@@ -1,0 +1,36 @@
+update_interval_minutes: 30
+auto_commit_enabled: true
+auto_deploy_enabled: true
+github_pages_enabled: true
+monitoring_enabled: true
+
+agents:
+  website_agent: true
+  deployment_agent: true
+  monitoring_agent: true
+  update_agent: true
+
+repositories:
+  main_website:
+    url: "https://github.com/swanhtet01/swanhtet01.github.io.git"
+    branch: "main"
+    auto_deploy: true
+  cloud_agent:
+    url: "https://github.com/swanhtet01/CloudAgent.git" 
+    branch: "social-ai-website"
+    auto_deploy: false
+
+website:
+  url: "https://swanhtet01.github.io/"
+  check_interval_minutes: 15
+  performance_threshold_seconds: 3.0
+
+github_pages:
+  enabled: true
+  build_time_minutes: 5
+  verify_after_deploy: true
+
+notifications:
+  enabled: true
+  log_file: "autonomous_dev_team.log"
+  status_file: "autonomous_status_report.json"
