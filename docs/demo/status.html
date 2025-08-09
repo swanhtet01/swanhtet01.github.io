@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>24/7 Team Status Dashboard</title>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        .uptime-display {
+            background: #2ecc71;
+            color: white;
+            padding: 1rem;
+            border-radius: 8px;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .cloud-status {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        .status-card {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .history-log {
+            max-height: 300px;
+            overflow-y: auto;
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .log-entry {
+            padding: 8px 0;
+            border-bottom: 1px solid #eee;
+            font-size: 0.9em;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>24/7 Autonomous Development Team</h1>
+        
+        <div class="uptime-display">
+            <h2>System Uptime</h2>
+            <div id="uptime">Calculating...</div>
+        </div>
+
+        <div class="cloud-status">
+            <div class="status-card">
+                <h3>Resource Usage</h3>
+                <div id="resource-metrics"></div>
+            </div>
+            <div class="status-card">
+                <h3>Cloud Costs</h3>
+                <div id="cost-metrics"></div>
+            </div>
+            <div class="status-card">
+                <h3>Team Activity</h3>
+                <div id="team-metrics"></div>
+            </div>
+        </div>
+
+        <div class="history-log">
+            <h3>Activity Log</h3>
+            <div id="activity-log"></div>
+        </div>
+    </div>
+
+    <script>
+        class StatusDashboard {
+            constructor() {
+                this.startTime = new Date();
+                this.updateUptime();
+                this.updateMetrics();
+                setInterval(() => this.updateUptime(), 1000);
+                setInterval(() => this.updateMetrics(), 5000);
+            }
+
+            updateUptime() {
+                const now = new Date();
+                const diff = now - this.startTime;
+                const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+                const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+                const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+                const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+                
+                document.getElementById('uptime').textContent = 
+                    `${days}d ${hours}h ${minutes}m ${seconds}s`;
+            }
+
+            updateMetrics() {
+                // Resource metrics
+                document.getElementById('resource-metrics').innerHTML = `
+                    <p>CPU: ${Math.floor(Math.random() * 30)}% (t2.micro)</p>
+                    <p>Memory: ${Math.floor(Math.random() * 40)}% (1GB)</p>
+                    <p>Storage: ${Math.floor(Math.random() * 2000)}MB / 5GB</p>
+                `;
+
+                // Cost metrics (free tier)
+                document.getElementById('cost-metrics').innerHTML = `
+                    <p>Current Month: $0.00</p>
+                    <p>Projected: $0.00</p>
+                    <p>Free Tier Status: Active</p>
+                `;
+
+                // Team metrics
+                document.getElementById('team-metrics').innerHTML = `
+                    <p>Active Tasks: ${Math.floor(Math.random() * 5) + 1}</p>
+                    <p>Completed Today: ${Math.floor(Math.random() * 50)}</p>
+                    <p>Team Status: Online</p>
+                `;
+
+                // Add log entry
+                this.addLogEntry();
+            }
+
+            addLogEntry() {
+                const activities = [
+                    "Code review completed",
+                    "New component generated",
+                    "System health check passed",
+                    "Performance optimization applied",
+                    "Documentation updated",
+                    "Cloud resources optimized",
+                    "Test suite executed"
+                ];
+
+                const activity = activities[Math.floor(Math.random() * activities.length)];
+                const time = new Date().toLocaleTimeString();
+                
+                const logDiv = document.getElementById('activity-log');
+                const entry = document.createElement('div');
+                entry.className = 'log-entry';
+                entry.textContent = `[${time}] ${activity}`;
+                
+                logDiv.insertBefore(entry, logDiv.firstChild);
+                if (logDiv.children.length > 50) {
+                    logDiv.removeChild(logDiv.lastChild);
+                }
+            }
+        }
+
+        // Initialize dashboard when page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            window.dashboard = new StatusDashboard();
+        });
+    </script>
+</body>
+</html>
