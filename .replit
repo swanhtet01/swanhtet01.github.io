@@ -1,0 +1,7 @@
+
+run = "python taskmaster_continuous_system.py"
+language = "python3"
+
+[deployment]
+run = ["python", "taskmaster_continuous_system.py"]
+deploymentTarget = "gce"
