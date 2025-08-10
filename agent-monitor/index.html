@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Agent Monitoring Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="bg-gray-100">
+    <div class="container mx-auto px-4 py-8">
+        <h1 class="text-3xl font-bold mb-8">AI Agent Monitoring Dashboard</h1>
+        
+        <!-- Status Overview -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+            <div class="bg-white p-4 rounded-lg shadow">
+                <h3 class="text-lg font-semibold mb-2">Active Agents</h3>
+                <p class="text-2xl" id="activeAgents">Loading...</p>
+            </div>
+            <div class="bg-white p-4 rounded-lg shadow">
+                <h3 class="text-lg font-semibold mb-2">System Health</h3>
+                <p class="text-2xl" id="systemHealth">Loading...</p>
+            </div>
+            <div class="bg-white p-4 rounded-lg shadow">
+                <h3 class="text-lg font-semibold mb-2">Memory Usage</h3>
+                <p class="text-2xl" id="memoryUsage">Loading...</p>
+            </div>
+            <div class="bg-white p-4 rounded-lg shadow">
+                <h3 class="text-lg font-semibold mb-2">CPU Usage</h3>
+                <p class="text-2xl" id="cpuUsage">Loading...</p>
+            </div>
+        </div>
+
+        <!-- Live Screen -->
+        <div class="bg-white p-4 rounded-lg shadow mb-8">
+            <h2 class="text-xl font-bold mb-4">Live Agent View</h2>
+            <div id="liveScreen" class="w-full h-64 bg-gray-200 rounded"></div>
+        </div>
+
+        <!-- Metrics Charts -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+            <div class="bg-white p-4 rounded-lg shadow">
+                <h2 class="text-xl font-bold mb-4">Performance Metrics</h2>
+                <canvas id="performanceChart"></canvas>
+            </div>
+            <div class="bg-white p-4 rounded-lg shadow">
+                <h2 class="text-xl font-bold mb-4">Resource Usage</h2>
+                <canvas id="resourceChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Log Stream -->
+        <div class="bg-white p-4 rounded-lg shadow">
+            <h2 class="text-xl font-bold mb-4">Live Logs</h2>
+            <div id="logStream" class="h-64 overflow-y-auto font-mono text-sm bg-gray-800 text-gray-100 p-4 rounded">
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Configuration
+        const config = {
+            endpoints: {
+                status: '/agent-monitor/status',
+                metrics: '/agent-monitor/metrics',
+                logs: '/agent-monitor/logs',
+                screen: '/agent-monitor/screen'
+            },
+            refreshInterval: 5000
+        };
+
+        // Initialize charts
+        const perfCtx = document.getElementById('performanceChart').getContext('2d');
+        const perfChart = new Chart(perfCtx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'Response Time (ms)',
+                    data: []
+                }]
+            }
+        });
+
+        const resCtx = document.getElementById('resourceChart').getContext('2d');
+        const resChart = new Chart(resCtx, {
+            type: 'bar',
+            data: {
+                labels: ['CPU', 'Memory', 'Disk'],
+                datasets: [{
+                    label: 'Usage %',
+                    data: [0, 0, 0]
+                }]
+            }
+        });
+
+        // Update functions
+        async function updateStatus() {
+            const response = await fetch(config.endpoints.status);
+            const data = await response.json();
+            document.getElementById('activeAgents').textContent = data.active_agents;
+            document.getElementById('systemHealth').textContent = data.health_status;
+            document.getElementById('memoryUsage').textContent = data.memory_usage + '%';
+            document.getElementById('cpuUsage').textContent = data.cpu_usage + '%';
+        }
+
+        async function updateMetrics() {
+            const response = await fetch(config.endpoints.metrics);
+            const data = await response.json();
+            
+            // Update performance chart
+            perfChart.data.labels.push(new Date().toLocaleTimeString());
+            perfChart.data.datasets[0].data.push(data.response_time);
+            if (perfChart.data.labels.length > 10) {
+                perfChart.data.labels.shift();
+                perfChart.data.datasets[0].data.shift();
+            }
+            perfChart.update();
+
+            // Update resource chart
+            resChart.data.datasets[0].data = [
+                data.cpu_usage,
+                data.memory_usage,
+                data.disk_usage
+            ];
+            resChart.update();
+        }
+
+        async function updateLogs() {
+            const response = await fetch(config.endpoints.logs);
+            const data = await response.json();
+            const logStream = document.getElementById('logStream');
+            data.forEach(log => {
+                const logEntry = document.createElement('div');
+                logEntry.textContent = `[${log.timestamp}] ${log.level}: ${log.message}`;
+                logStream.appendChild(logEntry);
+            });
+            logStream.scrollTop = logStream.scrollHeight;
+        }
+
+        async function updateScreen() {
+            const img = new Image();
+            img.src = config.endpoints.screen + '?t=' + new Date().getTime();
+            img.onload = () => {
+                const screen = document.getElementById('liveScreen');
+                screen.style.backgroundImage = `url(${img.src})`;
+                screen.style.backgroundSize = 'contain';
+                screen.style.backgroundRepeat = 'no-repeat';
+                screen.style.backgroundPosition = 'center';
+            };
+        }
+
+        // Start updates
+        setInterval(updateStatus, config.refreshInterval);
+        setInterval(updateMetrics, config.refreshInterval);
+        setInterval(updateLogs, config.refreshInterval);
+        setInterval(updateScreen, config.refreshInterval);
+
+        // Initial updates
+        updateStatus();
+        updateMetrics();
+        updateLogs();
+        updateScreen();
+    </script>
+</body>
+</html>
