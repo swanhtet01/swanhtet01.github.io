@@ -1,0 +1,643 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Agents - Super Mega Inc</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="icon" type="image/png" href="assets/supermega_logo.png">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: linear-gradient(135deg, #0a0e1a 0%, #1a1a2e 50%, #0f0f23 100%);
+            color: #ffffff;
+            line-height: 1.6;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+        
+        .bg-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: 
+                radial-gradient(circle at 20% 80%, rgba(120, 119, 198, 0.3) 0%, transparent 50%),
+                radial-gradient(circle at 80% 20%, rgba(255, 105, 135, 0.3) 0%, transparent 50%),
+                radial-gradient(circle at 40% 40%, rgba(75, 0, 130, 0.2) 0%, transparent 50%);
+            z-index: -1;
+        }
+        
+        .navbar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            backdrop-filter: blur(20px);
+            background: rgba(10, 14, 26, 0.8);
+            z-index: 1000;
+            padding: 1rem 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .nav-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 2rem;
+        }
+        
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+        
+        .logo img {
+            width: 40px;
+            height: 40px;
+            border-radius: 8px;
+        }
+        
+        .logo-text {
+            font-size: 1.5rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, #ff6b6b, #4ecdc4);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        .nav-links {
+            display: flex;
+            list-style: none;
+            gap: 2rem;
+        }
+        
+        .nav-links a {
+            color: #ffffff;
+            text-decoration: none;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            padding: 0.5rem 1rem;
+            border-radius: 8px;
+        }
+        
+        .nav-links a:hover, .nav-links a.active {
+            background: rgba(255, 255, 255, 0.1);
+            color: #4ecdc4;
+        }
+        
+        .main-content {
+            margin-top: 100px;
+            padding: 4rem 0;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 0 2rem;
+        }
+        
+        .agents-hero {
+            text-align: center;
+            margin-bottom: 6rem;
+        }
+        
+        .agents-title {
+            font-size: 3.5rem;
+            font-weight: 800;
+            margin-bottom: 1.5rem;
+            background: linear-gradient(135deg, #ff6b6b, #4ecdc4, #45b7d1);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        .agents-subtitle {
+            font-size: 1.25rem;
+            color: #a0aec0;
+            max-width: 800px;
+            margin: 0 auto 2rem;
+        }
+        
+        .agent-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 3rem;
+            margin-bottom: 6rem;
+        }
+        
+        .agent-card {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+            padding: 3rem;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .agent-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(135deg, #ff6b6b, #4ecdc4);
+        }
+        
+        .agent-card:hover {
+            transform: translateY(-5px);
+            border-color: rgba(76, 205, 196, 0.3);
+            box-shadow: 0 20px 40px rgba(76, 205, 196, 0.1);
+        }
+        
+        .agent-icon {
+            width: 80px;
+            height: 80px;
+            background: linear-gradient(135deg, #ff6b6b, #4ecdc4);
+            border-radius: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2rem;
+            margin-bottom: 2rem;
+        }
+        
+        .agent-name {
+            font-size: 1.8rem;
+            font-weight: 700;
+            color: #ffffff;
+            margin-bottom: 1rem;
+        }
+        
+        .agent-description {
+            color: #a0aec0;
+            margin-bottom: 2rem;
+            font-size: 1.1rem;
+        }
+        
+        .agent-features {
+            list-style: none;
+            margin-bottom: 2rem;
+        }
+        
+        .agent-features li {
+            padding: 0.5rem 0;
+            padding-left: 1.5rem;
+            position: relative;
+            color: #e2e8f0;
+        }
+        
+        .agent-features li::before {
+            content: '✓';
+            position: absolute;
+            left: 0;
+            color: #4ecdc4;
+            font-weight: bold;
+        }
+        
+        .agent-status {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+        }
+        
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #4ecdc4;
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+        
+        .agent-metrics {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 10px;
+            padding: 1.5rem;
+            margin-top: 2rem;
+        }
+        
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1rem;
+        }
+        
+        .metric {
+            text-align: center;
+        }
+        
+        .metric-value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #4ecdc4;
+        }
+        
+        .metric-label {
+            font-size: 0.9rem;
+            color: #a0aec0;
+        }
+        
+        .live-demo {
+            background: linear-gradient(135deg, rgba(255, 107, 107, 0.1), rgba(76, 205, 196, 0.1));
+            border-radius: 20px;
+            padding: 4rem;
+            text-align: center;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            margin-bottom: 6rem;
+        }
+        
+        .demo-title {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 2rem;
+            color: #ffffff;
+        }
+        
+        .demo-console {
+            background: rgba(0, 0, 0, 0.5);
+            border-radius: 15px;
+            padding: 2rem;
+            font-family: 'Courier New', monospace;
+            text-align: left;
+            margin: 2rem 0;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .console-line {
+            margin: 0.5rem 0;
+            opacity: 0;
+            animation: typewriter 0.5s ease-in-out forwards;
+        }
+        
+        .console-line:nth-child(1) { animation-delay: 1s; }
+        .console-line:nth-child(2) { animation-delay: 2s; }
+        .console-line:nth-child(3) { animation-delay: 3s; }
+        .console-line:nth-child(4) { animation-delay: 4s; }
+        
+        @keyframes typewriter {
+            to { opacity: 1; }
+        }
+        
+        .console-prompt {
+            color: #4ecdc4;
+        }
+        
+        .console-output {
+            color: #a0aec0;
+        }
+        
+        .console-success {
+            color: #48bb78;
+        }
+        
+        .agent-deployment {
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: 20px;
+            padding: 4rem;
+            margin-bottom: 6rem;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .deployment-title {
+            font-size: 2.5rem;
+            font-weight: 700;
+            text-align: center;
+            margin-bottom: 3rem;
+            background: linear-gradient(135deg, #ff6b6b, #4ecdc4);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        .deployment-steps {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 2rem;
+        }
+        
+        .deployment-step {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 15px;
+            padding: 2rem;
+            text-align: center;
+            position: relative;
+        }
+        
+        .step-number {
+            position: absolute;
+            top: -15px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 30px;
+            height: 30px;
+            background: linear-gradient(135deg, #ff6b6b, #4ecdc4);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 0.9rem;
+        }
+        
+        .step-title {
+            font-size: 1.2rem;
+            font-weight: 600;
+            margin: 1rem 0;
+            color: #ffffff;
+        }
+        
+        .step-description {
+            color: #a0aec0;
+            font-size: 0.9rem;
+        }
+        
+        .cta-section {
+            text-align: center;
+            padding: 4rem 0;
+        }
+        
+        .cta-button {
+            display: inline-block;
+            background: linear-gradient(135deg, #ff6b6b, #4ecdc4);
+            color: #ffffff;
+            text-decoration: none;
+            padding: 1rem 2.5rem;
+            border-radius: 50px;
+            font-weight: 600;
+            font-size: 1.1rem;
+            transition: all 0.3s ease;
+            box-shadow: 0 10px 30px rgba(76, 205, 196, 0.3);
+            margin: 0 1rem;
+        }
+        
+        .cta-button:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 15px 40px rgba(76, 205, 196, 0.4);
+        }
+        
+        .cta-button.secondary {
+            background: transparent;
+            border: 2px solid rgba(76, 205, 196, 0.5);
+        }
+        
+        @media (max-width: 768px) {
+            .agents-title {
+                font-size: 2.5rem;
+            }
+            
+            .agent-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .deployment-steps {
+                grid-template-columns: 1fr;
+            }
+            
+            .metrics-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="bg-overlay"></div>
+    
+    <nav class="navbar">
+        <div class="nav-container">
+            <div class="logo">
+                <img src="assets/supermega_logo.png" alt="Super Mega Inc" />
+                <span class="logo-text">Super Mega</span>
+            </div>
+            <ul class="nav-links">
+                <li><a href="index.html">Home</a></li>
+                <li><a href="platform.html">Platform</a></li>
+                <li><a href="agents.html" class="active">Agents</a></li>
+                <li><a href="about.html">About</a></li>
+                <li><a href="pricing.html">Pricing</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <main class="main-content">
+        <div class="container">
+            <section class="agents-hero">
+                <h1 class="agents-title">Autonomous AI Agents</h1>
+                <p class="agents-subtitle">
+                    Deploy intelligent agents that work autonomously to solve complex problems, 
+                    optimize workflows, and drive business growth 24/7.
+                </p>
+            </section>
+
+            <section class="agent-grid">
+                <div class="agent-card">
+                    <div class="agent-icon">🧠</div>
+                    <h3 class="agent-name">CloudAI Agent</h3>
+                    <div class="agent-status">
+                        <div class="status-indicator"></div>
+                        <span>Active - 682 lines deployed</span>
+                    </div>
+                    <p class="agent-description">
+                        Continuous deployment and infrastructure management agent that monitors, 
+                        optimizes, and scales your cloud resources automatically.
+                    </p>
+                    <ul class="agent-features">
+                        <li>Auto-scaling based on load</li>
+                        <li>Cost optimization algorithms</li>
+                        <li>Performance monitoring</li>
+                        <li>Security compliance checks</li>
+                        <li>Disaster recovery automation</li>
+                    </ul>
+                    <div class="agent-metrics">
+                        <div class="metrics-grid">
+                            <div class="metric">
+                                <div class="metric-value">99.9%</div>
+                                <div class="metric-label">Uptime</div>
+                            </div>
+                            <div class="metric">
+                                <div class="metric-value">45%</div>
+                                <div class="metric-label">Cost Savings</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="agent-card">
+                    <div class="agent-icon">⚡</div>
+                    <h3 class="agent-name">TaskMaster AI</h3>
+                    <div class="agent-status">
+                        <div class="status-indicator"></div>
+                        <span>Active - Processing 1,247 tasks</span>
+                    </div>
+                    <p class="agent-description">
+                        Intelligent task automation agent that handles complex workflows, 
+                        data processing, and business process optimization.
+                    </p>
+                    <ul class="agent-features">
+                        <li>Workflow automation</li>
+                        <li>Data pipeline management</li>
+                        <li>Process optimization</li>
+                        <li>Error handling & recovery</li>
+                        <li>Performance analytics</li>
+                    </ul>
+                    <div class="agent-metrics">
+                        <div class="metrics-grid">
+                            <div class="metric">
+                                <div class="metric-value">300%</div>
+                                <div class="metric-label">Efficiency Gain</div>
+                            </div>
+                            <div class="metric">
+                                <div class="metric-value">24/7</div>
+                                <div class="metric-label">Operation</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="agent-card">
+                    <div class="agent-icon">📊</div>
+                    <h3 class="agent-name">AnalyticsBot Pro</h3>
+                    <div class="agent-status">
+                        <div class="status-indicator"></div>
+                        <span>Active - 21 databases monitored</span>
+                    </div>
+                    <p class="agent-description">
+                        Advanced analytics agent that provides real-time insights, predictive modeling, 
+                        and data-driven recommendations for business decisions.
+                    </p>
+                    <ul class="agent-features">
+                        <li>Real-time data analysis</li>
+                        <li>Predictive modeling</li>
+                        <li>Anomaly detection</li>
+                        <li>Custom dashboards</li>
+                        <li>Automated reporting</li>
+                    </ul>
+                    <div class="agent-metrics">
+                        <div class="metrics-grid">
+                            <div class="metric">
+                                <div class="metric-value">85%</div>
+                                <div class="metric-label">Accuracy</div>
+                            </div>
+                            <div class="metric">
+                                <div class="metric-value">15s</div>
+                                <div class="metric-label">Response Time</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="agent-card">
+                    <div class="agent-icon">🤖</div>
+                    <h3 class="agent-name">DevOps Assistant</h3>
+                    <div class="agent-status">
+                        <div class="status-indicator"></div>
+                        <span>Active - Managing 15 repositories</span>
+                    </div>
+                    <p class="agent-description">
+                        Comprehensive DevOps agent that handles CI/CD pipelines, code reviews, 
+                        testing automation, and deployment management.
+                    </p>
+                    <ul class="agent-features">
+                        <li>Automated testing</li>
+                        <li>Code quality analysis</li>
+                        <li>Deployment pipelines</li>
+                        <li>Security scanning</li>
+                        <li>Performance monitoring</li>
+                    </ul>
+                    <div class="agent-metrics">
+                        <div class="metrics-grid">
+                            <div class="metric">
+                                <div class="metric-value">80%</div>
+                                <div class="metric-label">Faster Deployments</div>
+                            </div>
+                            <div class="metric">
+                                <div class="metric-value">95%</div>
+                                <div class="metric-label">Test Coverage</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="live-demo">
+                <h2 class="demo-title">Live Agent Console</h2>
+                <p style="color: #a0aec0; margin-bottom: 2rem;">
+                    Watch our agents work in real-time
+                </p>
+                <div class="demo-console">
+                    <div class="console-line">
+                        <span class="console-prompt">$ </span>CloudAI Agent: Scaling EC2 instances based on traffic spike...
+                    </div>
+                    <div class="console-line">
+                        <span class="console-output">  ✓ Detected 300% traffic increase</span>
+                    </div>
+                    <div class="console-line">
+                        <span class="console-output">  ✓ Auto-scaled from 2 to 6 instances</span>
+                    </div>
+                    <div class="console-line">
+                        <span class="console-success">  ✓ Response time optimized: 150ms → 45ms</span>
+                    </div>
+                </div>
+                <a href="command_center.html" class="cta-button">View Full Console</a>
+            </section>
+
+            <section class="agent-deployment">
+                <h2 class="deployment-title">Deploy Your Agent in Minutes</h2>
+                <div class="deployment-steps">
+                    <div class="deployment-step">
+                        <div class="step-number">1</div>
+                        <h4 class="step-title">Choose Agent Type</h4>
+                        <p class="step-description">Select from our library of pre-built agents or create a custom one</p>
+                    </div>
+                    <div class="deployment-step">
+                        <div class="step-number">2</div>
+                        <h4 class="step-title">Configure Parameters</h4>
+                        <p class="step-description">Set up your agent's goals, constraints, and operational parameters</p>
+                    </div>
+                    <div class="deployment-step">
+                        <div class="step-number">3</div>
+                        <h4 class="step-title">Deploy & Monitor</h4>
+                        <p class="step-description">Launch your agent and monitor its performance in real-time</p>
+                    </div>
+                    <div class="deployment-step">
+                        <div class="step-number">4</div>
+                        <h4 class="step-title">Scale & Optimize</h4>
+                        <p class="step-description">Let the agent learn and improve while you scale your operations</p>
+                    </div>
+                </div>
+            </section>
+
+            <section class="cta-section">
+                <h2 style="font-size: 2.5rem; margin-bottom: 1rem;">Ready to Deploy Your AI Workforce?</h2>
+                <p style="font-size: 1.2rem; color: #a0aec0; margin-bottom: 2rem;">
+                    Start with a free trial and see the difference autonomous AI can make
+                </p>
+                <a href="pricing.html" class="cta-button">Start Free Trial</a>
+                <a href="command_center.html" class="cta-button secondary">View Live Demo</a>
+            </section>
+        </div>
+    </main>
+</body>
+</html>
