@@ -1,0 +1,147 @@
+## Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg-info/
+.Python
+*.log
+
+## Environments / Secrets
+.env
+.env.*
+!*.example
+*.pem
+*.key
+*.crt
+*.der
+*.pfx
+supermega_facebook_campaign.json
+
+## Credentials / Service Accounts
+configs/service-account.json
+configs/supermega-*.json
+
+## Databases
+*.db
+*.db-* 
+
+## Node / Frontend
+node_modules/
+dist/
+build/
+.parcel-cache/
+.next/
+.vercel/
+
+## Virtual Envs
+venv/
+.venv/
+env/
+
+## OS / Editor
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.idea/
+.vscode/
+
+## Archives
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.7z
+
+## Temporary
+sanitize_tmp/
+tmp/
+temp/
+.tmp.driveupload/
+
+## Coverage / Testing
+.coverage
+htmlcov/
+coverage.xml
+pytest_cache/
+
+## Misc
+push_output.txt
+*.bak
+index.html.backup
+# Environment variables
+.env
+.env.local
+.env.production
+
+# API Keys and secrets
+**/secrets/
+**/*key*
+**/*secret*
+**/*token*
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Logs
+logs/
+*.log
+
+# Cache
+__pycache__/
+*.pyc
+*.pyo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+
+*.py[cod]
+*$py.class
+*.so
+.Python
+develop-eggs/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+.installed.cfg
+MANIFEST
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+*~
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+desktop.ini
+*.tmp
+*.temp
+.tmp/
+node_modules/
+config/secrets.json
