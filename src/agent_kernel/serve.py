@@ -44,6 +44,25 @@ class KernelHandler(BaseHTTPRequestHandler):
             return self._json(code, result)
         self._json(404, {"error": "not found"})
 
+    def do_POST(self):  # noqa
+        if not self._check_auth():
+            return
+        parsed = urlparse(self.path)
+        if parsed.path.startswith('/run/'):
+            name = parsed.path.split('/run/', 1)[1]
+            length = int(self.headers.get('Content-Length', '0') or 0)
+            raw = self.rfile.read(length) if length else b'{}'
+            try:
+                payload = json.loads(raw.decode() or '{}')
+            except Exception:
+                payload = {}
+            if not isinstance(payload, dict):
+                payload = {}
+            result = kernel.run_task(name, **payload)
+            code = 200 if result.get("status") == "ok" else 500
+            return self._json(code, result)
+        self._json(404, {"error": "not found"})
+
     def log_message(self, format, *args):  # noqa: override to reduce noise
         pass
 
