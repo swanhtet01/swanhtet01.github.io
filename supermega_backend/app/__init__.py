@@ -19,7 +19,11 @@ def create_app():
     db.init_app(app)
     migrate.init_app(app, db)
     jwt.init_app(app)
-    CORS(app)
+    # Allow browser apps to call with Authorization header
+    CORS(app, resources={r"/*": {"origins": "*"}},
+         supports_credentials=False,
+         allow_headers=["Content-Type", "Authorization"],
+         expose_headers=["Content-Type", "Authorization"]) 
 
     from app.api.auth import auth_bp
     from app.api.content import content_bp
