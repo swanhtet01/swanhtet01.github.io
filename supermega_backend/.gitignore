@@ -1,0 +1,7 @@
+# Local env and artifacts
+.env
+*.db
+instance/
+__pycache__/
+.venv/
+*.pyc
