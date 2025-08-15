@@ -3,452 +3,575 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Super Mega AI - Professional Business Automation Platform</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <title>Super Mega AI - Your Intelligent Agent Army</title>
     <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        body { font-family: 'Inter', sans-serif; }
-        .gradient-bg { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
-        .glass-effect { 
-            background: rgba(255, 255, 255, 0.1); 
-            backdrop-filter: blur(10px);
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: linear-gradient(135deg, #1a1a1a 0%, #2d1b69 50%, #ff6b35 100%);
+            min-height: 100vh;
+        }
+        
+        .container { max-width: 1200px; margin: 0 auto; padding: 0 20px; }
+        
+        /* PROFESSIONAL NOTIFICATION SYSTEM - NO BROWSER ALERTS */
+        .notification-container {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1001;
+            max-width: 400px;
+        }
+        
+        .notification {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 12px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+            border-left: 5px solid #10b981;
+            transform: translateX(450px);
+            opacity: 0;
+            transition: all 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+        }
+        
+        .notification.show {
+            transform: translateX(0);
+            opacity: 1;
+        }
+        
+        .notification-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 8px;
+        }
+        
+        .notification-title {
+            font-weight: 700;
+            color: #1f2937;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .notification-close {
+            background: none;
+            border: none;
+            font-size: 20px;
+            cursor: pointer;
+            color: #6b7280;
+            padding: 4px;
+            border-radius: 50%;
+            width: 28px;
+            height: 28px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .notification-message {
+            color: #4b5563;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+        
+        /* Navigation */
+        .navbar {
+            background: rgba(0, 0, 0, 0.95);
+            backdrop-filter: blur(20px);
+            padding: 1rem 0;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 1000;
+            border-bottom: 1px solid rgba(255, 107, 53, 0.2);
+        }
+        
+        .nav-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .logo {
+            font-size: 1.8rem;
+            font-weight: 800;
+            color: #fff;
+            text-decoration: none;
+        }
+        
+        .auth-buttons { display: flex; gap: 1rem; }
+        
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 14px;
+        }
+        
+        .btn-outline {
+            background: transparent;
+            color: #fff;
+            border: 2px solid #ff6b35;
+        }
+        
+        .btn-outline:hover {
+            background: #ff6b35;
+            color: #fff;
+            transform: translateY(-2px);
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #ff6b35, #f7931e);
+            color: #fff;
+            border: 2px solid transparent;
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(255, 107, 53, 0.4);
+        }
+        
+        /* Hero Section */
+        .hero {
+            padding: 140px 0 80px;
+            text-align: center;
+            color: #fff;
+        }
+        
+        .hero h1 {
+            font-size: 4rem;
+            font-weight: 900;
+            margin-bottom: 1.5rem;
+            background: linear-gradient(135deg, #fff, #ff6b35);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        .hero p {
+            font-size: 1.4rem;
+            margin-bottom: 3rem;
+            opacity: 0.9;
+            max-width: 800px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+        
+        .cta-buttons {
+            display: flex;
+            gap: 1.5rem;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        
+        .btn-large {
+            padding: 18px 36px;
+            font-size: 18px;
+            font-weight: 700;
+        }
+        
+        /* Products Section */
+        .products {
+            background: #fff;
+            padding: 100px 0;
+        }
+        
+        .products h2 {
+            text-align: center;
+            font-size: 3rem;
+            margin-bottom: 4rem;
+            color: #1a1a1a;
+            font-weight: 800;
+        }
+        
+        .products-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 3rem;
+        }
+        
+        .product-card {
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            padding: 3rem;
+            border-radius: 15px;
+            text-align: center;
+            transition: transform 0.3s ease;
+            border: 1px solid rgba(255, 107, 53, 0.1);
+        }
+        
+        .product-card:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 20px 40px rgba(255, 107, 53, 0.2);
+        }
+        
+        .product-icon {
+            font-size: 4rem;
+            margin-bottom: 1.5rem;
+            display: block;
+        }
+        
+        .product-card h3 {
+            color: #1a1a1a;
+            margin-bottom: 1rem;
+            font-size: 1.8rem;
+            font-weight: 700;
+        }
+        
+        .product-card p {
+            color: #666;
+            line-height: 1.6;
+            margin-bottom: 2rem;
+        }
+        
+        .product-features {
+            list-style: none;
+            padding: 0;
+            text-align: left;
+            margin-bottom: 2rem;
+        }
+        
+        .product-features li {
+            color: #444;
+            margin: 0.5rem 0;
+            padding-left: 1.5rem;
+            position: relative;
+        }
+        
+        .product-features li:before {
+            content: "✅";
+            position: absolute;
+            left: 0;
+        }
+        
+        /* Contact Section */
+        .contact {
+            background: linear-gradient(135deg, #2d1b69 0%, #1a1a1a 100%);
+            padding: 100px 0;
+            color: #fff;
+        }
+        
+        .contact h2 {
+            text-align: center;
+            font-size: 3rem;
+            margin-bottom: 4rem;
+            font-weight: 800;
+        }
+        
+        .contact-form {
+            max-width: 700px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.1);
+            padding: 3rem;
+            border-radius: 20px;
+            backdrop-filter: blur(20px);
             border: 1px solid rgba(255, 255, 255, 0.2);
         }
-        .tool-card {
-            background: linear-gradient(145deg, #1e293b, #334155);
-            border: 1px solid #475569;
+        
+        .form-group { margin-bottom: 2rem; }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: #fff;
+            font-weight: 600;
+            font-size: 16px;
+        }
+        
+        .form-group input, .form-group select, .form-group textarea {
+            width: 100%;
+            padding: 16px;
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            border-radius: 10px;
+            background: rgba(255, 255, 255, 0.1);
+            color: #fff;
+            font-size: 16px;
+            backdrop-filter: blur(10px);
             transition: all 0.3s ease;
         }
-        .tool-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.4);
+        
+        .form-group input:focus, .form-group select:focus, .form-group textarea:focus {
+            outline: none;
+            border-color: #ff6b35;
+            background: rgba(255, 255, 255, 0.15);
         }
-        .demo-output {
-            background: #0f172a;
-            border: 1px solid #334155;
-            font-family: 'Courier New', monospace;
+        
+        .form-group input::placeholder, .form-group textarea::placeholder {
+            color: rgba(255, 255, 255, 0.6);
         }
-        .pricing-card {
-            background: linear-gradient(145deg, #1e293b, #334155);
-            border: 2px solid #475569;
+        
+        .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; }
+        
+        textarea { min-height: 140px; resize: vertical; }
+        
+        .submit-btn {
+            width: 100%;
+            padding: 20px;
+            background: linear-gradient(135deg, #ff6b35, #f7931e);
+            color: #fff;
+            border: none;
+            border-radius: 12px;
+            font-size: 18px;
+            font-weight: 700;
+            cursor: pointer;
             transition: all 0.3s ease;
         }
-        .pricing-card:hover {
-            border-color: #3b82f6;
-            transform: scale(1.02);
+        
+        .submit-btn:hover:not(:disabled) {
+            transform: translateY(-3px);
+            box-shadow: 0 10px 30px rgba(255, 107, 53, 0.4);
         }
-        .featured {
-            border-color: #3b82f6;
-            background: linear-gradient(145deg, #1e40af, #3b82f6);
+        
+        .submit-btn:disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        @media (max-width: 768px) {
+            .hero h1 { font-size: 2.5rem; }
+            .form-row { grid-template-columns: 1fr; }
+            .cta-buttons { flex-direction: column; align-items: center; }
         }
     </style>
 </head>
-<body class="bg-slate-900 text-white" x-data="app()">
+<body x-data="superMegaApp()">
+    
+    <!-- Professional Notification System -->
+    <div class="notification-container">
+        <template x-for="notification in notifications" :key="notification.id">
+            <div class="notification" :class="notification.show ? 'show' : ''">
+                <div class="notification-header">
+                    <div class="notification-title">
+                        <span x-text="notification.icon"></span>
+                        <span x-text="notification.title"></span>
+                    </div>
+                    <button @click="removeNotification(notification.id)" class="notification-close">×</button>
+                </div>
+                <div class="notification-message" x-text="notification.message"></div>
+            </div>
+        </template>
+    </div>
 
     <!-- Navigation -->
-    <nav class="fixed top-0 w-full z-50 glass-effect">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="flex justify-between items-center h-16">
-                <div class="flex items-center">
-                    <div class="text-xl font-bold">Super Mega AI</div>
-                </div>
-                <div class="hidden md:flex space-x-8">
-                    <a href="#tools" class="hover:text-blue-400 transition">Tools</a>
-                    <a href="#demo" class="hover:text-blue-400 transition">Demo</a>
-                    <a href="#pricing" class="hover:text-blue-400 transition">Pricing</a>
-                    <a href="#contact" class="hover:text-blue-400 transition">Contact</a>
+    <nav class="navbar">
+        <div class="container">
+            <div class="nav-content">
+                <a href="/" class="logo">🚀 Super Mega AI</a>
+                
+                <div class="auth-buttons">
+                    <a href="#products" class="btn btn-outline">Products</a>
+                    <a href="dashboard.html" class="btn btn-primary">🚀 Launch Dashboard</a>
                 </div>
             </div>
         </div>
     </nav>
 
     <!-- Hero Section -->
-    <section class="gradient-bg pt-20 pb-20">
-        <div class="max-w-7xl mx-auto px-4 text-center">
-            <h1 class="text-6xl font-bold mb-6">
-                Professional AI Business<br>
-                <span class="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400">
-                    Automation Platform
-                </span>
-            </h1>
-            <p class="text-xl mb-8 text-gray-200 max-w-3xl mx-auto">
-                Replace expensive SaaS tools with our AI-powered lead generation, content creation, 
-                and business intelligence platform. Get enterprise results at a fraction of the cost.
-            </p>
+    <section class="hero">
+        <div class="container">
+            <h1>Beyond LLM Wrappers</h1>
+            <p>Deploy intelligent agents with computer vision, predictive analytics, and advanced automation that deliver real ROI.</p>
             
-            <div class="grid md:grid-cols-4 gap-6 mb-10 max-w-4xl mx-auto">
-                <div class="glass-effect rounded-lg p-4">
-                    <div class="text-3xl font-bold text-blue-400">$97/mo</div>
-                    <div class="text-sm">vs $15K ZoomInfo</div>
-                </div>
-                <div class="glass-effect rounded-lg p-4">
-                    <div class="text-3xl font-bold text-green-400">500+</div>
-                    <div class="text-sm">Leads per hour</div>
-                </div>
-                <div class="glass-effect rounded-lg p-4">
-                    <div class="text-3xl font-bold text-purple-400">15x</div>
-                    <div class="text-sm">Faster than manual</div>
-                </div>
-                <div class="glass-effect rounded-lg p-4">
-                    <div class="text-3xl font-bold text-yellow-400">99.2%</div>
-                    <div class="text-sm">Accuracy rate</div>
-                </div>
-            </div>
-            
-            <div class="space-x-4">
-                <button @click="scrollTo('demo')" 
-                        class="bg-blue-600 hover:bg-blue-700 px-8 py-4 rounded-lg text-lg font-semibold transition">
-                    Try Live Demo
-                </button>
-                <button @click="scrollTo('pricing')" 
-                        class="border border-white hover:bg-white hover:text-slate-900 px-8 py-4 rounded-lg text-lg font-semibold transition">
-                    View Pricing
+            <div class="cta-buttons">
+                <a href="dashboard.html" class="btn btn-primary btn-large">
+                    🚀 Launch Agent Lab
+                </a>
+                <button @click="scrollToContact()" class="btn btn-outline btn-large">
+                    💬 Schedule Demo
                 </button>
             </div>
         </div>
     </section>
 
-    <!-- Tools Section -->
-    <section id="tools" class="py-20 bg-slate-800">
-        <div class="max-w-7xl mx-auto px-4">
-            <h2 class="text-4xl font-bold text-center mb-16">Professional AI Tools</h2>
+    <!-- Innovative Products Section -->
+    <section id="products" class="products">
+        <div class="container">
+            <h2>Innovative AI Products</h2>
             
-            <div class="grid md:grid-cols-3 gap-8">
-                <!-- Email Intelligence -->
-                <div class="tool-card rounded-lg p-8">
-                    <div class="text-4xl mb-4">📧</div>
-                    <h3 class="text-2xl font-semibold mb-4">Email Intelligence</h3>
-                    <p class="text-gray-300 mb-6">
-                        Extract verified business emails from any domain with 95%+ accuracy. 
-                        Includes email validation, social profiles, and contact enrichment.
-                    </p>
-                    <div class="space-y-2 text-sm">
-                        <div class="flex items-center">
-                            <span class="text-green-400 mr-2">✓</span>
-                            Domain email discovery
-                        </div>
-                        <div class="flex items-center">
-                            <span class="text-green-400 mr-2">✓</span>
-                            Email validation & verification
-                        </div>
-                        <div class="flex items-center">
-                            <span class="text-green-400 mr-2">✓</span>
-                            LinkedIn profile matching
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Content Generator -->
-                <div class="tool-card rounded-lg p-8">
-                    <div class="text-4xl mb-4">🤖</div>
-                    <h3 class="text-2xl font-semibold mb-4">AI Content Engine</h3>
-                    <p class="text-gray-300 mb-6">
-                        Generate personalized cold emails, LinkedIn posts, and sales sequences 
-                        that convert 3x better than generic templates.
-                    </p>
-                    <div class="space-y-2 text-sm">
-                        <div class="flex items-center">
-                            <span class="text-green-400 mr-2">✓</span>
-                            Personalized cold emails
-                        </div>
-                        <div class="flex items-center">
-                            <span class="text-green-400 mr-2">✓</span>
-                            LinkedIn outreach sequences
-                        </div>
-                        <div class="flex items-center">
-                            <span class="text-green-400 mr-2">✓</span>
-                            Sales follow-up automation
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Competitor Intelligence -->
-                <div class="tool-card rounded-lg p-8">
-                    <div class="text-4xl mb-4">🕵️</div>
-                    <h3 class="text-2xl font-semibold mb-4">Competitor Intelligence</h3>
-                    <p class="text-gray-300 mb-6">
-                        Scrape competitor websites, analyze pricing strategies, and track 
-                        marketing campaigns to stay ahead of the competition.
-                    </p>
-                    <div class="space-y-2 text-sm">
-                        <div class="flex items-center">
-                            <span class="text-green-400 mr-2">✓</span>
-                            Website content analysis
-                        </div>
-                        <div class="flex items-center">
-                            <span class="text-green-400 mr-2">✓</span>
-                            Pricing intelligence
-                        </div>
-                        <div class="flex items-center">
-                            <span class="text-green-400 mr-2">✓</span>
-                            Marketing campaign tracking
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </section>
-
-    <!-- Live Demo Section -->
-    <section id="demo" class="py-20 bg-slate-900">
-        <div class="max-w-6xl mx-auto px-4">
-            <h2 class="text-4xl font-bold text-center mb-16">Live Demo</h2>
-            
-            <div class="grid md:grid-cols-2 gap-8">
-                <!-- Email Extraction Demo -->
-                <div class="bg-slate-800 rounded-lg p-6">
-                    <h3 class="text-xl font-semibold mb-4">Email Extraction</h3>
-                    <div class="space-y-4">
-                        <input x-model="emailDomain" 
-                               placeholder="Enter domain (e.g., github.com)" 
-                               class="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400">
-                        <button @click="extractEmails()" 
-                                :disabled="loading"
-                                class="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 px-4 py-2 rounded-lg transition">
-                            <span x-show="!loading">Extract Emails</span>
-                            <span x-show="loading">Extracting...</span>
-                        </button>
-                        <div class="demo-output rounded-lg p-4 h-64 overflow-y-auto">
-                            <div x-show="emailResults.length === 0 && !loading" class="text-gray-400">
-                                Results will appear here...
-                            </div>
-                            <template x-for="email in emailResults" :key="email">
-                                <div class="text-green-400 mb-1" x-text="email"></div>
-                            </template>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Content Generation Demo -->
-                <div class="bg-slate-800 rounded-lg p-6">
-                    <h3 class="text-xl font-semibold mb-4">AI Content Generation</h3>
-                    <div class="space-y-4">
-                        <input x-model="contentTopic" 
-                               placeholder="Enter topic (e.g., AI automation)" 
-                               class="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400">
-                        <input x-model="targetCompany" 
-                               placeholder="Target company name" 
-                               class="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400">
-                        <button @click="generateContent()" 
-                                :disabled="contentLoading"
-                                class="w-full bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 px-4 py-2 rounded-lg transition">
-                            <span x-show="!contentLoading">Generate Email</span>
-                            <span x-show="contentLoading">Generating...</span>
-                        </button>
-                        <div class="demo-output rounded-lg p-4 h-64 overflow-y-auto">
-                            <div x-show="!generatedContent && !contentLoading" class="text-gray-400">
-                                Generated content will appear here...
-                            </div>
-                            <div x-show="generatedContent" class="text-sm whitespace-pre-wrap" x-text="generatedContent"></div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </section>
-
-    <!-- Pricing Section -->
-    <section id="pricing" class="py-20 bg-slate-800">
-        <div class="max-w-6xl mx-auto px-4">
-            <h2 class="text-4xl font-bold text-center mb-16">Professional Pricing</h2>
-            
-            <div class="grid md:grid-cols-3 gap-8">
-                <!-- Starter -->
-                <div class="pricing-card rounded-lg p-8">
-                    <h3 class="text-2xl font-semibold mb-4">Starter</h3>
-                    <div class="text-4xl font-bold mb-6">$97<span class="text-lg font-normal">/month</span></div>
-                    <ul class="space-y-3 mb-8">
-                        <li class="flex items-center"><span class="text-green-400 mr-2">✓</span> 1,000 email extractions/month</li>
-                        <li class="flex items-center"><span class="text-green-400 mr-2">✓</span> 500 AI-generated emails</li>
-                        <li class="flex items-center"><span class="text-green-400 mr-2">✓</span> 10 competitor reports</li>
-                        <li class="flex items-center"><span class="text-green-400 mr-2">✓</span> Email support</li>
+            <div class="products-grid">
+                <div class="product-card">
+                    <span class="product-icon">🔍</span>
+                    <h3>Vision Intelligence Engine</h3>
+                    <p>Advanced computer vision that goes beyond basic image recognition.</p>
+                    <ul class="product-features">
+                        <li>Emotion analysis and demographic insights</li>
+                        <li>Document intelligence with OCR</li>
+                        <li>Scene understanding and context analysis</li>
+                        <li>Image quality assessment and enhancement</li>
+                        <li>Custom object detection models</li>
                     </ul>
-                    <button class="w-full bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg transition">
-                        Start Free Trial
-                    </button>
+                    <a href="dashboard.html?product=vision" class="btn btn-primary">Try Now</a>
                 </div>
-
-                <!-- Professional (Featured) -->
-                <div class="pricing-card featured rounded-lg p-8">
-                    <div class="text-center mb-4">
-                        <span class="bg-blue-600 text-white px-3 py-1 rounded-full text-sm">Most Popular</span>
-                    </div>
-                    <h3 class="text-2xl font-semibold mb-4">Professional</h3>
-                    <div class="text-4xl font-bold mb-6">$297<span class="text-lg font-normal">/month</span></div>
-                    <ul class="space-y-3 mb-8">
-                        <li class="flex items-center"><span class="text-green-400 mr-2">✓</span> 10,000 email extractions/month</li>
-                        <li class="flex items-center"><span class="text-green-400 mr-2">✓</span> 2,500 AI-generated emails</li>
-                        <li class="flex items-center"><span class="text-green-400 mr-2">✓</span> Unlimited competitor reports</li>
-                        <li class="flex items-center"><span class="text-green-400 mr-2">✓</span> Priority support</li>
-                        <li class="flex items-center"><span class="text-green-400 mr-2">✓</span> Custom integrations</li>
+                
+                <div class="product-card">
+                    <span class="product-icon">📊</span>
+                    <h3>Predictive Market Engine</h3>
+                    <p>ML-powered market intelligence with predictive analytics.</p>
+                    <ul class="product-features">
+                        <li>Financial analysis with ML predictions</li>
+                        <li>News sentiment and social intelligence</li>
+                        <li>Competitive landscape mapping</li>
+                        <li>Risk assessment and opportunity scoring</li>
+                        <li>Industry trend predictions</li>
                     </ul>
-                    <button class="w-full bg-white text-blue-600 hover:bg-gray-100 px-4 py-2 rounded-lg transition font-semibold">
-                        Start Free Trial
-                    </button>
+                    <a href="dashboard.html?product=market" class="btn btn-primary">Try Now</a>
                 </div>
-
-                <!-- Enterprise -->
-                <div class="pricing-card rounded-lg p-8">
-                    <h3 class="text-2xl font-semibold mb-4">Enterprise</h3>
-                    <div class="text-4xl font-bold mb-6">$997<span class="text-lg font-normal">/month</span></div>
-                    <ul class="space-y-3 mb-8">
-                        <li class="flex items-center"><span class="text-green-400 mr-2">✓</span> Unlimited extractions</li>
-                        <li class="flex items-center"><span class="text-green-400 mr-2">✓</span> Unlimited AI content</li>
-                        <li class="flex items-center"><span class="text-green-400 mr-2">✓</span> Real-time monitoring</li>
-                        <li class="flex items-center"><span class="text-green-400 mr-2">✓</span> 24/7 phone support</li>
-                        <li class="flex items-center"><span class="text-green-400 mr-2">✓</span> Dedicated account manager</li>
+                
+                <div class="product-card">
+                    <span class="product-icon">🕷️</span>
+                    <h3>Autonomous Web Agent</h3>
+                    <p>Intelligent web research with fact-checking and analysis.</p>
+                    <ul class="product-features">
+                        <li>Multi-source information gathering</li>
+                        <li>Content analysis and extraction</li>
+                        <li>Cross-reference fact-checking</li>
+                        <li>Trend identification and patterns</li>
+                        <li>Intelligent insights generation</li>
                     </ul>
-                    <button class="w-full bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg transition">
-                        Contact Sales
-                    </button>
+                    <a href="dashboard.html?product=web" class="btn btn-primary">Try Now</a>
+                </div>
+                
+                <div class="product-card">
+                    <span class="product-icon">🔧</span>
+                    <h3>Automation Orchestrator</h3>
+                    <p>Complex workflow automation with AI optimization.</p>
+                    <ul class="product-features">
+                        <li>Intelligent workflow creation</li>
+                        <li>Conditional logic and branching</li>
+                        <li>Error handling and recovery</li>
+                        <li>Performance optimization</li>
+                        <li>Real-time monitoring and analytics</li>
+                    </ul>
+                    <a href="dashboard.html?product=automation" class="btn btn-primary">Try Now</a>
                 </div>
             </div>
         </div>
     </section>
 
     <!-- Contact Section -->
-    <section id="contact" class="py-20 bg-slate-900">
-        <div class="max-w-4xl mx-auto px-4 text-center">
-            <h2 class="text-4xl font-bold mb-8">Ready to Scale Your Business?</h2>
-            <p class="text-xl text-gray-300 mb-8">
-                Join hundreds of companies using our AI platform to generate leads, 
-                create content, and analyze competitors at enterprise scale.
-            </p>
-            <div class="space-x-4">
-                <button class="bg-blue-600 hover:bg-blue-700 px-8 py-4 rounded-lg text-lg font-semibold transition">
-                    Start Free Trial
+    <section id="contact" class="contact">
+        <div class="container">
+            <h2>Ready for Real AI?</h2>
+            
+            <form @submit.prevent="submitContact()" class="contact-form">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="name">Full Name *</label>
+                        <input type="text" id="name" x-model="contactForm.name" 
+                               required placeholder="John Smith">
+                    </div>
+                    <div class="form-group">
+                        <label for="email">Business Email *</label>
+                        <input type="email" id="email" x-model="contactForm.email" 
+                               required placeholder="john@company.com">
+                    </div>
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="company">Company</label>
+                        <input type="text" id="company" x-model="contactForm.company" 
+                               placeholder="Your Company Inc.">
+                    </div>
+                    <div class="form-group">
+                        <label for="product">Product Interest</label>
+                        <select id="product" x-model="contactForm.product">
+                            <option value="all">All Products</option>
+                            <option value="vision">Vision Intelligence</option>
+                            <option value="market">Market Predictions</option>
+                            <option value="web">Web Intelligence</option>
+                            <option value="automation">Automation</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="message">What would you like to automate? *</label>
+                    <textarea id="message" x-model="contactForm.message" required 
+                              placeholder="Describe your specific needs..."></textarea>
+                </div>
+                
+                <button type="submit" class="submit-btn" :disabled="submitting">
+                    <span x-show="!submitting">🚀 Get Enterprise Demo</span>
+                    <span x-show="submitting">⏳ Processing...</span>
                 </button>
-                <button class="border border-white hover:bg-white hover:text-slate-900 px-8 py-4 rounded-lg text-lg font-semibold transition">
-                    Schedule Demo
-                </button>
-            </div>
+            </form>
         </div>
     </section>
 
-    <!-- Footer -->
-    <footer class="bg-black py-12">
-        <div class="max-w-7xl mx-auto px-4">
-            <div class="text-center">
-                <div class="text-2xl font-bold mb-4">Super Mega AI</div>
-                <p class="text-gray-400 mb-8">Professional Business Automation Platform</p>
-                <div class="border-t border-gray-800 pt-8">
-                    <p class="text-gray-500">&copy; 2025 Super Mega AI. All rights reserved.</p>
-                </div>
-            </div>
-        </div>
-    </footer>
-
     <script>
-        function app() {
+        function superMegaApp() {
             return {
-                emailDomain: '',
-                emailResults: [],
-                loading: false,
-                contentTopic: '',
-                targetCompany: '',
-                generatedContent: '',
-                contentLoading: false,
-
-                scrollTo(elementId) {
-                    document.getElementById(elementId).scrollIntoView({ 
-                        behavior: 'smooth' 
-                    });
+                notifications: [],
+                notificationCounter: 0,
+                submitting: false,
+                
+                contactForm: {
+                    name: '',
+                    email: '',
+                    company: '',
+                    product: 'all',
+                    message: ''
                 },
-
-                async extractEmails() {
-                    if (!this.emailDomain) return;
+                
+                showNotification(type, title, message) {
+                    const id = ++this.notificationCounter;
+                    const icons = { success: '✅', error: '❌', info: 'ℹ️' };
                     
-                    this.loading = true;
-                    this.emailResults = [];
+                    const notification = {
+                        id, type, title, message,
+                        icon: icons[type] || 'ℹ️',
+                        show: false
+                    };
                     
-                    try {
-                        const response = await fetch('http://localhost:5000/api/demo/extract-emails', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                            },
-                            body: JSON.stringify({ domain: this.emailDomain })
-                        });
-                        
-                        const data = await response.json();
-                        
-                        if (data.success) {
-                            this.emailResults = data.emails;
-                        } else {
-                            console.error('API Error:', data.error);
-                            // Fallback to mock data
-                            this.emailResults = [
-                                `contact@${this.emailDomain}`,
-                                `info@${this.emailDomain}`,
-                                `sales@${this.emailDomain}`,
-                                `support@${this.emailDomain}`,
-                                `admin@${this.emailDomain}`
-                            ];
-                        }
-                    } catch (error) {
-                        console.error('Network error:', error);
-                        // Fallback to mock data on network error
-                        this.emailResults = [
-                            `contact@${this.emailDomain}`,
-                            `info@${this.emailDomain}`,
-                            `sales@${this.emailDomain}`,
-                            `support@${this.emailDomain}`
-                        ];
-                    } finally {
-                        this.loading = false;
+                    this.notifications.push(notification);
+                    
+                    setTimeout(() => {
+                        const notif = this.notifications.find(n => n.id === id);
+                        if (notif) notif.show = true;
+                    }, 100);
+                    
+                    setTimeout(() => {
+                        this.removeNotification(id);
+                    }, 5000);
+                },
+                
+                removeNotification(id) {
+                    const notif = this.notifications.find(n => n.id === id);
+                    if (notif) {
+                        notif.show = false;
+                        setTimeout(() => {
+                            this.notifications = this.notifications.filter(n => n.id !== id);
+                        }, 400);
                     }
                 },
-
-                async generateContent() {
-                    if (!this.contentTopic || !this.targetCompany) return;
+                
+                async submitContact() {
+                    this.submitting = true;
                     
-                    this.contentLoading = true;
-                    this.generatedContent = '';
+                    // Simulate form submission
+                    await new Promise(resolve => setTimeout(resolve, 1000));
                     
-                    try {
-                        const response = await fetch('http://localhost:5000/api/demo/generate-content', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                            },
-                            body: JSON.stringify({ 
-                                topic: this.contentTopic,
-                                company: this.targetCompany 
-                            })
-                        });
-                        
-                        const data = await response.json();
-                        
-                        if (data.success) {
-                            this.generatedContent = data.content;
-                        } else {
-                            console.error('API Error:', data.error);
-                            // Fallback content
-                            this.generatedContent = `Subject: Quick question about ${this.targetCompany}'s ${this.contentTopic} strategy
-
-Hi there,
-
-I noticed ${this.targetCompany} has been making interesting moves in ${this.contentTopic}. Would you be open to a brief conversation about scaling operations?
-
-Best regards,
-Super Mega AI Team`;
-                        }
-                        
-                    } catch (error) {
-                        console.error('Network error:', error);
-                        // Fallback content on error
-                        this.generatedContent = `Subject: Partnership opportunity for ${this.targetCompany}
-
-Hi there,
-
-I'd like to discuss how we can help ${this.targetCompany} with ${this.contentTopic}.
-
-Best regards,
-Super Mega AI`;
-                    } finally {
-                        this.contentLoading = false;
-                    }
+                    this.showNotification('success', 'Demo Scheduled!', 
+                        'Our AI team will contact you within 24 hours with a custom demo.');
+                    
+                    this.contactForm = { name: '', email: '', company: '', product: 'all', message: '' };
+                    this.submitting = false;
+                },
+                
+                scrollToContact() {
+                    document.getElementById('contact').scrollIntoView({ behavior: 'smooth' });
                 }
             }
         }

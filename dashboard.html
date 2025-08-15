@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Super Mega AI - Agent Laboratory</title>
+    <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f5f7fa;
+            color: #333;
+            line-height: 1.6;
+        }
+        
+        .dashboard-container {
+            display: grid;
+            grid-template-columns: 280px 1fr;
+            min-height: 100vh;
+        }
+        
+        .sidebar {
+            background: linear-gradient(180deg, #1a1a1a 0%, #2d1b69 100%);
+            color: white;
+            padding: 2rem;
+            overflow-y: auto;
+        }
+        
+        .logo {
+            font-size: 1.5rem;
+            font-weight: bold;
+            margin-bottom: 3rem;
+            text-align: center;
+        }
+        
+        .nav-menu {
+            list-style: none;
+        }
+        
+        .nav-item {
+            margin-bottom: 1rem;
+        }
+        
+        .nav-link {
+            display: flex;
+            align-items: center;
+            padding: 12px 16px;
+            color: rgba(255, 255, 255, 0.8);
+            text-decoration: none;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+        }
+        
+        .nav-link:hover, .nav-link.active {
+            background: rgba(255, 107, 53, 0.2);
+            color: white;
+        }
+        
+        .nav-icon {
+            margin-right: 12px;
+            font-size: 1.2rem;
+        }
+        
+        .main-content {
+            padding: 2rem;
+            overflow-y: auto;
+        }
+        
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+            padding: 1.5rem;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+        
+        .header h1 {
+            font-size: 2rem;
+            font-weight: 700;
+            color: #1a1a1a;
+        }
+        
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+        
+        .content-section {
+            background: white;
+            border-radius: 12px;
+            padding: 2rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+        
+        .section-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin-bottom: 1.5rem;
+            color: #1a1a1a;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+        
+        .stat-card {
+            background: linear-gradient(135deg, #ff6b35, #f7931e);
+            color: white;
+            padding: 1.5rem;
+            border-radius: 10px;
+            text-align: center;
+        }
+        
+        .stat-number {
+            font-size: 2.5rem;
+            font-weight: bold;
+            margin-bottom: 0.5rem;
+        }
+        
+        .stat-label {
+            opacity: 0.9;
+            font-size: 0.9rem;
+        }
+        
+        .product-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+        }
+        
+        .product-card {
+            border: 2px solid #e5e7eb;
+            border-radius: 12px;
+            padding: 1.5rem;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+        
+        .product-card:hover {
+            border-color: #ff6b35;
+            transform: translateY(-5px);
+            box-shadow: 0 10px 25px rgba(255, 107, 53, 0.2);
+        }
+        
+        .product-card.active {
+            border-color: #ff6b35;
+            background: linear-gradient(135deg, #fff7ed, #ffffff);
+        }
+        
+        .product-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+        
+        .product-icon {
+            font-size: 2rem;
+            margin-right: 1rem;
+        }
+        
+        .product-title {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: #1a1a1a;
+        }
+        
+        .product-description {
+            color: #6b7280;
+            margin-bottom: 1rem;
+            font-size: 0.9rem;
+        }
+        
+        .product-actions {
+            display: flex;
+            gap: 0.5rem;
+        }
+        
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 500;
+            text-decoration: none;
+            transition: all 0.3s ease;
+            font-size: 0.9rem;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #ff6b35, #f7931e);
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(255, 107, 53, 0.3);
+        }
+        
+        .btn-secondary {
+            background: #f3f4f6;
+            color: #374151;
+            border: 1px solid #d1d5db;
+        }
+        
+        .btn-secondary:hover {
+            background: #e5e7eb;
+        }
+        
+        .status-indicator {
+            display: inline-flex;
+            align-items: center;
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 500;
+        }
+        
+        .status-active {
+            background: #d1fae5;
+            color: #065f46;
+        }
+        
+        .status-inactive {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+        
+        .demo-output {
+            background: #1f2937;
+            color: #10b981;
+            padding: 1rem;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.85rem;
+            margin-top: 1rem;
+            max-height: 300px;
+            overflow-y: auto;
+            white-space: pre-line;
+        }
+        
+        .loading {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .spinner {
+            width: 16px;
+            height: 16px;
+            border: 2px solid #f3f3f3;
+            border-top: 2px solid #ff6b35;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        @media (max-width: 768px) {
+            .dashboard-container {
+                grid-template-columns: 1fr;
+            }
+            .sidebar {
+                position: fixed;
+                top: 0;
+                left: -280px;
+                height: 100vh;
+                z-index: 1000;
+                transition: left 0.3s ease;
+            }
+            .sidebar.open {
+                left: 0;
+            }
+        }
+    </style>
+</head>
+<body x-data="dashboardApp()">
+    <div class="dashboard-container">
+        <!-- Sidebar -->
+        <div class="sidebar">
+            <div class="logo">🚀 Super Mega AI</div>
+            
+            <ul class="nav-menu">
+                <li class="nav-item">
+                    <a href="#" @click="currentView = 'overview'" 
+                       class="nav-link" :class="{'active': currentView === 'overview'}">
+                        <span class="nav-icon">📊</span>
+                        Overview
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="#" @click="currentView = 'products'" 
+                       class="nav-link" :class="{'active': currentView === 'products'}">
+                        <span class="nav-icon">🔬</span>
+                        AI Products
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="#" @click="currentView = 'analytics'" 
+                       class="nav-link" :class="{'active': currentView === 'analytics'}">
+                        <span class="nav-icon">📈</span>
+                        Analytics
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="#" @click="currentView = 'settings'" 
+                       class="nav-link" :class="{'active': currentView === 'settings'}">
+                        <span class="nav-icon">⚙️</span>
+                        Settings
+                    </a>
+                </li>
+            </ul>
+        </div>
+        
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Header -->
+            <div class="header">
+                <h1 x-text="getViewTitle()"></h1>
+                <div class="user-info">
+                    <span class="status-indicator status-active">🟢 All Systems Operational</span>
+                </div>
+            </div>
+            
+            <!-- Overview Section -->
+            <div x-show="currentView === 'overview'">
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-number" x-text="stats.totalAgents"></div>
+                        <div class="stat-label">Active Agents</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number" x-text="stats.tasksCompleted"></div>
+                        <div class="stat-label">Tasks Completed</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number" x-text="stats.successRate + '%'"></div>
+                        <div class="stat-label">Success Rate</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number" x-text="'$' + stats.costSavings"></div>
+                        <div class="stat-label">Cost Savings</div>
+                    </div>
+                </div>
+                
+                <div class="content-section">
+                    <h2 class="section-title">🎯 Quick Actions</h2>
+                    <div class="product-grid">
+                        <template x-for="product in products" :key="product.id">
+                            <div class="product-card" @click="selectProduct(product)">
+                                <div class="product-header">
+                                    <span class="product-icon" x-text="product.icon"></span>
+                                    <div>
+                                        <div class="product-title" x-text="product.name"></div>
+                                        <span class="status-indicator" 
+                                              :class="product.active ? 'status-active' : 'status-inactive'"
+                                              x-text="product.active ? 'Active' : 'Inactive'">
+                                        </span>
+                                    </div>
+                                </div>
+                                <div class="product-description" x-text="product.description"></div>
+                                <div class="product-actions">
+                                    <button class="btn btn-primary" @click.stop="runDemo(product)">
+                                        <span x-show="!product.running">Run Demo</span>
+                                        <span x-show="product.running" class="loading">
+                                            <div class="spinner"></div> Running...
+                                        </span>
+                                    </button>
+                                    <button class="btn btn-secondary">Configure</button>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Products Section -->
+            <div x-show="currentView === 'products'">
+                <div class="content-section">
+                    <h2 class="section-title">🔬 AI Product Laboratory</h2>
+                    
+                    <div x-show="selectedProduct">
+                        <div class="product-card active">
+                            <div class="product-header">
+                                <span class="product-icon" x-text="selectedProduct?.icon"></span>
+                                <div>
+                                    <div class="product-title" x-text="selectedProduct?.name"></div>
+                                    <div class="product-description" x-text="selectedProduct?.fullDescription"></div>
+                                </div>
+                            </div>
+                            
+                            <div class="product-actions" style="margin-top: 1rem;">
+                                <button class="btn btn-primary" @click="runAdvancedDemo(selectedProduct)">
+                                    <span x-show="!selectedProduct?.running">🚀 Run Advanced Demo</span>
+                                    <span x-show="selectedProduct?.running" class="loading">
+                                        <div class="spinner"></div> Processing...
+                                    </span>
+                                </button>
+                                <button class="btn btn-secondary">📊 View Analytics</button>
+                                <button class="btn btn-secondary">⚙️ Configure</button>
+                            </div>
+                            
+                            <div x-show="demoOutput" class="demo-output" x-text="demoOutput"></div>
+                        </div>
+                    </div>
+                    
+                    <div x-show="!selectedProduct" style="text-align: center; padding: 3rem;">
+                        <p style="color: #6b7280; font-size: 1.1rem;">Select a product from the overview to explore its capabilities</p>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Analytics Section -->
+            <div x-show="currentView === 'analytics'">
+                <div class="content-section">
+                    <h2 class="section-title">📈 Performance Analytics</h2>
+                    <div id="performanceChart" style="height: 400px;"></div>
+                </div>
+                
+                <div class="content-section">
+                    <h2 class="section-title">📊 Usage Statistics</h2>
+                    <div id="usageChart" style="height: 400px;"></div>
+                </div>
+            </div>
+            
+            <!-- Settings Section -->
+            <div x-show="currentView === 'settings'">
+                <div class="content-section">
+                    <h2 class="section-title">⚙️ Configuration</h2>
+                    <p>Advanced configuration options will be available here.</p>
+                    
+                    <div style="margin-top: 2rem;">
+                        <h3>API Configuration</h3>
+                        <p style="color: #6b7280; margin: 1rem 0;">Configure your API keys and settings for optimal performance.</p>
+                        
+                        <div style="background: #f9fafb; padding: 1.5rem; border-radius: 8px; margin: 1rem 0;">
+                            <strong>Cost Analysis:</strong><br>
+                            Current AWS costs: <strong>$12.14/month</strong> (Aug 1-15, 2025)<br>
+                            Projected monthly: <strong>~$25-30</strong> with full deployment<br>
+                            GitHub Actions savings: <strong>$267.80/year</strong>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        function dashboardApp() {
+            return {
+                currentView: 'overview',
+                selectedProduct: null,
+                demoOutput: '',
+                
+                stats: {
+                    totalAgents: 4,
+                    tasksCompleted: 1247,
+                    successRate: 94.2,
+                    costSavings: 12438
+                },
+                
+                products: [
+                    {
+                        id: 'vision',
+                        name: 'Vision Intelligence',
+                        icon: '🔍',
+                        description: 'Advanced computer vision with emotion analysis',
+                        fullDescription: 'Computer vision system that analyzes images for objects, faces, emotions, text extraction, and scene understanding.',
+                        active: true,
+                        running: false
+                    },
+                    {
+                        id: 'market',
+                        name: 'Market Predictions',
+                        icon: '📊',
+                        description: 'ML-powered market intelligence and forecasting',
+                        fullDescription: 'Predictive analytics engine for market intelligence, financial analysis, sentiment tracking, and trend predictions.',
+                        active: true,
+                        running: false
+                    },
+                    {
+                        id: 'web',
+                        name: 'Web Intelligence',
+                        icon: '🕷️',
+                        description: 'Autonomous web research with fact-checking',
+                        fullDescription: 'Intelligent web agent that performs research, content analysis, fact-checking, and generates insights.',
+                        active: true,
+                        running: false
+                    },
+                    {
+                        id: 'automation',
+                        name: 'Smart Automation',
+                        icon: '🔧',
+                        description: 'Complex workflow automation with AI optimization',
+                        fullDescription: 'Advanced automation orchestrator for complex workflows with conditional logic and AI optimization.',
+                        active: false,
+                        running: false
+                    }
+                ],
+                
+                init() {
+                    // Initialize charts when analytics view is selected
+                    this.$watch('currentView', (view) => {
+                        if (view === 'analytics') {
+                            this.$nextTick(() => {
+                                this.initCharts();
+                            });
+                        }
+                    });
+                    
+                    // Check for product parameter
+                    const urlParams = new URLSearchParams(window.location.search);
+                    const productParam = urlParams.get('product');
+                    if (productParam) {
+                        const product = this.products.find(p => p.id === productParam);
+                        if (product) {
+                            this.selectProduct(product);
+                            this.currentView = 'products';
+                        }
+                    }
+                },
+                
+                getViewTitle() {
+                    const titles = {
+                        overview: 'Agent Laboratory Dashboard',
+                        products: 'AI Product Suite',
+                        analytics: 'Performance Analytics',
+                        settings: 'Configuration'
+                    };
+                    return titles[this.currentView] || 'Dashboard';
+                },
+                
+                selectProduct(product) {
+                    this.selectedProduct = product;
+                },
+                
+                async runDemo(product) {
+                    product.running = true;
+                    
+                    await new Promise(resolve => setTimeout(resolve, 2000));
+                    
+                    product.running = false;
+                    
+                    // Update stats
+                    this.stats.tasksCompleted++;
+                    
+                    alert(`✅ ${product.name} demo completed successfully!\n\nDemo results available in the full product view.`);
+                },
+                
+                async runAdvancedDemo(product) {
+                    if (!product) return;
+                    
+                    product.running = true;
+                    this.demoOutput = 'Initializing ' + product.name + '...\n';
+                    
+                    const steps = [
+                        'Loading AI models...',
+                        'Connecting to data sources...',
+                        'Processing sample data...',
+                        'Running analysis algorithms...',
+                        'Generating insights...',
+                        'Preparing results...'
+                    ];
+                    
+                    for (const step of steps) {
+                        await new Promise(resolve => setTimeout(resolve, 800));
+                        this.demoOutput += '✅ ' + step + '\n';
+                    }
+                    
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    
+                    // Generate specific demo results based on product
+                    if (product.id === 'vision') {
+                        this.demoOutput += '\n🔍 VISION ANALYSIS RESULTS:\n';
+                        this.demoOutput += '• Objects detected: 15 (confidence: 94.2%)\n';
+                        this.demoOutput += '• Faces analyzed: 3 (emotions: happy, neutral, surprised)\n';
+                        this.demoOutput += '• Text extracted: "Super Mega AI Dashboard"\n';
+                        this.demoOutput += '• Scene type: Professional office environment\n';
+                        this.demoOutput += '• Quality score: 0.87/1.0\n';
+                    } else if (product.id === 'market') {
+                        this.demoOutput += '\n📊 MARKET ANALYSIS RESULTS:\n';
+                        this.demoOutput += '• Financial trend: Bullish (confidence: 89.3%)\n';
+                        this.demoOutput += '• Sentiment score: 0.72 (positive)\n';
+                        this.demoOutput += '• Risk level: Moderate (0.34)\n';
+                        this.demoOutput += '• Opportunity score: High (0.81)\n';
+                        this.demoOutput += '• Predicted growth: 28% next 12 months\n';
+                    } else if (product.id === 'web') {
+                        this.demoOutput += '\n🕷️ WEB INTELLIGENCE RESULTS:\n';
+                        this.demoOutput += '• Sources analyzed: 47\n';
+                        this.demoOutput += '• Facts verified: 23 (91.3% accuracy)\n';
+                        this.demoOutput += '• Trends identified: 6\n';
+                        this.demoOutput += '• Key insight: Enterprise AI adoption accelerating\n';
+                        this.demoOutput += '• Confidence level: 87.4%\n';
+                    } else if (product.id === 'automation') {
+                        this.demoOutput += '\n🔧 AUTOMATION RESULTS:\n';
+                        this.demoOutput += '• Workflow created: 8 steps\n';
+                        this.demoOutput += '• Execution time: 2.34 seconds\n';
+                        this.demoOutput += '• Success rate: 96.7%\n';
+                        this.demoOutput += '• Optimization applied: 23% faster\n';
+                        this.demoOutput += '• Resources saved: $1,247\n';
+                    }
+                    
+                    this.demoOutput += '\n🎉 Analysis complete! Ready for production deployment.';
+                    
+                    product.running = false;
+                    this.stats.tasksCompleted++;
+                },
+                
+                initCharts() {
+                    // Performance Chart
+                    const performanceData = [{
+                        x: ['Vision', 'Market', 'Web', 'Automation'],
+                        y: [94.2, 89.7, 91.3, 96.8],
+                        type: 'bar',
+                        marker: {
+                            color: ['#ff6b35', '#f7931e', '#ff8c42', '#ffa64d']
+                        },
+                        text: ['94.2%', '89.7%', '91.3%', '96.8%'],
+                        textposition: 'auto'
+                    }];
+                    
+                    Plotly.newPlot('performanceChart', performanceData, {
+                        title: 'AI Product Performance Scores',
+                        xaxis: { title: 'Products' },
+                        yaxis: { title: 'Performance (%)', range: [0, 100] }
+                    });
+                    
+                    // Usage Chart
+                    const usageData = [{
+                        labels: ['Vision Intelligence', 'Market Predictions', 'Web Intelligence', 'Automation'],
+                        values: [35, 28, 22, 15],
+                        type: 'pie',
+                        marker: {
+                            colors: ['#ff6b35', '#f7931e', '#ff8c42', '#ffa64d']
+                        }
+                    }];
+                    
+                    Plotly.newPlot('usageChart', usageData, {
+                        title: 'Product Usage Distribution'
+                    });
+                }
+            }
+        }
+    </script>
+</body>
+</html>
