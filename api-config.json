@@ -1,0 +1,71 @@
+{
+  "api_endpoints": {
+    "base_url": "https://supermega.dev/api",
+    "endpoints": [
+      {
+        "path": "/extract-emails",
+        "method": "POST",
+        "description": "Extract emails from domain",
+        "parameters": {
+          "domain": "string",
+          "max_results": "number"
+        }
+      },
+      {
+        "path": "/generate-content",
+        "method": "POST",
+        "description": "Generate AI content",
+        "parameters": {
+          "prompt": "string",
+          "type": "email|linkedin|sales"
+        }
+      },
+      {
+        "path": "/analyze-competitor",
+        "method": "POST",
+        "description": "Analyze competitor website",
+        "parameters": {
+          "url": "string",
+          "analysis_type": "pricing|content|strategy"
+        }
+      }
+    ]
+  },
+  "features": {
+    "email_extraction": {
+      "accuracy": "95%+",
+      "sources": ["linkedin", "company_website", "social_media"],
+      "validation": true
+    },
+    "ai_content": {
+      "personalization": true,
+      "templates": ["cold_email", "linkedin_message", "sales_sequence"],
+      "conversion_rate": "3x improvement"
+    },
+    "competitor_analysis": {
+      "website_scraping": true,
+      "pricing_intelligence": true,
+      "marketing_tracking": true
+    }
+  },
+  "pricing": {
+    "starter": {
+      "price": 97,
+      "email_extractions": 1000,
+      "ai_content": 500,
+      "competitor_reports": 10
+    },
+    "professional": {
+      "price": 297,
+      "email_extractions": 10000,
+      "ai_content": 2500,
+      "competitor_reports": "unlimited"
+    },
+    "enterprise": {
+      "price": 997,
+      "email_extractions": "unlimited",
+      "ai_content": "unlimited",
+      "competitor_reports": "unlimited"
+    }
+  }
+}
