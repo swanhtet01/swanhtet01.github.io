@@ -1,0 +1,74 @@
+{
+  "created_date": "2025-08-15T15:41:49.944783",
+  "total_emails": 5,
+  "expected_responses": "0.4 responses expected",
+  "potential_revenue": "$500 if 20% of responses convert",
+  "emails": [
+    {
+      "to": "jennifer.martinez@pacificcoastrealty.com",
+      "subject": "500 qualified leads for Pacific Coast Realty - 48 hours",
+      "body": "Hi Jennifer Martinez,\n\nQuick question - are you spending too much time or money on lead generation at Pacific Coast Realty?\n\nI noticed that real estate professionals often struggle with need homeowner leads.\n\nI have AI tools that can find 500 qualified leads (with contact info) in 48 hours for $500.\n\nFor Pacific Coast Realty:\nSkip expensive lead services. Get 500 homeowner leads for $500 vs $15K/year tools.\n\nBudget range: $500-1000/month (you'd pay just $500 once)\n\nInterested in seeing a sample of 20 leads for your industry (free)?\n\nTakes me 10 minutes to generate, could save you hours of research.\n\nLet me know!\n\nBest,\nSuper Mega AI Tools\nP.S. - No ongoing subscriptions, no expensive software needed.\n\n---\nLinkedIn: linkedin.com/in/jennifer-martinez\nLead Score: 92/100\n",
+      "lead_id": "Pacific Coast Realty",
+      "expected_response_rate": "5-10%",
+      "follow_up_sequence": [
+        "Day 3: LinkedIn connection request",
+        "Day 7: Follow-up email with case study",
+        "Day 14: Final email with special offer"
+      ]
+    },
+    {
+      "to": "robert.chen@metroproperties.com",
+      "subject": "500 qualified leads for Metro Properties - 48 hours",
+      "body": "Hi Robert Chen,\n\nQuick question - are you spending too much time or money on lead generation at Metro Properties?\n\nI noticed that real estate professionals often struggle with struggling with lead generation.\n\nI have AI tools that can find 500 qualified leads (with contact info) in 48 hours for $500.\n\nFor Metro Properties:\nSkip expensive lead services. Get 500 homeowner leads for $500 vs $15K/year tools.\n\nBudget range: $300-800/month (you'd pay just $500 once)\n\nInterested in seeing a sample of 20 leads for your industry (free)?\n\nTakes me 10 minutes to generate, could save you hours of research.\n\nLet me know!\n\nBest,\nSuper Mega AI Tools\nP.S. - No ongoing subscriptions, no expensive software needed.\n\n---\nLinkedIn: linkedin.com/in/robert-chen\nLead Score: 86/100\n",
+      "lead_id": "Metro Properties",
+      "expected_response_rate": "5-10%",
+      "follow_up_sequence": [
+        "Day 3: LinkedIn connection request",
+        "Day 7: Follow-up email with case study",
+        "Day 14: Final email with special offer"
+      ]
+    },
+    {
+      "to": "sarah.johnson@nexthomesolutions.com",
+      "subject": "500 qualified leads for NextHome Solutions - 48 hours",
+      "body": "Hi Sarah Johnson,\n\nQuick question - are you spending too much time or money on lead generation at NextHome Solutions?\n\nI noticed that real estate professionals often struggle with expensive lead sources.\n\nI have AI tools that can find 500 qualified leads (with contact info) in 48 hours for $500.\n\nFor NextHome Solutions:\nSkip expensive lead services. Get 500 homeowner leads for $500 vs $15K/year tools.\n\nBudget range: $400-1200/month (you'd pay just $500 once)\n\nInterested in seeing a sample of 20 leads for your industry (free)?\n\nTakes me 10 minutes to generate, could save you hours of research.\n\nLet me know!\n\nBest,\nSuper Mega AI Tools\nP.S. - No ongoing subscriptions, no expensive software needed.\n\n---\nLinkedIn: linkedin.com/in/sarah-johnson\nLead Score: 88/100\n",
+      "lead_id": "NextHome Solutions",
+      "expected_response_rate": "5-10%",
+      "follow_up_sequence": [
+        "Day 3: LinkedIn connection request",
+        "Day 7: Follow-up email with case study",
+        "Day 14: Final email with special offer"
+      ]
+    },
+    {
+      "to": "michael.davis@statefarm.com",
+      "subject": "500 qualified leads for State Farm - 48 hours",
+      "body": "Hi Michael Davis,\n\nQuick question - are you spending too much time or money on lead generation at State Farm?\n\nI noticed that insurance professionals often struggle with need business owner leads.\n\nI have AI tools that can find 500 qualified leads (with contact info) in 48 hours for $500.\n\nFor State Farm:\nStop cold calling. Get 500 business owner prospects with contact info for $500.\n\nBudget range: $400-900/month (you'd pay just $500 once)\n\nInterested in seeing a sample of 20 leads for your industry (free)?\n\nTakes me 10 minutes to generate, could save you hours of research.\n\nLet me know!\n\nBest,\nSuper Mega AI Tools\nP.S. - No ongoing subscriptions, no expensive software needed.\n\n---\nLinkedIn: linkedin.com/in/michael-davis\nLead Score: 88/100\n",
+      "lead_id": "State Farm",
+      "expected_response_rate": "5-10%",
+      "follow_up_sequence": [
+        "Day 3: LinkedIn connection request",
+        "Day 7: Follow-up email with case study",
+        "Day 14: Final email with special offer"
+      ]
+    },
+    {
+      "to": "lisa.thompson@thompsoninsurancegroup.com",
+      "subject": "500 qualified leads for Thompson Insurance Group - 48 hours",
+      "body": "Hi Lisa Thompson,\n\nQuick question - are you spending too much time or money on lead generation at Thompson Insurance Group?\n\nI noticed that insurance professionals often struggle with high cost per lead.\n\nI have AI tools that can find 500 qualified leads (with contact info) in 48 hours for $500.\n\nFor Thompson Insurance Group:\nStop cold calling. Get 500 business owner prospects with contact info for $500.\n\nBudget range: $600-1500/month (you'd pay just $500 once)\n\nInterested in seeing a sample of 20 leads for your industry (free)?\n\nTakes me 10 minutes to generate, could save you hours of research.\n\nLet me know!\n\nBest,\nSuper Mega AI Tools\nP.S. - No ongoing subscriptions, no expensive software needed.\n\n---\nLinkedIn: linkedin.com/in/lisa-thompson\nLead Score: 88/100\n",
+      "lead_id": "Thompson Insurance Group",
+      "expected_response_rate": "5-10%",
+      "follow_up_sequence": [
+        "Day 3: LinkedIn connection request",
+        "Day 7: Follow-up email with case study",
+        "Day 14: Final email with special offer"
+      ]
+    }
+  ],
+  "sending_instructions": [
+    "Send from professional email address",
+    "Schedule sending over 2-3 days",
+    "Track opens and responses",
+    "Follow up with non-responders after 3 days"
+  ]
+}

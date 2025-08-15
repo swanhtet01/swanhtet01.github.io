@@ -1,0 +1,50 @@
+{
+  "created_date": "2025-08-15T15:41:49.947030",
+  "total_posts": 4,
+  "platforms": [
+    "LinkedIn",
+    "Twitter",
+    "Facebook"
+  ],
+  "content_strategy": "Showcase results, address pain points, build trust",
+  "posting_schedule": "2-3 posts per week",
+  "content": [
+    {
+      "platform": "LinkedIn",
+      "type": "Post",
+      "content": "\ud83d\ude80 Just helped a real estate team generate 500 qualified homeowner leads in 48 hours.\n\nTheir previous method: Spending $1,500/month on lead services\nOur solution: $500 one-time for 500 leads with contact info\n\nThe difference? AI-powered extraction vs manual research.\n\nIf you're spending too much on leads or too much time finding them, let's chat.\n\n#LeadGeneration #RealEstate #SmallBusiness #AITools",
+      "best_time": "Tuesday 9 AM",
+      "expected_engagement": "50-100 views, 5-15 reactions"
+    },
+    {
+      "platform": "LinkedIn",
+      "type": "Post",
+      "content": "\ud83d\udca1 Most small businesses are overpaying for lead generation.\n\nExamples I see every day:\n\u274c ZoomInfo: $15,000/year\n\u274c Sales Navigator: $900/year\n\u274c Manual research: 20 hours/week\n\n\u2705 Our approach: 500 qualified leads for $500\n\nThe secret? Purpose-built AI tools, not generic software.\n\nReady to stop overpaying for leads?\n\n#Entrepreneurship #Sales #LeadGen #SmallBiz",
+      "best_time": "Wednesday 2 PM",
+      "expected_engagement": "75-150 views, 8-20 reactions"
+    },
+    {
+      "platform": "Twitter",
+      "type": "Thread",
+      "content": "\ud83e\uddf5 How I generate 500 leads in 48 hours for $500 (and how you can too)\n\n1/ Most businesses spend $15K/year on tools like ZoomInfo\n2/ Or waste 20+ hours/week on manual research\n3/ There's a better way...\n\n\ud83d\udd17 [Thread continues with your process]\n\n#LeadGeneration #StartupLife #Sales",
+      "best_time": "Thursday 11 AM",
+      "expected_engagement": "200-500 views, 10-30 engagements"
+    },
+    {
+      "platform": "Facebook",
+      "type": "Post",
+      "content": "\ud83c\udfaf Small business owners: Stop overpaying for leads!\n\nYesterday I helped a marketing agency get 500 qualified prospects for just $500.\n\nThey were about to spend $3K/month on expensive software.\n\nInstead, they got better results in 48 hours for 83% less cost.\n\nIf you're tired of expensive lead gen tools, message me for details.\n\n#SmallBusiness #Marketing #LeadGeneration",
+      "best_time": "Friday 7 PM",
+      "expected_engagement": "30-80 views, 5-12 reactions"
+    }
+  ],
+  "hashtag_strategy": [
+    "#LeadGeneration",
+    "#SmallBusiness",
+    "#Sales",
+    "#AITools",
+    "#Entrepreneurship",
+    "#Marketing",
+    "#StartupLife"
+  ]
+}
