@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - Super Mega AI</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        .gradient-bg {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .sidebar-animation {
+            transition: transform 0.3s ease-in-out;
+        }
+        .metric-card {
+            background: linear-gradient(135deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0.05) 100%);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+        .ai-pulse {
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .notification-badge {
+            animation: bounce 1s infinite;
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+    <!-- Sidebar -->
+    <div id="sidebar" class="fixed inset-y-0 left-0 z-50 w-64 bg-white shadow-lg transform -translate-x-full lg:translate-x-0 sidebar-animation">
+        <div class="flex items-center justify-center h-16 px-4 bg-purple-600">
+            <div class="flex items-center space-x-2">
+                <i class="fas fa-robot text-2xl text-white ai-pulse"></i>
+                <span class="text-xl font-bold text-white">Super Mega AI</span>
+            </div>
+        </div>
+        
+        <!-- Navigation -->
+        <nav class="mt-8">
+            <div class="px-4 space-y-2">
+                <a href="#dashboard" class="nav-item active flex items-center px-4 py-3 text-gray-700 bg-purple-100 rounded-lg hover:bg-purple-200 transition-colors">
+                    <i class="fas fa-tachometer-alt w-5 mr-3"></i>
+                    Dashboard
+                </a>
+                <a href="#agents" class="nav-item flex items-center px-4 py-3 text-gray-700 rounded-lg hover:bg-gray-100 transition-colors">
+                    <i class="fas fa-robot w-5 mr-3"></i>
+                    AI Agents
+                    <span class="ml-auto bg-green-500 text-white text-xs px-2 py-1 rounded-full">3 Active</span>
+                </a>
+                <a href="#analytics" class="nav-item flex items-center px-4 py-3 text-gray-700 rounded-lg hover:bg-gray-100 transition-colors">
+                    <i class="fas fa-chart-bar w-5 mr-3"></i>
+                    Analytics
+                </a>
+                <a href="#integrations" class="nav-item flex items-center px-4 py-3 text-gray-700 rounded-lg hover:bg-gray-100 transition-colors">
+                    <i class="fas fa-plug w-5 mr-3"></i>
+                    Integrations
+                </a>
+                <a href="#automation" class="nav-item flex items-center px-4 py-3 text-gray-700 rounded-lg hover:bg-gray-100 transition-colors">
+                    <i class="fas fa-cogs w-5 mr-3"></i>
+                    Automation
+                </a>
+                <a href="#billing" class="nav-item flex items-center px-4 py-3 text-gray-700 rounded-lg hover:bg-gray-100 transition-colors">
+                    <i class="fas fa-credit-card w-5 mr-3"></i>
+                    Billing & Usage
+                </a>
+                <a href="#settings" class="nav-item flex items-center px-4 py-3 text-gray-700 rounded-lg hover:bg-gray-100 transition-colors">
+                    <i class="fas fa-cog w-5 mr-3"></i>
+                    Settings
+                </a>
+            </div>
+        </nav>
+
+        <!-- User Profile -->
+        <div class="absolute bottom-0 w-full p-4 bg-gray-50">
+            <div class="flex items-center space-x-3">
+                <img id="userAvatar" src="https://via.placeholder.com/40" alt="Profile" class="w-10 h-10 rounded-full">
+                <div class="flex-1 min-w-0">
+                    <p id="userName" class="text-sm font-medium text-gray-900 truncate">John Doe</p>
+                    <p id="userPlan" class="text-xs text-gray-500 truncate">Professional Plan</p>
+                </div>
+                <button id="logoutBtn" class="text-gray-400 hover:text-red-500">
+                    <i class="fas fa-sign-out-alt"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Mobile sidebar backdrop -->
+    <div id="sidebarBackdrop" class="fixed inset-0 z-40 bg-black bg-opacity-50 hidden lg:hidden"></div>
+
+    <!-- Main Content -->
+    <div class="lg:ml-64 min-h-screen">
+        <!-- Header -->
+        <header class="bg-white shadow-sm border-b">
+            <div class="flex items-center justify-between px-6 py-4">
+                <div class="flex items-center">
+                    <button id="sidebarToggle" class="lg:hidden mr-4 text-gray-600 hover:text-gray-900">
+                        <i class="fas fa-bars text-xl"></i>
+                    </button>
+                    <h1 class="text-2xl font-bold text-gray-900">Dashboard</h1>
+                </div>
+                
+                <div class="flex items-center space-x-4">
+                    <!-- Search -->
+                    <div class="relative hidden sm:block">
+                        <input type="text" placeholder="Search..." class="pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+                        <i class="fas fa-search absolute left-3 top-3 text-gray-400"></i>
+                    </div>
+                    
+                    <!-- Notifications -->
+                    <button class="relative text-gray-600 hover:text-gray-900">
+                        <i class="fas fa-bell text-xl"></i>
+                        <span class="notification-badge absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">3</span>
+                    </button>
+                    
+                    <!-- Quick Actions -->
+                    <button id="quickActionBtn" class="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors">
+                        <i class="fas fa-plus mr-2"></i>Quick Action
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <!-- Dashboard Content -->
+        <main class="p-6">
+            <!-- Welcome Section -->
+            <div class="gradient-bg rounded-2xl p-8 text-white mb-8 relative overflow-hidden">
+                <div class="relative z-10">
+                    <h2 class="text-3xl font-bold mb-2">Welcome back, <span id="dashboardUserName">John</span>! 👋</h2>
+                    <p class="text-xl opacity-90 mb-6">Your AI agents have been busy. Here's what happened while you were away.</p>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div class="metric-card rounded-xl p-6">
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <p class="text-white/80 text-sm">AI Calls Today</p>
+                                    <p class="text-3xl font-bold">1,247</p>
+                                </div>
+                                <i class="fas fa-brain text-3xl text-white/60"></i>
+                            </div>
+                            <p class="text-white/70 text-sm mt-2">+23% from yesterday</p>
+                        </div>
+                        
+                        <div class="metric-card rounded-xl p-6">
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <p class="text-white/80 text-sm">Tasks Automated</p>
+                                    <p class="text-3xl font-bold">89</p>
+                                </div>
+                                <i class="fas fa-robot text-3xl text-white/60"></i>
+                            </div>
+                            <p class="text-white/70 text-sm mt-2">+12 new automations</p>
+                        </div>
+                        
+                        <div class="metric-card rounded-xl p-6">
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <p class="text-white/80 text-sm">Cost Savings</p>
+                                    <p class="text-3xl font-bold">$2,340</p>
+                                </div>
+                                <i class="fas fa-dollar-sign text-3xl text-white/60"></i>
+                            </div>
+                            <p class="text-white/70 text-sm mt-2">This month</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Floating elements -->
+                <div class="absolute top-10 right-10 text-white/10 text-6xl">
+                    <i class="fas fa-robot ai-pulse"></i>
+                </div>
+                <div class="absolute bottom-5 left-10 text-white/10 text-4xl">
+                    <i class="fas fa-cogs"></i>
+                </div>
+            </div>
+
+            <!-- Quick Stats -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                    <div class="flex items-center">
+                        <div class="p-3 rounded-full bg-blue-100 text-blue-600 mr-4">
+                            <i class="fas fa-eye text-xl"></i>
+                        </div>
+                        <div>
+                            <p class="text-gray-600 text-sm">API Calls</p>
+                            <p class="text-2xl font-bold text-gray-900">8,743</p>
+                            <p class="text-green-600 text-sm">↑ 15.3%</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                    <div class="flex items-center">
+                        <div class="p-3 rounded-full bg-green-100 text-green-600 mr-4">
+                            <i class="fas fa-check-circle text-xl"></i>
+                        </div>
+                        <div>
+                            <p class="text-gray-600 text-sm">Success Rate</p>
+                            <p class="text-2xl font-bold text-gray-900">99.2%</p>
+                            <p class="text-green-600 text-sm">↑ 2.1%</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                    <div class="flex items-center">
+                        <div class="p-3 rounded-full bg-purple-100 text-purple-600 mr-4">
+                            <i class="fas fa-clock text-xl"></i>
+                        </div>
+                        <div>
+                            <p class="text-gray-600 text-sm">Response Time</p>
+                            <p class="text-2xl font-bold text-gray-900">1.2s</p>
+                            <p class="text-red-600 text-sm">↑ 0.3s</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                    <div class="flex items-center">
+                        <div class="p-3 rounded-full bg-yellow-100 text-yellow-600 mr-4">
+                            <i class="fas fa-users text-xl"></i>
+                        </div>
+                        <div>
+                            <p class="text-gray-600 text-sm">Active Users</p>
+                            <p class="text-2xl font-bold text-gray-900">1,429</p>
+                            <p class="text-green-600 text-sm">↑ 8.7%</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Charts Section -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+                <!-- Usage Chart -->
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                    <div class="flex items-center justify-between mb-6">
+                        <h3 class="text-lg font-semibold text-gray-900">API Usage Trends</h3>
+                        <select class="text-sm border rounded px-3 py-1">
+                            <option>Last 7 days</option>
+                            <option>Last 30 days</option>
+                            <option>Last 90 days</option>
+                        </select>
+                    </div>
+                    <canvas id="usageChart" height="300"></canvas>
+                </div>
+                
+                <!-- AI Models Chart -->
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                    <div class="flex items-center justify-between mb-6">
+                        <h3 class="text-lg font-semibold text-gray-900">AI Model Usage</h3>
+                        <span class="text-sm text-gray-500">This month</span>
+                    </div>
+                    <canvas id="modelsChart" height="300"></canvas>
+                </div>
+            </div>
+
+            <!-- AI Agents Status -->
+            <div class="bg-white rounded-xl shadow-sm border border-gray-100 mb-8">
+                <div class="p-6 border-b border-gray-100">
+                    <h3 class="text-lg font-semibold text-gray-900">AI Agents Status</h3>
+                    <p class="text-gray-600 text-sm">Monitor your autonomous AI agents</p>
+                </div>
+                
+                <div class="p-6">
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        <div class="p-4 border border-green-200 bg-green-50 rounded-lg">
+                            <div class="flex items-center justify-between mb-3">
+                                <h4 class="font-semibold text-green-800">Customer Service Bot</h4>
+                                <span class="px-2 py-1 bg-green-100 text-green-700 text-xs rounded-full">Active</span>
+                            </div>
+                            <p class="text-green-700 text-sm mb-2">Handling customer inquiries automatically</p>
+                            <div class="flex justify-between text-sm">
+                                <span class="text-green-600">143 conversations today</span>
+                                <span class="text-green-600">98% satisfaction</span>
+                            </div>
+                        </div>
+                        
+                        <div class="p-4 border border-blue-200 bg-blue-50 rounded-lg">
+                            <div class="flex items-center justify-between mb-3">
+                                <h4 class="font-semibold text-blue-800">Content Creator</h4>
+                                <span class="px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded-full">Active</span>
+                            </div>
+                            <p class="text-blue-700 text-sm mb-2">Generating marketing content</p>
+                            <div class="flex justify-between text-sm">
+                                <span class="text-blue-600">27 posts created</span>
+                                <span class="text-blue-600">5 campaigns active</span>
+                            </div>
+                        </div>
+                        
+                        <div class="p-4 border border-purple-200 bg-purple-50 rounded-lg">
+                            <div class="flex items-center justify-between mb-3">
+                                <h4 class="font-semibold text-purple-800">Data Analyst</h4>
+                                <span class="px-2 py-1 bg-purple-100 text-purple-700 text-xs rounded-full">Active</span>
+                            </div>
+                            <p class="text-purple-700 text-sm mb-2">Processing business metrics</p>
+                            <div class="flex justify-between text-sm">
+                                <span class="text-purple-600">12 reports generated</span>
+                                <span class="text-purple-600">Real-time analysis</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Recent Activity -->
+            <div class="bg-white rounded-xl shadow-sm border border-gray-100">
+                <div class="p-6 border-b border-gray-100">
+                    <h3 class="text-lg font-semibold text-gray-900">Recent Activity</h3>
+                </div>
+                
+                <div class="p-6">
+                    <div class="space-y-4">
+                        <div class="flex items-center p-3 bg-gray-50 rounded-lg">
+                            <div class="w-2 h-2 bg-green-500 rounded-full mr-4"></div>
+                            <div class="flex-1">
+                                <p class="text-sm font-medium text-gray-900">Customer Service Bot resolved 15 tickets</p>
+                                <p class="text-xs text-gray-600">2 minutes ago</p>
+                            </div>
+                        </div>
+                        
+                        <div class="flex items-center p-3 bg-gray-50 rounded-lg">
+                            <div class="w-2 h-2 bg-blue-500 rounded-full mr-4"></div>
+                            <div class="flex-1">
+                                <p class="text-sm font-medium text-gray-900">Content Creator published new blog post</p>
+                                <p class="text-xs text-gray-600">5 minutes ago</p>
+                            </div>
+                        </div>
+                        
+                        <div class="flex items-center p-3 bg-gray-50 rounded-lg">
+                            <div class="w-2 h-2 bg-purple-500 rounded-full mr-4"></div>
+                            <div class="flex-1">
+                                <p class="text-sm font-medium text-gray-900">Data Analyst completed weekly performance report</p>
+                                <p class="text-xs text-gray-600">12 minutes ago</p>
+                            </div>
+                        </div>
+                        
+                        <div class="flex items-center p-3 bg-gray-50 rounded-lg">
+                            <div class="w-2 h-2 bg-yellow-500 rounded-full mr-4"></div>
+                            <div class="flex-1">
+                                <p class="text-sm font-medium text-gray-900">New integration connected: Slack</p>
+                                <p class="text-xs text-gray-600">1 hour ago</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        // Sidebar toggle functionality
+        const sidebarToggle = document.getElementById('sidebarToggle');
+        const sidebar = document.getElementById('sidebar');
+        const sidebarBackdrop = document.getElementById('sidebarBackdrop');
+
+        sidebarToggle.addEventListener('click', function() {
+            sidebar.classList.toggle('-translate-x-full');
+            sidebarBackdrop.classList.toggle('hidden');
+        });
+
+        sidebarBackdrop.addEventListener('click', function() {
+            sidebar.classList.add('-translate-x-full');
+            sidebarBackdrop.classList.add('hidden');
+        });
+
+        // Navigation functionality
+        document.querySelectorAll('.nav-item').forEach(item => {
+            item.addEventListener('click', function(e) {
+                e.preventDefault();
+                document.querySelectorAll('.nav-item').forEach(nav => nav.classList.remove('active', 'bg-purple-100', 'text-purple-600'));
+                this.classList.add('active', 'bg-purple-100', 'text-purple-600');
+            });
+        });
+
+        // Logout functionality
+        document.getElementById('logoutBtn').addEventListener('click', function() {
+            if (confirm('Are you sure you want to logout?')) {
+                localStorage.removeItem('auth_token');
+                window.location.href = '/login';
+            }
+        });
+
+        // Load user data
+        async function loadUserData() {
+            try {
+                const token = localStorage.getItem('auth_token');
+                if (!token) {
+                    window.location.href = '/login';
+                    return;
+                }
+
+                const response = await fetch('/api/user/profile', {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+
+                if (response.ok) {
+                    const user = await response.json();
+                    document.getElementById('userName').textContent = user.full_name;
+                    document.getElementById('userPlan').textContent = `${user.plan.charAt(0).toUpperCase() + user.plan.slice(1)} Plan`;
+                    document.getElementById('dashboardUserName').textContent = user.full_name.split(' ')[0];
+                    
+                    // Set user avatar (you can implement Gravatar or similar)
+                    const avatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(user.full_name)}&background=7c3aed&color=fff`;
+                    document.getElementById('userAvatar').src = avatar;
+                } else {
+                    throw new Error('Failed to load user data');
+                }
+            } catch (error) {
+                console.error('Error loading user data:', error);
+                localStorage.removeItem('auth_token');
+                window.location.href = '/login';
+            }
+        }
+
+        // Initialize charts
+        function initializeCharts() {
+            // Usage Chart
+            const usageCtx = document.getElementById('usageChart').getContext('2d');
+            new Chart(usageCtx, {
+                type: 'line',
+                data: {
+                    labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+                    datasets: [{
+                        label: 'API Calls',
+                        data: [1200, 1900, 1300, 1500, 2000, 1800, 2200],
+                        borderColor: '#7c3aed',
+                        backgroundColor: 'rgba(124, 58, 237, 0.1)',
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            grid: {
+                                color: '#f3f4f6'
+                            }
+                        },
+                        x: {
+                            grid: {
+                                display: false
+                            }
+                        }
+                    }
+                }
+            });
+
+            // Models Chart
+            const modelsCtx = document.getElementById('modelsChart').getContext('2d');
+            new Chart(modelsCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['GPT-4', 'Claude', 'Custom Models', 'GPT-3.5'],
+                    datasets: [{
+                        data: [45, 25, 20, 10],
+                        backgroundColor: [
+                            '#7c3aed',
+                            '#3b82f6',
+                            '#10b981',
+                            '#f59e0b'
+                        ],
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                usePointStyle: true,
+                                padding: 20
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Quick action functionality
+        document.getElementById('quickActionBtn').addEventListener('click', function() {
+            // You can implement a dropdown menu or modal here
+            alert('Quick actions: Create new agent, Add integration, Generate report');
+        });
+
+        // Initialize dashboard
+        document.addEventListener('DOMContentLoaded', function() {
+            loadUserData();
+            initializeCharts();
+        });
+
+        // Auto-refresh data every 30 seconds
+        setInterval(loadUserData, 30000);
+    </script>
+</body>
+</html>

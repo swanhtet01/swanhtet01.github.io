@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Global AI Agents - Control Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Arial, sans-serif; background: #0a0b1e; color: #ffffff; }
+        
+        .header {
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            padding: 20px;
+            text-align: center;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+        }
+        
+        .header h1 { font-size: 2.5em; margin-bottom: 10px; }
+        .header p { opacity: 0.9; font-size: 1.1em; }
+        
+        .dashboard-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 20px;
+            padding: 20px;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        
+        .card {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 20px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            transition: transform 0.3s ease;
+        }
+        
+        .card:hover { transform: translateY(-5px); }
+        
+        .card h3 {
+            color: #64b5f6;
+            margin-bottom: 15px;
+            font-size: 1.3em;
+            border-bottom: 2px solid #64b5f6;
+            padding-bottom: 8px;
+        }
+        
+        .metric {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .metric:last-child { border-bottom: none; }
+        
+        .metric-label { font-weight: 500; }
+        .metric-value { 
+            font-weight: bold; 
+            font-size: 1.1em;
+            color: #4fc3f7;
+        }
+        
+        .agent-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px;
+            margin: 5px 0;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 8px;
+            border-left: 4px solid #4caf50;
+        }
+        
+        .agent-working { border-left-color: #ff9800; }
+        .agent-idle { border-left-color: #9e9e9e; }
+        
+        .status-badge {
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.9em;
+            font-weight: bold;
+        }
+        
+        .status-working { background: #ff9800; color: #000; }
+        .status-idle { background: #9e9e9e; color: #fff; }
+        .status-completed { background: #4caf50; color: #fff; }
+        
+        .performance-bar {
+            width: 100%;
+            height: 8px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 4px;
+            overflow: hidden;
+            margin-top: 5px;
+        }
+        
+        .performance-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #4caf50, #8bc34a);
+            transition: width 0.3s ease;
+        }
+        
+        .communication-item {
+            padding: 10px;
+            margin: 8px 0;
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 6px;
+            border-left: 3px solid #2196f3;
+        }
+        
+        .comm-meta {
+            font-size: 0.9em;
+            opacity: 0.7;
+            margin-bottom: 5px;
+        }
+        
+        .ceo-chat {
+            grid-column: 1 / -1;
+            margin-top: 20px;
+        }
+        
+        .chat-container {
+            max-height: 300px;
+            overflow-y: auto;
+            margin-bottom: 15px;
+            padding: 15px;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 8px;
+        }
+        
+        .chat-input-container {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .chat-input {
+            flex: 1;
+            padding: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 6px;
+            background: rgba(255, 255, 255, 0.1);
+            color: #fff;
+            font-size: 1em;
+        }
+        
+        .chat-button {
+            padding: 12px 24px;
+            background: linear-gradient(135deg, #2196f3, #21cbf3);
+            border: none;
+            border-radius: 6px;
+            color: #fff;
+            font-weight: bold;
+            cursor: pointer;
+            transition: transform 0.2s ease;
+        }
+        
+        .chat-button:hover { transform: scale(1.05); }
+        
+        .chat-message {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 8px;
+        }
+        
+        .user-message {
+            background: rgba(33, 150, 243, 0.2);
+            border-left: 4px solid #2196f3;
+        }
+        
+        .ceo-message {
+            background: rgba(76, 175, 80, 0.2);
+            border-left: 4px solid #4caf50;
+            white-space: pre-line;
+        }
+        
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+            opacity: 0.7;
+        }
+        
+        .refresh-button {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 12px 20px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 25px;
+            color: #fff;
+            cursor: pointer;
+            backdrop-filter: blur(10px);
+            transition: all 0.3s ease;
+        }
+        
+        .refresh-button:hover {
+            background: rgba(255, 255, 255, 0.2);
+            transform: scale(1.05);
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🌟 Global AI Agents Control Dashboard</h1>
+        <p>Real-time monitoring and control of AI agent workforce</p>
+        <p>📧 Connected to: swanhtet@supermega.dev | ⚡ Live System</p>
+    </div>
+    
+    <button class="refresh-button" onclick="refreshDashboard()">🔄 Refresh Data</button>
+    
+    <div class="dashboard-container">
+        <!-- Overview Card -->
+        <div class="card">
+            <h3>📊 System Overview</h3>
+            <div id="overview-metrics">
+                <div class="loading">Loading...</div>
+            </div>
+        </div>
+        
+        <!-- Agents Card -->
+        <div class="card">
+            <h3>🤖 Active Agents</h3>
+            <div id="agents-list">
+                <div class="loading">Loading...</div>
+            </div>
+        </div>
+        
+        <!-- Tasks Card -->
+        <div class="card">
+            <h3>📋 Task Status</h3>
+            <div id="tasks-overview">
+                <div class="loading">Loading...</div>
+            </div>
+        </div>
+        
+        <!-- Performance Card -->
+        <div class="card">
+            <h3>📈 Performance Metrics</h3>
+            <div id="performance-metrics">
+                <div class="loading">Loading...</div>
+            </div>
+        </div>
+        
+        <!-- Communications Card -->
+        <div class="card">
+            <h3>💬 Recent Communications</h3>
+            <div id="communications-log">
+                <div class="loading">Loading...</div>
+            </div>
+        </div>
+        
+        <!-- Department Status Card -->
+        <div class="card">
+            <h3>🏢 Department Status</h3>
+            <div id="department-status">
+                <div class="loading">Loading...</div>
+            </div>
+        </div>
+        
+        <!-- CEO Communication Card -->
+        <div class="card ceo-chat">
+            <h3>💼 CEO Communication</h3>
+            <div class="chat-container" id="ceo-chat">
+                <div class="chat-message ceo-message">
+                    <strong>CEO:</strong> Hello! I'm ready to discuss strategic matters and provide guidance. How can I assist you today?
+                </div>
+            </div>
+            <div class="chat-input-container">
+                <input type="text" class="chat-input" id="ceo-message-input" placeholder="Type your message to the CEO...">
+                <button class="chat-button" onclick="sendCEOMessage()">Send Message</button>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        let dashboardData = {};
+        
+        function refreshDashboard() {
+            loadSystemStatus();
+            loadPerformanceMetrics();
+        }
+        
+        function loadSystemStatus() {
+            $.get('/api/status')
+                .done(function(data) {
+                    dashboardData = data;
+                    updateOverview(data);
+                    updateAgentsList(data.agents);
+                    updateTasksOverview(data.tasks);
+                    updateCommunications(data.communications);
+                })
+                .fail(function() {
+                    console.error('Failed to load system status');
+                });
+        }
+        
+        function loadPerformanceMetrics() {
+            $.get('/api/performance_metrics')
+                .done(function(data) {
+                    updatePerformanceMetrics(data);
+                    updateDepartmentStatus(data.department_performance);
+                })
+                .fail(function() {
+                    console.error('Failed to load performance metrics');
+                });
+        }
+        
+        function updateOverview(data) {
+            const html = `
+                <div class="metric">
+                    <span class="metric-label">Total Agents</span>
+                    <span class="metric-value">${data.performance.total_agents}</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Active Now</span>
+                    <span class="metric-value">${data.performance.active_agents}</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Total Tasks</span>
+                    <span class="metric-value">${data.tasks.total}</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Avg Performance</span>
+                    <span class="metric-value">${data.performance.average.toFixed(1)}/10</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">System Status</span>
+                    <span class="metric-value" style="color: #4caf50;">🟢 Operational</span>
+                </div>
+            `;
+            $('#overview-metrics').html(html);
+        }
+        
+        function updateAgentsList(agents) {
+            const html = agents.map(agent => `
+                <div class="agent-item agent-${agent.status}">
+                    <div>
+                        <div><strong>${agent.name}</strong></div>
+                        <div style="font-size: 0.9em; opacity: 0.7;">${agent.role} • ${agent.department}</div>
+                        <div class="performance-bar">
+                            <div class="performance-fill" style="width: ${agent.performance * 10}%"></div>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="status-badge status-${agent.status}">${agent.status.toUpperCase()}</div>
+                        <div style="font-size: 0.9em; margin-top: 5px;">${agent.performance.toFixed(1)}/10</div>
+                    </div>
+                </div>
+            `).join('');
+            $('#agents-list').html(html);
+        }
+        
+        function updateTasksOverview(tasks) {
+            const html = `
+                <div class="metric">
+                    <span class="metric-label">Active Tasks</span>
+                    <span class="metric-value">${tasks.active}</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Completed</span>
+                    <span class="metric-value" style="color: #4caf50;">${tasks.completed}</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Pending</span>
+                    <span class="metric-value" style="color: #ff9800;">${tasks.pending}</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Success Rate</span>
+                    <span class="metric-value">${tasks.total > 0 ? ((tasks.completed / tasks.total) * 100).toFixed(1) : 0}%</span>
+                </div>
+            `;
+            $('#tasks-overview').html(html);
+        }
+        
+        function updatePerformanceMetrics(data) {
+            if (data.task_completion_rates && data.task_completion_rates.length > 0) {
+                const avgCompletion = data.task_completion_rates.reduce((sum, rate) => sum + rate.completion_rate, 0) / data.task_completion_rates.length;
+                const html = `
+                    <div class="metric">
+                        <span class="metric-label">Avg Completion Rate</span>
+                        <span class="metric-value">${avgCompletion.toFixed(1)}%</span>
+                    </div>
+                    <div class="metric">
+                        <span class="metric-label">Efficiency Score</span>
+                        <span class="metric-value">${(avgCompletion * 0.1).toFixed(1)}/10</span>
+                    </div>
+                    <div class="metric">
+                        <span class="metric-label">System Health</span>
+                        <span class="metric-value" style="color: #4caf50;">Excellent</span>
+                    </div>
+                `;
+                $('#performance-metrics').html(html);
+            }
+        }
+        
+        function updateDepartmentStatus(departments) {
+            if (departments && departments.length > 0) {
+                const html = departments.map(dept => `
+                    <div class="metric">
+                        <span class="metric-label">${dept.department}</span>
+                        <span class="metric-value">${dept.avg_performance.toFixed(1)}/10 (${dept.agent_count} agents)</span>
+                    </div>
+                `).join('');
+                $('#department-status').html(html);
+            }
+        }
+        
+        function updateCommunications(communications) {
+            const html = communications.map(comm => `
+                <div class="communication-item">
+                    <div class="comm-meta">${comm.from} → ${comm.to} • ${comm.type}</div>
+                    <div>${comm.content}</div>
+                </div>
+            `).join('');
+            $('#communications-log').html(html || '<div style="text-align: center; opacity: 0.7;">No recent communications</div>');
+        }
+        
+        function sendCEOMessage() {
+            const input = $('#ceo-message-input');
+            const message = input.val().trim();
+            
+            if (!message) return;
+            
+            // Add user message to chat
+            $('#ceo-chat').append(`
+                <div class="chat-message user-message">
+                    <strong>You:</strong> ${message}
+                </div>
+            `);
+            
+            input.val('');
+            
+            // Show loading
+            $('#ceo-chat').append(`
+                <div class="chat-message" id="loading-message">
+                    <strong>CEO:</strong> <em>Typing...</em>
+                </div>
+            `);
+            
+            // Send to CEO
+            $.post('/api/communicate_ceo', { message: message })
+                .done(function(data) {
+                    $('#loading-message').remove();
+                    $('#ceo-chat').append(`
+                        <div class="chat-message ceo-message">
+                            <strong>CEO:</strong> ${data.response}
+                        </div>
+                    `);
+                    
+                    // Scroll to bottom
+                    const chatContainer = $('#ceo-chat');
+                    chatContainer.scrollTop(chatContainer[0].scrollHeight);
+                })
+                .fail(function() {
+                    $('#loading-message').remove();
+                    $('#ceo-chat').append(`
+                        <div class="chat-message ceo-message">
+                            <strong>CEO:</strong> I'm temporarily unavailable. Please try again in a moment.
+                        </div>
+                    `);
+                });
+        }
+        
+        // Handle Enter key in CEO chat
+        $('#ceo-message-input').keypress(function(e) {
+            if (e.which == 13) {
+                sendCEOMessage();
+            }
+        });
+        
+        // Auto-refresh every 30 seconds
+        setInterval(refreshDashboard, 30000);
+        
+        // Initial load
+        $(document).ready(function() {
+            refreshDashboard();
+        });
+    </script>
+</body>
+</html>

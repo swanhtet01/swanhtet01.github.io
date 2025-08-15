@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Super Mega Agent System{% endblock %}</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.1.3/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.4/socket.io.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.7.0/chart.min.js"></script>
+    <style>
+        body { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; }
+        .navbar-brand { font-weight: bold; font-size: 1.5rem; }
+        .card { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); }
+        .metric-card { border-left: 4px solid #007bff; }
+        .status-indicator { display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin-right: 8px; }
+        .status-active { background-color: #28a745; }
+        .status-inactive { background-color: #dc3545; }
+        .status-warning { background-color: #ffc107; }
+        .performance-bar { height: 8px; background: #e9ecef; border-radius: 4px; overflow: hidden; }
+        .performance-fill { height: 100%; background: linear-gradient(90deg, #28a745, #20c997, #17a2b8); }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+        <div class="container">
+            <a class="navbar-brand" href="/"><i class="fas fa-robot me-2"></i>Super Mega Agent System</a>
+            <div class="navbar-nav ms-auto">
+                {% if session.authenticated %}
+                    <a class="nav-link" href="/dashboard"><i class="fas fa-tachometer-alt me-1"></i>Dashboard</a>
+                    <a class="nav-link" href="/agents"><i class="fas fa-users me-1"></i>Agents</a>
+                    <a class="nav-link" href="/analytics"><i class="fas fa-chart-line me-1"></i>Analytics</a>
+                    <a class="nav-link" href="/logout"><i class="fas fa-sign-out-alt me-1"></i>Logout</a>
+                {% else %}
+                    <a class="nav-link" href="/"><i class="fas fa-home me-1"></i>Home</a>
+                    <a class="nav-link" href="/products"><i class="fas fa-cube me-1"></i>Products</a>
+                    <a class="nav-link" href="/solutions"><i class="fas fa-lightbulb me-1"></i>Solutions</a>
+                    <a class="nav-link" href="/login"><i class="fas fa-sign-in-alt me-1"></i>Login</a>
+                {% endif %}
+            </div>
+        </div>
+    </nav>
+
+    <main>
+        {% block content %}{% endblock %}
+    </main>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.1.3/js/bootstrap.bundle.min.js"></script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

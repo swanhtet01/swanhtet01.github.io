@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Super Mega AI - Autonomous Business Intelligence Platform</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .gradient-bg {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .feature-card:hover {
+            transform: translateY(-5px);
+            transition: all 0.3s ease;
+        }
+        .pricing-card {
+            transition: all 0.3s ease;
+        }
+        .pricing-card:hover {
+            transform: scale(1.05);
+        }
+    </style>
+</head>
+<body class="font-sans">
+    <!-- Navigation -->
+    <nav class="bg-white shadow-lg fixed w-full z-50">
+        <div class="max-w-7xl mx-auto px-4">
+            <div class="flex justify-between items-center h-16">
+                <div class="flex items-center space-x-2">
+                    <i class="fas fa-robot text-2xl text-purple-600"></i>
+                    <span class="text-xl font-bold text-gray-800">Super Mega AI</span>
+                </div>
+                <div class="hidden md:flex items-center space-x-8">
+                    <a href="#features" class="text-gray-700 hover:text-purple-600">Features</a>
+                    <a href="#pricing" class="text-gray-700 hover:text-purple-600">Pricing</a>
+                    <a href="#about" class="text-gray-700 hover:text-purple-600">About</a>
+                    <a href="/login" class="text-purple-600 hover:text-purple-800">Login</a>
+                    <a href="/register" class="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700">Start Free Trial</a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section class="gradient-bg pt-20">
+        <div class="max-w-7xl mx-auto px-4 py-20">
+            <div class="text-center text-white">
+                <h1 class="text-5xl md:text-7xl font-bold mb-6">
+                    🤖 Autonomous AI
+                    <span class="text-yellow-300">Business Platform</span>
+                </h1>
+                <p class="text-xl md:text-2xl mb-8 max-w-3xl mx-auto">
+                    Let AI agents run your business 24/7. Automate customer service, content creation, data analysis, and more with zero human intervention.
+                </p>
+                <div class="flex flex-col sm:flex-row gap-4 justify-center">
+                    <a href="/register" class="bg-white text-purple-600 px-8 py-4 rounded-lg font-semibold text-lg hover:bg-gray-100 transform hover:scale-105 transition-all">
+                        Start Free Trial - 100 AI Calls
+                    </a>
+                    <a href="#demo" class="border-2 border-white text-white px-8 py-4 rounded-lg font-semibold text-lg hover:bg-white hover:text-purple-600 transition-all">
+                        Watch Live Demo
+                    </a>
+                </div>
+                <div class="mt-8 text-sm opacity-90">
+                    ⚡ Setup in 60 seconds • 🔒 Enterprise Security • 📊 Real-time Analytics
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Stats Section -->
+    <section class="py-16 bg-gray-50">
+        <div class="max-w-7xl mx-auto px-4">
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
+                <div>
+                    <div class="text-4xl font-bold text-purple-600">10,000+</div>
+                    <div class="text-gray-600">Businesses Automated</div>
+                </div>
+                <div>
+                    <div class="text-4xl font-bold text-purple-600">24/7</div>
+                    <div class="text-gray-600">Autonomous Operation</div>
+                </div>
+                <div>
+                    <div class="text-4xl font-bold text-purple-600">95%</div>
+                    <div class="text-gray-600">Cost Reduction</div>
+                </div>
+                <div>
+                    <div class="text-4xl font-bold text-purple-600">99.9%</div>
+                    <div class="text-gray-600">Uptime SLA</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Features Section -->
+    <section id="features" class="py-20">
+        <div class="max-w-7xl mx-auto px-4">
+            <div class="text-center mb-16">
+                <h2 class="text-4xl font-bold text-gray-800 mb-4">🚀 Platform Features</h2>
+                <p class="text-xl text-gray-600">Everything you need to run an autonomous AI business</p>
+            </div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                <!-- Feature Cards -->
+                <div class="feature-card bg-white p-8 rounded-xl shadow-lg border hover:shadow-xl">
+                    <div class="text-4xl mb-4">🤖</div>
+                    <h3 class="text-xl font-semibold mb-3">Autonomous AI Agents</h3>
+                    <p class="text-gray-600">Self-managing AI agents that handle tasks, make decisions, and improve performance without human intervention.</p>
+                </div>
+                
+                <div class="feature-card bg-white p-8 rounded-xl shadow-lg border hover:shadow-xl">
+                    <div class="text-4xl mb-4">🧠</div>
+                    <h3 class="text-xl font-semibold mb-3">Multi-Model AI</h3>
+                    <p class="text-gray-600">GPT-4, Claude, custom models - access the best AI for each specific task with automatic model selection.</p>
+                </div>
+                
+                <div class="feature-card bg-white p-8 rounded-xl shadow-lg border hover:shadow-xl">
+                    <div class="text-4xl mb-4">📊</div>
+                    <h3 class="text-xl font-semibold mb-3">Real-time Analytics</h3>
+                    <p class="text-gray-600">Live dashboard with performance metrics, usage analytics, and business insights updated in real-time.</p>
+                </div>
+                
+                <div class="feature-card bg-white p-8 rounded-xl shadow-lg border hover:shadow-xl">
+                    <div class="text-4xl mb-4">⚡</div>
+                    <h3 class="text-xl font-semibold mb-3">Auto-Scaling</h3>
+                    <p class="text-gray-600">Automatically scales resources up or down based on demand to optimize performance and costs.</p>
+                </div>
+                
+                <div class="feature-card bg-white p-8 rounded-xl shadow-lg border hover:shadow-xl">
+                    <div class="text-4xl mb-4">🔗</div>
+                    <h3 class="text-xl font-semibold mb-3">Custom Integrations</h3>
+                    <p class="text-gray-600">Connect to any system via API. CRM, email, databases, social media - all automated seamlessly.</p>
+                </div>
+                
+                <div class="feature-card bg-white p-8 rounded-xl shadow-lg border hover:shadow-xl">
+                    <div class="text-4xl mb-4">🛡️</div>
+                    <h3 class="text-xl font-semibold mb-3">Enterprise Security</h3>
+                    <p class="text-gray-600">SOC2 compliant, end-to-end encryption, role-based access control, and audit trails.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Use Cases Section -->
+    <section class="py-20 bg-gray-50">
+        <div class="max-w-7xl mx-auto px-4">
+            <div class="text-center mb-16">
+                <h2 class="text-4xl font-bold text-gray-800 mb-4">💼 Perfect for Every Business</h2>
+                <p class="text-xl text-gray-600">See how companies use Super Mega AI to automate their operations</p>
+            </div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-12">
+                <div class="bg-white p-8 rounded-xl shadow-lg">
+                    <h3 class="text-2xl font-bold mb-4 text-purple-600">🏢 Digital Agencies</h3>
+                    <ul class="space-y-3 text-gray-700">
+                        <li class="flex items-center"><i class="fas fa-check text-green-500 mr-3"></i>Automated client reporting</li>
+                        <li class="flex items-center"><i class="fas fa-check text-green-500 mr-3"></i>Social media content generation</li>
+                        <li class="flex items-center"><i class="fas fa-check text-green-500 mr-3"></i>Campaign performance optimization</li>
+                        <li class="flex items-center"><i class="fas fa-check text-green-500 mr-3"></i>Client communication automation</li>
+                    </ul>
+                </div>
+                
+                <div class="bg-white p-8 rounded-xl shadow-lg">
+                    <h3 class="text-2xl font-bold mb-4 text-purple-600">🛒 E-commerce</h3>
+                    <ul class="space-y-3 text-gray-700">
+                        <li class="flex items-center"><i class="fas fa-check text-green-500 mr-3"></i>Customer service chatbots</li>
+                        <li class="flex items-center"><i class="fas fa-check text-green-500 mr-3"></i>Product description generation</li>
+                        <li class="flex items-center"><i class="fas fa-check text-green-500 mr-3"></i>Inventory management automation</li>
+                        <li class="flex items-center"><i class="fas fa-check text-green-500 mr-3"></i>Personalized marketing campaigns</li>
+                    </ul>
+                </div>
+                
+                <div class="bg-white p-8 rounded-xl shadow-lg">
+                    <h3 class="text-2xl font-bold mb-4 text-purple-600">💼 Consulting Firms</h3>
+                    <ul class="space-y-3 text-gray-700">
+                        <li class="flex items-center"><i class="fas fa-check text-green-500 mr-3"></i>Research and market analysis</li>
+                        <li class="flex items-center"><i class="fas fa-check text-green-500 mr-3"></i>Report and proposal generation</li>
+                        <li class="flex items-center"><i class="fas fa-check text-green-500 mr-3"></i>Client data analysis</li>
+                        <li class="flex items-center"><i class="fas fa-check text-green-500 mr-3"></i>Knowledge management</li>
+                    </ul>
+                </div>
+                
+                <div class="bg-white p-8 rounded-xl shadow-lg">
+                    <h3 class="text-2xl font-bold mb-4 text-purple-600">🏭 Manufacturing</h3>
+                    <ul class="space-y-3 text-gray-700">
+                        <li class="flex items-center"><i class="fas fa-check text-green-500 mr-3"></i>Quality control automation</li>
+                        <li class="flex items-center"><i class="fas fa-check text-green-500 mr-3"></i>Predictive maintenance</li>
+                        <li class="flex items-center"><i class="fas fa-check text-green-500 mr-3"></i>Supply chain optimization</li>
+                        <li class="flex items-center"><i class="fas fa-check text-green-500 mr-3"></i>Production scheduling</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Pricing Section -->
+    <section id="pricing" class="py-20">
+        <div class="max-w-7xl mx-auto px-4">
+            <div class="text-center mb-16">
+                <h2 class="text-4xl font-bold text-gray-800 mb-4">💰 Simple, Transparent Pricing</h2>
+                <p class="text-xl text-gray-600">Choose the perfect plan for your business size</p>
+            </div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+                <!-- Free Trial -->
+                <div class="pricing-card bg-white p-8 rounded-xl shadow-lg border-2 border-gray-200">
+                    <div class="text-center">
+                        <h3 class="text-2xl font-bold mb-2">Free Trial</h3>
+                        <div class="text-4xl font-bold text-gray-800 mb-4">$0</div>
+                        <p class="text-gray-600 mb-6">Perfect for testing</p>
+                    </div>
+                    <ul class="space-y-3 mb-8">
+                        <li class="flex items-center"><i class="fas fa-check text-green-500 mr-3"></i>100 AI calls/month</li>
+                        <li class="flex items-center"><i class="fas fa-check text-green-500 mr-3"></i>1 AI agent</li>
+                        <li class="flex items-center"><i class="fas fa-check text-green-500 mr-3"></i>Basic analytics</li>
+                        <li class="flex items-center"><i class="fas fa-check text-green-500 mr-3"></i>Email support</li>
+                    </ul>
+                    <button class="w-full bg-gray-600 text-white py-3 rounded-lg hover:bg-gray-700 transition-all">
+                        Start Free Trial
+                    </button>
+                </div>
+                
+                <!-- Starter -->
+                <div class="pricing-card bg-white p-8 rounded-xl shadow-lg border-2 border-purple-200">
+                    <div class="text-center">
+                        <h3 class="text-2xl font-bold mb-2">Starter</h3>
+                        <div class="text-4xl font-bold text-purple-600 mb-4">$29</div>
+                        <p class="text-gray-600 mb-6">For small businesses</p>
+                    </div>
+                    <ul class="space-y-3 mb-8">
+                        <li class="flex items-center"><i class="fas fa-check text-green-500 mr-3"></i>1,000 AI calls/month</li>
+                        <li class="flex items-center"><i class="fas fa-check text-green-500 mr-3"></i>2 AI agents</li>
+                        <li class="flex items-center"><i class="fas fa-check text-green-500 mr-3"></i>Email automation</li>
+                        <li class="flex items-center"><i class="fas fa-check text-green-500 mr-3"></i>Priority support</li>
+                    </ul>
+                    <button class="w-full bg-purple-600 text-white py-3 rounded-lg hover:bg-purple-700 transition-all">
+                        Choose Starter
+                    </button>
+                </div>
+                
+                <!-- Professional (Most Popular) -->
+                <div class="pricing-card bg-white p-8 rounded-xl shadow-xl border-2 border-purple-500 relative">
+                    <div class="absolute -top-3 left-1/2 transform -translate-x-1/2 bg-purple-500 text-white px-4 py-1 rounded-full text-sm">
+                        Most Popular
+                    </div>
+                    <div class="text-center">
+                        <h3 class="text-2xl font-bold mb-2">Professional</h3>
+                        <div class="text-4xl font-bold text-purple-600 mb-4">$99</div>
+                        <p class="text-gray-600 mb-6">For growing companies</p>
+                    </div>
+                    <ul class="space-y-3 mb-8">
+                        <li class="flex items-center"><i class="fas fa-check text-green-500 mr-3"></i>10,000 AI calls/month</li>
+                        <li class="flex items-center"><i class="fas fa-check text-green-500 mr-3"></i>10 AI agents</li>
+                        <li class="flex items-center"><i class="fas fa-check text-green-500 mr-3"></i>Multi-model AI</li>
+                        <li class="flex items-center"><i class="fas fa-check text-green-500 mr-3"></i>Custom workflows</li>
+                        <li class="flex items-center"><i class="fas fa-check text-green-500 mr-3"></i>API access</li>
+                        <li class="flex items-center"><i class="fas fa-check text-green-500 mr-3"></i>5 team members</li>
+                    </ul>
+                    <button class="w-full bg-purple-600 text-white py-3 rounded-lg hover:bg-purple-700 transition-all">
+                        Choose Professional
+                    </button>
+                </div>
+                
+                <!-- Enterprise -->
+                <div class="pricing-card bg-white p-8 rounded-xl shadow-lg border-2 border-gray-200">
+                    <div class="text-center">
+                        <h3 class="text-2xl font-bold mb-2">Enterprise</h3>
+                        <div class="text-4xl font-bold text-gray-800 mb-4">$299</div>
+                        <p class="text-gray-600 mb-6">For large organizations</p>
+                    </div>
+                    <ul class="space-y-3 mb-8">
+                        <li class="flex items-center"><i class="fas fa-check text-green-500 mr-3"></i>50,000 AI calls/month</li>
+                        <li class="flex items-center"><i class="fas fa-check text-green-500 mr-3"></i>Unlimited agents</li>
+                        <li class="flex items-center"><i class="fas fa-check text-green-500 mr-3"></i>White-label options</li>
+                        <li class="flex items-center"><i class="fas fa-check text-green-500 mr-3"></i>Custom models</li>
+                        <li class="flex items-center"><i class="fas fa-check text-green-500 mr-3"></i>Unlimited team members</li>
+                        <li class="flex items-center"><i class="fas fa-check text-green-500 mr-3"></i>24/7 phone support</li>
+                    </ul>
+                    <button class="w-full bg-gray-600 text-white py-3 rounded-lg hover:bg-gray-700 transition-all">
+                        Contact Sales
+                    </button>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Testimonials -->
+    <section class="py-20 bg-gray-50">
+        <div class="max-w-7xl mx-auto px-4">
+            <div class="text-center mb-16">
+                <h2 class="text-4xl font-bold text-gray-800 mb-4">🌟 What Our Customers Say</h2>
+            </div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+                <div class="bg-white p-8 rounded-xl shadow-lg">
+                    <div class="flex items-center mb-4">
+                        <img src="https://via.placeholder.com/60" alt="Customer" class="w-12 h-12 rounded-full mr-4">
+                        <div>
+                            <h4 class="font-semibold">Sarah Johnson</h4>
+                            <p class="text-gray-600 text-sm">CEO, TechStart Inc</p>
+                        </div>
+                    </div>
+                    <p class="text-gray-700">"Super Mega AI transformed our customer service. We now handle 10x more inquiries with 90% less manual work. It's incredible!"</p>
+                    <div class="mt-4 text-yellow-500">★★★★★</div>
+                </div>
+                
+                <div class="bg-white p-8 rounded-xl shadow-lg">
+                    <div class="flex items-center mb-4">
+                        <img src="https://via.placeholder.com/60" alt="Customer" class="w-12 h-12 rounded-full mr-4">
+                        <div>
+                            <h4 class="font-semibold">Mike Chen</h4>
+                            <p class="text-gray-600 text-sm">Founder, E-com Solutions</p>
+                        </div>
+                    </div>
+                    <p class="text-gray-700">"The ROI was immediate. Our content creation is now fully automated, and the quality is consistently excellent. Highly recommend!"</p>
+                    <div class="mt-4 text-yellow-500">★★★★★</div>
+                </div>
+                
+                <div class="bg-white p-8 rounded-xl shadow-lg">
+                    <div class="flex items-center mb-4">
+                        <img src="https://via.placeholder.com/60" alt="Customer" class="w-12 h-12 rounded-full mr-4">
+                        <div>
+                            <h4 class="font-semibold">Lisa Rodriguez</h4>
+                            <p class="text-gray-600 text-sm">COO, Digital Agency Pro</p>
+                        </div>
+                    </div>
+                    <p class="text-gray-700">"We've automated our entire client reporting process. What used to take hours now happens automatically. Our clients love the insights!"</p>
+                    <div class="mt-4 text-yellow-500">★★★★★</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- CTA Section -->
+    <section class="gradient-bg py-20">
+        <div class="max-w-4xl mx-auto text-center px-4">
+            <h2 class="text-4xl md:text-5xl font-bold text-white mb-6">
+                Ready to Automate Your Business?
+            </h2>
+            <p class="text-xl text-white mb-8 opacity-90">
+                Join thousands of companies already using Super Mega AI to save time and increase revenue
+            </p>
+            <div class="flex flex-col sm:flex-row gap-4 justify-center">
+                <a href="/register" class="bg-white text-purple-600 px-8 py-4 rounded-lg font-semibold text-lg hover:bg-gray-100 transform hover:scale-105 transition-all">
+                    Start Free Trial Today
+                </a>
+                <a href="#" class="border-2 border-white text-white px-8 py-4 rounded-lg font-semibold text-lg hover:bg-white hover:text-purple-600 transition-all">
+                    Schedule Demo Call
+                </a>
+            </div>
+            <div class="mt-6 text-white text-sm opacity-90">
+                ⚡ No credit card required • 🔒 Cancel anytime • 📞 Expert support included
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="bg-gray-900 text-white py-12">
+        <div class="max-w-7xl mx-auto px-4">
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-8">
+                <div>
+                    <div class="flex items-center space-x-2 mb-4">
+                        <i class="fas fa-robot text-2xl text-purple-400"></i>
+                        <span class="text-xl font-bold">Super Mega AI</span>
+                    </div>
+                    <p class="text-gray-400">The world's most advanced autonomous AI business platform.</p>
+                </div>
+                
+                <div>
+                    <h4 class="font-semibold mb-4">Product</h4>
+                    <ul class="space-y-2 text-gray-400">
+                        <li><a href="#" class="hover:text-white">Features</a></li>
+                        <li><a href="#" class="hover:text-white">Pricing</a></li>
+                        <li><a href="#" class="hover:text-white">API Docs</a></li>
+                        <li><a href="#" class="hover:text-white">Integrations</a></li>
+                    </ul>
+                </div>
+                
+                <div>
+                    <h4 class="font-semibold mb-4">Company</h4>
+                    <ul class="space-y-2 text-gray-400">
+                        <li><a href="#" class="hover:text-white">About</a></li>
+                        <li><a href="#" class="hover:text-white">Careers</a></li>
+                        <li><a href="#" class="hover:text-white">Press</a></li>
+                        <li><a href="#" class="hover:text-white">Contact</a></li>
+                    </ul>
+                </div>
+                
+                <div>
+                    <h4 class="font-semibold mb-4">Support</h4>
+                    <ul class="space-y-2 text-gray-400">
+                        <li><a href="#" class="hover:text-white">Help Center</a></li>
+                        <li><a href="#" class="hover:text-white">Status Page</a></li>
+                        <li><a href="#" class="hover:text-white">Security</a></li>
+                        <li><a href="#" class="hover:text-white">Privacy</a></li>
+                    </ul>
+                </div>
+            </div>
+            
+            <div class="border-t border-gray-800 mt-12 pt-8 text-center text-gray-400">
+                <p>&copy; 2025 Super Mega AI. All rights reserved. Built with ❤️ for autonomous businesses.</p>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // Smooth scrolling for navigation links
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                document.querySelector(this.getAttribute('href')).scrollIntoView({
+                    behavior: 'smooth'
+                });
+            });
+        });
+    </script>
+</body>
+</html>
