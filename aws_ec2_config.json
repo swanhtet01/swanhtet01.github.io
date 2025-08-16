@@ -1,0 +1,13 @@
+{
+  "instance_type": "t3.micro",
+  "ami_id": "ami-0abcdef1234567890",
+  "key_name": "supermega-key",
+  "security_groups": [
+    "supermega-web-sg"
+  ],
+  "user_data": "#!/bin/bash\n                # Install Docker\n                apt-get update\n                apt-get install -y docker.io\n                systemctl start docker\n                systemctl enable docker\n                \n                # Clone and run SuperMega platform\n                git clone https://github.com/swanhtet01/swanhtet01.github.io.git /opt/supermega\n                cd /opt/supermega\n                \n                # Start the platform\n                python3 -m http.server 8080 &\n                \n                # Setup auto-restart on reboot\n                echo \"@reboot cd /opt/supermega && python3 -m http.server 8080\" | crontab -\n            ",
+  "monitoring": {
+    "enabled": true,
+    "detailed": false
+  }
+}

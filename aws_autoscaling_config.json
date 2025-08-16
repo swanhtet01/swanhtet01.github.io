@@ -1,0 +1,31 @@
+{
+  "launch_template": {
+    "name": "supermega-template",
+    "instance_type": "t3.micro",
+    "min_size": 1,
+    "max_size": 2,
+    "desired_capacity": 1
+  },
+  "scaling_policies": {
+    "scale_up": {
+      "metric": "CPUUtilization",
+      "threshold": 70,
+      "action": "increase by 1"
+    },
+    "scale_down": {
+      "metric": "CPUUtilization",
+      "threshold": 30,
+      "action": "decrease by 1"
+    }
+  },
+  "scheduled_actions": {
+    "night_scale_down": {
+      "time": "02:00 UTC",
+      "desired_capacity": 1
+    },
+    "peak_scale_up": {
+      "time": "14:00 UTC",
+      "desired_capacity": 1
+    }
+  }
+}
