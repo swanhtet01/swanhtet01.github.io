@@ -1,0 +1,26 @@
+{
+  "project_name": "supermega-dev",
+  "domain": "supermega.dev",
+  "version": "1.0.0",
+  "build_date": "2025-08-16T17:10:29.264622",
+  "environment": "production",
+  "services": {
+    "api": {
+      "file": "api/supermega_api.py",
+      "port": 8080,
+      "health_check": "/api/health"
+    },
+    "frontend": {
+      "file": "frontend/supermega_production.html",
+      "port": 80
+    },
+    "agents": {
+      "file": "production/supermega_production.py",
+      "workers": 5
+    }
+  },
+  "database": {
+    "type": "sqlite",
+    "file": "supermega_production.db"
+  }
+}
