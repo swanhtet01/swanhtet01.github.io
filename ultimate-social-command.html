@@ -49,9 +49,39 @@
         <div class="container mx-auto px-6 py-4">
             <div class="flex items-center justify-between">
                 <div class="flex items-center space-x-4">
-                    <a href="index.html" class="text-2xl font-bold bg-gradient-to-r from-pink-400 to-purple-400 bg-clip-text text-transparent">
-                        📱 SuperMega Social Command
-                    </a>
+                    <svg width="120" height="48" viewBox="0 0 200 80" xmlns="http://www.w3.org/2000/svg">
+                        <defs>
+                            <linearGradient id="goldGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                                <stop offset="0%" style="stop-color:#FFD700;stop-opacity:1" />
+                                <stop offset="50%" style="stop-color:#FFA500;stop-opacity:1" />
+                                <stop offset="100%" style="stop-color:#FF8C00;stop-opacity:1" />
+                            </linearGradient>
+                            <linearGradient id="lightningGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                                <stop offset="0%" style="stop-color:#00FFFF;stop-opacity:1" />
+                                <stop offset="100%" style="stop-color:#0080FF;stop-opacity:1" />
+                            </linearGradient>
+                            <filter id="glow">
+                                <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
+                                <feMerge> 
+                                    <feMergeNode in="coloredBlur"/>
+                                    <feMergeNode in="SourceGraphic"/>
+                                </feMerge>
+                            </filter>
+                        </defs>
+                        <path d="M10 10 L50 40 L30 40 L70 70" stroke="url(#lightningGradient)" stroke-width="2" fill="none" filter="url(#glow)"/>
+                        <path d="M180 15 L140 35 L160 35 L120 65" stroke="url(#lightningGradient)" stroke-width="2" fill="none" filter="url(#glow)"/>
+                        <text x="20" y="35" font-family="Arial Black, Arial" font-size="22" font-weight="900" fill="url(#goldGradient)" filter="url(#glow)">SUPER</text>
+                        <text x="20" y="60" font-family="Arial Black, Arial" font-size="22" font-weight="900" fill="url(#goldGradient)" filter="url(#glow)">MEGA</text>
+                        <circle cx="160" cy="40" r="3" fill="#FFD700" opacity="0.8">
+                            <animate attributeName="opacity" values="0.8;0.3;0.8" dur="2s" repeatCount="indefinite"/>
+                        </circle>
+                        <circle cx="170" cy="25" r="2" fill="#FFA500" opacity="0.6">
+                            <animate attributeName="opacity" values="0.6;0.2;0.6" dur="1.5s" repeatCount="indefinite"/>
+                        </circle>
+                    </svg>
+                    <div class="text-2xl font-bold bg-gradient-to-r from-pink-400 to-purple-400 bg-clip-text text-transparent">
+                        Social Command Center
+                    </div>
                     <span class="px-3 py-1 bg-pink-500/20 border border-pink-500 rounded-full text-xs">ULTIMATE EDITION</span>
                 </div>
                 <button onclick="window.history.back()" class="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded-lg transition">
