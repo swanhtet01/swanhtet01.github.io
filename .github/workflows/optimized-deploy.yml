@@ -1,0 +1,51 @@
+name: SuperMega Optimized Deploy
+
+on:
+  push:
+    branches: [ supermega-production ]
+  schedule:
+    # Run once daily to save minutes
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10  # Limit to save budget
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      
+    - name: Setup Node (cached)
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: '**/package-lock.json'
+    
+    - name: Deploy to Pages
+      uses: actions/deploy-pages@v3
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        
+    - name: Update AWS if needed
+      run: |
+        # Only update AWS if files changed (save costs)
+        if [ "$(git diff --name-only HEAD~1)" ]; then
+          echo "Files changed, updating AWS..."
+          # Add AWS update commands here
+        else
+          echo "No changes, skipping AWS update"
+        fi
+
+  # Conditional job - only runs if needed
+  aws-update:
+    needs: deploy
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
+    timeout-minutes: 5
+    
+    steps:
+    - name: Update AWS Lambda
+      run: echo "AWS update logic here"

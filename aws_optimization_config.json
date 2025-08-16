@@ -1,0 +1,12 @@
+{
+  "auto_scaling": {
+    "min_instances": 1,
+    "max_instances": 2,
+    "scale_up_metric": "CPU > 70%",
+    "scale_down_metric": "CPU < 30%"
+  },
+  "cost_alerts": {
+    "budget_limit": 15,
+    "alert_threshold": 80
+  }
+}
