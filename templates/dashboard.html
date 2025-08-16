@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SuperMega Production Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            min-height: 100vh;
+        }
+        
+        .header {
+            background: rgba(0, 0, 0, 0.2);
+            padding: 1rem 2rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .header h1 {
+            font-size: 2.5rem;
+            font-weight: 300;
+            text-align: center;
+        }
+        
+        .subtitle {
+            text-align: center;
+            margin-top: 0.5rem;
+            opacity: 0.8;
+        }
+        
+        .dashboard {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+            padding: 2rem;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        .card {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 2rem;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            transition: transform 0.3s ease;
+        }
+        
+        .card:hover {
+            transform: translateY(-5px);
+        }
+        
+        .card h3 {
+            font-size: 1.5rem;
+            margin-bottom: 1rem;
+            color: #ffffff;
+        }
+        
+        .metric {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin: 1rem 0;
+            padding: 0.5rem;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 8px;
+        }
+        
+        .metric-label {
+            font-size: 1rem;
+            opacity: 0.8;
+        }
+        
+        .metric-value {
+            font-size: 1.3rem;
+            font-weight: 600;
+            color: #4ade80;
+        }
+        
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #4ade80;
+            margin-right: 8px;
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+        
+        .agent-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+        
+        .agent-item {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 1rem;
+            border-radius: 8px;
+            text-align: center;
+        }
+        
+        .agent-name {
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+        
+        .agent-specialty {
+            font-size: 0.9rem;
+            opacity: 0.7;
+            margin-bottom: 0.5rem;
+        }
+        
+        .agent-stats {
+            font-size: 0.8rem;
+            opacity: 0.6;
+        }
+        
+        .footer {
+            text-align: center;
+            padding: 2rem;
+            opacity: 0.6;
+        }
+        
+        .api-endpoints {
+            background: rgba(0, 0, 0, 0.2);
+            padding: 1rem;
+            border-radius: 8px;
+            margin-top: 1rem;
+        }
+        
+        .api-endpoints h4 {
+            margin-bottom: 0.5rem;
+            color: #60a5fa;
+        }
+        
+        .api-endpoints code {
+            display: block;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 0.3rem 0.5rem;
+            margin: 0.2rem 0;
+            border-radius: 4px;
+            font-size: 0.9rem;
+            color: #a3a3a3;
+        }
+        
+        @media (max-width: 768px) {
+            .dashboard {
+                grid-template-columns: 1fr;
+                padding: 1rem;
+            }
+            
+            .header h1 {
+                font-size: 2rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🚀 SuperMega Production Dashboard</h1>
+        <p class="subtitle">Real Business Platform • supermega.dev • 5 AI Agents Active</p>
+    </div>
+    
+    <div class="dashboard">
+        <div class="card">
+            <h3>📊 Business Metrics</h3>
+            <div class="metric">
+                <span class="metric-label">Active Users</span>
+                <span class="metric-value">{{ stats.active_users }}</span>
+            </div>
+            <div class="metric">
+                <span class="metric-label">Total Revenue</span>
+                <span class="metric-value">${{ "%.2f"|format(stats.total_revenue) }}</span>
+            </div>
+            <div class="metric">
+                <span class="metric-label">Active Projects</span>
+                <span class="metric-value">{{ stats.active_projects }}</span>
+            </div>
+            <div class="metric">
+                <span class="metric-label">Monthly Growth</span>
+                <span class="metric-value">{{ "%.1f"|format(stats.monthly_growth) }}%</span>
+            </div>
+        </div>
+        
+        <div class="card">
+            <h3>🤖 AI Agents Status</h3>
+            <div class="metric">
+                <span class="metric-label">System Status</span>
+                <span class="metric-value">
+                    <span class="status-indicator"></span>{{ stats.system_status.title() }}
+                </span>
+            </div>
+            <div class="agent-grid" id="agent-status">
+                <div class="agent-item">
+                    <div class="agent-name">AI Agent</div>
+                    <div class="agent-specialty">AI/ML Development</div>
+                    <div class="agent-stats">Ready for tasks</div>
+                </div>
+                <div class="agent-item">
+                    <div class="agent-name">Business Agent</div>
+                    <div class="agent-specialty">Strategy & Growth</div>
+                    <div class="agent-stats">Ready for tasks</div>
+                </div>
+                <div class="agent-item">
+                    <div class="agent-name">Marketing Agent</div>
+                    <div class="agent-specialty">Digital Marketing</div>
+                    <div class="agent-stats">Ready for tasks</div>
+                </div>
+                <div class="agent-item">
+                    <div class="agent-name">Content Agent</div>
+                    <div class="agent-specialty">Content Creation</div>
+                    <div class="agent-stats">Ready for tasks</div>
+                </div>
+                <div class="agent-item">
+                    <div class="agent-name">Tech Agent</div>
+                    <div class="agent-specialty">Infrastructure</div>
+                    <div class="agent-stats">Ready for tasks</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card">
+            <h3>⚡ Recent Activity</h3>
+            {% for activity in stats.agent_activities %}
+            <div class="metric">
+                <span class="metric-label">{{ activity.agent }}</span>
+                <span class="metric-value">{{ activity.activities }} tasks</span>
+            </div>
+            {% else %}
+            <div class="metric">
+                <span class="metric-label">System</span>
+                <span class="metric-value">Ready for new tasks</span>
+            </div>
+            {% endfor %}
+        </div>
+        
+        <div class="card">
+            <h3>🔗 API Endpoints</h3>
+            <div class="api-endpoints">
+                <h4>Available APIs:</h4>
+                <code>GET /api/stats - Dashboard statistics</code>
+                <code>GET /api/agents - Agent status</code>
+                <code>POST /api/submit-task - Submit task to agent</code>
+                <code>GET /health - System health check</code>
+            </div>
+            
+            <div class="metric">
+                <span class="metric-label">API Status</span>
+                <span class="metric-value">
+                    <span class="status-indicator"></span>Active
+                </span>
+            </div>
+        </div>
+    </div>
+    
+    <div class="footer">
+        <p>SuperMega Production System v1.0.0 | Cost-Optimized Cloud Architecture | Real Business Platform</p>
+        <p>© 2025 SuperMega Inc. | Production deployment to supermega.dev</p>
+    </div>
+    
+    <script>
+        // Auto-refresh dashboard data every 30 seconds
+        setInterval(async function() {
+            try {
+                const response = await fetch('/api/stats');
+                const stats = await response.json();
+                
+                // Update metrics without full page reload
+                document.querySelector('.metric-value').textContent = stats.active_users;
+                
+                // Update agent status
+                const agentResponse = await fetch('/api/agents');
+                const agents = await agentResponse.json();
+                
+                // Update agent grid with real data
+                updateAgentStatus(agents);
+                
+            } catch (error) {
+                console.log('Dashboard refresh error:', error);
+            }
+        }, 30000);
+        
+        function updateAgentStatus(agents) {
+            const agentItems = document.querySelectorAll('.agent-item');
+            let index = 0;
+            
+            for (const [agentName, agentData] of Object.entries(agents)) {
+                if (index < agentItems.length) {
+                    const item = agentItems[index];
+                    const statsDiv = item.querySelector('.agent-stats');
+                    if (statsDiv) {
+                        statsDiv.textContent = `${agentData.task_count} tasks | $${agentData.total_cost.toFixed(3)}`;
+                    }
+                    index++;
+                }
+            }
+        }
+        
+        // Initial load
+        fetch('/api/agents')
+            .then(response => response.json())
+            .then(agents => updateAgentStatus(agents))
+            .catch(error => console.log('Agent data load error:', error));
+    </script>
+</body>
+</html>
