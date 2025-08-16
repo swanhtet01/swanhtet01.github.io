@@ -363,7 +363,7 @@
                     this.emailResults = [];
                     
                     try {
-                        const response = await fetch('http://localhost:8080/api/extract-emails', {
+                        const response = await fetch('http://localhost:5000/api/demo/extract-emails', {
                             method: 'POST',
                             headers: {
                                 'Content-Type': 'application/json',
@@ -407,15 +407,14 @@
                     this.generatedContent = '';
                     
                     try {
-                        const response = await fetch('http://localhost:8080/api/generate-content', {
+                        const response = await fetch('http://localhost:5000/api/demo/generate-content', {
                             method: 'POST',
                             headers: {
                                 'Content-Type': 'application/json',
                             },
                             body: JSON.stringify({ 
-                                prompt: `Write a ${this.contentTopic} for ${this.targetCompany}`,
-                                type: 'cold_email',
-                                tone: 'professional'
+                                topic: this.contentTopic,
+                                company: this.targetCompany 
                             })
                         });
                         
