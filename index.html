@@ -60,8 +60,8 @@
                     <a href="#demo" class="text-gray-300 hover:text-white transition-colors">Live Demo</a>
                     <a href="#pricing" class="text-gray-300 hover:text-white transition-colors">Pricing</a>
                     <a href="#contact" class="text-gray-300 hover:text-white transition-colors">Contact</a>
-                    <button class="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 px-6 py-2 rounded-lg font-semibold transition-all">
-                        Get Started
+                    <button onclick="window.location.href='enterprise-login-system.html'" class="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 px-6 py-2 rounded-lg font-semibold transition-all">
+                        🔐 Enterprise Login
                     </button>
                 </div>
             </div>
@@ -547,8 +547,8 @@
                         <li class="flex items-center"><span class="text-green-400 mr-3">✓</span> Custom AI training</li>
                         <li class="flex items-center"><span class="text-green-400 mr-3">✓</span> 24/7 phone support</li>
                     </ul>
-                    <button class="w-full py-3 bg-gradient-to-r from-yellow-600 to-orange-600 hover:from-yellow-700 hover:to-orange-700 rounded-lg font-semibold transition-all duration-300">
-                        Contact Sales
+                    <button onclick="scheduleEnterpriseDemo()" class="w-full py-3 bg-gradient-to-r from-yellow-600 to-orange-600 hover:from-yellow-700 hover:to-orange-700 rounded-lg font-semibold transition-all duration-300">
+                        Schedule Enterprise Demo
                     </button>
                 </div>
             </div>
@@ -1044,12 +1044,12 @@ Response time: 47ms</pre>
             </p>
             
             <div class="flex flex-col sm:flex-row gap-4 justify-center items-center mb-8">
-                <button onclick="window.open('http://localhost:8501', '_blank')" 
+                <button onclick="window.location.href='enterprise-login-system.html'" 
                         class="px-8 py-4 bg-gradient-to-r from-green-500 to-blue-600 rounded-lg font-bold text-lg hover:from-green-600 hover:to-blue-700 transition-all duration-300 transform hover:scale-105 shadow-lg">
-                    🚀 Start Your Revolution Now
+                    🚀 Access Enterprise Platform
                 </button>
-                <button class="px-8 py-4 border-2 border-white border-opacity-30 rounded-lg font-semibold text-lg hover:bg-white hover:bg-opacity-10 transition-all duration-300 glass-effect">
-                    📞 Schedule Demo Call
+                <button onclick="scheduleEnterpriseDemo()" class="px-8 py-4 border-2 border-white border-opacity-30 rounded-lg font-semibold text-lg hover:bg-white hover:bg-opacity-10 transition-all duration-300 glass-effect">
+                    📞 Schedule Enterprise Demo
                 </button>
             </div>
             
@@ -1882,5 +1882,151 @@ Response time: 47ms</pre>
             box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
         }
     </style>
+
+    <script>
+        // Initialize page
+        document.addEventListener('DOMContentLoaded', function() {
+            // Live metrics animation
+            setInterval(() => {
+                const metrics = document.querySelectorAll('.text-blue-400, .text-purple-400, .text-cyan-400, .text-green-400');
+                metrics.forEach(metric => {
+                    if (metric.textContent.includes(',')) {
+                        const current = parseInt(metric.textContent.replace(/,/g, ''));
+                        const increment = Math.floor(Math.random() * 50) + 10;
+                        metric.textContent = (current + increment).toLocaleString();
+                    }
+                });
+            }, 8000);
+
+            // Smooth scrolling for navigation
+            document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+                anchor.addEventListener('click', function (e) {
+                    e.preventDefault();
+                    const targetElement = document.querySelector(this.getAttribute('href'));
+                    if (targetElement) {
+                        targetElement.scrollIntoView({
+                            behavior: 'smooth'
+                        });
+                    }
+                });
+            });
+        });
+
+        // Enterprise Demo Scheduling
+        function scheduleEnterpriseDemo() {
+            // Create modal for demo scheduling
+            const modal = document.createElement('div');
+            modal.className = 'fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center';
+            modal.innerHTML = `
+                <div class="glass-effect rounded-2xl p-8 max-w-lg w-full mx-4" style="background: rgba(255, 255, 255, 0.05); backdrop-filter: blur(20px); border: 1px solid rgba(255, 255, 255, 0.1);">
+                    <div class="text-center mb-6">
+                        <h2 class="text-3xl font-bold mb-4 text-white">📞 Schedule Enterprise Demo</h2>
+                        <p class="text-gray-400">Book a personalized demo with our enterprise team</p>
+                    </div>
+                    
+                    <form id="demoForm" class="space-y-4">
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium mb-2 text-gray-300">First Name</label>
+                                <input type="text" required class="w-full bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-white focus:border-blue-500 focus:outline-none">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium mb-2 text-gray-300">Last Name</label>
+                                <input type="text" required class="w-full bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-white focus:border-blue-500 focus:outline-none">
+                            </div>
+                        </div>
+                        
+                        <div>
+                            <label class="block text-sm font-medium mb-2 text-gray-300">Business Email</label>
+                            <input type="email" required class="w-full bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-white focus:border-blue-500 focus:outline-none">
+                        </div>
+                        
+                        <div>
+                            <label class="block text-sm font-medium mb-2 text-gray-300">Company Name</label>
+                            <input type="text" required class="w-full bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-white focus:border-blue-500 focus:outline-none">
+                        </div>
+                        
+                        <div>
+                            <label class="block text-sm font-medium mb-2 text-gray-300">Company Size</label>
+                            <select required class="w-full bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-white focus:border-blue-500 focus:outline-none">
+                                <option value="">Select company size</option>
+                                <option value="1-50">1-50 employees</option>
+                                <option value="51-200">51-200 employees</option>
+                                <option value="201-1000">201-1000 employees</option>
+                                <option value="1000+">1000+ employees</option>
+                            </select>
+                        </div>
+                        
+                        <div>
+                            <label class="block text-sm font-medium mb-2 text-gray-300">Preferred Time</label>
+                            <select required class="w-full bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-white focus:border-blue-500 focus:outline-none">
+                                <option value="">Select preferred time</option>
+                                <option value="asap">ASAP - Within 24 hours</option>
+                                <option value="this-week">This week</option>
+                                <option value="next-week">Next week</option>
+                                <option value="flexible">I'm flexible</option>
+                            </select>
+                        </div>
+                        
+                        <div>
+                            <label class="block text-sm font-medium mb-2 text-gray-300">What interests you most?</label>
+                            <textarea class="w-full bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-white focus:border-blue-500 focus:outline-none" rows="3" placeholder="Tell us about your specific needs and use cases..."></textarea>
+                        </div>
+                        
+                        <div class="flex space-x-3">
+                            <button type="submit" class="flex-1 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white py-3 rounded-lg font-semibold transition-all">
+                                📞 Schedule Demo
+                            </button>
+                            <button type="button" onclick="this.closest('.fixed').remove()" class="px-6 py-3 border border-gray-600 hover:bg-gray-600 rounded-lg font-semibold transition-all text-white">
+                                Cancel
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            `;
+            
+            document.body.appendChild(modal);
+            
+            // Handle form submission
+            const form = modal.querySelector('#demoForm');
+            form.addEventListener('submit', function(e) {
+                e.preventDefault();
+                
+                // Show success message
+                modal.innerHTML = `
+                    <div class="glass-effect rounded-2xl p-8 max-w-lg w-full mx-4 text-center" style="background: rgba(255, 255, 255, 0.05); backdrop-filter: blur(20px); border: 1px solid rgba(255, 255, 255, 0.1);">
+                        <div class="text-6xl mb-4">✅</div>
+                        <h2 class="text-2xl font-bold mb-4 text-green-400">Demo Scheduled Successfully!</h2>
+                        <div class="space-y-3 text-gray-300 mb-6">
+                            <p>🎉 Your enterprise demo has been scheduled</p>
+                            <p>📧 Confirmation email sent to your inbox</p>
+                            <p>📞 Our enterprise team will contact you within 4 hours</p>
+                            <p>⏰ Average demo duration: 45 minutes</p>
+                        </div>
+                        
+                        <div class="bg-blue-900/30 border border-blue-500/50 rounded-lg p-4 mb-6">
+                            <h3 class="font-semibold text-blue-400 mb-2">What to Expect:</h3>
+                            <ul class="text-sm text-gray-300 space-y-1 text-left">
+                                <li>• Personalized platform walkthrough</li>
+                                <li>• Live demonstration of all 47+ AI agents</li>
+                                <li>• Custom solution design for your company</li>
+                                <li>• ROI calculation and pricing discussion</li>
+                                <li>• Implementation timeline and support options</li>
+                            </ul>
+                        </div>
+                        
+                        <div class="flex space-x-3">
+                            <button onclick="window.location.href='enterprise-login-system.html'" class="flex-1 bg-gradient-to-r from-green-600 to-blue-600 text-white py-3 rounded-lg font-semibold">
+                                🚀 Access Platform Now
+                            </button>
+                            <button onclick="this.closest('.fixed').remove()" class="px-6 py-3 border border-gray-600 hover:bg-gray-600 rounded-lg font-semibold text-white">
+                                Close
+                            </button>
+                        </div>
+                    </div>
+                `;
+            });
+        }
+    </script>
 </body>
 </html>

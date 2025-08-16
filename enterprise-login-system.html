@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SuperMega Enterprise Login - Secure Access Portal</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .enterprise-gradient { 
+            background: linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 25%, #16213e 50%, #0f0f23 75%, #000000 100%);
+        }
+        .glass-card {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .security-indicator {
+            background: linear-gradient(45deg, #10b981, #34d399);
+            animation: pulse 2s infinite;
+        }
+        .enterprise-button {
+            background: linear-gradient(135deg, #2563eb, #3b82f6, #60a5fa);
+            transition: all 0.3s ease;
+        }
+        .enterprise-button:hover {
+            background: linear-gradient(135deg, #1d4ed8, #2563eb, #3b82f6);
+            transform: translateY(-2px);
+            box-shadow: 0 15px 30px -5px rgba(59, 130, 246, 0.5);
+        }
+        .login-animation {
+            animation: slideInUp 0.8s ease-out;
+        }
+        @keyframes slideInUp {
+            from { transform: translateY(50px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        .security-feature {
+            background: linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(52, 211, 153, 0.1));
+            border: 1px solid rgba(16, 185, 129, 0.3);
+        }
+        .biometric-scan {
+            animation: biometricScan 3s infinite;
+        }
+        @keyframes biometricScan {
+            0%, 100% { transform: scale(1); opacity: 0.7; }
+            50% { transform: scale(1.05); opacity: 1; }
+        }
+    </style>
+</head>
+<body class="enterprise-gradient min-h-screen flex items-center justify-center">
+
+    <!-- Background Pattern -->
+    <div class="absolute inset-0 opacity-10">
+        <div class="absolute inset-0" style="background-image: radial-gradient(circle at 25% 25%, #3b82f6 0%, transparent 50%), radial-gradient(circle at 75% 75%, #10b981 0%, transparent 50%);"></div>
+    </div>
+
+    <div class="container mx-auto px-6 relative z-10" x-data="enterpriseLogin()">
+        
+        <!-- Security Badge -->
+        <div class="text-center mb-8">
+            <div class="inline-flex items-center space-x-3 bg-green-900/30 border border-green-500/50 rounded-full px-6 py-3 mb-4">
+                <div class="security-indicator w-3 h-3 rounded-full"></div>
+                <span class="text-green-400 text-sm font-semibold">🔒 Enterprise Security Active</span>
+            </div>
+        </div>
+
+        <div class="max-w-lg mx-auto">
+            <!-- Main Login Card -->
+            <div class="glass-card rounded-3xl p-10 login-animation">
+                
+                <!-- Header -->
+                <div class="text-center mb-8">
+                    <div class="flex justify-center mb-4">
+                        <div class="biometric-scan w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-3xl">
+                            🚀
+                        </div>
+                    </div>
+                    <h1 class="text-3xl font-black bg-gradient-to-r from-white to-gray-300 bg-clip-text text-transparent mb-2">
+                        SuperMega Enterprise
+                    </h1>
+                    <p class="text-gray-400">Secure Access Portal - Multi-Factor Authentication</p>
+                </div>
+
+                <!-- Login Form -->
+                <form @submit.prevent="handleLogin" class="space-y-6">
+                    
+                    <!-- Email Field -->
+                    <div class="space-y-2">
+                        <label class="block text-sm font-semibold text-gray-300">Corporate Email</label>
+                        <div class="relative">
+                            <input 
+                                type="email" 
+                                x-model="loginForm.email"
+                                required
+                                class="w-full px-4 py-3 bg-gray-800/50 border border-gray-600 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all text-white"
+                                placeholder="your.name@company.com"
+                            >
+                            <div class="absolute right-3 top-3 text-gray-400">
+                                📧
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Password Field -->
+                    <div class="space-y-2">
+                        <label class="block text-sm font-semibold text-gray-300">Password</label>
+                        <div class="relative">
+                            <input 
+                                :type="showPassword ? 'text' : 'password'" 
+                                x-model="loginForm.password"
+                                required
+                                class="w-full px-4 py-3 bg-gray-800/50 border border-gray-600 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all text-white"
+                                placeholder="••••••••••••"
+                            >
+                            <button 
+                                type="button"
+                                @click="showPassword = !showPassword"
+                                class="absolute right-3 top-3 text-gray-400 hover:text-white transition-colors"
+                            >
+                                <span x-text="showPassword ? '🙈' : '👁️'"></span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 2FA Code -->
+                    <div class="space-y-2" x-show="show2FA">
+                        <label class="block text-sm font-semibold text-gray-300">2FA Authentication Code</label>
+                        <div class="relative">
+                            <input 
+                                type="text" 
+                                x-model="loginForm.twoFA"
+                                maxlength="6"
+                                class="w-full px-4 py-3 bg-gray-800/50 border border-gray-600 rounded-lg focus:border-green-500 focus:ring-2 focus:ring-green-500/20 transition-all text-white text-center text-2xl tracking-widest"
+                                placeholder="123456"
+                            >
+                            <div class="absolute right-3 top-3 text-green-400">
+                                🔐
+                            </div>
+                        </div>
+                        <p class="text-sm text-gray-500">Enter the 6-digit code from your authenticator app</p>
+                    </div>
+
+                    <!-- Remember & Options -->
+                    <div class="flex items-center justify-between">
+                        <label class="flex items-center space-x-2">
+                            <input type="checkbox" x-model="loginForm.remember" class="rounded border-gray-600 bg-gray-800 text-blue-500">
+                            <span class="text-sm text-gray-400">Remember device</span>
+                        </label>
+                        <a href="#" class="text-sm text-blue-400 hover:text-blue-300 transition-colors">Forgot password?</a>
+                    </div>
+
+                    <!-- Login Button -->
+                    <button 
+                        type="submit"
+                        :disabled="isLoading"
+                        class="w-full enterprise-button text-white font-semibold py-4 rounded-lg relative overflow-hidden"
+                    >
+                        <span x-show="!isLoading">🔐 Secure Login</span>
+                        <span x-show="isLoading" class="flex items-center justify-center space-x-2">
+                            <div class="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                            <span>Authenticating...</span>
+                        </span>
+                    </button>
+                </form>
+
+                <!-- Enterprise Features -->
+                <div class="mt-8 pt-6 border-t border-gray-700">
+                    <h3 class="text-sm font-semibold text-gray-300 mb-4">Enterprise Security Features</h3>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div class="security-feature p-3 rounded-lg">
+                            <div class="flex items-center space-x-2">
+                                <div class="w-2 h-2 bg-green-400 rounded-full"></div>
+                                <span class="text-xs text-green-400">SSL/TLS Encryption</span>
+                            </div>
+                        </div>
+                        <div class="security-feature p-3 rounded-lg">
+                            <div class="flex items-center space-x-2">
+                                <div class="w-2 h-2 bg-green-400 rounded-full"></div>
+                                <span class="text-xs text-green-400">Multi-Factor Auth</span>
+                            </div>
+                        </div>
+                        <div class="security-feature p-3 rounded-lg">
+                            <div class="flex items-center space-x-2">
+                                <div class="w-2 h-2 bg-green-400 rounded-full"></div>
+                                <span class="text-xs text-green-400">Role-Based Access</span>
+                            </div>
+                        </div>
+                        <div class="security-feature p-3 rounded-lg">
+                            <div class="flex items-center space-x-2">
+                                <div class="w-2 h-2 bg-green-400 rounded-full"></div>
+                                <span class="text-xs text-green-400">Audit Logging</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Quick Access Options -->
+            <div class="mt-6 text-center space-y-4">
+                <div class="glass-card rounded-2xl p-6">
+                    <h3 class="text-lg font-semibold mb-4">Quick Access Demo Accounts</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <button @click="quickLogin('ceo')" class="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 px-4 py-2 rounded-lg transition-all">
+                            👔 CEO Access
+                        </button>
+                        <button @click="quickLogin('manager')" class="bg-gradient-to-r from-green-600 to-teal-600 hover:from-green-700 hover:to-teal-700 px-4 py-2 rounded-lg transition-all">
+                            👨‍💼 Manager
+                        </button>
+                        <button @click="quickLogin('analyst')" class="bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-700 hover:to-red-700 px-4 py-2 rounded-lg transition-all">
+                            📊 Analyst
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function enterpriseLogin() {
+            return {
+                loginForm: {
+                    email: '',
+                    password: '',
+                    twoFA: '',
+                    remember: false
+                },
+                showPassword: false,
+                show2FA: false,
+                isLoading: false,
+
+                async handleLogin() {
+                    this.isLoading = true;
+                    
+                    // Simulate authentication process
+                    await this.delay(1500);
+                    
+                    if (!this.show2FA) {
+                        this.show2FA = true;
+                        this.isLoading = false;
+                        this.showNotification('🔐 2FA code sent to your device', 'success');
+                        return;
+                    }
+                    
+                    // Complete authentication
+                    this.showNotification('✅ Authentication successful!', 'success');
+                    
+                    await this.delay(1000);
+                    
+                    // Redirect to enterprise dashboard
+                    window.location.href = 'enterprise-member-dashboard.html';
+                },
+
+                async quickLogin(role) {
+                    this.isLoading = true;
+                    
+                    const credentials = {
+                        ceo: { email: 'ceo@supermega.dev', role: 'Chief Executive Officer' },
+                        manager: { email: 'manager@supermega.dev', role: 'Business Manager' },
+                        analyst: { email: 'analyst@supermega.dev', role: 'Data Analyst' }
+                    };
+                    
+                    const cred = credentials[role];
+                    this.loginForm.email = cred.email;
+                    
+                    this.showNotification(`🚀 Quick login as ${cred.role}`, 'info');
+                    
+                    await this.delay(2000);
+                    
+                    // Store role in sessionStorage for dashboard
+                    sessionStorage.setItem('userRole', role);
+                    sessionStorage.setItem('userEmail', cred.email);
+                    sessionStorage.setItem('roleTitle', cred.role);
+                    
+                    window.location.href = 'enterprise-member-dashboard.html';
+                },
+
+                showNotification(message, type = 'info') {
+                    // Create notification element
+                    const notification = document.createElement('div');
+                    notification.className = `fixed top-4 right-4 z-50 px-6 py-4 rounded-lg shadow-lg transform transition-all duration-500 ${
+                        type === 'success' ? 'bg-green-600' : 
+                        type === 'error' ? 'bg-red-600' : 'bg-blue-600'
+                    } text-white font-semibold`;
+                    notification.innerHTML = message;
+                    
+                    document.body.appendChild(notification);
+                    
+                    // Animate in
+                    setTimeout(() => {
+                        notification.style.transform = 'translateX(0)';
+                    }, 100);
+                    
+                    // Remove after delay
+                    setTimeout(() => {
+                        notification.style.transform = 'translateX(400px)';
+                        setTimeout(() => document.body.removeChild(notification), 500);
+                    }, 3000);
+                },
+
+                delay(ms) {
+                    return new Promise(resolve => setTimeout(resolve, ms));
+                }
+            }
+        }
+    </script>
+</body>
+</html>
