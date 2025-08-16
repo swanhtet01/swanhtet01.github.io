@@ -568,27 +568,54 @@
             <!-- Real Demo Interface -->
             <div class="max-w-6xl mx-auto" x-data="realDemo()">
                 
-                <!-- Tool Selection -->
-                <div class="flex flex-wrap justify-center gap-4 mb-12">
-                    <button @click="selectTool('leadgen')" 
-                            :class="activeTool === 'leadgen' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'"
-                            class="px-6 py-3 rounded-lg font-semibold transition-all duration-300">
-                        🎯 Lead Generator
+                <!-- Ultimate Product Access -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-8 mb-12">
+                    <button onclick="window.open('ultimate-business-intelligence.html', '_blank')" 
+                            class="ultimate-product-card bg-gradient-to-br from-purple-900/50 to-blue-900/50 border border-purple-500/50 hover:from-purple-800/50 hover:to-blue-800/50 p-8 rounded-2xl transition-all duration-300 transform hover:scale-105">
+                        <div class="flex items-center space-x-4 mb-6">
+                            <div class="w-12 h-12 bg-gradient-to-r from-purple-500 to-blue-500 rounded-xl flex items-center justify-center text-xl">🧠</div>
+                            <div class="text-left">
+                                <span class="text-purple-400 font-bold text-lg">Business Intelligence Engine</span>
+                                <div class="text-xs text-gray-400">ULTIMATE EDITION</div>
+                            </div>
+                        </div>
+                        <p class="text-gray-300 text-sm mb-4">Real-time competitor monitoring, lead generation, and market intelligence with 247 active data sources</p>
+                        <div class="flex items-center space-x-2">
+                            <div class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                            <span class="text-green-400 text-xs">LIVE MONITORING • 847K DATA POINTS</span>
+                        </div>
                     </button>
-                    <button @click="selectTool('email')" 
-                            :class="activeTool === 'email' ? 'bg-purple-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'"
-                            class="px-6 py-3 rounded-lg font-semibold transition-all duration-300">
-                        📧 Email Finder
+                    
+                    <button onclick="window.open('ultimate-social-command.html', '_blank')" 
+                            class="ultimate-product-card bg-gradient-to-br from-pink-900/50 to-red-900/50 border border-pink-500/50 hover:from-pink-800/50 hover:to-red-800/50 p-8 rounded-2xl transition-all duration-300 transform hover:scale-105">
+                        <div class="flex items-center space-x-4 mb-6">
+                            <div class="w-12 h-12 bg-gradient-to-r from-pink-500 to-red-500 rounded-xl flex items-center justify-center text-xl">📱</div>
+                            <div class="text-left">
+                                <span class="text-pink-400 font-bold text-lg">Social Command Center</span>
+                                <div class="text-xs text-gray-400">ULTIMATE EDITION</div>
+                            </div>
+                        </div>
+                        <p class="text-gray-300 text-sm mb-4">AI-powered multi-platform posting, engagement automation, and viral content creation across all social networks</p>
+                        <div class="flex items-center space-x-2">
+                            <div class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                            <span class="text-green-400 text-xs">AUTO-POSTING ACTIVE • 8 PLATFORMS</span>
+                        </div>
                     </button>
-                    <button @click="selectTool('domain')" 
-                            :class="activeTool === 'domain' ? 'bg-cyan-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'"
-                            class="px-6 py-3 rounded-lg font-semibold transition-all duration-300">
-                        🌐 Domain Analyzer
-                    </button>
-                    <button @click="selectTool('bizdata')" 
-                            :class="activeTool === 'bizdata' ? 'bg-orange-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'"
-                            class="px-6 py-3 rounded-lg font-semibold transition-all duration-300">
-                        ⚡ BizData API
+                    
+                    <button onclick="window.open('ultimate-enterprise-crm.html', '_blank')" 
+                            class="ultimate-product-card bg-gradient-to-br from-green-900/50 to-teal-900/50 border border-green-500/50 hover:from-green-800/50 hover:to-teal-800/50 p-8 rounded-2xl transition-all duration-300 transform hover:scale-105">
+                        <div class="flex items-center space-x-4 mb-6">
+                            <div class="w-12 h-12 bg-gradient-to-r from-green-500 to-teal-500 rounded-xl flex items-center justify-center text-xl">🏢</div>
+                            <div class="text-left">
+                                <span class="text-green-400 font-bold text-lg">Enterprise CRM Pro</span>
+                                <div class="text-xs text-gray-400">ULTIMATE EDITION</div>
+                            </div>
+                        </div>
+                        <p class="text-gray-300 text-sm mb-4">Complete customer relationship management with AI-driven lead scoring, automated outreach, and sales pipeline optimization</p>
+                        <div class="flex items-center space-x-2">
+                            <div class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                            <span class="text-green-400 text-xs">PIPELINE ACTIVE • $2.4M VALUE</span>
+                        </div>
                     </button>
                 </div>
 

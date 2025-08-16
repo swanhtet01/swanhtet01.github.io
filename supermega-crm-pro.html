@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SuperMega CRM Pro - Enterprise Customer Relationship Management</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .enterprise-gradient { 
+            background: linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 25%, #16213e 50%, #0f0f23 75%, #000000 100%);
+        }
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.03);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+        .data-card {
+            background: linear-gradient(145deg, #1e293b, #334155);
+            transition: all 0.3s ease;
+        }
+        .data-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px -5px rgba(59, 130, 246, 0.3);
+        }
+        .pipeline-stage {
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(139, 92, 246, 0.1));
+            border: 1px solid rgba(59, 130, 246, 0.3);
+        }
+    </style>
+</head>
+<body class="enterprise-gradient min-h-screen text-white" x-data="crmPro()" x-init="initCRM()">
+
+    <!-- Top Navigation -->
+    <nav class="glass-panel border-b border-gray-700">
+        <div class="px-6 py-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-4">
+                    <div class="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-xl">
+                        📊
+                    </div>
+                    <div>
+                        <h1 class="text-xl font-bold">SuperMega CRM Pro</h1>
+                        <p class="text-xs text-gray-400">Enterprise Customer Relationship Management</p>
+                    </div>
+                </div>
+                
+                <div class="flex items-center space-x-4">
+                    <div class="flex items-center space-x-2">
+                        <div class="w-3 h-3 bg-green-400 rounded-full animate-pulse"></div>
+                        <span class="text-green-400 text-sm">Live Sync Active</span>
+                    </div>
+                    <button class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg">
+                        + Add Deal
+                    </button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <div class="flex h-screen pt-20">
+        
+        <!-- Sidebar -->
+        <div class="w-64 glass-panel border-r border-gray-700 p-6">
+            <div class="space-y-2">
+                <template x-for="item in sidebarItems" :key="item.id">
+                    <button 
+                        @click="activeView = item.id"
+                        :class="{'bg-blue-600/20 border-blue-500': activeView === item.id}"
+                        class="w-full flex items-center space-x-3 px-4 py-3 rounded-lg hover:bg-white/5 transition-colors border border-transparent"
+                    >
+                        <span x-text="item.icon"></span>
+                        <span x-text="item.name" class="font-medium"></span>
+                        <span x-show="item.count" x-text="item.count" class="ml-auto bg-blue-600 text-xs px-2 py-1 rounded-full"></span>
+                    </button>
+                </template>
+            </div>
+
+            <!-- Quick Stats -->
+            <div class="mt-8 space-y-4">
+                <h3 class="text-sm font-semibold text-gray-400 uppercase">Pipeline Health</h3>
+                <div class="space-y-3">
+                    <div class="flex justify-between">
+                        <span class="text-sm">Conversion Rate</span>
+                        <span class="text-green-400 font-bold">23.4%</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-sm">Avg. Deal Size</span>
+                        <span class="text-blue-400 font-bold">$12.4K</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-sm">Monthly Recurring</span>
+                        <span class="text-purple-400 font-bold">$847K</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="flex-1 overflow-auto">
+            
+            <!-- Dashboard View -->
+            <div x-show="activeView === 'dashboard'" class="p-6">
+                
+                <!-- KPI Cards -->
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                    <template x-for="kpi in kpiMetrics" :key="kpi.title">
+                        <div class="data-card rounded-xl p-6">
+                            <div class="flex items-center justify-between mb-4">
+                                <span x-text="kpi.icon" class="text-2xl"></span>
+                                <div :class="kpi.trend === 'up' ? 'text-green-400' : 'text-red-400'" class="text-sm">
+                                    <span x-text="kpi.trend === 'up' ? '↗️' : '↘️'"></span>
+                                    <span x-text="kpi.change"></span>
+                                </div>
+                            </div>
+                            <div class="text-3xl font-bold mb-1" x-text="kpi.value"></div>
+                            <div class="text-sm text-gray-400" x-text="kpi.title"></div>
+                        </div>
+                    </template>
+                </div>
+
+                <!-- Sales Pipeline -->
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+                    <div class="lg:col-span-2 glass-panel rounded-xl p-6">
+                        <h2 class="text-xl font-bold mb-6">Sales Pipeline Overview</h2>
+                        <canvas id="pipelineChart"></canvas>
+                    </div>
+                    
+                    <div class="glass-panel rounded-xl p-6">
+                        <h2 class="text-xl font-bold mb-6">Top Opportunities</h2>
+                        <div class="space-y-4">
+                            <template x-for="opp in topOpportunities" :key="opp.id">
+                                <div class="bg-gray-800/50 rounded-lg p-4">
+                                    <div class="flex justify-between items-start mb-2">
+                                        <h3 class="font-semibold" x-text="opp.company"></h3>
+                                        <span class="text-green-400 font-bold" x-text="'$' + opp.value.toLocaleString()"></span>
+                                    </div>
+                                    <div class="text-sm text-gray-400 mb-2" x-text="opp.description"></div>
+                                    <div class="flex justify-between items-center">
+                                        <span :class="opp.probability >= 70 ? 'text-green-400' : opp.probability >= 50 ? 'text-yellow-400' : 'text-red-400'"
+                                              class="text-xs px-2 py-1 rounded" x-text="opp.probability + '% probability'"></span>
+                                        <span class="text-xs text-gray-500" x-text="opp.stage"></span>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Activity Feed -->
+                <div class="glass-panel rounded-xl p-6">
+                    <h2 class="text-xl font-bold mb-6">Recent Activity</h2>
+                    <div class="space-y-4">
+                        <template x-for="activity in recentActivity" :key="activity.id">
+                            <div class="flex items-center space-x-4 py-3 border-b border-gray-700 last:border-b-0">
+                                <div class="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
+                                    <span x-text="activity.icon"></span>
+                                </div>
+                                <div class="flex-1">
+                                    <div class="font-medium" x-text="activity.title"></div>
+                                    <div class="text-sm text-gray-400" x-text="activity.description"></div>
+                                </div>
+                                <div class="text-xs text-gray-500" x-text="activity.time"></div>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Contacts View -->
+            <div x-show="activeView === 'contacts'" class="p-6">
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-2xl font-bold">Contact Management</h2>
+                    <div class="flex space-x-3">
+                        <input type="text" x-model="contactSearch" placeholder="Search contacts..." 
+                               class="bg-gray-800 border border-gray-600 rounded-lg px-4 py-2">
+                        <button @click="addContact()" class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg">
+                            + Add Contact
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Contacts Grid -->
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <template x-for="contact in filteredContacts" :key="contact.id">
+                        <div class="data-card rounded-xl p-6">
+                            <div class="flex items-center space-x-4 mb-4">
+                                <div class="w-12 h-12 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full flex items-center justify-center">
+                                    <span class="text-lg font-bold" x-text="contact.name.charAt(0)"></span>
+                                </div>
+                                <div>
+                                    <h3 class="font-semibold" x-text="contact.name"></h3>
+                                    <p class="text-sm text-gray-400" x-text="contact.title"></p>
+                                </div>
+                            </div>
+                            
+                            <div class="space-y-2 text-sm">
+                                <div class="flex items-center space-x-2">
+                                    <span>🏢</span>
+                                    <span x-text="contact.company"></span>
+                                </div>
+                                <div class="flex items-center space-x-2">
+                                    <span>📧</span>
+                                    <span x-text="contact.email" class="text-blue-400"></span>
+                                </div>
+                                <div class="flex items-center space-x-2">
+                                    <span>📱</span>
+                                    <span x-text="contact.phone"></span>
+                                </div>
+                            </div>
+
+                            <div class="mt-4 pt-4 border-t border-gray-700">
+                                <div class="flex justify-between items-center">
+                                    <span class="text-xs text-gray-500">Last Contact</span>
+                                    <span class="text-xs" x-text="contact.lastContact"></span>
+                                </div>
+                                <div class="flex space-x-2 mt-3">
+                                    <button @click="contactAction('call', contact)" class="flex-1 bg-green-600 hover:bg-green-700 px-2 py-1 rounded text-xs">
+                                        📞 Call
+                                    </button>
+                                    <button @click="contactAction('email', contact)" class="flex-1 bg-blue-600 hover:bg-blue-700 px-2 py-1 rounded text-xs">
+                                        📧 Email
+                                    </button>
+                                    <button @click="contactAction('meeting', contact)" class="flex-1 bg-purple-600 hover:bg-purple-700 px-2 py-1 rounded text-xs">
+                                        📅 Meet
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </div>
+
+            <!-- Deals View -->
+            <div x-show="activeView === 'deals'" class="p-6">
+                <h2 class="text-2xl font-bold mb-6">Deal Pipeline</h2>
+                
+                <!-- Pipeline Stages -->
+                <div class="grid grid-cols-1 lg:grid-cols-5 gap-4">
+                    <template x-for="stage in pipelineStages" :key="stage.name">
+                        <div class="pipeline-stage rounded-xl p-4">
+                            <div class="flex justify-between items-center mb-4">
+                                <h3 class="font-semibold" x-text="stage.name"></h3>
+                                <span class="text-sm bg-blue-600 px-2 py-1 rounded" x-text="stage.deals.length"></span>
+                            </div>
+                            
+                            <div class="space-y-3">
+                                <template x-for="deal in stage.deals" :key="deal.id">
+                                    <div class="bg-gray-800/50 rounded-lg p-3 cursor-pointer hover:bg-gray-700/50 transition-colors"
+                                         @click="viewDeal(deal)">
+                                        <h4 class="font-medium text-sm mb-1" x-text="deal.title"></h4>
+                                        <p class="text-xs text-gray-400 mb-2" x-text="deal.company"></p>
+                                        <div class="flex justify-between items-center">
+                                            <span class="text-green-400 font-bold text-sm" x-text="'$' + deal.value.toLocaleString()"></span>
+                                            <span class="text-xs text-gray-500" x-text="deal.closeDate"></span>
+                                        </div>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </div>
+
+            <!-- Analytics View -->
+            <div x-show="activeView === 'analytics'" class="p-6">
+                <h2 class="text-2xl font-bold mb-6">Advanced Analytics</h2>
+                
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div class="glass-panel rounded-xl p-6">
+                        <h3 class="text-lg font-semibold mb-4">Revenue Trends</h3>
+                        <canvas id="revenueChart"></canvas>
+                    </div>
+                    
+                    <div class="glass-panel rounded-xl p-6">
+                        <h3 class="text-lg font-semibold mb-4">Conversion Funnel</h3>
+                        <canvas id="funnelChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function crmPro() {
+            return {
+                activeView: 'dashboard',
+                contactSearch: '',
+                
+                sidebarItems: [
+                    { id: 'dashboard', name: 'Dashboard', icon: '📊' },
+                    { id: 'contacts', name: 'Contacts', icon: '👥', count: 847 },
+                    { id: 'deals', name: 'Deals', icon: '💼', count: 156 },
+                    { id: 'analytics', name: 'Analytics', icon: '📈' },
+                    { id: 'reports', name: 'Reports', icon: '📋' },
+                    { id: 'settings', name: 'Settings', icon: '⚙️' }
+                ],
+
+                kpiMetrics: [
+                    { title: 'Total Revenue', value: '$2.4M', change: '+23%', trend: 'up', icon: '💰' },
+                    { title: 'Active Deals', value: '156', change: '+12%', trend: 'up', icon: '💼' },
+                    { title: 'Contacts', value: '847', change: '+18%', trend: 'up', icon: '👥' },
+                    { title: 'Conversion Rate', value: '23.4%', change: '+3.2%', trend: 'up', icon: '📈' }
+                ],
+
+                topOpportunities: [
+                    { 
+                        id: 1, 
+                        company: 'TechCorp Solutions', 
+                        value: 85000, 
+                        probability: 85, 
+                        stage: 'Proposal',
+                        description: 'Enterprise CRM implementation'
+                    },
+                    { 
+                        id: 2, 
+                        company: 'Global Industries', 
+                        value: 125000, 
+                        probability: 70, 
+                        stage: 'Negotiation',
+                        description: 'Multi-year consulting contract'
+                    },
+                    { 
+                        id: 3, 
+                        company: 'Startup Innovations', 
+                        value: 45000, 
+                        probability: 60, 
+                        stage: 'Demo',
+                        description: 'SaaS platform setup'
+                    }
+                ],
+
+                contacts: [
+                    { id: 1, name: 'John Smith', title: 'CEO', company: 'TechCorp Solutions', email: 'john@techcorp.com', phone: '+1 (555) 123-4567', lastContact: '2 days ago' },
+                    { id: 2, name: 'Sarah Johnson', title: 'VP Sales', company: 'Global Industries', email: 'sarah@global.com', phone: '+1 (555) 987-6543', lastContact: '1 week ago' },
+                    { id: 3, name: 'Mike Chen', title: 'CTO', company: 'Startup Innovations', email: 'mike@startup.com', phone: '+1 (555) 456-7890', lastContact: '3 days ago' },
+                    { id: 4, name: 'Emma Davis', title: 'Marketing Director', company: 'Creative Agency', email: 'emma@creative.com', phone: '+1 (555) 234-5678', lastContact: '5 days ago' },
+                    { id: 5, name: 'Alex Rodriguez', title: 'Operations Manager', company: 'Logistics Pro', email: 'alex@logistics.com', phone: '+1 (555) 345-6789', lastContact: '1 day ago' },
+                    { id: 6, name: 'Lisa Wang', title: 'Product Manager', company: 'Software Solutions', email: 'lisa@software.com', phone: '+1 (555) 567-8901', lastContact: '4 days ago' }
+                ],
+
+                recentActivity: [
+                    { id: 1, icon: '📞', title: 'Call scheduled with TechCorp Solutions', description: 'Discovery call for enterprise implementation', time: '10 min ago' },
+                    { id: 2, icon: '📧', title: 'Proposal sent to Global Industries', description: 'Multi-year consulting proposal delivered', time: '1 hour ago' },
+                    { id: 3, icon: '🤝', title: 'Deal closed with Startup Innovations', description: '$45K SaaS platform setup', time: '2 hours ago' },
+                    { id: 4, icon: '📅', title: 'Meeting with Creative Agency', description: 'Marketing automation discussion', time: '3 hours ago' }
+                ],
+
+                pipelineStages: [
+                    {
+                        name: 'Lead',
+                        deals: [
+                            { id: 1, title: 'New Enterprise Lead', company: 'MegaCorp Inc', value: 150000, closeDate: 'Q1 2025' },
+                            { id: 2, title: 'SaaS Inquiry', company: 'Tech Startup', value: 25000, closeDate: 'Dec 2024' }
+                        ]
+                    },
+                    {
+                        name: 'Qualified',
+                        deals: [
+                            { id: 3, title: 'CRM Implementation', company: 'Financial Services', value: 95000, closeDate: 'Jan 2025' }
+                        ]
+                    },
+                    {
+                        name: 'Demo',
+                        deals: [
+                            { id: 4, title: 'Platform Demo', company: 'Healthcare Corp', value: 75000, closeDate: 'Nov 2024' },
+                            { id: 5, title: 'Custom Solution', company: 'Manufacturing Co', value: 120000, closeDate: 'Dec 2024' }
+                        ]
+                    },
+                    {
+                        name: 'Proposal',
+                        deals: [
+                            { id: 6, title: 'Enterprise Package', company: 'Global Retail', value: 200000, closeDate: 'Oct 2024' }
+                        ]
+                    },
+                    {
+                        name: 'Closed Won',
+                        deals: [
+                            { id: 7, title: 'SaaS Subscription', company: 'E-commerce Plus', value: 45000, closeDate: 'Closed' }
+                        ]
+                    }
+                ],
+
+                get filteredContacts() {
+                    if (!this.contactSearch) return this.contacts;
+                    return this.contacts.filter(contact => 
+                        contact.name.toLowerCase().includes(this.contactSearch.toLowerCase()) ||
+                        contact.company.toLowerCase().includes(this.contactSearch.toLowerCase()) ||
+                        contact.email.toLowerCase().includes(this.contactSearch.toLowerCase())
+                    );
+                },
+
+                initCRM() {
+                    // Initialize charts after a short delay
+                    setTimeout(() => {
+                        this.initCharts();
+                    }, 500);
+
+                    // Simulate real-time updates
+                    setInterval(() => {
+                        this.updateMetrics();
+                    }, 10000);
+                },
+
+                initCharts() {
+                    // Pipeline Chart
+                    const pipelineCtx = document.getElementById('pipelineChart');
+                    if (pipelineCtx) {
+                        new Chart(pipelineCtx, {
+                            type: 'doughnut',
+                            data: {
+                                labels: ['Lead', 'Qualified', 'Demo', 'Proposal', 'Closed Won'],
+                                datasets: [{
+                                    data: [2, 1, 2, 1, 1],
+                                    backgroundColor: ['#ef4444', '#f97316', '#eab308', '#3b82f6', '#10b981'],
+                                    borderWidth: 2,
+                                    borderColor: '#1f2937'
+                                }]
+                            },
+                            options: {
+                                responsive: true,
+                                plugins: {
+                                    legend: { labels: { color: '#fff' } }
+                                }
+                            }
+                        });
+                    }
+
+                    // Revenue Chart
+                    const revenueCtx = document.getElementById('revenueChart');
+                    if (revenueCtx) {
+                        new Chart(revenueCtx, {
+                            type: 'line',
+                            data: {
+                                labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug'],
+                                datasets: [{
+                                    label: 'Revenue ($K)',
+                                    data: [180, 220, 190, 280, 340, 420, 380, 450],
+                                    borderColor: '#3b82f6',
+                                    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                                    tension: 0.4,
+                                    fill: true
+                                }]
+                            },
+                            options: {
+                                responsive: true,
+                                plugins: { legend: { labels: { color: '#fff' } } },
+                                scales: {
+                                    x: { ticks: { color: '#9ca3af' } },
+                                    y: { ticks: { color: '#9ca3af' } }
+                                }
+                            }
+                        });
+                    }
+
+                    // Funnel Chart
+                    const funnelCtx = document.getElementById('funnelChart');
+                    if (funnelCtx) {
+                        new Chart(funnelCtx, {
+                            type: 'bar',
+                            data: {
+                                labels: ['Leads', 'Qualified', 'Demo', 'Proposal', 'Closed'],
+                                datasets: [{
+                                    label: 'Conversion Funnel',
+                                    data: [1000, 500, 250, 100, 50],
+                                    backgroundColor: ['#ef4444', '#f97316', '#eab308', '#3b82f6', '#10b981'],
+                                    borderWidth: 2,
+                                    borderColor: '#1f2937'
+                                }]
+                            },
+                            options: {
+                                responsive: true,
+                                plugins: { legend: { labels: { color: '#fff' } } },
+                                scales: {
+                                    x: { ticks: { color: '#9ca3af' } },
+                                    y: { ticks: { color: '#9ca3af' } }
+                                }
+                            }
+                        });
+                    }
+                },
+
+                updateMetrics() {
+                    // Simulate live metric updates
+                    this.kpiMetrics.forEach(metric => {
+                        if (metric.title === 'Active Deals') {
+                            const currentValue = parseInt(metric.value);
+                            const change = Math.floor(Math.random() * 5) - 2;
+                            metric.value = (currentValue + change).toString();
+                        }
+                    });
+                },
+
+                addContact() {
+                    alert('🔧 Add Contact Feature\n\nThis would open a comprehensive contact creation form with:\n• Contact information fields\n• Company association\n• Lead scoring\n• Custom fields\n• Activity tracking setup');
+                },
+
+                contactAction(action, contact) {
+                    const actions = {
+                        call: `📞 Initiating call to ${contact.name}\n\n• Auto-dialing ${contact.phone}\n• Call recording enabled\n• CRM activity logged\n• Follow-up reminders set`,
+                        email: `📧 Opening email composer for ${contact.name}\n\n• Template suggestions loaded\n• Previous conversations referenced\n• Tracking enabled\n• Auto-follow-up scheduled`,
+                        meeting: `📅 Scheduling meeting with ${contact.name}\n\n• Calendar integration active\n• Available times detected\n• Meeting room booked\n• Agenda template created`
+                    };
+                    
+                    alert(actions[action]);
+                },
+
+                viewDeal(deal) {
+                    alert(`💼 Deal Details: ${deal.title}\n\nCompany: ${deal.company}\nValue: $${deal.value.toLocaleString()}\nExpected Close: ${deal.closeDate}\n\n• Full deal history\n• Document attachments\n• Activity timeline\n• Collaboration tools\n• Revenue forecasting`);
+                }
+            }
+        }
+    </script>
+</body>
+</html>
