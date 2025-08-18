@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>LinkedIn Content MVP</title>
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 2rem; }
+    input, button, textarea { font-size: 1rem; padding: .5rem; margin: .25rem 0; }
+    .row { display: flex; gap: 1rem; flex-wrap: wrap; }
+    .card { border: 1px solid #ccc; border-radius: 8px; padding: 1rem; max-width: 640px; }
+    .muted { color: #666; font-size: .9rem; }
+    pre { background: #f7f7f7; padding: 1rem; border-radius: 6px; overflow: auto; }
+  </style>
+</head>
+<body>
+  <h1>LinkedIn Content MVP</h1>
+  <p class="muted">Register or login, then generate a LinkedIn post draft.</p>
+
+  <div class="card">
+    <h2>Auth</h2>
+    <label>Email</label>
+    <input id="email" type="email" placeholder="you@example.com" />
+    <label>Password</label>
+    <input id="password" type="password" placeholder="********" />
+    <div class="row">
+      <button onclick="register()">Register</button>
+      <button onclick="login()">Login</button>
+    </div>
+    <div class="muted">Token: <span id="tokenStatus">none</span></div>
+  </div>
+
+  <div class="card" style="margin-top:1rem;">
+    <h2>Generate LinkedIn Post</h2>
+    <label>Topic</label>
+    <input id="topic" placeholder="AI strategy" />
+    <label>Audience</label>
+    <input id="audience" placeholder="B2B executives" />
+    <label>Brand</label>
+    <input id="brand" placeholder="Super Mega" />
+    <div class="row">
+      <button onclick="generatePost()">Generate</button>
+    </div>
+    <h3>Result</h3>
+    <pre id="out"></pre>
+  </div>
+
+  <script>
+    const backend = localStorage.getItem('backendUrl') || 'http://localhost:5000';
+    let token = '';
+    document.getElementById('tokenStatus').textContent = token ? 'set' : 'none';
+
+    async function register(){
+      const email = document.getElementById('email').value.trim();
+      const password = document.getElementById('password').value;
+      const res = await fetch(`${backend}/api/auth/register`, {
+        method: 'POST', headers: { 'Content-Type':'application/json' },
+        body: JSON.stringify({ email, password })
+      });
+      const data = await res.json();
+      show(data);
+    }
+    async function login(){
+      const email = document.getElementById('email').value.trim();
+      const password = document.getElementById('password').value;
+      const res = await fetch(`${backend}/api/auth/login`, {
+        method: 'POST', headers: { 'Content-Type':'application/json' },
+        body: JSON.stringify({ email, password })
+      });
+      const data = await res.json();
+      if(data.access_token){ token = data.access_token; document.getElementById('tokenStatus').textContent = 'set'; }
+      show(data);
+    }
+    async function generatePost(){
+      const topic = document.getElementById('topic').value || 'AI strategy';
+      const audience = document.getElementById('audience').value || 'B2B executives';
+      const brand = document.getElementById('brand').value || 'Super Mega';
+      const res = await fetch(`${backend}/api/content/linkedin/generate`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': token ? `Bearer ${token}` : '' },
+        body: JSON.stringify({ topic, audience, brand })
+      });
+      const data = await res.json();
+      show(data);
+    }
+    function show(obj){
+      document.getElementById('out').textContent = JSON.stringify(obj, null, 2);
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,23 @@
+{
+  "timestamp": "2025-08-09T01:14:01.020410",
+  "performance": {
+    "facebook": {
+      "total_posts": 5,
+      "avg_engagement": {
+        "likes": 21.0,
+        "comments": 4.0,
+        "shares": 1.8,
+        "reach": 170.0
+      }
+    },
+    "instagram": {
+      "total_posts": 5,
+      "avg_engagement": {
+        "likes": 35.0,
+        "comments": 5.0,
+        "shares": 0,
+        "reach": 250.0
+      }
+    }
+  }
+}

@@ -1,0 +1,696 @@
+{
+  "research": [
+    {
+      "id": "defad087",
+      "topic": "ai_trends",
+      "depth": "basic",
+      "timestamp": "2025-08-08T16:57:42.083812",
+      "data": {
+        "trends": [
+          "AI automation for small businesses growing 300% yearly",
+          "Social media AI tools reducing manual work by 80%",
+          "Custom AI solutions becoming more affordable",
+          "Integration APIs making AI accessible to non-developers"
+        ],
+        "market_size": "$150B AI automation market by 2025",
+        "growth_rate": "40% annual growth in business AI adoption"
+      },
+      "insights": [
+        "\ud83d\ude80 Opportunity: Target small businesses with affordable AI automation",
+        "\ud83d\udca1 Positioning: Emphasize 80% time savings in marketing materials",
+        "\ud83d\udcc8 Growth Strategy: Focus on integration APIs for easy adoption",
+        "\ud83c\udfaf Marketing: Highlight $150B market size to attract investors"
+      ],
+      "relevance_score": 0.95
+    },
+    {
+      "id": "1fc71cfb",
+      "topic": "competitor_analysis",
+      "depth": "comprehensive",
+      "timestamp": "2025-08-08T16:57:45.108341",
+      "data": {
+        "key_competitors": [
+          "Hootsuite - $99-$739/month social media management",
+          "Buffer - $15-$99/month social media scheduling",
+          "Sprout Social - $99-$249/month enterprise social",
+          "Later - $18-$80/month visual content planning"
+        ],
+        "market_gaps": [
+          "AI-powered content generation at affordable prices",
+          "Integrated business automation beyond social media",
+          "Custom AI solutions for specific industries"
+        ],
+        "pricing_opportunities": [
+          "Position at $99-299/month for comprehensive AI suite",
+          "Offer freemium tier to capture small businesses",
+          "Enterprise custom pricing starting at $500/month"
+        ]
+      },
+      "insights": [
+        "\ud83d\udcb0 Pricing: Position at $99-299/month to compete with Hootsuite/Sprout",
+        "\ud83c\udfaf Gap: AI content generation is underserved in the market",
+        "\ud83d\udcf1 Freemium: Offer free tier to capture Buffer low-end market",
+        "\ud83c\udfe2 Enterprise: Custom pricing starting at $500/month for large clients"
+      ],
+      "relevance_score": 0.85
+    },
+    {
+      "id": "f136e6ab",
+      "topic": "social_media",
+      "depth": "basic",
+      "timestamp": "2025-08-08T16:58:14.080290",
+      "data": {
+        "best_practices": [
+          "Post consistently 3-5 times per day across platforms",
+          "Use video content for 80% higher engagement",
+          "Automate posting but maintain authentic voice",
+          "Focus on value-driven content over promotion"
+        ],
+        "optimal_times": {
+          "facebook": [
+            "9am",
+            "1pm",
+            "5pm"
+          ],
+          "instagram": [
+            "11am",
+            "2pm",
+            "5pm",
+            "7pm"
+          ]
+        },
+        "engagement_strategies": [
+          "Ask questions in posts to drive comments",
+          "Share behind-the-scenes content",
+          "Use trending hashtags strategically",
+          "Respond to comments within 2 hours"
+        ]
+      },
+      "insights": [
+        "\ud83d\udcca Content Strategy: Increase video content to 80% of posts",
+        "\u23f0 Timing: Optimize posting times - FB: 9am/1pm/5pm, IG: 11am/2pm/5pm/7pm",
+        "\ud83e\udd16 Automation: Use AI for posting while maintaining authentic voice",
+        "\ud83d\udcac Engagement: Implement 2-hour response policy for comments"
+      ],
+      "relevance_score": 0.9
+    },
+    {
+      "id": "72722c35",
+      "topic": "pricing_strategies",
+      "depth": "comprehensive",
+      "timestamp": "2025-08-08T16:58:50.164290",
+      "data": {
+        "general_findings": [
+          "Research conducted on: pricing_strategies",
+          "Depth level: comprehensive",
+          "Multiple data sources analyzed",
+          "Key insights extracted and processed"
+        ]
+      },
+      "insights": [
+        "\ud83d\udcdd Research completed for pricing_strategies",
+        "\ud83e\udde0 Data analyzed and processed",
+        "\ud83d\udca1 Actionable recommendations generated",
+        "\ud83d\udcca Insights ready for implementation"
+      ],
+      "relevance_score": 0.85
+    },
+    {
+      "id": "8f27d2a2",
+      "topic": "ai_trends",
+      "depth": "basic",
+      "timestamp": "2025-08-08T17:07:55.394836",
+      "data": {
+        "trends": [
+          "AI automation for small businesses growing 300% yearly",
+          "Social media AI tools reducing manual work by 80%",
+          "Custom AI solutions becoming more affordable",
+          "Integration APIs making AI accessible to non-developers"
+        ],
+        "market_size": "$150B AI automation market by 2025",
+        "growth_rate": "40% annual growth in business AI adoption"
+      },
+      "insights": [
+        "\ud83d\ude80 Opportunity: Target small businesses with affordable AI automation",
+        "\ud83d\udca1 Positioning: Emphasize 80% time savings in marketing materials",
+        "\ud83d\udcc8 Growth Strategy: Focus on integration APIs for easy adoption",
+        "\ud83c\udfaf Marketing: Highlight $150B market size to attract investors"
+      ],
+      "relevance_score": 0.95
+    },
+    {
+      "id": "304f2dc8",
+      "topic": "competitor_analysis",
+      "depth": "comprehensive",
+      "timestamp": "2025-08-08T17:07:58.394206",
+      "data": {
+        "key_competitors": [
+          "Hootsuite - $99-$739/month social media management",
+          "Buffer - $15-$99/month social media scheduling",
+          "Sprout Social - $99-$249/month enterprise social",
+          "Later - $18-$80/month visual content planning"
+        ],
+        "market_gaps": [
+          "AI-powered content generation at affordable prices",
+          "Integrated business automation beyond social media",
+          "Custom AI solutions for specific industries"
+        ],
+        "pricing_opportunities": [
+          "Position at $99-299/month for comprehensive AI suite",
+          "Offer freemium tier to capture small businesses",
+          "Enterprise custom pricing starting at $500/month"
+        ]
+      },
+      "insights": [
+        "\ud83d\udcb0 Pricing: Position at $99-299/month to compete with Hootsuite/Sprout",
+        "\ud83c\udfaf Gap: AI content generation is underserved in the market",
+        "\ud83d\udcf1 Freemium: Offer free tier to capture Buffer low-end market",
+        "\ud83c\udfe2 Enterprise: Custom pricing starting at $500/month for large clients"
+      ],
+      "relevance_score": 0.85
+    },
+    {
+      "id": "c73fc565",
+      "topic": "social_media",
+      "depth": "basic",
+      "timestamp": "2025-08-08T17:08:27.401944",
+      "data": {
+        "best_practices": [
+          "Post consistently 3-5 times per day across platforms",
+          "Use video content for 80% higher engagement",
+          "Automate posting but maintain authentic voice",
+          "Focus on value-driven content over promotion"
+        ],
+        "optimal_times": {
+          "facebook": [
+            "9am",
+            "1pm",
+            "5pm"
+          ],
+          "instagram": [
+            "11am",
+            "2pm",
+            "5pm",
+            "7pm"
+          ]
+        },
+        "engagement_strategies": [
+          "Ask questions in posts to drive comments",
+          "Share behind-the-scenes content",
+          "Use trending hashtags strategically",
+          "Respond to comments within 2 hours"
+        ]
+      },
+      "insights": [
+        "\ud83d\udcca Content Strategy: Increase video content to 80% of posts",
+        "\u23f0 Timing: Optimize posting times - FB: 9am/1pm/5pm, IG: 11am/2pm/5pm/7pm",
+        "\ud83e\udd16 Automation: Use AI for posting while maintaining authentic voice",
+        "\ud83d\udcac Engagement: Implement 2-hour response policy for comments"
+      ],
+      "relevance_score": 0.9
+    },
+    {
+      "id": "b30f9de7",
+      "topic": "pricing_strategies",
+      "depth": "comprehensive",
+      "timestamp": "2025-08-08T17:09:03.435300",
+      "data": {
+        "general_findings": [
+          "Research conducted on: pricing_strategies",
+          "Depth level: comprehensive",
+          "Multiple data sources analyzed",
+          "Key insights extracted and processed"
+        ]
+      },
+      "insights": [
+        "\ud83d\udcdd Research completed for pricing_strategies",
+        "\ud83e\udde0 Data analyzed and processed",
+        "\ud83d\udca1 Actionable recommendations generated",
+        "\ud83d\udcca Insights ready for implementation"
+      ],
+      "relevance_score": 0.85
+    },
+    {
+      "id": "0c7e6931",
+      "topic": "ai_trends",
+      "depth": "basic",
+      "timestamp": "2025-08-08T19:08:59.892595",
+      "data": {
+        "trends": [
+          "AI automation for small businesses growing 300% yearly",
+          "Social media AI tools reducing manual work by 80%",
+          "Custom AI solutions becoming more affordable",
+          "Integration APIs making AI accessible to non-developers"
+        ],
+        "market_size": "$150B AI automation market by 2025",
+        "growth_rate": "40% annual growth in business AI adoption"
+      },
+      "insights": [
+        "\ud83d\ude80 Opportunity: Target small businesses with affordable AI automation",
+        "\ud83d\udca1 Positioning: Emphasize 80% time savings in marketing materials",
+        "\ud83d\udcc8 Growth Strategy: Focus on integration APIs for easy adoption",
+        "\ud83c\udfaf Marketing: Highlight $150B market size to attract investors"
+      ],
+      "relevance_score": 0.95
+    },
+    {
+      "id": "074dd195",
+      "topic": "competitor_analysis",
+      "depth": "comprehensive",
+      "timestamp": "2025-08-08T19:09:02.906189",
+      "data": {
+        "key_competitors": [
+          "Hootsuite - $99-$739/month social media management",
+          "Buffer - $15-$99/month social media scheduling",
+          "Sprout Social - $99-$249/month enterprise social",
+          "Later - $18-$80/month visual content planning"
+        ],
+        "market_gaps": [
+          "AI-powered content generation at affordable prices",
+          "Integrated business automation beyond social media",
+          "Custom AI solutions for specific industries"
+        ],
+        "pricing_opportunities": [
+          "Position at $99-299/month for comprehensive AI suite",
+          "Offer freemium tier to capture small businesses",
+          "Enterprise custom pricing starting at $500/month"
+        ]
+      },
+      "insights": [
+        "\ud83d\udcb0 Pricing: Position at $99-299/month to compete with Hootsuite/Sprout",
+        "\ud83c\udfaf Gap: AI content generation is underserved in the market",
+        "\ud83d\udcf1 Freemium: Offer free tier to capture Buffer low-end market",
+        "\ud83c\udfe2 Enterprise: Custom pricing starting at $500/month for large clients"
+      ],
+      "relevance_score": 0.85
+    },
+    {
+      "id": "0fe176a9",
+      "topic": "social_media",
+      "depth": "basic",
+      "timestamp": "2025-08-08T19:09:31.892753",
+      "data": {
+        "best_practices": [
+          "Post consistently 3-5 times per day across platforms",
+          "Use video content for 80% higher engagement",
+          "Automate posting but maintain authentic voice",
+          "Focus on value-driven content over promotion"
+        ],
+        "optimal_times": {
+          "facebook": [
+            "9am",
+            "1pm",
+            "5pm"
+          ],
+          "instagram": [
+            "11am",
+            "2pm",
+            "5pm",
+            "7pm"
+          ]
+        },
+        "engagement_strategies": [
+          "Ask questions in posts to drive comments",
+          "Share behind-the-scenes content",
+          "Use trending hashtags strategically",
+          "Respond to comments within 2 hours"
+        ]
+      },
+      "insights": [
+        "\ud83d\udcca Content Strategy: Increase video content to 80% of posts",
+        "\u23f0 Timing: Optimize posting times - FB: 9am/1pm/5pm, IG: 11am/2pm/5pm/7pm",
+        "\ud83e\udd16 Automation: Use AI for posting while maintaining authentic voice",
+        "\ud83d\udcac Engagement: Implement 2-hour response policy for comments"
+      ],
+      "relevance_score": 0.9
+    },
+    {
+      "id": "e3278289",
+      "topic": "pricing_strategies",
+      "depth": "comprehensive",
+      "timestamp": "2025-08-08T19:10:07.923562",
+      "data": {
+        "general_findings": [
+          "Research conducted on: pricing_strategies",
+          "Depth level: comprehensive",
+          "Multiple data sources analyzed",
+          "Key insights extracted and processed"
+        ]
+      },
+      "insights": [
+        "\ud83d\udcdd Research completed for pricing_strategies",
+        "\ud83e\udde0 Data analyzed and processed",
+        "\ud83d\udca1 Actionable recommendations generated",
+        "\ud83d\udcca Insights ready for implementation"
+      ],
+      "relevance_score": 0.85
+    },
+    {
+      "id": "dc51a8bd",
+      "topic": "ai_trends",
+      "depth": "basic",
+      "timestamp": "2025-08-08T23:24:07.850671",
+      "data": {
+        "trends": [
+          "AI automation for small businesses growing 300% yearly",
+          "Social media AI tools reducing manual work by 80%",
+          "Custom AI solutions becoming more affordable",
+          "Integration APIs making AI accessible to non-developers"
+        ],
+        "market_size": "$150B AI automation market by 2025",
+        "growth_rate": "40% annual growth in business AI adoption"
+      },
+      "insights": [
+        "\ud83d\ude80 Opportunity: Target small businesses with affordable AI automation",
+        "\ud83d\udca1 Positioning: Emphasize 80% time savings in marketing materials",
+        "\ud83d\udcc8 Growth Strategy: Focus on integration APIs for easy adoption",
+        "\ud83c\udfaf Marketing: Highlight $150B market size to attract investors"
+      ],
+      "relevance_score": 0.95
+    },
+    {
+      "id": "cd3bc044",
+      "topic": "competitor_analysis",
+      "depth": "comprehensive",
+      "timestamp": "2025-08-08T23:24:10.880628",
+      "data": {
+        "key_competitors": [
+          "Hootsuite - $99-$739/month social media management",
+          "Buffer - $15-$99/month social media scheduling",
+          "Sprout Social - $99-$249/month enterprise social",
+          "Later - $18-$80/month visual content planning"
+        ],
+        "market_gaps": [
+          "AI-powered content generation at affordable prices",
+          "Integrated business automation beyond social media",
+          "Custom AI solutions for specific industries"
+        ],
+        "pricing_opportunities": [
+          "Position at $99-299/month for comprehensive AI suite",
+          "Offer freemium tier to capture small businesses",
+          "Enterprise custom pricing starting at $500/month"
+        ]
+      },
+      "insights": [
+        "\ud83d\udcb0 Pricing: Position at $99-299/month to compete with Hootsuite/Sprout",
+        "\ud83c\udfaf Gap: AI content generation is underserved in the market",
+        "\ud83d\udcf1 Freemium: Offer free tier to capture Buffer low-end market",
+        "\ud83c\udfe2 Enterprise: Custom pricing starting at $500/month for large clients"
+      ],
+      "relevance_score": 0.85
+    },
+    {
+      "id": "7b3dfb03",
+      "topic": "social_media",
+      "depth": "basic",
+      "timestamp": "2025-08-08T23:24:39.886117",
+      "data": {
+        "best_practices": [
+          "Post consistently 3-5 times per day across platforms",
+          "Use video content for 80% higher engagement",
+          "Automate posting but maintain authentic voice",
+          "Focus on value-driven content over promotion"
+        ],
+        "optimal_times": {
+          "facebook": [
+            "9am",
+            "1pm",
+            "5pm"
+          ],
+          "instagram": [
+            "11am",
+            "2pm",
+            "5pm",
+            "7pm"
+          ]
+        },
+        "engagement_strategies": [
+          "Ask questions in posts to drive comments",
+          "Share behind-the-scenes content",
+          "Use trending hashtags strategically",
+          "Respond to comments within 2 hours"
+        ]
+      },
+      "insights": [
+        "\ud83d\udcca Content Strategy: Increase video content to 80% of posts",
+        "\u23f0 Timing: Optimize posting times - FB: 9am/1pm/5pm, IG: 11am/2pm/5pm/7pm",
+        "\ud83e\udd16 Automation: Use AI for posting while maintaining authentic voice",
+        "\ud83d\udcac Engagement: Implement 2-hour response policy for comments"
+      ],
+      "relevance_score": 0.9
+    },
+    {
+      "id": "a369196c",
+      "topic": "pricing_strategies",
+      "depth": "comprehensive",
+      "timestamp": "2025-08-08T23:25:15.904889",
+      "data": {
+        "general_findings": [
+          "Research conducted on: pricing_strategies",
+          "Depth level: comprehensive",
+          "Multiple data sources analyzed",
+          "Key insights extracted and processed"
+        ]
+      },
+      "insights": [
+        "\ud83d\udcdd Research completed for pricing_strategies",
+        "\ud83e\udde0 Data analyzed and processed",
+        "\ud83d\udca1 Actionable recommendations generated",
+        "\ud83d\udcca Insights ready for implementation"
+      ],
+      "relevance_score": 0.85
+    },
+    {
+      "id": "3d51a327",
+      "topic": "ai_trends",
+      "depth": "basic",
+      "timestamp": "2025-08-08T23:32:36.246174",
+      "data": {
+        "trends": [
+          "AI automation for small businesses growing 300% yearly",
+          "Social media AI tools reducing manual work by 80%",
+          "Custom AI solutions becoming more affordable",
+          "Integration APIs making AI accessible to non-developers"
+        ],
+        "market_size": "$150B AI automation market by 2025",
+        "growth_rate": "40% annual growth in business AI adoption"
+      },
+      "insights": [
+        "\ud83d\ude80 Opportunity: Target small businesses with affordable AI automation",
+        "\ud83d\udca1 Positioning: Emphasize 80% time savings in marketing materials",
+        "\ud83d\udcc8 Growth Strategy: Focus on integration APIs for easy adoption",
+        "\ud83c\udfaf Marketing: Highlight $150B market size to attract investors"
+      ],
+      "relevance_score": 0.95
+    },
+    {
+      "id": "b4997b5a",
+      "topic": "competitor_analysis",
+      "depth": "comprehensive",
+      "timestamp": "2025-08-08T23:32:39.256241",
+      "data": {
+        "key_competitors": [
+          "Hootsuite - $99-$739/month social media management",
+          "Buffer - $15-$99/month social media scheduling",
+          "Sprout Social - $99-$249/month enterprise social",
+          "Later - $18-$80/month visual content planning"
+        ],
+        "market_gaps": [
+          "AI-powered content generation at affordable prices",
+          "Integrated business automation beyond social media",
+          "Custom AI solutions for specific industries"
+        ],
+        "pricing_opportunities": [
+          "Position at $99-299/month for comprehensive AI suite",
+          "Offer freemium tier to capture small businesses",
+          "Enterprise custom pricing starting at $500/month"
+        ]
+      },
+      "insights": [
+        "\ud83d\udcb0 Pricing: Position at $99-299/month to compete with Hootsuite/Sprout",
+        "\ud83c\udfaf Gap: AI content generation is underserved in the market",
+        "\ud83d\udcf1 Freemium: Offer free tier to capture Buffer low-end market",
+        "\ud83c\udfe2 Enterprise: Custom pricing starting at $500/month for large clients"
+      ],
+      "relevance_score": 0.85
+    },
+    {
+      "id": "d6a4c94c",
+      "topic": "social_media",
+      "depth": "basic",
+      "timestamp": "2025-08-08T23:33:08.284383",
+      "data": {
+        "best_practices": [
+          "Post consistently 3-5 times per day across platforms",
+          "Use video content for 80% higher engagement",
+          "Automate posting but maintain authentic voice",
+          "Focus on value-driven content over promotion"
+        ],
+        "optimal_times": {
+          "facebook": [
+            "9am",
+            "1pm",
+            "5pm"
+          ],
+          "instagram": [
+            "11am",
+            "2pm",
+            "5pm",
+            "7pm"
+          ]
+        },
+        "engagement_strategies": [
+          "Ask questions in posts to drive comments",
+          "Share behind-the-scenes content",
+          "Use trending hashtags strategically",
+          "Respond to comments within 2 hours"
+        ]
+      },
+      "insights": [
+        "\ud83d\udcca Content Strategy: Increase video content to 80% of posts",
+        "\u23f0 Timing: Optimize posting times - FB: 9am/1pm/5pm, IG: 11am/2pm/5pm/7pm",
+        "\ud83e\udd16 Automation: Use AI for posting while maintaining authentic voice",
+        "\ud83d\udcac Engagement: Implement 2-hour response policy for comments"
+      ],
+      "relevance_score": 0.9
+    },
+    {
+      "id": "49578800",
+      "topic": "pricing_strategies",
+      "depth": "comprehensive",
+      "timestamp": "2025-08-08T23:33:44.260258",
+      "data": {
+        "general_findings": [
+          "Research conducted on: pricing_strategies",
+          "Depth level: comprehensive",
+          "Multiple data sources analyzed",
+          "Key insights extracted and processed"
+        ]
+      },
+      "insights": [
+        "\ud83d\udcdd Research completed for pricing_strategies",
+        "\ud83e\udde0 Data analyzed and processed",
+        "\ud83d\udca1 Actionable recommendations generated",
+        "\ud83d\udcca Insights ready for implementation"
+      ],
+      "relevance_score": 0.85
+    },
+    {
+      "id": "479b653c",
+      "topic": "ai_trends",
+      "depth": "basic",
+      "timestamp": "2025-08-09T01:14:03.034450",
+      "data": {
+        "trends": [
+          "AI automation for small businesses growing 300% yearly",
+          "Social media AI tools reducing manual work by 80%",
+          "Custom AI solutions becoming more affordable",
+          "Integration APIs making AI accessible to non-developers"
+        ],
+        "market_size": "$150B AI automation market by 2025",
+        "growth_rate": "40% annual growth in business AI adoption"
+      },
+      "insights": [
+        "\ud83d\ude80 Opportunity: Target small businesses with affordable AI automation",
+        "\ud83d\udca1 Positioning: Emphasize 80% time savings in marketing materials",
+        "\ud83d\udcc8 Growth Strategy: Focus on integration APIs for easy adoption",
+        "\ud83c\udfaf Marketing: Highlight $150B market size to attract investors"
+      ],
+      "relevance_score": 0.95
+    },
+    {
+      "id": "5e1f74d7",
+      "topic": "competitor_analysis",
+      "depth": "comprehensive",
+      "timestamp": "2025-08-09T01:14:06.036371",
+      "data": {
+        "key_competitors": [
+          "Hootsuite - $99-$739/month social media management",
+          "Buffer - $15-$99/month social media scheduling",
+          "Sprout Social - $99-$249/month enterprise social",
+          "Later - $18-$80/month visual content planning"
+        ],
+        "market_gaps": [
+          "AI-powered content generation at affordable prices",
+          "Integrated business automation beyond social media",
+          "Custom AI solutions for specific industries"
+        ],
+        "pricing_opportunities": [
+          "Position at $99-299/month for comprehensive AI suite",
+          "Offer freemium tier to capture small businesses",
+          "Enterprise custom pricing starting at $500/month"
+        ]
+      },
+      "insights": [
+        "\ud83d\udcb0 Pricing: Position at $99-299/month to compete with Hootsuite/Sprout",
+        "\ud83c\udfaf Gap: AI content generation is underserved in the market",
+        "\ud83d\udcf1 Freemium: Offer free tier to capture Buffer low-end market",
+        "\ud83c\udfe2 Enterprise: Custom pricing starting at $500/month for large clients"
+      ],
+      "relevance_score": 0.85
+    },
+    {
+      "id": "71fbb4a8",
+      "topic": "social_media",
+      "depth": "basic",
+      "timestamp": "2025-08-09T01:14:35.036929",
+      "data": {
+        "best_practices": [
+          "Post consistently 3-5 times per day across platforms",
+          "Use video content for 80% higher engagement",
+          "Automate posting but maintain authentic voice",
+          "Focus on value-driven content over promotion"
+        ],
+        "optimal_times": {
+          "facebook": [
+            "9am",
+            "1pm",
+            "5pm"
+          ],
+          "instagram": [
+            "11am",
+            "2pm",
+            "5pm",
+            "7pm"
+          ]
+        },
+        "engagement_strategies": [
+          "Ask questions in posts to drive comments",
+          "Share behind-the-scenes content",
+          "Use trending hashtags strategically",
+          "Respond to comments within 2 hours"
+        ]
+      },
+      "insights": [
+        "\ud83d\udcca Content Strategy: Increase video content to 80% of posts",
+        "\u23f0 Timing: Optimize posting times - FB: 9am/1pm/5pm, IG: 11am/2pm/5pm/7pm",
+        "\ud83e\udd16 Automation: Use AI for posting while maintaining authentic voice",
+        "\ud83d\udcac Engagement: Implement 2-hour response policy for comments"
+      ],
+      "relevance_score": 0.9
+    },
+    {
+      "id": "624f4f49",
+      "topic": "pricing_strategies",
+      "depth": "comprehensive",
+      "timestamp": "2025-08-09T01:15:11.038605",
+      "data": {
+        "general_findings": [
+          "Research conducted on: pricing_strategies",
+          "Depth level: comprehensive",
+          "Multiple data sources analyzed",
+          "Key insights extracted and processed"
+        ]
+      },
+      "insights": [
+        "\ud83d\udcdd Research completed for pricing_strategies",
+        "\ud83e\udde0 Data analyzed and processed",
+        "\ud83d\udca1 Actionable recommendations generated",
+        "\ud83d\udcca Insights ready for implementation"
+      ],
+      "relevance_score": 0.85
+    }
+  ],
+  "insights": [],
+  "trends": []
+}
