@@ -3,2053 +3,454 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SuperMega.dev - Professional Business Intelligence Platform</title>
+    <title>Super Mega AI - Professional Business Automation Platform</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
-    
-    <!-- SEO Meta Tags -->
-    <meta name="description" content="SuperMega.dev - Professional Business Intelligence Platform. Lead Generation Engine, Email Intelligence, Domain Analytics, and BizData API. Real tools for real results.">
-    <meta name="keywords" content="lead generation, email extraction, domain analytics, business intelligence, competitor research, sales automation">
-    <meta name="author" content="SuperMega Development Team">
-    
-    <!-- Open Graph Meta Tags -->
-    <meta property="og:title" content="SuperMega.dev - Professional Business Intelligence Platform">
-    <meta property="og:description" content="Real business tools: Lead Generation Engine, Email Intelligence Pro, Domain Analytics, BizData API. Used by 500+ companies worldwide.">
-    <meta property="og:url" content="https://supermega.dev">
-    <meta property="og:type" content="website">
-    
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
         body { font-family: 'Inter', sans-serif; }
-        .gradient-bg { background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #334155 100%); }
+        .gradient-bg { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
         .glass-effect { 
-            background: rgba(255, 255, 255, 0.05); 
-            backdrop-filter: blur(15px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: rgba(255, 255, 255, 0.1); 
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
         }
-        .product-card {
+        .tool-card {
             background: linear-gradient(145deg, #1e293b, #334155);
             border: 1px solid #475569;
             transition: all 0.3s ease;
         }
-        .product-card:hover {
-            transform: translateY(-8px);
-            box-shadow: 0 25px 35px -5px rgba(0, 0, 0, 0.5);
-            border-color: #3b82f6;
+        .tool-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.4);
         }
-        .live-indicator {
-            background: linear-gradient(45deg, #10b981, #22c55e);
-            animation: pulse 2s infinite;
+        .demo-output {
+            background: #0f172a;
+            border: 1px solid #334155;
+            font-family: 'Courier New', monospace;
         }
-    </style>
-</head>
-<body class="bg-gray-900 text-white">
-
-    <!-- Navigation -->
-    <nav class="fixed w-full top-0 z-50 bg-gray-900/80 backdrop-blur-md border-b border-gray-700">
-        <div class="container mx-auto px-6">
-            <div class="flex items-center justify-between h-16">
-                <div class="flex items-center space-x-3">
-                    <img src="logo.svg" alt="SUPER MEGA" style="width: 120px; height: 48px;" class="animate-pulse">
-                </div>
-                <div class="hidden md:flex items-center space-x-8">
-                    <a href="#products" class="text-gray-300 hover:text-white transition-colors">Live Products</a>
-                    <a href="#demo" class="text-gray-300 hover:text-white transition-colors">Live Demo</a>
-                    <a href="#pricing" class="text-gray-300 hover:text-white transition-colors">Pricing</a>
-                    <a href="#contact" class="text-gray-300 hover:text-white transition-colors">Contact</a>
-                    <button onclick="window.location.href='enterprise-login-system.html'" class="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 px-6 py-2 rounded-lg font-semibold transition-all">
-                        🔐 Enterprise Login
-                    </button>
-                </div>
-            </div>
-        </div>
-    </nav>
+        .pricing-card {
             background: linear-gradient(145deg, #1e293b, #334155);
             border: 2px solid #475569;
             transition: all 0.3s ease;
         }
         .pricing-card:hover {
-            transform: translateY(-5px);
-            border-color: #60a5fa;
-            box-shadow: 0 20px 30px -5px rgba(0, 0, 0, 0.4);
+            border-color: #3b82f6;
+            transform: scale(1.02);
         }
-        .enterprise-card {
-            border-color: #f59e0b !important;
-            background: linear-gradient(145deg, #451a03, #78350f) !important;
+        .featured {
+            border-color: #3b82f6;
+            background: linear-gradient(145deg, #1e40af, #3b82f6);
         }
     </style>
 </head>
-<body class="bg-gray-900 text-white min-h-screen">
+<body class="bg-slate-900 text-white" x-data="app()">
+
+    <!-- Navigation -->
+    <nav class="fixed top-0 w-full z-50 glass-effect">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center h-16">
+                <div class="flex items-center">
+                    <div class="text-xl font-bold">Super Mega AI</div>
+                </div>
+                <div class="hidden md:flex space-x-8">
+                    <a href="#tools" class="hover:text-blue-400 transition">Tools</a>
+                    <a href="#demo" class="hover:text-blue-400 transition">Demo</a>
+                    <a href="#pricing" class="hover:text-blue-400 transition">Pricing</a>
+                    <a href="#contact" class="hover:text-blue-400 transition">Contact</a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
     <!-- Hero Section -->
-    <div class="gradient-bg min-h-screen flex items-center relative overflow-hidden pt-16">
-        <div class="absolute inset-0 bg-black bg-opacity-30"></div>
-        <div class="container mx-auto px-6 relative z-10">
-            <div class="text-center max-w-5xl mx-auto">
-                <div class="mb-8">
-                    <span class="inline-flex items-center px-6 py-3 bg-green-500/20 border border-green-500 rounded-full text-sm font-semibold mb-4">
-                        <div class="w-2 h-2 bg-green-400 rounded-full mr-2 animate-pulse"></div>
-                        🚀 4 Live SaaS Products - Generating Revenue
-                    </span>
-                </div>
-                <h1 class="text-5xl md:text-7xl font-black mb-6 leading-tight">
-                    Professional 
-                    <span class="bg-gradient-to-r from-blue-400 via-purple-400 to-cyan-400 bg-clip-text text-transparent">
-                        Business Intelligence
-                    </span>
-                    Platform
-                </h1>
-                <p class="text-xl md:text-2xl mb-8 text-gray-200 max-w-4xl mx-auto leading-relaxed">
-                    Real tools for real business results. <span class="font-bold text-blue-400">Lead Generation Engine</span>, 
-                    <span class="font-bold text-purple-400">Email Intelligence Pro</span>, 
-                    <span class="font-bold text-cyan-400">Domain Analytics</span>, and 
-                    <span class="font-bold text-green-400">BizData API</span>. 
-                    Used by 500+ companies worldwide.
-                </p>
-                
-                <!-- Live Metrics -->
-                <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-12 max-w-4xl mx-auto">
-                    <div class="glass-effect rounded-lg p-4">
-                        <div class="text-3xl font-bold text-blue-400">127,394</div>
-                        <div class="text-sm text-gray-300">Leads Generated</div>
-                    </div>
-                    <div class="glass-effect rounded-lg p-4">
-                        <div class="text-3xl font-bold text-purple-400">89,432</div>
-                        <div class="text-sm text-gray-300">Emails Extracted</div>
-                    </div>
-                    <div class="glass-effect rounded-lg p-4">
-                        <div class="text-3xl font-bold text-cyan-400">15,847</div>
-                        <div class="text-sm text-gray-300">Domains Analyzed</div>
-                    </div>
-                    <div class="glass-effect rounded-lg p-4">
-                        <div class="text-3xl font-bold text-green-400">$2.1M</div>
-                        <div class="text-sm text-gray-300">Client Revenue</div>
-                    </div>
-                </div>
-
-                <div class="flex flex-col sm:flex-row gap-4 justify-center mb-8">
-                    <button class="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 px-8 py-4 rounded-lg font-bold text-lg transition-all shadow-lg">
-                        🚀 Access Live Products
-                    </button>
-                    <button class="border-2 border-white hover:bg-white hover:text-gray-900 px-8 py-4 rounded-lg font-bold text-lg transition-all">
-                        📊 View Live Demo
-                    </button>
-                </div>
-
-                <div class="text-sm text-gray-300">
-                    ✅ No setup required • ✅ API ready • ✅ Real-time results • ✅ 99.7% uptime
-                </div>
-            </div>
-        </div>
-    </div>
-                        <div class="text-sm text-gray-300">Learning Mode</div>
-                    </div>
-                    <div class="glass-effect rounded-lg p-4">
-                        <div class="text-2xl font-bold text-orange-400">8</div>
-                        <div class="text-sm text-gray-300">AI Specialists</div>
-                    </div>
-                </div>
-
-                <div class="flex flex-col sm:flex-row gap-4 justify-center items-center">
-                    <button onclick="window.open('http://localhost:8501', '_blank')" 
-                            class="px-8 py-4 bg-gradient-to-r from-green-500 to-blue-600 rounded-lg font-bold text-lg hover:from-green-600 hover:to-blue-700 transition-all duration-300 transform hover:scale-105 shadow-lg">
-                        🚀 Launch Platform Now
-                    </button>
-                    <button class="px-8 py-4 border-2 border-white border-opacity-30 rounded-lg font-semibold hover:bg-white hover:bg-opacity-10 transition-all duration-300 glass-effect">
-                        📊 View Live Demo
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Live Products Section -->
-    <div class="py-20 bg-gray-800" id="products">
-        <div class="container mx-auto px-6">
-            <div class="text-center mb-16">
-                <h2 class="text-4xl md:text-5xl font-black mb-6">
-                    Our <span class="bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">Live SaaS Products</span>
-                </h2>
-                <p class="text-xl text-gray-300 max-w-3xl mx-auto">
-                    Real business intelligence tools generating revenue and serving 500+ companies worldwide
-                </p>
-            </div>
-
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
-                <!-- Lead Generation Engine -->
-                <div class="product-card rounded-xl p-8">
-                    <div class="flex items-center justify-between mb-6">
-                        <div class="flex items-center space-x-3">
-                            <div class="text-4xl">🎯</div>
-                            <div>
-                                <h3 class="text-2xl font-bold text-blue-400">Lead Generation Engine</h3>
-                                <div class="flex items-center space-x-2 mt-1">
-                                    <div class="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-                                    <span class="text-green-400 text-sm font-semibold">LIVE</span>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="text-right">
-                            <div class="text-2xl font-bold text-green-400">127,394</div>
-                            <div class="text-xs text-gray-400">Leads Generated</div>
-                        </div>
-                    </div>
-                    <p class="text-gray-300 mb-6">
-                        Extract emails and contact information from any domain. Real scraping technology with 94.7% accuracy rate. Export to CSV, integrate with CRM.
-                    </p>
-                    <div class="grid grid-cols-3 gap-4 mb-6">
-                        <div class="text-center">
-                            <div class="text-lg font-bold text-blue-400">500+</div>
-                            <div class="text-xs text-gray-400">Companies</div>
-                        </div>
-                        <div class="text-center">
-                            <div class="text-lg font-bold text-purple-400">15,847</div>
-                            <div class="text-xs text-gray-400">Domains</div>
-                        </div>
-                        <div class="text-center">
-                            <div class="text-lg font-bold text-cyan-400">99.2%</div>
-                            <div class="text-xs text-gray-400">Uptime</div>
-                        </div>
-                    </div>
-                    <div class="flex space-x-3">
-                        <button class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold transition-all">
-                            🚀 Launch Tool
-                        </button>
-                        <button class="border border-gray-600 hover:border-blue-400 text-gray-300 px-4 py-2 rounded-lg transition-all">
-                            📊 View Stats
-                        </button>
-                    </div>
-                </div>
-
-                <!-- Email Intelligence Pro -->
-                <div class="product-card rounded-xl p-8">
-                    <div class="flex items-center justify-between mb-6">
-                        <div class="flex items-center space-x-3">
-                            <div class="text-4xl">�</div>
-                            <div>
-                                <h3 class="text-2xl font-bold text-purple-400">Email Intelligence Pro</h3>
-                                <div class="flex items-center space-x-2 mt-1">
-                                    <div class="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-                                    <span class="text-green-400 text-sm font-semibold">LIVE</span>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="text-right">
-                            <div class="text-2xl font-bold text-green-400">89,432</div>
-                            <div class="text-xs text-gray-400">Emails Extracted</div>
-                        </div>
-                    </div>
-                    <p class="text-gray-300 mb-6">
-                        Advanced email finding and verification system. Find emails by name, company, or domain. Real-time verification with bounce detection.
-                    </p>
-                    <div class="grid grid-cols-3 gap-4 mb-6">
-                        <div class="text-center">
-                            <div class="text-lg font-bold text-purple-400">96.3%</div>
-                            <div class="text-xs text-gray-400">Accuracy</div>
-                        </div>
-                        <div class="text-center">
-                            <div class="text-lg font-bold text-cyan-400">2.1M</div>
-                            <div class="text-xs text-gray-400">Verified</div>
-                        </div>
-                        <div class="text-center">
-                            <div class="text-lg font-bold text-orange-400">24/7</div>
-                            <div class="text-xs text-gray-400">API</div>
-                        </div>
-                    </div>
-                    <div class="flex space-x-3">
-                        <button class="bg-purple-500 hover:bg-purple-600 text-white px-4 py-2 rounded-lg font-semibold transition-all">
-                            🚀 Launch Tool
-                        </button>
-                        <button class="border border-gray-600 hover:border-purple-400 text-gray-300 px-4 py-2 rounded-lg transition-all">
-                            📊 View API
-                        </button>
-                    </div>
-                </div>
-
-                <!-- Domain Analytics -->
-                <div class="product-card rounded-xl p-8">
-                    <div class="flex items-center justify-between mb-6">
-                        <div class="flex items-center space-x-3">
-                            <div class="text-4xl">🌐</div>
-                            <div>
-                                <h3 class="text-2xl font-bold text-cyan-400">Domain Analytics</h3>
-                                <div class="flex items-center space-x-2 mt-1">
-                                    <div class="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-                                    <span class="text-green-400 text-sm font-semibold">LIVE</span>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="text-right">
-                            <div class="text-2xl font-bold text-green-400">15,847</div>
-                            <div class="text-xs text-gray-400">Domains Analyzed</div>
-                        </div>
-                    </div>
-                    <p class="text-gray-300 mb-6">
-                        Complete domain intelligence: SEO metrics, traffic analysis, competitor research, and business intelligence data collection.
-                    </p>
-                    <div class="grid grid-cols-3 gap-4 mb-6">
-                        <div class="text-center">
-                            <div class="text-lg font-bold text-cyan-400">247</div>
-                            <div class="text-xs text-gray-400">Monitored</div>
-                        </div>
-                        <div class="text-center">
-                            <div class="text-lg font-bold text-green-400">98.5%</div>
-                            <div class="text-xs text-gray-400">Success Rate</div>
-                        </div>
-                        <div class="text-center">
-                            <div class="text-lg font-bold text-orange-400">Real-time</div>
-                            <div class="text-xs text-gray-400">Updates</div>
-                        </div>
-                    </div>
-                    <div class="flex space-x-3">
-                        <button class="bg-cyan-500 hover:bg-cyan-600 text-white px-4 py-2 rounded-lg font-semibold transition-all">
-                            🚀 Launch Tool
-                        </button>
-                        <button class="border border-gray-600 hover:border-cyan-400 text-gray-300 px-4 py-2 rounded-lg transition-all">
-                            📈 View Reports
-                        </button>
-                    </div>
-                </div>
-
-                <!-- BizData API -->
-                <div class="product-card rounded-xl p-8">
-                    <div class="flex items-center justify-between mb-6">
-                        <div class="flex items-center space-x-3">
-                            <div class="text-4xl">⚡</div>
-                            <div>
-                                <h3 class="text-2xl font-bold text-orange-400">BizData API</h3>
-                                <div class="flex items-center space-x-2 mt-1">
-                                    <div class="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-                                    <span class="text-green-400 text-sm font-semibold">LIVE</span>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="text-right">
-                            <div class="text-2xl font-bold text-green-400">$2.1M</div>
-                            <div class="text-xs text-gray-400">Client Revenue</div>
-                        </div>
-                    </div>
-                    <p class="text-gray-300 mb-6">
-                        Enterprise-grade business data API. Access company information, contact details, and market intelligence through secure REST API.
-                    </p>
-                    <div class="grid grid-cols-3 gap-4 mb-6">
-                        <div class="text-center">
-                            <div class="text-lg font-bold text-orange-400">99.7%</div>
-                            <div class="text-xs text-gray-400">Uptime</div>
-                        </div>
-                        <div class="text-center">
-                            <div class="text-lg font-bold text-red-400">50M+</div>
-                            <div class="text-xs text-gray-400">Records</div>
-                        </div>
-                        <div class="text-center">
-                            <div class="text-lg font-bold text-yellow-400"><50ms</div>
-                            <div class="text-xs text-gray-400">Response</div>
-                        </div>
-                    </div>
-                    <div class="flex space-x-3">
-                        <button class="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg font-semibold transition-all">
-                            🚀 Launch API
-                        </button>
-                        <button class="border border-gray-600 hover:border-orange-400 text-gray-300 px-4 py-2 rounded-lg transition-all">
-                            📚 View Docs
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Product Stats -->
-            <div class="mt-16 text-center">
-                <div class="grid grid-cols-2 md:grid-cols-4 gap-8 max-w-3xl mx-auto">
-                    <div>
-                        <div class="text-3xl font-bold text-blue-400">500+</div>
-                        <div class="text-gray-400">Active Companies</div>
-                    </div>
-                    <div>
-                        <div class="text-3xl font-bold text-purple-400">99.7%</div>
-                        <div class="text-gray-400">System Uptime</div>
-                    </div>
-                    <div>
-                        <div class="text-3xl font-bold text-cyan-400">24/7</div>
-                        <div class="text-gray-400">Support & API</div>
-                    </div>
-                    <div>
-                        <div class="text-3xl font-bold text-green-400">$2.1M</div>
-                        <div class="text-gray-400">Revenue Generated</div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Success Stories Section -->
-    <div class="py-20 bg-gray-900">
-        <div class="container mx-auto px-6">
-            <div class="text-center mb-16">
-                <h2 class="text-4xl md:text-5xl font-black mb-6">
-                    Real Results from Real Companies
-                </h2>
-                <p class="text-xl text-gray-300">Companies replacing their entire office stack with our AI platform</p>
-            </div>
-
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
-                <div class="success-story rounded-xl p-8">
-                    <div class="text-3xl mb-4">🚀</div>
-                    <h3 class="text-xl font-bold mb-3 text-blue-400">TechCorp Solutions</h3>
-                    <p class="text-gray-300 mb-4">
-                        "Replaced Gmail, Excel, and PowerPoint. Our productivity increased by 340% and we saved $2.3M annually."
-                    </p>
-                    <div class="text-green-400 font-bold">340% Productivity Increase</div>
-                    <div class="text-sm text-gray-400 mt-2">$2.3M Annual Savings</div>
-                </div>
-
-                <div class="success-story rounded-xl p-8">
-                    <div class="text-3xl mb-4">📊</div>
-                    <h3 class="text-xl font-bold mb-3 text-purple-400">DataFlow Industries</h3>
-                    <p class="text-gray-300 mb-4">
-                        "The Data Analyst agent processes our reports 50x faster than our previous Excel workflows."
-                    </p>
-                    <div class="text-green-400 font-bold">50x Faster Processing</div>
-                    <div class="text-sm text-gray-400 mt-2">99.2% Accuracy Rate</div>
-                </div>
-
-                <div class="success-story rounded-xl p-8">
-                    <div class="text-3xl mb-4">🎯</div>
-                    <h3 class="text-xl font-bold mb-3 text-orange-400">Global Enterprises</h3>
-                    <p class="text-gray-300 mb-4">
-                        "Our entire 500-person company runs on SuperMega AI. We've eliminated 15 different software subscriptions."
-                    </p>
-                    <div class="text-green-400 font-bold">15 Tools Eliminated</div>
-                    <div class="text-sm text-gray-400 mt-2">500 Employees Automated</div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Features Comparison -->
-    <div class="py-20 bg-gray-800">
-        <div class="container mx-auto px-6">
-            <div class="text-center mb-16">
-                <h2 class="text-4xl md:text-5xl font-black mb-6">
-                    Why Replace Your Current Tools?
-                </h2>
-                <p class="text-xl text-gray-300">Stop juggling multiple subscriptions when one AI platform does it all better</p>
-            </div>
-
-            <div class="overflow-x-auto">
-                <table class="w-full text-left">
-                    <thead>
-                        <tr class="border-b border-gray-600">
-                            <th class="py-4 px-6 text-gray-300">Feature</th>
-                            <th class="py-4 px-6 text-center text-green-400 font-bold">SuperMega AI</th>
-                            <th class="py-4 px-6 text-center text-gray-400">Traditional Tools</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr class="border-b border-gray-700">
-                            <td class="py-4 px-6">Email Processing Speed</td>
-                            <td class="py-4 px-6 text-center text-green-400 font-bold">1000+ emails/minute</td>
-                            <td class="py-4 px-6 text-center text-red-400">Manual processing</td>
-                        </tr>
-                        <tr class="border-b border-gray-700">
-                            <td class="py-4 px-6">Data Analysis Accuracy</td>
-                            <td class="py-4 px-6 text-center text-green-400 font-bold">94.7%</td>
-                            <td class="py-4 px-6 text-center text-red-400">Human error prone</td>
-                        </tr>
-                        <tr class="border-b border-gray-700">
-                            <td class="py-4 px-6">Learning & Adaptation</td>
-                            <td class="py-4 px-6 text-center text-green-400 font-bold">24/7 Continuous</td>
-                            <td class="py-4 px-6 text-center text-red-400">Static features</td>
-                        </tr>
-                        <tr class="border-b border-gray-700">
-                            <td class="py-4 px-6">Integration Complexity</td>
-                            <td class="py-4 px-6 text-center text-green-400 font-bold">One Platform</td>
-                            <td class="py-4 px-6 text-center text-red-400">10+ separate tools</td>
-                        </tr>
-                        <tr class="border-b border-gray-700">
-                            <td class="py-4 px-6">Monthly Cost</td>
-                            <td class="py-4 px-6 text-center text-green-400 font-bold">$97/user</td>
-                            <td class="py-4 px-6 text-center text-red-400">$300+/user</td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </div>
-
-    <!-- Pricing Section -->
-    <div class="py-20 bg-gray-900">
-        <div class="container mx-auto px-6">
-            <div class="text-center mb-16">
-                <h2 class="text-4xl md:text-5xl font-black mb-6">
-                    Simple Pricing, Massive Savings
-                </h2>
-                <p class="text-xl text-gray-300">Replace $300+/month in software subscriptions with one AI platform</p>
-            </div>
-
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-6xl mx-auto">
-                <!-- Starter Plan -->
-                <div class="pricing-card rounded-xl p-8">
-                    <div class="text-center mb-8">
-                        <h3 class="text-2xl font-bold mb-2 text-blue-400">Professional</h3>
-                        <div class="text-4xl font-black mb-2">$97<span class="text-lg text-gray-400">/month</span></div>
-                        <p class="text-gray-400">Perfect for small teams</p>
-                    </div>
-                    <ul class="space-y-3 mb-8">
-                        <li class="flex items-center"><span class="text-green-400 mr-3">✓</span> All 8 AI Agents</li>
-                        <li class="flex items-center"><span class="text-green-400 mr-3">✓</span> Up to 5 users</li>
-                        <li class="flex items-center"><span class="text-green-400 mr-3">✓</span> 50GB storage</li>
-                        <li class="flex items-center"><span class="text-green-400 mr-3">✓</span> 24/7 learning mode</li>
-                        <li class="flex items-center"><span class="text-green-400 mr-3">✓</span> API access</li>
-                        <li class="flex items-center"><span class="text-green-400 mr-3">✓</span> Email support</li>
-                    </ul>
-                    <button class="w-full py-3 bg-blue-600 hover:bg-blue-700 rounded-lg font-semibold transition-all duration-300">
-                        Start Free Trial
-                    </button>
-                </div>
-
-                <!-- Business Plan -->
-                <div class="pricing-card rounded-xl p-8 transform scale-105 border-blue-500">
-                    <div class="text-center mb-8">
-                        <div class="inline-block px-3 py-1 bg-blue-600 rounded-full text-sm font-semibold mb-4">Most Popular</div>
-                        <h3 class="text-2xl font-bold mb-2 text-blue-400">Business</h3>
-                        <div class="text-4xl font-black mb-2">$197<span class="text-lg text-gray-400">/month</span></div>
-                        <p class="text-gray-400">For growing companies</p>
-                    </div>
-                    <ul class="space-y-3 mb-8">
-                        <li class="flex items-center"><span class="text-green-400 mr-3">✓</span> All Professional features</li>
-                        <li class="flex items-center"><span class="text-green-400 mr-3">✓</span> Up to 25 users</li>
-                        <li class="flex items-center"><span class="text-green-400 mr-3">✓</span> 500GB storage</li>
-                        <li class="flex items-center"><span class="text-green-400 mr-3">✓</span> Advanced analytics</li>
-                        <li class="flex items-center"><span class="text-green-400 mr-3">✓</span> Custom integrations</li>
-                        <li class="flex items-center"><span class="text-green-400 mr-3">✓</span> Priority support</li>
-                        <li class="flex items-center"><span class="text-green-400 mr-3">✓</span> Dedicated success manager</li>
-                    </ul>
-                    <button class="w-full py-3 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 rounded-lg font-semibold transition-all duration-300">
-                        Start Free Trial
-                    </button>
-                </div>
-
-                <!-- Enterprise Plan -->
-                <div class="pricing-card enterprise-card rounded-xl p-8">
-                    <div class="text-center mb-8">
-                        <h3 class="text-2xl font-bold mb-2 text-yellow-400">Enterprise</h3>
-                        <div class="text-4xl font-black mb-2">Custom<span class="text-lg text-gray-400"> pricing</span></div>
-                        <p class="text-gray-400">For large organizations</p>
-                    </div>
-                    <ul class="space-y-3 mb-8">
-                        <li class="flex items-center"><span class="text-green-400 mr-3">✓</span> All Business features</li>
-                        <li class="flex items-center"><span class="text-green-400 mr-3">✓</span> Unlimited users</li>
-                        <li class="flex items-center"><span class="text-green-400 mr-3">✓</span> Unlimited storage</li>
-                        <li class="flex items-center"><span class="text-green-400 mr-3">✓</span> White-label options</li>
-                        <li class="flex items-center"><span class="text-green-400 mr-3">✓</span> On-premise deployment</li>
-                        <li class="flex items-center"><span class="text-green-400 mr-3">✓</span> Custom AI training</li>
-                        <li class="flex items-center"><span class="text-green-400 mr-3">✓</span> 24/7 phone support</li>
-                    </ul>
-                    <button onclick="scheduleEnterpriseDemo()" class="w-full py-3 bg-gradient-to-r from-yellow-600 to-orange-600 hover:from-yellow-700 hover:to-orange-700 rounded-lg font-semibold transition-all duration-300">
-                        Schedule Enterprise Demo
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Real Working Demo Section -->
-    <div class="py-20 bg-gradient-to-br from-blue-900 to-purple-900" id="demo">
-        <div class="container mx-auto px-6">
-            <div class="text-center mb-16">
-                <h2 class="text-4xl md:text-5xl font-black mb-6">
-                    Live Working Demo
-                </h2>
-                <p class="text-xl text-gray-300">Real tools, real results - test our products right now</p>
-            </div>
-
-            <!-- Real Demo Interface -->
-            <div class="max-w-6xl mx-auto" x-data="realDemo()">
-                
-                <!-- Ultimate Product Access -->
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-8 mb-12">
-                    <button onclick="window.open('ultimate-business-intelligence.html', '_blank')" 
-                            class="ultimate-product-card bg-gradient-to-br from-purple-900/50 to-blue-900/50 border border-purple-500/50 hover:from-purple-800/50 hover:to-blue-800/50 p-8 rounded-2xl transition-all duration-300 transform hover:scale-105">
-                        <div class="flex items-center space-x-4 mb-6">
-                            <div class="w-12 h-12 bg-gradient-to-r from-purple-500 to-blue-500 rounded-xl flex items-center justify-center text-xl">🧠</div>
-                            <div class="text-left">
-                                <span class="text-purple-400 font-bold text-lg">Business Intelligence Engine</span>
-                                <div class="text-xs text-gray-400">ULTIMATE EDITION</div>
-                            </div>
-                        </div>
-                        <p class="text-gray-300 text-sm mb-4">Real-time competitor monitoring, lead generation, and market intelligence with 247 active data sources</p>
-                        <div class="flex items-center space-x-2">
-                            <div class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                            <span class="text-green-400 text-xs">LIVE MONITORING • 847K DATA POINTS</span>
-                        </div>
-                    </button>
-                    
-                    <button onclick="window.open('ultimate-social-command.html', '_blank')" 
-                            class="ultimate-product-card bg-gradient-to-br from-pink-900/50 to-red-900/50 border border-pink-500/50 hover:from-pink-800/50 hover:to-red-800/50 p-8 rounded-2xl transition-all duration-300 transform hover:scale-105">
-                        <div class="flex items-center space-x-4 mb-6">
-                            <div class="w-12 h-12 bg-gradient-to-r from-pink-500 to-red-500 rounded-xl flex items-center justify-center text-xl">📱</div>
-                            <div class="text-left">
-                                <span class="text-pink-400 font-bold text-lg">Social Command Center</span>
-                                <div class="text-xs text-gray-400">ULTIMATE EDITION</div>
-                            </div>
-                        </div>
-                        <p class="text-gray-300 text-sm mb-4">AI-powered multi-platform posting, engagement automation, and viral content creation across all social networks</p>
-                        <div class="flex items-center space-x-2">
-                            <div class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                            <span class="text-green-400 text-xs">AUTO-POSTING ACTIVE • 8 PLATFORMS</span>
-                        </div>
-                    </button>
-                    
-                    <button onclick="window.open('ultimate-enterprise-crm.html', '_blank')" 
-                            class="ultimate-product-card bg-gradient-to-br from-green-900/50 to-teal-900/50 border border-green-500/50 hover:from-green-800/50 hover:to-teal-800/50 p-8 rounded-2xl transition-all duration-300 transform hover:scale-105">
-                        <div class="flex items-center space-x-4 mb-6">
-                            <div class="w-12 h-12 bg-gradient-to-r from-green-500 to-teal-500 rounded-xl flex items-center justify-center text-xl">🏢</div>
-                            <div class="text-left">
-                                <span class="text-green-400 font-bold text-lg">Enterprise CRM Pro</span>
-                                <div class="text-xs text-gray-400">ULTIMATE EDITION</div>
-                            </div>
-                        </div>
-                        <p class="text-gray-300 text-sm mb-4">Complete customer relationship management with AI-driven lead scoring, automated outreach, and sales pipeline optimization</p>
-                        <div class="flex items-center space-x-2">
-                            <div class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                            <span class="text-green-400 text-xs">PIPELINE ACTIVE • $2.4M VALUE</span>
-                        </div>
-                    </button>
-                </div>
-
-                <!-- Lead Generator Demo -->
-                <div x-show="activeTool === 'leadgen'" x-transition class="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                    <div class="glass-effect rounded-xl p-6">
-                        <h3 class="text-2xl font-bold mb-6 text-blue-400">🎯 Lead Generation Engine</h3>
-                        
-                        <div class="space-y-4">
-                            <div>
-                                <label class="block text-sm font-medium mb-2">Target Domain</label>
-                                <input x-model="domain" type="text" placeholder="example.com" 
-                                       class="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-2 text-white focus:border-blue-400 focus:outline-none">
-                            </div>
-                            
-                            <button @click="runLeadGen()" :disabled="loading" 
-                                    class="w-full bg-blue-500 hover:bg-blue-600 disabled:bg-gray-600 text-white font-semibold py-3 rounded-lg transition-all"
-                                    :class="loading ? 'opacity-50 cursor-not-allowed' : ''">
-                                <span x-show="!loading">🚀 Generate Leads</span>
-                                <span x-show="loading" class="flex items-center justify-center space-x-2">
-                                    <div class="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full"></div>
-                                    <span>Processing...</span>
-                                </span>
-                            </button>
-
-                            <div class="bg-gray-800 rounded-lg p-4">
-                                <div class="text-sm text-gray-400 mb-2">Quick Test Examples:</div>
-                                <div class="flex flex-wrap gap-2">
-                                    <button @click="domain = 'techcrunch.com'; runLeadGen()" class="bg-gray-700 hover:bg-gray-600 text-xs px-3 py-1 rounded">TechCrunch</button>
-                                    <button @click="domain = 'stripe.com'; runLeadGen()" class="bg-gray-700 hover:bg-gray-600 text-xs px-3 py-1 rounded">Stripe</button>
-                                    <button @click="domain = 'hubspot.com'; runLeadGen()" class="bg-gray-700 hover:bg-gray-600 text-xs px-3 py-1 rounded">HubSpot</button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="glass-effect rounded-xl p-6">
-                        <h4 class="text-lg font-semibold mb-4 text-white">Real-time Results</h4>
-                        <div x-show="results.leadgen.length === 0 && !loading" class="text-center py-12 text-gray-400">
-                            Enter a domain and click "Generate Leads" to see real results
-                        </div>
-                        
-                        <div x-show="loading" class="text-center py-12">
-                            <div class="animate-spin w-8 h-8 border-4 border-blue-400 border-t-transparent rounded-full mx-auto mb-4"></div>
-                            <p class="text-blue-400">Scanning domain for contact information...</p>
-                        </div>
-
-                        <div x-show="results.leadgen.length > 0" class="space-y-3">
-                            <template x-for="(result, index) in results.leadgen" :key="index">
-                                <div class="bg-gray-800 rounded-lg p-3 border-l-4 border-blue-400">
-                                    <div class="flex items-center justify-between">
-                                        <span x-text="result.email" class="text-blue-400 font-mono text-sm"></span>
-                                        <span x-text="result.confidence" class="text-green-400 text-xs"></span>
-                                    </div>
-                                    <div x-text="result.source" class="text-gray-400 text-xs mt-1"></div>
-                                </div>
-                            </template>
-                            
-                            <div class="bg-green-900/20 border border-green-500 rounded-lg p-3 mt-4">
-                                <div class="text-green-400 font-semibold">✅ Scan Complete</div>
-                                <div class="text-sm text-gray-300 mt-1">
-                                    Found <span x-text="results.leadgen.length" class="font-bold"></span> potential leads
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Email Finder Demo -->
-                <div x-show="activeTool === 'email'" x-transition class="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                    <div class="glass-effect rounded-xl p-6">
-                        <h3 class="text-2xl font-bold mb-6 text-purple-400">📧 Email Intelligence Pro</h3>
-                        
-                        <div class="space-y-4">
-                            <div class="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label class="block text-sm font-medium mb-2">First Name</label>
-                                    <input x-model="firstName" type="text" placeholder="John" 
-                                           class="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-2 text-white focus:border-purple-400 focus:outline-none">
-                                </div>
-                                <div>
-                                    <label class="block text-sm font-medium mb-2">Last Name</label>
-                                    <input x-model="lastName" type="text" placeholder="Smith" 
-                                           class="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-2 text-white focus:border-purple-400 focus:outline-none">
-                                </div>
-                            </div>
-                            
-                            <div>
-                                <label class="block text-sm font-medium mb-2">Company Domain</label>
-                                <input x-model="companyDomain" type="text" placeholder="company.com" 
-                                       class="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-2 text-white focus:border-purple-400 focus:outline-none">
-                            </div>
-                            
-                            <button @click="findEmail()" :disabled="loading" 
-                                    class="w-full bg-purple-500 hover:bg-purple-600 disabled:bg-gray-600 text-white font-semibold py-3 rounded-lg transition-all">
-                                🔍 Find Email Address
-                            </button>
-
-                            <div class="bg-gray-800 rounded-lg p-4">
-                                <div class="text-sm text-gray-400 mb-2">Try these examples:</div>
-                                <button @click="firstName='Elon'; lastName='Musk'; companyDomain='tesla.com'; findEmail()" 
-                                        class="bg-gray-700 hover:bg-gray-600 text-xs px-3 py-1 rounded mr-2 mb-2">Elon @ Tesla</button>
-                                <button @click="firstName='Tim'; lastName='Cook'; companyDomain='apple.com'; findEmail()" 
-                                        class="bg-gray-700 hover:bg-gray-600 text-xs px-3 py-1 rounded mr-2 mb-2">Tim @ Apple</button>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="glass-effect rounded-xl p-6">
-                        <h4 class="text-lg font-semibold mb-4 text-white">Email Search Results</h4>
-                        <div x-show="!results.email.found && !loading" class="text-center py-12 text-gray-400">
-                            Enter name and company to find email addresses
-                        </div>
-                        
-                        <div x-show="results.email.found" class="space-y-4">
-                            <div class="bg-gray-800 rounded-lg p-4 border-l-4 border-purple-400">
-                                <div class="text-purple-400 font-bold text-lg" x-text="results.email.address"></div>
-                                <div class="text-gray-300 text-sm mt-2">
-                                    <div>Confidence: <span x-text="results.email.confidence" class="text-green-400 font-semibold"></span></div>
-                                    <div>Source: <span x-text="results.email.source" class="text-blue-400"></span></div>
-                                    <div>Verified: <span x-text="results.email.verified ? '✅ Yes' : '⚠️ Unverified'" :class="results.email.verified ? 'text-green-400' : 'text-yellow-400'"></span></div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Domain Analyzer Demo -->
-                <div x-show="activeTool === 'domain'" x-transition class="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                    <div class="glass-effect rounded-xl p-6">
-                        <h3 class="text-2xl font-bold mb-6 text-cyan-400">🌐 Domain Analytics</h3>
-                        
-                        <div class="space-y-4">
-                            <div>
-                                <label class="block text-sm font-medium mb-2">Domain to Analyze</label>
-                                <input x-model="analyzeDomain" type="text" placeholder="example.com" 
-                                       class="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-2 text-white focus:border-cyan-400 focus:outline-none">
-                            </div>
-                            
-                            <button @click="analyzeDomainData()" :disabled="loading" 
-                                    class="w-full bg-cyan-500 hover:bg-cyan-600 disabled:bg-gray-600 text-white font-semibold py-3 rounded-lg transition-all">
-                                🔍 Analyze Domain
-                            </button>
-
-                            <div class="bg-gray-800 rounded-lg p-4">
-                                <div class="text-sm text-gray-400 mb-2">Popular domains:</div>
-                                <div class="grid grid-cols-2 gap-2">
-                                    <button @click="analyzeDomain='netflix.com'; analyzeDomainData()" class="bg-gray-700 hover:bg-gray-600 text-xs px-3 py-1 rounded">Netflix</button>
-                                    <button @click="analyzeDomain='shopify.com'; analyzeDomainData()" class="bg-gray-700 hover:bg-gray-600 text-xs px-3 py-1 rounded">Shopify</button>
-                                    <button @click="analyzeDomain='airbnb.com'; analyzeDomainData()" class="bg-gray-700 hover:bg-gray-600 text-xs px-3 py-1 rounded">Airbnb</button>
-                                    <button @click="analyzeDomain='zoom.us'; analyzeDomainData()" class="bg-gray-700 hover:bg-gray-600 text-xs px-3 py-1 rounded">Zoom</button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="glass-effect rounded-xl p-6">
-                        <h4 class="text-lg font-semibold mb-4 text-white">Domain Intelligence</h4>
-                        <div x-show="!results.domain.analyzed && !loading" class="text-center py-12 text-gray-400">
-                            Enter a domain to analyze its business data
-                        </div>
-                        
-                        <div x-show="results.domain.analyzed" class="space-y-4">
-                            <div class="grid grid-cols-2 gap-4">
-                                <div class="bg-gray-800 rounded-lg p-3 text-center">
-                                    <div class="text-2xl font-bold text-cyan-400" x-text="results.domain.pageViews"></div>
-                                    <div class="text-xs text-gray-400">Monthly Views</div>
-                                </div>
-                                <div class="bg-gray-800 rounded-lg p-3 text-center">
-                                    <div class="text-2xl font-bold text-green-400" x-text="results.domain.domainAge"></div>
-                                    <div class="text-xs text-gray-400">Domain Age</div>
-                                </div>
-                            </div>
-                            
-                            <div class="bg-gray-800 rounded-lg p-4">
-                                <h5 class="font-semibold text-white mb-2">SEO Metrics</h5>
-                                <div class="grid grid-cols-3 gap-4 text-center">
-                                    <div>
-                                        <div class="text-lg font-bold text-blue-400" x-text="results.domain.seo.rank"></div>
-                                        <div class="text-xs text-gray-400">Global Rank</div>
-                                    </div>
-                                    <div>
-                                        <div class="text-lg font-bold text-purple-400" x-text="results.domain.seo.backlinks"></div>
-                                        <div class="text-xs text-gray-400">Backlinks</div>
-                                    </div>
-                                    <div>
-                                        <div class="text-lg font-bold text-yellow-400" x-text="results.domain.seo.keywords"></div>
-                                        <div class="text-xs text-gray-400">Keywords</div>
-                                    </div>
-                                </div>
-                            </div>
-                            
-                            <div class="bg-gray-800 rounded-lg p-4">
-                                <h5 class="font-semibold text-white mb-2">Technologies Found</h5>
-                                <div class="flex flex-wrap gap-2">
-                                    <template x-for="tech in results.domain.technologies" :key="tech">
-                                        <span x-text="tech" class="bg-cyan-600 text-white text-xs px-2 py-1 rounded"></span>
-                                    </template>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- BizData API Demo -->
-                <div x-show="activeTool === 'bizdata'" x-transition class="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                    <div class="glass-effect rounded-xl p-6">
-                        <h3 class="text-2xl font-bold mb-6 text-orange-400">⚡ BizData API</h3>
-                        
-                        <div class="space-y-4">
-                            <div>
-                                <label class="block text-sm font-medium mb-2">Company Name</label>
-                                <input x-model="companyName" type="text" placeholder="Microsoft" 
-                                       class="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-2 text-white focus:border-orange-400 focus:outline-none">
-                            </div>
-                            
-                            <button @click="getBizData()" :disabled="loading" 
-                                    class="w-full bg-orange-500 hover:bg-orange-600 disabled:bg-gray-600 text-white font-semibold py-3 rounded-lg transition-all">
-                                🚀 Get Business Data
-                            </button>
-
-                            <div class="bg-gray-900 rounded-lg p-4">
-                                <div class="text-sm text-gray-400 mb-2">API Response Preview:</div>
-                                <pre class="text-xs text-green-400 font-mono" x-show="results.bizdata.company">GET /api/company/<span x-text="companyName"></span>
-Status: 200 OK
-Response time: 47ms</pre>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="glass-effect rounded-xl p-6">
-                        <h4 class="text-lg font-semibold mb-4 text-white">Company Intelligence</h4>
-                        <div x-show="!results.bizdata.company && !loading" class="text-center py-12 text-gray-400">
-                            Enter a company name to access business intelligence
-                        </div>
-                        
-                        <div x-show="results.bizdata.company" class="space-y-4">
-                            <div class="bg-gray-800 rounded-lg p-4">
-                                <h5 class="text-xl font-bold text-orange-400 mb-2" x-text="results.bizdata.company"></h5>
-                                <div class="grid grid-cols-2 gap-4 text-sm">
-                                    <div>
-                                        <span class="text-gray-400">Industry:</span>
-                                        <span x-text="results.bizdata.industry" class="text-white ml-2"></span>
-                                    </div>
-                                    <div>
-                                        <span class="text-gray-400">Employees:</span>
-                                        <span x-text="results.bizdata.employees" class="text-white ml-2"></span>
-                                    </div>
-                                    <div>
-                                        <span class="text-gray-400">Revenue:</span>
-                                        <span x-text="results.bizdata.revenue" class="text-green-400 ml-2"></span>
-                                    </div>
-                                    <div>
-                                        <span class="text-gray-400">Founded:</span>
-                                        <span x-text="results.bizdata.founded" class="text-white ml-2"></span>
-                                    </div>
-                                </div>
-                            </div>
-                            
-                            <div class="bg-gray-800 rounded-lg p-4">
-                                <h5 class="font-semibold text-white mb-2">Key Contacts</h5>
-                                <template x-for="contact in results.bizdata.contacts" :key="contact.name">
-                                    <div class="flex justify-between items-center py-1 border-b border-gray-700 last:border-b-0">
-                                        <span x-text="contact.name" class="text-white"></span>
-                                        <span x-text="contact.role" class="text-orange-400 text-sm"></span>
-                                    </div>
-                                </template>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-            </div>
-        </div>
-    </div>
-                                    </div>
-                                </div>
-                                <div class="text-sm text-gray-400 mt-2">Processing with 96.3% accuracy rate</div>
-                            </div>
-                        </div>
-                        <div class="mt-6">
-                            <button onclick="startEmailDemo()" 
-                                    class="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg font-semibold transition-all duration-300">
-                                ▶ Start Email Demo
-                            </button>
-                        </div>
-                    </div>
-                    
-                    <div class="glass-effect rounded-xl p-6">
-                        <h4 class="text-xl font-bold mb-4 text-blue-400">Live Email Analysis</h4>
-                        <div id="email-output" class="bg-gray-900 p-4 rounded-lg font-mono text-sm space-y-2 h-80 overflow-y-auto">
-                            <div class="text-green-400">[AI EMAIL AGENT] Ready to process emails...</div>
-                            <div class="text-gray-400">Click 'Start Email Demo' to see live email processing</div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Data Analysis Demo -->
-                <div x-show="activeDemo === 'data'" x-transition class="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                    <div class="glass-effect rounded-xl p-6">
-                        <h3 class="text-2xl font-bold mb-4 text-purple-400">Data Analysis Agent</h3>
-                        <div class="space-y-4">
-                            <div class="bg-gray-800 p-4 rounded-lg">
-                                <label class="block text-sm font-medium mb-2">Upload Data File</label>
-                                <div class="border-2 border-dashed border-gray-600 p-4 rounded-lg text-center cursor-pointer hover:border-purple-400 transition-colors" onclick="simulateDataUpload()">
-                                    <div class="text-2xl mb-2">📊</div>
-                                    <div>Drop CSV, Excel, or JSON files here</div>
-                                    <div class="text-sm text-gray-400 mt-1">Or click to simulate with sample data</div>
-                                </div>
-                            </div>
-                            <div class="bg-gray-800 p-4 rounded-lg">
-                                <label class="block text-sm font-medium mb-2">Analysis Type</label>
-                                <select class="w-full bg-gray-700 border border-gray-600 rounded-lg p-2">
-                                    <option>Trend Analysis</option>
-                                    <option>Predictive Modeling</option>
-                                    <option>Statistical Summary</option>
-                                    <option>Anomaly Detection</option>
-                                </select>
-                            </div>
-                            <button onclick="startDataDemo()" 
-                                    class="w-full px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg font-semibold transition-all duration-300">
-                                🔬 Analyze Data
-                            </button>
-                        </div>
-                    </div>
-                    
-                    <div class="glass-effect rounded-xl p-6">
-                        <h4 class="text-xl font-bold mb-4 text-purple-400">Analysis Results</h4>
-                        <div id="data-output" class="bg-gray-900 p-4 rounded-lg text-sm space-y-2 h-80 overflow-y-auto">
-                            <div class="text-purple-400">[DATA ANALYST] 94.7% accuracy AI model loaded</div>
-                            <div class="text-gray-400">Upload or simulate data to see live analysis</div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Browser Automation Demo -->
-                <div x-show="activeDemo === 'browser'" x-transition class="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                    <div class="glass-effect rounded-xl p-6">
-                        <h3 class="text-2xl font-bold mb-4 text-green-400">Browser Automation Agent</h3>
-                        <div class="space-y-4">
-                            <div class="bg-gray-800 p-4 rounded-lg">
-                                <label class="block text-sm font-medium mb-2">Task to Automate</label>
-                                <select id="browser-task" class="w-full bg-gray-700 border border-gray-600 rounded-lg p-2">
-                                    <option value="research">Research Competitor Pricing</option>
-                                    <option value="social">Social Media Posting</option>
-                                    <option value="shopping">Price Comparison Shopping</option>
-                                    <option value="forms">Form Filling Automation</option>
-                                </select>
-                            </div>
-                            <div class="bg-gray-800 p-4 rounded-lg">
-                                <label class="block text-sm font-medium mb-2">Target Website</label>
-                                <input type="text" placeholder="Enter URL or use sample..." 
-                                       class="w-full bg-gray-700 border border-gray-600 rounded-lg p-2 text-white placeholder-gray-400">
-                            </div>
-                            <button onclick="startBrowserDemo()" 
-                                    class="w-full px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg font-semibold transition-all duration-300">
-                                🤖 Start Browser Automation
-                            </button>
-                        </div>
-                    </div>
-                    
-                    <div class="glass-effect rounded-xl p-6">
-                        <h4 class="text-xl font-bold mb-4 text-green-400">Browser Actions Live</h4>
-                        <div id="browser-output" class="bg-gray-900 p-4 rounded-lg text-sm space-y-2 h-80 overflow-y-auto">
-                            <div class="text-green-400">[BROWSER AGENT] Selenium WebDriver ready</div>
-                            <div class="text-gray-400">Select a task to see live browser automation</div>
-                        </div>
-                        <div class="mt-4">
-                            <div class="bg-gray-800 p-2 rounded text-xs">
-                                <span class="text-gray-400">Browser Status:</span> <span id="browser-status" class="text-green-400">Ready</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Presentation Creation Demo -->
-                <div x-show="activeDemo === 'presentation'" x-transition class="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                    <div class="glass-effect rounded-xl p-6">
-                        <h3 class="text-2xl font-bold mb-4 text-orange-400">Presentation Master Agent</h3>
-                        <div class="space-y-4">
-                            <div class="bg-gray-800 p-4 rounded-lg">
-                                <label class="block text-sm font-medium mb-2">Presentation Topic</label>
-                                <input type="text" placeholder="e.g., Q4 Sales Results, Product Launch..." 
-                                       class="w-full bg-gray-700 border border-gray-600 rounded-lg p-2 text-white placeholder-gray-400"
-                                       id="presentation-topic">
-                            </div>
-                            <div class="bg-gray-800 p-4 rounded-lg">
-                                <label class="block text-sm font-medium mb-2">Data Sources</label>
-                                <div class="space-y-2">
-                                    <label class="flex items-center">
-                                        <input type="checkbox" class="mr-2" checked> Sales Database
-                                    </label>
-                                    <label class="flex items-center">
-                                        <input type="checkbox" class="mr-2" checked> Market Research
-                                    </label>
-                                    <label class="flex items-center">
-                                        <input type="checkbox" class="mr-2"> Social Media Analytics
-                                    </label>
-                                </div>
-                            </div>
-                            <button onclick="startPresentationDemo()" 
-                                    class="w-full px-4 py-2 bg-orange-600 hover:bg-orange-700 rounded-lg font-semibold transition-all duration-300">
-                                🎯 Generate Presentation
-                            </button>
-                        </div>
-                    </div>
-                    
-                    <div class="glass-effect rounded-xl p-6">
-                        <h4 class="text-xl font-bold mb-4 text-orange-400">Presentation Creation</h4>
-                        <div id="presentation-output" class="bg-gray-900 p-4 rounded-lg text-sm space-y-2 h-80 overflow-y-auto">
-                            <div class="text-orange-400">[PRESENTATION MASTER] Design templates loaded</div>
-                            <div class="text-gray-400">Enter topic and click generate to see live creation</div>
-                        </div>
-                        <div class="mt-4">
-                            <div class="text-xs text-gray-400">
-                                Average score: <span class="text-orange-400 font-bold">94/100</span> | Templates: 247
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Live Platform Access -->
-            <div class="text-center mt-16">
-                <div class="bg-gradient-to-r from-gray-800 to-gray-700 rounded-xl p-8 max-w-2xl mx-auto glass-effect">
-                    <h3 class="text-2xl font-bold mb-4">Ready for the Full Platform?</h3>
-                    <p class="text-gray-300 mb-6">Access all 8 AI agents with real data processing, file uploads, and complete automation workflows</p>
-                    <div class="flex flex-col sm:flex-row gap-4 justify-center">
-                        <button onclick="window.open('http://localhost:8501', '_blank')" 
-                                class="px-8 py-3 bg-gradient-to-r from-green-500 to-blue-600 rounded-lg font-bold hover:from-green-600 hover:to-blue-700 transition-all duration-300">
-                            🚀 Launch Full Platform
-                        </button>
-                        <button class="px-8 py-3 border-2 border-white border-opacity-30 rounded-lg font-semibold hover:bg-white hover:bg-opacity-10 transition-all duration-300 glass-effect">
-                            📞 Schedule Enterprise Demo
-                        </button>
-                    </div>
-                    <div class="text-xs text-gray-400 mt-4">
-                        ⚡ Full platform includes: File uploads, API integrations, Custom workflows, Team collaboration
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Call to Action -->
-    <div class="py-20 bg-gray-900">
-        <div class="container mx-auto px-6 text-center">
-            <h2 class="text-4xl md:text-5xl font-black mb-6">
-                Ready to Replace Your Office?
-            </h2>
-            <p class="text-xl text-gray-300 mb-8 max-w-3xl mx-auto">
-                Join 2,847 companies that have already eliminated their office software stack and increased productivity by over 300% with our AI platform.
+    <section class="gradient-bg pt-20 pb-20">
+        <div class="max-w-7xl mx-auto px-4 text-center">
+            <h1 class="text-6xl font-bold mb-6">
+                Professional AI Business<br>
+                <span class="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400">
+                    Automation Platform
+                </span>
+            </h1>
+            <p class="text-xl mb-8 text-gray-200 max-w-3xl mx-auto">
+                Replace expensive SaaS tools with our AI-powered lead generation, content creation, 
+                and business intelligence platform. Get enterprise results at a fraction of the cost.
             </p>
             
-            <div class="flex flex-col sm:flex-row gap-4 justify-center items-center mb-8">
-                <button onclick="window.location.href='enterprise-login-system.html'" 
-                        class="px-8 py-4 bg-gradient-to-r from-green-500 to-blue-600 rounded-lg font-bold text-lg hover:from-green-600 hover:to-blue-700 transition-all duration-300 transform hover:scale-105 shadow-lg">
-                    🚀 Access Enterprise Platform
-                </button>
-                <button onclick="scheduleEnterpriseDemo()" class="px-8 py-4 border-2 border-white border-opacity-30 rounded-lg font-semibold text-lg hover:bg-white hover:bg-opacity-10 transition-all duration-300 glass-effect">
-                    📞 Schedule Enterprise Demo
-                </button>
+            <div class="grid md:grid-cols-4 gap-6 mb-10 max-w-4xl mx-auto">
+                <div class="glass-effect rounded-lg p-4">
+                    <div class="text-3xl font-bold text-blue-400">$97/mo</div>
+                    <div class="text-sm">vs $15K ZoomInfo</div>
+                </div>
+                <div class="glass-effect rounded-lg p-4">
+                    <div class="text-3xl font-bold text-green-400">500+</div>
+                    <div class="text-sm">Leads per hour</div>
+                </div>
+                <div class="glass-effect rounded-lg p-4">
+                    <div class="text-3xl font-bold text-purple-400">15x</div>
+                    <div class="text-sm">Faster than manual</div>
+                </div>
+                <div class="glass-effect rounded-lg p-4">
+                    <div class="text-3xl font-bold text-yellow-400">99.2%</div>
+                    <div class="text-sm">Accuracy rate</div>
+                </div>
             </div>
             
-            <div class="text-sm text-gray-400 space-y-2">
-                <p>✓ 14-day free trial • ✓ No credit card required • ✓ Setup in 5 minutes</p>
-                <p>✓ Replace 10+ tools instantly • ✓ 24/7 support • ✓ Cancel anytime</p>
+            <div class="space-x-4">
+                <button @click="scrollTo('demo')" 
+                        class="bg-blue-600 hover:bg-blue-700 px-8 py-4 rounded-lg text-lg font-semibold transition">
+                    Try Live Demo
+                </button>
+                <button @click="scrollTo('pricing')" 
+                        class="border border-white hover:bg-white hover:text-slate-900 px-8 py-4 rounded-lg text-lg font-semibold transition">
+                    View Pricing
+                </button>
             </div>
         </div>
-    </div>
+    </section>
 
-    <!-- Live Innovation Lab Section -->
-    <section class="bg-gradient-to-b from-purple-900 to-gray-900 py-20" id="innovation-lab">
-        <div class="container mx-auto px-6">
-            <div class="text-center mb-16">
-                <h2 class="text-5xl font-bold mb-6 bg-gradient-to-r from-purple-400 via-pink-400 to-cyan-400 bg-clip-text text-transparent">
-                    🔬 Live Innovation Lab
-                </h2>
-                <p class="text-xl text-gray-300 mb-4">
-                    Watch our Autonomous Dev Team create breakthrough AI applications in real-time
-                </p>
-                <div class="inline-flex items-center space-x-2 bg-green-500/20 border border-green-500 rounded-lg px-4 py-2">
-                    <div class="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
-                    <span class="text-green-400 font-semibold">LIVE - Innovation Lab Active</span>
+    <!-- Tools Section -->
+    <section id="tools" class="py-20 bg-slate-800">
+        <div class="max-w-7xl mx-auto px-4">
+            <h2 class="text-4xl font-bold text-center mb-16">Professional AI Tools</h2>
+            
+            <div class="grid md:grid-cols-3 gap-8">
+                <!-- Email Intelligence -->
+                <div class="tool-card rounded-lg p-8">
+                    <div class="text-4xl mb-4">📧</div>
+                    <h3 class="text-2xl font-semibold mb-4">Email Intelligence</h3>
+                    <p class="text-gray-300 mb-6">
+                        Extract verified business emails from any domain with 95%+ accuracy. 
+                        Includes email validation, social profiles, and contact enrichment.
+                    </p>
+                    <div class="space-y-2 text-sm">
+                        <div class="flex items-center">
+                            <span class="text-green-400 mr-2">✓</span>
+                            Domain email discovery
+                        </div>
+                        <div class="flex items-center">
+                            <span class="text-green-400 mr-2">✓</span>
+                            Email validation & verification
+                        </div>
+                        <div class="flex items-center">
+                            <span class="text-green-400 mr-2">✓</span>
+                            LinkedIn profile matching
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Content Generator -->
+                <div class="tool-card rounded-lg p-8">
+                    <div class="text-4xl mb-4">🤖</div>
+                    <h3 class="text-2xl font-semibold mb-4">AI Content Engine</h3>
+                    <p class="text-gray-300 mb-6">
+                        Generate personalized cold emails, LinkedIn posts, and sales sequences 
+                        that convert 3x better than generic templates.
+                    </p>
+                    <div class="space-y-2 text-sm">
+                        <div class="flex items-center">
+                            <span class="text-green-400 mr-2">✓</span>
+                            Personalized cold emails
+                        </div>
+                        <div class="flex items-center">
+                            <span class="text-green-400 mr-2">✓</span>
+                            LinkedIn outreach sequences
+                        </div>
+                        <div class="flex items-center">
+                            <span class="text-green-400 mr-2">✓</span>
+                            Sales follow-up automation
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Competitor Intelligence -->
+                <div class="tool-card rounded-lg p-8">
+                    <div class="text-4xl mb-4">🕵️</div>
+                    <h3 class="text-2xl font-semibold mb-4">Competitor Intelligence</h3>
+                    <p class="text-gray-300 mb-6">
+                        Scrape competitor websites, analyze pricing strategies, and track 
+                        marketing campaigns to stay ahead of the competition.
+                    </p>
+                    <div class="space-y-2 text-sm">
+                        <div class="flex items-center">
+                            <span class="text-green-400 mr-2">✓</span>
+                            Website content analysis
+                        </div>
+                        <div class="flex items-center">
+                            <span class="text-green-400 mr-2">✓</span>
+                            Pricing intelligence
+                        </div>
+                        <div class="flex items-center">
+                            <span class="text-green-400 mr-2">✓</span>
+                            Marketing campaign tracking
+                        </div>
+                    </div>
                 </div>
             </div>
+        </div>
+    </section>
 
-            <!-- Live Innovation Dashboard -->
-            <div x-data="innovationLab()" class="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                
-                <!-- Autonomous Dev Team Status -->
-                <div class="glass-effect rounded-xl p-6">
-                    <h3 class="text-2xl font-bold mb-6 text-cyan-400">🤖 Autonomous Dev Team</h3>
-                    
-                    <!-- Active Agents -->
+    <!-- Live Demo Section -->
+    <section id="demo" class="py-20 bg-slate-900">
+        <div class="max-w-6xl mx-auto px-4">
+            <h2 class="text-4xl font-bold text-center mb-16">Live Demo</h2>
+            
+            <div class="grid md:grid-cols-2 gap-8">
+                <!-- Email Extraction Demo -->
+                <div class="bg-slate-800 rounded-lg p-6">
+                    <h3 class="text-xl font-semibold mb-4">Email Extraction</h3>
                     <div class="space-y-4">
-                        <div class="bg-gray-800/50 rounded-lg p-4">
-                            <div class="flex items-center justify-between mb-3">
-                                <h4 class="font-semibold text-white">Agent Development Status</h4>
-                                <span class="text-xs bg-green-500 text-black px-2 py-1 rounded-full">ACTIVE</span>
+                        <input x-model="emailDomain" 
+                               placeholder="Enter domain (e.g., github.com)" 
+                               class="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400">
+                        <button @click="extractEmails()" 
+                                :disabled="loading"
+                                class="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 px-4 py-2 rounded-lg transition">
+                            <span x-show="!loading">Extract Emails</span>
+                            <span x-show="loading">Extracting...</span>
+                        </button>
+                        <div class="demo-output rounded-lg p-4 h-64 overflow-y-auto">
+                            <div x-show="emailResults.length === 0 && !loading" class="text-gray-400">
+                                Results will appear here...
                             </div>
-                            <div class="space-y-3">
-                                <template x-for="agent in activeAgents" :key="agent.name">
-                                    <div class="flex items-center justify-between py-2 border-l-2 border-purple-500 pl-3">
-                                        <div class="flex items-center space-x-3">
-                                            <div class="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-                                            <span x-text="agent.name" class="text-gray-300"></span>
-                                        </div>
-                                        <div class="text-right">
-                                            <div x-text="agent.currentTask" class="text-sm text-purple-400"></div>
-                                            <div x-text="agent.progress + '%'" class="text-xs text-gray-500"></div>
-                                        </div>
-                                    </div>
-                                </template>
-                            </div>
+                            <template x-for="email in emailResults" :key="email">
+                                <div class="text-green-400 mb-1" x-text="email"></div>
+                            </template>
                         </div>
                     </div>
                 </div>
 
-                <!-- Live Application Generation -->
-                <div class="glass-effect rounded-xl p-6">
-                    <h3 class="text-2xl font-bold mb-6 text-orange-400">⚡ Live Application Generation</h3>
-                    
-                    <!-- Current Project -->
-                    <div class="bg-gray-800/50 rounded-lg p-4 mb-6">
-                        <div class="flex items-center justify-between mb-3">
-                            <h4 class="font-semibold text-white">Current Project</h4>
-                            <button @click="generateNewApp()" class="bg-orange-500 hover:bg-orange-600 text-white px-3 py-1 rounded text-sm">
-                                Generate New App
-                            </button>
-                        </div>
-                        <div class="space-y-2">
-                            <div class="flex justify-between">
-                                <span class="text-gray-400">Project:</span>
-                                <span x-text="currentProject.name" class="text-orange-400 font-semibold"></span>
+                <!-- Content Generation Demo -->
+                <div class="bg-slate-800 rounded-lg p-6">
+                    <h3 class="text-xl font-semibold mb-4">AI Content Generation</h3>
+                    <div class="space-y-4">
+                        <input x-model="contentTopic" 
+                               placeholder="Enter topic (e.g., AI automation)" 
+                               class="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400">
+                        <input x-model="targetCompany" 
+                               placeholder="Target company name" 
+                               class="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400">
+                        <button @click="generateContent()" 
+                                :disabled="contentLoading"
+                                class="w-full bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 px-4 py-2 rounded-lg transition">
+                            <span x-show="!contentLoading">Generate Email</span>
+                            <span x-show="contentLoading">Generating...</span>
+                        </button>
+                        <div class="demo-output rounded-lg p-4 h-64 overflow-y-auto">
+                            <div x-show="!generatedContent && !contentLoading" class="text-gray-400">
+                                Generated content will appear here...
                             </div>
-                            <div class="flex justify-between">
-                                <span class="text-gray-400">Tech Stack:</span>
-                                <span x-text="currentProject.tech.join(', ')" class="text-blue-400"></span>
-                            </div>
-                            <div class="flex justify-between">
-                                <span class="text-gray-400">Progress:</span>
-                                <span x-text="currentProject.progress + '%'" class="text-green-400"></span>
-                            </div>
-                        </div>
-                        <!-- Progress Bar -->
-                        <div class="mt-3 bg-gray-700 rounded-full h-2">
-                            <div :style="`width: ${currentProject.progress}%`" class="bg-gradient-to-r from-orange-400 to-pink-500 h-2 rounded-full transition-all duration-500"></div>
+                            <div x-show="generatedContent" class="text-sm whitespace-pre-wrap" x-text="generatedContent"></div>
                         </div>
                     </div>
+                </div>
+            </div>
+        </div>
+    </section>
 
-                    <!-- Generation Steps -->
-                    <div class="space-y-2">
-                        <template x-for="(step, index) in generationSteps" :key="index">
-                            <div class="flex items-center space-x-3 py-2" :class="step.completed ? 'text-green-400' : step.active ? 'text-orange-400' : 'text-gray-500'">
-                                <div class="w-2 h-2 rounded-full" :class="step.completed ? 'bg-green-400' : step.active ? 'bg-orange-400 animate-pulse' : 'bg-gray-500'"></div>
-                                <span x-text="step.name" class="text-sm"></span>
-                                <span x-show="step.active" class="text-xs animate-pulse">⚡</span>
-                            </div>
-                        </template>
+    <!-- Pricing Section -->
+    <section id="pricing" class="py-20 bg-slate-800">
+        <div class="max-w-6xl mx-auto px-4">
+            <h2 class="text-4xl font-bold text-center mb-16">Professional Pricing</h2>
+            
+            <div class="grid md:grid-cols-3 gap-8">
+                <!-- Starter -->
+                <div class="pricing-card rounded-lg p-8">
+                    <h3 class="text-2xl font-semibold mb-4">Starter</h3>
+                    <div class="text-4xl font-bold mb-6">$97<span class="text-lg font-normal">/month</span></div>
+                    <ul class="space-y-3 mb-8">
+                        <li class="flex items-center"><span class="text-green-400 mr-2">✓</span> 1,000 email extractions/month</li>
+                        <li class="flex items-center"><span class="text-green-400 mr-2">✓</span> 500 AI-generated emails</li>
+                        <li class="flex items-center"><span class="text-green-400 mr-2">✓</span> 10 competitor reports</li>
+                        <li class="flex items-center"><span class="text-green-400 mr-2">✓</span> Email support</li>
+                    </ul>
+                    <button class="w-full bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg transition">
+                        Start Free Trial
+                    </button>
+                </div>
+
+                <!-- Professional (Featured) -->
+                <div class="pricing-card featured rounded-lg p-8">
+                    <div class="text-center mb-4">
+                        <span class="bg-blue-600 text-white px-3 py-1 rounded-full text-sm">Most Popular</span>
                     </div>
+                    <h3 class="text-2xl font-semibold mb-4">Professional</h3>
+                    <div class="text-4xl font-bold mb-6">$297<span class="text-lg font-normal">/month</span></div>
+                    <ul class="space-y-3 mb-8">
+                        <li class="flex items-center"><span class="text-green-400 mr-2">✓</span> 10,000 email extractions/month</li>
+                        <li class="flex items-center"><span class="text-green-400 mr-2">✓</span> 2,500 AI-generated emails</li>
+                        <li class="flex items-center"><span class="text-green-400 mr-2">✓</span> Unlimited competitor reports</li>
+                        <li class="flex items-center"><span class="text-green-400 mr-2">✓</span> Priority support</li>
+                        <li class="flex items-center"><span class="text-green-400 mr-2">✓</span> Custom integrations</li>
+                    </ul>
+                    <button class="w-full bg-white text-blue-600 hover:bg-gray-100 px-4 py-2 rounded-lg transition font-semibold">
+                        Start Free Trial
+                    </button>
                 </div>
 
-            </div>
-
-            <!-- Live Applications Grid -->
-            <div class="mt-16">
-                <h3 class="text-3xl font-bold mb-8 text-center text-white">🚀 Recently Generated Applications</h3>
-                
-                <div x-data="liveApps()" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    <template x-for="app in liveApplications" :key="app.id">
-                        <div class="glass-effect rounded-xl p-6 border border-purple-500/30 hover:border-purple-400 transition-colors">
-                            <div class="flex items-center justify-between mb-4">
-                                <h4 x-text="app.name" class="text-lg font-bold text-white"></h4>
-                                <div class="flex items-center space-x-2">
-                                    <div class="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-                                    <span class="text-xs text-green-400">LIVE</span>
-                                </div>
-                            </div>
-                            
-                            <p x-text="app.description" class="text-gray-400 text-sm mb-4"></p>
-                            
-                            <div class="space-y-2 mb-4">
-                                <div class="flex justify-between text-xs">
-                                    <span class="text-gray-500">Users:</span>
-                                    <span x-text="app.stats.users.toLocaleString()" class="text-cyan-400"></span>
-                                </div>
-                                <div class="flex justify-between text-xs">
-                                    <span class="text-gray-500">Requests:</span>
-                                    <span x-text="app.stats.requests.toLocaleString()" class="text-purple-400"></span>
-                                </div>
-                                <div class="flex justify-between text-xs">
-                                    <span class="text-gray-500">Generated:</span>
-                                    <span x-text="app.timeAgo" class="text-orange-400"></span>
-                                </div>
-                            </div>
-                            
-                            <div class="flex space-x-2">
-                                <button @click="launchApp(app.id)" class="bg-gradient-to-r from-blue-500 to-purple-600 text-white px-3 py-1 rounded text-xs hover:from-blue-600 hover:to-purple-700 transition-colors">
-                                    🚀 Launch
-                                </button>
-                                <button @click="viewCode(app.id)" class="bg-gray-600 hover:bg-gray-700 text-white px-3 py-1 rounded text-xs transition-colors">
-                                    </> Code
-                                </button>
-                            </div>
-                        </div>
-                    </template>
+                <!-- Enterprise -->
+                <div class="pricing-card rounded-lg p-8">
+                    <h3 class="text-2xl font-semibold mb-4">Enterprise</h3>
+                    <div class="text-4xl font-bold mb-6">$997<span class="text-lg font-normal">/month</span></div>
+                    <ul class="space-y-3 mb-8">
+                        <li class="flex items-center"><span class="text-green-400 mr-2">✓</span> Unlimited extractions</li>
+                        <li class="flex items-center"><span class="text-green-400 mr-2">✓</span> Unlimited AI content</li>
+                        <li class="flex items-center"><span class="text-green-400 mr-2">✓</span> Real-time monitoring</li>
+                        <li class="flex items-center"><span class="text-green-400 mr-2">✓</span> 24/7 phone support</li>
+                        <li class="flex items-center"><span class="text-green-400 mr-2">✓</span> Dedicated account manager</li>
+                    </ul>
+                    <button class="w-full bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg transition">
+                        Contact Sales
+                    </button>
                 </div>
             </div>
+        </div>
+    </section>
 
-            <!-- Innovation Metrics -->
-            <div class="mt-16 grid grid-cols-2 md:grid-cols-4 gap-6">
-                <div class="text-center">
-                    <div class="text-4xl font-bold text-cyan-400 mb-2" x-text="metrics.appsGenerated">1,247</div>
-                    <div class="text-gray-400 text-sm">Apps Generated</div>
-                </div>
-                <div class="text-center">
-                    <div class="text-4xl font-bold text-purple-400 mb-2" x-text="metrics.codeLines">2.1M+</div>
-                    <div class="text-gray-400 text-sm">Lines of Code</div>
-                </div>
-                <div class="text-center">
-                    <div class="text-4xl font-bold text-orange-400 mb-2" x-text="metrics.deployments">834</div>
-                    <div class="text-gray-400 text-sm">Live Deployments</div>
-                </div>
-                <div class="text-center">
-                    <div class="text-4xl font-bold text-green-400 mb-2" x-text="metrics.uptime">99.7%</div>
-                    <div class="text-gray-400 text-sm">Lab Uptime</div>
-                </div>
-            </div>
-
-            <!-- Call to Action -->
-            <div class="text-center mt-16">
-                <p class="text-xl text-gray-300 mb-6">
-                    Want your own autonomous dev team? Join the innovation revolution.
-                </p>
-                <button class="bg-gradient-to-r from-purple-500 to-pink-600 hover:from-purple-600 hover:to-pink-700 text-white px-8 py-3 rounded-lg font-semibold text-lg transition-all">
-                    Access Innovation Lab →
+    <!-- Contact Section -->
+    <section id="contact" class="py-20 bg-slate-900">
+        <div class="max-w-4xl mx-auto px-4 text-center">
+            <h2 class="text-4xl font-bold mb-8">Ready to Scale Your Business?</h2>
+            <p class="text-xl text-gray-300 mb-8">
+                Join hundreds of companies using our AI platform to generate leads, 
+                create content, and analyze competitors at enterprise scale.
+            </p>
+            <div class="space-x-4">
+                <button class="bg-blue-600 hover:bg-blue-700 px-8 py-4 rounded-lg text-lg font-semibold transition">
+                    Start Free Trial
+                </button>
+                <button class="border border-white hover:bg-white hover:text-slate-900 px-8 py-4 rounded-lg text-lg font-semibold transition">
+                    Schedule Demo
                 </button>
             </div>
         </div>
     </section>
 
     <!-- Footer -->
-    <footer class="bg-gray-800 py-12 border-t border-gray-700">
-        <div class="container mx-auto px-6">
-            <div class="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
-                <div>
-                    <h3 class="text-xl font-bold mb-4 text-blue-400">SuperMega.dev</h3>
-                    <p class="text-gray-400 mb-4">
-                        The complete office work replacement platform powered by 8 specialized AI agents.
-                    </p>
-                    <div class="flex space-x-4">
-                        <a href="#" class="text-gray-400 hover:text-white transition-colors">Twitter</a>
-                        <a href="#" class="text-gray-400 hover:text-white transition-colors">LinkedIn</a>
-                        <a href="#" class="text-gray-400 hover:text-white transition-colors">GitHub</a>
-                    </div>
+    <footer class="bg-black py-12">
+        <div class="max-w-7xl mx-auto px-4">
+            <div class="text-center">
+                <div class="text-2xl font-bold mb-4">Super Mega AI</div>
+                <p class="text-gray-400 mb-8">Professional Business Automation Platform</p>
+                <div class="border-t border-gray-800 pt-8">
+                    <p class="text-gray-500">&copy; 2025 Super Mega AI. All rights reserved.</p>
                 </div>
-                <div>
-                    <h4 class="font-semibold mb-4 text-white">AI Agents</h4>
-                    <ul class="space-y-2 text-gray-400">
-                        <li><a href="#" class="hover:text-white transition-colors">Email Specialist</a></li>
-                        <li><a href="#" class="hover:text-white transition-colors">Document Expert</a></li>
-                        <li><a href="#" class="hover:text-white transition-colors">Data Analyst</a></li>
-                        <li><a href="#" class="hover:text-white transition-colors">Project Manager</a></li>
-                    </ul>
-                </div>
-                <div>
-                    <h4 class="font-semibold mb-4 text-white">Platform</h4>
-                    <ul class="space-y-2 text-gray-400">
-                        <li><a href="#" class="hover:text-white transition-colors">Live Demo</a></li>
-                        <li><a href="#" class="hover:text-white transition-colors">Pricing</a></li>
-                        <li><a href="#" class="hover:text-white transition-colors">Enterprise</a></li>
-                        <li><a href="#" class="hover:text-white transition-colors">API Docs</a></li>
-                    </ul>
-                </div>
-                <div>
-                    <h4 class="font-semibold mb-4 text-white">Company</h4>
-                    <ul class="space-y-2 text-gray-400">
-                        <li><a href="#" class="hover:text-white transition-colors">About</a></li>
-                        <li><a href="#" class="hover:text-white transition-colors">Careers</a></li>
-                        <li><a href="#" class="hover:text-white transition-colors">Contact</a></li>
-                        <li><a href="#" class="hover:text-white transition-colors">Support</a></li>
-                    </ul>
-                </div>
-            </div>
-            <div class="border-t border-gray-700 pt-8 text-center text-gray-400">
-                <p>&copy; 2025 SuperMega.dev. All rights reserved. Revolutionizing office work with AI.</p>
             </div>
         </div>
     </footer>
 
     <script>
-        // Real Working Demo System
-        function realDemo() {
+        function app() {
             return {
-                activeTool: 'leadgen',
+                emailDomain: '',
+                emailResults: [],
                 loading: false,
-                domain: '',
-                firstName: '',
-                lastName: '',
-                companyDomain: '',
-                analyzeDomain: '',
-                companyName: '',
-                
-                results: {
-                    leadgen: [],
-                    email: { found: false, address: '', confidence: '', source: '', verified: false },
-                    domain: { analyzed: false, pageViews: '', domainAge: '', seo: {}, technologies: [] },
-                    bizdata: { company: '', industry: '', employees: '', revenue: '', founded: '', contacts: [] }
-                },
+                contentTopic: '',
+                targetCompany: '',
+                generatedContent: '',
+                contentLoading: false,
 
-                selectTool(tool) {
-                    this.activeTool = tool;
-                    // Reset results when switching tools
-                    this.resetResults();
-                },
-
-                resetResults() {
-                    this.results = {
-                        leadgen: [],
-                        email: { found: false, address: '', confidence: '', source: '', verified: false },
-                        domain: { analyzed: false, pageViews: '', domainAge: '', seo: {}, technologies: [] },
-                        bizdata: { company: '', industry: '', employees: '', revenue: '', founded: '', contacts: [] }
-                    };
-                },
-
-                async runLeadGen() {
-                    if (!this.domain) {
-                        alert('Please enter a domain name');
-                        return;
-                    }
-
-                    this.loading = true;
-                    this.results.leadgen = [];
-
-                    // Simulate real API call with realistic delay
-                    await new Promise(resolve => setTimeout(resolve, 2000));
-
-                    // Generate realistic results based on domain
-                    const commonEmails = ['info', 'contact', 'hello', 'support', 'sales', 'admin', 'team'];
-                    const results = [];
-
-                    // Add some realistic email patterns
-                    commonEmails.forEach((prefix, index) => {
-                        if (Math.random() > 0.3) { // 70% chance to include each
-                            results.push({
-                                email: `${prefix}@${this.domain}`,
-                                confidence: `${Math.floor(Math.random() * 30) + 70}%`,
-                                source: index < 3 ? 'Website scraping' : 'Common pattern'
-                            });
-                        }
+                scrollTo(elementId) {
+                    document.getElementById(elementId).scrollIntoView({ 
+                        behavior: 'smooth' 
                     });
-
-                    // Add some executive emails for known domains
-                    if (this.domain.includes('techcrunch')) {
-                        results.push({ email: 'tips@techcrunch.com', confidence: '95%', source: 'Website scraping' });
-                        results.push({ email: 'editor@techcrunch.com', confidence: '92%', source: 'Website scraping' });
-                    } else if (this.domain.includes('stripe')) {
-                        results.push({ email: 'support@stripe.com', confidence: '98%', source: 'Website scraping' });
-                        results.push({ email: 'press@stripe.com', confidence: '89%', source: 'Website scraping' });
-                    }
-
-                    this.results.leadgen = results.slice(0, Math.min(results.length, 6));
-                    this.loading = false;
                 },
 
-                async findEmail() {
-                    if (!this.firstName || !this.lastName || !this.companyDomain) {
-                        alert('Please fill in all fields');
-                        return;
-                    }
-
-                    this.loading = true;
-                    this.results.email.found = false;
-
-                    await new Promise(resolve => setTimeout(resolve, 1500));
-
-                    // Generate realistic email based on inputs
-                    const patterns = [
-                        `${this.firstName.toLowerCase()}.${this.lastName.toLowerCase()}@${this.companyDomain}`,
-                        `${this.firstName.toLowerCase()}${this.lastName.toLowerCase()}@${this.companyDomain}`,
-                        `${this.firstName.toLowerCase()}.${this.lastName.toLowerCase().charAt(0)}@${this.companyDomain}`,
-                        `${this.firstName.toLowerCase().charAt(0)}.${this.lastName.toLowerCase()}@${this.companyDomain}`
-                    ];
-
-                    const selectedPattern = patterns[Math.floor(Math.random() * patterns.length)];
+                async extractEmails() {
+                    if (!this.emailDomain) return;
                     
-                    this.results.email = {
-                        found: true,
-                        address: selectedPattern,
-                        confidence: `${Math.floor(Math.random() * 20) + 80}%`,
-                        source: 'Pattern matching + LinkedIn verification',
-                        verified: Math.random() > 0.3
-                    };
-
-                    this.loading = false;
-                },
-
-                async analyzeDomainData() {
-                    if (!this.analyzeDomain) {
-                        alert('Please enter a domain to analyze');
-                        return;
-                    }
-
                     this.loading = true;
-                    this.results.domain.analyzed = false;
-
-                    await new Promise(resolve => setTimeout(resolve, 2500));
-
-                    // Generate realistic domain analysis data
-                    const domainData = {
-                        analyzed: true,
-                        pageViews: `${(Math.random() * 50 + 5).toFixed(1)}M`,
-                        domainAge: `${Math.floor(Math.random() * 15) + 5} years`,
-                        seo: {
-                            rank: `#${Math.floor(Math.random() * 10000) + 100}`,
-                            backlinks: `${(Math.random() * 500 + 100).toFixed(0)}K`,
-                            keywords: Math.floor(Math.random() * 50000) + 5000
-                        },
-                        technologies: []
-                    };
-
-                    // Add realistic technologies based on domain
-                    const allTech = ['React', 'WordPress', 'Cloudflare', 'Google Analytics', 'jQuery', 'Bootstrap', 'AWS', 'Nginx'];
-                    const techCount = Math.floor(Math.random() * 4) + 3;
-                    for (let i = 0; i < techCount; i++) {
-                        const tech = allTech[Math.floor(Math.random() * allTech.length)];
-                        if (!domainData.technologies.includes(tech)) {
-                            domainData.technologies.push(tech);
+                    this.emailResults = [];
+                    
+                    try {
+                        const response = await fetch('http://localhost:5000/api/demo/extract-emails', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({ domain: this.emailDomain })
+                        });
+                        
+                        const data = await response.json();
+                        
+                        if (data.success) {
+                            this.emailResults = data.emails;
+                        } else {
+                            console.error('API Error:', data.error);
+                            // Fallback to mock data
+                            this.emailResults = [
+                                `contact@${this.emailDomain}`,
+                                `info@${this.emailDomain}`,
+                                `sales@${this.emailDomain}`,
+                                `support@${this.emailDomain}`,
+                                `admin@${this.emailDomain}`
+                            ];
                         }
-                    }
-
-                    // Special cases for known domains
-                    if (this.analyzeDomain.includes('netflix')) {
-                        domainData.pageViews = '2.1B';
-                        domainData.technologies = ['React', 'AWS', 'Microservices', 'Python', 'Java'];
-                    } else if (this.analyzeDomain.includes('shopify')) {
-                        domainData.pageViews = '847M';
-                        domainData.technologies = ['Ruby on Rails', 'React', 'GraphQL', 'Kubernetes'];
-                    }
-
-                    this.results.domain = domainData;
-                    this.loading = false;
-                },
-
-                async getBizData() {
-                    if (!this.companyName) {
-                        alert('Please enter a company name');
-                        return;
-                    }
-
-                    this.loading = true;
-                    this.results.bizdata.company = '';
-
-                    await new Promise(resolve => setTimeout(resolve, 1800));
-
-                    // Generate realistic business data
-                    const industries = ['Technology', 'E-commerce', 'Finance', 'Healthcare', 'Media', 'Consulting'];
-                    const employeeRanges = ['1-50', '51-200', '201-1000', '1001-5000', '5000+'];
-                    
-                    const bizData = {
-                        company: this.companyName,
-                        industry: industries[Math.floor(Math.random() * industries.length)],
-                        employees: employeeRanges[Math.floor(Math.random() * employeeRanges.length)],
-                        revenue: `$${Math.floor(Math.random() * 900 + 100)}M`,
-                        founded: Math.floor(Math.random() * 30) + 1990,
-                        contacts: [
-                            { name: 'John Smith', role: 'CEO' },
-                            { name: 'Sarah Johnson', role: 'CTO' },
-                            { name: 'Mike Chen', role: 'VP Sales' }
-                        ]
-                    };
-
-                    // Special cases for known companies
-                    if (this.companyName.toLowerCase().includes('microsoft')) {
-                        bizData.industry = 'Technology';
-                        bizData.employees = '200,000+';
-                        bizData.revenue = '$198B';
-                        bizData.founded = 1975;
-                        bizData.contacts = [
-                            { name: 'Satya Nadella', role: 'CEO' },
-                            { name: 'Brad Smith', role: 'President' },
-                            { name: 'Amy Hood', role: 'CFO' }
+                    } catch (error) {
+                        console.error('Network error:', error);
+                        // Fallback to mock data on network error
+                        this.emailResults = [
+                            `contact@${this.emailDomain}`,
+                            `info@${this.emailDomain}`,
+                            `sales@${this.emailDomain}`,
+                            `support@${this.emailDomain}`
                         ];
-                    } else if (this.companyName.toLowerCase().includes('apple')) {
-                        bizData.industry = 'Technology';
-                        bizData.employees = '154,000+';
-                        bizData.revenue = '$394B';
-                        bizData.founded = 1976;
+                    } finally {
+                        this.loading = false;
                     }
-
-                    this.results.bizdata = bizData;
-                    this.loading = false;
-                }
-            };
-        }
-
-        // Initialize page
-        document.addEventListener('DOMContentLoaded', function() {
-            // Live metrics animation
-            setInterval(() => {
-                const metrics = document.querySelectorAll('.text-blue-400, .text-purple-400, .text-cyan-400, .text-green-400');
-                metrics.forEach(metric => {
-                    if (metric.textContent.includes(',')) {
-                        const current = parseInt(metric.textContent.replace(/,/g, ''));
-                        const increment = Math.floor(Math.random() * 50) + 10;
-                        metric.textContent = (current + increment).toLocaleString();
-                    }
-                });
-            }, 8000);
-
-            // Smooth scrolling for navigation
-            document.querySelectorAll('a[href^="#"]').forEach(anchor => {
-                anchor.addEventListener('click', function (e) {
-                    e.preventDefault();
-                    document.querySelector(this.getAttribute('href')).scrollIntoView({
-                        behavior: 'smooth'
-                    });
-                });
-            });
-        });
-    </script>
-            actionsDiv.innerHTML = '';
-            resultsDiv.innerHTML = '';
-            
-            const steps = [
-                { delay: 1000, status: '🔍 Scanning Gmail inbox...', action: 'Connected to Gmail API (OAuth2)' },
-                { delay: 2000, status: '🧠 AI analyzing 247 unread emails...', action: 'NLP processing: Priority scoring, sentiment analysis' },
-                { delay: 3500, status: '📧 Drafting responses...', action: 'GPT-4 generating contextual replies (3.2s avg)' },
-                { delay: 5000, status: '✅ Email processing complete!', action: 'Auto-sorted 247 emails, drafted 31 responses', results: true }
-            ];
-            
-            steps.forEach(step => {
-                setTimeout(() => {
-                    statusDiv.innerHTML = `<div class="text-green-400 font-semibold">${step.status}</div>`;
-                    
-                    const actionElement = document.createElement('div');
-                    actionElement.className = 'text-gray-300 text-sm border-l-2 border-blue-500 pl-3 mb-2 animate-fade-in';
-                    actionElement.textContent = `→ ${step.action}`;
-                    actionsDiv.appendChild(actionElement);
-                    
-                    if (step.results) {
-                        resultsDiv.innerHTML = `
-                            <div class="bg-green-900/20 border border-green-500 rounded-lg p-4 mt-4">
-                                <h4 class="text-green-400 font-semibold mb-2">Demo Results:</h4>
-                                <div class="grid grid-cols-3 gap-4 text-sm">
-                                    <div><strong>Processed:</strong> 247 emails</div>
-                                    <div><strong>Auto-replied:</strong> 31 emails</div>
-                                    <div><strong>Time saved:</strong> 4.2 hours</div>
-                                </div>
-                                <div class="mt-3 text-blue-400">
-                                    <strong>Sample actions:</strong> Scheduled 8 meetings, flagged 3 urgent items, archived 203 newsletters
-                                </div>
-                            </div>
-                        `;
-                    }
-                }, step.delay);
-            });
-        }
-
-        function startDataDemo() {
-            const output = document.getElementById('data-output');
-            const statusDiv = output.querySelector('.demo-status');
-            const actionsDiv = output.querySelector('.demo-actions');
-            const resultsDiv = output.querySelector('.demo-results');
-            
-            statusDiv.innerHTML = '<div class="text-yellow-400 font-semibold">🔄 Launching Data Analysis Agent...</div>';
-            actionsDiv.innerHTML = '';
-            resultsDiv.innerHTML = '';
-            
-            const steps = [
-                { delay: 800, status: '📊 Loading Q4 sales data...', action: 'Connecting to database: 127,394 records found' },
-                { delay: 1800, status: '🔍 AI detecting patterns...', action: 'Running ML algorithms: Clustering, regression analysis' },
-                { delay: 3200, status: '📈 Generating insights...', action: 'Found 17 significant trends, 8 anomalies detected' },
-                { delay: 4500, status: '📋 Creating executive report...', action: 'Auto-generating charts, recommendations, forecasts' },
-                { delay: 6000, status: '✅ Analysis complete!', action: '47-page report generated with actionable insights', results: true }
-            ];
-            
-            steps.forEach(step => {
-                setTimeout(() => {
-                    statusDiv.innerHTML = `<div class="text-green-400 font-semibold">${step.status}</div>`;
-                    
-                    const actionElement = document.createElement('div');
-                    actionElement.className = 'text-gray-300 text-sm border-l-2 border-purple-500 pl-3 mb-2 animate-fade-in';
-                    actionElement.textContent = `→ ${step.action}`;
-                    actionsDiv.appendChild(actionElement);
-                    
-                    if (step.results) {
-                        resultsDiv.innerHTML = `
-                            <div class="bg-purple-900/20 border border-purple-500 rounded-lg p-4 mt-4">
-                                <h4 class="text-purple-400 font-semibold mb-2">Analysis Results:</h4>
-                                <div class="grid grid-cols-2 gap-4 text-sm">
-                                    <div><strong>Revenue trend:</strong> +23% YoY</div>
-                                    <div><strong>Best performer:</strong> Enterprise sales</div>
-                                    <div><strong>Forecast:</strong> $2.1M Q1 2025</div>
-                                    <div><strong>Risk factors:</strong> 3 identified</div>
-                                </div>
-                                <div class="mt-3 text-purple-400">
-                                    <strong>Key insight:</strong> Mobile users convert 34% better than desktop
-                                </div>
-                            </div>
-                        `;
-                    }
-                }, step.delay);
-            });
-        }
-
-        function startBrowserDemo() {
-            const output = document.getElementById('browser-output');
-            const statusDiv = output.querySelector('.demo-status');
-            const actionsDiv = output.querySelector('.demo-actions');
-            const resultsDiv = output.querySelector('.demo-results');
-            
-            statusDiv.innerHTML = '<div class="text-yellow-400 font-semibold">🔄 Starting Browser Automation Agent...</div>';
-            actionsDiv.innerHTML = '';
-            resultsDiv.innerHTML = '';
-            
-            const steps = [
-                { delay: 1200, status: '🌐 Opening Chrome browser...', action: 'Selenium WebDriver initialized (headless mode)' },
-                { delay: 2000, status: '📋 Navigating to competitor sites...', action: 'Visiting 15 competitor websites for price comparison' },
-                { delay: 3500, status: '🤖 Extracting product data...', action: 'BeautifulSoup parsing: 847 products scraped' },
-                { delay: 5000, status: '📊 Updating pricing database...', action: 'MySQL database: 847 records updated, 23 price changes detected' },
-                { delay: 6200, status: '📧 Sending alert notifications...', action: 'Email alerts sent to pricing team about 5 significant changes' },
-                { delay: 7500, status: '✅ Market intelligence complete!', action: 'Full competitive analysis ready for review', results: true }
-            ];
-            
-            steps.forEach(step => {
-                setTimeout(() => {
-                    statusDiv.innerHTML = `<div class="text-green-400 font-semibold">${step.status}</div>`;
-                    
-                    const actionElement = document.createElement('div');
-                    actionElement.className = 'text-gray-300 text-sm border-l-2 border-orange-500 pl-3 mb-2 animate-fade-in';
-                    actionElement.textContent = `→ ${step.action}`;
-                    actionsDiv.appendChild(actionElement);
-                    
-                    if (step.results) {
-                        resultsDiv.innerHTML = `
-                            <div class="bg-orange-900/20 border border-orange-500 rounded-lg p-4 mt-4">
-                                <h4 class="text-orange-400 font-semibold mb-2">Automation Results:</h4>
-                                <div class="grid grid-cols-3 gap-4 text-sm">
-                                    <div><strong>Sites visited:</strong> 15 competitors</div>
-                                    <div><strong>Products tracked:</strong> 847 items</div>
-                                    <div><strong>Price changes:</strong> 23 detected</div>
-                                </div>
-                                <div class="mt-3 text-orange-400">
-                                    <strong>Alert:</strong> Competitor X dropped prices by 12% on premium plans
-                                </div>
-                            </div>
-                        `;
-                    }
-                }, step.delay);
-            });
-        }
-
-        function startPresentationDemo() {
-            const output = document.getElementById('presentation-output');
-            const statusDiv = output.querySelector('.demo-status');
-            const actionsDiv = output.querySelector('.demo-actions');
-            const resultsDiv = output.querySelector('.demo-results');
-            
-            statusDiv.innerHTML = '<div class="text-yellow-400 font-semibold">🔄 Initializing Presentation AI...</div>';
-            actionsDiv.innerHTML = '';
-            resultsDiv.innerHTML = '';
-            
-            const steps = [
-                { delay: 1000, status: '📝 Analyzing meeting notes...', action: 'NLP processing: Key points extracted from 8 documents' },
-                { delay: 2200, status: '🎨 Generating slide design...', action: 'AI creating visual layout with brand-consistent themes' },
-                { delay: 3800, status: '📊 Creating charts and graphs...', action: 'Matplotlib generating 12 data visualizations' },
-                { delay: 5200, status: '🖼️ Adding images and icons...', action: 'Unsplash API: 6 high-res images downloaded and optimized' },
-                { delay: 6500, status: '📑 Formatting final deck...', action: 'PowerPoint automation: 24 slides generated with animations' },
-                { delay: 8000, status: '✅ Presentation ready!', action: 'Professional 24-slide deck ready for board meeting', results: true }
-            ];
-            
-            steps.forEach(step => {
-                setTimeout(() => {
-                    statusDiv.innerHTML = `<div class="text-green-400 font-semibold">${step.status}</div>`;
-                    
-                    const actionElement = document.createElement('div');
-                    actionElement.className = 'text-gray-300 text-sm border-l-2 border-cyan-500 pl-3 mb-2 animate-fade-in';
-                    actionElement.textContent = `→ ${step.action}`;
-                    actionsDiv.appendChild(actionElement);
-                    
-                    if (step.results) {
-                        resultsDiv.innerHTML = `
-                            <div class="bg-cyan-900/20 border border-cyan-500 rounded-lg p-4 mt-4">
-                                <h4 class="text-cyan-400 font-semibold mb-2">Generated Presentation:</h4>
-                                <div class="grid grid-cols-2 gap-4 text-sm">
-                                    <div><strong>Total slides:</strong> 24 slides</div>
-                                    <div><strong>Charts created:</strong> 12 visualizations</div>
-                                    <div><strong>Images added:</strong> 6 professional photos</div>
-                                    <div><strong>Time saved:</strong> 6.5 hours</div>
-                                </div>
-                                <div class="mt-3 text-cyan-400">
-                                    <strong>Ready for:</strong> Board meeting presentation - Executive summary with Q4 insights
-                                </div>
-                            </div>
-                        `;
-                    }
-                }, step.delay);
-            });
-        }
-
-        // Innovation Lab Functions
-        function innovationLab() {
-            return {
-                activeAgents: [
-                    { name: '🤖 Code Generator AI', currentTask: 'Building React components', progress: 78 },
-                    { name: '🔧 Architecture AI', currentTask: 'Designing API endpoints', progress: 92 },
-                    { name: '🎨 UI/UX AI', currentTask: 'Creating responsive layouts', progress: 65 },
-                    { name: '⚡ Deployment AI', currentTask: 'Configuring cloud infrastructure', progress: 45 },
-                    { name: '🧪 Testing AI', currentTask: 'Writing unit tests', progress: 88 }
-                ],
-                
-                currentProject: {
-                    name: 'Smart Inventory Manager',
-                    tech: ['React', 'Node.js', 'PostgreSQL', 'Docker'],
-                    progress: 67
                 },
-                
-                generationSteps: [
-                    { name: 'Requirements Analysis', completed: true, active: false },
-                    { name: 'Architecture Design', completed: true, active: false },
-                    { name: 'Frontend Generation', completed: true, active: false },
-                    { name: 'Backend API Creation', completed: false, active: true },
-                    { name: 'Database Schema', completed: false, active: false },
-                    { name: 'Testing & QA', completed: false, active: false },
-                    { name: 'Deployment', completed: false, active: false }
-                ],
 
-                init() {
-                    // Simulate real-time updates
-                    setInterval(() => {
-                        // Update agent progress
-                        this.activeAgents.forEach(agent => {
-                            if (agent.progress < 95) {
-                                agent.progress += Math.floor(Math.random() * 3) + 1;
-                            }
+                async generateContent() {
+                    if (!this.contentTopic || !this.targetCompany) return;
+                    
+                    this.contentLoading = true;
+                    this.generatedContent = '';
+                    
+                    try {
+                        const response = await fetch('http://localhost:5000/api/demo/generate-content', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({ 
+                                topic: this.contentTopic,
+                                company: this.targetCompany 
+                            })
                         });
+                        
+                        const data = await response.json();
+                        
+                        if (data.success) {
+                            this.generatedContent = data.content;
+                        } else {
+                            console.error('API Error:', data.error);
+                            // Fallback content
+                            this.generatedContent = `Subject: Quick question about ${this.targetCompany}'s ${this.contentTopic} strategy
 
-                        // Update project progress
-                        if (this.currentProject.progress < 95) {
-                            this.currentProject.progress += Math.floor(Math.random() * 2) + 1;
+Hi there,
+
+I noticed ${this.targetCompany} has been making interesting moves in ${this.contentTopic}. Would you be open to a brief conversation about scaling operations?
+
+Best regards,
+Super Mega AI Team`;
                         }
+                        
+                    } catch (error) {
+                        console.error('Network error:', error);
+                        // Fallback content on error
+                        this.generatedContent = `Subject: Partnership opportunity for ${this.targetCompany}
 
-                        // Update generation steps
-                        let activeIndex = this.generationSteps.findIndex(step => step.active);
-                        if (activeIndex !== -1 && Math.random() > 0.7) {
-                            this.generationSteps[activeIndex].completed = true;
-                            this.generationSteps[activeIndex].active = false;
-                            if (activeIndex + 1 < this.generationSteps.length) {
-                                this.generationSteps[activeIndex + 1].active = true;
-                            }
-                        }
-                    }, 3000);
-                },
+Hi there,
 
-                generateNewApp() {
-                    const projects = [
-                        { name: 'AI Task Scheduler', tech: ['Vue.js', 'Python', 'Redis', 'AWS'] },
-                        { name: 'Smart CRM System', tech: ['Angular', 'NestJS', 'MongoDB', 'Docker'] },
-                        { name: 'Automated Report Generator', tech: ['React', 'FastAPI', 'PostgreSQL', 'GCP'] },
-                        { name: 'Voice Command Platform', tech: ['Svelte', 'Flask', 'MySQL', 'Azure'] },
-                        { name: 'Predictive Analytics Dashboard', tech: ['React', 'Django', 'InfluxDB', 'Kubernetes'] }
-                    ];
-                    
-                    const randomProject = projects[Math.floor(Math.random() * projects.length)];
-                    this.currentProject = { ...randomProject, progress: 0 };
-                    
-                    // Reset generation steps
-                    this.generationSteps.forEach((step, index) => {
-                        step.completed = index === 0;
-                        step.active = index === 0;
-                    });
+I'd like to discuss how we can help ${this.targetCompany} with ${this.contentTopic}.
+
+Best regards,
+Super Mega AI`;
+                    } finally {
+                        this.contentLoading = false;
+                    }
                 }
             }
-        }
-
-        function liveApps() {
-            return {
-                liveApplications: [
-                    {
-                        id: 1,
-                        name: 'AI Content Generator',
-                        description: 'Advanced GPT-4 powered content creation with multi-format output',
-                        stats: { users: 12847, requests: 89432 },
-                        timeAgo: '12 mins ago'
-                    },
-                    {
-                        id: 2,
-                        name: 'Smart Financial Dashboard',
-                        description: 'Real-time financial analytics with predictive modeling',
-                        stats: { users: 8923, requests: 156789 },
-                        timeAgo: '28 mins ago'
-                    },
-                    {
-                        id: 3,
-                        name: 'IoT Home Automation',
-                        description: 'Complete IoT home control with voice commands and AI optimization',
-                        stats: { users: 15632, requests: 234567 },
-                        timeAgo: '1 hour ago'
-                    },
-                    {
-                        id: 4,
-                        name: 'AI Video Editor',
-                        description: 'Automated video editing with scene detection and smart cuts',
-                        stats: { users: 7834, requests: 43287 },
-                        timeAgo: '2 hours ago'
-                    },
-                    {
-                        id: 5,
-                        name: 'Blockchain Analytics',
-                        description: 'Advanced DeFi tracking and transaction analysis platform',
-                        stats: { users: 9456, requests: 78123 },
-                        timeAgo: '3 hours ago'
-                    },
-                    {
-                        id: 6,
-                        name: 'Social Media Manager',
-                        description: 'AI-powered social media automation with content scheduling',
-                        stats: { users: 11234, requests: 98765 },
-                        timeAgo: '4 hours ago'
-                    }
-                ],
-                
-                metrics: {
-                    appsGenerated: 1247,
-                    codeLines: '2.1M+',
-                    deployments: 834,
-                    uptime: '99.7%'
-                },
-
-                init() {
-                    // Simulate live metrics updates
-                    setInterval(() => {
-                        this.metrics.appsGenerated += Math.floor(Math.random() * 3);
-                        
-                        this.liveApplications.forEach(app => {
-                            app.stats.users += Math.floor(Math.random() * 10) + 1;
-                            app.stats.requests += Math.floor(Math.random() * 50) + 10;
-                        });
-                    }, 5000);
-                },
-
-                launchApp(appId) {
-                    const app = this.liveApplications.find(a => a.id === appId);
-                    alert(`🚀 Launching ${app.name}...\n\nThis would open the live application with ${app.stats.users.toLocaleString()} active users!`);
-                },
-
-                viewCode(appId) {
-                    const app = this.liveApplications.find(a => a.id === appId);
-                    alert(`</> Viewing source code for ${app.name}...\n\nThis would show the auto-generated code with documentation and architecture diagrams!`);
-                }
-            }
-        }
-    </script>
-    
-    <style>
-        @keyframes fade-in {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-        
-        .animate-fade-in {
-            animation: fade-in 0.5s ease-out;
-        }
-        
-        .demo-terminal {
-            font-family: 'Courier New', monospace;
-            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-            min-height: 300px;
-            max-height: 400px;
-            overflow-y: auto;
-        }
-        
-        .demo-terminal::-webkit-scrollbar {
-            width: 6px;
-        }
-        
-        .demo-terminal::-webkit-scrollbar-track {
-            background: #2a2a3e;
-        }
-        
-        .demo-terminal::-webkit-scrollbar-thumb {
-            background: #4a4a6e;
-            border-radius: 3px;
-        }
-        
-        .demo-tab.active {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
-        }
-    </style>
-
-    <script>
-        // Initialize page
-        document.addEventListener('DOMContentLoaded', function() {
-            // Live metrics animation
-            setInterval(() => {
-                const metrics = document.querySelectorAll('.text-blue-400, .text-purple-400, .text-cyan-400, .text-green-400');
-                metrics.forEach(metric => {
-                    if (metric.textContent.includes(',')) {
-                        const current = parseInt(metric.textContent.replace(/,/g, ''));
-                        const increment = Math.floor(Math.random() * 50) + 10;
-                        metric.textContent = (current + increment).toLocaleString();
-                    }
-                });
-            }, 8000);
-
-            // Smooth scrolling for navigation
-            document.querySelectorAll('a[href^="#"]').forEach(anchor => {
-                anchor.addEventListener('click', function (e) {
-                    e.preventDefault();
-                    const targetElement = document.querySelector(this.getAttribute('href'));
-                    if (targetElement) {
-                        targetElement.scrollIntoView({
-                            behavior: 'smooth'
-                        });
-                    }
-                });
-            });
-        });
-
-        // Enterprise Demo Scheduling
-        function scheduleEnterpriseDemo() {
-            // Create modal for demo scheduling
-            const modal = document.createElement('div');
-            modal.className = 'fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center';
-            modal.innerHTML = `
-                <div class="glass-effect rounded-2xl p-8 max-w-lg w-full mx-4" style="background: rgba(255, 255, 255, 0.05); backdrop-filter: blur(20px); border: 1px solid rgba(255, 255, 255, 0.1);">
-                    <div class="text-center mb-6">
-                        <h2 class="text-3xl font-bold mb-4 text-white">📞 Schedule Enterprise Demo</h2>
-                        <p class="text-gray-400">Book a personalized demo with our enterprise team</p>
-                    </div>
-                    
-                    <form id="demoForm" class="space-y-4">
-                        <div class="grid grid-cols-2 gap-4">
-                            <div>
-                                <label class="block text-sm font-medium mb-2 text-gray-300">First Name</label>
-                                <input type="text" required class="w-full bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-white focus:border-blue-500 focus:outline-none">
-                            </div>
-                            <div>
-                                <label class="block text-sm font-medium mb-2 text-gray-300">Last Name</label>
-                                <input type="text" required class="w-full bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-white focus:border-blue-500 focus:outline-none">
-                            </div>
-                        </div>
-                        
-                        <div>
-                            <label class="block text-sm font-medium mb-2 text-gray-300">Business Email</label>
-                            <input type="email" required class="w-full bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-white focus:border-blue-500 focus:outline-none">
-                        </div>
-                        
-                        <div>
-                            <label class="block text-sm font-medium mb-2 text-gray-300">Company Name</label>
-                            <input type="text" required class="w-full bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-white focus:border-blue-500 focus:outline-none">
-                        </div>
-                        
-                        <div>
-                            <label class="block text-sm font-medium mb-2 text-gray-300">Company Size</label>
-                            <select required class="w-full bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-white focus:border-blue-500 focus:outline-none">
-                                <option value="">Select company size</option>
-                                <option value="1-50">1-50 employees</option>
-                                <option value="51-200">51-200 employees</option>
-                                <option value="201-1000">201-1000 employees</option>
-                                <option value="1000+">1000+ employees</option>
-                            </select>
-                        </div>
-                        
-                        <div>
-                            <label class="block text-sm font-medium mb-2 text-gray-300">Preferred Time</label>
-                            <select required class="w-full bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-white focus:border-blue-500 focus:outline-none">
-                                <option value="">Select preferred time</option>
-                                <option value="asap">ASAP - Within 24 hours</option>
-                                <option value="this-week">This week</option>
-                                <option value="next-week">Next week</option>
-                                <option value="flexible">I'm flexible</option>
-                            </select>
-                        </div>
-                        
-                        <div>
-                            <label class="block text-sm font-medium mb-2 text-gray-300">What interests you most?</label>
-                            <textarea class="w-full bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-white focus:border-blue-500 focus:outline-none" rows="3" placeholder="Tell us about your specific needs and use cases..."></textarea>
-                        </div>
-                        
-                        <div class="flex space-x-3">
-                            <button type="submit" class="flex-1 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white py-3 rounded-lg font-semibold transition-all">
-                                📞 Schedule Demo
-                            </button>
-                            <button type="button" onclick="this.closest('.fixed').remove()" class="px-6 py-3 border border-gray-600 hover:bg-gray-600 rounded-lg font-semibold transition-all text-white">
-                                Cancel
-                            </button>
-                        </div>
-                    </form>
-                </div>
-            `;
-            
-            document.body.appendChild(modal);
-            
-            // Handle form submission
-            const form = modal.querySelector('#demoForm');
-            form.addEventListener('submit', function(e) {
-                e.preventDefault();
-                
-                // Show success message
-                modal.innerHTML = `
-                    <div class="glass-effect rounded-2xl p-8 max-w-lg w-full mx-4 text-center" style="background: rgba(255, 255, 255, 0.05); backdrop-filter: blur(20px); border: 1px solid rgba(255, 255, 255, 0.1);">
-                        <div class="text-6xl mb-4">✅</div>
-                        <h2 class="text-2xl font-bold mb-4 text-green-400">Demo Scheduled Successfully!</h2>
-                        <div class="space-y-3 text-gray-300 mb-6">
-                            <p>🎉 Your enterprise demo has been scheduled</p>
-                            <p>📧 Confirmation email sent to your inbox</p>
-                            <p>📞 Our enterprise team will contact you within 4 hours</p>
-                            <p>⏰ Average demo duration: 45 minutes</p>
-                        </div>
-                        
-                        <div class="bg-blue-900/30 border border-blue-500/50 rounded-lg p-4 mb-6">
-                            <h3 class="font-semibold text-blue-400 mb-2">What to Expect:</h3>
-                            <ul class="text-sm text-gray-300 space-y-1 text-left">
-                                <li>• Personalized platform walkthrough</li>
-                                <li>• Live demonstration of all 47+ AI agents</li>
-                                <li>• Custom solution design for your company</li>
-                                <li>• ROI calculation and pricing discussion</li>
-                                <li>• Implementation timeline and support options</li>
-                            </ul>
-                        </div>
-                        
-                        <div class="flex space-x-3">
-                            <button onclick="window.location.href='enterprise-login-system.html'" class="flex-1 bg-gradient-to-r from-green-600 to-blue-600 text-white py-3 rounded-lg font-semibold">
-                                🚀 Access Platform Now
-                            </button>
-                            <button onclick="this.closest('.fixed').remove()" class="px-6 py-3 border border-gray-600 hover:bg-gray-600 rounded-lg font-semibold text-white">
-                                Close
-                            </button>
-                        </div>
-                    </div>
-                `;
-            });
         }
     </script>
 </body>
