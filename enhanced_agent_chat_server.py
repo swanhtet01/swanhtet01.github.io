@@ -20,6 +20,10 @@ from datetime import datetime
 from typing import Dict, List, Any, Optional
 from dataclasses import dataclass, asdict
 
+# Load environment variables
+from dotenv import load_dotenv
+load_dotenv()
+
 import openai
 import socketio
 from aiohttp import web
@@ -424,6 +428,17 @@ class EnhancedAgentOrchestrator:
                 agent = self.agents[agent_name]
                 response = await agent.generate_response(message)
                 agent_responses[agent_name] = response
+                
+                # Track accomplishment
+                if hasattr(self, 'tracker'):
+                    self.tracker.record_accomplishment(
+                        agent_name=agent.name,
+                        task_type="Problem Analysis",
+                        description=f"Analyzed: {message[:100]}...",
+                        outcome=f"Generated {len(response['content'])} char response with {response['confidence']} confidence",
+                        impact_score=int(response['confidence'] * 10),
+                        session_id=session_id
+                    )
         
         # Second phase: Coordinator synthesis if multiple agents
         if len(active_agents) > 1 and 'copilot_coordinator' not in active_agents:
@@ -438,6 +453,17 @@ class EnhancedAgentOrchestrator:
             )
             
             agent_responses['synthesis'] = synthesis
+            
+            # Track coordination accomplishment
+            if hasattr(self, 'tracker'):
+                self.tracker.record_accomplishment(
+                    agent_name="Multi-Agent Coordinator",
+                    task_type="Cross-Agent Synthesis",
+                    description=f"Synthesized insights from {len(active_agents)} agents",
+                    outcome=f"Created unified solution combining {len(collaboration_context)} perspectives",
+                    impact_score=8,
+                    session_id=session_id
+                )
         
         # Calculate response time
         response_time = time.time() - start_time
@@ -445,14 +471,23 @@ class EnhancedAgentOrchestrator:
         # Store session data
         self._store_enhanced_session(session_id, message, agent_responses, response_time)
         
-        return {
+        # Enhanced response with accomplishment summary
+        result = {
             'message': message,
             'agent_responses': agent_responses,
             'active_agents': active_agents,
             'response_time': response_time,
             'timestamp': datetime.now().isoformat(),
-            'session_id': session_id
+            'session_id': session_id,
+            'collaboration_summary': self._generate_collaboration_summary(agent_responses)
         }
+        
+        # Add recent accomplishments if available
+        if hasattr(self, 'tracker'):
+            recent_accomplishments = self.tracker.get_recent_accomplishments(hours_back=1)
+            result['recent_agent_work'] = recent_accomplishments
+        
+        return result
     
     async def _determine_relevant_agents(self, message: str) -> List[str]:
         """Intelligently determine which agents are most relevant"""
@@ -483,6 +518,17 @@ class EnhancedAgentOrchestrator:
         
         return relevant_agents
     
+    def _generate_collaboration_summary(self, agent_responses: Dict) -> str:
+        """Generate a summary of agent collaboration"""
+        if len(agent_responses) <= 1:
+            return "Single agent response"
+        
+        agents_involved = [resp.get('agent', 'Unknown') for resp in agent_responses.values()]
+        confidence_scores = [resp.get('confidence', 0) for resp in agent_responses.values()]
+        avg_confidence = sum(confidence_scores) / len(confidence_scores)
+        
+        return f"Collaborative analysis by {len(agents_involved)} agents with {avg_confidence:.1%} average confidence"
+    
     def _store_enhanced_session(self, session_id: str, message: str, responses: Dict, response_time: float):
         """Store enhanced session data"""
         
@@ -511,6 +557,9 @@ class EnhancedAgentChatServer:
     
     def __init__(self):
         self.orchestrator = EnhancedAgentOrchestrator()
+        self.tracker = AgentAccomplishmentTracker()
+        self.orchestrator.tracker = self.tracker  # Link tracker to orchestrator
+        
         self.sio = socketio.AsyncServer(
             cors_allowed_origins="*",
             logger=True,
@@ -592,6 +641,20 @@ class EnhancedAgentChatServer:
                 }
             
             await self.sio.emit('agent_status', agent_status, room=sid)
+        
+        @self.sio.event
+        async def get_accomplishments(sid, data):
+            """Get recent agent accomplishments"""
+            
+            hours_back = data.get('hours_back', 24)
+            accomplishments = self.tracker.get_recent_accomplishments(hours_back)
+            report = self.tracker.generate_accomplishment_report()
+            
+            await self.sio.emit('accomplishments', {
+                'accomplishments': accomplishments,
+                'report': report,
+                'total_count': len(accomplishments)
+            }, room=sid)
     
     def _setup_http_routes(self):
         """Setup HTTP routes"""
@@ -857,12 +920,213 @@ class EnhancedAgentChatServer:
         logger.info(f"🚀 Starting Enhanced AI Agent Chat Server on {host}:{port}")
         logger.info(f"OpenAI API Status: {'✅ Enabled' if os.getenv('OPENAI_API_KEY') else '❌ Disabled (using fallback)'}")
         
-        web.run_app(self.app, host=host, port=port)
+        # Check for existing event loop
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                logger.info("Event loop already running, using current loop")
+                return await self._run_server_task(host, port)
+            else:
+                web.run_app(self.app, host=host, port=port)
+        except RuntimeError:
+            # No event loop, create one
+            web.run_app(self.app, host=host, port=port)
+    
+    async def _run_server_task(self, host='0.0.0.0', port=5000):
+        """Run server as a task in existing event loop"""
+        from aiohttp import web
+        runner = web.AppRunner(self.app)
+        await runner.setup()
+        site = web.TCPSite(runner, host, port)
+        await site.start()
+        logger.info(f"Server started on {host}:{port}")
+        
+        # Keep the server running
+        try:
+            while True:
+                await asyncio.sleep(1)
+        except KeyboardInterrupt:
+            logger.info("Server shutdown requested")
+        finally:
+            await runner.cleanup()
 
 # =============================================================================
-# MAIN EXECUTION
+# AGENT ACCOMPLISHMENT TRACKER
 # =============================================================================
+
+class AgentAccomplishmentTracker:
+    """Track and report on agent accomplishments since last check"""
+    
+    def __init__(self):
+        self.db_path = "agent_accomplishments.db"
+        self._setup_tracking_db()
+    
+    def _setup_tracking_db(self):
+        """Setup accomplishment tracking database"""
+        conn = sqlite3.connect(self.db_path)
+        
+        conn.execute('''
+            CREATE TABLE IF NOT EXISTS accomplishments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                agent_name TEXT,
+                task_type TEXT,
+                description TEXT,
+                outcome TEXT,
+                impact_score INTEGER,
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                session_id TEXT,
+                user_satisfaction INTEGER
+            )
+        ''')
+        
+        conn.execute('''
+            CREATE TABLE IF NOT EXISTS agent_metrics (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                agent_name TEXT,
+                total_tasks INTEGER,
+                successful_tasks INTEGER,
+                avg_response_time REAL,
+                user_rating REAL,
+                last_active DATETIME,
+                improvement_suggestions TEXT
+            )
+        ''')
+        
+        conn.commit()
+        conn.close()
+    
+    def record_accomplishment(self, agent_name: str, task_type: str, description: str, 
+                            outcome: str, impact_score: int = 5, session_id: str = None):
+        """Record an agent accomplishment"""
+        conn = sqlite3.connect(self.db_path)
+        
+        conn.execute('''
+            INSERT INTO accomplishments 
+            (agent_name, task_type, description, outcome, impact_score, session_id)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ''', (agent_name, task_type, description, outcome, impact_score, session_id))
+        
+        conn.commit()
+        conn.close()
+    
+    def get_recent_accomplishments(self, hours_back: int = 24) -> List[Dict]:
+        """Get accomplishments from the last N hours"""
+        conn = sqlite3.connect(self.db_path)
+        
+        cursor = conn.execute('''
+            SELECT agent_name, task_type, description, outcome, impact_score, timestamp
+            FROM accomplishments 
+            WHERE timestamp > datetime('now', '-{} hours')
+            ORDER BY timestamp DESC
+        '''.format(hours_back))
+        
+        accomplishments = []
+        for row in cursor.fetchall():
+            accomplishments.append({
+                'agent': row[0],
+                'task_type': row[1], 
+                'description': row[2],
+                'outcome': row[3],
+                'impact_score': row[4],
+                'timestamp': row[5]
+            })
+        
+        conn.close()
+        return accomplishments
+    
+    def generate_accomplishment_report(self) -> str:
+        """Generate a comprehensive accomplishment report"""
+        recent_accomplishments = self.get_recent_accomplishments(72)  # Last 3 days
+        
+        if not recent_accomplishments:
+            return """
+## 🤖 Agent Accomplishment Report
+
+**Period:** Last 72 hours
+**Status:** No recorded accomplishments yet
+
+This is expected for a fresh system. Once the agents start working, their accomplishments will be tracked here including:
+- Complex problem solving
+- Multi-agent collaborations  
+- System improvements made
+- User assistance provided
+- Infrastructure optimizations
+
+The agents are ready to work and will begin logging accomplishments as they help users.
+            """
+        
+        report = """
+## 🤖 Agent Accomplishment Report
+
+**Period:** Last 72 hours
+**Total Accomplishments:** {}
+
+### 🏆 Top Accomplishments:
+""".format(len(recent_accomplishments))
+        
+        # Group by agent
+        agent_accomplishments = {}
+        for acc in recent_accomplishments:
+            agent = acc['agent']
+            if agent not in agent_accomplishments:
+                agent_accomplishments[agent] = []
+            agent_accomplishments[agent].append(acc)
+        
+        for agent, accomplishments in agent_accomplishments.items():
+            report += f"\n#### {agent}\n"
+            for acc in accomplishments[:5]:  # Top 5 per agent
+                report += f"- **{acc['task_type']}**: {acc['description']}\n"
+                report += f"  - Outcome: {acc['outcome']}\n"
+                report += f"  - Impact Score: {acc['impact_score']}/10\n"
+                report += f"  - Time: {acc['timestamp']}\n\n"
+        
+        return report
+
+# =============================================================================
+# ENHANCED MAIN EXECUTION WITH ACCOMPLISHMENT TRACKING
+# =============================================================================
+
+def run_enhanced_system():
+    """Run the enhanced system with accomplishment tracking"""
+    
+    print("""
+🚀 Enhanced AI Agent System Starting...
+======================================
+
+Features Active:
+✅ Real LLM-powered agents (5 specialized agents)
+✅ Multi-agent collaboration
+✅ Accomplishment tracking
+✅ Performance monitoring
+✅ Memory and learning system
+
+Access: http://localhost:5000
+    """)
+    
+    # Initialize tracking
+    tracker = AgentAccomplishmentTracker()
+    
+    # Show recent accomplishments
+    report = tracker.generate_accomplishment_report()
+    print(report)
+    
+    # Start server
+    server = EnhancedAgentChatServer()
+    
+    # Add tracker to server for integration
+    server.tracker = tracker
+    
+    try:
+        asyncio.run(server.run())
+    except RuntimeError as e:
+        if "cannot be called from a running event loop" in str(e):
+            # We're in Jupyter or similar - create task instead
+            loop = asyncio.get_event_loop()
+            task = loop.create_task(server._run_server_task())
+            print("Server task created - running in background")
+            return task
+        else:
+            raise
 
 if __name__ == "__main__":
-    server = EnhancedAgentChatServer()
-    asyncio.run(server.run())
+    run_enhanced_system()
