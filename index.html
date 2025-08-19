@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Super Mega AI - Enterprise AI/ML Platform | Voice, Video, Image & Content Generation</title>
+    <title>Super Mega AI - Advanced AI Platform | Voice, Video, Image & Content Generation</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
@@ -31,35 +31,58 @@
             50% { box-shadow: 0 0 40px rgba(118, 75, 162, 0.9); }
         }
         .pulse-glow { animation: pulse-glow 2s infinite; }
-        .tech-badge {
-            background: linear-gradient(45deg, #FF6B6B, #4ECDC4);
+        .logo-gradient {
+            background: linear-gradient(45deg, #FF6B6B, #4ECDC4, #45B7D1, #96CEB4);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            font-weight: 900;
+        }
+        .product-live { 
+            background: linear-gradient(45deg, #00ff88, #00ccff);
             color: white;
             font-weight: 600;
-            font-size: 0.75rem;
-            padding: 0.25rem 0.5rem;
-            border-radius: 9999px;
+            font-size: 0.7rem;
+            padding: 0.2rem 0.4rem;
+            border-radius: 4px;
         }
     </style>
 </head>
 
-<body class="gradient-bg min-h-screen" x-data="aiPlatform()">
+<body class="gradient-bg min-h-screen" x-data="superMegaAI()">
 
     <!-- Navigation -->
     <nav class="fixed top-0 w-full z-50 glass-effect">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="flex items-center justify-between h-16">
                 <div class="flex items-center">
-                    <h1 class="text-2xl font-bold text-white">🚀 Super Mega AI</h1>
-                    <span class="ml-3 tech-badge">ENTERPRISE READY</span>
+                    <div class="text-3xl font-black logo-gradient">🚀 SUPER MEGA</div>
+                    <span class="ml-3 text-white/80 text-sm">AI Platform</span>
                 </div>
                 <div class="hidden md:flex items-center space-x-8">
-                    <a href="#products" class="text-white hover:text-yellow-300 transition-colors">AI Products</a>
-                    <a href="#capabilities" class="text-white hover:text-yellow-300 transition-colors">Capabilities</a>
+                    <a href="#products" class="text-white hover:text-yellow-300 transition-colors">Products</a>
+                    <a href="#capabilities" class="text-white hover:text-yellow-300 transition-colors">Features</a>
                     <a href="#demo" class="text-white hover:text-yellow-300 transition-colors">Live Demo</a>
                     <a href="#pricing" class="text-white hover:text-yellow-300 transition-colors">Pricing</a>
-                    <button class="bg-yellow-500 text-black px-6 py-2 rounded-full font-semibold hover:bg-yellow-400 transition-colors pulse-glow">
-                        Start Free Trial
-                    </button>
+                    <template x-if="!user.isLoggedIn">
+                        <div class="flex items-center space-x-4">
+                            <button @click="showLoginModal = true" class="text-white hover:text-yellow-300 transition-colors">Login</button>
+                            <button @click="showSignupModal = true" class="bg-gradient-to-r from-yellow-500 to-orange-500 text-white px-6 py-2 rounded-full font-semibold hover:shadow-lg transition-all pulse-glow">
+                                Sign Up Free
+                            </button>
+                        </div>
+                    </template>
+                    <template x-if="user.isLoggedIn">
+                        <div class="flex items-center space-x-4">
+                            <button @click="showDashboard = true" class="bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-blue-700 transition-colors">
+                                Dashboard
+                            </button>
+                            <div class="text-white text-sm">
+                                Hi, <span x-text="user.name"></span>
+                            </div>
+                            <button @click="logout()" class="text-white/70 hover:text-white transition-colors">Logout</button>
+                        </div>
+                    </template>
                 </div>
             </div>
         </div>
@@ -69,46 +92,59 @@
     <section class="pt-32 pb-20">
         <div class="max-w-7xl mx-auto px-4 text-center">
             <div class="mb-8">
-                <span class="inline-block text-6xl mb-4">🏆</span>
                 <h1 class="text-6xl md:text-7xl font-bold text-white mb-6 leading-tight">
-                    Enterprise AI/ML Platform
-                    <span class="block text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 via-pink-500 to-purple-600">
-                        6 Production Systems
+                    <span class="logo-gradient">SUPER MEGA</span> AI Platform
+                    <span class="block text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 via-pink-500 to-purple-600 text-4xl md:text-5xl mt-4">
+                        6 Production-Ready AI Tools
                     </span>
                 </h1>
                 <p class="text-xl md:text-2xl text-white/80 mb-8 max-w-4xl mx-auto leading-relaxed">
-                    Voice Cloning • AI Video Editor • Image Generation • Content Creation • Real-time Processing • Enterprise Ready
+                    Voice Cloning • AI Video Editor • Image Generation • Content Creation • Real AI Tools • Social Automation
                 </p>
             </div>
 
             <!-- Stats Bar -->
             <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-12 max-w-4xl mx-auto">
                 <div class="ai-card rounded-lg p-4">
-                    <div class="text-3xl font-bold text-yellow-400" x-text="stats.systems">6</div>
-                    <div class="text-white/70 text-sm">AI Systems</div>
+                    <div class="text-3xl font-bold text-yellow-400">6</div>
+                    <div class="text-white/70 text-sm">AI Tools</div>
                 </div>
                 <div class="ai-card rounded-lg p-4">
-                    <div class="text-3xl font-bold text-green-400" x-text="stats.readyRate">100%</div>
-                    <div class="text-white/70 text-sm">Production Ready</div>
+                    <div class="text-3xl font-bold text-green-400">100%</div>
+                    <div class="text-white/70 text-sm">Functional</div>
                 </div>
                 <div class="ai-card rounded-lg p-4">
-                    <div class="text-3xl font-bold text-blue-400" x-text="stats.sophistication">5.3/6</div>
-                    <div class="text-white/70 text-sm">Sophistication</div>
+                    <div class="text-3xl font-bold text-blue-400">Live</div>
+                    <div class="text-white/70 text-sm">Access</div>
                 </div>
                 <div class="ai-card rounded-lg p-4">
-                    <div class="text-3xl font-bold text-purple-400" x-text="stats.technologies">7+</div>
-                    <div class="text-white/70 text-sm">Technologies</div>
+                    <div class="text-3xl font-bold text-purple-400">24/7</div>
+                    <div class="text-white/70 text-sm">Support</div>
                 </div>
             </div>
 
             <!-- CTA Buttons -->
             <div class="flex flex-col sm:flex-row gap-4 justify-center">
-                <button @click="showDemo = true" class="bg-yellow-500 text-black px-8 py-4 rounded-full text-lg font-semibold hover:bg-yellow-400 transition-all transform hover:scale-105 pulse-glow">
-                    🎬 Try Live Demo
-                </button>
-                <button class="glass-effect text-white px-8 py-4 rounded-full text-lg font-semibold hover:bg-white/20 transition-all">
-                    📊 View Technical Report
-                </button>
+                <template x-if="!user.isLoggedIn">
+                    <div class="flex flex-col sm:flex-row gap-4">
+                        <button @click="showSignupModal = true" class="bg-gradient-to-r from-yellow-500 to-orange-500 text-white px-8 py-4 rounded-full text-lg font-semibold hover:shadow-xl transition-all transform hover:scale-105 pulse-glow">
+                            🚀 Start Free Trial - No Credit Card
+                        </button>
+                        <button @click="showDemo = true" class="glass-effect text-white px-8 py-4 rounded-full text-lg font-semibold hover:bg-white/20 transition-all">
+                            🎬 Try Live Demo
+                        </button>
+                    </div>
+                </template>
+                <template x-if="user.isLoggedIn">
+                    <div class="flex flex-col sm:flex-row gap-4">
+                        <button @click="showDashboard = true" class="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-8 py-4 rounded-full text-lg font-semibold hover:shadow-xl transition-all transform hover:scale-105">
+                            🎯 Open Dashboard
+                        </button>
+                        <button @click="showDemo = true" class="glass-effect text-white px-8 py-4 rounded-full text-lg font-semibold hover:bg-white/20 transition-all">
+                            🎬 Try Live Tools
+                        </button>
+                    </div>
+                </template>
             </div>
         </div>
     </section>
@@ -117,148 +153,265 @@
     <section id="products" class="py-20">
         <div class="max-w-7xl mx-auto px-4">
             <div class="text-center mb-16">
-                <h2 class="text-5xl font-bold text-white mb-4">🤖 AI Product Suite</h2>
+                <h2 class="text-5xl font-bold text-white mb-4">🤖 AI Tool Suite</h2>
                 <p class="text-xl text-white/70 max-w-3xl mx-auto">
-                    6 production-ready AI systems with enterprise-grade capabilities and real revenue potential
+                    Professional-grade AI tools ready to use right now
                 </p>
             </div>
 
             <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
-                <!-- Voice Systems -->
-                <div class="ai-card rounded-2xl p-8 group">
-                    <div class="text-5xl mb-4">🎙️</div>
+                <!-- Voice AI Studio -->
+                <div class="ai-card rounded-2xl p-8 group cursor-pointer" @click="openProduct('voice')">
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="text-5xl">🎙️</div>
+                        <span class="product-live">LIVE</span>
+                    </div>
                     <h3 class="text-2xl font-bold text-white mb-4">Voice AI Studio</h3>
                     <div class="space-y-2 text-white/70 mb-6">
-                        <p>✅ 3 Voice Systems Operational</p>
                         <p>✅ Real-time Voice Cloning</p>
                         <p>✅ Text-to-Speech Engine</p>
                         <p>✅ Voice Effects & Modulation</p>
-                        <p>✅ ML-Powered Processing</p>
+                        <p>✅ Custom Voice Training</p>
+                        <p>✅ Export High-Quality Audio</p>
                     </div>
-                    <div class="flex items-center justify-between">
-                        <span class="tech-badge">Sophistication: 5.3/6</span>
-                        <button class="text-yellow-400 hover:text-yellow-300 font-semibold">Try Demo →</button>
-                    </div>
+                    <button class="w-full bg-gradient-to-r from-purple-500 to-pink-500 text-white py-3 rounded-lg font-semibold hover:shadow-lg transition-all">
+                        Launch Voice Studio →
+                    </button>
                 </div>
 
-                <!-- Video Editor -->
-                <div class="ai-card rounded-2xl p-8 group">
-                    <div class="text-5xl mb-4">🎬</div>
+                <!-- AI Video Editor -->
+                <div class="ai-card rounded-2xl p-8 group cursor-pointer" @click="openProduct('video')">
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="text-5xl">🎬</div>
+                        <span class="product-live">LIVE</span>
+                    </div>
                     <h3 class="text-2xl font-bold text-white mb-4">AI Video Editor</h3>
                     <div class="space-y-2 text-white/70 mb-6">
-                        <p>✅ OpenCV Computer Vision</p>
-                        <p>✅ FFmpeg Processing</p>
                         <p>✅ Auto Scene Detection</p>
                         <p>✅ Smart Audio Sync</p>
                         <p>✅ Effects Generation</p>
+                        <p>✅ 4K Video Processing</p>
+                        <p>✅ One-Click Editing</p>
                     </div>
-                    <div class="flex items-center justify-between">
-                        <span class="tech-badge">Sophistication: 5/6</span>
-                        <button class="text-yellow-400 hover:text-yellow-300 font-semibold">Try Demo →</button>
-                    </div>
+                    <button class="w-full bg-gradient-to-r from-blue-500 to-cyan-500 text-white py-3 rounded-lg font-semibold hover:shadow-lg transition-all">
+                        Launch Video Editor →
+                    </button>
                 </div>
 
                 <!-- Image Generation -->
-                <div class="ai-card rounded-2xl p-8 group">
-                    <div class="text-5xl mb-4">🎨</div>
+                <div class="ai-card rounded-2xl p-8 group cursor-pointer" @click="openProduct('image')">
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="text-5xl">🎨</div>
+                        <span class="product-live">LIVE</span>
+                    </div>
                     <h3 class="text-2xl font-bold text-white mb-4">Image Generation</h3>
                     <div class="space-y-2 text-white/70 mb-6">
                         <p>✅ DALL-E 3 Integration</p>
-                        <p>✅ Stable Diffusion</p>
-                        <p>✅ Brand Integration</p>
-                        <p>✅ Social Media Formats</p>
-                        <p>✅ Batch Processing</p>
+                        <p>✅ Stable Diffusion Models</p>
+                        <p>✅ Brand Style Transfer</p>
+                        <p>✅ Batch Generation</p>
+                        <p>✅ Commercial License</p>
                     </div>
-                    <div class="flex items-center justify-between">
-                        <span class="tech-badge">Sophistication: 6/6</span>
-                        <button class="text-yellow-400 hover:text-yellow-300 font-semibold">Try Demo →</button>
-                    </div>
+                    <button class="w-full bg-gradient-to-r from-pink-500 to-rose-500 text-white py-3 rounded-lg font-semibold hover:shadow-lg transition-all">
+                        Launch Image Studio →
+                    </button>
                 </div>
 
-                <!-- Content Generation -->
-                <div class="ai-card rounded-2xl p-8 group">
-                    <div class="text-5xl mb-4">📝</div>
+                <!-- Content AI Engine -->
+                <div class="ai-card rounded-2xl p-8 group cursor-pointer" @click="openProduct('content')">
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="text-5xl">📝</div>
+                        <span class="product-live">LIVE</span>
+                    </div>
                     <h3 class="text-2xl font-bold text-white mb-4">Content AI Engine</h3>
                     <div class="space-y-2 text-white/70 mb-6">
                         <p>✅ GPT-4 Integration</p>
-                        <p>✅ Multi-format Support</p>
-                        <p>✅ Brand Voice</p>
+                        <p>✅ Multi-format Content</p>
+                        <p>✅ Brand Voice Training</p>
                         <p>✅ SEO Optimization</p>
-                        <p>✅ Quality Scoring</p>
+                        <p>✅ Plagiarism Check</p>
                     </div>
-                    <div class="flex items-center justify-between">
-                        <span class="tech-badge">Sophistication: 5/6</span>
-                        <button class="text-yellow-400 hover:text-yellow-300 font-semibold">Try Demo →</button>
-                    </div>
+                    <button class="w-full bg-gradient-to-r from-green-500 to-emerald-500 text-white py-3 rounded-lg font-semibold hover:shadow-lg transition-all">
+                        Launch Content Studio →
+                    </button>
                 </div>
 
                 <!-- Real AI Tools -->
-                <div class="ai-card rounded-2xl p-8 group">
-                    <div class="text-5xl mb-4">🛠️</div>
+                <div class="ai-card rounded-2xl p-8 group cursor-pointer" @click="openProduct('tools')">
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="text-5xl">🛠️</div>
+                        <span class="product-live">LIVE</span>
+                    </div>
                     <h3 class="text-2xl font-bold text-white mb-4">Real AI Tools</h3>
                     <div class="space-y-2 text-white/70 mb-6">
                         <p>✅ Email Extraction (0.3s)</p>
                         <p>✅ Web Scraping Engine</p>
-                        <p>✅ Database Integration</p>
                         <p>✅ Lead Generation</p>
-                        <p>✅ No Fake Data Policy</p>
+                        <p>✅ Data Analysis</p>
+                        <p>✅ Export to CSV/Excel</p>
                     </div>
-                    <div class="flex items-center justify-between">
-                        <span class="tech-badge">Production Ready</span>
-                        <button class="text-yellow-400 hover:text-yellow-300 font-semibold">Try Demo →</button>
-                    </div>
+                    <button class="w-full bg-gradient-to-r from-orange-500 to-red-500 text-white py-3 rounded-lg font-semibold hover:shadow-lg transition-all">
+                        Launch AI Tools →
+                    </button>
                 </div>
 
-                <!-- Social AI -->
-                <div class="ai-card rounded-2xl p-8 group">
-                    <div class="text-5xl mb-4">📱</div>
+                <!-- Social AI Manager -->
+                <div class="ai-card rounded-2xl p-8 group cursor-pointer" @click="openProduct('social')">
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="text-5xl">📱</div>
+                        <span class="product-live">LIVE</span>
+                    </div>
                     <h3 class="text-2xl font-bold text-white mb-4">Social AI Manager</h3>
                     <div class="space-y-2 text-white/70 mb-6">
-                        <p>✅ Facebook Automation</p>
+                        <p>✅ Auto Post Scheduling</p>
                         <p>✅ Content Calendar</p>
                         <p>✅ Engagement Analytics</p>
+                        <p>✅ Multi-Platform Support</p>
                         <p>✅ Campaign Management</p>
-                        <p>✅ Brand Messaging</p>
                     </div>
-                    <div class="flex items-center justify-between">
-                        <span class="tech-badge">Production Ready</span>
-                        <button class="text-yellow-400 hover:text-yellow-300 font-semibold">Try Demo →</button>
-                    </div>
+                    <button class="w-full bg-gradient-to-r from-indigo-500 to-purple-500 text-white py-3 rounded-lg font-semibold hover:shadow-lg transition-all">
+                        Launch Social Manager →
+                    </button>
                 </div>
             </div>
         </div>
     </section>
 
-    <!-- Technology Stack -->
-    <section id="capabilities" class="py-20 bg-black/20">
-        <div class="max-w-7xl mx-auto px-4">
-            <div class="text-center mb-16">
-                <h2 class="text-5xl font-bold text-white mb-4">⚡ Technology Stack</h2>
-                <p class="text-xl text-white/70">Enterprise-grade AI/ML technologies powering our platform</p>
+    <!-- Login Modal -->
+    <div x-show="showLoginModal" x-cloak class="fixed inset-0 z-50 flex items-center justify-center bg-black/80" @click.away="showLoginModal = false">
+        <div class="bg-white rounded-2xl p-8 max-w-md w-full mx-4">
+            <div class="flex items-center justify-between mb-6">
+                <h3 class="text-2xl font-bold text-gray-800">Login to Super Mega</h3>
+                <button @click="showLoginModal = false" class="text-gray-500 hover:text-gray-700">×</button>
+            </div>
+            <form @submit.prevent="login()">
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                        <input type="email" x-model="loginForm.email" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="your@email.com" required>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Password</label>
+                        <input type="password" x-model="loginForm.password" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="••••••••" required>
+                    </div>
+                    <button type="submit" class="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white py-2 rounded-lg font-semibold hover:shadow-lg transition-all">
+                        Login
+                    </button>
+                </div>
+            </form>
+            <div class="mt-4 text-center">
+                <p class="text-sm text-gray-600">Don't have an account? 
+                    <button @click="showLoginModal = false; showSignupModal = true" class="text-blue-600 hover:text-blue-800 font-semibold">Sign up free</button>
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Signup Modal -->
+    <div x-show="showSignupModal" x-cloak class="fixed inset-0 z-50 flex items-center justify-center bg-black/80" @click.away="showSignupModal = false">
+        <div class="bg-white rounded-2xl p-8 max-w-md w-full mx-4">
+            <div class="flex items-center justify-between mb-6">
+                <h3 class="text-2xl font-bold text-gray-800">Join Super Mega AI</h3>
+                <button @click="showSignupModal = false" class="text-gray-500 hover:text-gray-700">×</button>
+            </div>
+            <form @submit.prevent="signup()">
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
+                        <input type="text" x-model="signupForm.name" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="John Doe" required>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                        <input type="email" x-model="signupForm.email" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="your@email.com" required>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Password</label>
+                        <input type="password" x-model="signupForm.password" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="••••••••" required>
+                    </div>
+                    <button type="submit" class="w-full bg-gradient-to-r from-yellow-500 to-orange-500 text-white py-2 rounded-lg font-semibold hover:shadow-lg transition-all">
+                        Start Free Trial
+                    </button>
+                </div>
+            </form>
+            <div class="mt-4 text-center">
+                <p class="text-xs text-gray-500">Free trial includes all 6 AI tools • No credit card required</p>
+                <p class="text-sm text-gray-600 mt-2">Already have an account? 
+                    <button @click="showSignupModal = false; showLoginModal = true" class="text-blue-600 hover:text-blue-800 font-semibold">Login here</button>
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <!-- User Dashboard Modal -->
+    <div x-show="showDashboard" x-cloak class="fixed inset-0 z-50 flex items-center justify-center bg-black/80" @click.away="showDashboard = false">
+        <div class="bg-white rounded-2xl p-8 max-w-6xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <div class="flex items-center justify-between mb-6">
+                <h3 class="text-3xl font-bold text-gray-800">🎯 Your AI Dashboard</h3>
+                <button @click="showDashboard = false" class="text-gray-500 hover:text-gray-700">×</button>
             </div>
 
-            <div class="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
-                <template x-for="tech in technologies" :key="tech.name">
-                    <div class="ai-card rounded-xl p-6 text-center">
-                        <div class="text-3xl mb-3" x-text="tech.icon"></div>
-                        <h4 class="text-lg font-semibold text-white mb-2" x-text="tech.name"></h4>
-                        <p class="text-white/60 text-sm" x-text="tech.description"></p>
+            <!-- User Stats -->
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+                <div class="bg-blue-50 p-4 rounded-lg text-center">
+                    <div class="text-2xl font-bold text-blue-600" x-text="user.stats.tools_used"></div>
+                    <div class="text-sm text-gray-600">Tools Used</div>
+                </div>
+                <div class="bg-green-50 p-4 rounded-lg text-center">
+                    <div class="text-2xl font-bold text-green-600" x-text="user.stats.projects"></div>
+                    <div class="text-sm text-gray-600">Projects</div>
+                </div>
+                <div class="bg-purple-50 p-4 rounded-lg text-center">
+                    <div class="text-2xl font-bold text-purple-600" x-text="user.stats.credits"></div>
+                    <div class="text-sm text-gray-600">Credits Left</div>
+                </div>
+                <div class="bg-orange-50 p-4 rounded-lg text-center">
+                    <div class="text-2xl font-bold text-orange-600" x-text="user.plan"></div>
+                    <div class="text-sm text-gray-600">Current Plan</div>
+                </div>
+            </div>
+
+            <!-- Quick Launch Tools -->
+            <h4 class="text-xl font-bold text-gray-800 mb-4">🚀 Quick Launch</h4>
+            <div class="grid md:grid-cols-3 gap-4 mb-8">
+                <button @click="openProduct('voice')" class="bg-gradient-to-r from-purple-500 to-pink-500 text-white p-4 rounded-lg text-left hover:shadow-lg transition-all">
+                    <div class="text-2xl mb-2">🎙️</div>
+                    <div class="font-semibold">Voice AI Studio</div>
+                    <div class="text-sm opacity-90">Clone voices, generate speech</div>
+                </button>
+                <button @click="openProduct('image')" class="bg-gradient-to-r from-pink-500 to-rose-500 text-white p-4 rounded-lg text-left hover:shadow-lg transition-all">
+                    <div class="text-2xl mb-2">🎨</div>
+                    <div class="font-semibold">Image Generator</div>
+                    <div class="text-sm opacity-90">Create stunning visuals</div>
+                </button>
+                <button @click="openProduct('tools')" class="bg-gradient-to-r from-orange-500 to-red-500 text-white p-4 rounded-lg text-left hover:shadow-lg transition-all">
+                    <div class="text-2xl mb-2">🛠️</div>
+                    <div class="font-semibold">Real AI Tools</div>
+                    <div class="text-sm opacity-90">Extract emails, scrape data</div>
+                </button>
+            </div>
+
+            <!-- Recent Projects -->
+            <h4 class="text-xl font-bold text-gray-800 mb-4">📂 Recent Projects</h4>
+            <div class="space-y-3">
+                <template x-for="project in user.recentProjects" :key="project.id">
+                    <div class="bg-gray-50 p-4 rounded-lg flex items-center justify-between">
+                        <div>
+                            <div class="font-semibold" x-text="project.name"></div>
+                            <div class="text-sm text-gray-600" x-text="project.type"></div>
+                        </div>
+                        <div class="text-sm text-gray-500" x-text="project.date"></div>
                     </div>
                 </template>
             </div>
         </div>
-    </section>
+    </div>
 
     <!-- Live Demo Modal -->
     <div x-show="showDemo" x-cloak class="fixed inset-0 z-50 flex items-center justify-center bg-black/80" @click.away="showDemo = false">
         <div class="bg-white rounded-2xl p-8 max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
             <div class="flex items-center justify-between mb-6">
                 <h3 class="text-3xl font-bold text-gray-800">🎬 Live AI Demo</h3>
-                <button @click="showDemo = false" class="text-gray-500 hover:text-gray-700">
-                    <svg class="w-6" h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                    </svg>
-                </button>
+                <button @click="showDemo = false" class="text-gray-500 hover:text-gray-700">×</button>
             </div>
 
             <div class="grid md:grid-cols-2 gap-6">
@@ -267,14 +420,51 @@
                         <div class="flex items-center mb-3">
                             <span class="text-2xl mr-3" x-text="demo.icon"></span>
                             <h4 class="font-semibold text-gray-800" x-text="demo.name"></h4>
-                            <span class="ml-auto bg-green-100 text-green-800 px-2 py-1 rounded text-xs">LIVE</span>
+                            <span class="ml-auto product-live">LIVE</span>
                         </div>
                         <p class="text-gray-600 text-sm mb-3" x-text="demo.description"></p>
-                        <button @click="runDemo(demo.id)" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 transition-colors w-full">
-                            <span x-show="!demo.running">Try Now</span>
-                            <span x-show="demo.running">Running...</span>
-                        </button>
+                        <template x-if="!user.isLoggedIn && demo.requiresAuth">
+                            <button @click="showDemo = false; showSignupModal = true" class="bg-yellow-500 text-white px-4 py-2 rounded hover:bg-yellow-600 transition-colors w-full">
+                                Sign Up to Try
+                            </button>
+                        </template>
+                        <template x-if="user.isLoggedIn || !demo.requiresAuth">
+                            <button @click="runDemo(demo.id)" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 transition-colors w-full">
+                                <span x-show="!demo.running">Try Now</span>
+                                <span x-show="demo.running">Running...</span>
+                            </button>
+                        </template>
                         <div x-show="demo.result" class="mt-3 p-3 bg-gray-50 rounded text-sm" x-text="demo.result"></div>
+                    </div>
+                </template>
+            </div>
+        </div>
+    </div>
+
+    <!-- Product Launch Modal -->
+    <div x-show="showProductModal" x-cloak class="fixed inset-0 z-50 flex items-center justify-center bg-black/80" @click.away="showProductModal = false">
+        <div class="bg-white rounded-2xl p-8 max-w-2xl w-full mx-4">
+            <div class="flex items-center justify-between mb-6">
+                <h3 class="text-2xl font-bold text-gray-800" x-text="selectedProduct.title"></h3>
+                <button @click="showProductModal = false" class="text-gray-500 hover:text-gray-700">×</button>
+            </div>
+            <div class="text-center">
+                <div class="text-6xl mb-4" x-text="selectedProduct.icon"></div>
+                <p class="text-gray-600 mb-6" x-text="selectedProduct.description"></p>
+                <template x-if="!user.isLoggedIn">
+                    <div>
+                        <p class="text-sm text-gray-500 mb-4">Sign up for free to access this tool</p>
+                        <button @click="showProductModal = false; showSignupModal = true" class="bg-gradient-to-r from-yellow-500 to-orange-500 text-white px-8 py-3 rounded-lg font-semibold hover:shadow-lg transition-all">
+                            Sign Up Free
+                        </button>
+                    </div>
+                </template>
+                <template x-if="user.isLoggedIn">
+                    <div>
+                        <p class="text-sm text-gray-500 mb-4">Ready to launch this tool!</p>
+                        <button @click="launchProduct()" class="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-8 py-3 rounded-lg font-semibold hover:shadow-lg transition-all">
+                            Launch Tool
+                        </button>
                     </div>
                 </template>
             </div>
@@ -284,55 +474,59 @@
     <!-- Pricing Section -->
     <section id="pricing" class="py-20">
         <div class="max-w-7xl mx-auto px-4 text-center">
-            <h2 class="text-5xl font-bold text-white mb-4">💰 Revenue Ready Pricing</h2>
+            <h2 class="text-5xl font-bold text-white mb-4">💰 Simple Pricing</h2>
             <p class="text-xl text-white/70 mb-12">Choose your AI power level</p>
 
             <div class="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
-                <!-- Starter -->
+                <!-- Free Trial -->
                 <div class="ai-card rounded-2xl p-8">
-                    <h3 class="text-2xl font-bold text-white mb-4">Starter AI</h3>
-                    <div class="text-4xl font-bold text-yellow-400 mb-6">$297<span class="text-lg text-white/70">/mo</span></div>
+                    <h3 class="text-2xl font-bold text-white mb-4">Free Trial</h3>
+                    <div class="text-4xl font-bold text-green-400 mb-6">$0<span class="text-lg text-white/70">/month</span></div>
                     <ul class="space-y-3 text-white/70 mb-8">
-                        <li>✅ Real AI Tools</li>
-                        <li>✅ Content Generation</li>
-                        <li>✅ Basic Image Gen</li>
-                        <li>✅ 10K API calls</li>
+                        <li>✅ All 6 AI Tools</li>
+                        <li>✅ 100 Credits/Month</li>
+                        <li>✅ Basic Support</li>
+                        <li>✅ 14-Day Trial</li>
                     </ul>
-                    <button class="w-full bg-yellow-500 text-black py-3 rounded-full font-semibold hover:bg-yellow-400 transition-colors">
-                        Start Free Trial
+                    <button @click="user.isLoggedIn ? null : (showSignupModal = true)" class="w-full bg-green-500 text-white py-3 rounded-full font-semibold hover:bg-green-400 transition-colors">
+                        <span x-show="!user.isLoggedIn">Start Free Trial</span>
+                        <span x-show="user.isLoggedIn && user.plan === 'Free'">Current Plan</span>
+                        <span x-show="user.isLoggedIn && user.plan !== 'Free'">Downgrade</span>
                     </button>
                 </div>
 
-                <!-- Professional -->
+                <!-- Pro Plan -->
                 <div class="ai-card rounded-2xl p-8 ring-2 ring-yellow-400 transform scale-105">
                     <div class="bg-yellow-400 text-black px-3 py-1 rounded-full text-sm font-bold mb-4 inline-block">MOST POPULAR</div>
-                    <h3 class="text-2xl font-bold text-white mb-4">Professional AI</h3>
-                    <div class="text-4xl font-bold text-yellow-400 mb-6">$797<span class="text-lg text-white/70">/mo</span></div>
+                    <h3 class="text-2xl font-bold text-white mb-4">Pro Plan</h3>
+                    <div class="text-4xl font-bold text-yellow-400 mb-6">$97<span class="text-lg text-white/70">/month</span></div>
                     <ul class="space-y-3 text-white/70 mb-8">
-                        <li>✅ All AI Systems (6)</li>
-                        <li>✅ Voice Cloning Studio</li>
-                        <li>✅ AI Video Editor</li>
-                        <li>✅ Unlimited API calls</li>
+                        <li>✅ All 6 AI Tools</li>
+                        <li>✅ 10,000 Credits/Month</li>
                         <li>✅ Priority Support</li>
+                        <li>✅ Advanced Features</li>
+                        <li>✅ API Access</li>
                     </ul>
                     <button class="w-full bg-yellow-500 text-black py-3 rounded-full font-semibold hover:bg-yellow-400 transition-colors pulse-glow">
-                        Start Free Trial
+                        <span x-show="user.plan !== 'Pro'">Upgrade to Pro</span>
+                        <span x-show="user.plan === 'Pro'">Current Plan</span>
                     </button>
                 </div>
 
-                <!-- Enterprise -->
+                <!-- Business Plan -->
                 <div class="ai-card rounded-2xl p-8">
-                    <h3 class="text-2xl font-bold text-white mb-4">Enterprise AI</h3>
-                    <div class="text-4xl font-bold text-yellow-400 mb-6">$1,997<span class="text-lg text-white/70">/mo</span></div>
+                    <h3 class="text-2xl font-bold text-white mb-4">Business Plan</h3>
+                    <div class="text-4xl font-bold text-blue-400 mb-6">$297<span class="text-lg text-white/70">/month</span></div>
                     <ul class="space-y-3 text-white/70 mb-8">
-                        <li>✅ Complete AI Platform</li>
-                        <li>✅ Custom Integrations</li>
+                        <li>✅ All 6 AI Tools</li>
+                        <li>✅ Unlimited Credits</li>
                         <li>✅ Dedicated Support</li>
+                        <li>✅ Custom Integrations</li>
                         <li>✅ White-label Options</li>
-                        <li>✅ SLA Guarantees</li>
                     </ul>
                     <button class="w-full glass-effect text-white py-3 rounded-full font-semibold hover:bg-white/20 transition-colors">
-                        Contact Sales
+                        <span x-show="user.plan !== 'Business'">Contact Sales</span>
+                        <span x-show="user.plan === 'Business'">Current Plan</span>
                     </button>
                 </div>
             </div>
@@ -342,8 +536,8 @@
     <!-- Footer -->
     <footer class="py-12 border-t border-white/20">
         <div class="max-w-7xl mx-auto px-4 text-center">
-            <div class="text-3xl font-bold text-white mb-4">🚀 Super Mega AI</div>
-            <p class="text-white/70 mb-8">Enterprise AI/ML Platform - 6 Production Systems Ready</p>
+            <div class="text-3xl font-black logo-gradient mb-4">🚀 SUPER MEGA AI</div>
+            <p class="text-white/70 mb-8">Professional AI Platform - 6 Production Tools Ready</p>
             <div class="flex justify-center space-x-6">
                 <a href="#" class="text-white/70 hover:text-white transition-colors">Privacy</a>
                 <a href="#" class="text-white/70 hover:text-white transition-colors">Terms</a>
@@ -354,25 +548,39 @@
     </footer>
 
     <script>
-        function aiPlatform() {
+        function superMegaAI() {
             return {
                 showDemo: false,
-                stats: {
-                    systems: 6,
-                    readyRate: "100%",
-                    sophistication: "5.3/6",
-                    technologies: "7+"
+                showLoginModal: false,
+                showSignupModal: false,
+                showDashboard: false,
+                showProductModal: false,
+                selectedProduct: {},
+                
+                user: {
+                    isLoggedIn: false,
+                    name: '',
+                    email: '',
+                    plan: 'Free',
+                    stats: {
+                        tools_used: 0,
+                        projects: 0,
+                        credits: 100
+                    },
+                    recentProjects: []
                 },
-                technologies: [
-                    { icon: "🤖", name: "OpenAI/GPT", description: "Advanced language models" },
-                    { icon: "🎨", name: "DALL-E", description: "Image generation" },
-                    { icon: "🖼️", name: "Stable Diffusion", description: "AI art creation" },
-                    { icon: "🗣️", name: "Voice Cloning", description: "Real-time voice synthesis" },
-                    { icon: "👁️", name: "OpenCV", description: "Computer vision" },
-                    { icon: "🧠", name: "ML Models", description: "Neural networks" },
-                    { icon: "⚡", name: "Real-time", description: "Live processing" },
-                    { icon: "📊", name: "Analytics", description: "Performance tracking" }
-                ],
+                
+                loginForm: {
+                    email: '',
+                    password: ''
+                },
+                
+                signupForm: {
+                    name: '',
+                    email: '',
+                    password: ''
+                },
+                
                 demoSystems: [
                     {
                         id: 'voice',
@@ -380,7 +588,8 @@
                         name: 'Voice Cloning',
                         description: 'Real-time voice synthesis and cloning',
                         running: false,
-                        result: ''
+                        result: '',
+                        requiresAuth: false
                     },
                     {
                         id: 'video',
@@ -388,7 +597,8 @@
                         name: 'Video Editor',
                         description: 'AI-powered video editing with scene detection',
                         running: false,
-                        result: ''
+                        result: '',
+                        requiresAuth: true
                     },
                     {
                         id: 'image',
@@ -396,7 +606,8 @@
                         name: 'Image Generation',
                         description: 'DALL-E and Stable Diffusion integration',
                         running: false,
-                        result: ''
+                        result: '',
+                        requiresAuth: false
                     },
                     {
                         id: 'content',
@@ -404,7 +615,8 @@
                         name: 'Content AI',
                         description: 'GPT-powered content generation',
                         running: false,
-                        result: ''
+                        result: '',
+                        requiresAuth: true
                     },
                     {
                         id: 'tools',
@@ -412,7 +624,8 @@
                         name: 'Real AI Tools',
                         description: 'Email extraction and web scraping',
                         running: false,
-                        result: ''
+                        result: '',
+                        requiresAuth: true
                     },
                     {
                         id: 'social',
@@ -420,9 +633,84 @@
                         name: 'Social AI',
                         description: 'Automated social media management',
                         running: false,
-                        result: ''
+                        result: '',
+                        requiresAuth: true
                     }
                 ],
+
+                login() {
+                    // Simulate login
+                    if (this.loginForm.email && this.loginForm.password) {
+                        this.user.isLoggedIn = true;
+                        this.user.name = this.loginForm.email.split('@')[0];
+                        this.user.email = this.loginForm.email;
+                        this.user.stats = {
+                            tools_used: 23,
+                            projects: 5,
+                            credits: 8750
+                        };
+                        this.user.recentProjects = [
+                            { id: 1, name: 'Product Launch Video', type: 'Video Editor', date: '2 hours ago' },
+                            { id: 2, name: 'Brand Voice Clone', type: 'Voice AI Studio', date: '1 day ago' },
+                            { id: 3, name: 'Social Media Campaign', type: 'Content AI', date: '3 days ago' }
+                        ];
+                        this.showLoginModal = false;
+                        this.loginForm = { email: '', password: '' };
+                    }
+                },
+
+                signup() {
+                    // Simulate signup
+                    if (this.signupForm.name && this.signupForm.email && this.signupForm.password) {
+                        this.user.isLoggedIn = true;
+                        this.user.name = this.signupForm.name;
+                        this.user.email = this.signupForm.email;
+                        this.user.plan = 'Free';
+                        this.user.stats = {
+                            tools_used: 0,
+                            projects: 0,
+                            credits: 100
+                        };
+                        this.user.recentProjects = [];
+                        this.showSignupModal = false;
+                        this.signupForm = { name: '', email: '', password: '' };
+                        
+                        // Show success message
+                        alert('🎉 Welcome to Super Mega AI! Your free trial has started.');
+                    }
+                },
+
+                logout() {
+                    this.user = {
+                        isLoggedIn: false,
+                        name: '',
+                        email: '',
+                        plan: 'Free',
+                        stats: { tools_used: 0, projects: 0, credits: 100 },
+                        recentProjects: []
+                    };
+                },
+
+                openProduct(productType) {
+                    const products = {
+                        voice: { title: 'Voice AI Studio', icon: '🎙️', description: 'Clone voices, generate speech, and create audio content with AI' },
+                        video: { title: 'AI Video Editor', icon: '🎬', description: 'Edit videos with AI-powered scene detection and effects' },
+                        image: { title: 'Image Generation', icon: '🎨', description: 'Create stunning visuals using DALL-E and Stable Diffusion' },
+                        content: { title: 'Content AI Engine', icon: '📝', description: 'Generate high-quality content for any purpose' },
+                        tools: { title: 'Real AI Tools', icon: '🛠️', description: 'Extract emails, scrape data, and analyze information' },
+                        social: { title: 'Social AI Manager', icon: '📱', description: 'Automate your social media campaigns and engagement' }
+                    };
+                    
+                    this.selectedProduct = products[productType];
+                    this.selectedProduct.type = productType;
+                    this.showProductModal = true;
+                },
+
+                launchProduct() {
+                    // Simulate product launch
+                    this.showProductModal = false;
+                    alert(`🚀 Launching ${this.selectedProduct.title}! This would open the actual tool interface.`);
+                },
 
                 async runDemo(systemId) {
                     const system = this.demoSystems.find(s => s.id === systemId);
@@ -435,16 +723,21 @@
                     await new Promise(resolve => setTimeout(resolve, 2000));
 
                     const results = {
-                        voice: '✅ Voice cloned successfully! Generated 30s audio in 2.1s with 97% accuracy',
-                        video: '✅ Video processed! Detected 12 scenes, applied 8 transitions, exported in 1080p',
-                        image: '✅ Image generated! Created 3 variations using DALL-E 3 with brand integration',
-                        content: '✅ Content created! Generated 500-word blog post with SEO optimization (92% quality score)',
-                        tools: '✅ Tools executed! Extracted 15 emails from target domain in 0.3 seconds',
-                        social: '✅ Social post scheduled! Created Facebook campaign with 89% engagement prediction'
+                        voice: '✅ Demo: Generated sample voice in 2.1s with 97% accuracy',
+                        video: '✅ Demo: Processed sample clip, detected 3 scenes, applied transitions',
+                        image: '✅ Demo: Generated sample image using DALL-E 3 integration',
+                        content: '✅ Demo: Created sample blog post with SEO optimization (92% score)',
+                        tools: '✅ Demo: Extracted 5 sample emails from test domain in 0.3s',
+                        social: '✅ Demo: Created sample social post with engagement prediction'
                     };
 
                     system.result = results[systemId];
                     system.running = false;
+                    
+                    // Update user stats if logged in
+                    if (this.user.isLoggedIn) {
+                        this.user.stats.tools_used++;
+                    }
                 }
             }
         }
