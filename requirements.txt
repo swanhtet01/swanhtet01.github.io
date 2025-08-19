@@ -1,0 +1,44 @@
+# Core Platform Requirements
+streamlit>=1.28.0
+requests>=2.31.0
+beautifulsoup4>=4.12.0
+selenium>=4.15.0
+pandas>=2.1.0
+numpy>=1.24.0
+
+# Web Automation
+webdriver-manager>=4.0.0
+
+# Image & Video Processing
+pillow>=10.0.0
+opencv-python>=4.8.0
+
+# Audio Processing
+librosa>=0.10.0
+soundfile>=0.12.0
+
+# 3D Visualization & CAD
+matplotlib>=3.7.0
+mpl-toolkits>=0.1.0
+
+# Text Analysis & NLP
+nltk>=3.8.0
+textstat>=0.7.0
+
+# Data Processing
+openpyxl>=3.1.0
+xlsxwriter>=3.1.0
+
+# Utilities
+python-dateutil>=2.8.0
+pytz>=2023.3
+
+# Optional Cloud Deployment
+boto3>=1.29.0
+azure-storage-blob>=12.19.0
+google-cloud-storage>=2.10.0
+
+# Development & Testing
+pytest>=7.4.0
+black>=23.7.0
+flake8>=6.0.0

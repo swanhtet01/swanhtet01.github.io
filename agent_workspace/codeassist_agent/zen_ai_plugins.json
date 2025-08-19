@@ -1,0 +1,8 @@
+{
+  "ai_autocomplete": true,
+  "code_generation": true,
+  "bug_detection": true,
+  "refactoring_suggestions": true,
+  "documentation_generation": true,
+  "voice_coding": true
+}

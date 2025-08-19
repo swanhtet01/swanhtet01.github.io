@@ -1,0 +1,11 @@
+{
+  "theme": "dark",
+  "plugins": [
+    "lsp",
+    "git",
+    "search",
+    "terminal"
+  ],
+  "ai_assistance": true,
+  "auto_complete": true
+}
