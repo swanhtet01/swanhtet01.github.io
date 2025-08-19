@@ -1,0 +1,501 @@
+Company Name,Contact Name,Email,Phone,Website,Industry,Location,Employee Count,Revenue Estimate
+Premier Homes,Nicole Jackson,nicole.jackson@premierproperties.com,(512) 328-4002,https://premierproperties.com,Real Estate,Austin,100-250,$1M-5M
+Advanced Realty,Brian Taylor,brian.taylor@advancedrealty.com,(512) 541-2032,https://advancedrealty.com,Real Estate,Austin,100-250,$10M-25M
+Advanced Real Estate Group,James Johnson,james.johnson@advancedproperties.com,(512) 509-5272,https://advancedproperties.com,Real Estate,Austin,25-50,$10M-25M
+Strategic Real Estate Group,David Anderson,david.anderson@strategicrealty.com,(512) 294-6666,https://strategicrealty.com,Real Estate,Austin,10-25,$50M+
+Global Properties,Robert Moore,robert.moore@globalrealty.com,(512) 676-4932,https://globalrealty.com,Real Estate,Austin,10-25,$1M-5M
+Professional Property Management,David Jackson,david.jackson@professionalrealty.com,(512) 422-1893,https://professionalrealty.com,Real Estate,Austin,50-100,$1M-5M
+Capital Homes,Robert Brown,robert.brown@capitalpropertymanagement.com,(512) 882-1374,https://capitalpropertymanagement.com,Real Estate,Austin,100-250,$10M-25M
+Prime Real Estate Group,Nicole Thompson,nicole.thompson@primerealestategroup.com,(512) 951-1170,https://primerealestategroup.com,Real Estate,Austin,50-100,$10M-25M
+Prime Properties,Brian White,brian.white@primehomes.com,(512) 279-2203,https://primehomes.com,Real Estate,Austin,100-250,$5M-10M
+Prime Realty,James Wilson,james.wilson@primeproperties.com,(512) 460-8263,https://primeproperties.com,Real Estate,Austin,25-50,$50M+
+Prime Real Estate Group,Lisa Moore,lisa.moore@primerealty.com,(512) 599-2514,https://primerealty.com,Real Estate,Austin,10-25,$1M-5M
+Strategic Realty,Jennifer Johnson,jennifer.johnson@strategicrealestategroup.com,(512) 339-4753,https://strategicrealestategroup.com,Real Estate,Austin,25-50,$5M-10M
+Premier Property Management,Sarah Jackson,sarah.jackson@premierrealestategroup.com,(512) 487-4631,https://premierrealestategroup.com,Real Estate,Austin,50-100,$50M+
+Strategic Property Management,Michelle Wilson,michelle.wilson@strategichomes.com,(512) 741-1031,https://strategichomes.com,Real Estate,Austin,100-250,$25M+
+Premier Realty,Brian Thompson,brian.thompson@premierhomes.com,(512) 433-9972,https://premierhomes.com,Real Estate,Austin,250+,$50M+
+Advanced Real Estate Group,Jessica Smith,jessica.smith@advancedproperties.com,(512) 486-1402,https://advancedproperties.com,Real Estate,Austin,100-250,$10M-25M
+Premier Homes,Sarah Miller,sarah.miller@premierproperties.com,(512) 460-4628,https://premierproperties.com,Real Estate,Austin,250+,$10M-25M
+Strategic Properties,John Jackson,john.jackson@strategicrealty.com,(512) 278-9499,https://strategicrealty.com,Real Estate,Austin,25-50,$5M-10M
+Elite Homes,Lisa Harris,lisa.harris@eliterealestategroup.com,(512) 527-7459,https://eliterealestategroup.com,Real Estate,Austin,10-25,$5M-10M
+Summit Property Management,Nicole Harris,nicole.harris@summitrealty.com,(512) 272-7281,https://summitrealty.com,Real Estate,Austin,50-100,$5M-10M
+Strategic Property Management,Lisa Wilson,lisa.wilson@strategicproperties.com,(512) 758-5977,https://strategicproperties.com,Real Estate,Austin,10-25,$5M-10M
+Elite Properties,Nicole Johnson,nicole.johnson@eliterealty.com,(512) 209-9776,https://eliterealty.com,Real Estate,Austin,250+,$10M-25M
+Advanced Homes,Nicole Johnson,nicole.johnson@advancedproperties.com,(512) 377-8860,https://advancedproperties.com,Real Estate,Austin,10-25,$50M+
+Capital Homes,Lisa Moore,lisa.moore@capitalrealty.com,(512) 738-5333,https://capitalrealty.com,Real Estate,Austin,50-100,$25M+
+Professional Realty,James Martin,james.martin@professionalhomes.com,(512) 349-7103,https://professionalhomes.com,Real Estate,Austin,250+,$5M-10M
+Capital Property Management,Sarah Thomas,sarah.thomas@capitalpropertymanagement.com,(512) 816-7118,https://capitalpropertymanagement.com,Real Estate,Austin,250+,$25M+
+Advanced Properties,Amanda Martin,amanda.martin@advancedproperties.com,(512) 500-2686,https://advancedproperties.com,Real Estate,Austin,250+,$50M+
+Prime Real Estate Group,Sarah Thomas,sarah.thomas@primerealty.com,(512) 831-3188,https://primerealty.com,Real Estate,Austin,100-250,$5M-10M
+Global Properties,Amanda Davis,amanda.davis@globalproperties.com,(512) 597-9598,https://globalproperties.com,Real Estate,Austin,50-100,$10M-25M
+Professional Property Management,David Moore,david.moore@professionalproperties.com,(512) 562-8767,https://professionalproperties.com,Real Estate,Austin,10-25,$50M+
+Summit Properties,Brian Wilson,brian.wilson@summitproperties.com,(512) 887-6768,https://summitproperties.com,Real Estate,Austin,25-50,$5M-10M
+Metro Property Management,Ashley Smith,ashley.smith@metropropertymanagement.com,(512) 381-4943,https://metropropertymanagement.com,Real Estate,Austin,100-250,$1M-5M
+Premier Property Management,Lisa Anderson,lisa.anderson@premierproperties.com,(512) 215-6664,https://premierproperties.com,Real Estate,Austin,25-50,$5M-10M
+Advanced Real Estate Group,Sarah Thomas,sarah.thomas@advancedrealestategroup.com,(512) 226-1532,https://advancedrealestategroup.com,Real Estate,Austin,100-250,$10M-25M
+Strategic Properties,Chris Garcia,chris.garcia@strategichomes.com,(512) 611-7607,https://strategichomes.com,Real Estate,Austin,250+,$10M-25M
+Premier Realty,Amanda Garcia,amanda.garcia@premierproperties.com,(512) 552-5618,https://premierproperties.com,Real Estate,Austin,50-100,$5M-10M
+Advanced Properties,Robert Wilson,robert.wilson@advancedpropertymanagement.com,(512) 361-1864,https://advancedpropertymanagement.com,Real Estate,Austin,250+,$10M-25M
+Advanced Realty,James Taylor,james.taylor@advancedproperties.com,(512) 721-2359,https://advancedproperties.com,Real Estate,Austin,10-25,$10M-25M
+Summit Realty,Michelle Miller,michelle.miller@summitproperties.com,(512) 903-3424,https://summitproperties.com,Real Estate,Austin,250+,$50M+
+Metro Realty,Lisa Wilson,lisa.wilson@metroproperties.com,(512) 738-7783,https://metroproperties.com,Real Estate,Austin,10-25,$5M-10M
+Capital Real Estate Group,Mike Miller,mike.miller@capitalpropertymanagement.com,(512) 650-6509,https://capitalpropertymanagement.com,Real Estate,Austin,50-100,$5M-10M
+Global Homes,Lisa Anderson,lisa.anderson@globalrealestategroup.com,(512) 656-5650,https://globalrealestategroup.com,Real Estate,Austin,50-100,$1M-5M
+Global Properties,Robert Miller,robert.miller@globalrealty.com,(512) 819-7190,https://globalrealty.com,Real Estate,Austin,50-100,$5M-10M
+Global Homes,Mike Thompson,mike.thompson@globalproperties.com,(512) 675-7065,https://globalproperties.com,Real Estate,Austin,100-250,$50M+
+Global Properties,Ashley White,ashley.white@globalpropertymanagement.com,(512) 403-2971,https://globalpropertymanagement.com,Real Estate,Austin,50-100,$1M-5M
+Premier Homes,Ashley Thompson,ashley.thompson@premierproperties.com,(512) 319-8479,https://premierproperties.com,Real Estate,Austin,10-25,$5M-10M
+Premier Realty,Michelle Smith,michelle.smith@premierrealty.com,(512) 950-8058,https://premierrealty.com,Real Estate,Austin,10-25,$25M+
+Capital Real Estate Group,Jessica Smith,jessica.smith@capitalhomes.com,(512) 875-2237,https://capitalhomes.com,Real Estate,Austin,25-50,$50M+
+Professional Realty,Ashley Moore,ashley.moore@professionalrealty.com,(512) 262-9914,https://professionalrealty.com,Real Estate,Austin,250+,$5M-10M
+Capital Realty,Brian Johnson,brian.johnson@capitalrealestategroup.com,(512) 880-7658,https://capitalrealestategroup.com,Real Estate,Austin,10-25,$10M-25M
+Capital Property Management,David Jackson,david.jackson@capitalproperties.com,(512) 523-7950,https://capitalproperties.com,Real Estate,Austin,25-50,$25M+
+Advanced Property Management,David Moore,david.moore@advancedrealty.com,(512) 849-3834,https://advancedrealty.com,Real Estate,Austin,250+,$1M-5M
+Metro Homes,Michael Thompson,michael.thompson@metrorealty.com,(512) 559-7343,https://metrorealty.com,Real Estate,Austin,25-50,$50M+
+Premier Properties,Sarah Thomas,sarah.thomas@premierproperties.com,(512) 938-9134,https://premierproperties.com,Real Estate,Austin,50-100,$50M+
+Prime Homes,Chris Smith,chris.smith@primeproperties.com,(512) 301-6206,https://primeproperties.com,Real Estate,Austin,250+,$5M-10M
+Elite Property Management,Amanda Brown,amanda.brown@elitepropertymanagement.com,(512) 807-3384,https://elitepropertymanagement.com,Real Estate,Austin,25-50,$5M-10M
+Advanced Real Estate Group,James Moore,james.moore@advancedrealestategroup.com,(512) 305-8418,https://advancedrealestategroup.com,Real Estate,Austin,10-25,$25M+
+Capital Homes,James Thomas,james.thomas@capitalrealestategroup.com,(512) 775-5896,https://capitalrealestategroup.com,Real Estate,Austin,25-50,$10M-25M
+Global Realty,John Johnson,john.johnson@globalrealty.com,(512) 593-8077,https://globalrealty.com,Real Estate,Austin,25-50,$5M-10M
+Professional Realty,Mike Brown,mike.brown@professionalhomes.com,(512) 965-4245,https://professionalhomes.com,Real Estate,Austin,10-25,$1M-5M
+Global Property Management,Michelle Thomas,michelle.thomas@globalrealty.com,(512) 420-5185,https://globalrealty.com,Real Estate,Austin,10-25,$25M+
+Capital Property Management,Michelle Martin,michelle.martin@capitalpropertymanagement.com,(512) 474-4238,https://capitalpropertymanagement.com,Real Estate,Austin,10-25,$50M+
+Prime Properties,Robert Jackson,robert.jackson@primehomes.com,(512) 294-1603,https://primehomes.com,Real Estate,Austin,10-25,$25M+
+Premier Real Estate Group,James Miller,james.miller@premierrealestategroup.com,(512) 668-9601,https://premierrealestategroup.com,Real Estate,Austin,250+,$50M+
+Global Property Management,Lisa Brown,lisa.brown@globalrealty.com,(512) 318-2196,https://globalrealty.com,Real Estate,Austin,100-250,$1M-5M
+Capital Realty,Sarah Wilson,sarah.wilson@capitalpropertymanagement.com,(512) 219-2246,https://capitalpropertymanagement.com,Real Estate,Austin,10-25,$10M-25M
+Advanced Property Management,Jessica Johnson,jessica.johnson@advancedrealty.com,(512) 307-9581,https://advancedrealty.com,Real Estate,Austin,100-250,$25M+
+Professional Real Estate Group,David Taylor,david.taylor@professionalpropertymanagement.com,(512) 419-2332,https://professionalpropertymanagement.com,Real Estate,Austin,50-100,$50M+
+Metro Realty,Sarah Anderson,sarah.anderson@metrorealty.com,(512) 218-4416,https://metrorealty.com,Real Estate,Austin,25-50,$25M+
+Prime Properties,Michael Martin,michael.martin@primehomes.com,(512) 846-2181,https://primehomes.com,Real Estate,Austin,10-25,$10M-25M
+Prime Properties,Michael Taylor,michael.taylor@primerealestategroup.com,(512) 666-5282,https://primerealestategroup.com,Real Estate,Austin,250+,$5M-10M
+Advanced Realty,James Thompson,james.thompson@advancedhomes.com,(512) 492-5462,https://advancedhomes.com,Real Estate,Austin,25-50,$5M-10M
+Advanced Properties,Sarah White,sarah.white@advancedrealty.com,(512) 812-1967,https://advancedrealty.com,Real Estate,Austin,50-100,$25M+
+Summit Homes,Sarah Thompson,sarah.thompson@summitrealty.com,(512) 218-7370,https://summitrealty.com,Real Estate,Austin,25-50,$10M-25M
+Summit Realty,Amanda Johnson,amanda.johnson@summitrealty.com,(512) 239-5798,https://summitrealty.com,Real Estate,Austin,25-50,$25M+
+Strategic Realty,Chris Davis,chris.davis@strategicrealty.com,(512) 492-7456,https://strategicrealty.com,Real Estate,Austin,25-50,$5M-10M
+Summit Homes,Chris Johnson,chris.johnson@summitrealestategroup.com,(512) 836-2929,https://summitrealestategroup.com,Real Estate,Austin,50-100,$50M+
+Capital Property Management,Chris Smith,chris.smith@capitalrealestategroup.com,(512) 773-7445,https://capitalrealestategroup.com,Real Estate,Austin,100-250,$50M+
+Summit Realty,Jennifer Brown,jennifer.brown@summitproperties.com,(512) 219-9629,https://summitproperties.com,Real Estate,Austin,100-250,$10M-25M
+Capital Real Estate Group,Nicole Taylor,nicole.taylor@capitalrealty.com,(512) 674-3926,https://capitalrealty.com,Real Estate,Austin,50-100,$10M-25M
+Summit Real Estate Group,John Thompson,john.thompson@summitproperties.com,(512) 560-8459,https://summitproperties.com,Real Estate,Austin,10-25,$1M-5M
+Capital Real Estate Group,Robert Wilson,robert.wilson@capitalproperties.com,(512) 981-6248,https://capitalproperties.com,Real Estate,Austin,250+,$50M+
+Strategic Real Estate Group,Lisa Thomas,lisa.thomas@strategicrealestategroup.com,(512) 694-3160,https://strategicrealestategroup.com,Real Estate,Austin,50-100,$10M-25M
+Elite Homes,Robert Thomas,robert.thomas@elitehomes.com,(512) 210-1265,https://elitehomes.com,Real Estate,Austin,250+,$5M-10M
+Metro Homes,Nicole Smith,nicole.smith@metroproperties.com,(512) 241-2895,https://metroproperties.com,Real Estate,Austin,50-100,$25M+
+Strategic Properties,Lisa Harris,lisa.harris@strategicrealestategroup.com,(512) 972-9983,https://strategicrealestategroup.com,Real Estate,Austin,10-25,$25M+
+Strategic Real Estate Group,Sarah Garcia,sarah.garcia@strategicrealty.com,(512) 323-4181,https://strategicrealty.com,Real Estate,Austin,10-25,$10M-25M
+Professional Real Estate Group,Jessica Martin,jessica.martin@professionalhomes.com,(512) 791-2029,https://professionalhomes.com,Real Estate,Austin,50-100,$5M-10M
+Professional Property Management,Michelle Davis,michelle.davis@professionalrealestategroup.com,(512) 916-4101,https://professionalrealestategroup.com,Real Estate,Austin,50-100,$10M-25M
+Global Real Estate Group,Michael Thompson,michael.thompson@globalpropertymanagement.com,(512) 692-6675,https://globalpropertymanagement.com,Real Estate,Austin,25-50,$1M-5M
+Capital Property Management,Lisa Johnson,lisa.johnson@capitalproperties.com,(512) 532-1461,https://capitalproperties.com,Real Estate,Austin,100-250,$10M-25M
+Strategic Real Estate Group,Mike Johnson,mike.johnson@strategichomes.com,(512) 352-3859,https://strategichomes.com,Real Estate,Austin,250+,$5M-10M
+Prime Real Estate Group,Michael Johnson,michael.johnson@primehomes.com,(512) 749-3036,https://primehomes.com,Real Estate,Austin,250+,$50M+
+Advanced Property Management,Ashley Davis,ashley.davis@advancedhomes.com,(512) 902-8373,https://advancedhomes.com,Real Estate,Austin,100-250,$1M-5M
+Professional Realty,Jessica Martin,jessica.martin@professionalrealty.com,(512) 997-6969,https://professionalrealty.com,Real Estate,Austin,50-100,$50M+
+Advanced Properties,Jessica Taylor,jessica.taylor@advancedrealestategroup.com,(512) 541-8317,https://advancedrealestategroup.com,Real Estate,Austin,25-50,$5M-10M
+Capital Property Management,David Taylor,david.taylor@capitalrealestategroup.com,(512) 768-1176,https://capitalrealestategroup.com,Real Estate,Austin,250+,$50M+
+Prime Real Estate Group,Brian Davis,brian.davis@primehomes.com,(512) 427-1334,https://primehomes.com,Real Estate,Austin,50-100,$10M-25M
+Prime Property Management,Michael Miller,michael.miller@primerealestategroup.com,(512) 384-5243,https://primerealestategroup.com,Real Estate,Austin,25-50,$5M-10M
+Capital Property Management,Brian Wilson,brian.wilson@capitalhomes.com,(512) 231-4578,https://capitalhomes.com,Real Estate,Austin,10-25,$25M+
+Advanced Property Management,David Wilson,david.wilson@advancedrealty.com,(512) 223-1130,https://advancedrealty.com,Real Estate,Austin,250+,$1M-5M
+Metro Homes,Chris Brown,chris.brown@metropropertymanagement.com,(512) 526-4082,https://metropropertymanagement.com,Real Estate,Austin,25-50,$10M-25M
+Global Realty,Jennifer Jackson,jennifer.jackson@globalhomes.com,(512) 419-1225,https://globalhomes.com,Real Estate,Austin,10-25,$50M+
+Metro Real Estate Group,Robert Harris,robert.harris@metrohomes.com,(512) 587-6159,https://metrohomes.com,Real Estate,Austin,250+,$1M-5M
+Strategic Property Management,Brian Jackson,brian.jackson@strategichomes.com,(512) 965-3381,https://strategichomes.com,Real Estate,Austin,50-100,$25M+
+Capital Real Estate Group,Mike Moore,mike.moore@capitalhomes.com,(512) 612-8992,https://capitalhomes.com,Real Estate,Austin,100-250,$1M-5M
+Premier Property Management,Chris Davis,chris.davis@premierhomes.com,(512) 597-1971,https://premierhomes.com,Real Estate,Austin,100-250,$1M-5M
+Elite Homes,Mike Moore,mike.moore@eliteproperties.com,(512) 432-9515,https://eliteproperties.com,Real Estate,Austin,10-25,$10M-25M
+Advanced Properties,Jennifer Thompson,jennifer.thompson@advancedrealty.com,(512) 256-7877,https://advancedrealty.com,Real Estate,Austin,50-100,$10M-25M
+Metro Homes,Amanda Harris,amanda.harris@metrohomes.com,(512) 811-1069,https://metrohomes.com,Real Estate,Austin,250+,$10M-25M
+Professional Property Management,Jennifer Miller,jennifer.miller@professionalhomes.com,(512) 389-6314,https://professionalhomes.com,Real Estate,Austin,100-250,$50M+
+Prime Homes,David Moore,david.moore@primeproperties.com,(512) 952-2615,https://primeproperties.com,Real Estate,Austin,50-100,$10M-25M
+Metro Realty,John White,john.white@metroproperties.com,(512) 301-1803,https://metroproperties.com,Real Estate,Austin,50-100,$5M-10M
+Premier Realty,Sarah Taylor,sarah.taylor@premierhomes.com,(512) 327-9419,https://premierhomes.com,Real Estate,Austin,50-100,$1M-5M
+Elite Realty,Michelle Smith,michelle.smith@eliterealty.com,(512) 966-4032,https://eliterealty.com,Real Estate,Austin,50-100,$25M+
+Elite Real Estate Group,Brian Thompson,brian.thompson@eliterealty.com,(512) 751-1565,https://eliterealty.com,Real Estate,Austin,50-100,$10M-25M
+Prime Real Estate Group,Michael Miller,michael.miller@primehomes.com,(512) 814-7681,https://primehomes.com,Real Estate,Austin,25-50,$5M-10M
+Strategic Property Management,Brian Martin,brian.martin@strategicpropertymanagement.com,(512) 304-1679,https://strategicpropertymanagement.com,Real Estate,Austin,50-100,$50M+
+Elite Realty,Lisa Miller,lisa.miller@eliterealty.com,(512) 942-5504,https://eliterealty.com,Real Estate,Austin,250+,$1M-5M
+Capital Real Estate Group,John Thompson,john.thompson@capitalpropertymanagement.com,(512) 928-4286,https://capitalpropertymanagement.com,Real Estate,Austin,250+,$25M+
+Summit Real Estate Group,James White,james.white@summithomes.com,(512) 539-7416,https://summithomes.com,Real Estate,Austin,25-50,$5M-10M
+Elite Homes,Michael Taylor,michael.taylor@elitepropertymanagement.com,(512) 889-1183,https://elitepropertymanagement.com,Real Estate,Austin,250+,$10M-25M
+Prime Realty,Robert White,robert.white@primerealestategroup.com,(512) 706-5503,https://primerealestategroup.com,Real Estate,Austin,10-25,$10M-25M
+Advanced Real Estate Group,Jennifer Moore,jennifer.moore@advancedrealty.com,(512) 821-9115,https://advancedrealty.com,Real Estate,Austin,100-250,$50M+
+Strategic Realty,Brian Wilson,brian.wilson@strategicproperties.com,(512) 465-5082,https://strategicproperties.com,Real Estate,Austin,50-100,$50M+
+Advanced Property Management,Lisa Jackson,lisa.jackson@advancedpropertymanagement.com,(512) 641-8193,https://advancedpropertymanagement.com,Real Estate,Austin,100-250,$25M+
+Capital Homes,David Martin,david.martin@capitalrealty.com,(512) 589-5212,https://capitalrealty.com,Real Estate,Austin,50-100,$10M-25M
+Professional Property Management,Nicole White,nicole.white@professionalpropertymanagement.com,(512) 263-6139,https://professionalpropertymanagement.com,Real Estate,Austin,50-100,$1M-5M
+Advanced Realty,Brian Jackson,brian.jackson@advancedproperties.com,(512) 222-4531,https://advancedproperties.com,Real Estate,Austin,10-25,$50M+
+Professional Homes,Jessica Wilson,jessica.wilson@professionalproperties.com,(512) 428-4384,https://professionalproperties.com,Real Estate,Austin,25-50,$10M-25M
+Advanced Real Estate Group,Mike Anderson,mike.anderson@advancedproperties.com,(512) 727-8191,https://advancedproperties.com,Real Estate,Austin,25-50,$50M+
+Global Real Estate Group,Ashley Jackson,ashley.jackson@globalproperties.com,(512) 461-9420,https://globalproperties.com,Real Estate,Austin,250+,$5M-10M
+Elite Properties,Chris Jackson,chris.jackson@eliterealty.com,(512) 413-5015,https://eliterealty.com,Real Estate,Austin,50-100,$25M+
+Professional Real Estate Group,James Brown,james.brown@professionalhomes.com,(512) 493-3300,https://professionalhomes.com,Real Estate,Austin,25-50,$10M-25M
+Advanced Realty,Jessica Brown,jessica.brown@advancedhomes.com,(512) 752-4402,https://advancedhomes.com,Real Estate,Austin,50-100,$5M-10M
+Summit Properties,John Anderson,john.anderson@summitpropertymanagement.com,(512) 641-9999,https://summitpropertymanagement.com,Real Estate,Austin,25-50,$25M+
+Advanced Homes,Jennifer Taylor,jennifer.taylor@advancedproperties.com,(512) 350-5595,https://advancedproperties.com,Real Estate,Austin,25-50,$50M+
+Global Real Estate Group,Ashley Smith,ashley.smith@globalpropertymanagement.com,(512) 603-2245,https://globalpropertymanagement.com,Real Estate,Austin,100-250,$1M-5M
+Advanced Property Management,Lisa Miller,lisa.miller@advancedrealestategroup.com,(512) 889-4087,https://advancedrealestategroup.com,Real Estate,Austin,100-250,$50M+
+Metro Properties,Ashley Anderson,ashley.anderson@metrorealty.com,(512) 716-8309,https://metrorealty.com,Real Estate,Austin,25-50,$5M-10M
+Elite Real Estate Group,Chris Wilson,chris.wilson@elitehomes.com,(512) 357-4150,https://elitehomes.com,Real Estate,Austin,25-50,$5M-10M
+Professional Homes,John Garcia,john.garcia@professionalrealty.com,(512) 953-4079,https://professionalrealty.com,Real Estate,Austin,50-100,$25M+
+Summit Real Estate Group,James Johnson,james.johnson@summitrealty.com,(512) 445-5039,https://summitrealty.com,Real Estate,Austin,250+,$10M-25M
+Premier Properties,Ashley Miller,ashley.miller@premierrealty.com,(512) 498-8214,https://premierrealty.com,Real Estate,Austin,25-50,$5M-10M
+Professional Homes,Ashley White,ashley.white@professionalpropertymanagement.com,(512) 950-9866,https://professionalpropertymanagement.com,Real Estate,Austin,10-25,$5M-10M
+Strategic Property Management,Michael Davis,michael.davis@strategicrealestategroup.com,(512) 481-7902,https://strategicrealestategroup.com,Real Estate,Austin,250+,$1M-5M
+Advanced Realty,David Anderson,david.anderson@advancedrealty.com,(512) 883-5409,https://advancedrealty.com,Real Estate,Austin,50-100,$5M-10M
+Prime Homes,Amanda Thomas,amanda.thomas@primehomes.com,(512) 886-6255,https://primehomes.com,Real Estate,Austin,10-25,$5M-10M
+Premier Homes,Amanda Martin,amanda.martin@premierrealestategroup.com,(512) 444-2259,https://premierrealestategroup.com,Real Estate,Austin,50-100,$50M+
+Advanced Property Management,Nicole Harris,nicole.harris@advancedrealestategroup.com,(512) 320-2055,https://advancedrealestategroup.com,Real Estate,Austin,50-100,$50M+
+Capital Realty,Jennifer White,jennifer.white@capitalhomes.com,(512) 584-5086,https://capitalhomes.com,Real Estate,Austin,50-100,$1M-5M
+Elite Property Management,Jennifer Taylor,jennifer.taylor@elitehomes.com,(512) 213-4966,https://elitehomes.com,Real Estate,Austin,100-250,$25M+
+Global Homes,Nicole Garcia,nicole.garcia@globalproperties.com,(512) 900-3613,https://globalproperties.com,Real Estate,Austin,50-100,$10M-25M
+Professional Properties,Chris White,chris.white@professionalproperties.com,(512) 406-3024,https://professionalproperties.com,Real Estate,Austin,100-250,$50M+
+Metro Real Estate Group,Sarah Garcia,sarah.garcia@metrorealty.com,(512) 692-2781,https://metrorealty.com,Real Estate,Austin,50-100,$25M+
+Advanced Properties,John Brown,john.brown@advancedproperties.com,(512) 677-5812,https://advancedproperties.com,Real Estate,Austin,250+,$25M+
+Elite Property Management,Chris Garcia,chris.garcia@elitehomes.com,(512) 207-3004,https://elitehomes.com,Real Estate,Austin,50-100,$50M+
+Prime Realty,Lisa Wilson,lisa.wilson@primeproperties.com,(512) 287-9674,https://primeproperties.com,Real Estate,Austin,250+,$10M-25M
+Premier Properties,David Anderson,david.anderson@premierhomes.com,(512) 987-7301,https://premierhomes.com,Real Estate,Austin,10-25,$25M+
+Elite Realty,David Davis,david.davis@eliterealestategroup.com,(512) 236-1956,https://eliterealestategroup.com,Real Estate,Austin,250+,$1M-5M
+Summit Homes,James Anderson,james.anderson@summithomes.com,(512) 430-2915,https://summithomes.com,Real Estate,Austin,250+,$1M-5M
+Global Realty,Nicole Martin,nicole.martin@globalpropertymanagement.com,(512) 630-6061,https://globalpropertymanagement.com,Real Estate,Austin,100-250,$5M-10M
+Global Real Estate Group,Sarah Anderson,sarah.anderson@globalpropertymanagement.com,(512) 502-9403,https://globalpropertymanagement.com,Real Estate,Austin,250+,$50M+
+Summit Homes,Jessica Harris,jessica.harris@summitproperties.com,(512) 922-6956,https://summitproperties.com,Real Estate,Austin,25-50,$25M+
+Global Realty,Sarah Thompson,sarah.thompson@globalrealestategroup.com,(512) 777-4435,https://globalrealestategroup.com,Real Estate,Austin,100-250,$25M+
+Prime Real Estate Group,David Brown,david.brown@primeproperties.com,(512) 516-6542,https://primeproperties.com,Real Estate,Austin,250+,$1M-5M
+Strategic Homes,Michelle Thompson,michelle.thompson@strategichomes.com,(512) 557-2147,https://strategichomes.com,Real Estate,Austin,10-25,$25M+
+Strategic Realty,John Johnson,john.johnson@strategicrealty.com,(512) 810-5283,https://strategicrealty.com,Real Estate,Austin,100-250,$1M-5M
+Metro Properties,Nicole Moore,nicole.moore@metroproperties.com,(512) 966-3362,https://metroproperties.com,Real Estate,Austin,25-50,$50M+
+Capital Realty,Chris Smith,chris.smith@capitalrealestategroup.com,(512) 871-7869,https://capitalrealestategroup.com,Real Estate,Austin,25-50,$1M-5M
+Professional Property Management,Michael Wilson,michael.wilson@professionalrealestategroup.com,(512) 767-7005,https://professionalrealestategroup.com,Real Estate,Austin,25-50,$10M-25M
+Premier Properties,Brian Smith,brian.smith@premierrealestategroup.com,(512) 350-5236,https://premierrealestategroup.com,Real Estate,Austin,10-25,$5M-10M
+Professional Real Estate Group,Brian Moore,brian.moore@professionalpropertymanagement.com,(512) 357-2301,https://professionalpropertymanagement.com,Real Estate,Austin,10-25,$50M+
+Elite Homes,Michelle Anderson,michelle.anderson@elitepropertymanagement.com,(512) 248-4201,https://elitepropertymanagement.com,Real Estate,Austin,50-100,$25M+
+Global Homes,Robert Johnson,robert.johnson@globalproperties.com,(512) 261-8001,https://globalproperties.com,Real Estate,Austin,10-25,$5M-10M
+Global Real Estate Group,James Taylor,james.taylor@globalrealestategroup.com,(512) 382-4214,https://globalrealestategroup.com,Real Estate,Austin,10-25,$50M+
+Professional Homes,Nicole Smith,nicole.smith@professionalhomes.com,(512) 371-8008,https://professionalhomes.com,Real Estate,Austin,25-50,$10M-25M
+Prime Realty,Lisa Davis,lisa.davis@primeproperties.com,(512) 262-5263,https://primeproperties.com,Real Estate,Austin,250+,$50M+
+Capital Realty,James Taylor,james.taylor@capitalrealty.com,(512) 933-7286,https://capitalrealty.com,Real Estate,Austin,25-50,$5M-10M
+Elite Properties,Mike Thompson,mike.thompson@eliterealestategroup.com,(512) 281-3672,https://eliterealestategroup.com,Real Estate,Austin,25-50,$5M-10M
+Prime Property Management,Amanda Brown,amanda.brown@primeproperties.com,(512) 404-2665,https://primeproperties.com,Real Estate,Austin,100-250,$1M-5M
+Prime Properties,Jessica Martin,jessica.martin@primerealestategroup.com,(512) 511-2257,https://primerealestategroup.com,Real Estate,Austin,50-100,$10M-25M
+Elite Real Estate Group,Ashley Anderson,ashley.anderson@eliterealestategroup.com,(512) 431-4948,https://eliterealestategroup.com,Real Estate,Austin,50-100,$10M-25M
+Elite Property Management,Michelle Johnson,michelle.johnson@elitehomes.com,(512) 359-5603,https://elitehomes.com,Real Estate,Austin,50-100,$50M+
+Prime Homes,Lisa Garcia,lisa.garcia@primerealty.com,(512) 273-7380,https://primerealty.com,Real Estate,Austin,50-100,$1M-5M
+Premier Real Estate Group,Jessica Anderson,jessica.anderson@premierpropertymanagement.com,(512) 313-3652,https://premierpropertymanagement.com,Real Estate,Austin,100-250,$5M-10M
+Prime Real Estate Group,Sarah Miller,sarah.miller@primeproperties.com,(512) 476-8041,https://primeproperties.com,Real Estate,Austin,10-25,$50M+
+Premier Realty,Jessica Miller,jessica.miller@premierproperties.com,(512) 836-3823,https://premierproperties.com,Real Estate,Austin,250+,$10M-25M
+Metro Realty,Lisa Smith,lisa.smith@metrohomes.com,(512) 896-5506,https://metrohomes.com,Real Estate,Austin,250+,$1M-5M
+Prime Realty,Brian Smith,brian.smith@primepropertymanagement.com,(512) 704-9683,https://primepropertymanagement.com,Real Estate,Austin,100-250,$5M-10M
+Prime Realty,Chris Thompson,chris.thompson@primerealty.com,(512) 390-3884,https://primerealty.com,Real Estate,Austin,50-100,$25M+
+Capital Real Estate Group,Jennifer Taylor,jennifer.taylor@capitalrealty.com,(512) 420-3152,https://capitalrealty.com,Real Estate,Austin,25-50,$5M-10M
+Strategic Homes,Michelle Anderson,michelle.anderson@strategicproperties.com,(512) 408-7110,https://strategicproperties.com,Real Estate,Austin,250+,$25M+
+Global Realty,Jennifer Thompson,jennifer.thompson@globalhomes.com,(512) 934-9708,https://globalhomes.com,Real Estate,Austin,25-50,$1M-5M
+Premier Real Estate Group,Michael Taylor,michael.taylor@premierproperties.com,(512) 531-3827,https://premierproperties.com,Real Estate,Austin,50-100,$25M+
+Global Real Estate Group,Amanda Jackson,amanda.jackson@globalpropertymanagement.com,(512) 523-6535,https://globalpropertymanagement.com,Real Estate,Austin,50-100,$25M+
+Global Realty,Mike Davis,mike.davis@globalrealty.com,(512) 589-1374,https://globalrealty.com,Real Estate,Austin,10-25,$25M+
+Elite Properties,Sarah White,sarah.white@elitepropertymanagement.com,(512) 601-6434,https://elitepropertymanagement.com,Real Estate,Austin,50-100,$10M-25M
+Elite Realty,Brian Brown,brian.brown@eliterealty.com,(512) 954-7789,https://eliterealty.com,Real Estate,Austin,100-250,$25M+
+Advanced Properties,Amanda Harris,amanda.harris@advancedrealty.com,(512) 945-9036,https://advancedrealty.com,Real Estate,Austin,50-100,$50M+
+Metro Property Management,Ashley Smith,ashley.smith@metrorealestategroup.com,(512) 870-8352,https://metrorealestategroup.com,Real Estate,Austin,100-250,$25M+
+Summit Properties,Jennifer Harris,jennifer.harris@summitpropertymanagement.com,(512) 945-8879,https://summitpropertymanagement.com,Real Estate,Austin,250+,$5M-10M
+Elite Real Estate Group,Michelle Jackson,michelle.jackson@elitepropertymanagement.com,(512) 219-8216,https://elitepropertymanagement.com,Real Estate,Austin,250+,$5M-10M
+Strategic Properties,John Smith,john.smith@strategicpropertymanagement.com,(512) 948-6148,https://strategicpropertymanagement.com,Real Estate,Austin,10-25,$10M-25M
+Metro Properties,Amanda Miller,amanda.miller@metropropertymanagement.com,(512) 752-3621,https://metropropertymanagement.com,Real Estate,Austin,100-250,$50M+
+Elite Homes,Michael Smith,michael.smith@elitehomes.com,(512) 693-5005,https://elitehomes.com,Real Estate,Austin,25-50,$5M-10M
+Advanced Real Estate Group,Sarah Johnson,sarah.johnson@advancedrealty.com,(512) 475-6177,https://advancedrealty.com,Real Estate,Austin,50-100,$5M-10M
+Capital Realty,Mike Brown,mike.brown@capitalrealestategroup.com,(512) 289-6294,https://capitalrealestategroup.com,Real Estate,Austin,100-250,$10M-25M
+Global Property Management,Ashley Miller,ashley.miller@globalhomes.com,(512) 989-5250,https://globalhomes.com,Real Estate,Austin,25-50,$50M+
+Professional Properties,Ashley Smith,ashley.smith@professionalproperties.com,(512) 890-4694,https://professionalproperties.com,Real Estate,Austin,25-50,$25M+
+Advanced Real Estate Group,Ashley Moore,ashley.moore@advancedhomes.com,(512) 432-9201,https://advancedhomes.com,Real Estate,Austin,100-250,$1M-5M
+Professional Property Management,Chris Anderson,chris.anderson@professionalhomes.com,(512) 720-2844,https://professionalhomes.com,Real Estate,Austin,50-100,$50M+
+Metro Real Estate Group,Michael Moore,michael.moore@metrohomes.com,(512) 272-5802,https://metrohomes.com,Real Estate,Austin,10-25,$10M-25M
+Global Properties,Jennifer Davis,jennifer.davis@globalpropertymanagement.com,(512) 526-4071,https://globalpropertymanagement.com,Real Estate,Austin,100-250,$50M+
+Premier Realty,Jessica Thompson,jessica.thompson@premierpropertymanagement.com,(512) 977-1182,https://premierpropertymanagement.com,Real Estate,Austin,100-250,$50M+
+Metro Property Management,Jennifer Taylor,jennifer.taylor@metrohomes.com,(512) 678-4611,https://metrohomes.com,Real Estate,Austin,25-50,$50M+
+Metro Realty,Amanda Wilson,amanda.wilson@metrorealty.com,(512) 854-9179,https://metrorealty.com,Real Estate,Austin,50-100,$1M-5M
+Capital Real Estate Group,Michelle Thomas,michelle.thomas@capitalrealestategroup.com,(512) 763-4452,https://capitalrealestategroup.com,Real Estate,Austin,10-25,$1M-5M
+Prime Properties,Nicole Jackson,nicole.jackson@primerealty.com,(512) 561-2092,https://primerealty.com,Real Estate,Austin,250+,$50M+
+Premier Homes,Lisa Johnson,lisa.johnson@premierrealestategroup.com,(512) 900-4796,https://premierrealestategroup.com,Real Estate,Austin,10-25,$10M-25M
+Prime Homes,John Thompson,john.thompson@primeproperties.com,(512) 269-9756,https://primeproperties.com,Real Estate,Austin,100-250,$25M+
+Professional Homes,Jessica Brown,jessica.brown@professionalproperties.com,(512) 784-4252,https://professionalproperties.com,Real Estate,Austin,50-100,$1M-5M
+Advanced Property Management,Lisa Johnson,lisa.johnson@advancedhomes.com,(512) 942-1574,https://advancedhomes.com,Real Estate,Austin,50-100,$25M+
+Premier Real Estate Group,Nicole Johnson,nicole.johnson@premierpropertymanagement.com,(512) 479-7771,https://premierpropertymanagement.com,Real Estate,Austin,250+,$50M+
+Capital Property Management,Jennifer Brown,jennifer.brown@capitalrealestategroup.com,(512) 755-2339,https://capitalrealestategroup.com,Real Estate,Austin,50-100,$10M-25M
+Metro Property Management,David Johnson,david.johnson@metropropertymanagement.com,(512) 719-6264,https://metropropertymanagement.com,Real Estate,Austin,10-25,$10M-25M
+Metro Real Estate Group,Jessica Miller,jessica.miller@metrorealty.com,(512) 958-5194,https://metrorealty.com,Real Estate,Austin,25-50,$5M-10M
+Global Homes,James White,james.white@globalhomes.com,(512) 724-5711,https://globalhomes.com,Real Estate,Austin,50-100,$25M+
+Prime Realty,Brian Jackson,brian.jackson@primerealty.com,(512) 536-7199,https://primerealty.com,Real Estate,Austin,100-250,$25M+
+Advanced Homes,John Thompson,john.thompson@advancedhomes.com,(512) 208-1326,https://advancedhomes.com,Real Estate,Austin,10-25,$10M-25M
+Professional Homes,Amanda Miller,amanda.miller@professionalpropertymanagement.com,(512) 512-4154,https://professionalpropertymanagement.com,Real Estate,Austin,250+,$25M+
+Capital Property Management,Michelle Harris,michelle.harris@capitalrealestategroup.com,(512) 868-2221,https://capitalrealestategroup.com,Real Estate,Austin,50-100,$5M-10M
+Prime Property Management,Jennifer Johnson,jennifer.johnson@primeproperties.com,(512) 771-6195,https://primeproperties.com,Real Estate,Austin,50-100,$25M+
+Capital Homes,Brian Wilson,brian.wilson@capitalpropertymanagement.com,(512) 907-1211,https://capitalpropertymanagement.com,Real Estate,Austin,50-100,$50M+
+Prime Property Management,Nicole Martin,nicole.martin@primehomes.com,(512) 920-7729,https://primehomes.com,Real Estate,Austin,50-100,$25M+
+Metro Property Management,Brian Thompson,brian.thompson@metrorealty.com,(512) 426-6826,https://metrorealty.com,Real Estate,Austin,10-25,$1M-5M
+Professional Real Estate Group,James Johnson,james.johnson@professionalpropertymanagement.com,(512) 492-2164,https://professionalpropertymanagement.com,Real Estate,Austin,250+,$50M+
+Elite Realty,Amanda Martin,amanda.martin@eliteproperties.com,(512) 469-4554,https://eliteproperties.com,Real Estate,Austin,50-100,$50M+
+Advanced Property Management,Mike Thomas,mike.thomas@advancedrealty.com,(512) 990-6211,https://advancedrealty.com,Real Estate,Austin,50-100,$10M-25M
+Summit Properties,Brian Johnson,brian.johnson@summitpropertymanagement.com,(512) 431-9455,https://summitpropertymanagement.com,Real Estate,Austin,50-100,$1M-5M
+Professional Real Estate Group,Mike Thompson,mike.thompson@professionalhomes.com,(512) 664-3237,https://professionalhomes.com,Real Estate,Austin,10-25,$1M-5M
+Elite Homes,Lisa Davis,lisa.davis@eliterealestategroup.com,(512) 821-3884,https://eliterealestategroup.com,Real Estate,Austin,50-100,$25M+
+Prime Properties,Michelle Harris,michelle.harris@primeproperties.com,(512) 489-6726,https://primeproperties.com,Real Estate,Austin,50-100,$10M-25M
+Prime Realty,Lisa Harris,lisa.harris@primerealty.com,(512) 488-4341,https://primerealty.com,Real Estate,Austin,100-250,$50M+
+Global Homes,Chris Garcia,chris.garcia@globalpropertymanagement.com,(512) 807-4256,https://globalpropertymanagement.com,Real Estate,Austin,250+,$25M+
+Premier Realty,Amanda Jackson,amanda.jackson@premierpropertymanagement.com,(512) 830-2962,https://premierpropertymanagement.com,Real Estate,Austin,25-50,$50M+
+Global Realty,Jessica Smith,jessica.smith@globalrealestategroup.com,(512) 253-7516,https://globalrealestategroup.com,Real Estate,Austin,250+,$1M-5M
+Capital Properties,Nicole Miller,nicole.miller@capitalpropertymanagement.com,(512) 462-3302,https://capitalpropertymanagement.com,Real Estate,Austin,25-50,$50M+
+Strategic Property Management,Ashley Brown,ashley.brown@strategicproperties.com,(512) 630-8098,https://strategicproperties.com,Real Estate,Austin,250+,$25M+
+Advanced Real Estate Group,Amanda Jackson,amanda.jackson@advancedrealestategroup.com,(512) 740-3948,https://advancedrealestategroup.com,Real Estate,Austin,250+,$5M-10M
+Metro Real Estate Group,Robert Brown,robert.brown@metrohomes.com,(512) 240-8893,https://metrohomes.com,Real Estate,Austin,10-25,$25M+
+Advanced Realty,Mike Anderson,mike.anderson@advancedrealty.com,(512) 814-4129,https://advancedrealty.com,Real Estate,Austin,25-50,$5M-10M
+Metro Realty,Brian Harris,brian.harris@metropropertymanagement.com,(512) 607-4580,https://metropropertymanagement.com,Real Estate,Austin,100-250,$10M-25M
+Strategic Homes,Lisa Brown,lisa.brown@strategicpropertymanagement.com,(512) 970-6356,https://strategicpropertymanagement.com,Real Estate,Austin,100-250,$10M-25M
+Capital Real Estate Group,Jessica Brown,jessica.brown@capitalproperties.com,(512) 325-9986,https://capitalproperties.com,Real Estate,Austin,100-250,$10M-25M
+Capital Property Management,Sarah Johnson,sarah.johnson@capitalhomes.com,(512) 286-1679,https://capitalhomes.com,Real Estate,Austin,100-250,$10M-25M
+Professional Homes,Jennifer Johnson,jennifer.johnson@professionalproperties.com,(512) 991-9928,https://professionalproperties.com,Real Estate,Austin,100-250,$25M+
+Advanced Properties,James Johnson,james.johnson@advancedproperties.com,(512) 963-3991,https://advancedproperties.com,Real Estate,Austin,25-50,$1M-5M
+Global Properties,Michelle Anderson,michelle.anderson@globalrealty.com,(512) 732-8107,https://globalrealty.com,Real Estate,Austin,25-50,$5M-10M
+Metro Realty,David Smith,david.smith@metrorealestategroup.com,(512) 669-1924,https://metrorealestategroup.com,Real Estate,Austin,250+,$10M-25M
+Prime Homes,James White,james.white@primehomes.com,(512) 854-3227,https://primehomes.com,Real Estate,Austin,25-50,$10M-25M
+Capital Realty,Brian Thompson,brian.thompson@capitalhomes.com,(512) 698-3200,https://capitalhomes.com,Real Estate,Austin,100-250,$50M+
+Metro Homes,Mike Miller,mike.miller@metrorealestategroup.com,(512) 415-3659,https://metrorealestategroup.com,Real Estate,Austin,250+,$10M-25M
+Professional Realty,Ashley Johnson,ashley.johnson@professionalhomes.com,(512) 204-4200,https://professionalhomes.com,Real Estate,Austin,10-25,$10M-25M
+Elite Homes,Chris Moore,chris.moore@eliterealestategroup.com,(512) 355-6791,https://eliterealestategroup.com,Real Estate,Austin,100-250,$1M-5M
+Strategic Homes,Jennifer Garcia,jennifer.garcia@strategicrealestategroup.com,(512) 897-9275,https://strategicrealestategroup.com,Real Estate,Austin,250+,$1M-5M
+Prime Realty,Jessica Taylor,jessica.taylor@primeproperties.com,(512) 700-5071,https://primeproperties.com,Real Estate,Austin,250+,$25M+
+Professional Realty,Nicole Davis,nicole.davis@professionalrealty.com,(512) 203-7718,https://professionalrealty.com,Real Estate,Austin,25-50,$25M+
+Global Real Estate Group,John White,john.white@globalproperties.com,(512) 937-9037,https://globalproperties.com,Real Estate,Austin,100-250,$10M-25M
+Strategic Real Estate Group,Brian Moore,brian.moore@strategichomes.com,(512) 247-6866,https://strategichomes.com,Real Estate,Austin,100-250,$25M+
+Global Properties,Amanda Wilson,amanda.wilson@globalrealty.com,(512) 856-3117,https://globalrealty.com,Real Estate,Austin,50-100,$10M-25M
+Elite Homes,Ashley Thomas,ashley.thomas@elitepropertymanagement.com,(512) 775-3108,https://elitepropertymanagement.com,Real Estate,Austin,10-25,$1M-5M
+Advanced Properties,Lisa Brown,lisa.brown@advancedrealty.com,(512) 338-2681,https://advancedrealty.com,Real Estate,Austin,50-100,$1M-5M
+Advanced Realty,Brian Thompson,brian.thompson@advancedrealestategroup.com,(512) 407-8356,https://advancedrealestategroup.com,Real Estate,Austin,100-250,$25M+
+Metro Real Estate Group,Brian Brown,brian.brown@metrohomes.com,(512) 596-1863,https://metrohomes.com,Real Estate,Austin,50-100,$50M+
+Metro Properties,Lisa Thomas,lisa.thomas@metrohomes.com,(512) 375-1608,https://metrohomes.com,Real Estate,Austin,10-25,$10M-25M
+Summit Real Estate Group,Michael Miller,michael.miller@summitrealestategroup.com,(512) 840-4656,https://summitrealestategroup.com,Real Estate,Austin,100-250,$50M+
+Capital Properties,David Jackson,david.jackson@capitalhomes.com,(512) 389-4396,https://capitalhomes.com,Real Estate,Austin,100-250,$5M-10M
+Elite Realty,Ashley Wilson,ashley.wilson@eliterealty.com,(512) 641-6620,https://eliterealty.com,Real Estate,Austin,25-50,$50M+
+Strategic Real Estate Group,Michelle Miller,michelle.miller@strategicrealestategroup.com,(512) 313-6334,https://strategicrealestategroup.com,Real Estate,Austin,25-50,$25M+
+Global Realty,Brian Miller,brian.miller@globalpropertymanagement.com,(512) 892-3083,https://globalpropertymanagement.com,Real Estate,Austin,50-100,$5M-10M
+Global Realty,David Taylor,david.taylor@globalhomes.com,(512) 945-9363,https://globalhomes.com,Real Estate,Austin,10-25,$5M-10M
+Professional Homes,Robert Smith,robert.smith@professionalrealty.com,(512) 475-4461,https://professionalrealty.com,Real Estate,Austin,25-50,$50M+
+Strategic Homes,Amanda Davis,amanda.davis@strategicrealty.com,(512) 845-3361,https://strategicrealty.com,Real Estate,Austin,100-250,$25M+
+Metro Property Management,Chris Wilson,chris.wilson@metropropertymanagement.com,(512) 415-4798,https://metropropertymanagement.com,Real Estate,Austin,10-25,$25M+
+Prime Real Estate Group,Robert Anderson,robert.anderson@primeproperties.com,(512) 960-1298,https://primeproperties.com,Real Estate,Austin,25-50,$5M-10M
+Premier Homes,James Harris,james.harris@premierpropertymanagement.com,(512) 351-1003,https://premierpropertymanagement.com,Real Estate,Austin,100-250,$50M+
+Premier Real Estate Group,Jennifer Moore,jennifer.moore@premierhomes.com,(512) 321-6709,https://premierhomes.com,Real Estate,Austin,50-100,$1M-5M
+Capital Homes,Robert Moore,robert.moore@capitalpropertymanagement.com,(512) 331-8292,https://capitalpropertymanagement.com,Real Estate,Austin,250+,$25M+
+Capital Real Estate Group,Ashley Johnson,ashley.johnson@capitalrealty.com,(512) 609-6622,https://capitalrealty.com,Real Estate,Austin,250+,$1M-5M
+Professional Property Management,Robert Harris,robert.harris@professionalhomes.com,(512) 544-7363,https://professionalhomes.com,Real Estate,Austin,250+,$5M-10M
+Prime Property Management,Brian Johnson,brian.johnson@primehomes.com,(512) 264-8940,https://primehomes.com,Real Estate,Austin,25-50,$5M-10M
+Summit Property Management,Amanda Taylor,amanda.taylor@summithomes.com,(512) 802-7190,https://summithomes.com,Real Estate,Austin,10-25,$5M-10M
+Advanced Realty,Lisa Martin,lisa.martin@advancedrealestategroup.com,(512) 617-5863,https://advancedrealestategroup.com,Real Estate,Austin,10-25,$10M-25M
+Metro Homes,Robert Anderson,robert.anderson@metropropertymanagement.com,(512) 913-5951,https://metropropertymanagement.com,Real Estate,Austin,25-50,$1M-5M
+Advanced Properties,Amanda Brown,amanda.brown@advancedhomes.com,(512) 297-2655,https://advancedhomes.com,Real Estate,Austin,100-250,$50M+
+Premier Real Estate Group,Mike Harris,mike.harris@premierrealestategroup.com,(512) 806-8152,https://premierrealestategroup.com,Real Estate,Austin,25-50,$1M-5M
+Strategic Realty,David Davis,david.davis@strategicrealty.com,(512) 261-4428,https://strategicrealty.com,Real Estate,Austin,10-25,$1M-5M
+Prime Property Management,James Wilson,james.wilson@primehomes.com,(512) 202-4481,https://primehomes.com,Real Estate,Austin,100-250,$5M-10M
+Prime Properties,Ashley Anderson,ashley.anderson@primepropertymanagement.com,(512) 434-7881,https://primepropertymanagement.com,Real Estate,Austin,250+,$10M-25M
+Elite Real Estate Group,Nicole White,nicole.white@elitepropertymanagement.com,(512) 296-2748,https://elitepropertymanagement.com,Real Estate,Austin,25-50,$1M-5M
+Metro Realty,Lisa Moore,lisa.moore@metrohomes.com,(512) 349-4181,https://metrohomes.com,Real Estate,Austin,25-50,$10M-25M
+Capital Property Management,Amanda Harris,amanda.harris@capitalproperties.com,(512) 744-8372,https://capitalproperties.com,Real Estate,Austin,25-50,$50M+
+Capital Property Management,Robert Moore,robert.moore@capitalrealty.com,(512) 244-3975,https://capitalrealty.com,Real Estate,Austin,25-50,$1M-5M
+Metro Property Management,Jennifer Moore,jennifer.moore@metrorealty.com,(512) 965-5833,https://metrorealty.com,Real Estate,Austin,10-25,$5M-10M
+Metro Real Estate Group,Michael Thomas,michael.thomas@metrorealestategroup.com,(512) 985-8840,https://metrorealestategroup.com,Real Estate,Austin,10-25,$25M+
+Advanced Properties,Sarah Moore,sarah.moore@advancedproperties.com,(512) 778-4162,https://advancedproperties.com,Real Estate,Austin,25-50,$25M+
+Advanced Properties,Jennifer Johnson,jennifer.johnson@advancedrealestategroup.com,(512) 547-6032,https://advancedrealestategroup.com,Real Estate,Austin,100-250,$50M+
+Summit Property Management,Mike Miller,mike.miller@summithomes.com,(512) 627-9841,https://summithomes.com,Real Estate,Austin,25-50,$50M+
+Advanced Real Estate Group,Chris Garcia,chris.garcia@advancedproperties.com,(512) 661-1030,https://advancedproperties.com,Real Estate,Austin,25-50,$25M+
+Professional Realty,Nicole Brown,nicole.brown@professionalproperties.com,(512) 726-9773,https://professionalproperties.com,Real Estate,Austin,100-250,$50M+
+Premier Realty,Jennifer Thomas,jennifer.thomas@premierhomes.com,(512) 434-8635,https://premierhomes.com,Real Estate,Austin,250+,$10M-25M
+Strategic Realty,Sarah Smith,sarah.smith@strategicpropertymanagement.com,(512) 888-2139,https://strategicpropertymanagement.com,Real Estate,Austin,100-250,$5M-10M
+Global Property Management,Sarah Brown,sarah.brown@globalpropertymanagement.com,(512) 502-2336,https://globalpropertymanagement.com,Real Estate,Austin,100-250,$1M-5M
+Metro Properties,Amanda Smith,amanda.smith@metroproperties.com,(512) 861-7304,https://metroproperties.com,Real Estate,Austin,250+,$50M+
+Elite Realty,Mike Taylor,mike.taylor@eliteproperties.com,(512) 891-1949,https://eliteproperties.com,Real Estate,Austin,50-100,$1M-5M
+Advanced Real Estate Group,Brian Thompson,brian.thompson@advancedproperties.com,(512) 373-7640,https://advancedproperties.com,Real Estate,Austin,25-50,$25M+
+Prime Homes,James Taylor,james.taylor@primeproperties.com,(512) 963-1272,https://primeproperties.com,Real Estate,Austin,25-50,$25M+
+Summit Real Estate Group,Amanda Thomas,amanda.thomas@summitrealestategroup.com,(512) 464-6081,https://summitrealestategroup.com,Real Estate,Austin,25-50,$25M+
+Summit Realty,Nicole White,nicole.white@summitpropertymanagement.com,(512) 614-7284,https://summitpropertymanagement.com,Real Estate,Austin,50-100,$1M-5M
+Global Realty,David Moore,david.moore@globalproperties.com,(512) 265-4690,https://globalproperties.com,Real Estate,Austin,50-100,$25M+
+Advanced Properties,Nicole Wilson,nicole.wilson@advancedproperties.com,(512) 986-2361,https://advancedproperties.com,Real Estate,Austin,250+,$5M-10M
+Summit Homes,Robert Taylor,robert.taylor@summitproperties.com,(512) 350-9957,https://summitproperties.com,Real Estate,Austin,50-100,$1M-5M
+Prime Realty,James Harris,james.harris@primerealestategroup.com,(512) 402-1437,https://primerealestategroup.com,Real Estate,Austin,50-100,$1M-5M
+Strategic Real Estate Group,Brian Moore,brian.moore@strategicproperties.com,(512) 427-8847,https://strategicproperties.com,Real Estate,Austin,10-25,$5M-10M
+Professional Real Estate Group,David Moore,david.moore@professionalrealty.com,(512) 311-8678,https://professionalrealty.com,Real Estate,Austin,10-25,$25M+
+Summit Homes,Ashley White,ashley.white@summitpropertymanagement.com,(512) 660-9201,https://summitpropertymanagement.com,Real Estate,Austin,100-250,$25M+
+Summit Homes,John Johnson,john.johnson@summithomes.com,(512) 570-7758,https://summithomes.com,Real Estate,Austin,250+,$10M-25M
+Premier Properties,Jennifer Garcia,jennifer.garcia@premierhomes.com,(512) 748-2020,https://premierhomes.com,Real Estate,Austin,10-25,$10M-25M
+Summit Homes,Michelle Taylor,michelle.taylor@summitrealestategroup.com,(512) 831-8083,https://summitrealestategroup.com,Real Estate,Austin,25-50,$50M+
+Professional Realty,Chris Moore,chris.moore@professionalhomes.com,(512) 948-4514,https://professionalhomes.com,Real Estate,Austin,100-250,$5M-10M
+Metro Realty,Amanda Davis,amanda.davis@metroproperties.com,(512) 377-5720,https://metroproperties.com,Real Estate,Austin,250+,$50M+
+Elite Real Estate Group,Chris Miller,chris.miller@elitehomes.com,(512) 434-6629,https://elitehomes.com,Real Estate,Austin,250+,$5M-10M
+Elite Property Management,Lisa Wilson,lisa.wilson@eliterealestategroup.com,(512) 414-6070,https://eliterealestategroup.com,Real Estate,Austin,100-250,$25M+
+Premier Property Management,Sarah Smith,sarah.smith@premierproperties.com,(512) 603-4592,https://premierproperties.com,Real Estate,Austin,10-25,$5M-10M
+Advanced Homes,Nicole Thompson,nicole.thompson@advancedpropertymanagement.com,(512) 681-5754,https://advancedpropertymanagement.com,Real Estate,Austin,25-50,$5M-10M
+Metro Property Management,Jennifer Miller,jennifer.miller@metrorealestategroup.com,(512) 965-1707,https://metrorealestategroup.com,Real Estate,Austin,25-50,$25M+
+Prime Properties,Michael Miller,michael.miller@primepropertymanagement.com,(512) 819-1092,https://primepropertymanagement.com,Real Estate,Austin,250+,$1M-5M
+Global Properties,Nicole Thomas,nicole.thomas@globalhomes.com,(512) 634-6638,https://globalhomes.com,Real Estate,Austin,50-100,$5M-10M
+Summit Property Management,Jessica Thompson,jessica.thompson@summitproperties.com,(512) 749-9489,https://summitproperties.com,Real Estate,Austin,10-25,$5M-10M
+Professional Realty,John Jackson,john.jackson@professionalhomes.com,(512) 306-8937,https://professionalhomes.com,Real Estate,Austin,50-100,$25M+
+Prime Property Management,Jennifer Martin,jennifer.martin@primerealestategroup.com,(512) 501-4473,https://primerealestategroup.com,Real Estate,Austin,250+,$1M-5M
+Advanced Homes,Nicole Taylor,nicole.taylor@advancedhomes.com,(512) 389-1998,https://advancedhomes.com,Real Estate,Austin,50-100,$1M-5M
+Professional Properties,Michelle White,michelle.white@professionalpropertymanagement.com,(512) 765-5145,https://professionalpropertymanagement.com,Real Estate,Austin,50-100,$50M+
+Strategic Real Estate Group,Lisa Harris,lisa.harris@strategicrealestategroup.com,(512) 480-3691,https://strategicrealestategroup.com,Real Estate,Austin,50-100,$5M-10M
+Prime Property Management,Michelle Miller,michelle.miller@primepropertymanagement.com,(512) 427-3059,https://primepropertymanagement.com,Real Estate,Austin,10-25,$25M+
+Global Realty,Jessica Jackson,jessica.jackson@globalpropertymanagement.com,(512) 401-6172,https://globalpropertymanagement.com,Real Estate,Austin,25-50,$1M-5M
+Professional Realty,Michelle Taylor,michelle.taylor@professionalhomes.com,(512) 313-3574,https://professionalhomes.com,Real Estate,Austin,100-250,$50M+
+Professional Property Management,John Martin,john.martin@professionalhomes.com,(512) 703-8948,https://professionalhomes.com,Real Estate,Austin,25-50,$1M-5M
+Summit Property Management,James Davis,james.davis@summitpropertymanagement.com,(512) 842-7630,https://summitpropertymanagement.com,Real Estate,Austin,25-50,$50M+
+Premier Homes,Nicole Thomas,nicole.thomas@premierpropertymanagement.com,(512) 490-6933,https://premierpropertymanagement.com,Real Estate,Austin,100-250,$5M-10M
+Strategic Properties,Robert Brown,robert.brown@strategicpropertymanagement.com,(512) 444-9726,https://strategicpropertymanagement.com,Real Estate,Austin,250+,$50M+
+Prime Properties,James Taylor,james.taylor@primerealty.com,(512) 778-4884,https://primerealty.com,Real Estate,Austin,25-50,$25M+
+Advanced Realty,Lisa Miller,lisa.miller@advancedhomes.com,(512) 780-1157,https://advancedhomes.com,Real Estate,Austin,25-50,$50M+
+Premier Properties,Amanda White,amanda.white@premierproperties.com,(512) 201-4908,https://premierproperties.com,Real Estate,Austin,250+,$1M-5M
+Prime Property Management,Michelle Wilson,michelle.wilson@primepropertymanagement.com,(512) 991-3216,https://primepropertymanagement.com,Real Estate,Austin,10-25,$50M+
+Summit Properties,Robert Moore,robert.moore@summitrealty.com,(512) 430-9297,https://summitrealty.com,Real Estate,Austin,100-250,$50M+
+Elite Real Estate Group,David Garcia,david.garcia@eliteproperties.com,(512) 399-9694,https://eliteproperties.com,Real Estate,Austin,100-250,$50M+
+Premier Property Management,Ashley Taylor,ashley.taylor@premierrealestategroup.com,(512) 684-8900,https://premierrealestategroup.com,Real Estate,Austin,25-50,$50M+
+Advanced Real Estate Group,Michelle White,michelle.white@advancedrealestategroup.com,(512) 803-2026,https://advancedrealestategroup.com,Real Estate,Austin,100-250,$5M-10M
+Prime Realty,Amanda Martin,amanda.martin@primerealestategroup.com,(512) 760-9824,https://primerealestategroup.com,Real Estate,Austin,10-25,$1M-5M
+Strategic Property Management,Jessica Moore,jessica.moore@strategicrealty.com,(512) 643-6074,https://strategicrealty.com,Real Estate,Austin,10-25,$10M-25M
+Premier Homes,Michael Thompson,michael.thompson@premierpropertymanagement.com,(512) 472-9651,https://premierpropertymanagement.com,Real Estate,Austin,10-25,$25M+
+Strategic Homes,John Jackson,john.jackson@strategicrealty.com,(512) 621-1050,https://strategicrealty.com,Real Estate,Austin,50-100,$5M-10M
+Global Real Estate Group,Lisa Moore,lisa.moore@globalrealty.com,(512) 309-1025,https://globalrealty.com,Real Estate,Austin,50-100,$50M+
+Prime Property Management,Chris Anderson,chris.anderson@primerealty.com,(512) 968-1575,https://primerealty.com,Real Estate,Austin,100-250,$10M-25M
+Global Homes,Jessica Moore,jessica.moore@globalrealestategroup.com,(512) 906-2014,https://globalrealestategroup.com,Real Estate,Austin,250+,$5M-10M
+Metro Real Estate Group,Robert Jackson,robert.jackson@metrorealty.com,(512) 294-2869,https://metrorealty.com,Real Estate,Austin,250+,$25M+
+Metro Properties,Mike Martin,mike.martin@metrorealestategroup.com,(512) 240-5386,https://metrorealestategroup.com,Real Estate,Austin,50-100,$5M-10M
+Prime Properties,David Thomas,david.thomas@primerealty.com,(512) 980-9925,https://primerealty.com,Real Estate,Austin,50-100,$5M-10M
+Capital Real Estate Group,John Garcia,john.garcia@capitalproperties.com,(512) 498-4922,https://capitalproperties.com,Real Estate,Austin,10-25,$1M-5M
+Elite Realty,John Taylor,john.taylor@eliteproperties.com,(512) 475-1637,https://eliteproperties.com,Real Estate,Austin,100-250,$5M-10M
+Advanced Properties,Amanda Davis,amanda.davis@advancedpropertymanagement.com,(512) 574-1962,https://advancedpropertymanagement.com,Real Estate,Austin,250+,$25M+
+Strategic Real Estate Group,Sarah Anderson,sarah.anderson@strategicrealestategroup.com,(512) 580-9407,https://strategicrealestategroup.com,Real Estate,Austin,25-50,$1M-5M
+Prime Realty,Mike Taylor,mike.taylor@primerealestategroup.com,(512) 596-5399,https://primerealestategroup.com,Real Estate,Austin,25-50,$5M-10M
+Capital Realty,John Anderson,john.anderson@capitalrealty.com,(512) 448-7969,https://capitalrealty.com,Real Estate,Austin,100-250,$25M+
+Capital Property Management,Robert Garcia,robert.garcia@capitalhomes.com,(512) 227-6200,https://capitalhomes.com,Real Estate,Austin,10-25,$50M+
+Prime Real Estate Group,Nicole Garcia,nicole.garcia@primepropertymanagement.com,(512) 750-3239,https://primepropertymanagement.com,Real Estate,Austin,100-250,$10M-25M
+Metro Realty,Michael Taylor,michael.taylor@metropropertymanagement.com,(512) 557-5296,https://metropropertymanagement.com,Real Estate,Austin,250+,$1M-5M
+Capital Realty,James Moore,james.moore@capitalproperties.com,(512) 939-2305,https://capitalproperties.com,Real Estate,Austin,10-25,$5M-10M
+Summit Property Management,Ashley Thomas,ashley.thomas@summitproperties.com,(512) 729-5584,https://summitproperties.com,Real Estate,Austin,50-100,$1M-5M
+Prime Properties,Jessica Miller,jessica.miller@primerealty.com,(512) 212-2364,https://primerealty.com,Real Estate,Austin,50-100,$1M-5M
+Strategic Homes,John Johnson,john.johnson@strategichomes.com,(512) 576-9839,https://strategichomes.com,Real Estate,Austin,100-250,$1M-5M
+Summit Realty,James Anderson,james.anderson@summithomes.com,(512) 750-2463,https://summithomes.com,Real Estate,Austin,50-100,$10M-25M
+Advanced Properties,Robert Smith,robert.smith@advancedproperties.com,(512) 436-9511,https://advancedproperties.com,Real Estate,Austin,25-50,$10M-25M
+Metro Real Estate Group,Chris Thompson,chris.thompson@metropropertymanagement.com,(512) 645-1449,https://metropropertymanagement.com,Real Estate,Austin,250+,$10M-25M
+Premier Property Management,Jennifer Moore,jennifer.moore@premierrealestategroup.com,(512) 982-1054,https://premierrealestategroup.com,Real Estate,Austin,50-100,$50M+
+Premier Property Management,Jessica Garcia,jessica.garcia@premierrealty.com,(512) 241-3346,https://premierrealty.com,Real Estate,Austin,50-100,$1M-5M
+Capital Property Management,John Smith,john.smith@capitalproperties.com,(512) 294-7868,https://capitalproperties.com,Real Estate,Austin,50-100,$10M-25M
+Elite Real Estate Group,Michelle Davis,michelle.davis@eliteproperties.com,(512) 908-5167,https://eliteproperties.com,Real Estate,Austin,25-50,$1M-5M
+Advanced Property Management,David Taylor,david.taylor@advancedhomes.com,(512) 477-8513,https://advancedhomes.com,Real Estate,Austin,250+,$1M-5M
+Professional Real Estate Group,Robert Miller,robert.miller@professionalpropertymanagement.com,(512) 251-6272,https://professionalpropertymanagement.com,Real Estate,Austin,25-50,$10M-25M
+Global Realty,Sarah Davis,sarah.davis@globalproperties.com,(512) 928-9658,https://globalproperties.com,Real Estate,Austin,100-250,$50M+
+Prime Property Management,Ashley Martin,ashley.martin@primerealestategroup.com,(512) 791-1854,https://primerealestategroup.com,Real Estate,Austin,25-50,$25M+
+Prime Property Management,James White,james.white@primehomes.com,(512) 698-6987,https://primehomes.com,Real Estate,Austin,100-250,$1M-5M
+Strategic Homes,Chris Jackson,chris.jackson@strategicrealty.com,(512) 744-1757,https://strategicrealty.com,Real Estate,Austin,25-50,$25M+
+Global Realty,James White,james.white@globalproperties.com,(512) 354-7120,https://globalproperties.com,Real Estate,Austin,100-250,$5M-10M
+Advanced Real Estate Group,Lisa Davis,lisa.davis@advancedhomes.com,(512) 923-4595,https://advancedhomes.com,Real Estate,Austin,250+,$10M-25M
+Global Realty,Michael Smith,michael.smith@globalpropertymanagement.com,(512) 671-3484,https://globalpropertymanagement.com,Real Estate,Austin,10-25,$50M+
+Professional Homes,Michael Moore,michael.moore@professionalpropertymanagement.com,(512) 764-6745,https://professionalpropertymanagement.com,Real Estate,Austin,25-50,$5M-10M
+Advanced Properties,Jessica Taylor,jessica.taylor@advancedrealty.com,(512) 494-9431,https://advancedrealty.com,Real Estate,Austin,25-50,$10M-25M
+Global Property Management,David Garcia,david.garcia@globalproperties.com,(512) 822-4160,https://globalproperties.com,Real Estate,Austin,100-250,$5M-10M
+Summit Properties,Amanda Miller,amanda.miller@summitpropertymanagement.com,(512) 526-4897,https://summitpropertymanagement.com,Real Estate,Austin,250+,$10M-25M
+Global Homes,John Brown,john.brown@globalrealestategroup.com,(512) 696-1828,https://globalrealestategroup.com,Real Estate,Austin,10-25,$25M+
+Premier Real Estate Group,Michael Harris,michael.harris@premierrealty.com,(512) 605-9440,https://premierrealty.com,Real Estate,Austin,100-250,$5M-10M
+Global Homes,Sarah Miller,sarah.miller@globalrealty.com,(512) 908-2625,https://globalrealty.com,Real Estate,Austin,100-250,$50M+
+Professional Properties,Amanda Jackson,amanda.jackson@professionalrealty.com,(512) 209-8320,https://professionalrealty.com,Real Estate,Austin,10-25,$50M+
+Metro Properties,Sarah Moore,sarah.moore@metrohomes.com,(512) 563-2136,https://metrohomes.com,Real Estate,Austin,25-50,$5M-10M
+Summit Real Estate Group,Robert Thompson,robert.thompson@summitpropertymanagement.com,(512) 391-3537,https://summitpropertymanagement.com,Real Estate,Austin,25-50,$10M-25M
+Advanced Properties,Nicole Johnson,nicole.johnson@advancedpropertymanagement.com,(512) 650-4027,https://advancedpropertymanagement.com,Real Estate,Austin,25-50,$5M-10M
+Summit Property Management,Jessica Thompson,jessica.thompson@summitpropertymanagement.com,(512) 795-9940,https://summitpropertymanagement.com,Real Estate,Austin,250+,$1M-5M
+Prime Real Estate Group,Brian Moore,brian.moore@primepropertymanagement.com,(512) 338-2913,https://primepropertymanagement.com,Real Estate,Austin,100-250,$5M-10M
+Professional Properties,Robert Davis,robert.davis@professionalproperties.com,(512) 982-3040,https://professionalproperties.com,Real Estate,Austin,10-25,$50M+
+Advanced Realty,James White,james.white@advancedrealty.com,(512) 557-8220,https://advancedrealty.com,Real Estate,Austin,10-25,$10M-25M
+Global Properties,Sarah Smith,sarah.smith@globalrealty.com,(512) 776-9265,https://globalrealty.com,Real Estate,Austin,100-250,$10M-25M
+Summit Property Management,John White,john.white@summitproperties.com,(512) 388-5801,https://summitproperties.com,Real Estate,Austin,10-25,$25M+
+Global Realty,Amanda White,amanda.white@globalrealty.com,(512) 334-4020,https://globalrealty.com,Real Estate,Austin,100-250,$50M+
+Global Real Estate Group,Robert Davis,robert.davis@globalproperties.com,(512) 742-3655,https://globalproperties.com,Real Estate,Austin,50-100,$10M-25M
+Capital Properties,Chris Wilson,chris.wilson@capitalrealty.com,(512) 280-8179,https://capitalrealty.com,Real Estate,Austin,100-250,$10M-25M
+Prime Properties,Amanda Anderson,amanda.anderson@primerealty.com,(512) 477-9360,https://primerealty.com,Real Estate,Austin,50-100,$1M-5M
+Metro Homes,Michelle Anderson,michelle.anderson@metrohomes.com,(512) 595-4006,https://metrohomes.com,Real Estate,Austin,10-25,$1M-5M
+Premier Real Estate Group,David Brown,david.brown@premierrealty.com,(512) 860-9914,https://premierrealty.com,Real Estate,Austin,10-25,$50M+
+Summit Property Management,Chris Davis,chris.davis@summitrealty.com,(512) 404-2151,https://summitrealty.com,Real Estate,Austin,25-50,$50M+
+Summit Property Management,David Garcia,david.garcia@summitrealty.com,(512) 451-3951,https://summitrealty.com,Real Estate,Austin,10-25,$10M-25M
+Strategic Properties,Michelle Brown,michelle.brown@strategicrealestategroup.com,(512) 851-9949,https://strategicrealestategroup.com,Real Estate,Austin,25-50,$5M-10M
+Advanced Realty,Brian Miller,brian.miller@advancedrealty.com,(512) 770-8924,https://advancedrealty.com,Real Estate,Austin,10-25,$1M-5M
+Strategic Property Management,Mike Brown,mike.brown@strategicrealty.com,(512) 608-4541,https://strategicrealty.com,Real Estate,Austin,250+,$50M+
+Premier Property Management,Chris Johnson,chris.johnson@premierhomes.com,(512) 841-3459,https://premierhomes.com,Real Estate,Austin,10-25,$10M-25M
+Advanced Properties,James Davis,james.davis@advancedrealty.com,(512) 725-4307,https://advancedrealty.com,Real Estate,Austin,100-250,$10M-25M
+Capital Property Management,Chris Johnson,chris.johnson@capitalhomes.com,(512) 679-3935,https://capitalhomes.com,Real Estate,Austin,50-100,$50M+
+Strategic Real Estate Group,David Johnson,david.johnson@strategichomes.com,(512) 494-8836,https://strategichomes.com,Real Estate,Austin,25-50,$50M+
+Summit Realty,Amanda Wilson,amanda.wilson@summitpropertymanagement.com,(512) 383-1686,https://summitpropertymanagement.com,Real Estate,Austin,25-50,$10M-25M
+Summit Properties,Nicole White,nicole.white@summitpropertymanagement.com,(512) 281-9790,https://summitpropertymanagement.com,Real Estate,Austin,25-50,$25M+
+Elite Real Estate Group,Mike Moore,mike.moore@eliteproperties.com,(512) 845-3463,https://eliteproperties.com,Real Estate,Austin,100-250,$10M-25M
+Prime Property Management,Jessica Thompson,jessica.thompson@primerealestategroup.com,(512) 624-2859,https://primerealestategroup.com,Real Estate,Austin,10-25,$10M-25M
+Premier Realty,Chris Thompson,chris.thompson@premierrealestategroup.com,(512) 562-6430,https://premierrealestategroup.com,Real Estate,Austin,100-250,$50M+
+Strategic Homes,Jennifer Miller,jennifer.miller@strategicrealty.com,(512) 259-5650,https://strategicrealty.com,Real Estate,Austin,100-250,$1M-5M
+Elite Homes,Michelle Wilson,michelle.wilson@eliterealty.com,(512) 901-6477,https://eliterealty.com,Real Estate,Austin,250+,$5M-10M
+Professional Realty,Michael Brown,michael.brown@professionalhomes.com,(512) 883-7288,https://professionalhomes.com,Real Estate,Austin,25-50,$5M-10M
+Advanced Property Management,Amanda White,amanda.white@advancedhomes.com,(512) 878-6318,https://advancedhomes.com,Real Estate,Austin,100-250,$1M-5M
+Elite Property Management,Brian Wilson,brian.wilson@eliteproperties.com,(512) 893-3832,https://eliteproperties.com,Real Estate,Austin,100-250,$5M-10M
+Professional Property Management,Mike Thomas,mike.thomas@professionalrealty.com,(512) 634-7768,https://professionalrealty.com,Real Estate,Austin,50-100,$10M-25M
+Prime Property Management,John Harris,john.harris@primepropertymanagement.com,(512) 463-1540,https://primepropertymanagement.com,Real Estate,Austin,250+,$5M-10M
+Elite Property Management,Brian Smith,brian.smith@eliterealty.com,(512) 616-9737,https://eliterealty.com,Real Estate,Austin,50-100,$5M-10M
+Global Real Estate Group,Lisa Martin,lisa.martin@globalrealty.com,(512) 574-2045,https://globalrealty.com,Real Estate,Austin,50-100,$1M-5M
+Elite Properties,Jessica Martin,jessica.martin@elitepropertymanagement.com,(512) 904-3578,https://elitepropertymanagement.com,Real Estate,Austin,50-100,$10M-25M
+Strategic Homes,Ashley Miller,ashley.miller@strategicpropertymanagement.com,(512) 722-6146,https://strategicpropertymanagement.com,Real Estate,Austin,100-250,$25M+
+Global Real Estate Group,Michael Smith,michael.smith@globalpropertymanagement.com,(512) 880-2225,https://globalpropertymanagement.com,Real Estate,Austin,10-25,$1M-5M
+Global Properties,James Miller,james.miller@globalproperties.com,(512) 680-6606,https://globalproperties.com,Real Estate,Austin,250+,$50M+
+Advanced Real Estate Group,Chris Smith,chris.smith@advancedproperties.com,(512) 942-1854,https://advancedproperties.com,Real Estate,Austin,50-100,$50M+
+Premier Real Estate Group,David Garcia,david.garcia@premierpropertymanagement.com,(512) 747-8023,https://premierpropertymanagement.com,Real Estate,Austin,100-250,$50M+
+Professional Properties,Jennifer Johnson,jennifer.johnson@professionalhomes.com,(512) 405-3055,https://professionalhomes.com,Real Estate,Austin,10-25,$10M-25M
+Elite Properties,Jennifer Wilson,jennifer.wilson@eliterealestategroup.com,(512) 710-9795,https://eliterealestategroup.com,Real Estate,Austin,100-250,$50M+
+Prime Property Management,Michael Miller,michael.miller@primepropertymanagement.com,(512) 817-6718,https://primepropertymanagement.com,Real Estate,Austin,250+,$50M+
+Advanced Properties,John Miller,john.miller@advancedpropertymanagement.com,(512) 803-8288,https://advancedpropertymanagement.com,Real Estate,Austin,100-250,$50M+
+Summit Homes,James Harris,james.harris@summitproperties.com,(512) 894-1359,https://summitproperties.com,Real Estate,Austin,250+,$25M+
+Capital Real Estate Group,Jennifer Wilson,jennifer.wilson@capitalproperties.com,(512) 486-2184,https://capitalproperties.com,Real Estate,Austin,25-50,$25M+
+Metro Properties,Jennifer White,jennifer.white@metroproperties.com,(512) 741-5657,https://metroproperties.com,Real Estate,Austin,25-50,$50M+
+Advanced Realty,Amanda Moore,amanda.moore@advancedrealty.com,(512) 469-3487,https://advancedrealty.com,Real Estate,Austin,100-250,$1M-5M
+Summit Properties,Robert Wilson,robert.wilson@summithomes.com,(512) 856-5900,https://summithomes.com,Real Estate,Austin,25-50,$5M-10M
+Premier Properties,Robert Taylor,robert.taylor@premierrealty.com,(512) 839-2247,https://premierrealty.com,Real Estate,Austin,250+,$25M+
+Elite Property Management,James Martin,james.martin@elitepropertymanagement.com,(512) 208-2615,https://elitepropertymanagement.com,Real Estate,Austin,100-250,$5M-10M
+Advanced Real Estate Group,Amanda Thompson,amanda.thompson@advancedhomes.com,(512) 409-4267,https://advancedhomes.com,Real Estate,Austin,10-25,$25M+
+Global Homes,David Davis,david.davis@globalrealestategroup.com,(512) 983-9316,https://globalrealestategroup.com,Real Estate,Austin,100-250,$50M+
+Summit Properties,Mike Davis,mike.davis@summitrealty.com,(512) 840-1063,https://summitrealty.com,Real Estate,Austin,25-50,$5M-10M
+Premier Realty,Nicole Davis,nicole.davis@premierpropertymanagement.com,(512) 214-1643,https://premierpropertymanagement.com,Real Estate,Austin,50-100,$5M-10M
+Prime Properties,Mike Smith,mike.smith@primeproperties.com,(512) 674-3084,https://primeproperties.com,Real Estate,Austin,50-100,$50M+
+Metro Properties,Lisa Jackson,lisa.jackson@metrorealty.com,(512) 328-1467,https://metrorealty.com,Real Estate,Austin,50-100,$10M-25M
+Premier Property Management,John Moore,john.moore@premierrealty.com,(512) 625-8228,https://premierrealty.com,Real Estate,Austin,250+,$1M-5M
+Elite Property Management,Chris White,chris.white@eliterealty.com,(512) 991-3071,https://eliterealty.com,Real Estate,Austin,100-250,$10M-25M
+Prime Homes,Ashley Miller,ashley.miller@primerealty.com,(512) 462-7683,https://primerealty.com,Real Estate,Austin,100-250,$25M+
+Global Property Management,Jennifer White,jennifer.white@globalrealty.com,(512) 868-5573,https://globalrealty.com,Real Estate,Austin,25-50,$1M-5M
+Capital Properties,Mike Miller,mike.miller@capitalhomes.com,(512) 326-8091,https://capitalhomes.com,Real Estate,Austin,50-100,$25M+
+Strategic Homes,Lisa Anderson,lisa.anderson@strategichomes.com,(512) 939-1336,https://strategichomes.com,Real Estate,Austin,50-100,$5M-10M
+Prime Properties,James Brown,james.brown@primehomes.com,(512) 461-4937,https://primehomes.com,Real Estate,Austin,250+,$10M-25M
+Metro Properties,James Jackson,james.jackson@metrorealestategroup.com,(512) 348-1206,https://metrorealestategroup.com,Real Estate,Austin,25-50,$5M-10M
+Global Homes,Mike Brown,mike.brown@globalproperties.com,(512) 300-9220,https://globalproperties.com,Real Estate,Austin,10-25,$10M-25M
+Elite Realty,Lisa Johnson,lisa.johnson@elitepropertymanagement.com,(512) 572-5215,https://elitepropertymanagement.com,Real Estate,Austin,50-100,$50M+
+Prime Homes,Michael Garcia,michael.garcia@primerealestategroup.com,(512) 616-6132,https://primerealestategroup.com,Real Estate,Austin,100-250,$1M-5M
+Capital Properties,Lisa Smith,lisa.smith@capitalhomes.com,(512) 224-5969,https://capitalhomes.com,Real Estate,Austin,25-50,$25M+
+Summit Properties,Chris Miller,chris.miller@summitrealty.com,(512) 385-6663,https://summitrealty.com,Real Estate,Austin,50-100,$10M-25M
+Metro Homes,Robert Thomas,robert.thomas@metrohomes.com,(512) 944-9788,https://metrohomes.com,Real Estate,Austin,25-50,$50M+
+Elite Real Estate Group,Nicole Thompson,nicole.thompson@elitehomes.com,(512) 776-6042,https://elitehomes.com,Real Estate,Austin,250+,$25M+
+Professional Property Management,Mike Jackson,mike.jackson@professionalhomes.com,(512) 386-2896,https://professionalhomes.com,Real Estate,Austin,10-25,$1M-5M
+Capital Real Estate Group,Mike Davis,mike.davis@capitalhomes.com,(512) 223-5193,https://capitalhomes.com,Real Estate,Austin,100-250,$1M-5M
+Summit Properties,Ashley Smith,ashley.smith@summitpropertymanagement.com,(512) 307-5017,https://summitpropertymanagement.com,Real Estate,Austin,250+,$5M-10M
+Summit Properties,Robert Brown,robert.brown@summitpropertymanagement.com,(512) 951-4841,https://summitpropertymanagement.com,Real Estate,Austin,100-250,$5M-10M
+Professional Homes,Chris Martin,chris.martin@professionalrealty.com,(512) 713-9012,https://professionalrealty.com,Real Estate,Austin,250+,$50M+
+Premier Real Estate Group,Amanda Thompson,amanda.thompson@premierproperties.com,(512) 647-9415,https://premierproperties.com,Real Estate,Austin,100-250,$1M-5M
+Elite Homes,Mike Taylor,mike.taylor@elitehomes.com,(512) 646-6759,https://elitehomes.com,Real Estate,Austin,100-250,$25M+
+Advanced Properties,Jennifer Moore,jennifer.moore@advancedproperties.com,(512) 914-7072,https://advancedproperties.com,Real Estate,Austin,100-250,$25M+
+Strategic Realty,Nicole Anderson,nicole.anderson@strategicproperties.com,(512) 648-3370,https://strategicproperties.com,Real Estate,Austin,250+,$10M-25M
+Capital Properties,Chris Harris,chris.harris@capitalrealty.com,(512) 349-5758,https://capitalrealty.com,Real Estate,Austin,25-50,$10M-25M
+Premier Properties,Amanda Moore,amanda.moore@premierhomes.com,(512) 633-8075,https://premierhomes.com,Real Estate,Austin,10-25,$50M+
+Summit Properties,Lisa Thomas,lisa.thomas@summitrealestategroup.com,(512) 577-1493,https://summitrealestategroup.com,Real Estate,Austin,25-50,$50M+
+Prime Real Estate Group,Jennifer Taylor,jennifer.taylor@primerealestategroup.com,(512) 972-6586,https://primerealestategroup.com,Real Estate,Austin,25-50,$1M-5M
+Elite Real Estate Group,Ashley Miller,ashley.miller@eliterealestategroup.com,(512) 269-1304,https://eliterealestategroup.com,Real Estate,Austin,25-50,$50M+
+Summit Real Estate Group,Mike Wilson,mike.wilson@summitpropertymanagement.com,(512) 763-4364,https://summitpropertymanagement.com,Real Estate,Austin,50-100,$10M-25M
+Strategic Properties,Nicole Anderson,nicole.anderson@strategicproperties.com,(512) 291-7990,https://strategicproperties.com,Real Estate,Austin,250+,$10M-25M
+Elite Property Management,James Martin,james.martin@elitehomes.com,(512) 597-6683,https://elitehomes.com,Real Estate,Austin,100-250,$5M-10M

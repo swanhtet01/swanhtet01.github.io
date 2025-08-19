@@ -1,0 +1,9 @@
+{
+  "sync_enabled": true,
+  "sync_interval": 300,
+  "folders": {
+    "agent_outputs": "SuperMega_Agent_Outputs",
+    "reports": "SuperMega_Reports",
+    "dashboards": "SuperMega_Dashboards"
+  }
+}

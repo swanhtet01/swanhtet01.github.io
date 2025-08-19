@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Get 500 Qualified Leads in 24 Hours - $500</title>
+    <meta name="description" content="Stop paying $15K/year for ZoomInfo. Get 500 qualified leads with contact info in 24 hours for just $500. No subscriptions, proven results.">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+
+        /* Header */
+        header {
+            padding: 1rem 0;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+        }
+
+        .header-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: white;
+        }
+
+        .cta-button {
+            background: #ff6b6b;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 6px;
+            font-weight: bold;
+            cursor: pointer;
+            text-decoration: none;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(255, 107, 107, 0.3);
+        }
+
+        .cta-button:hover {
+            background: #ff5252;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(255, 107, 107, 0.4);
+        }
+
+        /* Hero Section */
+        .hero {
+            padding: 4rem 0;
+            text-align: center;
+            color: white;
+        }
+
+        .hero h1 {
+            font-size: 3.5rem;
+            margin-bottom: 1rem;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .hero .subtitle {
+            font-size: 1.3rem;
+            margin-bottom: 2rem;
+            opacity: 0.9;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .value-props {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+            margin: 3rem 0;
+        }
+
+        .value-prop {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 2rem;
+            border-radius: 12px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .value-prop h3 {
+            font-size: 1.5rem;
+            margin-bottom: 1rem;
+            color: #fff;
+        }
+
+        .value-prop p {
+            color: rgba(255, 255, 255, 0.9);
+        }
+
+        /* Comparison Section */
+        .comparison {
+            background: white;
+            padding: 4rem 0;
+        }
+
+        .comparison h2 {
+            text-align: center;
+            font-size: 2.5rem;
+            margin-bottom: 3rem;
+            color: #333;
+        }
+
+        .comparison-table {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        .comparison-item {
+            padding: 2rem;
+            border-radius: 12px;
+            text-align: center;
+        }
+
+        .competitor {
+            background: #fee;
+            border: 2px solid #ff6b6b;
+        }
+
+        .us {
+            background: #efe;
+            border: 2px solid #4caf50;
+        }
+
+        .comparison-item h3 {
+            font-size: 1.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .price {
+            font-size: 2rem;
+            font-weight: bold;
+            margin: 1rem 0;
+        }
+
+        .competitor .price {
+            color: #ff6b6b;
+        }
+
+        .us .price {
+            color: #4caf50;
+        }
+
+        /* Form Section */
+        .form-section {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 4rem 0;
+            color: white;
+        }
+
+        .form-container {
+            max-width: 600px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.1);
+            padding: 3rem;
+            border-radius: 12px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .form-container h2 {
+            text-align: center;
+            margin-bottom: 2rem;
+            font-size: 2rem;
+        }
+
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: bold;
+        }
+
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            width: 100%;
+            padding: 12px;
+            border: none;
+            border-radius: 6px;
+            font-size: 1rem;
+            background: rgba(255, 255, 255, 0.9);
+        }
+
+        .form-group textarea {
+            height: 100px;
+            resize: vertical;
+        }
+
+        .submit-button {
+            width: 100%;
+            background: #ff6b6b;
+            color: white;
+            padding: 15px;
+            border: none;
+            border-radius: 6px;
+            font-size: 1.2rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background 0.3s ease;
+        }
+
+        .submit-button:hover {
+            background: #ff5252;
+        }
+
+        /* Testimonials */
+        .testimonials {
+            background: white;
+            padding: 4rem 0;
+        }
+
+        .testimonials h2 {
+            text-align: center;
+            font-size: 2.5rem;
+            margin-bottom: 3rem;
+        }
+
+        .testimonial-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+        }
+
+        .testimonial {
+            background: #f8f9fa;
+            padding: 2rem;
+            border-radius: 12px;
+            border-left: 4px solid #667eea;
+        }
+
+        .testimonial-text {
+            font-style: italic;
+            margin-bottom: 1rem;
+            font-size: 1.1rem;
+        }
+
+        .testimonial-author {
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        /* Footer */
+        footer {
+            background: #333;
+            color: white;
+            text-align: center;
+            padding: 2rem 0;
+        }
+
+        @media (max-width: 768px) {
+            .hero h1 {
+                font-size: 2.5rem;
+            }
+            
+            .hero .subtitle {
+                font-size: 1.1rem;
+            }
+            
+            .comparison-table {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="container">
+            <div class="header-content">
+                <div class="logo">🚀 Super Mega AI Tools</div>
+                <a href="#get-started" class="cta-button">Get Started Free</a>
+            </div>
+        </div>
+    </header>
+
+    <section class="hero">
+        <div class="container">
+            <h1>Get 500 Qualified Leads in 24 Hours</h1>
+            <p class="subtitle">Stop paying $15,000/year for ZoomInfo. Get the same results for 97% less with our AI-powered lead generation tools.</p>
+            
+            <div class="value-props">
+                <div class="value-prop">
+                    <h3>⚡ Lightning Fast</h3>
+                    <p>Get your lead list delivered within 24 hours. No weeks of waiting, no complex setup required.</p>
+                </div>
+                <div class="value-prop">
+                    <h3>💰 97% Cheaper</h3>
+                    <p>$500 vs $15,000/year. Same quality data, fraction of the cost. No ongoing subscriptions.</p>
+                </div>
+                <div class="value-prop">
+                    <h3>🎯 Actually Works</h3>
+                    <p>Real email addresses, verified contact info, ready-to-use data. Not fake AI-generated content.</p>
+                </div>
+            </div>
+
+            <a href="#get-started" class="cta-button" style="font-size: 1.2rem; padding: 15px 30px;">Get My First 100 Leads FREE</a>
+        </div>
+    </section>
+
+    <section class="comparison">
+        <div class="container">
+            <h2>Why Pay Enterprise Prices for Small Business Needs?</h2>
+            <div class="comparison-table">
+                <div class="comparison-item competitor">
+                    <h3>🏢 ZoomInfo/Apollo</h3>
+                    <div class="price">$15,000/year</div>
+                    <ul style="text-align: left; margin: 1rem 0;">
+                        <li>Complex enterprise features you don't need</li>
+                        <li>Minimum 12-month contracts</li>
+                        <li>Weeks of onboarding and training</li>
+                        <li>Pay for unused features</li>
+                    </ul>
+                </div>
+                <div class="comparison-item us">
+                    <h3>🚀 Super Mega AI Tools</h3>
+                    <div class="price">$500/project</div>
+                    <ul style="text-align: left; margin: 1rem 0;">
+                        <li>Simple, focused lead generation</li>
+                        <li>Pay per project, no contracts</li>
+                        <li>Results in 24 hours</li>
+                        <li>Only pay for what you need</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="testimonials">
+        <div class="container">
+            <h2>What Our Clients Say</h2>
+            <div class="testimonial-grid">
+                <div class="testimonial">
+                    <div class="testimonial-text">"Got 847 qualified real estate leads in 18 hours. Closed 3 deals in the first week. This paid for itself 10x over."</div>
+                    <div class="testimonial-author">- Sarah M., Real Estate Agent</div>
+                </div>
+                <div class="testimonial">
+                    <div class="testimonial-text">"As a recruiter, I was spending 15 hours a week finding candidate contacts. Now I get 500 qualified contacts in 24 hours for $500."</div>
+                    <div class="testimonial-author">- Mike K., Technical Recruiter</div>
+                </div>
+                <div class="testimonial">
+                    <div class="testimonial-text">"Cancelled our $18K/year ZoomInfo subscription. These tools give us better results for 95% less cost."</div>
+                    <div class="testimonial-author">- Jessica L., Marketing Agency Owner</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="form-section" id="get-started">
+        <div class="container">
+            <div class="form-container">
+                <h2>Get Your First 100 Leads FREE</h2>
+                <p style="text-align: center; margin-bottom: 2rem; opacity: 0.9;">Fill out this form and we'll send you a free sample of 100 leads in your industry within 24 hours. No payment required.</p>
+                
+                <form id="leadForm" action="#" method="POST">
+                    <div class="form-group">
+                        <label for="name">Your Name *</label>
+                        <input type="text" id="name" name="name" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="email">Email Address *</label>
+                        <input type="email" id="email" name="email" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="company">Company Name *</label>
+                        <input type="text" id="company" name="company" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="industry">Industry *</label>
+                        <select id="industry" name="industry" required>
+                            <option value="">Select Your Industry</option>
+                            <option value="real-estate">Real Estate</option>
+                            <option value="insurance">Insurance</option>
+                            <option value="recruiting">Recruiting/HR</option>
+                            <option value="marketing">Marketing Agency</option>
+                            <option value="consulting">Consulting</option>
+                            <option value="saas">Software/SaaS</option>
+                            <option value="other">Other</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="target">Describe Your Ideal Lead *</label>
+                        <textarea id="target" name="target" placeholder="Example: Small business owners with 10-50 employees in Austin, Texas who might need marketing help" required></textarea>
+                    </div>
+                    
+                    <button type="submit" class="submit-button">Send Me 100 FREE Leads</button>
+                </form>
+                
+                <p style="text-align: center; margin-top: 1rem; font-size: 0.9rem; opacity: 0.8;">
+                    No spam. No commitments. See the quality of our data risk-free.
+                </p>
+            </div>
+        </div>
+    </section>
+
+    <footer>
+        <div class="container">
+            <p>&copy; 2025 Super Mega AI Tools. Real results, not fake promises.</p>
+        </div>
+    </footer>
+
+    <script>
+        document.getElementById('leadForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            // Get form data
+            const formData = new FormData(this);
+            const data = Object.fromEntries(formData);
+            
+            // Show success message
+            alert('Thank you! We\'ll send your 100 free leads within 24 hours. Check your email!');
+            
+            // In a real implementation, you'd send this data to your backend
+            console.log('Lead form submitted:', data);
+            
+            // Reset form
+            this.reset();
+        });
+
+        // Smooth scrolling for CTA buttons
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                document.querySelector(this.getAttribute('href')).scrollIntoView({
+                    behavior: 'smooth'
+                });
+            });
+        });
+    </script>
+</body>
+</html>

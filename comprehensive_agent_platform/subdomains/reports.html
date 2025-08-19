@@ -1,0 +1,44 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>SuperMega Reports</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body { font-family: Arial, sans-serif; margin: 0; padding: 20px; background: #f5f5f5; }
+        .container { max-width: 1200px; margin: 0 auto; }
+        .header { text-align: center; margin-bottom: 30px; }
+        .tools-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
+        .tool-card { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>SuperMega Reports</h1>
+            <p>Available at: <strong>reports.supermega.dev</strong></p>
+        </div>
+        
+        <div class="tools-grid">
+            <div class="tool-card">
+                <h3>🚀 Agent Management</h3>
+                <p>Manage and monitor all 300+ agents</p>
+                <button onclick="window.open('/agents')">Open Tool</button>
+            </div>
+            
+            <div class="tool-card">
+                <h3>📊 Real-time Dashboard</h3>
+                <p>Live metrics and performance monitoring</p>
+                <button onclick="window.open('/dashboard')">Open Tool</button>
+            </div>
+            
+            <div class="tool-card">
+                <h3>🛠️ Tool Inventory</h3>
+                <p>Browse all available tools and CLI commands</p>
+                <button onclick="window.open('/tools')">Open Tool</button>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

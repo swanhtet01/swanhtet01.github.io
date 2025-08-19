@@ -49,6 +49,7 @@ class CloudDeploymentManager:
         # Initialize AWS clients
         self.ec2 = boto3.client('ec2', region_name=self.aws_region)
         self.cloudwatch = boto3.client('cloudwatch', region_name=self.aws_region)
+        self.ecr = boto3.client('ecr', region_name=self.aws_region)  # Fix: Add ECR client
         
         # Use S3 for storage (free tier includes 5GB)
         self.s3 = boto3.client('s3', region_name=self.aws_region)
@@ -780,7 +781,240 @@ class CloudDeploymentManager:
             logger.error(f"❌ Failed to check deployment status: {e}")
             return {'status': 'error', 'error': str(e)}
     
-    def stop_deployment(self) -> bool:
+    def deploy_real_agents_to_aws(self):
+        """Deploy REAL autonomous agents to AWS ECS (actual working agents)"""
+        print("🚀 Deploying REAL WORKING AGENTS to AWS ECS...")
+        
+        # Real agents that actually work - no simulations
+        agents = [
+            {
+                'name': 'content-creator',
+                'port': 8510,
+                'file': 'content_creator_agent.py',
+                'image': f"autonomous-agents:content-creator"
+            },
+            {
+                'name': 'data-analyst', 
+                'port': 8511,
+                'file': 'data_analyst_agent.py',
+                'image': f"autonomous-agents:data-analyst"
+            },
+            {
+                'name': 'web-automation',
+                'port': 8512,
+                'file': 'web_automation_agent.py',
+                'image': f"autonomous-agents:web-automation"
+            },
+            {
+                'name': 'business-intelligence',
+                'port': 8513,
+                'file': 'business_intel_agent.py', 
+                'image': f"autonomous-agents:business-intelligence"
+            },
+            {
+                'name': 'quality-assurance',
+                'port': 8514,
+                'file': 'quality_assurance_agent.py',
+                'image': f"autonomous-agents:quality-assurance"
+            }
+        ]
+        
+        # Ensure ECR repository exists
+        repository_name = "autonomous-agents"
+        try:
+            self.ecr.create_repository(
+                repositoryName=repository_name,
+                imageScanningConfiguration={'scanOnPush': True},
+                encryptionConfiguration={'encryptionType': 'AES256'}
+            )
+            logger.info("✅ ECR repository created")
+        except self.ecr.exceptions.RepositoryAlreadyExistsException:
+            logger.info("✅ ECR repository already exists")
+        
+        deployed_services = []
+        
+        # Build and deploy each agent
+        for agent in agents:
+            try:
+                # Build Docker image for agent
+                print(f"🔨 Building Docker image for {agent['name']}...")
+                self.build_agent_docker_image(agent, repository_name)
+                
+                # Create ECS service for agent
+                print(f"🚀 Deploying {agent['name']} to ECS...")
+                service_result = self.create_agent_ecs_service(agent)
+                deployed_services.append(service_result)
+                print(f"✅ Deployed {agent['name']} service to AWS")
+                
+            except Exception as e:
+                print(f"❌ Failed to deploy {agent['name']}: {str(e)}")
+                logger.error(f"Failed to deploy {agent['name']}: {str(e)}")
+                continue
+        
+        return deployed_services
+    
+    def build_agent_docker_image(self, agent, repository_name):
+        """Build Docker image for real agent with all dependencies"""
+        dockerfile_content = f"""
+FROM python:3.9-slim
+
+WORKDIR /app
+
+# Install system dependencies for real agents
+RUN apt-get update && apt-get install -y \\
+    gcc \\
+    curl \\
+    wget \\
+    chromium \\
+    chromium-driver \\
+    ffmpeg \\
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy and install Python requirements
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Install additional real agent dependencies
+RUN pip install \\
+    streamlit \\
+    selenium \\
+    psutil \\
+    beautifulsoup4 \\
+    requests \\
+    pandas \\
+    numpy \\
+    matplotlib \\
+    seaborn \\
+    plotly \\
+    openai \\
+    anthropic \\
+    sqlalchemy \\
+    boto3
+
+# Copy agent file
+COPY {agent['file']} ./agent.py
+
+# Create startup script
+RUN echo '#!/bin/bash' > start.sh && \\
+    echo 'export CHROME_BIN=/usr/bin/chromium' >> start.sh && \\
+    echo 'export CHROMEDRIVER_PATH=/usr/bin/chromedriver' >> start.sh && \\
+    echo 'streamlit run agent.py --server.port={agent['port']} --server.address=0.0.0.0 --server.headless=true' >> start.sh && \\
+    chmod +x start.sh
+
+EXPOSE {agent['port']}
+
+CMD ["./start.sh"]
+"""
+        
+        # Write Dockerfile for this agent
+        dockerfile_path = f"Dockerfile.{agent['name']}"
+        with open(dockerfile_path, 'w') as f:
+            f.write(dockerfile_content)
+        
+        # Get ECR login
+        account_id = boto3.client('sts').get_caller_identity()['Account']
+        ecr_uri = f"{account_id}.dkr.ecr.{self.aws_region}.amazonaws.com"
+        
+        # Docker login to ECR
+        login_command = f"aws ecr get-login-password --region {self.aws_region} | docker login --username AWS --password-stdin {ecr_uri}"
+        subprocess.run(login_command, shell=True, check=True)
+        
+        # Build image
+        full_image_name = f"{ecr_uri}/{repository_name}:{agent['name']}"
+        build_cmd = f"docker build -f {dockerfile_path} -t {full_image_name} ."
+        subprocess.run(build_cmd, shell=True, check=True)
+        
+        # Push to ECR
+        push_cmd = f"docker push {full_image_name}"
+        subprocess.run(push_cmd, shell=True, check=True)
+        
+        # Clean up dockerfile
+        os.remove(dockerfile_path)
+        
+        print(f"✅ Built and pushed {agent['name']} image")
+    
+    def create_agent_ecs_service(self, agent):
+        """Create ECS service for individual agent"""
+        execution_role_arn = self.get_or_create_execution_role()
+        task_role_arn = self.get_or_create_task_role()
+        vpc_resources = self.get_or_create_vpc_resources()
+        
+        # Get ECR URI
+        account_id = boto3.client('sts').get_caller_identity()['Account']
+        ecr_uri = f"{account_id}.dkr.ecr.{self.aws_region}.amazonaws.com"
+        full_image_name = f"{ecr_uri}/autonomous-agents:{agent['name']}"
+        
+        # Register task definition for agent
+        task_definition = {
+            'family': f"autonomous-{agent['name']}-task",
+            'networkMode': 'awsvpc',
+            'requiresCompatibilities': ['FARGATE'],
+            'cpu': '512',
+            'memory': '1024',
+            'executionRoleArn': execution_role_arn,
+            'taskRoleArn': task_role_arn,
+            'containerDefinitions': [
+                {
+                    'name': f"{agent['name']}-container",
+                    'image': full_image_name,
+                    'essential': True,
+                    'portMappings': [
+                        {
+                            'containerPort': agent['port'],
+                            'protocol': 'tcp'
+                        }
+                    ],
+                    'environment': [
+                        {'name': 'AGENT_NAME', 'value': agent['name']},
+                        {'name': 'AGENT_PORT', 'value': str(agent['port'])},
+                        {'name': 'AWS_REGION', 'value': self.aws_region}
+                    ],
+                    'logConfiguration': {
+                        'logDriver': 'awslogs',
+                        'options': {
+                            'awslogs-group': f"/ecs/autonomous-{agent['name']}",
+                            'awslogs-region': self.aws_region,
+                            'awslogs-stream-prefix': 'ecs',
+                            'awslogs-create-group': 'true'
+                        }
+                    }
+                }
+            ]
+        }
+        
+        # Register task definition
+        task_response = self.ecs.register_task_definition(**task_definition)
+        task_arn = task_response['taskDefinition']['taskDefinitionArn']
+        
+        # Create service
+        service_name = f"autonomous-{agent['name']}-service"
+        service_response = self.ecs.create_service(
+            cluster=self.cluster_name,
+            serviceName=service_name,
+            taskDefinition=task_arn,
+            desiredCount=1,
+            launchType='FARGATE',
+            networkConfiguration={
+                'awsvpcConfiguration': {
+                    'subnets': vpc_resources['subnet_ids'][:2],
+                    'securityGroups': [vpc_resources['security_group_id']],
+                    'assignPublicIp': 'ENABLED'
+                }
+            },
+            tags=[
+                {'key': 'Project', 'value': 'AutonomousDevTeam'},
+                {'key': 'Agent', 'value': agent['name']},
+                {'key': 'Environment', 'value': 'Production'}
+            ]
+        )
+        
+        return {
+            'agent_name': agent['name'],
+            'service_name': service_name,
+            'service_arn': service_response['service']['serviceArn'],
+            'port': agent['port'],
+            'status': 'deployed'
+        }
         """Stop the AWS deployment"""
         try:
             logger.info("🛑 Stopping AWS deployment...")
@@ -812,7 +1046,7 @@ def main():
     import argparse
     
     parser = argparse.ArgumentParser(description="24/7 Cloud Deployment Manager")
-    parser.add_argument('action', choices=['deploy', 'status', 'stop', 'endpoints'], 
+    parser.add_argument('action', choices=['deploy', 'deploy-agents', 'status', 'stop', 'endpoints'], 
                        help="Action to perform")
     
     args = parser.parse_args()
@@ -821,6 +1055,10 @@ def main():
     
     if args.action == 'deploy':
         result = manager.deploy_to_aws()
+        print(json.dumps(result, indent=2))
+    elif args.action == 'deploy-agents':
+        print("🚀 DEPLOYING REAL AGENTS TO AWS - NO SIMULATIONS!")
+        result = manager.deploy_real_agents_to_aws()
         print(json.dumps(result, indent=2))
     elif args.action == 'status':
         status = manager.check_deployment_status()

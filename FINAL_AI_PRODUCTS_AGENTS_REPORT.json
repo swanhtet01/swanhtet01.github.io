@@ -1,0 +1,63 @@
+{
+  "timestamp": "2025-08-20T00:28:30.480587",
+  "test_summary": {
+    "success_rate": 100.0,
+    "ai_integration_rate": 100.0,
+    "production_ready": false,
+    "total_systems": 1,
+    "operational_systems": 1
+  },
+  "agent_results": {
+    "agents": {
+      "advanced_orchestrator_ai.py": {
+        "status": "OPERATIONAL",
+        "file_path": ".\\advanced_orchestrator_ai.py",
+        "classes": 1,
+        "functions": 16,
+        "ai_integration": true,
+        "async_capable": false,
+        "database_support": false,
+        "web_enabled": true,
+        "real_functionality": true,
+        "production_ready": true
+      }
+    },
+    "products": {},
+    "systems": {}
+  },
+  "functionality_results": {
+    "real_ai_tools": {
+      "instantiation": true,
+      "database_access": true,
+      "report_generation": true,
+      "production_ready": true
+    },
+    "databases": {
+      "real_data.db": {
+        "tables": 2,
+        "records": 26,
+        "operational": true
+      },
+      "autonomous_agents.db": {
+        "operational": false
+      },
+      "supermega_production.db": {
+        "operational": false
+      }
+    }
+  },
+  "top_systems": {
+    "advanced_orchestrator_ai.py": {
+      "status": "OPERATIONAL",
+      "file_path": ".\\advanced_orchestrator_ai.py",
+      "classes": 1,
+      "functions": 16,
+      "ai_integration": true,
+      "async_capable": false,
+      "database_support": false,
+      "web_enabled": true,
+      "real_functionality": true,
+      "production_ready": true
+    }
+  }
+}
