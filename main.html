@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Redirecting to Super Mega AI Work OS...</title>
+    <meta http-equiv="refresh" content="0; url=index.html">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <style>
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
+            color: white;
+            font-family: system-ui;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+        .loading {
+            text-align: center;
+        }
+        .spinner {
+            animation: spin 1s linear infinite;
+            font-size: 48px;
+            margin-bottom: 20px;
+        }
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+    </style>
+    <script>
+        setTimeout(() => {
+            window.location.href = 'index.html?v=' + Date.now();
+        }, 1000);
+    </script>
+</head>
+<body>
+    <div class="loading">
+        <div class="spinner">🎨</div>
+        <h1>Loading Super Mega AI Work OS...</h1>
+        <p>Creative Edition - Professional AI Tools</p>
+    </div>
+</body>
+</html>
