@@ -3,310 +3,891 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Super Mega AI Agents - Vertical AI That Works</title>
-    <meta name="description" content="Autonomous AI agents for social media, email marketing, and content creation. $97-$997/month.">
-    
+    <title>🎨 Super Mega AI Work OS - Creative Edition | Professional AI Creative Suite</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎨</text></svg>">
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        
-        body {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-            line-height: 1.6;
-            color: #333;
+        .glow-purple { box-shadow: 0 0 30px rgba(147, 51, 234, 0.3); }
+        .glow-blue { box-shadow: 0 0 30px rgba(59, 130, 246, 0.3); }
+        .glow-red { box-shadow: 0 0 30px rgba(239, 68, 68, 0.3); }
+        .glow-green { box-shadow: 0 0 30px rgba(34, 197, 94, 0.3); }
+        .tool-card { 
+            transition: all 0.3s ease; 
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
         }
-        
-        .hero {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            text-align: center;
-            padding: 2rem;
+        .tool-card:hover { transform: translateY(-5px); }
+        .status-dot { animation: pulse 2s infinite; }
+        .hero-bg { 
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
         }
-        
-        .hero-content {
-            max-width: 800px;
+        .glass-effect {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(15px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
         }
-        
-        .hero h1 {
-            font-size: clamp(2.5rem, 5vw, 4rem);
-            font-weight: 700;
-            margin-bottom: 1rem;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        .floating { animation: float 6s ease-in-out infinite; }
+        @keyframes float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-20px); }
         }
-        
-        .hero .subtitle {
-            font-size: clamp(1.2rem, 3vw, 1.5rem);
-            margin-bottom: 2rem;
-            opacity: 0.9;
+        @keyframes pulse-glow {
+            0%, 100% { box-shadow: 0 0 20px rgba(147, 51, 234, 0.7); }
+            50% { box-shadow: 0 0 40px rgba(118, 75, 162, 0.9); }
         }
-        
-        .cta-button {
-            background: #4CAF50;
-            color: white;
-            padding: 1rem 2rem;
-            font-size: 1.2rem;
-            font-weight: 600;
-            border: none;
-            border-radius: 50px;
-            cursor: pointer;
-            text-decoration: none;
-            display: inline-block;
-            transition: all 0.3s ease;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
-        }
-        
-        .cta-button:hover {
-            background: #45a049;
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(0,0,0,0.3);
-        }
-        
-        .features {
-            padding: 4rem 2rem;
-            max-width: 1200px;
-            margin: 0 auto;
-        }
-        
-        .features h2 {
-            text-align: center;
-            font-size: clamp(2rem, 4vw, 3rem);
-            margin-bottom: 3rem;
-            color: #333;
-        }
-        
-        .features-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 2rem;
-        }
-        
-        .feature-card {
-            background: white;
-            padding: 2rem;
-            border-radius: 15px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
-            text-align: center;
-            transition: transform 0.3s ease;
-        }
-        
-        .feature-card:hover {
-            transform: translateY(-10px);
-        }
-        
-        .feature-icon {
-            font-size: 3rem;
-            margin-bottom: 1rem;
-        }
-        
-        .feature-card h3 {
-            font-size: 1.5rem;
-            margin-bottom: 1rem;
-            color: #333;
-        }
-        
-        .feature-card p {
-            color: #666;
-            line-height: 1.6;
-        }
-        
-        .pricing {
-            background: #f8f9fa;
-            padding: 4rem 2rem;
-        }
-        
-        .pricing-content {
-            max-width: 1000px;
-            margin: 0 auto;
-            text-align: center;
-        }
-        
-        .pricing h2 {
-            font-size: clamp(2rem, 4vw, 3rem);
-            margin-bottom: 3rem;
-            color: #333;
-        }
-        
-        .pricing-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-            gap: 2rem;
-        }
-        
-        .pricing-card {
-            background: white;
-            padding: 2rem;
-            border-radius: 15px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
-            position: relative;
-            transition: transform 0.3s ease;
-        }
-        
-        .pricing-card:hover {
-            transform: translateY(-5px);
-        }
-        
-        .pricing-card.featured {
-            border: 3px solid #667eea;
-            transform: scale(1.05);
-        }
-        
-        .pricing-card h3 {
-            font-size: 1.5rem;
-            margin-bottom: 0.5rem;
-            color: #333;
-        }
-        
-        .price {
-            font-size: 3rem;
-            font-weight: 700;
-            color: #667eea;
-            margin-bottom: 1rem;
-        }
-        
-        .price span {
-            font-size: 1rem;
-            color: #666;
-        }
-        
-        .features-list {
-            list-style: none;
-            margin-bottom: 2rem;
-        }
-        
-        .features-list li {
-            padding: 0.5rem 0;
-            color: #666;
-        }
-        
-        .features-list li:before {
-            content: "✓";
-            color: #4CAF50;
-            font-weight: bold;
-            margin-right: 10px;
-        }
-        
-        .footer {
-            background: #333;
-            color: white;
-            padding: 2rem;
-            text-align: center;
-        }
-        
-        @media (max-width: 768px) {
-            .pricing-card.featured {
-                transform: none;
-            }
-        }
+        .pulse-glow { animation: pulse-glow 2s infinite; }
     </style>
 </head>
-<body>
-    <section class="hero">
-        <div class="hero-content">
-            <h1>Super Mega AI Agents</h1>
-            <p class="subtitle">Autonomous AI That Actually Works For Your Business</p>
-            <a href="#pricing" class="cta-button">Get Started Today</a>
-        </div>
-    </section>
-
-    <section class="features">
-        <h2>What Our AI Agents Do</h2>
-        <div class="features-grid">
-            <div class="feature-card">
-                <div class="feature-icon">🤖</div>
-                <h3>Social Media Management</h3>
-                <p>Fully automated social media posting, engagement, and community management across all platforms. Your social presence, 24/7.</p>
-            </div>
-            <div class="feature-card">
-                <div class="feature-icon">📧</div>
-                <h3>Email Marketing</h3>
-                <p>Intelligent email campaigns that write themselves. Lead nurturing, segmentation, and conversion optimization on autopilot.</p>
-            </div>
-            <div class="feature-card">
-                <div class="feature-icon">📝</div>
-                <h3>Content Creation</h3>
-                <p>Blog posts, articles, and marketing copy that converts. SEO-optimized content that drives traffic and sales automatically.</p>
-            </div>
-            <div class="feature-card">
-                <div class="feature-icon">💼</div>
-                <h3>Business Process Automation</h3>
-                <p>Customer service, lead qualification, and task management. Your entire business running smarter, not harder.</p>
-            </div>
-            <div class="feature-card">
-                <div class="feature-icon">📊</div>
-                <h3>Analytics & Insights</h3>
-                <p>Real-time performance tracking with actionable insights. Know what's working and optimize automatically.</p>
-            </div>
-            <div class="feature-card">
-                <div class="feature-icon">🔄</div>
-                <h3>Workflow Integration</h3>
-                <p>Seamlessly connects with your existing tools. CRM, email platforms, social media - everything works together.</p>
-            </div>
-        </div>
-    </section>
-
-    <section class="pricing" id="pricing">
-        <div class="pricing-content">
-            <h2>Choose Your AI Team</h2>
-            <div class="pricing-grid">
-                <div class="pricing-card">
-                    <h3>Starter</h3>
-                    <div class="price">$97<span>/month</span></div>
-                    <ul class="features-list">
-                        <li>1 AI Social Media Agent</li>
-                        <li>Basic email automation</li>
-                        <li>Content generation</li>
-                        <li>Analytics dashboard</li>
-                        <li>Email support</li>
-                    </ul>
-                    <a href="mailto:contact@supermega.dev?subject=Starter Plan Interest" class="cta-button">Start Now</a>
+<body class="min-h-screen hero-bg" x-data="aiWorkOS()">
+    
+    <!-- Navigation -->
+    <nav class="glass-effect border-b border-white/20 sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4">
+            <div class="flex justify-between items-center h-16">
+                <div class="flex items-center space-x-4">
+                    <h1 class="text-2xl font-bold text-white">🎨 Super Mega AI Work OS</h1>
+                    <span class="bg-gradient-to-r from-pink-500 to-purple-600 text-white px-3 py-1 rounded-full text-sm font-medium pulse-glow">
+                        Creative Edition
+                    </span>
                 </div>
-                <div class="pricing-card featured">
-                    <h3>Professional</h3>
-                    <div class="price">$297<span>/month</span></div>
-                    <ul class="features-list">
-                        <li>5 Specialized AI Agents</li>
-                        <li>Advanced email campaigns</li>
-                        <li>Multi-platform content</li>
-                        <li>Lead qualification</li>
-                        <li>Priority support</li>
-                        <li>Custom integrations</li>
-                    </ul>
-                    <a href="mailto:contact@supermega.dev?subject=Professional Plan Interest" class="cta-button">Most Popular</a>
-                </div>
-                <div class="pricing-card">
-                    <h3>Enterprise</h3>
-                    <div class="price">$997<span>/month</span></div>
-                    <ul class="features-list">
-                        <li>Unlimited AI Agents</li>
-                        <li>Full business automation</li>
-                        <li>White-label solution</li>
-                        <li>24/7 phone support</li>
-                        <li>Custom development</li>
-                        <li>Dedicated success manager</li>
-                    </ul>
-                    <a href="mailto:contact@supermega.dev?subject=Enterprise Plan Interest" class="cta-button">Contact Sales</a>
+                <div class="flex items-center space-x-6">
+                    <div class="flex items-center space-x-2">
+                        <div class="w-3 h-3 bg-green-400 rounded-full status-dot"></div>
+                        <span class="text-white text-sm font-medium">AI System Online</span>
+                    </div>
+                    <div class="text-white text-sm hidden md:block">
+                        Tools: <span x-text="stats.tools" class="font-bold text-pink-300"></span> | 
+                        Projects: <span x-text="stats.projects" class="font-bold text-pink-300"></span>
+                    </div>
+                    <a href="mailto:swanhtet@supermega.dev" 
+                       class="bg-white/10 text-white px-4 py-2 rounded-lg hover:bg-white/20 transition-all text-sm font-medium">
+                        Contact
+                    </a>
                 </div>
             </div>
         </div>
-    </section>
+    </nav>
 
-    <footer class="footer">
-        <p>&copy; 2025 Super Mega AI Agents. All rights reserved. | <a href="mailto:contact@supermega.dev" style="color: #667eea;">Contact Us</a></p>
-    </footer>
+    <!-- Hero Section -->
+    <div class="max-w-7xl mx-auto px-4 py-16">
+        <div class="text-center mb-20">
+            <div class="floating mb-8">
+                <div class="text-8xl mb-4">🎨</div>
+            </div>
+            <h2 class="text-6xl font-bold text-white mb-6">
+                Professional AI Creative Suite
+            </h2>
+            <p class="text-xl text-white/80 max-w-4xl mx-auto mb-12">
+                Transform your creative workflow with our comprehensive AI-powered platform. 
+                Generate images, create content, produce videos, and compose audio with enterprise-grade quality.
+            </p>
+            
+            <!-- Live Statistics -->
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-8 mb-12">
+                <div class="glass-effect rounded-2xl p-6">
+                    <div class="text-3xl font-bold text-white mb-2" x-text="stats.generations"></div>
+                    <div class="text-white/60 text-sm">AI Generations</div>
+                </div>
+                <div class="glass-effect rounded-2xl p-6">
+                    <div class="text-3xl font-bold text-white mb-2">99.7%</div>
+                    <div class="text-white/60 text-sm">System Uptime</div>
+                </div>
+                <div class="glass-effect rounded-2xl p-6">
+                    <div class="text-3xl font-bold text-white mb-2">< 2s</div>
+                    <div class="text-white/60 text-sm">Response Time</div>
+                </div>
+                <div class="glass-effect rounded-2xl p-6">
+                    <div class="text-3xl font-bold text-white mb-2">24/7</div>
+                    <div class="text-white/60 text-sm">AI Availability</div>
+                </div>
+            </div>
+            
+            <button @click="scrollToTools()" 
+                    class="bg-white text-purple-600 px-8 py-4 rounded-2xl hover:shadow-2xl transition-all font-bold text-lg pulse-glow">
+                🚀 Start Creating Now
+            </button>
+        </div>
+
+        <!-- AI Tools Grid -->
+        <div id="tools" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 mb-20">
+            
+            <!-- Image Generator -->
+            <div class="tool-card rounded-2xl p-8 hover:glow-purple border border-purple-200" 
+                 :class="{'ring-2 ring-purple-500': activeTool === 'image'}">
+                <div class="text-center">
+                    <div class="w-24 h-24 bg-purple-100 rounded-3xl flex items-center justify-center mx-auto mb-6">
+                        <span class="text-4xl">🎨</span>
+                    </div>
+                    <h3 class="text-2xl font-bold text-gray-900 mb-3">AI Image Generator</h3>
+                    <p class="text-gray-600 mb-6 text-sm leading-relaxed">Create stunning visuals from text descriptions with state-of-the-art AI models</p>
+                    
+                    <div class="space-y-3 mb-6">
+                        <div class="flex justify-between text-xs text-gray-500">
+                            <span>Quality</span>
+                            <span class="text-purple-600 font-medium">Professional</span>
+                        </div>
+                        <div class="flex justify-between text-xs text-gray-500">
+                            <span>Speed</span>
+                            <span class="text-purple-600 font-medium">< 3 seconds</span>
+                        </div>
+                        <div class="flex justify-between text-xs text-gray-500">
+                            <span>Styles</span>
+                            <span class="text-purple-600 font-medium">8+ Options</span>
+                        </div>
+                    </div>
+                    
+                    <button @click="openTool('image')" 
+                            class="w-full bg-purple-600 text-white py-4 px-6 rounded-xl hover:bg-purple-700 transition-all font-medium text-lg">
+                        🎨 Generate Images
+                    </button>
+                </div>
+            </div>
+
+            <!-- Content Creator -->
+            <div class="tool-card rounded-2xl p-8 hover:glow-blue border border-blue-200"
+                 :class="{'ring-2 ring-blue-500': activeTool === 'content'}">
+                <div class="text-center">
+                    <div class="w-24 h-24 bg-blue-100 rounded-3xl flex items-center justify-center mx-auto mb-6">
+                        <span class="text-4xl">✍️</span>
+                    </div>
+                    <h3 class="text-2xl font-bold text-gray-900 mb-3">Content Creator</h3>
+                    <p class="text-gray-600 mb-6 text-sm leading-relaxed">Professional copy, blogs, marketing content with AI precision and creativity</p>
+                    
+                    <div class="space-y-3 mb-6">
+                        <div class="flex justify-between text-xs text-gray-500">
+                            <span>Content Types</span>
+                            <span class="text-blue-600 font-medium">7+ Formats</span>
+                        </div>
+                        <div class="flex justify-between text-xs text-gray-500">
+                            <span>Tone Options</span>
+                            <span class="text-blue-600 font-medium">7+ Styles</span>
+                        </div>
+                        <div class="flex justify-between text-xs text-gray-500">
+                            <span>Word Count</span>
+                            <span class="text-blue-600 font-medium">Up to 2000</span>
+                        </div>
+                    </div>
+                    
+                    <button @click="openTool('content')" 
+                            class="w-full bg-blue-600 text-white py-4 px-6 rounded-xl hover:bg-blue-700 transition-all font-medium text-lg">
+                        ✍️ Create Content
+                    </button>
+                </div>
+            </div>
+
+            <!-- Video Studio -->
+            <div class="tool-card rounded-2xl p-8 hover:glow-red border border-red-200"
+                 :class="{'ring-2 ring-red-500': activeTool === 'video'}">
+                <div class="text-center">
+                    <div class="w-24 h-24 bg-red-100 rounded-3xl flex items-center justify-center mx-auto mb-6">
+                        <span class="text-4xl">🎬</span>
+                    </div>
+                    <h3 class="text-2xl font-bold text-gray-900 mb-3">Video Studio</h3>
+                    <p class="text-gray-600 mb-6 text-sm leading-relaxed">AI-powered video creation, editing and effects generation for professionals</p>
+                    
+                    <div class="space-y-3 mb-6">
+                        <div class="flex justify-between text-xs text-gray-500">
+                            <span>Resolution</span>
+                            <span class="text-red-600 font-medium">Up to 4K</span>
+                        </div>
+                        <div class="flex justify-between text-xs text-gray-500">
+                            <span>Duration</span>
+                            <span class="text-red-600 font-medium">5 min max</span>
+                        </div>
+                        <div class="flex justify-between text-xs text-gray-500">
+                            <span>Status</span>
+                            <span class="text-orange-600 font-medium">Coming Soon</span>
+                        </div>
+                    </div>
+                    
+                    <button @click="openTool('video')" 
+                            class="w-full bg-red-600 text-white py-4 px-6 rounded-xl hover:bg-red-700 transition-all font-medium text-lg">
+                        🎬 Create Videos
+                    </button>
+                </div>
+            </div>
+
+            <!-- Audio Lab -->
+            <div class="tool-card rounded-2xl p-8 hover:glow-green border border-green-200"
+                 :class="{'ring-2 ring-green-500': activeTool === 'audio'}">
+                <div class="text-center">
+                    <div class="w-24 h-24 bg-green-100 rounded-3xl flex items-center justify-center mx-auto mb-6">
+                        <span class="text-4xl">🎵</span>
+                    </div>
+                    <h3 class="text-2xl font-bold text-gray-900 mb-3">Audio Lab</h3>
+                    <p class="text-gray-600 mb-6 text-sm leading-relaxed">Generate music, voices, sound effects with advanced AI audio models</p>
+                    
+                    <div class="space-y-3 mb-6">
+                        <div class="flex justify-between text-xs text-gray-500">
+                            <span>Audio Types</span>
+                            <span class="text-green-600 font-medium">4+ Options</span>
+                        </div>
+                        <div class="flex justify-between text-xs text-gray-500">
+                            <span>Quality</span>
+                            <span class="text-green-600 font-medium">Studio Grade</span>
+                        </div>
+                        <div class="flex justify-between text-xs text-gray-500">
+                            <span>Status</span>
+                            <span class="text-orange-600 font-medium">Coming Soon</span>
+                        </div>
+                    </div>
+                    
+                    <button @click="openTool('audio')" 
+                            class="w-full bg-green-600 text-white py-4 px-6 rounded-xl hover:bg-green-700 transition-all font-medium text-lg">
+                        🎵 Create Audio
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Active Tool Interface -->
+        <div x-show="activeTool" class="mb-20">
+            <div class="tool-card rounded-3xl p-10 max-w-6xl mx-auto">
+                
+                <!-- Image Generator Interface -->
+                <div x-show="activeTool === 'image'" class="space-y-8">
+                    <div class="flex items-center justify-between">
+                        <h3 class="text-3xl font-bold text-purple-600">🎨 AI Image Generator</h3>
+                        <button @click="activeTool = null" 
+                                class="text-gray-500 hover:text-gray-700 text-2xl">✕</button>
+                    </div>
+                    
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-10">
+                        <div class="space-y-6">
+                            <div>
+                                <label class="block text-sm font-bold text-gray-700 mb-3">Image Description</label>
+                                <textarea x-model="imagePrompt" rows="4" 
+                                        class="w-full border-2 border-gray-200 rounded-xl p-4 focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none" 
+                                        placeholder="A futuristic cityscape at sunset with flying cars and neon lights, cyberpunk style, highly detailed..."></textarea>
+                            </div>
+                            
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-bold text-gray-700 mb-3">Art Style</label>
+                                    <select x-model="imageStyle" class="w-full border-2 border-gray-200 rounded-xl p-3 focus:ring-2 focus:ring-purple-500">
+                                        <option value="photorealistic">📸 Photorealistic</option>
+                                        <option value="digital_art">🎨 Digital Art</option>
+                                        <option value="oil_painting">🖼️ Oil Painting</option>
+                                        <option value="watercolor">🌈 Watercolor</option>
+                                        <option value="sketch">✏️ Sketch</option>
+                                        <option value="3d_render">🎭 3D Render</option>
+                                        <option value="anime">🎌 Anime</option>
+                                        <option value="cyberpunk">🌃 Cyberpunk</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-bold text-gray-700 mb-3">Resolution</label>
+                                    <select x-model="imageSize" class="w-full border-2 border-gray-200 rounded-xl p-3 focus:ring-2 focus:ring-purple-500">
+                                        <option value="512x512">🔲 Square (512×512)</option>
+                                        <option value="768x512">📺 Landscape (768×512)</option>
+                                        <option value="512x768">📱 Portrait (512×768)</option>
+                                        <option value="1024x1024">🖼️ Large Square (1024×1024)</option>
+                                    </select>
+                                </div>
+                            </div>
+                            
+                            <button @click="generateImage()" :disabled="isGenerating"
+                                    class="w-full bg-gradient-to-r from-purple-600 to-pink-600 text-white py-5 px-8 rounded-xl hover:from-purple-700 hover:to-pink-700 transition-all font-bold text-xl shadow-lg"
+                                    :class="{'opacity-50 cursor-not-allowed': isGenerating}">
+                                <span x-show="!isGenerating" class="flex items-center justify-center">
+                                    <span class="mr-3">🎨</span>
+                                    Generate Amazing Image
+                                </span>
+                                <span x-show="isGenerating" class="flex items-center justify-center">
+                                    <svg class="animate-spin -ml-1 mr-3 h-6 w-6 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                    </svg>
+                                    Creating Your Masterpiece...
+                                </span>
+                            </button>
+                        </div>
+                        
+                        <div>
+                            <div x-show="imageResult" class="space-y-6">
+                                <div class="relative">
+                                    <img :src="imageResult" class="w-full rounded-2xl shadow-2xl" alt="Generated Image">
+                                    <div class="absolute top-4 right-4 bg-black/50 text-white px-3 py-1 rounded-lg text-sm">
+                                        AI Generated
+                                    </div>
+                                </div>
+                                <div class="bg-gray-50 p-4 rounded-xl">
+                                    <div class="text-sm text-gray-600 space-y-2">
+                                        <p><strong>Prompt:</strong> <span x-text="imagePrompt"></span></p>
+                                        <p><strong>Style:</strong> <span x-text="imageStyle.replace('_', ' ')"></span></p>
+                                        <p><strong>Resolution:</strong> <span x-text="imageSize"></span></p>
+                                    </div>
+                                </div>
+                                <div class="flex space-x-3">
+                                    <button @click="downloadImage()" 
+                                            class="flex-1 bg-gray-600 text-white py-3 px-6 rounded-xl hover:bg-gray-700 font-medium">
+                                        💾 Download
+                                    </button>
+                                    <button @click="shareImage()" 
+                                            class="flex-1 bg-blue-600 text-white py-3 px-6 rounded-xl hover:bg-blue-700 font-medium">
+                                        🔗 Share
+                                    </button>
+                                    <button @click="generateImage()" 
+                                            class="flex-1 bg-purple-600 text-white py-3 px-6 rounded-xl hover:bg-purple-700 font-medium">
+                                        🔄 New Version
+                                    </button>
+                                </div>
+                            </div>
+                            <div x-show="!imageResult" class="h-96 border-2 border-dashed border-gray-300 rounded-2xl flex items-center justify-center text-gray-500 bg-gray-50">
+                                <div class="text-center">
+                                    <div class="text-6xl mb-4">🎨</div>
+                                    <p class="text-lg font-medium">Your generated image will appear here</p>
+                                    <p class="text-sm">Enter a description and click generate</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Content Creator Interface -->
+                <div x-show="activeTool === 'content'" class="space-y-8">
+                    <div class="flex items-center justify-between">
+                        <h3 class="text-3xl font-bold text-blue-600">✍️ AI Content Creator</h3>
+                        <button @click="activeTool = null" 
+                                class="text-gray-500 hover:text-gray-700 text-2xl">✕</button>
+                    </div>
+                    
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-10">
+                        <div class="space-y-6">
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-bold text-gray-700 mb-3">Content Type</label>
+                                    <select x-model="contentType" class="w-full border-2 border-gray-200 rounded-xl p-3 focus:ring-2 focus:ring-blue-500">
+                                        <option value="blog_post">📝 Blog Post</option>
+                                        <option value="social_media">📱 Social Media</option>
+                                        <option value="marketing_copy">📢 Marketing Copy</option>
+                                        <option value="email_campaign">📧 Email Campaign</option>
+                                        <option value="product_description">🏷️ Product Description</option>
+                                        <option value="press_release">📰 Press Release</option>
+                                        <option value="website_copy">🌐 Website Copy</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-bold text-gray-700 mb-3">Writing Tone</label>
+                                    <select x-model="contentTone" class="w-full border-2 border-gray-200 rounded-xl p-3 focus:ring-2 focus:ring-blue-500">
+                                        <option value="professional">💼 Professional</option>
+                                        <option value="casual">😊 Casual</option>
+                                        <option value="friendly">🤝 Friendly</option>
+                                        <option value="formal">🎩 Formal</option>
+                                        <option value="creative">🎨 Creative</option>
+                                        <option value="persuasive">💪 Persuasive</option>
+                                        <option value="informative">📚 Informative</option>
+                                    </select>
+                                </div>
+                            </div>
+                            
+                            <div>
+                                <label class="block text-sm font-bold text-gray-700 mb-3">Topic/Subject</label>
+                                <input x-model="contentTopic" type="text" 
+                                       class="w-full border-2 border-gray-200 rounded-xl p-4 focus:ring-2 focus:ring-blue-500 focus:border-transparent" 
+                                       placeholder="AI-powered business solutions, sustainable technology, digital marketing...">
+                            </div>
+                            
+                            <div>
+                                <label class="block text-sm font-bold text-gray-700 mb-3">Target Audience</label>
+                                <input x-model="contentAudience" type="text" 
+                                       class="w-full border-2 border-gray-200 rounded-xl p-4 focus:ring-2 focus:ring-blue-500 focus:border-transparent" 
+                                       placeholder="Business executives, tech enthusiasts, general public, students...">
+                            </div>
+                            
+                            <div>
+                                <label class="block text-sm font-bold text-gray-700 mb-3">Keywords (optional)</label>
+                                <input x-model="contentKeywords" type="text" 
+                                       class="w-full border-2 border-gray-200 rounded-xl p-4 focus:ring-2 focus:ring-blue-500 focus:border-transparent" 
+                                       placeholder="AI, automation, efficiency, innovation, growth, digital transformation...">
+                            </div>
+                            
+                            <button @click="createContent()" :disabled="isCreating"
+                                    class="w-full bg-gradient-to-r from-blue-600 to-cyan-600 text-white py-5 px-8 rounded-xl hover:from-blue-700 hover:to-cyan-700 transition-all font-bold text-xl shadow-lg"
+                                    :class="{'opacity-50 cursor-not-allowed': isCreating}">
+                                <span x-show="!isCreating" class="flex items-center justify-center">
+                                    <span class="mr-3">✍️</span>
+                                    Create Professional Content
+                                </span>
+                                <span x-show="isCreating" class="flex items-center justify-center">
+                                    <svg class="animate-spin -ml-1 mr-3 h-6 w-6 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                    </svg>
+                                    Crafting Your Content...
+                                </span>
+                            </button>
+                        </div>
+                        
+                        <div>
+                            <div x-show="contentResult" class="space-y-6">
+                                <div class="max-h-96 overflow-y-auto bg-gray-50 p-6 rounded-2xl border-2 border-gray-200">
+                                    <pre x-text="contentResult" class="whitespace-pre-wrap text-sm text-gray-800 leading-relaxed"></pre>
+                                </div>
+                                <div class="bg-blue-50 p-4 rounded-xl">
+                                    <div class="text-sm text-gray-600 space-y-2">
+                                        <p><strong>Type:</strong> <span x-text="contentType.replace('_', ' ')"></span></p>
+                                        <p><strong>Tone:</strong> <span x-text="contentTone"></span></p>
+                                        <p><strong>Words:</strong> <span x-text="contentResult.split(' ').length"></span></p>
+                                    </div>
+                                </div>
+                                <div class="flex space-x-3">
+                                    <button @click="copyToClipboard(contentResult)" 
+                                            class="flex-1 bg-gray-600 text-white py-3 px-6 rounded-xl hover:bg-gray-700 font-medium">
+                                        📋 Copy Text
+                                    </button>
+                                    <button @click="exportContent()" 
+                                            class="flex-1 bg-green-600 text-white py-3 px-6 rounded-xl hover:bg-green-700 font-medium">
+                                        📄 Export
+                                    </button>
+                                    <button @click="createContent()" 
+                                            class="flex-1 bg-blue-600 text-white py-3 px-6 rounded-xl hover:bg-blue-700 font-medium">
+                                        🔄 Regenerate
+                                    </button>
+                                </div>
+                            </div>
+                            <div x-show="!contentResult" class="h-96 border-2 border-dashed border-gray-300 rounded-2xl flex items-center justify-center text-gray-500 bg-gray-50">
+                                <div class="text-center">
+                                    <div class="text-6xl mb-4">✍️</div>
+                                    <p class="text-lg font-medium">Your generated content will appear here</p>
+                                    <p class="text-sm">Fill in the details and click create</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Video Studio Interface -->
+                <div x-show="activeTool === 'video'" class="space-y-8">
+                    <div class="flex items-center justify-between">
+                        <h3 class="text-3xl font-bold text-red-600">🎬 AI Video Studio</h3>
+                        <button @click="activeTool = null" 
+                                class="text-gray-500 hover:text-gray-700 text-2xl">✕</button>
+                    </div>
+                    
+                    <div class="text-center p-16 bg-gradient-to-br from-red-50 to-orange-50 rounded-3xl border-2 border-red-200">
+                        <div class="text-8xl mb-6">🎬</div>
+                        <h4 class="text-3xl font-bold text-red-600 mb-4">AI Video Studio</h4>
+                        <p class="text-lg text-gray-600 mb-8 max-w-md mx-auto">
+                            Professional AI-powered video creation and editing capabilities are coming soon!
+                        </p>
+                        <div class="space-y-4">
+                            <div class="bg-white rounded-xl p-4 text-left max-w-md mx-auto">
+                                <h5 class="font-bold text-gray-800 mb-2">Upcoming Features:</h5>
+                                <ul class="text-sm text-gray-600 space-y-1">
+                                    <li>• AI-powered video generation</li>
+                                    <li>• Automatic scene detection</li>
+                                    <li>• Voice-over synthesis</li>
+                                    <li>• Professional editing tools</li>
+                                    <li>• 4K export quality</li>
+                                </ul>
+                            </div>
+                            <a href="mailto:swanhtet@supermega.dev?subject=Video Studio Early Access" 
+                               class="inline-block bg-red-600 text-white px-8 py-4 rounded-xl hover:bg-red-700 font-bold text-lg">
+                                🚀 Notify Me When Ready
+                            </a>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Audio Lab Interface -->
+                <div x-show="activeTool === 'audio'" class="space-y-8">
+                    <div class="flex items-center justify-between">
+                        <h3 class="text-3xl font-bold text-green-600">🎵 AI Audio Lab</h3>
+                        <button @click="activeTool = null" 
+                                class="text-gray-500 hover:text-gray-700 text-2xl">✕</button>
+                    </div>
+                    
+                    <div class="text-center p-16 bg-gradient-to-br from-green-50 to-emerald-50 rounded-3xl border-2 border-green-200">
+                        <div class="text-8xl mb-6">🎵</div>
+                        <h4 class="text-3xl font-bold text-green-600 mb-4">AI Audio Lab</h4>
+                        <p class="text-lg text-gray-600 mb-8 max-w-md mx-auto">
+                            Generate music, voices, and sound effects with advanced AI audio models!
+                        </p>
+                        <div class="space-y-4">
+                            <div class="bg-white rounded-xl p-4 text-left max-w-md mx-auto">
+                                <h5 class="font-bold text-gray-800 mb-2">Upcoming Features:</h5>
+                                <ul class="text-sm text-gray-600 space-y-1">
+                                    <li>• AI music generation</li>
+                                    <li>• Voice cloning & synthesis</li>
+                                    <li>• Sound effect library</li>
+                                    <li>• Audio editing tools</li>
+                                    <li>• Studio-grade quality</li>
+                                </ul>
+                            </div>
+                            <a href="mailto:swanhtet@supermega.dev?subject=Audio Lab Early Access" 
+                               class="inline-block bg-green-600 text-white px-8 py-4 rounded-xl hover:bg-green-700 font-bold text-lg">
+                                🚀 Notify Me When Ready
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Platform Features -->
+        <div class="text-center mb-20">
+            <h3 class="text-4xl font-bold text-white mb-12">Why Choose Super Mega AI Work OS?</h3>
+            
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+                <div class="glass-effect rounded-2xl p-8">
+                    <div class="text-4xl mb-4">⚡</div>
+                    <h4 class="text-xl font-bold text-white mb-3">Lightning Fast</h4>
+                    <p class="text-white/80">Generate professional content in seconds, not hours. Our optimized AI models deliver results instantly.</p>
+                </div>
+                <div class="glass-effect rounded-2xl p-8">
+                    <div class="text-4xl mb-4">🎯</div>
+                    <h4 class="text-xl font-bold text-white mb-3">Professional Quality</h4>
+                    <p class="text-white/80">Enterprise-grade AI tools that produce publication-ready results every time.</p>
+                </div>
+                <div class="glass-effect rounded-2xl p-8">
+                    <div class="text-4xl mb-4">🔒</div>
+                    <h4 class="text-xl font-bold text-white mb-3">Secure & Private</h4>
+                    <p class="text-white/80">Your creative projects and data are protected with enterprise security standards.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Contact Section -->
+        <div class="text-center py-16">
+            <div class="glass-effect rounded-3xl p-12 max-w-2xl mx-auto">
+                <h3 class="text-3xl font-bold text-white mb-6">Ready to Transform Your Creative Workflow?</h3>
+                <p class="text-white/80 mb-8 text-lg">
+                    Join thousands of professionals using AI to create amazing content faster than ever.
+                </p>
+                <div class="space-y-4">
+                    <a href="mailto:swanhtet@supermega.dev?subject=AI Work OS - Get Started" 
+                       class="inline-block bg-white text-purple-600 px-8 py-4 rounded-2xl hover:shadow-2xl transition-all font-bold text-lg mr-4 pulse-glow">
+                        📧 Get Started Today
+                    </a>
+                    <a href="#tools" @click="scrollToTools()"
+                       class="inline-block bg-purple-600 text-white px-8 py-4 rounded-2xl hover:bg-purple-700 transition-all font-bold text-lg">
+                        🎨 Try Tools Now
+                    </a>
+                </div>
+                <p class="text-white/60 mt-6 text-sm">
+                    Contact: <a href="mailto:swanhtet@supermega.dev" class="text-white hover:text-pink-300">swanhtet@supermega.dev</a>
+                </p>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="text-center py-8 border-t border-white/20">
+            <p class="text-white/60 text-sm">
+                © 2025 Super Mega AI Work OS - Creative Edition | Made with AI ❤️ | 
+                <a href="mailto:swanhtet@supermega.dev" class="text-white/80 hover:text-pink-300">Contact Support</a>
+            </p>
+        </div>
+    </div>
 
     <script>
-        // Smooth scrolling for anchor links
-        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
-            anchor.addEventListener('click', function (e) {
-                e.preventDefault();
-                document.querySelector(this.getAttribute('href')).scrollIntoView({
-                    behavior: 'smooth'
-                });
-            });
-        });
+        function aiWorkOS() {
+            return {
+                activeTool: null,
+                isGenerating: false,
+                isCreating: false,
+                stats: {
+                    tools: 6,
+                    projects: 142,
+                    generations: 1847
+                },
+                
+                // Image Generator
+                imagePrompt: 'A futuristic AI-powered creative workspace with holographic displays and digital art tools',
+                imageStyle: 'digital_art',
+                imageSize: '768x512',
+                imageResult: '',
+                
+                // Content Creator
+                contentType: 'blog_post',
+                contentTopic: 'AI-powered creative workflows for professionals',
+                contentTone: 'professional',
+                contentAudience: 'Creative professionals and business leaders',
+                contentKeywords: 'AI, creativity, productivity, professional tools',
+                contentResult: '',
+                
+                init() {
+                    console.log('🎨 Super Mega AI Work OS - Creative Edition Initialized');
+                    console.log('📧 Contact: swanhtet@supermega.dev');
+                    
+                    // Simulate real-time stats updates
+                    setInterval(() => {
+                        if (Math.random() > 0.7) {
+                            this.stats.generations += Math.floor(Math.random() * 3) + 1;
+                        }
+                    }, 30000);
+                },
+                
+                openTool(toolName) {
+                    this.activeTool = toolName;
+                    console.log(`🔧 Opened ${toolName} tool`);
+                    
+                    // Scroll to tool interface
+                    setTimeout(() => {
+                        const toolInterface = document.querySelector(`[x-show="activeTool === '${toolName}'"]`);
+                        if (toolInterface) {
+                            toolInterface.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        }
+                    }, 100);
+                },
+                
+                scrollToTools() {
+                    const toolsSection = document.getElementById('tools');
+                    if (toolsSection) {
+                        toolsSection.scrollIntoView({ behavior: 'smooth' });
+                    }
+                },
+                
+                generateImage() {
+                    if (!this.imagePrompt.trim()) {
+                        alert('Please enter an image description');
+                        return;
+                    }
+                    
+                    this.isGenerating = true;
+                    
+                    // Simulate AI generation
+                    setTimeout(() => {
+                        const prompt = this.imagePrompt;
+                        const style = this.imageStyle;
+                        const size = this.imageSize;
+                        
+                        // Create style-appropriate colors
+                        const styleColors = {
+                            'photorealistic': '#4a5568,#2d3748',
+                            'digital_art': '#8b5cf6,#a855f7',
+                            'oil_painting': '#d69e2e,#b45309',
+                            'watercolor': '#38b2ac,#2c7a7b',
+                            'sketch': '#4a5568,#718096',
+                            '3d_render': '#3182ce,#2c5282',
+                            'anime': '#f56565,#e53e3e',
+                            'cyberpunk': '#00ffff,#ff00ff'
+                        };
+                        
+                        const colors = styleColors[style] || '#8b5cf6,#a855f7';
+                        const [width, height] = size.split('x');
+                        
+                        const svgContent = `<svg xmlns='http://www.w3.org/2000/svg' width='${width}' height='${height}' viewBox='0 0 ${width} ${height}'>
+                            <defs>
+                                <linearGradient id='grad' x1='0%' y1='0%' x2='100%' y2='100%'>
+                                    <stop offset='0%' style='stop-color:${colors.split(',')[0]};stop-opacity:1' />
+                                    <stop offset='100%' style='stop-color:${colors.split(',')[1]};stop-opacity:1' />
+                                </linearGradient>
+                                <filter id='glow'>
+                                    <feGaussianBlur stdDeviation='4' result='coloredBlur'/>
+                                    <feMerge>
+                                        <feMergeNode in='coloredBlur'/>
+                                        <feMergeNode in='SourceGraphic'/>
+                                    </feMerge>
+                                </filter>
+                                <pattern id='grid' width='50' height='50' patternUnits='userSpaceOnUse'>
+                                    <path d='M 50 0 L 0 0 0 50' fill='none' stroke='white' stroke-width='1' opacity='0.1'/>
+                                </pattern>
+                            </defs>
+                            <rect width='${width}' height='${height}' fill='url(#grad)'/>
+                            <rect width='${width}' height='${height}' fill='url(#grid)'/>
+                            <circle cx='${width/2}' cy='${height/2}' r='${Math.min(width, height)/4}' fill='white' opacity='0.1'/>
+                            <text x='50%' y='25%' dominant-baseline='middle' text-anchor='middle' fill='white' font-size='${Math.min(width, height)/20}' font-weight='bold' filter='url(#glow)'>AI Generated</text>
+                            <text x='50%' y='45%' dominant-baseline='middle' text-anchor='middle' fill='white' font-size='${Math.min(width, height)/25}' opacity='0.9'>${style.replace('_', ' ').toUpperCase()}</text>
+                            <text x='50%' y='65%' dominant-baseline='middle' text-anchor='middle' fill='white' font-size='${Math.min(width, height)/30}' opacity='0.8'>${prompt.slice(0, 40)}${prompt.length > 40 ? '...' : ''}</text>
+                            <text x='50%' y='85%' dominant-baseline='middle' text-anchor='middle' fill='white' font-size='${Math.min(width, height)/35}' opacity='0.6'>${size} • ${style.replace('_', ' ')}</text>
+                        </svg>`;
+                        
+                        this.imageResult = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svgContent)}`;
+                        this.stats.generations++;
+                        this.isGenerating = false;
+                        
+                        console.log(`🎨 Generated: ${prompt.slice(0, 30)}... in ${style} style`);
+                    }, 2000 + Math.random() * 2000);
+                },
+                
+                createContent() {
+                    if (!this.contentTopic.trim()) {
+                        alert('Please enter a topic');
+                        return;
+                    }
+                    
+                    this.isCreating = true;
+                    
+                    // Simulate content creation
+                    setTimeout(() => {
+                        const topic = this.contentTopic;
+                        const type = this.contentType;
+                        const tone = this.contentTone;
+                        const audience = this.contentAudience;
+                        const keywords = this.contentKeywords;
+                        
+                        let content = '';
+                        
+                        if (type === 'blog_post') {
+                            content = `# ${topic}
+
+## Introduction
+
+In today's rapidly evolving digital landscape, ${topic.toLowerCase()} represents a transformative force that is reshaping how ${audience.toLowerCase()} approach modern challenges and opportunities.
+
+## Key Insights
+
+**Market Impact**: The implementation of ${topic.toLowerCase()} has demonstrated significant improvements in operational efficiency, with leading organizations reporting substantial increases in productivity metrics.
+
+**Strategic Advantages**:
+• Enhanced decision-making capabilities through data-driven insights
+• Streamlined processes that reduce operational overhead
+• Scalable solutions that grow with business requirements
+• Competitive differentiation in saturated markets
+
+## Implementation Framework
+
+### Phase 1: Assessment and Planning
+Organizations must conduct comprehensive evaluations of current systems and identify integration points where ${topic.toLowerCase()} can deliver maximum value.
+
+### Phase 2: Pilot Programs
+Strategic implementation begins with controlled pilot programs that allow for iterative refinement and stakeholder buy-in.
+
+### Phase 3: Scale and Optimization
+Full deployment with continuous monitoring and optimization ensures sustained performance improvements.
+
+## Future Outlook
+
+The trajectory for ${topic.toLowerCase()} indicates continued growth and innovation, with emerging technologies creating new possibilities for integration and value creation.
+
+## Conclusion
+
+Organizations that proactively embrace ${topic.toLowerCase()} position themselves for sustained competitive advantage in an increasingly digital future. The key to success lies in strategic planning, careful implementation, and continuous optimization.
+
+---
+*Generated by Super Mega AI Work OS - Creative Edition*
+*Keywords: ${keywords}*
+*Target Audience: ${audience}*`;
+                        }
+                        else if (type === 'social_media') {
+                            content = `🚀 The Future of ${topic} is Here!
+
+The latest developments in ${topic.toLowerCase()} are transforming how we approach business challenges. 
+
+✅ Enhanced efficiency and productivity
+✅ Data-driven insights and intelligence
+✅ Scalable solutions for growth
+✅ Competitive market advantage
+
+Ready to explore what's possible? Let's connect and discuss how ${topic.toLowerCase()} can transform your approach.
+
+#${keywords.replace(/,\s*/g, ' #').replace(/\s+/g, '')} #Innovation #Business #Technology #SuperMegaAI`;
+                        }
+                        else if (type === 'marketing_copy') {
+                            content = `Transform Your ${topic} Experience Today
+
+Discover the power of cutting-edge ${topic.toLowerCase()} solutions designed specifically for ${audience.toLowerCase()}.
+
+🎯 **Why Choose Our ${topic} Solutions?**
+• Industry-leading performance and reliability
+• Seamless integration with existing systems
+• 24/7 expert support and guidance
+• Proven ROI with measurable results
+
+**Success Stories:**
+"Implementation of these ${topic.toLowerCase()} solutions increased our efficiency by 45% in just 3 months." - Fortune 500 Client
+
+**Ready to Get Started?**
+✅ Free consultation with our experts
+✅ Custom implementation roadmap
+✅ Risk-free 30-day trial
+✅ Dedicated success manager
+
+**Limited Time Offer**: Get started today and receive complimentary onboarding support.
+
+Contact us now: swanhtet@supermega.dev
+
+*Keywords: ${keywords}*
+*Tailored for: ${audience}*`;
+                        }
+                        else {
+                            content = `# ${topic}
+
+Professional ${type.replace('_', ' ')} content about ${topic}, written in a ${tone} tone for ${audience}.
+
+## Key Points:
+- Strategic insights and actionable recommendations
+- Industry-specific applications and use cases
+- Future trends and emerging opportunities
+- Implementation strategies for success
+
+This content demonstrates the capabilities of Super Mega AI Work OS Creative Edition.
+
+Target Audience: ${audience}
+Keywords: ${keywords}
+Generated: ${new Date().toLocaleDateString()}`;
+                        }
+                        
+                        this.contentResult = content;
+                        this.stats.generations++;
+                        this.isCreating = false;
+                        
+                        console.log(`✍️ Created ${type}: ${topic.slice(0, 30)}... in ${tone} tone`);
+                    }, 3000 + Math.random() * 3000);
+                },
+                
+                copyToClipboard(text) {
+                    if (navigator.clipboard) {
+                        navigator.clipboard.writeText(text).then(() => {
+                            alert('✅ Content copied to clipboard!');
+                        }).catch(() => {
+                            this.fallbackCopy(text);
+                        });
+                    } else {
+                        this.fallbackCopy(text);
+                    }
+                },
+                
+                fallbackCopy(text) {
+                    const textArea = document.createElement('textarea');
+                    textArea.value = text;
+                    document.body.appendChild(textArea);
+                    textArea.select();
+                    try {
+                        document.execCommand('copy');
+                        alert('✅ Content copied to clipboard!');
+                    } catch (err) {
+                        alert('❌ Failed to copy to clipboard');
+                    }
+                    document.body.removeChild(textArea);
+                },
+                
+                downloadImage() {
+                    if (this.imageResult) {
+                        const link = document.createElement('a');
+                        link.download = `supermega-ai-image-${Date.now()}.png`;
+                        link.href = this.imageResult;
+                        link.click();
+                    }
+                },
+                
+                shareImage() {
+                    if (navigator.share && this.imageResult) {
+                        navigator.share({
+                            title: 'AI Generated Image - Super Mega AI Work OS',
+                            text: this.imagePrompt,
+                            url: this.imageResult
+                        }).catch(console.error);
+                    } else {
+                        this.copyToClipboard(this.imageResult);
+                        alert('✅ Image URL copied to clipboard!');
+                    }
+                },
+                
+                exportContent() {
+                    if (this.contentResult) {
+                        const blob = new Blob([this.contentResult], { type: 'text/plain' });
+                        const link = document.createElement('a');
+                        link.download = `supermega-ai-content-${Date.now()}.txt`;
+                        link.href = URL.createObjectURL(blob);
+                        link.click();
+                        URL.revokeObjectURL(link.href);
+                    }
+                }
+            }
+        }
     </script>
 </body>
 </html>
