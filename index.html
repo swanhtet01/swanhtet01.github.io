@@ -26,9 +26,9 @@
                     <a href="#tools" class="text-gray-700 hover:text-indigo-600">Tools</a>
                     <a href="#features" class="text-gray-700 hover:text-indigo-600">Features</a>
                     <a href="#pricing" class="text-gray-700 hover:text-indigo-600">Pricing</a>
-                    <a href="http://localhost:8080" target="_blank" 
+                    <a href="#" onclick="launchPlatform()" 
                        class="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700">
-                        Launch Platform
+                        🚀 Launch AI Work OS
                     </a>
                 </div>
             </div>
@@ -408,6 +408,52 @@
             </div>
         </div>
     </footer>
+
+    <script>
+        function launchPlatform() {
+            // Check if platform is running locally
+            fetch('http://localhost:8080/health')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'healthy') {
+                        window.open('http://localhost:8080', '_blank');
+                    } else {
+                        alert('Platform starting... Please try again in a moment.');
+                    }
+                })
+                .catch(() => {
+                    // If local platform not available, show message
+                    alert('AI Work OS Platform is starting up. Please wait a moment and try again.\n\nLocal platform: http://localhost:8080\nContact: swanhtet@supermega.dev');
+                    // Try to open anyway
+                    window.open('http://localhost:8080', '_blank');
+                });
+        }
+        
+        // Auto-check platform status
+        function checkPlatformStatus() {
+            fetch('http://localhost:8080/health')
+                .then(response => response.json())
+                .then(data => {
+                    const statusElement = document.querySelector('.bg-green-100');
+                    if (statusElement && data.status === 'healthy') {
+                        statusElement.innerHTML = '🟢 PLATFORM LIVE';
+                        statusElement.classList.add('animate-pulse');
+                    }
+                })
+                .catch(() => {
+                    const statusElement = document.querySelector('.bg-green-100');
+                    if (statusElement) {
+                        statusElement.innerHTML = '🟡 STARTING...';
+                        statusElement.classList.remove('bg-green-100', 'text-green-800');
+                        statusElement.classList.add('bg-yellow-100', 'text-yellow-800');
+                    }
+                });
+        }
+        
+        // Check status on page load and every 10 seconds
+        window.addEventListener('load', checkPlatformStatus);
+        setInterval(checkPlatformStatus, 10000);
+    </script>
 
 </body>
 </html>
