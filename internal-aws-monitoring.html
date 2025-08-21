@@ -3,332 +3,474 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SuperMega Internal - AWS Monitoring</title>
+    <title>SuperMega AI Agents Control Center</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         body { font-family: 'Inter', sans-serif; }
         .status-indicator { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: .5; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .5; } }
+        .matrix-bg { 
+            background-image: linear-gradient(rgba(0,255,0,0.1) 1px, transparent 1px);
+            background-size: 20px 20px;
+        }
+        .ai-pulse { animation: ai-pulse 3s ease-in-out infinite; }
+        @keyframes ai-pulse {
+            0%, 100% { box-shadow: 0 0 10px rgba(34, 197, 94, 0.5); }
+            50% { box-shadow: 0 0 30px rgba(34, 197, 94, 0.8); }
         }
     </style>
 </head>
-<body class="bg-gray-900 text-white">
-    <div class="container mx-auto px-4 py-8">
-        <div class="flex items-center justify-between mb-8">
+<body class="bg-black text-green-400 matrix-bg">
+    <div class="container mx-auto px-4 py-6">
+        <!-- Header -->
+        <div class="flex items-center justify-between mb-8 border-b border-green-500/30 pb-4">
             <div>
-                <h1 class="text-3xl font-bold text-red-400">⚠️ INTERNAL SYSTEM ACCESS</h1>
-                <p class="text-gray-400">AWS Auto-Update Monitoring Dashboard - Authorized Personnel Only</p>
+                <h1 class="text-3xl font-bold text-red-400">🤖 AI AGENTS CONTROL CENTER</h1>
+                <p class="text-green-300">SuperMega LLM & AI Agent Management System - Authorized Access Only</p>
             </div>
             <div class="flex items-center space-x-4">
-                <div class="flex items-center space-x-2 bg-green-900/30 px-4 py-2 rounded-full">
+                <div class="flex items-center space-x-2 bg-green-900/30 px-4 py-2 rounded-full ai-pulse">
                     <div class="w-3 h-3 bg-green-500 rounded-full status-indicator"></div>
-                    <span class="text-green-400 text-sm font-medium">All Systems Operational</span>
+                    <span class="text-green-300 text-sm font-medium">25/25 AI Agents Online</span>
                 </div>
-                <a href="/" class="text-gray-400 hover:text-white">← Return to Main Site</a>
+                <a href="/" class="text-green-400 hover:text-green-300 transition-colors">← Return to Main</a>
             </div>
         </div>
         
-        <!-- Live AWS Agent Activity -->
-        <div class="bg-green-500 text-black px-4 py-2 rounded-lg mb-8 text-center font-bold">
-            🔴 LIVE: AWS agents are continuously updating this platform • Real-time improvements in progress
+        <!-- AI Agent Status Bar -->
+        <div class="bg-gradient-to-r from-green-500 to-blue-500 text-black px-6 py-3 rounded-lg mb-8 text-center font-bold">
+            🧠 LIVE AI NEURAL NETWORK: 25 LLM Agents Processing • GPT-4, Claude, Mixtral, LLaMA Active • Real-time Learning
         </div>
         
-        <!-- Metrics Grid -->
-        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-            <div class="bg-gray-800 rounded-lg p-6 border border-green-500/30">
+        <!-- Core AI Metrics -->
+        <div class="grid grid-cols-1 md:grid-cols-5 gap-6 mb-8">
+            <div class="bg-gray-900 rounded-lg p-6 border border-green-500/50">
                 <div class="flex items-center justify-between mb-2">
-                    <h3 class="text-green-400 font-semibold">Active Agents</h3>
-                    <i class="fas fa-robot text-green-400"></i>
+                    <h3 class="text-green-400 font-semibold">LLM Agents</h3>
+                    <i class="fas fa-brain text-green-400"></i>
                 </div>
                 <div class="text-3xl font-bold text-white">25</div>
-                <div class="text-sm text-gray-400">100% operational</div>
+                <div class="text-sm text-green-300">Neural networks active</div>
             </div>
             
-            <div class="bg-gray-800 rounded-lg p-6 border border-blue-500/30">
+            <div class="bg-gray-900 rounded-lg p-6 border border-blue-500/50">
                 <div class="flex items-center justify-between mb-2">
-                    <h3 class="text-blue-400 font-semibold">Total Outputs</h3>
-                    <i class="fas fa-file-alt text-blue-400"></i>
+                    <h3 class="text-blue-400 font-semibold">Tokens/Sec</h3>
+                    <i class="fas fa-tachometer-alt text-blue-400"></i>
                 </div>
-                <div class="text-3xl font-bold text-white">268</div>
-                <div class="text-sm text-gray-400">Files & reports created</div>
+                <div class="text-3xl font-bold text-white">1,247</div>
+                <div class="text-sm text-blue-300">Processing speed</div>
             </div>
             
-            <div class="bg-gray-800 rounded-lg p-6 border border-purple-500/30">
+            <div class="bg-gray-900 rounded-lg p-6 border border-purple-500/50">
                 <div class="flex items-center justify-between mb-2">
-                    <h3 class="text-purple-400 font-semibold">Efficiency Score</h3>
-                    <i class="fas fa-chart-line text-purple-400"></i>
+                    <h3 class="text-purple-400 font-semibold">AI Models</h3>
+                    <i class="fas fa-microchip text-purple-400"></i>
                 </div>
-                <div class="text-3xl font-bold text-white">98%</div>
-                <div class="text-sm text-gray-400">vs 300-agent systems</div>
+                <div class="text-3xl font-bold text-white">8</div>
+                <div class="text-sm text-purple-300">GPT-4, Claude, Mixtral</div>
             </div>
             
-            <div class="bg-gray-800 rounded-lg p-6 border border-orange-500/30">
+            <div class="bg-gray-900 rounded-lg p-6 border border-yellow-500/50">
                 <div class="flex items-center justify-between mb-2">
-                    <h3 class="text-orange-400 font-semibold">AWS Deployments</h3>
-                    <i class="fas fa-cloud text-orange-400"></i>
+                    <h3 class="text-yellow-400 font-semibold">GPU Clusters</h3>
+                    <i class="fas fa-server text-yellow-400"></i>
                 </div>
-                <div class="text-3xl font-bold text-white">15</div>
-                <div class="text-sm text-gray-400">Auto-updates today</div>
+                <div class="text-3xl font-bold text-white">12</div>
+                <div class="text-sm text-yellow-300">NVIDIA A100 units</div>
+            </div>
+            
+            <div class="bg-gray-900 rounded-lg p-6 border border-red-500/50">
+                <div class="flex items-center justify-between mb-2">
+                    <h3 class="text-red-400 font-semibold">Memory Pool</h3>
+                    <i class="fas fa-memory text-red-400"></i>
+                </div>
+                <div class="text-3xl font-bold text-white">1.2TB</div>
+                <div class="text-sm text-red-300">Vector embeddings</div>
             </div>
         </div>
         
-        <!-- Agent Categories -->
-        <div class="grid grid-cols-1 md:grid-cols-5 gap-6 mb-8">
-            <div class="bg-gray-800 rounded-lg p-6 border-l-4 border-orange-500">
+        <!-- AI Model Performance Grid -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            <div class="bg-gray-900 rounded-lg p-6 border-l-4 border-green-500">
                 <div class="flex items-center justify-between mb-4">
-                    <h3 class="font-bold text-orange-400">Business</h3>
-                    <span class="text-sm text-gray-400">5 agents</span>
+                    <h3 class="font-bold text-green-400">GPT-4 Turbo</h3>
+                    <span class="text-xs bg-green-500 text-black px-2 py-1 rounded">ACTIVE</span>
                 </div>
-                <div class="space-y-2 text-sm">
-                    <div class="flex items-center justify-between">
-                        <span>CEO Strategy</span>
-                        <span class="text-green-400">● Active</span>
+                <div class="space-y-3 text-sm">
+                    <div class="flex justify-between">
+                        <span class="text-green-300">Requests/min:</span>
+                        <span class="text-white font-bold">847</span>
                     </div>
-                    <div class="flex items-center justify-between">
-                        <span>CTO Technical</span>
-                        <span class="text-green-400">● Active</span>
+                    <div class="flex justify-between">
+                        <span class="text-green-300">Avg Latency:</span>
+                        <span class="text-white font-bold">1.2s</span>
                     </div>
-                    <div class="flex items-center justify-between">
-                        <span>Business Intelligence</span>
-                        <span class="text-green-400">● Active</span>
+                    <div class="flex justify-between">
+                        <span class="text-green-300">Success Rate:</span>
+                        <span class="text-green-400 font-bold">99.7%</span>
                     </div>
+                    <div class="w-full bg-gray-700 rounded-full h-2">
+                        <div class="bg-green-500 h-2 rounded-full" style="width: 94%"></div>
+                    </div>
+                    <div class="text-xs text-green-300">Utilization: 94%</div>
                 </div>
             </div>
             
-            <div class="bg-gray-800 rounded-lg p-6 border-l-4 border-green-500">
+            <div class="bg-gray-900 rounded-lg p-6 border-l-4 border-blue-500">
                 <div class="flex items-center justify-between mb-4">
-                    <h3 class="font-bold text-green-400">DevOps</h3>
-                    <span class="text-sm text-gray-400">8 agents</span>
+                    <h3 class="font-bold text-blue-400">Claude-3 Opus</h3>
+                    <span class="text-xs bg-blue-500 text-white px-2 py-1 rounded">ACTIVE</span>
                 </div>
-                <div class="space-y-2 text-sm">
-                    <div class="flex items-center justify-between">
-                        <span>Code Generator</span>
-                        <span class="text-blue-400">97% coverage</span>
+                <div class="space-y-3 text-sm">
+                    <div class="flex justify-between">
+                        <span class="text-blue-300">Requests/min:</span>
+                        <span class="text-white font-bold">623</span>
                     </div>
-                    <div class="flex items-center justify-between">
-                        <span>Test Automator</span>
-                        <span class="text-green-400">Auto-testing</span>
+                    <div class="flex justify-between">
+                        <span class="text-blue-300">Avg Latency:</span>
+                        <span class="text-white font-bold">0.9s</span>
                     </div>
-                    <div class="flex items-center justify-between">
-                        <span>Deployment Manager</span>
-                        <span class="text-green-400">80% faster</span>
+                    <div class="flex justify-between">
+                        <span class="text-blue-300">Success Rate:</span>
+                        <span class="text-green-400 font-bold">99.8%</span>
                     </div>
+                    <div class="w-full bg-gray-700 rounded-full h-2">
+                        <div class="bg-blue-500 h-2 rounded-full" style="width: 87%"></div>
+                    </div>
+                    <div class="text-xs text-blue-300">Utilization: 87%</div>
                 </div>
             </div>
             
-            <div class="bg-gray-800 rounded-lg p-6 border-l-4 border-purple-500">
+            <div class="bg-gray-900 rounded-lg p-6 border-l-4 border-purple-500">
                 <div class="flex items-center justify-between mb-4">
-                    <h3 class="font-bold text-purple-400">Marketing</h3>
-                    <span class="text-sm text-gray-400">4 agents</span>
+                    <h3 class="font-bold text-purple-400">Mixtral 8x7B</h3>
+                    <span class="text-xs bg-purple-500 text-white px-2 py-1 rounded">ACTIVE</span>
                 </div>
-                <div class="space-y-2 text-sm">
-                    <div class="flex items-center justify-between">
-                        <span>Content Creator</span>
-                        <span class="text-green-400">130+ posts</span>
+                <div class="space-y-3 text-sm">
+                    <div class="flex justify-between">
+                        <span class="text-purple-300">Requests/min:</span>
+                        <span class="text-white font-bold">1,234</span>
                     </div>
-                    <div class="flex items-center justify-between">
-                        <span>Social Media Manager</span>
-                        <span class="text-blue-400">Multi-platform</span>
+                    <div class="flex justify-between">
+                        <span class="text-purple-300">Avg Latency:</span>
+                        <span class="text-white font-bold">0.6s</span>
                     </div>
-                    <div class="flex items-center justify-between">
-                        <span>SEO Optimizer</span>
-                        <span class="text-green-400">95% success</span>
+                    <div class="flex justify-between">
+                        <span class="text-purple-300">Success Rate:</span>
+                        <span class="text-green-400 font-bold">99.9%</span>
                     </div>
+                    <div class="w-full bg-gray-700 rounded-full h-2">
+                        <div class="bg-purple-500 h-2 rounded-full" style="width: 91%"></div>
+                    </div>
+                    <div class="text-xs text-purple-300">Utilization: 91%</div>
                 </div>
             </div>
             
-            <div class="bg-gray-800 rounded-lg p-6 border-l-4 border-blue-500">
+            <div class="bg-gray-900 rounded-lg p-6 border-l-4 border-yellow-500">
                 <div class="flex items-center justify-between mb-4">
-                    <h3 class="font-bold text-blue-400">Analytics</h3>
-                    <span class="text-sm text-gray-400">3 agents</span>
+                    <h3 class="font-bold text-yellow-400">LLaMA 2 70B</h3>
+                    <span class="text-xs bg-yellow-500 text-black px-2 py-1 rounded">ACTIVE</span>
                 </div>
-                <div class="space-y-2 text-sm">
-                    <div class="flex items-center justify-between">
-                        <span>Data Analyst</span>
-                        <span class="text-green-400">15K+ data points</span>
+                <div class="space-y-3 text-sm">
+                    <div class="flex justify-between">
+                        <span class="text-yellow-300">Requests/min:</span>
+                        <span class="text-white font-bold">956</span>
                     </div>
-                    <div class="flex items-center justify-between">
-                        <span>Performance Tracker</span>
-                        <span class="text-green-400">Real-time KPIs</span>
+                    <div class="flex justify-between">
+                        <span class="text-yellow-300">Avg Latency:</span>
+                        <span class="text-white font-bold">1.4s</span>
                     </div>
-                    <div class="flex items-center justify-between">
-                        <span>Insight Generator</span>
-                        <span class="text-blue-400">250+ insights</span>
+                    <div class="flex justify-between">
+                        <span class="text-yellow-300">Success Rate:</span>
+                        <span class="text-green-400 font-bold">99.6%</span>
                     </div>
-                </div>
-            </div>
-            
-            <div class="bg-gray-800 rounded-lg p-6 border-l-4 border-red-500">
-                <div class="flex items-center justify-between mb-4">
-                    <h3 class="font-bold text-red-400">Automation</h3>
-                    <span class="text-sm text-gray-400">5 agents</span>
-                </div>
-                <div class="space-y-2 text-sm">
-                    <div class="flex items-center justify-between">
-                        <span>Process Automator</span>
-                        <span class="text-green-400">40hrs/week saved</span>
+                    <div class="w-full bg-gray-700 rounded-full h-2">
+                        <div class="bg-yellow-500 h-2 rounded-full" style="width: 83%"></div>
                     </div>
-                    <div class="flex items-center justify-between">
-                        <span>API Integrator</span>
-                        <span class="text-green-400">Systems connected</span>
-                    </div>
-                    <div class="flex items-center justify-between">
-                        <span>Task Scheduler</span>
-                        <span class="text-blue-400">Auto-scheduling</span>
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        <!-- AWS Auto-Update System -->
-        <div class="bg-gray-800 rounded-2xl p-6 mb-8 border border-green-500/30">
-            <div class="flex items-center justify-between mb-6">
-                <h3 class="text-xl font-bold text-white">
-                    <i class="fas fa-cloud text-yellow-400 mr-2"></i>AWS Auto-Update System
-                </h3>
-                <div class="flex items-center space-x-2">
-                    <div class="w-3 h-3 bg-green-500 rounded-full status-indicator"></div>
-                    <span class="text-green-400 text-sm font-medium">Live & Active</span>
-                </div>
-            </div>
-            
-            <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
-                <div class="text-center">
-                    <div class="text-3xl font-bold text-green-400">15</div>
-                    <div class="text-sm text-gray-400">Auto-Deployments</div>
-                </div>
-                <div class="text-center">
-                    <div class="text-3xl font-bold text-blue-400">23</div>
-                    <div class="text-sm text-gray-400">Updates Applied</div>
-                </div>
-                <div class="text-center">
-                    <div class="text-3xl font-bold text-purple-400">4</div>
-                    <div class="text-sm text-gray-400">AWS Regions</div>
-                </div>
-                <div class="text-center">
-                    <div class="text-3xl font-bold text-yellow-400">99.9%</div>
-                    <div class="text-sm text-gray-400">Reliability</div>
-                </div>
-            </div>
-            
-            <div class="bg-gray-700 rounded-lg p-4">
-                <div class="flex items-center justify-between mb-2">
-                    <h4 class="font-semibold text-blue-400">
-                        <i class="fas fa-cloud text-blue-400 mr-2"></i>Latest AWS Auto-Update
-                    </h4>
-                    <span class="text-xs text-gray-400">2 minutes ago</span>
-                </div>
-                <p class="text-green-400 text-sm">AWS Lambda optimization deployed • 18% performance improvement</p>
-            </div>
-            
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
-                <div class="bg-gray-700 rounded-lg p-4">
-                    <h4 class="font-bold text-green-400 mb-3">Recent Improvements</h4>
-                    <ul class="space-y-2 text-sm text-gray-300">
-                        <li>• AWS Lambda functions optimized - 18% faster execution</li>
-                        <li>• Database queries optimized - 25% faster response</li>
-                        <li>• Security protocols enhanced with advanced monitoring</li>
-                    </ul>
-                </div>
-                <div class="bg-gray-700 rounded-lg p-4">
-                    <h4 class="font-bold text-blue-400 mb-3">Auto-Update Schedule</h4>
-                    <ul class="space-y-2 text-sm text-gray-300">
-                        <li>• Performance monitoring: Every 30 seconds</li>
-                        <li>• Security patches: Every hour</li>
-                        <li>• Feature deployments: As needed</li>
-                    </ul>
+                    <div class="text-xs text-yellow-300">Utilization: 83%</div>
                 </div>
             </div>
         </div>
         
-        <!-- Live Agent Activity -->
-        <div class="bg-gray-800 rounded-2xl p-6 border border-red-500/30">
-            <div class="flex items-center justify-between mb-6">
-                <h3 class="text-xl font-bold text-white">
-                    <i class="fas fa-activity text-red-400 mr-2"></i>Live Agent Activity
-                </h3>
-                <span class="text-xs text-gray-400">Real-time updates</span>
+        <!-- AI Agent Control Panel -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+            <!-- Agent Categories -->
+            <div class="lg:col-span-2">
+                <div class="bg-gray-900 rounded-2xl p-6 border border-green-500/30">
+                    <h3 class="text-xl font-bold text-green-400 mb-6">
+                        <i class="fas fa-robot text-green-400 mr-2"></i>AI Agent Fleet Status
+                    </h3>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="bg-gray-800 rounded-lg p-4 border-l-4 border-green-500">
+                            <h4 class="font-bold text-green-400 mb-3">Language Models (8)</h4>
+                            <div class="space-y-2 text-sm">
+                                <div class="flex justify-between">
+                                    <span class="text-green-300">GPT-4 Turbo</span>
+                                    <span class="text-green-400">● Online</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-green-300">Claude-3 Opus</span>
+                                    <span class="text-green-400">● Online</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-green-300">Mixtral 8x7B</span>
+                                    <span class="text-green-400">● Online</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-green-300">LLaMA 2 70B</span>
+                                    <span class="text-green-400">● Online</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="bg-gray-800 rounded-lg p-4 border-l-4 border-blue-500">
+                            <h4 class="font-bold text-blue-400 mb-3">Specialized AI (7)</h4>
+                            <div class="space-y-2 text-sm">
+                                <div class="flex justify-between">
+                                    <span class="text-blue-300">Vision AI (GPT-4V)</span>
+                                    <span class="text-green-400">● Online</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-blue-300">Code AI (Codex)</span>
+                                    <span class="text-green-400">● Online</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-blue-300">Audio AI (Whisper)</span>
+                                    <span class="text-green-400">● Online</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-blue-300">Image AI (DALL-E 3)</span>
+                                    <span class="text-green-400">● Online</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="bg-gray-800 rounded-lg p-4 border-l-4 border-purple-500">
+                            <h4 class="font-bold text-purple-400 mb-3">Business AI (5)</h4>
+                            <div class="space-y-2 text-sm">
+                                <div class="flex justify-between">
+                                    <span class="text-purple-300">Strategy Analyzer</span>
+                                    <span class="text-green-400">● Active</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-purple-300">Market Predictor</span>
+                                    <span class="text-green-400">● Active</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-purple-300">Content Optimizer</span>
+                                    <span class="text-green-400">● Active</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-purple-300">Performance Monitor</span>
+                                    <span class="text-green-400">● Active</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="bg-gray-800 rounded-lg p-4 border-l-4 border-yellow-500">
+                            <h4 class="font-bold text-yellow-400 mb-3">Automation AI (5)</h4>
+                            <div class="space-y-2 text-sm">
+                                <div class="flex justify-between">
+                                    <span class="text-yellow-300">Workflow Manager</span>
+                                    <span class="text-green-400">● Running</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-yellow-300">Data Processor</span>
+                                    <span class="text-green-400">● Running</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-yellow-300">API Orchestrator</span>
+                                    <span class="text-green-400">● Running</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-yellow-300">Quality Assurance</span>
+                                    <span class="text-green-400">● Running</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
             
-            <div class="space-y-4 max-h-96 overflow-y-auto">
-                <div class="flex items-center space-x-4 p-3 bg-gray-700 rounded-lg">
-                    <div class="w-2 h-2 bg-green-500 rounded-full"></div>
-                    <div class="flex-1">
-                        <div class="flex items-center justify-between">
-                            <span class="font-medium text-white">Database Optimizer</span>
-                            <span class="text-xs text-gray-400">just now</span>
+            <!-- Real-time AI Activity -->
+            <div class="lg:col-span-1">
+                <div class="bg-gray-900 rounded-2xl p-6 border border-red-500/30">
+                    <h3 class="text-xl font-bold text-red-400 mb-6">
+                        <i class="fas fa-activity text-red-400 mr-2"></i>Live Neural Activity
+                    </h3>
+                    
+                    <div class="space-y-4 max-h-96 overflow-y-auto">
+                        <div class="flex items-start space-x-3 p-3 bg-gray-800 rounded-lg">
+                            <div class="w-2 h-2 bg-green-500 rounded-full mt-2 status-indicator"></div>
+                            <div class="flex-1">
+                                <div class="text-sm font-medium text-white">GPT-4 Turbo</div>
+                                <div class="text-xs text-green-400">Processing creative content request</div>
+                                <div class="text-xs text-gray-500">Token rate: 127/sec</div>
+                            </div>
                         </div>
-                        <p class="text-sm text-gray-400">Query cache refreshed - Response time improved</p>
-                    </div>
-                    <span class="text-xs bg-blue-500 px-2 py-1 rounded">database</span>
-                </div>
-                
-                <div class="flex items-center space-x-4 p-3 bg-gray-700 rounded-lg">
-                    <div class="w-2 h-2 bg-green-500 rounded-full"></div>
-                    <div class="flex-1">
-                        <div class="flex items-center justify-between">
-                            <span class="font-medium text-white">AWS Lambda Optimizer</span>
-                            <span class="text-xs text-gray-400">2 minutes ago</span>
+                        
+                        <div class="flex items-start space-x-3 p-3 bg-gray-800 rounded-lg">
+                            <div class="w-2 h-2 bg-blue-500 rounded-full mt-2 status-indicator"></div>
+                            <div class="flex-1">
+                                <div class="text-sm font-medium text-white">Claude-3 Opus</div>
+                                <div class="text-xs text-blue-400">Analyzing business strategy</div>
+                                <div class="text-xs text-gray-500">Token rate: 98/sec</div>
+                            </div>
                         </div>
-                        <p class="text-sm text-gray-400">Function optimization completed - 18% faster execution</p>
-                    </div>
-                    <span class="text-xs bg-yellow-500 px-2 py-1 rounded">optimization</span>
-                </div>
-                
-                <div class="flex items-center space-x-4 p-3 bg-gray-700 rounded-lg">
-                    <div class="w-2 h-2 bg-green-500 rounded-full"></div>
-                    <div class="flex-1">
-                        <div class="flex items-center justify-between">
-                            <span class="font-medium text-white">EC2 Auto-Scaler</span>
-                            <span class="text-xs text-gray-400">5 minutes ago</span>
+                        
+                        <div class="flex items-start space-x-3 p-3 bg-gray-800 rounded-lg">
+                            <div class="w-2 h-2 bg-purple-500 rounded-full mt-2 status-indicator"></div>
+                            <div class="flex-1">
+                                <div class="text-sm font-medium text-white">Mixtral 8x7B</div>
+                                <div class="text-xs text-purple-400">Code generation active</div>
+                                <div class="text-xs text-gray-500">Token rate: 156/sec</div>
+                            </div>
                         </div>
-                        <p class="text-sm text-gray-400">Instance scaling optimized for current load</p>
-                    </div>
-                    <span class="text-xs bg-purple-500 px-2 py-1 rounded">scaling</span>
-                </div>
-                
-                <div class="flex items-center space-x-4 p-3 bg-gray-700 rounded-lg">
-                    <div class="w-2 h-2 bg-green-500 rounded-full"></div>
-                    <div class="flex-1">
-                        <div class="flex items-center justify-between">
-                            <span class="font-medium text-white">CloudWatch Monitor</span>
-                            <span class="text-xs text-gray-400">6 minutes ago</span>
+                        
+                        <div class="flex items-start space-x-3 p-3 bg-gray-800 rounded-lg">
+                            <div class="w-2 h-2 bg-yellow-500 rounded-full mt-2 status-indicator"></div>
+                            <div class="flex-1">
+                                <div class="text-sm font-medium text-white">Vision AI</div>
+                                <div class="text-xs text-yellow-400">Image analysis in progress</div>
+                                <div class="text-xs text-gray-500">Processing: 8K resolution</div>
+                            </div>
                         </div>
-                        <p class="text-sm text-gray-400">Performance metrics updated - All systems green</p>
+                        
+                        <div class="flex items-start space-x-3 p-3 bg-gray-800 rounded-lg">
+                            <div class="w-2 h-2 bg-red-500 rounded-full mt-2 status-indicator"></div>
+                            <div class="flex-1">
+                                <div class="text-sm font-medium text-white">Auto-Scaler</div>
+                                <div class="text-xs text-red-400">Optimizing GPU allocation</div>
+                                <div class="text-xs text-gray-500">Load balancing: 12 nodes</div>
+                            </div>
+                        </div>
                     </div>
-                    <span class="text-xs bg-green-500 px-2 py-1 rounded">monitoring</span>
                 </div>
             </div>
         </div>
         
-        <div class="mt-8 text-center text-gray-500 text-sm">
-            <p>⚠️ This is an internal monitoring dashboard. Unauthorized access is prohibited.</p>
-            <p>AWS Auto-Update System is continuously improving platform performance.</p>
+        <!-- AI Performance Charts -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+            <div class="bg-gray-900 rounded-2xl p-6 border border-green-500/30">
+                <h3 class="text-lg font-bold text-green-400 mb-4">Token Processing Rate</h3>
+                <canvas id="tokenChart" height="200"></canvas>
+            </div>
+            
+            <div class="bg-gray-900 rounded-2xl p-6 border border-blue-500/30">
+                <h3 class="text-lg font-bold text-blue-400 mb-4">AI Model Distribution</h3>
+                <canvas id="modelChart" height="200"></canvas>
+            </div>
+        </div>
+        
+        <!-- Agent Control Commands -->
+        <div class="bg-gray-900 rounded-2xl p-6 border border-red-500/30">
+            <h3 class="text-xl font-bold text-red-400 mb-6">
+                <i class="fas fa-terminal text-red-400 mr-2"></i>AI Agent Control Terminal
+            </h3>
+            
+            <div class="bg-black rounded-lg p-4 font-mono text-sm">
+                <div class="text-green-400 mb-2">supermega@ai-control:~$ system status</div>
+                <div class="text-white mb-1">✅ All 25 AI agents operational</div>
+                <div class="text-white mb-1">🧠 Neural networks stable</div>
+                <div class="text-white mb-1">⚡ GPU clusters at optimal capacity</div>
+                <div class="text-white mb-1">🔄 Auto-scaling enabled</div>
+                <div class="text-green-400 mb-2">supermega@ai-control:~$ performance metrics</div>
+                <div class="text-white mb-1">📊 Throughput: 1,247 tokens/sec</div>
+                <div class="text-white mb-1">🎯 Success rate: 99.7% average</div>
+                <div class="text-white mb-1">⚡ Latency: 1.2s average</div>
+                <div class="text-green-400 mb-2">supermega@ai-control:~$ agent fleet ready</div>
+                <div class="text-green-400">●</div>
+            </div>
+        </div>
+        
+        <div class="mt-8 text-center text-green-500 text-sm border-t border-green-500/30 pt-6">
+            <p>🔒 AI AGENTS CONTROL CENTER - Restricted Access</p>
+            <p>25 Neural Networks Active • Real-time Learning Enabled • Autonomous Optimization Running</p>
+            <p>Last AI Model Update: <span class="text-green-300">2 minutes ago</span> | Next Scheduled: <span class="text-green-300">Auto-continuous</span></p>
         </div>
     </div>
 
     <script>
-        // Simulate live updates
-        function updateMetrics() {
-            // Update timestamps and metrics to simulate real activity
-            const timeElements = document.querySelectorAll('.text-xs.text-gray-400');
-            timeElements.forEach(el => {
-                if (el.textContent.includes('ago')) {
-                    const minutes = Math.floor(Math.random() * 10) + 1;
-                    el.textContent = `${minutes} minutes ago`;
-                }
+        // Initialize charts
+        document.addEventListener('DOMContentLoaded', function() {
+            // Token Processing Chart
+            const tokenCtx = document.getElementById('tokenChart');
+            if (tokenCtx) {
+                new Chart(tokenCtx, {
+                    type: 'line',
+                    data: {
+                        labels: ['00:00', '04:00', '08:00', '12:00', '16:00', '20:00'],
+                        datasets: [{
+                            label: 'Tokens/Second',
+                            data: [950, 1100, 1247, 1180, 1300, 1247],
+                            borderColor: '#22C55E',
+                            backgroundColor: 'rgba(34, 197, 94, 0.1)',
+                            tension: 0.4,
+                            fill: true
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: { legend: { display: false } },
+                        scales: {
+                            x: { ticks: { color: '#22C55E' } },
+                            y: { ticks: { color: '#22C55E' } }
+                        }
+                    }
+                });
+            }
+            
+            // AI Model Distribution Chart
+            const modelCtx = document.getElementById('modelChart');
+            if (modelCtx) {
+                new Chart(modelCtx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: ['GPT-4', 'Claude-3', 'Mixtral', 'LLaMA', 'Others'],
+                        datasets: [{
+                            data: [30, 25, 20, 15, 10],
+                            backgroundColor: ['#22C55E', '#3B82F6', '#8B5CF6', '#F59E0B', '#EF4444']
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: { 
+                            legend: { 
+                                position: 'bottom',
+                                labels: { color: '#22C55E' }
+                            }
+                        }
+                    }
+                });
+            }
+        });
+        
+        // Simulate real-time updates
+        function updateAIMetrics() {
+            // Update token rates randomly
+            const tokenRates = document.querySelectorAll('[data-token-rate]');
+            tokenRates.forEach(el => {
+                const baseRate = parseInt(el.dataset.tokenRate) || 100;
+                const newRate = baseRate + Math.floor(Math.random() * 50) - 25;
+                el.textContent = `Token rate: ${newRate}/sec`;
             });
+            
+            // Update status indicators
+            console.log('🤖 AI Agents Status Updated');
         }
         
-        // Update every 30 seconds
-        setInterval(updateMetrics, 30000);
+        // Update every 5 seconds
+        setInterval(updateAIMetrics, 5000);
         
-        // Initial load
-        updateMetrics();
+        // Initial update
+        updateAIMetrics();
     </script>
 </body>
 </html>
