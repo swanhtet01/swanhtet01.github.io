@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SuperMega AWS Internal Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .dashboard-card { 
+            background: linear-gradient(145deg, #1a1a2e, #16213e);
+            border: 1px solid #333;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-white">
+    
+    <!-- Internal Header -->
+    <nav class="bg-red-900 border-b border-red-700">
+        <div class="max-w-7xl mx-auto px-4 py-3">
+            <div class="flex justify-between items-center">
+                <div>
+                    <h1 class="text-2xl font-bold text-white">🔒 SuperMega AWS Internal Dashboard</h1>
+                    <p class="text-red-200 text-sm">INTERNAL USE ONLY - Development & Monitoring</p>
+                </div>
+                <div class="text-red-200">
+                    🚨 AWS Agent Status: Active
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Warning Banner -->
+    <div class="bg-yellow-900 border-b border-yellow-700 py-3">
+        <div class="max-w-7xl mx-auto px-4 text-center">
+            <p class="text-yellow-200">
+                ⚠️ This is the INTERNAL AWS dashboard. Users should access the platform at 
+                <a href="https://swanhtet01.github.io" class="text-yellow-100 underline">swanhtet01.github.io</a>
+            </p>
+        </div>
+    </div>
+
+    <!-- Internal Dashboard Content -->
+    <div class="max-w-7xl mx-auto px-4 py-8">
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            
+            <!-- AWS Agent Status -->
+            <div class="dashboard-card p-6 rounded-lg">
+                <h3 class="text-xl font-bold mb-4">AWS Agent Status</h3>
+                <div class="space-y-2">
+                    <div class="flex justify-between">
+                        <span>Status:</span>
+                        <span class="text-green-400">🟢 Active</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span>Uptime:</span>
+                        <span>24/7</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span>Last Update:</span>
+                        <span>2025-01-20</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Development Tasks -->
+            <div class="dashboard-card p-6 rounded-lg">
+                <h3 class="text-xl font-bold mb-4">Development Tasks</h3>
+                <div class="space-y-2 text-sm">
+                    <div class="flex items-center">
+                        <span class="text-green-400 mr-2">✓</span>
+                        <span>Platform separation complete</span>
+                    </div>
+                    <div class="flex items-center">
+                        <span class="text-green-400 mr-2">✓</span>
+                        <span>User platform deployed</span>
+                    </div>
+                    <div class="flex items-center">
+                        <span class="text-green-400 mr-2">✓</span>
+                        <span>Login/contact forms added</span>
+                    </div>
+                    <div class="flex items-center">
+                        <span class="text-yellow-400 mr-2">○</span>
+                        <span>User onboarding system</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- System Monitoring -->
+            <div class="dashboard-card p-6 rounded-lg">
+                <h3 class="text-xl font-bold mb-4">System Monitoring</h3>
+                <div class="space-y-2">
+                    <div class="flex justify-between">
+                        <span>CPU:</span>
+                        <span class="text-blue-400">45%</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span>Memory:</span>
+                        <span class="text-blue-400">67%</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span>Storage:</span>
+                        <span class="text-blue-400">23%</span>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Internal Tools -->
+        <div class="mt-8">
+            <h2 class="text-2xl font-bold mb-6">Internal Development Tools</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                
+                <div class="dashboard-card p-6 rounded-lg">
+                    <h3 class="text-xl font-bold mb-4">🛠️ AWS Management</h3>
+                    <p class="text-gray-300 mb-4">Internal AWS resource management and monitoring</p>
+                    <button class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
+                        Access AWS Tools
+                    </button>
+                </div>
+                
+                <div class="dashboard-card p-6 rounded-lg">
+                    <h3 class="text-xl font-bold mb-4">📊 Analytics Dashboard</h3>
+                    <p class="text-gray-300 mb-4">Internal analytics and performance monitoring</p>
+                    <button class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">
+                        View Analytics
+                    </button>
+                </div>
+                
+            </div>
+        </div>
+
+        <!-- Contact Info -->
+        <div class="mt-8 bg-gray-800 p-6 rounded-lg border border-gray-700">
+            <h3 class="text-xl font-bold mb-4">Internal Development Contact</h3>
+            <p class="text-gray-300">For internal development issues, contact: swanhtet@supermega.dev</p>
+            <p class="text-sm text-gray-400 mt-2">
+                Public users should visit: <a href="https://swanhtet01.github.io" class="text-blue-400 hover:text-blue-300">swanhtet01.github.io</a>
+            </p>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="bg-black border-t border-gray-800 mt-12 py-6">
+        <div class="max-w-7xl mx-auto px-4 text-center">
+            <p class="text-gray-500">🔒 SuperMega AWS Internal Dashboard - Development Team Only</p>
+        </div>
+    </footer>
+
+</body>
+</html>

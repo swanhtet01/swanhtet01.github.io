@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Work OS - Your Complete AI Assistant Platform</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+    <style>
+        .gradient-bg { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+        .tool-card { transition: transform 0.3s ease, box-shadow 0.3s ease; }
+        .tool-card:hover { transform: translateY(-5px); box-shadow: 0 10px 25px rgba(0,0,0,0.1); }
+    </style>
+</head>
+<body class="bg-gray-50">
+
+    <!-- Navigation -->
+    <nav class="bg-white shadow-lg sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16">
+                <div class="flex items-center">
+                    <h1 class="text-2xl font-bold text-indigo-600">AI Work OS</h1>
+                    <span class="ml-2 px-2 py-1 bg-green-100 text-green-800 rounded-full text-sm font-medium">🟢 LIVE</span>
+                </div>
+                <div class="flex items-center space-x-6">
+                    <a href="#tools" class="text-gray-700 hover:text-indigo-600">Tools</a>
+                    <a href="#features" class="text-gray-700 hover:text-indigo-600">Features</a>
+                    <a href="#pricing" class="text-gray-700 hover:text-indigo-600">Pricing</a>
+                    <a href="#" onclick="launchPlatform()" 
+                       class="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700">
+                        🚀 Launch AI Work OS
+                    </a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section class="gradient-bg text-white py-20">
+        <div class="max-w-7xl mx-auto px-4 text-center">
+            <h2 class="text-5xl font-bold mb-6">Your AI Work Assistant That Actually Works</h2>
+            <p class="text-xl mb-8 max-w-3xl mx-auto">
+                Stop switching between 10+ apps. Get real tools that replace Gmail, Excel, PDF readers, and more - all powered by AI.
+            </p>
+            <div class="flex justify-center space-x-8 mb-8">
+                <div class="text-center">
+                    <div class="text-3xl font-bold">4</div>
+                    <div class="text-indigo-200">Core Tools</div>
+                </div>
+                <div class="text-center">
+                    <div class="text-3xl font-bold">24/7</div>
+                    <div class="text-indigo-200">Available</div>
+                </div>
+                <div class="text-center">
+                    <div class="text-3xl font-bold">AI</div>
+                    <div class="text-indigo-200">Powered</div>
+                </div>
+            </div>
+            <div class="space-x-4">
+                <a href="http://localhost:8080" target="_blank" 
+                   class="bg-white text-indigo-600 px-8 py-3 rounded-lg font-semibold hover:bg-gray-100">
+                    Try Platform Free
+                </a>
+                <a href="#tools" class="border-2 border-white text-white px-8 py-3 rounded-lg font-semibold hover:bg-white hover:text-indigo-600">
+                    See Tools
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Tools Section -->
+    <section id="tools" class="py-20 bg-white">
+        <div class="max-w-7xl mx-auto px-4">
+            <div class="text-center mb-16">
+                <h3 class="text-3xl font-bold text-gray-900 mb-4">Professional AI Tools That Replace Everything</h3>
+                <p class="text-xl text-gray-600">Real applications that compete with Gmail, Excel, Acrobat, and more</p>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <!-- Email Analyzer -->
+                <div class="tool-card bg-white p-8 rounded-xl shadow-lg border">
+                    <div class="flex items-center mb-4">
+                        <div class="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center text-2xl">📧</div>
+                        <div class="ml-4">
+                            <h4 class="text-xl font-bold text-gray-900">Email Analyzer Pro</h4>
+                            <p class="text-gray-600">Gmail/Outlook Replacement</p>
+                        </div>
+                    </div>
+                    <ul class="space-y-2 mb-6">
+                        <li class="flex items-center text-gray-700">
+                            <span class="text-green-500 mr-2">✓</span>
+                            IMAP/POP3 integration with any provider
+                        </li>
+                        <li class="flex items-center text-gray-700">
+                            <span class="text-green-500 mr-2">✓</span>
+                            AI-powered content analysis & sentiment detection
+                        </li>
+                        <li class="flex items-center text-gray-700">
+                            <span class="text-green-500 mr-2">✓</span>
+                            Smart filtering, auto-replies & scheduling
+                        </li>
+                        <li class="flex items-center text-gray-700">
+                            <span class="text-green-500 mr-2">✓</span>
+                            Advanced contact management & templates
+                        </li>
+                    </ul>
+                    <a href="http://localhost:8080" target="_blank" 
+                       class="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 text-center block">
+                        Launch Email Tool
+                    </a>
+                </div>
+
+                <!-- Spreadsheet Analyzer -->
+                <div class="tool-card bg-white p-8 rounded-xl shadow-lg border">
+                    <div class="flex items-center mb-4">
+                        <div class="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center text-2xl">📊</div>
+                        <div class="ml-4">
+                            <h4 class="text-xl font-bold text-gray-900">Spreadsheet Analyzer</h4>
+                            <p class="text-gray-600">Excel/Google Sheets Replacement</p>
+                        </div>
+                    </div>
+                    <ul class="space-y-2 mb-6">
+                        <li class="flex items-center text-gray-700">
+                            <span class="text-green-500 mr-2">✓</span>
+                            Advanced Excel/CSV processing & analysis
+                        </li>
+                        <li class="flex items-center text-gray-700">
+                            <span class="text-green-500 mr-2">✓</span>
+                            AI insights generation & data recommendations
+                        </li>
+                        <li class="flex items-center text-gray-700">
+                            <span class="text-green-500 mr-2">✓</span>
+                            Automated chart creation & pivot tables
+                        </li>
+                        <li class="flex items-center text-gray-700">
+                            <span class="text-green-500 mr-2">✓</span>
+                            Data cleaning & quality assessment
+                        </li>
+                    </ul>
+                    <a href="http://localhost:8080" target="_blank" 
+                       class="w-full bg-green-600 text-white py-3 rounded-lg font-semibold hover:bg-green-700 text-center block">
+                        Launch Spreadsheet Tool
+                    </a>
+                </div>
+
+                <!-- PDF Analyzer -->
+                <div class="tool-card bg-white p-8 rounded-xl shadow-lg border">
+                    <div class="flex items-center mb-4">
+                        <div class="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center text-2xl">📄</div>
+                        <div class="ml-4">
+                            <h4 class="text-xl font-bold text-gray-900">PDF Analyzer Pro</h4>
+                            <p class="text-gray-600">Adobe Acrobat Replacement</p>
+                        </div>
+                    </div>
+                    <ul class="space-y-2 mb-6">
+                        <li class="flex items-center text-gray-700">
+                            <span class="text-green-500 mr-2">✓</span>
+                            Advanced text extraction & content analysis
+                        </li>
+                        <li class="flex items-center text-gray-700">
+                            <span class="text-green-500 mr-2">✓</span>
+                            AI summarization & key information detection
+                        </li>
+                        <li class="flex items-center text-gray-700">
+                            <span class="text-green-500 mr-2">✓</span>
+                            Document classification & readability analysis
+                        </li>
+                        <li class="flex items-center text-gray-700">
+                            <span class="text-green-500 mr-2">✓</span>
+                            Multi-format export & batch processing
+                        </li>
+                    </ul>
+                    <a href="http://localhost:8080" target="_blank" 
+                       class="w-full bg-red-600 text-white py-3 rounded-lg font-semibold hover:bg-red-700 text-center block">
+                        Launch PDF Tool
+                    </a>
+                </div>
+
+                <!-- Web Scraper -->
+                <div class="tool-card bg-white p-8 rounded-xl shadow-lg border">
+                    <div class="flex items-center mb-4">
+                        <div class="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center text-2xl">🌐</div>
+                        <div class="ml-4">
+                            <h4 class="text-xl font-bold text-gray-900">Web Scraping Agent</h4>
+                            <p class="text-gray-600">Advanced Data Extraction</p>
+                        </div>
+                    </div>
+                    <ul class="space-y-2 mb-6">
+                        <li class="flex items-center text-gray-700">
+                            <span class="text-green-500 mr-2">✓</span>
+                            Real browser automation with progress tracking
+                        </li>
+                        <li class="flex items-center text-gray-700">
+                            <span class="text-green-500 mr-2">✓</span>
+                            JavaScript rendering & anti-detection features
+                        </li>
+                        <li class="flex items-center text-gray-700">
+                            <span class="text-green-500 mr-2">✓</span>
+                            Bulk URL processing & scheduled monitoring
+                        </li>
+                        <li class="flex items-center text-gray-700">
+                            <span class="text-green-500 mr-2">✓</span>
+                            Data export to CSV/JSON/Excel formats
+                        </li>
+                    </ul>
+                    <a href="http://localhost:8080" target="_blank" 
+                       class="w-full bg-purple-600 text-white py-3 rounded-lg font-semibold hover:bg-purple-700 text-center block">
+                        Launch Web Scraper
+                    </a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Features Section -->
+    <section id="features" class="py-20 bg-gray-50">
+        <div class="max-w-7xl mx-auto px-4">
+            <div class="text-center mb-16">
+                <h3 class="text-3xl font-bold text-gray-900 mb-4">Why Choose AI Work OS?</h3>
+                <p class="text-xl text-gray-600">Real functionality that actually works</p>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+                <div class="text-center">
+                    <div class="w-16 h-16 bg-blue-100 rounded-full mx-auto mb-4 flex items-center justify-center text-2xl">🚀</div>
+                    <h4 class="text-xl font-bold text-gray-900 mb-2">Production Ready</h4>
+                    <p class="text-gray-600">Built for real work, not demos. Handle actual files, emails, and data.</p>
+                </div>
+                <div class="text-center">
+                    <div class="w-16 h-16 bg-green-100 rounded-full mx-auto mb-4 flex items-center justify-center text-2xl">🤖</div>
+                    <h4 class="text-xl font-bold text-gray-900 mb-2">AI Powered</h4>
+                    <p class="text-gray-600">Smart analysis, automated insights, and intelligent recommendations.</p>
+                </div>
+                <div class="text-center">
+                    <div class="w-16 h-16 bg-purple-100 rounded-full mx-auto mb-4 flex items-center justify-center text-2xl">⚡</div>
+                    <h4 class="text-xl font-bold text-gray-900 mb-2">All-in-One</h4>
+                    <p class="text-gray-600">Replace multiple apps with one comprehensive platform.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Pricing Section -->
+    <section id="pricing" class="py-20 bg-white">
+        <div class="max-w-7xl mx-auto px-4">
+            <div class="text-center mb-16">
+                <h3 class="text-3xl font-bold text-gray-900 mb-4">Simple Pricing</h3>
+                <p class="text-xl text-gray-600">Start free, upgrade as you grow</p>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-5xl mx-auto">
+                <div class="border rounded-xl p-8 text-center">
+                    <h4 class="text-2xl font-bold text-gray-900 mb-4">Starter</h4>
+                    <div class="text-4xl font-bold text-indigo-600 mb-4">$97</div>
+                    <p class="text-gray-600 mb-6">per user/month</p>
+                    <ul class="space-y-3 mb-8">
+                        <li class="flex items-center justify-center">
+                            <span class="text-green-500 mr-2">✓</span>
+                            <span>Email & PDF Tools</span>
+                        </li>
+                        <li class="flex items-center justify-center">
+                            <span class="text-green-500 mr-2">✓</span>
+                            <span>Basic Analytics</span>
+                        </li>
+                        <li class="flex items-center justify-center">
+                            <span class="text-green-500 mr-2">✓</span>
+                            <span>Email Support</span>
+                        </li>
+                    </ul>
+                    <a href="mailto:swanhtet@supermega.dev" class="w-full bg-gray-200 text-gray-900 py-3 rounded-lg font-semibold hover:bg-gray-300 block">
+                        Get Started
+                    </a>
+                </div>
+
+                <div class="border-2 border-indigo-600 rounded-xl p-8 text-center relative">
+                    <div class="absolute -top-4 left-1/2 transform -translate-x-1/2 bg-indigo-600 text-white px-4 py-1 rounded-full text-sm font-medium">
+                        Most Popular
+                    </div>
+                    <h4 class="text-2xl font-bold text-gray-900 mb-4">Professional</h4>
+                    <div class="text-4xl font-bold text-indigo-600 mb-4">$197</div>
+                    <p class="text-gray-600 mb-6">per user/month</p>
+                    <ul class="space-y-3 mb-8">
+                        <li class="flex items-center justify-center">
+                            <span class="text-green-500 mr-2">✓</span>
+                            <span>All AI Tools</span>
+                        </li>
+                        <li class="flex items-center justify-center">
+                            <span class="text-green-500 mr-2">✓</span>
+                            <span>Advanced Analytics</span>
+                        </li>
+                        <li class="flex items-center justify-center">
+                            <span class="text-green-500 mr-2">✓</span>
+                            <span>Priority Support</span>
+                        </li>
+                        <li class="flex items-center justify-center">
+                            <span class="text-green-500 mr-2">✓</span>
+                            <span>Custom Integrations</span>
+                        </li>
+                    </ul>
+                    <a href="mailto:swanhtet@supermega.dev" class="w-full bg-indigo-600 text-white py-3 rounded-lg font-semibold hover:bg-indigo-700 block">
+                        Start Professional
+                    </a>
+                </div>
+
+                <div class="border rounded-xl p-8 text-center">
+                    <h4 class="text-2xl font-bold text-gray-900 mb-4">Enterprise</h4>
+                    <div class="text-4xl font-bold text-indigo-600 mb-4">$497</div>
+                    <p class="text-gray-600 mb-6">per user/month</p>
+                    <ul class="space-y-3 mb-8">
+                        <li class="flex items-center justify-center">
+                            <span class="text-green-500 mr-2">✓</span>
+                            <span>Full Platform Access</span>
+                        </li>
+                        <li class="flex items-center justify-center">
+                            <span class="text-green-500 mr-2">✓</span>
+                            <span>Custom AI Agents</span>
+                        </li>
+                        <li class="flex items-center justify-center">
+                            <span class="text-green-500 mr-2">✓</span>
+                            <span>24/7 Support</span>
+                        </li>
+                        <li class="flex items-center justify-center">
+                            <span class="text-green-500 mr-2">✓</span>
+                            <span>White-label Option</span>
+                        </li>
+                    </ul>
+                    <a href="mailto:swanhtet@supermega.dev" class="w-full bg-gray-200 text-gray-900 py-3 rounded-lg font-semibold hover:bg-gray-300 block">
+                        Contact Sales
+                    </a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Status Section -->
+    <section class="py-16 bg-gray-900 text-white">
+        <div class="max-w-7xl mx-auto px-4 text-center">
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-8">
+                <div>
+                    <div class="text-3xl font-bold text-green-400">✅ LIVE</div>
+                    <div class="text-gray-400">Platform Status</div>
+                </div>
+                <div>
+                    <div class="text-3xl font-bold text-blue-400">4 Tools</div>
+                    <div class="text-gray-400">Production Ready</div>
+                </div>
+                <div>
+                    <div class="text-3xl font-bold text-purple-400">24/7</div>
+                    <div class="text-gray-400">Available</div>
+                </div>
+                <div>
+                    <div class="text-3xl font-bold text-yellow-400">AI</div>
+                    <div class="text-gray-400">Powered</div>
+                </div>
+            </div>
+            
+            <div class="mt-12 p-6 bg-gray-800 rounded-lg">
+                <h4 class="text-xl font-bold mb-4">🚀 Platform Information</h4>
+                <div class="space-y-2 text-sm">
+                    <p><strong>Platform:</strong> AI Work OS v2.0 Production</p>
+                    <p><strong>Local Access:</strong> <a href="http://localhost:8080" class="text-blue-400">http://localhost:8080</a></p>
+                    <p><strong>Status:</strong> All tools operational and ready</p>
+                    <p><strong>Contact:</strong> <a href="mailto:swanhtet@supermega.dev" class="text-blue-400">swanhtet@supermega.dev</a></p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="bg-gray-50 py-12">
+        <div class="max-w-7xl mx-auto px-4 text-center">
+            <div class="mb-8">
+                <h2 class="text-2xl font-bold text-gray-900">AI Work OS</h2>
+                <p class="text-gray-600 mt-2">Your complete AI assistant platform</p>
+            </div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-8 mb-8">
+                <div>
+                    <h5 class="font-bold text-gray-900 mb-4">Platform</h5>
+                    <ul class="space-y-2 text-gray-600">
+                        <li><a href="http://localhost:8080" class="hover:text-indigo-600">Launch Platform</a></li>
+                        <li><a href="#tools" class="hover:text-indigo-600">Tools</a></li>
+                        <li><a href="#pricing" class="hover:text-indigo-600">Pricing</a></li>
+                    </ul>
+                </div>
+                <div>
+                    <h5 class="font-bold text-gray-900 mb-4">Tools</h5>
+                    <ul class="space-y-2 text-gray-600">
+                        <li>Email Analyzer Pro</li>
+                        <li>Spreadsheet Analyzer</li>
+                        <li>PDF Analyzer Pro</li>
+                        <li>Web Scraping Agent</li>
+                    </ul>
+                </div>
+                <div>
+                    <h5 class="font-bold text-gray-900 mb-4">Support</h5>
+                    <ul class="space-y-2 text-gray-600">
+                        <li><a href="mailto:swanhtet@supermega.dev" class="hover:text-indigo-600">Contact Support</a></li>
+                        <li>Documentation (Coming Soon)</li>
+                        <li>API Reference (Coming Soon)</li>
+                    </ul>
+                </div>
+            </div>
+            
+            <div class="border-t border-gray-200 pt-8">
+                <p class="text-gray-600">&copy; 2025 AI Work OS. Built with real AI tools for real work.</p>
+                <p class="text-sm text-gray-500 mt-2">Contact: swanhtet@supermega.dev</p>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        function launchPlatform() {
+            // Check if platform is running locally
+            fetch('http://localhost:8080/health')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'healthy') {
+                        window.open('http://localhost:8080', '_blank');
+                    } else {
+                        alert('Platform starting... Please try again in a moment.');
+                    }
+                })
+                .catch(() => {
+                    // If local platform not available, show message
+                    alert('AI Work OS Platform is starting up. Please wait a moment and try again.\n\nLocal platform: http://localhost:8080\nContact: swanhtet@supermega.dev');
+                    // Try to open anyway
+                    window.open('http://localhost:8080', '_blank');
+                });
+        }
+        
+        // Auto-check platform status
+        function checkPlatformStatus() {
+            fetch('http://localhost:8080/health')
+                .then(response => response.json())
+                .then(data => {
+                    const statusElement = document.querySelector('.bg-green-100');
+                    if (statusElement && data.status === 'healthy') {
+                        statusElement.innerHTML = '🟢 PLATFORM LIVE';
+                        statusElement.classList.add('animate-pulse');
+                    }
+                })
+                .catch(() => {
+                    const statusElement = document.querySelector('.bg-green-100');
+                    if (statusElement) {
+                        statusElement.innerHTML = '🟡 STARTING...';
+                        statusElement.classList.remove('bg-green-100', 'text-green-800');
+                        statusElement.classList.add('bg-yellow-100', 'text-yellow-800');
+                    }
+                });
+        }
+        
+        // Check status on page load and every 10 seconds
+        window.addEventListener('load', checkPlatformStatus);
+        setInterval(checkPlatformStatus, 10000);
+    </script>
+
+</body>
+</html>
