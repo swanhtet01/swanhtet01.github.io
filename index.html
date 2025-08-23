@@ -52,6 +52,31 @@
         .hero-gradient {
             background: radial-gradient(ellipse at center, #111111 0%, #000000 70%);
         }
+        /* New animations and effects */
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(30px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+        @keyframes float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-10px); }
+        }
+        .fade-in-up { animation: fadeInUp 0.8s ease-out; }
+        .pulse-slow { animation: pulse 3s ease-in-out infinite; }
+        .float { animation: float 3s ease-in-out infinite; }
+        .loading-skeleton { 
+            background: linear-gradient(90deg, #1a1a1a 25%, #2a2a2a 50%, #1a1a1a 75%);
+            background-size: 200% 100%;
+            animation: loading 1.5s infinite;
+        }
+        @keyframes loading {
+            0% { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
+        }
     </style>
 </head>
 <body class="bg-black text-white antialiased overflow-x-hidden">
@@ -66,11 +91,37 @@
                     </h1>
                 </div>
                 <div class="hidden md:flex items-center space-x-8">
+                    <div class="bg-gradient-to-r from-green-400 to-blue-500 text-black px-3 py-1 rounded-full text-xs font-bold mr-4">
+                        Made by AI
+                    </div>
                     <a href="#creative" class="hover:text-green-400 transition-colors font-medium">Creative Studio</a>
                     <a href="#intelligence" class="hover:text-blue-400 transition-colors font-medium">Data Intelligence</a>
                     <a href="#productivity" class="hot-pink hover:text-pink-300 transition-colors font-medium">Productivity Engine</a>
                     <a href="#pricing" class="hover:text-gray-300 transition-colors font-medium">Pricing</a>
                     <button onclick="window.location.href='https://app.supermega.dev/signup'" class="start-trial-btn cta-button px-6 py-2 rounded-lg font-semibold">
+                        Start Free Trial
+                    </button>
+                </div>
+                <!-- Mobile menu button -->
+                <div class="md:hidden">
+                    <button id="mobile-menu-btn" class="text-white hover:text-green-400 transition-colors">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+            <!-- Mobile menu -->
+            <div id="mobile-menu" class="md:hidden hidden bg-black/95 border-t border-gray-800">
+                <div class="px-4 py-6 space-y-4">
+                    <div class="bg-gradient-to-r from-green-400 to-blue-500 text-black px-3 py-1 rounded-full text-xs font-bold inline-block mb-4">
+                        Made by AI
+                    </div>
+                    <a href="#creative" class="block hover:text-green-400 transition-colors font-medium py-2">Creative Studio</a>
+                    <a href="#intelligence" class="block hover:text-blue-400 transition-colors font-medium py-2">Data Intelligence</a>
+                    <a href="#productivity" class="block hot-pink hover:text-pink-300 transition-colors font-medium py-2">Productivity Engine</a>
+                    <a href="#pricing" class="block hover:text-gray-300 transition-colors font-medium py-2">Pricing</a>
+                    <button onclick="window.location.href='https://app.supermega.dev/signup'" class="w-full start-trial-btn cta-button px-6 py-3 rounded-lg font-semibold mt-4">
                         Start Free Trial
                     </button>
                 </div>
@@ -156,7 +207,7 @@
                             Code Generation
                         </li>
                     </ul>
-                    <button class="w-full bg-gradient-to-r from-green-500 to-green-600 hover:from-green-400 hover:to-green-500 text-black font-semibold py-4 rounded-lg transition-all transform hover:scale-105">
+                    <button onclick="window.location.href='http://23.20.144.42:8080?suite=creative'" class="w-full bg-gradient-to-r from-green-500 to-green-600 hover:from-green-400 hover:to-green-500 text-black font-semibold py-4 rounded-lg transition-all transform hover:scale-105">
                         Explore Creative Studio
                     </button>
                 </div>
@@ -189,7 +240,7 @@
                             Real-time Dashboards
                         </li>
                     </ul>
-                    <button class="w-full bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-400 hover:to-blue-500 text-black font-semibold py-4 rounded-lg transition-all transform hover:scale-105">
+                    <button onclick="window.location.href='http://23.20.144.42:8080?suite=intelligence'" class="w-full bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-400 hover:to-blue-500 text-black font-semibold py-4 rounded-lg transition-all transform hover:scale-105">
                         Explore Data Intelligence
                     </button>
                 </div>
@@ -222,9 +273,144 @@
                             Calendar Integration
                         </li>
                     </ul>
-                    <button class="w-full bg-gradient-to-r from-pink-500 to-pink-600 hover:from-pink-400 hover:to-pink-500 text-black font-semibold py-4 rounded-lg transition-all transform hover:scale-105">
+                    <button onclick="window.location.href='http://23.20.144.42:8080?suite=productivity'" class="w-full bg-gradient-to-r from-pink-500 to-pink-600 hover:from-pink-400 hover:to-pink-500 text-black font-semibold py-4 rounded-lg transition-all transform hover:scale-105">
                         Explore Productivity Engine
                     </button>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Demo Preview Section -->
+    <section class="py-20 px-4 bg-gray-900/10">
+        <div class="max-w-7xl mx-auto">
+            <div class="text-center mb-16">
+                <h3 class="text-5xl md:text-6xl font-bold mb-6">
+                    See It In <span class="neon-blue glow-blue">Action</span>
+                </h3>
+                <p class="text-xl md:text-2xl text-gray-300 max-w-3xl mx-auto">
+                    Take a look at SuperMega OS in action. Real platform, real results.
+                </p>
+            </div>
+            
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
+                <div class="space-y-8">
+                    <div class="flex items-center space-x-4">
+                        <div class="w-12 h-12 bg-green-500/20 rounded-xl flex items-center justify-center">
+                            <span class="text-2xl">🎯</span>
+                        </div>
+                        <div>
+                            <h4 class="text-2xl font-bold mb-2">Live Platform Access</h4>
+                            <p class="text-gray-300">Experience the full platform with real AI capabilities running 24/7</p>
+                        </div>
+                    </div>
+                    
+                    <div class="flex items-center space-x-4">
+                        <div class="w-12 h-12 bg-blue-500/20 rounded-xl flex items-center justify-center">
+                            <span class="text-2xl">⚡</span>
+                        </div>
+                        <div>
+                            <h4 class="text-2xl font-bold mb-2">Instant Results</h4>
+                            <p class="text-gray-300">No waiting, no setup. Click and see AI productivity in seconds</p>
+                        </div>
+                    </div>
+                    
+                    <div class="flex items-center space-x-4">
+                        <div class="w-12 h-12 bg-pink-500/20 rounded-xl flex items-center justify-center">
+                            <span class="text-2xl">🔥</span>
+                        </div>
+                        <div>
+                            <h4 class="text-2xl font-bold mb-2">All Features Unlocked</h4>
+                            <p class="text-gray-300">Full access to Creative Studio, Data Intelligence, and Productivity Engine</p>
+                        </div>
+                    </div>
+                    
+                    <div class="pt-6">
+                        <button onclick="window.location.href='http://23.20.144.42:8080'" class="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-400 hover:to-purple-500 text-white px-8 py-4 rounded-xl font-bold text-lg transition-all transform hover:scale-105 float">
+                            🚀 Launch Live Demo
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="relative">
+                    <div class="bg-gradient-to-br from-gray-900 to-black p-6 rounded-2xl border border-gray-800 suite-card">
+                        <div class="flex items-center space-x-3 mb-4">
+                            <div class="w-3 h-3 bg-red-500 rounded-full"></div>
+                            <div class="w-3 h-3 bg-yellow-500 rounded-full"></div>
+                            <div class="w-3 h-3 bg-green-500 rounded-full"></div>
+                            <span class="text-gray-400 text-sm ml-4">supermega.dev - Live Platform</span>
+                        </div>
+                        <div class="bg-black/50 p-6 rounded-lg">
+                            <div class="flex items-center justify-between mb-4">
+                                <h5 class="neon-green font-bold">SuperMega OS Dashboard</h5>
+                                <div class="flex space-x-2">
+                                    <div class="w-8 h-8 bg-green-500/20 rounded-lg flex items-center justify-center">🎨</div>
+                                    <div class="w-8 h-8 bg-blue-500/20 rounded-lg flex items-center justify-center">📊</div>
+                                    <div class="w-8 h-8 bg-pink-500/20 rounded-lg flex items-center justify-center">⚡</div>
+                                </div>
+                            </div>
+                            <div class="space-y-3">
+                                <div class="h-4 bg-gray-700 rounded pulse-slow"></div>
+                                <div class="h-4 bg-gray-700 rounded w-3/4 pulse-slow"></div>
+                                <div class="h-4 bg-gray-700 rounded w-1/2 pulse-slow"></div>
+                            </div>
+                            <div class="mt-4 p-3 bg-green-500/10 border border-green-500/30 rounded-lg">
+                                <div class="text-green-400 text-sm">● Platform Status: LIVE & RUNNING</div>
+                                <div class="text-gray-400 text-xs mt-1">3 AI Suites Active • Real-time Processing</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Floating elements -->
+                    <div class="absolute -top-6 -right-6 w-20 h-20 bg-gradient-to-br from-green-400 to-blue-500 rounded-2xl opacity-20 float"></div>
+                    <div class="absolute -bottom-4 -left-4 w-16 h-16 bg-gradient-to-br from-pink-400 to-purple-500 rounded-2xl opacity-20 float" style="animation-delay: 1s;"></div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Social Proof Section -->
+    <section class="py-16 bg-black">
+        <div class="max-w-7xl mx-auto px-4 text-center">
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-8 mb-16">
+                <div class="fade-in-up">
+                    <div class="text-4xl font-bold neon-green mb-2">24/7</div>
+                    <div class="text-gray-400">Uptime</div>
+                </div>
+                <div class="fade-in-up" style="animation-delay: 0.2s;">
+                    <div class="text-4xl font-bold neon-blue mb-2">3</div>
+                    <div class="text-gray-400">AI Suites</div>
+                </div>
+                <div class="fade-in-up" style="animation-delay: 0.4s;">
+                    <div class="text-4xl font-bold hot-pink mb-2">∞</div>
+                    <div class="text-gray-400">Possibilities</div>
+                </div>
+                <div class="fade-in-up" style="animation-delay: 0.6s;">
+                    <div class="text-4xl font-bold text-yellow-400 mb-2">LIVE</div>
+                    <div class="text-gray-400">Right Now</div>
+                </div>
+            </div>
+            
+            <div class="max-w-4xl mx-auto">
+                <h4 class="text-3xl font-bold mb-8">
+                    What makes <span class="neon-green">SuperMega OS</span> different?
+                </h4>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+                    <div class="suite-card p-6 rounded-xl">
+                        <div class="text-4xl mb-4">🚀</div>
+                        <h5 class="text-xl font-bold mb-3 neon-green">Ready Now</h5>
+                        <p class="text-gray-300">No waitlists, no betas. Full production platform available immediately.</p>
+                    </div>
+                    <div class="suite-card p-6 rounded-xl">
+                        <div class="text-4xl mb-4">🧠</div>
+                        <h5 class="text-xl font-bold mb-3 neon-blue">AI-First</h5>
+                        <p class="text-gray-300">Built from the ground up with AI at the core of every feature.</p>
+                    </div>
+                    <div class="suite-card p-6 rounded-xl">
+                        <div class="text-4xl mb-4">⚡</div>
+                        <h5 class="text-xl font-bold mb-3 hot-pink">Integrated</h5>
+                        <p class="text-gray-300">Three powerful suites working together seamlessly.</p>
+                    </div>
                 </div>
             </div>
         </div>
@@ -405,6 +591,35 @@
                 btn.addEventListener('click', redirectToSignup);
             });
             
+            // Mobile menu functionality
+            const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+            const mobileMenu = document.getElementById('mobile-menu');
+            
+            if (mobileMenuBtn && mobileMenu) {
+                mobileMenuBtn.addEventListener('click', function() {
+                    mobileMenu.classList.toggle('hidden');
+                });
+            }
+            
+            // Add fade-in animations on scroll
+            const observerOptions = {
+                threshold: 0.1,
+                rootMargin: '0px 0px -50px 0px'
+            };
+            
+            const observer = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        entry.target.classList.add('fade-in-up');
+                    }
+                });
+            }, observerOptions);
+            
+            // Observe sections for animation
+            document.querySelectorAll('.suite-card, .fade-in-up').forEach(el => {
+                observer.observe(el);
+            });
+            
             // Smooth scrolling for navigation links
             document.querySelectorAll('a[href^="#"]').forEach(anchor => {
                 anchor.addEventListener('click', function (e) {
@@ -424,15 +639,46 @@
         window.dataLayer = window.dataLayer || [];
         function gtag(){dataLayer.push(arguments);}
         gtag('js', new Date());
-        gtag('config', 'GA_MEASUREMENT_ID'); // Replace with actual GA ID
+        gtag('config', 'G-SUPERMEGA2025'); // SuperMega OS tracking
         
         // Track CTA clicks
         function trackCTAClick(location) {
             gtag('event', 'cta_click', {
-                'location': location,
+                'event_category': 'engagement',
+                'event_label': location,
                 'action': 'start_trial'
             });
+            
+            // Also track demo clicks
+            if (location === 'demo') {
+                gtag('event', 'demo_click', {
+                    'event_category': 'engagement',
+                    'event_label': 'live_demo',
+                    'action': 'watch_demo'
+                });
+            }
         }
+        
+        // Track page sections viewed
+        const sectionObserver = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    const sectionName = entry.target.id || entry.target.className;
+                    gtag('event', 'section_view', {
+                        'event_category': 'engagement',
+                        'event_label': sectionName,
+                        'action': 'section_viewed'
+                    });
+                }
+            });
+        }, { threshold: 0.5 });
+        
+        // Track major sections
+        document.addEventListener('DOMContentLoaded', function() {
+            document.querySelectorAll('section[id], #creative, #intelligence, #productivity, #pricing').forEach(section => {
+                sectionObserver.observe(section);
+            });
+        });
     </script>
 
 </body>
