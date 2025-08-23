@@ -1,599 +1,634 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="bg-black">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SuperMega.dev - Office Work Replacement Revolution</title>
+    <title>AI Work OS - Made by AI</title>
+    
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- CSS Framework -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
     
-    <!-- SEO Meta Tags -->
-    <meta name="description" content="SuperMega.dev - Revolutionary Office Work Replacement Platform with 8 specialized AI agents for complete business automation. Replace Gmail, Excel, PowerPoint, and more with superior AI alternatives. DEPLOYED: 2025-01-20">
-    <meta name="keywords" content="office work replacement, AI automation, email specialist, document expert, presentation master, data analyst, meeting coordinator, project manager">
-    <meta name="author" content="SuperMega Development Team">
+    <!-- Payment Processing -->
+    <script src="https://js.stripe.com/v3/"></script>
     
-    <!-- Open Graph Meta Tags -->
-    <meta property="og:title" content="SuperMega.dev - Office Work Replacement Revolution">
-    <meta property="og:description" content="8 specialized AI agents for complete office automation. Email Specialist (96.3% accuracy), Document Expert, Data Analyst (94.7% accuracy), and more.">
-    <meta property="og:url" content="https://supermega.dev">
-    <meta property="og:type" content="website">
+    <!-- Analytics -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=GA_MEASUREMENT_ID"></script>
     
     <style>
-        body { font-family: 'Inter', sans-serif; }
-        .gradient-bg { background: linear-gradient(135deg, #1e3a8a 0%, #7c3aed 50%, #db2777 100%); }
-        .glass-effect { 
-            background: rgba(255, 255, 255, 0.1); 
-            backdrop-filter: blur(15px);
-            border: 1px solid rgba(255, 255, 255, 0.2);
+        body { 
+            font-family: 'Inter', sans-serif;
+            background: #000000;
         }
-        .agent-card {
-            background: linear-gradient(145deg, #1e293b, #334155);
-            border: 1px solid #475569;
+        .pitch-black { background: #000000; }
+        .neon-green { color: #00FF88; }
+        .neon-blue { color: #0088FF; }
+        .hot-pink { color: #FF0088; }
+        .glow-green { text-shadow: 0 0 20px #00FF88; }
+        .glow-blue { text-shadow: 0 0 20px #0088FF; }
+        .suite-card { 
+            background: linear-gradient(135deg, #0A0A0A 0%, #111111 100%);
+            border: 1px solid #333333;
             transition: all 0.3s ease;
         }
-        .agent-card:hover {
-            transform: translateY(-8px);
-            box-shadow: 0 25px 35px -5px rgba(0, 0, 0, 0.5);
-            border-color: #60a5fa;
-        }
-        .metric-highlight {
-            background: linear-gradient(45deg, #10b981, #3b82f6);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-        }
-        .success-story {
-            background: linear-gradient(145deg, #0f172a, #1e293b);
-            border: 1px solid #334155;
-        }
-        .pricing-card {
-            background: linear-gradient(145deg, #1e293b, #334155);
-            border: 2px solid #475569;
-            transition: all 0.3s ease;
-        }
-        .pricing-card:hover {
+        .suite-card:hover { 
+            border-color: #00FF88;
             transform: translateY(-5px);
-            border-color: #60a5fa;
-            box-shadow: 0 20px 30px -5px rgba(0, 0, 0, 0.4);
+            box-shadow: 0 20px 40px rgba(0, 255, 136, 0.1);
         }
-        .enterprise-card {
-            border-color: #f59e0b !important;
-            background: linear-gradient(145deg, #451a03, #78350f) !important;
+        .cta-button {
+            background: linear-gradient(135deg, #00FF88 0%, #0088FF 100%);
+            color: #000000;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+        .cta-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(0, 255, 136, 0.3);
+        }
+        .hero-gradient {
+            background: radial-gradient(ellipse at center, #111111 0%, #000000 70%);
         }
     </style>
 </head>
-<body class="bg-gray-900 text-white min-h-screen">
+<body class="bg-black text-white antialiased overflow-x-hidden">
+
+    <!-- Navigation -->
+    <nav class="fixed top-0 w-full bg-black/90 backdrop-blur-sm border-b border-gray-800 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-16">
+                <div class="flex items-center">
+                    <h1 class="text-2xl font-bold">
+                        AI Work OS <span class="neon-green glow-green">●</span>
+                    </h1>
+                    <span class="ml-3 px-3 py-1 bg-green-500/20 neon-green rounded-full text-xs font-semibold border border-green-500/30">
+                        Made by AI
+                    </span>
+                </div>
+                <div class="hidden md:flex items-center space-x-8">
+                    <a href="#creative" class="hover:text-green-400 transition-colors font-medium">Creative Studio</a>
+                    <a href="#intelligence" class="hover:text-blue-400 transition-colors font-medium">Data Intelligence</a>
+                    <a href="#productivity" class="hot-pink hover:text-pink-300 transition-colors font-medium">Productivity Engine</a>
+                    <a href="#pricing" class="hover:text-gray-300 transition-colors font-medium">Pricing</a>
+                    <button class="start-trial-btn cta-button px-6 py-2 rounded-lg font-semibold">
+                        Start Free Trial
+                    </button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
     <!-- Hero Section -->
-    <div class="gradient-bg min-h-screen flex items-center relative overflow-hidden">
-        <div class="absolute inset-0 bg-black bg-opacity-20"></div>
-        <div class="container mx-auto px-6 relative z-10">
-            <div class="text-center max-w-4xl mx-auto">
-                <div class="mb-8">
-                    <span class="inline-block px-4 py-2 bg-white bg-opacity-20 rounded-full text-sm font-semibold mb-4 glass-effect">
-                        🚀 Office Work Replacement Revolution
-                    </span>
+    <section class="hero-gradient pt-24 pb-20 px-4 min-h-screen flex items-center">
+        <div class="max-w-7xl mx-auto text-center">
+            <div class="mb-8">
+                <span class="inline-block px-4 py-2 bg-green-500/10 neon-green rounded-full text-sm font-semibold border border-green-500/20 mb-6">
+                    🤖 Made by AI • Built for Power Users
+                </span>
+            </div>
+            <h2 class="text-6xl md:text-8xl font-bold mb-8 leading-tight">
+                Made by <span class="neon-green glow-green">AI</span><br>
+                Built for <span class="neon-blue glow-blue">Power Users</span>
+            </h2>
+            <p class="text-xl md:text-2xl text-gray-300 mb-12 max-w-4xl mx-auto leading-relaxed">
+                The AI-Native Productivity Platform that integrates <span class="neon-green">Creative Studio</span>, 
+                <span class="neon-blue">Data Intelligence</span>, and <span class="hot-pink">Productivity Engine</span> 
+                into one seamless experience.
+            </p>
+            <div class="flex flex-col sm:flex-row gap-6 justify-center mb-16">
+                <button class="start-trial-btn cta-button text-lg px-10 py-4 rounded-lg font-semibold">
+                    Start Free Trial - 30 Days
+                </button>
+                <button class="border-2 border-gray-600 text-white px-10 py-4 rounded-lg font-semibold hover:bg-gray-900 hover:border-gray-500 transition-all">
+                    Watch Live Demo
+                </button>
+            </div>
+            <div class="grid grid-cols-3 gap-8 max-w-2xl mx-auto">
+                <div class="text-center">
+                    <div class="text-4xl font-bold neon-green mb-2">3</div>
+                    <div class="text-gray-400 text-sm">AI Suites</div>
                 </div>
-                <h1 class="text-5xl md:text-7xl font-black mb-6 leading-tight">
-                    Replace Your Entire
-                    <span class="bg-gradient-to-r from-yellow-400 to-orange-500 bg-clip-text text-transparent">
-                        Office Workflow
-                    </span>
-                    with AI
-                </h1>
-                <p class="text-xl md:text-2xl mb-8 text-gray-200 max-w-3xl mx-auto leading-relaxed">
-                    8 Specialized AI Agents working 24/7. Email Specialist with <span class="metric-highlight font-bold">96.3% accuracy</span>, 
-                    Data Analyst with <span class="metric-highlight font-bold">94.7% accuracy</span>, and more. 
-                    Stop using 10 different tools when 1 AI platform does it all.
+                <div class="text-center">
+                    <div class="text-4xl font-bold neon-blue mb-2">∞</div>
+                    <div class="text-gray-400 text-sm">Possibilities</div>
+                </div>
+                <div class="text-center">
+                    <div class="text-4xl font-bold hot-pink mb-2">24/7</div>
+                    <div class="text-gray-400 text-sm">AI Power</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- AI Suites Section -->
+    <section id="suites" class="py-20 px-4 bg-black">
+        <div class="max-w-7xl mx-auto">
+            <div class="text-center mb-20">
+                <h3 class="text-5xl md:text-6xl font-bold mb-6">
+                    Three <span class="neon-green glow-green">AI-Powered</span> Suites
+                </h3>
+                <p class="text-xl md:text-2xl text-gray-300 max-w-3xl mx-auto">
+                    Specialized AI tools designed for creative professionals, data analysts, and productivity power users.
                 </p>
+            </div>
+            
+            <div class="grid md:grid-cols-3 gap-8">
+                <!-- Creative Studio -->
+                <div id="creative" class="suite-card p-8 rounded-2xl group cursor-pointer">
+                    <div class="w-16 h-16 bg-green-500/20 rounded-2xl flex items-center justify-center mb-6 group-hover:bg-green-500/30 transition-colors">
+                        <span class="text-3xl">🎨</span>
+                    </div>
+                    <h4 class="text-3xl font-bold mb-4 neon-green">Creative Studio</h4>
+                    <p class="text-gray-300 mb-8 text-lg leading-relaxed">
+                        AI-powered image generation, video editing, audio production, and design templates. 
+                        Create professional content at the speed of thought.
+                    </p>
+                    <ul class="space-y-3 mb-8">
+                        <li class="flex items-center text-gray-300">
+                            <span class="neon-green mr-3 font-bold">✓</span>
+                            DALL-E 3 Integration
+                        </li>
+                        <li class="flex items-center text-gray-300">
+                            <span class="neon-green mr-3 font-bold">✓</span>
+                            Video Editing & Effects
+                        </li>
+                        <li class="flex items-center text-gray-300">
+                            <span class="neon-green mr-3 font-bold">✓</span>
+                            Audio Production Tools
+                        </li>
+                        <li class="flex items-center text-gray-300">
+                            <span class="neon-green mr-3 font-bold">✓</span>
+                            Brand Template System
+                        </li>
+                    </ul>
+                    <button class="w-full bg-gradient-to-r from-green-500 to-green-600 hover:from-green-400 hover:to-green-500 text-black font-semibold py-4 rounded-lg transition-all transform hover:scale-105">
+                        Explore Creative Studio
+                    </button>
+                </div>
                 
-                <!-- Key Metrics -->
-                <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-12 max-w-3xl mx-auto">
-                    <div class="glass-effect rounded-lg p-4">
-                        <div class="text-2xl font-bold text-green-400">96.3%</div>
-                        <div class="text-sm text-gray-300">Email Accuracy</div>
+                <!-- Data Intelligence -->
+                <div id="intelligence" class="suite-card p-8 rounded-2xl group cursor-pointer">
+                    <div class="w-16 h-16 bg-blue-500/20 rounded-2xl flex items-center justify-center mb-6 group-hover:bg-blue-500/30 transition-colors">
+                        <span class="text-3xl">📊</span>
                     </div>
-                    <div class="glass-effect rounded-lg p-4">
-                        <div class="text-2xl font-bold text-blue-400">94.7%</div>
-                        <div class="text-sm text-gray-300">Data Analysis</div>
-                    </div>
-                    <div class="glass-effect rounded-lg p-4">
-                        <div class="text-2xl font-bold text-purple-400">24/7</div>
-                        <div class="text-sm text-gray-300">Learning Mode</div>
-                    </div>
-                    <div class="glass-effect rounded-lg p-4">
-                        <div class="text-2xl font-bold text-orange-400">8</div>
-                        <div class="text-sm text-gray-300">AI Specialists</div>
-                    </div>
-                </div>
-
-                <div class="flex flex-col sm:flex-row gap-4 justify-center items-center">
-                    <button onclick="window.open('http://localhost:8501', '_blank')" 
-                            class="px-8 py-4 bg-gradient-to-r from-green-500 to-blue-600 rounded-lg font-bold text-lg hover:from-green-600 hover:to-blue-700 transition-all duration-300 transform hover:scale-105 shadow-lg">
-                        🚀 Launch Platform Now
+                    <h4 class="text-3xl font-bold mb-4 neon-blue">Data Intelligence</h4>
+                    <p class="text-gray-300 mb-8 text-lg leading-relaxed">
+                        Natural language queries, automated insights, predictive analytics, and business dashboards. 
+                        Turn data into decisions instantly.
+                    </p>
+                    <ul class="space-y-3 mb-8">
+                        <li class="flex items-center text-gray-300">
+                            <span class="neon-blue mr-3 font-bold">✓</span>
+                            Natural Language Queries
+                        </li>
+                        <li class="flex items-center text-gray-300">
+                            <span class="neon-blue mr-3 font-bold">✓</span>
+                            Automated Insights
+                        </li>
+                        <li class="flex items-center text-gray-300">
+                            <span class="neon-blue mr-3 font-bold">✓</span>
+                            Predictive Analytics
+                        </li>
+                        <li class="flex items-center text-gray-300">
+                            <span class="neon-blue mr-3 font-bold">✓</span>
+                            Visual Dashboards
+                        </li>
+                    </ul>
+                    <button class="w-full bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-400 hover:to-blue-500 text-black font-semibold py-4 rounded-lg transition-all transform hover:scale-105">
+                        Explore Data Intelligence
                     </button>
-                    <button class="px-8 py-4 border-2 border-white border-opacity-30 rounded-lg font-semibold hover:bg-white hover:bg-opacity-10 transition-all duration-300 glass-effect">
-                        📊 View Live Demo
+                </div>
+                
+                <!-- Productivity Engine -->
+                <div id="productivity" class="suite-card p-8 rounded-2xl group cursor-pointer">
+                    <div class="w-16 h-16 bg-pink-500/20 rounded-2xl flex items-center justify-center mb-6 group-hover:bg-pink-500/30 transition-colors">
+                        <span class="text-3xl">⚡</span>
+                    </div>
+                    <h4 class="text-3xl font-bold mb-4 hot-pink">Productivity Engine</h4>
+                    <p class="text-gray-300 mb-8 text-lg leading-relaxed">
+                        Email automation, PDF processing, spreadsheet analysis, and calendar integration. 
+                        Automate everything, focus on what matters.
+                    </p>
+                    <ul class="space-y-3 mb-8">
+                        <li class="flex items-center text-gray-300">
+                            <span class="hot-pink mr-3 font-bold">✓</span>
+                            Email Automation
+                        </li>
+                        <li class="flex items-center text-gray-300">
+                            <span class="hot-pink mr-3 font-bold">✓</span>
+                            PDF Processing
+                        </li>
+                        <li class="flex items-center text-gray-300">
+                            <span class="hot-pink mr-3 font-bold">✓</span>
+                            Spreadsheet Analysis
+                        </li>
+                        <li class="flex items-center text-gray-300">
+                            <span class="hot-pink mr-3 font-bold">✓</span>
+                            Calendar Integration
+                        </li>
+                    </ul>
+                    <button class="w-full bg-gradient-to-r from-pink-500 to-pink-600 hover:from-pink-400 hover:to-pink-500 text-black font-semibold py-4 rounded-lg transition-all transform hover:scale-105">
+                        Explore Productivity Engine
                     </button>
                 </div>
             </div>
         </div>
-    </div>
+    </section>
 
-    <!-- AI Agents Section -->
-    <div class="py-20 bg-gray-800">
-        <div class="container mx-auto px-6">
-            <div class="text-center mb-16">
-                <h2 class="text-4xl md:text-5xl font-black mb-6">
-                    Meet Your <span class="text-gradient-to-r from-blue-400 to-purple-500">AI Office Team</span>
-                </h2>
-                <p class="text-xl text-gray-300 max-w-3xl mx-auto">
-                    8 specialized AI agents, each an expert in their field, working together to automate your entire office workflow
-                </p>
-            </div>
-
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-                <!-- Email Specialist -->
-                <div class="agent-card rounded-xl p-6 text-center">
-                    <div class="text-4xl mb-4">📧</div>
-                    <h3 class="text-xl font-bold mb-2 text-blue-400">Email Specialist</h3>
-                    <div class="text-green-400 font-bold text-lg mb-3">96.3% Accuracy</div>
-                    <p class="text-gray-300 text-sm mb-4">
-                        Automated email management, smart sorting, response generation, and priority detection
-                    </p>
-                    <div class="text-xs text-gray-400">
-                        Replaces: Gmail, Outlook, Boomerang
+                <!-- PDF Analyzer -->
+                <div class="tool-card bg-white p-8 rounded-xl shadow-lg border">
+                    <div class="flex items-center mb-4">
+                        <div class="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center text-2xl">📄</div>
+                        <div class="ml-4">
+                            <h4 class="text-xl font-bold text-gray-900">PDF Analyzer Pro</h4>
+                            <p class="text-gray-600">Adobe Acrobat Replacement</p>
+                        </div>
                     </div>
+                    <ul class="space-y-2 mb-6">
+                        <li class="flex items-center text-gray-700">
+                            <span class="text-green-500 mr-2">✓</span>
+                            Advanced text extraction & content analysis
+                        </li>
+                        <li class="flex items-center text-gray-700">
+                            <span class="text-green-500 mr-2">✓</span>
+                            AI summarization & key information detection
+                        </li>
+                        <li class="flex items-center text-gray-700">
+                            <span class="text-green-500 mr-2">✓</span>
+                            Document classification & readability analysis
+                        </li>
+                        <li class="flex items-center text-gray-700">
+                            <span class="text-green-500 mr-2">✓</span>
+                            Multi-format export & batch processing
+                        </li>
+                    </ul>
+                    <a href="http://localhost:8080" target="_blank" 
+                       class="w-full bg-red-600 text-white py-3 rounded-lg font-semibold hover:bg-red-700 text-center block">
+                        Launch PDF Tool
+                    </a>
                 </div>
 
-                <!-- Document Expert -->
-                <div class="agent-card rounded-xl p-6 text-center">
-                    <div class="text-4xl mb-4">📄</div>
-                    <h3 class="text-xl font-bold mb-2 text-purple-400">Document Expert</h3>
-                    <div class="text-green-400 font-bold text-lg mb-3">Smart Processing</div>
-                    <p class="text-gray-300 text-sm mb-4">
-                        Document analysis, content extraction, formatting, and intelligent summarization
-                    </p>
-                    <div class="text-xs text-gray-400">
-                        Replaces: Word, Adobe, DocuSign
+                <!-- Web Scraper -->
+                <div class="tool-card bg-white p-8 rounded-xl shadow-lg border">
+                    <div class="flex items-center mb-4">
+                        <div class="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center text-2xl">🌐</div>
+                        <div class="ml-4">
+                            <h4 class="text-xl font-bold text-gray-900">Web Scraping Agent</h4>
+                            <p class="text-gray-600">Advanced Data Extraction</p>
+                        </div>
                     </div>
-                </div>
-
-                <!-- Presentation Master -->
-                <div class="agent-card rounded-xl p-6 text-center">
-                    <div class="text-4xl mb-4">🎯</div>
-                    <h3 class="text-xl font-bold mb-2 text-orange-400">Presentation Master</h3>
-                    <div class="text-green-400 font-bold text-lg mb-3">94/100 Score</div>
-                    <p class="text-gray-300 text-sm mb-4">
-                        Auto-generated presentations with data visualization and professional design
-                    </p>
-                    <div class="text-xs text-gray-400">
-                        Replaces: PowerPoint, Canva, Prezi
-                    </div>
-                </div>
-
-                <!-- Data Analyst -->
-                <div class="agent-card rounded-xl p-6 text-center">
-                    <div class="text-4xl mb-4">📊</div>
-                    <h3 class="text-xl font-bold mb-2 text-green-400">Data Analyst</h3>
-                    <div class="text-green-400 font-bold text-lg mb-3">94.7% Accuracy</div>
-                    <p class="text-gray-300 text-sm mb-4">
-                        Advanced analytics, predictive modeling, and automated reporting with insights
-                    </p>
-                    <div class="text-xs text-gray-400">
-                        Replaces: Excel, Tableau, Google Sheets
-                    </div>
-                </div>
-
-                <!-- Meeting Coordinator -->
-                <div class="agent-card rounded-xl p-6 text-center">
-                    <div class="text-4xl mb-4">🤝</div>
-                    <h3 class="text-xl font-bold mb-2 text-cyan-400">Meeting Coordinator</h3>
-                    <div class="text-green-400 font-bold text-lg mb-3">Smart Scheduling</div>
-                    <p class="text-gray-300 text-sm mb-4">
-                        Meeting optimization, agenda creation, note-taking, and action item tracking
-                    </p>
-                    <div class="text-xs text-gray-400">
-                        Replaces: Calendly, Zoom, Teams
-                    </div>
-                </div>
-
-                <!-- Project Manager -->
-                <div class="agent-card rounded-xl p-6 text-center">
-                    <div class="text-4xl mb-4">📋</div>
-                    <h3 class="text-xl font-bold mb-2 text-red-400">Project Manager</h3>
-                    <div class="text-green-400 font-bold text-lg mb-3">92% Confidence</div>
-                    <p class="text-gray-300 text-sm mb-4">
-                        Task automation, deadline tracking, resource allocation, and progress monitoring
-                    </p>
-                    <div class="text-xs text-gray-400">
-                        Replaces: Asana, Monday.com, Jira
-                    </div>
-                </div>
-
-                <!-- Research Assistant -->
-                <div class="agent-card rounded-xl p-6 text-center">
-                    <div class="text-4xl mb-4">🔍</div>
-                    <h3 class="text-xl font-bold mb-2 text-yellow-400">Research Assistant</h3>
-                    <div class="text-green-400 font-bold text-lg mb-3">Deep Analysis</div>
-                    <p class="text-gray-300 text-sm mb-4">
-                        Market research, competitor analysis, trend identification, and report generation
-                    </p>
-                    <div class="text-xs text-gray-400">
-                        Replaces: Google, Research Tools
-                    </div>
-                </div>
-
-                <!-- Communication Expert -->
-                <div class="agent-card rounded-xl p-6 text-center">
-                    <div class="text-4xl mb-4">💬</div>
-                    <h3 class="text-xl font-bold mb-2 text-pink-400">Communication Expert</h3>
-                    <div class="text-green-400 font-bold text-lg mb-3">Multi-Channel</div>
-                    <p class="text-gray-300 text-sm mb-4">
-                        Cross-platform messaging, tone optimization, and relationship management
-                    </p>
-                    <div class="text-xs text-gray-400">
-                        Replaces: Slack, WhatsApp, LinkedIn
-                    </div>
+                    <ul class="space-y-2 mb-6">
+                        <li class="flex items-center text-gray-700">
+                            <span class="text-green-500 mr-2">✓</span>
+                            Real browser automation with progress tracking
+                        </li>
+                        <li class="flex items-center text-gray-700">
+                            <span class="text-green-500 mr-2">✓</span>
+                            JavaScript rendering & anti-detection features
+                        </li>
+                        <li class="flex items-center text-gray-700">
+                            <span class="text-green-500 mr-2">✓</span>
+                            Bulk URL processing & scheduled monitoring
+                        </li>
+                        <li class="flex items-center text-gray-700">
+                            <span class="text-green-500 mr-2">✓</span>
+                            Data export to CSV/JSON/Excel formats
+                        </li>
+                    </ul>
+                    <a href="http://localhost:8080" target="_blank" 
+                       class="w-full bg-purple-600 text-white py-3 rounded-lg font-semibold hover:bg-purple-700 text-center block">
+                        Launch Web Scraper
+                    </a>
                 </div>
             </div>
         </div>
-    </div>
+    </section>
 
-    <!-- Success Stories Section -->
-    <div class="py-20 bg-gray-900">
-        <div class="container mx-auto px-6">
+    <!-- Features Section -->
+    <section id="features" class="py-20 bg-gray-50">
+        <div class="max-w-7xl mx-auto px-4">
             <div class="text-center mb-16">
-                <h2 class="text-4xl md:text-5xl font-black mb-6">
-                    Real Results from Real Companies
-                </h2>
-                <p class="text-xl text-gray-300">Companies replacing their entire office stack with our AI platform</p>
+                <h3 class="text-3xl font-bold text-gray-900 mb-4">Why Choose AI Work OS?</h3>
+                <p class="text-xl text-gray-600">Real functionality that actually works</p>
             </div>
 
             <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
-                <div class="success-story rounded-xl p-8">
-                    <div class="text-3xl mb-4">🚀</div>
-                    <h3 class="text-xl font-bold mb-3 text-blue-400">TechCorp Solutions</h3>
-                    <p class="text-gray-300 mb-4">
-                        "Replaced Gmail, Excel, and PowerPoint. Our productivity increased by 340% and we saved $2.3M annually."
-                    </p>
-                    <div class="text-green-400 font-bold">340% Productivity Increase</div>
-                    <div class="text-sm text-gray-400 mt-2">$2.3M Annual Savings</div>
+                <div class="text-center">
+                    <div class="w-16 h-16 bg-blue-100 rounded-full mx-auto mb-4 flex items-center justify-center text-2xl">🚀</div>
+                    <h4 class="text-xl font-bold text-gray-900 mb-2">Production Ready</h4>
+                    <p class="text-gray-600">Built for real work, not demos. Handle actual files, emails, and data.</p>
                 </div>
-
-                <div class="success-story rounded-xl p-8">
-                    <div class="text-3xl mb-4">📊</div>
-                    <h3 class="text-xl font-bold mb-3 text-purple-400">DataFlow Industries</h3>
-                    <p class="text-gray-300 mb-4">
-                        "The Data Analyst agent processes our reports 50x faster than our previous Excel workflows."
-                    </p>
-                    <div class="text-green-400 font-bold">50x Faster Processing</div>
-                    <div class="text-sm text-gray-400 mt-2">99.2% Accuracy Rate</div>
+                <div class="text-center">
+                    <div class="w-16 h-16 bg-green-100 rounded-full mx-auto mb-4 flex items-center justify-center text-2xl">🤖</div>
+                    <h4 class="text-xl font-bold text-gray-900 mb-2">AI Powered</h4>
+                    <p class="text-gray-600">Smart analysis, automated insights, and intelligent recommendations.</p>
                 </div>
-
-                <div class="success-story rounded-xl p-8">
-                    <div class="text-3xl mb-4">🎯</div>
-                    <h3 class="text-xl font-bold mb-3 text-orange-400">Global Enterprises</h3>
-                    <p class="text-gray-300 mb-4">
-                        "Our entire 500-person company runs on SuperMega AI. We've eliminated 15 different software subscriptions."
-                    </p>
-                    <div class="text-green-400 font-bold">15 Tools Eliminated</div>
-                    <div class="text-sm text-gray-400 mt-2">500 Employees Automated</div>
+                <div class="text-center">
+                    <div class="w-16 h-16 bg-purple-100 rounded-full mx-auto mb-4 flex items-center justify-center text-2xl">⚡</div>
+                    <h4 class="text-xl font-bold text-gray-900 mb-2">All-in-One</h4>
+                    <p class="text-gray-600">Replace multiple apps with one comprehensive platform.</p>
                 </div>
             </div>
         </div>
-    </div>
-
-    <!-- Features Comparison -->
-    <div class="py-20 bg-gray-800">
-        <div class="container mx-auto px-6">
-            <div class="text-center mb-16">
-                <h2 class="text-4xl md:text-5xl font-black mb-6">
-                    Why Replace Your Current Tools?
-                </h2>
-                <p class="text-xl text-gray-300">Stop juggling multiple subscriptions when one AI platform does it all better</p>
-            </div>
-
-            <div class="overflow-x-auto">
-                <table class="w-full text-left">
-                    <thead>
-                        <tr class="border-b border-gray-600">
-                            <th class="py-4 px-6 text-gray-300">Feature</th>
-                            <th class="py-4 px-6 text-center text-green-400 font-bold">SuperMega AI</th>
-                            <th class="py-4 px-6 text-center text-gray-400">Traditional Tools</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr class="border-b border-gray-700">
-                            <td class="py-4 px-6">Email Processing Speed</td>
-                            <td class="py-4 px-6 text-center text-green-400 font-bold">1000+ emails/minute</td>
-                            <td class="py-4 px-6 text-center text-red-400">Manual processing</td>
-                        </tr>
-                        <tr class="border-b border-gray-700">
-                            <td class="py-4 px-6">Data Analysis Accuracy</td>
-                            <td class="py-4 px-6 text-center text-green-400 font-bold">94.7%</td>
-                            <td class="py-4 px-6 text-center text-red-400">Human error prone</td>
-                        </tr>
-                        <tr class="border-b border-gray-700">
-                            <td class="py-4 px-6">Learning & Adaptation</td>
-                            <td class="py-4 px-6 text-center text-green-400 font-bold">24/7 Continuous</td>
-                            <td class="py-4 px-6 text-center text-red-400">Static features</td>
-                        </tr>
-                        <tr class="border-b border-gray-700">
-                            <td class="py-4 px-6">Integration Complexity</td>
-                            <td class="py-4 px-6 text-center text-green-400 font-bold">One Platform</td>
-                            <td class="py-4 px-6 text-center text-red-400">10+ separate tools</td>
-                        </tr>
-                        <tr class="border-b border-gray-700">
-                            <td class="py-4 px-6">Monthly Cost</td>
-                            <td class="py-4 px-6 text-center text-green-400 font-bold">$97/user</td>
-                            <td class="py-4 px-6 text-center text-red-400">$300+/user</td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </div>
+    </section>
 
     <!-- Pricing Section -->
-    <div class="py-20 bg-gray-900">
-        <div class="container mx-auto px-6">
-            <div class="text-center mb-16">
-                <h2 class="text-4xl md:text-5xl font-black mb-6">
-                    Simple Pricing, Massive Savings
-                </h2>
-                <p class="text-xl text-gray-300">Replace $300+/month in software subscriptions with one AI platform</p>
+    <section id="pricing" class="py-20 px-4 bg-gray-900/20">
+        <div class="max-w-6xl mx-auto text-center">
+            <div class="mb-20">
+                <h3 class="text-5xl md:text-6xl font-bold mb-6">
+                    Simple, <span class="neon-green glow-green">Transparent</span> Pricing
+                </h3>
+                <p class="text-xl md:text-2xl text-gray-300 max-w-3xl mx-auto">
+                    One plan. All features. 30-day free trial. No setup fees. Cancel anytime.
+                </p>
             </div>
-
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-6xl mx-auto">
-                <!-- Starter Plan -->
-                <div class="pricing-card rounded-xl p-8">
-                    <div class="text-center mb-8">
-                        <h3 class="text-2xl font-bold mb-2 text-blue-400">Professional</h3>
-                        <div class="text-4xl font-black mb-2">$97<span class="text-lg text-gray-400">/month</span></div>
-                        <p class="text-gray-400">Perfect for small teams</p>
+            
+            <div class="max-w-md mx-auto">
+                <div class="suite-card p-10 rounded-3xl border-2 border-green-500/30 relative">
+                    <div class="absolute -top-4 left-1/2 transform -translate-x-1/2 bg-gradient-to-r from-green-500 to-blue-500 text-black px-6 py-2 rounded-full text-sm font-bold">
+                        Most Popular
                     </div>
-                    <ul class="space-y-3 mb-8">
-                        <li class="flex items-center"><span class="text-green-400 mr-3">✓</span> All 8 AI Agents</li>
-                        <li class="flex items-center"><span class="text-green-400 mr-3">✓</span> Up to 5 users</li>
-                        <li class="flex items-center"><span class="text-green-400 mr-3">✓</span> 50GB storage</li>
-                        <li class="flex items-center"><span class="text-green-400 mr-3">✓</span> 24/7 learning mode</li>
-                        <li class="flex items-center"><span class="text-green-400 mr-3">✓</span> API access</li>
-                        <li class="flex items-center"><span class="text-green-400 mr-3">✓</span> Email support</li>
-                    </ul>
-                    <button class="w-full py-3 bg-blue-600 hover:bg-blue-700 rounded-lg font-semibold transition-all duration-300">
+                    <div class="mb-8">
+                        <h4 class="text-3xl font-bold mb-4">AI Work OS Pro</h4>
+                        <div class="mb-6">
+                            <span class="text-6xl font-bold neon-green glow-green">$97</span>
+                            <span class="text-gray-400 text-2xl">/month</span>
+                        </div>
+                        <p class="text-gray-300 text-lg">
+                            Everything you need to transform your productivity
+                        </p>
+                    </div>
+                    
+                    <div class="space-y-4 mb-10 text-left">
+                        <div class="flex items-center">
+                            <span class="neon-green mr-4 font-bold text-xl">✓</span>
+                            <span class="text-lg">All three AI-powered suites</span>
+                        </div>
+                        <div class="flex items-center">
+                            <span class="neon-blue mr-4 font-bold text-xl">✓</span>
+                            <span class="text-lg">Unlimited projects and usage</span>
+                        </div>
+                        <div class="flex items-center">
+                            <span class="hot-pink mr-4 font-bold text-xl">✓</span>
+                            <span class="text-lg">Priority support and updates</span>
+                        </div>
+                        <div class="flex items-center">
+                            <span class="neon-green mr-4 font-bold text-xl">✓</span>
+                            <span class="text-lg">Advanced AI capabilities</span>
+                        </div>
+                        <div class="flex items-center">
+                            <span class="neon-blue mr-4 font-bold text-xl">✓</span>
+                            <span class="text-lg">Custom integrations</span>
+                        </div>
+                        <div class="flex items-center">
+                            <span class="hot-pink mr-4 font-bold text-xl">✓</span>
+                            <span class="text-lg">30-day free trial</span>
+                        </div>
+                    </div>
+                    
+                    <button class="start-trial-btn w-full cta-button text-xl py-4 rounded-xl font-bold mb-4">
                         Start Free Trial
                     </button>
+                    <p class="text-sm text-gray-400">
+                        No credit card required • Cancel anytime • Full access during trial
+                    </p>
                 </div>
-
-                <!-- Business Plan -->
-                <div class="pricing-card rounded-xl p-8 transform scale-105 border-blue-500">
-                    <div class="text-center mb-8">
-                        <div class="inline-block px-3 py-1 bg-blue-600 rounded-full text-sm font-semibold mb-4">Most Popular</div>
-                        <h3 class="text-2xl font-bold mb-2 text-blue-400">Business</h3>
-                        <div class="text-4xl font-black mb-2">$197<span class="text-lg text-gray-400">/month</span></div>
-                        <p class="text-gray-400">For growing companies</p>
-                    </div>
+            </div>
+        </div>
+    </section>
+                    <h4 class="text-2xl font-bold text-gray-900 mb-4">Enterprise</h4>
+                    <div class="text-4xl font-bold text-indigo-600 mb-4">$497</div>
+                    <p class="text-gray-600 mb-6">per user/month</p>
                     <ul class="space-y-3 mb-8">
-                        <li class="flex items-center"><span class="text-green-400 mr-3">✓</span> All Professional features</li>
-                        <li class="flex items-center"><span class="text-green-400 mr-3">✓</span> Up to 25 users</li>
-                        <li class="flex items-center"><span class="text-green-400 mr-3">✓</span> 500GB storage</li>
-                        <li class="flex items-center"><span class="text-green-400 mr-3">✓</span> Advanced analytics</li>
-                        <li class="flex items-center"><span class="text-green-400 mr-3">✓</span> Custom integrations</li>
-                        <li class="flex items-center"><span class="text-green-400 mr-3">✓</span> Priority support</li>
-                        <li class="flex items-center"><span class="text-green-400 mr-3">✓</span> Dedicated success manager</li>
+                        <li class="flex items-center justify-center">
+                            <span class="text-green-500 mr-2">✓</span>
+                            <span>Full Platform Access</span>
+                        </li>
+                        <li class="flex items-center justify-center">
+                            <span class="text-green-500 mr-2">✓</span>
+                            <span>Custom AI Agents</span>
+                        </li>
+                        <li class="flex items-center justify-center">
+                            <span class="text-green-500 mr-2">✓</span>
+                            <span>24/7 Support</span>
+                        </li>
+                        <li class="flex items-center justify-center">
+                            <span class="text-green-500 mr-2">✓</span>
+                            <span>White-label Option</span>
+                        </li>
                     </ul>
-                    <button class="w-full py-3 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 rounded-lg font-semibold transition-all duration-300">
-                        Start Free Trial
-                    </button>
-                </div>
-
-                <!-- Enterprise Plan -->
-                <div class="pricing-card enterprise-card rounded-xl p-8">
-                    <div class="text-center mb-8">
-                        <h3 class="text-2xl font-bold mb-2 text-yellow-400">Enterprise</h3>
-                        <div class="text-4xl font-black mb-2">Custom<span class="text-lg text-gray-400"> pricing</span></div>
-                        <p class="text-gray-400">For large organizations</p>
-                    </div>
-                    <ul class="space-y-3 mb-8">
-                        <li class="flex items-center"><span class="text-green-400 mr-3">✓</span> All Business features</li>
-                        <li class="flex items-center"><span class="text-green-400 mr-3">✓</span> Unlimited users</li>
-                        <li class="flex items-center"><span class="text-green-400 mr-3">✓</span> Unlimited storage</li>
-                        <li class="flex items-center"><span class="text-green-400 mr-3">✓</span> White-label options</li>
-                        <li class="flex items-center"><span class="text-green-400 mr-3">✓</span> On-premise deployment</li>
-                        <li class="flex items-center"><span class="text-green-400 mr-3">✓</span> Custom AI training</li>
-                        <li class="flex items-center"><span class="text-green-400 mr-3">✓</span> 24/7 phone support</li>
-                    </ul>
-                    <button class="w-full py-3 bg-gradient-to-r from-yellow-600 to-orange-600 hover:from-yellow-700 hover:to-orange-700 rounded-lg font-semibold transition-all duration-300">
+                    <a href="mailto:swanhtet@supermega.dev" class="w-full bg-gray-200 text-gray-900 py-3 rounded-lg font-semibold hover:bg-gray-300 block">
                         Contact Sales
-                    </button>
+                    </a>
                 </div>
             </div>
         </div>
-    </div>
+    </section>
 
-    <!-- Demo Section -->
-    <div class="py-20 bg-gradient-to-br from-blue-900 to-purple-900">
-        <div class="container mx-auto px-6">
-            <div class="text-center mb-16">
-                <h2 class="text-4xl md:text-5xl font-black mb-6">
-                    See It In Action
-                </h2>
-                <p class="text-xl text-gray-300">Watch our AI agents replace your entire office workflow in real-time</p>
-            </div>
-
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
+    <!-- Status Section -->
+    <section class="py-16 bg-gray-900 text-white">
+        <div class="max-w-7xl mx-auto px-4 text-center">
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-8">
                 <div>
-                    <h3 class="text-3xl font-bold mb-6 text-blue-400">Live Platform Demo</h3>
-                    <ul class="space-y-4 mb-8">
-                        <li class="flex items-center">
-                            <span class="text-green-400 mr-3 text-xl">✓</span>
-                            <span>Watch email processing at 1000+ emails/minute</span>
-                        </li>
-                        <li class="flex items-center">
-                            <span class="text-green-400 mr-3 text-xl">✓</span>
-                            <span>See data analysis with 94.7% accuracy in real-time</span>
-                        </li>
-                        <li class="flex items-center">
-                            <span class="text-green-400 mr-3 text-xl">✓</span>
-                            <span>Experience presentation generation in seconds</span>
-                        </li>
-                        <li class="flex items-center">
-                            <span class="text-green-400 mr-3 text-xl">✓</span>
-                            <span>Observe 24/7 learning and adaptation</span>
-                        </li>
-                    </ul>
-                    <div class="flex flex-col sm:flex-row gap-4">
-                        <button onclick="window.open('http://localhost:8501', '_blank')" 
-                                class="px-6 py-3 bg-gradient-to-r from-green-500 to-blue-600 rounded-lg font-bold hover:from-green-600 hover:to-blue-700 transition-all duration-300">
-                            🚀 Launch Live Demo
-                        </button>
-                        <button class="px-6 py-3 border-2 border-white border-opacity-30 rounded-lg font-semibold hover:bg-white hover:bg-opacity-10 transition-all duration-300 glass-effect">
-                            📞 Schedule Call
-                        </button>
-                    </div>
+                    <div class="text-3xl font-bold text-green-400">✅ LIVE</div>
+                    <div class="text-gray-400">Platform Status</div>
                 </div>
-                
-                <div class="glass-effect rounded-xl p-8">
-                    <h4 class="text-xl font-bold mb-4 text-center text-purple-400">Real-Time Metrics</h4>
-                    <div class="space-y-6">
-                        <div class="flex justify-between items-center">
-                            <span>Emails Processed Today</span>
-                            <span class="text-green-400 font-bold">247,392</span>
-                        </div>
-                        <div class="flex justify-between items-center">
-                            <span>Documents Analyzed</span>
-                            <span class="text-blue-400 font-bold">18,947</span>
-                        </div>
-                        <div class="flex justify-between items-center">
-                            <span>Presentations Created</span>
-                            <span class="text-purple-400 font-bold">3,294</span>
-                        </div>
-                        <div class="flex justify-between items-center">
-                            <span>Data Reports Generated</span>
-                            <span class="text-orange-400 font-bold">12,847</span>
-                        </div>
-                        <div class="flex justify-between items-center">
-                            <span>Meetings Optimized</span>
-                            <span class="text-cyan-400 font-bold">8,392</span>
-                        </div>
-                        <div class="border-t border-gray-600 pt-4 mt-4">
-                            <div class="flex justify-between items-center text-lg font-bold">
-                                <span>Companies Automated</span>
-                                <span class="text-yellow-400">2,847</span>
-                            </div>
-                        </div>
-                    </div>
+                <div>
+                    <div class="text-3xl font-bold text-blue-400">4 Tools</div>
+                    <div class="text-gray-400">Production Ready</div>
+                </div>
+                <div>
+                    <div class="text-3xl font-bold text-purple-400">24/7</div>
+                    <div class="text-gray-400">Available</div>
+                </div>
+                <div>
+                    <div class="text-3xl font-bold text-yellow-400">AI</div>
+                    <div class="text-gray-400">Powered</div>
+                </div>
+            </div>
+            
+            <div class="mt-12 p-6 bg-gray-800 rounded-lg">
+                <h4 class="text-xl font-bold mb-4">🚀 Platform Information</h4>
+                <div class="space-y-2 text-sm">
+                    <p><strong>Platform:</strong> AI Work OS v2.0 Production</p>
+                    <p><strong>Local Access:</strong> <a href="http://localhost:8080" class="text-blue-400">http://localhost:8080</a></p>
+                    <p><strong>Status:</strong> All tools operational and ready</p>
+                    <p><strong>Contact:</strong> <a href="mailto:swanhtet@supermega.dev" class="text-blue-400">swanhtet@supermega.dev</a></p>
                 </div>
             </div>
         </div>
-    </div>
+    </section>
 
     <!-- Call to Action -->
-    <div class="py-20 bg-gray-900">
-        <div class="container mx-auto px-6 text-center">
-            <h2 class="text-4xl md:text-5xl font-black mb-6">
-                Ready to Replace Your Office?
-            </h2>
-            <p class="text-xl text-gray-300 mb-8 max-w-3xl mx-auto">
-                Join 2,847 companies that have already eliminated their office software stack and increased productivity by over 300% with our AI platform.
-            </p>
+    <section class="bg-gradient-to-r from-blue-900 via-blue-800 to-purple-800 py-16">
+        <div class="max-w-4xl mx-auto px-6 text-center">
+            <h2 class="text-3xl font-bold text-white mb-4">Ready to Experience AI WORK OS?</h2>
+            <p class="text-blue-100 mb-8">Start creating with our full suite of AI-powered creative tools</p>
             
-            <div class="flex flex-col sm:flex-row gap-4 justify-center items-center mb-8">
-                <button onclick="window.open('http://localhost:8501', '_blank')" 
-                        class="px-8 py-4 bg-gradient-to-r from-green-500 to-blue-600 rounded-lg font-bold text-lg hover:from-green-600 hover:to-blue-700 transition-all duration-300 transform hover:scale-105 shadow-lg">
-                    🚀 Start Your Revolution Now
-                </button>
-                <button class="px-8 py-4 border-2 border-white border-opacity-30 rounded-lg font-semibold text-lg hover:bg-white hover:bg-opacity-10 transition-all duration-300 glass-effect">
-                    📞 Schedule Demo Call
-                </button>
-            </div>
-            
-            <div class="text-sm text-gray-400 space-y-2">
-                <p>✓ 14-day free trial • ✓ No credit card required • ✓ Setup in 5 minutes</p>
-                <p>✓ Replace 10+ tools instantly • ✓ 24/7 support • ✓ Cancel anytime</p>
-            </div>
-        </div>
-    </div>
-
-    <!-- Footer -->
-    <footer class="bg-gray-800 py-12 border-t border-gray-700">
-        <div class="container mx-auto px-6">
-            <div class="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
-                <div>
-                    <h3 class="text-xl font-bold mb-4 text-blue-400">SuperMega.dev</h3>
-                    <p class="text-gray-400 mb-4">
-                        The complete office work replacement platform powered by 8 specialized AI agents.
-                    </p>
-                    <div class="flex space-x-4">
-                        <a href="#" class="text-gray-400 hover:text-white transition-colors">Twitter</a>
-                        <a href="#" class="text-gray-400 hover:text-white transition-colors">LinkedIn</a>
-                        <a href="#" class="text-gray-400 hover:text-white transition-colors">GitHub</a>
+            <div class="bg-white/10 backdrop-blur-md rounded-2xl p-8 mb-8">
+                <h3 class="text-xl font-semibold text-white mb-4">
+                    <i class="fas fa-rocket mr-2"></i>Live Platform Access
+                </h3>
+                <p class="text-blue-100 mb-6">Experience all 13+ AI tools working in real-time</p>
+                
+                <div class="space-y-4">
+                    <a href="http://localhost:5000/platform" target="_blank" 
+                       class="inline-block bg-gradient-to-r from-green-500 to-blue-500 text-white px-8 py-4 rounded-full text-lg font-semibold hover:shadow-2xl transition-all duration-300 transform hover:scale-105">
+                        <i class="fas fa-play mr-2"></i>Launch AI WORK OS Platform
+                    </a>
+                    
+                    <div class="mt-4 text-sm text-blue-200">
+                        <p>• All 13 AI tools included • Real-time processing • Creative Suite ready</p>
+                        <p class="mt-2">Test tools: <a href="http://localhost:5000/test-tools" target="_blank" class="underline hover:text-white">Run Full Test Suite</a></p>
                     </div>
                 </div>
+            </div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 text-white">
                 <div>
-                    <h4 class="font-semibold mb-4 text-white">AI Agents</h4>
-                    <ul class="space-y-2 text-gray-400">
-                        <li><a href="#" class="hover:text-white transition-colors">Email Specialist</a></li>
-                        <li><a href="#" class="hover:text-white transition-colors">Document Expert</a></li>
-                        <li><a href="#" class="hover:text-white transition-colors">Data Analyst</a></li>
-                        <li><a href="#" class="hover:text-white transition-colors">Project Manager</a></li>
+                    <div class="text-2xl mb-2">🎨</div>
+                    <h4 class="font-semibold mb-1">Creative Suite</h4>
+                    <p class="text-sm text-blue-200">Image gen, video, audio, code</p>
+                </div>
+                <div>
+                    <div class="text-2xl mb-2">📊</div>
+                    <h4 class="font-semibold mb-1">Analytics Suite</h4>
+                    <p class="text-sm text-blue-200">Data analysis, reports, predictions</p>
+                </div>
+                <div>
+                    <div class="text-2xl mb-2">⚙️</div>
+                    <h4 class="font-semibold mb-1">Management Suite</h4>
+                    <p class="text-sm text-blue-200">Task management, automation</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="py-16 px-4 bg-black border-t border-gray-800">
+        <div class="max-w-7xl mx-auto">
+            <div class="text-center mb-12">
+                <h2 class="text-3xl font-bold mb-4">
+                    AI Work OS <span class="neon-green glow-green">●</span>
+                </h2>
+                <p class="text-gray-300 text-lg">Made by AI • Built for Power Users</p>
+            </div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-8 mb-12">
+                <div>
+                    <h5 class="font-bold text-white mb-4 text-lg">Suites</h5>
+                    <ul class="space-y-3 text-gray-400">
+                        <li><a href="#creative" class="hover:text-green-400 transition-colors">Creative Studio</a></li>
+                        <li><a href="#intelligence" class="hover:text-blue-400 transition-colors">Data Intelligence</a></li>
+                        <li><a href="#productivity" class="hover:text-pink-400 transition-colors">Productivity Engine</a></li>
                     </ul>
                 </div>
                 <div>
-                    <h4 class="font-semibold mb-4 text-white">Platform</h4>
-                    <ul class="space-y-2 text-gray-400">
-                        <li><a href="#" class="hover:text-white transition-colors">Live Demo</a></li>
-                        <li><a href="#" class="hover:text-white transition-colors">Pricing</a></li>
-                        <li><a href="#" class="hover:text-white transition-colors">Enterprise</a></li>
-                        <li><a href="#" class="hover:text-white transition-colors">API Docs</a></li>
+                    <h5 class="font-bold text-white mb-4 text-lg">Platform</h5>
+                    <ul class="space-y-3 text-gray-400">
+                        <li><a href="#pricing" class="hover:text-gray-300 transition-colors">Pricing</a></li>
+                        <li><a href="#" class="hover:text-gray-300 transition-colors">API Docs</a></li>
+                        <li><a href="#" class="hover:text-gray-300 transition-colors">Integrations</a></li>
                     </ul>
                 </div>
                 <div>
-                    <h4 class="font-semibold mb-4 text-white">Company</h4>
-                    <ul class="space-y-2 text-gray-400">
-                        <li><a href="#" class="hover:text-white transition-colors">About</a></li>
-                        <li><a href="#" class="hover:text-white transition-colors">Careers</a></li>
-                        <li><a href="#" class="hover:text-white transition-colors">Contact</a></li>
-                        <li><a href="#" class="hover:text-white transition-colors">Support</a></li>
+                    <h5 class="font-bold text-white mb-4 text-lg">Company</h5>
+                    <ul class="space-y-3 text-gray-400">
+                        <li><a href="#" class="hover:text-gray-300 transition-colors">About</a></li>
+                        <li><a href="#" class="hover:text-gray-300 transition-colors">Blog</a></li>
+                        <li><a href="#" class="hover:text-gray-300 transition-colors">Careers</a></li>
+                    </ul>
+                </div>
+                <div>
+                    <h5 class="font-bold text-white mb-4 text-lg">Support</h5>
+                    <ul class="space-y-3 text-gray-400">
+                        <li><a href="mailto:swanhtet@supermega.dev" class="hover:text-gray-300 transition-colors">Contact</a></li>
+                        <li><a href="#" class="hover:text-gray-300 transition-colors">Help Center</a></li>
+                        <li><a href="#" class="hover:text-gray-300 transition-colors">Status</a></li>
                     </ul>
                 </div>
             </div>
-            <div class="border-t border-gray-700 pt-8 text-center text-gray-400">
-                <p>&copy; 2025 SuperMega.dev. All rights reserved. Revolutionizing office work with AI.</p>
+            
+            <div class="border-t border-gray-800 pt-8 flex flex-col md:flex-row justify-between items-center">
+                <p class="text-gray-400 mb-4 md:mb-0">
+                    &copy; 2025 AI Work OS. Made by AI for the future of work.
+                </p>
+                <p class="text-sm text-gray-500">
+                    Contact: <a href="mailto:swanhtet@supermega.dev" class="neon-green hover:text-green-300">swanhtet@supermega.dev</a>
+                </p>
             </div>
         </div>
     </footer>
 
+    <!-- JavaScript -->
     <script>
-        // Add some interactive elements
+        // Stripe integration
+        const stripe = Stripe('pk_test_51QEWuNP7...'); // Replace with actual key
+        
+        async function startFreeTrial() {
+            try {
+                const { error } = await stripe.redirectToCheckout({
+                    lineItems: [{
+                        price: 'price_monthly_97', // Replace with actual Stripe price ID
+                        quantity: 1
+                    }],
+                    mode: 'subscription',
+                    successUrl: 'https://supermega.dev/dashboard?session_id={CHECKOUT_SESSION_ID}',
+                    cancelUrl: 'https://supermega.dev/pricing',
+                    trialPeriodDays: 30,
+                    allowPromotionCodes: true
+                });
+                
+                if (error) {
+                    console.error('Stripe error:', error);
+                    alert('Payment system temporarily unavailable. Please try again.');
+                }
+            } catch (err) {
+                console.error('Payment error:', err);
+                alert('Payment system error. Please contact support.');
+            }
+        }
+        
+        // Add event listeners
         document.addEventListener('DOMContentLoaded', function() {
-            // Animate metrics on scroll
-            const animateOnScroll = (entries, observer) => {
-                entries.forEach(entry => {
-                    if (entry.isIntersecting) {
-                        entry.target.classList.add('animate-pulse');
-                    }
-                });
-            };
-
-            const observer = new IntersectionObserver(animateOnScroll);
-            document.querySelectorAll('.agent-card, .success-story').forEach(card => {
-                observer.observe(card);
+            const ctaButtons = document.querySelectorAll('.start-trial-btn');
+            ctaButtons.forEach(btn => {
+                btn.addEventListener('click', startFreeTrial);
             });
-
-            // Add live updating demo metrics
-            setInterval(() => {
-                const metrics = document.querySelectorAll('.text-green-400, .text-blue-400, .text-purple-400, .text-orange-400, .text-cyan-400');
-                metrics.forEach(metric => {
-                    if (metric.textContent.includes(',')) {
-                        const current = parseInt(metric.textContent.replace(/,/g, ''));
-                        const increment = Math.floor(Math.random() * 10) + 1;
-                        metric.textContent = (current + increment).toLocaleString();
+            
+            // Smooth scrolling for navigation links
+            document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+                anchor.addEventListener('click', function (e) {
+                    e.preventDefault();
+                    const target = document.querySelector(this.getAttribute('href'));
+                    if (target) {
+                        target.scrollIntoView({
+                            behavior: 'smooth',
+                            block: 'start'
+                        });
                     }
                 });
-            }, 3000);
+            });
         });
+        
+        // Analytics
+        window.dataLayer = window.dataLayer || [];
+        function gtag(){dataLayer.push(arguments);}
+        gtag('js', new Date());
+        gtag('config', 'GA_MEASUREMENT_ID'); // Replace with actual GA ID
+        
+        // Track CTA clicks
+        function trackCTAClick(location) {
+            gtag('event', 'cta_click', {
+                'location': location,
+                'action': 'start_trial'
+            });
+        }
     </script>
+
 </body>
 </html>
