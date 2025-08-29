@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Settings - SuperMega OS</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: white;
+            margin: 0;
+            padding: 2rem;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+        .nav-buttons {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+        .nav-btn {
+            padding: 0.5rem 1rem;
+            background: rgba(255, 255, 255, 0.2);
+            border: none;
+            border-radius: 5px;
+            color: white;
+            cursor: pointer;
+            text-decoration: none;
+            margin: 0 0.5rem;
+            transition: all 0.3s ease;
+        }
+        .nav-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+        .settings-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+        .setting-card {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 2rem;
+            border-radius: 15px;
+            backdrop-filter: blur(10px);
+        }
+        .toggle {
+            background: #333;
+            width: 60px;
+            height: 30px;
+            border-radius: 15px;
+            position: relative;
+            cursor: pointer;
+            transition: background 0.3s ease;
+        }
+        .toggle.active {
+            background: #4CAF50;
+        }
+        .toggle::after {
+            content: '';
+            width: 26px;
+            height: 26px;
+            border-radius: 50%;
+            background: white;
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            transition: left 0.3s ease;
+        }
+        .toggle.active::after {
+            left: 32px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>⚙️ Settings</h1>
+    </div>
+    
+    <nav class="nav-buttons">
+        <a href="supermega-platform.html" class="nav-btn">🏠 Dashboard</a>
+        <a href="data-intelligence.html" class="nav-btn">📊 Analytics</a>
+        <a href="productivity-engine.html" class="nav-btn">⚡ Productivity</a>
+        <a href="#help" class="nav-btn" onclick="showHelp()">❓ Help</a>
+    </nav>
+    
+    <div class="settings-grid">
+        <div class="setting-card">
+            <h3>🔔 Notifications</h3>
+            <p>Browser notifications (Disabled by CEO directive)</p>
+            <div class="toggle" onclick="toggleSetting(this)"></div>
+        </div>
+        
+        <div class="setting-card">
+            <h3>🎨 Theme</h3>
+            <p>Interface appearance and styling</p>
+            <select style="width: 100%; padding: 0.5rem; border-radius: 5px; border: none;">
+                <option>Dark Mode</option>
+                <option>Light Mode</option>
+                <option>Auto</option>
+            </select>
+        </div>
+        
+        <div class="setting-card">
+            <h3>🤖 AI Agents</h3>
+            <p>Agent behavior and preferences</p>
+            <div class="toggle active" onclick="toggleSetting(this)"></div>
+        </div>
+        
+        <div class="setting-card">
+            <h3>⚡ Performance</h3>
+            <p>Platform optimization settings</p>
+            <div class="toggle active" onclick="toggleSetting(this)"></div>
+        </div>
+    </div>
+    
+    <script>
+        function toggleSetting(element) {
+            element.classList.toggle('active');
+        }
+        
+        function showHelp() {
+            alert('Help System:\n\n1. Dashboard - Main platform overview\n2. Analytics - Data and reports\n3. Productivity - Task management\n4. Settings - Configure preferences\n\nFor support, contact: support@supermega.dev');
+        }
+    </script>
+</body>
+</html>
