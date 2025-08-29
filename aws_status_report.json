@@ -1,0 +1,18 @@
+{
+  "aws_instance": false,
+  "web_services": {
+    "main_site": "CONNECTION REFUSED",
+    "platform": "CONNECTION REFUSED",
+    "creative": "CONNECTION REFUSED",
+    "data": "CONNECTION REFUSED",
+    "productivity": "CONNECTION REFUSED"
+  },
+  "backend_apis": {
+    "health": "NOT RUNNING",
+    "creative_api": "NOT RUNNING",
+    "data_api": "NOT RUNNING",
+    "productivity_api": "NOT RUNNING"
+  },
+  "ssh_access": true,
+  "timestamp": "2025-08-29T22:07:59.598382"
+}
