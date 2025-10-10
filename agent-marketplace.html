@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Agent Marketplace - SuperMega OS</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #000000 0%, #1a1a2e 100%);
+            color: #ffffff;
+            overflow-x: hidden;
+        }
+
+        .header {
+            background: rgba(0,0,0,0.5);
+            backdrop-filter: blur(20px);
+            padding: 1.5rem 2rem;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .header h1 {
+            font-size: 2rem;
+            background: linear-gradient(45deg, #00ff88, #00d4ff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 0.5rem;
+        }
+
+        .nav-buttons {
+            display: flex;
+            gap: 1rem;
+            margin-top: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .nav-btn {
+            background: rgba(255,255,255,0.1);
+            padding: 0.5rem 1rem;
+            border-radius: 8px;
+            text-decoration: none;
+            color: #fff;
+            transition: all 0.3s ease;
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+
+        .nav-btn:hover {
+            background: rgba(255,255,255,0.2);
+            transform: translateY(-2px);
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        .hero-section {
+            text-align: center;
+            padding: 3rem 2rem;
+            background: linear-gradient(135deg, rgba(0,255,136,0.1), rgba(0,212,255,0.1));
+            border-radius: 20px;
+            margin-bottom: 3rem;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .hero-section h2 {
+            font-size: 2.5rem;
+            margin-bottom: 1rem;
+            background: linear-gradient(45deg, #00ff88, #00d4ff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .hero-section p {
+            font-size: 1.2rem;
+            opacity: 0.9;
+            max-width: 800px;
+            margin: 0 auto 2rem;
+            line-height: 1.6;
+        }
+
+        .feature-badges {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .badge {
+            background: rgba(0,255,136,0.2);
+            padding: 0.5rem 1rem;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            border: 1px solid rgba(0,255,136,0.3);
+        }
+
+        .templates-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 2rem;
+            margin-bottom: 3rem;
+        }
+
+        .template-card {
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 15px;
+            padding: 2rem;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+
+        .template-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 30px rgba(0,255,136,0.2);
+            border-color: rgba(0,255,136,0.5);
+        }
+
+        .template-icon {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+        }
+
+        .template-title {
+            font-size: 1.5rem;
+            margin-bottom: 0.5rem;
+            color: #00ff88;
+        }
+
+        .template-category {
+            font-size: 0.9rem;
+            color: #00d4ff;
+            margin-bottom: 1rem;
+            opacity: 0.8;
+        }
+
+        .template-description {
+            line-height: 1.6;
+            margin-bottom: 1.5rem;
+            opacity: 0.9;
+        }
+
+        .template-features {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .feature-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.9rem;
+            opacity: 0.8;
+        }
+
+        .pricing-section {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 1.5rem;
+            padding-top: 1.5rem;
+            border-top: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .price {
+            font-size: 1.8rem;
+            font-weight: bold;
+            color: #00ff88;
+        }
+
+        .price-label {
+            font-size: 0.9rem;
+            opacity: 0.7;
+        }
+
+        .buy-btn {
+            background: linear-gradient(45deg, #00ff88, #00d4ff);
+            color: #000;
+            padding: 0.75rem 1.5rem;
+            border-radius: 25px;
+            border: none;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .buy-btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 5px 20px rgba(0,255,136,0.4);
+        }
+
+        .framework-section {
+            background: rgba(255,255,255,0.03);
+            border-radius: 15px;
+            padding: 2rem;
+            margin-bottom: 3rem;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .framework-section h3 {
+            font-size: 1.8rem;
+            margin-bottom: 1rem;
+            color: #00d4ff;
+        }
+
+        .framework-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1rem;
+            margin-top: 1.5rem;
+        }
+
+        .framework-item {
+            background: rgba(0,212,255,0.1);
+            padding: 1rem;
+            border-radius: 10px;
+            border: 1px solid rgba(0,212,255,0.2);
+        }
+
+        .framework-name {
+            font-weight: bold;
+            color: #00d4ff;
+            margin-bottom: 0.5rem;
+        }
+
+        .integration-panel {
+            background: linear-gradient(135deg, rgba(0,255,136,0.1), rgba(138,43,226,0.1));
+            border-radius: 15px;
+            padding: 2rem;
+            margin-top: 2rem;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .integration-panel h3 {
+            font-size: 1.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .integration-logos {
+            display: flex;
+            gap: 2rem;
+            flex-wrap: wrap;
+            justify-content: center;
+            margin-top: 1.5rem;
+        }
+
+        .integration-logo {
+            font-size: 3rem;
+            transition: transform 0.3s ease;
+            cursor: pointer;
+        }
+
+        .integration-logo:hover {
+            transform: scale(1.2);
+        }
+
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .template-card {
+            animation: fadeInUp 0.6s ease forwards;
+            opacity: 0;
+        }
+
+        .template-card:nth-child(1) { animation-delay: 0.1s; }
+        .template-card:nth-child(2) { animation-delay: 0.2s; }
+        .template-card:nth-child(3) { animation-delay: 0.3s; }
+        .template-card:nth-child(4) { animation-delay: 0.4s; }
+        .template-card:nth-child(5) { animation-delay: 0.5s; }
+        .template-card:nth-child(6) { animation-delay: 0.6s; }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <h1>🤖 AI Agent Marketplace</h1>
+        <p style="opacity: 0.8;">Enterprise-Ready AI Agent Solutions | Built with Latest 2025 Technologies</p>
+        <nav class="nav-buttons">
+            <a href="supermega-platform.html" class="nav-btn">🏠 Dashboard</a>
+            <a href="creative-studio.html" class="nav-btn">🎨 Creative Studio</a>
+            <a href="data-intelligence.html" class="nav-btn">📊 Data Intelligence</a>
+            <a href="productivity-engine.html" class="nav-btn">⚡ Productivity Engine</a>
+        </nav>
+    </header>
+
+    <div class="container">
+        <div class="hero-section">
+            <h2>🚀 Pre-Built AI Agent Solutions</h2>
+            <p>
+                Deploy powerful AI agents in minutes with our ready-to-use templates. 
+                Built with OpenAI AgentKit, LangChain, Microsoft AutoGen, and CrewAI. 
+                Each solution is enterprise-ready and fully customizable to your needs.
+            </p>
+            <div class="feature-badges">
+                <span class="badge">✅ OpenAI AgentKit Integration</span>
+                <span class="badge">⚡ Deploy in Minutes</span>
+                <span class="badge">🔧 Fully Customizable</span>
+                <span class="badge">📊 Real-time Analytics</span>
+                <span class="badge">🔒 Enterprise Security</span>
+            </div>
+        </div>
+
+        <h2 style="font-size: 2rem; margin-bottom: 2rem; text-align: center;">💼 Solution Templates</h2>
+        
+        <div class="templates-grid">
+            <!-- Template 1: Customer Support Agent -->
+            <div class="template-card" onclick="showTemplateDetails('customer-support')">
+                <div class="template-icon">💬</div>
+                <div class="template-title">AI Customer Support Agent</div>
+                <div class="template-category">Customer Service | LangChain + OpenAI</div>
+                <div class="template-description">
+                    Intelligent customer support agent that handles inquiries, resolves issues, and escalates complex cases. 
+                    Includes sentiment analysis, multi-language support, and CRM integration.
+                </div>
+                <div class="template-features">
+                    <div class="feature-item">✓ 24/7 automated responses</div>
+                    <div class="feature-item">✓ Multi-channel support (chat, email, SMS)</div>
+                    <div class="feature-item">✓ Sentiment analysis & escalation</div>
+                    <div class="feature-item">✓ Knowledge base integration</div>
+                    <div class="feature-item">✓ 50+ language support</div>
+                </div>
+                <div class="pricing-section">
+                    <div>
+                        <div class="price">$2,499</div>
+                        <div class="price-label">One-time + $199/month</div>
+                    </div>
+                    <button class="buy-btn" onclick="purchaseTemplate(event, 'customer-support')">Purchase Now</button>
+                </div>
+            </div>
+
+            <!-- Template 2: Sales Agent -->
+            <div class="template-card" onclick="showTemplateDetails('sales-agent')">
+                <div class="template-icon">💰</div>
+                <div class="template-title">AI Sales & Lead Agent</div>
+                <div class="template-category">Sales Automation | CrewAI + GPT-4</div>
+                <div class="template-description">
+                    Autonomous sales agent that qualifies leads, schedules meetings, and nurtures prospects through the sales funnel. 
+                    Integrates with CRM and marketing automation tools.
+                </div>
+                <div class="template-features">
+                    <div class="feature-item">✓ Lead qualification & scoring</div>
+                    <div class="feature-item">✓ Automated follow-ups</div>
+                    <div class="feature-item">✓ Meeting scheduling & calendar sync</div>
+                    <div class="feature-item">✓ Email & LinkedIn outreach</div>
+                    <div class="feature-item">✓ CRM integration (Salesforce, HubSpot)</div>
+                </div>
+                <div class="pricing-section">
+                    <div>
+                        <div class="price">$3,999</div>
+                        <div class="price-label">One-time + $299/month</div>
+                    </div>
+                    <button class="buy-btn" onclick="purchaseTemplate(event, 'sales-agent')">Purchase Now</button>
+                </div>
+            </div>
+
+            <!-- Template 3: Content Creation Agent -->
+            <div class="template-card" onclick="showTemplateDetails('content-agent')">
+                <div class="template-icon">✍️</div>
+                <div class="template-title">AI Content Creation Agent</div>
+                <div class="template-category">Marketing | OpenAI AgentKit + Claude</div>
+                <div class="template-description">
+                    Generate blog posts, social media content, email campaigns, and ad copy at scale. 
+                    Maintains brand voice and optimizes for SEO and engagement.
+                </div>
+                <div class="template-features">
+                    <div class="feature-item">✓ Multi-format content generation</div>
+                    <div class="feature-item">✓ SEO optimization built-in</div>
+                    <div class="feature-item">✓ Brand voice consistency</div>
+                    <div class="feature-item">✓ A/B testing variations</div>
+                    <div class="feature-item">✓ Social media scheduling</div>
+                </div>
+                <div class="pricing-section">
+                    <div>
+                        <div class="price">$1,999</div>
+                        <div class="price-label">One-time + $149/month</div>
+                    </div>
+                    <button class="buy-btn" onclick="purchaseTemplate(event, 'content-agent')">Purchase Now</button>
+                </div>
+            </div>
+
+            <!-- Template 4: Data Analysis Agent -->
+            <div class="template-card" onclick="showTemplateDetails('data-agent')">
+                <div class="template-icon">📊</div>
+                <div class="template-title">AI Data Analysis Agent</div>
+                <div class="template-category">Business Intelligence | LangChain + Python</div>
+                <div class="template-description">
+                    Automated data analysis, visualization, and reporting. Connects to databases, APIs, and data warehouses 
+                    to generate insights and predictive models.
+                </div>
+                <div class="template-features">
+                    <div class="feature-item">✓ Automated data processing</div>
+                    <div class="feature-item">✓ Real-time dashboards</div>
+                    <div class="feature-item">✓ Predictive analytics</div>
+                    <div class="feature-item">✓ Custom report generation</div>
+                    <div class="feature-item">✓ Database integrations</div>
+                </div>
+                <div class="pricing-section">
+                    <div>
+                        <div class="price">$4,999</div>
+                        <div class="price-label">One-time + $399/month</div>
+                    </div>
+                    <button class="buy-btn" onclick="purchaseTemplate(event, 'data-agent')">Purchase Now</button>
+                </div>
+            </div>
+
+            <!-- Template 5: Workflow Automation Agent -->
+            <div class="template-card" onclick="showTemplateDetails('workflow-agent')">
+                <div class="template-icon">⚙️</div>
+                <div class="template-title">AI Workflow Automation Agent</div>
+                <div class="template-category">Productivity | Microsoft AutoGen + Zapier</div>
+                <div class="template-description">
+                    Intelligent workflow orchestration that automates complex business processes. 
+                    Connects apps, triggers actions, and handles exceptions autonomously.
+                </div>
+                <div class="template-features">
+                    <div class="feature-item">✓ Multi-app integrations (1000+)</div>
+                    <div class="feature-item">✓ Smart decision-making</div>
+                    <div class="feature-item">✓ Exception handling</div>
+                    <div class="feature-item">✓ Process optimization</div>
+                    <div class="feature-item">✓ Custom workflow builder</div>
+                </div>
+                <div class="pricing-section">
+                    <div>
+                        <div class="price">$3,499</div>
+                        <div class="price-label">One-time + $249/month</div>
+                    </div>
+                    <button class="buy-btn" onclick="purchaseTemplate(event, 'workflow-agent')">Purchase Now</button>
+                </div>
+            </div>
+
+            <!-- Template 6: Research Assistant Agent -->
+            <div class="template-card" onclick="showTemplateDetails('research-agent')">
+                <div class="template-icon">🔍</div>
+                <div class="template-title">AI Research Assistant Agent</div>
+                <div class="template-category">Knowledge Work | OpenAI Swarm + Perplexity</div>
+                <div class="template-description">
+                    Autonomous research agent that gathers information, synthesizes findings, and generates comprehensive reports. 
+                    Perfect for market research, competitive analysis, and academic work.
+                </div>
+                <div class="template-features">
+                    <div class="feature-item">✓ Web scraping & data collection</div>
+                    <div class="feature-item">✓ Source verification</div>
+                    <div class="feature-item">✓ Report generation</div>
+                    <div class="feature-item">✓ Citation management</div>
+                    <div class="feature-item">✓ Multi-source analysis</div>
+                </div>
+                <div class="pricing-section">
+                    <div>
+                        <div class="price">$2,999</div>
+                        <div class="price-label">One-time + $199/month</div>
+                    </div>
+                    <button class="buy-btn" onclick="purchaseTemplate(event, 'research-agent')">Purchase Now</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Framework Technologies Section -->
+        <div class="framework-section">
+            <h3>🛠️ Built with Latest AI Technologies (2025)</h3>
+            <p style="opacity: 0.9; margin-bottom: 1rem;">
+                Our solutions leverage the most advanced AI agent frameworks and technologies available:
+            </p>
+            <div class="framework-grid">
+                <div class="framework-item">
+                    <div class="framework-name">OpenAI AgentKit</div>
+                    <p style="font-size: 0.9rem; opacity: 0.8;">
+                        Visual agent builder with drag-and-drop workflows, inline evaluation, and versioning
+                    </p>
+                </div>
+                <div class="framework-item">
+                    <div class="framework-name">LangChain</div>
+                    <p style="font-size: 0.9rem; opacity: 0.8;">
+                        Multi-actor applications with stateful LLM integration and efficient coordination
+                    </p>
+                </div>
+                <div class="framework-item">
+                    <div class="framework-name">Microsoft AutoGen</div>
+                    <p style="font-size: 0.9rem; opacity: 0.8;">
+                        Advanced automated generation and management of AI-driven tasks
+                    </p>
+                </div>
+                <div class="framework-item">
+                    <div class="framework-name">CrewAI</div>
+                    <p style="font-size: 0.9rem; opacity: 0.8;">
+                        Enterprise-ready solutions with comprehensive task management systems
+                    </p>
+                </div>
+                <div class="framework-item">
+                    <div class="framework-name">OpenAI Swarm</div>
+                    <p style="font-size: 0.9rem; opacity: 0.8;">
+                        Collective intelligence for large-scale, complex task handling
+                    </p>
+                </div>
+                <div class="framework-item">
+                    <div class="framework-name">ChatKit Integration</div>
+                    <p style="font-size: 0.9rem; opacity: 0.8;">
+                        Embeddable chat interfaces with real-time interaction capabilities
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Integration Panel -->
+        <div class="integration-panel">
+            <h3>🔗 Seamless Integrations</h3>
+            <p style="opacity: 0.9;">Connect with your existing tools and platforms:</p>
+            <div class="integration-logos">
+                <div class="integration-logo" title="Salesforce">☁️</div>
+                <div class="integration-logo" title="HubSpot">🎯</div>
+                <div class="integration-logo" title="Slack">💬</div>
+                <div class="integration-logo" title="Google Workspace">📧</div>
+                <div class="integration-logo" title="Microsoft 365">📊</div>
+                <div class="integration-logo" title="Zapier">⚡</div>
+                <div class="integration-logo" title="AWS">☁️</div>
+                <div class="integration-logo" title="Stripe">💳</div>
+            </div>
+        </div>
+
+        <!-- Custom Solutions CTA -->
+        <div style="text-align: center; margin-top: 3rem; padding: 3rem; background: rgba(255,255,255,0.05); border-radius: 15px;">
+            <h3 style="font-size: 2rem; margin-bottom: 1rem;">Need a Custom Solution?</h3>
+            <p style="font-size: 1.1rem; opacity: 0.9; margin-bottom: 2rem;">
+                Our team can build bespoke AI agent solutions tailored to your specific business needs.
+            </p>
+            <button class="buy-btn" onclick="contactSales()" style="padding: 1rem 2rem; font-size: 1.1rem;">
+                Contact Sales Team
+            </button>
+        </div>
+    </div>
+
+    <script>
+        function showTemplateDetails(templateId) {
+            const templates = {
+                'customer-support': {
+                    name: 'AI Customer Support Agent',
+                    details: 'Full-featured customer support automation with:\n\n• 24/7 availability across all channels\n• Natural language understanding\n• Sentiment analysis and smart escalation\n• Integration with your existing helpdesk\n• Customizable responses and workflows\n• Analytics dashboard\n\nImplementation: 2-4 weeks\nTraining included: 40 hours\nSupport: Priority 24/7'
+                },
+                'sales-agent': {
+                    name: 'AI Sales & Lead Agent',
+                    details: 'Complete sales automation solution with:\n\n• Intelligent lead scoring\n• Automated outreach campaigns\n• Meeting scheduling with calendar sync\n• CRM integration (Salesforce, HubSpot, Pipedrive)\n• Pipeline management\n• Performance analytics\n\nImplementation: 3-5 weeks\nTraining included: 50 hours\nSupport: Priority 24/7'
+                },
+                'content-agent': {
+                    name: 'AI Content Creation Agent',
+                    details: 'Professional content generation at scale:\n\n• Blog posts, articles, social media\n• Email campaigns and newsletters\n• Ad copy and landing pages\n• SEO optimization built-in\n• Brand voice training\n• Multi-platform publishing\n\nImplementation: 2-3 weeks\nTraining included: 30 hours\nSupport: Business hours'
+                },
+                'data-agent': {
+                    name: 'AI Data Analysis Agent',
+                    details: 'Enterprise data intelligence solution:\n\n• Automated ETL pipelines\n• Real-time analytics and dashboards\n• Predictive modeling\n• Custom report generation\n• Database integration (SQL, NoSQL)\n• API connectivity\n\nImplementation: 4-6 weeks\nTraining included: 60 hours\nSupport: Priority 24/7'
+                },
+                'workflow-agent': {
+                    name: 'AI Workflow Automation Agent',
+                    details: 'Intelligent process automation:\n\n• 1000+ app integrations\n• Custom workflow builder\n• Smart decision-making\n• Exception handling\n• Process mining and optimization\n• ROI tracking\n\nImplementation: 3-5 weeks\nTraining included: 45 hours\nSupport: Priority 24/7'
+                },
+                'research-agent': {
+                    name: 'AI Research Assistant Agent',
+                    details: 'Autonomous research and analysis:\n\n• Web scraping and data collection\n• Source verification and fact-checking\n• Comprehensive report generation\n• Citation management\n• Market analysis\n• Competitive intelligence\n\nImplementation: 2-4 weeks\nTraining included: 35 hours\nSupport: Business hours'
+                }
+            };
+
+            const template = templates[templateId];
+            if (template) {
+                alert(`${template.name}\n\n${template.details}\n\nClick "Purchase Now" to get started!`);
+            }
+        }
+
+        function purchaseTemplate(event, templateId) {
+            event.stopPropagation();
+            alert(`🎉 Initiating purchase for ${templateId}...\n\nYou will be redirected to our secure checkout.\n\nWhat's included:\n• Full source code and documentation\n• Implementation support\n• Training sessions\n• 1 year of updates\n• Priority support\n\nPayment options: Credit card, Wire transfer, Crypto`);
+        }
+
+        function contactSales() {
+            alert(`📞 Contact Our Sales Team\n\nEmail: sales@supermega.dev\nPhone: +1 (555) 123-4567\n\nOr schedule a demo:\nhttps://supermega.dev/demo\n\nOur AI solutions architects will help you:\n• Define your requirements\n• Design custom agents\n• Plan implementation\n• Calculate ROI\n\nResponse time: < 24 hours`);
+        }
+
+        // Animate cards on load
+        window.addEventListener('load', function() {
+            console.log('AI Agent Marketplace loaded - Latest 2025 technologies');
+        });
+    </script>
+</body>
+</html>

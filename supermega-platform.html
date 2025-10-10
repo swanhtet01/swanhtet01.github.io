@@ -613,6 +613,65 @@
                 
                 <button class="launch-button">Launch Productivity Engine</button>
             </div>
+
+            <div class="suite-card" onclick="launchSuite('marketplace')" style="grid-column: span 2; background: linear-gradient(135deg, rgba(0,255,136,0.1), rgba(0,212,255,0.1)); border: 2px solid rgba(0,255,136,0.3);">
+                <div class="suite-header">
+                    <div class="suite-icon">🤖</div>
+                    <div>
+                        <div class="suite-title">AI Agent Marketplace</div>
+                        <div class="suite-subtitle">Enterprise Solution Templates | NEW 🔥</div>
+                    </div>
+                </div>
+                
+                <div class="suite-description">
+                    Ready-to-deploy AI agent solutions built with OpenAI AgentKit, LangChain, CrewAI, and Microsoft AutoGen. 
+                    Get enterprise-grade agents for customer support, sales, content creation, and more.
+                </div>
+                
+                <div class="suite-features">
+                    <div class="feature-item">
+                        <div class="feature-icon">💬</div>
+                        <span>Customer Support Agents</span>
+                    </div>
+                    <div class="feature-item">
+                        <div class="feature-icon">💰</div>
+                        <span>Sales Automation</span>
+                    </div>
+                    <div class="feature-item">
+                        <div class="feature-icon">✍️</div>
+                        <span>Content Creation</span>
+                    </div>
+                    <div class="feature-item">
+                        <div class="feature-icon">📊</div>
+                        <span>Data Analysis</span>
+                    </div>
+                    <div class="feature-item">
+                        <div class="feature-icon">⚙️</div>
+                        <span>Workflow Automation</span>
+                    </div>
+                    <div class="feature-item">
+                        <div class="feature-icon">🔍</div>
+                        <span>Research Assistant</span>
+                    </div>
+                </div>
+                
+                <div class="suite-stats">
+                    <div class="stat-item">
+                        <span class="stat-number">6</span>
+                        <div class="stat-label">Ready Templates</div>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-number">2025</span>
+                        <div class="stat-label">Latest Tech</div>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-number">100%</span>
+                        <div class="stat-label">Customizable</div>
+                    </div>
+                </div>
+                
+                <button class="launch-button" style="background: linear-gradient(45deg, #00ff88, #00d4ff);">Explore Marketplace</button>
+            </div>
         </div>
 
         <div class="platform-overview">
@@ -724,7 +783,8 @@
             const suiteUrls = {
                 'creative': 'creative-studio.html',
                 'data': 'data-intelligence.html', 
-                'productivity': 'productivity-engine.html'
+                'productivity': 'productivity-engine.html',
+                'marketplace': 'agent-marketplace.html'
             };
             
             if (suiteUrls[suiteName]) {
