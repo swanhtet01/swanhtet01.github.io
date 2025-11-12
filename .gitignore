@@ -1,0 +1,4 @@
+apikeys.txt
+*.pem
+.env*
+*credentials*
