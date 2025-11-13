@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FlowCore - Smart Manufacturing Platform | SuperMega</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 50%, #0369a1 100%);
+            min-height: 100vh;
+        }
+    </style>
+</head>
+<body class="text-white">
+    <!-- Header -->
+    <header class="bg-black/30 backdrop-blur-lg border-b border-white/10">
+        <div class="container mx-auto px-4 py-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-4">
+                    <a href="index.html" class="px-4 py-2 bg-white/20 hover:bg-white/30 rounded-lg transition-all">
+                        ← Back to Home
+                    </a>
+                    <div class="flex items-center gap-2">
+                        <span class="text-4xl">📊</span>
+                        <h1 class="text-2xl font-bold">FlowCore</h1>
+                    </div>
+                </div>
+                <nav class="hidden md:flex gap-4">
+                    <a href="#features" class="px-4 py-2 hover:bg-white/10 rounded-lg transition-all">Features</a>
+                    <a href="#industries" class="px-4 py-2 hover:bg-white/10 rounded-lg transition-all">Industries</a>
+                    <a href="#pricing" class="px-4 py-2 hover:bg-white/10 rounded-lg transition-all">Pricing</a>
+                </nav>
+            </div>
+        </div>
+    </header>
+
+    <!-- Hero Section -->
+    <section class="container mx-auto px-4 py-20 text-center">
+        <div class="max-w-4xl mx-auto">
+            <h2 class="text-5xl md:text-7xl font-bold mb-6">
+                Smart Manufacturing<br>
+                <span class="text-cyan-300">Platform</span>
+            </h2>
+            <p class="text-xl text-white/80 mb-8">
+                AI-powered manufacturing operations platform that optimizes production, reduces downtime, 
+                and maximizes efficiency through real-time monitoring and predictive analytics.
+            </p>
+            <div class="flex gap-4 justify-center flex-wrap">
+                <a href="#demo" class="px-8 py-4 bg-white text-cyan-600 rounded-lg font-semibold hover:bg-cyan-50 transition-all">
+                    Schedule Demo
+                </a>
+                <a href="#features" class="px-8 py-4 bg-white/20 backdrop-blur-lg rounded-lg font-semibold hover:bg-white/30 transition-all">
+                    Learn More
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Stats -->
+    <section class="container mx-auto px-4 py-12">
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-6 max-w-5xl mx-auto">
+            <div class="bg-white/10 backdrop-blur-lg rounded-xl p-6 text-center border border-white/20">
+                <div class="text-4xl font-bold text-cyan-300">45%</div>
+                <div class="text-sm text-white/70 mt-2">Downtime Reduction</div>
+            </div>
+            <div class="bg-white/10 backdrop-blur-lg rounded-xl p-6 text-center border border-white/20">
+                <div class="text-4xl font-bold text-cyan-300">30%</div>
+                <div class="text-sm text-white/70 mt-2">Cost Savings</div>
+            </div>
+            <div class="bg-white/10 backdrop-blur-lg rounded-xl p-6 text-center border border-white/20">
+                <div class="text-4xl font-bold text-cyan-300">99.5%</div>
+                <div class="text-sm text-white/70 mt-2">Uptime Rate</div>
+            </div>
+            <div class="bg-white/10 backdrop-blur-lg rounded-xl p-6 text-center border border-white/20">
+                <div class="text-4xl font-bold text-cyan-300">25%</div>
+                <div class="text-sm text-white/70 mt-2">Output Increase</div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Features Section -->
+    <section id="features" class="container mx-auto px-4 py-20">
+        <div class="text-center mb-12">
+            <h2 class="text-4xl md:text-5xl font-bold mb-4">Core Capabilities</h2>
+            <p class="text-xl text-white/70">Everything you need for smart manufacturing</p>
+        </div>
+        
+        <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-6xl mx-auto">
+            <div class="bg-white/10 backdrop-blur-lg rounded-xl p-8 border border-white/20 hover:bg-white/15 transition-all">
+                <div class="text-5xl mb-4">⚙️</div>
+                <h3 class="text-2xl font-bold mb-3">Production Monitoring</h3>
+                <p class="text-white/70">Real-time visibility into production lines, equipment status, and output metrics across all facilities.</p>
+            </div>
+            
+            <div class="bg-white/10 backdrop-blur-lg rounded-xl p-8 border border-white/20 hover:bg-white/15 transition-all">
+                <div class="text-5xl mb-4">🤖</div>
+                <h3 class="text-2xl font-bold mb-3">Predictive Maintenance</h3>
+                <p class="text-white/70">AI predicts equipment failures before they happen, scheduling maintenance to minimize disruption.</p>
+            </div>
+            
+            <div class="bg-white/10 backdrop-blur-lg rounded-xl p-8 border border-white/20 hover:bg-white/15 transition-all">
+                <div class="text-5xl mb-4">📈</div>
+                <h3 class="text-2xl font-bold mb-3">Performance Analytics</h3>
+                <p class="text-white/70">Deep insights into OEE, cycle times, quality metrics, and production efficiency trends.</p>
+            </div>
+            
+            <div class="bg-white/10 backdrop-blur-lg rounded-xl p-8 border border-white/20 hover:bg-white/15 transition-all">
+                <div class="text-5xl mb-4">📦</div>
+                <h3 class="text-2xl font-bold mb-3">Inventory Management</h3>
+                <p class="text-white/70">Track raw materials, WIP, and finished goods with automated reorder points and alerts.</p>
+            </div>
+            
+            <div class="bg-white/10 backdrop-blur-lg rounded-xl p-8 border border-white/20 hover:bg-white/15 transition-all">
+                <div class="text-5xl mb-4">✅</div>
+                <h3 class="text-2xl font-bold mb-3">Quality Control</h3>
+                <p class="text-white/70">Automated quality checks, defect tracking, and root cause analysis to maintain standards.</p>
+            </div>
+            
+            <div class="bg-white/10 backdrop-blur-lg rounded-xl p-8 border border-white/20 hover:bg-white/15 transition-all">
+                <div class="text-5xl mb-4">🔗</div>
+                <h3 class="text-2xl font-bold mb-3">IoT Integration</h3>
+                <p class="text-white/70">Connect with sensors, PLCs, and existing systems for seamless data collection.</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Industries Section -->
+    <section id="industries" class="container mx-auto px-4 py-20">
+        <div class="text-center mb-12">
+            <h2 class="text-4xl md:text-5xl font-bold mb-4">Built for Your Industry</h2>
+            <p class="text-xl text-white/70">Specialized solutions for different manufacturing sectors</p>
+        </div>
+        
+        <div class="grid md:grid-cols-3 gap-8 max-w-6xl mx-auto">
+            <div class="bg-gradient-to-br from-cyan-500/20 to-cyan-600/20 backdrop-blur-lg rounded-xl p-8 border border-cyan-400/30">
+                <h3 class="text-3xl font-bold mb-4">Automotive</h3>
+                <ul class="space-y-3 text-white/80">
+                    <li class="flex items-start gap-2">
+                        <span class="text-cyan-300">✓</span>
+                        <span>Assembly line optimization</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-cyan-300">✓</span>
+                        <span>Just-in-time inventory</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-cyan-300">✓</span>
+                        <span>Supplier integration</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-cyan-300">✓</span>
+                        <span>Quality traceability</span>
+                    </li>
+                </ul>
+            </div>
+            
+            <div class="bg-gradient-to-br from-cyan-500/20 to-cyan-600/20 backdrop-blur-lg rounded-xl p-8 border border-cyan-400/30">
+                <h3 class="text-3xl font-bold mb-4">Electronics</h3>
+                <ul class="space-y-3 text-white/80">
+                    <li class="flex items-start gap-2">
+                        <span class="text-cyan-300">✓</span>
+                        <span>PCB production tracking</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-cyan-300">✓</span>
+                        <span>Component management</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-cyan-300">✓</span>
+                        <span>Testing automation</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-cyan-300">✓</span>
+                        <span>Yield optimization</span>
+                    </li>
+                </ul>
+            </div>
+            
+            <div class="bg-gradient-to-br from-cyan-500/20 to-cyan-600/20 backdrop-blur-lg rounded-xl p-8 border border-cyan-400/30">
+                <h3 class="text-3xl font-bold mb-4">Food & Beverage</h3>
+                <ul class="space-y-3 text-white/80">
+                    <li class="flex items-start gap-2">
+                        <span class="text-cyan-300">✓</span>
+                        <span>Batch tracking</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-cyan-300">✓</span>
+                        <span>FDA compliance</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-cyan-300">✓</span>
+                        <span>Expiration management</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-cyan-300">✓</span>
+                        <span>Recall readiness</span>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </section>
+
+    <!-- Testimonials -->
+    <section class="container mx-auto px-4 py-20">
+        <div class="text-center mb-12">
+            <h2 class="text-4xl md:text-5xl font-bold mb-4">Trusted by Industry Leaders</h2>
+        </div>
+        
+        <div class="grid md:grid-cols-2 gap-8 max-w-5xl mx-auto">
+            <div class="bg-white/10 backdrop-blur-lg rounded-xl p-8 border border-white/20">
+                <div class="flex items-center gap-4 mb-4">
+                    <div class="w-16 h-16 bg-cyan-400 rounded-full flex items-center justify-center text-3xl">👨‍💼</div>
+                    <div>
+                        <div class="font-bold text-lg">James Rodriguez</div>
+                        <div class="text-white/70 text-sm">VP Operations, TechManufacturing Inc</div>
+                    </div>
+                </div>
+                <p class="text-white/80 italic">"FlowCore helped us reduce downtime by 45% and increase output by 25%. The predictive maintenance alone paid for itself in the first quarter. Game-changing platform."</p>
+            </div>
+            
+            <div class="bg-white/10 backdrop-blur-lg rounded-xl p-8 border border-white/20">
+                <div class="flex items-center gap-4 mb-4">
+                    <div class="w-16 h-16 bg-cyan-400 rounded-full flex items-center justify-center text-3xl">👩‍💼</div>
+                    <div>
+                        <div class="font-bold text-lg">Lisa Chen</div>
+                        <div class="text-white/70 text-sm">Plant Manager, AutoParts Global</div>
+                    </div>
+                </div>
+                <p class="text-white/80 italic">"Real-time visibility across all our facilities has transformed how we operate. We can spot issues before they become problems. The ROI was immediate and substantial."</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Pricing Section -->
+    <section id="pricing" class="container mx-auto px-4 py-20">
+        <div class="text-center mb-12">
+            <h2 class="text-4xl md:text-5xl font-bold mb-4">Flexible Pricing</h2>
+            <p class="text-xl text-white/70">Scale as you grow</p>
+        </div>
+        
+        <div class="grid md:grid-cols-3 gap-8 max-w-6xl mx-auto">
+            <div class="bg-white/10 backdrop-blur-lg rounded-xl p-8 border border-white/20">
+                <h3 class="text-2xl font-bold mb-4">Essential</h3>
+                <div class="text-4xl font-bold mb-2">$499<span class="text-xl text-white/70">/month</span></div>
+                <p class="text-white/70 mb-6">For single production lines</p>
+                <ul class="space-y-3 mb-8">
+                    <li class="flex items-start gap-2">
+                        <span class="text-cyan-300">✓</span>
+                        <span>1 production line</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-cyan-300">✓</span>
+                        <span>Real-time monitoring</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-cyan-300">✓</span>
+                        <span>Basic analytics</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-cyan-300">✓</span>
+                        <span>Email support</span>
+                    </li>
+                </ul>
+                <button class="w-full px-6 py-3 bg-white/20 rounded-lg hover:bg-white/30 transition-all">Get Started</button>
+            </div>
+            
+            <div class="bg-gradient-to-br from-cyan-500/30 to-cyan-600/30 backdrop-blur-lg rounded-xl p-8 border-2 border-cyan-400 relative">
+                <div class="absolute top-0 right-4 bg-cyan-400 text-cyan-900 px-4 py-1 rounded-b-lg font-bold text-sm">POPULAR</div>
+                <h3 class="text-2xl font-bold mb-4">Professional</h3>
+                <div class="text-4xl font-bold mb-2">$1,499<span class="text-xl text-white/70">/month</span></div>
+                <p class="text-white/70 mb-6">For multi-line facilities</p>
+                <ul class="space-y-3 mb-8">
+                    <li class="flex items-start gap-2">
+                        <span class="text-cyan-300">✓</span>
+                        <span>Up to 5 production lines</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-cyan-300">✓</span>
+                        <span>Predictive maintenance</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-cyan-300">✓</span>
+                        <span>Advanced analytics</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-cyan-300">✓</span>
+                        <span>Priority support</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-cyan-300">✓</span>
+                        <span>API access</span>
+                    </li>
+                </ul>
+                <button class="w-full px-6 py-3 bg-cyan-400 text-cyan-900 rounded-lg hover:bg-cyan-300 transition-all font-bold">Get Started</button>
+            </div>
+            
+            <div class="bg-white/10 backdrop-blur-lg rounded-xl p-8 border border-white/20">
+                <h3 class="text-2xl font-bold mb-4">Enterprise</h3>
+                <div class="text-4xl font-bold mb-2">Custom</div>
+                <p class="text-white/70 mb-6">For large operations</p>
+                <ul class="space-y-3 mb-8">
+                    <li class="flex items-start gap-2">
+                        <span class="text-cyan-300">✓</span>
+                        <span>Unlimited lines</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-cyan-300">✓</span>
+                        <span>Multi-facility support</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-cyan-300">✓</span>
+                        <span>Custom integrations</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-cyan-300">✓</span>
+                        <span>Dedicated support</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-cyan-300">✓</span>
+                        <span>SLA guarantee</span>
+                    </li>
+                </ul>
+                <button class="w-full px-6 py-3 bg-white/20 rounded-lg hover:bg-white/30 transition-all">Contact Sales</button>
+            </div>
+        </div>
+    </section>
+
+    <!-- CTA Section -->
+    <section id="demo" class="container mx-auto px-4 py-20">
+        <div class="bg-gradient-to-br from-cyan-500/30 to-cyan-600/30 backdrop-blur-lg rounded-2xl p-12 text-center border border-cyan-400/30 max-w-4xl mx-auto">
+            <h2 class="text-4xl md:text-5xl font-bold mb-6">Ready to Optimize Your Operations?</h2>
+            <p class="text-xl text-white/80 mb-8">See how FlowCore can transform your manufacturing process</p>
+            <div class="flex gap-4 justify-center flex-wrap">
+                <a href="#" class="px-8 py-4 bg-white text-cyan-600 rounded-lg font-semibold hover:bg-cyan-50 transition-all">
+                    Schedule Demo
+                </a>
+                <a href="#" class="px-8 py-4 bg-white/20 backdrop-blur-lg rounded-lg font-semibold hover:bg-white/30 transition-all">
+                    Contact Sales
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="bg-black/30 backdrop-blur-lg border-t border-white/10 py-8">
+        <div class="container mx-auto px-4 text-center">
+            <p class="text-white/70">&copy; 2024 SuperMega - FlowCore. All rights reserved.</p>
+            <div class="flex gap-6 justify-center mt-4">
+                <a href="#" class="text-white/70 hover:text-white transition-all">Privacy Policy</a>
+                <a href="#" class="text-white/70 hover:text-white transition-all">Terms of Service</a>
+                <a href="#" class="text-white/70 hover:text-white transition-all">Support</a>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>
