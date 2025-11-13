@@ -30,11 +30,139 @@
                     <span class="text-2xl font-bold">AI Agents Productivity</span>
                 </div>
             </div>
-            <button onclick="refreshData()" class="px-4 py-2 bg-green-500 hover:bg-green-600 rounded-lg transition">
-                🔄 Refresh Data
-            </button>
+            <div class="flex gap-2">
+                <button onclick="refreshData()" class="px-4 py-2 bg-green-500 hover:bg-green-600 rounded-lg transition">
+                    🔄 Refresh Data
+                </button>
+                <button onclick="showControlPanel()" class="px-4 py-2 bg-purple-500 hover:bg-purple-600 rounded-lg transition">
+                    ⚙️ Control Center
+                </button>
+            </div>
         </div>
     </header>
+
+    <!-- Agent Control Center -->
+    <section class="container mx-auto px-4 pt-6 pb-4" id="controlCenter" style="display: none;">
+        <div class="max-w-6xl mx-auto">
+            <div class="bg-gradient-to-r from-purple-900/30 to-pink-900/30 border border-purple-500/30 rounded-lg p-6">
+                <div class="flex items-center justify-between mb-6">
+                    <div class="flex items-center gap-3">
+                        <span class="text-3xl">⚙️</span>
+                        <h2 class="text-3xl font-bold">Agent Control Center</h2>
+                        <span class="px-3 py-1 bg-purple-500/20 text-purple-400 rounded-full text-sm">Full Control</span>
+                    </div>
+                    <button onclick="hideControlPanel()" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg transition text-sm">
+                        ✕ Close
+                    </button>
+                </div>
+
+                <!-- Quick Actions -->
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                    <button onclick="performAction('start-all')" class="p-4 bg-green-500/20 hover:bg-green-500/30 border border-green-500/30 rounded-lg transition">
+                        <div class="text-2xl mb-2">▶️</div>
+                        <div class="font-semibold">Start All Agents</div>
+                        <div class="text-xs text-slate-400 mt-1">Boot up idle agents</div>
+                    </button>
+                    <button onclick="performAction('stop-idle')" class="p-4 bg-yellow-500/20 hover:bg-yellow-500/30 border border-yellow-500/30 rounded-lg transition">
+                        <div class="text-2xl mb-2">⏸️</div>
+                        <div class="font-semibold">Suspend Idle</div>
+                        <div class="text-xs text-slate-400 mt-1">Reduce costs</div>
+                    </button>
+                    <button onclick="performAction('restart-all')" class="p-4 bg-orange-500/20 hover:bg-orange-500/30 border border-orange-500/30 rounded-lg transition">
+                        <div class="text-2xl mb-2">🔄</div>
+                        <div class="font-semibold">Restart All</div>
+                        <div class="text-xs text-slate-400 mt-1">Fresh start</div>
+                    </button>
+                    <button onclick="performAction('emergency-stop')" class="p-4 bg-red-500/20 hover:bg-red-500/30 border border-red-500/30 rounded-lg transition">
+                        <div class="text-2xl mb-2">🛑</div>
+                        <div class="font-semibold">Emergency Stop</div>
+                        <div class="text-xs text-slate-400 mt-1">Stop all immediately</div>
+                    </button>
+                </div>
+
+                <!-- Agent Status Grid -->
+                <div class="bg-slate-900/50 rounded-lg p-4 mb-4">
+                    <h3 class="text-lg font-semibold mb-4 flex items-center gap-2">
+                        <span>🎛️</span>
+                        <span>Individual Agent Controls</span>
+                    </h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div class="flex items-center justify-between p-3 bg-slate-800/50 rounded-lg">
+                            <div class="flex items-center gap-3">
+                                <span class="w-2 h-2 rounded-full bg-green-500"></span>
+                                <span class="text-sm">Code Generation Agent</span>
+                            </div>
+                            <div class="flex gap-2">
+                                <button onclick="controlAgent('code-gen', 'restart')" class="px-3 py-1 bg-orange-500/20 hover:bg-orange-500/30 rounded text-xs">Restart</button>
+                                <button onclick="controlAgent('code-gen', 'stop')" class="px-3 py-1 bg-red-500/20 hover:bg-red-500/30 rounded text-xs">Stop</button>
+                            </div>
+                        </div>
+                        <div class="flex items-center justify-between p-3 bg-slate-800/50 rounded-lg">
+                            <div class="flex items-center gap-3">
+                                <span class="w-2 h-2 rounded-full bg-green-500"></span>
+                                <span class="text-sm">AWS Cost Optimizer</span>
+                            </div>
+                            <div class="flex gap-2">
+                                <button onclick="controlAgent('aws-cost', 'restart')" class="px-3 py-1 bg-orange-500/20 hover:bg-orange-500/30 rounded text-xs">Restart</button>
+                                <button onclick="controlAgent('aws-cost', 'stop')" class="px-3 py-1 bg-red-500/20 hover:bg-red-500/30 rounded text-xs">Stop</button>
+                            </div>
+                        </div>
+                        <div class="flex items-center justify-between p-3 bg-slate-800/50 rounded-lg">
+                            <div class="flex items-center gap-3">
+                                <span class="w-2 h-2 rounded-full bg-green-500"></span>
+                                <span class="text-sm">AWS Auto-Scaling Agent</span>
+                            </div>
+                            <div class="flex gap-2">
+                                <button onclick="controlAgent('aws-scale', 'restart')" class="px-3 py-1 bg-orange-500/20 hover:bg-orange-500/30 rounded text-xs">Restart</button>
+                                <button onclick="controlAgent('aws-scale', 'stop')" class="px-3 py-1 bg-red-500/20 hover:bg-red-500/30 rounded text-xs">Stop</button>
+                            </div>
+                        </div>
+                        <div class="flex items-center justify-between p-3 bg-slate-800/50 rounded-lg">
+                            <div class="flex items-center gap-3">
+                                <span class="w-2 h-2 rounded-full bg-gray-500"></span>
+                                <span class="text-sm">Deployment Agent</span>
+                                <span class="text-xs text-gray-400">(Idle)</span>
+                            </div>
+                            <div class="flex gap-2">
+                                <button onclick="controlAgent('deploy', 'start')" class="px-3 py-1 bg-green-500/20 hover:bg-green-500/30 rounded text-xs">Start</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Alerts & Warnings -->
+                <div class="bg-slate-900/50 rounded-lg p-4">
+                    <h3 class="text-lg font-semibold mb-3 flex items-center gap-2">
+                        <span>⚠️</span>
+                        <span>System Alerts</span>
+                    </h3>
+                    <div class="space-y-2">
+                        <div class="flex items-start gap-3 p-3 bg-green-500/10 border border-green-500/30 rounded-lg">
+                            <span class="text-green-400">✓</span>
+                            <div class="flex-1">
+                                <div class="text-sm font-semibold text-green-400">All Critical Agents Online</div>
+                                <div class="text-xs text-slate-400">Core systems operational, 8/12 agents active</div>
+                            </div>
+                        </div>
+                        <div class="flex items-start gap-3 p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
+                            <span class="text-yellow-400">⚠</span>
+                            <div class="flex-1">
+                                <div class="text-sm font-semibold text-yellow-400">Deployment Agent Idle</div>
+                                <div class="text-xs text-slate-400">Not required unless deployment needed - saves $15/month</div>
+                            </div>
+                        </div>
+                        <div class="flex items-start gap-3 p-3 bg-cyan-500/10 border border-cyan-500/30 rounded-lg">
+                            <span class="text-cyan-400">ℹ</span>
+                            <div class="flex-1">
+                                <div class="text-sm font-semibold text-cyan-400">Cost Optimization Active</div>
+                                <div class="text-xs text-slate-400">Saving $78/month through lean operations</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
 
     <!-- Summary Metrics -->
     <section class="container mx-auto px-4 py-12">
@@ -120,6 +248,171 @@
                         <div class="flex items-start gap-2">
                             <span class="text-green-400">✓</span>
                             <span>S3 lifecycle policies for logs</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Agent Health Monitoring -->
+        <div class="max-w-6xl mx-auto mb-12">
+            <div class="bg-gradient-to-r from-green-900/30 to-emerald-900/30 border border-green-500/30 rounded-lg p-8">
+                <div class="flex items-center gap-3 mb-6">
+                    <span class="text-3xl">🏥</span>
+                    <h2 class="text-3xl font-bold">Agent Health Monitoring</h2>
+                    <span class="px-3 py-1 bg-green-500/20 text-green-400 rounded-full text-sm">All Systems Normal</span>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                    <!-- Performance Thresholds -->
+                    <div class="bg-slate-900/50 rounded-lg p-4">
+                        <h3 class="text-lg font-semibold mb-4 flex items-center gap-2">
+                            <span>📊</span>
+                            <span>Performance Thresholds</span>
+                        </h3>
+                        <div class="space-y-3">
+                            <div>
+                                <div class="flex justify-between text-sm mb-1">
+                                    <span>CPU Usage</span>
+                                    <span class="text-green-400">42%</span>
+                                </div>
+                                <div class="w-full bg-slate-800 rounded-full h-2">
+                                    <div class="bg-green-500 h-2 rounded-full" style="width: 42%"></div>
+                                </div>
+                                <div class="text-xs text-slate-500 mt-1">Threshold: 80% • Status: ✓ Normal</div>
+                            </div>
+                            <div>
+                                <div class="flex justify-between text-sm mb-1">
+                                    <span>Memory Usage</span>
+                                    <span class="text-green-400">58%</span>
+                                </div>
+                                <div class="w-full bg-slate-800 rounded-full h-2">
+                                    <div class="bg-green-500 h-2 rounded-full" style="width: 58%"></div>
+                                </div>
+                                <div class="text-xs text-slate-500 mt-1">Threshold: 85% • Status: ✓ Normal</div>
+                            </div>
+                            <div>
+                                <div class="flex justify-between text-sm mb-1">
+                                    <span>Response Time</span>
+                                    <span class="text-green-400">1.8s avg</span>
+                                </div>
+                                <div class="w-full bg-slate-800 rounded-full h-2">
+                                    <div class="bg-green-500 h-2 rounded-full" style="width: 36%"></div>
+                                </div>
+                                <div class="text-xs text-slate-500 mt-1">Threshold: 5.0s • Status: ✓ Excellent</div>
+                            </div>
+                            <div>
+                                <div class="flex justify-between text-sm mb-1">
+                                    <span>Error Rate</span>
+                                    <span class="text-green-400">0.3%</span>
+                                </div>
+                                <div class="w-full bg-slate-800 rounded-full h-2">
+                                    <div class="bg-green-500 h-2 rounded-full" style="width: 3%"></div>
+                                </div>
+                                <div class="text-xs text-slate-500 mt-1">Threshold: 5.0% • Status: ✓ Excellent</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Agent Status Summary -->
+                    <div class="bg-slate-900/50 rounded-lg p-4">
+                        <h3 class="text-lg font-semibold mb-4 flex items-center gap-2">
+                            <span>💚</span>
+                            <span>Agent Status Summary</span>
+                        </h3>
+                        <div class="space-y-3">
+                            <div class="flex items-center justify-between p-3 bg-green-500/10 rounded-lg">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-3 h-3 rounded-full bg-green-500"></div>
+                                    <div>
+                                        <div class="font-semibold text-green-400">8 Agents Healthy</div>
+                                        <div class="text-xs text-slate-400">Running optimally</div>
+                                    </div>
+                                </div>
+                                <div class="text-2xl font-bold text-green-400">67%</div>
+                            </div>
+                            <div class="flex items-center justify-between p-3 bg-gray-500/10 rounded-lg">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-3 h-3 rounded-full bg-gray-500"></div>
+                                    <div>
+                                        <div class="font-semibold text-gray-400">4 Agents Idle</div>
+                                        <div class="text-xs text-slate-400">Suspended to save costs</div>
+                                    </div>
+                                </div>
+                                <div class="text-2xl font-bold text-gray-400">33%</div>
+                            </div>
+                            <div class="flex items-center justify-between p-3 bg-yellow-500/10 rounded-lg">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-3 h-3 rounded-full bg-yellow-500"></div>
+                                    <div>
+                                        <div class="font-semibold text-yellow-400">0 Agents Warning</div>
+                                        <div class="text-xs text-slate-400">Performance concerns</div>
+                                    </div>
+                                </div>
+                                <div class="text-2xl font-bold text-yellow-400">0%</div>
+                            </div>
+                            <div class="flex items-center justify-between p-3 bg-red-500/10 rounded-lg">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-3 h-3 rounded-full bg-red-500"></div>
+                                    <div>
+                                        <div class="font-semibold text-red-400">0 Agents Critical</div>
+                                        <div class="text-xs text-slate-400">Requires immediate attention</div>
+                                    </div>
+                                </div>
+                                <div class="text-2xl font-bold text-red-400">0%</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Auto-Actions & Policies -->
+                <div class="bg-slate-900/50 rounded-lg p-4">
+                    <h3 class="text-lg font-semibold mb-3 flex items-center gap-2">
+                        <span>🤖</span>
+                        <span>Automated Actions & Policies</span>
+                    </h3>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+                        <div class="flex items-start gap-2 p-3 bg-slate-800/50 rounded">
+                            <span class="text-green-400">✓</span>
+                            <div>
+                                <div class="font-semibold">Auto-Restart on Failure</div>
+                                <div class="text-xs text-slate-400">Max 3 attempts, 5min cooldown</div>
+                            </div>
+                        </div>
+                        <div class="flex items-start gap-2 p-3 bg-slate-800/50 rounded">
+                            <span class="text-green-400">✓</span>
+                            <div>
+                                <div class="font-semibold">Load Balancing</div>
+                                <div class="text-xs text-slate-400">Distribute tasks evenly</div>
+                            </div>
+                        </div>
+                        <div class="flex items-start gap-2 p-3 bg-slate-800/50 rounded">
+                            <span class="text-green-400">✓</span>
+                            <div>
+                                <div class="font-semibold">Health Checks</div>
+                                <div class="text-xs text-slate-400">Every 30 seconds</div>
+                            </div>
+                        </div>
+                        <div class="flex items-start gap-2 p-3 bg-slate-800/50 rounded">
+                            <span class="text-green-400">✓</span>
+                            <div>
+                                <div class="font-semibold">Alert Notifications</div>
+                                <div class="text-xs text-slate-400">Email + Slack on critical</div>
+                            </div>
+                        </div>
+                        <div class="flex items-start gap-2 p-3 bg-slate-800/50 rounded">
+                            <span class="text-green-400">✓</span>
+                            <div>
+                                <div class="font-semibold">Resource Limits</div>
+                                <div class="text-xs text-slate-400">Prevent runaway usage</div>
+                            </div>
+                        </div>
+                        <div class="flex items-start gap-2 p-3 bg-slate-800/50 rounded">
+                            <span class="text-green-400">✓</span>
+                            <div>
+                                <div class="font-semibold">Backup Failover</div>
+                                <div class="text-xs text-slate-400">Switch to standby instantly</div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -518,6 +811,53 @@
     </section>
 
     <script>
+        // Control Panel Management
+        function showControlPanel() {
+            document.getElementById('controlCenter').style.display = 'block';
+            document.getElementById('controlCenter').scrollIntoView({ behavior: 'smooth' });
+        }
+
+        function hideControlPanel() {
+            document.getElementById('controlCenter').style.display = 'none';
+        }
+
+        function performAction(action) {
+            const actions = {
+                'start-all': 'Starting all agents... This will increase costs temporarily.',
+                'stop-idle': 'Suspending idle agents... Saving approximately $45/month.',
+                'restart-all': 'Restarting all agents... Brief service interruption expected.',
+                'emergency-stop': 'EMERGENCY STOP initiated! All agents shutting down immediately.'
+            };
+            
+            if (confirm(`${actions[action]}\n\nContinue?`)) {
+                console.log(`Performing action: ${action}`);
+                alert(`✓ Action "${action}" completed successfully!\n\nIn production, this would execute the actual agent control commands.`);
+                
+                // Update UI to reflect changes
+                if (action === 'start-all') {
+                    document.getElementById('activeAgents').textContent = '12';
+                } else if (action === 'stop-idle') {
+                    document.getElementById('activeAgents').textContent = '8';
+                } else if (action === 'emergency-stop') {
+                    document.getElementById('activeAgents').textContent = '0';
+                }
+            }
+        }
+
+        function controlAgent(agentId, action) {
+            const agentNames = {
+                'code-gen': 'Code Generation Agent',
+                'aws-cost': 'AWS Cost Optimizer Agent',
+                'aws-scale': 'AWS Auto-Scaling Agent',
+                'deploy': 'Deployment Agent'
+            };
+            
+            const actionText = action === 'start' ? 'Starting' : action === 'stop' ? 'Stopping' : 'Restarting';
+            
+            console.log(`${actionText} ${agentNames[agentId]}...`);
+            alert(`✓ ${actionText} ${agentNames[agentId]} completed!\n\nIn production, this would control the actual agent instance.`);
+        }
+
         function refreshData() {
             // In a real implementation, this would fetch from the database
             console.log('Refreshing agent productivity data...');
