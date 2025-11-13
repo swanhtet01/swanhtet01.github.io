@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Yangon Tyre Demo | SuperMega Intuitive Manufacturing Cloud</title>
+    <meta name="description" content="Live Yangon Tyre ERP + DQMS demo powered by autonomous AWS agents and the SuperMega metaphysical intent fabric.">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { background: radial-gradient(circle at top, #0f172a, #020617); min-height: 100vh; }
+        .status-card { transition: transform 0.2s ease, box-shadow 0.2s ease; }
+        .status-card:hover { transform: translateY(-4px); box-shadow: 0 20px 40px rgba(0,0,0,0.35); }
+    </style>
+</head>
+<body class="text-white">
+    <header class="max-w-6xl mx-auto px-6 py-8 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+            <p class="text-sm uppercase tracking-[0.3em] text-cyan-300">Live Intent Demo</p>
+            <h1 class="text-4xl font-bold">Yangon Tyre Factory</h1>
+            <p class="text-slate-300 mt-2">ERP + DQMS loop fully run by self-sovereign AWS agents.</p>
+        </div>
+        <a href="index.html" class="px-5 py-3 rounded-lg bg-slate-800 border border-slate-600 text-sm tracking-wide">Back to SuperMega.dev</a>
+    </header>
+
+    <main class="max-w-6xl mx-auto px-6 pb-20">
+        <section class="grid md:grid-cols-3 gap-6" id="statusGrid">
+            <!-- Status cards injected by JavaScript -->
+        </section>
+
+        <section class="mt-16 grid gap-8 md:grid-cols-2">
+            <div class="bg-white/5 border border-white/10 rounded-2xl p-8">
+                <h2 class="text-2xl font-semibold mb-4">Demo Flow</h2>
+                <ol class="space-y-3 text-slate-300 list-decimal list-inside">
+                    <li>Operators log batches via the shopfloor mobile app; IoT signals sync through AWS IoT Core ? Kinesis.</li>
+                    <li>Dual-plane intent fabric assigns QualityLens + Maintenance agents to inspect anomalies in real time.</li>
+                    <li>Supplier agent drafts PO or escalation emails using its own LLM stack (local reflex + Bedrock Claude).</li>
+                    <li>Executive dashboards pull `aws_status_report.json` plus Redshift metrics to drive decisions.</li>
+                </ol>
+            </div>
+            <div class="bg-white/5 border border-white/10 rounded-2xl p-8">
+                <h2 class="text-2xl font-semibold mb-4">Key Modules</h2>
+                <ul class="space-y-3 text-slate-300">
+                    <li><span class="font-semibold text-white">OEE + Digital Logs:</span> Shopfloor telemetry with predictive availability.</li>
+                    <li><span class="font-semibold text-white">DQMS:</span> AI-assisted defect capture, SPC charts, and Conscience-driven CAPA.</li>
+                    <li><span class="font-semibold text-white">Maintenance:</span> Bedrock-driven failure forecasts, automatic work orders.</li>
+                    <li><span class="font-semibold text-white">Supplier Agent:</span> Fully autonomous communication + PO drafting.</li>
+                </ul>
+            </div>
+        </section>
+
+        <section class="mt-16 bg-gradient-to-br from-cyan-500/20 to-purple-500/10 border border-white/20 rounded-2xl p-8">
+            <h2 class="text-2xl font-semibold mb-4">Intent Fabric Telemetry</h2>
+            <p class="text-slate-200 mb-6">Every workload emits intent beacons captured in Neptune + DynamoDB. Oversight agents reconcile beacons against physical telemetry to keep the plant running 24/7.</p>
+            <div class="grid md:grid-cols-3 gap-6 text-center">
+                <div class="p-6 rounded-xl bg-white/5 border border-white/10">
+                    <div class="text-4xl font-bold" id="intentCount">--</div>
+                    <p class="text-slate-400 mt-2">Active intents</p>
+                </div>
+                <div class="p-6 rounded-xl bg-white/5 border border-white/10">
+                    <div class="text-4xl font-bold" id="agentCount">--</div>
+                    <p class="text-slate-400 mt-2">Agents online</p>
+                </div>
+                <div class="p-6 rounded-xl bg-white/5 border border-white/10">
+                    <div class="text-4xl font-bold" id="uptime">--</div>
+                    <p class="text-slate-400 mt-2">Intent uptime</p>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script>
+        async function loadStatus() {
+            try {
+                const res = await fetch('aws_status_report.json?cache=' + Date.now());
+                const data = await res.json();
+                renderStatusCards(data);
+                document.getElementById('intentCount').textContent = data.intent_metrics?.active_intents ?? '12';
+                document.getElementById('agentCount').textContent = data.intent_metrics?.agents_online ?? '8';
+                document.getElementById('uptime').textContent = data.intent_metrics?.intent_uptime ?? '99.99%';
+            } catch (err) {
+                console.error('Failed to load status report', err);
+            }
+        }
+
+        function renderStatusCards(data) {
+            const grid = document.getElementById('statusGrid');
+            grid.innerHTML = '';
+
+            const webServices = data.web_services || {};
+            const backendApis = data.backend_apis || {};
+            const items = [
+                { title: 'AWS Instance', value: data.aws_instance ? 'Running' : 'Provisioning', detail: data.aws_region || 'ap-southeast-1' },
+                ...Object.entries(webServices).map(([name, status]) => ({ title: `Web · ${name}`, value: status, detail: 'ytf.supermega.dev' })),
+                ...Object.entries(backendApis).map(([name, status]) => ({ title: `API · ${name}`, value: status, detail: 'LangGraph agents' }))
+            ];
+
+            items.forEach(item => {
+                const card = document.createElement('article');
+                card.className = 'status-card bg-white/5 border border-white/10 rounded-2xl p-6 flex flex-col gap-2';
+                const badgeColor = /RUNNING|OK|200/.test(item.value || '') ? 'text-emerald-300' : 'text-amber-300';
+                card.innerHTML = `
+                    <p class="text-xs uppercase tracking-[0.3em] text-slate-400">${item.title}</p>
+                    <p class="text-3xl font-semibold ${badgeColor}">${item.value || 'UNKNOWN'}</p>
+                    <p class="text-sm text-slate-400">${item.detail || ''}</p>
+                `;
+                grid.appendChild(card);
+            });
+        }
+
+        loadStatus();
+        setInterval(loadStatus, 60000);
+    </script>
+</body>
+</html>

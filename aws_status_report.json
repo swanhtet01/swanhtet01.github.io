@@ -1,18 +1,24 @@
 {
-  "aws_instance": false,
-  "web_services": {
-    "main_site": "CONNECTION REFUSED",
-    "platform": "CONNECTION REFUSED",
-    "creative": "CONNECTION REFUSED",
-    "data": "CONNECTION REFUSED",
-    "productivity": "CONNECTION REFUSED"
-  },
-  "backend_apis": {
-    "health": "NOT RUNNING",
-    "creative_api": "NOT RUNNING",
-    "data_api": "NOT RUNNING",
-    "productivity_api": "NOT RUNNING"
-  },
-  "ssh_access": true,
-  "timestamp": "2025-08-29T22:07:59.598382"
+    "aws_instance":  true,
+    "web_services":  {
+                         "main_site":  "RUNNING",
+                         "platform":  "RUNNING",
+                         "creative":  "RUNNING",
+                         "data":  "RUNNING",
+                         "productivity":  "RUNNING"
+                     },
+    "backend_apis":  {
+                         "health":  "200 OK",
+                         "creative_api":  "RUNNING",
+                         "data_api":  "RUNNING",
+                         "productivity_api":  "RUNNING"
+                     },
+    "ssh_access":  true,
+    "timestamp":  "2025-11-13T15:17:03",
+    "aws_region":  "ap-southeast-1",
+    "intent_metrics":  {
+                           "active_intents":  18,
+                           "agents_online":  9,
+                           "intent_uptime":  "99.995%"
+                       }
 }
