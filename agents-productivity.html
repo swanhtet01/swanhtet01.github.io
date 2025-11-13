@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Agents Productivity Dashboard | SuperMega</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            background: linear-gradient(to bottom, #020617, #0c4a6e, #020617);
+            min-height: 100vh;
+        }
+        .metric-card {
+            transition: all 0.3s ease;
+        }
+        .metric-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 20px 40px rgba(16, 185, 129, 0.2);
+        }
+    </style>
+</head>
+<body class="text-white">
+    <!-- Header -->
+    <header class="container mx-auto px-4 py-6">
+        <div class="flex justify-between items-center">
+            <div class="flex items-center gap-4">
+                <a href="index.html" class="text-slate-300 hover:text-white transition">← Back to Home</a>
+                <div class="flex items-center gap-2">
+                    <span class="text-2xl">🤖</span>
+                    <span class="text-2xl font-bold">AI Agents Productivity</span>
+                </div>
+            </div>
+            <button onclick="refreshData()" class="px-4 py-2 bg-green-500 hover:bg-green-600 rounded-lg transition">
+                🔄 Refresh Data
+            </button>
+        </div>
+    </header>
+
+    <!-- Summary Metrics -->
+    <section class="container mx-auto px-4 py-12">
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-12">
+            <div class="metric-card bg-slate-900/50 border border-green-500/30 rounded-lg p-6 text-center">
+                <div class="text-4xl mb-2">🤖</div>
+                <div class="text-3xl font-bold text-green-400" id="totalAgents">12</div>
+                <div class="text-slate-400 mt-2">Total Agents</div>
+            </div>
+            <div class="metric-card bg-slate-900/50 border border-green-500/30 rounded-lg p-6 text-center">
+                <div class="text-4xl mb-2">✅</div>
+                <div class="text-3xl font-bold text-green-400" id="activeAgents">8</div>
+                <div class="text-slate-400 mt-2">Active Now</div>
+            </div>
+            <div class="metric-card bg-slate-900/50 border border-green-500/30 rounded-lg p-6 text-center">
+                <div class="text-4xl mb-2">📊</div>
+                <div class="text-3xl font-bold text-green-400" id="tasksCompleted">1,247</div>
+                <div class="text-slate-400 mt-2">Tasks Completed</div>
+            </div>
+            <div class="metric-card bg-slate-900/50 border border-green-500/30 rounded-lg p-6 text-center">
+                <div class="text-4xl mb-2">⚡</div>
+                <div class="text-3xl font-bold text-green-400" id="efficiency">94.3%</div>
+                <div class="text-slate-400 mt-2">Efficiency Rate</div>
+            </div>
+        </div>
+
+        <!-- Agent Performance -->
+        <div class="max-w-6xl mx-auto">
+            <h2 class="text-3xl font-bold mb-6">Agent Performance</h2>
+            
+            <div class="space-y-4" id="agentsList">
+                <!-- Code Generation Agent -->
+                <div class="bg-slate-900/50 border border-slate-800 rounded-lg p-6">
+                    <div class="flex justify-between items-start mb-4">
+                        <div>
+                            <h3 class="text-xl font-bold mb-1">💻 Code Generation Agent</h3>
+                            <p class="text-slate-400 text-sm">Generates production-ready code</p>
+                        </div>
+                        <span class="px-3 py-1 bg-green-500/20 text-green-400 rounded-full text-sm">Active</span>
+                    </div>
+                    <div class="grid grid-cols-3 gap-4 mb-4">
+                        <div>
+                            <div class="text-2xl font-bold text-green-400">342</div>
+                            <div class="text-sm text-slate-400">Tasks Today</div>
+                        </div>
+                        <div>
+                            <div class="text-2xl font-bold text-green-400">97.2%</div>
+                            <div class="text-sm text-slate-400">Success Rate</div>
+                        </div>
+                        <div>
+                            <div class="text-2xl font-bold text-green-400">2.3s</div>
+                            <div class="text-sm text-slate-400">Avg Response</div>
+                        </div>
+                    </div>
+                    <div class="w-full bg-slate-800 rounded-full h-2">
+                        <div class="bg-green-500 h-2 rounded-full" style="width: 97.2%"></div>
+                    </div>
+                </div>
+
+                <!-- Data Analysis Agent -->
+                <div class="bg-slate-900/50 border border-slate-800 rounded-lg p-6">
+                    <div class="flex justify-between items-start mb-4">
+                        <div>
+                            <h3 class="text-xl font-bold mb-1">📊 Data Analysis Agent</h3>
+                            <p class="text-slate-400 text-sm">Processes and analyzes data</p>
+                        </div>
+                        <span class="px-3 py-1 bg-green-500/20 text-green-400 rounded-full text-sm">Active</span>
+                    </div>
+                    <div class="grid grid-cols-3 gap-4 mb-4">
+                        <div>
+                            <div class="text-2xl font-bold text-green-400">189</div>
+                            <div class="text-sm text-slate-400">Tasks Today</div>
+                        </div>
+                        <div>
+                            <div class="text-2xl font-bold text-green-400">95.8%</div>
+                            <div class="text-sm text-slate-400">Success Rate</div>
+                        </div>
+                        <div>
+                            <div class="text-2xl font-bold text-green-400">4.1s</div>
+                            <div class="text-sm text-slate-400">Avg Response</div>
+                        </div>
+                    </div>
+                    <div class="w-full bg-slate-800 rounded-full h-2">
+                        <div class="bg-green-500 h-2 rounded-full" style="width: 95.8%"></div>
+                    </div>
+                </div>
+
+                <!-- Content Creation Agent -->
+                <div class="bg-slate-900/50 border border-slate-800 rounded-lg p-6">
+                    <div class="flex justify-between items-start mb-4">
+                        <div>
+                            <h3 class="text-xl font-bold mb-1">✍️ Content Creation Agent</h3>
+                            <p class="text-slate-400 text-sm">Creates marketing and documentation</p>
+                        </div>
+                        <span class="px-3 py-1 bg-green-500/20 text-green-400 rounded-full text-sm">Active</span>
+                    </div>
+                    <div class="grid grid-cols-3 gap-4 mb-4">
+                        <div>
+                            <div class="text-2xl font-bold text-green-400">156</div>
+                            <div class="text-sm text-slate-400">Tasks Today</div>
+                        </div>
+                        <div>
+                            <div class="text-2xl font-bold text-green-400">98.5%</div>
+                            <div class="text-sm text-slate-400">Success Rate</div>
+                        </div>
+                        <div>
+                            <div class="text-2xl font-bold text-green-400">3.7s</div>
+                            <div class="text-sm text-slate-400">Avg Response</div>
+                        </div>
+                    </div>
+                    <div class="w-full bg-slate-800 rounded-full h-2">
+                        <div class="bg-green-500 h-2 rounded-full" style="width: 98.5%"></div>
+                    </div>
+                </div>
+
+                <!-- Quality Assurance Agent -->
+                <div class="bg-slate-900/50 border border-slate-800 rounded-lg p-6">
+                    <div class="flex justify-between items-start mb-4">
+                        <div>
+                            <h3 class="text-xl font-bold mb-1">🔍 Quality Assurance Agent</h3>
+                            <p class="text-slate-400 text-sm">Tests and validates code</p>
+                        </div>
+                        <span class="px-3 py-1 bg-green-500/20 text-green-400 rounded-full text-sm">Active</span>
+                    </div>
+                    <div class="grid grid-cols-3 gap-4 mb-4">
+                        <div>
+                            <div class="text-2xl font-bold text-green-400">278</div>
+                            <div class="text-sm text-slate-400">Tasks Today</div>
+                        </div>
+                        <div>
+                            <div class="text-2xl font-bold text-green-400">99.1%</div>
+                            <div class="text-sm text-slate-400">Success Rate</div>
+                        </div>
+                        <div>
+                            <div class="text-2xl font-bold text-green-400">1.8s</div>
+                            <div class="text-sm text-slate-400">Avg Response</div>
+                        </div>
+                    </div>
+                    <div class="w-full bg-slate-800 rounded-full h-2">
+                        <div class="bg-green-500 h-2 rounded-full" style="width: 99.1%"></div>
+                    </div>
+                </div>
+
+                <!-- Deployment Agent -->
+                <div class="bg-slate-900/50 border border-slate-800 rounded-lg p-6">
+                    <div class="flex justify-between items-start mb-4">
+                        <div>
+                            <h3 class="text-xl font-bold mb-1">🚀 Deployment Agent</h3>
+                            <p class="text-slate-400 text-sm">Manages deployments and infrastructure</p>
+                        </div>
+                        <span class="px-3 py-1 bg-yellow-500/20 text-yellow-400 rounded-full text-sm">Idle</span>
+                    </div>
+                    <div class="grid grid-cols-3 gap-4 mb-4">
+                        <div>
+                            <div class="text-2xl font-bold text-green-400">47</div>
+                            <div class="text-sm text-slate-400">Tasks Today</div>
+                        </div>
+                        <div>
+                            <div class="text-2xl font-bold text-green-400">96.4%</div>
+                            <div class="text-sm text-slate-400">Success Rate</div>
+                        </div>
+                        <div>
+                            <div class="text-2xl font-bold text-green-400">5.2s</div>
+                            <div class="text-sm text-slate-400">Avg Response</div>
+                        </div>
+                    </div>
+                    <div class="w-full bg-slate-800 rounded-full h-2">
+                        <div class="bg-green-500 h-2 rounded-full" style="width: 96.4%"></div>
+                    </div>
+                </div>
+
+                <!-- Monitoring Agent -->
+                <div class="bg-slate-900/50 border border-slate-800 rounded-lg p-6">
+                    <div class="flex justify-between items-start mb-4">
+                        <div>
+                            <h3 class="text-xl font-bold mb-1">👁️ Monitoring Agent</h3>
+                            <p class="text-slate-400 text-sm">Watches system health and alerts</p>
+                        </div>
+                        <span class="px-3 py-1 bg-green-500/20 text-green-400 rounded-full text-sm">Active</span>
+                    </div>
+                    <div class="grid grid-cols-3 gap-4 mb-4">
+                        <div>
+                            <div class="text-2xl font-bold text-green-400">523</div>
+                            <div class="text-sm text-slate-400">Tasks Today</div>
+                        </div>
+                        <div>
+                            <div class="text-2xl font-bold text-green-400">99.7%</div>
+                            <div class="text-sm text-slate-400">Success Rate</div>
+                        </div>
+                        <div>
+                            <div class="text-2xl font-bold text-green-400">0.9s</div>
+                            <div class="text-sm text-slate-400">Avg Response</div>
+                        </div>
+                    </div>
+                    <div class="w-full bg-slate-800 rounded-full h-2">
+                        <div class="bg-green-500 h-2 rounded-full" style="width: 99.7%"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Activity Timeline -->
+        <div class="max-w-6xl mx-auto mt-12">
+            <h2 class="text-3xl font-bold mb-6">Recent Activity</h2>
+            <div class="bg-slate-900/50 border border-slate-800 rounded-lg p-6">
+                <div class="space-y-4" id="activityTimeline">
+                    <div class="flex items-start gap-4 pb-4 border-b border-slate-800">
+                        <div class="text-2xl">💻</div>
+                        <div class="flex-1">
+                            <div class="font-semibold">Code Generation Agent completed task</div>
+                            <div class="text-sm text-slate-400">Generated 3 new API endpoints for FlowCore</div>
+                            <div class="text-xs text-slate-500 mt-1">2 minutes ago</div>
+                        </div>
+                    </div>
+                    <div class="flex items-start gap-4 pb-4 border-b border-slate-800">
+                        <div class="text-2xl">🔍</div>
+                        <div class="flex-1">
+                            <div class="font-semibold">Quality Assurance Agent ran tests</div>
+                            <div class="text-sm text-slate-400">All 147 tests passed successfully</div>
+                            <div class="text-xs text-slate-500 mt-1">5 minutes ago</div>
+                        </div>
+                    </div>
+                    <div class="flex items-start gap-4 pb-4 border-b border-slate-800">
+                        <div class="text-2xl">📊</div>
+                        <div class="flex-1">
+                            <div class="font-semibold">Data Analysis Agent processed data</div>
+                            <div class="text-sm text-slate-400">Analyzed 15.3M data points for insights</div>
+                            <div class="text-xs text-slate-500 mt-1">12 minutes ago</div>
+                        </div>
+                    </div>
+                    <div class="flex items-start gap-4 pb-4 border-b border-slate-800">
+                        <div class="text-2xl">✍️</div>
+                        <div class="flex-1">
+                            <div class="font-semibold">Content Creation Agent updated docs</div>
+                            <div class="text-sm text-slate-400">Created FlowCore product documentation</div>
+                            <div class="text-xs text-slate-500 mt-1">18 minutes ago</div>
+                        </div>
+                    </div>
+                    <div class="flex items-start gap-4">
+                        <div class="text-2xl">👁️</div>
+                        <div class="flex-1">
+                            <div class="font-semibold">Monitoring Agent detected anomaly</div>
+                            <div class="text-sm text-slate-400">AWS services down - alert sent</div>
+                            <div class="text-xs text-slate-500 mt-1">1 hour ago</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <script>
+        function refreshData() {
+            // In a real implementation, this would fetch from the database
+            console.log('Refreshing agent productivity data...');
+            alert('Data refreshed! In production, this would fetch real-time data from productive_agents.db');
+        }
+
+        // Simulate real-time updates
+        setInterval(() => {
+            const tasksElement = document.getElementById('tasksCompleted');
+            if (tasksElement) {
+                const current = parseInt(tasksElement.textContent.replace(/,/g, ''));
+                tasksElement.textContent = (current + Math.floor(Math.random() * 3)).toLocaleString();
+            }
+        }, 5000);
+    </script>
+</body>
+</html>

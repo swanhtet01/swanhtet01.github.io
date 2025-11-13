@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FlowCore - Smart Manufacturing Platform | SuperMega</title>
+    <meta name="description" content="FlowCore: AI-powered smart manufacturing platform for real-time production monitoring, quality control, and operational excellence">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            background: linear-gradient(to bottom, #020617, #0c4a6e, #020617);
+            min-height: 100vh;
+        }
+        .gradient-text {
+            background: linear-gradient(45deg, #06b6d4, #3b82f6, #8b5cf6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .feature-card {
+            transition: all 0.3s ease;
+        }
+        .feature-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 20px 40px rgba(6, 182, 212, 0.2);
+        }
+    </style>
+</head>
+<body class="text-white">
+    <!-- Navigation -->
+    <header class="container mx-auto px-4 py-6">
+        <div class="flex justify-between items-center">
+            <div class="flex items-center gap-4">
+                <a href="index.html" class="text-slate-300 hover:text-white transition">← Back</a>
+                <div class="flex items-center gap-2">
+                    <span class="text-4xl">📊</span>
+                    <span class="text-2xl font-bold gradient-text">FlowCore</span>
+                </div>
+            </div>
+            <a href="https://ytf.supermega.dev" class="px-6 py-2 bg-cyan-500 hover:bg-cyan-600 rounded-lg font-semibold transition">
+                Launch Platform
+            </a>
+        </div>
+    </header>
+
+    <!-- Hero Section -->
+    <section class="container mx-auto px-4 py-20 text-center">
+        <div class="max-w-4xl mx-auto">
+            <h1 class="text-6xl md:text-7xl font-bold mb-6">
+                <span class="gradient-text">FlowCore</span><br>
+                Smart Manufacturing Intelligence
+            </h1>
+            <p class="text-xl text-slate-300 mb-12">
+                Transform your manufacturing operations with AI-powered real-time monitoring, 
+                predictive analytics, and intelligent automation.
+            </p>
+            <div class="flex gap-4 justify-center flex-wrap">
+                <a href="#features" class="px-8 py-4 bg-cyan-500 hover:bg-cyan-600 rounded-lg font-semibold transition">
+                    Explore Features
+                </a>
+                <a href="#demo" class="px-8 py-4 bg-slate-700 hover:bg-slate-600 rounded-lg font-semibold transition">
+                    Request Demo
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Key Metrics -->
+    <section class="container mx-auto px-4 py-16">
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 max-w-6xl mx-auto">
+            <div class="bg-slate-900/50 border border-cyan-500/30 rounded-lg p-6 text-center">
+                <div class="text-4xl font-bold text-cyan-400 mb-2">99.9%</div>
+                <div class="text-slate-400">Uptime Guaranteed</div>
+            </div>
+            <div class="bg-slate-900/50 border border-cyan-500/30 rounded-lg p-6 text-center">
+                <div class="text-4xl font-bold text-cyan-400 mb-2">35%</div>
+                <div class="text-slate-400">Efficiency Increase</div>
+            </div>
+            <div class="bg-slate-900/50 border border-cyan-500/30 rounded-lg p-6 text-center">
+                <div class="text-4xl font-bold text-cyan-400 mb-2">Real-time</div>
+                <div class="text-slate-400">Data Processing</div>
+            </div>
+            <div class="bg-slate-900/50 border border-cyan-500/30 rounded-lg p-6 text-center">
+                <div class="text-4xl font-bold text-cyan-400 mb-2">24/7</div>
+                <div class="text-slate-400">AI Monitoring</div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Core Features -->
+    <section id="features" class="container mx-auto px-4 py-20">
+        <h2 class="text-5xl font-bold mb-4 text-center">Core Features</h2>
+        <p class="text-xl text-slate-400 text-center mb-16">Everything you need for smart manufacturing</p>
+        
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-6xl mx-auto">
+            <!-- Production Monitoring -->
+            <div class="feature-card bg-slate-900/50 border border-slate-800 rounded-lg p-8">
+                <div class="text-5xl mb-4">📈</div>
+                <h3 class="text-2xl font-bold mb-4">Production Monitoring</h3>
+                <ul class="space-y-3 text-slate-300">
+                    <li class="flex items-start gap-2">
+                        <span class="text-cyan-400">✓</span>
+                        <span>Real-time production tracking</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-cyan-400">✓</span>
+                        <span>OEE (Overall Equipment Effectiveness)</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-cyan-400">✓</span>
+                        <span>Line performance analytics</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-cyan-400">✓</span>
+                        <span>Downtime detection & alerts</span>
+                    </li>
+                </ul>
+            </div>
+
+            <!-- Quality Control -->
+            <div class="feature-card bg-slate-900/50 border border-slate-800 rounded-lg p-8">
+                <div class="text-5xl mb-4">👁️</div>
+                <h3 class="text-2xl font-bold mb-4">AI Quality Control</h3>
+                <ul class="space-y-3 text-slate-300">
+                    <li class="flex items-start gap-2">
+                        <span class="text-cyan-400">✓</span>
+                        <span>Computer vision inspection</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-cyan-400">✓</span>
+                        <span>Defect detection & classification</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-cyan-400">✓</span>
+                        <span>Quality trend analysis</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-cyan-400">✓</span>
+                        <span>Root cause identification</span>
+                    </li>
+                </ul>
+            </div>
+
+            <!-- Predictive Maintenance -->
+            <div class="feature-card bg-slate-900/50 border border-slate-800 rounded-lg p-8">
+                <div class="text-5xl mb-4">🔧</div>
+                <h3 class="text-2xl font-bold mb-4">Predictive Maintenance</h3>
+                <ul class="space-y-3 text-slate-300">
+                    <li class="flex items-start gap-2">
+                        <span class="text-cyan-400">✓</span>
+                        <span>Equipment health monitoring</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-cyan-400">✓</span>
+                        <span>Failure prediction algorithms</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-cyan-400">✓</span>
+                        <span>Maintenance scheduling</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-cyan-400">✓</span>
+                        <span>Parts & inventory management</span>
+                    </li>
+                </ul>
+            </div>
+
+            <!-- Inventory Management -->
+            <div class="feature-card bg-slate-900/50 border border-slate-800 rounded-lg p-8">
+                <div class="text-5xl mb-4">🧠</div>
+                <h3 class="text-2xl font-bold mb-4">Smart Inventory</h3>
+                <ul class="space-y-3 text-slate-300">
+                    <li class="flex items-start gap-2">
+                        <span class="text-cyan-400">✓</span>
+                        <span>Automated stock tracking</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-cyan-400">✓</span>
+                        <span>Demand forecasting</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-cyan-400">✓</span>
+                        <span>Just-in-time optimization</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-cyan-400">✓</span>
+                        <span>Supply chain integration</span>
+                    </li>
+                </ul>
+            </div>
+
+            <!-- Analytics & Reporting -->
+            <div class="feature-card bg-slate-900/50 border border-slate-800 rounded-lg p-8">
+                <div class="text-5xl mb-4">📊</div>
+                <h3 class="text-2xl font-bold mb-4">Advanced Analytics</h3>
+                <ul class="space-y-3 text-slate-300">
+                    <li class="flex items-start gap-2">
+                        <span class="text-cyan-400">✓</span>
+                        <span>Custom dashboards</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-cyan-400">✓</span>
+                        <span>KPI tracking & reporting</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-cyan-400">✓</span>
+                        <span>Historical data analysis</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-cyan-400">✓</span>
+                        <span>Export & API access</span>
+                    </li>
+                </ul>
+            </div>
+
+            <!-- Integration Hub -->
+            <div class="feature-card bg-slate-900/50 border border-slate-800 rounded-lg p-8">
+                <div class="text-5xl mb-4">🔗</div>
+                <h3 class="text-2xl font-bold mb-4">Integration Hub</h3>
+                <ul class="space-y-3 text-slate-300">
+                    <li class="flex items-start gap-2">
+                        <span class="text-cyan-400">✓</span>
+                        <span>ERP/MES connectivity</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-cyan-400">✓</span>
+                        <span>IoT device support</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-cyan-400">✓</span>
+                        <span>REST API & webhooks</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-cyan-400">✓</span>
+                        <span>Custom integrations</span>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </section>
+
+    <!-- Technology Stack -->
+    <section class="container mx-auto px-4 py-20">
+        <h2 class="text-5xl font-bold mb-4 text-center">Powered By Advanced AI</h2>
+        <p class="text-xl text-slate-400 text-center mb-16">Built on cutting-edge technology</p>
+        
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-6 max-w-4xl mx-auto">
+            <div class="bg-slate-900/50 border border-slate-800 rounded-lg p-6 text-center">
+                <div class="text-4xl mb-3">🤖</div>
+                <div class="font-semibold">Machine Learning</div>
+            </div>
+            <div class="bg-slate-900/50 border border-slate-800 rounded-lg p-6 text-center">
+                <div class="text-4xl mb-3">👁️</div>
+                <div class="font-semibold">Computer Vision</div>
+            </div>
+            <div class="bg-slate-900/50 border border-slate-800 rounded-lg p-6 text-center">
+                <div class="text-4xl mb-3">☁️</div>
+                <div class="font-semibold">Cloud Native</div>
+            </div>
+            <div class="bg-slate-900/50 border border-slate-800 rounded-lg p-6 text-center">
+                <div class="text-4xl mb-3">⚡</div>
+                <div class="font-semibold">Real-time Processing</div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Demo Section -->
+    <section id="demo" class="container mx-auto px-4 py-20">
+        <div class="max-w-3xl mx-auto bg-slate-900/50 border border-cyan-500/30 rounded-2xl p-12 text-center">
+            <h2 class="text-4xl font-bold mb-6">Ready to Transform Your Manufacturing?</h2>
+            <p class="text-xl text-slate-300 mb-8">
+                See FlowCore in action. Schedule a personalized demo with our team.
+            </p>
+            <div class="flex gap-4 justify-center flex-wrap">
+                <a href="https://ytf.supermega.dev" class="px-8 py-4 bg-cyan-500 hover:bg-cyan-600 rounded-lg font-semibold transition">
+                    View Live Dashboard
+                </a>
+                <a href="mailto:contact@supermega.dev" class="px-8 py-4 bg-slate-700 hover:bg-slate-600 rounded-lg font-semibold transition">
+                    Contact Sales
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="container mx-auto px-4 py-12 text-center text-slate-400 border-t border-slate-800">
+        <div class="mb-4">
+            <a href="index.html" class="text-slate-300 hover:text-white transition">Home</a>
+            <span class="mx-4">•</span>
+            <a href="supermega-platform.html" class="text-slate-300 hover:text-white transition">Platform</a>
+            <span class="mx-4">•</span>
+            <a href="https://ytf.supermega.dev" class="text-slate-300 hover:text-white transition">Dashboard</a>
+        </div>
+        <p>&copy; 2025 SuperMega. All rights reserved.</p>
+    </footer>
+</body>
+</html>
