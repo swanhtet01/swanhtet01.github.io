@@ -1,0 +1,716 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flow - Smart Manufacturing Platform | SuperMega</title>
+    <meta name="description" content="Flow: AI-powered smart manufacturing platform for real-time production monitoring, quality control, and operational excellence">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            background: linear-gradient(to bottom, #020617, #0c4a6e, #020617);
+            min-height: 100vh;
+        }
+        .gradient-text {
+            background: linear-gradient(45deg, #06b6d4, #3b82f6, #8b5cf6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .feature-card {
+            transition: all 0.3s ease;
+        }
+        .feature-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 20px 40px rgba(6, 182, 212, 0.2);
+        }
+    </style>
+</head>
+<body class="text-white">
+    <!-- Navigation -->
+    <header class="container mx-auto px-4 py-6">
+        <div class="flex justify-between items-center">
+            <div class="flex items-center gap-4">
+                <a href="index.html" class="text-slate-300 hover:text-white transition">← Back</a>
+                <div class="flex items-center gap-2">
+                    <span class="text-4xl">📊</span>
+                    <span class="text-2xl font-bold gradient-text">Flow</span>
+                </div>
+            </div>
+            <a href="https://ytf.supermega.dev" class="px-6 py-2 bg-cyan-500 hover:bg-cyan-600 rounded-lg font-semibold transition">
+                Launch Platform
+            </a>
+        </div>
+    </header>
+
+    <!-- Hero Section -->
+    <section class="container mx-auto px-4 py-20 text-center">
+        <div class="max-w-4xl mx-auto">
+            <div class="inline-block px-4 py-2 bg-green-500/20 text-green-400 rounded-full text-sm font-semibold mb-4">
+                ✅ LIVE NOW - Proven at Yangon Tyre Factory
+            </div>
+            <h1 class="text-6xl md:text-7xl font-bold mb-6">
+                <span class="gradient-text">Flow</span><br>
+                Enterprise Manufacturing<br>Intelligence Platform
+            </h1>
+            <p class="text-xl text-slate-300 mb-4">
+                Complete ERP + DQMS solution for modern manufacturing.
+            </p>
+            <p class="text-lg text-slate-400 mb-12">
+                Plug into existing ERPs or run standalone. Real-world validated with Yangon Tyre Factory as anchor customer.
+            </p>
+            <div class="flex gap-4 justify-center flex-wrap">
+                <a href="yangon-tyre-demo.html" class="px-8 py-4 bg-cyan-500 hover:bg-cyan-600 rounded-lg font-semibold transition">
+                    🏭 View Live Demo
+                </a>
+                <a href="#modules" class="px-8 py-4 bg-slate-700 hover:bg-slate-600 rounded-lg font-semibold transition">
+                    Explore Modules
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Key Metrics -->
+    <section class="container mx-auto px-4 py-16">
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 max-w-6xl mx-auto">
+            <div class="bg-slate-900/50 border border-cyan-500/30 rounded-lg p-6 text-center">
+                <div class="text-4xl font-bold text-cyan-400 mb-2">99.9%</div>
+                <div class="text-slate-400">Uptime Guaranteed</div>
+            </div>
+            <div class="bg-slate-900/50 border border-cyan-500/30 rounded-lg p-6 text-center">
+                <div class="text-4xl font-bold text-cyan-400 mb-2">35%</div>
+                <div class="text-slate-400">Efficiency Increase</div>
+            </div>
+            <div class="bg-slate-900/50 border border-cyan-500/30 rounded-lg p-6 text-center">
+                <div class="text-4xl font-bold text-cyan-400 mb-2">Real-time</div>
+                <div class="text-slate-400">Data Processing</div>
+            </div>
+            <div class="bg-slate-900/50 border border-cyan-500/30 rounded-lg p-6 text-center">
+                <div class="text-4xl font-bold text-cyan-400 mb-2">24/7</div>
+                <div class="text-slate-400">AI Monitoring</div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Enterprise Modules -->
+    <section id="modules" class="container mx-auto px-4 py-20">
+        <div class="text-center mb-16">
+            <h2 class="text-5xl font-bold mb-4">Enterprise Modules</h2>
+            <p class="text-xl text-slate-400">Complete manufacturing intelligence layer - standalone or plug-and-play with your existing ERP</p>
+        </div>
+        
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 max-w-7xl mx-auto">
+            <!-- Module 1: OEE Monitoring -->
+            <div class="feature-card bg-gradient-to-br from-slate-900 to-slate-800 border-2 border-cyan-500/30 rounded-lg p-8 hover:border-cyan-500 transition-all">
+                <div class="text-5xl mb-4">📊</div>
+                <h3 class="text-2xl font-bold mb-4 text-cyan-400">OEE Monitoring + Digital Logs</h3>
+                <p class="text-slate-300 mb-4">Real-time production tracking with comprehensive digital logging</p>
+                <ul class="space-y-3 text-slate-300">
+                    <li class="flex items-start gap-2">
+                        <span class="text-cyan-400">✓</span>
+                        <span>Live OEE calculation & dashboards</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-cyan-400">✓</span>
+                        <span>Production line performance tracking</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-cyan-400">✓</span>
+                        <span>Downtime detection & categorization</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-cyan-400">✓</span>
+                        <span>Digital shift logs & handover reports</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-cyan-400">✓</span>
+                        <span>Historical trend analysis</span>
+                    </li>
+                </ul>
+            </div>
+
+            <!-- Module 2: DQMS -->
+            <div class="feature-card bg-gradient-to-br from-orange-900/50 to-red-900/50 border-2 border-orange-500/50 rounded-lg p-8 hover:border-orange-500 transition-all">
+                <div class="text-5xl mb-4">🔍</div>
+                <h3 class="text-2xl font-bold mb-4 text-orange-400">Quality Inspection & DQMS</h3>
+                <p class="text-slate-300 mb-4">Integrated Digital Quality Management System with AI-powered defect capture</p>
+                <ul class="space-y-3 text-slate-300">
+                    <li class="flex items-start gap-2">
+                        <span class="text-orange-400">✓</span>
+                        <span>Tablet-based QC data entry (offline-capable)</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-orange-400">✓</span>
+                        <span>Photo capture + AI OCR (98.5% accuracy)</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-orange-400">✓</span>
+                        <span>Defect classification & root cause analysis</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-orange-400">✓</span>
+                        <span>ISO 9001 / IATF 16949 compliance</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-orange-400">✓</span>
+                        <span>Digital audit trails & reporting</span>
+                    </li>
+                </ul>
+            </div>
+
+            <!-- Module 3: Material Tracking -->
+            <div class="feature-card bg-gradient-to-br from-slate-900 to-slate-800 border-2 border-purple-500/30 rounded-lg p-8 hover:border-purple-500 transition-all">
+                <div class="text-5xl mb-4">📦</div>
+                <h3 class="text-2xl font-bold mb-4 text-purple-400">Material Tracking + Inventory</h3>
+                <p class="text-slate-300 mb-4">Smart inventory control with demand forecasting</p>
+                <ul class="space-y-3 text-slate-300">
+                    <li class="flex items-start gap-2">
+                        <span class="text-purple-400">✓</span>
+                        <span>Real-time stock tracking (raw materials & finished goods)</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-purple-400">✓</span>
+                        <span>Batch traceability & lot tracking</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-purple-400">✓</span>
+                        <span>AI-powered demand forecasting</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-purple-400">✓</span>
+                        <span>Just-in-time optimization</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-purple-400">✓</span>
+                        <span>Low stock alerts & auto-reorder</span>
+                    </li>
+                </ul>
+            </div>
+
+            <!-- Module 4: Maintenance -->
+            <div class="feature-card bg-gradient-to-br from-slate-900 to-slate-800 border-2 border-yellow-500/30 rounded-lg p-8 hover:border-yellow-500 transition-all">
+                <div class="text-5xl mb-4">🔧</div>
+                <h3 class="text-2xl font-bold mb-4 text-yellow-400">Maintenance & Breakdown Forecasting</h3>
+                <p class="text-slate-300 mb-4">Predictive maintenance AI to prevent unplanned downtime</p>
+                <ul class="space-y-3 text-slate-300">
+                    <li class="flex items-start gap-2">
+                        <span class="text-yellow-400">✓</span>
+                        <span>Equipment health monitoring (7-10 day advance warnings)</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-yellow-400">✓</span>
+                        <span>Breakdown prediction algorithms</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-yellow-400">✓</span>
+                        <span>Preventive maintenance scheduling</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-yellow-400">✓</span>
+                        <span>Spare parts inventory tracking</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-yellow-400">✓</span>
+                        <span>Maintenance history & work orders</span>
+                    </li>
+                </ul>
+            </div>
+
+            <!-- Module 5: Supplier AI Agent -->
+            <div class="feature-card bg-gradient-to-br from-slate-900 to-slate-800 border-2 border-green-500/30 rounded-lg p-8 hover:border-green-500 transition-all">
+                <div class="text-5xl mb-4">🤖</div>
+                <h3 class="text-2xl font-bold mb-4 text-green-400">Supplier Communication AI Agent</h3>
+                <p class="text-slate-300 mb-4">Autonomous procurement workflow automation</p>
+                <ul class="space-y-3 text-slate-300">
+                    <li class="flex items-start gap-2">
+                        <span class="text-green-400">✓</span>
+                        <span>Auto-generate purchase orders from inventory triggers</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-green-400">✓</span>
+                        <span>Email automation (RFQs, follow-ups, confirmations)</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-green-400">✓</span>
+                        <span>Supplier performance tracking</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-green-400">✓</span>
+                        <span>Multi-LLM price negotiation assistance</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-green-400">✓</span>
+                        <span>Delivery tracking & alerts</span>
+                    </li>
+                </ul>
+            </div>
+
+            <!-- Module 6: Shopfloor App -->
+            <div class="feature-card bg-gradient-to-br from-slate-900 to-slate-800 border-2 border-blue-500/30 rounded-lg p-8 hover:border-blue-500 transition-all">
+                <div class="text-5xl mb-4">📱</div>
+                <h3 class="text-2xl font-bold mb-4 text-blue-400">Shopfloor Mobile App</h3>
+                <p class="text-slate-300 mb-4">Operator interface for logs, QC checks, and real-time data entry</p>
+                <ul class="space-y-3 text-slate-300">
+                    <li class="flex items-start gap-2">
+                        <span class="text-blue-400">✓</span>
+                        <span>Rugged IP65 tablet support (glove-friendly UI)</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-blue-400">✓</span>
+                        <span>Offline mode with auto-sync</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-blue-400">✓</span>
+                        <span>Production log input (hourly checks, defects)</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-blue-400">✓</span>
+                        <span>Digital QC checklists & photo capture</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-blue-400">✓</span>
+                        <span>Real-time notifications & alerts</span>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </section>
+
+    <!-- Why It Wins -->
+    <section class="container mx-auto px-4 py-20 bg-gradient-to-br from-cyan-900/20 to-blue-900/20 rounded-2xl">
+        <div class="max-w-4xl mx-auto text-center">
+            <h2 class="text-4xl font-bold mb-8">Why Flow Wins</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8 text-left">
+                <div class="bg-slate-900/50 rounded-lg p-6 border border-cyan-500/30">
+                    <div class="text-3xl mb-3">🏭</div>
+                    <h3 class="text-xl font-bold mb-2 text-cyan-400">Real-World Validated</h3>
+                    <p class="text-slate-300">Yangon Tyre Factory as anchor customer - bootstrap with actual manufacturing data, proven ROI</p>
+                </div>
+                <div class="bg-slate-900/50 rounded-lg p-6 border border-cyan-500/30">
+                    <div class="text-3xl mb-3">🔌</div>
+                    <h3 class="text-xl font-bold mb-2 text-cyan-400">Plug & Play</h3>
+                    <p class="text-slate-300">Integrate with existing ERPs (SAP, Oracle, etc.) or run standalone - flexible deployment</p>
+                </div>
+                <div class="bg-slate-900/50 rounded-lg p-6 border border-cyan-500/30">
+                    <div class="text-3xl mb-3">🚀</div>
+                    <h3 class="text-xl font-bold mb-2 text-cyan-400">Enterprise-Grade</h3>
+                    <p class="text-slate-300">ISO 9001, IATF 16949 ready, 99.9% uptime SLA, comprehensive audit trails, multi-factory scalable</p>
+                </div>
+                <div class="bg-slate-900/50 rounded-lg p-6 border border-cyan-500/30">
+                    <div class="text-3xl mb-3">📈</div>
+                    <h3 class="text-xl font-bold mb-2 text-cyan-400">Long-Term Flagship</h3>
+                    <p class="text-slate-300">Strategic product for manufacturing sector - scale across industries (automotive, electronics, F&B, textiles)</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ROI & Metrics (Previously Core Features) -->
+    <section class="container mx-auto px-4 py-20">
+        <h2 class="text-4xl font-bold mb-4 text-center">Proven Business Impact</h2>
+        <p class="text-xl text-slate-400 text-center mb-12">Real results from Yangon Tyre Factory deployment</p>
+        
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-6xl mx-auto">
+            <!-- Production Monitoring -->
+            <div class="feature-card bg-slate-900/50 border border-slate-800 rounded-lg p-8">
+                <div class="text-5xl mb-4">📈</div>
+                <h3 class="text-2xl font-bold mb-4">35% Efficiency Gain</h3>
+                <ul class="space-y-3 text-slate-300">
+                    <li class="flex items-start gap-2">
+                        <span class="text-cyan-400">✓</span>
+                        <span>8,247 units/day tracked in real-time</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-cyan-400">✓</span>
+                        <span>87.5% OEE (from 64% baseline)</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-cyan-400">✓</span>
+                        <span>99.2% quality rate maintained</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-cyan-400">✓</span>
+                        <span>24/7 autonomous monitoring</span>
+                    </li>
+                </ul>
+            </div>
+
+            <!-- Quality Control -->
+            <div class="feature-card bg-slate-900/50 border border-slate-800 rounded-lg p-8">
+                <div class="text-5xl mb-4">🔍</div>
+                <h3 class="text-2xl font-bold mb-4">85% Time Savings (DQMS)</h3>
+                <ul class="space-y-3 text-slate-300">
+                    <li class="flex items-start gap-2">
+                        <span class="text-cyan-400">✓</span>
+                        <span>Data entry: 4hrs → 30min per shift</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-cyan-400">✓</span>
+                        <span>72% faster issue detection</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-cyan-400">✓</span>
+                        <span>98.5% OCR accuracy on paper forms</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-cyan-400">✓</span>
+                        <span>$18K/year labor + paper cost savings</span>
+                    </li>
+                </ul>
+            </div>
+
+            <!-- Predictive Maintenance -->
+            <div class="feature-card bg-slate-900/50 border border-slate-800 rounded-lg p-8">
+                <div class="text-5xl mb-4">🔧</div>
+                <h3 class="text-2xl font-bold mb-4">7-10 Day Failure Prediction</h3>
+                <ul class="space-y-3 text-slate-300">
+                    <li class="flex items-start gap-2">
+                        <span class="text-cyan-400">✓</span>
+                        <span>Hydraulic pump wear detected early</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-cyan-400">✓</span>
+                        <span>Temperature variance alerts (Quality Agent)</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-cyan-400">✓</span>
+                        <span>$2,400/day savings (Stock Agent optimization)</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-cyan-400">✓</span>
+                        <span>Prevented 3 major breakdowns in Q4 2024</span>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </section>
+
+    <!-- Previous sections continue... -->
+                    <li class="flex items-start gap-2">
+                        <span class="text-cyan-400">✓</span>
+                        <span>KPI tracking & reporting</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-cyan-400">✓</span>
+                        <span>Historical data analysis</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-cyan-400">✓</span>
+                        <span>Export & API access</span>
+                    </li>
+                </ul>
+            </div>
+
+            <!-- Integration Hub -->
+            <div class="feature-card bg-slate-900/50 border border-slate-800 rounded-lg p-8">
+                <div class="text-5xl mb-4">🔗</div>
+                <h3 class="text-2xl font-bold mb-4">Integration Hub</h3>
+                <ul class="space-y-3 text-slate-300">
+                    <li class="flex items-start gap-2">
+                        <span class="text-cyan-400">✓</span>
+                        <span>ERP/MES connectivity</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-cyan-400">✓</span>
+                        <span>IoT device support</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-cyan-400">✓</span>
+                        <span>REST API & webhooks</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-cyan-400">✓</span>
+                        <span>Custom integrations</span>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </section>
+
+    <!-- Technology Stack -->
+    <section class="container mx-auto px-4 py-20">
+        <h2 class="text-5xl font-bold mb-4 text-center">Powered By Advanced AI</h2>
+        <p class="text-xl text-slate-400 text-center mb-16">Built on cutting-edge technology</p>
+        
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-6 max-w-4xl mx-auto">
+            <div class="bg-slate-900/50 border border-slate-800 rounded-lg p-6 text-center">
+                <div class="text-4xl mb-3">🤖</div>
+                <div class="font-semibold">Machine Learning</div>
+            </div>
+            <div class="bg-slate-900/50 border border-slate-800 rounded-lg p-6 text-center">
+                <div class="text-4xl mb-3">👁️</div>
+                <div class="font-semibold">Computer Vision</div>
+            </div>
+            <div class="bg-slate-900/50 border border-slate-800 rounded-lg p-6 text-center">
+                <div class="text-4xl mb-3">☁️</div>
+                <div class="font-semibold">Cloud Native</div>
+            </div>
+            <div class="bg-slate-900/50 border border-slate-800 rounded-lg p-6 text-center">
+                <div class="text-4xl mb-3">⚡</div>
+                <div class="font-semibold">Real-time Processing</div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Recent Updates -->
+    <section class="container mx-auto px-4 py-16">
+        <div class="max-w-6xl mx-auto">
+            <div class="flex items-center justify-between mb-8">
+                <h2 class="text-3xl font-bold">🔄 Recent Updates</h2>
+                <span class="px-4 py-2 bg-green-500/20 text-green-400 rounded-full text-sm font-semibold">Live Platform</span>
+            </div>
+            <div class="grid md:grid-cols-2 gap-6">
+                <!-- Latest Updates -->
+                <div class="bg-gradient-to-br from-cyan-900/30 to-blue-900/30 border border-cyan-500/30 rounded-lg p-6">
+                    <div class="flex items-center gap-3 mb-4">
+                        <span class="text-3xl">✨</span>
+                        <div>
+                            <div class="font-bold text-lg">Multi-LLM AI Integration</div>
+                            <div class="text-sm text-slate-400">December 2024</div>
+                        </div>
+                    </div>
+                    <ul class="space-y-2 text-slate-300">
+                        <li>✓ 4 LLM providers (GPT-4, Claude, Gemini, Llama 3)</li>
+                        <li>✓ 5.2x faster insights generation</li>
+                        <li>✓ 62% cost reduction through intelligent routing</li>
+                        <li>✓ 98.5% accuracy in predictions</li>
+                    </ul>
+                </div>
+
+                <div class="bg-gradient-to-br from-purple-900/30 to-pink-900/30 border border-purple-500/30 rounded-lg p-6">
+                    <div class="flex items-center gap-3 mb-4">
+                        <span class="text-3xl">🏭</span>
+                        <div>
+                            <div class="font-bold text-lg">Yangon Tyre Integration</div>
+                            <div class="text-sm text-slate-400">November 2024</div>
+                        </div>
+                    </div>
+                    <ul class="space-y-2 text-slate-300">
+                        <li>✓ Live production dashboard deployed</li>
+                        <li>✓ 3 production lines monitored 24/7</li>
+                        <li>✓ Real-time quality alerts active</li>
+                        <li>✓ Predictive maintenance system online</li>
+                    </ul>
+                </div>
+
+                <div class="bg-gradient-to-br from-green-900/30 to-emerald-900/30 border border-green-500/30 rounded-lg p-6">
+                    <div class="flex items-center gap-3 mb-4">
+                        <span class="text-3xl">📊</span>
+                        <div>
+                            <div class="font-bold text-lg">Advanced Analytics Engine</div>
+                            <div class="text-sm text-slate-400">October 2024</div>
+                        </div>
+                    </div>
+                    <ul class="space-y-2 text-slate-300">
+                        <li>✓ Custom KPI dashboards</li>
+                        <li>✓ Historical trend analysis</li>
+                        <li>✓ Automated reporting schedules</li>
+                        <li>✓ Export to PDF/Excel</li>
+                    </ul>
+                </div>
+
+                <div class="bg-gradient-to-br from-orange-900/30 to-red-900/30 border border-orange-500/30 rounded-lg p-6">
+                    <div class="flex items-center gap-3 mb-4">
+                        <span class="text-3xl">🔧</span>
+                        <div>
+                            <div class="font-bold text-lg">Enhanced Equipment Monitoring</div>
+                            <div class="text-sm text-slate-400">September 2024</div>
+                        </div>
+                    </div>
+                    <ul class="space-y-2 text-slate-300">
+                        <li>✓ IoT sensor integration expanded</li>
+                        <li>✓ Vibration analysis for motors</li>
+                        <li>✓ Temperature anomaly detection</li>
+                        <li>✓ Automatic maintenance scheduling</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Roadmap -->
+    <section class="container mx-auto px-4 py-16">
+        <div class="max-w-6xl mx-auto">
+            <h2 class="text-3xl font-bold mb-8 text-center">📅 Coming Soon</h2>
+            <div class="grid md:grid-cols-3 gap-6">
+                <div class="bg-slate-900/50 border border-slate-700 rounded-lg p-6">
+                    <div class="text-3xl mb-3">🤖</div>
+                    <div class="font-bold text-lg mb-2">Q1 2025</div>
+                    <h3 class="font-semibold mb-2 text-cyan-400">Autonomous Production</h3>
+                    <p class="text-slate-400 text-sm">AI agents automatically adjust machine settings based on quality targets</p>
+                </div>
+                <div class="bg-slate-900/50 border border-slate-700 rounded-lg p-6">
+                    <div class="text-3xl mb-3">🔗</div>
+                    <div class="font-bold text-lg mb-2">Q2 2025</div>
+                    <h3 class="font-semibold mb-2 text-cyan-400">Supply Chain Integration</h3>
+                    <p class="text-slate-400 text-sm">Connect with suppliers for automated raw material ordering</p>
+                </div>
+                <div class="bg-slate-900/50 border border-slate-700 rounded-lg p-6">
+                    <div class="text-3xl mb-3">🌐</div>
+                    <div class="font-bold text-lg mb-2">Q3 2025</div>
+                    <h3 class="font-semibold mb-2 text-cyan-400">Multi-Factory Support</h3>
+                    <p class="text-slate-400 text-sm">Manage multiple manufacturing sites from single dashboard</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Data Sources Integration -->
+    <section class="container mx-auto px-4 py-20 bg-slate-900/30">
+        <div class="max-w-6xl mx-auto">
+            <h2 class="text-4xl font-bold mb-4 text-center">4 Ongoing Data Sources</h2>
+            <p class="text-center text-slate-400 mb-12">Real-time data pipeline powered by AWS agents</p>
+            
+            <div class="grid md:grid-cols-2 gap-6">
+                <!-- Dad's PC -->
+                <div class="bg-gradient-to-br from-slate-800 to-slate-900 border border-green-500/30 rounded-xl p-6">
+                    <div class="flex items-start gap-4">
+                        <span class="text-4xl">👔</span>
+                        <div class="flex-1">
+                            <div class="flex items-center gap-2 mb-2">
+                                <h3 class="font-semibold text-lg">Dad's PC (CEO Office)</h3>
+                                <span class="px-2 py-0.5 bg-green-500/20 text-green-400 rounded text-xs font-semibold">🟢 ACTIVE</span>
+                            </div>
+                            <p class="text-sm text-slate-400 mb-3">Strategic plans, financial reports, high-level KPIs</p>
+                            <div class="flex gap-4 text-sm">
+                                <div>
+                                    <span class="text-cyan-400 font-semibold">1,247</span>
+                                    <span class="text-slate-500"> documents</span>
+                                </div>
+                                <div>
+                                    <span class="text-cyan-400 font-semibold">Every 5min</span>
+                                    <span class="text-slate-500"> sync</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Plant B KZL Stick -->
+                <div class="bg-gradient-to-br from-slate-800 to-slate-900 border border-green-500/30 rounded-xl p-6">
+                    <div class="flex items-start gap-4">
+                        <span class="text-4xl">💻</span>
+                        <div class="flex-1">
+                            <div class="flex items-center gap-2 mb-2">
+                                <h3 class="font-semibold text-lg">Plant B KZL Stick (Technical)</h3>
+                                <span class="px-2 py-0.5 bg-green-500/20 text-green-400 rounded text-xs font-semibold">🟢 ACTIVE</span>
+                            </div>
+                            <p class="text-sm text-slate-400 mb-3">Technical specs, CAD files, process parameters</p>
+                            <div class="flex gap-4 text-sm">
+                                <div>
+                                    <span class="text-cyan-400 font-semibold">892</span>
+                                    <span class="text-slate-500"> files</span>
+                                </div>
+                                <div>
+                                    <span class="text-cyan-400 font-semibold">Every 5min</span>
+                                    <span class="text-slate-500"> sync</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Plant B Office Desktop -->
+                <div class="bg-gradient-to-br from-slate-800 to-slate-900 border border-green-500/30 rounded-xl p-6">
+                    <div class="flex items-start gap-4">
+                        <span class="text-4xl">🖥️</span>
+                        <div class="flex-1">
+                            <div class="flex items-center gap-2 mb-2">
+                                <h3 class="font-semibold text-lg">Plant B Office PC (Planning)</h3>
+                                <span class="px-2 py-0.5 bg-green-500/20 text-green-400 rounded text-xs font-semibold">🟢 ACTIVE</span>
+                            </div>
+                            <p class="text-sm text-slate-400 mb-3">Production schedules, forecasts, inventory plans</p>
+                            <div class="flex gap-4 text-sm">
+                                <div>
+                                    <span class="text-cyan-400 font-semibold">1,563</span>
+                                    <span class="text-slate-500"> records</span>
+                                </div>
+                                <div>
+                                    <span class="text-cyan-400 font-semibold">Every 5min</span>
+                                    <span class="text-slate-500"> sync</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Plant A Production Office -->
+                <div class="bg-gradient-to-br from-slate-800 to-slate-900 border border-green-500/30 rounded-xl p-6">
+                    <div class="flex items-start gap-4">
+                        <span class="text-4xl">🏭</span>
+                        <div class="flex-1">
+                            <div class="flex items-center gap-2 mb-2">
+                                <h3 class="font-semibold text-lg">Plant A Production (Tyre Records)</h3>
+                                <span class="px-2 py-0.5 bg-green-500/20 text-green-400 rounded text-xs font-semibold">🟢 ACTIVE</span>
+                            </div>
+                            <p class="text-sm text-slate-400 mb-3">Daily production records, quality logs, output data</p>
+                            <div class="flex gap-4 text-sm">
+                                <div>
+                                    <span class="text-cyan-400 font-semibold">8,247</span>
+                                    <span class="text-slate-500"> records today</span>
+                                </div>
+                                <div>
+                                    <span class="text-cyan-400 font-semibold">Every 5min</span>
+                                    <span class="text-slate-500"> sync</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mt-8 bg-slate-800/50 border border-cyan-500/30 rounded-xl p-6">
+                <h4 class="font-semibold mb-4 text-cyan-400">AWS Agents Handle All Data Operations:</h4>
+                <div class="grid md:grid-cols-4 gap-4 text-sm">
+                    <div>
+                        <div class="font-semibold mb-1">📥 Data Ingestion Agent</div>
+                        <div class="text-slate-400">Monitors all 4 sources 24/7</div>
+                    </div>
+                    <div>
+                        <div class="font-semibold mb-1">🔄 ETL Agent</div>
+                        <div class="text-slate-400">Transforms and cleanses data</div>
+                    </div>
+                    <div>
+                        <div class="font-semibold mb-1">⚡ Sync Agent</div>
+                        <div class="text-slate-400">Ensures data consistency</div>
+                    </div>
+                    <div>
+                        <div class="font-semibold mb-1">💾 Backup Agent</div>
+                        <div class="text-slate-400">Hourly snapshots to S3</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Demo Section -->
+    <section id="demo" class="container mx-auto px-4 py-20">
+        <div class="max-w-3xl mx-auto bg-slate-900/50 border border-cyan-500/30 rounded-2xl p-12 text-center">
+            <h2 class="text-4xl font-bold mb-6">Ready to Transform Your Manufacturing?</h2>
+            <p class="text-xl text-slate-300 mb-8">
+                See Flow in action at Yangon Tyre Factory. Live production dashboard available 24/7.
+            </p>
+            <div class="flex gap-4 justify-center flex-wrap">
+                <a href="yangon-tyre-demo.html" class="px-8 py-4 bg-cyan-500 hover:bg-cyan-600 rounded-lg font-semibold transition">
+                    🏭 View Live Demo
+                </a>
+                <a href="mailto:contact@supermega.dev" class="px-8 py-4 bg-slate-700 hover:bg-slate-600 rounded-lg font-semibold transition">
+                    Contact Sales
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="container mx-auto px-4 py-12 text-center text-slate-400 border-t border-slate-800">
+        <div class="mb-4">
+            <a href="index.html" class="text-slate-300 hover:text-white transition">Home</a>
+            <span class="mx-4">•</span>
+            <a href="supermega-platform.html" class="text-slate-300 hover:text-white transition">Platform</a>
+            <span class="mx-4">•</span>
+            <a href="https://ytf.supermega.dev" class="text-slate-300 hover:text-white transition">Dashboard</a>
+        </div>
+        <p>&copy; 2025 SuperMega. All rights reserved.</p>
+    </footer>
+</body>
+</html>

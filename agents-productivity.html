@@ -1,0 +1,1214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Agents Productivity Dashboard | SuperMega</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            background: linear-gradient(to bottom, #020617, #0c4a6e, #020617);
+            min-height: 100vh;
+        }
+        .metric-card {
+            transition: all 0.3s ease;
+        }
+        .metric-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 20px 40px rgba(16, 185, 129, 0.2);
+        }
+    </style>
+</head>
+<body class="text-white">
+    <!-- Header -->
+    <header class="container mx-auto px-4 py-6">
+        <div class="flex justify-between items-center">
+            <div class="flex items-center gap-4">
+                <a href="index.html" class="text-slate-300 hover:text-white transition">← Back to Home</a>
+                <div class="flex items-center gap-2">
+                    <span class="text-2xl">🤖</span>
+                    <span class="text-2xl font-bold">AI Agents Productivity</span>
+                </div>
+            </div>
+            <div class="flex gap-2">
+                <button onclick="refreshData()" class="px-4 py-2 bg-green-500 hover:bg-green-600 rounded-lg transition">
+                    🔄 Refresh Data
+                </button>
+                <button onclick="showControlPanel()" class="px-4 py-2 bg-purple-500 hover:bg-purple-600 rounded-lg transition">
+                    ⚙️ Control Center
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Agent Control Center -->
+    <section class="container mx-auto px-4 pt-6 pb-4" id="controlCenter" style="display: none;">
+        <div class="max-w-6xl mx-auto">
+            <div class="bg-gradient-to-r from-purple-900/30 to-pink-900/30 border border-purple-500/30 rounded-lg p-6">
+                <div class="flex items-center justify-between mb-6">
+                    <div class="flex items-center gap-3">
+                        <span class="text-3xl">⚙️</span>
+                        <h2 class="text-3xl font-bold">Agent Control Center</h2>
+                        <span class="px-3 py-1 bg-purple-500/20 text-purple-400 rounded-full text-sm">Full Control</span>
+                    </div>
+                    <button onclick="hideControlPanel()" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg transition text-sm">
+                        ✕ Close
+                    </button>
+                </div>
+
+                <!-- Quick Actions -->
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                    <button onclick="performAction('start-all')" class="p-4 bg-green-500/20 hover:bg-green-500/30 border border-green-500/30 rounded-lg transition">
+                        <div class="text-2xl mb-2">▶️</div>
+                        <div class="font-semibold">Start All Agents</div>
+                        <div class="text-xs text-slate-400 mt-1">Boot up idle agents</div>
+                    </button>
+                    <button onclick="performAction('stop-idle')" class="p-4 bg-yellow-500/20 hover:bg-yellow-500/30 border border-yellow-500/30 rounded-lg transition">
+                        <div class="text-2xl mb-2">⏸️</div>
+                        <div class="font-semibold">Suspend Idle</div>
+                        <div class="text-xs text-slate-400 mt-1">Reduce costs</div>
+                    </button>
+                    <button onclick="performAction('restart-all')" class="p-4 bg-orange-500/20 hover:bg-orange-500/30 border border-orange-500/30 rounded-lg transition">
+                        <div class="text-2xl mb-2">🔄</div>
+                        <div class="font-semibold">Restart All</div>
+                        <div class="text-xs text-slate-400 mt-1">Fresh start</div>
+                    </button>
+                    <button onclick="performAction('emergency-stop')" class="p-4 bg-red-500/20 hover:bg-red-500/30 border border-red-500/30 rounded-lg transition">
+                        <div class="text-2xl mb-2">🛑</div>
+                        <div class="font-semibold">Emergency Stop</div>
+                        <div class="text-xs text-slate-400 mt-1">Stop all immediately</div>
+                    </button>
+                </div>
+
+                <!-- Agent Status Grid -->
+                <div class="bg-slate-900/50 rounded-lg p-4 mb-4">
+                    <h3 class="text-lg font-semibold mb-4 flex items-center gap-2">
+                        <span>🎛️</span>
+                        <span>Individual Agent Controls</span>
+                    </h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div class="flex items-center justify-between p-3 bg-slate-800/50 rounded-lg">
+                            <div class="flex items-center gap-3">
+                                <span class="w-2 h-2 rounded-full bg-green-500"></span>
+                                <span class="text-sm">Code Generation Agent</span>
+                            </div>
+                            <div class="flex gap-2">
+                                <button onclick="controlAgent('code-gen', 'restart')" class="px-3 py-1 bg-orange-500/20 hover:bg-orange-500/30 rounded text-xs">Restart</button>
+                                <button onclick="controlAgent('code-gen', 'stop')" class="px-3 py-1 bg-red-500/20 hover:bg-red-500/30 rounded text-xs">Stop</button>
+                            </div>
+                        </div>
+                        <div class="flex items-center justify-between p-3 bg-slate-800/50 rounded-lg">
+                            <div class="flex items-center gap-3">
+                                <span class="w-2 h-2 rounded-full bg-green-500"></span>
+                                <span class="text-sm">AWS Cost Optimizer</span>
+                            </div>
+                            <div class="flex gap-2">
+                                <button onclick="controlAgent('aws-cost', 'restart')" class="px-3 py-1 bg-orange-500/20 hover:bg-orange-500/30 rounded text-xs">Restart</button>
+                                <button onclick="controlAgent('aws-cost', 'stop')" class="px-3 py-1 bg-red-500/20 hover:bg-red-500/30 rounded text-xs">Stop</button>
+                            </div>
+                        </div>
+                        <div class="flex items-center justify-between p-3 bg-slate-800/50 rounded-lg">
+                            <div class="flex items-center gap-3">
+                                <span class="w-2 h-2 rounded-full bg-green-500"></span>
+                                <span class="text-sm">AWS Auto-Scaling Agent</span>
+                            </div>
+                            <div class="flex gap-2">
+                                <button onclick="controlAgent('aws-scale', 'restart')" class="px-3 py-1 bg-orange-500/20 hover:bg-orange-500/30 rounded text-xs">Restart</button>
+                                <button onclick="controlAgent('aws-scale', 'stop')" class="px-3 py-1 bg-red-500/20 hover:bg-red-500/30 rounded text-xs">Stop</button>
+                            </div>
+                        </div>
+                        <div class="flex items-center justify-between p-3 bg-slate-800/50 rounded-lg">
+                            <div class="flex items-center gap-3">
+                                <span class="w-2 h-2 rounded-full bg-gray-500"></span>
+                                <span class="text-sm">Deployment Agent</span>
+                                <span class="text-xs text-gray-400">(Idle)</span>
+                            </div>
+                            <div class="flex gap-2">
+                                <button onclick="controlAgent('deploy', 'start')" class="px-3 py-1 bg-green-500/20 hover:bg-green-500/30 rounded text-xs">Start</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Alerts & Warnings -->
+                <div class="bg-slate-900/50 rounded-lg p-4">
+                    <h3 class="text-lg font-semibold mb-3 flex items-center gap-2">
+                        <span>⚠️</span>
+                        <span>System Alerts</span>
+                    </h3>
+                    <div class="space-y-2">
+                        <div class="flex items-start gap-3 p-3 bg-green-500/10 border border-green-500/30 rounded-lg">
+                            <span class="text-green-400">✓</span>
+                            <div class="flex-1">
+                                <div class="text-sm font-semibold text-green-400">All Critical Agents Online</div>
+                                <div class="text-xs text-slate-400">Core systems operational, 8/12 agents active</div>
+                            </div>
+                        </div>
+                        <div class="flex items-start gap-3 p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
+                            <span class="text-yellow-400">⚠</span>
+                            <div class="flex-1">
+                                <div class="text-sm font-semibold text-yellow-400">Deployment Agent Idle</div>
+                                <div class="text-xs text-slate-400">Not required unless deployment needed - saves $15/month</div>
+                            </div>
+                        </div>
+                        <div class="flex items-start gap-3 p-3 bg-cyan-500/10 border border-cyan-500/30 rounded-lg">
+                            <span class="text-cyan-400">ℹ</span>
+                            <div class="flex-1">
+                                <div class="text-sm font-semibold text-cyan-400">Cost Optimization Active</div>
+                                <div class="text-xs text-slate-400">Saving $78/month through lean operations</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Summary Metrics -->
+    <section class="container mx-auto px-4 py-12">
+        <div class="grid grid-cols-1 md:grid-cols-5 gap-6 mb-12">
+            <div class="metric-card bg-slate-900/50 border border-green-500/30 rounded-lg p-6 text-center">
+                <div class="text-4xl mb-2">🤖</div>
+                <div class="text-3xl font-bold text-green-400" id="totalAgents">12</div>
+                <div class="text-slate-400 mt-2">Total Agents</div>
+            </div>
+            <div class="metric-card bg-slate-900/50 border border-green-500/30 rounded-lg p-6 text-center">
+                <div class="text-4xl mb-2">✅</div>
+                <div class="text-3xl font-bold text-green-400" id="activeAgents">8</div>
+                <div class="text-slate-400 mt-2">Active Now</div>
+            </div>
+            <div class="metric-card bg-slate-900/50 border border-green-500/30 rounded-lg p-6 text-center">
+                <div class="text-4xl mb-2">📊</div>
+                <div class="text-3xl font-bold text-green-400" id="tasksCompleted">1,247</div>
+                <div class="text-slate-400 mt-2">Tasks Completed</div>
+            </div>
+            <div class="metric-card bg-slate-900/50 border border-green-500/30 rounded-lg p-6 text-center">
+                <div class="text-4xl mb-2">⚡</div>
+                <div class="text-3xl font-bold text-green-400" id="efficiency">94.3%</div>
+                <div class="text-slate-400 mt-2">Efficiency Rate</div>
+            </div>
+            <div class="metric-card bg-slate-900/50 border border-cyan-500/30 rounded-lg p-6 text-center">
+                <div class="text-4xl mb-2">💰</div>
+                <div class="text-3xl font-bold text-cyan-400" id="monthlyCost">$127</div>
+                <div class="text-slate-400 mt-2">AWS Cost/Month</div>
+                <div class="text-xs text-green-400 mt-1">↓ 38% optimized</div>
+            </div>
+        </div>
+
+        <!-- AWS Cost Optimization Panel -->
+        <div class="max-w-6xl mx-auto mb-12">
+            <div class="bg-gradient-to-r from-cyan-900/30 to-blue-900/30 border border-cyan-500/30 rounded-lg p-8">
+                <div class="flex items-center gap-3 mb-6">
+                    <span class="text-3xl">☁️</span>
+                    <h2 class="text-3xl font-bold">AWS Cost Optimization</h2>
+                    <span class="px-3 py-1 bg-green-500/20 text-green-400 rounded-full text-sm">Lean Mode Active</span>
+                </div>
+                
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+                    <div class="bg-slate-900/50 rounded-lg p-4">
+                        <div class="text-sm text-slate-400 mb-2">Monthly Budget</div>
+                        <div class="text-2xl font-bold text-white">$150</div>
+                        <div class="text-xs text-green-400 mt-1">Under budget by $23</div>
+                    </div>
+                    <div class="bg-slate-900/50 rounded-lg p-4">
+                        <div class="text-sm text-slate-400 mb-2">Cost per Task</div>
+                        <div class="text-2xl font-bold text-white">$0.10</div>
+                        <div class="text-xs text-green-400 mt-1">↓ 42% from last month</div>
+                    </div>
+                    <div class="bg-slate-900/50 rounded-lg p-4">
+                        <div class="text-sm text-slate-400 mb-2">Savings This Month</div>
+                        <div class="text-2xl font-bold text-green-400">$78</div>
+                        <div class="text-xs text-slate-400 mt-1">Through optimization</div>
+                    </div>
+                </div>
+
+                <div class="bg-slate-900/50 rounded-lg p-4">
+                    <div class="text-sm font-semibold text-cyan-400 mb-3">💡 Active Optimizations:</div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                        <div class="flex items-start gap-2">
+                            <span class="text-green-400">✓</span>
+                            <span>Spot instances for non-critical agents (60% savings)</span>
+                        </div>
+                        <div class="flex items-start gap-2">
+                            <span class="text-green-400">✓</span>
+                            <span>Auto-scaling based on task load</span>
+                        </div>
+                        <div class="flex items-start gap-2">
+                            <span class="text-green-400">✓</span>
+                            <span>Lambda for intermittent tasks</span>
+                        </div>
+                        <div class="flex items-start gap-2">
+                            <span class="text-green-400">✓</span>
+                            <span>Reserved capacity for core agents (40% discount)</span>
+                        </div>
+                        <div class="flex items-start gap-2">
+                            <span class="text-green-400">✓</span>
+                            <span>Idle agent suspension (saves $45/mo)</span>
+                        </div>
+                        <div class="flex items-start gap-2">
+                            <span class="text-green-400">✓</span>
+                            <span>S3 lifecycle policies for logs</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Agent Health Monitoring -->
+        <div class="max-w-6xl mx-auto mb-12">
+            <div class="bg-gradient-to-r from-green-900/30 to-emerald-900/30 border border-green-500/30 rounded-lg p-8">
+                <div class="flex items-center gap-3 mb-6">
+                    <span class="text-3xl">🏥</span>
+                    <h2 class="text-3xl font-bold">Agent Health Monitoring</h2>
+                    <span class="px-3 py-1 bg-green-500/20 text-green-400 rounded-full text-sm">All Systems Normal</span>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                    <!-- Performance Thresholds -->
+                    <div class="bg-slate-900/50 rounded-lg p-4">
+                        <h3 class="text-lg font-semibold mb-4 flex items-center gap-2">
+                            <span>📊</span>
+                            <span>Performance Thresholds</span>
+                        </h3>
+                        <div class="space-y-3">
+                            <div>
+                                <div class="flex justify-between text-sm mb-1">
+                                    <span>CPU Usage</span>
+                                    <span class="text-green-400">42%</span>
+                                </div>
+                                <div class="w-full bg-slate-800 rounded-full h-2">
+                                    <div class="bg-green-500 h-2 rounded-full" style="width: 42%"></div>
+                                </div>
+                                <div class="text-xs text-slate-500 mt-1">Threshold: 80% • Status: ✓ Normal</div>
+                            </div>
+                            <div>
+                                <div class="flex justify-between text-sm mb-1">
+                                    <span>Memory Usage</span>
+                                    <span class="text-green-400">58%</span>
+                                </div>
+                                <div class="w-full bg-slate-800 rounded-full h-2">
+                                    <div class="bg-green-500 h-2 rounded-full" style="width: 58%"></div>
+                                </div>
+                                <div class="text-xs text-slate-500 mt-1">Threshold: 85% • Status: ✓ Normal</div>
+                            </div>
+                            <div>
+                                <div class="flex justify-between text-sm mb-1">
+                                    <span>Response Time</span>
+                                    <span class="text-green-400">1.8s avg</span>
+                                </div>
+                                <div class="w-full bg-slate-800 rounded-full h-2">
+                                    <div class="bg-green-500 h-2 rounded-full" style="width: 36%"></div>
+                                </div>
+                                <div class="text-xs text-slate-500 mt-1">Threshold: 5.0s • Status: ✓ Excellent</div>
+                            </div>
+                            <div>
+                                <div class="flex justify-between text-sm mb-1">
+                                    <span>Error Rate</span>
+                                    <span class="text-green-400">0.3%</span>
+                                </div>
+                                <div class="w-full bg-slate-800 rounded-full h-2">
+                                    <div class="bg-green-500 h-2 rounded-full" style="width: 3%"></div>
+                                </div>
+                                <div class="text-xs text-slate-500 mt-1">Threshold: 5.0% • Status: ✓ Excellent</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Agent Status Summary -->
+                    <div class="bg-slate-900/50 rounded-lg p-4">
+                        <h3 class="text-lg font-semibold mb-4 flex items-center gap-2">
+                            <span>💚</span>
+                            <span>Agent Status Summary</span>
+                        </h3>
+                        <div class="space-y-3">
+                            <div class="flex items-center justify-between p-3 bg-green-500/10 rounded-lg">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-3 h-3 rounded-full bg-green-500"></div>
+                                    <div>
+                                        <div class="font-semibold text-green-400">8 Agents Healthy</div>
+                                        <div class="text-xs text-slate-400">Running optimally</div>
+                                    </div>
+                                </div>
+                                <div class="text-2xl font-bold text-green-400">67%</div>
+                            </div>
+                            <div class="flex items-center justify-between p-3 bg-gray-500/10 rounded-lg">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-3 h-3 rounded-full bg-gray-500"></div>
+                                    <div>
+                                        <div class="font-semibold text-gray-400">4 Agents Idle</div>
+                                        <div class="text-xs text-slate-400">Suspended to save costs</div>
+                                    </div>
+                                </div>
+                                <div class="text-2xl font-bold text-gray-400">33%</div>
+                            </div>
+                            <div class="flex items-center justify-between p-3 bg-yellow-500/10 rounded-lg">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-3 h-3 rounded-full bg-yellow-500"></div>
+                                    <div>
+                                        <div class="font-semibold text-yellow-400">0 Agents Warning</div>
+                                        <div class="text-xs text-slate-400">Performance concerns</div>
+                                    </div>
+                                </div>
+                                <div class="text-2xl font-bold text-yellow-400">0%</div>
+                            </div>
+                            <div class="flex items-center justify-between p-3 bg-red-500/10 rounded-lg">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-3 h-3 rounded-full bg-red-500"></div>
+                                    <div>
+                                        <div class="font-semibold text-red-400">0 Agents Critical</div>
+                                        <div class="text-xs text-slate-400">Requires immediate attention</div>
+                                    </div>
+                                </div>
+                                <div class="text-2xl font-bold text-red-400">0%</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Auto-Actions & Policies -->
+                <div class="bg-slate-900/50 rounded-lg p-4">
+                    <h3 class="text-lg font-semibold mb-3 flex items-center gap-2">
+                        <span>🤖</span>
+                        <span>Automated Actions & Policies</span>
+                    </h3>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+                        <div class="flex items-start gap-2 p-3 bg-slate-800/50 rounded">
+                            <span class="text-green-400">✓</span>
+                            <div>
+                                <div class="font-semibold">Auto-Restart on Failure</div>
+                                <div class="text-xs text-slate-400">Max 3 attempts, 5min cooldown</div>
+                            </div>
+                        </div>
+                        <div class="flex items-start gap-2 p-3 bg-slate-800/50 rounded">
+                            <span class="text-green-400">✓</span>
+                            <div>
+                                <div class="font-semibold">Load Balancing</div>
+                                <div class="text-xs text-slate-400">Distribute tasks evenly</div>
+                            </div>
+                        </div>
+                        <div class="flex items-start gap-2 p-3 bg-slate-800/50 rounded">
+                            <span class="text-green-400">✓</span>
+                            <div>
+                                <div class="font-semibold">Health Checks</div>
+                                <div class="text-xs text-slate-400">Every 30 seconds</div>
+                            </div>
+                        </div>
+                        <div class="flex items-start gap-2 p-3 bg-slate-800/50 rounded">
+                            <span class="text-green-400">✓</span>
+                            <div>
+                                <div class="font-semibold">Alert Notifications</div>
+                                <div class="text-xs text-slate-400">Email + Slack on critical</div>
+                            </div>
+                        </div>
+                        <div class="flex items-start gap-2 p-3 bg-slate-800/50 rounded">
+                            <span class="text-green-400">✓</span>
+                            <div>
+                                <div class="font-semibold">Resource Limits</div>
+                                <div class="text-xs text-slate-400">Prevent runaway usage</div>
+                            </div>
+                        </div>
+                        <div class="flex items-start gap-2 p-3 bg-slate-800/50 rounded">
+                            <span class="text-green-400">✓</span>
+                            <div>
+                                <div class="font-semibold">Backup Failover</div>
+                                <div class="text-xs text-slate-400">Switch to standby instantly</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- AWS Agents Command Center -->
+        <div class="max-w-6xl mx-auto mb-12">
+            <div class="bg-gradient-to-r from-orange-900/30 to-red-900/30 border-2 border-orange-500 rounded-lg p-8">
+                <div class="flex items-center gap-3 mb-6">
+                    <span class="text-4xl">⚙️</span>
+                    <div>
+                        <h2 class="text-4xl font-bold">AWS Agents Command Center</h2>
+                        <p class="text-slate-400 mt-2">"AWS agents are the soldiers. They are life and death. They carry us to glory."</p>
+                    </div>
+                </div>
+
+                <div class="bg-slate-900/50 rounded-lg p-6 mb-6">
+                    <h3 class="text-xl font-semibold mb-4 text-orange-400">The Core Team - Always Active</h3>
+                    <p class="text-slate-300 mb-6">
+                        These 4 AWS infrastructure agents form the foundation of our entire operation. They never sleep. 
+                        They handle all infrastructure, cost optimization, scaling, and security automatically.
+                    </p>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <!-- Cost Optimizer Agent -->
+                        <div class="bg-gradient-to-br from-green-900/30 to-emerald-900/30 border border-green-500/30 rounded-lg p-6">
+                            <div class="flex items-center gap-3 mb-3">
+                                <span class="text-3xl">💰</span>
+                                <div>
+                                    <h4 class="font-semibold text-lg">AWS Cost Optimizer Agent</h4>
+                                    <span class="text-xs text-green-400">🟢 ACTIVE - Financial Guardian</span>
+                                </div>
+                            </div>
+                            <p class="text-sm text-slate-400 mb-3">
+                                <strong>Mission:</strong> Keep costs lean while maximizing performance
+                            </p>
+                            <div class="space-y-2 text-sm">
+                                <div class="flex justify-between">
+                                    <span>Monthly Savings:</span>
+                                    <span class="text-green-400 font-semibold">$78 (38% ↓)</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span>Active Strategies:</span>
+                                    <span class="text-cyan-400">6 running</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span>Next Action:</span>
+                                    <span class="text-slate-400">Reviewing Lambda ARM migration</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Auto-Scaling Agent -->
+                        <div class="bg-gradient-to-br from-blue-900/30 to-cyan-900/30 border border-blue-500/30 rounded-lg p-6">
+                            <div class="flex items-center gap-3 mb-3">
+                                <span class="text-3xl">📈</span>
+                                <div>
+                                    <h4 class="font-semibold text-lg">AWS Auto-Scaling Agent</h4>
+                                    <span class="text-xs text-blue-400">🟢 ACTIVE - Resource Orchestrator</span>
+                                </div>
+                            </div>
+                            <p class="text-sm text-slate-400 mb-3">
+                                <strong>Mission:</strong> Scale up when needed, scale down when not
+                            </p>
+                            <div class="space-y-2 text-sm">
+                                <div class="flex justify-between">
+                                    <span>Agents Active:</span>
+                                    <span class="text-cyan-400 font-semibold">4 of 12 (67% efficient)</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span>Scale Events Today:</span>
+                                    <span class="text-cyan-400">89 adjustments</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span>Cost Savings:</span>
+                                    <span class="text-green-400">$45/mo from idle suspension</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Resource Manager Agent -->
+                        <div class="bg-gradient-to-br from-purple-900/30 to-pink-900/30 border border-purple-500/30 rounded-lg p-6">
+                            <div class="flex items-center gap-3 mb-3">
+                                <span class="text-3xl">🔧</span>
+                                <div>
+                                    <h4 class="font-semibold text-lg">AWS Resource Manager Agent</h4>
+                                    <span class="text-xs text-purple-400">🟢 ACTIVE - Infrastructure Commander</span>
+                                </div>
+                            </div>
+                            <p class="text-sm text-slate-400 mb-3">
+                                <strong>Mission:</strong> Manage all AWS resources across 12 services
+                            </p>
+                            <div class="space-y-2 text-sm">
+                                <div class="flex justify-between">
+                                    <span>Resources Managed:</span>
+                                    <span class="text-cyan-400 font-semibold">234 across 12 services</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span>Health Score:</span>
+                                    <span class="text-green-400">99.2%</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span>Services:</span>
+                                    <span class="text-slate-400">EC2, Lambda, S3, RDS, +8 more</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Security Agent -->
+                        <div class="bg-gradient-to-br from-red-900/30 to-orange-900/30 border border-red-500/30 rounded-lg p-6">
+                            <div class="flex items-center gap-3 mb-3">
+                                <span class="text-3xl">🔒</span>
+                                <div>
+                                    <h4 class="font-semibold text-lg">AWS Security Agent</h4>
+                                    <span class="text-xs text-red-400">🟢 ACTIVE - Security Guardian</span>
+                                </div>
+                            </div>
+                            <p class="text-sm text-slate-400 mb-3">
+                                <strong>Mission:</strong> 100% compliance, zero vulnerabilities
+                            </p>
+                            <div class="space-y-2 text-sm">
+                                <div class="flex justify-between">
+                                    <span>Vulnerabilities:</span>
+                                    <span class="text-green-400 font-semibold">0 detected</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span>Compliance:</span>
+                                    <span class="text-green-400">100%</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span>Scans Today:</span>
+                                    <span class="text-cyan-400">847 completed</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <!-- Strategic Value -->
+                    <div class="bg-slate-900/50 rounded-lg p-6">
+                        <h4 class="font-semibold mb-4 text-orange-400">💎 Strategic Value</h4>
+                        <ul class="space-y-2 text-sm">
+                            <li class="flex items-start gap-2">
+                                <span class="text-green-400">✓</span>
+                                <span><strong>Speed:</strong> Multi-LLM = 5.2x faster execution</span>
+                            </li>
+                            <li class="flex items-start gap-2">
+                                <span class="text-green-400">✓</span>
+                                <span><strong>Cost:</strong> Intelligent routing = 62% cost reduction</span>
+                            </li>
+                            <li class="flex items-start gap-2">
+                                <span class="text-green-400">✓</span>
+                                <span><strong>Reliability:</strong> Auto-failover = 99.98% uptime</span>
+                            </li>
+                            <li class="flex items-start gap-2">
+                                <span class="text-green-400">✓</span>
+                                <span><strong>Scale:</strong> Handle 100x growth, no code changes</span>
+                            </li>
+                        </ul>
+                    </div>
+
+                    <!-- Delegation Model -->
+                    <div class="bg-slate-900/50 rounded-lg p-6">
+                        <h4 class="font-semibold mb-4 text-orange-400">🎯 Delegation Model</h4>
+                        <div class="space-y-3 text-sm">
+                            <div>
+                                <div class="font-semibold text-cyan-400 mb-1">You (Strategy):</div>
+                                <div class="text-slate-400">Product vision, customer needs, business outcomes</div>
+                            </div>
+                            <div>
+                                <div class="font-semibold text-green-400 mb-1">AWS Agents (Execution):</div>
+                                <div class="text-slate-400">Data sync, cost optimization, scaling, security, backups, monitoring</div>
+                            </div>
+                            <div class="p-3 bg-orange-500/10 border border-orange-500/30 rounded">
+                                <div class="font-semibold text-orange-400">Result:</div>
+                                <div class="text-slate-300 text-xs mt-1">
+                                    You focus on big picture. AWS agents handle all tactical operations 24/7.
+                                    This is how we outscale everyone.
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- AI-Powered Agent Architecture -->
+        <div class="max-w-6xl mx-auto mb-12">
+            <div class="bg-gradient-to-r from-purple-900/30 to-blue-900/30 border border-purple-500/30 rounded-lg p-8">
+                <div class="flex items-center gap-3 mb-6">
+                    <span class="text-3xl">🧠</span>
+                    <h2 class="text-3xl font-bold">AI-Powered Agent Architecture</h2>
+                    <span class="px-3 py-1 bg-purple-500/20 text-purple-400 rounded-full text-sm">Multi-LLM</span>
+                </div>
+
+                <div class="bg-slate-900/50 rounded-lg p-6 mb-6">
+                    <h3 class="text-lg font-semibold mb-4 flex items-center gap-2">
+                        <span>🎯</span>
+                        <span>How Our Agents Work</span>
+                    </h3>
+                    <p class="text-slate-300 mb-4">
+                        Our agents don't write code directly. Instead, they use AI to generate prompts and leverage multiple LLM providers 
+                        for faster, more accurate, and cost-effective operations.
+                    </p>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div class="bg-slate-800/50 rounded-lg p-4">
+                            <div class="text-2xl mb-2">1️⃣</div>
+                            <div class="font-semibold mb-1">Receive Task</div>
+                            <div class="text-sm text-slate-400">Agent gets request from system</div>
+                        </div>
+                        <div class="bg-slate-800/50 rounded-lg p-4">
+                            <div class="text-2xl mb-2">2️⃣</div>
+                            <div class="font-semibold mb-1">Generate AI Prompt</div>
+                            <div class="text-sm text-slate-400">Create optimized prompt for LLM</div>
+                        </div>
+                        <div class="bg-slate-800/50 rounded-lg p-4">
+                            <div class="text-2xl mb-2">3️⃣</div>
+                            <div class="font-semibold mb-1">Execute via LLM</div>
+                            <div class="text-sm text-slate-400">Send to best available AI model</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <!-- LLM Providers -->
+                    <div class="bg-slate-900/50 rounded-lg p-6">
+                        <h3 class="text-lg font-semibold mb-4 flex items-center gap-2">
+                            <span>🔑</span>
+                            <span>Active LLM Providers</span>
+                        </h3>
+                        <div class="space-y-3">
+                            <div class="flex items-center justify-between p-3 bg-slate-800/50 rounded">
+                                <div class="flex items-center gap-3">
+                                    <span class="w-2 h-2 rounded-full bg-green-500"></span>
+                                    <div>
+                                        <div class="font-semibold">OpenAI GPT-4</div>
+                                        <div class="text-xs text-slate-400">Primary - Code & Analysis</div>
+                                    </div>
+                                </div>
+                                <span class="text-xs text-green-400">Active</span>
+                            </div>
+                            <div class="flex items-center justify-between p-3 bg-slate-800/50 rounded">
+                                <div class="flex items-center gap-3">
+                                    <span class="w-2 h-2 rounded-full bg-green-500"></span>
+                                    <div>
+                                        <div class="font-semibold">Anthropic Claude</div>
+                                        <div class="text-xs text-slate-400">Secondary - Complex reasoning</div>
+                                    </div>
+                                </div>
+                                <span class="text-xs text-green-400">Active</span>
+                            </div>
+                            <div class="flex items-center justify-between p-3 bg-slate-800/50 rounded">
+                                <div class="flex items-center gap-3">
+                                    <span class="w-2 h-2 rounded-full bg-green-500"></span>
+                                    <div>
+                                        <div class="font-semibold">Google Gemini</div>
+                                        <div class="text-xs text-slate-400">Tertiary - Data processing</div>
+                                    </div>
+                                </div>
+                                <span class="text-xs text-green-400">Active</span>
+                            </div>
+                            <div class="flex items-center justify-between p-3 bg-slate-800/50 rounded">
+                                <div class="flex items-center gap-3">
+                                    <span class="w-2 h-2 rounded-full bg-yellow-500"></span>
+                                    <div>
+                                        <div class="font-semibold">Llama 3 (Local)</div>
+                                        <div class="text-xs text-slate-400">Fallback - Cost optimization</div>
+                                    </div>
+                                </div>
+                                <span class="text-xs text-yellow-400">Standby</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Performance Benefits -->
+                    <div class="bg-slate-900/50 rounded-lg p-6">
+                        <h3 class="text-lg font-semibold mb-4 flex items-center gap-2">
+                            <span>⚡</span>
+                            <span>Performance Benefits</span>
+                        </h3>
+                        <div class="space-y-4">
+                            <div class="bg-slate-800/50 rounded p-3">
+                                <div class="flex items-center justify-between mb-2">
+                                    <span class="text-sm font-semibold">Speed Improvement</span>
+                                    <span class="text-lg font-bold text-cyan-400">5.2x</span>
+                                </div>
+                                <div class="text-xs text-slate-400">AI prompts execute faster than code generation</div>
+                            </div>
+                            <div class="bg-slate-800/50 rounded p-3">
+                                <div class="flex items-center justify-between mb-2">
+                                    <span class="text-sm font-semibold">Cost Reduction</span>
+                                    <span class="text-lg font-bold text-green-400">62%</span>
+                                </div>
+                                <div class="text-xs text-slate-400">Multi-LLM routing optimizes API costs</div>
+                            </div>
+                            <div class="bg-slate-800/50 rounded p-3">
+                                <div class="flex items-center justify-between mb-2">
+                                    <span class="text-sm font-semibold">Accuracy Rate</span>
+                                    <span class="text-lg font-bold text-purple-400">98.5%</span>
+                                </div>
+                                <div class="text-xs text-slate-400">Better results than direct code generation</div>
+                            </div>
+                            <div class="bg-slate-800/50 rounded p-3">
+                                <div class="flex items-center justify-between mb-2">
+                                    <span class="text-sm font-semibold">Uptime</span>
+                                    <span class="text-lg font-bold text-yellow-400">99.98%</span>
+                                </div>
+                                <div class="text-xs text-slate-400">Automatic failover between providers</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Smart Routing -->
+                <div class="bg-slate-900/50 rounded-lg p-6 mt-6">
+                    <h3 class="text-lg font-semibold mb-3 flex items-center gap-2">
+                        <span>🎛️</span>
+                        <span>Intelligent LLM Routing</span>
+                    </h3>
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-3 text-sm">
+                        <div class="bg-slate-800/50 rounded p-3">
+                            <div class="font-semibold mb-1">Cost-Based</div>
+                            <div class="text-xs text-slate-400">Route to cheapest provider for simple tasks</div>
+                        </div>
+                        <div class="bg-slate-800/50 rounded p-3">
+                            <div class="font-semibold mb-1">Speed-Based</div>
+                            <div class="text-xs text-slate-400">Use fastest model for urgent requests</div>
+                        </div>
+                        <div class="bg-slate-800/50 rounded p-3">
+                            <div class="font-semibold mb-1">Quality-Based</div>
+                            <div class="text-xs text-slate-400">Best model for complex reasoning</div>
+                        </div>
+                        <div class="bg-slate-800/50 rounded p-3">
+                            <div class="font-semibold mb-1">Load Balancing</div>
+                            <div class="text-xs text-slate-400">Distribute across providers evenly</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Agent Performance -->
+        <div class="max-w-6xl mx-auto">
+            <h2 class="text-3xl font-bold mb-6">Agent Performance</h2>
+            
+            <div class="space-y-4" id="agentsList">
+                <!-- Code Generation Agent -->
+                <div class="bg-slate-900/50 border border-slate-800 rounded-lg p-6">
+                    <div class="flex justify-between items-start mb-4">
+                        <div>
+                            <h3 class="text-xl font-bold mb-1">💻 Code Generation Agent</h3>
+                            <p class="text-slate-400 text-sm">Prompts LLMs to generate production-ready code</p>
+                        </div>
+                        <span class="px-3 py-1 bg-green-500/20 text-green-400 rounded-full text-sm">Active</span>
+                    </div>
+                    <div class="grid grid-cols-3 gap-4 mb-4">
+                        <div>
+                            <div class="text-2xl font-bold text-green-400">342</div>
+                            <div class="text-sm text-slate-400">AI Prompts Today</div>
+                        </div>
+                        <div>
+                            <div class="text-2xl font-bold text-green-400">97.2%</div>
+                            <div class="text-sm text-slate-400">Success Rate</div>
+                        </div>
+                        <div>
+                            <div class="text-2xl font-bold text-green-400">2.3s</div>
+                            <div class="text-sm text-slate-400">Avg LLM Response</div>
+                        </div>
+                    </div>
+                    <div class="w-full bg-slate-800 rounded-full h-2">
+                        <div class="bg-green-500 h-2 rounded-full" style="width: 97.2%"></div>
+                    </div>
+                </div>
+
+                <!-- Data Analysis Agent -->
+                <div class="bg-slate-900/50 border border-slate-800 rounded-lg p-6">
+                    <div class="flex justify-between items-start mb-4">
+                        <div>
+                            <h3 class="text-xl font-bold mb-1">📊 Data Analysis Agent</h3>
+                            <p class="text-slate-400 text-sm">Processes and analyzes data</p>
+                        </div>
+                        <span class="px-3 py-1 bg-green-500/20 text-green-400 rounded-full text-sm">Active</span>
+                    </div>
+                    <div class="grid grid-cols-3 gap-4 mb-4">
+                        <div>
+                            <div class="text-2xl font-bold text-green-400">189</div>
+                            <div class="text-sm text-slate-400">Tasks Today</div>
+                        </div>
+                        <div>
+                            <div class="text-2xl font-bold text-green-400">95.8%</div>
+                            <div class="text-sm text-slate-400">Success Rate</div>
+                        </div>
+                        <div>
+                            <div class="text-2xl font-bold text-green-400">4.1s</div>
+                            <div class="text-sm text-slate-400">Avg Response</div>
+                        </div>
+                    </div>
+                    <div class="w-full bg-slate-800 rounded-full h-2">
+                        <div class="bg-green-500 h-2 rounded-full" style="width: 95.8%"></div>
+                    </div>
+                </div>
+
+                <!-- Content Creation Agent -->
+                <div class="bg-slate-900/50 border border-slate-800 rounded-lg p-6">
+                    <div class="flex justify-between items-start mb-4">
+                        <div>
+                            <h3 class="text-xl font-bold mb-1">✍️ Content Creation Agent</h3>
+                            <p class="text-slate-400 text-sm">Creates marketing and documentation</p>
+                        </div>
+                        <span class="px-3 py-1 bg-green-500/20 text-green-400 rounded-full text-sm">Active</span>
+                    </div>
+                    <div class="grid grid-cols-3 gap-4 mb-4">
+                        <div>
+                            <div class="text-2xl font-bold text-green-400">156</div>
+                            <div class="text-sm text-slate-400">Tasks Today</div>
+                        </div>
+                        <div>
+                            <div class="text-2xl font-bold text-green-400">98.5%</div>
+                            <div class="text-sm text-slate-400">Success Rate</div>
+                        </div>
+                        <div>
+                            <div class="text-2xl font-bold text-green-400">3.7s</div>
+                            <div class="text-sm text-slate-400">Avg Response</div>
+                        </div>
+                    </div>
+                    <div class="w-full bg-slate-800 rounded-full h-2">
+                        <div class="bg-green-500 h-2 rounded-full" style="width: 98.5%"></div>
+                    </div>
+                </div>
+
+                <!-- Quality Assurance Agent -->
+                <div class="bg-slate-900/50 border border-slate-800 rounded-lg p-6">
+                    <div class="flex justify-between items-start mb-4">
+                        <div>
+                            <h3 class="text-xl font-bold mb-1">🔍 Quality Assurance Agent</h3>
+                            <p class="text-slate-400 text-sm">Tests and validates code</p>
+                        </div>
+                        <span class="px-3 py-1 bg-green-500/20 text-green-400 rounded-full text-sm">Active</span>
+                    </div>
+                    <div class="grid grid-cols-3 gap-4 mb-4">
+                        <div>
+                            <div class="text-2xl font-bold text-green-400">278</div>
+                            <div class="text-sm text-slate-400">Tasks Today</div>
+                        </div>
+                        <div>
+                            <div class="text-2xl font-bold text-green-400">99.1%</div>
+                            <div class="text-sm text-slate-400">Success Rate</div>
+                        </div>
+                        <div>
+                            <div class="text-2xl font-bold text-green-400">1.8s</div>
+                            <div class="text-sm text-slate-400">Avg Response</div>
+                        </div>
+                    </div>
+                    <div class="w-full bg-slate-800 rounded-full h-2">
+                        <div class="bg-green-500 h-2 rounded-full" style="width: 99.1%"></div>
+                    </div>
+                </div>
+
+                <!-- Deployment Agent -->
+                <div class="bg-slate-900/50 border border-slate-800 rounded-lg p-6">
+                    <div class="flex justify-between items-start mb-4">
+                        <div>
+                            <h3 class="text-xl font-bold mb-1">🚀 Deployment Agent</h3>
+                            <p class="text-slate-400 text-sm">Manages deployments and infrastructure</p>
+                        </div>
+                        <span class="px-3 py-1 bg-yellow-500/20 text-yellow-400 rounded-full text-sm">Idle</span>
+                    </div>
+                    <div class="grid grid-cols-3 gap-4 mb-4">
+                        <div>
+                            <div class="text-2xl font-bold text-green-400">47</div>
+                            <div class="text-sm text-slate-400">Tasks Today</div>
+                        </div>
+                        <div>
+                            <div class="text-2xl font-bold text-green-400">96.4%</div>
+                            <div class="text-sm text-slate-400">Success Rate</div>
+                        </div>
+                        <div>
+                            <div class="text-2xl font-bold text-green-400">5.2s</div>
+                            <div class="text-sm text-slate-400">Avg Response</div>
+                        </div>
+                    </div>
+                    <div class="w-full bg-slate-800 rounded-full h-2">
+                        <div class="bg-green-500 h-2 rounded-full" style="width: 96.4%"></div>
+                    </div>
+                </div>
+
+                <!-- Monitoring Agent -->
+                <div class="bg-slate-900/50 border border-slate-800 rounded-lg p-6">
+                    <div class="flex justify-between items-start mb-4">
+                        <div>
+                            <h3 class="text-xl font-bold mb-1">👁️ Monitoring Agent</h3>
+                            <p class="text-slate-400 text-sm">Watches system health and alerts</p>
+                        </div>
+                        <span class="px-3 py-1 bg-green-500/20 text-green-400 rounded-full text-sm">Active</span>
+                    </div>
+                    <div class="grid grid-cols-3 gap-4 mb-4">
+                        <div>
+                            <div class="text-2xl font-bold text-green-400">523</div>
+                            <div class="text-sm text-slate-400">Tasks Today</div>
+                        </div>
+                        <div>
+                            <div class="text-2xl font-bold text-green-400">99.7%</div>
+                            <div class="text-sm text-slate-400">Success Rate</div>
+                        </div>
+                        <div>
+                            <div class="text-2xl font-bold text-green-400">0.9s</div>
+                            <div class="text-sm text-slate-400">Avg Response</div>
+                        </div>
+                    </div>
+                    <div class="w-full bg-slate-800 rounded-full h-2">
+                        <div class="bg-green-500 h-2 rounded-full" style="width: 99.7%"></div>
+                    </div>
+                </div>
+
+                <!-- AWS Infrastructure Agents Section -->
+                <div class="mt-8 mb-4">
+                    <div class="flex items-center gap-3 mb-4">
+                        <span class="text-2xl">☁️</span>
+                        <h3 class="text-2xl font-bold">AWS Infrastructure Agents</h3>
+                        <span class="px-3 py-1 bg-cyan-500/20 text-cyan-400 rounded-full text-sm">Cost-Optimized</span>
+                    </div>
+                </div>
+
+                <!-- AWS Cost Optimizer Agent -->
+                <div class="bg-slate-900/50 border border-cyan-500/30 rounded-lg p-6">
+                    <div class="flex justify-between items-start mb-4">
+                        <div>
+                            <h3 class="text-xl font-bold mb-1">💰 AWS Cost Optimizer Agent</h3>
+                            <p class="text-slate-400 text-sm">Monitors and optimizes AWS spending</p>
+                        </div>
+                        <span class="px-3 py-1 bg-green-500/20 text-green-400 rounded-full text-sm">Active</span>
+                    </div>
+                    <div class="grid grid-cols-4 gap-4 mb-4">
+                        <div>
+                            <div class="text-2xl font-bold text-green-400">156</div>
+                            <div class="text-sm text-slate-400">Optimizations</div>
+                        </div>
+                        <div>
+                            <div class="text-2xl font-bold text-green-400">$78</div>
+                            <div class="text-sm text-slate-400">Saved/Month</div>
+                        </div>
+                        <div>
+                            <div class="text-2xl font-bold text-green-400">38%</div>
+                            <div class="text-sm text-slate-400">Cost Reduction</div>
+                        </div>
+                        <div>
+                            <div class="text-2xl font-bold text-green-400">1.2s</div>
+                            <div class="text-sm text-slate-400">Avg Response</div>
+                        </div>
+                    </div>
+                    <div class="text-xs text-cyan-400 mb-2">Active Strategies: Spot Instances • Reserved Capacity • Auto-Scaling • Idle Suspension</div>
+                    <div class="w-full bg-slate-800 rounded-full h-2">
+                        <div class="bg-cyan-500 h-2 rounded-full" style="width: 100%"></div>
+                    </div>
+                </div>
+
+                <!-- AWS Auto-Scaling Agent -->
+                <div class="bg-slate-900/50 border border-cyan-500/30 rounded-lg p-6 mt-4">
+                    <div class="flex justify-between items-start mb-4">
+                        <div>
+                            <h3 class="text-xl font-bold mb-1">📈 AWS Auto-Scaling Agent</h3>
+                            <p class="text-slate-400 text-sm">Dynamically scales resources based on load</p>
+                        </div>
+                        <span class="px-3 py-1 bg-green-500/20 text-green-400 rounded-full text-sm">Active</span>
+                    </div>
+                    <div class="grid grid-cols-4 gap-4 mb-4">
+                        <div>
+                            <div class="text-2xl font-bold text-green-400">89</div>
+                            <div class="text-sm text-slate-400">Scale Events</div>
+                        </div>
+                        <div>
+                            <div class="text-2xl font-bold text-green-400">4/12</div>
+                            <div class="text-sm text-slate-400">Active/Total</div>
+                        </div>
+                        <div>
+                            <div class="text-2xl font-bold text-green-400">67%</div>
+                            <div class="text-sm text-slate-400">Utilization</div>
+                        </div>
+                        <div>
+                            <div class="text-2xl font-bold text-green-400">0.8s</div>
+                            <div class="text-sm text-slate-400">Avg Response</div>
+                        </div>
+                    </div>
+                    <div class="text-xs text-cyan-400 mb-2">Current: 4 instances running • Target utilization: 65-75% • Idle agents suspended</div>
+                    <div class="w-full bg-slate-800 rounded-full h-2">
+                        <div class="bg-cyan-500 h-2 rounded-full" style="width: 98.2%"></div>
+                    </div>
+                </div>
+
+                <!-- AWS Resource Manager Agent -->
+                <div class="bg-slate-900/50 border border-cyan-500/30 rounded-lg p-6 mt-4">
+                    <div class="flex justify-between items-start mb-4">
+                        <div>
+                            <h3 class="text-xl font-bold mb-1">🔧 AWS Resource Manager Agent</h3>
+                            <p class="text-slate-400 text-sm">Manages EC2, Lambda, S3, and other AWS services</p>
+                        </div>
+                        <span class="px-3 py-1 bg-green-500/20 text-green-400 rounded-full text-sm">Active</span>
+                    </div>
+                    <div class="grid grid-cols-4 gap-4 mb-4">
+                        <div>
+                            <div class="text-2xl font-bold text-green-400">234</div>
+                            <div class="text-sm text-slate-400">Resources</div>
+                        </div>
+                        <div>
+                            <div class="text-2xl font-bold text-green-400">12</div>
+                            <div class="text-sm text-slate-400">Services</div>
+                        </div>
+                        <div>
+                            <div class="text-2xl font-bold text-green-400">99.2%</div>
+                            <div class="text-sm text-slate-400">Health Score</div>
+                        </div>
+                        <div>
+                            <div class="text-2xl font-bold text-green-400">1.5s</div>
+                            <div class="text-sm text-slate-400">Avg Response</div>
+                        </div>
+                    </div>
+                    <div class="text-xs text-cyan-400 mb-2">Managing: EC2 (4) • Lambda (18) • S3 (8 buckets) • RDS (2) • CloudWatch • ELB</div>
+                    <div class="w-full bg-slate-800 rounded-full h-2">
+                        <div class="bg-cyan-500 h-2 rounded-full" style="width: 99.2%"></div>
+                    </div>
+                </div>
+
+                <!-- AWS Security & Compliance Agent -->
+                <div class="bg-slate-900/50 border border-cyan-500/30 rounded-lg p-6 mt-4">
+                    <div class="flex justify-between items-start mb-4">
+                        <div>
+                            <h3 class="text-xl font-bold mb-1">🔒 AWS Security Agent</h3>
+                            <p class="text-slate-400 text-sm">Enforces security policies and compliance</p>
+                        </div>
+                        <span class="px-3 py-1 bg-green-500/20 text-green-400 rounded-full text-sm">Active</span>
+                    </div>
+                    <div class="grid grid-cols-4 gap-4 mb-4">
+                        <div>
+                            <div class="text-2xl font-bold text-green-400">0</div>
+                            <div class="text-sm text-slate-400">Vulnerabilities</div>
+                        </div>
+                        <div>
+                            <div class="text-2xl font-bold text-green-400">100%</div>
+                            <div class="text-sm text-slate-400">Compliance</div>
+                        </div>
+                        <div>
+                            <div class="text-2xl font-bold text-green-400">847</div>
+                            <div class="text-sm text-slate-400">Scans Today</div>
+                        </div>
+                        <div>
+                            <div class="text-2xl font-bold text-green-400">0.7s</div>
+                            <div class="text-sm text-slate-400">Avg Response</div>
+                        </div>
+                    </div>
+                    <div class="text-xs text-cyan-400 mb-2">Active: IAM policies • Security groups • Encryption at rest • SSL/TLS • WAF rules</div>
+                    <div class="w-full bg-slate-800 rounded-full h-2">
+                        <div class="bg-cyan-500 h-2 rounded-full" style="width: 100%"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Activity Timeline -->
+        <div class="max-w-6xl mx-auto mt-12">
+            <h2 class="text-3xl font-bold mb-6">Recent Activity</h2>
+            <div class="bg-slate-900/50 border border-slate-800 rounded-lg p-6">
+                <div class="space-y-4" id="activityTimeline">
+                    <div class="flex items-start gap-4 pb-4 border-b border-slate-800">
+                        <div class="text-2xl">💻</div>
+                        <div class="flex-1">
+                            <div class="font-semibold">Code Generation Agent completed task</div>
+                            <div class="text-sm text-slate-400">Generated 3 new API endpoints for FlowCore</div>
+                            <div class="text-xs text-slate-500 mt-1">2 minutes ago</div>
+                        </div>
+                    </div>
+                    <div class="flex items-start gap-4 pb-4 border-b border-slate-800">
+                        <div class="text-2xl">💰</div>
+                        <div class="flex-1">
+                            <div class="font-semibold">AWS Cost Optimizer saved $12 today</div>
+                            <div class="text-sm text-cyan-400">Switched to spot instances for non-critical workloads</div>
+                            <div class="text-xs text-slate-500 mt-1">4 minutes ago</div>
+                        </div>
+                    </div>
+                    <div class="flex items-start gap-4 pb-4 border-b border-slate-800">
+                        <div class="text-2xl">🔍</div>
+                        <div class="flex-1">
+                            <div class="font-semibold">Quality Assurance Agent ran tests</div>
+                            <div class="text-sm text-slate-400">All 147 tests passed successfully</div>
+                            <div class="text-xs text-slate-500 mt-1">5 minutes ago</div>
+                        </div>
+                    </div>
+                    <div class="flex items-start gap-4 pb-4 border-b border-slate-800">
+                        <div class="text-2xl">📈</div>
+                        <div class="flex-1">
+                            <div class="font-semibold">AWS Auto-Scaling Agent adjusted capacity</div>
+                            <div class="text-sm text-cyan-400">Scaled down 3 idle agents to reduce costs</div>
+                            <div class="text-xs text-slate-500 mt-1">8 minutes ago</div>
+                        </div>
+                    </div>
+                    <div class="flex items-start gap-4 pb-4 border-b border-slate-800">
+                        <div class="text-2xl">📊</div>
+                        <div class="flex-1">
+                            <div class="font-semibold">Data Analysis Agent processed data</div>
+                            <div class="text-sm text-slate-400">Analyzed 15.3M data points for insights</div>
+                            <div class="text-xs text-slate-500 mt-1">12 minutes ago</div>
+                        </div>
+                    </div>
+                    <div class="flex items-start gap-4 pb-4 border-b border-slate-800">
+                        <div class="text-2xl">🔧</div>
+                        <div class="flex-1">
+                            <div class="font-semibold">AWS Resource Manager optimized Lambda</div>
+                            <div class="text-sm text-cyan-400">Updated 18 functions to ARM architecture (20% cost savings)</div>
+                            <div class="text-xs text-slate-500 mt-1">15 minutes ago</div>
+                        </div>
+                    </div>
+                    <div class="flex items-start gap-4 pb-4 border-b border-slate-800">
+                        <div class="text-2xl">✍️</div>
+                        <div class="flex-1">
+                            <div class="font-semibold">Content Creation Agent updated docs</div>
+                            <div class="text-sm text-slate-400">Created FlowCore product documentation</div>
+                            <div class="text-xs text-slate-500 mt-1">18 minutes ago</div>
+                        </div>
+                    </div>
+                    <div class="flex items-start gap-4">
+                        <div class="text-2xl">🔒</div>
+                        <div class="flex-1">
+                            <div class="font-semibold">AWS Security Agent completed compliance scan</div>
+                            <div class="text-sm text-cyan-400">All 847 checks passed • 0 vulnerabilities found</div>
+                            <div class="text-xs text-slate-500 mt-1">22 minutes ago</div>
+                        </div>
+                    </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <script>
+        // Control Panel Management
+        function showControlPanel() {
+            document.getElementById('controlCenter').style.display = 'block';
+            document.getElementById('controlCenter').scrollIntoView({ behavior: 'smooth' });
+        }
+
+        function hideControlPanel() {
+            document.getElementById('controlCenter').style.display = 'none';
+        }
+
+        function performAction(action) {
+            const actions = {
+                'start-all': 'Starting all agents... This will increase costs temporarily.',
+                'stop-idle': 'Suspending idle agents... Saving approximately $45/month.',
+                'restart-all': 'Restarting all agents... Brief service interruption expected.',
+                'emergency-stop': 'EMERGENCY STOP initiated! All agents shutting down immediately.'
+            };
+            
+            if (confirm(`${actions[action]}\n\nContinue?`)) {
+                console.log(`Performing action: ${action}`);
+                alert(`✓ Action "${action}" completed successfully!\n\nIn production, this would execute the actual agent control commands.`);
+                
+                // Update UI to reflect changes
+                if (action === 'start-all') {
+                    document.getElementById('activeAgents').textContent = '12';
+                } else if (action === 'stop-idle') {
+                    document.getElementById('activeAgents').textContent = '8';
+                } else if (action === 'emergency-stop') {
+                    document.getElementById('activeAgents').textContent = '0';
+                }
+            }
+        }
+
+        function controlAgent(agentId, action) {
+            const agentNames = {
+                'code-gen': 'Code Generation Agent',
+                'aws-cost': 'AWS Cost Optimizer Agent',
+                'aws-scale': 'AWS Auto-Scaling Agent',
+                'deploy': 'Deployment Agent'
+            };
+            
+            const actionText = action === 'start' ? 'Starting' : action === 'stop' ? 'Stopping' : 'Restarting';
+            
+            console.log(`${actionText} ${agentNames[agentId]}...`);
+            alert(`✓ ${actionText} ${agentNames[agentId]} completed!\n\nIn production, this would control the actual agent instance.`);
+        }
+
+        function refreshData() {
+            // In a real implementation, this would fetch from the database
+            console.log('Refreshing agent productivity data...');
+            alert('Data refreshed! In production, this would fetch real-time data from productive_agents.db');
+        }
+
+        // Simulate real-time updates
+        setInterval(() => {
+            const tasksElement = document.getElementById('tasksCompleted');
+            if (tasksElement) {
+                const current = parseInt(tasksElement.textContent.replace(/,/g, ''));
+                tasksElement.textContent = (current + Math.floor(Math.random() * 3)).toLocaleString();
+            }
+        }, 5000);
+    </script>
+</body>
+</html>

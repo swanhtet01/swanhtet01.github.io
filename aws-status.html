@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AWS Infrastructure Status | SuperMega</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            background: linear-gradient(to bottom, #020617, #0c4a6e, #020617);
+            min-height: 100vh;
+        }
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 8px;
+        }
+        .status-down {
+            background-color: #ef4444;
+            box-shadow: 0 0 10px #ef4444;
+        }
+        .status-up {
+            background-color: #10b981;
+            box-shadow: 0 0 10px #10b981;
+        }
+        .status-warning {
+            background-color: #f59e0b;
+            box-shadow: 0 0 10px #f59e0b;
+        }
+    </style>
+</head>
+<body class="text-white">
+    <!-- Header -->
+    <header class="container mx-auto px-4 py-6">
+        <div class="flex justify-between items-center">
+            <div class="flex items-center gap-4">
+                <a href="index.html" class="text-slate-300 hover:text-white transition">← Back to Home</a>
+                <span class="text-2xl font-bold">AWS Infrastructure Status</span>
+            </div>
+            <button onclick="refreshStatus()" class="px-4 py-2 bg-cyan-500 hover:bg-cyan-600 rounded-lg transition">
+                🔄 Refresh
+            </button>
+        </div>
+    </header>
+
+    <!-- Status Summary -->
+    <section class="container mx-auto px-4 py-12">
+        <div class="max-w-4xl mx-auto">
+            <div class="bg-slate-900/50 border border-slate-800 rounded-lg p-8 mb-8">
+                <div class="flex items-center justify-between mb-6">
+                    <h2 class="text-3xl font-bold">System Status</h2>
+                    <div class="text-slate-400 text-sm">
+                        Last Updated: <span id="lastUpdate" class="text-white">Loading...</span>
+                    </div>
+                </div>
+                <div id="overallStatus" class="text-center py-8">
+                    <div class="status-indicator status-down"></div>
+                    <span class="text-2xl font-semibold text-red-400">Services Currently Down</span>
+                    <p class="text-slate-400 mt-4">AWS instance services are not responding</p>
+                </div>
+            </div>
+
+            <!-- Web Services -->
+            <div class="bg-slate-900/50 border border-slate-800 rounded-lg p-8 mb-8">
+                <h3 class="text-2xl font-bold mb-6">Web Services</h3>
+                <div class="space-y-4" id="webServices">
+                    <div class="flex justify-between items-center p-4 bg-slate-800/50 rounded-lg">
+                        <div>
+                            <div class="font-semibold">Main Site</div>
+                            <div class="text-sm text-slate-400">supermega.dev</div>
+                        </div>
+                        <div class="flex items-center text-red-400">
+                            <span class="status-indicator status-down"></span>
+                            <span>CONNECTION REFUSED</span>
+                        </div>
+                    </div>
+                    <div class="flex justify-between items-center p-4 bg-slate-800/50 rounded-lg">
+                        <div>
+                            <div class="font-semibold">Platform</div>
+                            <div class="text-sm text-slate-400">Platform services</div>
+                        </div>
+                        <div class="flex items-center text-red-400">
+                            <span class="status-indicator status-down"></span>
+                            <span>CONNECTION REFUSED</span>
+                        </div>
+                    </div>
+                    <div class="flex justify-between items-center p-4 bg-slate-800/50 rounded-lg">
+                        <div>
+                            <div class="font-semibold">Creative Studio</div>
+                            <div class="text-sm text-slate-400">Creative services</div>
+                        </div>
+                        <div class="flex items-center text-red-400">
+                            <span class="status-indicator status-down"></span>
+                            <span>CONNECTION REFUSED</span>
+                        </div>
+                    </div>
+                    <div class="flex justify-between items-center p-4 bg-slate-800/50 rounded-lg">
+                        <div>
+                            <div class="font-semibold">Data Intelligence</div>
+                            <div class="text-sm text-slate-400">Data services</div>
+                        </div>
+                        <div class="flex items-center text-red-400">
+                            <span class="status-indicator status-down"></span>
+                            <span>CONNECTION REFUSED</span>
+                        </div>
+                    </div>
+                    <div class="flex justify-between items-center p-4 bg-slate-800/50 rounded-lg">
+                        <div>
+                            <div class="font-semibold">Productivity Engine</div>
+                            <div class="text-sm text-slate-400">Productivity services</div>
+                        </div>
+                        <div class="flex items-center text-red-400">
+                            <span class="status-indicator status-down"></span>
+                            <span>CONNECTION REFUSED</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Backend APIs -->
+            <div class="bg-slate-900/50 border border-slate-800 rounded-lg p-8 mb-8">
+                <h3 class="text-2xl font-bold mb-6">Backend APIs</h3>
+                <div class="space-y-4" id="backendApis">
+                    <div class="flex justify-between items-center p-4 bg-slate-800/50 rounded-lg">
+                        <div>
+                            <div class="font-semibold">Health API</div>
+                            <div class="text-sm text-slate-400">System health checks</div>
+                        </div>
+                        <div class="flex items-center text-red-400">
+                            <span class="status-indicator status-down"></span>
+                            <span>NOT RUNNING</span>
+                        </div>
+                    </div>
+                    <div class="flex justify-between items-center p-4 bg-slate-800/50 rounded-lg">
+                        <div>
+                            <div class="font-semibold">Creative API</div>
+                            <div class="text-sm text-slate-400">Creative services API</div>
+                        </div>
+                        <div class="flex items-center text-red-400">
+                            <span class="status-indicator status-down"></span>
+                            <span>NOT RUNNING</span>
+                        </div>
+                    </div>
+                    <div class="flex justify-between items-center p-4 bg-slate-800/50 rounded-lg">
+                        <div>
+                            <div class="font-semibold">Data API</div>
+                            <div class="text-sm text-slate-400">Data intelligence API</div>
+                        </div>
+                        <div class="flex items-center text-red-400">
+                            <span class="status-indicator status-down"></span>
+                            <span>NOT RUNNING</span>
+                        </div>
+                    </div>
+                    <div class="flex justify-between items-center p-4 bg-slate-800/50 rounded-lg">
+                        <div>
+                            <div class="font-semibold">Productivity API</div>
+                            <div class="text-sm text-slate-400">Productivity services API</div>
+                        </div>
+                        <div class="flex items-center text-red-400">
+                            <span class="status-indicator status-down"></span>
+                            <span>NOT RUNNING</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Infrastructure -->
+            <div class="bg-slate-900/50 border border-slate-800 rounded-lg p-8 mb-8">
+                <h3 class="text-2xl font-bold mb-6">Infrastructure</h3>
+                <div class="space-y-4">
+                    <div class="flex justify-between items-center p-4 bg-slate-800/50 rounded-lg">
+                        <div>
+                            <div class="font-semibold">AWS Instance</div>
+                            <div class="text-sm text-slate-400">EC2 instance status</div>
+                        </div>
+                        <div class="flex items-center text-red-400">
+                            <span class="status-indicator status-down"></span>
+                            <span>DOWN</span>
+                        </div>
+                    </div>
+                    <div class="flex justify-between items-center p-4 bg-slate-800/50 rounded-lg">
+                        <div>
+                            <div class="font-semibold">SSH Access</div>
+                            <div class="text-sm text-slate-400">Remote access availability</div>
+                        </div>
+                        <div class="flex items-center text-green-400">
+                            <span class="status-indicator status-up"></span>
+                            <span>AVAILABLE</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Recommendations -->
+            <div class="bg-cyan-900/20 border border-cyan-500/30 rounded-lg p-8">
+                <h3 class="text-2xl font-bold mb-6 text-cyan-400">📋 Recommended Actions</h3>
+                <div class="space-y-4 text-slate-300">
+                    <div class="flex items-start gap-3">
+                        <span class="text-cyan-400 text-xl">1.</span>
+                        <div>
+                            <div class="font-semibold mb-1">Check AWS Instance Status</div>
+                            <div class="text-sm text-slate-400">Verify EC2 instance is running and accessible</div>
+                        </div>
+                    </div>
+                    <div class="flex items-start gap-3">
+                        <span class="text-cyan-400 text-xl">2.</span>
+                        <div>
+                            <div class="font-semibold mb-1">Start Web Services</div>
+                            <div class="text-sm text-slate-400">Deploy and start all web application services</div>
+                        </div>
+                    </div>
+                    <div class="flex items-start gap-3">
+                        <span class="text-cyan-400 text-xl">3.</span>
+                        <div>
+                            <div class="font-semibold mb-1">Initialize Backend APIs</div>
+                            <div class="text-sm text-slate-400">Start all API services and verify health endpoints</div>
+                        </div>
+                    </div>
+                    <div class="flex items-start gap-3">
+                        <span class="text-cyan-400 text-xl">4.</span>
+                        <div>
+                            <div class="font-semibold mb-1">Configure Load Balancer</div>
+                            <div class="text-sm text-slate-400">Set up AWS ELB for high availability</div>
+                        </div>
+                    </div>
+                    <div class="flex items-start gap-3">
+                        <span class="text-cyan-400 text-xl">5.</span>
+                        <div>
+                            <div class="font-semibold mb-1">Enable Monitoring</div>
+                            <div class="text-sm text-slate-400">Configure CloudWatch alerts and metrics</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <script>
+        function refreshStatus() {
+            // In a real implementation, this would fetch from aws_status_report.json
+            // For now, we'll just update the timestamp
+            document.getElementById('lastUpdate').textContent = new Date().toLocaleString();
+        }
+
+        // Load initial status from JSON file
+        async function loadStatus() {
+            try {
+                const response = await fetch('aws_status_report.json');
+                const data = await response.json();
+                
+                // Update timestamp
+                if (data.timestamp) {
+                    document.getElementById('lastUpdate').textContent = 
+                        new Date(data.timestamp).toLocaleString();
+                }
+            } catch (error) {
+                console.error('Error loading status:', error);
+                document.getElementById('lastUpdate').textContent = 
+                    new Date().toLocaleString();
+            }
+        }
+
+        // Load status on page load
+        window.addEventListener('load', loadStatus);
+    </script>
+</body>
+</html>
