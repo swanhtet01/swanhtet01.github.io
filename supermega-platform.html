@@ -446,10 +446,48 @@
                 grid-template-columns: 1fr;
             }
         }
-    </style>
+            .intent-hero {
+            background: radial-gradient(circle at top, rgba(37,99,235,0.2), rgba(8,47,73,0.4));
+            padding: 50px 60px;
+            border-bottom: 1px solid rgba(255,255,255,0.08);
+        }
+        .intent-hero h1 {
+            font-size: 48px;
+            margin-bottom: 15px;
+        }
+        .intent-hero p {
+            color: #94a3b8;
+            font-size: 18px;
+            max-width: 900px;
+        }
+        .intent-badges {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin-top: 25px;
+        }
+        .intent-badges span {
+            padding: 8px 14px;
+            border-radius: 999px;
+            border: 1px solid rgba(148,163,184,0.4);
+            font-size: 12px;
+            letter-spacing: 0.2em;
+            text-transform: uppercase;
+        }
+
 </head>
 <body>
     <div class="platform-container">
+        <section class="intent-hero">
+            <h1>Dual-Plane OS - Physical AWS + Metaphysical Intent</h1>
+            <p>The SuperMega platform couples hardened AWS infrastructure with an intent graph that agents interpret using their own LLM stacks. Every workload emits intent beacons, Conscience agents reconcile them with telemetry, and GitOps workflows keep supermega.dev and ytf.supermega.dev live.</p>
+            <div class="intent-badges">
+                <span>SELF-SOVEREIGN LLMS</span>
+                <span>BEDROCK / OPENAI / GEMINI</span>
+                <span>NEPTUNE INTENT GRAPH</span>
+                <span>LANGGRAPH OVERSIGHT</span>
+            </div>
+        </section>
         <header class="main-header">
             <div class="logo-section">
                 <div class="logo">SuperMega OS</div>
@@ -830,3 +868,5 @@
     </script>
 </body>
 </html>
+
+
