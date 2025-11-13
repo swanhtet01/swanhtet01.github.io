@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QualityLens - AI Quality Intelligence | SuperMega</title>
+    <meta name="description" content="QualityLens: Computer vision AI for automated quality inspection, defect detection, and production excellence">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            background: linear-gradient(to bottom, #020617, #581c87, #020617);
+            min-height: 100vh;
+        }
+        .gradient-text {
+            background: linear-gradient(45deg, #a855f7, #ec4899, #f97316);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .outcome-card {
+            transition: all 0.3s ease;
+        }
+        .outcome-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 20px 40px rgba(168, 85, 247, 0.3);
+        }
+    </style>
+</head>
+<body class="text-white">
+    <!-- Navigation -->
+    <header class="container mx-auto px-4 py-6">
+        <div class="flex justify-between items-center">
+            <div class="flex items-center gap-4">
+                <a href="index.html" class="text-slate-300 hover:text-white transition">← Back</a>
+                <div class="flex items-center gap-2">
+                    <span class="text-4xl">👁️</span>
+                    <span class="text-2xl font-bold gradient-text">QualityLens</span>
+                </div>
+            </div>
+            <a href="#demo" class="px-6 py-2 bg-purple-500 hover:bg-purple-600 rounded-lg font-semibold transition">
+                See It In Action
+            </a>
+        </div>
+    </header>
+
+    <!-- Hero Section -->
+    <section class="container mx-auto px-4 py-20 text-center">
+        <div class="max-w-4xl mx-auto">
+            <h1 class="text-6xl md:text-7xl font-bold mb-6">
+                <span class="gradient-text">QualityLens</span><br>
+                AI-Powered Quality Intelligence
+            </h1>
+            <p class="text-xl text-slate-300 mb-12">
+                Detect defects instantly with computer vision AI. Reduce quality issues by 95%, 
+                increase inspection speed by 10x, and achieve 99.9% accuracy.
+            </p>
+            <div class="flex gap-4 justify-center flex-wrap">
+                <a href="#results" class="px-8 py-4 bg-purple-500 hover:bg-purple-600 rounded-lg font-semibold transition">
+                    View Results
+                </a>
+                <a href="#demo" class="px-8 py-4 bg-slate-700 hover:bg-slate-600 rounded-lg font-semibold transition">
+                    Live Demo
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Proven Outcomes -->
+    <section id="results" class="container mx-auto px-4 py-20">
+        <h2 class="text-5xl font-bold mb-4 text-center">Proven Outcomes</h2>
+        <p class="text-xl text-slate-400 text-center mb-16">Real results from real customers</p>
+        
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-6xl mx-auto mb-16">
+            <div class="outcome-card bg-slate-900/50 border border-purple-500/30 rounded-lg p-8 text-center">
+                <div class="text-6xl font-bold text-purple-400 mb-4">95%</div>
+                <div class="text-xl font-semibold mb-2">Defect Reduction</div>
+                <div class="text-slate-400">Catch quality issues before they reach customers</div>
+            </div>
+            <div class="outcome-card bg-slate-900/50 border border-purple-500/30 rounded-lg p-8 text-center">
+                <div class="text-6xl font-bold text-purple-400 mb-4">10x</div>
+                <div class="text-xl font-semibold mb-2">Faster Inspection</div>
+                <div class="text-slate-400">Automated inspection vs manual checking</div>
+            </div>
+            <div class="outcome-card bg-slate-900/50 border border-purple-500/30 rounded-lg p-8 text-center">
+                <div class="text-6xl font-bold text-purple-400 mb-4">99.9%</div>
+                <div class="text-xl font-semibold mb-2">Accuracy Rate</div>
+                <div class="text-slate-400">More reliable than human inspection</div>
+            </div>
+        </div>
+
+        <!-- Customer Success Stories -->
+        <div class="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div class="bg-gradient-to-br from-purple-900/30 to-pink-900/30 border border-purple-500/30 rounded-lg p-8">
+                <div class="flex items-center gap-4 mb-4">
+                    <div class="text-4xl">🏭</div>
+                    <div>
+                        <div class="font-bold text-xl">Electronics Manufacturer</div>
+                        <div class="text-sm text-slate-400">Fortune 500 Company</div>
+                    </div>
+                </div>
+                <div class="space-y-4">
+                    <div class="flex justify-between items-center">
+                        <span class="text-slate-300">Quality Issues Reduced</span>
+                        <span class="font-bold text-purple-400">92%</span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-slate-300">Inspection Cost Savings</span>
+                        <span class="font-bold text-purple-400">$2.4M/year</span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-slate-300">Customer Complaints</span>
+                        <span class="font-bold text-purple-400">-87%</span>
+                    </div>
+                    <p class="text-sm text-slate-400 italic mt-4">
+                        "QualityLens detected defects we never caught manually. ROI achieved in 3 months."
+                    </p>
+                </div>
+            </div>
+
+            <div class="bg-gradient-to-br from-purple-900/30 to-pink-900/30 border border-purple-500/30 rounded-lg p-8">
+                <div class="flex items-center gap-4 mb-4">
+                    <div class="text-4xl">🚗</div>
+                    <div>
+                        <div class="font-bold text-xl">Automotive Parts Supplier</div>
+                        <div class="text-sm text-slate-400">Tier 1 Supplier</div>
+                    </div>
+                </div>
+                <div class="space-y-4">
+                    <div class="flex justify-between items-center">
+                        <span class="text-slate-300">Defect Detection Rate</span>
+                        <span class="font-bold text-purple-400">99.7%</span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-slate-300">Inspection Speed</span>
+                        <span class="font-bold text-purple-400">12x faster</span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-slate-300">Labor Cost Reduction</span>
+                        <span class="font-bold text-purple-400">-68%</span>
+                    </div>
+                    <p class="text-sm text-slate-400 italic mt-4">
+                        "Inspection time dropped from 45 seconds to 3 seconds per part. Game-changing."
+                    </p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- How It Works -->
+    <section class="container mx-auto px-4 py-20">
+        <h2 class="text-5xl font-bold mb-4 text-center">How QualityLens Works</h2>
+        <p class="text-xl text-slate-400 text-center mb-16">Powered by advanced computer vision AI</p>
+        
+        <div class="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-4 gap-6">
+            <div class="bg-slate-900/50 border border-slate-800 rounded-lg p-6 text-center">
+                <div class="text-5xl mb-4">📷</div>
+                <div class="text-xl font-bold mb-2">1. Capture</div>
+                <p class="text-slate-400 text-sm">High-res cameras capture every detail at production speed</p>
+            </div>
+            <div class="bg-slate-900/50 border border-slate-800 rounded-lg p-6 text-center">
+                <div class="text-5xl mb-4">🤖</div>
+                <div class="text-xl font-bold mb-2">2. Analyze</div>
+                <p class="text-slate-400 text-sm">AI instantly detects defects, scratches, misalignments</p>
+            </div>
+            <div class="bg-slate-900/50 border border-slate-800 rounded-lg p-6 text-center">
+                <div class="text-5xl mb-4">✅</div>
+                <div class="text-xl font-bold mb-2">3. Classify</div>
+                <p class="text-slate-400 text-sm">Categorize defects by severity and type automatically</p>
+            </div>
+            <div class="bg-slate-900/50 border border-slate-800 rounded-lg p-6 text-center">
+                <div class="text-5xl mb-4">📊</div>
+                <div class="text-xl font-bold mb-2">4. Act</div>
+                <p class="text-slate-400 text-sm">Alert operators, stop lines, log data for analysis</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Key Features -->
+    <section class="container mx-auto px-4 py-20">
+        <h2 class="text-5xl font-bold mb-16 text-center">Capabilities</h2>
+        
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-6xl mx-auto">
+            <div class="bg-slate-900/50 border border-slate-800 rounded-lg p-8">
+                <div class="text-5xl mb-4">🔍</div>
+                <h3 class="text-2xl font-bold mb-4">Defect Detection</h3>
+                <ul class="space-y-3 text-slate-300">
+                    <li class="flex items-start gap-2">
+                        <span class="text-purple-400">✓</span>
+                        <span>Scratches, dents, cracks, discoloration</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-purple-400">✓</span>
+                        <span>Missing components or incorrect assembly</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-purple-400">✓</span>
+                        <span>Dimensional accuracy verification</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-purple-400">✓</span>
+                        <span>Surface finish quality assessment</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-purple-400">✓</span>
+                        <span>Contamination and foreign object detection</span>
+                    </li>
+                </ul>
+            </div>
+
+            <div class="bg-slate-900/50 border border-slate-800 rounded-lg p-8">
+                <div class="text-5xl mb-4">⚡</div>
+                <h3 class="text-2xl font-bold mb-4">Real-Time Processing</h3>
+                <ul class="space-y-3 text-slate-300">
+                    <li class="flex items-start gap-2">
+                        <span class="text-purple-400">✓</span>
+                        <span>Process 100+ items per minute</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-purple-400">✓</span>
+                        <span>Sub-second inspection time per unit</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-purple-400">✓</span>
+                        <span>Instant alerts and line stops</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-purple-400">✓</span>
+                        <span>No production slowdowns</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-purple-400">✓</span>
+                        <span>24/7 operation with zero fatigue</span>
+                    </li>
+                </ul>
+            </div>
+
+            <div class="bg-slate-900/50 border border-slate-800 rounded-lg p-8">
+                <div class="text-5xl mb-4">🎯</div>
+                <h3 class="text-2xl font-bold mb-4">Smart Classification</h3>
+                <ul class="space-y-3 text-slate-300">
+                    <li class="flex items-start gap-2">
+                        <span class="text-purple-400">✓</span>
+                        <span>Critical vs cosmetic defect categorization</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-purple-400">✓</span>
+                        <span>Automatic severity scoring</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-purple-400">✓</span>
+                        <span>Defect type taxonomy and tracking</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-purple-400">✓</span>
+                        <span>Root cause analysis suggestions</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-purple-400">✓</span>
+                        <span>Trend detection and alerts</span>
+                    </li>
+                </ul>
+            </div>
+
+            <div class="bg-slate-900/50 border border-slate-800 rounded-lg p-8">
+                <div class="text-5xl mb-4">📈</div>
+                <h3 class="text-2xl font-bold mb-4">Analytics & Insights</h3>
+                <ul class="space-y-3 text-slate-300">
+                    <li class="flex items-start gap-2">
+                        <span class="text-purple-400">✓</span>
+                        <span>Quality trend dashboards</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-purple-400">✓</span>
+                        <span>Defect rate by product, line, shift</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-purple-400">✓</span>
+                        <span>Predictive quality forecasting</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-purple-400">✓</span>
+                        <span>Cost of quality calculations</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-purple-400">✓</span>
+                        <span>Compliance reporting (ISO, Six Sigma)</span>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </section>
+
+    <!-- ROI Calculator -->
+    <section id="demo" class="container mx-auto px-4 py-20">
+        <div class="max-w-4xl mx-auto bg-gradient-to-r from-purple-900/30 to-pink-900/30 border border-purple-500/30 rounded-2xl p-12">
+            <h2 class="text-4xl font-bold mb-6 text-center">Calculate Your ROI</h2>
+            <p class="text-xl text-slate-300 mb-8 text-center">
+                See how much QualityLens can save your operation
+            </p>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                <div class="bg-slate-900/50 rounded-lg p-6">
+                    <div class="text-sm text-slate-400 mb-2">Current Quality Costs</div>
+                    <div class="text-4xl font-bold text-white mb-2">$450K</div>
+                    <div class="text-sm text-slate-400">Annual defect-related costs</div>
+                </div>
+                <div class="bg-slate-900/50 rounded-lg p-6">
+                    <div class="text-sm text-slate-400 mb-2">With QualityLens</div>
+                    <div class="text-4xl font-bold text-purple-400 mb-2">$90K</div>
+                    <div class="text-sm text-green-400">Save $360K/year (80% reduction)</div>
+                </div>
+            </div>
+
+            <div class="bg-slate-900/50 rounded-lg p-6 mb-6">
+                <div class="grid grid-cols-2 gap-4 text-sm">
+                    <div class="flex justify-between">
+                        <span class="text-slate-400">Reduced scrap & rework:</span>
+                        <span class="font-bold text-white">$220K</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-slate-400">Lower labor costs:</span>
+                        <span class="font-bold text-white">$85K</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-slate-400">Fewer customer returns:</span>
+                        <span class="font-bold text-white">$35K</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-slate-400">Improved throughput:</span>
+                        <span class="font-bold text-white">$20K</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="text-center">
+                <div class="text-2xl font-bold text-purple-400 mb-2">Payback Period: 4-6 Months</div>
+                <p class="text-slate-400 mb-6">Based on typical customer deployments</p>
+                <a href="mailto:sales@supermega.dev" class="inline-block px-8 py-4 bg-purple-500 hover:bg-purple-600 rounded-lg font-semibold transition">
+                    Get Custom ROI Analysis
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <!-- CTA -->
+    <section class="container mx-auto px-4 py-20">
+        <div class="max-w-3xl mx-auto bg-slate-900/50 border border-purple-500/30 rounded-2xl p-12 text-center">
+            <h2 class="text-4xl font-bold mb-6">Ready to Transform Quality Control?</h2>
+            <p class="text-xl text-slate-300 mb-8">
+                Join leading manufacturers achieving 95%+ defect reduction.
+            </p>
+            <div class="flex gap-4 justify-center flex-wrap">
+                <a href="mailto:sales@supermega.dev" class="px-8 py-4 bg-purple-500 hover:bg-purple-600 rounded-lg font-semibold transition">
+                    Request Demo
+                </a>
+                <a href="index.html" class="px-8 py-4 bg-slate-700 hover:bg-slate-600 rounded-lg font-semibold transition">
+                    View All Products
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="container mx-auto px-4 py-12 text-center text-slate-400 border-t border-slate-800">
+        <div class="mb-4">
+            <a href="index.html" class="text-slate-300 hover:text-white transition">Home</a>
+            <span class="mx-4">•</span>
+            <a href="flowcore.html" class="text-slate-300 hover:text-white transition">FlowCore</a>
+            <span class="mx-4">•</span>
+            <a href="stockmind.html" class="text-slate-300 hover:text-white transition">StockMind</a>
+        </div>
+        <p>&copy; 2025 SuperMega. All rights reserved.</p>
+    </footer>
+</body>
+</html>

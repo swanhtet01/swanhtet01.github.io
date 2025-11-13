@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>StockMind - Intelligent Inventory Management | SuperMega</title>
+    <meta name="description" content="StockMind: AI-powered inventory optimization, demand forecasting, and supply chain intelligence">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            background: linear-gradient(to bottom, #020617, #1e3a8a, #020617);
+            min-height: 100vh;
+        }
+        .gradient-text {
+            background: linear-gradient(45deg, #3b82f6, #10b981, #06b6d4);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .outcome-card {
+            transition: all 0.3s ease;
+        }
+        .outcome-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 20px 40px rgba(59, 130, 246, 0.3);
+        }
+    </style>
+</head>
+<body class="text-white">
+    <!-- Navigation -->
+    <header class="container mx-auto px-4 py-6">
+        <div class="flex justify-between items-center">
+            <div class="flex items-center gap-4">
+                <a href="index.html" class="text-slate-300 hover:text-white transition">← Back</a>
+                <div class="flex items-center gap-2">
+                    <span class="text-4xl">🧠</span>
+                    <span class="text-2xl font-bold gradient-text">StockMind</span>
+                </div>
+            </div>
+            <a href="#demo" class="px-6 py-2 bg-blue-500 hover:bg-blue-600 rounded-lg font-semibold transition">
+                See Results
+            </a>
+        </div>
+    </header>
+
+    <!-- Hero Section -->
+    <section class="container mx-auto px-4 py-20 text-center">
+        <div class="max-w-4xl mx-auto">
+            <h1 class="text-6xl md:text-7xl font-bold mb-6">
+                <span class="gradient-text">StockMind</span><br>
+                Intelligent Inventory Management
+            </h1>
+            <p class="text-xl text-slate-300 mb-12">
+                Reduce inventory costs by 35%, eliminate stockouts by 90%, and achieve 
+                perfect demand forecasting with AI-powered inventory intelligence.
+            </p>
+            <div class="flex gap-4 justify-center flex-wrap">
+                <a href="#results" class="px-8 py-4 bg-blue-500 hover:bg-blue-600 rounded-lg font-semibold transition">
+                    View Outcomes
+                </a>
+                <a href="#demo" class="px-8 py-4 bg-slate-700 hover:bg-slate-600 rounded-lg font-semibold transition">
+                    Calculate Savings
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Proven Outcomes -->
+    <section id="results" class="container mx-auto px-4 py-20">
+        <h2 class="text-5xl font-bold mb-4 text-center">Measurable Results</h2>
+        <p class="text-xl text-slate-400 text-center mb-16">Transform your supply chain performance</p>
+        
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 max-w-6xl mx-auto mb-16">
+            <div class="outcome-card bg-slate-900/50 border border-blue-500/30 rounded-lg p-6 text-center">
+                <div class="text-5xl font-bold text-blue-400 mb-3">35%</div>
+                <div class="text-lg font-semibold mb-2">Cost Reduction</div>
+                <div class="text-sm text-slate-400">Lower carrying costs & waste</div>
+            </div>
+            <div class="outcome-card bg-slate-900/50 border border-blue-500/30 rounded-lg p-6 text-center">
+                <div class="text-5xl font-bold text-blue-400 mb-3">90%</div>
+                <div class="text-lg font-semibold mb-2">Fewer Stockouts</div>
+                <div class="text-sm text-slate-400">Always have what you need</div>
+            </div>
+            <div class="outcome-card bg-slate-900/50 border border-blue-500/30 rounded-lg p-6 text-center">
+                <div class="text-5xl font-bold text-blue-400 mb-3">98%</div>
+                <div class="text-lg font-semibold mb-2">Forecast Accuracy</div>
+                <div class="text-sm text-slate-400">Predict demand perfectly</div>
+            </div>
+            <div class="outcome-card bg-slate-900/50 border border-blue-500/30 rounded-lg p-6 text-center">
+                <div class="text-5xl font-bold text-blue-400 mb-3">45%</div>
+                <div class="text-lg font-semibold mb-2">Faster Turnover</div>
+                <div class="text-sm text-slate-400">Optimized stock levels</div>
+            </div>
+        </div>
+
+        <!-- Customer Success Stories -->
+        <div class="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div class="bg-gradient-to-br from-blue-900/30 to-cyan-900/30 border border-blue-500/30 rounded-lg p-8">
+                <div class="flex items-center gap-4 mb-4">
+                    <div class="text-4xl">📦</div>
+                    <div>
+                        <div class="font-bold text-xl">E-Commerce Retailer</div>
+                        <div class="text-sm text-slate-400">$500M Annual Revenue</div>
+                    </div>
+                </div>
+                <div class="space-y-4">
+                    <div class="flex justify-between items-center">
+                        <span class="text-slate-300">Inventory Costs Reduced</span>
+                        <span class="font-bold text-blue-400">$8.5M/year</span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-slate-300">Stockout Incidents</span>
+                        <span class="font-bold text-blue-400">-92%</span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-slate-300">Overstock Reduction</span>
+                        <span class="font-bold text-blue-400">-78%</span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-slate-300">Forecast Accuracy</span>
+                        <span class="font-bold text-blue-400">97.8%</span>
+                    </div>
+                    <p class="text-sm text-slate-400 italic mt-4">
+                        "StockMind paid for itself in the first quarter. We finally have the right products at the right time."
+                    </p>
+                </div>
+            </div>
+
+            <div class="bg-gradient-to-br from-blue-900/30 to-cyan-900/30 border border-blue-500/30 rounded-lg p-8">
+                <div class="flex items-center gap-4 mb-4">
+                    <div class="text-4xl">🏪</div>
+                    <div>
+                        <div class="font-bold text-xl">Retail Chain</div>
+                        <div class="text-sm text-slate-400">250 Store Locations</div>
+                    </div>
+                </div>
+                <div class="space-y-4">
+                    <div class="flex justify-between items-center">
+                        <span class="text-slate-300">Working Capital Freed</span>
+                        <span class="font-bold text-blue-400">$12.3M</span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-slate-300">Inventory Turnover</span>
+                        <span class="font-bold text-blue-400">+52%</span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-slate-300">Obsolete Stock</span>
+                        <span class="font-bold text-blue-400">-85%</span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-slate-300">Supply Chain Efficiency</span>
+                        <span class="font-bold text-blue-400">+64%</span>
+                    </div>
+                    <p class="text-sm text-slate-400 italic mt-4">
+                        "The AI handles complexity across all our stores. We reduced inventory while improving availability."
+                    </p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- How It Works -->
+    <section class="container mx-auto px-4 py-20">
+        <h2 class="text-5xl font-bold mb-4 text-center">AI-Powered Intelligence</h2>
+        <p class="text-xl text-slate-400 text-center mb-16">Smarter inventory decisions, automatically</p>
+        
+        <div class="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-4 gap-6">
+            <div class="bg-slate-900/50 border border-slate-800 rounded-lg p-6 text-center">
+                <div class="text-5xl mb-4">📊</div>
+                <div class="text-xl font-bold mb-2">1. Learn</div>
+                <p class="text-slate-400 text-sm">AI analyzes sales history, seasonality, trends, and external factors</p>
+            </div>
+            <div class="bg-slate-900/50 border border-slate-800 rounded-lg p-6 text-center">
+                <div class="text-5xl mb-4">🔮</div>
+                <div class="text-xl font-bold mb-2">2. Predict</div>
+                <p class="text-slate-400 text-sm">Forecast demand with 98% accuracy up to 6 months ahead</p>
+            </div>
+            <div class="bg-slate-900/50 border border-slate-800 rounded-lg p-6 text-center">
+                <div class="text-5xl mb-4">⚖️</div>
+                <div class="text-xl font-bold mb-2">3. Optimize</div>
+                <p class="text-slate-400 text-sm">Calculate perfect stock levels balancing cost vs service</p>
+            </div>
+            <div class="bg-slate-900/50 border border-slate-800 rounded-lg p-6 text-center">
+                <div class="text-5xl mb-4">🚀</div>
+                <div class="text-xl font-bold mb-2">4. Execute</div>
+                <p class="text-slate-400 text-sm">Automatic purchase orders, rebalancing, and replenishment</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Key Features -->
+    <section class="container mx-auto px-4 py-20">
+        <h2 class="text-5xl font-bold mb-16 text-center">Complete Solution</h2>
+        
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-6xl mx-auto">
+            <div class="bg-slate-900/50 border border-slate-800 rounded-lg p-8">
+                <div class="text-5xl mb-4">🎯</div>
+                <h3 class="text-2xl font-bold mb-4">Demand Forecasting</h3>
+                <ul class="space-y-3 text-slate-300">
+                    <li class="flex items-start gap-2">
+                        <span class="text-blue-400">✓</span>
+                        <span>SKU-level predictions with 98% accuracy</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-blue-400">✓</span>
+                        <span>Seasonal and trend analysis</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-blue-400">✓</span>
+                        <span>Promotion and event impact modeling</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-blue-400">✓</span>
+                        <span>New product launch forecasting</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-blue-400">✓</span>
+                        <span>Multi-location demand planning</span>
+                    </li>
+                </ul>
+            </div>
+
+            <div class="bg-slate-900/50 border border-slate-800 rounded-lg p-8">
+                <div class="text-5xl mb-4">📦</div>
+                <h3 class="text-2xl font-bold mb-4">Smart Replenishment</h3>
+                <ul class="space-y-3 text-slate-300">
+                    <li class="flex items-start gap-2">
+                        <span class="text-blue-400">✓</span>
+                        <span>Automated purchase order generation</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-blue-400">✓</span>
+                        <span>Optimal reorder points and quantities</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-blue-400">✓</span>
+                        <span>Safety stock optimization</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-blue-400">✓</span>
+                        <span>Lead time variability handling</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-blue-400">✓</span>
+                        <span>Multi-supplier management</span>
+                    </li>
+                </ul>
+            </div>
+
+            <div class="bg-slate-900/50 border border-slate-800 rounded-lg p-8">
+                <div class="text-5xl mb-4">💰</div>
+                <h3 class="text-2xl font-bold mb-4">Cost Optimization</h3>
+                <ul class="space-y-3 text-slate-300">
+                    <li class="flex items-start gap-2">
+                        <span class="text-blue-400">✓</span>
+                        <span>Minimize carrying costs and tied capital</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-blue-400">✓</span>
+                        <span>Reduce obsolescence and waste</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-blue-400">✓</span>
+                        <span>Order consolidation and batching</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-blue-400">✓</span>
+                        <span>Supplier negotiation insights</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-blue-400">✓</span>
+                        <span>Working capital optimization</span>
+                    </li>
+                </ul>
+            </div>
+
+            <div class="bg-slate-900/50 border border-slate-800 rounded-lg p-8">
+                <div class="text-5xl mb-4">🔗</div>
+                <h3 class="text-2xl font-bold mb-4">Supply Chain Intelligence</h3>
+                <ul class="space-y-3 text-slate-300">
+                    <li class="flex items-start gap-2">
+                        <span class="text-blue-400">✓</span>
+                        <span>Real-time inventory visibility</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-blue-400">✓</span>
+                        <span>Warehouse and distribution optimization</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-blue-400">✓</span>
+                        <span>Stock allocation across locations</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-blue-400">✓</span>
+                        <span>Supply chain risk monitoring</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-blue-400">✓</span>
+                        <span>Performance dashboards and alerts</span>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </section>
+
+    <!-- ROI Calculator -->
+    <section id="demo" class="container mx-auto px-4 py-20">
+        <div class="max-w-4xl mx-auto bg-gradient-to-r from-blue-900/30 to-cyan-900/30 border border-blue-500/30 rounded-2xl p-12">
+            <h2 class="text-4xl font-bold mb-6 text-center">Your Potential Savings</h2>
+            <p class="text-xl text-slate-300 mb-8 text-center">
+                Based on typical customer results
+            </p>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                <div class="bg-slate-900/50 rounded-lg p-6">
+                    <div class="text-sm text-slate-400 mb-2">Current Inventory Costs</div>
+                    <div class="text-4xl font-bold text-white mb-2">$2.5M</div>
+                    <div class="text-sm text-slate-400">Annual inventory carrying costs</div>
+                </div>
+                <div class="bg-slate-900/50 rounded-lg p-6">
+                    <div class="text-sm text-slate-400 mb-2">With StockMind</div>
+                    <div class="text-4xl font-bold text-blue-400 mb-2">$1.6M</div>
+                    <div class="text-sm text-green-400">Save $875K/year (35% reduction)</div>
+                </div>
+            </div>
+
+            <div class="bg-slate-900/50 rounded-lg p-6 mb-6">
+                <div class="grid grid-cols-2 gap-4 text-sm">
+                    <div class="flex justify-between">
+                        <span class="text-slate-400">Reduced carrying costs:</span>
+                        <span class="font-bold text-white">$420K</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-slate-400">Lower stockouts:</span>
+                        <span class="font-bold text-white">$245K</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-slate-400">Reduced obsolescence:</span>
+                        <span class="font-bold text-white">$135K</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-slate-400">Better cash flow:</span>
+                        <span class="font-bold text-white">$75K</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="text-center">
+                <div class="text-2xl font-bold text-blue-400 mb-2">ROI: 380% in First Year</div>
+                <p class="text-slate-400 mb-6">Payback in 3-4 months on average</p>
+                <a href="mailto:sales@supermega.dev" class="inline-block px-8 py-4 bg-blue-500 hover:bg-blue-600 rounded-lg font-semibold transition">
+                    Get Your Custom Analysis
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <!-- CTA -->
+    <section class="container mx-auto px-4 py-20">
+        <div class="max-w-3xl mx-auto bg-slate-900/50 border border-blue-500/30 rounded-2xl p-12 text-center">
+            <h2 class="text-4xl font-bold mb-6">Start Optimizing Your Inventory</h2>
+            <p class="text-xl text-slate-300 mb-8">
+                Join hundreds of companies saving millions with AI-powered inventory management.
+            </p>
+            <div class="flex gap-4 justify-center flex-wrap">
+                <a href="mailto:sales@supermega.dev" class="px-8 py-4 bg-blue-500 hover:bg-blue-600 rounded-lg font-semibold transition">
+                    Schedule Demo
+                </a>
+                <a href="index.html" class="px-8 py-4 bg-slate-700 hover:bg-slate-600 rounded-lg font-semibold transition">
+                    Explore Platform
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="container mx-auto px-4 py-12 text-center text-slate-400 border-t border-slate-800">
+        <div class="mb-4">
+            <a href="index.html" class="text-slate-300 hover:text-white transition">Home</a>
+            <span class="mx-4">•</span>
+            <a href="flowcore.html" class="text-slate-300 hover:text-white transition">FlowCore</a>
+            <span class="mx-4">•</span>
+            <a href="qualitylens.html" class="text-slate-300 hover:text-white transition">QualityLens</a>
+        </div>
+        <p>&copy; 2025 SuperMega. All rights reserved.</p>
+    </footer>
+</body>
+</html>
