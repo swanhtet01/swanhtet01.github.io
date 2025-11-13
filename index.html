@@ -3,72 +3,65 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SuperMega OS</title>
-    <meta http-equiv="refresh" content="1; url=supermega-platform.html">
+    <title>SuperMega - AI That Builds Your Business</title>
+    <meta name="description" content="Enterprise software built and maintained by autonomous AI agents">
+    <script src="https://cdn.tailwindcss.com"></script>
     <style>
         body {
-            font-family: -apple-system, BlinkMacSystemFont, sans-serif;
-            background: linear-gradient(135deg, #000000, #1a1a1a);
-            color: #ffffff;
-            text-align: center;
-            padding: 40px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            background: linear-gradient(to bottom, #020617, #0c4a6e, #020617);
             min-height: 100vh;
-            margin: 0;
-        }
-        .loader {
-            animation: pulse 2s infinite;
-            text-align: center;
-        }
-        .logo {
-            font-size: 3rem;
-            margin-bottom: 20px;
-            color: #00ff88;
-        }
-        h1 {
-            font-size: 2.5rem;
-            margin-bottom: 15px;
-        }
-        p {
-            font-size: 1.2rem;
-            margin-bottom: 20px;
-            opacity: 0.8;
-        }
-        .enter-btn {
-            color: #00ff88;
-            text-decoration: none;
-            padding: 12px 24px;
-            border: 2px solid #00ff88;
-            border-radius: 8px;
-            font-weight: bold;
-            transition: all 0.3s;
-            display: inline-block;
-        }
-        .enter-btn:hover {
-            background: #00ff88;
-            color: #000;
-        }
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.7; }
         }
     </style>
 </head>
-<body>
-    <div class="loader">
-        <div class="logo">🚀</div>
-        <h1>SuperMega OS</h1>
-        <p>Loading AI Workspace...</p>
-        <p>Redirecting to platform...</p>
-        <a href="supermega-platform.html" class="enter-btn">Enter Platform Now</a>
-    </div>
-    <script>
-        // Immediate redirect
-        setTimeout(() => {
-            window.location.href = 'supermega-platform.html';
-        }, 1000);
-    </script>
+<body class="text-white">
+    <!-- Header -->
+    <header class="container mx-auto px-4 py-6">
+        <div class="flex justify-between items-center">
+            <div class="flex items-center gap-2">
+                <div class="w-10 h-10 bg-cyan-500 rounded-lg flex items-center justify-center">
+                    <span class="text-2xl">🤖</span>
+                </div>
+                <span class="text-xl font-bold">SuperMega</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- Hero -->
+    <section class="container mx-auto px-4 py-20 text-center">
+        <h1 class="text-5xl md:text-7xl font-bold mb-6">
+            AI That Builds Your <br><span class="text-cyan-400">Business</span>
+        </h1>
+        
+        <p class="text-xl text-slate-300 mb-8 max-w-2xl mx-auto">
+            Enterprise software built by autonomous AI agents.<br>
+            Deploy in days, improve daily, scale infinitely.
+        </p>
+        
+        <a href="https://3003-i8v8jti5j6buqqgq7o4ph-32e21deb.manus-asia.computer/?demo=true" class="inline-block px-8 py-4 bg-cyan-500 hover:bg-cyan-600 text-white rounded-lg font-semibold">
+            View Demo →
+        </a>
+    </section>
+
+    <!-- Products -->
+    <section class="container mx-auto px-4 py-20">
+        <h2 class="text-4xl font-bold mb-12 text-center">Our Products</h2>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-6xl mx-auto">
+            <div class="bg-slate-900/50 border border-slate-800 rounded-lg p-6">
+                <div class="text-4xl mb-4">📊</div>
+                <h3 class="text-2xl font-bold mb-2">FlowCore</h3>
+                <p class="text-slate-400">Smart manufacturing platform</p>
+            </div>
+            <div class="bg-slate-900/50 border border-slate-800 rounded-lg p-6">
+                <div class="text-4xl mb-4">👁️</div>
+                <h3 class="text-2xl font-bold mb-2">QualityLens</h3>
+                <p class="text-slate-400">AI quality intelligence</p>
+            </div>
+            <div class="bg-slate-900/50 border border-slate-800 rounded-lg p-6">
+                <div class="text-4xl mb-4">🧠</div>
+                <h3 class="text-2xl font-bold mb-2">StockMind</h3>
+                <p class="text-slate-400">Intelligent inventory</p>
+            </div>
+        </div>
+    </section>
 </body>
 </html>

@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SuperMega OS</title>
+    <meta http-equiv="refresh" content="1; url=supermega-platform.html">
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+            background: linear-gradient(135deg, #000000, #1a1a1a);
+            color: #ffffff;
+            text-align: center;
+            padding: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+        }
+        .loader {
+            animation: pulse 2s infinite;
+            text-align: center;
+        }
+        .logo {
+            font-size: 3rem;
+            margin-bottom: 20px;
+            color: #00ff88;
+        }
+        h1 {
+            font-size: 2.5rem;
+            margin-bottom: 15px;
+        }
+        p {
+            font-size: 1.2rem;
+            margin-bottom: 20px;
+            opacity: 0.8;
+        }
+        .enter-btn {
+            color: #00ff88;
+            text-decoration: none;
+            padding: 12px 24px;
+            border: 2px solid #00ff88;
+            border-radius: 8px;
+            font-weight: bold;
+            transition: all 0.3s;
+            display: inline-block;
+        }
+        .enter-btn:hover {
+            background: #00ff88;
+            color: #000;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+    </style>
+</head>
+<body>
+    <div class="loader">
+        <div class="logo">🚀</div>
+        <h1>SuperMega OS</h1>
+        <p>Loading AI Workspace...</p>
+        <p>Redirecting to platform...</p>
+        <a href="supermega-platform.html" class="enter-btn">Enter Platform Now</a>
+    </div>
+    <script>
+        // Immediate redirect
+        setTimeout(() => {
+            window.location.href = 'supermega-platform.html';
+        }, 1000);
+    </script>
+</body>
+</html>
