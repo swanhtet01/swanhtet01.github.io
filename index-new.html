@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NextERP - AI-Native Manufacturing ERP for Myanmar</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        
+        .gradient-bg {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        
+        .gradient-text {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        .card-hover {
+            transition: all 0.3s ease;
+        }
+        
+        .card-hover:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <!-- Navigation -->
+    <nav class="bg-white shadow-sm sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16 items-center">
+                <div class="flex-shrink-0 flex items-center">
+                    <h1 class="text-2xl font-bold gradient-text">NextERP</h1>
+                    <span class="ml-3 text-sm text-gray-500">AI-Native Manufacturing</span>
+                </div>
+                <div class="hidden md:flex space-x-8">
+                    <a href="#features" class="text-gray-700 hover:text-indigo-600">Features</a>
+                    <a href="#yangon-tyre" class="text-gray-700 hover:text-indigo-600">Case Study</a>
+                    <a href="#pricing" class="text-gray-700 hover:text-indigo-600">Pricing</a>
+                    <a href="#contact" class="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700">Get Started</a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <div class="gradient-bg text-white">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
+            <div class="text-center">
+                <h1 class="text-5xl md:text-6xl font-bold mb-6">
+                    Manufacturing ERP<br/>Built for Myanmar
+                </h1>
+                <p class="text-xl md:text-2xl mb-8 text-indigo-100 max-w-3xl mx-auto">
+                    Production tracking, quality control, and inventory management.<br/>
+                    Proven at Yangon Tyre Factory. Ready for your factory.
+                </p>
+                <div class="flex justify-center space-x-4">
+                    <a href="#yangon-tyre" class="bg-white text-indigo-600 px-8 py-3 rounded-lg font-semibold hover:bg-gray-100 transition">
+                        See Live Factory
+                    </a>
+                    <a href="#contact" class="border-2 border-white text-white px-8 py-3 rounded-lg font-semibold hover:bg-white hover:text-indigo-600 transition">
+                        Request Demo
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Value Proposition -->
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
+        <div class="text-center mb-16">
+            <h2 class="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
+                Why NextERP?
+            </h2>
+            <p class="text-xl text-gray-600 max-w-2xl mx-auto">
+                Traditional ERP systems take 6 months and cost millions.<br/>
+                We deploy in 1 week with AI-powered automation.
+            </p>
+        </div>
+
+        <div class="grid md:grid-cols-3 gap-8">
+            <div class="bg-white p-8 rounded-xl shadow-sm card-hover">
+                <div class="text-4xl mb-4">⚡</div>
+                <h3 class="text-xl font-semibold mb-3">Fast Deployment</h3>
+                <p class="text-gray-600">
+                    1 week setup vs 6 months traditional ERP. Template-based configuration for tyre, automotive, and general manufacturing.
+                </p>
+            </div>
+
+            <div class="bg-white p-8 rounded-xl shadow-sm card-hover">
+                <div class="text-4xl mb-4">🤖</div>
+                <h3 class="text-xl font-semibold mb-3">AI-Powered</h3>
+                <p class="text-gray-600">
+                    Automatic quality alerts, predictive maintenance warnings, and smart inventory optimization. No manual data entry.
+                </p>
+            </div>
+
+            <div class="bg-white p-8 rounded-xl shadow-sm card-hover">
+                <div class="text-4xl mb-4">💰</div>
+                <h3 class="text-xl font-semibold mb-3">Affordable</h3>
+                <p class="text-gray-600">
+                    $500-$2,000/month vs $50K+ setup fees for SAP/Oracle. Start small, scale as you grow.
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Core Features -->
+    <div id="features" class="bg-gray-100 py-16">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="text-center mb-12">
+                <h2 class="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
+                    Core Modules
+                </h2>
+                <p class="text-xl text-gray-600">
+                    Everything you need to run a modern factory
+                </p>
+            </div>
+
+            <div class="grid md:grid-cols-2 gap-8">
+                <!-- Production Tracking -->
+                <div class="bg-white p-6 rounded-xl shadow-sm">
+                    <h3 class="text-xl font-semibold mb-4 flex items-center">
+                        <span class="bg-indigo-100 text-indigo-600 px-3 py-1 rounded-lg mr-3">📊</span>
+                        Production Tracking
+                    </h3>
+                    <ul class="space-y-2 text-gray-600">
+                        <li>• Real-time production dashboard</li>
+                        <li>• OEE (Overall Equipment Effectiveness) tracking</li>
+                        <li>• Multi-line monitoring</li>
+                        <li>• Downtime alerts & analysis</li>
+                    </ul>
+                </div>
+
+                <!-- Quality Management (DQMS) -->
+                <div class="bg-white p-6 rounded-xl shadow-sm">
+                    <h3 class="text-xl font-semibold mb-4 flex items-center">
+                        <span class="bg-green-100 text-green-600 px-3 py-1 rounded-lg mr-3">✓</span>
+                        Digital Quality Control
+                    </h3>
+                    <ul class="space-y-2 text-gray-600">
+                        <li>• Mobile QC forms (tablet/phone)</li>
+                        <li>• Photo capture with AI verification</li>
+                        <li>• Defect tracking & root cause</li>
+                        <li>• ISO 9001 compliance ready</li>
+                    </ul>
+                </div>
+
+                <!-- Inventory Management -->
+                <div class="bg-white p-6 rounded-xl shadow-sm">
+                    <h3 class="text-xl font-semibold mb-4 flex items-center">
+                        <span class="bg-blue-100 text-blue-600 px-3 py-1 rounded-lg mr-3">📦</span>
+                        Smart Inventory
+                    </h3>
+                    <ul class="space-y-2 text-gray-600">
+                        <li>• Real-time stock levels</li>
+                        <li>• Automatic reorder alerts</li>
+                        <li>• Material tracking by batch</li>
+                        <li>• Supplier performance monitoring</li>
+                    </ul>
+                </div>
+
+                <!-- Maintenance Management -->
+                <div class="bg-white p-6 rounded-xl shadow-sm">
+                    <h3 class="text-xl font-semibold mb-4 flex items-center">
+                        <span class="bg-yellow-100 text-yellow-600 px-3 py-1 rounded-lg mr-3">🔧</span>
+                        Predictive Maintenance
+                    </h3>
+                    <ul class="space-y-2 text-gray-600">
+                        <li>• Equipment health monitoring</li>
+                        <li>• Failure prediction (7-10 days advance)</li>
+                        <li>• Maintenance scheduling</li>
+                        <li>• Parts inventory tracking</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Yangon Tyre Case Study -->
+    <div id="yangon-tyre" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
+        <div class="bg-white rounded-2xl shadow-lg overflow-hidden">
+            <div class="md:flex">
+                <div class="md:w-1/2 p-12">
+                    <div class="text-sm font-semibold text-indigo-600 mb-2">CUSTOMER SUCCESS</div>
+                    <h2 class="text-3xl font-bold text-gray-900 mb-4">
+                        Yangon Tyre Factory
+                    </h2>
+                    <p class="text-lg text-gray-600 mb-6">
+                        Local tyre manufacturer using NextERP since January 2025
+                    </p>
+
+                    <div class="space-y-4 mb-8">
+                        <div class="flex items-start">
+                            <div class="bg-green-100 rounded-lg p-2 mr-4">
+                                <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                                </svg>
+                            </div>
+                            <div>
+                                <div class="font-semibold text-gray-900">8,247 tyres/day</div>
+                                <div class="text-gray-600">Production volume tracked daily</div>
+                            </div>
+                        </div>
+
+                        <div class="flex items-start">
+                            <div class="bg-green-100 rounded-lg p-2 mr-4">
+                                <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                                </svg>
+                            </div>
+                            <div>
+                                <div class="font-semibold text-gray-900">99.2% quality rate</div>
+                                <div class="text-gray-600">Digital QC tracking</div>
+                            </div>
+                        </div>
+
+                        <div class="flex items-start">
+                            <div class="bg-green-100 rounded-lg p-2 mr-4">
+                                <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                                </svg>
+                            </div>
+                            <div>
+                                <div class="font-semibold text-gray-900">$18,000/year saved</div>
+                                <div class="text-gray-600">85% less data entry time</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <a href="yangon-tyre-demo.html" class="inline-block bg-indigo-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-indigo-700 transition">
+                        View Live Dashboard →
+                    </a>
+                </div>
+
+                <div class="md:w-1/2 bg-gradient-to-br from-indigo-500 to-purple-600 p-12 text-white">
+                    <h3 class="text-2xl font-bold mb-6">What they say:</h3>
+                    <blockquote class="text-lg mb-6">
+                        "Before NextERP, we tracked everything on paper. Now we see real-time production data, quality issues are caught immediately, and our inventory is always accurate. Setup took only 5 days."
+                    </blockquote>
+                    <div class="font-semibold">U Aung Myint</div>
+                    <div class="text-indigo-200">Production Manager, Yangon Tyre Factory</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Pricing -->
+    <div id="pricing" class="bg-gray-100 py-16">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="text-center mb-12">
+                <h2 class="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
+                    Simple Pricing
+                </h2>
+                <p class="text-xl text-gray-600">
+                    No hidden fees. No long-term contracts. Cancel anytime.
+                </p>
+            </div>
+
+            <div class="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
+                <!-- Starter -->
+                <div class="bg-white p-8 rounded-xl shadow-sm">
+                    <h3 class="text-xl font-semibold mb-2">Starter</h3>
+                    <div class="text-3xl font-bold mb-4">$500<span class="text-lg text-gray-600">/month</span></div>
+                    <p class="text-gray-600 mb-6">For small factories (1-2 lines)</p>
+                    <ul class="space-y-3 mb-8">
+                        <li class="flex items-center text-gray-700">
+                            <svg class="w-5 h-5 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                            </svg>
+                            Production tracking
+                        </li>
+                        <li class="flex items-center text-gray-700">
+                            <svg class="w-5 h-5 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                            </svg>
+                            Quality control
+                        </li>
+                        <li class="flex items-center text-gray-700">
+                            <svg class="w-5 h-5 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                            </svg>
+                            Basic inventory
+                        </li>
+                        <li class="flex items-center text-gray-700">
+                            <svg class="w-5 h-5 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                            </svg>
+                            Email support
+                        </li>
+                    </ul>
+                    <a href="#contact" class="block text-center bg-gray-200 text-gray-800 px-6 py-3 rounded-lg font-semibold hover:bg-gray-300 transition">
+                        Get Started
+                    </a>
+                </div>
+
+                <!-- Professional (Popular) -->
+                <div class="bg-white p-8 rounded-xl shadow-lg border-2 border-indigo-600 relative">
+                    <div class="absolute top-0 left-1/2 transform -translate-x-1/2 -translate-y-1/2">
+                        <span class="bg-indigo-600 text-white px-4 py-1 rounded-full text-sm font-semibold">Most Popular</span>
+                    </div>
+                    <h3 class="text-xl font-semibold mb-2">Professional</h3>
+                    <div class="text-3xl font-bold mb-4">$1,200<span class="text-lg text-gray-600">/month</span></div>
+                    <p class="text-gray-600 mb-6">For medium factories (3-5 lines)</p>
+                    <ul class="space-y-3 mb-8">
+                        <li class="flex items-center text-gray-700">
+                            <svg class="w-5 h-5 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                            </svg>
+                            Everything in Starter
+                        </li>
+                        <li class="flex items-center text-gray-700">
+                            <svg class="w-5 h-5 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                            </svg>
+                            Predictive maintenance
+                        </li>
+                        <li class="flex items-center text-gray-700">
+                            <svg class="w-5 h-5 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                            </svg>
+                            Advanced analytics
+                        </li>
+                        <li class="flex items-center text-gray-700">
+                            <svg class="w-5 h-5 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                            </svg>
+                            Phone + chat support
+                        </li>
+                        <li class="flex items-center text-gray-700">
+                            <svg class="w-5 h-5 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                            </svg>
+                            API access
+                        </li>
+                    </ul>
+                    <a href="#contact" class="block text-center bg-indigo-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-indigo-700 transition">
+                        Get Started
+                    </a>
+                </div>
+
+                <!-- Enterprise -->
+                <div class="bg-white p-8 rounded-xl shadow-sm">
+                    <h3 class="text-xl font-semibold mb-2">Enterprise</h3>
+                    <div class="text-3xl font-bold mb-4">Custom</div>
+                    <p class="text-gray-600 mb-6">For large factories (6+ lines)</p>
+                    <ul class="space-y-3 mb-8">
+                        <li class="flex items-center text-gray-700">
+                            <svg class="w-5 h-5 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                            </svg>
+                            Everything in Professional
+                        </li>
+                        <li class="flex items-center text-gray-700">
+                            <svg class="w-5 h-5 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                            </svg>
+                            Multi-factory support
+                        </li>
+                        <li class="flex items-center text-gray-700">
+                            <svg class="w-5 h-5 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                            </svg>
+                            Custom integrations
+                        </li>
+                        <li class="flex items-center text-gray-700">
+                            <svg class="w-5 h-5 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                            </svg>
+                            Dedicated support
+                        </li>
+                        <li class="flex items-center text-gray-700">
+                            <svg class="w-5 h-5 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                            </svg>
+                            99.9% uptime SLA
+                        </li>
+                    </ul>
+                    <a href="#contact" class="block text-center bg-gray-200 text-gray-800 px-6 py-3 rounded-lg font-semibold hover:bg-gray-300 transition">
+                        Contact Sales
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Contact/CTA -->
+    <div id="contact" class="gradient-bg text-white py-16">
+        <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+            <h2 class="text-3xl md:text-4xl font-bold mb-4">
+                Ready to Modernize Your Factory?
+            </h2>
+            <p class="text-xl mb-8 text-indigo-100">
+                Schedule a demo and see how NextERP works for your manufacturing process
+            </p>
+            <div class="flex flex-col sm:flex-row justify-center space-y-4 sm:space-y-0 sm:space-x-4">
+                <div class="bg-white bg-opacity-20 backdrop-blur-sm rounded-lg p-6">
+                    <div class="text-2xl font-bold">📞 +95 9 123 456 789</div>
+                    <div class="text-indigo-100">Call or WhatsApp</div>
+                </div>
+                <div class="bg-white bg-opacity-20 backdrop-blur-sm rounded-lg p-6">
+                    <div class="text-2xl font-bold">✉️ sales@nexterp.com.mm</div>
+                    <div class="text-indigo-100">Email us</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="bg-gray-900 text-gray-400 py-12">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="grid md:grid-cols-4 gap-8">
+                <div>
+                    <h3 class="text-white font-semibold mb-4">NextERP</h3>
+                    <p class="text-sm">
+                        AI-native manufacturing ERP built for Myanmar factories
+                    </p>
+                </div>
+                <div>
+                    <h3 class="text-white font-semibold mb-4">Product</h3>
+                    <ul class="space-y-2 text-sm">
+                        <li><a href="#features" class="hover:text-white">Features</a></li>
+                        <li><a href="#pricing" class="hover:text-white">Pricing</a></li>
+                        <li><a href="yangon-tyre-demo.html" class="hover:text-white">Live Demo</a></li>
+                    </ul>
+                </div>
+                <div>
+                    <h3 class="text-white font-semibold mb-4">Company</h3>
+                    <ul class="space-y-2 text-sm">
+                        <li><a href="#" class="hover:text-white">About</a></li>
+                        <li><a href="#yangon-tyre" class="hover:text-white">Case Studies</a></li>
+                        <li><a href="#contact" class="hover:text-white">Contact</a></li>
+                    </ul>
+                </div>
+                <div>
+                    <h3 class="text-white font-semibold mb-4">Contact</h3>
+                    <ul class="space-y-2 text-sm">
+                        <li>Yangon, Myanmar</li>
+                        <li>+95 9 123 456 789</li>
+                        <li>sales@nexterp.com.mm</li>
+                    </ul>
+                </div>
+            </div>
+            <div class="border-t border-gray-800 mt-8 pt-8 text-sm text-center">
+                &copy; 2025 NextERP. Built for Myanmar manufacturers.
+            </div>
+        </div>
+    </footer>
+</body>
+</html>
