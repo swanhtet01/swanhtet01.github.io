@@ -3,60 +3,528 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SuperMega Intuitive Manufacturing Cloud</title>
+    <title>SuperMega.dev - AI-Native Solutions for Manufacturing & Enterprise</title>
+    <meta name="description" content="Transform your business with AI-powered platforms. Custom ERP, data intelligence, and autonomous agent systems for manufacturing and enterprise.">
     <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
     <style>
-        body { background: linear-gradient(140deg, #000814 0%, #031b34 55%, #020617 100%); min-height: 100vh; }
-        .card { background: rgba(15,23,42,0.65); border: 1px solid rgba(148,163,184,0.2); border-radius: 18px; transition: transform 0.2s ease; }
-        .card:hover { transform: translateY(-4px); border-color: #22d3ee; }
-        .featured-card { background: linear-gradient(135deg, rgba(6,182,212,0.1) 0%, rgba(59,130,246,0.1) 100%); border: 2px solid #22d3ee; }
+        * { font-family: 'Inter', sans-serif; }
+        body { 
+            background: linear-gradient(140deg, #000814 0%, #031b34 55%, #020617 100%); 
+            min-height: 100vh; 
+        }
+        .card { 
+            background: rgba(15,23,42,0.65); 
+            border: 1px solid rgba(148,163,184,0.2); 
+            border-radius: 18px; 
+            transition: all 0.3s ease; 
+            backdrop-filter: blur(10px);
+        }
+        .card:hover { 
+            transform: translateY(-6px); 
+            border-color: #22d3ee; 
+            box-shadow: 0 20px 40px rgba(34,211,238,0.15);
+        }
+        .featured-card { 
+            background: linear-gradient(135deg, rgba(6,182,212,0.15) 0%, rgba(59,130,246,0.15) 100%); 
+            border: 2px solid #22d3ee; 
+        }
+        .gradient-text {
+            background: linear-gradient(135deg, #22d3ee 0%, #3b82f6 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .stat-card {
+            background: rgba(6,182,212,0.1);
+            border: 1px solid rgba(34,211,238,0.3);
+        }
+        .service-icon {
+            width: 48px;
+            height: 48px;
+            background: linear-gradient(135deg, #22d3ee 0%, #3b82f6 100%);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+        }
+        .tech-badge {
+            background: rgba(34,211,238,0.1);
+            border: 1px solid rgba(34,211,238,0.3);
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 500;
+            color: #22d3ee;
+        }
+        .pulse-dot {
+            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
     </style>
 </head>
 <body class="text-white">
-    <header class="max-w-6xl mx-auto px-6 py-8 flex justify-between items-center">
-        <div>
-            <p class="text-xs uppercase tracking-widest text-cyan-300">SuperMega</p>
-            <h1 class="text-2xl font-semibold">Intuitive Manufacturing Cloud</h1>
+    <!-- Navigation -->
+    <header class="max-w-7xl mx-auto px-6 py-6 flex justify-between items-center sticky top-0 z-50 backdrop-blur-lg bg-slate-900/50">
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-lg bg-gradient-to-br from-cyan-400 to-blue-500 flex items-center justify-center text-white font-bold text-lg">
+                SM
+            </div>
+            <div>
+                <p class="text-xs uppercase tracking-widest text-cyan-300">SuperMega</p>
+                <h1 class="text-lg font-semibold">.dev</h1>
+            </div>
         </div>
-        <nav class="flex gap-4 text-sm text-slate-300">
-            <a class="hover:text-white" href="ytf-demo.html">Yangon Tyre</a>
+        <nav class="hidden md:flex gap-8 text-sm text-slate-300">
+            <a class="hover:text-cyan-400 transition" href="#services">Services</a>
+            <a class="hover:text-cyan-400 transition" href="#portfolio">Portfolio</a>
+            <a class="hover:text-cyan-400 transition" href="#tech">Technology</a>
+            <a class="hover:text-cyan-400 transition" href="#contact">Contact</a>
         </nav>
+        <a href="#contact" class="px-5 py-2 rounded-lg bg-cyan-500 hover:bg-cyan-400 font-semibold text-sm transition">
+            Book Consultation
+        </a>
     </header>
-    <main class="max-w-6xl mx-auto px-6 pb-20">
-        <section class="featured-card p-8 mb-12 rounded-2xl">
-            <div class="flex items-center gap-3 mb-4">
-                <span class="px-3 py-1 bg-cyan-500/20 text-cyan-300 text-xs font-semibold rounded-full">LIVE PRODUCTION</span>
-                <span class="text-cyan-400 text-sm">● Deployed on AWS</span>
+
+    <main class="max-w-7xl mx-auto px-6">
+        <!-- Hero Section -->
+        <section class="py-20 text-center">
+            <div class="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-cyan-500/10 border border-cyan-500/30 mb-8">
+                <span class="w-2 h-2 rounded-full bg-cyan-400 pulse-dot"></span>
+                <span class="text-cyan-300 text-sm font-medium">AI-Native Solutions for Modern Business</span>
             </div>
-            <h2 class="text-4xl font-bold mb-4">Yangon Tyre Factory Management System</h2>
-            <p class="text-lg text-slate-200 mb-6">Full-stack ERP + DQMS for Myanmar's leading tyre manufacturer. Real-time production tracking, quality control, inventory management, and AI-powered insights.</p>
-            <div class="flex gap-4 mb-6">
-                <a href="https://ytf.supermega.dev" class="px-6 py-3 rounded-lg bg-cyan-500 hover:bg-cyan-400 font-semibold">Launch App</a>
-                <a href="https://github.com/swanhtet01/yangon-tyre-bms" class="px-6 py-3 rounded-lg border border-cyan-400/50 hover:border-cyan-400 font-semibold">Source Code</a>
+            
+            <h1 class="text-6xl md:text-7xl font-bold mb-6 leading-tight">
+                Transform Your Business<br/>
+                with <span class="gradient-text">AI-Powered</span> Platforms
+            </h1>
+            
+            <p class="text-xl text-slate-300 max-w-3xl mx-auto mb-12 leading-relaxed">
+                Custom ERP systems, data intelligence platforms, and autonomous agent solutions designed for manufacturing, enterprise, and scale-ups. Built with cutting-edge AI and battle-tested infrastructure.
+            </p>
+            
+            <div class="flex gap-4 justify-center mb-16">
+                <a href="#portfolio" class="px-8 py-4 rounded-lg bg-cyan-500 hover:bg-cyan-400 font-semibold text-lg transition shadow-lg shadow-cyan-500/30">
+                    View Our Work
+                </a>
+                <a href="#contact" class="px-8 py-4 rounded-lg border-2 border-cyan-400/50 hover:border-cyan-400 font-semibold text-lg transition">
+                    Start a Project
+                </a>
             </div>
-            <div class="grid grid-cols-4 gap-4 text-sm">
-                <div class="bg-black/20 rounded-lg p-3">
-                    <div class="text-cyan-300 font-semibold">Stack</div>
-                    <div class="text-slate-300">React + Node + MySQL</div>
+
+            <!-- Stats -->
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-6 max-w-4xl mx-auto">
+                <div class="stat-card rounded-xl p-6">
+                    <div class="text-4xl font-bold text-cyan-400 mb-2">100%</div>
+                    <div class="text-sm text-slate-300">Production Uptime</div>
                 </div>
-                <div class="bg-black/20 rounded-lg p-3">
-                    <div class="text-cyan-300 font-semibold">Infrastructure</div>
-                    <div class="text-slate-300">AWS EC2 + RDS</div>
+                <div class="stat-card rounded-xl p-6">
+                    <div class="text-4xl font-bold text-cyan-400 mb-2">47%</div>
+                    <div class="text-sm text-slate-300">Cost Reduction</div>
                 </div>
-                <div class="bg-black/20 rounded-lg p-3">
-                    <div class="text-cyan-300 font-semibold">Features</div>
-                    <div class="text-slate-300">21 DB Tables</div>
+                <div class="stat-card rounded-xl p-6">
+                    <div class="text-4xl font-bold text-cyan-400 mb-2">10x</div>
+                    <div class="text-sm text-slate-300">Faster Insights</div>
                 </div>
-                <div class="bg-black/20 rounded-lg p-3">
-                    <div class="text-cyan-300 font-semibold">Status</div>
-                    <div class="text-green-400">Production Ready</div>
+                <div class="stat-card rounded-xl p-6">
+                    <div class="text-4xl font-bold text-cyan-400 mb-2">24/7</div>
+                    <div class="text-sm text-slate-300">AI Monitoring</div>
                 </div>
             </div>
         </section>
-        <section class="text-center py-12">
-            <h2 class="text-5xl font-bold">AI that feels intuitive</h2>
-            <p class="mt-6 text-lg text-slate-300 max-w-3xl mx-auto">Self-sovereign agents with their own LLM copilots deploy code, fix incidents, and keep plants online 24/7.</p>
+
+        <!-- Featured Portfolio -->
+        <section id="portfolio" class="py-20">
+            <div class="text-center mb-16">
+                <h2 class="text-5xl font-bold mb-4">Featured Work</h2>
+                <p class="text-xl text-slate-300">Real-world solutions delivering measurable results</p>
+            </div>
+
+            <!-- YTF Case Study -->
+            <div class="featured-card p-10 mb-12 rounded-2xl">
+                <div class="flex items-center gap-3 mb-6">
+                    <span class="px-4 py-2 bg-green-500/20 text-green-300 text-sm font-semibold rounded-full flex items-center gap-2">
+                        <span class="w-2 h-2 rounded-full bg-green-400 pulse-dot"></span>
+                        LIVE IN PRODUCTION
+                    </span>
+                    <span class="text-cyan-400 text-sm font-medium">● Deployed on AWS</span>
+                </div>
+                
+                <div class="grid md:grid-cols-2 gap-10">
+                    <div>
+                        <h3 class="text-4xl font-bold mb-4">Yangon Tyre Factory</h3>
+                        <p class="text-lg text-slate-200 mb-6 leading-relaxed">
+                            Complete AI-native data intelligence platform for Myanmar's leading tire manufacturer. Processes 938+ inventory items, generates real-time insights, and integrates with Odoo ERP for seamless operations.
+                        </p>
+                        
+                        <div class="space-y-3 mb-8">
+                            <div class="flex items-start gap-3">
+                                <span class="text-cyan-400 text-xl">✓</span>
+                                <div>
+                                    <div class="font-semibold text-white">Autonomous AI Agents</div>
+                                    <div class="text-sm text-slate-300">24/7 monitoring, data extraction, and insight generation</div>
+                                </div>
+                            </div>
+                            <div class="flex items-start gap-3">
+                                <span class="text-cyan-400 text-xl">✓</span>
+                                <div>
+                                    <div class="font-semibold text-white">Complete Data Lineage</div>
+                                    <div class="text-sm text-slate-300">Track every data point from source to insight</div>
+                                </div>
+                            </div>
+                            <div class="flex items-start gap-3">
+                                <span class="text-cyan-400 text-xl">✓</span>
+                                <div>
+                                    <div class="font-semibold text-white">Odoo ERP Integration</div>
+                                    <div class="text-sm text-slate-300">Bidirectional sync with manufacturing operations</div>
+                                </div>
+                            </div>
+                            <div class="flex items-start gap-3">
+                                <span class="text-cyan-400 text-xl">✓</span>
+                                <div>
+                                    <div class="font-semibold text-white">2,128% ROI</div>
+                                    <div class="text-sm text-slate-300">$24K annual savings from automation</div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="flex gap-4">
+                            <a href="ytf-demo.html" class="px-6 py-3 rounded-lg bg-cyan-500 hover:bg-cyan-400 font-semibold transition">
+                                View Case Study
+                            </a>
+                            <a href="https://github.com/swanhtet01/yangon-tyre-bms" class="px-6 py-3 rounded-lg border border-cyan-400/50 hover:border-cyan-400 font-semibold transition" target="_blank">
+                                Source Code →
+                            </a>
+                        </div>
+                    </div>
+                    
+                    <div class="space-y-4">
+                        <div class="grid grid-cols-2 gap-4">
+                            <div class="bg-black/30 rounded-xl p-5 border border-cyan-500/20">
+                                <div class="text-cyan-300 font-semibold mb-2">Technology Stack</div>
+                                <div class="text-sm text-slate-300">React 19, tRPC, Express, PostgreSQL</div>
+                            </div>
+                            <div class="bg-black/30 rounded-xl p-5 border border-cyan-500/20">
+                                <div class="text-cyan-300 font-semibold mb-2">Infrastructure</div>
+                                <div class="text-sm text-slate-300">AWS EC2, RDS, S3, CloudFront</div>
+                            </div>
+                            <div class="bg-black/30 rounded-xl p-5 border border-cyan-500/20">
+                                <div class="text-cyan-300 font-semibold mb-2">AI Models</div>
+                                <div class="text-sm text-slate-300">Claude 3.5, GPT-4o, Gemini</div>
+                            </div>
+                            <div class="bg-black/30 rounded-xl p-5 border border-cyan-500/20">
+                                <div class="text-cyan-300 font-semibold mb-2">Deployment</div>
+                                <div class="text-sm text-green-400 font-semibold">Production Ready</div>
+                            </div>
+                        </div>
+                        
+                        <div class="bg-black/30 rounded-xl p-6 border border-cyan-500/20">
+                            <div class="text-cyan-300 font-semibold mb-4">Key Metrics</div>
+                            <div class="space-y-3">
+                                <div class="flex justify-between items-center">
+                                    <span class="text-slate-300">Inventory Items</span>
+                                    <span class="text-white font-semibold">938</span>
+                                </div>
+                                <div class="flex justify-between items-center">
+                                    <span class="text-slate-300">Data Sources</span>
+                                    <span class="text-white font-semibold">4 Folders, 28 Files</span>
+                                </div>
+                                <div class="flex justify-between items-center">
+                                    <span class="text-slate-300">AI Agents</span>
+                                    <span class="text-white font-semibold">8 Specialized</span>
+                                </div>
+                                <div class="flex justify-between items-center">
+                                    <span class="text-slate-300">Uptime</span>
+                                    <span class="text-green-400 font-semibold">99.9%</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Services -->
+        <section id="services" class="py-20">
+            <div class="text-center mb-16">
+                <h2 class="text-5xl font-bold mb-4">What We Build</h2>
+                <p class="text-xl text-slate-300">End-to-end solutions for modern businesses</p>
+            </div>
+
+            <div class="grid md:grid-cols-3 gap-8">
+                <div class="card p-8">
+                    <div class="service-icon mb-6">
+                        🏭
+                    </div>
+                    <h3 class="text-2xl font-bold mb-4">Manufacturing ERP</h3>
+                    <p class="text-slate-300 mb-6 leading-relaxed">
+                        Custom ERP systems with production tracking, inventory management, quality control, and real-time analytics. Integrated with Odoo or standalone.
+                    </p>
+                    <ul class="space-y-2 text-sm text-slate-400">
+                        <li>• Production planning & scheduling</li>
+                        <li>• Inventory & warehouse management</li>
+                        <li>• Quality control & compliance</li>
+                        <li>• Supply chain optimization</li>
+                    </ul>
+                </div>
+
+                <div class="card p-8">
+                    <div class="service-icon mb-6">
+                        🤖
+                    </div>
+                    <h3 class="text-2xl font-bold mb-4">AI Agent Systems</h3>
+                    <p class="text-slate-300 mb-6 leading-relaxed">
+                        Autonomous agents that monitor, analyze, and act on your data 24/7. From data extraction to insight generation and automated decision-making.
+                    </p>
+                    <ul class="space-y-2 text-sm text-slate-400">
+                        <li>• Autonomous data processing</li>
+                        <li>• Real-time monitoring & alerts</li>
+                        <li>• Predictive analytics</li>
+                        <li>• Self-improving systems</li>
+                    </ul>
+                </div>
+
+                <div class="card p-8">
+                    <div class="service-icon mb-6">
+                        📊
+                    </div>
+                    <h3 class="text-2xl font-bold mb-4">Data Intelligence</h3>
+                    <p class="text-slate-300 mb-6 leading-relaxed">
+                        Transform raw data into actionable insights. Complete lineage tracking, AI-powered analysis, and beautiful dashboards that tell your data story.
+                    </p>
+                    <ul class="space-y-2 text-sm text-slate-400">
+                        <li>• Data pipeline automation</li>
+                        <li>• AI-powered insights</li>
+                        <li>• Custom dashboards & reports</li>
+                        <li>• Complete data lineage</li>
+                    </ul>
+                </div>
+
+                <div class="card p-8">
+                    <div class="service-icon mb-6">
+                        ☁️
+                    </div>
+                    <h3 class="text-2xl font-bold mb-4">Cloud Infrastructure</h3>
+                    <p class="text-slate-300 mb-6 leading-relaxed">
+                        Scalable, secure, and cost-optimized cloud architecture on AWS. From serverless to containerized workloads, we design for growth.
+                    </p>
+                    <ul class="space-y-2 text-sm text-slate-400">
+                        <li>• AWS architecture design</li>
+                        <li>• Auto-scaling infrastructure</li>
+                        <li>• Cost optimization (47% avg savings)</li>
+                        <li>• Security & compliance</li>
+                    </ul>
+                </div>
+
+                <div class="card p-8">
+                    <div class="service-icon mb-6">
+                        🔗
+                    </div>
+                    <h3 class="text-2xl font-bold mb-4">System Integration</h3>
+                    <p class="text-slate-300 mb-6 leading-relaxed">
+                        Connect your existing systems seamlessly. ERP, CRM, accounting, and custom APIs integrated into a unified platform.
+                    </p>
+                    <ul class="space-y-2 text-sm text-slate-400">
+                        <li>• Odoo ERP integration</li>
+                        <li>• Google Workspace sync</li>
+                        <li>• Custom API development</li>
+                        <li>• Real-time data synchronization</li>
+                    </ul>
+                </div>
+
+                <div class="card p-8">
+                    <div class="service-icon mb-6">
+                        🎯
+                    </div>
+                    <h3 class="text-2xl font-bold mb-4">Custom Development</h3>
+                    <p class="text-slate-300 mb-6 leading-relaxed">
+                        Full-stack web applications tailored to your unique business needs. Modern tech stack, clean code, and production-ready from day one.
+                    </p>
+                    <ul class="space-y-2 text-sm text-slate-400">
+                        <li>• React + Next.js frontends</li>
+                        <li>• Node.js + tRPC backends</li>
+                        <li>• PostgreSQL/MySQL databases</li>
+                        <li>• Mobile-responsive design</li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+
+        <!-- Technology Stack -->
+        <section id="tech" class="py-20">
+            <div class="text-center mb-16">
+                <h2 class="text-5xl font-bold mb-4">Technology Stack</h2>
+                <p class="text-xl text-slate-300">Modern, battle-tested technologies for production systems</p>
+            </div>
+
+            <div class="grid md:grid-cols-4 gap-8">
+                <div>
+                    <h4 class="text-cyan-400 font-semibold mb-4 text-sm uppercase tracking-wide">Frontend</h4>
+                    <div class="flex flex-wrap gap-2">
+                        <span class="tech-badge">React 19</span>
+                        <span class="tech-badge">Next.js</span>
+                        <span class="tech-badge">TypeScript</span>
+                        <span class="tech-badge">Tailwind CSS</span>
+                        <span class="tech-badge">shadcn/ui</span>
+                    </div>
+                </div>
+                <div>
+                    <h4 class="text-cyan-400 font-semibold mb-4 text-sm uppercase tracking-wide">Backend</h4>
+                    <div class="flex flex-wrap gap-2">
+                        <span class="tech-badge">Node.js</span>
+                        <span class="tech-badge">tRPC</span>
+                        <span class="tech-badge">Express</span>
+                        <span class="tech-badge">Python</span>
+                        <span class="tech-badge">Drizzle ORM</span>
+                    </div>
+                </div>
+                <div>
+                    <h4 class="text-cyan-400 font-semibold mb-4 text-sm uppercase tracking-wide">AI & ML</h4>
+                    <div class="flex flex-wrap gap-2">
+                        <span class="tech-badge">Claude 3.5</span>
+                        <span class="tech-badge">GPT-4o</span>
+                        <span class="tech-badge">Gemini</span>
+                        <span class="tech-badge">LangChain</span>
+                        <span class="tech-badge">Anthropic SDK</span>
+                    </div>
+                </div>
+                <div>
+                    <h4 class="text-cyan-400 font-semibold mb-4 text-sm uppercase tracking-wide">Infrastructure</h4>
+                    <div class="flex flex-wrap gap-2">
+                        <span class="tech-badge">AWS</span>
+                        <span class="tech-badge">PostgreSQL</span>
+                        <span class="tech-badge">Docker</span>
+                        <span class="tech-badge">S3</span>
+                        <span class="tech-badge">CloudFront</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Process -->
+        <section class="py-20">
+            <div class="text-center mb-16">
+                <h2 class="text-5xl font-bold mb-4">How We Work</h2>
+                <p class="text-xl text-slate-300">From concept to production in weeks, not months</p>
+            </div>
+
+            <div class="grid md:grid-cols-4 gap-8">
+                <div class="text-center">
+                    <div class="w-16 h-16 rounded-full bg-cyan-500/20 border-2 border-cyan-400 flex items-center justify-center text-2xl font-bold text-cyan-400 mx-auto mb-4">
+                        1
+                    </div>
+                    <h4 class="text-xl font-bold mb-3">Discovery</h4>
+                    <p class="text-slate-400 text-sm">
+                        Understand your business, challenges, and goals. Define scope and success metrics.
+                    </p>
+                </div>
+                <div class="text-center">
+                    <div class="w-16 h-16 rounded-full bg-cyan-500/20 border-2 border-cyan-400 flex items-center justify-center text-2xl font-bold text-cyan-400 mx-auto mb-4">
+                        2
+                    </div>
+                    <h4 class="text-xl font-bold mb-3">Design</h4>
+                    <p class="text-slate-400 text-sm">
+                        Architecture planning, tech stack selection, and UI/UX design. Get approval before coding.
+                    </p>
+                </div>
+                <div class="text-center">
+                    <div class="w-16 h-16 rounded-full bg-cyan-500/20 border-2 border-cyan-400 flex items-center justify-center text-2xl font-bold text-cyan-400 mx-auto mb-4">
+                        3
+                    </div>
+                    <h4 class="text-xl font-bold mb-3">Build</h4>
+                    <p class="text-slate-400 text-sm">
+                        Agile development with weekly demos. Continuous integration and automated testing.
+                    </p>
+                </div>
+                <div class="text-center">
+                    <div class="w-16 h-16 rounded-full bg-cyan-500/20 border-2 border-cyan-400 flex items-center justify-center text-2xl font-bold text-cyan-400 mx-auto mb-4">
+                        4
+                    </div>
+                    <h4 class="text-xl font-bold mb-3">Deploy</h4>
+                    <p class="text-slate-400 text-sm">
+                        Production deployment, monitoring setup, and team training. Ongoing support included.
+                    </p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Contact -->
+        <section id="contact" class="py-20">
+            <div class="card p-12 text-center max-w-3xl mx-auto">
+                <h2 class="text-5xl font-bold mb-6">Let's Build Something Amazing</h2>
+                <p class="text-xl text-slate-300 mb-10 leading-relaxed">
+                    Ready to transform your business with AI-powered solutions? Book a free consultation to discuss your project.
+                </p>
+                
+                <div class="space-y-6 mb-10">
+                    <div class="flex items-center justify-center gap-4">
+                        <span class="text-cyan-400 text-2xl">📧</span>
+                        <a href="mailto:swanhtet@supermega.dev" class="text-xl text-cyan-400 hover:text-cyan-300 transition">
+                            swanhtet@supermega.dev
+                        </a>
+                    </div>
+                    <div class="flex items-center justify-center gap-4">
+                        <span class="text-cyan-400 text-2xl">🔗</span>
+                        <a href="https://github.com/swanhtet01" class="text-xl text-cyan-400 hover:text-cyan-300 transition" target="_blank">
+                            github.com/swanhtet01
+                        </a>
+                    </div>
+                </div>
+
+                <a href="mailto:swanhtet@supermega.dev?subject=Project Inquiry" class="inline-block px-10 py-4 rounded-lg bg-cyan-500 hover:bg-cyan-400 font-semibold text-lg transition shadow-lg shadow-cyan-500/30">
+                    Book Free Consultation
+                </a>
+            </div>
         </section>
     </main>
+
+    <!-- Footer -->
+    <footer class="border-t border-slate-800 mt-20">
+        <div class="max-w-7xl mx-auto px-6 py-12">
+            <div class="grid md:grid-cols-3 gap-8">
+                <div>
+                    <div class="flex items-center gap-3 mb-4">
+                        <div class="w-10 h-10 rounded-lg bg-gradient-to-br from-cyan-400 to-blue-500 flex items-center justify-center text-white font-bold text-lg">
+                            SM
+                        </div>
+                        <div>
+                            <p class="text-xs uppercase tracking-widest text-cyan-300">SuperMega</p>
+                            <h3 class="text-lg font-semibold">.dev</h3>
+                        </div>
+                    </div>
+                    <p class="text-slate-400 text-sm">
+                        AI-native solutions for manufacturing and enterprise. Built with modern technology and deployed on production-grade infrastructure.
+                    </p>
+                </div>
+                <div>
+                    <h4 class="font-semibold mb-4 text-cyan-400">Services</h4>
+                    <ul class="space-y-2 text-sm text-slate-400">
+                        <li><a href="#services" class="hover:text-cyan-400 transition">Manufacturing ERP</a></li>
+                        <li><a href="#services" class="hover:text-cyan-400 transition">AI Agent Systems</a></li>
+                        <li><a href="#services" class="hover:text-cyan-400 transition">Data Intelligence</a></li>
+                        <li><a href="#services" class="hover:text-cyan-400 transition">Cloud Infrastructure</a></li>
+                    </ul>
+                </div>
+                <div>
+                    <h4 class="font-semibold mb-4 text-cyan-400">Connect</h4>
+                    <ul class="space-y-2 text-sm text-slate-400">
+                        <li><a href="mailto:swanhtet@supermega.dev" class="hover:text-cyan-400 transition">Email</a></li>
+                        <li><a href="https://github.com/swanhtet01" class="hover:text-cyan-400 transition" target="_blank">GitHub</a></li>
+                        <li><a href="#portfolio" class="hover:text-cyan-400 transition">Portfolio</a></li>
+                        <li><a href="ytf-demo.html" class="hover:text-cyan-400 transition">Case Studies</a></li>
+                    </ul>
+                </div>
+            </div>
+            <div class="border-t border-slate-800 mt-8 pt-8 text-center text-sm text-slate-500">
+                <p>&copy; 2024 SuperMega.dev. All rights reserved. Built with AI-native technology.</p>
+            </div>
+        </div>
+    </footer>
 </body>
 </html>
