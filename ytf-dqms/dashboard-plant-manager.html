@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Plant Manager Dashboard | YTF DQMS</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        }
+        .card {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+        .metric-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+        .status-normal { background: #10b981; color: white; }
+        .status-warning { background: #f59e0b; color: white; }
+        .status-critical { background: #ef4444; color: white; }
+        .trend-up { color: #10b981; }
+        .trend-down { color: #ef4444; }
+        .trend-stable { color: #6b7280; }
+    </style>
+</head>
+<body class="min-h-screen p-6">
+    <!-- Header -->
+    <header class="mb-8">
+        <div class="flex items-center justify-between">
+            <div>
+                <h1 class="text-4xl font-bold text-white mb-2">Plant Manager Dashboard</h1>
+                <p class="text-white/80">Plant B Quality Overview - Real-time Monitoring</p>
+            </div>
+            <div class="text-right">
+                <div class="text-white/80 text-sm">Welcome, Mr. Wu</div>
+                <div class="text-white font-semibold text-lg" id="currentTime"></div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Key Metrics Row -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <!-- Today's B+R Rate -->
+        <div class="card metric-card p-6">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-white/80 text-sm font-medium">Today's B+R Rate</h3>
+                <span class="status-badge status-normal" id="brRateStatus">Normal</span>
+            </div>
+            <div class="text-4xl font-bold mb-2" id="currentBRRate">2.4%</div>
+            <div class="flex items-center text-sm">
+                <span class="trend-down mr-2">↓ 0.3%</span>
+                <span class="text-white/80">vs. yesterday</span>
+            </div>
+            <div class="mt-4 pt-4 border-t border-white/20">
+                <div class="text-xs text-white/80">Target: &lt; 3.0%</div>
+            </div>
+        </div>
+
+        <!-- Production Today -->
+        <div class="card metric-card p-6">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-white/80 text-sm font-medium">Production Today</h3>
+                <svg class="w-5 h-5 text-white/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                </svg>
+            </div>
+            <div class="text-4xl font-bold mb-2" id="todayProduction">1,247</div>
+            <div class="flex items-center text-sm">
+                <span class="text-white/80">tires</span>
+            </div>
+            <div class="mt-4 pt-4 border-t border-white/20">
+                <div class="text-xs text-white/80">A: 1,217 | B: 24 | R: 6</div>
+            </div>
+        </div>
+
+        <!-- Cost of Quality -->
+        <div class="card metric-card p-6">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-white/80 text-sm font-medium">Cost of Quality (Today)</h3>
+                <svg class="w-5 h-5 text-white/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
+            </div>
+            <div class="text-4xl font-bold mb-2" id="todayCOQ">$342</div>
+            <div class="flex items-center text-sm">
+                <span class="trend-down mr-2">↓ 12%</span>
+                <span class="text-white/80">vs. yesterday</span>
+            </div>
+            <div class="mt-4 pt-4 border-t border-white/20">
+                <div class="text-xs text-white/80">$0.27 per tire</div>
+            </div>
+        </div>
+
+        <!-- Active Alerts -->
+        <div class="card metric-card p-6">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-white/80 text-sm font-medium">Active Alerts</h3>
+                <svg class="w-5 h-5 text-white/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"></path>
+                </svg>
+            </div>
+            <div class="text-4xl font-bold mb-2" id="activeAlerts">2</div>
+            <div class="flex items-center text-sm">
+                <span class="text-white/80">1 critical, 1 warning</span>
+            </div>
+            <div class="mt-4 pt-4 border-t border-white/20">
+                <div class="text-xs text-white/80">Last alert: 15 min ago</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Production Lines Status -->
+    <div class="card p-6 mb-8">
+        <h2 class="text-2xl font-bold mb-6">Production Lines - Real-Time Status</h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <!-- PD-1 Mixing -->
+            <div class="border border-gray-200 rounded-lg p-4 hover:border-purple-500 transition-colors">
+                <div class="flex items-center justify-between mb-3">
+                    <h3 class="font-semibold text-lg">PD-1 Mixing</h3>
+                    <span class="status-badge status-normal">Active</span>
+                </div>
+                <div class="space-y-2 text-sm">
+                    <div class="flex justify-between">
+                        <span class="text-gray-600">B+R Rate:</span>
+                        <span class="font-semibold text-green-600">2.1%</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-600">Produced:</span>
+                        <span class="font-semibold">287 tires</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-600">Current Shift:</span>
+                        <span class="font-semibold">Day</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- PD-2 Extrusion -->
+            <div class="border border-gray-200 rounded-lg p-4 hover:border-purple-500 transition-colors">
+                <div class="flex items-center justify-between mb-3">
+                    <h3 class="font-semibold text-lg">PD-2 Extrusion</h3>
+                    <span class="status-badge status-warning">Warning</span>
+                </div>
+                <div class="space-y-2 text-sm">
+                    <div class="flex justify-between">
+                        <span class="text-gray-600">B+R Rate:</span>
+                        <span class="font-semibold text-orange-600">3.2%</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-600">Produced:</span>
+                        <span class="font-semibold">312 tires</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-600">Current Shift:</span>
+                        <span class="font-semibold">Day</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- PD-3 Building -->
+            <div class="border border-gray-200 rounded-lg p-4 hover:border-purple-500 transition-colors">
+                <div class="flex items-center justify-between mb-3">
+                    <h3 class="font-semibold text-lg">PD-3 Building</h3>
+                    <span class="status-badge status-normal">Active</span>
+                </div>
+                <div class="space-y-2 text-sm">
+                    <div class="flex justify-between">
+                        <span class="text-gray-600">B+R Rate:</span>
+                        <span class="font-semibold text-green-600">2.3%</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-600">Produced:</span>
+                        <span class="font-semibold">334 tires</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-600">Current Shift:</span>
+                        <span class="font-semibold">Day</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- PD-4 Curing -->
+            <div class="border border-gray-200 rounded-lg p-4 hover:border-purple-500 transition-colors">
+                <div class="flex items-center justify-between mb-3">
+                    <h3 class="font-semibold text-lg">PD-4 Curing</h3>
+                    <span class="status-badge status-normal">Active</span>
+                </div>
+                <div class="space-y-2 text-sm">
+                    <div class="flex justify-between">
+                        <span class="text-gray-600">B+R Rate:</span>
+                        <span class="font-semibold text-green-600">2.5%</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-600">Produced:</span>
+                        <span class="font-semibold">314 tires</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-600">Current Shift:</span>
+                        <span class="font-semibold">Day</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Charts Row -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+        <!-- B+R Rate Trend -->
+        <div class="card p-6">
+            <h2 class="text-xl font-bold mb-4">B+R Rate Trend (Last 30 Days)</h2>
+            <canvas id="brRateTrendChart" height="250"></canvas>
+        </div>
+
+        <!-- Defect Distribution -->
+        <div class="card p-6">
+            <h2 class="text-xl font-bold mb-4">Top Defect Types (This Week)</h2>
+            <canvas id="defectDistributionChart" height="250"></canvas>
+        </div>
+    </div>
+
+    <!-- Bottom Row -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Recent Alerts -->
+        <div class="card p-6">
+            <h2 class="text-xl font-bold mb-4">Recent Alerts</h2>
+            <div class="space-y-3">
+                <div class="flex items-start space-x-3 p-3 bg-red-50 rounded-lg">
+                    <svg class="w-5 h-5 text-red-500 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"></path>
+                    </svg>
+                    <div class="flex-1">
+                        <div class="font-semibold text-sm">PD-2: B+R Rate High</div>
+                        <div class="text-xs text-gray-600">Current: 3.2% (Target: &lt;3.0%)</div>
+                        <div class="text-xs text-gray-500 mt-1">15 minutes ago</div>
+                    </div>
+                </div>
+
+                <div class="flex items-start space-x-3 p-3 bg-yellow-50 rounded-lg">
+                    <svg class="w-5 h-5 text-yellow-500 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path>
+                    </svg>
+                    <div class="flex-1">
+                        <div class="font-semibold text-sm">PD-4: Sidewall Crack Spike</div>
+                        <div class="text-xs text-gray-600">5 defects in last 2 hours</div>
+                        <div class="text-xs text-gray-500 mt-1">1 hour ago</div>
+                    </div>
+                </div>
+
+                <div class="text-center py-4">
+                    <a href="#" class="text-purple-600 hover:text-purple-700 text-sm font-medium">View All Alerts →</a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Production vs Quality Balance -->
+        <div class="card p-6">
+            <h2 class="text-xl font-bold mb-4">Production vs Quality (This Week)</h2>
+            <canvas id="productionQualityChart" height="250"></canvas>
+        </div>
+
+        <!-- Cost of Quality Breakdown -->
+        <div class="card p-6">
+            <h2 class="text-xl font-bold mb-4">Cost of Quality (This Month)</h2>
+            <div class="space-y-3">
+                <div>
+                    <div class="flex justify-between text-sm mb-1">
+                        <span class="text-gray-600">Internal Failure</span>
+                        <span class="font-semibold">$4,230</span>
+                    </div>
+                    <div class="w-full bg-gray-200 rounded-full h-2">
+                        <div class="bg-red-500 h-2 rounded-full" style="width: 65%"></div>
+                    </div>
+                </div>
+
+                <div>
+                    <div class="flex justify-between text-sm mb-1">
+                        <span class="text-gray-600">Appraisal</span>
+                        <span class="font-semibold">$1,450</span>
+                    </div>
+                    <div class="w-full bg-gray-200 rounded-full h-2">
+                        <div class="bg-blue-500 h-2 rounded-full" style="width: 22%"></div>
+                    </div>
+                </div>
+
+                <div>
+                    <div class="flex justify-between text-sm mb-1">
+                        <span class="text-gray-600">External Failure</span>
+                        <span class="font-semibold">$560</span>
+                    </div>
+                    <div class="w-full bg-gray-200 rounded-full h-2">
+                        <div class="bg-orange-500 h-2 rounded-full" style="width: 9%"></div>
+                    </div>
+                </div>
+
+                <div>
+                    <div class="flex justify-between text-sm mb-1">
+                        <span class="text-gray-600">Prevention</span>
+                        <span class="font-semibold">$280</span>
+                    </div>
+                    <div class="w-full bg-gray-200 rounded-full h-2">
+                        <div class="bg-green-500 h-2 rounded-full" style="width: 4%"></div>
+                    </div>
+                </div>
+
+                <div class="pt-3 border-t mt-4">
+                    <div class="flex justify-between font-bold">
+                        <span>Total COQ</span>
+                        <span>$6,520</span>
+                    </div>
+                    <div class="text-xs text-gray-600 mt-1">$0.31 per tire</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Update current time
+        function updateTime() {
+            const now = new Date();
+            const timeStr = now.toLocaleString('en-US', {
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: true
+            });
+            document.getElementById('currentTime').textContent = timeStr;
+        }
+        updateTime();
+        setInterval(updateTime, 1000);
+
+        // B+R Rate Trend Chart
+        const brRateTrendCtx = document.getElementById('brRateTrendChart').getContext('2d');
+        new Chart(brRateTrendCtx, {
+            type: 'line',
+            data: {
+                labels: ['Day 1', 'Day 5', 'Day 10', 'Day 15', 'Day 20', 'Day 25', 'Day 30'],
+                datasets: [{
+                    label: 'B+R Rate (%)',
+                    data: [2.8, 2.6, 2.9, 2.7, 2.5, 2.4, 2.4],
+                    borderColor: '#667eea',
+                    backgroundColor: 'rgba(102, 126, 234, 0.1)',
+                    tension: 0.4,
+                    fill: true
+                }, {
+                    label: 'Target (3.0%)',
+                    data: [3.0, 3.0, 3.0, 3.0, 3.0, 3.0, 3.0],
+                    borderColor: '#ef4444',
+                    borderDash: [5, 5],
+                    borderWidth: 2,
+                    pointRadius: 0
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: true,
+                        position: 'top'
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        max: 4
+                    }
+                }
+            }
+        });
+
+        // Defect Distribution Chart
+        const defectDistCtx = document.getElementById('defectDistributionChart').getContext('2d');
+        new Chart(defectDistCtx, {
+            type: 'bar',
+            data: {
+                labels: ['Inner Separation', 'Sidewall Crack', 'Bead Deformation', 'Inner Undercure', 'Tire Weight Wrong'],
+                datasets: [{
+                    label: 'Defect Count',
+                    data: [18, 12, 9, 7, 5],
+                    backgroundColor: [
+                        '#ef4444',
+                        '#f59e0b',
+                        '#10b981',
+                        '#3b82f6',
+                        '#8b5cf6'
+                    ]
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: false
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true
+                    }
+                }
+            }
+        });
+
+        // Production vs Quality Chart
+        const prodQualityCtx = document.getElementById('productionQualityChart').getContext('2d');
+        new Chart(prodQualityCtx, {
+            type: 'line',
+            data: {
+                labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+                datasets: [{
+                    label: 'Production (tires)',
+                    data: [1200, 1250, 1180, 1300, 1247, 1100, 980],
+                    borderColor: '#10b981',
+                    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                    yAxisID: 'y',
+                    tension: 0.4
+                }, {
+                    label: 'B+R Rate (%)',
+                    data: [2.8, 2.6, 2.9, 2.7, 2.4, 2.5, 2.3],
+                    borderColor: '#667eea',
+                    backgroundColor: 'rgba(102, 126, 234, 0.1)',
+                    yAxisID: 'y1',
+                    tension: 0.4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: {
+                    mode: 'index',
+                    intersect: false,
+                },
+                scales: {
+                    y: {
+                        type: 'linear',
+                        display: true,
+                        position: 'left',
+                        title: {
+                            display: true,
+                            text: 'Production (tires)'
+                        }
+                    },
+                    y1: {
+                        type: 'linear',
+                        display: true,
+                        position: 'right',
+                        title: {
+                            display: true,
+                            text: 'B+R Rate (%)'
+                        },
+                        grid: {
+                            drawOnChartArea: false,
+                        },
+                    },
+                }
+            }
+        });
+
+        // Simulate real-time updates
+        setInterval(() => {
+            // Update B+R rate with small random variation
+            const currentRate = parseFloat(document.getElementById('currentBRRate').textContent);
+            const newRate = (currentRate + (Math.random() - 0.5) * 0.1).toFixed(1);
+            document.getElementById('currentBRRate').textContent = newRate + '%';
+            
+            // Update status badge
+            const statusBadge = document.getElementById('brRateStatus');
+            if (newRate < 2.8) {
+                statusBadge.textContent = 'Excellent';
+                statusBadge.className = 'status-badge status-normal';
+            } else if (newRate < 3.0) {
+                statusBadge.textContent = 'Normal';
+                statusBadge.className = 'status-badge status-normal';
+            } else if (newRate < 3.5) {
+                statusBadge.textContent = 'Warning';
+                statusBadge.className = 'status-badge status-warning';
+            } else {
+                statusBadge.textContent = 'Critical';
+                statusBadge.className = 'status-badge status-critical';
+            }
+        }, 5000);
+    </script>
+</body>
+</html>
