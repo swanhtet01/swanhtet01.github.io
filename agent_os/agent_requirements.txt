@@ -1,0 +1,11 @@
+langgraph
+langchain
+openai
+pydantic
+requests
+redis
+google-api-python-client
+google-auth-httplib2
+google-auth-oauthlib
+stripe
+odoo-rpc
