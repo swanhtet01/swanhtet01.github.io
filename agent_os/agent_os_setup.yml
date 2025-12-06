@@ -1,0 +1,96 @@
+version: '3.8'
+
+services:
+  # ---------------------------------------------------------------------------
+  # THE BRAIN: OpenManus Orchestrator
+  # ---------------------------------------------------------------------------
+  orchestrator:
+    image: openmanus/core:latest
+    container_name: agent_os_brain
+    restart: always
+    environment:
+      - MODE=orchestrator
+      - REDIS_URL=redis://redis:6379
+      - DB_URL=postgresql://user:pass@db:5432/agent_os
+    depends_on:
+      - redis
+      - db
+    networks:
+      - agent_net
+
+  # ---------------------------------------------------------------------------
+  # DEPARTMENT: Logistics Core (LangGraph)
+  # ---------------------------------------------------------------------------
+  logistics-core:
+    build: 
+      context: ./agents/logistics
+      dockerfile: Dockerfile
+    container_name: agent_logistics
+    restart: always
+    environment:
+      - AGENT_TYPE=logistics
+      - GOOGLE_SHEETS_ID=${GOOGLE_SHEETS_ID}
+      - REDIS_URL=redis://redis:6379
+    volumes:
+      - ./logs/logistics:/app/logs
+    networks:
+      - agent_net
+
+  # ---------------------------------------------------------------------------
+  # DEPARTMENT: Finance Reactor (LangGraph)
+  # ---------------------------------------------------------------------------
+  finance-reactor:
+    build: 
+      context: ./agents/finance
+      dockerfile: Dockerfile
+    container_name: agent_finance
+    restart: always
+    environment:
+      - AGENT_TYPE=finance
+      - ODOO_URL=${ODOO_URL}
+      - STRIPE_KEY=${STRIPE_KEY}
+      - REDIS_URL=redis://redis:6379
+    volumes:
+      - ./logs/finance:/app/logs
+    networks:
+      - agent_net
+
+  # ---------------------------------------------------------------------------
+  # INFRASTRUCTURE: API Gateway & Storage
+  # ---------------------------------------------------------------------------
+  api-gateway:
+    build: ./gateway
+    container_name: agent_gateway
+    ports:
+      - "8000:8000"
+    environment:
+      - REDIS_URL=redis://redis:6379
+    volumes:
+      - ./logs:/app/logs
+    networks:
+      - agent_net
+
+  redis:
+    image: redis:alpine
+    container_name: agent_redis
+    networks:
+      - agent_net
+
+  db:
+    image: postgres:15
+    container_name: agent_db
+    environment:
+      - POSTGRES_USER=user
+      - POSTGRES_PASSWORD=pass
+      - POSTGRES_DB=agent_os
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - agent_net
+
+networks:
+  agent_net:
+    driver: bridge
+
+volumes:
+  pgdata:
