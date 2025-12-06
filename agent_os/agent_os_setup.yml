@@ -47,7 +47,9 @@ services:
     restart: always
     environment:
       - AGENT_TYPE=finance
-      - ODOO_URL=${ODOO_URL}
+      - ERPNEXT_URL=${ERPNEXT_URL}
+      - ERPNEXT_API_KEY=${ERPNEXT_API_KEY}
+      - ERPNEXT_API_SECRET=${ERPNEXT_API_SECRET}
       - STRIPE_KEY=${STRIPE_KEY}
       - REDIS_URL=redis://redis:6379
     volumes:

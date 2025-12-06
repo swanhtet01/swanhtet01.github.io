@@ -14,11 +14,11 @@ This document outlines the architecture for **AgentOS**, a distributed AI agent 
 *   **Logistics Core**:
     *   **Framework**: **LangGraph** (Stateful workflow).
     *   **Responsibility**: Inventory scanning, PO drafting, Shipping tracking.
-    *   **Tools**: Google Sheets API, Odoo API.
+    *   **Tools**: Google Sheets API, **ERPNext API**.
 *   **Finance Reactor**:
     *   **Framework**: **LangGraph** (Stateful workflow).
     *   **Responsibility**: Invoice auditing, Cash flow forecasting, Stripe payments.
-    *   **Tools**: Odoo API, Stripe API, Banking APIs.
+    *   **Tools**: **ERPNext API**, Stripe API, Banking APIs.
 *   **Code Foundry**:
     *   **Framework**: **OpenManus** (Coding agent).
     *   **Responsibility**: System maintenance, feature development, self-healing.
@@ -27,7 +27,7 @@ This document outlines the architecture for **AgentOS**, a distributed AI agent 
 ### 3. The "Nervous System" (Communication)
 *   **API Gateway**: A **FastAPI** server that exposes endpoints for the web dashboard to poll status and logs.
 *   **Message Queue**: **Redis** for inter-agent communication and task queuing.
-*   **Memory Store**: **PostgreSQL** (via Odoo or standalone) for long-term agent memory and state persistence.
+*   **Memory Store**: **PostgreSQL** (via ERPNext or standalone) for long-term agent memory and state persistence.
 
 ## Infrastructure Stack (Docker Compose)
 
@@ -56,7 +56,7 @@ services:
     build: ./agents/finance
     environment:
       - AGENT_TYPE=finance
-      - ODOO_URL=...
+      - ERPNEXT_URL=...
     volumes:
       - ./logs:/app/logs
 
