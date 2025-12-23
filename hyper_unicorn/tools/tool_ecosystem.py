@@ -733,3 +733,149 @@ __all__ = [
     'ToolDefinition',
     'ToolCategory'
 ]
+
+
+# ============================================================================
+# MEGA TOOLS (Combining capabilities)
+# ============================================================================
+
+class UniversalResearchTool(BaseTool):
+    """A mega tool for comprehensive research, combining multiple search APIs."""
+    
+    def __init__(self):
+        super().__init__(ToolDefinition(
+            name="universal_research",
+            description="Performs deep research on a topic using multiple web search APIs.",
+            category=ToolCategory.AI,
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "The research query"},
+                    "search_depth": {"type": "string", "enum": ["basic", "advanced"], "default": "basic"}
+                },
+                "required": ["query"]
+            },
+            timeout_seconds=120
+        ))
+        self.tavily_api_key = os.getenv("TAVILY_API_KEY")
+        self.exa_api_key = os.getenv("EXA_API_KEY")
+
+    async def execute(self, query: str, search_depth: str = "basic") -> Dict:
+        """Orchestrates multiple search APIs to gather comprehensive results."""
+        if not self.tavily_api_key or not self.exa_api_key:
+            return {"success": False, "error": "Tavily or Exa API key not set."}
+
+        async with httpx.AsyncClient() as client:
+            tavily_task = asyncio.create_task(self._tavily_search(client, query, search_depth))
+            exa_task = asyncio.create_task(self._exa_search(client, query))
+
+            results = await asyncio.gather(tavily_task, exa_task, return_exceptions=True)
+
+        tavily_results = results[0] if not isinstance(results[0], Exception) else {"error": str(results[0])}
+        exa_results = results[1] if not isinstance(results[1], Exception) else {"error": str(results[1])}
+
+        # Simple merging strategy
+        combined = {
+            "tavily_results": tavily_results.get("results", []),
+            "exa_results": exa_results.get("results", []),
+        }
+        
+        # Re-ranking and summarization would happen in a higher-level agent
+        return {"success": True, "data": combined}
+
+    async def _tavily_search(self, client: httpx.AsyncClient, query: str, search_depth: str) -> Dict:
+        """Performs a search using the Tavily API."""
+        headers = {"Authorization": f"Bearer {self.tavily_api_key}"}
+        payload = {"query": query, "search_depth": search_depth, "include_answer": True}
+        try:
+            response = await client.post("https://api.tavily.com/search", json=payload, headers=headers)
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPStatusError as e:
+            logger.error(f"Tavily API error: {e.response.text}")
+            return {"error": f"Tavily API error: {e.response.status_code}"}
+
+    async def _exa_search(self, client: httpx.AsyncClient, query: str) -> Dict:
+        """Performs a search using the Exa API."""
+        headers = {"x-api-key": self.exa_api_key}
+        payload = {"query": query, "num_results": 5, "use_autoprompt": True}
+        try:
+            response = await client.post("https://api.exa.ai/search", json=payload, headers=headers)
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPStatusError as e:
+            logger.error(f"Exa API error: {e.response.text}")
+            return {"error": f"Exa API error: {e.response.status_code}"}
+
+
+# ============================================================================
+# Tool Ecosystem Class
+# ============================================================================
+
+class ToolEcosystem:
+    """A unified registry for all available tools."""
+    
+    def __init__(self):
+        self.tools: Dict[str, BaseTool] = {}
+        self._register_all_tools()
+
+    def _register_tool(self, tool: BaseTool):
+        self.tools[tool.name] = tool
+        logger.info(f"Registered tool: {tool.name}")
+
+    def _register_all_tools(self):
+        # Computer Use
+        self._register_tool(ScreenshotTool())
+        self._register_tool(MouseClickTool())
+        self._register_tool(KeyboardTypeTool())
+
+        # Browser
+        browser_nav = BrowserNavigateTool()
+        self._register_tool(browser_nav)
+        self._register_tool(BrowserClickTool(browser_nav))
+        self._register_tool(BrowserExtractTool(browser_nav))
+
+        # Code
+        self._register_tool(PythonExecuteTool())
+        self._register_tool(ShellExecuteTool())
+
+        # File
+        self._register_tool(FileReadTool())
+        
+        # Mega Tools
+        self._register_tool(UniversalResearchTool())
+
+    def get_tool(self, name: str) -> Optional[BaseTool]:
+        return self.tools.get(name)
+
+    def get_all_tools_mcp(self) -> List[Dict]:
+        """Get all tools in MCP format."""
+        return [tool.to_mcp_format() for tool in self.tools.values()]
+
+    async def run_tool(self, name: str, **kwargs) -> Dict:
+        """Run a tool by name."""
+        tool = self.get_tool(name)
+        if not tool:
+            return {"success": False, "error": f"Tool ‘{name}’ not found."}
+        
+        return await tool(**kwargs)
+
+# Example usage
+async def main():
+    ecosystem = ToolEcosystem()
+    print("--- Available Tools (MCP Format) ---")
+    print(json.dumps(ecosystem.get_all_tools_mcp(), indent=2))
+    
+    print("\n--- Running Universal Research Tool ---")
+    # NOTE: Requires TAVILY_API_KEY and EXA_API_KEY to be set in env
+    if os.getenv("TAVILY_API_KEY") and os.getenv("EXA_API_KEY"):
+        research_results = await ecosystem.run_tool(
+            "universal_research", 
+            query="Latest advancements in AI agent memory systems"
+        )
+        print(json.dumps(research_results, indent=2))
+    else:
+        print("Skipping research tool example: API keys not set.")
+
+if __name__ == "__main__":
+    asyncio.run(main())

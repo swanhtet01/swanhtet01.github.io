@@ -1,0 +1,626 @@
+{
+  "name": "HYPER UNICORN - Agent Workflow Templates",
+  "version": "1.0.0",
+  "workflows": [
+    {
+      "id": "agent-task-orchestrator",
+      "name": "Agent Task Orchestrator",
+      "description": "Main workflow that receives tasks and routes them to appropriate agents",
+      "nodes": [
+        {
+          "id": "webhook-trigger",
+          "type": "n8n-nodes-base.webhook",
+          "position": [250, 300],
+          "parameters": {
+            "path": "agent-task",
+            "method": "POST",
+            "responseMode": "responseNode"
+          }
+        },
+        {
+          "id": "task-classifier",
+          "type": "n8n-nodes-base.httpRequest",
+          "position": [450, 300],
+          "parameters": {
+            "url": "http://mca:8080/classify",
+            "method": "POST",
+            "bodyParameters": {
+              "task": "={{ $json.task }}",
+              "context": "={{ $json.context }}"
+            }
+          }
+        },
+        {
+          "id": "router",
+          "type": "n8n-nodes-base.switch",
+          "position": [650, 300],
+          "parameters": {
+            "rules": [
+              {"value": "research", "output": 0},
+              {"value": "code", "output": 1},
+              {"value": "write", "output": 2},
+              {"value": "analyze", "output": 3},
+              {"value": "automate", "output": 4}
+            ]
+          }
+        },
+        {
+          "id": "research-agent",
+          "type": "n8n-nodes-base.httpRequest",
+          "position": [850, 100],
+          "parameters": {
+            "url": "http://mca:8080/agents/researcher/execute",
+            "method": "POST"
+          }
+        },
+        {
+          "id": "coder-agent",
+          "type": "n8n-nodes-base.httpRequest",
+          "position": [850, 200],
+          "parameters": {
+            "url": "http://mca:8080/agents/coder/execute",
+            "method": "POST"
+          }
+        },
+        {
+          "id": "writer-agent",
+          "type": "n8n-nodes-base.httpRequest",
+          "position": [850, 300],
+          "parameters": {
+            "url": "http://mca:8080/agents/writer/execute",
+            "method": "POST"
+          }
+        },
+        {
+          "id": "analyst-agent",
+          "type": "n8n-nodes-base.httpRequest",
+          "position": [850, 400],
+          "parameters": {
+            "url": "http://mca:8080/agents/analyst/execute",
+            "method": "POST"
+          }
+        },
+        {
+          "id": "automator-agent",
+          "type": "n8n-nodes-base.httpRequest",
+          "position": [850, 500],
+          "parameters": {
+            "url": "http://mca:8080/agents/automator/execute",
+            "method": "POST"
+          }
+        },
+        {
+          "id": "result-aggregator",
+          "type": "n8n-nodes-base.merge",
+          "position": [1050, 300]
+        },
+        {
+          "id": "response",
+          "type": "n8n-nodes-base.respondToWebhook",
+          "position": [1250, 300],
+          "parameters": {
+            "respondWith": "json"
+          }
+        }
+      ],
+      "connections": {
+        "webhook-trigger": {"main": [[{"node": "task-classifier", "type": "main", "index": 0}]]},
+        "task-classifier": {"main": [[{"node": "router", "type": "main", "index": 0}]]},
+        "router": {
+          "main": [
+            [{"node": "research-agent", "type": "main", "index": 0}],
+            [{"node": "coder-agent", "type": "main", "index": 0}],
+            [{"node": "writer-agent", "type": "main", "index": 0}],
+            [{"node": "analyst-agent", "type": "main", "index": 0}],
+            [{"node": "automator-agent", "type": "main", "index": 0}]
+          ]
+        },
+        "research-agent": {"main": [[{"node": "result-aggregator", "type": "main", "index": 0}]]},
+        "coder-agent": {"main": [[{"node": "result-aggregator", "type": "main", "index": 0}]]},
+        "writer-agent": {"main": [[{"node": "result-aggregator", "type": "main", "index": 0}]]},
+        "analyst-agent": {"main": [[{"node": "result-aggregator", "type": "main", "index": 0}]]},
+        "automator-agent": {"main": [[{"node": "result-aggregator", "type": "main", "index": 0}]]},
+        "result-aggregator": {"main": [[{"node": "response", "type": "main", "index": 0}]]}
+      }
+    },
+    {
+      "id": "gmail-monitor",
+      "name": "Gmail Monitor & Auto-Response",
+      "description": "Monitors Gmail for important emails and triggers agent responses",
+      "nodes": [
+        {
+          "id": "schedule-trigger",
+          "type": "n8n-nodes-base.scheduleTrigger",
+          "position": [250, 300],
+          "parameters": {
+            "rule": {"interval": [{"field": "minutes", "minutesInterval": 5}]}
+          }
+        },
+        {
+          "id": "gmail-search",
+          "type": "n8n-nodes-base.httpRequest",
+          "position": [450, 300],
+          "parameters": {
+            "url": "http://mca:8080/integrations/gmail/search",
+            "method": "POST",
+            "bodyParameters": {
+              "query": "is:unread label:important",
+              "max_results": 10
+            }
+          }
+        },
+        {
+          "id": "filter-actionable",
+          "type": "n8n-nodes-base.filter",
+          "position": [650, 300],
+          "parameters": {
+            "conditions": {
+              "boolean": [{"value1": "={{ $json.needs_action }}", "value2": true}]
+            }
+          }
+        },
+        {
+          "id": "classify-email",
+          "type": "n8n-nodes-base.httpRequest",
+          "position": [850, 300],
+          "parameters": {
+            "url": "http://mca:8080/classify",
+            "method": "POST",
+            "bodyParameters": {
+              "task": "email_response",
+              "content": "={{ $json.body }}"
+            }
+          }
+        },
+        {
+          "id": "generate-response",
+          "type": "n8n-nodes-base.httpRequest",
+          "position": [1050, 300],
+          "parameters": {
+            "url": "http://mca:8080/agents/writer/execute",
+            "method": "POST",
+            "bodyParameters": {
+              "task": "draft_email_response",
+              "context": "={{ $json }}"
+            }
+          }
+        },
+        {
+          "id": "save-draft",
+          "type": "n8n-nodes-base.httpRequest",
+          "position": [1250, 300],
+          "parameters": {
+            "url": "http://mca:8080/integrations/gmail/draft",
+            "method": "POST"
+          }
+        },
+        {
+          "id": "notify-slack",
+          "type": "n8n-nodes-base.slack",
+          "position": [1450, 300],
+          "parameters": {
+            "channel": "#agent-notifications",
+            "text": "📧 Draft response created for email: {{ $json.subject }}"
+          }
+        }
+      ]
+    },
+    {
+      "id": "calendar-scheduler",
+      "name": "Calendar Task Scheduler",
+      "description": "Schedules agent tasks based on calendar events",
+      "nodes": [
+        {
+          "id": "schedule-trigger",
+          "type": "n8n-nodes-base.scheduleTrigger",
+          "position": [250, 300],
+          "parameters": {
+            "rule": {"interval": [{"field": "hours", "hoursInterval": 1}]}
+          }
+        },
+        {
+          "id": "get-upcoming-events",
+          "type": "n8n-nodes-base.httpRequest",
+          "position": [450, 300],
+          "parameters": {
+            "url": "http://mca:8080/integrations/calendar/upcoming",
+            "method": "GET",
+            "queryParameters": {
+              "hours_ahead": 24
+            }
+          }
+        },
+        {
+          "id": "filter-agent-tasks",
+          "type": "n8n-nodes-base.filter",
+          "position": [650, 300],
+          "parameters": {
+            "conditions": {
+              "string": [{"value1": "={{ $json.description }}", "operation": "contains", "value2": "[AGENT]"}]
+            }
+          }
+        },
+        {
+          "id": "parse-task",
+          "type": "n8n-nodes-base.httpRequest",
+          "position": [850, 300],
+          "parameters": {
+            "url": "http://mca:8080/parse-calendar-task",
+            "method": "POST"
+          }
+        },
+        {
+          "id": "schedule-execution",
+          "type": "n8n-nodes-base.httpRequest",
+          "position": [1050, 300],
+          "parameters": {
+            "url": "http://mca:8080/schedule-task",
+            "method": "POST"
+          }
+        }
+      ]
+    },
+    {
+      "id": "gdrive-sync",
+      "name": "Google Drive Sync & Process",
+      "description": "Monitors Google Drive for new files and processes them",
+      "nodes": [
+        {
+          "id": "schedule-trigger",
+          "type": "n8n-nodes-base.scheduleTrigger",
+          "position": [250, 300],
+          "parameters": {
+            "rule": {"interval": [{"field": "minutes", "minutesInterval": 15}]}
+          }
+        },
+        {
+          "id": "check-new-files",
+          "type": "n8n-nodes-base.httpRequest",
+          "position": [450, 300],
+          "parameters": {
+            "url": "http://mca:8080/integrations/gdrive/changes",
+            "method": "GET"
+          }
+        },
+        {
+          "id": "filter-processable",
+          "type": "n8n-nodes-base.filter",
+          "position": [650, 300],
+          "parameters": {
+            "conditions": {
+              "string": [{"value1": "={{ $json.mimeType }}", "operation": "regex", "value2": "(pdf|doc|xlsx|csv)"}]
+            }
+          }
+        },
+        {
+          "id": "download-file",
+          "type": "n8n-nodes-base.httpRequest",
+          "position": [850, 300],
+          "parameters": {
+            "url": "http://mca:8080/integrations/gdrive/download",
+            "method": "POST"
+          }
+        },
+        {
+          "id": "process-document",
+          "type": "n8n-nodes-base.httpRequest",
+          "position": [1050, 300],
+          "parameters": {
+            "url": "http://mca:8080/agents/analyst/process-document",
+            "method": "POST"
+          }
+        },
+        {
+          "id": "store-insights",
+          "type": "n8n-nodes-base.httpRequest",
+          "position": [1250, 300],
+          "parameters": {
+            "url": "http://mca:8080/memory/store",
+            "method": "POST"
+          }
+        }
+      ]
+    },
+    {
+      "id": "daily-report",
+      "name": "Daily Agent Report Generator",
+      "description": "Generates and sends daily summary reports",
+      "nodes": [
+        {
+          "id": "cron-trigger",
+          "type": "n8n-nodes-base.scheduleTrigger",
+          "position": [250, 300],
+          "parameters": {
+            "rule": {"interval": [{"field": "cronExpression", "expression": "0 9 * * *"}]}
+          }
+        },
+        {
+          "id": "gather-metrics",
+          "type": "n8n-nodes-base.httpRequest",
+          "position": [450, 300],
+          "parameters": {
+            "url": "http://mca:8080/metrics/daily",
+            "method": "GET"
+          }
+        },
+        {
+          "id": "gather-task-summary",
+          "type": "n8n-nodes-base.httpRequest",
+          "position": [450, 450],
+          "parameters": {
+            "url": "http://mca:8080/tasks/summary",
+            "method": "GET",
+            "queryParameters": {"period": "24h"}
+          }
+        },
+        {
+          "id": "merge-data",
+          "type": "n8n-nodes-base.merge",
+          "position": [650, 375]
+        },
+        {
+          "id": "generate-report",
+          "type": "n8n-nodes-base.httpRequest",
+          "position": [850, 375],
+          "parameters": {
+            "url": "http://mca:8080/agents/writer/execute",
+            "method": "POST",
+            "bodyParameters": {
+              "task": "generate_daily_report",
+              "data": "={{ $json }}"
+            }
+          }
+        },
+        {
+          "id": "send-email",
+          "type": "n8n-nodes-base.httpRequest",
+          "position": [1050, 375],
+          "parameters": {
+            "url": "http://mca:8080/integrations/gmail/send",
+            "method": "POST",
+            "bodyParameters": {
+              "to": "swannyhtet@gmail.com",
+              "subject": "🦄 HYPER UNICORN Daily Report - {{ $now.format('YYYY-MM-DD') }}",
+              "body": "={{ $json.report }}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "research-pipeline",
+      "name": "Deep Research Pipeline",
+      "description": "Multi-step research workflow with source verification",
+      "nodes": [
+        {
+          "id": "webhook-trigger",
+          "type": "n8n-nodes-base.webhook",
+          "position": [250, 300],
+          "parameters": {
+            "path": "research",
+            "method": "POST"
+          }
+        },
+        {
+          "id": "plan-research",
+          "type": "n8n-nodes-base.httpRequest",
+          "position": [450, 300],
+          "parameters": {
+            "url": "http://mca:8080/agents/researcher/plan",
+            "method": "POST"
+          }
+        },
+        {
+          "id": "execute-searches",
+          "type": "n8n-nodes-base.splitInBatches",
+          "position": [650, 300],
+          "parameters": {"batchSize": 3}
+        },
+        {
+          "id": "search-web",
+          "type": "n8n-nodes-base.httpRequest",
+          "position": [850, 200],
+          "parameters": {
+            "url": "http://mca:8080/tools/tavily_search",
+            "method": "POST"
+          }
+        },
+        {
+          "id": "search-papers",
+          "type": "n8n-nodes-base.httpRequest",
+          "position": [850, 400],
+          "parameters": {
+            "url": "http://mca:8080/tools/arxiv_search",
+            "method": "POST"
+          }
+        },
+        {
+          "id": "aggregate-sources",
+          "type": "n8n-nodes-base.merge",
+          "position": [1050, 300]
+        },
+        {
+          "id": "verify-claims",
+          "type": "n8n-nodes-base.httpRequest",
+          "position": [1250, 300],
+          "parameters": {
+            "url": "http://mca:8080/agents/researcher/verify",
+            "method": "POST"
+          }
+        },
+        {
+          "id": "synthesize-report",
+          "type": "n8n-nodes-base.httpRequest",
+          "position": [1450, 300],
+          "parameters": {
+            "url": "http://mca:8080/agents/writer/synthesize",
+            "method": "POST"
+          }
+        },
+        {
+          "id": "store-to-memory",
+          "type": "n8n-nodes-base.httpRequest",
+          "position": [1650, 300],
+          "parameters": {
+            "url": "http://mca:8080/memory/store",
+            "method": "POST"
+          }
+        }
+      ]
+    },
+    {
+      "id": "code-review-pipeline",
+      "name": "Automated Code Review Pipeline",
+      "description": "Reviews code changes and provides feedback",
+      "nodes": [
+        {
+          "id": "github-webhook",
+          "type": "n8n-nodes-base.webhook",
+          "position": [250, 300],
+          "parameters": {
+            "path": "github-pr",
+            "method": "POST"
+          }
+        },
+        {
+          "id": "filter-pr-events",
+          "type": "n8n-nodes-base.filter",
+          "position": [450, 300],
+          "parameters": {
+            "conditions": {
+              "string": [{"value1": "={{ $json.action }}", "operation": "equal", "value2": "opened"}]
+            }
+          }
+        },
+        {
+          "id": "fetch-diff",
+          "type": "n8n-nodes-base.httpRequest",
+          "position": [650, 300],
+          "parameters": {
+            "url": "={{ $json.pull_request.diff_url }}",
+            "method": "GET"
+          }
+        },
+        {
+          "id": "analyze-code",
+          "type": "n8n-nodes-base.httpRequest",
+          "position": [850, 300],
+          "parameters": {
+            "url": "http://mca:8080/agents/coder/review",
+            "method": "POST"
+          }
+        },
+        {
+          "id": "security-scan",
+          "type": "n8n-nodes-base.httpRequest",
+          "position": [850, 450],
+          "parameters": {
+            "url": "http://mca:8080/tools/security_scan",
+            "method": "POST"
+          }
+        },
+        {
+          "id": "merge-reviews",
+          "type": "n8n-nodes-base.merge",
+          "position": [1050, 375]
+        },
+        {
+          "id": "post-comment",
+          "type": "n8n-nodes-base.httpRequest",
+          "position": [1250, 375],
+          "parameters": {
+            "url": "http://mca:8080/integrations/github/comment",
+            "method": "POST"
+          }
+        }
+      ]
+    },
+    {
+      "id": "system-health-monitor",
+      "name": "System Health Monitor",
+      "description": "Monitors Bangkok Node health and triggers alerts",
+      "nodes": [
+        {
+          "id": "schedule-trigger",
+          "type": "n8n-nodes-base.scheduleTrigger",
+          "position": [250, 300],
+          "parameters": {
+            "rule": {"interval": [{"field": "minutes", "minutesInterval": 1}]}
+          }
+        },
+        {
+          "id": "check-cpu",
+          "type": "n8n-nodes-base.httpRequest",
+          "position": [450, 200],
+          "parameters": {
+            "url": "http://node-exporter:9100/metrics",
+            "method": "GET"
+          }
+        },
+        {
+          "id": "check-memory",
+          "type": "n8n-nodes-base.httpRequest",
+          "position": [450, 300],
+          "parameters": {
+            "url": "http://mca:8080/health/memory",
+            "method": "GET"
+          }
+        },
+        {
+          "id": "check-gpu",
+          "type": "n8n-nodes-base.httpRequest",
+          "position": [450, 400],
+          "parameters": {
+            "url": "http://mca:8080/health/gpu",
+            "method": "GET"
+          }
+        },
+        {
+          "id": "merge-metrics",
+          "type": "n8n-nodes-base.merge",
+          "position": [650, 300]
+        },
+        {
+          "id": "evaluate-health",
+          "type": "n8n-nodes-base.code",
+          "position": [850, 300],
+          "parameters": {
+            "jsCode": "const metrics = $input.all();\nconst alerts = [];\n\nif (metrics.cpu_percent > 90) alerts.push('CPU Critical');\nif (metrics.memory_percent > 85) alerts.push('Memory High');\nif (metrics.gpu_memory_percent > 95) alerts.push('GPU Memory Critical');\n\nreturn [{json: {healthy: alerts.length === 0, alerts}}];"
+          }
+        },
+        {
+          "id": "filter-unhealthy",
+          "type": "n8n-nodes-base.filter",
+          "position": [1050, 300],
+          "parameters": {
+            "conditions": {
+              "boolean": [{"value1": "={{ $json.healthy }}", "value2": false}]
+            }
+          }
+        },
+        {
+          "id": "send-alert",
+          "type": "n8n-nodes-base.httpRequest",
+          "position": [1250, 300],
+          "parameters": {
+            "url": "http://mca:8080/integrations/notify",
+            "method": "POST",
+            "bodyParameters": {
+              "channel": "alerts",
+              "message": "🚨 System Alert: {{ $json.alerts.join(', ') }}"
+            }
+          }
+        },
+        {
+          "id": "trigger-remediation",
+          "type": "n8n-nodes-base.httpRequest",
+          "position": [1250, 450],
+          "parameters": {
+            "url": "http://mca:8080/remediation/auto",
+            "method": "POST"
+          }
+        }
+      ]
+    }
+  ]
+}
