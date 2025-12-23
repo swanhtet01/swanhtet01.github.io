@@ -1,0 +1,225 @@
+version: '3.8'
+
+# ============================================================================
+# JARVIS AI Agent Infrastructure
+# SuperMega.dev - Bangkok Node + AWS Deployment
+# ============================================================================
+
+services:
+  # ==========================================================================
+  # Core Services (Run on AWS 24/7)
+  # ==========================================================================
+  
+  # Master Control Agent - The orchestration brain
+  mca:
+    build:
+      context: ./mca
+      dockerfile: Dockerfile
+    container_name: jarvis-mca
+    restart: always
+    ports:
+      - "8080:8080"
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_API_BASE=${OPENAI_API_BASE:-https://api.openai.com/v1}
+      - BANGKOK_NODE_IP=${BANGKOK_NODE_IP:-100.113.30.52}
+      - QDRANT_URL=http://qdrant:6333
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - redis
+      - qdrant
+    networks:
+      - jarvis-network
+    volumes:
+      - ./logs:/app/logs
+      - ./data:/app/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+  # Alfred Dashboard - Web UI
+  dashboard:
+    build:
+      context: ./dashboard
+      dockerfile: Dockerfile
+    container_name: jarvis-dashboard
+    restart: always
+    ports:
+      - "8501:8501"
+    environment:
+      - BANGKOK_NODE_IP=${BANGKOK_NODE_IP:-100.113.30.52}
+      - AWS_MCA_URL=http://mca:8080
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+    depends_on:
+      - mca
+    networks:
+      - jarvis-network
+    volumes:
+      - ./logs:/app/logs
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ==========================================================================
+  # Data Services
+  # ==========================================================================
+  
+  # Redis - Task queue and caching
+  redis:
+    image: redis:7-alpine
+    container_name: jarvis-redis
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - jarvis-network
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # Qdrant - Vector database for agent memory
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: jarvis-qdrant
+    restart: always
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant-data:/qdrant/storage
+    networks:
+      - jarvis-network
+    environment:
+      - QDRANT__SERVICE__GRPC_PORT=6334
+
+  # ==========================================================================
+  # Monitoring Services
+  # ==========================================================================
+  
+  # Prometheus - Metrics collection
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: jarvis-prometheus
+    restart: always
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./configs/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    networks:
+      - jarvis-network
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+
+  # Grafana - Dashboards
+  grafana:
+    image: grafana/grafana:latest
+    container_name: jarvis-grafana
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-jarvis123}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_SERVER_ROOT_URL=%(protocol)s://%(domain)s:%(http_port)s/grafana/
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./configs/grafana/dashboards:/etc/grafana/provisioning/dashboards
+      - ./configs/grafana/datasources:/etc/grafana/provisioning/datasources
+    depends_on:
+      - prometheus
+    networks:
+      - jarvis-network
+
+  # ==========================================================================
+  # Agent Services (Can run on Bangkok Node or AWS)
+  # ==========================================================================
+  
+  # n8n - Workflow automation
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: jarvis-n8n
+    restart: always
+    ports:
+      - "5678:5678"
+    environment:
+      - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_BASIC_AUTH_USER=${N8N_USER:-admin}
+      - N8N_BASIC_AUTH_PASSWORD=${N8N_PASSWORD:-jarvis123}
+      - N8N_HOST=${N8N_HOST:-localhost}
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=http
+      - WEBHOOK_URL=http://${N8N_HOST:-localhost}:5678/
+      - GENERIC_TIMEZONE=Asia/Bangkok
+    volumes:
+      - n8n-data:/home/node/.n8n
+    networks:
+      - jarvis-network
+
+  # ==========================================================================
+  # Reverse Proxy
+  # ==========================================================================
+  
+  nginx:
+    image: nginx:alpine
+    container_name: jarvis-nginx
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./configs/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./configs/ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - dashboard
+      - mca
+      - grafana
+    networks:
+      - jarvis-network
+
+# ==========================================================================
+# Networks
+# ==========================================================================
+
+networks:
+  jarvis-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.30.0.0/16
+
+# ==========================================================================
+# Volumes
+# ==========================================================================
+
+volumes:
+  redis-data:
+    driver: local
+  qdrant-data:
+    driver: local
+  prometheus-data:
+    driver: local
+  grafana-data:
+    driver: local
+  n8n-data:
+    driver: local
