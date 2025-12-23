@@ -1,0 +1,41 @@
+# ============================================================================
+# HYPER UNICORN - Alfred Dashboard
+# ============================================================================
+
+FROM python:3.11-slim
+
+LABEL maintainer="SuperMega.dev"
+LABEL description="Alfred Dashboard for HYPER UNICORN Architecture"
+
+# Set working directory
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python dependencies
+RUN pip install --no-cache-dir \
+    streamlit==1.29.0 \
+    requests==2.31.0 \
+    plotly==5.18.0 \
+    pandas==2.1.4
+
+# Copy dashboard code
+COPY interfaces/alfred_dashboard.py ./alfred_dashboard.py
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1
+ENV STREAMLIT_SERVER_PORT=8501
+ENV STREAMLIT_SERVER_ADDRESS=0.0.0.0
+
+# Expose port
+EXPOSE 8501
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8501/_stcore/health || exit 1
+
+# Run Streamlit
+CMD ["streamlit", "run", "alfred_dashboard.py", "--server.port=8501", "--server.address=0.0.0.0"]
