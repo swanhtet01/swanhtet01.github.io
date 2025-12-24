@@ -1,27 +1,23 @@
 """
-HYPER UNICORN Integrations
-==========================
-External service integrations for AI agents.
+Integrations Module
+====================
+External service integrations for HYPER UNICORN.
 """
 
 from .google_integrations import GoogleIntegrations
-from .supermega_integration import (
-    AgentERP,
-    GoogleDriveSync,
-    MCPIntegration,
-    WorkflowTemplateLibrary,
-    Client,
-    WorkflowTemplate,
-    AgentTask
+from .supermega_integration import SuperMegaIntegration
+from .mcp_integrations import (
+    MCPIntegrationManager,
+    MCPServer,
+    MCPCategory,
+    MCP_SERVERS,
 )
 
 __all__ = [
     "GoogleIntegrations",
-    "AgentERP",
-    "GoogleDriveSync",
-    "MCPIntegration",
-    "WorkflowTemplateLibrary",
-    "Client",
-    "WorkflowTemplate",
-    "AgentTask"
+    "SuperMegaIntegration",
+    "MCPIntegrationManager",
+    "MCPServer",
+    "MCPCategory",
+    "MCP_SERVERS",
 ]
