@@ -2,3 +2,4 @@ apikeys.txt
 *.pem
 .env*
 *credentials*
+hyper_unicorn/venv/

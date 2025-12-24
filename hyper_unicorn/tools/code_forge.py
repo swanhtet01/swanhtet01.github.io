@@ -101,10 +101,12 @@ def get_message():
             try:
                 # Check if file exists to update it
                 existing_file = repo.get_contents(file_info["name"])
-                repo.update_file(existing_file.path, f"Update {file_info[\"name\"]}", content, existing_file.sha)
+                file_name = file_info["name"]
+                repo.update_file(existing_file.path, f"Update {file_name}", content, existing_file.sha)
             except Exception:
                 # Create file if it doesn\'t exist
-                repo.create_file(file_info["name"], f"Create {file_info[\"name\"]}", content)
+                file_name = file_info["name"]
+                repo.create_file(file_name, f"Create {file_name}", content)
 
 # Example Usage:
 def main():
