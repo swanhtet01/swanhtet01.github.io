@@ -1,24 +1,16 @@
-"""
-HYPER UNICORN Core
-==================
-Core components for the AI agent infrastructure.
-"""
-
+"""Core components for HYPER UNICORN."""
 from .intelligence_fabric import IntelligenceFabric
 from .master_control_agent import MasterControlAgent
-from .collaboration import CollaborationOrchestrator, MessageBus, SharedMemory, CollaborationPatterns
-from .plugin_system import PluginManager, PluginBase, ToolPlugin, AgentPlugin, PluginMarketplace
+from .collaboration import CollaborationProtocol, AgentTeam
+from .plugin_system import PluginManager
+from .ab_testing import ABTestingManager, AgentStrategyTester
 
 __all__ = [
     "IntelligenceFabric",
-    "MasterControlAgent",
-    "CollaborationOrchestrator",
-    "MessageBus",
-    "SharedMemory",
-    "CollaborationPatterns",
+    "MasterControlAgent", 
+    "CollaborationProtocol",
+    "AgentTeam",
     "PluginManager",
-    "PluginBase",
-    "ToolPlugin",
-    "AgentPlugin",
-    "PluginMarketplace"
+    "ABTestingManager",
+    "AgentStrategyTester"
 ]
