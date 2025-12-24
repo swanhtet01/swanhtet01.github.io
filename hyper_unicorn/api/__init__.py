@@ -1,9 +1,14 @@
 """
 HYPER UNICORN API
 =================
-FastAPI-based orchestration server.
+FastAPI server and webhook handlers.
 """
 
-from .server import app, task_queue, agents
+from .server import app
+from .webhooks import WebhookManager, create_webhook_routes
 
-__all__ = ["app", "task_queue", "agents"]
+__all__ = [
+    "app",
+    "WebhookManager",
+    "create_webhook_routes"
+]
