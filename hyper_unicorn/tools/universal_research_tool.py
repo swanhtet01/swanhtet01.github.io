@@ -53,6 +53,10 @@ class UniversalResearchTool:
         # return crawled_page["markdown"]
         return f"Markdown content for {url} would be fetched here."
 
+    def _format_sources(self, sources: list) -> str:
+        """Format sources list for report."""
+        return "\n".join([f"- {source.get('url', 'N/A')}" for source in sources])
+
     async def process_and_synthesize(self, query: str, sources: list):
         """Synthesizes information from multiple sources to answer a query."""
         # This would involve feeding the content from sources into a powerful LLM
@@ -65,7 +69,7 @@ class UniversalResearchTool:
         ... (LLM-generated synthesis would go here) ...
 
         **Sources:**
-        {chr(10).join([f"- {source[\'url\']}" for source in sources])}
+        {self._format_sources(sources)}
         """
         return report
 

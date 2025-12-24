@@ -1,0 +1,566 @@
+{
+  "workflows": [
+    {
+      "name": "Daily Research Digest",
+      "description": "Automatically research trending topics and send a daily digest email",
+      "trigger": "cron",
+      "schedule": "0 8 * * *",
+      "nodes": [
+        {
+          "name": "Schedule Trigger",
+          "type": "n8n-nodes-base.scheduleTrigger",
+          "parameters": {
+            "rule": {
+              "interval": [{"field": "cronExpression", "expression": "0 8 * * *"}]
+            }
+          }
+        },
+        {
+          "name": "Get Trending Topics",
+          "type": "n8n-nodes-base.httpRequest",
+          "parameters": {
+            "url": "https://api.tavily.com/search",
+            "method": "POST",
+            "body": {
+              "query": "trending technology news today",
+              "search_depth": "advanced",
+              "max_results": 10
+            },
+            "headers": {
+              "Authorization": "Bearer {{$env.TAVILY_API_KEY}}"
+            }
+          }
+        },
+        {
+          "name": "AI Summarize",
+          "type": "n8n-nodes-base.httpRequest",
+          "parameters": {
+            "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent",
+            "method": "POST",
+            "qs": {"key": "{{$env.GEMINI_API_KEY}}"},
+            "body": {
+              "contents": [{
+                "parts": [{
+                  "text": "Summarize these news items into a concise daily digest with key insights:\n\n{{$json.results}}"
+                }]
+              }]
+            }
+          }
+        },
+        {
+          "name": "Send Email",
+          "type": "n8n-nodes-base.gmail",
+          "parameters": {
+            "operation": "send",
+            "to": "{{$env.DIGEST_EMAIL}}",
+            "subject": "Daily Research Digest - {{$today}}",
+            "message": "{{$json.candidates[0].content.parts[0].text}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Code Review Automation",
+      "description": "Automatically review new pull requests and post comments",
+      "trigger": "webhook",
+      "webhook_path": "/github-pr",
+      "nodes": [
+        {
+          "name": "Webhook Trigger",
+          "type": "n8n-nodes-base.webhook",
+          "parameters": {
+            "path": "github-pr",
+            "httpMethod": "POST"
+          }
+        },
+        {
+          "name": "Filter PR Events",
+          "type": "n8n-nodes-base.if",
+          "parameters": {
+            "conditions": {
+              "string": [{
+                "value1": "{{$json.action}}",
+                "operation": "equals",
+                "value2": "opened"
+              }]
+            }
+          }
+        },
+        {
+          "name": "Get PR Diff",
+          "type": "n8n-nodes-base.httpRequest",
+          "parameters": {
+            "url": "{{$json.pull_request.diff_url}}",
+            "method": "GET",
+            "headers": {
+              "Authorization": "token {{$env.GITHUB_TOKEN}}"
+            }
+          }
+        },
+        {
+          "name": "AI Code Review",
+          "type": "n8n-nodes-base.httpRequest",
+          "parameters": {
+            "url": "https://api.anthropic.com/v1/messages",
+            "method": "POST",
+            "headers": {
+              "x-api-key": "{{$env.ANTHROPIC_API_KEY}}",
+              "anthropic-version": "2023-06-01"
+            },
+            "body": {
+              "model": "claude-3-5-sonnet-20241022",
+              "max_tokens": 2000,
+              "messages": [{
+                "role": "user",
+                "content": "Review this code diff and provide constructive feedback. Focus on bugs, security issues, and improvements:\n\n{{$json.data}}"
+              }]
+            }
+          }
+        },
+        {
+          "name": "Post Review Comment",
+          "type": "n8n-nodes-base.github",
+          "parameters": {
+            "operation": "createComment",
+            "owner": "{{$json.repository.owner.login}}",
+            "repository": "{{$json.repository.name}}",
+            "issueNumber": "{{$json.pull_request.number}}",
+            "body": "## 🤖 AI Code Review\n\n{{$json.content[0].text}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Content Calendar Automation",
+      "description": "Generate weekly content ideas and schedule them",
+      "trigger": "cron",
+      "schedule": "0 9 * * 1",
+      "nodes": [
+        {
+          "name": "Schedule Trigger",
+          "type": "n8n-nodes-base.scheduleTrigger",
+          "parameters": {
+            "rule": {
+              "interval": [{"field": "cronExpression", "expression": "0 9 * * 1"}]
+            }
+          }
+        },
+        {
+          "name": "Generate Content Ideas",
+          "type": "n8n-nodes-base.httpRequest",
+          "parameters": {
+            "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent",
+            "method": "POST",
+            "qs": {"key": "{{$env.GEMINI_API_KEY}}"},
+            "body": {
+              "contents": [{
+                "parts": [{
+                  "text": "Generate 5 content ideas for a tech company blog this week. Include: title, brief description, target audience, and suggested publish day. Format as JSON array."
+                }]
+              }]
+            }
+          }
+        },
+        {
+          "name": "Parse Ideas",
+          "type": "n8n-nodes-base.code",
+          "parameters": {
+            "jsCode": "const response = $input.first().json.candidates[0].content.parts[0].text;\nconst ideas = JSON.parse(response.match(/\\[.*\\]/s)[0]);\nreturn ideas.map(idea => ({json: idea}));"
+          }
+        },
+        {
+          "name": "Create Calendar Events",
+          "type": "n8n-nodes-base.googleCalendar",
+          "parameters": {
+            "operation": "create",
+            "calendar": "primary",
+            "summary": "Content: {{$json.title}}",
+            "description": "{{$json.description}}\n\nTarget: {{$json.target_audience}}",
+            "start": "{{$json.publish_day}}",
+            "end": "{{$json.publish_day}}"
+          }
+        },
+        {
+          "name": "Save to Google Drive",
+          "type": "n8n-nodes-base.googleDrive",
+          "parameters": {
+            "operation": "upload",
+            "name": "content_calendar_{{$today}}.json",
+            "folderId": "{{$env.CONTENT_FOLDER_ID}}",
+            "content": "{{JSON.stringify($json)}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Customer Support Triage",
+      "description": "Automatically categorize and respond to support emails",
+      "trigger": "gmail",
+      "nodes": [
+        {
+          "name": "Gmail Trigger",
+          "type": "n8n-nodes-base.gmailTrigger",
+          "parameters": {
+            "filters": {
+              "q": "label:support is:unread"
+            }
+          }
+        },
+        {
+          "name": "AI Categorize",
+          "type": "n8n-nodes-base.httpRequest",
+          "parameters": {
+            "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent",
+            "method": "POST",
+            "qs": {"key": "{{$env.GEMINI_API_KEY}}"},
+            "body": {
+              "contents": [{
+                "parts": [{
+                  "text": "Categorize this support email and suggest a response:\n\nSubject: {{$json.subject}}\nBody: {{$json.body}}\n\nRespond with JSON: {\"category\": \"bug/feature/question/billing\", \"priority\": \"high/medium/low\", \"suggested_response\": \"...\"}"
+                }]
+              }]
+            }
+          }
+        },
+        {
+          "name": "Parse Response",
+          "type": "n8n-nodes-base.code",
+          "parameters": {
+            "jsCode": "const text = $input.first().json.candidates[0].content.parts[0].text;\nconst data = JSON.parse(text.match(/\\{.*\\}/s)[0]);\nreturn [{json: data}];"
+          }
+        },
+        {
+          "name": "Route by Priority",
+          "type": "n8n-nodes-base.switch",
+          "parameters": {
+            "dataPropertyName": "priority",
+            "rules": [
+              {"value": "high"},
+              {"value": "medium"},
+              {"value": "low"}
+            ]
+          }
+        },
+        {
+          "name": "High Priority Alert",
+          "type": "n8n-nodes-base.slack",
+          "parameters": {
+            "channel": "#support-urgent",
+            "text": "🚨 High Priority Support Request\n\nCategory: {{$json.category}}\nSubject: {{$node['Gmail Trigger'].json.subject}}"
+          }
+        },
+        {
+          "name": "Draft Response",
+          "type": "n8n-nodes-base.gmail",
+          "parameters": {
+            "operation": "draft",
+            "to": "{{$node['Gmail Trigger'].json.from}}",
+            "subject": "Re: {{$node['Gmail Trigger'].json.subject}}",
+            "message": "{{$json.suggested_response}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Market Intelligence Monitor",
+      "description": "Monitor competitors and market trends",
+      "trigger": "cron",
+      "schedule": "0 6 * * *",
+      "nodes": [
+        {
+          "name": "Schedule Trigger",
+          "type": "n8n-nodes-base.scheduleTrigger",
+          "parameters": {
+            "rule": {
+              "interval": [{"field": "cronExpression", "expression": "0 6 * * *"}]
+            }
+          }
+        },
+        {
+          "name": "Search Competitor News",
+          "type": "n8n-nodes-base.httpRequest",
+          "parameters": {
+            "url": "https://api.tavily.com/search",
+            "method": "POST",
+            "body": {
+              "query": "{{$env.COMPETITOR_NAMES}} news announcements",
+              "search_depth": "advanced",
+              "max_results": 20
+            },
+            "headers": {
+              "Authorization": "Bearer {{$env.TAVILY_API_KEY}}"
+            }
+          }
+        },
+        {
+          "name": "AI Analysis",
+          "type": "n8n-nodes-base.httpRequest",
+          "parameters": {
+            "url": "https://api.anthropic.com/v1/messages",
+            "method": "POST",
+            "headers": {
+              "x-api-key": "{{$env.ANTHROPIC_API_KEY}}",
+              "anthropic-version": "2023-06-01"
+            },
+            "body": {
+              "model": "claude-3-5-sonnet-20241022",
+              "max_tokens": 2000,
+              "messages": [{
+                "role": "user",
+                "content": "Analyze these competitor news items and provide strategic insights:\n\n{{JSON.stringify($json.results)}}\n\nProvide: 1) Key announcements 2) Market trends 3) Opportunities 4) Threats 5) Recommended actions"
+              }]
+            }
+          }
+        },
+        {
+          "name": "Save Report",
+          "type": "n8n-nodes-base.googleDrive",
+          "parameters": {
+            "operation": "upload",
+            "name": "market_intel_{{$today}}.md",
+            "folderId": "{{$env.INTEL_FOLDER_ID}}",
+            "content": "# Market Intelligence Report - {{$today}}\n\n{{$json.content[0].text}}"
+          }
+        },
+        {
+          "name": "Notify Team",
+          "type": "n8n-nodes-base.slack",
+          "parameters": {
+            "channel": "#market-intel",
+            "text": "📊 Daily Market Intelligence Report Ready\n\nView: {{$json.webViewLink}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Automated Testing Pipeline",
+      "description": "Run automated tests and report results",
+      "trigger": "webhook",
+      "webhook_path": "/run-tests",
+      "nodes": [
+        {
+          "name": "Webhook Trigger",
+          "type": "n8n-nodes-base.webhook",
+          "parameters": {
+            "path": "run-tests",
+            "httpMethod": "POST"
+          }
+        },
+        {
+          "name": "Clone Repository",
+          "type": "n8n-nodes-base.executeCommand",
+          "parameters": {
+            "command": "cd /tmp && rm -rf test_repo && git clone {{$json.repo_url}} test_repo"
+          }
+        },
+        {
+          "name": "Run Tests",
+          "type": "n8n-nodes-base.executeCommand",
+          "parameters": {
+            "command": "cd /tmp/test_repo && pip install -r requirements.txt && pytest --json-report --json-report-file=results.json"
+          }
+        },
+        {
+          "name": "Read Results",
+          "type": "n8n-nodes-base.readBinaryFile",
+          "parameters": {
+            "filePath": "/tmp/test_repo/results.json"
+          }
+        },
+        {
+          "name": "AI Analyze Results",
+          "type": "n8n-nodes-base.httpRequest",
+          "parameters": {
+            "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent",
+            "method": "POST",
+            "qs": {"key": "{{$env.GEMINI_API_KEY}}"},
+            "body": {
+              "contents": [{
+                "parts": [{
+                  "text": "Analyze these test results and provide a summary with recommendations:\n\n{{$json.data}}"
+                }]
+              }]
+            }
+          }
+        },
+        {
+          "name": "Post Results",
+          "type": "n8n-nodes-base.slack",
+          "parameters": {
+            "channel": "#ci-cd",
+            "text": "🧪 Test Results for {{$node['Webhook Trigger'].json.repo_name}}\n\n{{$json.candidates[0].content.parts[0].text}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Invoice Processing",
+      "description": "Process incoming invoices and update accounting",
+      "trigger": "gmail",
+      "nodes": [
+        {
+          "name": "Gmail Trigger",
+          "type": "n8n-nodes-base.gmailTrigger",
+          "parameters": {
+            "filters": {
+              "q": "subject:invoice has:attachment"
+            }
+          }
+        },
+        {
+          "name": "Download Attachment",
+          "type": "n8n-nodes-base.gmail",
+          "parameters": {
+            "operation": "getAttachment",
+            "messageId": "{{$json.id}}"
+          }
+        },
+        {
+          "name": "AI Extract Data",
+          "type": "n8n-nodes-base.httpRequest",
+          "parameters": {
+            "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent",
+            "method": "POST",
+            "qs": {"key": "{{$env.GEMINI_API_KEY}}"},
+            "body": {
+              "contents": [{
+                "parts": [
+                  {"text": "Extract invoice data from this document. Return JSON: {\"vendor\": \"\", \"invoice_number\": \"\", \"date\": \"\", \"amount\": 0, \"currency\": \"\", \"line_items\": []}"},
+                  {"inline_data": {"mime_type": "application/pdf", "data": "{{$json.data}}"}}
+                ]
+              }]
+            }
+          }
+        },
+        {
+          "name": "Parse Invoice Data",
+          "type": "n8n-nodes-base.code",
+          "parameters": {
+            "jsCode": "const text = $input.first().json.candidates[0].content.parts[0].text;\nconst data = JSON.parse(text.match(/\\{.*\\}/s)[0]);\nreturn [{json: data}];"
+          }
+        },
+        {
+          "name": "Add to Spreadsheet",
+          "type": "n8n-nodes-base.googleSheets",
+          "parameters": {
+            "operation": "append",
+            "sheetId": "{{$env.INVOICE_SHEET_ID}}",
+            "range": "Invoices!A:F",
+            "values": [
+              "{{$json.vendor}}",
+              "{{$json.invoice_number}}",
+              "{{$json.date}}",
+              "{{$json.amount}}",
+              "{{$json.currency}}",
+              "{{$today}}"
+            ]
+          }
+        },
+        {
+          "name": "Archive Email",
+          "type": "n8n-nodes-base.gmail",
+          "parameters": {
+            "operation": "addLabels",
+            "messageId": "{{$node['Gmail Trigger'].json.id}}",
+            "labelIds": ["processed"]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Social Media Scheduler",
+      "description": "Generate and schedule social media posts",
+      "trigger": "cron",
+      "schedule": "0 7 * * 1,3,5",
+      "nodes": [
+        {
+          "name": "Schedule Trigger",
+          "type": "n8n-nodes-base.scheduleTrigger",
+          "parameters": {
+            "rule": {
+              "interval": [{"field": "cronExpression", "expression": "0 7 * * 1,3,5"}]
+            }
+          }
+        },
+        {
+          "name": "Get Content Topics",
+          "type": "n8n-nodes-base.googleSheets",
+          "parameters": {
+            "operation": "read",
+            "sheetId": "{{$env.CONTENT_SHEET_ID}}",
+            "range": "Topics!A:C"
+          }
+        },
+        {
+          "name": "Generate Posts",
+          "type": "n8n-nodes-base.httpRequest",
+          "parameters": {
+            "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent",
+            "method": "POST",
+            "qs": {"key": "{{$env.GEMINI_API_KEY}}"},
+            "body": {
+              "contents": [{
+                "parts": [{
+                  "text": "Create 3 engaging social media posts for these topics:\n\n{{JSON.stringify($json)}}\n\nFor each post provide: platform (twitter/linkedin), text (with hashtags), best posting time. Format as JSON array."
+                }]
+              }]
+            }
+          }
+        },
+        {
+          "name": "Parse Posts",
+          "type": "n8n-nodes-base.code",
+          "parameters": {
+            "jsCode": "const text = $input.first().json.candidates[0].content.parts[0].text;\nconst posts = JSON.parse(text.match(/\\[.*\\]/s)[0]);\nreturn posts.map(post => ({json: post}));"
+          }
+        },
+        {
+          "name": "Save to Buffer/Later",
+          "type": "n8n-nodes-base.httpRequest",
+          "parameters": {
+            "url": "https://api.buffer.com/1/updates/create.json",
+            "method": "POST",
+            "body": {
+              "text": "{{$json.text}}",
+              "profile_ids": ["{{$env.BUFFER_PROFILE_ID}}"],
+              "scheduled_at": "{{$json.posting_time}}"
+            },
+            "headers": {
+              "Authorization": "Bearer {{$env.BUFFER_TOKEN}}"
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "environment_variables": {
+    "required": [
+      "GEMINI_API_KEY",
+      "ANTHROPIC_API_KEY",
+      "TAVILY_API_KEY",
+      "GITHUB_TOKEN"
+    ],
+    "optional": [
+      "OPENAI_API_KEY",
+      "SLACK_WEBHOOK_URL",
+      "BUFFER_TOKEN",
+      "BUFFER_PROFILE_ID",
+      "DIGEST_EMAIL",
+      "COMPETITOR_NAMES",
+      "CONTENT_FOLDER_ID",
+      "INTEL_FOLDER_ID",
+      "INVOICE_SHEET_ID",
+      "CONTENT_SHEET_ID"
+    ]
+  },
+  "import_instructions": {
+    "steps": [
+      "1. Open n8n at http://localhost:5678",
+      "2. Go to Settings > Import Workflow",
+      "3. Paste the workflow JSON",
+      "4. Configure credentials for each service",
+      "5. Set environment variables in n8n settings",
+      "6. Activate the workflow"
+    ]
+  }
+}

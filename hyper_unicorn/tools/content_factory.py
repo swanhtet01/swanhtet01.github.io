@@ -50,7 +50,8 @@ class ContentFactory:
 
 {content}
 """
-        output_path = f"{topic.replace(\' \', \'-\\' ).lower()}_report.md"
+        safe_topic = topic.replace(' ', '-').lower()
+        output_path = f"{safe_topic}_report.md"
         with open(output_path, "w") as f:
             f.write(md_content)
         return output_path
@@ -69,7 +70,8 @@ class ContentFactory:
         # Add a proper multi_cell for the content
         # pdf.multi_cell(0, 10, content)
         
-        output_path = f"{topic.replace(\' \', \'-\\' ).lower()}_report.pdf"
+        safe_topic = topic.replace(' ', '-').lower()
+        output_path = f"{safe_topic}_report.pdf"
         pdf.output(output_path)
         return output_path
 
