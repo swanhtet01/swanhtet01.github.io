@@ -1,7 +1,7 @@
 """
 HYPER UNICORN Agents
 ====================
-Autonomous AI agents for various tasks.
+Specialized AI agents for autonomous task execution.
 """
 
 from .research_agent import ResearchAgent
@@ -10,12 +10,16 @@ from .content_agent import ContentAgent
 from .browser_agent import BrowserAgent
 from .financial_agent import FinancialAgent
 from .communication_agent import CommunicationAgent
+from .ceo_agent import CEOAgent, AgentWorkforce, TaskPriority
 
 __all__ = [
     "ResearchAgent",
-    "CodeAgent", 
+    "CodeAgent",
     "ContentAgent",
     "BrowserAgent",
     "FinancialAgent",
-    "CommunicationAgent"
+    "CommunicationAgent",
+    "CEOAgent",
+    "AgentWorkforce",
+    "TaskPriority"
 ]
