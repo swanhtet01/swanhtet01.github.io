@@ -7,6 +7,8 @@ from .ab_testing import ABTestingManager, AgentStrategyTester
 from .security import SecurityManager, Permission, Role
 from .cost_optimizer import CostOptimizer, TaskComplexity
 from .learning_system import LearningSystem, FeedbackType, OutcomeType
+from .event_system import EventBus, EventFactory, EventTypes, EventStore
+from .multi_tenant import TenantManager, Tenant, TenantTier, TenantContext
 
 __all__ = [
     "IntelligenceFabric",
@@ -23,5 +25,13 @@ __all__ = [
     "TaskComplexity",
     "LearningSystem",
     "FeedbackType",
-    "OutcomeType"
+    "OutcomeType",
+    "EventBus",
+    "EventFactory",
+    "EventTypes",
+    "EventStore",
+    "TenantManager",
+    "Tenant",
+    "TenantTier",
+    "TenantContext"
 ]
