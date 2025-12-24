@@ -181,7 +181,7 @@ class TestToolEcosystem(unittest.TestCase):
     def test_tool_ecosystem_import(self):
         """Test that Tool Ecosystem can be imported."""
         try:
-            from tools.tool_ecosystem import ToolEcosystem
+            from tools.tool_ecosystem import ToolEcosystem, ToolRegistry
             self.assertTrue(True)
         except ImportError as e:
             self.fail(f"Failed to import Tool Ecosystem: {e}")
