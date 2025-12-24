@@ -1,9 +1,16 @@
 """
 HYPER UNICORN Monitoring
 ========================
-Real-time monitoring and observability for the agent system.
+Monitoring and observability for AI agents.
 """
 
-from .agent_monitor import AgentMonitor, AgentStatus, TaskMetrics, SystemMetrics
+from .agent_monitor import AgentMonitor
+from .health_check import HealthMonitor, HealthChecker, AutoRecovery, AlertManager
 
-__all__ = ["AgentMonitor", "AgentStatus", "TaskMetrics", "SystemMetrics"]
+__all__ = [
+    "AgentMonitor",
+    "HealthMonitor",
+    "HealthChecker",
+    "AutoRecovery",
+    "AlertManager"
+]

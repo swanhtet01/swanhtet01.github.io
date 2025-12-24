@@ -11,6 +11,7 @@ from .browser_agent import BrowserAgent
 from .financial_agent import FinancialAgent
 from .communication_agent import CommunicationAgent
 from .ceo_agent import CEOAgent, AgentWorkforce, TaskPriority
+from .data_agent import DataAgent
 
 __all__ = [
     "ResearchAgent",
@@ -21,5 +22,6 @@ __all__ = [
     "CommunicationAgent",
     "CEOAgent",
     "AgentWorkforce",
-    "TaskPriority"
+    "TaskPriority",
+    "DataAgent"
 ]
