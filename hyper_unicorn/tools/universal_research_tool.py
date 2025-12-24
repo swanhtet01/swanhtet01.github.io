@@ -61,6 +61,7 @@ class UniversalResearchTool:
         """Synthesizes information from multiple sources to answer a query."""
         # This would involve feeding the content from sources into a powerful LLM
         # like Claude 3.5 Sonnet to generate a comprehensive answer.
+        sources_formatted = self._format_sources(sources)
         report = f"""
         # Synthesized Report for: {query}
 
@@ -69,7 +70,7 @@ class UniversalResearchTool:
         ... (LLM-generated synthesis would go here) ...
 
         **Sources:**
-        {self._format_sources(sources)}
+        {sources_formatted}
         """
         return report
 
