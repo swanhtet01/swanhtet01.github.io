@@ -1,0 +1,118 @@
+{
+  "name": "Google Drive File Monitor",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 5
+            }
+          ]
+        }
+      },
+      "name": "Every 5 Minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "operation": "list",
+        "folderId": "YOUR_GDRIVE_FOLDER_ID",
+        "options": {
+          "fields": ["id", "name", "mimeType", "modifiedTime", "webViewLink"]
+        }
+      },
+      "name": "List Drive Files",
+      "type": "n8n-nodes-base.googleDrive",
+      "position": [450, 300],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "1",
+          "name": "Google Drive"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "dateTime": [
+            {
+              "value1": "={{ $json.modifiedTime }}",
+              "operation": "after",
+              "value2": "={{ $now.minus(5, 'minutes').toISO() }}"
+            }
+          ]
+        }
+      },
+      "name": "Filter New/Modified",
+      "type": "n8n-nodes-base.filter",
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "url": "http://swan-aws:8000/tasks/submit",
+        "method": "POST",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "task_type",
+              "value": "process_file"
+            },
+            {
+              "name": "payload",
+              "value": "={{ JSON.stringify({ file_url: $json.webViewLink, file_name: $json.name, mime_type: $json.mimeType }) }}"
+            },
+            {
+              "name": "target_node",
+              "value": "bkk"
+            }
+          ]
+        }
+      },
+      "name": "Submit Processing Task",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [850, 300]
+    },
+    {
+      "parameters": {
+        "url": "https://ytf.supermega.dev/api/trpc/fileUpload.trackFile",
+        "method": "POST",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "fileName",
+              "value": "={{ $json.name }}"
+            },
+            {
+              "name": "source",
+              "value": "google_drive"
+            },
+            {
+              "name": "status",
+              "value": "processing"
+            }
+          ]
+        }
+      },
+      "name": "Track in YTF Platform",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [1050, 300]
+    }
+  ],
+  "connections": {
+    "Every 5 Minutes": {
+      "main": [[{ "node": "List Drive Files", "type": "main", "index": 0 }]]
+    },
+    "List Drive Files": {
+      "main": [[{ "node": "Filter New/Modified", "type": "main", "index": 0 }]]
+    },
+    "Filter New/Modified": {
+      "main": [[{ "node": "Submit Processing Task", "type": "main", "index": 0 }]]
+    },
+    "Submit Processing Task": {
+      "main": [[{ "node": "Track in YTF Platform", "type": "main", "index": 0 }]]
+    }
+  }
+}

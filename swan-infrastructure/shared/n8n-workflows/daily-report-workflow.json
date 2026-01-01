@@ -1,0 +1,93 @@
+{
+  "name": "Daily Factory Report Generator",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 24,
+              "triggerAtHour": 7
+            }
+          ]
+        }
+      },
+      "name": "Daily 7AM Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "url": "http://swan-aws:8000/tasks/submit",
+        "method": "POST",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "task_type",
+              "value": "generate_report"
+            },
+            {
+              "name": "payload",
+              "value": "={{ JSON.stringify({ report_type: 'daily_summary', date: $now.format('YYYY-MM-DD') }) }}"
+            },
+            {
+              "name": "target_node",
+              "value": "bkk"
+            }
+          ]
+        }
+      },
+      "name": "Submit Report Task",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "amount": 60,
+        "unit": "seconds"
+      },
+      "name": "Wait for Processing",
+      "type": "n8n-nodes-base.wait",
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "url": "=http://swan-aws:8000/tasks/{{ $json.task_id }}",
+        "method": "GET"
+      },
+      "name": "Check Task Status",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [850, 300]
+    },
+    {
+      "parameters": {
+        "chatId": "YOUR_TELEGRAM_CHAT_ID",
+        "text": "=📊 Daily Report Ready!\n\n{{ $json.result.report.substring(0, 500) }}...\n\nFull report: http://ytf.supermega.dev/reports"
+      },
+      "name": "Send Telegram Notification",
+      "type": "n8n-nodes-base.telegram",
+      "position": [1050, 300],
+      "credentials": {
+        "telegramApi": {
+          "id": "1",
+          "name": "Telegram Bot"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Daily 7AM Trigger": {
+      "main": [[{ "node": "Submit Report Task", "type": "main", "index": 0 }]]
+    },
+    "Submit Report Task": {
+      "main": [[{ "node": "Wait for Processing", "type": "main", "index": 0 }]]
+    },
+    "Wait for Processing": {
+      "main": [[{ "node": "Check Task Status", "type": "main", "index": 0 }]]
+    },
+    "Check Task Status": {
+      "main": [[{ "node": "Send Telegram Notification", "type": "main", "index": 0 }]]
+    }
+  }
+}
