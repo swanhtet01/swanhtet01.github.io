@@ -1,37 +1,45 @@
-"""Core components for HYPER UNICORN."""
+"""
+HYPER UNICORN Core
+==================
+Core systems and infrastructure.
+"""
+
 from .intelligence_fabric import IntelligenceFabric
 from .master_control_agent import MasterControlAgent
-from .collaboration import CollaborationProtocol, AgentTeam
-from .plugin_system import PluginManager
-from .ab_testing import ABTestingManager, AgentStrategyTester
-from .security import SecurityManager, Permission, Role
-from .cost_optimizer import CostOptimizer, TaskComplexity
-from .learning_system import LearningSystem, FeedbackType, OutcomeType
-from .event_system import EventBus, EventFactory, EventTypes, EventStore
-from .multi_tenant import TenantManager, Tenant, TenantTier, TenantContext
+from .collaboration import AgentCollaboration
+from .plugin_system import PluginSystem
+from .ab_testing import ABTestingFramework
+from .security import SecurityManager
+from .cost_optimizer import CostOptimizer
+from .learning_system import LearningSystem
+from .event_system import EventSystem
+from .multi_tenant import MultiTenantManager
+from .agent_communication import (
+    AgentCommunicationHub,
+    get_communication_hub,
+    quick_delegate,
+    broadcast_announcement,
+    MessageType,
+    MessagePriority,
+    AgentStatus
+)
 
 __all__ = [
     "IntelligenceFabric",
-    "MasterControlAgent", 
-    "CollaborationProtocol",
-    "AgentTeam",
-    "PluginManager",
-    "ABTestingManager",
-    "AgentStrategyTester",
+    "MasterControlAgent",
+    "AgentCollaboration",
+    "PluginSystem",
+    "ABTestingFramework",
     "SecurityManager",
-    "Permission",
-    "Role",
     "CostOptimizer",
-    "TaskComplexity",
     "LearningSystem",
-    "FeedbackType",
-    "OutcomeType",
-    "EventBus",
-    "EventFactory",
-    "EventTypes",
-    "EventStore",
-    "TenantManager",
-    "Tenant",
-    "TenantTier",
-    "TenantContext"
+    "EventSystem",
+    "MultiTenantManager",
+    "AgentCommunicationHub",
+    "get_communication_hub",
+    "quick_delegate",
+    "broadcast_announcement",
+    "MessageType",
+    "MessagePriority",
+    "AgentStatus"
 ]
