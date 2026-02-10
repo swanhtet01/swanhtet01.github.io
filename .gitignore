@@ -3,3 +3,4 @@ apikeys.txt
 .env*
 *credentials*
 hyper_unicorn/venv/
+.github/workflows/
