@@ -1,0 +1,138 @@
+{
+  "description": "SuperMega Mark 1 — n8n Workflow Templates for Autonomous Operations",
+  "version": "1.0.0",
+  "workflows": [
+    {
+      "id": "wf-email-digest",
+      "name": "Daily Email Digest",
+      "description": "Scans Gmail for priority emails from key domains (yangontyre.com, evergreenmyanmar, supermega.dev) and senders (KIIC, Junky). Generates a daily summary and posts to Slack/Dashboard.",
+      "trigger": "Schedule (every day at 07:00 MMT)",
+      "nodes": [
+        "Gmail Trigger → Filter by Domain/Sender → Classify Priority → Summarize with AI → Post to Dashboard → Update machine-status.json"
+      ],
+      "integrations": ["Gmail API", "OpenAI/Gemini", "GitHub API"],
+      "status": "TEMPLATE_READY"
+    },
+    {
+      "id": "wf-drive-monitor",
+      "name": "Google Drive File Monitor",
+      "description": "Monitors key Google Drive folders for new/modified files. Triggers data extraction pipeline when new files appear in monitored folders.",
+      "trigger": "Webhook (Google Drive API push notification)",
+      "nodes": [
+        "Drive Webhook → Identify Folder → Classify File Type → Extract Data (OCR if image) → Update Knowledge Base → Notify Dashboard"
+      ],
+      "integrations": ["Google Drive API", "Google Vision OCR", "PostgreSQL"],
+      "status": "TEMPLATE_READY"
+    },
+    {
+      "id": "wf-invoice-processor",
+      "name": "Invoice Auto-Processor",
+      "description": "Processes incoming invoices from email attachments. Extracts data, validates against PO, and creates entries in Odoo.",
+      "trigger": "Gmail Trigger (attachment filter)",
+      "nodes": [
+        "Gmail Trigger → Extract Attachment → OCR/Parse → Validate Against PO → Create Odoo Entry → Send Confirmation → Log to Dashboard"
+      ],
+      "integrations": ["Gmail API", "Google Vision", "Odoo API", "Stripe"],
+      "status": "TEMPLATE_READY"
+    },
+    {
+      "id": "wf-lead-gen-pipeline",
+      "name": "Lead Generation Pipeline",
+      "description": "Scrapes Google Maps for businesses in target categories. Enriches with LinkedIn data. Scores and adds to CRM.",
+      "trigger": "Schedule (weekly) or Manual",
+      "nodes": [
+        "Google Maps Scraper → Data Enrichment → Lead Scoring → CRM Entry → Outreach Email Draft → Queue for Review"
+      ],
+      "integrations": ["Google Maps API", "LinkedIn API", "Odoo CRM", "Gmail"],
+      "status": "TEMPLATE_READY"
+    },
+    {
+      "id": "wf-content-calendar",
+      "name": "Content Calendar Automation",
+      "description": "Generates weekly content calendar for social media. Creates drafts using AI. Schedules posts.",
+      "trigger": "Schedule (every Sunday at 20:00 MMT)",
+      "nodes": [
+        "Generate Topics → AI Content Draft → Image Generation → Schedule Posts → Update Calendar → Notify for Review"
+      ],
+      "integrations": ["OpenAI/Gemini", "Meta API", "Google Calendar", "Canva API"],
+      "status": "TEMPLATE_READY"
+    },
+    {
+      "id": "wf-system-backup",
+      "name": "Automated System Backup",
+      "description": "Backs up all critical data: database dumps, configuration files, secrets inventory. Stores in S3 with versioning.",
+      "trigger": "Schedule (daily at 02:00 UTC)",
+      "nodes": [
+        "Trigger → Dump PostgreSQL → Export Odoo Data → Snapshot Configs → Compress → Upload to S3 → Verify → Report"
+      ],
+      "integrations": ["PostgreSQL", "AWS S3", "Odoo API"],
+      "status": "TEMPLATE_READY"
+    },
+    {
+      "id": "wf-cost-monitor",
+      "name": "AWS Cost Monitor",
+      "description": "Monitors AWS spending. Alerts when approaching budget thresholds. Generates daily cost report.",
+      "trigger": "Schedule (daily at 08:00 UTC)",
+      "nodes": [
+        "AWS Cost Explorer API → Parse Costs → Compare to Budget → Generate Report → Alert if Threshold → Update Dashboard"
+      ],
+      "integrations": ["AWS Cost Explorer", "Gmail", "GitHub API"],
+      "status": "TEMPLATE_READY"
+    },
+    {
+      "id": "wf-calendar-sync",
+      "name": "Calendar Intelligence",
+      "description": "Syncs Google Calendar events. Prepares daily briefing. Auto-schedules follow-ups after meetings.",
+      "trigger": "Schedule (daily at 06:30 MMT)",
+      "nodes": [
+        "Fetch Today's Events → Generate Briefing → Check Prep Materials → Send Morning Brief → Post-Meeting: Auto-Create Follow-Up Tasks"
+      ],
+      "integrations": ["Google Calendar API", "Gmail", "Odoo Tasks"],
+      "status": "TEMPLATE_READY"
+    },
+    {
+      "id": "wf-github-activity",
+      "name": "GitHub Activity Tracker",
+      "description": "Monitors all GitHub repositories for commits, issues, PRs. Updates machine status and generates activity reports.",
+      "trigger": "Webhook (GitHub)",
+      "nodes": [
+        "GitHub Webhook → Parse Event → Update machine-status.json → Generate Activity Log → Weekly Summary"
+      ],
+      "integrations": ["GitHub API", "GitHub Actions"],
+      "status": "TEMPLATE_READY"
+    },
+    {
+      "id": "wf-agent-health",
+      "name": "Agent Health Monitor",
+      "description": "Pings all running agents every 5 minutes. Restarts failed agents. Escalates persistent failures.",
+      "trigger": "Schedule (every 5 minutes)",
+      "nodes": [
+        "Ping All Agents → Check Response → If Failed: Restart → If Still Failed: Escalate → Update Dashboard → Log"
+      ],
+      "integrations": ["Docker API", "AWS EC2 API", "Gmail (escalation)"],
+      "status": "TEMPLATE_READY"
+    },
+    {
+      "id": "wf-stripe-reconciliation",
+      "name": "Stripe Payment Reconciliation",
+      "description": "Reconciles Stripe payments with Odoo invoices. Flags discrepancies. Generates monthly financial report.",
+      "trigger": "Webhook (Stripe) + Schedule (monthly)",
+      "nodes": [
+        "Stripe Webhook → Match to Odoo Invoice → Update Payment Status → Flag Discrepancies → Monthly Report"
+      ],
+      "integrations": ["Stripe API", "Odoo API", "Google Sheets"],
+      "status": "TEMPLATE_READY"
+    },
+    {
+      "id": "wf-knowledge-ingestion",
+      "name": "Knowledge Base Ingestion",
+      "description": "Processes new documents added to Google Drive. Extracts text, generates embeddings, adds to vector database for RAG.",
+      "trigger": "Google Drive Webhook",
+      "nodes": [
+        "New File Detected → Extract Text (PDF/DOCX/Image OCR) → Chunk Text → Generate Embeddings → Store in Vector DB → Index → Confirm"
+      ],
+      "integrations": ["Google Drive API", "OpenAI Embeddings", "PostgreSQL pgvector"],
+      "status": "TEMPLATE_READY"
+    }
+  ]
+}

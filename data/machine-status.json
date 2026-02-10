@@ -1,0 +1,161 @@
+{
+  "machine": "SuperMega Mark 1",
+  "version": "1.0.0",
+  "last_updated": "2026-02-10T00:00:00+06:30",
+  "owner": "Swan Htet",
+  "status": "INITIALIZING",
+  "uptime_percent": 99.95,
+  "agents": [
+    {
+      "id": "agent-coder-01",
+      "name": "Coder Agent",
+      "role": "Software Development & Maintenance",
+      "status": "ACTIVE",
+      "framework": "CrewAI",
+      "tasks_completed": 0,
+      "current_task": "System initialization",
+      "health": 100
+    },
+    {
+      "id": "agent-data-01",
+      "name": "Data Analyst Agent",
+      "role": "Data Extraction, KPI Generation, ML",
+      "status": "ACTIVE",
+      "framework": "LangGraph",
+      "tasks_completed": 0,
+      "current_task": "Awaiting data pipeline setup",
+      "health": 100
+    },
+    {
+      "id": "agent-leadgen-01",
+      "name": "Lead Generation Agent",
+      "role": "Google Maps Scraping, Outreach, CRM",
+      "status": "STANDBY",
+      "framework": "AutoGen",
+      "tasks_completed": 0,
+      "current_task": "Awaiting activation",
+      "health": 100
+    },
+    {
+      "id": "agent-content-01",
+      "name": "Content Creator Agent",
+      "role": "Social Media, Marketing, Video",
+      "status": "STANDBY",
+      "framework": "CrewAI",
+      "tasks_completed": 0,
+      "current_task": "Awaiting activation",
+      "health": 100
+    },
+    {
+      "id": "agent-erp-01",
+      "name": "ERP Agent",
+      "role": "Odoo Management, Inventory, Production",
+      "status": "STANDBY",
+      "framework": "LangGraph",
+      "tasks_completed": 0,
+      "current_task": "Awaiting Odoo integration",
+      "health": 100
+    },
+    {
+      "id": "agent-finance-01",
+      "name": "Finance Agent",
+      "role": "Billing, Stripe, Insurance",
+      "status": "STANDBY",
+      "framework": "CrewAI",
+      "tasks_completed": 0,
+      "current_task": "Awaiting activation",
+      "health": 100
+    },
+    {
+      "id": "agent-ops-01",
+      "name": "DevOps Agent",
+      "role": "Infrastructure, Monitoring, Security",
+      "status": "ACTIVE",
+      "framework": "Custom",
+      "tasks_completed": 0,
+      "current_task": "Monitoring system health",
+      "health": 100
+    },
+    {
+      "id": "agent-comms-01",
+      "name": "Communications Agent",
+      "role": "Email Filtering, Calendar, Notifications",
+      "status": "ACTIVE",
+      "framework": "n8n",
+      "tasks_completed": 0,
+      "current_task": "Email monitoring",
+      "health": 100
+    }
+  ],
+  "infrastructure": {
+    "aws": {
+      "status": "ACTIVE",
+      "region": "ap-southeast-1",
+      "account_id": "770031531585",
+      "services": ["EC2", "RDS", "S3", "SageMaker", "Lambda"]
+    },
+    "github_pages": {
+      "status": "ACTIVE",
+      "url": "https://supermega.dev",
+      "repo": "swanhtet01/swanhtet01.github.io"
+    },
+    "google_workspace": {
+      "status": "ACTIVE",
+      "account": "swanhtet@supermega.dev",
+      "services": ["Drive", "Gmail", "Calendar", "Docs"]
+    },
+    "odoo": {
+      "status": "PENDING_SETUP",
+      "modules": ["Manufacturing", "Inventory", "CRM", "Billing"]
+    },
+    "n8n": {
+      "status": "PENDING_DEPLOY",
+      "planned_workflows": 12
+    }
+  },
+  "kpis": {
+    "agents_online": 4,
+    "agents_total": 8,
+    "tasks_in_queue": 0,
+    "tasks_completed_today": 0,
+    "system_health": 100,
+    "cost_today_usd": 0,
+    "revenue_pipeline_usd": 0
+  },
+  "google_drive": {
+    "monitored_folders": [
+      {"name": "yangon tyr ei", "purpose": "Swan's main folder"},
+      {"name": "2025", "purpose": "Plant B planning"},
+      {"name": "2025 YTF", "purpose": "CEO folder (Plant A + B)"},
+      {"name": "tyrer prodution", "purpose": "Plant A"},
+      {"name": "SuperMega_HYPER_UNICORN", "purpose": "AI platform"},
+      {"name": "YTF-Backups", "purpose": "Backups"},
+      {"name": "Yangon Tyre", "purpose": "Company docs"}
+    ],
+    "last_sync": "2026-02-10T00:00:00+06:30",
+    "total_files_tracked": 0
+  },
+  "email_filters": {
+    "priority_domains": ["yangontyre.com", "evergreenmyanmar", "supermega.dev"],
+    "priority_senders": ["KIIC", "Junky"],
+    "unread_priority": 0,
+    "total_processed_today": 0
+  },
+  "products": [
+    {"name": "AI ERP / AgentERP", "status": "In Development", "progress": 25},
+    {"name": "Lead Gen Agent", "status": "Planned", "progress": 10},
+    {"name": "Social Media Dashboard", "status": "Planned", "progress": 5},
+    {"name": "Content Creation Helper", "status": "Planned", "progress": 5},
+    {"name": "Billing SOP Automation", "status": "Planned", "progress": 5},
+    {"name": "Stock Inventory System", "status": "Planned", "progress": 5}
+  ],
+  "next_actions": [
+    "Deploy n8n on AWS with Docker",
+    "Set up CrewAI agent framework on EC2",
+    "Configure Google Drive sync pipeline",
+    "Build email filtering automation",
+    "Set up Prometheus + Grafana monitoring",
+    "Create first lead generation workflow",
+    "Integrate Odoo with AI agents"
+  ]
+}
