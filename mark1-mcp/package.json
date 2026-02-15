@@ -1,0 +1,21 @@
+{
+  "name": "@supermega/mark1-mcp",
+  "version": "1.0.0",
+  "description": "Mark 1 MCP Server — Expose SuperMega workspace as tools for Claude Code, Cline, Cursor, Windsurf",
+  "type": "module",
+  "bin": {
+    "mark1-mcp": "./server.mjs"
+  },
+  "scripts": {
+    "start": "node server.mjs"
+  },
+  "keywords": ["mcp", "ai", "workspace", "claude", "cursor", "cline"],
+  "author": "Swan Htet <swanhtet@supermega.dev>",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "zod": "^3.23.0",
+    "node-fetch": "^3.3.2",
+    "dotenv": "^16.4.5"
+  }
+}

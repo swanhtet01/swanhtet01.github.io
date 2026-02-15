@@ -1,0 +1,68 @@
+{
+  "name": "SuperMega Mark 1 Workspace",
+  "image": "mcr.microsoft.com/devcontainers/typescript-node:22-bookworm",
+  "features": {
+    "ghcr.io/devcontainers/features/python:1": {
+      "version": "3.12",
+      "installTools": true
+    },
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {},
+    "ghcr.io/devcontainers/features/git:1": {},
+    "ghcr.io/devcontainers/features/github-cli:1": {}
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "saoudrizwan.claude-dev",
+        "continue.continue",
+        "google.gemini-code-assist",
+        "github.copilot",
+        "github.copilot-chat",
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        "bradlc.vscode-tailwindcss",
+        "ms-vscode.vscode-typescript-next",
+        "eamodio.gitlens",
+        "ms-azuretools.vscode-docker",
+        "redhat.vscode-yaml",
+        "tamasfe.even-better-toml",
+        "streetsidesoftware.code-spell-checker",
+        "gruntfuggly.todo-tree",
+        "usernamehw.errorlens",
+        "ms-playwright.playwright"
+      ],
+      "settings": {
+        "editor.defaultFormatter": "esbenp.prettier-vscode",
+        "editor.formatOnSave": true,
+        "editor.tabSize": 2,
+        "editor.bracketPairColorization.enabled": true,
+        "editor.guides.bracketPairs": true,
+        "terminal.integrated.defaultProfile.linux": "bash",
+        "typescript.preferences.importModuleSpecifier": "non-relative",
+        "python.defaultInterpreterPath": "/usr/local/bin/python3",
+        "files.exclude": {
+          "**/.git": true,
+          "**/node_modules": true,
+          "**/__pycache__": true
+        }
+      }
+    }
+  },
+  "postCreateCommand": "bash .devcontainer/post-create.sh",
+  "remoteEnv": {
+    "GEMINI_API_KEY": "${localEnv:GEMINI_API_KEY}",
+    "ANTHROPIC_API_KEY": "${localEnv:ANTHROPIC_API_KEY}",
+    "OPENAI_API_KEY": "${localEnv:OPENAI_API_KEY}",
+    "GOOGLE_CLOUD_PROJECT": "${localEnv:GOOGLE_CLOUD_PROJECT}",
+    "COMPOSIO_API_KEY": "${localEnv:COMPOSIO_API_KEY}",
+    "E2B_API_KEY": "${localEnv:E2B_API_KEY}"
+  },
+  "forwardPorts": [3000, 5678, 8080],
+  "portsAttributes": {
+    "3000": { "label": "Mark 1 Dashboard", "onAutoForward": "notify" },
+    "5678": { "label": "n8n Workflows", "onAutoForward": "notify" },
+    "8080": { "label": "Agent API", "onAutoForward": "notify" }
+  }
+}

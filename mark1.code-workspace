@@ -1,0 +1,157 @@
+{
+  "folders": [
+    { "path": ".", "name": "Mark 1 — Root" },
+    { "path": "mark1-cli", "name": "Mark 1 CLI" },
+    { "path": "mark1-mcp", "name": "Mark 1 MCP Server" },
+    { "path": "hyper_unicorn", "name": "HYPER UNICORN" },
+    { "path": "agent_os", "name": "Agent OS" },
+    { "path": "Jarvis", "name": "Jarvis Agents" },
+    { "path": "swan-infrastructure", "name": "Infrastructure" }
+  ],
+  "settings": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
+    "editor.formatOnSave": true,
+    "editor.tabSize": 2,
+    "editor.bracketPairColorization.enabled": true,
+    "editor.guides.bracketPairs": true,
+    "editor.minimap.enabled": false,
+    "editor.wordWrap": "on",
+    "terminal.integrated.defaultProfile.linux": "bash",
+    "terminal.integrated.profiles.linux": {
+      "Mark 1 Shell": {
+        "path": "bash",
+        "args": ["-c", "echo '🤖 Mark 1 Shell Ready — type: mark1 status' && bash"]
+      }
+    },
+    "files.exclude": {
+      "**/.git": true,
+      "**/node_modules": true,
+      "**/__pycache__": true,
+      "**/.venv": true
+    },
+    "search.exclude": {
+      "**/node_modules": true,
+      "**/dist": true,
+      "**/.git": true
+    },
+    "typescript.preferences.importModuleSpecifier": "non-relative",
+    "python.defaultInterpreterPath": "/usr/local/bin/python3",
+    "cline.mcpServers": {
+      "mark1": {
+        "command": "node",
+        "args": ["${workspaceFolder}/mark1-mcp/server.mjs"]
+      }
+    }
+  },
+  "tasks": {
+    "version": "2.0.0",
+    "tasks": [
+      {
+        "label": "Mark 1: Status",
+        "type": "shell",
+        "command": "mark1 status",
+        "group": "none",
+        "presentation": { "reveal": "always", "panel": "shared" }
+      },
+      {
+        "label": "Mark 1: Chat (Interactive)",
+        "type": "shell",
+        "command": "mark1 chat",
+        "group": "none",
+        "presentation": { "reveal": "always", "panel": "dedicated" },
+        "isBackground": true
+      },
+      {
+        "label": "Mark 1: Agent List",
+        "type": "shell",
+        "command": "mark1 agent list",
+        "group": "none",
+        "presentation": { "reveal": "always", "panel": "shared" }
+      },
+      {
+        "label": "Mark 1: Tool Catalog",
+        "type": "shell",
+        "command": "mark1 tools",
+        "group": "none",
+        "presentation": { "reveal": "always", "panel": "shared" }
+      },
+      {
+        "label": "Mark 1: Install All Tools",
+        "type": "shell",
+        "command": "mark1 tools --install-all",
+        "group": "none",
+        "presentation": { "reveal": "always", "panel": "dedicated" }
+      },
+      {
+        "label": "Start n8n",
+        "type": "shell",
+        "command": "n8n start",
+        "group": "none",
+        "presentation": { "reveal": "always", "panel": "dedicated" },
+        "isBackground": true
+      },
+      {
+        "label": "Gemini CLI (Vibe Coding)",
+        "type": "shell",
+        "command": "gemini",
+        "group": "none",
+        "presentation": { "reveal": "always", "panel": "dedicated" },
+        "isBackground": true
+      },
+      {
+        "label": "Aider (AI Pair Programming)",
+        "type": "shell",
+        "command": "aider --model gemini/gemini-2.0-flash",
+        "group": "none",
+        "presentation": { "reveal": "always", "panel": "dedicated" },
+        "isBackground": true
+      },
+      {
+        "label": "Start MCP Server",
+        "type": "shell",
+        "command": "cd mark1-mcp && node server.mjs",
+        "group": "none",
+        "presentation": { "reveal": "always", "panel": "dedicated" },
+        "isBackground": true
+      }
+    ]
+  },
+  "launch": {
+    "version": "0.2.0",
+    "configurations": [
+      {
+        "name": "Mark 1 CLI Debug",
+        "type": "node",
+        "request": "launch",
+        "program": "${workspaceFolder}/mark1-cli/bin/mark1.mjs",
+        "args": ["status"],
+        "console": "integratedTerminal"
+      },
+      {
+        "name": "Mark 1 MCP Server Debug",
+        "type": "node",
+        "request": "launch",
+        "program": "${workspaceFolder}/mark1-mcp/server.mjs",
+        "console": "integratedTerminal"
+      }
+    ]
+  },
+  "extensions": {
+    "recommendations": [
+      "saoudrizwan.claude-dev",
+      "continue.continue",
+      "google.gemini-code-assist",
+      "github.copilot",
+      "github.copilot-chat",
+      "ms-python.python",
+      "dbaeumer.vscode-eslint",
+      "esbenp.prettier-vscode",
+      "bradlc.vscode-tailwindcss",
+      "eamodio.gitlens",
+      "ms-azuretools.vscode-docker",
+      "gruntfuggly.todo-tree",
+      "usernamehw.errorlens",
+      "ms-playwright.playwright"
+    ]
+  }
+}
