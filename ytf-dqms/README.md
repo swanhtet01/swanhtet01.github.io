@@ -317,22 +317,21 @@ The YTF DQMS is a comprehensive, real-time quality management system designed sp
 - ✅ Analytics engine core
 
 ### Phase 2: Core Features (Weeks 3-6)
-- ✅ Plant Manager dashboard
-- 🚧 QC Manager dashboard
-- 🚧 Production Supervisor dashboard
-- 🚧 Real-time monitoring
-- 🚧 Alert system
+- ✅ Plant Manager dashboard (`dashboard-plant-manager.html`)
+- ✅ QC Manager dashboard (`dashboard-qc-manager.html`)
+- ✅ Production Supervisor dashboard (`dashboard-supervisor.html`)
+- ✅ Alert Management system (`alerts.html`)
+- ✅ Reports & Analytics page (`reports.html`)
 
 ### Phase 3: Mobile & Intelligence (Weeks 7-9)
-- ⏳ Mobile inspection app (PWA)
-- ⏳ QC Inspector interface
-- ⏳ Production Operator interface
-- ⏳ AI-powered root cause analysis
-- ⏳ Anomaly detection
+- ✅ Mobile Inspector App (`mobile-inspector.html`) — bilingual EN/MY, full inspection workflow
+- ✅ Production Operator Interface (`mobile-operator.html`) — dark mode, AI tips, ranking
+- 🚧 AI-powered root cause analysis (Claude integration)
+- 🚧 Anomaly detection (SPC alerts)
 
 ### Phase 4: Polish & Testing (Weeks 10-11)
-- ⏳ User acceptance testing
-- ⏳ Performance optimization
+- 🚧 User acceptance testing
+- 🚧 Performance optimization
 - ⏳ Training materials (English + Burmese)
 - ⏳ Documentation
 

@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Operator Dashboard | YTF DQMS</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #1e293b;
+            color: white;
+            max-width: 480px;
+            margin: 0 auto;
+            min-height: 100vh;
+        }
+        .header { background: linear-gradient(135deg, #1e40af 0%, #7c3aed 100%); padding: 16px; }
+        .card { background: #1e293b; border-radius: 16px; border: 1px solid #334155; }
+        .card-light { background: #0f172a; border-radius: 16px; border: 1px solid #1e293b; }
+        .score-ring { position: relative; display: flex; align-items: center; justify-content: center; }
+        .big-score { font-size: 3.5rem; font-weight: 900; line-height: 1; }
+        .grade-pill { display: inline-block; padding: 6px 18px; border-radius: 20px; font-weight: 700; font-size: 0.875rem; }
+        .grade-A { background: #065f46; color: #34d399; border: 2px solid #34d399; }
+        .grade-B { background: #78350f; color: #fbbf24; border: 2px solid #fbbf24; }
+        .grade-R { background: #7f1d1d; color: #f87171; border: 2px solid #f87171; }
+        .screen { display: none; }
+        .screen.active { display: block; }
+        .bottom-nav { position: fixed; bottom: 0; left: 50%; transform: translateX(-50%); width: 100%; max-width: 480px; background: #0f172a; border-top: 1px solid #1e293b; }
+        .nav-item { flex: 1; display: flex; flex-direction: column; align-items: center; padding: 10px 4px 8px; cursor: pointer; color: #64748b; font-size: 0.65rem; transition: color 0.2s; }
+        .nav-item.active { color: #818cf8; }
+        .nav-item svg { width: 22px; height: 22px; margin-bottom: 2px; }
+        .tip-card { background: linear-gradient(135deg, #1e3a5f 0%, #1e1b4b 100%); border: 1px solid #3730a3; border-radius: 16px; }
+        .alert-critical { background: #450a0a; border: 1px solid #ef4444; border-radius: 12px; padding: 16px; }
+        .alert-warning { background: #422006; border: 1px solid #f59e0b; border-radius: 12px; padding: 16px; }
+        .progress-bar { height: 10px; border-radius: 5px; background: #1e293b; overflow: hidden; }
+        .progress-fill { height: 100%; border-radius: 5px; transition: width 0.5s; }
+        .lang-toggle { display: flex; gap: 2px; background: rgba(255,255,255,0.1); border-radius: 8px; padding: 2px; }
+        .lang-btn { padding: 4px 12px; border-radius: 6px; font-size: 0.75rem; font-weight: 600; cursor: pointer; color: rgba(255,255,255,0.5); }
+        .lang-btn.active { background: white; color: #1e40af; }
+        .ranking-card { display: flex; align-items: center; gap-12px; padding: 12px; border-radius: 12px; background: #0f172a; border: 1px solid #1e293b; margin-bottom: 8px; }
+        .rank-1 { border-color: #fbbf24; }
+        .rank-2 { border-color: #94a3b8; }
+        .rank-3 { border-color: #c2824a; }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <div class="header">
+        <div class="flex items-center justify-between">
+            <div>
+                <div class="font-bold text-xl" id="txt-welcome">Welcome back,</div>
+                <div class="text-2xl font-black">Ko Htun</div>
+                <div class="text-blue-200 text-sm mt-0.5">PD-2 Extrusion · Day Shift</div>
+            </div>
+            <div class="flex flex-col items-end gap-2">
+                <div class="lang-toggle">
+                    <button class="lang-btn active" onclick="setLang('en')">EN</button>
+                    <button class="lang-btn" onclick="setLang('my')">မြန်မာ</button>
+                </div>
+                <div class="text-right">
+                    <div class="text-blue-200 text-xs" id="headerTime"></div>
+                    <div class="text-blue-200 text-xs" id="txt-today">Today</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div style="padding-bottom:80px; padding: 16px; padding-bottom:96px;">
+
+    <!-- ===== SCREEN: My Score ===== -->
+    <div id="screen-score" class="screen active">
+
+        <!-- Alert (if B/R tire recently produced) -->
+        <div class="alert-warning mb-4" id="lastTireAlert">
+            <div class="flex items-start gap-3">
+                <span class="text-2xl">⚠️</span>
+                <div>
+                    <div class="font-bold text-yellow-300 text-sm" id="txt-attention">Attention!</div>
+                    <div class="text-yellow-100 text-sm mt-1" id="txt-last-b-tire">Your last tire T-2025-0302 was graded B — Sidewall Crack detected. Check machine pressure settings.</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Today's Quality Score -->
+        <div class="card p-6 mb-4">
+            <div class="text-gray-400 text-sm font-semibold mb-4" id="txt-quality-score">YOUR QUALITY SCORE TODAY</div>
+            <div class="flex items-center gap-6">
+                <div class="score-ring">
+                    <svg viewBox="0 0 120 120" class="w-28 h-28">
+                        <circle cx="60" cy="60" r="50" fill="none" stroke="#1e3a5f" stroke-width="10"/>
+                        <circle cx="60" cy="60" r="50" fill="none" stroke="#ef4444" stroke-width="10"
+                            stroke-dasharray="314" stroke-dashoffset="94" stroke-linecap="round"
+                            transform="rotate(-90 60 60)" id="scoreCircle"/>
+                        <text x="60" y="60" text-anchor="middle" dominant-baseline="central" fill="white" font-size="22" font-weight="900" id="scoreText">72</text>
+                    </svg>
+                </div>
+                <div class="flex-1">
+                    <div class="flex gap-3 mb-3">
+                        <div class="text-center flex-1">
+                            <div class="text-2xl font-bold text-green-400" id="scoreA">49</div>
+                            <div class="text-xs text-gray-400">Grade A</div>
+                        </div>
+                        <div class="text-center flex-1">
+                            <div class="text-2xl font-bold text-yellow-400" id="scoreB">2</div>
+                            <div class="text-xs text-gray-400">Grade B</div>
+                        </div>
+                        <div class="text-center flex-1">
+                            <div class="text-2xl font-bold text-red-400" id="scoreR">1</div>
+                            <div class="text-xs text-gray-400">Grade R</div>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="flex justify-between text-xs text-gray-400 mb-1">
+                            <span id="txt-br-rate">B+R Rate</span>
+                            <span class="text-yellow-400 font-semibold" id="brRateVal">5.8%</span>
+                        </div>
+                        <div class="progress-bar">
+                            <div class="progress-fill bg-yellow-400" id="brProgressFill" style="width:58%"></div>
+                        </div>
+                        <div class="flex justify-between text-xs text-gray-500 mt-1">
+                            <span>0%</span>
+                            <span id="txt-target">Target: 3%</span>
+                            <span>10%</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Quality Tips -->
+        <div class="tip-card p-4 mb-4" id="qualityTips">
+            <div class="text-indigo-300 text-xs font-bold mb-2" id="txt-ai-tip">🤖 AI QUALITY TIP FOR YOU</div>
+            <div class="text-white text-sm font-semibold mb-1" id="tipTitle">Reduce Sidewall Cracks</div>
+            <div class="text-gray-300 text-sm" id="tipBody">Your last 3 B/R tires had sidewall cracks. Check if the building machine's side pressure is within the 12–14 bar range. Also verify the compound temperature is not exceeding 95°C before use.</div>
+            <div class="flex gap-2 mt-3">
+                <button onclick="markTipHelpful()" class="px-4 py-2 bg-indigo-600 text-white text-xs rounded-lg hover:bg-indigo-700 transition-colors" id="txt-helpful">Helpful ✓</button>
+                <button onclick="nextTip()" class="px-4 py-2 bg-slate-700 text-white text-xs rounded-lg hover:bg-slate-600 transition-colors" id="txt-next-tip">Next Tip →</button>
+            </div>
+        </div>
+
+        <!-- Tires produced today -->
+        <div class="card p-4 mb-4">
+            <div class="text-gray-400 text-sm font-semibold mb-3" id="txt-tires-today">TIRES PRODUCED TODAY</div>
+            <div class="grid grid-cols-3 gap-3">
+                <div class="card-light p-3 text-center rounded-xl">
+                    <div class="text-xs text-gray-400 mb-1" id="txt-total-prod">Total</div>
+                    <div class="text-2xl font-bold" id="totalProduced">52</div>
+                </div>
+                <div class="card-light p-3 text-center rounded-xl">
+                    <div class="text-xs text-gray-400 mb-1" id="txt-target-label">Target</div>
+                    <div class="text-2xl font-bold text-blue-400">65</div>
+                </div>
+                <div class="card-light p-3 text-center rounded-xl">
+                    <div class="text-xs text-gray-400 mb-1" id="txt-remaining-label">Remaining</div>
+                    <div class="text-2xl font-bold text-yellow-400" id="remaining">13</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== SCREEN: My Defects ===== -->
+    <div id="screen-defects" class="screen">
+        <div class="text-lg font-bold mb-4" id="txt-my-defects-title">My Recent Defects</div>
+
+        <div class="card p-4 mb-4">
+            <div class="text-gray-400 text-xs font-semibold mb-3" id="txt-defect-breakdown">DEFECT BREAKDOWN — THIS WEEK</div>
+            <canvas id="myDefectsChart" height="200"></canvas>
+        </div>
+
+        <div class="space-y-3" id="myDefectsList"></div>
+    </div>
+
+    <!-- ===== SCREEN: Ranking ===== -->
+    <div id="screen-ranking" class="screen">
+        <div class="text-lg font-bold mb-1" id="txt-ranking-title">Team Quality Ranking</div>
+        <div class="text-gray-400 text-sm mb-4" id="txt-ranking-sub">PD-2 Extrusion · Day Shift · This Week</div>
+
+        <div class="space-y-2 mb-4" id="rankingList"></div>
+
+        <div class="card p-4">
+            <div class="text-gray-400 text-xs font-semibold mb-3" id="txt-your-position">YOUR POSITION</div>
+            <div class="flex items-center justify-between">
+                <div>
+                    <div class="text-gray-300 text-sm" id="txt-rank-pos">You are ranked <span class="text-yellow-400 font-bold">#6</span> out of 8 operators on your line.</div>
+                    <div class="text-gray-400 text-xs mt-1" id="txt-rank-improve">Reduce your B+R rate by 1.5% to move to top 3!</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== SCREEN: Tips ===== -->
+    <div id="screen-tips" class="screen">
+        <div class="text-lg font-bold mb-4" id="txt-quality-tips-title">Quality Improvement Tips</div>
+
+        <div class="space-y-4" id="tipsList"></div>
+    </div>
+
+    </div><!-- end padding wrapper -->
+
+    <!-- Bottom Nav -->
+    <div class="bottom-nav">
+        <div class="flex">
+            <div class="nav-item active" onclick="goTo('screen-score')" id="nav-score">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
+                <span id="nav-txt-score">My Score</span>
+            </div>
+            <div class="nav-item" onclick="goTo('screen-defects')" id="nav-defects">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"></path></svg>
+                <span id="nav-txt-defects">My Defects</span>
+            </div>
+            <div class="nav-item" onclick="goTo('screen-ranking')" id="nav-ranking">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"></path></svg>
+                <span id="nav-txt-ranking">Ranking</span>
+            </div>
+            <div class="nav-item" onclick="goTo('screen-tips')" id="nav-tips">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path></svg>
+                <span id="nav-txt-tips">Tips</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function updateTime() {
+            document.getElementById('headerTime').textContent = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+        }
+        updateTime(); setInterval(updateTime, 30000);
+
+        // Language
+        let currentLang = 'en';
+        const translations = {
+            en: {
+                'txt-welcome': 'Welcome back,',
+                'txt-today': 'Today',
+                'txt-attention': 'Attention!',
+                'txt-last-b-tire': 'Your last tire T-2025-0302 was graded B — Sidewall Crack detected. Check machine pressure settings.',
+                'txt-quality-score': 'YOUR QUALITY SCORE TODAY',
+                'txt-br-rate': 'B+R Rate',
+                'txt-target': 'Target: 3%',
+                'txt-ai-tip': '🤖 AI QUALITY TIP FOR YOU',
+                'txt-helpful': 'Helpful ✓',
+                'txt-next-tip': 'Next Tip →',
+                'txt-tires-today': 'TIRES PRODUCED TODAY',
+                'txt-total-prod': 'Total',
+                'txt-target-label': 'Target',
+                'txt-remaining-label': 'Remaining',
+                'txt-my-defects-title': 'My Recent Defects',
+                'txt-defect-breakdown': 'DEFECT BREAKDOWN — THIS WEEK',
+                'txt-ranking-title': 'Team Quality Ranking',
+                'txt-ranking-sub': 'PD-2 Extrusion · Day Shift · This Week',
+                'txt-your-position': 'YOUR POSITION',
+                'txt-rank-pos': 'You are ranked <span class="text-yellow-400 font-bold">#6</span> out of 8 operators on your line.',
+                'txt-rank-improve': 'Reduce your B+R rate by 1.5% to move to top 3!',
+                'txt-quality-tips-title': 'Quality Improvement Tips',
+                'nav-txt-score': 'My Score',
+                'nav-txt-defects': 'My Defects',
+                'nav-txt-ranking': 'Ranking',
+                'nav-txt-tips': 'Tips',
+            },
+            my: {
+                'txt-welcome': 'ကြိုဆိုပါသည်,',
+                'txt-today': 'ယနေ့',
+                'txt-attention': 'သတိပြုပါ!',
+                'txt-last-b-tire': 'သင်၏ နောက်ဆုံး တာယာ T-2025-0302 ကို B အဆင့် ရရှိသည် — နံရံ အက်ကွဲ တွေ့ရသည်။ စက်၏ ဖိအားကို စစ်ဆေးပါ။',
+                'txt-quality-score': 'ယနေ့ အရည်အသွေး ရမှတ်',
+                'txt-br-rate': 'B+R နှုန်း',
+                'txt-target': 'ပန်းတိုင်: 3%',
+                'txt-ai-tip': '🤖 AI အကြံပြုချက်',
+                'txt-helpful': 'အထောက်အကူဖြစ်သည် ✓',
+                'txt-next-tip': 'နောက် အကြံပြုချက် →',
+                'txt-tires-today': 'ယနေ့ ထုတ်လုပ်သော တာယာများ',
+                'txt-total-prod': 'စုစုပေါင်း',
+                'txt-target-label': 'ပန်းတိုင်',
+                'txt-remaining-label': 'ကျန်ရှိသည်',
+                'txt-my-defects-title': 'ကျွန်ုပ်၏ ချို့ယွင်းချက်များ',
+                'txt-defect-breakdown': 'ချို့ယွင်းချက် ခွဲခြမ်းစိတ်ဖြာ — ဤသီတင်းပတ်',
+                'txt-ranking-title': 'အဖွဲ့ အရည်အသွေး အဆင့်',
+                'txt-ranking-sub': 'PD-2 Extrusion · နေ့ဆိုင်း · ဤသီတင်းပတ်',
+                'txt-your-position': 'သင်၏ ရပ်တည်ချက်',
+                'txt-rank-pos': 'သင်သည် လိုင်းပေါ်ရှိ ၈ ဦးထဲမှ <span class="text-yellow-400 font-bold">#6</span> အဆင့်ရှိသည်',
+                'txt-rank-improve': 'B+R နှုန်း 1.5% လျှော့ချ၍ ထိပ် 3 တွင် ဝင်ပါ!',
+                'txt-quality-tips-title': 'အရည်အသွေး တိုးတက်ရေး အကြံပြုချက်များ',
+                'nav-txt-score': 'ကျွန်ုပ် ရမှတ်',
+                'nav-txt-defects': 'ချို့ယွင်းချက်',
+                'nav-txt-ranking': 'အဆင့်',
+                'nav-txt-tips': 'အကြံပြုချက်',
+            }
+        };
+
+        function setLang(lang) {
+            currentLang = lang;
+            document.querySelectorAll('.lang-btn').forEach(b => b.classList.toggle('active', b.textContent === (lang === 'en' ? 'EN' : 'မြန်မာ')));
+            const t = translations[lang];
+            Object.keys(t).forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.innerHTML = t[id];
+            });
+            buildTipsList();
+            buildRanking();
+        }
+
+        // Navigation
+        function goTo(screenId) {
+            document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+            document.getElementById(screenId).classList.add('active');
+            document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+            const navMap = { 'screen-score': 'nav-score', 'screen-defects': 'nav-defects', 'screen-ranking': 'nav-ranking', 'screen-tips': 'nav-tips' };
+            if (navMap[screenId]) document.getElementById(navMap[screenId]).classList.add('active');
+            if (screenId === 'screen-defects') buildDefectsChart();
+            if (screenId === 'screen-ranking') buildRanking();
+            if (screenId === 'screen-tips') buildTipsList();
+        }
+
+        // Defects this week
+        const myWeeklyDefects = [
+            { day: 'Mon', defects: 3, grade: 'B', type: 'Sidewall Crack' },
+            { day: 'Tue', defects: 1, grade: 'R', type: 'Inner Separation' },
+            { day: 'Wed', defects: 0, grade: 'A', type: '' },
+            { day: 'Thu', defects: 2, grade: 'B', type: 'Sidewall Crack' },
+            { day: 'Fri', defects: 1, grade: 'B', type: 'Bead Deformation' },
+        ];
+
+        let defectsChartBuilt = false;
+        function buildDefectsChart() {
+            if (defectsChartBuilt) return;
+            defectsChartBuilt = true;
+            new Chart(document.getElementById('myDefectsChart').getContext('2d'), {
+                type: 'bar',
+                data: {
+                    labels: ['Mon','Tue','Wed','Thu','Fri'],
+                    datasets: [{
+                        label: 'Defect Count',
+                        data: [3,1,0,2,1],
+                        backgroundColor: ['#f59e0b','#ef4444','#10b981','#f59e0b','#f59e0b']
+                    }]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        x: { ticks: { color: '#94a3b8' }, grid: { color: '#1e293b' } },
+                        y: { beginAtZero: true, ticks: { color: '#94a3b8' }, grid: { color: '#334155' } }
+                    }
+                }
+            });
+
+            const listEl = document.getElementById('myDefectsList');
+            myWeeklyDefects.forEach(d => {
+                const gradeColor = d.grade === 'A' ? 'grade-A' : d.grade === 'B' ? 'grade-B' : 'grade-R';
+                listEl.innerHTML += `
+                <div class="card p-4 flex items-center gap-4">
+                    <div class="text-gray-400 text-sm w-10 font-semibold">${d.day}</div>
+                    <div class="flex-1">
+                        <div class="font-semibold">${d.defects} defect${d.defects !== 1 ? 's' : ''}</div>
+                        <div class="text-gray-400 text-xs">${d.type || 'No defects — excellent!'}</div>
+                    </div>
+                    <span class="grade-pill ${gradeColor}">${d.grade}</span>
+                </div>`;
+            });
+        }
+
+        // Ranking
+        const rankingData = [
+            { name: 'Ko Aung', brRate: 1.9, score: 94, isMe: false, rank: 1 },
+            { name: 'Ko Naing', brRate: 2.2, score: 90, isMe: false, rank: 2 },
+            { name: 'Mg Soe', brRate: 2.1, score: 91, isMe: false, rank: 3 },
+            { name: 'Ma Thida', brRate: 3.3, score: 78, isMe: false, rank: 4 },
+            { name: 'Mg Lwin', brRate: 2.6, score: 85, isMe: false, rank: 5 },
+            { name: 'Ko Htun (You)', brRate: 3.8, score: 72, isMe: true, rank: 6 },
+            { name: 'Ko Zin', brRate: 2.8, score: 83, isMe: false, rank: 7 },
+            { name: 'Mg Win', brRate: 4.7, score: 63, isMe: false, rank: 8 },
+        ].sort((a,b) => b.score - a.score).map((op, i) => ({ ...op, rank: i+1 }));
+
+        function buildRanking() {
+            const el = document.getElementById('rankingList');
+            el.innerHTML = '';
+            rankingData.forEach(op => {
+                const medals = ['🥇','🥈','🥉'];
+                const medal = op.rank <= 3 ? medals[op.rank-1] : op.rank + '.';
+                const highlight = op.isMe ? 'border-indigo-500' : 'border-transparent';
+                const bg = op.isMe ? 'background:linear-gradient(135deg,#1e1b4b,#0f172a)' : '';
+                el.innerHTML += `
+                <div class="card p-3 flex items-center gap-3 border-2 ${highlight}" style="${bg}">
+                    <div class="w-8 text-center text-lg">${medal}</div>
+                    <div class="flex-1">
+                        <div class="font-semibold text-sm ${op.isMe ? 'text-indigo-300' : ''}">${op.name}</div>
+                        <div class="text-xs text-gray-400">B+R: ${op.brRate}%</div>
+                    </div>
+                    <div class="text-right">
+                        <div class="font-bold ${op.score >= 85 ? 'text-green-400' : op.score >= 70 ? 'text-yellow-400' : 'text-red-400'}">${op.score}</div>
+                        <div class="text-xs text-gray-500">score</div>
+                    </div>
+                </div>`;
+            });
+        }
+
+        // Tips
+        const tipsEn = [
+            { title: 'Check Machine Pressure', icon: '⚙️', body: 'Before starting your shift, always verify the building machine side pressure is between 12–14 bar. Low pressure causes sidewall cracks.' },
+            { title: 'Monitor Compound Temperature', icon: '🌡️', body: 'Compound should not exceed 95°C when fed into the extruder. High temperature increases the risk of inner separation.' },
+            { title: 'Bead Placement', icon: '🔧', body: 'Ensure the bead wire is seated evenly on both sides before closing the machine. Uneven placement leads to bead deformation.' },
+            { title: 'Tire Weight Check', icon: '⚖️', body: 'Weigh every 10th tire during your shift. Alert your supervisor if 3 consecutive tires are outside the ±150g tolerance range.' },
+            { title: 'Clean Work Area', icon: '🧹', body: 'Foreign material contamination is a leading cause of inner separation. Keep your work area clean and free of rubber debris.' },
+        ];
+        const tipsMy = [
+            { title: 'စက်ဖိအား စစ်ဆေးပါ', icon: '⚙️', body: 'ဆိုင်းမလုပ်မီ building machine ၏ ဘေးဖိအားကို 12–14 bar ဖြစ်ကြောင်း စစ်ဆေးပါ။' },
+            { title: 'Compound အပူချိန် စောင့်ကြည့်ပါ', icon: '🌡️', body: 'Compound သည် 95°C မကျော်ရပါ။ အပူချိန်မြင့်ကြောင်း inner separation ဖြစ်နိုင်သည်။' },
+            { title: 'Bead တင်ခြင်း', icon: '🔧', body: 'Bead wire ကို နှစ်ဘက် ညီမျှအောင် တပ်ဆင်ပါ။ မညီမျှပါက bead deformation ဖြစ်သည်။' },
+            { title: 'တာယာ အလေးချိန် စစ်ဆေးပါ', icon: '⚖️', body: 'ဆိုင်းတွင် တာယာ ၁၀ ခုတစ်ကြိမ် ချိန်ပါ။ ±150g မကိုက်ညီပါက ကြီးကြပ်သူကို အကြောင်းကြားပါ။' },
+            { title: 'လုပ်ငန်းခွင် သန့်ရှင်းပါ', icon: '🧹', body: 'ညစ်ညမ်းခြင်း inner separation ၏ အဓိကအကြောင်းဖြစ်သည်။ ရာဘာ အမှုန်အမွှားများ ရှင်းလင်းပါ။' },
+        ];
+
+        function buildTipsList() {
+            const tips = currentLang === 'my' ? tipsMy : tipsEn;
+            const el = document.getElementById('tipsList');
+            el.innerHTML = '';
+            tips.forEach(tip => {
+                el.innerHTML += `
+                <div class="tip-card p-4">
+                    <div class="flex items-center gap-2 mb-2">
+                        <span class="text-2xl">${tip.icon}</span>
+                        <div class="font-bold text-indigo-200">${tip.title}</div>
+                    </div>
+                    <div class="text-gray-300 text-sm">${tip.body}</div>
+                </div>`;
+            });
+        }
+        buildTipsList();
+
+        // AI Tip rotation
+        let currentTipIdx = 0;
+        function nextTip() {
+            currentTipIdx = (currentTipIdx + 1) % tipsEn.length;
+            const tip = currentLang === 'my' ? tipsMy[currentTipIdx] : tipsEn[currentTipIdx];
+            document.getElementById('tipTitle').textContent = tip.title;
+            document.getElementById('tipBody').textContent = tip.body;
+        }
+        function markTipHelpful() {
+            const btn = document.getElementById('txt-helpful');
+            btn.textContent = currentLang === 'my' ? '✓ မှတ်တမ်းတင်ပြီး' : '✓ Thanks for feedback!';
+            btn.disabled = true;
+            setTimeout(() => { btn.textContent = currentLang === 'my' ? 'အထောက်အကူဖြစ်သည် ✓' : 'Helpful ✓'; btn.disabled = false; }, 2000);
+        }
+
+        // Live production counter
+        setInterval(() => {
+            const el = document.getElementById('totalProduced');
+            const v = parseInt(el.textContent);
+            if (v < 65) {
+                el.textContent = v + 1;
+                document.getElementById('remaining').textContent = 65 - (v + 1);
+            }
+        }, 20000);
+    </script>
+</body>
+</html>

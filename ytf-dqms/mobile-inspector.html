@@ -1,0 +1,720 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>QC Inspector | YTF DQMS</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            background: #f3f4f6;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            max-width: 480px;
+            margin: 0 auto;
+            min-height: 100vh;
+        }
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        .bottom-nav {
+            position: fixed;
+            bottom: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 100%;
+            max-width: 480px;
+            background: white;
+            border-top: 1px solid #e5e7eb;
+            z-index: 100;
+        }
+        .nav-item { flex: 1; display: flex; flex-direction: column; align-items: center; padding: 10px 4px 8px; cursor: pointer; transition: color 0.2s; color: #6b7280; font-size: 0.65rem; }
+        .nav-item.active { color: #667eea; }
+        .nav-item svg { width: 22px; height: 22px; margin-bottom: 2px; }
+        .card { background: white; border-radius: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); margin-bottom: 16px; }
+        .defect-btn {
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            padding: 12px 8px; border-radius: 12px; border: 2px solid #e5e7eb;
+            background: white; cursor: pointer; transition: all 0.2s; text-align: center;
+            font-size: 0.75rem; color: #374151; min-height: 72px;
+        }
+        .defect-btn:hover, .defect-btn.selected { border-color: #667eea; background: #ede9fe; color: #5b21b6; }
+        .defect-btn .icon { font-size: 1.5rem; margin-bottom: 4px; }
+        .btn-primary { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; border-radius: 12px; padding: 14px 24px; font-size: 1rem; font-weight: 600; cursor: pointer; width: 100%; transition: opacity 0.2s; }
+        .btn-primary:hover { opacity: 0.9; }
+        .btn-secondary { background: white; color: #667eea; border: 2px solid #667eea; border-radius: 12px; padding: 12px 24px; font-size: 1rem; font-weight: 600; cursor: pointer; width: 100%; transition: all 0.2s; }
+        .grade-btn { flex: 1; padding: 16px; border-radius: 12px; border: 2px solid #e5e7eb; background: white; font-size: 1.25rem; font-weight: 700; cursor: pointer; transition: all 0.2s; }
+        .grade-A { border-color: #10b981; }
+        .grade-A.selected { background: #10b981; color: white; }
+        .grade-B { border-color: #f59e0b; }
+        .grade-B.selected { background: #f59e0b; color: white; }
+        .grade-R { border-color: #ef4444; }
+        .grade-R.selected { background: #ef4444; color: white; }
+        .screen { display: none; }
+        .screen.active { display: block; }
+        .step-indicator { display: flex; align-items: center; justify-content: center; gap: 8px; }
+        .step { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: 600; }
+        .step.done { background: #10b981; color: white; }
+        .step.current { background: #667eea; color: white; }
+        .step.pending { background: #e5e7eb; color: #6b7280; }
+        .step-line { width: 24px; height: 2px; background: #e5e7eb; }
+        .step-line.done { background: #10b981; }
+        .badge { display: inline-block; padding: 3px 10px; border-radius: 10px; font-size: 0.7rem; font-weight: 600; }
+        .badge-A { background: #d1fae5; color: #065f46; }
+        .badge-B { background: #fef3c7; color: #92400e; }
+        .badge-R { background: #fee2e2; color: #991b1b; }
+        input, textarea, select { width: 100%; padding: 12px 16px; border: 1.5px solid #d1d5db; border-radius: 10px; font-size: 1rem; background: white; outline: none; transition: border-color 0.2s; }
+        input:focus, textarea:focus, select:focus { border-color: #667eea; }
+        label { display: block; font-size: 0.85rem; font-weight: 600; color: #374151; margin-bottom: 6px; }
+        .photo-area { border: 2px dashed #d1d5db; border-radius: 12px; padding: 32px; text-align: center; cursor: pointer; background: #f9fafb; transition: all 0.2s; }
+        .photo-area:hover { border-color: #667eea; background: #ede9fe; }
+        .success-check { width: 80px; height: 80px; background: #10b981; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 16px; }
+        .lang-toggle { display: flex; gap: 2px; background: rgba(255,255,255,0.2); border-radius: 8px; padding: 2px; }
+        .lang-btn { padding: 4px 12px; border-radius: 6px; font-size: 0.75rem; font-weight: 600; cursor: pointer; transition: all 0.2s; color: rgba(255,255,255,0.7); }
+        .lang-btn.active { background: white; color: #667eea; }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <div class="header px-4 py-3">
+        <div class="flex items-center justify-between">
+            <div>
+                <div class="font-bold text-lg">YTF DQMS</div>
+                <div class="text-white/70 text-xs" id="headerSubtitle">QC Inspector — Mg Kyaw</div>
+            </div>
+            <div class="flex items-center gap-3">
+                <div class="lang-toggle">
+                    <button class="lang-btn active" onclick="setLang('en')">EN</button>
+                    <button class="lang-btn" onclick="setLang('my')">မြန်မာ</button>
+                </div>
+                <div class="text-right">
+                    <div class="text-xs text-white/70" id="mobileTime"></div>
+                    <div class="text-xs text-white/70">Day Shift</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div style="padding-bottom:80px;">
+
+    <!-- ===== SCREEN: Home ===== -->
+    <div id="screen-home" class="screen active p-4">
+        <!-- Today's Summary -->
+        <div class="card p-4">
+            <div class="text-sm font-semibold text-gray-500 mb-3" id="txt-today-summary">TODAY'S SUMMARY</div>
+            <div class="grid grid-cols-3 gap-3">
+                <div class="text-center">
+                    <div class="text-2xl font-bold text-green-600" id="homeInspections">32</div>
+                    <div class="text-xs text-gray-500 mt-0.5" id="txt-inspections">Inspections</div>
+                </div>
+                <div class="text-center">
+                    <div class="text-2xl font-bold text-yellow-600" id="homeDefects">4</div>
+                    <div class="text-xs text-gray-500 mt-0.5" id="txt-defects-found">Defects Found</div>
+                </div>
+                <div class="text-center">
+                    <div class="text-2xl font-bold text-blue-600">97%</div>
+                    <div class="text-xs text-gray-500 mt-0.5" id="txt-accuracy">Accuracy</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- New Inspection CTA -->
+        <button onclick="goTo('screen-scan')" class="btn-primary mb-4">
+            <span id="txt-new-inspection">+ New Inspection</span>
+        </button>
+
+        <!-- Recent Inspections -->
+        <div class="card p-4">
+            <div class="font-semibold text-gray-800 mb-3" id="txt-recent">Recent Inspections</div>
+            <div class="space-y-3" id="recentInspectionsList"></div>
+        </div>
+
+        <!-- Active Alerts -->
+        <div class="card p-4">
+            <div class="font-semibold text-gray-800 mb-3" id="txt-alerts">Active Alerts</div>
+            <div class="space-y-2">
+                <div class="flex items-start gap-3 p-3 bg-red-50 rounded-xl">
+                    <div class="w-2 h-2 rounded-full bg-red-500 mt-1.5 flex-shrink-0"></div>
+                    <div>
+                        <div class="text-sm font-semibold text-red-800">PD-2: B+R Rate High</div>
+                        <div class="text-xs text-red-600">Current 3.2% — watch for sidewall cracks</div>
+                    </div>
+                </div>
+                <div class="flex items-start gap-3 p-3 bg-yellow-50 rounded-xl">
+                    <div class="w-2 h-2 rounded-full bg-yellow-500 mt-1.5 flex-shrink-0"></div>
+                    <div>
+                        <div class="text-sm font-semibold text-yellow-800">PD-4: Defect Spike</div>
+                        <div class="text-xs text-yellow-600">5 Inner Separation in last 2 hours</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== SCREEN: Scan ===== -->
+    <div id="screen-scan" class="screen p-4">
+        <button onclick="goTo('screen-home')" class="flex items-center gap-2 text-gray-600 mb-4 text-sm">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
+            <span id="txt-back">Back</span>
+        </button>
+
+        <div class="step-indicator mb-6">
+            <div class="step current">1</div>
+            <div class="step-line"></div>
+            <div class="step pending">2</div>
+            <div class="step-line"></div>
+            <div class="step pending">3</div>
+            <div class="step-line"></div>
+            <div class="step pending">4</div>
+        </div>
+
+        <div class="card p-4">
+            <h2 class="text-lg font-bold mb-4" id="txt-scan-title">Scan Tire Serial Number</h2>
+
+            <!-- Simulated barcode scan area -->
+            <div class="photo-area mb-4" onclick="simulateScan()">
+                <svg class="w-12 h-12 text-gray-400 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8H4a1 1 0 00-1 1v10a1 1 0 001 1h16a1 1 0 001-1V9a1 1 0 00-1-1h-1M8 8V7a4 4 0 118 0v1"></path>
+                </svg>
+                <div class="text-sm text-gray-500" id="txt-tap-scan">Tap to Scan Barcode</div>
+                <div class="text-xs text-gray-400 mt-1" id="txt-or-type">or type serial number below</div>
+            </div>
+
+            <div class="mb-4">
+                <label id="txt-serial-label">Tire Serial Number</label>
+                <input type="text" id="serialInput" placeholder="e.g. T-2025-0342" oninput="onSerialInput()">
+            </div>
+
+            <div id="tireInfoCard" class="hidden">
+                <div class="p-3 bg-blue-50 rounded-xl mb-4">
+                    <div class="text-sm font-semibold text-blue-800 mb-2" id="txt-tire-info">Tire Info</div>
+                    <div class="grid grid-cols-2 gap-2 text-sm">
+                        <div><span class="text-gray-500">Model:</span> <span class="font-semibold" id="tireModel">195 R14 C</span></div>
+                        <div><span class="text-gray-500">Line:</span> <span class="font-semibold" id="tireLine">PD-2</span></div>
+                        <div><span class="text-gray-500">Batch:</span> <span class="font-semibold" id="tireBatch">B-2025-0087</span></div>
+                        <div><span class="text-gray-500">Operator:</span> <span class="font-semibold" id="tireOperator">Ko Htun</span></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mb-4">
+                <label id="txt-line-label">Production Line</label>
+                <select id="lineSelect">
+                    <option value="">Select line...</option>
+                    <option value="PD-1">PD-1 Mixing</option>
+                    <option value="PD-2">PD-2 Extrusion</option>
+                    <option value="PD-3">PD-3 Building</option>
+                    <option value="PD-4">PD-4 Curing</option>
+                </select>
+            </div>
+
+            <button onclick="goTo('screen-inspect')" class="btn-primary" id="txt-next-inspect">Next: Inspect →</button>
+        </div>
+    </div>
+
+    <!-- ===== SCREEN: Inspect ===== -->
+    <div id="screen-inspect" class="screen p-4">
+        <button onclick="goTo('screen-scan')" class="flex items-center gap-2 text-gray-600 mb-4 text-sm">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
+            <span id="txt-back2">Back</span>
+        </button>
+
+        <div class="step-indicator mb-6">
+            <div class="step done">✓</div>
+            <div class="step-line done"></div>
+            <div class="step current">2</div>
+            <div class="step-line"></div>
+            <div class="step pending">3</div>
+            <div class="step-line"></div>
+            <div class="step pending">4</div>
+        </div>
+
+        <div class="card p-4">
+            <h2 class="text-lg font-bold mb-1" id="txt-select-defects">Select Defects Found</h2>
+            <p class="text-sm text-gray-500 mb-4" id="txt-tap-all">Tap all that apply. Tap again to deselect.</p>
+
+            <div class="grid grid-cols-2 gap-3 mb-6" id="defectGrid"></div>
+
+            <div class="mb-4">
+                <div class="font-semibold text-sm text-gray-700 mb-3" id="txt-assign-grade">Assign Grade</div>
+                <div class="flex gap-3">
+                    <button class="grade-btn grade-A" onclick="selectGrade('A')" id="gradeA">A</button>
+                    <button class="grade-btn grade-B" onclick="selectGrade('B')" id="gradeB">B</button>
+                    <button class="grade-btn grade-R" onclick="selectGrade('R')" id="gradeR">R</button>
+                </div>
+                <div class="mt-2 text-xs text-gray-500 grid grid-cols-3 gap-2 text-center">
+                    <span id="txt-grade-a-desc">First Quality</span>
+                    <span id="txt-grade-b-desc">Minor Defect</span>
+                    <span id="txt-grade-r-desc">Reject</span>
+                </div>
+            </div>
+
+            <button onclick="goTo('screen-photo')" class="btn-primary" id="txt-next-photo">Next: Add Photo →</button>
+        </div>
+    </div>
+
+    <!-- ===== SCREEN: Photo ===== -->
+    <div id="screen-photo" class="screen p-4">
+        <button onclick="goTo('screen-inspect')" class="flex items-center gap-2 text-gray-600 mb-4 text-sm">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
+            <span id="txt-back3">Back</span>
+        </button>
+
+        <div class="step-indicator mb-6">
+            <div class="step done">✓</div>
+            <div class="step-line done"></div>
+            <div class="step done">✓</div>
+            <div class="step-line done"></div>
+            <div class="step current">3</div>
+            <div class="step-line"></div>
+            <div class="step pending">4</div>
+        </div>
+
+        <div class="card p-4">
+            <h2 class="text-lg font-bold mb-4" id="txt-photo-title">Add Photo (Optional)</h2>
+
+            <div class="photo-area mb-4" onclick="simulatePhoto()" id="photoArea">
+                <svg class="w-12 h-12 text-gray-400 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                </svg>
+                <div class="text-sm text-gray-500" id="txt-take-photo">Tap to Take Photo</div>
+                <div class="text-xs text-gray-400 mt-1" id="txt-photo-desc">Document the defect visually</div>
+            </div>
+
+            <!-- Tire Diagram -->
+            <div class="mb-4">
+                <div class="text-sm font-semibold text-gray-700 mb-2" id="txt-defect-location">Mark Defect Location</div>
+                <div class="relative bg-gray-100 rounded-xl overflow-hidden" style="height:180px;">
+                    <svg viewBox="0 0 300 180" class="w-full h-full" id="tireDiagram">
+                        <!-- Tire cross section -->
+                        <ellipse cx="150" cy="90" rx="120" ry="75" fill="#9ca3af" stroke="#4b5563" stroke-width="3"/>
+                        <ellipse cx="150" cy="90" rx="80" ry="50" fill="#6b7280" stroke="#374151" stroke-width="2"/>
+                        <ellipse cx="150" cy="90" rx="40" ry="25" fill="#374151" stroke="#1f2937" stroke-width="2"/>
+                        <text x="100" y="85" fill="white" font-size="9" font-weight="bold">TREAD</text>
+                        <text x="60" y="60" fill="white" font-size="8">SIDEWALL</text>
+                        <text x="60" y="125" fill="white" font-size="8">SIDEWALL</text>
+                        <text x="125" y="95" fill="white" font-size="8">INNER</text>
+                        <!-- Defect marker (draggable sim) -->
+                        <circle id="defectMarker" cx="150" cy="30" r="8" fill="#ef4444" opacity="0" cursor="pointer"/>
+                        <text id="defectMarkerText" x="140" y="18" fill="#ef4444" font-size="9" opacity="0">⚠ Defect</text>
+                    </svg>
+                    <div class="absolute inset-0 flex items-center justify-center text-xs text-gray-500 pointer-events-none" id="diagramHint">Tap diagram to mark defect location</div>
+                </div>
+            </div>
+
+            <div class="mb-4">
+                <label id="txt-notes-label">Notes</label>
+                <textarea rows="3" id="notesInput" placeholder="Additional observations..."></textarea>
+            </div>
+
+            <button onclick="goTo('screen-submit')" class="btn-primary" id="txt-next-submit">Next: Review & Submit →</button>
+        </div>
+    </div>
+
+    <!-- ===== SCREEN: Submit ===== -->
+    <div id="screen-submit" class="screen p-4">
+        <button onclick="goTo('screen-photo')" class="flex items-center gap-2 text-gray-600 mb-4 text-sm">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
+            <span id="txt-back4">Back</span>
+        </button>
+
+        <div class="step-indicator mb-6">
+            <div class="step done">✓</div>
+            <div class="step-line done"></div>
+            <div class="step done">✓</div>
+            <div class="step-line done"></div>
+            <div class="step done">✓</div>
+            <div class="step-line done"></div>
+            <div class="step current">4</div>
+        </div>
+
+        <div class="card p-4 mb-4">
+            <h2 class="text-lg font-bold mb-4" id="txt-review-title">Review & Submit</h2>
+            <div class="space-y-3" id="reviewSummary"></div>
+        </div>
+
+        <button onclick="submitInspection()" class="btn-primary mb-3" id="txt-submit-btn">Submit Inspection ✓</button>
+        <button onclick="goTo('screen-inspect')" class="btn-secondary" id="txt-edit-btn">Edit</button>
+    </div>
+
+    <!-- ===== SCREEN: Success ===== -->
+    <div id="screen-success" class="screen p-4">
+        <div class="text-center py-12">
+            <div class="success-check">
+                <svg class="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path>
+                </svg>
+            </div>
+            <h2 class="text-2xl font-bold text-gray-800 mb-2" id="txt-success-title">Inspection Submitted!</h2>
+            <p class="text-gray-500 mb-2" id="txt-success-ref">Reference: <span class="font-mono font-semibold" id="successRef"></span></p>
+            <p class="text-sm text-gray-400 mb-8" id="txt-success-sync">Synced to server ✓</p>
+            <button onclick="goTo('screen-home')" class="btn-primary" id="txt-new-inspection-btn">New Inspection</button>
+        </div>
+    </div>
+
+    <!-- ===== SCREEN: History ===== -->
+    <div id="screen-history" class="screen p-4">
+        <h2 class="text-xl font-bold mb-4" id="txt-my-history">My Inspections Today</h2>
+        <div class="space-y-3" id="historyList"></div>
+    </div>
+
+    <!-- ===== SCREEN: Guide ===== -->
+    <div id="screen-guide" class="screen p-4">
+        <h2 class="text-xl font-bold mb-4" id="txt-guide-title">Defect Identification Guide</h2>
+        <div class="space-y-3" id="defectGuide"></div>
+    </div>
+
+    </div><!-- end padding-bottom -->
+
+    <!-- Bottom Nav -->
+    <div class="bottom-nav">
+        <div class="flex">
+            <div class="nav-item active" onclick="goTo('screen-home')" id="nav-home">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg>
+                <span id="nav-txt-home">Home</span>
+            </div>
+            <div class="nav-item" onclick="goTo('screen-scan')" id="nav-inspect">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"></path></svg>
+                <span id="nav-txt-inspect">Inspect</span>
+            </div>
+            <div class="nav-item" onclick="goTo('screen-history')" id="nav-history">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                <span id="nav-txt-history">History</span>
+            </div>
+            <div class="nav-item" onclick="goTo('screen-guide')" id="nav-guide">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.746 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path></svg>
+                <span id="nav-txt-guide">Guide</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Time
+        function updateTime() {
+            document.getElementById('mobileTime').textContent = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+        }
+        updateTime(); setInterval(updateTime, 30000);
+
+        // Language
+        let currentLang = 'en';
+        const translations = {
+            en: {
+                'txt-today-summary': 'TODAY\'S SUMMARY',
+                'txt-inspections': 'Inspections',
+                'txt-defects-found': 'Defects Found',
+                'txt-accuracy': 'Accuracy',
+                'txt-new-inspection': '+ New Inspection',
+                'txt-recent': 'Recent Inspections',
+                'txt-alerts': 'Active Alerts',
+                'txt-scan-title': 'Scan Tire Serial Number',
+                'txt-tap-scan': 'Tap to Scan Barcode',
+                'txt-or-type': 'or type serial number below',
+                'txt-serial-label': 'Tire Serial Number',
+                'txt-tire-info': 'Tire Info',
+                'txt-line-label': 'Production Line',
+                'txt-next-inspect': 'Next: Inspect →',
+                'txt-select-defects': 'Select Defects Found',
+                'txt-tap-all': 'Tap all that apply. Tap again to deselect.',
+                'txt-assign-grade': 'Assign Grade',
+                'txt-grade-a-desc': 'First Quality',
+                'txt-grade-b-desc': 'Minor Defect',
+                'txt-grade-r-desc': 'Reject',
+                'txt-next-photo': 'Next: Add Photo →',
+                'txt-photo-title': 'Add Photo (Optional)',
+                'txt-take-photo': 'Tap to Take Photo',
+                'txt-photo-desc': 'Document the defect visually',
+                'txt-defect-location': 'Mark Defect Location',
+                'txt-notes-label': 'Notes',
+                'txt-next-submit': 'Next: Review & Submit →',
+                'txt-review-title': 'Review & Submit',
+                'txt-submit-btn': 'Submit Inspection ✓',
+                'txt-edit-btn': 'Edit',
+                'txt-success-title': 'Inspection Submitted!',
+                'txt-success-sync': 'Synced to server ✓',
+                'txt-new-inspection-btn': 'New Inspection',
+                'txt-my-history': 'My Inspections Today',
+                'txt-guide-title': 'Defect Identification Guide',
+                'nav-txt-home': 'Home',
+                'nav-txt-inspect': 'Inspect',
+                'nav-txt-history': 'History',
+                'nav-txt-guide': 'Guide',
+                'txt-back': 'Back',
+                'txt-back2': 'Back',
+                'txt-back3': 'Back',
+                'txt-back4': 'Back',
+            },
+            my: {
+                'txt-today-summary': 'ယနေ့ အနှစ်ချုပ်',
+                'txt-inspections': 'စစ်ဆေးမှု',
+                'txt-defects-found': 'ချို့ယွင်းချက်',
+                'txt-accuracy': 'တိကျမှု',
+                'txt-new-inspection': '+ စစ်ဆေးမှု အသစ်',
+                'txt-recent': 'မကြာသေးမီ စစ်ဆေးမှုများ',
+                'txt-alerts': 'သတိပေးချက်များ',
+                'txt-scan-title': 'တာယာ ဆီရီရယ် နံပါတ် စကင်ဖတ်ရန်',
+                'txt-tap-scan': 'ဘားကုတ် စကင်ဖတ်ရန် တို့ပါ',
+                'txt-or-type': 'သို့မဟုတ် အောက်တွင် ရိုက်ထည့်ပါ',
+                'txt-serial-label': 'တာယာ ဆီရီရယ် နံပါတ်',
+                'txt-tire-info': 'တာယာ အချက်အလက်',
+                'txt-line-label': 'ထုတ်လုပ်မှု လိုင်း',
+                'txt-next-inspect': 'ရှေ့: စစ်ဆေးရန် →',
+                'txt-select-defects': 'တွေ့ရသော ချို့ယွင်းချက် ရွေးချယ်ပါ',
+                'txt-tap-all': 'ဖြစ်သည်ကို အားလုံး တို့ပါ',
+                'txt-assign-grade': 'အဆင့် သတ်မှတ်ပါ',
+                'txt-grade-a-desc': 'အကောင်းဆုံး',
+                'txt-grade-b-desc': 'အနည်းငယ် ချို့ယွင်း',
+                'txt-grade-r-desc': 'ပယ်ချ',
+                'txt-next-photo': 'ရှေ့: ဓာတ်ပုံ ထည့်ရန် →',
+                'txt-photo-title': 'ဓာတ်ပုံ ထည့်ပါ (ရွေးချယ်နိုင်)',
+                'txt-take-photo': 'ဓာတ်ပုံ ရိုက်ရန် တို့ပါ',
+                'txt-photo-desc': 'ချို့ယွင်းချက်ကို မြင်ယောင်အောင် မှတ်တမ်းတင်ပါ',
+                'txt-defect-location': 'ချို့ယွင်းချက် တည်နေရာ မှတ်သားပါ',
+                'txt-notes-label': 'မှတ်ချက်များ',
+                'txt-next-submit': 'ရှေ့: စစ်ဆေးပြီး တင်သွင်းရန် →',
+                'txt-review-title': 'စစ်ဆေးပြီး တင်သွင်းရန်',
+                'txt-submit-btn': 'စစ်ဆေးမှု တင်သွင်းရန် ✓',
+                'txt-edit-btn': 'ပြင်ဆင်ရန်',
+                'txt-success-title': 'တင်သွင်းပြီးပါပြီ!',
+                'txt-success-sync': 'ဆာဗာသို့ sync ပြုလုပ်ပြီး ✓',
+                'txt-new-inspection-btn': 'စစ်ဆေးမှု အသစ်',
+                'txt-my-history': 'ယနေ့ ကျွန်ုပ်၏ စစ်ဆေးမှုများ',
+                'txt-guide-title': 'ချို့ယွင်းချက် ခွဲခြားနည်း လမ်းညွှန်',
+                'nav-txt-home': 'မူလ',
+                'nav-txt-inspect': 'စစ်ဆေးရန်',
+                'nav-txt-history': 'မှတ်တမ်း',
+                'nav-txt-guide': 'လမ်းညွှန်',
+                'txt-back': 'နောက်သို့',
+                'txt-back2': 'နောက်သို့',
+                'txt-back3': 'နောက်သို့',
+                'txt-back4': 'နောက်သို့',
+            }
+        };
+
+        function setLang(lang) {
+            currentLang = lang;
+            document.querySelectorAll('.lang-btn').forEach(b => b.classList.toggle('active', b.textContent === (lang === 'en' ? 'EN' : 'မြန်မာ')));
+            const t = translations[lang];
+            Object.keys(t).forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.textContent = t[id];
+            });
+            // Rebuild defect grid with current language
+            buildDefectGrid();
+            buildGuide();
+        }
+
+        // Defects
+        const defectTypes = [
+            { code: 'INNER_SEP', en: 'Inner Separation', my: 'အတွင်းပိုင်း ကွဲ', icon: '🔴', grade: 'R' },
+            { code: 'SIDEWALL_CRACK', en: 'Sidewall Crack', my: 'နံရံ အက်ကွဲ', icon: '🟠', grade: 'B' },
+            { code: 'BEAD_DEFORM', en: 'Bead Deformation', my: 'Bead ပုံပျက်', icon: '🟡', grade: 'B' },
+            { code: 'INNER_UNDERCURE', en: 'Inner Undercure', my: 'အတွင်း မမှည့်', icon: '🔴', grade: 'R' },
+            { code: 'WEIGHT_WRONG', en: 'Weight Wrong', my: 'အလေးချိန် မမှန်', icon: '⚖️', grade: 'B' },
+            { code: 'PLY_SPLICE', en: 'Ply Splice Thick', my: 'Ply အဆက်ထူ', icon: '🟤', grade: 'B' },
+            { code: 'TREAD_CRACK', en: 'Tread Crack', my: 'Pattern အက်ကွဲ', icon: '🟡', grade: 'B' },
+            { code: 'SPLICE_OPEN', en: 'Splice Open', my: 'Splice ပွင့်', icon: '🔶', grade: 'R' },
+            { code: 'INNER_BARECORD', en: 'Inner Barecord', my: 'အတွင်း ကြိုးပေါက်', icon: '🔴', grade: 'R' },
+            { code: 'SIDEWALL_SEP', en: 'Sidewall Separation', my: 'နံရံ ကွဲ', icon: '🟠', grade: 'R' },
+        ];
+        let selectedDefects = new Set();
+        let selectedGrade = null;
+
+        function buildDefectGrid() {
+            const grid = document.getElementById('defectGrid');
+            if (!grid) return;
+            grid.innerHTML = '';
+            defectTypes.forEach(d => {
+                const label = currentLang === 'my' ? d.my : d.en;
+                const isSelected = selectedDefects.has(d.code);
+                grid.innerHTML += `
+                <button class="defect-btn ${isSelected ? 'selected' : ''}" onclick="toggleDefect('${d.code}')" id="defbtn-${d.code}">
+                    <span class="icon">${d.icon}</span>
+                    <span>${label}</span>
+                </button>`;
+            });
+        }
+        buildDefectGrid();
+
+        function toggleDefect(code) {
+            if (selectedDefects.has(code)) { selectedDefects.delete(code); } else { selectedDefects.add(code); }
+            document.getElementById('defbtn-' + code).classList.toggle('selected', selectedDefects.has(code));
+            // Auto-suggest grade
+            const defectData = defectTypes.find(d => d.code === code);
+            if (selectedDefects.has(code) && defectData) {
+                if (defectData.grade === 'R' && selectedGrade !== 'R') selectGrade('R');
+                else if (defectData.grade === 'B' && !selectedGrade) selectGrade('B');
+            }
+        }
+
+        function selectGrade(g) {
+            selectedGrade = g;
+            ['A','B','R'].forEach(grade => {
+                const btn = document.getElementById('grade' + grade);
+                if (btn) btn.classList.toggle('selected', grade === g);
+            });
+        }
+
+        // Navigation
+        function goTo(screenId) {
+            document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+            document.getElementById(screenId).classList.add('active');
+            // Update nav
+            document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+            if (screenId === 'screen-home' || screenId === 'screen-success') document.getElementById('nav-home').classList.add('active');
+            if (screenId.includes('screen-scan') || screenId.includes('screen-inspect') || screenId.includes('screen-photo') || screenId.includes('screen-submit')) document.getElementById('nav-inspect').classList.add('active');
+            if (screenId === 'screen-history') document.getElementById('nav-history').classList.add('active');
+            if (screenId === 'screen-guide') document.getElementById('nav-guide').classList.add('active');
+
+            if (screenId === 'screen-submit') buildReviewSummary();
+            if (screenId === 'screen-history') buildHistory();
+        }
+
+        function simulateScan() {
+            const serials = ['T-2025-0342', 'T-2025-0343', 'T-2025-0344', 'T-2025-0345'];
+            const serial = serials[Math.floor(Math.random() * serials.length)];
+            document.getElementById('serialInput').value = serial;
+            onSerialInput();
+        }
+
+        function onSerialInput() {
+            const val = document.getElementById('serialInput').value;
+            if (val.length >= 5) {
+                document.getElementById('tireInfoCard').classList.remove('hidden');
+                document.getElementById('tireModel').textContent = ['195 R14 C','185/70 R14','205/70 R15 C'][Math.floor(Math.random()*3)];
+                document.getElementById('tireLine').textContent = ['PD-2','PD-3','PD-4'][Math.floor(Math.random()*3)];
+            } else {
+                document.getElementById('tireInfoCard').classList.add('hidden');
+            }
+        }
+
+        function simulatePhoto() {
+            const area = document.getElementById('photoArea');
+            area.innerHTML = '<div class="text-green-600 font-semibold">📸 Photo captured ✓</div><div class="text-xs text-gray-500 mt-1">defect_photo_' + Date.now() + '.jpg</div>';
+            // Show defect marker on diagram
+            document.getElementById('defectMarker').setAttribute('opacity', '0.9');
+            document.getElementById('defectMarkerText').setAttribute('opacity', '0.9');
+            document.getElementById('diagramHint').style.display = 'none';
+        }
+
+        function buildReviewSummary() {
+            const serial = document.getElementById('serialInput').value || 'T-2025-0342';
+            const line = document.getElementById('lineSelect').value || 'PD-2';
+            const notes = document.getElementById('notesInput').value;
+            const defectNames = [...selectedDefects].map(c => defectTypes.find(d => d.code === c)?.[currentLang === 'my' ? 'my' : 'en'] || c);
+            const grade = selectedGrade || 'A';
+            const gradeColors = { A: 'badge-A', B: 'badge-B', R: 'badge-R' };
+            document.getElementById('reviewSummary').innerHTML = `
+            <div class="flex justify-between py-2 border-b border-gray-100">
+                <span class="text-sm text-gray-500">Serial Number</span>
+                <span class="text-sm font-semibold font-mono">${serial}</span>
+            </div>
+            <div class="flex justify-between py-2 border-b border-gray-100">
+                <span class="text-sm text-gray-500">Production Line</span>
+                <span class="text-sm font-semibold">${line}</span>
+            </div>
+            <div class="flex justify-between py-2 border-b border-gray-100">
+                <span class="text-sm text-gray-500">Defects Found</span>
+                <span class="text-sm font-semibold text-right">${defectNames.length > 0 ? defectNames.join(', ') : 'None'}</span>
+            </div>
+            <div class="flex justify-between py-2 border-b border-gray-100">
+                <span class="text-sm text-gray-500">Grade</span>
+                <span class="badge ${gradeColors[grade]}">${grade}</span>
+            </div>
+            ${notes ? `<div class="flex justify-between py-2"><span class="text-sm text-gray-500">Notes</span><span class="text-sm text-right flex-1 ml-4">${notes}</span></div>` : ''}
+            `;
+        }
+
+        function submitInspection() {
+            const refNum = 'INS-' + Date.now().toString().slice(-6);
+            document.getElementById('successRef').textContent = refNum;
+            // Update home counter
+            const el = document.getElementById('homeInspections');
+            el.textContent = parseInt(el.textContent) + 1;
+            // Reset form
+            selectedDefects.clear();
+            selectedGrade = null;
+            document.getElementById('serialInput').value = '';
+            document.getElementById('notesInput').value = '';
+            document.getElementById('tireInfoCard').classList.add('hidden');
+            buildDefectGrid();
+            goTo('screen-success');
+        }
+
+        // History data
+        const historyData = [
+            { serial: 'T-2025-0310', grade: 'A', defects: 0, time: '07:15', line: 'PD-2' },
+            { serial: 'T-2025-0318', grade: 'B', defects: 1, time: '07:42', line: 'PD-2' },
+            { serial: 'T-2025-0325', grade: 'A', defects: 0, time: '08:10', line: 'PD-2' },
+            { serial: 'T-2025-0330', grade: 'R', defects: 2, time: '08:35', line: 'PD-4' },
+            { serial: 'T-2025-0338', grade: 'A', defects: 0, time: '09:02', line: 'PD-2' },
+        ];
+
+        function buildHistory() {
+            const el = document.getElementById('historyList');
+            el.innerHTML = '';
+            historyData.forEach(h => {
+                const gClass = h.grade === 'A' ? 'badge-A' : h.grade === 'B' ? 'badge-B' : 'badge-R';
+                el.innerHTML += `
+                <div class="card p-4 flex items-center gap-3">
+                    <div class="flex-1">
+                        <div class="font-mono text-sm font-semibold">${h.serial}</div>
+                        <div class="text-xs text-gray-500 mt-0.5">${h.line} · ${h.time} · ${h.defects} defect${h.defects !== 1 ? 's' : ''}</div>
+                    </div>
+                    <span class="badge ${gClass}">${h.grade}</span>
+                </div>`;
+            });
+        }
+
+        // Guide
+        const guideData = [
+            { code: 'INNER_SEP', en: 'Inner Separation', my: 'အတွင်းပိုင်း ကွဲခြင်း', desc: 'Delamination of inner liner from carcass plies. Usually appears as a bubble or lifting when inflated.', causes: ['Poor splice quality', 'Contamination on inner liner', 'Incorrect cure time/temperature'], grade: 'R' },
+            { code: 'SIDEWALL_CRACK', en: 'Sidewall Crack', my: 'နံရံ အက်ကွဲ', desc: 'Cracks or cuts on the sidewall surface. Can be fine surface cracks or deeper structural cracks.', causes: ['Overloading', 'Incorrect building machine pressure', 'Compound quality issue'], grade: 'B' },
+            { code: 'BEAD_DEFORM', en: 'Bead Deformation', my: 'Bead ပုံပျက်', desc: 'Bead wire not forming a perfect circle. The tire bead area appears irregular or deformed.', causes: ['Bead wire tension setting', 'Building machine alignment', 'Improper handling'], grade: 'B' },
+            { code: 'WEIGHT_WRONG', en: 'Tire Weight Wrong', my: 'တာယာ အလေးချိန် မမှန်', desc: 'Tire weight outside specified tolerance range (±150g typical).', causes: ['Compound mixing variation', 'Tread weight inconsistency', 'Ply cut inaccuracy'], grade: 'B' },
+        ];
+
+        function buildGuide() {
+            const el = document.getElementById('defectGuide');
+            if (!el) return;
+            el.innerHTML = '';
+            guideData.forEach(g => {
+                const gradeClass = g.grade === 'R' ? 'badge-R' : 'badge-B';
+                const name = currentLang === 'my' ? g.my : g.en;
+                el.innerHTML += `
+                <div class="card p-4">
+                    <div class="flex items-center justify-between mb-2">
+                        <div class="font-bold text-gray-800">${name}</div>
+                        <span class="badge ${gradeClass}">Grade ${g.grade}</span>
+                    </div>
+                    <p class="text-sm text-gray-600 mb-3">${g.desc}</p>
+                    <div class="text-xs font-semibold text-gray-500 mb-1">COMMON CAUSES:</div>
+                    <ul class="text-xs text-gray-600 space-y-1">
+                        ${g.causes.map(c => `<li class="flex items-start gap-1"><span class="text-purple-500 mt-0.5">•</span>${c}</li>`).join('')}
+                    </ul>
+                </div>`;
+            });
+        }
+        buildGuide();
+
+        // Recent inspections on home
+        const recentEl = document.getElementById('recentInspectionsList');
+        [
+            { serial: 'T-2025-0338', grade: 'A', time: '09:02' },
+            { serial: 'T-2025-0330', grade: 'R', time: '08:35' },
+            { serial: 'T-2025-0325', grade: 'A', time: '08:10' },
+        ].forEach(r => {
+            const gClass = r.grade === 'A' ? 'badge-A' : r.grade === 'R' ? 'badge-R' : 'badge-B';
+            recentEl.innerHTML += `
+            <div class="flex items-center gap-3 py-2 border-b border-gray-100 last:border-0">
+                <span class="text-xs text-gray-400 w-12">${r.time}</span>
+                <span class="flex-1 font-mono text-sm">${r.serial}</span>
+                <span class="badge ${gClass}">${r.grade}</span>
+            </div>`;
+        });
+    </script>
+</body>
+</html>
