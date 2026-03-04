@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Alert Management | YTF DQMS</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        body {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            min-height: 100vh;
+        }
+        .card { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 16px; backdrop-filter: blur(10px); }
+        .card-white { background: white; border-radius: 16px; }
+        .status-badge { display: inline-block; padding: 4px 12px; border-radius: 12px; font-size: 0.75rem; font-weight: 600; }
+        .nav-link { color: rgba(255,255,255,0.7); text-decoration: none; padding: 8px 16px; border-radius: 8px; font-size: 0.875rem; transition: all 0.2s; }
+        .nav-link:hover { background: rgba(255,255,255,0.1); color: white; }
+        .alert-critical { background: rgba(239,68,68,0.15); border-left: 4px solid #ef4444; }
+        .alert-warning { background: rgba(245,158,11,0.15); border-left: 4px solid #f59e0b; }
+        .alert-info { background: rgba(59,130,246,0.15); border-left: 4px solid #3b82f6; }
+        .alert-resolved { background: rgba(107,114,128,0.1); border-left: 4px solid #6b7280; opacity: 0.7; }
+        .pulse-red { animation: pulseRed 2s infinite; }
+        @keyframes pulseRed { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+        .filter-btn { padding: 6px 16px; border-radius: 20px; font-size: 0.8rem; font-weight: 600; cursor: pointer; border: 1.5px solid rgba(255,255,255,0.2); color: rgba(255,255,255,0.7); background: transparent; transition: all 0.2s; }
+        .filter-btn.active, .filter-btn:hover { background: white; color: #1a1a2e; border-color: white; }
+    </style>
+</head>
+<body class="p-6">
+    <!-- Header -->
+    <header class="mb-8">
+        <div class="flex items-center justify-between flex-wrap gap-4">
+            <div>
+                <h1 class="text-4xl font-bold text-white mb-2">Alert Management</h1>
+                <p class="text-white/60">Real-time quality alerts — Plant B</p>
+            </div>
+            <div class="flex items-center gap-4 flex-wrap">
+                <nav class="flex gap-2">
+                    <a href="dashboard-plant-manager.html" class="nav-link">Plant Manager</a>
+                    <a href="dashboard-qc-manager.html" class="nav-link">QC Manager</a>
+                    <a href="dashboard-supervisor.html" class="nav-link">Supervisor</a>
+                    <a href="mobile-inspector.html" class="nav-link">Inspector</a>
+                    <a href="reports.html" class="nav-link">Reports</a>
+                </nav>
+                <div class="text-white font-semibold" id="currentTime"></div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Stats Row -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+        <div class="card p-5 text-center">
+            <div class="flex items-center justify-center gap-2 mb-2">
+                <div class="w-3 h-3 rounded-full bg-red-500 pulse-red"></div>
+                <div class="text-red-400 font-bold text-2xl" id="criticalCount">3</div>
+            </div>
+            <div class="text-white/60 text-sm">Critical</div>
+        </div>
+        <div class="card p-5 text-center">
+            <div class="text-yellow-400 font-bold text-2xl mb-2" id="warningCount">5</div>
+            <div class="text-white/60 text-sm">Warnings</div>
+        </div>
+        <div class="card p-5 text-center">
+            <div class="text-blue-400 font-bold text-2xl mb-2" id="infoCount">8</div>
+            <div class="text-white/60 text-sm">Info</div>
+        </div>
+        <div class="card p-5 text-center">
+            <div class="text-gray-400 font-bold text-2xl mb-2" id="resolvedCount">24</div>
+            <div class="text-white/60 text-sm">Resolved Today</div>
+        </div>
+    </div>
+
+    <!-- Alert Filters + List -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+        <!-- Alert Feed -->
+        <div class="lg:col-span-2">
+            <div class="flex items-center justify-between mb-4 flex-wrap gap-3">
+                <h2 class="text-xl font-bold text-white">Live Alert Feed</h2>
+                <div class="flex gap-2 flex-wrap">
+                    <button class="filter-btn active" onclick="filterAlerts('all')">All</button>
+                    <button class="filter-btn" onclick="filterAlerts('critical')">Critical</button>
+                    <button class="filter-btn" onclick="filterAlerts('warning')">Warning</button>
+                    <button class="filter-btn" onclick="filterAlerts('info')">Info</button>
+                    <button class="filter-btn" onclick="filterAlerts('resolved')">Resolved</button>
+                </div>
+            </div>
+
+            <div class="space-y-3" id="alertFeed"></div>
+        </div>
+
+        <!-- Alert Config Panel -->
+        <div>
+            <h2 class="text-xl font-bold text-white mb-4">Alert Thresholds</h2>
+            <div class="card p-5 mb-4">
+                <h3 class="text-white font-semibold mb-4">B+R Rate Thresholds</h3>
+                <div class="space-y-4">
+                    <div>
+                        <div class="flex justify-between text-sm mb-1">
+                            <span class="text-white/70">Warning Level</span>
+                            <span class="text-yellow-400 font-bold" id="warningThresholdDisplay">2.8%</span>
+                        </div>
+                        <input type="range" min="1" max="5" step="0.1" value="2.8" class="w-full accent-yellow-400"
+                            oninput="document.getElementById('warningThresholdDisplay').textContent=parseFloat(this.value).toFixed(1)+'%'">
+                    </div>
+                    <div>
+                        <div class="flex justify-between text-sm mb-1">
+                            <span class="text-white/70">Critical Level</span>
+                            <span class="text-red-400 font-bold" id="criticalThresholdDisplay">3.5%</span>
+                        </div>
+                        <input type="range" min="1" max="6" step="0.1" value="3.5" class="w-full accent-red-400"
+                            oninput="document.getElementById('criticalThresholdDisplay').textContent=parseFloat(this.value).toFixed(1)+'%'">
+                    </div>
+                </div>
+            </div>
+
+            <div class="card p-5 mb-4">
+                <h3 class="text-white font-semibold mb-4">Defect Spike Detection</h3>
+                <div class="space-y-3">
+                    <div>
+                        <div class="text-white/70 text-sm mb-1">Same defect count threshold</div>
+                        <select class="w-full bg-white/10 border border-white/20 rounded-lg p-2 text-white text-sm">
+                            <option value="3">3 defects in 2 hours</option>
+                            <option value="5" selected>5 defects in 2 hours</option>
+                            <option value="8">8 defects in 2 hours</option>
+                        </select>
+                    </div>
+                    <div>
+                        <div class="text-white/70 text-sm mb-1">Time window</div>
+                        <select class="w-full bg-white/10 border border-white/20 rounded-lg p-2 text-white text-sm">
+                            <option value="1">1 hour</option>
+                            <option value="2" selected>2 hours</option>
+                            <option value="4">4 hours</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card p-5 mb-4">
+                <h3 class="text-white font-semibold mb-3">Notification Channels</h3>
+                <div class="space-y-3">
+                    <label class="flex items-center gap-3 cursor-pointer">
+                        <input type="checkbox" checked class="w-4 h-4 accent-purple-400">
+                        <span class="text-white/80 text-sm">In-app notifications</span>
+                    </label>
+                    <label class="flex items-center gap-3 cursor-pointer">
+                        <input type="checkbox" checked class="w-4 h-4 accent-purple-400">
+                        <span class="text-white/80 text-sm">Email (critical only)</span>
+                    </label>
+                    <label class="flex items-center gap-3 cursor-pointer">
+                        <input type="checkbox" class="w-4 h-4 accent-purple-400">
+                        <span class="text-white/80 text-sm">SMS alerts</span>
+                    </label>
+                    <label class="flex items-center gap-3 cursor-pointer">
+                        <input type="checkbox" checked class="w-4 h-4 accent-purple-400">
+                        <span class="text-white/80 text-sm">Mobile push notifications</span>
+                    </label>
+                </div>
+                <button class="mt-4 w-full bg-purple-600 hover:bg-purple-700 text-white text-sm py-2 rounded-lg font-semibold transition-colors" onclick="saveSettings()">Save Settings</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Alert Trend Chart -->
+    <div class="card-white p-6">
+        <h2 class="text-xl font-bold mb-4">Alerts Trend — Last 7 Days</h2>
+        <canvas id="alertTrendChart" height="160"></canvas>
+    </div>
+
+    <!-- Acknowledge Modal -->
+    <div id="ackModal" class="fixed inset-0 bg-black/70 flex items-center justify-center z-50 hidden">
+        <div class="card-white p-6 w-full max-w-md mx-4 rounded-2xl">
+            <h3 class="text-xl font-bold mb-2" id="modalAlertTitle">Acknowledge Alert</h3>
+            <p class="text-gray-600 text-sm mb-4" id="modalAlertMsg"></p>
+            <div>
+                <label class="block text-sm font-semibold text-gray-700 mb-1">Action Taken</label>
+                <textarea rows="3" id="ackNotes" class="w-full border border-gray-300 rounded-lg p-3 text-sm" placeholder="Describe the action taken..."></textarea>
+            </div>
+            <div class="flex gap-3 mt-4">
+                <button onclick="submitAck()" class="flex-1 bg-blue-600 text-white py-2 rounded-lg font-semibold hover:bg-blue-700 transition-colors">Acknowledge</button>
+                <button onclick="closeModal()" class="flex-1 bg-gray-200 text-gray-700 py-2 rounded-lg hover:bg-gray-300 transition-colors">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function updateTime() {
+            document.getElementById('currentTime').textContent =
+                new Date().toLocaleString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
+        }
+        updateTime(); setInterval(updateTime, 1000);
+
+        // Alert data
+        const alerts = [
+            { id: 1, type: 'critical', icon: '🚨', title: 'PD-2: B+R Rate Critical', msg: 'Current B+R rate 3.8% exceeds critical threshold 3.5%. Immediate action required.', time: '2 min ago', line: 'PD-2', status: 'active', actionRequired: true },
+            { id: 2, type: 'critical', icon: '🚨', title: 'PD-4: Defect Spike — Inner Separation', msg: '7 Inner Separation defects detected in last 2 hours on PD-4. This is 2× the normal rate.', time: '15 min ago', line: 'PD-4', status: 'active', actionRequired: true },
+            { id: 3, type: 'critical', icon: '🚨', title: 'PD-2: Operator Quality Issue', msg: 'Ko Htun B+R rate 5.8% — significantly above line average. Performance review recommended.', time: '1 hour ago', line: 'PD-2', status: 'active', actionRequired: true },
+            { id: 4, type: 'warning', icon: '⚠️', title: 'PD-1: B+R Rate Warning', msg: 'B+R rate 2.8% approaching warning threshold 3.0%. Monitor closely.', time: '35 min ago', line: 'PD-1', status: 'active', actionRequired: false },
+            { id: 5, type: 'warning', icon: '⚠️', title: 'PD-3: Tire Weight Deviation', msg: '4 consecutive tires outside ±150g tolerance. Check compound feeding.', time: '52 min ago', line: 'PD-3', status: 'active', actionRequired: false },
+            { id: 6, type: 'warning', icon: '⚠️', title: 'Google Drive Sync Delay', msg: 'Last sync was 38 minutes ago. Expected every 15 minutes. Checking connectivity.', time: '1 hour ago', line: 'System', status: 'active', actionRequired: false },
+            { id: 7, type: 'warning', icon: '⚠️', title: 'PD-2: Down Time Extended', msg: 'Machine down 45+ minutes (compound change). Production target may not be met.', time: '2 hours ago', line: 'PD-2', status: 'acknowledged', actionRequired: false },
+            { id: 8, type: 'warning', icon: '⚠️', title: 'PD-4: Sidewall Crack Spike', msg: '5 Sidewall Crack defects in last 2 hours on PD-4.', time: '2.5 hours ago', line: 'PD-4', status: 'active', actionRequired: false },
+            { id: 9, type: 'info', icon: 'ℹ️', title: 'Daily Report Generated', msg: 'Daily quality summary report for 2025-02-10 has been generated and emailed to management.', time: '3 hours ago', line: 'System', status: 'active', actionRequired: false },
+            { id: 10, type: 'info', icon: 'ℹ️', title: 'PD-3: Shift Change', msg: 'Day shift ended at 19:00. Night shift started. Handover notes saved.', time: '5 hours ago', line: 'PD-3', status: 'active', actionRequired: false },
+            { id: 11, type: 'info', icon: 'ℹ️', title: 'RCA-2025-001 Assigned', msg: 'Root cause analysis assigned to QC Manager. Expected completion: 2 days.', time: '6 hours ago', line: 'PD-4', status: 'active', actionRequired: false },
+            { id: 12, type: 'info', icon: 'ℹ️', title: 'CAPA #007 Due Tomorrow', msg: 'Corrective action: Calibrate extruder temperature sensors — due 2025-02-11.', time: '8 hours ago', line: 'PD-2', status: 'active', actionRequired: false },
+            { id: 13, type: 'resolved', icon: '✅', title: 'PD-1: B+R Rate Normalized', msg: 'B+R rate returned to 2.1%, below warning threshold. Issue resolved.', time: '4 hours ago', line: 'PD-1', status: 'resolved', actionRequired: false },
+            { id: 14, type: 'resolved', icon: '✅', title: 'Google Drive Sync Restored', msg: 'Sync resumed normally after 25-minute interruption. All data up to date.', time: '7 hours ago', line: 'System', status: 'resolved', actionRequired: false },
+        ];
+
+        let currentFilter = 'all';
+        let currentAckId = null;
+
+        function filterAlerts(type) {
+            currentFilter = type;
+            document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+            event.target.classList.add('active');
+            renderAlerts();
+        }
+
+        function renderAlerts() {
+            const feed = document.getElementById('alertFeed');
+            const filtered = currentFilter === 'all' ? alerts : alerts.filter(a => a.type === currentFilter || (currentFilter === 'resolved' && a.status === 'resolved'));
+            feed.innerHTML = '';
+            filtered.forEach(alert => {
+                const cssClass = alert.type === 'critical' ? 'alert-critical' :
+                                 alert.type === 'warning' ? 'alert-warning' :
+                                 alert.type === 'info' ? 'alert-info' : 'alert-resolved';
+                const ackBtn = alert.status === 'active' && alert.type !== 'info' ?
+                    `<button onclick="openAck(${alert.id})" class="text-xs px-3 py-1.5 rounded-lg bg-white/20 hover:bg-white/30 transition-colors font-semibold text-white">Acknowledge</button>` : '';
+                const resolveBtn = alert.status === 'active' ?
+                    `<button onclick="resolveAlert(${alert.id})" class="text-xs px-3 py-1.5 rounded-lg bg-green-500/20 hover:bg-green-500/30 transition-colors font-semibold text-green-300">Resolve</button>` : '';
+                const statusBadge = alert.status === 'resolved' ? '<span class="text-xs text-gray-400 font-semibold">RESOLVED</span>' :
+                                    alert.status === 'acknowledged' ? '<span class="text-xs text-blue-300 font-semibold">ACK\'D</span>' : '';
+                feed.innerHTML += `
+                <div class="rounded-xl p-4 ${cssClass}" id="alert-${alert.id}">
+                    <div class="flex items-start gap-3">
+                        <span class="text-xl flex-shrink-0 mt-0.5">${alert.icon}</span>
+                        <div class="flex-1 min-w-0">
+                            <div class="flex items-center gap-2 flex-wrap mb-1">
+                                <span class="text-white font-semibold text-sm">${alert.title}</span>
+                                ${statusBadge}
+                                ${alert.actionRequired ? '<span class="text-xs bg-red-500/30 text-red-300 px-2 py-0.5 rounded font-semibold">ACTION REQUIRED</span>' : ''}
+                            </div>
+                            <div class="text-white/70 text-sm">${alert.msg}</div>
+                            <div class="flex items-center justify-between mt-2 flex-wrap gap-2">
+                                <div class="text-white/40 text-xs">${alert.line} · ${alert.time}</div>
+                                <div class="flex gap-2">
+                                    ${ackBtn}
+                                    ${resolveBtn}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>`;
+            });
+            if (filtered.length === 0) {
+                feed.innerHTML = '<div class="text-center text-white/50 py-8">No alerts in this category</div>';
+            }
+        }
+        renderAlerts();
+
+        function openAck(id) {
+            currentAckId = id;
+            const alert = alerts.find(a => a.id === id);
+            document.getElementById('modalAlertTitle').textContent = 'Acknowledge: ' + alert.title;
+            document.getElementById('modalAlertMsg').textContent = alert.msg;
+            document.getElementById('ackModal').classList.remove('hidden');
+        }
+
+        function closeModal() {
+            document.getElementById('ackModal').classList.add('hidden');
+        }
+
+        function submitAck() {
+            if (currentAckId) {
+                const alert = alerts.find(a => a.id === currentAckId);
+                if (alert) alert.status = 'acknowledged';
+                closeModal();
+                renderAlerts();
+            }
+        }
+
+        function resolveAlert(id) {
+            const alert = alerts.find(a => a.id === id);
+            if (alert) {
+                alert.status = 'resolved';
+                alert.type = 'resolved';
+                document.getElementById('resolvedCount').textContent = parseInt(document.getElementById('resolvedCount').textContent) + 1;
+                if (alert.type !== 'info') {
+                    const countEl = document.getElementById(alert.type === 'critical' ? 'criticalCount' : 'warningCount');
+                    if (countEl) countEl.textContent = Math.max(0, parseInt(countEl.textContent) - 1);
+                }
+                renderAlerts();
+            }
+        }
+
+        function saveSettings() {
+            alert('Alert settings saved!\n\nChanges will take effect immediately.');
+        }
+
+        // Alert trend chart
+        new Chart(document.getElementById('alertTrendChart').getContext('2d'), {
+            type: 'bar',
+            data: {
+                labels: ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'],
+                datasets: [
+                    { label: 'Critical', data: [4,2,5,3,3,1,2], backgroundColor: 'rgba(239,68,68,0.7)' },
+                    { label: 'Warning', data: [8,6,9,7,5,4,5], backgroundColor: 'rgba(245,158,11,0.7)' },
+                    { label: 'Info', data: [12,10,14,11,8,7,9], backgroundColor: 'rgba(59,130,246,0.5)' },
+                ]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } }
+            }
+        });
+
+        // Simulate new alerts
+        const newAlertMessages = [
+            { type: 'warning', icon: '⚠️', title: 'PD-4: B+R Rate Warning', msg: 'B+R rate trending upward at 2.9%.', line: 'PD-4' },
+            { type: 'info', icon: 'ℹ️', title: 'Sync Completed', msg: 'Google Drive sync successful. 3 new records loaded.', line: 'System' },
+        ];
+        let newAlertIdx = 0;
+        setInterval(() => {
+            if (currentFilter === 'all' || currentFilter === newAlertMessages[newAlertIdx % newAlertMessages.length].type) {
+                const newAlert = { ...newAlertMessages[newAlertIdx % newAlertMessages.length], id: Date.now(), time: 'Just now', status: 'active', actionRequired: false };
+                alerts.unshift(newAlert);
+                if (newAlert.type === 'warning') document.getElementById('warningCount').textContent = parseInt(document.getElementById('warningCount').textContent) + 1;
+                if (newAlert.type === 'info') document.getElementById('infoCount').textContent = parseInt(document.getElementById('infoCount').textContent) + 1;
+                renderAlerts();
+                newAlertIdx++;
+            }
+        }, 30000);
+    </script>
+</body>
+</html>

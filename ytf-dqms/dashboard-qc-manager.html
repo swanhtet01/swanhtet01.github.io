@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QC Manager Dashboard | YTF DQMS</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        body {
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        }
+        .card {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+        .metric-card {
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+            color: white;
+        }
+        .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+        .status-normal { background: #10b981; color: white; }
+        .status-warning { background: #f59e0b; color: white; }
+        .status-critical { background: #ef4444; color: white; }
+        .status-open { background: #ef4444; color: white; }
+        .status-progress { background: #3b82f6; color: white; }
+        .status-closed { background: #10b981; color: white; }
+        .nav-link {
+            color: white;
+            text-decoration: none;
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-size: 0.875rem;
+            transition: background 0.2s;
+        }
+        .nav-link:hover { background: rgba(255,255,255,0.2); }
+    </style>
+</head>
+<body class="min-h-screen p-6">
+    <!-- Header -->
+    <header class="mb-8">
+        <div class="flex items-center justify-between flex-wrap gap-4">
+            <div>
+                <h1 class="text-4xl font-bold text-white mb-2">QC Manager Dashboard</h1>
+                <p class="text-white/80">Plant B Quality Control Operations</p>
+            </div>
+            <div class="flex items-center gap-4">
+                <nav class="flex gap-2">
+                    <a href="dashboard-plant-manager.html" class="nav-link">Plant Manager</a>
+                    <a href="dashboard-supervisor.html" class="nav-link">Supervisor</a>
+                    <a href="mobile-inspector.html" class="nav-link">Inspector</a>
+                    <a href="alerts.html" class="nav-link">Alerts</a>
+                    <a href="reports.html" class="nav-link">Reports</a>
+                </nav>
+                <div class="text-right">
+                    <div class="text-white/80 text-sm">QC Manager</div>
+                    <div class="text-white font-semibold text-lg" id="currentTime"></div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Key Metrics -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <div class="card metric-card p-6">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-white/80 text-sm font-medium">Inspections Today</h3>
+                <span class="status-badge bg-white/20 text-white" id="inspectionsStatus">On Track</span>
+            </div>
+            <div class="text-4xl font-bold mb-2" id="inspectionsToday">147</div>
+            <div class="text-sm text-white/80">of 200 target</div>
+            <div class="mt-3 bg-white/20 rounded-full h-2">
+                <div class="bg-white h-2 rounded-full" style="width:74%"></div>
+            </div>
+        </div>
+
+        <div class="card metric-card p-6">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-white/80 text-sm font-medium">Open Defects</h3>
+                <svg class="w-5 h-5 text-white/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                </svg>
+            </div>
+            <div class="text-4xl font-bold mb-2" id="openDefects">23</div>
+            <div class="text-sm text-white/80">5 critical · 18 minor</div>
+        </div>
+
+        <div class="card metric-card p-6">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-white/80 text-sm font-medium">Open RCAs</h3>
+                <svg class="w-5 h-5 text-white/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path>
+                </svg>
+            </div>
+            <div class="text-4xl font-bold mb-2">4</div>
+            <div class="text-sm text-white/80">2 in progress · 2 pending</div>
+        </div>
+
+        <div class="card metric-card p-6">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-white/80 text-sm font-medium">CAPA Actions</h3>
+                <svg class="w-5 h-5 text-white/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
+            </div>
+            <div class="text-4xl font-bold mb-2">11</div>
+            <div class="text-sm text-white/80">7 on time · 4 overdue</div>
+        </div>
+    </div>
+
+    <!-- Defect Analysis & Inspector Workload -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+        <!-- Defect Analysis -->
+        <div class="card p-6">
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="text-xl font-bold">Defect Analysis — Today</h2>
+                <select class="text-sm border border-gray-300 rounded-lg px-3 py-1" id="defectPeriod">
+                    <option value="today">Today</option>
+                    <option value="week">This Week</option>
+                    <option value="month">This Month</option>
+                </select>
+            </div>
+            <canvas id="defectParetoChart" height="280"></canvas>
+        </div>
+
+        <!-- Inspector Workload -->
+        <div class="card p-6">
+            <h2 class="text-xl font-bold mb-4">Inspector Workload</h2>
+            <div class="space-y-4" id="inspectorList">
+                <!-- Populated by JS -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Defect by Line & Shift + Trend -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+        <div class="card p-6">
+            <h2 class="text-xl font-bold mb-4">Defects by Production Line</h2>
+            <canvas id="defectByLineChart" height="250"></canvas>
+        </div>
+
+        <div class="card p-6">
+            <h2 class="text-xl font-bold mb-4">Defect Trend — Last 14 Days</h2>
+            <canvas id="defectTrendChart" height="250"></canvas>
+        </div>
+    </div>
+
+    <!-- Root Cause Analysis & CAPA Table -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+        <!-- RCA List -->
+        <div class="card p-6">
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="text-xl font-bold">Root Cause Analyses</h2>
+                <button class="bg-green-600 text-white text-sm px-4 py-2 rounded-lg hover:bg-green-700 transition-colors">+ New RCA</button>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="text-left border-b border-gray-200">
+                            <th class="pb-2 text-gray-600 font-medium">RCA #</th>
+                            <th class="pb-2 text-gray-600 font-medium">Problem</th>
+                            <th class="pb-2 text-gray-600 font-medium">Line</th>
+                            <th class="pb-2 text-gray-600 font-medium">Status</th>
+                            <th class="pb-2 text-gray-600 font-medium">Days Open</th>
+                        </tr>
+                    </thead>
+                    <tbody id="rcaTable">
+                        <tr class="border-b border-gray-100 hover:bg-gray-50">
+                            <td class="py-3 font-mono text-xs">RCA-2025-001</td>
+                            <td class="py-3">Inner Separation Spike</td>
+                            <td class="py-3">PD-4</td>
+                            <td class="py-3"><span class="status-badge status-progress">In Progress</span></td>
+                            <td class="py-3 font-semibold">3</td>
+                        </tr>
+                        <tr class="border-b border-gray-100 hover:bg-gray-50">
+                            <td class="py-3 font-mono text-xs">RCA-2025-002</td>
+                            <td class="py-3">Sidewall Crack Pattern</td>
+                            <td class="py-3">PD-2</td>
+                            <td class="py-3"><span class="status-badge status-open">Open</span></td>
+                            <td class="py-3 font-semibold text-red-600">7</td>
+                        </tr>
+                        <tr class="border-b border-gray-100 hover:bg-gray-50">
+                            <td class="py-3 font-mono text-xs">RCA-2025-003</td>
+                            <td class="py-3">Weight Deviation Cluster</td>
+                            <td class="py-3">PD-3</td>
+                            <td class="py-3"><span class="status-badge status-progress">In Progress</span></td>
+                            <td class="py-3 font-semibold">1</td>
+                        </tr>
+                        <tr class="hover:bg-gray-50">
+                            <td class="py-3 font-mono text-xs">RCA-2025-004</td>
+                            <td class="py-3">Bead Deformation Series</td>
+                            <td class="py-3">PD-1</td>
+                            <td class="py-3"><span class="status-badge status-open">Open</span></td>
+                            <td class="py-3 font-semibold text-orange-600">5</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- CAPA Actions -->
+        <div class="card p-6">
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="text-xl font-bold">CAPA Actions</h2>
+                <span class="text-sm text-red-600 font-semibold">4 Overdue</span>
+            </div>
+            <div class="space-y-3" id="capaList">
+                <!-- Populated by JS -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Shift Comparison & Daily Report -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Day vs Night Shift -->
+        <div class="card p-6">
+            <h2 class="text-xl font-bold mb-4">Day vs Night Shift</h2>
+            <canvas id="shiftCompChart" height="250"></canvas>
+        </div>
+
+        <!-- Daily Quality Report Summary -->
+        <div class="card p-6 lg:col-span-2">
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="text-xl font-bold">Today's Quality Summary</h2>
+                <button onclick="generateReport()" class="bg-green-600 text-white text-sm px-4 py-2 rounded-lg hover:bg-green-700 transition-colors">Generate Report</button>
+            </div>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                <div class="text-center p-3 bg-gray-50 rounded-lg">
+                    <div class="text-2xl font-bold text-green-600">1,217</div>
+                    <div class="text-xs text-gray-600 mt-1">Grade A</div>
+                </div>
+                <div class="text-center p-3 bg-yellow-50 rounded-lg">
+                    <div class="text-2xl font-bold text-yellow-600">24</div>
+                    <div class="text-xs text-gray-600 mt-1">Grade B</div>
+                </div>
+                <div class="text-center p-3 bg-red-50 rounded-lg">
+                    <div class="text-2xl font-bold text-red-600">6</div>
+                    <div class="text-xs text-gray-600 mt-1">Grade R</div>
+                </div>
+                <div class="text-center p-3 bg-blue-50 rounded-lg">
+                    <div class="text-2xl font-bold text-blue-600">2.4%</div>
+                    <div class="text-xs text-gray-600 mt-1">B+R Rate</div>
+                </div>
+            </div>
+
+            <h3 class="font-semibold text-gray-700 mb-3">Top 5 Defects Today</h3>
+            <div class="space-y-2" id="topDefectsList">
+                <!-- Populated by JS -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Time update
+        function updateTime() {
+            document.getElementById('currentTime').textContent =
+                new Date().toLocaleString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
+        }
+        updateTime();
+        setInterval(updateTime, 1000);
+
+        // Inspector data
+        const inspectors = [
+            { name: 'Mg Kyaw', nameEn: 'Mg Kyaw', completed: 32, target: 40, rate: 95 },
+            { name: 'Ko Win', nameEn: 'Ko Win', completed: 28, target: 40, rate: 93 },
+            { name: 'Ma Aye', nameEn: 'Ma Aye', completed: 35, target: 40, rate: 97 },
+            { name: 'Mg Zaw', nameEn: 'Mg Zaw', completed: 25, target: 40, rate: 91 },
+            { name: 'Ko Htet', nameEn: 'Ko Htet', completed: 27, target: 40, rate: 94 },
+        ];
+        const inspectorListEl = document.getElementById('inspectorList');
+        inspectors.forEach(ins => {
+            const pct = Math.round((ins.completed / ins.target) * 100);
+            const color = pct >= 80 ? 'bg-green-500' : pct >= 60 ? 'bg-yellow-500' : 'bg-red-500';
+            inspectorListEl.innerHTML += `
+            <div>
+                <div class="flex justify-between text-sm mb-1">
+                    <span class="font-medium">${ins.nameEn}</span>
+                    <span class="text-gray-600">${ins.completed}/${ins.target} · ${ins.rate}% accuracy</span>
+                </div>
+                <div class="w-full bg-gray-200 rounded-full h-2">
+                    <div class="${color} h-2 rounded-full transition-all" style="width:${pct}%"></div>
+                </div>
+            </div>`;
+        });
+
+        // CAPA data
+        const capas = [
+            { action: 'Retrain operators on inner layer application', due: '2025-02-10', responsible: 'Ko Win', status: 'overdue' },
+            { action: 'Calibrate extruder temperature sensors', due: '2025-02-15', responsible: 'Maintenance', status: 'overdue' },
+            { action: 'Update curing press pressure settings', due: '2025-02-20', responsible: 'PD-4 Supervisor', status: 'on-time' },
+            { action: 'Introduce bead seating check at PD-1', due: '2025-02-25', responsible: 'QC Team', status: 'on-time' },
+            { action: 'Weekly SPC review meeting', due: '2025-03-01', responsible: 'QC Manager', status: 'on-time' },
+        ];
+        const capaEl = document.getElementById('capaList');
+        capas.forEach(c => {
+            const isOverdue = c.status === 'overdue';
+            capaEl.innerHTML += `
+            <div class="flex items-start gap-3 p-3 ${isOverdue ? 'bg-red-50' : 'bg-gray-50'} rounded-lg">
+                <div class="mt-0.5 w-4 h-4 rounded-full ${isOverdue ? 'bg-red-400' : 'bg-green-400'} flex-shrink-0"></div>
+                <div class="flex-1 min-w-0">
+                    <div class="text-sm font-medium text-gray-900 truncate">${c.action}</div>
+                    <div class="text-xs text-gray-600 mt-0.5">Responsible: ${c.responsible} · Due: ${c.due}</div>
+                </div>
+                <span class="text-xs font-semibold ${isOverdue ? 'text-red-600' : 'text-green-600'}">${isOverdue ? 'OVERDUE' : 'On Time'}</span>
+            </div>`;
+        });
+
+        // Top defects list
+        const topDefects = [
+            { name: 'Inner Separation', count: 8, pct: 35 },
+            { name: 'Sidewall Crack', count: 6, pct: 26 },
+            { name: 'Bead Deformation', count: 4, pct: 17 },
+            { name: 'Inner Undercure', count: 3, pct: 13 },
+            { name: 'Tire Weight Wrong', count: 2, pct: 9 },
+        ];
+        const defectsEl = document.getElementById('topDefectsList');
+        const colors = ['bg-red-500','bg-orange-500','bg-yellow-500','bg-blue-500','bg-purple-500'];
+        topDefects.forEach((d, i) => {
+            defectsEl.innerHTML += `
+            <div>
+                <div class="flex justify-between text-sm mb-1">
+                    <span>${d.name}</span>
+                    <span class="font-semibold">${d.count} (${d.pct}%)</span>
+                </div>
+                <div class="w-full bg-gray-200 rounded-full h-2">
+                    <div class="${colors[i]} h-2 rounded-full" style="width:${d.pct}%"></div>
+                </div>
+            </div>`;
+        });
+
+        // Pareto Chart
+        new Chart(document.getElementById('defectParetoChart').getContext('2d'), {
+            type: 'bar',
+            data: {
+                labels: ['Inner Sep.', 'Sidewall Crack', 'Bead Deform.', 'Inner Undercure', 'Weight Wrong', 'Ply Splice', 'Other'],
+                datasets: [{
+                    label: 'Defect Count',
+                    data: [18, 12, 9, 7, 5, 3, 2],
+                    backgroundColor: 'rgba(17,153,142,0.7)',
+                    yAxisID: 'y',
+                    order: 2
+                }, {
+                    label: 'Cumulative %',
+                    type: 'line',
+                    data: [32, 53, 69, 81, 90, 96, 100],
+                    borderColor: '#ef4444',
+                    backgroundColor: 'transparent',
+                    yAxisID: 'y1',
+                    tension: 0.2,
+                    order: 1
+                }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                scales: {
+                    y: { beginAtZero: true, title: { display: true, text: 'Count' } },
+                    y1: { beginAtZero: true, max: 100, position: 'right', title: { display: true, text: 'Cumulative %' }, grid: { drawOnChartArea: false } }
+                }
+            }
+        });
+
+        // Defects by Line
+        new Chart(document.getElementById('defectByLineChart').getContext('2d'), {
+            type: 'bar',
+            data: {
+                labels: ['PD-1 Mixing', 'PD-2 Extrusion', 'PD-3 Building', 'PD-4 Curing'],
+                datasets: [
+                    { label: 'Inner', data: [2, 5, 3, 8], backgroundColor: '#ef4444' },
+                    { label: 'Sidewall', data: [0, 6, 2, 4], backgroundColor: '#f59e0b' },
+                    { label: 'Bead', data: [3, 1, 2, 3], backgroundColor: '#3b82f6' },
+                    { label: 'Other', data: [1, 2, 1, 3], backgroundColor: '#8b5cf6' },
+                ]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } }
+            }
+        });
+
+        // Defect Trend
+        const days14 = Array.from({ length: 14 }, (_, i) => {
+            const d = new Date(); d.setDate(d.getDate() - 13 + i);
+            return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        });
+        new Chart(document.getElementById('defectTrendChart').getContext('2d'), {
+            type: 'line',
+            data: {
+                labels: days14,
+                datasets: [{
+                    label: 'Total Defects',
+                    data: [28, 22, 25, 30, 19, 23, 20, 18, 24, 21, 19, 22, 24, 23],
+                    borderColor: '#11998e', backgroundColor: 'rgba(17,153,142,0.1)', tension: 0.4, fill: true
+                }]
+            },
+            options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } }
+        });
+
+        // Day vs Night Shift
+        new Chart(document.getElementById('shiftCompChart').getContext('2d'), {
+            type: 'radar',
+            data: {
+                labels: ['B+R Rate', 'Inspection Rate', 'Defect Detection', 'RCA Speed', 'CAPA Closure'],
+                datasets: [{
+                    label: 'Day Shift',
+                    data: [85, 90, 88, 75, 80],
+                    borderColor: '#11998e',
+                    backgroundColor: 'rgba(17,153,142,0.2)'
+                }, {
+                    label: 'Night Shift',
+                    data: [78, 82, 80, 70, 72],
+                    borderColor: '#3b82f6',
+                    backgroundColor: 'rgba(59,130,246,0.2)'
+                }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                scales: { r: { min: 60, max: 100, ticks: { stepSize: 10 } } }
+            }
+        });
+
+        // Generate report button
+        function generateReport() {
+            alert('Daily Quality Report generated!\n\nDate: ' + new Date().toLocaleDateString() + '\nTotal Produced: 1,247\nB+R Rate: 2.4%\nTop Defect: Inner Separation (8 cases)\n\nReport saved to: /reports/quality-report-' + new Date().toISOString().slice(0,10) + '.pdf');
+        }
+
+        // Live update inspections count
+        setInterval(() => {
+            const el = document.getElementById('inspectionsToday');
+            const v = parseInt(el.textContent);
+            if (v < 200) el.textContent = v + 1;
+        }, 15000);
+    </script>
+</body>
+</html>

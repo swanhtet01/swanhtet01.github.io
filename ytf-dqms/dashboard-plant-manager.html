@@ -38,19 +38,31 @@
         .trend-up { color: #10b981; }
         .trend-down { color: #ef4444; }
         .trend-stable { color: #6b7280; }
+        .nav-link { color: white; text-decoration: none; padding: 8px 16px; border-radius: 8px; font-size: 0.875rem; transition: background 0.2s; }
+        .nav-link:hover { background: rgba(255,255,255,0.2); }
     </style>
 </head>
 <body class="min-h-screen p-6">
     <!-- Header -->
     <header class="mb-8">
-        <div class="flex items-center justify-between">
+        <div class="flex items-center justify-between flex-wrap gap-4">
             <div>
                 <h1 class="text-4xl font-bold text-white mb-2">Plant Manager Dashboard</h1>
                 <p class="text-white/80">Plant B Quality Overview - Real-time Monitoring</p>
             </div>
-            <div class="text-right">
-                <div class="text-white/80 text-sm">Welcome, Mr. Wu</div>
-                <div class="text-white font-semibold text-lg" id="currentTime"></div>
+            <div class="flex items-center gap-4 flex-wrap">
+                <nav class="flex gap-2 flex-wrap">
+                    <a href="dashboard-qc-manager.html" class="nav-link">QC Manager</a>
+                    <a href="dashboard-supervisor.html" class="nav-link">Supervisor</a>
+                    <a href="mobile-inspector.html" class="nav-link">Inspector</a>
+                    <a href="mobile-operator.html" class="nav-link">Operator</a>
+                    <a href="alerts.html" class="nav-link">Alerts</a>
+                    <a href="reports.html" class="nav-link">Reports</a>
+                </nav>
+                <div class="text-right">
+                    <div class="text-white/80 text-sm">Welcome, Mr. Wu</div>
+                    <div class="text-white font-semibold text-lg" id="currentTime"></div>
+                </div>
             </div>
         </div>
     </header>
