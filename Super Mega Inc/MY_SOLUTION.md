@@ -34,3 +34,11 @@ It will:
 
 - Gmail user token is still missing, so email signals are reduced.
 - After token is completed, supplier/internal/quality email signals flow into the same system.
+
+To complete token quickly after Google sign-in callback:
+
+```powershell
+.\tools\gmail_finish.ps1
+```
+
+(It reads callback URL from clipboard, or pass `-CallbackUrl` explicitly.)

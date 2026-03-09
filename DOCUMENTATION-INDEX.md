@@ -91,9 +91,15 @@ Operator-facing entry doc:
 - one-command daily run path
 - immediate practical value and current known limitation
 
+### 14. `tools/gmail_finish.ps1`
+OAuth finish helper:
+
+- completes Gmail token bootstrap from clipboard callback URL
+- avoids manual long command typing
+
 ## Supporting docs
 
-### 14. `agent-setup-guide.md`
+### 15. `agent-setup-guide.md`
 Legacy but still useful setup material for agent hosts, model routing, telemetry, and autonomy patterns.
 
 ## Legacy or template docs
