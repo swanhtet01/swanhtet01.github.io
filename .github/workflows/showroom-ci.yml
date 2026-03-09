@@ -1,0 +1,39 @@
+name: Showroom CI
+
+on:
+  pull_request:
+    paths:
+      - 'showroom/**'
+      - '.github/workflows/showroom-ci.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'showroom/**'
+      - '.github/workflows/showroom-ci.yml'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: showroom/package-lock.json
+
+      - name: Install dependencies
+        working-directory: showroom
+        run: npm ci
+
+      - name: Lint
+        working-directory: showroom
+        run: npm run lint
+
+      - name: Build
+        working-directory: showroom
+        run: npm run build
