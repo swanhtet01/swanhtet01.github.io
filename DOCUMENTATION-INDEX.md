@@ -84,9 +84,16 @@ Manus-derived shortlist for website refinement:
 - identifies highest-value prior showroom sample bundle
 - lists reusable content/proof assets to import into `showroom/`
 
+### 13. `Super Mega Inc/MY_SOLUTION.md`
+Operator-facing entry doc:
+
+- where your live Yangon Tyre solution outputs are
+- one-command daily run path
+- immediate practical value and current known limitation
+
 ## Supporting docs
 
-### 13. `agent-setup-guide.md`
+### 14. `agent-setup-guide.md`
 Legacy but still useful setup material for agent hosts, model routing, telemetry, and autonomy patterns.
 
 ## Legacy or template docs
