@@ -253,10 +253,11 @@
   .accordion-btn .chevron { transition: transform .25s; font-size: .8rem; }
   .accordion-btn.open .chevron { transform: rotate(180deg); }
   .accordion-body {
-    max-height: 0; overflow: hidden; transition: max-height .35s ease;
+    overflow: hidden; transition: max-height .35s ease;
     background: var(--bg); padding: 0 1.1rem; font-size: .95rem;
+    max-height: 0;
   }
-  .accordion-body.open { max-height: 800px; padding: .9rem 1.1rem 1.1rem; }
+  .accordion-body.open { max-height: 3000px; overflow: visible; padding: .9rem 1.1rem 1.1rem; }
 
   /* ── CHARTS ── */
   .chart-wrap {
@@ -300,6 +301,36 @@
   .drive-card .dc-name { font-weight: 600; font-size: .95rem; }
   .drive-card .dc-desc { font-size: .82rem; color: var(--text-muted); }
 
+  /* ── READING PROGRESS ── */
+  #progress-bar {
+    position: fixed; top: var(--header-h); left: 0; right: 0; z-index: 101;
+    height: 3px; background: var(--border);
+  }
+  #progress-fill {
+    height: 100%; width: 0%; background: var(--accent);
+    transition: width .1s linear;
+  }
+
+  /* ── FONT SIZE CONTROLS ── */
+  .font-ctrl { display: flex; align-items: center; gap: .2rem; }
+  .font-ctrl button {
+    background: none; border: 1px solid var(--border); border-radius: 4px;
+    cursor: pointer; color: var(--text-muted); line-height: 1;
+    font-family: 'EB Garamond', serif; transition: all .15s;
+  }
+  .font-ctrl button:hover { border-color: var(--accent); color: var(--accent); }
+  .font-ctrl .fs-sm { font-size: .75rem; padding: .3rem .5rem; }
+  .font-ctrl .fs-lg { font-size: 1rem; padding: .2rem .45rem; }
+
+  /* ── LIVE URL BANNER ── */
+  .live-banner {
+    background: var(--note-bg); border: 1px solid var(--note-border); border-radius: 8px;
+    padding: .75rem 1.1rem; margin-top: 2rem; font-size: .9rem;
+    display: flex; align-items: center; gap: .6rem; justify-content: center; flex-wrap: wrap;
+  }
+  .live-banner a { color: var(--link); font-weight: 600; word-break: break-all; }
+  .live-banner a:hover { color: var(--accent); }
+
   /* ── PRINT ── */
   @media print {
     #topbar, #sidebar, .no-print { display: none !important; }
@@ -324,11 +355,18 @@
 </head>
 <body>
 
+<!-- READING PROGRESS BAR -->
+<div id="progress-bar"><div id="progress-fill"></div></div>
+
 <!-- TOP BAR -->
 <header id="topbar">
   <button class="icon-btn" id="menuToggle" aria-label="Toggle menu">☰</button>
   <div class="logo">
     Yangon Tyre Factory &nbsp;<span>Director's Manual</span>
+  </div>
+  <div class="font-ctrl no-print">
+    <button class="fs-sm" id="fontDown" title="Decrease font size">A−</button>
+    <button class="fs-lg" id="fontUp" title="Increase font size">A+</button>
   </div>
   <button class="icon-btn" id="themeToggle" title="Toggle dark/light mode">🌙 Dark</button>
   <button class="icon-btn no-print" onclick="window.print()" title="Print to PDF">🖨 Print</button>
@@ -399,6 +437,12 @@
         <a href="#ch8-training">Training Plan</a>
         <a href="#ch8-kra">KRA Matrix</a>
       </div>
+      <div class="sidebar-section">
+        <a href="#ch9" class="chapter-link">9 · Glossary &amp; Reference</a>
+        <a href="#ch9-glossary">Tyre Glossary</a>
+        <a href="#ch9-formulas">Key Formulas</a>
+        <a href="#ch9-contacts">Director Contacts</a>
+      </div>
     </nav>
 
     <!-- Google Drive Links -->
@@ -433,6 +477,14 @@
         <a class="cover-drive-btn" href="ytf-demo.html">
           ⚡ Live ERP Demo
         </a>
+      </div>
+
+      <div class="live-banner no-print">
+        🌐 <strong>View online:</strong>
+        <a href="https://swanhtet01.github.io/director-manual.html" target="_blank" rel="noopener">
+          https://swanhtet01.github.io/director-manual.html
+        </a>
+        — open in any browser, works on phone &amp; desktop.
       </div>
 
       <div style="margin-top:2.5rem; text-align:left; max-width:560px; margin-left:auto; margin-right:auto;">
@@ -1169,10 +1221,164 @@ graph TD
       </div>
     </section>
 
+    <!-- ═══════════════════════════════════════════════════
+         CHAPTER 9: GLOSSARY & QUICK REFERENCE
+    ═══════════════════════════════════════════════════ -->
+    <section class="chapter" id="ch9">
+      <div class="chapter-header">
+        <span class="chapter-num">9</span>
+        <h2 class="chapter-title">Glossary &amp; Quick Reference</h2>
+      </div>
+
+      <p>This appendix is the Director's quick-lookup reference. Bookmark this page — it covers the essential terminology, formulas, and contacts needed to navigate any meeting, audit, or production review with confidence.</p>
+
+      <h2 class="section-title" id="ch9-glossary">9.1 Tyre Industry Glossary</h2>
+
+      <div class="accordion">
+        <div class="accordion-item">
+          <button class="accordion-btn">A – E <span class="chevron">▼</span></button>
+          <div class="accordion-body">
+            <table class="data-table">
+              <thead><tr><th>Term</th><th>Definition</th></tr></thead>
+              <tbody>
+                <tr><td><strong>AQL</strong></td><td>Acceptable Quality Level — the worst tolerable process average for sampling inspection (e.g. AQL 1.5 = max 1.5% defective in acceptable lot).</td></tr>
+                <tr><td><strong>Aspect Ratio</strong></td><td>Sidewall height ÷ section width × 100. A "65" in 205/65R15 means sidewall is 65% of 205mm. Lower ratio = sportier handling.</td></tr>
+                <tr><td><strong>Bead</strong></td><td>High-tensile steel wire bundle that locks the tyre to the wheel rim. Critical safety component — bead failure causes instant deflation.</td></tr>
+                <tr><td><strong>Banbury Mixer</strong></td><td>Internal batch mixer that combines rubber, carbon black, and chemicals at ~150°C with counter-rotating rotors. Core of the compounding department.</td></tr>
+                <tr><td><strong>Bladder</strong></td><td>Inflatable rubber bag inside the curing press mould that shapes the tyre from the inside during vulcanisation. Lifespan ~500 cycles.</td></tr>
+                <tr><td><strong>BR</strong></td><td>Butadiene Rubber — synthetic elastomer giving low rolling resistance and high resilience. Used in tread base and sidewalls.</td></tr>
+                <tr><td><strong>Calendering</strong></td><td>Process of applying rubber coating to fabric or steel cord between heavy rollers to produce ply sheets.</td></tr>
+                <tr><td><strong>Carcass</strong></td><td>The structural skeleton of the tyre — the cord plies that run from bead to bead and carry the load.</td></tr>
+                <tr><td><strong>Carbon Black (CB)</strong></td><td>Reinforcing filler made of near-pure carbon. Increases tyre strength 4–5× vs unfilled rubber. Gives tyres their black colour.</td></tr>
+                <tr><td><strong>CoA</strong></td><td>Certificate of Analysis — supplier document confirming a material lot meets specification. Required for DQMS material release.</td></tr>
+                <tr><td><strong>Compound</strong></td><td>A formulated rubber mixture (elastomers + fillers + chemicals) ready for processing. Each tyre component has a unique compound recipe.</td></tr>
+                <tr><td><strong>Cure / Vulcanisation</strong></td><td>The heat + pressure process that forms chemical crosslinks between rubber chains, transforming soft compound into tough, elastic rubber.</td></tr>
+                <tr><td><strong>DQMS</strong></td><td>Digital Quality Management System — SuperMega's integrated platform for real-time quality data capture, AI defect detection, and corrective action tracking.</td></tr>
+                <tr><td><strong>ECE</strong></td><td>United Nations Economic Commission for Europe — issues tyre safety regulations (R30 for car tyres, R54 for truck tyres) required for European market.</td></tr>
+                <tr><td><strong>EPDM</strong></td><td>Ethylene Propylene Diene Monomer — rubber with excellent ozone and UV resistance. Used in sidewall compounds.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="accordion-item">
+          <button class="accordion-btn">F – M <span class="chevron">▼</span></button>
+          <div class="accordion-body">
+            <table class="data-table">
+              <thead><tr><th>Term</th><th>Definition</th></tr></thead>
+              <tbody>
+                <tr><td><strong>FIFO</strong></td><td>First In, First Out — inventory management rule ensuring oldest stock is used first. Critical for natural rubber (shelf life: 2 years).</td></tr>
+                <tr><td><strong>Flash</strong></td><td>Thin rubber fin that forms at mould parting lines during curing. Minor cosmetic defect — trimmed in finishing.</td></tr>
+                <tr><td><strong>Green Tyre</strong></td><td>The uncured assembled tyre before it enters the curing press. Soft and sticky — must be cured within 8 hours of building.</td></tr>
+                <tr><td><strong>Groove</strong></td><td>Continuous channel in the tread pattern for water evacuation. Minimum legal groove depth varies by country (typically 1.6mm).</td></tr>
+                <tr><td><strong>Halobutyl</strong></td><td>Chloro- or bromobutyl rubber — used in the inner liner for excellent air impermeability. Key for tubeless tyres.</td></tr>
+                <tr><td><strong>IoT</strong></td><td>Internet of Things — sensors on factory machines that transmit real-time data (temperature, vibration, pressure) to the SuperMega platform.</td></tr>
+                <tr><td><strong>ISO 9001</strong></td><td>International standard for Quality Management Systems. Certification requires documented processes, management review, and continuous improvement.</td></tr>
+                <tr><td><strong>Kerf</strong></td><td>Narrow slot in the tread mould blade that creates sipes. Controls wet grip and noise.</td></tr>
+                <tr><td><strong>Mooney Viscosity</strong></td><td>Standardised measure of rubber flow resistance (ML 1+4 @ 100°C). Controls processing behaviour — too high = processing difficulty; too low = shape retention issues.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="accordion-item">
+          <button class="accordion-btn">N – Z <span class="chevron">▼</span></button>
+          <div class="accordion-body">
+            <table class="data-table">
+              <thead><tr><th>Term</th><th>Definition</th></tr></thead>
+              <tbody>
+                <tr><td><strong>NR</strong></td><td>Natural Rubber — from Hevea brasiliensis latex. High tensile strength and cut resistance. Grade RSS1 (premium) or TSR20 (standard). Commodity-priced.</td></tr>
+                <tr><td><strong>OEE</strong></td><td>Overall Equipment Effectiveness = Availability × Performance × Quality. World-class benchmark: 85%. Formula: (Good Units × Ideal Cycle Time) ÷ Planned Production Time.</td></tr>
+                <tr><td><strong>PCI</strong></td><td>Post-Cure Inflation — inflating the hot tyre immediately after curing press opens to prevent distortion as it cools. Critical for uniformity.</td></tr>
+                <tr><td><strong>Ply</strong></td><td>A layer of rubber-coated fabric or steel cord. Radial tyres have radial plies (90° to tread); bias tyres have diagonal plies.</td></tr>
+                <tr><td><strong>PPM</strong></td><td>Parts Per Million — quality metric for defect rate. 1000 PPM = 0.1% defect rate. World-class automotive target: &lt;50 PPM.</td></tr>
+                <tr><td><strong>Radial</strong></td><td>Tyre construction where ply cords run perpendicular (radially) to the direction of travel, topped by a steel belt package. Better fuel economy and handling vs bias.</td></tr>
+                <tr><td><strong>ROP</strong></td><td>Reorder Point — inventory level that triggers a purchase order. Formula: (Average Daily Usage × Lead Time) + Safety Stock.</td></tr>
+                <tr><td><strong>SBR</strong></td><td>Styrene-Butadiene Rubber — main synthetic tread rubber. Better wet grip and abrasion resistance than NR. Price tracks crude oil.</td></tr>
+                <tr><td><strong>Sidewall</strong></td><td>The flexible side section of the tyre between tread and bead. Contains tyre markings and must resist ozone cracking and flexing fatigue.</td></tr>
+                <tr><td><strong>Sipe</strong></td><td>Fine cut in tread blocks that improves wet traction and snow grip by creating additional biting edges.</td></tr>
+                <tr><td><strong>TBM</strong></td><td>Tyre Building Machine — the machine that assembles all tyre components (ply, belt, tread, bead) into a green tyre.</td></tr>
+                <tr><td><strong>Tread</strong></td><td>The road-contact zone of the tyre. Its compound and pattern determine grip, wear rate, noise, and rolling resistance.</td></tr>
+                <tr><td><strong>TWI</strong></td><td>Tread Wear Indicator — moulded rubber bar at 1.6mm groove depth. When tread is flush with TWI, tyre is legally worn out.</td></tr>
+                <tr><td><strong>Uniformity</strong></td><td>Consistency of tyre dimensions and stiffness around its circumference. Poor uniformity causes vibration and uneven wear. Measured on a uniformity machine (force variation test).</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <h2 class="section-title" id="ch9-formulas">9.2 Key Formulas Quick Reference</h2>
+      <table class="data-table">
+        <thead><tr><th>Formula</th><th>Equation</th><th>Units / Notes</th></tr></thead>
+        <tbody>
+          <tr><td><strong>OEE</strong></td><td>Availability × Performance × Quality</td><td>%; target ≥ 80%</td></tr>
+          <tr><td>Availability</td><td>(Planned Production Time − Downtime) ÷ Planned Production Time</td><td>%</td></tr>
+          <tr><td>Performance</td><td>(Total Count × Ideal Cycle Time) ÷ Run Time</td><td>%</td></tr>
+          <tr><td>Quality Rate</td><td>Good Count ÷ Total Count</td><td>%</td></tr>
+          <tr><td><strong>Defect Rate (PPM)</strong></td><td>(Defective Units ÷ Total Units) × 1,000,000</td><td>PPM</td></tr>
+          <tr><td><strong>Safety Stock</strong></td><td>Z × σ × √(Lead Time)</td><td>Z=1.65 for 95% SL</td></tr>
+          <tr><td><strong>Reorder Point</strong></td><td>(Avg Daily Usage × Lead Time) + Safety Stock</td><td>Units</td></tr>
+          <tr><td><strong>Inventory Turnover</strong></td><td>Cost of Goods Sold ÷ Average Inventory Value</td><td>×/year; target ≥ 8×</td></tr>
+          <tr><td><strong>Gross Margin</strong></td><td>(Revenue − COGS) ÷ Revenue × 100</td><td>%; target ≥ 25%</td></tr>
+          <tr><td><strong>Payback Period</strong></td><td>Initial Investment ÷ Annual Net Savings</td><td>Months / Years</td></tr>
+          <tr><td><strong>Tyre Aspect Ratio</strong></td><td>Section Height ÷ Section Width × 100</td><td>%; e.g. 65 in 205/65R15</td></tr>
+          <tr><td><strong>Cure Extent</strong></td><td>Equivalent Cure Time at Ref Temp via Arrhenius: t<sub>eq</sub> = ∑ exp((T−T<sub>ref</sub>)/10) × Δt</td><td>Engineering reference</td></tr>
+        </tbody>
+      </table>
+
+      <h2 class="section-title" id="ch9-contacts">9.3 Director's Key Contacts &amp; Escalation Matrix</h2>
+
+      <div class="callout note">
+        <div class="callout-title">📌 Note</div>
+        Update this table with actual contact details before distributing the manual. The roles and escalation levels are fixed.
+      </div>
+
+      <table class="data-table">
+        <thead><tr><th>Role</th><th>Responsibility Area</th><th>Escalate When</th><th>Contact</th></tr></thead>
+        <tbody>
+          <tr><td>Plant Manager</td><td>Production, maintenance, safety</td><td>OEE &lt;65%, any safety incident, critical machine down &gt;4h</td><td>—</td></tr>
+          <tr><td>QC Manager</td><td>Quality, DQMS, customer complaints</td><td>Critical defect found in finished goods, customer field return</td><td>—</td></tr>
+          <tr><td>Supply Chain Manager</td><td>Procurement, inventory, suppliers</td><td>Risk of production stop due to stock-out, supplier defaults</td><td>—</td></tr>
+          <tr><td>Finance Manager</td><td>Budget, P&amp;L, cost control</td><td>Variance &gt;10% from monthly budget</td><td>—</td></tr>
+          <tr><td>HR Manager</td><td>Staffing, training, labour relations</td><td>Headcount gap causing shift coverage risk</td><td>—</td></tr>
+          <tr><td>SuperMega Support</td><td>ERP / DQMS system issues</td><td>System downtime &gt;1h, agent anomaly, data loss</td><td>support@supermega.dev</td></tr>
+          <tr><td>AWS Emergency</td><td>Cloud infrastructure</td><td>Database unreachable, multi-region failure</td><td>AWS Support Console</td></tr>
+        </tbody>
+      </table>
+
+      <div class="callout">
+        <div class="callout-title">🔗 How to Access This Manual</div>
+        <strong>Online (recommended):</strong> Open <a href="https://swanhtet01.github.io/director-manual.html">https://swanhtet01.github.io/director-manual.html</a> in any browser on any device — no login required.<br><br>
+        <strong>Offline / PDF:</strong> Click the 🖨 Print button in the top bar and select "Save as PDF". All accordion sections and charts will expand for the print view.<br><br>
+        <strong>To suggest improvements:</strong> The manual is hosted on GitHub. The Director or any authorised editor can submit updates via the <a href="https://github.com/swanhtet01/swanhtet01.github.io" target="_blank" rel="noopener">GitHub repository</a>, or contact the SuperMega team.
+      </div>
+    </section>
+
   </main>
 </div>
 
 <script>
+// ── READING PROGRESS BAR ──
+const progressFill = document.getElementById('progress-fill');
+function updateProgress() {
+  const scrollTop = window.scrollY;
+  const docHeight = document.documentElement.scrollHeight - window.innerHeight;
+  progressFill.style.width = docHeight > 0 ? (scrollTop / docHeight * 100) + '%' : '0%';
+}
+window.addEventListener('scroll', updateProgress, { passive: true });
+updateProgress();
+
+// ── FONT SIZE CONTROLS (range 13–22px for comfortable reading) ──
+const FS_MIN = 13, FS_MAX = 22, FS_DEFAULT = 17;
+const savedFs = parseFloat(localStorage.getItem('ytf-manual-fontsize'));
+let fontSize = (Number.isFinite(savedFs) && savedFs >= FS_MIN && savedFs <= FS_MAX) ? savedFs : FS_DEFAULT;
+function applyFontSize(sz) {
+  fontSize = Math.max(FS_MIN, Math.min(FS_MAX, sz));
+  document.documentElement.style.fontSize = fontSize + 'px';
+  localStorage.setItem('ytf-manual-fontsize', fontSize);
+}
+document.getElementById('fontUp').addEventListener('click', () => applyFontSize(fontSize + 1));
+document.getElementById('fontDown').addEventListener('click', () => applyFontSize(fontSize - 1));
+applyFontSize(fontSize);
+
 // ── THEME TOGGLE ──
 const themeBtn = document.getElementById('themeToggle');
 const html = document.documentElement;
