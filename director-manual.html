@@ -326,10 +326,15 @@
   .live-banner {
     background: var(--note-bg); border: 1px solid var(--note-border); border-radius: 8px;
     padding: .75rem 1.1rem; margin-top: 2rem; font-size: .9rem;
-    display: flex; align-items: center; gap: .6rem; justify-content: center; flex-wrap: wrap;
+    display: flex; align-items: flex-start; gap: .6rem; justify-content: center; flex-wrap: wrap; flex-direction: column; text-align: center; align-items: center;
   }
   .live-banner a { color: var(--link); font-weight: 600; word-break: break-all; }
   .live-banner a:hover { color: var(--accent); }
+  .cover-read-btn {
+    background: var(--accent) !important; color: #fff !important; border-color: var(--accent) !important;
+    font-weight: 700 !important; font-size: 1rem !important; padding: .6rem 1.4rem !important;
+  }
+  .cover-read-btn:hover { opacity: .88; }
 
   /* ── PRINT ── */
   @media print {
@@ -474,6 +479,9 @@
       <p class="meta">Manufacturing Operations · Quality · Finance · Digital Systems</p>
       <div class="cover-version">Version 1.0 · March 2026 · Ever-Evolving Edition</div>
       <div class="cover-links">
+        <a class="cover-drive-btn cover-read-btn" href="https://htmlpreview.github.io/?https://github.com/swanhtet01/swanhtet01.github.io/blob/copilot/build-interactive-manual/director-manual.html" target="_blank" rel="noopener">
+          📖 Read Manual (Preview)
+        </a>
         <a class="cover-drive-btn" href="https://drive.google.com/drive/folders/1lvNk73XNxIdPIagwal7YKEzlCtAkk-yv" target="_blank" rel="noopener">
           🗂 Full Project Folder
         </a>
@@ -486,10 +494,11 @@
       </div>
 
       <div class="live-banner no-print">
-        🌐 <strong>How to view:</strong>
-        Once the PR is merged to <code>main</code>, this manual will be live at
-        <a href="https://swanhtet01.github.io/director-manual.html" target="_blank" rel="noopener">swanhtet01.github.io/director-manual.html</a>.
-        Until then, download <code>director-manual.html</code> from GitHub and open it directly in any browser — works offline, no server needed.
+        📖 <strong>Read the manual now (before merging):</strong>
+        <a href="https://htmlpreview.github.io/?https://github.com/swanhtet01/swanhtet01.github.io/blob/copilot/build-interactive-manual/director-manual.html" target="_blank" rel="noopener">Open preview in browser →</a>
+        (works on phone, tablet, or desktop — no download needed)<br>
+        <span style="font-size:.85rem; opacity:.8;">After merging to <code>main</code>, the permanent link will be:
+        <a href="https://swanhtet01.github.io/director-manual.html" target="_blank" rel="noopener">swanhtet01.github.io/director-manual.html</a></span>
       </div>
 
       <div style="margin-top:2.5rem; text-align:left; max-width:560px; margin-left:auto; margin-right:auto;">
@@ -1919,7 +1928,11 @@ graph TD
 
       <div class="callout">
         <div class="callout-title">🔗 How to Access This Manual</div>
-        <strong>Online (recommended):</strong> Open <a href="https://swanhtet01.github.io/director-manual.html">https://swanhtet01.github.io/director-manual.html</a> in any browser on any device — no login required.<br><br>
+        <strong>Right now (before merging):</strong>
+        <a href="https://htmlpreview.github.io/?https://github.com/swanhtet01/swanhtet01.github.io/blob/copilot/build-interactive-manual/director-manual.html" target="_blank" rel="noopener">Open the live preview →</a>
+        — works in any browser, phone or desktop, no download needed.<br><br>
+        <strong>After this PR is merged:</strong> Permanent link at
+        <a href="https://swanhtet01.github.io/director-manual.html" target="_blank" rel="noopener">swanhtet01.github.io/director-manual.html</a><br><br>
         <strong>Offline / PDF:</strong> Click the 🖨 Print button in the top bar and select "Save as PDF". All accordion sections and charts will expand for the print view.<br><br>
         <strong>To suggest improvements:</strong> The manual is hosted on GitHub. The Director or any authorised editor can submit updates via the <a href="https://github.com/swanhtet01/swanhtet01.github.io" target="_blank" rel="noopener">GitHub repository</a>, or contact the SuperMega team.
       </div>
