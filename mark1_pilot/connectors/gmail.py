@@ -279,7 +279,7 @@ class GmailProbe:
                 scopes=[GMAIL_READONLY_SCOPE],
                 redirect_uri=redirect_uri,
             )
-            auth_url, _ = flow.authorization_url(
+            auth_url, state = flow.authorization_url(
                 access_type="offline",
                 prompt="consent",
                 include_granted_scopes="true",
@@ -297,6 +297,8 @@ class GmailProbe:
                         "client_secret_json": str(self.client_secret_json),
                         "redirect_uri": redirect_uri,
                         "scopes": [GMAIL_READONLY_SCOPE],
+                        "state": state,
+                        "code_verifier": getattr(flow, "code_verifier", ""),
                         "authorization_url": auth_url,
                     },
                     indent=2,
@@ -345,8 +347,12 @@ class GmailProbe:
             flow = Flow.from_client_secrets_file(
                 str(self.client_secret_json),
                 scopes=session["scopes"],
+                state=session.get("state"),
                 redirect_uri=redirect_uri,
             )
+            code_verifier = session.get("code_verifier", "")
+            if code_verifier:
+                flow.code_verifier = code_verifier
             flow.fetch_token(authorization_response=callback_url)
             credentials = flow.credentials
             self.token_json.parent.mkdir(parents=True, exist_ok=True)
