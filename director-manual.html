@@ -1,0 +1,1314 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Director's Manual — Yangon Tyre Factory</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Playfair+Display:ital,wght@0,700;0,900;1,700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js"></script>
+<style>
+  :root {
+    --bg: #faf8f4;
+    --surface: #ffffff;
+    --border: #d8cfc0;
+    --text: #1a1209;
+    --text-muted: #6b5c45;
+    --accent: #8b1a1a;
+    --accent-light: #f5e6e6;
+    --link: #1a4a8b;
+    --sidebar-bg: #f2ede4;
+    --sidebar-width: 280px;
+    --header-h: 56px;
+    --chapter-num: #b5600b;
+    --rule: #c8bba6;
+    --code-bg: #f0ebe2;
+    --callout-bg: #fef9ee;
+    --callout-border: #e8c84a;
+    --note-bg: #eef3fc;
+    --note-border: #3a6abf;
+  }
+  [data-theme="dark"] {
+    --bg: #12100d;
+    --surface: #1c1913;
+    --border: #3a3228;
+    --text: #e8dfd0;
+    --text-muted: #9e8e78;
+    --accent: #e05555;
+    --accent-light: #2a1515;
+    --link: #7baae8;
+    --sidebar-bg: #181510;
+    --chapter-num: #e0902a;
+    --rule: #3a3228;
+    --code-bg: #221e18;
+    --callout-bg: #1e1b0e;
+    --callout-border: #c8a820;
+    --note-bg: #0e1520;
+    --note-border: #3a6abf;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html { scroll-behavior: smooth; font-size: 17px; }
+
+  body {
+    font-family: 'EB Garamond', Georgia, serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.75;
+    transition: background 0.25s, color 0.25s;
+  }
+
+  /* ── TOP BAR ── */
+  #topbar {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+    height: var(--header-h);
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; padding: 0 1.25rem;
+    gap: 1rem;
+    box-shadow: 0 1px 6px rgba(0,0,0,.06);
+  }
+  #topbar .logo {
+    font-family: 'Playfair Display', serif; font-weight: 700;
+    font-size: 1.05rem; color: var(--accent); letter-spacing: .02em; flex: 1;
+  }
+  #topbar .logo span { color: var(--text-muted); font-weight: 400; font-size: .85rem; }
+  .icon-btn {
+    background: none; border: 1px solid var(--border); border-radius: 6px;
+    cursor: pointer; padding: .35rem .65rem; color: var(--text-muted);
+    font-size: .8rem; display: flex; align-items: center; gap: .35rem;
+    transition: border-color .2s, background .2s;
+  }
+  .icon-btn:hover { border-color: var(--accent); background: var(--accent-light); color: var(--accent); }
+  #menuToggle { display: none; }
+
+  /* ── LAYOUT ── */
+  #wrapper {
+    display: flex;
+    padding-top: var(--header-h);
+    min-height: 100vh;
+  }
+
+  /* ── SIDEBAR ── */
+  #sidebar {
+    width: var(--sidebar-width);
+    flex-shrink: 0;
+    position: fixed;
+    top: var(--header-h);
+    left: 0;
+    bottom: 0;
+    overflow-y: auto;
+    background: var(--sidebar-bg);
+    border-right: 1px solid var(--border);
+    padding: 1.5rem 0 3rem;
+    transition: transform 0.28s ease, background 0.25s;
+  }
+  #sidebar h2 {
+    font-family: 'EB Garamond', serif; font-size: .7rem; font-weight: 600;
+    letter-spacing: .15em; text-transform: uppercase; color: var(--text-muted);
+    padding: 0 1.25rem .6rem; border-bottom: 1px solid var(--rule); margin-bottom: .75rem;
+  }
+  #sidebar nav a {
+    display: block; padding: .3rem 1.25rem .3rem 1.5rem;
+    text-decoration: none; color: var(--text-muted); font-size: .875rem;
+    border-left: 3px solid transparent; transition: all .18s;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  #sidebar nav a.chapter-link {
+    font-weight: 500; color: var(--text); font-size: .9rem;
+    padding-top: .45rem; padding-bottom: .45rem;
+  }
+  #sidebar nav a:hover, #sidebar nav a.active {
+    color: var(--accent); border-left-color: var(--accent);
+    background: var(--accent-light);
+  }
+  .sidebar-section { margin-top: 1.5rem; }
+  .sidebar-drive {
+    margin: 1.5rem 1rem 0; padding: 1rem;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+  }
+  .sidebar-drive h3 { font-size: .7rem; text-transform: uppercase; letter-spacing: .12em; color: var(--text-muted); margin-bottom: .6rem; }
+  .sidebar-drive a {
+    display: flex; align-items: center; gap: .4rem;
+    text-decoration: none; font-size: .82rem; color: var(--link);
+    padding: .3rem 0; border-bottom: 1px solid var(--rule);
+  }
+  .sidebar-drive a:last-child { border-bottom: none; }
+  .sidebar-drive a:hover { color: var(--accent); }
+  .drive-icon { font-size: 1rem; }
+
+  /* ── MAIN CONTENT ── */
+  #main {
+    margin-left: var(--sidebar-width);
+    flex: 1;
+    max-width: 860px;
+    padding: 3rem 3.5rem 6rem;
+  }
+
+  /* ── COVER PAGE ── */
+  #cover {
+    text-align: center; padding: 4rem 2rem 3rem;
+    border-bottom: 2px solid var(--rule); margin-bottom: 4rem;
+  }
+  #cover .overline {
+    font-size: .75rem; letter-spacing: .22em; text-transform: uppercase;
+    color: var(--text-muted); margin-bottom: 1.5rem;
+  }
+  #cover h1 {
+    font-family: 'Playfair Display', serif; font-size: 2.6rem; font-weight: 900;
+    line-height: 1.2; color: var(--accent); margin-bottom: .75rem;
+  }
+  #cover h1 span { display: block; font-size: 1.5rem; color: var(--text); margin-top: .25rem; }
+  #cover .cover-rule { border: none; border-top: 1px solid var(--rule); width: 200px; margin: 1.5rem auto; }
+  #cover .meta { font-style: italic; color: var(--text-muted); font-size: .95rem; }
+  #cover .cover-version {
+    display: inline-block; margin-top: 1.5rem; padding: .35rem 1rem;
+    border: 1px solid var(--border); border-radius: 20px;
+    font-size: .8rem; color: var(--text-muted); font-family: 'JetBrains Mono', monospace;
+  }
+  #cover .cover-links { display: flex; justify-content: center; gap: 1rem; margin-top: 1.75rem; flex-wrap: wrap; }
+  .cover-drive-btn {
+    display: inline-flex; align-items: center; gap: .5rem;
+    padding: .6rem 1.2rem; border-radius: 8px;
+    text-decoration: none; font-size: .875rem; font-family: 'EB Garamond', serif;
+    border: 1px solid var(--border); color: var(--link);
+    background: var(--surface); transition: all .2s;
+  }
+  .cover-drive-btn:hover { border-color: var(--accent); background: var(--accent-light); color: var(--accent); }
+
+  /* ── CHAPTERS ── */
+  .chapter { margin-bottom: 5rem; scroll-margin-top: calc(var(--header-h) + 1rem); }
+  .chapter-header {
+    display: flex; align-items: baseline; gap: 1rem;
+    border-bottom: 2px solid var(--rule); padding-bottom: 1rem; margin-bottom: 2rem;
+  }
+  .chapter-num {
+    font-family: 'Playfair Display', serif; font-size: 3rem; font-weight: 700;
+    color: var(--chapter-num); line-height: 1; flex-shrink: 0;
+  }
+  .chapter-title { font-family: 'Playfair Display', serif; font-size: 1.75rem; font-weight: 700; line-height: 1.2; }
+
+  h2.section-title {
+    font-family: 'Playfair Display', serif; font-size: 1.3rem; font-weight: 700;
+    margin: 2.5rem 0 1rem; color: var(--text);
+    padding-bottom: .35rem; border-bottom: 1px solid var(--rule);
+  }
+  h3.subsection-title {
+    font-size: 1.05rem; font-weight: 600; margin: 1.75rem 0 .65rem; color: var(--text);
+  }
+
+  p { margin-bottom: 1rem; }
+  ul, ol { padding-left: 1.5rem; margin-bottom: 1rem; }
+  li { margin-bottom: .35rem; }
+
+  /* ── DATA TABLE ── */
+  .data-table { width: 100%; border-collapse: collapse; margin: 1.5rem 0; font-size: .9rem; }
+  .data-table th {
+    background: var(--accent); color: #fff;
+    padding: .6rem .9rem; text-align: left; font-weight: 600;
+    font-family: 'EB Garamond', serif; font-size: .85rem; letter-spacing: .04em;
+  }
+  .data-table td { padding: .55rem .9rem; border-bottom: 1px solid var(--border); }
+  .data-table tr:nth-child(even) td { background: var(--code-bg); }
+  .data-table tr:hover td { background: var(--accent-light); }
+
+  /* ── KPI GRID ── */
+  .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; margin: 1.5rem 0; }
+  .kpi-card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 1.1rem; text-align: center;
+  }
+  .kpi-card .kpi-val {
+    font-family: 'Playfair Display', serif; font-size: 2rem; font-weight: 700;
+    color: var(--accent); display: block;
+  }
+  .kpi-card .kpi-label { font-size: .8rem; color: var(--text-muted); margin-top: .25rem; }
+  .kpi-card .kpi-trend { font-size: .8rem; margin-top: .3rem; }
+  .trend-up { color: #2e7d32; } .trend-down { color: #c62828; }
+
+  /* ── CALLOUT BOXES ── */
+  .callout {
+    background: var(--callout-bg); border-left: 4px solid var(--callout-border);
+    border-radius: 0 8px 8px 0; padding: 1rem 1.25rem; margin: 1.5rem 0;
+    font-size: .95rem;
+  }
+  .callout.note { background: var(--note-bg); border-color: var(--note-border); }
+  .callout .callout-title { font-weight: 700; font-size: .8rem; text-transform: uppercase; letter-spacing: .1em; margin-bottom: .4rem; color: var(--callout-border); }
+  .callout.note .callout-title { color: var(--note-border); }
+
+  /* ── ACCORDION ── */
+  .accordion { border: 1px solid var(--border); border-radius: 8px; margin: 1.25rem 0; overflow: hidden; }
+  .accordion-item { border-bottom: 1px solid var(--border); }
+  .accordion-item:last-child { border-bottom: none; }
+  .accordion-btn {
+    width: 100%; background: var(--surface); border: none; cursor: pointer;
+    padding: .85rem 1.1rem; text-align: left; display: flex; align-items: center; justify-content: space-between;
+    font-family: 'EB Garamond', serif; font-size: 1rem; font-weight: 600; color: var(--text);
+    transition: background .18s;
+  }
+  .accordion-btn:hover { background: var(--accent-light); color: var(--accent); }
+  .accordion-btn .chevron { transition: transform .25s; font-size: .8rem; }
+  .accordion-btn.open .chevron { transform: rotate(180deg); }
+  .accordion-body {
+    max-height: 0; overflow: hidden; transition: max-height .35s ease;
+    background: var(--bg); padding: 0 1.1rem; font-size: .95rem;
+  }
+  .accordion-body.open { max-height: 800px; padding: .9rem 1.1rem 1.1rem; }
+
+  /* ── CHARTS ── */
+  .chart-wrap {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 1.25rem; margin: 1.75rem 0;
+  }
+  .chart-title { font-size: .8rem; text-transform: uppercase; letter-spacing: .1em; color: var(--text-muted); margin-bottom: .75rem; }
+  .chart-wrap canvas { max-height: 320px; }
+
+  /* ── MERMAID ── */
+  .diagram-wrap {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 1.5rem; margin: 1.75rem 0; overflow-x: auto; text-align: center;
+  }
+  .diagram-wrap .diagram-caption { font-size: .82rem; color: var(--text-muted); margin-top: .75rem; font-style: italic; text-align: center; }
+
+  /* ── CODE ── */
+  code {
+    font-family: 'JetBrains Mono', monospace; font-size: .82rem;
+    background: var(--code-bg); padding: .15rem .4rem; border-radius: 4px;
+  }
+  pre code { display: block; padding: 1rem; overflow-x: auto; line-height: 1.6; }
+  pre { background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px; margin: 1.25rem 0; overflow: hidden; }
+
+  /* ── BLOCKQUOTE ── */
+  blockquote {
+    border-left: 3px solid var(--chapter-num); padding: .5rem 1.25rem;
+    margin: 1.5rem 0; font-style: italic; color: var(--text-muted);
+  }
+  blockquote cite { display: block; margin-top: .5rem; font-size: .85rem; font-style: normal; font-weight: 600; }
+
+  /* ── DRIVE SECTION ── */
+  .drive-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin: 1.25rem 0; }
+  .drive-card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 1.1rem; display: flex; flex-direction: column; gap: .5rem; text-decoration: none;
+    transition: border-color .2s, box-shadow .2s; color: var(--text);
+  }
+  .drive-card:hover { border-color: var(--accent); box-shadow: 0 4px 16px rgba(139,26,26,.12); }
+  .drive-card .dc-icon { font-size: 1.75rem; }
+  .drive-card .dc-name { font-weight: 600; font-size: .95rem; }
+  .drive-card .dc-desc { font-size: .82rem; color: var(--text-muted); }
+
+  /* ── PRINT ── */
+  @media print {
+    #topbar, #sidebar, .no-print { display: none !important; }
+    #main { margin-left: 0; padding: 1.5cm 2cm; max-width: 100%; }
+    .chapter { page-break-before: always; }
+    #cover { page-break-after: always; }
+    .accordion-body { max-height: none !important; padding: .9rem 1.1rem 1.1rem !important; }
+  }
+
+  /* ── RESPONSIVE ── */
+  @media (max-width: 860px) {
+    :root { --sidebar-width: 260px; }
+    #main { padding: 2rem 1.5rem 5rem; }
+    #menuToggle { display: flex; }
+    #sidebar { transform: translateX(-100%); z-index: 90; }
+    #sidebar.open { transform: translateX(0); }
+    #main { margin-left: 0; }
+    #overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 89; }
+    #overlay.active { display: block; }
+  }
+</style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<header id="topbar">
+  <button class="icon-btn" id="menuToggle" aria-label="Toggle menu">☰</button>
+  <div class="logo">
+    Yangon Tyre Factory &nbsp;<span>Director's Manual</span>
+  </div>
+  <button class="icon-btn" id="themeToggle" title="Toggle dark/light mode">🌙 Dark</button>
+  <button class="icon-btn no-print" onclick="window.print()" title="Print to PDF">🖨 Print</button>
+  <a class="icon-btn" href="ytf-demo.html">← Demo</a>
+</header>
+
+<div id="overlay"></div>
+
+<div id="wrapper">
+  <!-- SIDEBAR -->
+  <aside id="sidebar">
+    <h2>Contents</h2>
+    <nav id="toc">
+      <a href="#cover" class="chapter-link">Cover</a>
+
+      <div class="sidebar-section">
+        <a href="#ch1" class="chapter-link">1 · Company Overview</a>
+        <a href="#ch1-vision">Vision &amp; Mission</a>
+        <a href="#ch1-products">Product Portfolio</a>
+        <a href="#ch1-market">Market Position</a>
+      </div>
+
+      <div class="sidebar-section">
+        <a href="#ch2" class="chapter-link">2 · Tyre Engineering</a>
+        <a href="#ch2-anatomy">Tyre Anatomy</a>
+        <a href="#ch2-compounds">Rubber Compounds</a>
+        <a href="#ch2-standards">Standards &amp; Specs</a>
+      </div>
+
+      <div class="sidebar-section">
+        <a href="#ch3" class="chapter-link">3 · Manufacturing Ops</a>
+        <a href="#ch3-process">Production Process</a>
+        <a href="#ch3-oee">OEE Dashboard</a>
+        <a href="#ch3-maintenance">Maintenance</a>
+      </div>
+
+      <div class="sidebar-section">
+        <a href="#ch4" class="chapter-link">4 · Quality (DQMS)</a>
+        <a href="#ch4-dqms">DQMS Overview</a>
+        <a href="#ch4-defects">Defect Classification</a>
+        <a href="#ch4-metrics">Quality Metrics</a>
+      </div>
+
+      <div class="sidebar-section">
+        <a href="#ch5" class="chapter-link">5 · Supply Chain</a>
+        <a href="#ch5-suppliers">Key Suppliers</a>
+        <a href="#ch5-procurement">Procurement Flow</a>
+        <a href="#ch5-inventory">Inventory Mgmt</a>
+      </div>
+
+      <div class="sidebar-section">
+        <a href="#ch6" class="chapter-link">6 · Finance &amp; KPIs</a>
+        <a href="#ch6-budget">Budget Overview</a>
+        <a href="#ch6-kpis">Director KPIs</a>
+        <a href="#ch6-roi">ROI &amp; Payback</a>
+      </div>
+
+      <div class="sidebar-section">
+        <a href="#ch7" class="chapter-link">7 · Digital &amp; AI</a>
+        <a href="#ch7-platform">SuperMega Platform</a>
+        <a href="#ch7-agents">AI Agents</a>
+        <a href="#ch7-infra">Infrastructure</a>
+      </div>
+
+      <div class="sidebar-section">
+        <a href="#ch8" class="chapter-link">8 · HR &amp; Organisation</a>
+        <a href="#ch8-structure">Org Structure</a>
+        <a href="#ch8-training">Training Plan</a>
+        <a href="#ch8-kra">KRA Matrix</a>
+      </div>
+    </nav>
+
+    <!-- Google Drive Links -->
+    <div class="sidebar-drive">
+      <h3>📁 Reference Documents</h3>
+      <a href="https://drive.google.com/drive/folders/1lvNk73XNxIdPIagwal7YKEzlCtAkk-yv" target="_blank" rel="noopener">
+        <span class="drive-icon">🗂</span> Project Folder
+      </a>
+      <a href="https://drive.google.com/drive/folders/1OiqlWG6F6TmeOd_LjYeuZz4LZjart43m" target="_blank" rel="noopener">
+        <span class="drive-icon">📚</span> Industry Literature
+      </a>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <main id="main">
+
+    <!-- COVER -->
+    <section id="cover">
+      <p class="overline">Confidential Internal Document · SuperMega ERP</p>
+      <h1>Director's Manual<span>Yangon Tyre Factory</span></h1>
+      <hr class="cover-rule">
+      <p class="meta">Manufacturing Operations · Quality · Finance · Digital Systems</p>
+      <div class="cover-version">Version 1.0 · March 2026 · Ever-Evolving Edition</div>
+      <div class="cover-links">
+        <a class="cover-drive-btn" href="https://drive.google.com/drive/folders/1lvNk73XNxIdPIagwal7YKEzlCtAkk-yv" target="_blank" rel="noopener">
+          🗂 Full Project Folder
+        </a>
+        <a class="cover-drive-btn" href="https://drive.google.com/drive/folders/1OiqlWG6F6TmeOd_LjYeuZz4LZjart43m" target="_blank" rel="noopener">
+          📚 Industry Literature &amp; References
+        </a>
+        <a class="cover-drive-btn" href="ytf-demo.html">
+          ⚡ Live ERP Demo
+        </a>
+      </div>
+
+      <div style="margin-top:2.5rem; text-align:left; max-width:560px; margin-left:auto; margin-right:auto;">
+        <p style="font-size:.95rem; color:var(--text-muted);">
+          This manual is the operational and strategic reference for the Director of Yangon Tyre Factory.
+          It covers tyre engineering fundamentals, production operations, quality systems, supply chain,
+          financial KPIs, and the SuperMega digital platform. It is kept updated as the factory and
+          its systems evolve.
+        </p>
+      </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════
+         CHAPTER 1: COMPANY OVERVIEW
+    ═══════════════════════════════════════════════════ -->
+    <section class="chapter" id="ch1">
+      <div class="chapter-header">
+        <span class="chapter-num">1</span>
+        <h2 class="chapter-title">Company Overview &amp; Strategic Position</h2>
+      </div>
+
+      <h2 class="section-title" id="ch1-vision">1.1 Vision, Mission &amp; Values</h2>
+      <div class="kpi-grid">
+        <div class="kpi-card">
+          <span class="kpi-val">24/7</span>
+          <div class="kpi-label">Operations</div>
+        </div>
+        <div class="kpi-card">
+          <span class="kpi-val">3</span>
+          <div class="kpi-label">Shifts Daily</div>
+        </div>
+        <div class="kpi-card">
+          <span class="kpi-val">Myanmar</span>
+          <div class="kpi-label">Primary Market</div>
+        </div>
+        <div class="kpi-card">
+          <span class="kpi-val">ISO</span>
+          <div class="kpi-label">Quality Standard</div>
+        </div>
+      </div>
+
+      <blockquote>
+        "To be Myanmar's most reliable tyre manufacturer — delivering quality, safety, and value
+        to every road user, while pioneering digital-first manufacturing."
+        <cite>— Yangon Tyre Factory Mission Statement</cite>
+      </blockquote>
+
+      <div class="accordion">
+        <div class="accordion-item">
+          <button class="accordion-btn">Strategic Values <span class="chevron">▼</span></button>
+          <div class="accordion-body">
+            <ul>
+              <li><strong>Quality First:</strong> Every tyre that leaves the factory must exceed customer expectations.</li>
+              <li><strong>Safety Culture:</strong> Zero-incident target across all shifts and departments.</li>
+              <li><strong>Digital Innovation:</strong> Embrace AI and data to continuously improve operations.</li>
+              <li><strong>People Development:</strong> Invest in workforce upskilling and fair labour practices.</li>
+              <li><strong>Sustainable Growth:</strong> Responsible sourcing and environmental stewardship.</li>
+            </ul>
+          </div>
+        </div>
+        <div class="accordion-item">
+          <button class="accordion-btn">Competitive Advantages <span class="chevron">▼</span></button>
+          <div class="accordion-body">
+            <ul>
+              <li>Local production gives cost advantage vs. imported tyres (30–45% landed cost saving).</li>
+              <li>Deep understanding of Myanmar road conditions enables tailored product specifications.</li>
+              <li>AI-powered DQMS reduces defect escape rate below industry average.</li>
+              <li>Strong relationships with ASEAN rubber suppliers ensure raw material security.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <h2 class="section-title" id="ch1-products">1.2 Product Portfolio</h2>
+      <table class="data-table">
+        <thead><tr><th>Product Line</th><th>Sizes</th><th>Application</th><th>Target Segment</th></tr></thead>
+        <tbody>
+          <tr><td>Motorcycle Tyres</td><td>2.50–17 to 3.00–18</td><td>Urban commuting</td><td>Mass market</td></tr>
+          <tr><td>Passenger Car</td><td>155/65R13 – 205/65R15</td><td>Sedan / Hatchback</td><td>Mid-market</td></tr>
+          <tr><td>Light Truck</td><td>185R14C – 215/75R16C</td><td>Delivery vans</td><td>Commercial</td></tr>
+          <tr><td>Heavy Truck / Bus</td><td>7.50R16 – 11R22.5</td><td>Long-haul transport</td><td>B2B fleet</td></tr>
+          <tr><td>Agricultural</td><td>5.00–15 to 12.4–28</td><td>Tractors, harvesters</td><td>Agri sector</td></tr>
+        </tbody>
+      </table>
+
+      <h2 class="section-title" id="ch1-market">1.3 Market &amp; Strategic Position</h2>
+      <div class="callout">
+        <div class="callout-title">⚡ Director Priority</div>
+        Myanmar's vehicle fleet is growing at ~8% per year. Motorcycle tyre volume represents 60%
+        of the market. Local production must be positioned to capture this growth while expanding
+        the higher-margin truck tyre segment.
+      </div>
+      <p>Key market dynamics:</p>
+      <ul>
+        <li>Myanmar imports ~70% of tyres — significant import-substitution opportunity.</li>
+        <li>Thai and Chinese brands dominate the car tyre segment; local pricing advantage is 20–30%.</li>
+        <li>Fleet operators (buses, logistics) are priority B2B targets for contracted supply agreements.</li>
+        <li>Export to neighbouring markets (Bangladesh, Laos, Cambodia) is a 3-year growth target.</li>
+      </ul>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════
+         CHAPTER 2: TYRE ENGINEERING
+    ═══════════════════════════════════════════════════ -->
+    <section class="chapter" id="ch2">
+      <div class="chapter-header">
+        <span class="chapter-num">2</span>
+        <h2 class="chapter-title">Tyre Engineering &amp; Technology</h2>
+      </div>
+
+      <h2 class="section-title" id="ch2-anatomy">2.1 Tyre Anatomy — Key Components</h2>
+
+      <div class="diagram-wrap">
+        <div class="mermaid">
+graph LR
+    A[Natural Rubber\nNR / SBR / BR] --> B[Compounding]
+    B --> C[Banbury Mixing]
+    C --> D{Component\nBuilding}
+    D --> E[Bead Wire]
+    D --> F[Ply / Belt]
+    D --> G[Inner Liner]
+    D --> H[Tread Strip]
+    E & F & G & H --> I[Tyre Building\nMachine TBM]
+    I --> J[Green Tyre]
+    J --> K[Curing Press\n160°C · 15 min]
+    K --> L[Finished Tyre]
+    L --> M[Quality\nInspection]
+    M --> N{Pass?}
+    N -->|Yes| O[Warehouse]
+    N -->|No| P[Reject / Rework]
+        </div>
+        <div class="diagram-caption">Figure 2.1 — End-to-end tyre manufacturing process flow</div>
+      </div>
+
+      <table class="data-table">
+        <thead><tr><th>Component</th><th>Material</th><th>Function</th><th>Director Note</th></tr></thead>
+        <tbody>
+          <tr><td>Tread</td><td>NR + SBR + Carbon Black</td><td>Road contact, grip, wear</td><td>Critical for quality complaints</td></tr>
+          <tr><td>Belt Package</td><td>Steel cord + rubber</td><td>Dimensional stability</td><td>Highest scrap cost if wrong</td></tr>
+          <tr><td>Carcass Ply</td><td>Nylon / Polyester cord</td><td>Structural strength</td><td>Track cord supplier quality</td></tr>
+          <tr><td>Inner Liner</td><td>Halobutyl rubber</td><td>Air retention (tubeless)</td><td>Key for tubeless range</td></tr>
+          <tr><td>Bead</td><td>Steel wire + apex rubber</td><td>Wheel mounting</td><td>Bead seat accuracy = safety</td></tr>
+          <tr><td>Sidewall</td><td>NR + EPDM</td><td>Flex fatigue, branding</td><td>Ozone cracking = warranty risk</td></tr>
+        </tbody>
+      </table>
+
+      <h2 class="section-title" id="ch2-compounds">2.2 Rubber Compounding</h2>
+      <p>
+        Compound formulation is the core intellectual property of any tyre manufacturer.
+        The compound recipe determines rolling resistance, wet grip, durability, and cost.
+        As Director, you must understand the trade-offs:
+      </p>
+
+      <div class="accordion">
+        <div class="accordion-item">
+          <button class="accordion-btn">Natural Rubber (NR) — Primary Elastomer <span class="chevron">▼</span></button>
+          <div class="accordion-body">
+            <p>Sourced from Thailand and Myanmar. Key grade: RSS1, TSR20. Controls: <strong>Mooney viscosity (ML 1+4 @ 100°C)</strong>, dirt content, volatile matter. High NR content → better cut resistance and heat build-up in truck tyres. Price is commodity-driven — hedge with 90-day forward contracts.</p>
+          </div>
+        </div>
+        <div class="accordion-item">
+          <button class="accordion-btn">Synthetic Rubbers (SBR / BR) <span class="chevron">▼</span></button>
+          <div class="accordion-body">
+            <p><strong>SBR (Styrene-Butadiene Rubber):</strong> Blended with NR for tread compounds — improves wet grip and abrasion resistance. <strong>BR (Butadiene Rubber):</strong> Used in sidewalls and tread base — reduces rolling resistance and heat generation. Both are imported; monitor USD/barrel correlation for price forecasting.</p>
+          </div>
+        </div>
+        <div class="accordion-item">
+          <button class="accordion-btn">Carbon Black &amp; Silica <span class="chevron">▼</span></button>
+          <div class="accordion-body">
+            <p>Carbon black is 25–35% by weight of tread compound. Grade N330 (HAF) for truck tyres, N550 for sidewalls. Silica-filled compounds offer superior wet grip and lower rolling resistance but require silane coupling agent — higher cost, longer mixing cycle. Consider silica for passenger car premium range.</p>
+          </div>
+        </div>
+        <div class="accordion-item">
+          <button class="accordion-btn">Vulcanisation System <span class="chevron">▼</span></button>
+          <div class="accordion-body">
+            <p>Sulphur + accelerators (CBS, TBBS, TMTD) form crosslinks during curing. The crosslink density determines hardness (Shore A target: tread 60–68, sidewall 54–62). <strong>Cure time and temperature are critical process controls</strong> — deviations directly cause under/over-cure defects.</p>
+          </div>
+        </div>
+      </div>
+
+      <h2 class="section-title" id="ch2-standards">2.3 Applicable Standards</h2>
+      <table class="data-table">
+        <thead><tr><th>Standard</th><th>Scope</th><th>Relevance</th></tr></thead>
+        <tbody>
+          <tr><td>ISO 4210</td><td>Bicycle tyres (reference)</td><td>Bicycle segment</td></tr>
+          <tr><td>ISO 9001:2015</td><td>Quality Management System</td><td>Factory-wide QMS</td></tr>
+          <tr><td>ECE R30</td><td>Passenger car tyre safety</td><td>Export requirement</td></tr>
+          <tr><td>ECE R54</td><td>Commercial vehicle tyres</td><td>Truck tyre export</td></tr>
+          <tr><td>ASTM D1418</td><td>Rubber classification</td><td>Incoming material QC</td></tr>
+          <tr><td>Myanmar MES</td><td>Myanmar Engineering Standard</td><td>Local compliance</td></tr>
+        </tbody>
+      </table>
+
+      <div class="callout note">
+        <div class="callout-title">📚 Reference</div>
+        Full technical standards, compound specs, and reference manuals are in the
+        <a href="https://drive.google.com/drive/folders/1OiqlWG6F6TmeOd_LjYeuZz4LZjart43m" target="_blank" rel="noopener">Industry Literature folder</a>
+        on Google Drive.
+      </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════
+         CHAPTER 3: MANUFACTURING OPERATIONS
+    ═══════════════════════════════════════════════════ -->
+    <section class="chapter" id="ch3">
+      <div class="chapter-header">
+        <span class="chapter-num">3</span>
+        <h2 class="chapter-title">Manufacturing &amp; Production Operations</h2>
+      </div>
+
+      <h2 class="section-title" id="ch3-process">3.1 Production Process Flow</h2>
+
+      <div class="diagram-wrap">
+        <div class="mermaid">
+flowchart TD
+    subgraph RM [Raw Material Store]
+        R1[Rubber\nBales]
+        R2[Carbon\nBlack]
+        R3[Steel Cord\n& Wire]
+        R4[Fabric\nCord]
+    end
+    subgraph MIX [Mixing]
+        M1[Banbury\nMixer]
+        M2[Open Mill\nSheeting]
+        M3[Batch-off\n& Cooling]
+    end
+    subgraph BUILD [Building]
+        B1[Bead\nWinding]
+        B2[Ply\nCalendering]
+        B3[Tread\nExtrusion]
+        B4[Tyre Building\nMachine TBM]
+    end
+    subgraph CURE [Curing]
+        C1[Bladder\nCuring Press]
+        C2[Post-Cure\nInflation PCI]
+    end
+    subgraph QC [Quality]
+        Q1[Visual\nInspection]
+        Q2[X-Ray / Force\nVariation]
+        Q3[Uniformity\nTest]
+    end
+    RM --> MIX --> BUILD --> CURE --> QC
+    QC -->|Pass| WH[Finished\nGoods Store]
+    QC -->|Fail| REJ[Reject /\nRework]
+        </div>
+        <div class="diagram-caption">Figure 3.1 — Tyre manufacturing flow from raw material to finished goods</div>
+      </div>
+
+      <h2 class="section-title" id="ch3-oee">3.2 OEE — Overall Equipment Effectiveness</h2>
+      <p>
+        OEE is the primary production KPI. World-class OEE is 85%. Our current baseline and targets:
+      </p>
+
+      <div class="kpi-grid">
+        <div class="kpi-card">
+          <span class="kpi-val">72%</span>
+          <div class="kpi-label">Current OEE</div>
+          <div class="kpi-trend trend-up">▲ Target: 80%</div>
+        </div>
+        <div class="kpi-card">
+          <span class="kpi-val">88%</span>
+          <div class="kpi-label">Availability</div>
+          <div class="kpi-trend trend-up">▲ +2% YoY</div>
+        </div>
+        <div class="kpi-card">
+          <span class="kpi-val">85%</span>
+          <div class="kpi-label">Performance</div>
+          <div class="kpi-trend">→ Stable</div>
+        </div>
+        <div class="kpi-card">
+          <span class="kpi-val">96%</span>
+          <div class="kpi-label">Quality Rate</div>
+          <div class="kpi-trend trend-up">▲ +1% QoQ</div>
+        </div>
+      </div>
+
+      <div class="chart-wrap">
+        <div class="chart-title">Monthly OEE Trend — Tyre Building Machines (Jan–Dec)</div>
+        <canvas id="oeeChart"></canvas>
+      </div>
+
+      <div class="callout">
+        <div class="callout-title">⚡ Director Action: OEE Improvement</div>
+        The biggest OEE loss is unplanned downtime (12% of shift time). Top causes: mould change delays,
+        bladder failures, and compound temperature deviations. The SuperMega Predictive Maintenance agent
+        now targets a 40% reduction in unplanned stops within 6 months.
+      </div>
+
+      <h2 class="section-title" id="ch3-maintenance">3.3 Maintenance Philosophy</h2>
+      <div class="accordion">
+        <div class="accordion-item">
+          <button class="accordion-btn">Preventive Maintenance Schedule <span class="chevron">▼</span></button>
+          <div class="accordion-body">
+            <table class="data-table">
+              <thead><tr><th>Equipment</th><th>Frequency</th><th>Key Items</th></tr></thead>
+              <tbody>
+                <tr><td>Banbury Mixer</td><td>Weekly / 200 h</td><td>Rotor tip clearance, ram seal, cooling water</td></tr>
+                <tr><td>Tyre Building Machine</td><td>Weekly / 500 cycles</td><td>Drum width, bladder condition, PLC calibration</td></tr>
+                <tr><td>Curing Press</td><td>Monthly / 1000 cycles</td><td>Bladder replacement, steam trap, platen parallelism</td></tr>
+                <tr><td>Extruder</td><td>Fortnightly</td><td>Screw wear, die temperature, gear box oil</td></tr>
+                <tr><td>Calender</td><td>Monthly</td><td>Roll surface, bearing temperature, gauge control</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="accordion-item">
+          <button class="accordion-btn">Predictive Maintenance via IoT Sensors <span class="chevron">▼</span></button>
+          <div class="accordion-body">
+            <p>Accelerometers and temperature sensors on critical machines feed data to the SuperMega AI agent every 5 minutes. Anomaly detection (vibration threshold breach or temperature spike) triggers an automated alert in the DQMS system and creates a maintenance work order. Target: detect 80% of failures 48 hours before they occur.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════
+         CHAPTER 4: QUALITY MANAGEMENT — DQMS
+    ═══════════════════════════════════════════════════ -->
+    <section class="chapter" id="ch4">
+      <div class="chapter-header">
+        <span class="chapter-num">4</span>
+        <h2 class="chapter-title">Quality Management System (DQMS)</h2>
+      </div>
+
+      <h2 class="section-title" id="ch4-dqms">4.1 DQMS Overview</h2>
+      <p>
+        The Digital Quality Management System (DQMS) is the real-time quality nerve centre of the factory.
+        It integrates mobile inspection apps, AI-powered defect detection, and the SuperMega analytics engine
+        to provide zero-paper, zero-delay quality control.
+      </p>
+
+      <div class="diagram-wrap">
+        <div class="mermaid">
+flowchart LR
+    A[Operator\nMobile App] -->|Defect Photo| B[AWS Rekognition\nAI Analysis]
+    B -->|Auto-classify| C[DQMS Database]
+    D[QC Inspector\nTablet] -->|Dimensional Check| C
+    E[IoT Sensors] -->|Real-time Data| C
+    C --> F[AI Analytics\nEngine]
+    F --> G[QC Manager\nDashboard]
+    F --> H[Director\nReport]
+    F --> I[Automated\nAlerts SNS]
+    G -->|Corrective Action| J[Production\nTeam]
+        </div>
+        <div class="diagram-caption">Figure 4.1 — DQMS data flow and stakeholder integration</div>
+      </div>
+
+      <h2 class="section-title" id="ch4-defects">4.2 Defect Classification &amp; Action Matrix</h2>
+      <table class="data-table">
+        <thead><tr><th>Severity</th><th>Examples</th><th>Action</th><th>Escalation Time</th></tr></thead>
+        <tbody>
+          <tr><td><strong style="color:var(--accent)">Critical</strong></td><td>Exposed bead wire, ply separation, major bulge</td><td>Immediate production stop, Director alert</td><td>&lt; 15 min</td></tr>
+          <tr><td><strong style="color:#e07b2a">Major</strong></td><td>Tread void &gt;5mm, cure blister, sidewall crack</td><td>Batch quarantine, QC Manager review</td><td>&lt; 2 h</td></tr>
+          <tr><td><strong>Minor</strong></td><td>Cosmetic mark, slight flash, minor spew</td><td>Log and monitor, sort before dispatch</td><td>Shift report</td></tr>
+          <tr><td>Observation</td><td>Colour variation, slight roughness</td><td>Record only</td><td>Weekly trend</td></tr>
+        </tbody>
+      </table>
+
+      <h2 class="section-title" id="ch4-metrics">4.3 Quality Metrics Dashboard</h2>
+
+      <div class="chart-wrap">
+        <div class="chart-title">Monthly Defect Rate by Category (PPM — Parts Per Million)</div>
+        <canvas id="qualityChart"></canvas>
+      </div>
+
+      <div class="callout note">
+        <div class="callout-title">📌 Note</div>
+        The full DQMS system with live data is accessible at
+        <a href="ytf-dqms/dashboard-plant-manager.html">Plant Manager Dashboard</a> and
+        <a href="ytf-dqms/dashboard-qc-manager.html">QC Manager Dashboard</a>.
+        Director-level aggregated reports are generated automatically every Monday at 08:00.
+      </div>
+
+      <div class="accordion">
+        <div class="accordion-item">
+          <button class="accordion-btn">Incoming Raw Material Inspection Protocol <span class="chevron">▼</span></button>
+          <div class="accordion-body">
+            <ol>
+              <li>Each rubber delivery receives lot number and enters the DQMS upon arrival.</li>
+              <li>Samples sent to lab: Mooney viscosity, density, ash content, volatile matter.</li>
+              <li>Certificate of Analysis (CoA) from supplier compared against spec limits.</li>
+              <li>Material released for production only after DQMS system shows "Released" status.</li>
+              <li>Non-conforming material quarantined and supplier notified via AI email agent within 2 hours.</li>
+            </ol>
+          </div>
+        </div>
+        <div class="accordion-item">
+          <button class="accordion-btn">Final Product Audit — AQL Sampling Plan <span class="chevron">▼</span></button>
+          <div class="accordion-body">
+            <p>Using AQL 1.5 (ISO 2859-1) for critical defects, AQL 4.0 for major. For a batch of 1000 tyres, inspect 80 samples. Reject if more than 3 critical or 14 major defects found. All rejected batches undergo 100% re-inspection or destruction.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════
+         CHAPTER 5: SUPPLY CHAIN
+    ═══════════════════════════════════════════════════ -->
+    <section class="chapter" id="ch5">
+      <div class="chapter-header">
+        <span class="chapter-num">5</span>
+        <h2 class="chapter-title">Supply Chain &amp; Procurement</h2>
+      </div>
+
+      <h2 class="section-title" id="ch5-suppliers">5.1 Key Supplier Categories</h2>
+      <table class="data-table">
+        <thead><tr><th>Material</th><th>Source Country</th><th>Lead Time</th><th>Risk Level</th><th>Backup Supplier</th></tr></thead>
+        <tbody>
+          <tr><td>Natural Rubber (NR)</td><td>Thailand / Myanmar</td><td>7–14 days</td><td>Medium</td><td>Indonesia</td></tr>
+          <tr><td>Carbon Black</td><td>Thailand / India</td><td>21–28 days</td><td>Low</td><td>China</td></tr>
+          <tr><td>Steel Cord (belt)</td><td>China / South Korea</td><td>30–45 days</td><td>High</td><td>India</td></tr>
+          <tr><td>Textile Cord (nylon)</td><td>Thailand / China</td><td>21–30 days</td><td>Medium</td><td>India</td></tr>
+          <tr><td>Halobutyl (inner liner)</td><td>USA / Russia</td><td>45–60 days</td><td>High</td><td>Germany</td></tr>
+          <tr><td>Chemicals / Accelerators</td><td>China / India</td><td>21–35 days</td><td>Medium</td><td>Germany</td></tr>
+          <tr><td>Steel Bead Wire</td><td>China / South Korea</td><td>30–45 days</td><td>Medium</td><td>India</td></tr>
+        </tbody>
+      </table>
+
+      <h2 class="section-title" id="ch5-procurement">5.2 Procurement Process</h2>
+
+      <div class="diagram-wrap">
+        <div class="mermaid">
+sequenceDiagram
+    participant AI as AI Reorder Agent
+    participant PM as Procurement Mgr
+    participant S as Supplier
+    participant WH as Warehouse
+
+    AI->>PM: Stock below reorder point alert
+    PM->>PM: Review &amp; approve draft PO
+    PM->>S: Issue PO (email via AI agent)
+    S-->>PM: Acknowledge PO
+    S-->>WH: Deliver goods
+    WH->>AI: GRN raised — stock updated
+    AI->>PM: PO closed in system
+        </div>
+        <div class="diagram-caption">Figure 5.1 — AI-assisted procurement workflow</div>
+      </div>
+
+      <h2 class="section-title" id="ch5-inventory">5.3 Inventory Management Policy</h2>
+
+      <div class="accordion">
+        <div class="accordion-item">
+          <button class="accordion-btn">Safety Stock &amp; Reorder Point Formula <span class="chevron">▼</span></button>
+          <div class="accordion-body">
+            <p><strong>Safety Stock</strong> = Z × σ<sub>LT</sub> × √(Lead Time)<br>
+            Where Z = 1.65 for 95% service level, σ<sub>LT</sub> = demand standard deviation during lead time.</p>
+            <p style="margin-top:.75rem"><strong>Reorder Point (ROP)</strong> = (Average Daily Usage × Lead Time) + Safety Stock</p>
+            <p style="margin-top:.75rem">The SuperMega Inventory Agent automatically calculates and monitors ROP for all 200+ raw materials and triggers alerts when stock falls below threshold.</p>
+          </div>
+        </div>
+        <div class="accordion-item">
+          <button class="accordion-btn">FIFO &amp; Lot Traceability <span class="chevron">▼</span></button>
+          <div class="accordion-body">
+            <p>All raw materials are issued on FIFO basis. Each lot has a unique barcode scanned at receipt and at mixing. The DQMS maintains full traceability: finished tyre → production batch → compound lot → raw material lot → supplier CoA. This enables rapid recall if a field issue is traced to a specific material batch.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════
+         CHAPTER 6: FINANCE & KPIS
+    ═══════════════════════════════════════════════════ -->
+    <section class="chapter" id="ch6">
+      <div class="chapter-header">
+        <span class="chapter-num">6</span>
+        <h2 class="chapter-title">Business, Finance &amp; KPIs</h2>
+      </div>
+
+      <h2 class="section-title" id="ch6-budget">6.1 Budget Overview</h2>
+
+      <div class="chart-wrap">
+        <div class="chart-title">Annual Cost Structure &amp; Revenue Projection (USD '000)</div>
+        <canvas id="financeChart"></canvas>
+      </div>
+
+      <table class="data-table">
+        <thead><tr><th>Line Item</th><th>Year 1</th><th>Year 2</th><th>Year 3</th></tr></thead>
+        <tbody>
+          <tr><td>Raw Materials</td><td>$2,800K</td><td>$3,200K</td><td>$3,800K</td></tr>
+          <tr><td>Labour</td><td>$480K</td><td>$520K</td><td>$560K</td></tr>
+          <tr><td>Energy (electricity/gas)</td><td>$320K</td><td>$340K</td><td>$360K</td></tr>
+          <tr><td>Depreciation</td><td>$280K</td><td>$280K</td><td>$280K</td></tr>
+          <tr><td>Digital / ERP (SuperMega)</td><td>$54K</td><td>$42K</td><td>$42K</td></tr>
+          <tr><td>SG&amp;A</td><td>$210K</td><td>$230K</td><td>$250K</td></tr>
+          <tr><td><strong>Total Cost</strong></td><td><strong>$4,144K</strong></td><td><strong>$4,612K</strong></td><td><strong>$5,292K</strong></td></tr>
+          <tr><td><strong>Revenue (projected)</strong></td><td><strong>$5,200K</strong></td><td><strong>$6,100K</strong></td><td><strong>$7,400K</strong></td></tr>
+          <tr><td><strong>EBITDA Margin</strong></td><td><strong>20%</strong></td><td><strong>24%</strong></td><td><strong>28%</strong></td></tr>
+        </tbody>
+      </table>
+
+      <h2 class="section-title" id="ch6-kpis">6.2 Director KPI Scorecard</h2>
+      <div class="kpi-grid">
+        <div class="kpi-card">
+          <span class="kpi-val">80%</span>
+          <div class="kpi-label">OEE Target</div>
+          <div class="kpi-trend">→ Current: 72%</div>
+        </div>
+        <div class="kpi-card">
+          <span class="kpi-val">&lt;2%</span>
+          <div class="kpi-label">Defect Rate</div>
+          <div class="kpi-trend">→ Current: 3.1%</div>
+        </div>
+        <div class="kpi-card">
+          <span class="kpi-val">98%</span>
+          <div class="kpi-label">On-Time Delivery</div>
+          <div class="kpi-trend trend-up">▲ Current: 94%</div>
+        </div>
+        <div class="kpi-card">
+          <span class="kpi-val">0</span>
+          <div class="kpi-label">Lost-Time Incidents</div>
+          <div class="kpi-trend trend-up">▲ Safety first</div>
+        </div>
+        <div class="kpi-card">
+          <span class="kpi-val">25%</span>
+          <div class="kpi-label">Gross Margin Target</div>
+          <div class="kpi-trend">→ Current: 20%</div>
+        </div>
+        <div class="kpi-card">
+          <span class="kpi-val">4.2★</span>
+          <div class="kpi-label">Supplier Rating</div>
+          <div class="kpi-trend">→ Out of 5.0</div>
+        </div>
+      </div>
+
+      <h2 class="section-title" id="ch6-roi">6.3 Digital ERP ROI Analysis</h2>
+      <table class="data-table">
+        <thead><tr><th>Benefit Area</th><th>Annual Saving</th><th>Basis</th></tr></thead>
+        <tbody>
+          <tr><td>Reduced defect scrap</td><td>$120K</td><td>Defect rate 3.1% → 1.5%</td></tr>
+          <tr><td>Improved OEE</td><td>$85K</td><td>+8% OEE = more output without extra cost</td></tr>
+          <tr><td>Inventory optimisation</td><td>$60K</td><td>15% reduction in carrying cost</td></tr>
+          <tr><td>Predictive maintenance</td><td>$45K</td><td>40% fewer unplanned breakdowns</td></tr>
+          <tr><td>Labour efficiency</td><td>$35K</td><td>Paperwork elimination, 3 admin FTE redeployed</td></tr>
+          <tr><td><strong>Total Annual Benefit</strong></td><td><strong>$345K</strong></td><td></td></tr>
+          <tr><td>ERP Investment (Yr 1)</td><td>($54K)</td><td>$50K setup + $42K/yr ongoing</td></tr>
+          <tr><td><strong>Net ROI (Yr 1)</strong></td><td><strong>$291K</strong></td><td><strong>Payback: ~2 months</strong></td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════
+         CHAPTER 7: DIGITAL SYSTEMS & AI
+    ═══════════════════════════════════════════════════ -->
+    <section class="chapter" id="ch7">
+      <div class="chapter-header">
+        <span class="chapter-num">7</span>
+        <h2 class="chapter-title">Digital Systems &amp; AI Platform</h2>
+      </div>
+
+      <h2 class="section-title" id="ch7-platform">7.1 SuperMega ERP Platform</h2>
+      <p>
+        The SuperMega platform is a cloud-native ERP and DQMS running on AWS, purpose-built for
+        Myanmar manufacturing. It replaces manual logbooks, Excel sheets, and paper inspection forms
+        with a unified digital environment accessible from any device.
+      </p>
+
+      <div class="kpi-grid">
+        <div class="kpi-card">
+          <span class="kpi-val">99.9%</span>
+          <div class="kpi-label">Uptime SLA</div>
+        </div>
+        <div class="kpi-card">
+          <span class="kpi-val">ap-se-1</span>
+          <div class="kpi-label">AWS Singapore</div>
+        </div>
+        <div class="kpi-card">
+          <span class="kpi-val">8</span>
+          <div class="kpi-label">AI Agents Active</div>
+        </div>
+        <div class="kpi-card">
+          <span class="kpi-val">60s</span>
+          <div class="kpi-label">Data Refresh Cycle</div>
+        </div>
+      </div>
+
+      <h2 class="section-title" id="ch7-agents">7.2 AI Agent Roster</h2>
+
+      <div class="diagram-wrap">
+        <div class="mermaid">
+graph TD
+    O[🧠 Orchestrator\nAgent] --> A1[📊 OEE Monitor\nAgent]
+    O --> A2[🔬 Quality\nDefect Agent]
+    O --> A3[📦 Inventory\nReorder Agent]
+    O --> A4[🔧 Predictive\nMaintenance Agent]
+    O --> A5[✉️ Supplier Comms\nAgent]
+    O --> A6[📈 Finance\nReporting Agent]
+    O --> A7[🚨 Conscience\nAgent - Guardrail]
+    A7 -.->|Watches all| O
+        </div>
+        <div class="diagram-caption">Figure 7.1 — SuperMega AI Agent hierarchy</div>
+      </div>
+
+      <div class="accordion">
+        <div class="accordion-item">
+          <button class="accordion-btn">OEE Monitor Agent — How It Works <span class="chevron">▼</span></button>
+          <div class="accordion-body">
+            <p>Collects production log entries from operators every 15 minutes via mobile app. Calculates Availability (planned vs actual run time), Performance (ideal vs actual cycle time), and Quality (good vs total units). Sends shift-end OEE report to plant manager and flags any machine below 65% OEE for director review.</p>
+          </div>
+        </div>
+        <div class="accordion-item">
+          <button class="accordion-btn">Conscience Agent — Safety Guardrail <span class="chevron">▼</span></button>
+          <div class="accordion-body">
+            <p>The Conscience Agent monitors all other agents for anomalous behaviour. If an agent (e.g., Supplier Comms) sends an action with unintended consequences — such as cancelling all POs — the Conscience Agent detects the deviation, blocks execution, and escalates to the director. Two consecutive anomalies trigger automatic agent rollback. This is the critical safeguard for autonomous operations.</p>
+          </div>
+        </div>
+        <div class="accordion-item">
+          <button class="accordion-btn">Director Access — Dashboard &amp; Reports <span class="chevron">▼</span></button>
+          <div class="accordion-body">
+            <ul>
+              <li><a href="ytf-demo.html">Live ERP Demo Dashboard</a> — real-time agent status and metrics.</li>
+              <li><a href="ytf-dqms/dashboard-plant-manager.html">Plant Manager View</a> — production and OEE.</li>
+              <li><a href="ytf-dqms/dashboard-qc-manager.html">QC Manager View</a> — quality metrics and defect trends.</li>
+              <li>Weekly Director Report — auto-generated PDF delivered to email every Monday.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <h2 class="section-title" id="ch7-infra">7.3 AWS Infrastructure</h2>
+      <table class="data-table">
+        <thead><tr><th>Service</th><th>Purpose</th><th>Spec</th></tr></thead>
+        <tbody>
+          <tr><td>EC2 t3.large</td><td>Agent Orchestrator</td><td>2 vCPU, 8 GB RAM</td></tr>
+          <tr><td>ECS Fargate</td><td>API microservices</td><td>Auto-scaling</td></tr>
+          <tr><td>RDS PostgreSQL</td><td>Primary database</td><td>db.t3.medium, Multi-AZ</td></tr>
+          <tr><td>ElastiCache Redis</td><td>Session &amp; cache</td><td>cache.t3.micro</td></tr>
+          <tr><td>S3</td><td>Defect images, backups</td><td>Standard + Intelligent Tiering</td></tr>
+          <tr><td>SageMaker</td><td>Defect detection ML model</td><td>ml.t3.medium endpoint</td></tr>
+          <tr><td>Rekognition</td><td>Visual inspection AI</td><td>Per-API pricing</td></tr>
+          <tr><td>SNS + SES</td><td>Alerts &amp; supplier emails</td><td>Serverless</td></tr>
+          <tr><td>CloudWatch</td><td>Monitoring &amp; logs</td><td>90-day retention</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════
+         CHAPTER 8: HR & ORGANISATION
+    ═══════════════════════════════════════════════════ -->
+    <section class="chapter" id="ch8">
+      <div class="chapter-header">
+        <span class="chapter-num">8</span>
+        <h2 class="chapter-title">HR &amp; Organisation</h2>
+      </div>
+
+      <h2 class="section-title" id="ch8-structure">8.1 Organisational Structure</h2>
+
+      <div class="diagram-wrap">
+        <div class="mermaid">
+graph TD
+    D[🏛 Director] --> PM[Plant Manager]
+    D --> FM[Finance Manager]
+    D --> HR[HR Manager]
+    PM --> ProdM[Production Mgr]
+    PM --> MaintM[Maintenance Mgr]
+    PM --> QCM[QC Manager]
+    PM --> SCM[Supply Chain Mgr]
+    ProdM --> TL1[Shift Leader A]
+    ProdM --> TL2[Shift Leader B]
+    ProdM --> TL3[Shift Leader C]
+    TL1 & TL2 & TL3 --> OP[Operators\n~40 per shift]
+    QCM --> QCI[QC Inspectors\n×6]
+    MaintM --> TECH[Technicians\n×8]
+    SCM --> PROC[Procurement\nOfficer]
+    SCM --> WH[Warehouse\nSupervisor]
+        </div>
+        <div class="diagram-caption">Figure 8.1 — Yangon Tyre Factory organisational chart</div>
+      </div>
+
+      <h2 class="section-title" id="ch8-training">8.2 Digital Transformation Training Plan</h2>
+      <table class="data-table">
+        <thead><tr><th>Group</th><th>Training Focus</th><th>Duration</th><th>Format</th></tr></thead>
+        <tbody>
+          <tr><td>Director &amp; Management</td><td>Dashboard navigation, KPI interpretation, AI agent reports</td><td>1 day</td><td>Classroom + hands-on</td></tr>
+          <tr><td>Plant Manager</td><td>OEE module, maintenance scheduling, shift reports</td><td>2 days</td><td>Workshop</td></tr>
+          <tr><td>QC Team (6 inspectors)</td><td>Mobile inspection app, defect AI, DQMS review</td><td>3 days</td><td>Hands-on + field</td></tr>
+          <tr><td>Production Operators (~40)</td><td>Mobile app for production logging, safety alerts</td><td>4 hours each</td><td>On-shift training</td></tr>
+          <tr><td>Maintenance Technicians</td><td>Work order system, IoT sensor data interpretation</td><td>1 day</td><td>Workshop</td></tr>
+          <tr><td>Procurement &amp; Warehouse</td><td>Inventory module, PO workflow, barcode scanning</td><td>1 day</td><td>Hands-on</td></tr>
+        </tbody>
+      </table>
+
+      <h2 class="section-title" id="ch8-kra">8.3 Key Result Areas (KRA) Matrix</h2>
+      <div class="accordion">
+        <div class="accordion-item">
+          <button class="accordion-btn">Plant Manager KRAs <span class="chevron">▼</span></button>
+          <div class="accordion-body">
+            <ul>
+              <li>Achieve OEE ≥ 80% across all tyre building machines (weight: 35%)</li>
+              <li>Zero critical safety incidents (weight: 25%)</li>
+              <li>Production plan adherence ≥ 95% (weight: 20%)</li>
+              <li>Maintenance work order completion within 48h: ≥ 90% (weight: 20%)</li>
+            </ul>
+          </div>
+        </div>
+        <div class="accordion-item">
+          <button class="accordion-btn">QC Manager KRAs <span class="chevron">▼</span></button>
+          <div class="accordion-body">
+            <ul>
+              <li>First-pass quality yield ≥ 98% (weight: 40%)</li>
+              <li>Customer field complaint rate &lt; 0.1% (weight: 30%)</li>
+              <li>DQMS data completeness ≥ 99% (no missing inspection records) (weight: 20%)</li>
+              <li>Corrective action closure within SLA: ≥ 95% (weight: 10%)</li>
+            </ul>
+          </div>
+        </div>
+        <div class="accordion-item">
+          <button class="accordion-btn">Supply Chain Manager KRAs <span class="chevron">▼</span></button>
+          <div class="accordion-body">
+            <ul>
+              <li>Zero raw material stock-outs causing production stops (weight: 40%)</li>
+              <li>Purchase price variance within ±5% of budget (weight: 25%)</li>
+              <li>Supplier on-time delivery ≥ 90% (weight: 25%)</li>
+              <li>Inventory turnover ≥ 8× per year (weight: 10%)</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="callout">
+        <div class="callout-title">📁 Reference Documents</div>
+        HR policies, employment contracts, training materials, and industry reference manuals are stored in the shared Google Drive.
+        <div class="drive-grid" style="margin-top:1rem">
+          <a class="drive-card" href="https://drive.google.com/drive/folders/1lvNk73XNxIdPIagwal7YKEzlCtAkk-yv" target="_blank" rel="noopener">
+            <span class="dc-icon">🗂</span>
+            <span class="dc-name">Project Folder</span>
+            <span class="dc-desc">All project documents, reports, and plans</span>
+          </a>
+          <a class="drive-card" href="https://drive.google.com/drive/folders/1OiqlWG6F6TmeOd_LjYeuZz4LZjart43m" target="_blank" rel="noopener">
+            <span class="dc-icon">📚</span>
+            <span class="dc-name">Industry Literature</span>
+            <span class="dc-desc">Technical manuals, standards &amp; reference papers</span>
+          </a>
+        </div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<script>
+// ── THEME TOGGLE ──
+const themeBtn = document.getElementById('themeToggle');
+const html = document.documentElement;
+function setTheme(t) {
+  html.setAttribute('data-theme', t);
+  themeBtn.textContent = t === 'dark' ? '☀️ Light' : '🌙 Dark';
+  localStorage.setItem('ytf-manual-theme', t);
+  if (window.myCharts) {
+    window.myCharts.forEach(c => { c.options.plugins.legend.labels.color = t === 'dark' ? '#e8dfd0' : '#1a1209'; c.update(); });
+  }
+}
+themeBtn.addEventListener('click', () => setTheme(html.getAttribute('data-theme') === 'dark' ? 'light' : 'dark'));
+const saved = localStorage.getItem('ytf-manual-theme');
+if (saved) setTheme(saved);
+else if (window.matchMedia('(prefers-color-scheme: dark)').matches) setTheme('dark');
+
+// ── MOBILE MENU ──
+const menuToggle = document.getElementById('menuToggle');
+const sidebar = document.getElementById('sidebar');
+const overlay = document.getElementById('overlay');
+menuToggle.addEventListener('click', () => {
+  sidebar.classList.toggle('open');
+  overlay.classList.toggle('active');
+});
+overlay.addEventListener('click', () => {
+  sidebar.classList.remove('open');
+  overlay.classList.remove('active');
+});
+
+// ── ACCORDION ──
+document.querySelectorAll('.accordion-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const body = btn.nextElementSibling;
+    const isOpen = body.classList.contains('open');
+    // close all in same accordion
+    const parent = btn.closest('.accordion');
+    parent.querySelectorAll('.accordion-body').forEach(b => b.classList.remove('open'));
+    parent.querySelectorAll('.accordion-btn').forEach(b => b.classList.remove('open'));
+    if (!isOpen) {
+      body.classList.add('open');
+      btn.classList.add('open');
+    }
+  });
+});
+
+// ── ACTIVE TOC ──
+const sections = document.querySelectorAll('[id]');
+const tocLinks = document.querySelectorAll('#toc a');
+const observer = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      const id = e.target.getAttribute('id');
+      tocLinks.forEach(a => a.classList.toggle('active', a.getAttribute('href') === '#' + id));
+    }
+  });
+}, { rootMargin: '-20% 0px -70% 0px' });
+sections.forEach(s => observer.observe(s));
+
+// ── MERMAID ──
+mermaid.initialize({ startOnLoad: true, theme: html.getAttribute('data-theme') === 'dark' ? 'dark' : 'default', flowchart: { useMaxWidth: true } });
+
+// ── CHARTS ──
+window.myCharts = [];
+const isDark = () => html.getAttribute('data-theme') === 'dark';
+const textColor = () => isDark() ? '#e8dfd0' : '#1a1209';
+const gridColor = () => isDark() ? '#3a3228' : '#d8cfc0';
+
+// OEE Chart
+const oeeCtx = document.getElementById('oeeChart').getContext('2d');
+const oeeChart = new Chart(oeeCtx, {
+  type: 'line',
+  data: {
+    labels: ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'],
+    datasets: [
+      { label: 'OEE %', data: [68,70,69,71,72,73,72,74,75,76,77,78], borderColor: '#8b1a1a', backgroundColor: 'rgba(139,26,26,.08)', tension: 0.4, fill: true, pointRadius: 4 },
+      { label: 'Availability %', data: [84,85,85,86,87,88,87,88,89,89,90,90], borderColor: '#e07b2a', borderDash: [4,3], tension: 0.4, fill: false, pointRadius: 3 },
+      { label: 'Target OEE 80%', data: Array(12).fill(80), borderColor: '#3a6abf', borderDash: [8,4], pointRadius: 0, fill: false },
+    ]
+  },
+  options: {
+    responsive: true, interaction: { mode: 'index', intersect: false },
+    plugins: { legend: { labels: { color: textColor() } } },
+    scales: {
+      x: { ticks: { color: textColor() }, grid: { color: gridColor() } },
+      y: { min: 60, max: 100, ticks: { color: textColor(), callback: v => v + '%' }, grid: { color: gridColor() } }
+    }
+  }
+});
+window.myCharts.push(oeeChart);
+
+// Quality Chart
+const qualCtx = document.getElementById('qualityChart').getContext('2d');
+const qualChart = new Chart(qualCtx, {
+  type: 'bar',
+  data: {
+    labels: ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'],
+    datasets: [
+      { label: 'Tread Defects', data: [420,390,410,380,350,320,310,290,280,260,245,230], backgroundColor: '#8b1a1a' },
+      { label: 'Sidewall Defects', data: [180,170,165,155,148,140,135,128,120,115,108,100], backgroundColor: '#e07b2a' },
+      { label: 'Cure Defects', data: [90,85,80,75,72,68,65,62,58,55,50,48], backgroundColor: '#3a6abf' },
+    ]
+  },
+  options: {
+    responsive: true, interaction: { mode: 'index', intersect: false },
+    plugins: { legend: { labels: { color: textColor() } } },
+    scales: {
+      x: { stacked: true, ticks: { color: textColor() }, grid: { color: gridColor() } },
+      y: { stacked: true, ticks: { color: textColor(), callback: v => v + ' PPM' }, grid: { color: gridColor() } }
+    }
+  }
+});
+window.myCharts.push(qualChart);
+
+// Finance Chart
+const finCtx = document.getElementById('financeChart').getContext('2d');
+const finChart = new Chart(finCtx, {
+  type: 'bar',
+  data: {
+    labels: ['Year 1', 'Year 2', 'Year 3'],
+    datasets: [
+      { label: 'Revenue', data: [5200, 6100, 7400], backgroundColor: 'rgba(58,106,191,.7)', yAxisID: 'y' },
+      { label: 'Total Cost', data: [4144, 4612, 5292], backgroundColor: 'rgba(139,26,26,.6)', yAxisID: 'y' },
+      { label: 'EBITDA Margin %', data: [20, 24, 28], type: 'line', borderColor: '#e07b2a', backgroundColor: 'transparent', yAxisID: 'y2', tension: 0.4, pointRadius: 6 },
+    ]
+  },
+  options: {
+    responsive: true, interaction: { mode: 'index', intersect: false },
+    plugins: { legend: { labels: { color: textColor() } } },
+    scales: {
+      x: { ticks: { color: textColor() }, grid: { color: gridColor() } },
+      y: { ticks: { color: textColor(), callback: v => '$' + v + 'K' }, grid: { color: gridColor() }, title: { display: true, text: 'USD (000)', color: textColor() } },
+      y2: { position: 'right', min: 0, max: 40, ticks: { color: textColor(), callback: v => v + '%' }, grid: { display: false }, title: { display: true, text: 'EBITDA %', color: textColor() } }
+    }
+  }
+});
+window.myCharts.push(finChart);
+</script>
+</body>
+</html>

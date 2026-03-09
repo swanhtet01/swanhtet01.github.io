@@ -19,7 +19,10 @@
             <h1 class="text-4xl font-bold">Yangon Tyre Factory</h1>
             <p class="text-slate-300 mt-2">ERP + DQMS loop fully run by self-sovereign AWS agents.</p>
         </div>
-        <a href="index.html" class="px-5 py-3 rounded-lg bg-slate-800 border border-slate-600 text-sm tracking-wide">Back to SuperMega.dev</a>
+        <div class="flex gap-3 flex-wrap">
+            <a href="director-manual.html" class="px-5 py-3 rounded-lg bg-amber-900/60 border border-amber-600/50 text-amber-200 text-sm tracking-wide hover:bg-amber-800/70 transition">ðŸ“– Director's Manual</a>
+            <a href="index.html" class="px-5 py-3 rounded-lg bg-slate-800 border border-slate-600 text-sm tracking-wide">Back to SuperMega.dev</a>
+        </div>
     </header>
 
     <main class="max-w-6xl mx-auto px-6 pb-20">
@@ -90,8 +93,8 @@
             const backendApis = data.backend_apis || {};
             const items = [
                 { title: 'AWS Instance', value: data.aws_instance ? 'Running' : 'Provisioning', detail: data.aws_region || 'ap-southeast-1' },
-                ...Object.entries(webServices).map(([name, status]) => ({ title: `Web · ${name}`, value: status, detail: 'ytf.supermega.dev' })),
-                ...Object.entries(backendApis).map(([name, status]) => ({ title: `API · ${name}`, value: status, detail: 'LangGraph agents' }))
+                ...Object.entries(webServices).map(([name, status]) => ({ title: `Web ï¿½ ${name}`, value: status, detail: 'ytf.supermega.dev' })),
+                ...Object.entries(backendApis).map(([name, status]) => ({ title: `API ï¿½ ${name}`, value: status, detail: 'LangGraph agents' }))
             ];
 
             items.forEach(item => {
