@@ -236,8 +236,16 @@
     font-size: .95rem;
   }
   .callout.note { background: var(--note-bg); border-color: var(--note-border); }
+  .callout.insight { background: #f0f7f0; border-color: #2e7d32; }
+  [data-theme=dark] .callout.insight { background: #1a2e1a; border-color: #4caf50; }
   .callout .callout-title { font-weight: 700; font-size: .8rem; text-transform: uppercase; letter-spacing: .1em; margin-bottom: .4rem; color: var(--callout-border); }
   .callout.note .callout-title { color: var(--note-border); }
+  .callout.insight .callout-title { color: #2e7d32; }
+  [data-theme=dark] .callout.insight .callout-title { color: #4caf50; }
+  .ref-list { list-style: none; padding: 0; margin: 0; }
+  .ref-list li { padding: .5rem 0; border-bottom: 1px solid var(--border); font-size: .93rem; line-height: 1.5; }
+  .ref-list li:last-child { border-bottom: none; }
+  .ref-list .ref-tag { display: inline-block; background: var(--surface); border: 1px solid var(--border); border-radius: 4px; padding: .1rem .45rem; font-size: .75rem; margin-right: .4rem; color: var(--text-muted); }
 
   /* ── ACCORDION ── */
   .accordion { border: 1px solid var(--border); border-radius: 8px; margin: 1.25rem 0; overflow: hidden; }
@@ -401,6 +409,7 @@
         <a href="#ch2-anatomy">Tyre Anatomy</a>
         <a href="#ch2-compounds">Rubber Compounds</a>
         <a href="#ch2-standards">Standards &amp; Specs</a>
+        <a href="#ch2-industry4">Industry 4.0 / Smart Mfg</a>
       </div>
 
       <div class="sidebar-section">
@@ -408,6 +417,7 @@
         <a href="#ch3-process">Production Process</a>
         <a href="#ch3-oee">OEE Dashboard</a>
         <a href="#ch3-maintenance">Maintenance</a>
+        <a href="#ch3-rca">Root Cause Analysis</a>
       </div>
 
       <div class="sidebar-section">
@@ -454,6 +464,7 @@
         <a href="#ch9-glossary">Tyre Glossary</a>
         <a href="#ch9-formulas">Key Formulas</a>
         <a href="#ch9-contacts">Director Contacts</a>
+        <a href="#ch9-references">Further Reading</a>
       </div>
     </nav>
 
@@ -945,7 +956,83 @@ graph LR
         <a href="https://drive.google.com/drive/folders/1OiqlWG6F6TmeOd_LjYeuZz4LZjart43m" target="_blank" rel="noopener">Industry Literature folder</a>
         on Google Drive.
       </div>
-    </section>
+
+      <h2 class="section-title" id="ch2-industry4">2.4 Industry 4.0 &amp; Smart Manufacturing for Tyres</h2>
+      <p>Industry 4.0 refers to the integration of digital, connected, and data-driven technologies into physical manufacturing. For a tyre factory Director, this is not abstract — it is a set of specific, deployable technologies that reduce waste, improve quality consistency, and lower the cost of production. The following are the most relevant and proven technologies for the tyre manufacturing sector.</p>
+
+      <div class="callout insight">
+        <div class="callout-title">💡 Director's Insight</div>
+        Industry 4.0 adoption does not require replacing your entire factory. Start with data collection (IoT on the banbury mixer and curing presses) — this alone typically reveals 8–15% hidden OEE losses. Buy data before you buy automation.
+        <br><small>Reference: McKinsey Global Institute, <em>Manufacturing's Next Act</em> (2016) — still the most cited framework for smart factory ROI.</small>
+      </div>
+
+      <div class="accordion">
+        <div class="accordion-item">
+          <button class="accordion-btn">Process Automation &amp; Robotics <span class="chevron">▼</span></button>
+          <div class="accordion-body">
+            <table class="data-table">
+              <thead><tr><th>Application</th><th>Technology</th><th>Tyre Factory Benefit</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Tyre building</strong></td><td>Automated Tyre Building Machine (ATBM) with servo-motor precision</td><td>Consistent ply tension ±0.5mm vs operator variation of ±3mm; reduces crown/balance defects</td></tr>
+                <tr><td><strong>Curing press loading</strong></td><td>Robotic green tyre transfer arm</td><td>Eliminates manual handling distortion; reduces cure-centre defects by removing handling variance</td></tr>
+                <tr><td><strong>Compound weighing</strong></td><td>Automated batch weighing system (loss-in-weight feeders)</td><td>Compound consistency improves; reduces batch-to-batch viscosity variation (Mooney viscosity CV &lt;2%)</td></tr>
+                <tr><td><strong>Finished goods inspection</strong></td><td>Automated Visual Inspection (AVI) — LED strobes + camera array</td><td>100% surface inspection vs ~5% manual sampling; detects bulges, blisters, and tread voids at line speed</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="accordion-item">
+          <button class="accordion-btn">IoT &amp; Real-Time Process Monitoring <span class="chevron">▼</span></button>
+          <div class="accordion-body">
+            <table class="data-table">
+              <thead><tr><th>Machine / Asset</th><th>Sensor Type</th><th>KPI Unlocked</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Banbury Mixer</strong></td><td>Motor current transducer, rotor temperature, fill factor load cell</td><td>Mooney viscosity proxy (current-temperature profile); batch-end time consistency; carbon black dispersion index</td></tr>
+                <tr><td><strong>Curing Press</strong></td><td>Cure temperature/pressure sensors + dielectric cure monitor (DiCure)</td><td>Real-time cure state — eliminates under/over-cure; cure time optimisation saves energy 6–9%</td></tr>
+                <tr><td><strong>Calender / Extruder</strong></td><td>Laser thickness gauge (cross-web), line speed encoder</td><td>Real-time gauge profile control; reduces tread strip waste from spec deviation</td></tr>
+                <tr><td><strong>Banbury dust collection</strong></td><td>Differential pressure sensor on filter bags</td><td>Carbon black exposure monitoring; compliance with health/safety thresholds; predictive bag replacement</td></tr>
+                <tr><td><strong>Autoclave / steam supply</strong></td><td>Steam flow meter, condensate temperature</td><td>Steam trap failure detection; energy loss quantification; reduce energy cost 3–5%</td></tr>
+              </tbody>
+            </table>
+            <p style="font-size:.9rem; margin-top:.75rem;">Key standard: <strong>IEC 62443</strong> covers cybersecurity for industrial automation/control systems — essential if IoT devices are networked to plant IT systems.</p>
+          </div>
+        </div>
+
+        <div class="accordion-item">
+          <button class="accordion-btn">Digital Twin &amp; Simulation <span class="chevron">▼</span></button>
+          <div class="accordion-body">
+            <p>A <strong>digital twin</strong> is a virtual replica of a physical asset or process that is updated in real time from sensor data. In tyre manufacturing:</p>
+            <ul style="padding-left:1.2rem; line-height:1.9;">
+              <li><strong>Curing press digital twin:</strong> Simulates heat transfer inside the tyre mould given real compound thickness, initial temperature, and steam pressure. Used to predict optimum cure time for each batch — avoiding both under-cure (weak bond) and over-cure (hardened rubber, loss of elongation).</li>
+              <li><strong>Production scheduling twin:</strong> Models the entire factory floor — which presses are up/down, which moulds are in use, compound batch availability — to maximise schedule adherence and minimise mould changeover downtime.</li>
+              <li><strong>Compound formulation twin:</strong> Links raw material lot properties (e.g., NR Mooney viscosity ML1+4) to predicted compound performance (Shore A hardness, tensile strength, abrasion index) before batch is mixed.</li>
+            </ul>
+            <p style="font-size:.9rem; color:var(--text-muted);">Industry reference: Michelin, Bridgestone, and Hankook all use digital twin-based cure optimisation in their modern plants. Open-source simulation frameworks like OpenFOAM can be used for heat transfer modelling at low cost.</p>
+          </div>
+        </div>
+
+        <div class="accordion-item">
+          <button class="accordion-btn">IATF 16949 — Automotive Quality Standard <span class="chevron">▼</span></button>
+          <div class="accordion-body">
+            <p><strong>IATF 16949:2016</strong> is the global quality management standard for automotive parts suppliers — including tyre manufacturers supplying OEM (Original Equipment Manufacturer) automotive customers. It builds on ISO 9001 and adds automotive-specific requirements.</p>
+            <table class="data-table">
+              <thead><tr><th>IATF 16949 Requirement</th><th>What It Means for the Factory</th></tr></thead>
+              <tbody>
+                <tr><td><strong>APQP</strong> (Advanced Product Quality Planning)</td><td>Structured process for introducing new tyre sizes or compounds — gates from design to production approval</td></tr>
+                <tr><td><strong>PPAP</strong> (Production Part Approval Process)</td><td>Formal submission of samples + process capability data to the automotive customer before production begins</td></tr>
+                <tr><td><strong>FMEA</strong> (Failure Mode &amp; Effects Analysis)</td><td>Risk assessment for each manufacturing step — identifies what can go wrong and what controls prevent it</td></tr>
+                <tr><td><strong>SPC</strong> (Statistical Process Control)</td><td>Control charts on critical dimensions (tread width, section height, bead diameter) to detect process drift before defects are produced</td></tr>
+                <tr><td><strong>MSA</strong> (Measurement System Analysis)</td><td>Validates that your measurement tools (callipers, balancing machine, uniformity machine) are accurate and repeatable enough</td></tr>
+              </tbody>
+            </table>
+            <div class="callout insight">
+              <div class="callout-title">💡 Director's Insight</div>
+              IATF 16949 certification is mandatory to supply major vehicle manufacturers (Toyota, Mitsubishi, Suzuki) directly. Even without certification, implementing APQP and FMEA internally improves your product launch success rate and reduces warranty claims. Start with FMEA on your top-5 defect types — it is the highest-ROI quality tool.
+            </div>
+          </div>
+        </div>
+      </div>
 
     <!-- ═══════════════════════════════════════════════════
          CHAPTER 3: MANUFACTURING OPERATIONS
@@ -1056,7 +1143,96 @@ flowchart TD
           </div>
         </div>
       </div>
-    </section>
+
+      <h2 class="section-title" id="ch3-rca">3.4 Root Cause Analysis &amp; Problem Solving</h2>
+      <p>When quality problems or machine failures recur, root cause analysis (RCA) is the Director's primary tool for permanent fixes. The goal is not to address the symptom but to eliminate the cause. Below are the four core methods used in manufacturing — each appropriate for different situations.</p>
+
+      <div class="callout insight">
+        <div class="callout-title">💡 Director's Insight</div>
+        A defect found in the warehouse costs 1× to fix. A defect found by the customer costs 100× — in returns, relationship damage, and brand impact. Invest in root cause analysis on every customer complaint, even if it seems minor. The first complaint is almost always the tip of an iceberg.
+        <br><small>Source: Juran's Quality Handbook (7th ed., McGraw-Hill, 2016) — the foundational text on cost of quality in manufacturing.</small>
+      </div>
+
+      <div class="accordion">
+        <div class="accordion-item">
+          <button class="accordion-btn">5-Why Analysis — Fast Root Cause for Production Problems <span class="chevron">▼</span></button>
+          <div class="accordion-body">
+            <p>Ask "Why?" five times in sequence until the systemic root cause is revealed. Example: tread separation defect.</p>
+            <table class="data-table">
+              <thead><tr><th>#</th><th>Why?</th><th>Answer</th></tr></thead>
+              <tbody>
+                <tr><td>1</td><td>Why did the tread separate from the carcass?</td><td>The adhesion between tread compound and carcass was insufficient.</td></tr>
+                <tr><td>2</td><td>Why was the adhesion insufficient?</td><td>The bonding skim compound viscosity was out of spec.</td></tr>
+                <tr><td>3</td><td>Why was the skim compound out of spec?</td><td>The mixing time was 40 seconds short of the required duration.</td></tr>
+                <tr><td>4</td><td>Why was the mixing time too short?</td><td>The Banbury timer was misconfigured after a maintenance reset.</td></tr>
+                <tr><td>5</td><td>Why was the timer not verified after maintenance?</td><td>There is no checklist step for parameter verification in the post-maintenance restart procedure.</td></tr>
+              </tbody>
+            </table>
+            <p><strong>Root Cause:</strong> Missing parameter verification step in restart SOP.<br>
+            <strong>Corrective Action:</strong> Add "Verify timer settings vs. Master Parameter Sheet" to post-maintenance restart checklist. Implement lock-out-tag-out for parameter changes.</p>
+          </div>
+        </div>
+
+        <div class="accordion-item">
+          <button class="accordion-btn">Fishbone Diagram (Ishikawa) — Structured Brainstorming <span class="chevron">▼</span></button>
+          <div class="accordion-body">
+            <p>The Fishbone diagram maps all possible causes of a problem across six standard categories (the "6M"s). Use it when the root cause is not obvious and you need the team to systematically explore all possibilities before choosing where to investigate.</p>
+            <table class="data-table">
+              <thead><tr><th>Category (M)</th><th>Example Causes in Tyre Manufacturing</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Machine</strong></td><td>Press bladder worn, calender roll misalignment, inadequate Banbury cooling</td></tr>
+                <tr><td><strong>Method</strong></td><td>Incorrect cure time, wrong ply angle, non-standard cement application technique</td></tr>
+                <tr><td><strong>Material</strong></td><td>NR Mooney viscosity out of spec, carbon black lot contamination, expired skim compound</td></tr>
+                <tr><td><strong>Man (People)</strong></td><td>Operator training gap, shift handover miscommunication, fatigue (night shift)</td></tr>
+                <tr><td><strong>Measurement</strong></td><td>Gauge not calibrated, incorrect sampling protocol, operator measurement variation</td></tr>
+                <tr><td><strong>Mother Nature (Environment)</strong></td><td>High ambient humidity causing tack variation, temperature affecting compound flow</td></tr>
+              </tbody>
+            </table>
+            <p style="font-size:.9rem; margin-top:.75rem;">Run the fishbone with your Plant Manager and QC team as a group session. Each arm of the fishbone is investigated and either confirmed or eliminated by data. The goal is to narrow to 1–2 probable root causes for 5-Why or experiment.</p>
+          </div>
+        </div>
+
+        <div class="accordion-item">
+          <button class="accordion-btn">8D Problem Solving — For Customer Complaints &amp; Escapes <span class="chevron">▼</span></button>
+          <div class="accordion-body">
+            <p>The 8 Disciplines (8D) process is the standard response format for customer-facing quality escapes in the automotive industry. Use it any time a defective tyre reaches a customer or OEM partner.</p>
+            <table class="data-table">
+              <thead><tr><th>Discipline</th><th>Action</th><th>Timeframe</th></tr></thead>
+              <tbody>
+                <tr><td><strong>D1 — Team</strong></td><td>Assemble cross-functional team (QC + Production + SC + Director)</td><td>Day 1</td></tr>
+                <tr><td><strong>D2 — Problem Statement</strong></td><td>Describe: What tyre, which lot, what defect, found where, how many</td><td>Day 1</td></tr>
+                <tr><td><strong>D3 — Containment</strong></td><td>Immediate action: quarantine all suspect stock, stop further shipment, customer notification</td><td>Day 1–2</td></tr>
+                <tr><td><strong>D4 — Root Cause</strong></td><td>5-Why or Fishbone analysis; confirm root cause with data (DO NOT assume)</td><td>Day 3–7</td></tr>
+                <tr><td><strong>D5 — Corrective Actions</strong></td><td>Define permanent fixes for confirmed root cause</td><td>Day 7–14</td></tr>
+                <tr><td><strong>D6 — Implementation &amp; Verification</strong></td><td>Implement fixes; verify effectiveness with data (run chart, PPM before/after)</td><td>Week 3–4</td></tr>
+                <tr><td><strong>D7 — Prevent Recurrence</strong></td><td>Update procedures, FMEA, control plans, training materials; apply fix to similar processes</td><td>Week 4–6</td></tr>
+                <tr><td><strong>D8 — Congratulate Team</strong></td><td>Document learnings; recognise team; close the 8D report formally</td><td>Week 6</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="accordion-item">
+          <button class="accordion-btn">Statistical Process Control (SPC) — Detecting Drift Before Defects <span class="chevron">▼</span></button>
+          <div class="accordion-body">
+            <p>SPC uses control charts to distinguish between normal process variation (common cause) and abnormal signals (special cause) that require investigation. Applied to critical tyre dimensions, it detects mould wear or material drift before out-of-spec product is made.</p>
+            <table class="data-table">
+              <thead><tr><th>Control Chart Concept</th><th>Meaning in Production</th></tr></thead>
+              <tbody>
+                <tr><td><strong>UCL / LCL</strong></td><td>Upper/Lower Control Limits — set at ±3σ from the process mean. Any point outside is a signal to investigate immediately.</td></tr>
+                <tr><td><strong>Run of 8 on one side</strong></td><td>Eight consecutive points above (or below) the mean indicates a process shift — even if within control limits. Common cause: mould temperature creeping up, material lot change.</td></tr>
+                <tr><td><strong>Cp / Cpk</strong></td><td>Process Capability Index. Cpk &gt;1.33 is the minimum for automotive OEM. Cpk &gt;1.67 is world-class. Cpk &lt;1.0 means your process cannot reliably produce to spec — re-engineer before relying on inspection.</td></tr>
+                <tr><td><strong>Where to apply SPC first</strong></td><td>Start with the 3 highest-PPM defect types from your DQMS data. SPC on bead diameter, tread gauge, and section width typically captures the most impactful variation.</td></tr>
+              </tbody>
+            </table>
+            <div class="callout insight">
+              <div class="callout-title">💡 Director's Insight</div>
+              SPC is most valuable when operators themselves read the charts and are empowered to stop the line (Andon). If charts only go to QC management, you lose the real-time benefit. Post control charts at each machine and train operators to identify "8 consecutive" and "outside control limits" conditions.
+              <br><small>Source: Wheeler, D.J. &amp; Chambers, D.S., <em>Understanding Statistical Process Control</em> (3rd ed., SPC Press, 2010) — the practitioner's standard reference.</small>
+            </div>
+          </div>
+        </div>
+      </div>
 
     <!-- ═══════════════════════════════════════════════════
          CHAPTER 4: QUALITY MANAGEMENT — DQMS
@@ -2035,7 +2211,74 @@ graph TD
         <strong>Offline / PDF:</strong> Click the 🖨 Print button in the top bar and select "Save as PDF". All accordion sections and charts will expand for the print view.<br><br>
         <strong>To suggest improvements:</strong> The manual is hosted on GitHub. The Director or any authorised editor can submit updates via the <a href="https://github.com/swanhtet01/swanhtet01.github.io" target="_blank" rel="noopener">GitHub repository</a>, or contact the SuperMega team.
       </div>
-    </section>
+
+      <h2 class="section-title" id="ch9-references">9.4 Further Reading &amp; Key Industry References</h2>
+      <p>The following references are curated for practical value — not academic completeness. Each is cited against the chapter it is most relevant to.</p>
+
+      <div class="accordion">
+        <div class="accordion-item">
+          <button class="accordion-btn">📗 Books — Manufacturing, Operations &amp; Quality <span class="chevron">▼</span></button>
+          <div class="accordion-body">
+            <ul class="ref-list">
+              <li><span class="ref-tag">Ch3 OEE</span> <strong>Hansen, R.C.</strong> — <em>Overall Equipment Effectiveness: A Powerful Production/Maintenance Tool for Increased Profits</em> (Industrial Press, 2001). The definitive practical guide to OEE calculation and improvement. Industry benchmark targets (85%+ world-class) come from this framework.</li>
+              <li><span class="ref-tag">Ch3 Lean</span> <strong>Womack, J.P. &amp; Jones, D.T.</strong> — <em>Lean Thinking: Banish Waste and Create Wealth in Your Corporation</em> (Free Press, 1996, 2nd ed. 2003). Introduces value stream mapping and 5 lean principles. The tyre factory equivalent: map material flow from raw NR bale to packaged tyre and eliminate the non-value-adding steps.</li>
+              <li><span class="ref-tag">Ch3/Ch4</span> <strong>Liker, J.K.</strong> — <em>The Toyota Way: 14 Management Principles from the World's Greatest Manufacturer</em> (McGraw-Hill, 2003). The most-cited book on lean manufacturing culture, Andon, and Jidoka. Relevant to how to build a production culture where problems are surfaced, not hidden.</li>
+              <li><span class="ref-tag">Ch6 Finance</span> <strong>Goldratt, E.M. &amp; Cox, J.</strong> — <em>The Goal: A Process of Ongoing Improvement</em> (North River Press, 1984, 3rd ed. 2004). A novel-format introduction to Theory of Constraints (TOC). Key insight: identify your factory's constraint (the bottleneck press or mixer) and subordinate everything else to maximising its throughput.</li>
+              <li><span class="ref-tag">Ch4 Quality</span> <strong>Juran, J.M. &amp; De Feo, J.A.</strong> — <em>Juran's Quality Handbook: The Complete Guide to Performance Excellence</em> (7th ed., McGraw-Hill, 2016). The comprehensive reference on QMS, cost of poor quality, and quality planning. Key formula used in Ch6: COPQ = (Internal failure + External failure + Appraisal + Prevention) costs.</li>
+              <li><span class="ref-tag">Ch3/Ch4 SPC</span> <strong>Wheeler, D.J. &amp; Chambers, D.S.</strong> — <em>Understanding Statistical Process Control</em> (3rd ed., SPC Press, 2010). The practitioner's guide to control charts. More practical than Shewhart's original work; focuses on what to do when a chart signals.</li>
+              <li><span class="ref-tag">Ch2 Tyre</span> <strong>Clark, S.K. (ed.)</strong> — <em>Mechanics of Pneumatic Tires</em> (US Dept of Transportation / NHTSA, 1981, 2nd ed.). The foundational technical text on tyre construction physics — carcass stress, bead design, tread compound mechanics. Available free from NHTSA digital archive.</li>
+              <li><span class="ref-tag">Ch2 Rubber</span> <strong>Morton, M. (ed.)</strong> — <em>Rubber Technology</em> (3rd ed., Springer, 1999). Covers NR, SBR, BR, vulcanisation chemistry, carbon black reinforcement, and processing. The chemical engineering reference for your compound team.</li>
+              <li><span class="ref-tag">Ch8 Leadership</span> <strong>Collins, J.</strong> — <em>Good to Great: Why Some Companies Make the Leap and Others Don't</em> (HarperCollins, 2001). Relevant to Director leadership: Level 5 Leadership concept (personal humility + professional will), "First Who, Then What" (get the right people before setting strategy), and the Hedgehog Concept (what you can be the best at in your market).</li>
+              <li><span class="ref-tag">Ch6 Finance</span> <strong>Brealey, R.A., Myers, S.C. &amp; Allen, F.</strong> — <em>Principles of Corporate Finance</em> (14th ed., McGraw-Hill, 2022). The standard MBA finance text. NPV, IRR, WACC, and capital budgeting chapters are directly applicable to Ch6 capex decisions. Also covers currency risk and working capital management.</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="accordion-item">
+          <button class="accordion-btn">📋 Industry Standards (Free &amp; Paid) <span class="chevron">▼</span></button>
+          <div class="accordion-body">
+            <ul class="ref-list">
+              <li><span class="ref-tag">QMS</span> <strong>ISO 9001:2015</strong> — Quality Management Systems: Requirements. Foundational standard; the factory's QMS is built on this. Available from ISO.org (purchase) or Myanmar MOST (national standards body). Audit your QMS against Clause 8.5 (production control) and Clause 10 (improvement).</li>
+              <li><span class="ref-tag">Automotive QMS</span> <strong>IATF 16949:2016</strong> — Quality Management System Requirements for Automotive Production and Relevant Service Parts Organizations. Required to supply OEM automotive. Available via IATF.global. Includes APQP, PPAP, FMEA, MSA, SPC requirements.</li>
+              <li><span class="ref-tag">Environment</span> <strong>ISO 14001:2015</strong> — Environmental Management Systems. Relevant for handling carbon black, solvent waste, rubber dust. Required by many export customers and by Myanmar ECC compliance.</li>
+              <li><span class="ref-tag">Safety</span> <strong>ISO 45001:2018</strong> — Occupational Health &amp; Safety Management Systems. Replaces OHSAS 18001. Tyre factory hazards (press operation, banbury heat, solvent vapours) make this standard highly relevant.</li>
+              <li><span class="ref-tag">Product — Export</span> <strong>UNECE Regulation No. 30 (ECE R30)</strong> — Uniform Provisions Concerning the Approval of Pneumatic Tyres for Motor Vehicles. Required for any tyre exported to ECE-member countries. Tests: endurance, high-speed performance, dimensional compliance. Available free from unece.org.</li>
+              <li><span class="ref-tag">Product — Export</span> <strong>UNECE Regulation No. 54 (ECE R54)</strong> — Commercial Vehicle Tyres. Same framework as R30 but for trucks and buses. If you supply truck tyres to Thailand or Singapore, ECE R54 approval may be required by customers.</li>
+              <li><span class="ref-tag">Rubber Testing</span> <strong>ASTM D1646</strong> — Mooney Viscosity (ML1+4 at 100°C) test method. The standard for incoming NR and SBR viscosity testing. Used daily by your compound QC lab.</li>
+              <li><span class="ref-tag">Rubber Testing</span> <strong>ASTM D2084</strong> — Vulcanisation characteristics by oscillating disc cure meter (ODR). Defines T90 (time to 90% cure) — the basis for your curing press time settings.</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="accordion-item">
+          <button class="accordion-btn">🌐 Industry Data &amp; Market Intelligence Sources <span class="chevron">▼</span></button>
+          <div class="accordion-body">
+            <ul class="ref-list">
+              <li><span class="ref-tag">Rubber Market</span> <strong>International Rubber Study Group (IRSG)</strong> — <em>Rubber Statistical Bulletin</em> (monthly, irsg.org). NR and SR production, consumption, and price data by country. Used to benchmark Myanmar NR pricing and forecast raw material costs. Singapore-based; Myanmar is a member state.</li>
+              <li><span class="ref-tag">Rubber Price</span> <strong>SICOM (Singapore Commodity Exchange)</strong> — TSR20 (Technically Specified Rubber) futures prices. The reference price for Grade 20 natural rubber — the most commonly traded grade in Southeast Asia. Use SICOM TSR20 as your NR price benchmark in procurement negotiations. Accessible at sicom.com.sg.</li>
+              <li><span class="ref-tag">Tyre Industry</span> <strong>European Tyre &amp; Rubber Manufacturers' Association (ETRMA)</strong> — Annual statistics report on European tyre production and market. Useful for global market context, technology trend benchmarking. Available free at etrma.org.</li>
+              <li><span class="ref-tag">Myanmar Trade</span> <strong>Myanmar Central Statistical Organisation (CSO)</strong> — Trade statistics including rubber exports and vehicle import data. Useful for estimating domestic vehicle fleet size (proxy for tyre demand). Accessible via planning.gov.mm.</li>
+              <li><span class="ref-tag">Myanmar Rubber</span> <strong>Myanmar Rubber Planters &amp; Producers Association (MRPPA)</strong> — Domestic NR production data, plantation statistics, and market prices. Key contact for establishing direct NR purchasing relationships from Tanintharyi Region estates.</li>
+              <li><span class="ref-tag">Commodity Prices</span> <strong>World Bank Commodity Price Data ("Pink Sheet")</strong> — Monthly benchmark prices for NR (RSS3), carbon black feedstock (naphtha), and synthetic rubber feedstocks. Free download at worldbank.org/commodities. Use for 12-month trend analysis in your raw material budget.</li>
+              <li><span class="ref-tag">Carbon Black</span> <strong>International Carbon Black Association (ICBA)</strong> — Technical publications on carbon black grades (N330, N550, N660, N774) and their performance effects in tyre compounds. Free technical papers at carbon-black.org. Reference when evaluating alternative CB suppliers.</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="accordion-item">
+          <button class="accordion-btn">🎓 MBA &amp; Business References <span class="chevron">▼</span></button>
+          <div class="accordion-body">
+            <ul class="ref-list">
+              <li><span class="ref-tag">Ch1 Strategy</span> <strong>Porter, M.E.</strong> — <em>Competitive Strategy: Techniques for Analyzing Industries and Competitors</em> (Free Press, 1980). The original source for Porter's 5 Forces and generic strategies. The Myanmar tyre market analysis in §1.4 directly applies Porter's framework.</li>
+              <li><span class="ref-tag">Ch1 Strategy</span> <strong>Porter, M.E.</strong> — <em>Competitive Advantage: Creating and Sustaining Superior Performance</em> (Free Press, 1985). Introduces the value chain concept — how every activity from NR procurement to tyre delivery either creates or erodes competitive advantage. Most actionable strategy framework for a manufacturing director.</li>
+              <li><span class="ref-tag">Ch6 Finance</span> <strong>Damodaran, A.</strong> — <em>Investment Valuation: Tools and Techniques for Determining the Value of Any Asset</em> (3rd ed., Wiley, 2012). The standard reference for NPV and DCF valuation. The author's website (pages.stern.nyu.edu/~adamodar) provides free industry beta data including manufacturing sector WACC estimates useful for capital budgeting in §6.6.</li>
+              <li><span class="ref-tag">Ch5 Supply Chain</span> <strong>Christopher, M.</strong> — <em>Logistics &amp; Supply Chain Management</em> (5th ed., FT Publishing, 2016). Covers supplier risk frameworks, demand-driven supply chains, and inventory optimisation — directly applicable to §5.3 safety stock and FIFO policy.</li>
+              <li><span class="ref-tag">Ch6 KPIs</span> <strong>Kaplan, R.S. &amp; Norton, D.P.</strong> — <em>The Balanced Scorecard: Translating Strategy into Action</em> (Harvard Business School Press, 1996). The framework behind the Director KPI scorecard in §6.2. Financial, Customer, Internal Process, and Learning/Growth perspectives ensure KPIs are balanced and not purely short-term financial.</li>
+              <li><span class="ref-tag">Ch8 Leadership</span> <strong>Drucker, P.F.</strong> — <em>The Effective Executive</em> (Harper &amp; Row, 1967, revised ed. 2006). The most practical management book for a Director. Key concepts: manage your time (relates to Ch7 daily cadence), focus on contribution (relates to delegation framework in §8.4), make strengths productive (relevant to KRA matrix in §8.3).</li>
+            </ul>
+          </div>
+        </div>
+      </div>
 
   </main>
 </div>
