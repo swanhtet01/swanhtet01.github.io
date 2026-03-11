@@ -26,7 +26,8 @@ This pilot package starts from what is actually true right now:
 - `inventory.py` - local source inventory and markdown/json report generation
 - `review.py` - operational review generator
 - `graph.py` - minimal LangGraph scaffold
-- `connectors/google_drive.py` - optional Drive API probe
+- `input_center.py` - structured team-input templates and snapshot summarization
+- `connectors/google_drive.py` - optional Drive API probe plus Google Sheets input-center integration
 - `connectors/gmail.py` - optional Gmail API probe
 
 ## Run
@@ -152,7 +153,7 @@ To generate a more useful decision-oriented brief from the same evidence:
 & "C:\Users\swann\OneDrive - BDA\.venv\Scripts\python.exe" -m mark1_pilot.cli brief-query --config .\config.example.json --query cash --top-k 5 --title "Cash Evidence Brief"
 ```
 
-To sync ERP-style file activity tracking (snapshot + change register + watchlist alerts):
+To sync ERP-style file activity tracking (local mirror + Google Drive change registers + watchlist alerts):
 
 ```powershell
 & "C:\Users\swann\OneDrive - BDA\.venv\Scripts\python.exe" -m mark1_pilot.cli erp-sync --config .\config.example.json
@@ -163,6 +164,31 @@ ERP outputs written to `pilot-data/`:
 - `erp_snapshot.json`
 - `erp_change_register.json`
 - `erp_change_register.md`
+- `erp_drive_snapshot.json`
+- `erp_drive_change_register.json`
+- `erp_drive_change_register.md`
+- `erp_sync_status.json`
+
+
+
+To bootstrap structured Google Sheets for team updates (operations, quality, procurement, sales):
+
+```powershell
+& "C:\Users\swann\OneDrive - BDA\.venv\Scripts\python.exe" -m mark1_pilot.cli input-center-setup --config .\config.example.json
+```
+
+To sync the latest rows from those sheets into the dashboard pipeline:
+
+```powershell
+& "C:\Users\swann\OneDrive - BDA\.venv\Scripts\python.exe" -m mark1_pilot.cli input-center-sync --config .\config.example.json
+```
+
+This writes:
+
+- `input_center_registry.json`
+- `input_center_snapshot.json`
+- `input_center_snapshot.md`
+- `input_center_sync_status.json`
 
 To build the combined personal platform digest and dashboard:
 
@@ -248,6 +274,7 @@ Use these flags when needed:
 
 - `--rebuild-search-index`
 - `--skip-dqms`
+- `--skip-input-center`
 - `--skip-platform-publish`
 - `--run-manus-catalog`
 
