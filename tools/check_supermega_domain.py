@@ -4,6 +4,7 @@ import argparse
 import json
 import socket
 import ssl
+import threading
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -16,11 +17,7 @@ from typing import Any
 DEFAULT_DOMAIN = "supermega.dev"
 DEFAULT_ROUTES = [
     "/",
-    "/solutions/",
     "/packages/",
-    "/case-studies/",
-    "/dqms/",
-    "/about/",
     "/contact/",
 ]
 
@@ -33,17 +30,43 @@ class CheckResult:
     meta: dict[str, Any]
 
 
-def _resolve_host(hostname: str) -> CheckResult:
-    try:
-        infos = socket.getaddrinfo(hostname, None, type=socket.SOCK_STREAM)
-    except socket.gaierror as exc:
+def _resolve_host(hostname: str, timeout_seconds: float = 8.0) -> CheckResult:
+    result: dict[str, Any] = {}
+    error: dict[str, Exception] = {}
+
+    def _lookup() -> None:
+        try:
+            result["infos"] = socket.getaddrinfo(hostname, None, type=socket.SOCK_STREAM)
+        except Exception as exc:  # noqa: BLE001
+            error["exc"] = exc
+
+    worker = threading.Thread(target=_lookup, daemon=True)
+    worker.start()
+    worker.join(timeout=timeout_seconds)
+    if worker.is_alive():
+        return CheckResult(
+            target=f"dns:{hostname}",
+            status="error",
+            detail=f"dns_resolution_timeout_after_{timeout_seconds}s",
+            meta={"hostname": hostname, "addresses": []},
+        )
+    exc = error.get("exc")
+    if isinstance(exc, socket.gaierror):
         return CheckResult(
             target=f"dns:{hostname}",
             status="error",
             detail=f"dns_resolution_failed: {exc}",
             meta={"hostname": hostname, "addresses": []},
         )
+    if exc is not None:
+        return CheckResult(
+            target=f"dns:{hostname}",
+            status="error",
+            detail=f"dns_resolution_error: {exc}",
+            meta={"hostname": hostname, "addresses": []},
+        )
 
+    infos = result.get("infos", [])
     addresses = sorted({item[4][0] for item in infos})
     return CheckResult(
         target=f"dns:{hostname}",
@@ -53,7 +76,7 @@ def _resolve_host(hostname: str) -> CheckResult:
     )
 
 
-def _tls_check(hostname: str, timeout_seconds: float = 10.0) -> CheckResult:
+def _tls_check(hostname: str, timeout_seconds: float = 6.0) -> CheckResult:
     context = ssl.create_default_context()
     try:
         with socket.create_connection((hostname, 443), timeout=timeout_seconds) as sock:
@@ -94,7 +117,7 @@ def _tls_check(hostname: str, timeout_seconds: float = 10.0) -> CheckResult:
     )
 
 
-def _http_check(url: str, timeout_seconds: float = 15.0) -> CheckResult:
+def _http_check(url: str, timeout_seconds: float = 5.0) -> CheckResult:
     request = urllib.request.Request(url=url, method="GET", headers={"User-Agent": "supermega-domain-check/1.0"})
     try:
         with urllib.request.urlopen(request, timeout=timeout_seconds) as response:

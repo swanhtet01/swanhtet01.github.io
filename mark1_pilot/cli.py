@@ -7,14 +7,14 @@ import sys
 from datetime import datetime
 from pathlib import Path
 from time import perf_counter
-from typing import Callable
+from typing import Any, Callable
 
 from .briefing import build_gmail_brief_markdown, build_query_brief_markdown
 from .config import PilotConfig
 from .connectors.gmail import DEFAULT_GMAIL_AUTH_HOST, DEFAULT_GMAIL_AUTH_PORT, GmailProbe
 from .connectors.google_drive import GoogleDriveProbe
 from .dqms import build_dqms_registers, render_dqms_weekly_summary, write_dqms_outputs
-from .erp import sync_erp_files
+from .erp import sync_erp_drive_activity, sync_erp_files
 from .inventory import render_inventory_markdown, scan_local_root
 from .manus_catalog import build_manus_catalog, write_manus_catalog
 from .platform import (
@@ -23,6 +23,12 @@ from .platform import (
     render_platform_digest_markdown,
 )
 from .pilot_solution import build_pilot_solution, write_pilot_solution
+from .input_center import (
+    build_input_center_snapshot,
+    resolve_input_templates,
+    template_payload,
+    write_input_center_outputs,
+)
 from .review import build_connector_presence_summary, build_review_markdown
 from .search import build_search_index, search_index
 
@@ -467,26 +473,233 @@ def run_erp_sync(config_path: str, watch_patterns: list[str]) -> int:
     output_dir = config.output.inventory_path
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    result = sync_erp_files(
+    local_result = sync_erp_files(
         root=config.drive.local_root_path,
         output_dir=output_dir,
         config=config.erp,
         watch_patterns_override=watch_patterns or None,
     )
+
+    drive_result: dict[str, Any] = {
+        "status": "skipped",
+        "reason": "include_drive_activity_disabled",
+    }
+    drive_index_status: dict[str, Any] = {
+        "status": "skipped",
+        "reason": "include_drive_activity_disabled",
+    }
+
+    if config.erp.include_drive_activity:
+        drive_probe = GoogleDriveProbe(
+            service_account_json=config.drive.service_account_path,
+            folder_id=config.drive.google_drive_folder_id,
+        )
+        drive_index_status = drive_probe.list_folder_file_index(max_items=config.erp.drive_max_items)
+        _write_json(output_dir / "erp_drive_file_index_status.json", drive_index_status)
+
+        if drive_index_status.get("status") == "ready":
+            drive_result = sync_erp_drive_activity(
+                output_dir=output_dir,
+                config=config.erp,
+                drive_file_index=drive_index_status,
+            )
+        else:
+            drive_result = {
+                "status": "error",
+                "message": drive_index_status.get("message", "Drive file index failed."),
+            }
+        _write_json(output_dir / "erp_drive_sync_status.json", drive_result)
+
+    local_ready = local_result.get("status") == "ready"
+    drive_ready = drive_result.get("status") == "ready"
+    drive_required = bool(config.erp.include_drive_activity and config.erp.drive_activity_required)
+
+    if local_ready and (drive_ready or not drive_required):
+        status = "ready" if (drive_ready or not config.erp.include_drive_activity) else "ready_with_warnings"
+    else:
+        status = "error"
+
+    summary = {
+        "status": status,
+        "local": {
+            "status": local_result.get("status", "unknown"),
+            "total_changes": local_result.get("total_changes", 0),
+            "watchlist_change_count": local_result.get("watchlist_change_count", 0),
+            "snapshot_file": local_result.get("snapshot_file", ""),
+            "change_file": local_result.get("change_file", ""),
+            "change_markdown_file": local_result.get("change_markdown_file", ""),
+        },
+        "drive": {
+            "enabled": config.erp.include_drive_activity,
+            "required": drive_required,
+            "status": drive_result.get("status", "unknown"),
+            "message": drive_result.get("message", ""),
+            "total_changes": drive_result.get("total_changes", 0),
+            "watchlist_change_count": drive_result.get("watchlist_change_count", 0),
+            "snapshot_file": drive_result.get("snapshot_file", ""),
+            "change_file": drive_result.get("change_file", ""),
+            "change_markdown_file": drive_result.get("change_markdown_file", ""),
+            "index_truncated": drive_index_status.get("truncated", False),
+            "indexed_files": drive_index_status.get("file_count", 0),
+        },
+    }
+    _write_json(output_dir / "erp_sync_status.json", summary)
+
+    print(
+        json.dumps(summary, indent=2)
+    )
+    return 0 if status in {"ready", "ready_with_warnings"} else 1
+
+
+def run_input_center_setup(config_path: str, folder_id: str | None = None) -> int:
+    config = PilotConfig.from_path(config_path)
+    output_dir = config.output.inventory_path
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    if not config.input_center.enabled:
+        result = {
+            "status": "disabled",
+            "message": "Input center is disabled in config.",
+        }
+        _write_json(output_dir / "input_center_setup_status.json", result)
+        print(json.dumps(result, indent=2))
+        return 0
+
+    templates = [template_payload(template) for template in resolve_input_templates(config.input_center)]
+    target_folder_id = (
+        folder_id
+        or config.input_center.drive_folder_id
+        or config.platform.publish.drive_folder_id
+        or config.drive.google_drive_folder_id
+    )
+
+    drive = GoogleDriveProbe(
+        service_account_json=config.drive.service_account_path,
+        folder_id=target_folder_id,
+    )
+    result = drive.setup_input_center_templates(
+        workspace_folder_name=config.input_center.workspace_folder_name,
+        templates=templates,
+        sheet_name=config.input_center.sheet_name,
+    )
+
+    registry_path = output_dir / config.input_center.registry_file
+    if result.get("status") == "ready":
+        registry_payload = {
+            "generated_at": result.get("generated_at", ""),
+            "status": "ready",
+            "sheet_name": result.get("sheet_name", config.input_center.sheet_name),
+            "drive_folder_id": target_folder_id,
+            "workspace_folder": result.get("target_folder", {}),
+            "templates": result.get("templates", []),
+        }
+        _write_json(registry_path, registry_payload)
+    else:
+        _write_json(
+            registry_path,
+            {
+                "generated_at": datetime.now().astimezone().isoformat(),
+                "status": "error",
+                "drive_folder_id": target_folder_id,
+                "templates": templates,
+                "last_error": result,
+            },
+        )
+
+    _write_json(output_dir / "input_center_setup_status.json", result)
     print(
         json.dumps(
             {
                 "status": result.get("status", "unknown"),
-                "total_changes": result.get("total_changes", 0),
-                "watchlist_change_count": result.get("watchlist_change_count", 0),
-                "snapshot_file": result.get("snapshot_file", ""),
-                "change_file": result.get("change_file", ""),
-                "change_markdown_file": result.get("change_markdown_file", ""),
+                "template_count": len(result.get("templates", [])),
+                "registry_file": str(registry_path.resolve()),
+                "workspace_folder": result.get("target_folder", {}).get("name", ""),
+                "workspace_link": result.get("target_folder", {}).get("webViewLink", ""),
             },
             indent=2,
         )
     )
     return 0 if result.get("status") == "ready" else 1
+
+
+def run_input_center_sync(config_path: str, max_rows: int = 0) -> int:
+    config = PilotConfig.from_path(config_path)
+    output_dir = config.output.inventory_path
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    if not config.input_center.enabled:
+        result = {
+            "status": "disabled",
+            "message": "Input center is disabled in config.",
+        }
+        _write_json(output_dir / "input_center_sync_status.json", result)
+        print(json.dumps(result, indent=2))
+        return 0
+
+    registry_path = output_dir / config.input_center.registry_file
+    if not registry_path.exists():
+        result = {
+            "status": "missing_registry",
+            "message": "Run input-center-setup first.",
+            "registry_file": str(registry_path.resolve()),
+        }
+        _write_json(output_dir / "input_center_sync_status.json", result)
+        print(json.dumps(result, indent=2))
+        return 1
+
+    registry = json.loads(registry_path.read_text(encoding="utf-8"))
+    templates = registry.get("templates", [])
+    if not templates:
+        result = {
+            "status": "missing_templates",
+            "message": "Input center registry has no templates. Re-run input-center-setup.",
+            "registry_file": str(registry_path.resolve()),
+        }
+        _write_json(output_dir / "input_center_sync_status.json", result)
+        print(json.dumps(result, indent=2))
+        return 1
+
+    row_limit = max_rows if max_rows > 0 else config.input_center.max_rows_per_sheet
+    target_folder_id = (
+        registry.get("drive_folder_id", "")
+        or config.input_center.drive_folder_id
+        or config.platform.publish.drive_folder_id
+        or config.drive.google_drive_folder_id
+    )
+
+    drive = GoogleDriveProbe(
+        service_account_json=config.drive.service_account_path,
+        folder_id=target_folder_id,
+    )
+    sync_result = drive.read_input_center_templates(
+        templates=templates,
+        default_sheet_name=config.input_center.sheet_name,
+        max_rows_per_sheet=row_limit,
+    )
+
+    snapshot = build_input_center_snapshot(sync_result)
+    outputs = write_input_center_outputs(snapshot, output_dir, config.input_center)
+    status_payload = {
+        "sync": sync_result,
+        "snapshot": snapshot,
+        "outputs": outputs,
+    }
+    _write_json(output_dir / "input_center_sync_status.json", status_payload)
+
+    print(
+        json.dumps(
+            {
+                "status": sync_result.get("status", "unknown"),
+                "template_count": snapshot.get("total_templates", 0),
+                "total_rows": snapshot.get("total_rows", 0),
+                "open_item_count": snapshot.get("open_item_count", 0),
+                "snapshot_file": outputs.get("snapshot_file", ""),
+                "summary_file": outputs.get("summary_file", ""),
+            },
+            indent=2,
+        )
+    )
+    return 0 if sync_result.get("status") in {"ready", "ready_with_errors"} else 1
 
 
 def run_platform_digest(config_path: str, email_max_results: int) -> int:
@@ -771,6 +984,7 @@ def run_autopilot(
     dqms_search_top_k: int,
     publish_email_max_results: int,
     skip_dqms: bool,
+    skip_input_center: bool,
     skip_platform_publish: bool,
     skip_drive: bool,
     publish_folder_id: str | None,
@@ -895,6 +1109,38 @@ def run_autopilot(
             ),
         )
         execute_step("dqms-report", True, lambda: run_dqms_report(config_path))
+
+
+    if skip_input_center:
+        steps.append(
+            {
+                "name": "input-center-setup",
+                "required": False,
+                "status": "skipped",
+                "exit_code": 0,
+                "reason": "skip_input_center_flag",
+            }
+        )
+        steps.append(
+            {
+                "name": "input-center-sync",
+                "required": False,
+                "status": "skipped",
+                "exit_code": 0,
+                "reason": "skip_input_center_flag",
+            }
+        )
+    else:
+        execute_step(
+            "input-center-setup",
+            False,
+            lambda: run_input_center_setup(config_path, folder_id=publish_folder_id),
+        )
+        execute_step(
+            "input-center-sync",
+            False,
+            lambda: run_input_center_sync(config_path, max_rows=0),
+        )
 
     if skip_platform_publish:
         steps.append(
@@ -1297,7 +1543,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     erp_sync_parser = subparsers.add_parser(
         "erp-sync",
-        help="Build ERP-style file snapshot and change register with watchlist tracking.",
+        help="Build ERP-style local and Drive file snapshots and change registers with watchlist tracking.",
     )
     erp_sync_parser.add_argument(
         "--config",
@@ -1309,6 +1555,37 @@ def build_parser() -> argparse.ArgumentParser:
         action="append",
         default=[],
         help="Optional watch pattern override (repeatable, fnmatch style).",
+    )
+
+    input_center_setup_parser = subparsers.add_parser(
+        "input-center-setup",
+        help="Create or update structured Google Sheets templates for team input in the configured Shared Drive.",
+    )
+    input_center_setup_parser.add_argument(
+        "--config",
+        default="./config.example.json",
+        help="Path to pilot config JSON.",
+    )
+    input_center_setup_parser.add_argument(
+        "--folder-id",
+        default=None,
+        help="Optional Google Drive folder or shared drive ID override for input-center setup.",
+    )
+
+    input_center_sync_parser = subparsers.add_parser(
+        "input-center-sync",
+        help="Pull latest rows from input-center sheets and write snapshot outputs.",
+    )
+    input_center_sync_parser.add_argument(
+        "--config",
+        default="./config.example.json",
+        help="Path to pilot config JSON.",
+    )
+    input_center_sync_parser.add_argument(
+        "--max-rows",
+        type=int,
+        default=0,
+        help="Maximum rows to fetch per sheet (0 uses config default).",
     )
 
     platform_digest_parser = subparsers.add_parser(
@@ -1461,6 +1738,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Skip DQMS sync/report steps.",
     )
     autopilot_parser.add_argument(
+        "--skip-input-center",
+        action="store_true",
+        help="Skip input-center setup/sync steps.",
+    )
+    autopilot_parser.add_argument(
         "--skip-platform-publish",
         action="store_true",
         help="Skip platform publish step.",
@@ -1536,6 +1818,10 @@ def main() -> int:
         return run_brief_query(args.config, args.query, args.top_k, args.title)
     if args.command == "erp-sync":
         return run_erp_sync(args.config, args.watch_pattern)
+    if args.command == "input-center-setup":
+        return run_input_center_setup(args.config, args.folder_id)
+    if args.command == "input-center-sync":
+        return run_input_center_sync(args.config, args.max_rows)
     if args.command == "platform-digest":
         return run_platform_digest(args.config, args.email_max_results)
     if args.command == "platform-publish":
@@ -1558,6 +1844,7 @@ def main() -> int:
             dqms_search_top_k=args.dqms_search_top_k,
             publish_email_max_results=args.publish_email_max_results,
             skip_dqms=args.skip_dqms,
+            skip_input_center=args.skip_input_center,
             skip_platform_publish=args.skip_platform_publish,
             skip_drive=args.skip_drive,
             publish_folder_id=args.folder_id,

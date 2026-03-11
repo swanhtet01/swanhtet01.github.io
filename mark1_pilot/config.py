@@ -135,6 +135,28 @@ class PlatformDigestConfig:
 
 
 @dataclass(slots=True)
+class InputCenterTemplateConfig:
+    key: str
+    title: str
+    description: str = ""
+    headers: list[str] = field(default_factory=list)
+    sample_row: list[str] = field(default_factory=list)
+
+
+@dataclass(slots=True)
+class InputCenterConfig:
+    enabled: bool = True
+    workspace_folder_name: str = "YTF Input Center"
+    drive_folder_id: str = ""
+    sheet_name: str = "Input"
+    max_rows_per_sheet: int = 200
+    registry_file: str = "input_center_registry.json"
+    snapshot_file: str = "input_center_snapshot.json"
+    summary_file: str = "input_center_snapshot.md"
+    templates: list[InputCenterTemplateConfig] = field(default_factory=list)
+
+
+@dataclass(slots=True)
 class DQMSConfig:
     quality_profile_name: str = "quality_watch"
     quality_search_query: str = "claim OR complaint OR defect OR reject OR quality"
@@ -176,6 +198,24 @@ class ERPConfig:
     change_file: str = "erp_change_register.json"
     change_markdown_file: str = "erp_change_register.md"
     max_recent_changes: int = 40
+    include_drive_activity: bool = True
+    drive_activity_required: bool = False
+    drive_snapshot_file: str = "erp_drive_snapshot.json"
+    drive_change_file: str = "erp_drive_change_register.json"
+    drive_change_markdown_file: str = "erp_drive_change_register.md"
+    drive_max_items: int = 5000
+    drive_watch_patterns: list[str] = field(
+        default_factory=lambda: [
+            "**/kcm/**",
+            "**/sales/**",
+            "**/strategy/**",
+            "**/*cash*",
+            "**/*invoice*",
+            "**/*claim*",
+            "**/*quotation*",
+            "**/*shipment*",
+        ]
+    )
     module_keywords: dict[str, list[str]] = field(default_factory=dict)
 
 
@@ -186,6 +226,7 @@ class PilotConfig:
     gmail: GmailSourceConfig
     external: ExternalSourceConfig
     platform: PlatformDigestConfig
+    input_center: InputCenterConfig
     dqms: DQMSConfig
     erp: ERPConfig
     output: OutputConfig
@@ -221,6 +262,21 @@ class PilotConfig:
             ],
             publish=PlatformPublishConfig(**publish_data) if publish_data else PlatformPublishConfig(),
         )
+        input_center_data = data.get("input_center", {})
+        input_center = InputCenterConfig(
+            enabled=input_center_data.get("enabled", True),
+            workspace_folder_name=input_center_data.get("workspace_folder_name", "YTF Input Center"),
+            drive_folder_id=input_center_data.get("drive_folder_id", ""),
+            sheet_name=input_center_data.get("sheet_name", "Input"),
+            max_rows_per_sheet=input_center_data.get("max_rows_per_sheet", 200),
+            registry_file=input_center_data.get("registry_file", "input_center_registry.json"),
+            snapshot_file=input_center_data.get("snapshot_file", "input_center_snapshot.json"),
+            summary_file=input_center_data.get("summary_file", "input_center_snapshot.md"),
+            templates=[
+                InputCenterTemplateConfig(**item)
+                for item in input_center_data.get("templates", [])
+            ],
+        )
         dqms = DQMSConfig(**data.get("dqms", {}))
         erp = ERPConfig(**data.get("erp", {}))
         output = OutputConfig(**data["output"])
@@ -231,6 +287,7 @@ class PilotConfig:
             gmail=gmail,
             external=external,
             platform=platform,
+            input_center=input_center,
             dqms=dqms,
             erp=erp,
             output=output,

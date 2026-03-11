@@ -1,0 +1,8 @@
+beautifulsoup4
+google-api-python-client
+google-auth
+google-auth-oauthlib
+langgraph
+openpyxl
+pypdf
+python-dotenv
