@@ -10,6 +10,15 @@ $ErrorActionPreference = "Stop"
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repoRoot = Split-Path -Parent $scriptDir
 $pilotWrapper = Join-Path $scriptDir "pilot.ps1"
+$configPath = $Config
+if (-not [System.IO.Path]::IsPathRooted($configPath)) {
+    $configPath = Join-Path $repoRoot $configPath
+}
+if (-not (Test-Path -LiteralPath $configPath)) {
+    Write-Error ("Config file not found: " + $configPath)
+    exit 1
+}
+$configPath = (Resolve-Path -LiteralPath $configPath).Path
 
 if (-not (Test-Path -LiteralPath $pilotWrapper)) {
     Write-Error "Missing wrapper script: $pilotWrapper"
@@ -23,7 +32,7 @@ try {
             "-ExecutionPolicy", "Bypass",
             "-File", $pilotWrapper,
             "autopilot-run",
-            "--config", $Config
+            "--config", $configPath
         )
         if ($SkipDrive) {
             $args += "--skip-drive"

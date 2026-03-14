@@ -133,6 +133,11 @@ if ($pyCmd -and $pyCmd.Source -notmatch "WindowsApps\\py.exe$") {
     Add-Attempt -List $attempts -Name "py" -CommandPath $pyCmd.Source -PrefixArgs @("-3", "-m", "mark1_pilot.cli")
 }
 
+$venvDotWindowsPython = Join-Path $repoRoot ".venv\Scripts\python.exe"
+if (Test-Path $venvDotWindowsPython) {
+    Add-Attempt -List $attempts -Name ".venv-windows" -CommandPath $venvDotWindowsPython -PrefixArgs @("-m", "mark1_pilot.cli")
+}
+
 $venvWindowsPython = Join-Path $repoRoot "venv\Scripts\python.exe"
 if (Test-Path $venvWindowsPython) {
     Add-Attempt -List $attempts -Name "venv-windows" -CommandPath $venvWindowsPython -PrefixArgs @("-m", "mark1_pilot.cli")
