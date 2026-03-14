@@ -13,8 +13,14 @@ from .briefing import build_gmail_brief_markdown, build_query_brief_markdown
 from .config import PilotConfig
 from .connectors.gmail import DEFAULT_GMAIL_AUTH_HOST, DEFAULT_GMAIL_AUTH_PORT, GmailProbe
 from .connectors.google_drive import GoogleDriveProbe
+from .coverage import build_data_coverage_report, write_data_coverage_outputs
 from .dqms import build_dqms_registers, render_dqms_weekly_summary, write_dqms_outputs
-from .erp import sync_erp_drive_activity, sync_erp_files
+from .erp import (
+    build_erp_focus_report,
+    sync_erp_drive_activity,
+    sync_erp_files,
+    write_erp_focus_outputs,
+)
 from .inventory import render_inventory_markdown, scan_local_root
 from .manus_catalog import build_manus_catalog, write_manus_catalog
 from .platform import (
@@ -551,6 +557,86 @@ def run_erp_sync(config_path: str, watch_patterns: list[str]) -> int:
     return 0 if status in {"ready", "ready_with_warnings"} else 1
 
 
+def _load_focus_terms(config: PilotConfig, explicit_terms: list[str], focus_file: str | None) -> list[str]:
+    terms: list[str] = []
+    for term in explicit_terms:
+        cleaned = term.strip()
+        if cleaned:
+            terms.append(cleaned)
+
+    for term in config.erp.focus_terms:
+        cleaned = str(term).strip()
+        if cleaned and cleaned not in terms:
+            terms.append(cleaned)
+
+    focus_path = Path(focus_file).expanduser() if focus_file else config.output.inventory_path / config.erp.focus_file
+    if focus_path.exists():
+        for line in focus_path.read_text(encoding="utf-8").splitlines():
+            cleaned = line.strip()
+            if not cleaned or cleaned.startswith("#"):
+                continue
+            if cleaned not in terms:
+                terms.append(cleaned)
+
+    return terms
+
+
+def run_erp_focus(config_path: str, focus_terms: list[str], focus_file: str | None) -> int:
+    config = PilotConfig.from_path(config_path)
+    output_dir = config.output.inventory_path
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    resolved_terms = _load_focus_terms(config, focus_terms, focus_file)
+    payload = build_erp_focus_report(
+        output_dir=output_dir,
+        config=config.erp,
+        focus_terms=resolved_terms,
+    )
+
+    if payload.get("status") == "ready":
+        outputs = write_erp_focus_outputs(payload, output_dir, config.erp)
+        print(
+            json.dumps(
+                {
+                    "status": "ready",
+                    "focus_term_count": payload.get("focus_term_count", 0),
+                    "missing_focus_count": payload.get("missing_focus_count", 0),
+                    "recent_change_focus_count": payload.get("recent_change_focus_count", 0),
+                    "json_file": outputs["json_file"],
+                    "markdown_file": outputs["markdown_file"],
+                },
+                indent=2,
+            )
+        )
+        return 0
+
+    print(json.dumps(payload, indent=2))
+    return 0 if payload.get("status") == "missing_focus_terms" else 1
+
+
+def run_coverage_report(config_path: str) -> int:
+    config = PilotConfig.from_path(config_path)
+    output_dir = config.output.inventory_path
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    payload = build_data_coverage_report(config)
+    outputs = write_data_coverage_outputs(payload, output_dir)
+    print(
+        json.dumps(
+            {
+                "status": payload.get("status", "unknown"),
+                "readiness_score": payload.get("readiness_score", 0),
+                "dimension_count": len(payload.get("dimensions", [])),
+                "action_count": len(payload.get("actions", [])),
+                "json_file": outputs["json_file"],
+                "markdown_file": outputs["markdown_file"],
+            },
+            indent=2,
+        )
+    )
+    return 0 if payload.get("status") in {"ready", "warning"} else 1
+
+
 def run_input_center_setup(config_path: str, folder_id: str | None = None) -> int:
     config = PilotConfig.from_path(config_path)
     output_dir = config.output.inventory_path
@@ -862,7 +948,7 @@ def run_dqms_sync(config_path: str, max_email_results: int, search_top_k: int) -
     mail_warning = ""
     if mail_status == "ready":
         quality_messages = quality_mail_result.get("messages", [])
-    elif mail_status in {"missing_token_file", "missing_client_secret", "not_configured"}:
+    elif GmailProbe.is_non_fatal_mail_gap(quality_mail_result):
         mail_warning = quality_mail_result.get("message", "Gmail quality feed unavailable.")
     else:
         print(json.dumps(quality_mail_result, indent=2))
@@ -1072,11 +1158,25 @@ def run_autopilot(
                 "reason": "skip_erp_flag",
             }
         )
+        steps.append(
+            {
+                "name": "erp-focus",
+                "required": False,
+                "status": "skipped",
+                "exit_code": 0,
+                "reason": "skip_erp_flag",
+            }
+        )
     else:
         execute_step(
             "erp-sync",
             True,
             lambda: run_erp_sync(config_path, watch_patterns=[]),
+        )
+        execute_step(
+            "erp-focus",
+            False,
+            lambda: run_erp_focus(config_path, focus_terms=[], focus_file=None),
         )
 
     if skip_dqms:
@@ -1171,6 +1271,11 @@ def run_autopilot(
             config_path,
             email_max_results=publish_email_max_results,
         ),
+    )
+    execute_step(
+        "coverage-report",
+        False,
+        lambda: run_coverage_report(config_path),
     )
 
     if run_manus_catalog_step:
@@ -1557,6 +1662,27 @@ def build_parser() -> argparse.ArgumentParser:
         help="Optional watch pattern override (repeatable, fnmatch style).",
     )
 
+    erp_focus_parser = subparsers.add_parser(
+        "erp-focus",
+        help="Track specific critical files/folders across local + Drive ERP snapshots.",
+    )
+    erp_focus_parser.add_argument(
+        "--config",
+        default="./config.example.json",
+        help="Path to pilot config JSON.",
+    )
+    erp_focus_parser.add_argument(
+        "--focus",
+        action="append",
+        default=[],
+        help="Focus term to track. Supports substring or fnmatch wildcard (repeatable).",
+    )
+    erp_focus_parser.add_argument(
+        "--focus-file",
+        default=None,
+        help="Optional file path with one focus term per line.",
+    )
+
     input_center_setup_parser = subparsers.add_parser(
         "input-center-setup",
         help="Create or update structured Google Sheets templates for team input in the configured Shared Drive.",
@@ -1644,6 +1770,16 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=12,
         help="Maximum number of emails sampled per profile.",
+    )
+
+    coverage_parser = subparsers.add_parser(
+        "coverage-report",
+        help="Generate a data coverage scorecard and collection actions for pilot operations.",
+    )
+    coverage_parser.add_argument(
+        "--config",
+        default="./config.example.json",
+        help="Path to pilot config JSON.",
     )
 
     dqms_sync_parser = subparsers.add_parser(
@@ -1818,6 +1954,8 @@ def main() -> int:
         return run_brief_query(args.config, args.query, args.top_k, args.title)
     if args.command == "erp-sync":
         return run_erp_sync(args.config, args.watch_pattern)
+    if args.command == "erp-focus":
+        return run_erp_focus(args.config, args.focus, args.focus_file)
     if args.command == "input-center-setup":
         return run_input_center_setup(args.config, args.folder_id)
     if args.command == "input-center-sync":
@@ -1828,6 +1966,8 @@ def main() -> int:
         return run_platform_publish(args.config, args.email_max_results, args.skip_drive, args.folder_id)
     if args.command == "pilot-solution":
         return run_pilot_solution(args.config, args.email_max_results)
+    if args.command == "coverage-report":
+        return run_coverage_report(args.config)
     if args.command == "dqms-sync":
         return run_dqms_sync(args.config, args.max_email_results, args.search_top_k)
     if args.command == "dqms-report":

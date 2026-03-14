@@ -10,6 +10,14 @@ from urllib.parse import urlparse
 GMAIL_READONLY_SCOPE = "https://www.googleapis.com/auth/gmail.readonly"
 DEFAULT_GMAIL_AUTH_HOST = "127.0.0.1"
 DEFAULT_GMAIL_AUTH_PORT = 8765
+NON_FATAL_AUTH_ERROR_HINTS = (
+    "invalid_grant",
+    "expired or revoked",
+    "token has been expired",
+    "token has been revoked",
+    "reauth",
+    "consent",
+)
 
 
 def _normalize_redirect_uri(uri: str) -> str:
@@ -438,6 +446,16 @@ class GmailProbe:
                 "message": str(exc),
                 "query": query,
             }
+
+    @staticmethod
+    def is_non_fatal_mail_gap(result: dict[str, Any]) -> bool:
+        status = str(result.get("status", "")).strip().lower()
+        if status in {"missing_token_file", "missing_client_secret", "not_configured", "missing_token_path"}:
+            return True
+        if status != "error":
+            return False
+        message = str(result.get("message", "")).strip().lower()
+        return any(hint in message for hint in NON_FATAL_AUTH_ERROR_HINTS)
 
     def build_setup_guide(
         self,

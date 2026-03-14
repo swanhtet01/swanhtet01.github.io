@@ -15,6 +15,7 @@ Core docs:
 - `personal-pilot-architecture.md` - v1 architecture and stack decision for the personal pilot
 - `mark1_pilot/README.md` - runnable pilot scaffold for Yangon Tyre plus Gmail
 - `showroom/` - React + TypeScript + Tailwind public showroom for `supermega.dev`
+- `showroom/DEPLOY_CLOUD_RUN.md` - fallback hosting path when GitHub Pages connectivity is blocked
 - `command-center/ARCHITECTURE_v2.3.md` - broader Mark 1 machine vision and long-term architecture
 - `DOCUMENTATION-INDEX.md` - map of active vs legacy docs
 - `TODO.md` - current delegated workstreams
@@ -33,6 +34,10 @@ Quick commands:
 # DQMS starter registers
 & "C:\Users\swann\OneDrive - BDA\.venv\Scripts\python.exe" -m mark1_pilot.cli dqms-sync --config .\config.example.json
 
+# ERP sync + critical file focus tracking
+& "C:\Users\swann\OneDrive - BDA\.venv\Scripts\python.exe" -m mark1_pilot.cli erp-sync --config .\config.example.json
+& "C:\Users\swann\OneDrive - BDA\.venv\Scripts\python.exe" -m mark1_pilot.cli erp-focus --config .\config.example.json
+
 # Team input center sheets (one-time template setup)
 & "C:\Users\swann\OneDrive - BDA\.venv\Scripts\python.exe" -m mark1_pilot.cli input-center-setup --config .\config.example.json
 
@@ -41,6 +46,12 @@ Quick commands:
 
 # Daily autopilot run
 & "C:\Users\swann\OneDrive - BDA\.venv\Scripts\python.exe" -m mark1_pilot.cli autopilot-run --config .\config.example.json --skip-drive --run-domain-check
+
+# Continuous autonomous loop (hourly, 0 = unlimited runs)
+.\tools\autopilot_loop.ps1 -Config .\config.example.json -IntervalMinutes 60 -MaxRuns 0 -SkipDrive
+
+# Data coverage scorecard (what data is missing and what teams should update)
+& "C:\Users\swann\OneDrive - BDA\.venv\Scripts\python.exe" -m mark1_pilot.cli coverage-report --config .\config.example.json
 
 # Showroom
 cd showroom

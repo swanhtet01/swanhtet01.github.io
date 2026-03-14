@@ -660,3 +660,229 @@ def load_erp_summary(output_dir: Path, config: ERPConfig) -> dict[str, Any]:
         "drive_truncated": drive_payload.get("truncated", False),
         "drive_recent_changes": drive_payload.get("recent_changes", [])[:8],
     }
+
+
+def _is_glob_pattern(term: str) -> bool:
+    return any(token in term for token in ("*", "?", "[", "]"))
+
+
+def _match_focus_term(path: str, term: str) -> bool:
+    normalized_path = _normalize(path).lower()
+    normalized_term = _normalize(term).lower()
+    if _is_glob_pattern(normalized_term):
+        return fnmatch(normalized_path, normalized_term)
+    return normalized_term in normalized_path
+
+
+def _collect_local_focus_hits(local_files: dict[str, dict[str, Any]], term: str) -> list[dict[str, Any]]:
+    hits: list[dict[str, Any]] = []
+    for item in local_files.values():
+        path = str(item.get("path", ""))
+        if not path or not _match_focus_term(path, term):
+            continue
+        hits.append(
+            {
+                "path": path,
+                "module": item.get("module", "general"),
+                "top_level": item.get("top_level", ""),
+                "modified_at": item.get("modified_at", ""),
+                "size_bytes": item.get("size_bytes", 0),
+                "watch_match": item.get("watch_match", False),
+            }
+        )
+    hits.sort(key=lambda item: (item.get("modified_at", ""), item.get("path", "")), reverse=True)
+    return hits
+
+
+def _collect_drive_focus_hits(drive_files: dict[str, dict[str, Any]], term: str) -> list[dict[str, Any]]:
+    hits: list[dict[str, Any]] = []
+    for item in drive_files.values():
+        path = str(item.get("path", ""))
+        if not path or not _match_focus_term(path, term):
+            continue
+        hits.append(
+            {
+                "file_id": item.get("id", ""),
+                "path": path,
+                "module": item.get("module", "general"),
+                "top_level": item.get("top_level", ""),
+                "modified_at": item.get("modified_at", ""),
+                "size_bytes": item.get("size_bytes", 0),
+                "watch_match": item.get("watch_match", False),
+                "web_view_link": item.get("web_view_link", ""),
+            }
+        )
+    hits.sort(key=lambda item: (item.get("modified_at", ""), item.get("path", "")), reverse=True)
+    return hits
+
+
+def build_erp_focus_report(
+    *,
+    output_dir: Path,
+    config: ERPConfig,
+    focus_terms: list[str],
+) -> dict[str, Any]:
+    output_dir = output_dir.expanduser().resolve()
+    snapshot_path = output_dir / config.snapshot_file
+    drive_snapshot_path = output_dir / config.drive_snapshot_file
+    change_path = output_dir / config.change_file
+    drive_change_path = output_dir / config.drive_change_file
+
+    if not snapshot_path.exists() and not drive_snapshot_path.exists():
+        return {
+            "status": "not_ready",
+            "message": "ERP snapshots are missing. Run erp-sync first.",
+            "required_files": [
+                str(snapshot_path),
+                str(drive_snapshot_path),
+            ],
+        }
+
+    if not focus_terms:
+        return {
+            "status": "missing_focus_terms",
+            "message": "No focus terms were provided. Add terms in config.erp.focus_terms, the focus file, or --focus flags.",
+        }
+
+    local_snapshot = json.loads(snapshot_path.read_text(encoding="utf-8")) if snapshot_path.exists() else {}
+    drive_snapshot = json.loads(drive_snapshot_path.read_text(encoding="utf-8")) if drive_snapshot_path.exists() else {}
+    local_changes = json.loads(change_path.read_text(encoding="utf-8")) if change_path.exists() else {}
+    drive_changes = json.loads(drive_change_path.read_text(encoding="utf-8")) if drive_change_path.exists() else {}
+
+    local_files = local_snapshot.get("files", {})
+    drive_files = drive_snapshot.get("files", {})
+    local_change_map = {
+        str(item.get("path", "")): str(item.get("type", ""))
+        for item in local_changes.get("recent_changes", [])
+    }
+    drive_change_map = {
+        str(item.get("path", "")): str(item.get("type", ""))
+        for item in drive_changes.get("recent_changes", [])
+    }
+
+    focus_entries: list[dict[str, Any]] = []
+    for term in focus_terms:
+        local_hits = _collect_local_focus_hits(local_files, term)
+        drive_hits = _collect_drive_focus_hits(drive_files, term)
+
+        local_recent_types = sorted(
+            {
+                local_change_map[item.get("path", "")]
+                for item in local_hits
+                if item.get("path", "") in local_change_map
+            }
+        )
+        drive_recent_types = sorted(
+            {
+                drive_change_map[item.get("path", "")]
+                for item in drive_hits
+                if item.get("path", "") in drive_change_map
+            }
+        )
+        local_latest = local_hits[0].get("modified_at", "") if local_hits else ""
+        drive_latest = drive_hits[0].get("modified_at", "") if drive_hits else ""
+
+        if local_hits and drive_hits:
+            presence = "present_local_and_drive"
+        elif local_hits:
+            presence = "present_local_only"
+        elif drive_hits:
+            presence = "present_drive_only"
+        else:
+            presence = "missing"
+
+        focus_entries.append(
+            {
+                "focus_term": term,
+                "presence": presence,
+                "local_match_count": len(local_hits),
+                "drive_match_count": len(drive_hits),
+                "local_latest_modified_at": local_latest,
+                "drive_latest_modified_at": drive_latest,
+                "local_recent_change_types": local_recent_types,
+                "drive_recent_change_types": drive_recent_types,
+                "local_matches": local_hits[:10],
+                "drive_matches": drive_hits[:10],
+                "action": (
+                    "Verify naming and path coverage for this critical file set."
+                    if presence == "missing"
+                    else "Review the latest matched files and assign owner/date if action is required."
+                ),
+            }
+        )
+
+    missing_terms = [item["focus_term"] for item in focus_entries if item.get("presence") == "missing"]
+    recent_change_terms = [
+        item["focus_term"]
+        for item in focus_entries
+        if item.get("local_recent_change_types") or item.get("drive_recent_change_types")
+    ]
+
+    actions: list[str] = []
+    if missing_terms:
+        actions.append(
+            f"Missing focus terms ({len(missing_terms)}): {', '.join(missing_terms[:8])}. Tighten naming or update focus terms."
+        )
+    if recent_change_terms:
+        actions.append(
+            f"Recent changes detected for {len(recent_change_terms)} focus terms: {', '.join(recent_change_terms[:8])}."
+        )
+    if not actions:
+        actions.append("All focus terms resolved without recent critical changes.")
+
+    return {
+        "status": "ready",
+        "generated_at": datetime.now(UTC).isoformat(),
+        "focus_term_count": len(focus_terms),
+        "missing_focus_count": len(missing_terms),
+        "recent_change_focus_count": len(recent_change_terms),
+        "entries": focus_entries,
+        "actions": actions,
+    }
+
+
+def render_erp_focus_markdown(payload: dict[str, Any]) -> str:
+    lines = [
+        "# ERP Focus File Tracker",
+        "",
+        f"- Generated: {payload.get('generated_at', '')}",
+        f"- Focus terms: {payload.get('focus_term_count', 0)}",
+        f"- Missing terms: {payload.get('missing_focus_count', 0)}",
+        f"- Terms with recent changes: {payload.get('recent_change_focus_count', 0)}",
+        "",
+        "## Recommended Actions",
+        "",
+    ]
+    for action in payload.get("actions", []):
+        lines.append(f"- {action}")
+
+    lines.extend(["", "## Focus Coverage", ""])
+    for entry in payload.get("entries", []):
+        lines.append(
+            f"- `{entry.get('focus_term', '')}` | `{entry.get('presence', '')}` | local={entry.get('local_match_count', 0)} | drive={entry.get('drive_match_count', 0)}"
+        )
+        if entry.get("local_recent_change_types"):
+            lines.append(f"  local_recent_changes: {', '.join(entry.get('local_recent_change_types', []))}")
+        if entry.get("drive_recent_change_types"):
+            lines.append(f"  drive_recent_changes: {', '.join(entry.get('drive_recent_change_types', []))}")
+        for item in entry.get("local_matches", [])[:3]:
+            lines.append(f"  local: `{item.get('path', '')}` | {item.get('modified_at', '')}")
+        for item in entry.get("drive_matches", [])[:3]:
+            lines.append(f"  drive: `{item.get('path', '')}` | {item.get('modified_at', '')}")
+
+    lines.append("")
+    return "\n".join(lines)
+
+
+def write_erp_focus_outputs(payload: dict[str, Any], output_dir: Path, config: ERPConfig) -> dict[str, str]:
+    output_dir = output_dir.expanduser().resolve()
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    json_path = output_dir / config.focus_report_file
+    md_path = output_dir / config.focus_markdown_file
+    json_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    md_path.write_text(render_erp_focus_markdown(payload), encoding="utf-8")
+    return {
+        "json_file": str(json_path.resolve()),
+        "markdown_file": str(md_path.resolve()),
+    }

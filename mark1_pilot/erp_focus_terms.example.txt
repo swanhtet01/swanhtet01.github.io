@@ -1,0 +1,8 @@
+# One term per line. Supports substring terms or fnmatch wildcards.
+# Copy this file to pilot-data/erp_focus_terms.txt and edit it for your critical files.
+
+kcm/**
+**/*invoice*
+**/*claim*
+**/*shipment*
+**/*quality*
