@@ -53,6 +53,9 @@ Quick commands:
 # Data coverage scorecard (what data is missing and what teams should update)
 & "C:\Users\swann\OneDrive - BDA\.venv\Scripts\python.exe" -m mark1_pilot.cli coverage-report --config .\config.example.json
 
+# One-page execution recap across website + YTF pilot + SuperMega R&D
+& "C:\Users\swann\OneDrive - BDA\.venv\Scripts\python.exe" -m mark1_pilot.cli execution-review --config .\config.example.json
+
 # Showroom
 cd showroom
 npm ci

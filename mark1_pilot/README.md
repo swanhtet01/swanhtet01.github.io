@@ -229,6 +229,12 @@ To generate a data coverage scorecard (what is missing, what to collect, and nex
 & "C:\Users\swann\OneDrive - BDA\.venv\Scripts\python.exe" -m mark1_pilot.cli coverage-report --config .\config.example.json
 ```
 
+To generate a one-page execution recap across the 3 active tracks (website, YTF pilot, SuperMega productization):
+
+```powershell
+& "C:\Users\swann\OneDrive - BDA\.venv\Scripts\python.exe" -m mark1_pilot.cli execution-review --config .\config.example.json
+```
+
 That command writes:
 
 - `data_coverage_report.json`
@@ -311,6 +317,10 @@ Autopilot output artifacts:
 - `erp_focus_report.md`
 - `data_coverage_report.json`
 - `data_coverage_report.md`
+- `execution_review.json`
+- `execution_review.md`
+- `TODAY.json`
+- `TODAY.md`
 
 Use these flags when needed:
 

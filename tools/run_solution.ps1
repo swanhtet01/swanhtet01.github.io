@@ -39,6 +39,7 @@ try {
 
     $dashboard = Join-Path $repoRoot "swan-intelligence-hub\index.html"
     $brief = Join-Path $repoRoot "pilot-data\pilot_solution.md"
+    $today = Join-Path $repoRoot "pilot-data\TODAY.md"
     $dqms = Join-Path $repoRoot "pilot-data\dqms_weekly_summary.md"
     $autopilot = Join-Path $repoRoot "pilot-data\autopilot_status.md"
 
@@ -46,12 +47,16 @@ try {
     Write-Host "Your live solution outputs:"
     Write-Host ("- Dashboard: " + $dashboard)
     Write-Host ("- Director brief: " + $brief)
+    Write-Host ("- Today recap: " + $today)
     Write-Host ("- DQMS weekly summary: " + $dqms)
     Write-Host ("- Pipeline status: " + $autopilot)
 
     if (-not $NoOpen) {
         if (Test-Path -LiteralPath $dashboard) {
             Start-Process $dashboard | Out-Null
+        }
+        if (Test-Path -LiteralPath $today) {
+            Start-Process $today | Out-Null
         }
         if (Test-Path -LiteralPath $brief) {
             Start-Process $brief | Out-Null
