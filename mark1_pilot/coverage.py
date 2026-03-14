@@ -62,7 +62,12 @@ def build_data_coverage_report(config: PilotConfig) -> dict[str, Any]:
 
     gmail_client_status = str(gmail_check.get("client", {}).get("status", "not_ready"))
     gmail_token_status = str(gmail_check.get("token", {}).get("status", "not_ready"))
-    if gmail_client_status == "ready" and gmail_token_status == "ready":
+    dqms_mail_status = str(dqms_sync.get("mail_status", "not_ready"))
+    mail_verified_from_dqms = dqms_mail_status == "ready"
+
+    if gmail_client_status == "ready" and (
+        gmail_token_status == "ready" or mail_verified_from_dqms
+    ):
         gmail_status = "ready"
     elif gmail_client_status == "ready":
         gmail_status = "warning"
@@ -77,6 +82,7 @@ def build_data_coverage_report(config: PilotConfig) -> dict[str, Any]:
             "details": {
                 "client_status": gmail_client_status,
                 "token_status": gmail_token_status,
+                "mail_verified_from_dqms": mail_verified_from_dqms,
             },
         }
     )
@@ -130,7 +136,6 @@ def build_data_coverage_report(config: PilotConfig) -> dict[str, Any]:
 
     dqms_incident_count = int(dqms_sync.get("incident_count", 0) or 0)
     dqms_file_hits = int(dqms_sync.get("file_hits", 0) or 0)
-    dqms_mail_status = str(dqms_sync.get("mail_status", "not_ready"))
     if dqms_incident_count > 0:
         dqms_status = "ready"
     elif dqms_file_hits > 0:
