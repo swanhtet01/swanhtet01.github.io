@@ -50,3 +50,6 @@ Build script also creates:
 - Workflow: `.github/workflows/showroom-pages.yml`
 - Artifact: `showroom/dist`
 - Custom domain: `supermega.dev`
+- Fallback host: Google Cloud Run via `showroom/Dockerfile` and `tools/deploy_showroom_cloud_run.ps1`
+- Cloud Run guide: `showroom/DEPLOY_CLOUD_RUN.md`
+- Optional CI deploy workflow: `.github/workflows/showroom-cloud-run.yml` (requires `GCP_SA_KEY` secret)

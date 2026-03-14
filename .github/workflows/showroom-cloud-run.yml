@@ -1,0 +1,76 @@
+name: Deploy Showroom To Cloud Run
+
+on:
+  workflow_dispatch:
+    inputs:
+      project_id:
+        description: Google Cloud project ID
+        required: true
+        default: supermega-468612
+      region:
+        description: Cloud Run region
+        required: true
+        default: asia-southeast1
+      service:
+        description: Cloud Run service name
+        required: true
+        default: supermega-showroom
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      PROJECT_ID: ${{ github.event.inputs.project_id }}
+      REGION: ${{ github.event.inputs.region }}
+      SERVICE: ${{ github.event.inputs.service }}
+      IMAGE: gcr.io/${{ github.event.inputs.project_id }}/${{ github.event.inputs.service }}:${{ github.sha }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker auth
+        run: gcloud auth configure-docker --quiet
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: showroom/package-lock.json
+
+      - name: Build showroom
+        working-directory: showroom
+        run: |
+          npm ci
+          npm run build
+
+      - name: Build container image
+        run: gcloud builds submit showroom --tag "$IMAGE"
+
+      - name: Deploy Cloud Run service
+        run: |
+          gcloud run deploy "$SERVICE" \
+            --image "$IMAGE" \
+            --region "$REGION" \
+            --platform managed \
+            --allow-unauthenticated \
+            --port 8080
+
+      - name: Print service URL
+        run: |
+          gcloud run services describe "$SERVICE" \
+            --region "$REGION" \
+            --format='value(status.url)'

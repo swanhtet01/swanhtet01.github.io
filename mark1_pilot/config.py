@@ -217,6 +217,10 @@ class ERPConfig:
         ]
     )
     module_keywords: dict[str, list[str]] = field(default_factory=dict)
+    focus_terms: list[str] = field(default_factory=list)
+    focus_file: str = "erp_focus_terms.txt"
+    focus_report_file: str = "erp_focus_report.json"
+    focus_markdown_file: str = "erp_focus_report.md"
 
 
 @dataclass(slots=True)

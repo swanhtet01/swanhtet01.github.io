@@ -27,6 +27,8 @@ This pilot package starts from what is actually true right now:
 - `review.py` - operational review generator
 - `graph.py` - minimal LangGraph scaffold
 - `input_center.py` - structured team-input templates and snapshot summarization
+- `erp.py` - ERP-style file change tracking and focus-file monitoring
+- `coverage.py` - data coverage scorecard and collection-action generator
 - `connectors/google_drive.py` - optional Drive API probe plus Google Sheets input-center integration
 - `connectors/gmail.py` - optional Gmail API probe
 
@@ -169,6 +171,25 @@ ERP outputs written to `pilot-data/`:
 - `erp_drive_change_register.md`
 - `erp_sync_status.json`
 
+To track a specific set of critical files/folders (exact files or wildcard patterns):
+
+```powershell
+& "C:\Users\swann\OneDrive - BDA\.venv\Scripts\python.exe" -m mark1_pilot.cli erp-focus --config .\config.example.json --focus "**/*invoice*" --focus "kcm/**"
+```
+
+You can also place one term per line in `pilot-data/erp_focus_terms.txt` (or set `erp.focus_terms` in config) and run:
+
+```powershell
+& "C:\Users\swann\OneDrive - BDA\.venv\Scripts\python.exe" -m mark1_pilot.cli erp-focus --config .\config.example.json
+```
+
+Starter template: `mark1_pilot/erp_focus_terms.example.txt`
+
+This writes:
+
+- `erp_focus_report.json`
+- `erp_focus_report.md`
+
 
 
 To bootstrap structured Google Sheets for team updates (operations, quality, procurement, sales):
@@ -201,6 +222,17 @@ To build a more personal "pilot solution" brief with prioritized actions from yo
 ```powershell
 & "C:\Users\swann\OneDrive - BDA\.venv\Scripts\python.exe" -m mark1_pilot.cli pilot-solution --config .\config.example.json --email-max-results 12
 ```
+
+To generate a data coverage scorecard (what is missing, what to collect, and next actions):
+
+```powershell
+& "C:\Users\swann\OneDrive - BDA\.venv\Scripts\python.exe" -m mark1_pilot.cli coverage-report --config .\config.example.json
+```
+
+That command writes:
+
+- `data_coverage_report.json`
+- `data_coverage_report.md`
 
 That command writes:
 
@@ -246,7 +278,7 @@ To generate DQMS starter registers from quality emails + quality search evidence
 & "C:\Users\swann\OneDrive - BDA\.venv\Scripts\python.exe" -m mark1_pilot.cli dqms-sync --config .\config.example.json --max-email-results 25 --search-top-k 25
 ```
 
-If Gmail OAuth token is not available yet, `dqms-sync` now runs in a degraded mode (`ready_with_email_gap`) and still builds quality registers from local evidence.
+If Gmail OAuth token is not available, expired, or revoked, `dqms-sync` now runs in a degraded mode (`ready_with_email_gap`) and still builds quality registers from local evidence.
 
 To regenerate the weekly DQMS summary from saved register files:
 
@@ -260,6 +292,12 @@ To run the autonomous daily pipeline in one command:
 & "C:\Users\swann\OneDrive - BDA\.venv\Scripts\python.exe" -m mark1_pilot.cli autopilot-run --config .\config.example.json --skip-drive --run-domain-check
 ```
 
+To run repeated autonomous loops (example: hourly, unlimited):
+
+```powershell
+.\tools\autopilot_loop.ps1 -Config .\config.example.json -IntervalMinutes 60 -MaxRuns 0 -SkipDrive
+```
+
 Autopilot output artifacts:
 
 - `autopilot_status.json`
@@ -269,6 +307,10 @@ Autopilot output artifacts:
 - `erp_change_register.md`
 - `pilot_solution.json`
 - `pilot_solution.md`
+- `erp_focus_report.json`
+- `erp_focus_report.md`
+- `data_coverage_report.json`
+- `data_coverage_report.md`
 
 Use these flags when needed:
 

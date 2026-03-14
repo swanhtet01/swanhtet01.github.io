@@ -8,6 +8,7 @@ from typing import Any
 from .config import PilotConfig
 from .connectors.gmail import GmailProbe
 from .connectors.google_drive import GoogleDriveProbe
+from .coverage import load_data_coverage_summary
 from .dqms import load_dqms_summary
 from .erp import load_erp_summary
 from .external import ExternalSourceWatcher
@@ -85,6 +86,7 @@ def _build_action_items(
     external_payload: dict[str, Any],
     erp_summary: dict[str, Any],
     input_center: dict[str, Any],
+    data_coverage: dict[str, Any],
 ) -> list[str]:
     actions: list[str] = []
 
@@ -171,6 +173,10 @@ def _build_action_items(
         if action not in actions:
             actions.append(action)
 
+    for action in data_coverage.get("top_actions", [])[:2]:
+        if action not in actions:
+            actions.append(action)
+
     if not actions:
         actions.append("Expand the search index and email profiles so the next digest has stronger operational coverage.")
 
@@ -226,6 +232,7 @@ def build_platform_digest(
     dqms = load_dqms_summary(config.output.inventory_path, config.dqms)
     erp = load_erp_summary(config.output.inventory_path, config.erp)
     input_center = load_input_center_summary(config.output.inventory_path, config.input_center)
+    data_coverage = load_data_coverage_summary(config.output.inventory_path)
 
     highlights = [
         f"Mailbox `{gmail_probe.get('email_address', '')}` is live with Yangon Tyre-focused profiles ready.",
@@ -260,6 +267,10 @@ def build_platform_digest(
         highlights.append(
             f"Input center: {input_center.get('total_rows', 0)} rows across {input_center.get('total_templates', 0)} live team sheets."
         )
+    if data_coverage.get("status") != "not_ready":
+        highlights.append(
+            f"Data coverage score: {data_coverage.get('readiness_score', 0)} ({data_coverage.get('status', 'unknown')})."
+        )
 
     return {
         "generated_at": datetime.now(UTC).isoformat(),
@@ -279,8 +290,9 @@ def build_platform_digest(
         "input_center": input_center,
         "dqms": dqms,
         "erp": erp,
+        "data_coverage": data_coverage,
         "highlights": highlights,
-        "actions": _build_action_items(email_profiles, search_queries, external_payload, erp, input_center),
+        "actions": _build_action_items(email_profiles, search_queries, external_payload, erp, input_center, data_coverage),
     }
 
 
@@ -399,6 +411,17 @@ def render_platform_digest_markdown(payload: dict[str, Any]) -> str:
     lines.extend(["## Recommended Actions", ""])
     for action in payload.get("actions", []):
         lines.append(f"- {action}")
+    lines.append("")
+
+    coverage = payload.get("data_coverage", {})
+    lines.extend(["## Data Coverage Score", ""])
+    if coverage.get("status") == "not_ready":
+        lines.append("- Coverage report not generated yet. Run `coverage-report`.")
+    else:
+        lines.append(f"- Score: {coverage.get('readiness_score', 0)}")
+        lines.append(f"- Status: {coverage.get('status', '')}")
+        for action in coverage.get("top_actions", [])[:4]:
+            lines.append(f"- {action}")
     lines.append("")
 
     dqms = payload.get("dqms", {})
@@ -547,6 +570,15 @@ def render_platform_dashboard_html(payload: dict[str, Any]) -> str:
     )
 
     dqms = payload.get("dqms", {})
+    coverage = payload.get("data_coverage", {})
+    coverage_actions_html = "".join(
+        (
+            "<li>"
+            f"<div class='title'>{escape(action)}</div>"
+            "</li>"
+        )
+        for action in coverage.get("top_actions", [])[:5]
+    )
     dqms_html = "".join(
         (
             "<li>"
@@ -640,12 +672,22 @@ def render_platform_dashboard_html(payload: dict[str, Any]) -> str:
           <div class="chip">Input rows: {input_center.get('total_rows', 0)}</div>
           <div class="chip">ERP changes: {erp.get('total_changes', 0)}</div>
           <div class="chip">ERP drive changes: {erp.get('drive_total_changes', 0)}</div>
+          <div class="chip">Coverage score: {coverage.get('readiness_score', 0)}</div>
           <div class="chip">DQMS open: {dqms.get('open_incident_count', 0)}</div>
         </div>
         <h3 style="margin-top:22px;">Next Moves</h3>
         <ul>{_list_html(payload.get('actions', []))}</ul>
       </div>
     </section>
+
+    <div class="section-head"><h2>Data Coverage</h2><p class="meta">Readiness score and collection gaps</p></div>
+    <div class="grid">
+      <section class="panel">
+        <p class="stat">{coverage.get('readiness_score', 0)}</p>
+        <p class="lede">Status: {coverage.get('status', 'not_ready')}</p>
+        <ul class="detail-list">{coverage_actions_html or '<li><div class="sub">Run coverage-report to generate gap actions.</div></li>'}</ul>
+      </section>
+    </div>
 
     <div class="section-head"><h2>Email Signals</h2><p class="meta">Internal, supplier, and broad watch profiles</p></div>
     <div class="grid">{''.join(email_sections)}</div>

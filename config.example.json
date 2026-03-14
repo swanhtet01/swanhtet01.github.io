@@ -317,7 +317,17 @@
         "ncr",
         "capa"
       ]
-    }
+    },
+    "focus_terms": [
+      "kcm/**",
+      "**/*invoice*",
+      "**/*claim*",
+      "**/*shipment*",
+      "**/*quality*"
+    ],
+    "focus_file": "erp_focus_terms.txt",
+    "focus_report_file": "erp_focus_report.json",
+    "focus_markdown_file": "erp_focus_report.md"
   },
   "output": {
     "inventory_dir": "./pilot-data"
