@@ -21,6 +21,7 @@ from .erp import (
     sync_erp_files,
     write_erp_focus_outputs,
 )
+from .execution_review import build_execution_review, write_execution_review_outputs
 from .inventory import render_inventory_markdown, scan_local_root
 from .manus_catalog import build_manus_catalog, write_manus_catalog
 from .platform import (
@@ -630,6 +631,36 @@ def run_coverage_report(config_path: str) -> int:
                 "action_count": len(payload.get("actions", [])),
                 "json_file": outputs["json_file"],
                 "markdown_file": outputs["markdown_file"],
+            },
+            indent=2,
+        )
+    )
+    return 0 if payload.get("status") in {"ready", "warning"} else 1
+
+
+def run_execution_review(
+    config_path: str,
+    autopilot_status_override: dict[str, Any] | None = None,
+) -> int:
+    config = PilotConfig.from_path(config_path)
+    output_dir = config.output.inventory_path
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    payload = build_execution_review(config, autopilot_status_override=autopilot_status_override)
+    outputs = write_execution_review_outputs(payload, output_dir)
+    project_status = {
+        item.get("id", ""): item.get("status", "unknown")
+        for item in payload.get("projects", [])
+    }
+    print(
+        json.dumps(
+            {
+                "status": payload.get("status", "unknown"),
+                "project_status": project_status,
+                "priority_count": len(payload.get("top_priorities", [])),
+                "json_file": outputs["json_file"],
+                "markdown_file": outputs["markdown_file"],
+                "today_markdown_file": outputs["today_markdown_file"],
             },
             indent=2,
         )
@@ -1322,6 +1353,34 @@ def run_autopilot(
                 }
             )
 
+    preview_required_failures = [step for step in steps if step.get("required") and step.get("status") == "error"]
+    preview_optional_failures = [step for step in steps if not step.get("required") and step.get("status") == "error"]
+    preview_overall_status = "ready" if not preview_required_failures else "error"
+
+    review_step_started = datetime.now().astimezone().isoformat()
+    review_tick = perf_counter()
+    review_code = run_execution_review(
+        config_path,
+        autopilot_status_override={
+            "status": preview_overall_status,
+            "required_failure_count": len(preview_required_failures),
+            "optional_failure_count": len(preview_optional_failures),
+        },
+    )
+    review_elapsed = round(perf_counter() - review_tick, 3)
+    review_step_finished = datetime.now().astimezone().isoformat()
+    steps.append(
+        {
+            "name": "execution-review",
+            "required": False,
+            "status": "ready" if review_code == 0 else "error",
+            "exit_code": review_code,
+            "started_at": review_step_started,
+            "ended_at": review_step_finished,
+            "duration_seconds": review_elapsed,
+        }
+    )
+
     required_failures = [step for step in steps if step.get("required") and step.get("status") == "error"]
     optional_failures = [step for step in steps if not step.get("required") and step.get("status") == "error"]
     overall_status = "ready" if not required_failures else "error"
@@ -1782,6 +1841,16 @@ def build_parser() -> argparse.ArgumentParser:
         help="Path to pilot config JSON.",
     )
 
+    execution_review_parser = subparsers.add_parser(
+        "execution-review",
+        help="Generate one concise status review across website, YTF pilot, and SuperMega productization.",
+    )
+    execution_review_parser.add_argument(
+        "--config",
+        default="./config.example.json",
+        help="Path to pilot config JSON.",
+    )
+
     dqms_sync_parser = subparsers.add_parser(
         "dqms-sync",
         help="Generate DQMS starter registers from quality emails and local quality evidence.",
@@ -1968,6 +2037,8 @@ def main() -> int:
         return run_pilot_solution(args.config, args.email_max_results)
     if args.command == "coverage-report":
         return run_coverage_report(args.config)
+    if args.command == "execution-review":
+        return run_execution_review(args.config)
     if args.command == "dqms-sync":
         return run_dqms_sync(args.config, args.max_email_results, args.search_top_k)
     if args.command == "dqms-report":
