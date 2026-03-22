@@ -4,6 +4,14 @@ export type Solution = {
   outcomes: string[]
 }
 
+export type Product = {
+  name: string
+  tagline: string
+  innovation: string
+  capabilities: string[]
+  fit: string
+}
+
 export type PackageTier = {
   name: 'Starter' | 'Growth' | 'Scale'
   timeline: string
@@ -28,6 +36,7 @@ export type DqmsModule = {
 
 export const navItems = [
   { label: 'Home', to: '/' },
+  { label: 'Products', to: '/products' },
   { label: 'Solutions', to: '/solutions' },
   { label: 'Packages', to: '/packages' },
   { label: 'Case Studies', to: '/case-studies' },
@@ -35,6 +44,45 @@ export const navItems = [
   { label: 'About', to: '/about' },
   { label: 'Contact', to: '/contact' },
 ] as const
+
+export const products: Product[] = [
+  {
+    name: 'SignalGrid OS',
+    tagline: 'Unified decision operating system over email, files, sheets, and external market signals.',
+    innovation:
+      'Most ERP projects force data migration first. SignalGrid runs on top of your existing stack and creates a live decision layer from day one.',
+    capabilities: [
+      'Cross-source signal extraction with priority scoring',
+      'Owner-level daily and weekly brief generation',
+      'Evidence-linked action routing to named team owners',
+    ],
+    fit: 'CEO/founder-led teams that need instant visibility without replacing everything.',
+  },
+  {
+    name: 'FlowForge Agents',
+    tagline: 'Role-specific autonomous agents for operations, sales, procurement, and finance follow-through.',
+    innovation:
+      'Instead of one generic chatbot, each agent has explicit operating boundaries, outputs, and escalation rules aligned to real roles.',
+    capabilities: [
+      'Agent playbooks tied to operating SOPs',
+      'Automated reminder/escalation loops for overdue actions',
+      'Workflow handoff between director, manager, and operator levels',
+    ],
+    fit: 'Businesses with execution gaps between management instruction and ground-level completion.',
+  },
+  {
+    name: 'QualityPulse DQMS',
+    tagline: 'AI-native quality intelligence and CAPA control plane for supplier and production risk.',
+    innovation:
+      'QualityPulse converts unstructured quality signals from email/files into incident and CAPA chains automatically, then tracks closure velocity.',
+    capabilities: [
+      'Incident register auto-generated from live evidence',
+      'CAPA generation with owner/date/status tracking',
+      'Supplier nonconformance trend snapshots for escalation',
+    ],
+    fit: 'Manufacturing and distribution teams where quality drift creates hidden margin loss.',
+  },
+]
 
 export const solutions: Solution[] = [
   {

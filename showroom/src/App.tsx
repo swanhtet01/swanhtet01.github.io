@@ -9,6 +9,7 @@ import { DqmsPage } from './pages/DqmsPage'
 import { HomePage } from './pages/HomePage'
 import { NotFoundPage } from './pages/NotFoundPage'
 import { PackagesPage } from './pages/PackagesPage'
+import { ProductsPage } from './pages/ProductsPage'
 import { SolutionsPage } from './pages/SolutionsPage'
 
 function App() {
@@ -18,6 +19,7 @@ function App() {
       <Routes>
         <Route element={<SiteFrame />} path="/">
           <Route element={<HomePage />} index />
+          <Route element={<ProductsPage />} path="products" />
           <Route element={<SolutionsPage />} path="solutions" />
           <Route element={<PackagesPage />} path="packages" />
           <Route element={<CaseStudiesPage />} path="case-studies" />
