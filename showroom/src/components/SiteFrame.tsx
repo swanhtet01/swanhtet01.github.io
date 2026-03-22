@@ -5,21 +5,26 @@ import { navItems } from '../content'
 
 const navClassName = ({ isActive }: { isActive: boolean }) =>
   `rounded-full px-4 py-2 text-sm font-semibold transition ${
-    isActive ? 'bg-slate-900 text-white' : 'text-slate-700 hover:bg-slate-200'
+    isActive
+      ? 'bg-[var(--sm-accent)] text-white shadow-[0_10px_26px_-18px_rgba(13,110,112,0.85)]'
+      : 'text-[var(--sm-ink)] hover:bg-white/80'
   }`
 
 export function SiteFrame() {
   const [menuOpen, setMenuOpen] = useState(false)
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_10%_10%,#dbeafe_0%,#f8fafc_35%,#fef3c7_100%)] text-slate-900">
-      <div className="fixed inset-x-0 top-0 z-40 border-b border-slate-200/60 bg-white/85 backdrop-blur">
+    <div className="min-h-screen text-[var(--sm-ink)]">
+      <div className="fixed inset-x-0 top-0 z-40 border-b border-[var(--sm-line)]/70 bg-[rgba(255,251,242,0.84)] backdrop-blur-lg">
         <nav className="mx-auto flex w-full max-w-6xl items-center justify-between px-4 py-3 lg:px-8">
-          <NavLink className="text-lg font-bold tracking-tight text-slate-900" to="/">
-            SuperMega
+          <NavLink className="flex flex-col" to="/">
+            <span className="text-lg font-extrabold tracking-tight">SuperMega</span>
+            <span className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[var(--sm-muted)]">
+              AI-native operations
+            </span>
           </NavLink>
           <button
-            className="rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold md:hidden"
+            className="rounded-md border border-[var(--sm-line)] px-3 py-2 text-sm font-semibold md:hidden"
             onClick={() => setMenuOpen((open) => !open)}
             type="button"
           >
@@ -31,10 +36,16 @@ export function SiteFrame() {
                 {item.label}
               </NavLink>
             ))}
+            <NavLink
+              className="ml-2 rounded-full bg-[var(--sm-accent-alt)] px-4 py-2 text-sm font-bold text-white shadow-[0_16px_30px_-20px_rgba(202,93,41,0.8)] transition hover:bg-[#b84d1d]"
+              to="/contact?intent=discovery"
+            >
+              Start Pilot
+            </NavLink>
           </div>
         </nav>
         {menuOpen ? (
-          <div className="border-t border-slate-200 bg-white px-4 py-3 md:hidden">
+          <div className="border-t border-[var(--sm-line)] bg-[var(--sm-paper)] px-4 py-3 md:hidden">
             <div className="flex flex-col gap-2">
               {navItems.map((item) => (
                 <NavLink
@@ -46,6 +57,13 @@ export function SiteFrame() {
                   {item.label}
                 </NavLink>
               ))}
+              <NavLink
+                className="mt-1 rounded-full bg-[var(--sm-accent-alt)] px-4 py-2 text-center text-sm font-bold text-white"
+                onClick={() => setMenuOpen(false)}
+                to="/contact?intent=discovery"
+              >
+                Start Pilot
+              </NavLink>
             </div>
           </div>
         ) : null}
@@ -55,10 +73,10 @@ export function SiteFrame() {
         <Outlet />
       </main>
 
-      <footer className="border-t border-slate-200/80 bg-white/70">
-        <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 px-4 py-6 text-sm text-slate-600 lg:flex-row lg:items-center lg:justify-between lg:px-8">
-          <p>AI agents and automation partner for Myanmar SMBs.</p>
-          <p>SuperMega.dev | Yangon and remote delivery</p>
+      <footer className="border-t border-[var(--sm-line)]/80 bg-[rgba(255,251,242,0.72)]">
+        <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 px-4 py-6 text-sm text-[var(--sm-muted)] lg:flex-row lg:items-center lg:justify-between lg:px-8">
+          <p>AI-native ERP systems and automation for owner-led teams.</p>
+          <p>supermega.dev | Yangon + remote implementation</p>
         </div>
       </footer>
     </div>

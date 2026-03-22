@@ -3,4 +3,15 @@ apikeys.txt
 .env*
 *credentials*
 hyper_unicorn/venv/
-.github/workflows/
+.secrets/
+pilot-data/
+*.oauth.json
+*.token.json
+*.service-account.json
+showroom/node_modules/
+showroom/dist/
+showroom/.env*
+__pycache__/
+*.pyc
+.venv-wsl/
+swan-intelligence-hub/

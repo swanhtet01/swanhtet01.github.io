@@ -14,20 +14,20 @@ export function PackagesPage() {
 
       <section className="grid gap-5 lg:grid-cols-3">
         {packages.map((pkg) => (
-          <article className="rounded-3xl border border-slate-200 bg-white/90 p-6" key={pkg.name}>
-            <p className="text-xs font-bold uppercase tracking-[0.2em] text-cyan-700">{pkg.name}</p>
-            <p className="mt-2 text-2xl font-bold text-slate-900">{pkg.investment}</p>
-            <p className="mt-1 text-sm font-medium text-slate-600">{pkg.timeline}</p>
-            <p className="mt-4 text-sm leading-relaxed text-slate-700">{pkg.bestFor}</p>
-            <ul className="mt-4 space-y-2 text-sm text-slate-700">
+          <article className="rounded-3xl border border-[var(--sm-line)] bg-white/92 p-6" key={pkg.name}>
+            <p className="text-xs font-bold uppercase tracking-[0.2em] text-[var(--sm-accent)]">{pkg.name}</p>
+            <p className="mt-2 text-2xl font-extrabold text-[var(--sm-ink)]">{pkg.investment}</p>
+            <p className="mt-1 text-sm font-medium text-[var(--sm-muted)]">{pkg.timeline}</p>
+            <p className="mt-4 text-sm leading-relaxed text-[var(--sm-muted)]">{pkg.bestFor}</p>
+            <ul className="mt-4 space-y-2 text-sm text-[var(--sm-muted)]">
               {pkg.deliverables.map((deliverable) => (
-                <li className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3" key={deliverable}>
+                <li className="rounded-2xl border border-[var(--sm-line)] bg-[var(--sm-paper)] px-3 py-3" key={deliverable}>
                   {deliverable}
                 </li>
               ))}
             </ul>
             <Link
-              className="mt-5 inline-flex rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-700"
+              className="mt-5 inline-flex rounded-full bg-[var(--sm-accent-alt)] px-4 py-2 text-sm font-bold text-white hover:bg-[#b84d1d]"
               to={`/contact?intent=proposal&package=${pkg.name}`}
             >
               Request {pkg.name} proposal

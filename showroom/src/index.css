@@ -1,10 +1,18 @@
-@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&family=Space+Grotesk:wght@500;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700;800&family=Sora:wght@500;600;700;800&display=swap');
 @import 'tailwindcss';
 
 :root {
-  font-family: 'Manrope', 'Segoe UI', sans-serif;
-  color: #0f172a;
-  background-color: #f8fafc;
+  --sm-bg: #f3efe5;
+  --sm-paper: #fffbf2;
+  --sm-ink: #1b2a2f;
+  --sm-muted: #5f6d72;
+  --sm-accent: #0d6e70;
+  --sm-accent-alt: #ca5d29;
+  --sm-line: #d8cfbd;
+  --sm-shadow: 0 22px 50px -34px rgba(20, 26, 29, 0.55);
+  font-family: 'Instrument Sans', 'Segoe UI', sans-serif;
+  color: var(--sm-ink);
+  background-color: var(--sm-bg);
 }
 
 *,
@@ -16,8 +24,11 @@
 body {
   margin: 0;
   min-width: 320px;
-  background: #f8fafc;
-  color: #0f172a;
+  background:
+    radial-gradient(circle at 9% 7%, rgba(13, 110, 112, 0.18), transparent 30%),
+    radial-gradient(circle at 90% 5%, rgba(202, 93, 41, 0.15), transparent 30%),
+    linear-gradient(140deg, #f4f0e6 0%, #fffaf0 40%, #f0ece2 100%);
+  color: var(--sm-ink);
 }
 
 h1,
@@ -26,11 +37,15 @@ h3,
 h4,
 h5,
 h6 {
-  font-family: 'Space Grotesk', 'Segoe UI', sans-serif;
+  font-family: 'Sora', 'Segoe UI', sans-serif;
 }
 
 a {
   color: inherit;
+}
+
+::selection {
+  background: rgba(13, 110, 112, 0.22);
 }
 
 .animate-rise {
@@ -57,6 +72,10 @@ a {
   animation: rise-in 650ms cubic-bezier(0.22, 1, 0.36, 1) 260ms both;
 }
 
+.animate-soft-glow {
+  animation: soft-glow 4.8s ease-in-out infinite alternate;
+}
+
 @keyframes rise-in {
   from {
     opacity: 0;
@@ -65,5 +84,14 @@ a {
   to {
     opacity: 1;
     transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes soft-glow {
+  from {
+    box-shadow: 0 18px 45px -34px rgba(13, 110, 112, 0.38);
+  }
+  to {
+    box-shadow: 0 24px 55px -34px rgba(202, 93, 41, 0.45);
   }
 }

@@ -48,6 +48,18 @@ Use the local virtual environment already present on this machine:
 & "C:\Users\swann\OneDrive - BDA\.venv\Scripts\python.exe" -m mark1_pilot.cli inventory --config .\config.example.json
 ```
 
+To list setup profiles defined in your config:
+
+```powershell
+& "C:\Users\swann\OneDrive - BDA\.venv\Scripts\python.exe" -m mark1_pilot.cli config-profiles --config .\config.example.json
+```
+
+To create a reusable profile overlay for a new setup/client:
+
+```powershell
+& "C:\Users\swann\OneDrive - BDA\.venv\Scripts\python.exe" -m mark1_pilot.cli config-profile-create --config .\config.example.json --profile my_new_client --from-profile smb_template
+```
+
 Outputs are written to `pilot-data/`, which is ignored by git.
 
 To snapshot the shared Yangon Tyre Drive structure:
@@ -302,6 +314,37 @@ To run repeated autonomous loops (example: hourly, unlimited):
 
 ```powershell
 .\tools\autopilot_loop.ps1 -Config .\config.example.json -IntervalMinutes 60 -MaxRuns 0 -SkipDrive
+```
+
+To run everything in one command and get a simple operator output bundle:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\tools\run_solution.ps1 -Config .\config.example.json -SkipDrive
+```
+
+To switch between tenant/client setups, use profile overlays from `config.example.json`:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\tools\run_solution.ps1 -Config .\config.example.json -Profile smb_template -SkipDrive
+```
+
+You can also set the profile once for direct CLI usage:
+
+```powershell
+$env:MARK1_PROFILE = "smb_template"
+& "C:\Users\swann\OneDrive - BDA\.venv\Scripts\python.exe" -m mark1_pilot.cli autopilot-run --config .\config.example.json --skip-drive
+```
+
+By default this includes a live website domain check. Skip that check if you only want faster local pipeline runs:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\tools\run_solution.ps1 -Config .\config.example.json -SkipDrive -SkipDomainCheck
+```
+
+To serve the latest dashboard and status API for phone/laptop access:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\tools\run_solution.ps1 -Config .\config.example.json -SkipRun -Serve -BindHost 0.0.0.0 -Port 8787
 ```
 
 Autopilot output artifacts:

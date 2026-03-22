@@ -1,0 +1,2 @@
+lead_id,created_at,company,contact_name,contact_email,source,package_interest,stage,next_action,next_action_due,owner,deal_value,status_note
+LEAD-001,2026-03-09T00:00:00Z,Example Co,Example Person,example@company.com,showroom,Starter,New Lead,Schedule discovery call,2026-03-11,SuperMega,3000,Template row

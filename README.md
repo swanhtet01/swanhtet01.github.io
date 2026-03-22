@@ -18,43 +18,69 @@ Core docs:
 - `showroom/DEPLOY_CLOUD_RUN.md` - fallback hosting path when GitHub Pages connectivity is blocked
 - `command-center/ARCHITECTURE_v2.3.md` - broader Mark 1 machine vision and long-term architecture
 - `DOCUMENTATION-INDEX.md` - map of active vs legacy docs
+- `QUICKSTART.md` - fastest path to run pilot, fix Gmail, and test on phone/laptop
 - `TODO.md` - current delegated workstreams
 - `Super Mega Inc/runbooks/` - domain cutover and showroom operations runbooks
+- `Super Mega Inc/runbooks/ai_native_erp_architecture_v1.md` - production blueprint for AI-native ERP rollout from single-tenant to multi-tenant
 - `Super Mega Inc/sales/` - package one-pagers and proposal/discovery collateral
 
 Quick commands:
 
 ```powershell
 # Personal pilot
-& "C:\Users\swann\OneDrive - BDA\.venv\Scripts\python.exe" -m mark1_pilot.cli platform-publish --config .\config.example.json --email-max-results 12
+powershell -ExecutionPolicy Bypass -File .\tools\pilot.ps1 platform-publish --config .\config.example.json --email-max-results 12
 
 # Manus inventory
-& "C:\Users\swann\OneDrive - BDA\.venv\Scripts\python.exe" -m mark1_pilot.cli manus-catalog --config .\config.example.json
+powershell -ExecutionPolicy Bypass -File .\tools\pilot.ps1 manus-catalog --config .\config.example.json
 
 # DQMS starter registers
-& "C:\Users\swann\OneDrive - BDA\.venv\Scripts\python.exe" -m mark1_pilot.cli dqms-sync --config .\config.example.json
+powershell -ExecutionPolicy Bypass -File .\tools\pilot.ps1 dqms-sync --config .\config.example.json
 
 # ERP sync + critical file focus tracking
-& "C:\Users\swann\OneDrive - BDA\.venv\Scripts\python.exe" -m mark1_pilot.cli erp-sync --config .\config.example.json
-& "C:\Users\swann\OneDrive - BDA\.venv\Scripts\python.exe" -m mark1_pilot.cli erp-focus --config .\config.example.json
+powershell -ExecutionPolicy Bypass -File .\tools\pilot.ps1 erp-sync --config .\config.example.json
+powershell -ExecutionPolicy Bypass -File .\tools\pilot.ps1 erp-focus --config .\config.example.json
 
 # Team input center sheets (one-time template setup)
-& "C:\Users\swann\OneDrive - BDA\.venv\Scripts\python.exe" -m mark1_pilot.cli input-center-setup --config .\config.example.json
+powershell -ExecutionPolicy Bypass -File .\tools\pilot.ps1 input-center-setup --config .\config.example.json
 
 # Team input center sync (daily)
-& "C:\Users\swann\OneDrive - BDA\.venv\Scripts\python.exe" -m mark1_pilot.cli input-center-sync --config .\config.example.json
+powershell -ExecutionPolicy Bypass -File .\tools\pilot.ps1 input-center-sync --config .\config.example.json
 
 # Daily autopilot run
-& "C:\Users\swann\OneDrive - BDA\.venv\Scripts\python.exe" -m mark1_pilot.cli autopilot-run --config .\config.example.json --skip-drive --run-domain-check
+powershell -ExecutionPolicy Bypass -File .\tools\pilot.ps1 autopilot-run --config .\config.example.json --skip-drive --run-domain-check
 
 # Continuous autonomous loop (hourly, 0 = unlimited runs)
 .\tools\autopilot_loop.ps1 -Config .\config.example.json -IntervalMinutes 60 -MaxRuns 0 -SkipDrive
 
 # Data coverage scorecard (what data is missing and what teams should update)
-& "C:\Users\swann\OneDrive - BDA\.venv\Scripts\python.exe" -m mark1_pilot.cli coverage-report --config .\config.example.json
+powershell -ExecutionPolicy Bypass -File .\tools\pilot.ps1 coverage-report --config .\config.example.json
+
+# List reusable client/setup profiles
+powershell -ExecutionPolicy Bypass -File .\tools\pilot.ps1 config-profiles --config .\config.example.json
+
+# Create a new setup profile from template (multi-client bootstrap)
+powershell -ExecutionPolicy Bypass -File .\tools\pilot.ps1 config-profile-create --config .\config.example.json --profile my_new_client --from-profile smb_template
 
 # One-page execution recap across website + YTF pilot + SuperMega R&D
-& "C:\Users\swann\OneDrive - BDA\.venv\Scripts\python.exe" -m mark1_pilot.cli execution-review --config .\config.example.json
+powershell -ExecutionPolicy Bypass -File .\tools\pilot.ps1 execution-review --config .\config.example.json
+
+# Re-auth Gmail if token expired/revoked
+powershell -ExecutionPolicy Bypass -File .\tools\pilot.ps1 gmail-auth --config .\config.example.json --host 127.0.0.1 --port 8765
+
+# Full one-command run + open outputs
+powershell -ExecutionPolicy Bypass -File .\tools\run_solution.ps1 -Config .\config.example.json -SkipDrive
+
+# Run against a profile overlay (multi-client setup)
+powershell -ExecutionPolicy Bypass -File .\tools\run_solution.ps1 -Config .\config.example.json -Profile smb_template -SkipDrive
+
+# Skip website domain check if you only want local pipeline speed
+powershell -ExecutionPolicy Bypass -File .\tools\run_solution.ps1 -Config .\config.example.json -SkipDrive -SkipDomainCheck
+
+# Serve dashboard/API for phone/laptop access on LAN
+powershell -ExecutionPolicy Bypass -File .\tools\run_solution.ps1 -Config .\config.example.json -SkipRun -Serve -BindHost 0.0.0.0 -Port 8787
+
+# Deploy website via GitHub Actions (sync secret + dispatch Pages/Cloud Run)
+powershell -ExecutionPolicy Bypass -File .\tools\deploy_website_actions.ps1 -ProjectId supermega-468612 -Region asia-southeast1 -Service supermega-showroom
 
 # Showroom
 cd showroom
