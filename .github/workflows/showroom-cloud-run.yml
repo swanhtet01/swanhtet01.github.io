@@ -58,7 +58,9 @@ jobs:
           npm run build
 
       - name: Build container image
-        run: gcloud builds submit showroom --tag "$IMAGE"
+        run: |
+          docker build -t "$IMAGE" showroom
+          docker push "$IMAGE"
 
       - name: Deploy Cloud Run service
         run: |
