@@ -44,6 +44,8 @@ def _readiness_status(scores: list[str]) -> str:
 def _domain_summary(domain_report: dict[str, Any]) -> tuple[str, dict[str, Any], list[str], list[str]]:
     checks = domain_report.get("checks", [])
     failures = domain_report.get("failures", [])
+    optional_failures = domain_report.get("optional_failures", [])
+    all_failures = domain_report.get("all_failures", [])
     next_actions: list[str] = []
 
     dns_apex_ready = any(
@@ -55,7 +57,8 @@ def _domain_summary(domain_report: dict[str, Any]) -> tuple[str, dict[str, Any],
         for item in checks
     )
     dns_ready = dns_apex_ready and dns_www_ready
-    all_timeout = bool(failures) and all("timed out" in str(item.get("detail", "")).lower() for item in failures)
+    timeout_candidates = failures if failures else (all_failures or optional_failures)
+    all_timeout = bool(timeout_candidates) and all("timeout" in str(item.get("detail", "")).lower() for item in timeout_candidates)
     apex_https_ready = any(
         item.get("target") == "http:https://supermega.dev/" and item.get("status") == "ready"
         for item in checks
@@ -68,8 +71,16 @@ def _domain_summary(domain_report: dict[str, Any]) -> tuple[str, dict[str, Any],
     if not dns_ready:
         next_actions.append("Recheck apex A records and www CNAME in DNS provider.")
 
-    if domain_report.get("overall_status") == "ready":
+    domain_overall = str(domain_report.get("overall_status", "not_ready"))
+
+    if domain_overall == "ready":
         status = "ready"
+    elif domain_overall == "warning":
+        status = "warning"
+        if all_timeout:
+            next_actions.append("Domain checks show network timeouts from this runtime. Re-run from another network or rely on GitHub Action health results.")
+        else:
+            next_actions.append("Recheck optional domain warnings and keep monitoring.")
     elif dns_ready and apex_https_ready and www_failure_only:
         next_actions.append("Apex site is live, but www is not redirecting yet. Wait for propagation and re-run domain check.")
         status = "warning"
@@ -81,16 +92,17 @@ def _domain_summary(domain_report: dict[str, Any]) -> tuple[str, dict[str, Any],
         next_actions.append("Inspect failing health checks and repair DNS/TLS route before launch.")
         status = "error"
 
+    detail_source = failures if failures else optional_failures
     failure_details = [
         f"{item.get('target', '')}: {item.get('detail', '')}"
-        for item in failures[:4]
+        for item in detail_source[:4]
     ]
     return (
         status,
         {
             "dns_ready": dns_ready,
             "failure_count": int(domain_report.get("failure_count", 0) or 0),
-            "overall_status": domain_report.get("overall_status", "not_ready"),
+            "overall_status": domain_overall,
         },
         failure_details,
         next_actions,

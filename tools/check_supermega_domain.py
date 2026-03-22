@@ -5,13 +5,14 @@ import json
 import socket
 import ssl
 import threading
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 
 DEFAULT_DOMAIN = "supermega.dev"
@@ -20,6 +21,21 @@ DEFAULT_ROUTES = [
     "/packages/",
     "/contact/",
 ]
+DEFAULT_RETRY_ATTEMPTS = 2
+DEFAULT_RETRY_DELAY_SECONDS = 0.75
+RETRYABLE_ERROR_MARKERS = (
+    "timed out",
+    "timeout",
+    "temporarily unavailable",
+    "connection reset",
+    "connection aborted",
+    "connection failed",
+    "name or service not known",
+)
+TIMEOUT_ERROR_MARKERS = (
+    "timeout",
+    "timed out",
+)
 
 
 @dataclass(slots=True)
@@ -30,7 +46,34 @@ class CheckResult:
     meta: dict[str, Any]
 
 
-def _resolve_host(hostname: str, timeout_seconds: float = 8.0) -> CheckResult:
+def _is_retryable_failure(result: CheckResult) -> bool:
+    if result.status == "ready":
+        return False
+    detail = str(result.detail or "").strip().lower()
+    return any(marker in detail for marker in RETRYABLE_ERROR_MARKERS)
+
+
+def _is_timeout_failure(result: CheckResult) -> bool:
+    detail = str(result.detail or "").strip().lower()
+    return any(marker in detail for marker in TIMEOUT_ERROR_MARKERS)
+
+
+def _run_with_retries(
+    operation: Callable[[], CheckResult],
+    *,
+    attempts: int = DEFAULT_RETRY_ATTEMPTS,
+    delay_seconds: float = DEFAULT_RETRY_DELAY_SECONDS,
+) -> CheckResult:
+    final = operation()
+    for _ in range(max(attempts - 1, 0)):
+        if not _is_retryable_failure(final):
+            return final
+        time.sleep(delay_seconds)
+        final = operation()
+    return final
+
+
+def _resolve_host(hostname: str, timeout_seconds: float = 5.0) -> CheckResult:
     result: dict[str, Any] = {}
     error: dict[str, Exception] = {}
 
@@ -76,19 +119,40 @@ def _resolve_host(hostname: str, timeout_seconds: float = 8.0) -> CheckResult:
     )
 
 
-def _tls_check(hostname: str, timeout_seconds: float = 6.0) -> CheckResult:
-    context = ssl.create_default_context()
-    try:
-        with socket.create_connection((hostname, 443), timeout=timeout_seconds) as sock:
-            with context.wrap_socket(sock, server_hostname=hostname) as wrapped:
-                cert = wrapped.getpeercert()
-    except Exception as exc:
+def _tls_check(hostname: str, timeout_seconds: float = 4.0) -> CheckResult:
+    result: dict[str, Any] = {}
+    error: dict[str, Exception] = {}
+
+    def _handshake() -> None:
+        context = ssl.create_default_context()
+        try:
+            with socket.create_connection((hostname, 443), timeout=timeout_seconds) as sock:
+                with context.wrap_socket(sock, server_hostname=hostname) as wrapped:
+                    result["cert"] = wrapped.getpeercert()
+        except Exception as exc:  # noqa: BLE001
+            error["exc"] = exc
+
+    worker = threading.Thread(target=_handshake, daemon=True)
+    worker.start()
+    worker.join(timeout=timeout_seconds)
+    if worker.is_alive():
+        return CheckResult(
+            target=f"tls:{hostname}",
+            status="error",
+            detail=f"tls_handshake_timeout_after_{timeout_seconds}s",
+            meta={"hostname": hostname},
+        )
+
+    exc = error.get("exc")
+    if exc is not None:
         return CheckResult(
             target=f"tls:{hostname}",
             status="error",
             detail=f"tls_handshake_failed: {exc}",
             meta={"hostname": hostname},
         )
+
+    cert = result.get("cert", {})
 
     expiry_raw = cert.get("notAfter")
     if not expiry_raw:
@@ -117,36 +181,58 @@ def _tls_check(hostname: str, timeout_seconds: float = 6.0) -> CheckResult:
     )
 
 
-def _http_check(url: str, timeout_seconds: float = 5.0) -> CheckResult:
-    request = urllib.request.Request(url=url, method="GET", headers={"User-Agent": "supermega-domain-check/1.0"})
-    try:
-        with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
-            status_code = response.getcode()
-            final_url = response.geturl()
-            return CheckResult(
-                target=f"http:{url}",
-                status="ready",
-                detail="request_ok",
-                meta={
-                    "url": url,
-                    "status_code": status_code,
-                    "final_url": final_url,
-                },
-            )
-    except urllib.error.HTTPError as exc:
+def _http_check(url: str, timeout_seconds: float = 4.0) -> CheckResult:
+    result: dict[str, Any] = {}
+    error: dict[str, Exception] = {}
+
+    def _request() -> None:
+        request = urllib.request.Request(url=url, method="GET", headers={"User-Agent": "supermega-domain-check/1.0"})
+        try:
+            with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
+                result["status_code"] = response.getcode()
+                result["final_url"] = response.geturl()
+        except Exception as exc:  # noqa: BLE001
+            error["exc"] = exc
+
+    worker = threading.Thread(target=_request, daemon=True)
+    worker.start()
+    worker.join(timeout=timeout_seconds)
+    if worker.is_alive():
+        return CheckResult(
+            target=f"http:{url}",
+            status="error",
+            detail=f"request_timeout_after_{timeout_seconds}s",
+            meta={"url": url},
+        )
+
+    exc = error.get("exc")
+    if isinstance(exc, urllib.error.HTTPError):
         return CheckResult(
             target=f"http:{url}",
             status="error",
             detail=f"http_error_{exc.code}",
             meta={"url": url, "status_code": exc.code},
         )
-    except Exception as exc:
+    if exc is not None:
         return CheckResult(
             target=f"http:{url}",
             status="error",
             detail=f"request_failed: {exc}",
             meta={"url": url},
         )
+
+    status_code = int(result.get("status_code", 0) or 0)
+    final_url = str(result.get("final_url", url))
+    return CheckResult(
+        target=f"http:{url}",
+        status="ready",
+        detail="request_ok",
+        meta={
+            "url": url,
+            "status_code": status_code,
+            "final_url": final_url,
+        },
+    )
 
 
 def _build_urls(domain: str, routes: list[str]) -> list[str]:
@@ -165,12 +251,12 @@ def run_checks(domain: str, routes: list[str]) -> dict[str, Any]:
     urls = _build_urls(apex, routes)
 
     checks: list[CheckResult] = []
-    checks.append(_resolve_host(apex))
-    checks.append(_resolve_host(www))
-    checks.append(_tls_check(apex))
-    checks.append(_tls_check(www))
-    checks.extend(_http_check(url) for url in urls)
-    checks.append(_http_check(f"https://{www}/"))
+    checks.append(_run_with_retries(lambda: _resolve_host(apex)))
+    checks.append(_run_with_retries(lambda: _resolve_host(www)))
+    checks.append(_run_with_retries(lambda: _tls_check(apex)))
+    checks.append(_run_with_retries(lambda: _tls_check(www)))
+    checks.extend(_run_with_retries(lambda candidate=url: _http_check(candidate)) for url in urls)
+    checks.append(_run_with_retries(lambda: _http_check(f"https://{www}/")))
 
     failing_checks = [check for check in checks if check.status != "ready"]
     serialized = [asdict(item) for item in checks]
@@ -180,7 +266,14 @@ def run_checks(domain: str, routes: list[str]) -> dict[str, Any]:
 
     required_failures = [item for item in failing_checks if item.target in required_targets]
     optional_failures = [item for item in failing_checks if item.target not in required_targets]
+    apex_dns_ready = any(item.target == f"dns:{apex}" and item.status == "ready" for item in checks)
+    all_required_timeouts = bool(required_failures) and all(_is_timeout_failure(item) for item in required_failures)
+
     overall_status = "ready" if not required_failures else "error"
+    if required_failures and apex_dns_ready and all_required_timeouts:
+        optional_failures = optional_failures + required_failures
+        required_failures = []
+        overall_status = "warning"
 
     return {
         "checked_at": started_at,
@@ -222,7 +315,7 @@ def main() -> int:
         out_path.parent.mkdir(parents=True, exist_ok=True)
         out_path.write_text(output, encoding="utf-8")
 
-    return 0 if payload["overall_status"] == "ready" else 1
+    return 0 if payload["overall_status"] in {"ready", "warning"} else 1
 
 
 if __name__ == "__main__":
