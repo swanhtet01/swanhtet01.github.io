@@ -59,8 +59,21 @@ jobs:
 
       - name: Build container image
         run: |
-          docker build -t "$IMAGE" showroom
-          docker push "$IMAGE"
+          set -o pipefail
+          build_log="$(mktemp)"
+          push_log="$(mktemp)"
+
+          if ! docker build -t "$IMAGE" showroom 2>&1 | tee "$build_log"; then
+            summary="$(tail -n 20 "$build_log" | tr '\n' ' ')"
+            echo "::error title=Docker build failed::${summary}"
+            exit 1
+          fi
+
+          if ! docker push "$IMAGE" 2>&1 | tee "$push_log"; then
+            summary="$(tail -n 30 "$push_log" | tr '\n' ' ')"
+            echo "::error title=Docker push failed::${summary}"
+            exit 1
+          fi
 
       - name: Deploy Cloud Run service
         run: |
