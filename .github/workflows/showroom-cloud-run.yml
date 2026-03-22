@@ -61,12 +61,18 @@ jobs:
 
       - name: Deploy Cloud Run service
         run: |
-          gcloud run deploy "$SERVICE" \
+          set -o pipefail
+          deploy_log="$(mktemp)"
+          if ! gcloud run deploy "$SERVICE" \
             --source showroom \
             --region "$REGION" \
             --platform managed \
             --allow-unauthenticated \
-            --port 8080
+            --port 8080 2>&1 | tee "$deploy_log"; then
+            summary="$(tail -n 40 "$deploy_log" | tr '\n' ' ')"
+            echo "::error title=Cloud Run deploy failed::${summary}"
+            exit 1
+          fi
 
       - name: Print service URL
         run: |
