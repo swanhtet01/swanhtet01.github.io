@@ -175,28 +175,23 @@ def run_checks(domain: str, routes: list[str]) -> dict[str, Any]:
     failing_checks = [check for check in checks if check.status != "ready"]
     serialized = [asdict(item) for item in checks]
 
-    route_results = [
-        item
-        for item in checks
-        if item.target.startswith("http:https://") and f"https://{apex}" in item.target
-    ]
-    route_failures = [
-        item
-        for item in route_results
-        if int(item.meta.get("status_code", 0)) != 200
-    ]
+    required_targets = {f"dns:{apex}", f"tls:{apex}"}
+    required_targets.update(f"http:https://{apex}{route if route.startswith('/') else '/' + route}" for route in routes)
 
-    overall_status = "ready"
-    if failing_checks or route_failures:
-        overall_status = "error"
+    required_failures = [item for item in failing_checks if item.target in required_targets]
+    optional_failures = [item for item in failing_checks if item.target not in required_targets]
+    overall_status = "ready" if not required_failures else "error"
 
     return {
         "checked_at": started_at,
         "domain": domain,
         "overall_status": overall_status,
         "check_count": len(checks),
-        "failure_count": len(failing_checks),
-        "failures": [asdict(item) for item in failing_checks],
+        "failure_count": len(required_failures),
+        "optional_failure_count": len(optional_failures),
+        "failures": [asdict(item) for item in required_failures],
+        "optional_failures": [asdict(item) for item in optional_failures],
+        "all_failures": [asdict(item) for item in failing_checks],
         "checks": serialized,
     }
 

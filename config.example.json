@@ -1,5 +1,40 @@
 {
   "project_name": "yangon-tyre-director-pilot",
+  "default_profile": "",
+  "profiles": {
+    "ytf_personal": {},
+    "smb_template": {
+      "project_name": "smb-ai-erp-pilot",
+      "sources": {
+        "drive": {
+          "local_root": "C:/Data/ClientA",
+          "google_drive_folder_id": "REPLACE_WITH_CLIENT_FOLDER_ID"
+        },
+        "gmail": {
+          "user_email": "owner@clienta.com",
+          "profiles": {
+            "internal_ytf": "(from:owner@clienta.com OR to:owner@clienta.com OR operations OR supplier OR sales) newer_than:365d",
+            "supplier_kiic": "(supplier OR quotation OR shipment OR payment) newer_than:365d",
+            "supplier_junky": "(supplier OR overdue OR payment OR remittance) newer_than:365d",
+            "supplier_forwarded": "(from:owner@clienta.com AND (supplier OR quotation OR shipment OR invoice)) newer_than:365d",
+            "quality_watch": "((quality OR complaint OR defect OR reject OR ncr OR capa) AND (factory OR supplier OR production)) newer_than:365d",
+            "relevant_all": "(operations OR supplier OR sales OR quality OR payment OR shipment) newer_than:365d"
+          }
+        }
+      },
+      "platform": {
+        "dashboard_title": "ClientA Intelligence Hub",
+        "publish": {
+          "workspace_folder_name": "ClientA Intelligence Hub",
+          "drive_folder_id": "REPLACE_WITH_PUBLISH_FOLDER_ID"
+        }
+      },
+      "input_center": {
+        "workspace_folder_name": "ClientA Input Center",
+        "drive_folder_id": "REPLACE_WITH_PUBLISH_FOLDER_ID"
+      }
+    }
+  },
   "sources": {
     "drive": {
       "mode": "local_mirror",

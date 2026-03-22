@@ -14,33 +14,33 @@ export function CaseStudiesPage() {
 
       <section className="space-y-5">
         {caseStudies.map((study) => (
-          <article className="rounded-3xl border border-slate-200 bg-white/90 p-6" key={study.title}>
-            <h2 className="text-2xl font-bold text-slate-900">{study.title}</h2>
+          <article className="rounded-3xl border border-[var(--sm-line)] bg-white/92 p-6" key={study.title}>
+            <h2 className="text-2xl font-bold text-[var(--sm-ink)]">{study.title}</h2>
             <div className="mt-4 grid gap-3 text-sm md:grid-cols-3">
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Baseline</p>
-                <p className="mt-2 leading-relaxed text-slate-700">{study.baseline}</p>
+              <div className="rounded-2xl border border-[var(--sm-line)] bg-[var(--sm-paper)] p-4">
+                <p className="text-xs font-bold uppercase tracking-[0.16em] text-[var(--sm-muted)]">Baseline</p>
+                <p className="mt-2 leading-relaxed text-[var(--sm-muted)]">{study.baseline}</p>
               </div>
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Intervention</p>
-                <p className="mt-2 leading-relaxed text-slate-700">{study.intervention}</p>
+              <div className="rounded-2xl border border-[var(--sm-line)] bg-[var(--sm-paper)] p-4">
+                <p className="text-xs font-bold uppercase tracking-[0.16em] text-[var(--sm-muted)]">Intervention</p>
+                <p className="mt-2 leading-relaxed text-[var(--sm-muted)]">{study.intervention}</p>
               </div>
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Outcome</p>
-                <p className="mt-2 leading-relaxed text-slate-700">{study.outcome}</p>
+              <div className="rounded-2xl border border-[var(--sm-line)] bg-[var(--sm-paper)] p-4">
+                <p className="text-xs font-bold uppercase tracking-[0.16em] text-[var(--sm-muted)]">Outcome</p>
+                <p className="mt-2 leading-relaxed text-[var(--sm-muted)]">{study.outcome}</p>
               </div>
             </div>
-            <p className="mt-4 text-sm font-semibold text-cyan-700">{study.proof}</p>
+            <p className="mt-4 text-sm font-semibold text-[var(--sm-accent)]">{study.proof}</p>
           </article>
         ))}
       </section>
 
-      <section className="rounded-3xl border border-slate-200 bg-white/90 p-6">
-        <h2 className="text-xl font-bold text-slate-900">Want a case study in your format?</h2>
-        <p className="mt-2 text-sm text-slate-700">
+      <section className="rounded-3xl border border-[var(--sm-line)] bg-white/92 p-6">
+        <h2 className="text-xl font-bold text-[var(--sm-ink)]">Want a case study in your format?</h2>
+        <p className="mt-2 text-sm text-[var(--sm-muted)]">
           We can turn your own files and mail history into measurable baseline-versus-outcome reports for investor or board use.
         </p>
-        <Link className="mt-4 inline-flex rounded-full bg-cyan-600 px-5 py-3 text-sm font-semibold text-white hover:bg-cyan-500" to="/contact?intent=case-study">
+        <Link className="mt-4 inline-flex rounded-full bg-[var(--sm-accent)] px-5 py-3 text-sm font-bold text-white hover:bg-[#0a5b5d]" to="/contact?intent=case-study">
           Request custom case report
         </Link>
       </section>

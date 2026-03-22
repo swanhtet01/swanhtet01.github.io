@@ -40,41 +40,41 @@ export const solutions: Solution[] = [
   {
     name: 'Executive Intelligence Hub',
     summary:
-      'Daily decision briefs from your files, inbox, and market sources in one operating dashboard.',
+      'One command center for owners and directors: files, inbox, market watch, and priorities in one execution view.',
     outcomes: [
-      'Morning director brief with critical alerts and opportunities',
-      'Grounded evidence links to source files and emails',
-      'Weekly priorities translated into execution actions',
+      'Morning and end-of-day leadership brief with priority ranking',
+      'Evidence-linked recommendations from source files and email threads',
+      'Weekly plan converted into tracked owner actions',
     ],
   },
   {
     name: 'Sales and Operations Copilot',
     summary:
-      'Pipeline, shipment, and cash collection signals unified to reduce avoidable delays and leakage.',
+      'Pipeline, shipment, collections, and delivery signals in one workflow so leadership can spot slippage early.',
     outcomes: [
-      'Lead and quote follow-up automation',
-      'Order and shipment exception watch',
-      'Actionable sales and collection summary every week',
+      'Quote-to-order follow-up automation',
+      'Shipment and payment exception watchlist',
+      'Actionable weekly sales and collections controls',
     ],
   },
   {
     name: 'Procurement and Supplier Intelligence',
     summary:
-      'Supplier communication patterns, nonconformance risks, and pricing signals tracked continuously.',
+      'Continuously track supplier communication, documentation drift, delays, and nonconformance risk.',
     outcomes: [
-      'Supplier watchlist for KIIC, JUNKY, and key alternates',
-      'Contract and quotation change detection',
-      'Procurement risk snapshots tied to owner and due date',
+      'Supplier control register with owner and due-date tracking',
+      'Quotation and document-change detection',
+      'Procurement risk snapshots tied to escalation paths',
     ],
   },
   {
-    name: 'Document and Workflow Automation',
+    name: 'AI-Native ERP Foundation',
     summary:
-      'Manual reporting and repetitive document work replaced with agent workflows and governed templates.',
+      'Start from your existing files and email, then evolve into a structured, AI-native ERP operating layer.',
     outcomes: [
-      'Proposal, report, and brief generation with quality controls',
-      'Task handoffs tracked by owner and SLA',
-      'Faster turnaround with clear audit trail',
+      'Structured event intake via Google Sheets or forms',
+      'Incident, CAPA, supplier, and action registers',
+      'Expandable architecture for multi-company rollouts',
     ],
   },
 ]
@@ -84,33 +84,33 @@ export const packages: PackageTier[] = [
     name: 'Starter',
     timeline: '2 weeks',
     investment: 'USD 1,500 - 3,000',
-    bestFor: 'Founder-led SMBs starting from spreadsheets, email, and shared folders.',
+    bestFor: 'Founder-led teams that need one painful workflow fixed immediately.',
     deliverables: [
-      'One high-value workflow automated end-to-end',
-      'Lead capture and tracker baseline',
-      'Weekly executive summary template and rollout',
+      'One high-value workflow automated end-to-end in production',
+      'Operator dashboard with owner and due-date tracking',
+      'Weekly executive brief and handover SOP',
     ],
   },
   {
     name: 'Growth',
     timeline: '4-6 weeks',
     investment: 'USD 4,000 - 9,000',
-    bestFor: 'Teams that need multi-workflow coordination across sales, operations, and suppliers.',
+    bestFor: 'Teams needing cross-functional controls across sales, operations, quality, and suppliers.',
     deliverables: [
-      'Three workflow automations with owner routing',
-      'Internal intelligence dashboard and source connectors',
-      'Case-specific playbooks for recurring decisions',
+      'Three workflow automations with escalation logic',
+      'Unified intelligence and operations dashboard',
+      'Role-specific playbooks for repeat decisions',
     ],
   },
   {
     name: 'Scale',
     timeline: '8-12 weeks',
     investment: 'USD 10,000+',
-    bestFor: 'Operators building AI as a strategic operating layer across the company.',
+    bestFor: 'Companies turning AI into a core operating layer, not one-off tools.',
     deliverables: [
-      'Full operating cockpit with KPI tiles and alerting',
-      'Role-specific agent assistants and governed prompt packs',
-      'Delivery SOP, analytics baseline, and team enablement',
+      'AI-native ERP foundation with module-level controls',
+      'Role-based copilots and governed agent tasks',
+      'Production analytics baseline and rollout blueprint',
     ],
   },
 ]
@@ -121,30 +121,30 @@ export const caseStudies: CaseStudy[] = [
     baseline:
       'Supplier and internal signals were scattered across personal inboxes and forwarded threads.',
     intervention:
-      'Built focused Gmail profiles and quality/supplier filters, then generated structured briefs and DQMS starter outputs.',
+      'Built focused Gmail profiles and quality/supplier filters, then generated structured briefs, ERP change views, and DQMS starter outputs.',
     outcome:
-      'Created one view for supplier risk, quality incidents, and priority action tracking.',
-    proof: '13 incident-to-CAPA starter records generated from real signals in current run.',
+      'Created one management view for supplier risk, quality incidents, and weekly action tracking.',
+    proof: 'Live DQMS starter chain now produces incident/CAPA records from real evidence.',
   },
   {
-    title: 'Cross-Channel Dashboard Build (Web + Data Sources)',
+    title: 'Cross-Channel Decision Dashboard',
     baseline:
-      'Leadership lacked one operational dashboard tying internal metrics with market context.',
+      'Leadership had fragmented reporting across folders, inboxes, and market links.',
     intervention:
-      'Reused Manus prototypes and rebuilt a coherent dashboard workflow with exportable summaries.',
+      'Reworked ingestion and synthesis flow into one digest pipeline with structured output artifacts.',
     outcome:
-      'Decision-ready dashboard format with shared evidence and repeatable weekly cadence.',
-    proof: 'Manus archive now indexed with 3,014 classified assets for selective reuse.',
+      'Decision-ready dashboard format with repeatable daily and weekly cadence.',
+    proof: 'Unified dashboard + brief outputs now generated from one autopilot workflow.',
   },
   {
     title: 'Showroom Recovery and Productization',
     baseline:
       'Public web assets were fragmented across multiple static prototype pages and mixed messaging.',
     intervention:
-      'Reframed offer stack into a single conversion-focused showroom with package-led positioning.',
+      'Reframed into one conversion-focused showroom with package-led positioning and stronger CTA routing.',
     outcome:
       'Clear visitor path from interest to package selection, discovery call, and proposal request.',
-    proof: 'Dedicated React showroom with route-level IA and production build workflow.',
+    proof: 'Dedicated React showroom with route-level IA, CI deploy workflow, and domain health checks.',
   },
 ]
 

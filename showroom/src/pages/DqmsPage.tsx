@@ -14,12 +14,12 @@ export function DqmsPage() {
 
       <section className="grid gap-5 md:grid-cols-3">
         {dqmsModules.map((module) => (
-          <article className="rounded-3xl border border-slate-200 bg-white/90 p-6" key={module.name}>
-            <h2 className="text-xl font-bold text-slate-900">{module.name}</h2>
-            <p className="mt-3 text-sm leading-relaxed text-slate-700">{module.purpose}</p>
-            <ul className="mt-4 space-y-2 text-sm text-slate-700">
+          <article className="rounded-3xl border border-[var(--sm-line)] bg-white/92 p-6" key={module.name}>
+            <h2 className="text-xl font-bold text-[var(--sm-ink)]">{module.name}</h2>
+            <p className="mt-3 text-sm leading-relaxed text-[var(--sm-muted)]">{module.purpose}</p>
+            <ul className="mt-4 space-y-2 text-sm text-[var(--sm-muted)]">
               {module.outputs.map((output) => (
-                <li className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2" key={output}>
+                <li className="rounded-2xl border border-[var(--sm-line)] bg-[var(--sm-paper)] px-3 py-2" key={output}>
                   {output}
                 </li>
               ))}
@@ -28,15 +28,15 @@ export function DqmsPage() {
         ))}
       </section>
 
-      <section className="rounded-3xl border border-amber-200 bg-amber-50 p-6">
-        <h2 className="text-xl font-bold text-slate-900">What this adds beyond dashboards</h2>
-        <ul className="mt-3 grid gap-2 text-sm text-slate-700 md:grid-cols-2">
-          <li className="rounded-2xl border border-amber-100 bg-white px-3 py-3">Incident-to-CAPA chain with owner and due date</li>
-          <li className="rounded-2xl border border-amber-100 bg-white px-3 py-3">Supplier-level trend snapshots for review meetings</li>
-          <li className="rounded-2xl border border-amber-100 bg-white px-3 py-3">Weekly quality summary artifacts for leadership</li>
-          <li className="rounded-2xl border border-amber-100 bg-white px-3 py-3">Governed closure criteria and validation checkpoints</li>
+      <section className="rounded-3xl border border-[var(--sm-line)] bg-[var(--sm-paper)] p-6">
+        <h2 className="text-xl font-bold text-[var(--sm-ink)]">What this adds beyond dashboards</h2>
+        <ul className="mt-3 grid gap-2 text-sm text-[var(--sm-muted)] md:grid-cols-2">
+          <li className="rounded-2xl border border-[var(--sm-line)] bg-white px-3 py-3">Incident-to-CAPA chain with owner and due date</li>
+          <li className="rounded-2xl border border-[var(--sm-line)] bg-white px-3 py-3">Supplier-level trend snapshots for review meetings</li>
+          <li className="rounded-2xl border border-[var(--sm-line)] bg-white px-3 py-3">Weekly quality summary artifacts for leadership</li>
+          <li className="rounded-2xl border border-[var(--sm-line)] bg-white px-3 py-3">Governed closure criteria and validation checkpoints</li>
         </ul>
-        <Link className="mt-5 inline-flex rounded-full bg-slate-900 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-700" to="/contact?intent=dqms">
+        <Link className="mt-5 inline-flex rounded-full bg-[var(--sm-accent)] px-5 py-3 text-sm font-bold text-white hover:bg-[#0a5b5d]" to="/contact?intent=dqms">
           Add DQMS module
         </Link>
       </section>

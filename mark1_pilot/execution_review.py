@@ -17,6 +17,22 @@ def _load_json(path: Path) -> Any:
         return {}
 
 
+def _load_latest_domain_report(output_dir: Path) -> dict[str, Any]:
+    candidates = [
+        _load_json(output_dir / "domain_health_latest.json"),
+        _load_json(output_dir / "domain_health_autopilot.json"),
+    ]
+    reports = [item for item in candidates if isinstance(item, dict) and item]
+    if not reports:
+        return {}
+
+    def _timestamp(report: dict[str, Any]) -> str:
+        return str(report.get("checked_at", ""))
+
+    reports.sort(key=_timestamp, reverse=True)
+    return reports[0]
+
+
 def _readiness_status(scores: list[str]) -> str:
     if any(status == "error" for status in scores):
         return "error"
@@ -40,12 +56,23 @@ def _domain_summary(domain_report: dict[str, Any]) -> tuple[str, dict[str, Any],
     )
     dns_ready = dns_apex_ready and dns_www_ready
     all_timeout = bool(failures) and all("timed out" in str(item.get("detail", "")).lower() for item in failures)
+    apex_https_ready = any(
+        item.get("target") == "http:https://supermega.dev/" and item.get("status") == "ready"
+        for item in checks
+    )
+    www_failure_only = (
+        len(failures) == 1
+        and str(failures[0].get("target", "")).strip() == "http:https://www.supermega.dev/"
+    )
 
     if not dns_ready:
         next_actions.append("Recheck apex A records and www CNAME in DNS provider.")
 
     if domain_report.get("overall_status") == "ready":
         status = "ready"
+    elif dns_ready and apex_https_ready and www_failure_only:
+        next_actions.append("Apex site is live, but www is not redirecting yet. Wait for propagation and re-run domain check.")
+        status = "warning"
     elif dns_ready and all_timeout:
         next_actions.append("Confirm GitHub Pages custom domain and Enforce HTTPS in repository settings.")
         next_actions.append("If timeout persists, deploy showroom to Cloud Run and point domain there as fallback.")
@@ -169,7 +196,7 @@ def build_execution_review(
 
     autopilot = autopilot_status_override or _load_json(output_dir / "autopilot_status.json")
     coverage = _load_json(output_dir / "data_coverage_report.json")
-    domain = _load_json(output_dir / "domain_health_autopilot.json")
+    domain = _load_latest_domain_report(output_dir)
     input_snapshot = _load_json(output_dir / config.input_center.snapshot_file)
     dqms_incidents = _load_json(output_dir / config.dqms.incident_file)
 

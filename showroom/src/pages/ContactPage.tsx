@@ -96,42 +96,42 @@ export function ContactPage() {
       />
 
       <section className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
-        <form className="rounded-3xl border border-slate-200 bg-white/90 p-6" onSubmit={handleSubmit}>
+        <form className="rounded-3xl border border-[var(--sm-line)] bg-white/92 p-6" onSubmit={handleSubmit}>
           <div className="grid gap-4 md:grid-cols-2">
-            <label className="flex flex-col gap-2 text-sm font-semibold text-slate-700">
+            <label className="flex flex-col gap-2 text-sm font-semibold text-[var(--sm-muted)]">
               Name
               <input
-                className="rounded-xl border border-slate-300 px-3 py-2 text-sm font-normal"
+                className="rounded-xl border border-[var(--sm-line)] bg-[var(--sm-paper)] px-3 py-2 text-sm font-normal"
                 onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))}
                 required
                 type="text"
                 value={form.name}
               />
             </label>
-            <label className="flex flex-col gap-2 text-sm font-semibold text-slate-700">
+            <label className="flex flex-col gap-2 text-sm font-semibold text-[var(--sm-muted)]">
               Email
               <input
-                className="rounded-xl border border-slate-300 px-3 py-2 text-sm font-normal"
+                className="rounded-xl border border-[var(--sm-line)] bg-[var(--sm-paper)] px-3 py-2 text-sm font-normal"
                 onChange={(event) => setForm((prev) => ({ ...prev, email: event.target.value }))}
                 required
                 type="email"
                 value={form.email}
               />
             </label>
-            <label className="flex flex-col gap-2 text-sm font-semibold text-slate-700">
+            <label className="flex flex-col gap-2 text-sm font-semibold text-[var(--sm-muted)]">
               Company
               <input
-                className="rounded-xl border border-slate-300 px-3 py-2 text-sm font-normal"
+                className="rounded-xl border border-[var(--sm-line)] bg-[var(--sm-paper)] px-3 py-2 text-sm font-normal"
                 onChange={(event) => setForm((prev) => ({ ...prev, company: event.target.value }))}
                 required
                 type="text"
                 value={form.company}
               />
             </label>
-            <label className="flex flex-col gap-2 text-sm font-semibold text-slate-700">
+            <label className="flex flex-col gap-2 text-sm font-semibold text-[var(--sm-muted)]">
               Package
               <select
-                className="rounded-xl border border-slate-300 px-3 py-2 text-sm font-normal"
+                className="rounded-xl border border-[var(--sm-line)] bg-[var(--sm-paper)] px-3 py-2 text-sm font-normal"
                 onChange={(event) => setForm((prev) => ({ ...prev, package: event.target.value }))}
                 value={form.package}
               >
@@ -142,10 +142,10 @@ export function ContactPage() {
                 <option value="Custom">Custom</option>
               </select>
             </label>
-            <label className="flex flex-col gap-2 text-sm font-semibold text-slate-700 md:col-span-2">
+            <label className="flex flex-col gap-2 text-sm font-semibold text-[var(--sm-muted)] md:col-span-2">
               Priority
               <select
-                className="rounded-xl border border-slate-300 px-3 py-2 text-sm font-normal"
+                className="rounded-xl border border-[var(--sm-line)] bg-[var(--sm-paper)] px-3 py-2 text-sm font-normal"
                 onChange={(event) => setForm((prev) => ({ ...prev, priority: event.target.value }))}
                 value={form.priority}
               >
@@ -154,10 +154,10 @@ export function ContactPage() {
                 <option>Next quarter</option>
               </select>
             </label>
-            <label className="flex flex-col gap-2 text-sm font-semibold text-slate-700 md:col-span-2">
+            <label className="flex flex-col gap-2 text-sm font-semibold text-[var(--sm-muted)] md:col-span-2">
               Brief
               <textarea
-                className="min-h-40 rounded-xl border border-slate-300 px-3 py-2 text-sm font-normal"
+                className="min-h-40 rounded-xl border border-[var(--sm-line)] bg-[var(--sm-paper)] px-3 py-2 text-sm font-normal"
                 onChange={(event) => setForm((prev) => ({ ...prev, brief: event.target.value }))}
                 placeholder="Current process, problem, and desired outcome."
                 required
@@ -166,13 +166,13 @@ export function ContactPage() {
             </label>
           </div>
           <button
-            className="mt-5 rounded-full bg-slate-900 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
+            className="mt-5 rounded-full bg-[var(--sm-accent)] px-5 py-3 text-sm font-bold text-white hover:bg-[#0a5b5d] disabled:cursor-not-allowed disabled:opacity-60"
             disabled={status === 'sending'}
             type="submit"
           >
             {status === 'sending' ? 'Submitting...' : 'Book call and request proposal'}
           </button>
-          <p className="mt-3 text-sm text-slate-600">
+          <p className="mt-3 text-sm text-[var(--sm-muted)]">
             {status === 'sent' && 'Lead submitted successfully. We will contact you shortly.'}
             {status === 'fallback' && 'No API endpoint configured. Your mail app was opened with lead details.'}
             {status === 'error' && 'Lead endpoint failed. Use mail fallback or send details directly.'}
@@ -181,7 +181,7 @@ export function ContactPage() {
           </p>
         </form>
 
-        <aside className="rounded-3xl border border-slate-200 bg-slate-900 p-6 text-sm text-slate-100">
+        <aside className="rounded-3xl border border-[#184a4a] bg-[#112d31] p-6 text-sm text-slate-100">
           <h2 className="text-lg font-bold">Pipeline stages</h2>
           <ul className="mt-3 space-y-2">
             <li className="rounded-2xl border border-white/15 px-3 py-2">New Lead</li>

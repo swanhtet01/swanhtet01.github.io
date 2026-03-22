@@ -17,6 +17,18 @@ from .inventory import scan_local_root
 from .search import search_index
 
 
+def _friendly_gmail_message(raw_message: str) -> str:
+    message = raw_message.strip()
+    if not message:
+        return ""
+    lowered = message.lower()
+    if "invalid_grant" in lowered or "expired or revoked" in lowered:
+        return "token expired or revoked; run gmail-auth"
+    if len(message) > 180:
+        return message[:177] + "..."
+    return message
+
+
 def _profile_summary(result: dict[str, Any]) -> dict[str, Any]:
     messages = result.get("messages", [])
     senders = Counter(item.get("from", "") for item in messages if item.get("from"))
@@ -24,6 +36,7 @@ def _profile_summary(result: dict[str, Any]) -> dict[str, Any]:
     newest = messages[0] if messages else {}
     return {
         "status": result.get("status", "unknown"),
+        "message": _friendly_gmail_message(str(result.get("message", ""))),
         "message_count": len(messages),
         "top_senders": senders.most_common(5),
         "newest_subject": newest.get("subject", ""),
@@ -78,6 +91,23 @@ def _latest_relevant_items(external_payload: dict[str, Any]) -> list[dict[str, A
 def _contains_any(items: list[str], keywords: tuple[str, ...]) -> bool:
     lowered_items = " ".join(items).lower()
     return any(keyword in lowered_items for keyword in keywords)
+
+
+def _gmail_chip_label(gmail_probe: dict[str, Any]) -> str:
+    status = str(gmail_probe.get("status", "unknown"))
+    email_address = str(gmail_probe.get("email_address", "")).strip()
+    if status == "ready":
+        return email_address if email_address else "connected"
+
+    if status in {"missing_token_file", "missing_token_path"}:
+        return "auth required"
+    if status in {"missing_client_secret", "not_configured"}:
+        return "client setup needed"
+    if status == "dependency_missing":
+        return "dependency missing"
+    if status == "error":
+        return "token refresh needed"
+    return status
 
 
 def _build_action_items(
@@ -234,8 +264,18 @@ def build_platform_digest(
     input_center = load_input_center_summary(config.output.inventory_path, config.input_center)
     data_coverage = load_data_coverage_summary(config.output.inventory_path)
 
+    gmail_status = str(gmail_probe.get("status", "unknown"))
+    gmail_email = str(gmail_probe.get("email_address", "")).strip()
+    if gmail_status == "ready":
+        mailbox_label = f"`{gmail_email}`" if gmail_email else "`connected mailbox`"
+        gmail_highlight = f"Mailbox {mailbox_label} is live with Yangon Tyre-focused profiles ready."
+    elif gmail_status in {"missing_token_file", "missing_token_path", "error"}:
+        gmail_highlight = "Gmail token needs re-auth. Dashboard is running in file-first mode until token is refreshed."
+    else:
+        gmail_highlight = "Gmail connector is not ready yet. File, Drive, and external intelligence are still active."
+
     highlights = [
-        f"Mailbox `{gmail_probe.get('email_address', '')}` is live with Yangon Tyre-focused profiles ready.",
+        gmail_highlight,
         f"Local corpus remains the backbone at {inventory['total_files']} files dominated by spreadsheets, documents, and PDFs.",
         f"External watch is now pulling from {len(config.external.news_sources)} configured public sources.",
     ]
@@ -297,11 +337,14 @@ def build_platform_digest(
 
 
 def render_platform_digest_markdown(payload: dict[str, Any]) -> str:
+    gmail_label = payload["connectors"]["gmail"].get("email_address", "") or _gmail_chip_label(
+        payload.get("connectors", {}).get("gmail", {})
+    )
     lines = [
         f"# {payload['dashboard_title']}",
         "",
         f"- Generated: {payload['generated_at']}",
-        f"- Gmail mailbox: `{payload['connectors']['gmail'].get('email_address', '')}`",
+        f"- Gmail mailbox: `{gmail_label}`",
         f"- Local files: {payload['inventory']['total_files']}",
         "",
         "## Executive Pulse",
@@ -446,6 +489,11 @@ def render_platform_dashboard_html(payload: dict[str, Any]) -> str:
 
     email_sections: list[str] = []
     for profile_name, summary in payload.get("email_profiles", {}).items():
+        profile_status = str(summary.get("status", "unknown"))
+        status_line = f"Status: {profile_status}"
+        if profile_status != "ready" and summary.get("message"):
+            status_line = f"{status_line} | {summary.get('message', '')}"
+        lede_text = summary.get("newest_subject", "") or status_line
         sender_html = "".join(
             f"<li><strong>{escape(name)}</strong> <span>{count}</span></li>"
             for name, count in summary.get("top_senders", [])[:4]
@@ -464,7 +512,7 @@ def render_platform_dashboard_html(payload: dict[str, Any]) -> str:
             "<section class='panel'>"
             f"<h3>{escape(profile_name)}</h3>"
             f"<p class='stat'>{summary.get('message_count', 0)} sampled emails</p>"
-            f"<p class='lede'>{escape(summary.get('newest_subject', 'No recent subject'))}</p>"
+            f"<p class='lede'>{escape(lede_text)}</p>"
             "<div class='split'>"
             f"<ul class='mini-list'>{sender_html}</ul>"
             f"<ul class='detail-list'>{message_html}</ul>"
@@ -571,6 +619,7 @@ def render_platform_dashboard_html(payload: dict[str, Any]) -> str:
 
     dqms = payload.get("dqms", {})
     coverage = payload.get("data_coverage", {})
+    gmail_label = _gmail_chip_label(payload.get("connectors", {}).get("gmail", {}))
     coverage_actions_html = "".join(
         (
             "<li>"
@@ -665,7 +714,7 @@ def render_platform_dashboard_html(payload: dict[str, Any]) -> str:
       <div class="panel">
         <h3>Command Deck</h3>
         <div class="chips">
-          <div class="chip">Gmail: {escape(payload['connectors']['gmail'].get('email_address', 'not connected'))}</div>
+          <div class="chip">Gmail: {escape(gmail_label)}</div>
           <div class="chip">Files: {payload['inventory']['total_files']}</div>
           <div class="chip">Drive: {escape(payload['connectors']['drive'].get('status', 'unknown'))}</div>
           <div class="chip">External: {len(payload.get('external', {}).get('sources', {}))} sources</div>

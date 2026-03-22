@@ -33,6 +33,12 @@ Required repo secret:
 
 Then run **Actions -> Deploy Showroom To Cloud Run -> Run workflow** and provide project/region/service inputs.
 
+Or use the automation helper from repo root (syncs `GCP_SA_KEY`, dispatches Pages + Cloud Run, waits for results):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\tools\deploy_website_actions.ps1 -ProjectId supermega-468612 -Region asia-southeast1 -Service supermega-showroom
+```
+
 ## Domain mapping
 
 After deploy:

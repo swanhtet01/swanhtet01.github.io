@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import json
+import os
 import subprocess
 import sys
 from datetime import datetime
@@ -151,6 +153,132 @@ def run_inventory(config_path: str) -> int:
         "gmail_probe": gmail_probe["status"],
     }
     print(json.dumps(summary, indent=2))
+    return 0
+
+
+def run_config_profiles(config_path: str) -> int:
+    config_file = Path(config_path).expanduser()
+    if not config_file.is_absolute():
+        config_file = (Path.cwd() / config_file).resolve()
+    data = json.loads(config_file.read_text(encoding="utf-8"))
+    profiles = data.get("profiles", {})
+    if not isinstance(profiles, dict):
+        profiles = {}
+
+    summary = {
+        "config_file": str(config_file),
+        "default_profile": str(data.get("default_profile", "")),
+        "profile_count": len(profiles),
+        "profiles": sorted(str(key) for key in profiles.keys()),
+        "active_profile_from_env": str((os.getenv("MARK1_PROFILE", "") or "").strip()),
+    }
+    print(json.dumps(summary, indent=2))
+    return 0
+
+
+def run_config_profile_create(
+    config_path: str,
+    profile_name: str,
+    from_profile: str | None,
+    set_default: bool,
+    overwrite: bool,
+) -> int:
+    config_file = Path(config_path).expanduser()
+    if not config_file.is_absolute():
+        config_file = (Path.cwd() / config_file).resolve()
+
+    if not config_file.exists():
+        print(
+            json.dumps(
+                {
+                    "status": "missing_config",
+                    "message": f"Config file does not exist: {config_file}",
+                },
+                indent=2,
+            )
+        )
+        return 1
+
+    data = json.loads(config_file.read_text(encoding="utf-8"))
+    profiles = data.get("profiles", {})
+    if not isinstance(profiles, dict):
+        profiles = {}
+
+    source_payload: dict[str, Any] = {}
+    source_name = (from_profile or "").strip()
+    if source_name:
+        source_value = profiles.get(source_name)
+        if source_value is None:
+            print(
+                json.dumps(
+                    {
+                        "status": "missing_source_profile",
+                        "message": f"Profile '{source_name}' was not found in config.",
+                        "available_profiles": sorted(str(key) for key in profiles.keys()),
+                    },
+                    indent=2,
+                )
+            )
+            return 1
+        if not isinstance(source_value, dict):
+            print(
+                json.dumps(
+                    {
+                        "status": "invalid_source_profile",
+                        "message": f"Profile '{source_name}' is not a JSON object and cannot be used as a template.",
+                    },
+                    indent=2,
+                )
+            )
+            return 1
+        source_payload = copy.deepcopy(source_value)
+
+    target_name = profile_name.strip()
+    if not target_name:
+        print(
+            json.dumps(
+                {
+                    "status": "invalid_profile_name",
+                    "message": "Profile name cannot be empty.",
+                },
+                indent=2,
+            )
+        )
+        return 1
+
+    already_exists = target_name in profiles
+    if already_exists and not overwrite:
+        print(
+            json.dumps(
+                {
+                    "status": "profile_exists",
+                    "message": f"Profile '{target_name}' already exists. Use --overwrite to replace it.",
+                },
+                indent=2,
+            )
+        )
+        return 1
+
+    profiles[target_name] = source_payload
+    data["profiles"] = profiles
+    if set_default:
+        data["default_profile"] = target_name
+
+    config_file.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+    print(
+        json.dumps(
+            {
+                "status": "ready",
+                "config_file": str(config_file),
+                "profile_name": target_name,
+                "copied_from": source_name,
+                "set_as_default": bool(set_default),
+                "overwrote_existing": bool(already_exists),
+                "profile_count": len(profiles),
+            },
+            indent=2,
+        )
+    )
     return 0
 
 
@@ -1273,28 +1401,6 @@ def run_autopilot(
             lambda: run_input_center_sync(config_path, max_rows=0),
         )
 
-    if skip_platform_publish:
-        steps.append(
-            {
-                "name": "platform-publish",
-                "required": True,
-                "status": "skipped",
-                "exit_code": 0,
-                "reason": "skip_platform_publish_flag",
-            }
-        )
-    else:
-        execute_step(
-            "platform-publish",
-            True,
-            lambda: run_platform_publish(
-                config_path,
-                email_max_results=publish_email_max_results,
-                skip_drive=skip_drive,
-                folder_id=publish_folder_id,
-            ),
-        )
-
     execute_step(
         "pilot-solution",
         True,
@@ -1352,6 +1458,28 @@ def run_autopilot(
                     "reason": "domain_check_script_missing",
                 }
             )
+
+    if skip_platform_publish:
+        steps.append(
+            {
+                "name": "platform-publish",
+                "required": True,
+                "status": "skipped",
+                "exit_code": 0,
+                "reason": "skip_platform_publish_flag",
+            }
+        )
+    else:
+        execute_step(
+            "platform-publish",
+            True,
+            lambda: run_platform_publish(
+                config_path,
+                email_max_results=publish_email_max_results,
+                skip_drive=skip_drive,
+                folder_id=publish_folder_id,
+            ),
+        )
 
     preview_required_failures = [step for step in steps if step.get("required") and step.get("status") == "error"]
     preview_optional_failures = [step for step in steps if not step.get("required") and step.get("status") == "error"]
@@ -1447,6 +1575,46 @@ def build_parser() -> argparse.ArgumentParser:
         "--config",
         default="./config.example.json",
         help="Path to pilot config JSON.",
+    )
+
+    config_profiles_parser = subparsers.add_parser(
+        "config-profiles",
+        help="List available profile overlays defined in the config file.",
+    )
+    config_profiles_parser.add_argument(
+        "--config",
+        default="./config.example.json",
+        help="Path to pilot config JSON.",
+    )
+
+    config_profile_create_parser = subparsers.add_parser(
+        "config-profile-create",
+        help="Create a new profile overlay in config JSON, optionally cloned from an existing profile.",
+    )
+    config_profile_create_parser.add_argument(
+        "--config",
+        default="./config.example.json",
+        help="Path to pilot config JSON.",
+    )
+    config_profile_create_parser.add_argument(
+        "--profile",
+        required=True,
+        help="Name of the new profile to create.",
+    )
+    config_profile_create_parser.add_argument(
+        "--from-profile",
+        default="",
+        help="Optional existing profile name to clone as the starting template.",
+    )
+    config_profile_create_parser.add_argument(
+        "--set-default",
+        action="store_true",
+        help="Set the created profile as default_profile in config.",
+    )
+    config_profile_create_parser.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="Replace the target profile if it already exists.",
     )
 
     drive_map_parser = subparsers.add_parser(
@@ -1991,6 +2159,16 @@ def main() -> int:
 
     if args.command == "inventory":
         return run_inventory(args.config)
+    if args.command == "config-profiles":
+        return run_config_profiles(args.config)
+    if args.command == "config-profile-create":
+        return run_config_profile_create(
+            args.config,
+            profile_name=args.profile,
+            from_profile=args.from_profile,
+            set_default=args.set_default,
+            overwrite=args.overwrite,
+        )
     if args.command == "drive-map":
         return run_drive_map(args.config, args.max_depth, args.folder_id)
     if args.command == "drive-shared-list":

@@ -21,6 +21,17 @@ def _expand(value: Any) -> Any:
     return value
 
 
+def _deep_merge_dict(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
+    merged: dict[str, Any] = dict(base)
+    for key, override_value in override.items():
+        base_value = merged.get(key)
+        if isinstance(base_value, dict) and isinstance(override_value, dict):
+            merged[key] = _deep_merge_dict(base_value, override_value)
+            continue
+        merged[key] = override_value
+    return merged
+
+
 WINDOWS_ABS_PATH_PATTERN = re.compile(r"^[A-Za-z]:[\\/]")
 
 
@@ -240,6 +251,19 @@ class PilotConfig:
         raw_path = _path_from_config(str(config_path))
         data = json.loads(raw_path.read_text(encoding="utf-8"))
         data = _expand(data)
+        selected_profile = str(os.getenv("MARK1_PROFILE", "") or data.get("default_profile", "")).strip()
+        profile_map = data.get("profiles", {})
+        if selected_profile:
+            if not isinstance(profile_map, dict) or selected_profile not in profile_map:
+                available = sorted(profile_map.keys()) if isinstance(profile_map, dict) else []
+                available_text = ", ".join(available) if available else "(none)"
+                raise ValueError(
+                    f"Config profile '{selected_profile}' is not defined. Available profiles: {available_text}"
+                )
+            override_payload = profile_map[selected_profile]
+            if not isinstance(override_payload, dict):
+                raise ValueError(f"Config profile '{selected_profile}' must be a JSON object.")
+            data = _deep_merge_dict(data, override_payload)
 
         drive = DriveSourceConfig(**data["sources"]["drive"])
         gmail = GmailSourceConfig(**data["sources"]["gmail"])
