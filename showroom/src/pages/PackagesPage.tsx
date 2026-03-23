@@ -8,8 +8,8 @@ export function PackagesPage() {
     <div className="space-y-8">
       <PageIntro
         eyebrow="Packages"
-        title="3 engagement tiers."
-        description="No fixed public pricing. Scope is agreed after discovery."
+        title="3 rollout tiers."
+        description="No public fixed pricing. Scope is set in discovery."
       />
 
       <section className="grid gap-5 lg:grid-cols-3">
@@ -19,8 +19,8 @@ export function PackagesPage() {
             key={pkg.name}
           >
             <p className="text-xs font-bold uppercase tracking-[0.2em] text-[var(--sm-accent)]">{pkg.name}</p>
-            <p className="mt-2 text-2xl font-extrabold text-[var(--sm-ink)]">{pkg.commercialModel}</p>
-            <p className="mt-1 text-sm font-medium text-[var(--sm-muted)]">{pkg.timeline}</p>
+            <p className="mt-2 text-2xl font-extrabold text-[var(--sm-ink)]">{pkg.timeline}</p>
+            <p className="mt-1 text-sm font-medium text-[var(--sm-muted)]">{pkg.commercialModel}</p>
             <p className="mt-4 text-sm leading-relaxed text-[var(--sm-muted)]">{pkg.bestFor}</p>
             <ul className="mt-4 space-y-2 text-sm text-[var(--sm-muted)]">
               {pkg.deliverables.map((deliverable) => (

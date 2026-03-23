@@ -2,14 +2,14 @@
 @import 'tailwindcss';
 
 :root {
-  --sm-bg: #0a1322;
-  --sm-paper: #dce3ec;
-  --sm-ink: #12263a;
-  --sm-muted: #4f667a;
-  --sm-accent: #0d7f9b;
-  --sm-accent-alt: #f27a4a;
-  --sm-line: #b7c6d8;
-  --sm-shadow: 0 26px 65px -42px rgba(7, 16, 32, 0.85);
+  --sm-bg: #f3f7fb;
+  --sm-paper: #ecf2f7;
+  --sm-ink: #102539;
+  --sm-muted: #496076;
+  --sm-accent: #0b8c9e;
+  --sm-accent-alt: #d66a2a;
+  --sm-line: #bdd0de;
+  --sm-shadow: 0 28px 60px -42px rgba(11, 40, 64, 0.55);
   font-family: 'Manrope', 'Segoe UI', sans-serif;
   color: var(--sm-ink);
 }
@@ -24,10 +24,10 @@ body {
   margin: 0;
   min-width: 320px;
   background:
-    radial-gradient(circle at 6% 8%, rgba(23, 176, 222, 0.28), transparent 30%),
-    radial-gradient(circle at 90% 12%, rgba(248, 127, 74, 0.2), transparent 30%),
-    radial-gradient(circle at 60% 92%, rgba(30, 127, 179, 0.2), transparent 34%),
-    linear-gradient(135deg, #081120 0%, #0c1a31 55%, #091429 100%);
+    radial-gradient(circle at 8% 10%, rgba(33, 169, 214, 0.2), transparent 34%),
+    radial-gradient(circle at 92% 14%, rgba(255, 139, 77, 0.18), transparent 36%),
+    radial-gradient(circle at 58% 94%, rgba(71, 146, 197, 0.16), transparent 36%),
+    linear-gradient(135deg, #f6f9fc 0%, #edf4fa 52%, #f7f2ee 100%);
   color: var(--sm-ink);
   background-attachment: fixed;
 }
@@ -47,6 +47,10 @@ a {
 
 ::selection {
   background: rgba(20, 164, 205, 0.32);
+}
+
+#root {
+  position: relative;
 }
 
 .animate-rise {
