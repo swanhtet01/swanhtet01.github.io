@@ -7,16 +7,18 @@ type LeadFormState = {
   name: string
   email: string
   company: string
-  agent: string
-  brief: string
+  workflow: string
+  data: string
+  goal: string
 }
 
 const initialForm: LeadFormState = {
   name: '',
   email: '',
   company: '',
-  agent: 'Supplier Watch Agent',
-  brief: '',
+  workflow: 'Supplier Watch',
+  data: 'Gmail + Drive',
+  goal: '',
 }
 
 function buildLeadMailto(payload: LeadFormState) {
@@ -27,10 +29,11 @@ function buildLeadMailto(payload: LeadFormState) {
     `Name: ${payload.name}`,
     `Email: ${payload.email}`,
     `Company: ${payload.company}`,
-    `Agent of interest: ${payload.agent}`,
+    `First workflow: ${payload.workflow}`,
+    `Data already available: ${payload.data}`,
     '',
-    'Brief:',
-    payload.brief,
+    'Goal:',
+    payload.goal,
   ].join('\n')
   return `mailto:swanhtet@supermega.dev?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
 }
@@ -50,16 +53,16 @@ export function ContactPage() {
     <div className="space-y-8">
       <PageIntro
         eyebrow="Contact"
-        title="Start a real pilot."
-        description="Pick the workflow you want first. We scope one useful agent and move fast."
+        title="Start one useful pilot."
+        description="Tell us the workflow, the data you already have, and the outcome you want first."
       />
 
       <section className="grid gap-6 lg:grid-cols-[0.92fr_1.08fr]">
-        <aside className="sm-surface-deep p-6">
+        <aside className="sm-terminal p-6">
           <p className="sm-kicker text-[var(--sm-accent)]">Direct path</p>
-          <h2 className="mt-3 text-3xl font-bold text-white">No fake funnel.</h2>
+          <h2 className="mt-3 text-3xl font-bold text-white">Short brief. Fast reply.</h2>
           <p className="mt-3 text-sm leading-relaxed text-[var(--sm-muted)]">
-            If the agent is useful, we scope the pilot on your real data. If it is not useful, we do not force it.
+            We use this to scope the first useful rollout. No fake funnel. No dead-end request form.
           </p>
 
           <div className="mt-6 grid gap-3">
@@ -68,12 +71,16 @@ export function ContactPage() {
               <p className="mt-2 text-white">swanhtet@supermega.dev</p>
             </a>
             <div className="sm-chip">
-              <p className="sm-kicker text-[var(--sm-accent)]">Best starting agents</p>
-              <p className="mt-2 text-white">Supplier Watch, Quality CAPA, Director Command</p>
+              <p className="sm-kicker text-[var(--sm-accent)]">Good first workflows</p>
+              <p className="mt-2 text-white">Supplier risk, quality closeout, cash control, daily action board</p>
             </div>
             <div className="sm-chip">
-              <p className="sm-kicker text-[var(--sm-accent)]">Pilot shape</p>
+              <p className="sm-kicker text-[var(--sm-accent-alt)]">Pilot shape</p>
               <p className="mt-2 text-white">One workflow. One owner view. Two-week first sprint.</p>
+            </div>
+            <div className="sm-chip">
+              <p className="sm-kicker text-[var(--sm-accent)]">What helps</p>
+              <p className="mt-2 text-white">One sample sheet, one mailbox, one raw process we can clean up first.</p>
             </div>
           </div>
         </aside>
@@ -111,28 +118,40 @@ export function ContactPage() {
               />
             </label>
             <label className="flex flex-col gap-2 text-sm font-semibold text-[var(--sm-muted)]">
-              Agent
+              First workflow
               <select
                 className="rounded-xl border border-white/8 bg-white/4 px-3 py-2 text-sm font-normal text-white"
-                onChange={(event) => setForm((prev) => ({ ...prev, agent: event.target.value }))}
-                value={form.agent}
+                onChange={(event) => setForm((prev) => ({ ...prev, workflow: event.target.value }))}
+                value={form.workflow}
               >
-                <option>Supplier Watch Agent</option>
-                <option>Quality CAPA Agent</option>
-                <option>Director Command Agent</option>
-                <option>Cash Control Agent</option>
-                <option>Lead-to-Pilot Agent</option>
+                <option>Supplier Watch</option>
+                <option>Quality Closeout</option>
+                <option>Cash Watch</option>
+                <option>Action Board</option>
+                <option>News Brief</option>
+                <option>Lead Finder</option>
                 <option>SuperMega OS</option>
               </select>
             </label>
             <label className="flex flex-col gap-2 text-sm font-semibold text-[var(--sm-muted)] md:col-span-2">
-              Brief
+              Data already available
+              <input
+                className="rounded-xl border border-white/8 bg-white/4 px-3 py-2 text-sm font-normal text-white"
+                onChange={(event) => setForm((prev) => ({ ...prev, data: event.target.value }))}
+                placeholder="For example: Gmail + Drive, or Sheets + shared folder"
+                required
+                type="text"
+                value={form.data}
+              />
+            </label>
+            <label className="flex flex-col gap-2 text-sm font-semibold text-[var(--sm-muted)] md:col-span-2">
+              Goal
               <textarea
                 className="min-h-52 rounded-xl border border-white/8 bg-white/4 px-3 py-3 text-sm font-normal text-white"
-                onChange={(event) => setForm((prev) => ({ ...prev, brief: event.target.value }))}
-                placeholder="What workflow do you want fixed first?"
+                onChange={(event) => setForm((prev) => ({ ...prev, goal: event.target.value }))}
+                placeholder="What do you want fixed first?"
                 required
-                value={form.brief}
+                value={form.goal}
               />
             </label>
           </div>
@@ -140,11 +159,14 @@ export function ContactPage() {
             <button className="sm-button-accent" type="submit">
               {status === 'sending' ? 'Opening email...' : 'Email this brief'}
             </button>
+            <a className="sm-button-primary" href="/examples">
+              Try the tools first
+            </a>
             <a className="sm-button-secondary" href="mailto:swanhtet@supermega.dev">
               Email directly
             </a>
           </div>
-          <p className="mt-3 text-sm text-[var(--sm-muted)]">This opens a direct email draft. No fake forms, no dead-end funnel.</p>
+          <p className="mt-3 text-sm text-[var(--sm-muted)]">This opens a direct email draft. Keep it short and concrete.</p>
         </form>
       </section>
     </div>

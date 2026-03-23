@@ -106,6 +106,29 @@ Expected outputs:
 - source-of-truth state stays in the main runtime, not in a side agent
 - risky writes require human approval
 
+## Knowledge and Memory Rules
+
+- every agent should read the latest relevant artifact before starting
+- useful findings become runbooks, product docs, or code changes
+- repeated lessons must move into shared templates, not stay inside one agent run
+- the main runtime owns durable memory; side agents contribute notes and artifacts
+
+## Review Cadence
+
+- per task:
+  - define scope
+  - inspect sources
+  - return artifact
+  - review whether it improved the system
+- daily:
+  - product lab refresh
+  - action board refresh
+  - blocker review
+- weekly:
+  - product ladder review
+  - framework review
+  - template and SOP cleanup
+
 ## Default Execution Loop
 
 1. Main rollout defines the target outcome.

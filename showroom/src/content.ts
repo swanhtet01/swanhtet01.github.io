@@ -1,22 +1,24 @@
 export type TrialModule = {
-  id: 'lead-to-pilot' | 'supplier-watch' | 'director-command'
+  id: 'lead-finder' | 'market-brief' | 'action-board'
   name: string
   promise: string
   testInput: string
 }
 
 export type Product = {
+  kind: 'Free tool' | 'Control module'
   name: string
-  availability: 'Live now' | 'Pilot'
+  availability: 'Try free' | 'Deploy'
   tagline: string
   input: string
   output: string
   fit: string
+  variants: string[]
   exampleId?: TrialModule['id']
 }
 
 export type PackageTier = {
-  name: 'Starter' | 'Growth' | 'Scale'
+  name: 'Starter' | 'Control Pack' | 'OS Build'
   timeline: string
   commercialModel: string
   bestFor: string
@@ -32,55 +34,75 @@ export type FlagshipSystem = {
 
 export const navItems = [
   { label: 'Home', to: '/' },
-  { label: 'Agents', to: '/products' },
-  { label: 'Live Lab', to: '/examples' },
-  { label: 'Pricing', to: '/packages' },
+  { label: 'Products', to: '/products' },
+  { label: 'Tools', to: '/examples' },
+  { label: 'Plans', to: '/packages' },
   { label: 'Contact', to: '/contact' },
 ] as const
 
 export const products: Product[] = [
   {
-    name: 'Lead-to-Pilot Agent',
-    availability: 'Live now',
-    tagline: 'Turn messy lead lists into scored outreach-ready prospects.',
+    kind: 'Free tool',
+    name: 'Lead Finder',
+    availability: 'Try free',
+    tagline: 'Turn a messy list into a cleaner lead sheet in minutes.',
     input: 'Directory text, URL, or pasted lead list',
     output: 'Scored leads, contact pack, CSV export',
-    fit: 'Sales, outreach, and SuperMega growth.',
-    exampleId: 'lead-to-pilot',
+    fit: 'Sales, partnerships, and outbound teams.',
+    variants: ['Distributors', 'Retail stores', 'Industrial buyers'],
+    exampleId: 'lead-finder',
   },
   {
-    name: 'Supplier Watch Agent',
-    availability: 'Live now',
-    tagline: 'Read supplier threads and flag delay, payment, and document risk.',
-    input: 'Supplier email thread or pasted message',
-    output: 'Risk score, tags, owner, due date, next actions',
+    kind: 'Free tool',
+    name: 'News Brief',
+    availability: 'Try free',
+    tagline: 'Convert messy headlines into one short operating brief.',
+    input: 'Headlines, copied articles, or pasted notes',
+    output: 'Priority summary, risk tags, next actions',
+    fit: 'Directors, founders, and market-watch teams.',
+    variants: ['News watch', 'Market watch', 'Policy watch'],
+    exampleId: 'market-brief',
+  },
+  {
+    kind: 'Free tool',
+    name: 'Action Board',
+    availability: 'Try free',
+    tagline: 'Turn raw updates into owners, priorities, and due windows.',
+    input: 'Team updates, forwarded notes, or meeting scraps',
+    output: 'Action list, priority lane, owner queue',
+    fit: 'Operations, projects, and plant management.',
+    variants: ['Daily standup', 'Director review', 'Follow-up tracker'],
+    exampleId: 'action-board',
+  },
+  {
+    kind: 'Control module',
+    name: 'Supplier Watch',
+    availability: 'Deploy',
+    tagline: 'Catch delay, payment, and customs risk before it hurts operations.',
+    input: 'Supplier emails, ETA sheets, customs notes',
+    output: 'Risk score, escalation queue, owner + due date',
     fit: 'Procurement and supply chain teams.',
-    exampleId: 'supplier-watch',
+    variants: ['Import watch', 'Supplier delay watch', 'Documentation watch'],
   },
   {
-    name: 'Director Command Agent',
-    availability: 'Live now',
-    tagline: 'Convert daily noise into one clean director action brief.',
-    input: 'Daily ops updates, forwarded notes, management snippets',
-    output: 'Top actions, blockers, decisions needed',
-    fit: 'Directors, GMs, and founders.',
-    exampleId: 'director-command',
-  },
-  {
-    name: 'Quality CAPA Agent',
-    availability: 'Pilot',
-    tagline: 'Turn one issue into a structured close-out chain.',
+    kind: 'Control module',
+    name: 'Quality Closeout',
+    availability: 'Deploy',
+    tagline: 'Turn one quality issue into a tracked close-out chain.',
     input: 'Incident text, severity, supplier, evidence',
     output: 'Incident record, containment, RCA, CAPA chain',
     fit: 'Quality teams and plant managers.',
+    variants: ['Supplier NC', 'Customer complaint', 'Internal defect'],
   },
   {
-    name: 'Cash Control Agent',
-    availability: 'Pilot',
-    tagline: 'Pull invoices, cash books, and payment emails into one control view.',
+    kind: 'Control module',
+    name: 'Cash Watch',
+    availability: 'Deploy',
+    tagline: 'Put invoices, reminders, and collections into one control view.',
     input: 'Invoice sheets, cash books, payment notes',
     output: 'Overdue queue, collections list, follow-up drafts',
     fit: 'Finance and commercial control.',
+    variants: ['Collections', 'Invoice control', 'Payment confirmation'],
   },
 ]
 
@@ -88,61 +110,61 @@ export const packages: PackageTier[] = [
   {
     name: 'Starter',
     timeline: '2-week sprint',
-    commercialModel: 'One workflow',
-    bestFor: 'Teams that want one agent live fast.',
-    deliverables: ['One live agent', 'One operating view', 'Simple handover SOP'],
+    commercialModel: 'One free tool + one first workflow',
+    bestFor: 'Teams that want one useful win without a heavy rollout.',
+    deliverables: ['One live tool setup', 'One operator workflow', 'Simple handover SOP'],
   },
   {
-    name: 'Growth',
+    name: 'Control Pack',
     timeline: '4 to 6 weeks',
-    commercialModel: 'Connected rollout',
-    bestFor: 'Teams connecting multiple workflows into one layer.',
-    deliverables: ['Three connected agents', 'Manager command view', 'Weekly operating rhythm'],
+    commercialModel: 'Two or three connected modules',
+    bestFor: 'Teams fixing a function end-to-end.',
+    deliverables: ['Supplier, quality, cash, or ops pack', 'Manager control board', 'Weekly operating rhythm'],
   },
   {
-    name: 'Scale',
+    name: 'OS Build',
     timeline: 'Program rollout',
-    commercialModel: 'Operating system build',
-    bestFor: 'Companies building an AI-native alternative to manual ERP work.',
-    deliverables: ['SuperMega OS foundation', 'Role dashboards', 'Governance and rollout playbook'],
+    commercialModel: 'AI-native operating layer',
+    bestFor: 'Companies replacing manual ERP work with one action system.',
+    deliverables: ['SuperMega OS foundation', 'Role views', 'Governance and rollout playbook'],
   },
 ]
 
 export const flagshipSystem: FlagshipSystem = {
   name: 'SuperMega OS',
-  tagline: 'An AI-native operating layer on top of Gmail, Drive, Sheets, and messy real company data.',
+  tagline: 'An AI-native action layer on top of Gmail, Drive, Sheets, and messy company data.',
   steps: [
     'Pull signals from inboxes, files, and simple team inputs',
-    'Turn them into ranked actions, blockers, and approvals',
-    'Run managers and directors from one command layer instead of scattered tools',
+    'Convert them into owners, due dates, blockers, and approvals',
+    'Run managers and directors from one control layer instead of scattered spreadsheets',
   ],
-  bestFor: 'Companies that are too messy for traditional ERP and too operational for generic chatbots.',
+  bestFor: 'Owner-led companies that are too messy for ERP and too operational for generic AI chat.',
 }
 
 export const trialModules: TrialModule[] = [
   {
-    id: 'lead-to-pilot',
-    name: 'Lead-to-Pilot',
-    promise: 'Paste leads in. Get an outreach-ready contact pack out.',
+    id: 'lead-finder',
+    name: 'Lead Finder',
+    promise: 'Paste leads in. Get a cleaner contact pack out.',
     testInput: 'Lead list or URL',
   },
   {
-    id: 'supplier-watch',
-    name: 'Supplier Watch',
-    promise: 'Paste one supplier thread. Get risk, owner, and next actions.',
-    testInput: 'Supplier email or message',
+    id: 'market-brief',
+    name: 'News Brief',
+    promise: 'Paste headlines in. Get one short market brief out.',
+    testInput: 'Headlines or notes',
   },
   {
-    id: 'director-command',
-    name: 'Director Command',
-    promise: 'Paste daily updates. Get a director brief with top actions.',
+    id: 'action-board',
+    name: 'Action Board',
+    promise: 'Paste raw updates. Get owners and due dates out.',
     testInput: 'Daily notes or updates',
   },
 ]
 
 export const engagementFlow = [
-  'Try one live agent',
-  'Connect one real workflow',
+  'Try one free tool',
+  'Deploy one control module',
   'Ship one manager view',
   'Scale into SuperMega OS',
 ]
