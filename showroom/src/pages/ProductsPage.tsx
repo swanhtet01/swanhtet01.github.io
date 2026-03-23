@@ -146,6 +146,25 @@ export function ProductsPage() {
           </Link>
         </div>
       </section>
+
+      <section className="sm-surface p-6">
+        <p className="sm-kicker text-[var(--sm-accent)]">Context adapter</p>
+        <h2 className="mt-3 text-2xl font-bold text-white">Built to swap client context, not rebuild from zero.</h2>
+        <div className="mt-5 grid gap-4 md:grid-cols-3">
+          <div className="sm-chip">
+            <p className="sm-kicker text-[var(--sm-accent)]">Connector pack</p>
+            <p className="mt-2 text-sm text-white">Gmail, Drive, Sheets, forms, ERP exports, and external feeds.</p>
+          </div>
+          <div className="sm-chip">
+            <p className="sm-kicker text-[var(--sm-accent-alt)]">Entity map</p>
+            <p className="mt-2 text-sm text-white">Suppliers, incidents, invoices, actions, approvals, and owners.</p>
+          </div>
+          <div className="sm-chip">
+            <p className="sm-kicker text-[var(--sm-accent)]">Output pack</p>
+            <p className="mt-2 text-sm text-white">Manager board, founder brief, weekly report, and exception queue.</p>
+          </div>
+        </div>
+      </section>
     </div>
   )
 }
