@@ -62,6 +62,36 @@ function Probe-Http {
     }
 }
 
+function Probe-Tcp443 {
+    param([string]$IpAddress)
+    try {
+        $client = [System.Net.Sockets.TcpClient]::new()
+        $task = $client.ConnectAsync($IpAddress, 443)
+        $connected = $task.Wait(3000)
+        if ($connected -and $client.Connected) {
+            $client.Close()
+            return @{
+                ip = $IpAddress
+                status = "ready"
+                tcp_succeeded = $true
+            }
+        }
+        $client.Close()
+        return @{
+            ip = $IpAddress
+            status = "blocked"
+            tcp_succeeded = $false
+        }
+    }
+    catch {
+        return @{
+            ip = $IpAddress
+            status = "error"
+            tcp_succeeded = $false
+        }
+    }
+}
+
 $www = "www.$Domain"
 $localApex = Resolve-Record -Name $Domain
 $localWww = Resolve-Record -Name $www
@@ -69,6 +99,10 @@ $googleApex = Resolve-Record -Name $Domain -Server "8.8.8.8"
 $cloudflareApex = Resolve-Record -Name $Domain -Server "1.1.1.1"
 $httpApex = Probe-Http -Url ("https://{0}" -f $Domain)
 $httpWww = Probe-Http -Url ("https://{0}" -f $www)
+$tcpChecks = @()
+foreach ($ip in ($localApex.ips | Select-Object -Unique)) {
+    $tcpChecks += Probe-Tcp443 -IpAddress $ip
+}
 
 $diagnosis = "ok"
 $recommendations = @()
@@ -89,8 +123,17 @@ elseif ($httpApex.status -ne "ready" -and $httpWww.status -eq "ready") {
     $recommendations += "Keep www as temporary canonical path and re-check apex DNS and HTTPS propagation."
 }
 elseif ($httpApex.status -ne "ready" -and $httpWww.status -ne "ready") {
-    $diagnosis = "http_connectivity_issue"
-    $recommendations += "Check local firewall/proxy/VPN and retry from another network."
+    $anyTcpReady = @($tcpChecks | Where-Object { $_.tcp_succeeded }).Count -gt 0
+    if (-not $anyTcpReady -and $localApex.status -eq "ready") {
+        $diagnosis = "network_blocks_github_pages_ips"
+        $recommendations += "DNS resolves, but TCP/443 to GitHub Pages IPs is blocked on this network."
+        $recommendations += "Try another network/hotspot, or disable blocking proxy/VPN/firewall rules."
+        $recommendations += "Use Cloud Run hosting fallback if your ISP blocks GitHub Pages ranges."
+    }
+    else {
+        $diagnosis = "http_connectivity_issue"
+        $recommendations += "Check local firewall/proxy/VPN and retry from another network."
+    }
 }
 else {
     $recommendations += "Domain and HTTPS look healthy from this machine."
@@ -106,6 +149,7 @@ $payload = @{
         cloudflare_resolve_apex = $cloudflareApex
         https_apex = $httpApex
         https_www = $httpWww
+        tcp_443_apex_ips = $tcpChecks
     }
     diagnosis = $diagnosis
     recommendations = $recommendations
