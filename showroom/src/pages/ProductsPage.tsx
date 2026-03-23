@@ -8,8 +8,8 @@ export function ProductsPage() {
     <div className="space-y-8">
       <PageIntro
         eyebrow="Products"
-        title="3 AI agent products."
-        description="Each product has a free working example you can test right now."
+        title="Simple AI agent products."
+        description="Open the free demo first. Then deploy on your own data."
       />
 
       <section className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
@@ -35,13 +35,13 @@ export function ProductsPage() {
                 className="rounded-full bg-[var(--sm-accent)] px-4 py-2 text-sm font-bold text-white hover:bg-cyan-700"
                 to={`/examples#${product.exampleId}`}
               >
-                Open Example
+                Try Free
               </Link>
               <Link
                 className="rounded-full border border-white/70 bg-white/65 px-4 py-2 text-sm font-semibold text-[var(--sm-ink)] hover:bg-white/90"
                 to="/contact?intent=pilot"
               >
-                Deploy This
+                Deploy on My Data
               </Link>
             </div>
           </article>

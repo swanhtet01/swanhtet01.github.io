@@ -44,30 +44,30 @@ export type TrialModule = {
 export const navItems = [
   { label: 'Home', to: '/' },
   { label: 'Products', to: '/products' },
-  { label: 'Examples', to: '/examples' },
+  { label: 'Try Free', to: '/examples' },
   { label: 'Pricing', to: '/packages' },
   { label: 'Contact', to: '/contact' },
 ] as const
 
 export const products: Product[] = [
   {
-    name: 'Lead Finder Agent',
-    tagline: 'Turn messy business lists into qualified outreach leads.',
-    capabilities: ['Extract contacts', 'Score lead quality', 'Export clean CSV'],
-    fit: 'Sales, partnerships, and business development teams.',
+    name: 'Lead Scraper Agent',
+    tagline: 'Find and clean public business leads in minutes.',
+    capabilities: ['Scrape URL or pasted list', 'Extract contacts', 'Export scored CSV'],
+    fit: 'Sales, partnerships, and growth teams.',
     exampleId: 'lead-finder',
   },
   {
-    name: 'Daily News Brief Agent',
-    tagline: 'Generate a short business brief from live source links.',
-    capabilities: ['Fetch source pages', 'Tag risk themes', 'Output daily brief'],
-    fit: 'Directors, managers, and owners making daily decisions.',
+    name: 'News Brief Agent',
+    tagline: 'Turn daily news links into one clear management brief.',
+    capabilities: ['Read source URLs', 'Tag market/ops risk', 'Generate brief + actions'],
+    fit: 'Directors, managers, and owner-led teams.',
     exampleId: 'news-brief',
   },
   {
-    name: 'Action Planner Agent',
-    tagline: 'Convert unstructured notes into owner-ready task plans.',
-    capabilities: ['Parse action items', 'Assign suggested owner', 'Set urgency and due window'],
+    name: 'Action Board Agent',
+    tagline: 'Convert raw updates into owner + due-date actions.',
+    capabilities: ['Parse messy notes', 'Assign owner lane', 'Set priority + due window'],
     fit: 'Operations, project, and plant management teams.',
     exampleId: 'action-planner',
   },
@@ -76,52 +76,53 @@ export const products: Product[] = [
 export const packages: PackageTier[] = [
   {
     name: 'Starter',
-    timeline: '1 workflow in 14 days',
-    commercialModel: 'Fixed scope',
-    bestFor: 'Teams that want one working agent live fast.',
-    deliverables: ['One production workflow', 'Simple dashboard', 'Team handover SOP'],
+    timeline: 'Pilot sprint',
+    commercialModel: 'Focused scope',
+    bestFor: 'Teams that want one working agent fast.',
+    deliverables: ['One live agent', 'Simple dashboard', 'Pilot SOP'],
   },
   {
     name: 'Growth',
-    timeline: '3 workflows in 4-6 weeks',
+    timeline: 'Team rollout',
     commercialModel: 'Phased scope',
-    bestFor: 'Teams needing cross-functional automation and reporting.',
-    deliverables: ['Three connected agents', 'Role-based dashboards', 'Weekly execution cadence'],
+    bestFor: 'Teams connecting multiple functions into one flow.',
+    deliverables: ['Three connected agents', 'Role-based views', 'Weekly operating cadence'],
   },
   {
     name: 'Scale',
-    timeline: 'Operating system rollout',
+    timeline: 'Company operating layer',
     commercialModel: 'Program scope',
     bestFor: 'Companies building an AI-native management layer.',
-    deliverables: ['AI-native ERP foundation', 'Multi-team rollout', 'Governance and expansion plan'],
+    deliverables: ['AI-native ERP foundation', 'Multi-team rollout', 'Governance playbook'],
   },
 ]
 
 export const trialModules: TrialModule[] = [
   {
     id: 'lead-finder',
-    name: 'Lead Finder Example',
+    name: 'Lead Scraper',
     promise: 'Paste directory text or URL and get scored leads.',
     testInput: 'Business text or page URL',
   },
   {
     id: 'news-brief',
-    name: 'Daily News Brief Example',
+    name: 'News Brief',
     promise: 'Pull headlines from source links and output a short brief.',
     testInput: 'Source URLs or pasted headlines',
   },
   {
     id: 'action-planner',
-    name: 'Action Planner Example',
+    name: 'Action Board',
     promise: 'Turn raw notes into a clean action tracker.',
     testInput: 'Messy updates or meeting notes',
   },
 ]
 
 export const engagementFlow = [
-  'Open examples and test with your own input',
+  'Open free tool',
+  'Run with sample input',
+  'Run with your own data',
   'Pick one product for pilot',
-  'Get scoped plan and timeline',
   'Go live with tracked outcomes',
 ]
 

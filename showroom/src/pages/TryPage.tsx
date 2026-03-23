@@ -28,6 +28,19 @@ type PlannedAction = {
   priority: 'high' | 'medium' | 'low'
 }
 
+const LEAD_SAMPLE_TEXT = `Shwe Auto House | www.shweautohouse.com | sales@shweautohouse.com | +95 9 777 111 222 | tyre distributor Yangon
+Mingalar Tyre Service, www.mingalartyreservice.com, contact@mingalartyreservice.com, +95 9 765 444 222, auto service and tyre retail
+Golden Highway Parts | www.goldenhighwayparts.com | +95 9 500 113 221 | truck and industrial tyre buyer
+Delta Auto Care | hello@deltaautocare.com | +95 9 330 888 999 | vehicle maintenance and tyres`
+
+const NEWS_SAMPLE_TEXT = `Long queues form as vehicles line up for fuel in Yangon
+MAI cuts baggage allowances due to jet fuel shortage
+Myanmar rubber prices hold steady amid softer regional demand
+Customs clearance delays reported at key import checkpoints
+MRPPA updates RSS market range for current week`
+
+const ACTION_SAMPLE_TEXT = `Supplier shipment may slip by 4 days due to customs. Confirm ETA today. Review overdue invoice list and call top 3 customers. Prepare quality check for incoming batch tomorrow. Update weekly director brief by Friday.`
+
 function resolveInitialTab(): TrialTab {
   const hash = window.location.hash.replace('#', '').trim()
   if (hash === 'lead-finder' || hash === 'news-brief' || hash === 'action-planner') {
@@ -235,7 +248,7 @@ export function TryPage() {
   const [newsFetching, setNewsFetching] = useState(false)
 
   const [plannerInput, setPlannerInput] = useState(
-    'Supplier shipment may slip by 4 days due to customs. Confirm ETA today. Review overdue invoice list and call top 3 customers. Prepare quality check for incoming batch tomorrow.',
+    ACTION_SAMPLE_TEXT,
   )
   const [plannerRows, setPlannerRows] = useState<PlannedAction[]>([])
 
@@ -253,7 +266,7 @@ export function TryPage() {
     try {
       const text = await fetchReadableText(leadUrl)
       setLeadRawText(text.slice(0, 30000))
-      setLeadStatus('Fetched source text. Click "Run Lead Finder".')
+      setLeadStatus('Fetched source text. Click "Run".')
     } catch {
       setLeadStatus('Could not fetch URL. Paste text manually and run.')
     } finally {
@@ -265,6 +278,15 @@ export function TryPage() {
     const rows = parseLeads(leadRawText, leadKeywords)
     setLeadRows(rows)
     setLeadStatus(rows.length > 0 ? `Generated ${rows.length} leads.` : 'No leads found. Try different input.')
+  }
+
+  function handleLeadSample() {
+    const keywords = 'tyre,auto,service,distributor,industrial'
+    setLeadRawText(LEAD_SAMPLE_TEXT)
+    setLeadKeywords(keywords)
+    const rows = parseLeads(LEAD_SAMPLE_TEXT, keywords)
+    setLeadRows(rows)
+    setLeadStatus(`Loaded sample and generated ${rows.length} leads.`)
   }
 
   async function handleNewsFetch() {
@@ -317,7 +339,7 @@ export function TryPage() {
       setNewsStatus(`Generated brief from ${cleaned.length} headlines.`)
     } else {
       setNewsItems(items)
-      setNewsBrief(['Live fetch failed. Paste headlines below and click "Run Manual Brief".'])
+      setNewsBrief(['Live fetch failed. Paste headlines below and click "Run Manual".'])
       setNewsStatus('Live fetch failed.')
     }
   }
@@ -333,16 +355,33 @@ export function TryPage() {
     setNewsStatus(fallback.length > 0 ? `Generated brief from ${fallback.length} manual headlines.` : 'No headlines found.')
   }
 
+  function handleNewsSample() {
+    setNewsFallbackText(NEWS_SAMPLE_TEXT)
+    const fallback = extractHeadlines(NEWS_SAMPLE_TEXT, 12).map((headline) => ({
+      source: 'Sample',
+      headline,
+      tag: classifyHeadline(headline),
+    }))
+    setNewsItems(fallback)
+    setNewsBrief(buildNewsBrief(fallback))
+    setNewsStatus(`Loaded sample and generated brief from ${fallback.length} headlines.`)
+  }
+
   function handlePlannerRun() {
     setPlannerRows(parseActions(plannerInput))
+  }
+
+  function handlePlannerSample() {
+    setPlannerInput(ACTION_SAMPLE_TEXT)
+    setPlannerRows(parseActions(ACTION_SAMPLE_TEXT))
   }
 
   return (
     <div className="space-y-8">
       <PageIntro
-        eyebrow="Examples"
-        title="Free AI agent examples."
-        description="These are real working tools, not static mock cards."
+        eyebrow="Try Free"
+        title="Run these tools now."
+        description="Use sample data in one click, then test with your own input."
       />
 
       <section className="grid gap-3 md:grid-cols-3">
@@ -366,7 +405,7 @@ export function TryPage() {
       {activeTab === 'lead-finder' ? (
         <section className="grid gap-5 lg:grid-cols-[1fr_1fr]">
           <article className="rounded-3xl border border-white/55 bg-white/55 p-6 backdrop-blur-xl">
-            <h2 className="text-xl font-bold text-[var(--sm-ink)]">Lead Finder</h2>
+            <h2 className="text-xl font-bold text-[var(--sm-ink)]">Lead Scraper</h2>
             <p className="mt-2 text-sm text-[var(--sm-muted)]">Fetch a page or paste text, then score leads.</p>
             <label className="mt-4 block text-sm font-semibold text-[var(--sm-muted)]">
               Source URL (optional)
@@ -412,7 +451,14 @@ export function TryPage() {
                 onClick={handleLeadRun}
                 type="button"
               >
-                Run Lead Finder
+                Run
+              </button>
+              <button
+                className="rounded-full border border-white/70 bg-white/70 px-5 py-2.5 text-sm font-semibold text-[var(--sm-ink)] hover:bg-white"
+                onClick={handleLeadSample}
+                type="button"
+              >
+                Load Sample
               </button>
               {leadRows.length > 0 ? (
                 <button
@@ -451,7 +497,7 @@ export function TryPage() {
       {activeTab === 'news-brief' ? (
         <section className="grid gap-5 lg:grid-cols-[1fr_1fr]">
           <article className="rounded-3xl border border-white/55 bg-white/55 p-6 backdrop-blur-xl">
-            <h2 className="text-xl font-bold text-[var(--sm-ink)]">Daily News Brief</h2>
+            <h2 className="text-xl font-bold text-[var(--sm-ink)]">News Brief</h2>
             <p className="mt-2 text-sm text-[var(--sm-muted)]">Use source links. If blocked, paste headlines manually.</p>
             <label className="mt-4 block text-sm font-semibold text-[var(--sm-muted)]">
               Source URLs (one per line)
@@ -468,7 +514,14 @@ export function TryPage() {
                 onClick={handleNewsFetch}
                 type="button"
               >
-                {newsFetching ? 'Fetching...' : 'Run Live Brief'}
+                {newsFetching ? 'Fetching...' : 'Run Live'}
+              </button>
+              <button
+                className="rounded-full border border-white/70 bg-white/70 px-5 py-2.5 text-sm font-semibold text-[var(--sm-ink)] hover:bg-white"
+                onClick={handleNewsSample}
+                type="button"
+              >
+                Load Sample
               </button>
             </div>
             <label className="mt-4 block text-sm font-semibold text-[var(--sm-muted)]">
@@ -485,7 +538,7 @@ export function TryPage() {
               onClick={handleManualNewsRun}
               type="button"
             >
-              Run Manual Brief
+              Run Manual
             </button>
             <p className="mt-3 text-sm text-[var(--sm-muted)]">{newsStatus}</p>
           </article>
@@ -512,20 +565,29 @@ export function TryPage() {
       {activeTab === 'action-planner' ? (
         <section className="grid gap-5 lg:grid-cols-[1fr_1fr]">
           <article className="rounded-3xl border border-white/55 bg-white/55 p-6 backdrop-blur-xl">
-            <h2 className="text-xl font-bold text-[var(--sm-ink)]">Action Planner</h2>
+            <h2 className="text-xl font-bold text-[var(--sm-ink)]">Action Board</h2>
             <p className="mt-2 text-sm text-[var(--sm-muted)]">Paste notes. Get a clean owner-ready action list.</p>
             <textarea
               className="mt-4 min-h-64 w-full rounded-2xl border border-[var(--sm-line)] bg-white/70 px-3 py-3 text-sm"
               onChange={(event) => setPlannerInput(event.target.value)}
               value={plannerInput}
             />
-            <button
-              className="mt-4 rounded-full bg-[var(--sm-accent)] px-5 py-2.5 text-sm font-bold text-white hover:bg-cyan-700"
-              onClick={handlePlannerRun}
-              type="button"
-            >
-              Run Action Planner
-            </button>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <button
+                className="rounded-full bg-[var(--sm-accent)] px-5 py-2.5 text-sm font-bold text-white hover:bg-cyan-700"
+                onClick={handlePlannerRun}
+                type="button"
+              >
+                Run
+              </button>
+              <button
+                className="rounded-full border border-white/70 bg-white/70 px-5 py-2.5 text-sm font-semibold text-[var(--sm-ink)] hover:bg-white"
+                onClick={handlePlannerSample}
+                type="button"
+              >
+                Load Sample
+              </button>
+            </div>
           </article>
 
           <article className="rounded-3xl border border-white/30 bg-[linear-gradient(145deg,rgba(10,21,38,0.88),rgba(17,45,65,0.86))] p-6 text-white">
@@ -546,7 +608,7 @@ export function TryPage() {
       ) : null}
 
       <section className="rounded-3xl border border-white/55 bg-white/55 p-6 backdrop-blur-xl">
-        <h2 className="text-xl font-bold text-[var(--sm-ink)]">Deploy one of these on your real data</h2>
+        <h2 className="text-xl font-bold text-[var(--sm-ink)]">Want this on your real data?</h2>
         <div className="mt-4 flex flex-wrap gap-3">
           <Link
             className="rounded-full bg-orange-500 px-5 py-3 text-sm font-bold text-white hover:bg-orange-400"

@@ -22,6 +22,45 @@ const initialForm: LeadFormState = {
   brief: '',
 }
 
+const LEAD_QUEUE_KEY = 'supermega_leads_v1'
+
+type StoredLead = LeadFormState & {
+  summary: string
+  submittedAt: string
+}
+
+function loadQueuedLeadCount() {
+  if (typeof window === 'undefined') {
+    return 0
+  }
+  try {
+    const payload = window.localStorage.getItem(LEAD_QUEUE_KEY)
+    if (!payload) {
+      return 0
+    }
+    const rows = JSON.parse(payload)
+    return Array.isArray(rows) ? rows.length : 0
+  } catch {
+    return 0
+  }
+}
+
+function saveLeadLocally(payload: StoredLead) {
+  if (typeof window === 'undefined') {
+    return 0
+  }
+  try {
+    const existingRaw = window.localStorage.getItem(LEAD_QUEUE_KEY)
+    const existing = existingRaw ? JSON.parse(existingRaw) : []
+    const rows = Array.isArray(existing) ? existing : []
+    rows.unshift(payload)
+    window.localStorage.setItem(LEAD_QUEUE_KEY, JSON.stringify(rows.slice(0, 100)))
+    return rows.length
+  } catch {
+    return 0
+  }
+}
+
 function buildLeadSummary(payload: LeadFormState) {
   return [
     'SuperMega Pilot Request',
@@ -56,7 +95,8 @@ export function ContactPage() {
   const requestedPackage = searchParams.get('package') ?? ''
   const [form, setForm] = useState<LeadFormState>({ ...initialForm, package: requestedPackage })
   const [summary, setSummary] = useState('')
-  const [status, setStatus] = useState<'idle' | 'ready' | 'copied' | 'submitted' | 'error'>('idle')
+  const [status, setStatus] = useState<'idle' | 'ready' | 'queued' | 'copied' | 'submitted' | 'error'>('idle')
+  const [queuedCount, setQueuedCount] = useState(loadQueuedLeadCount)
   const leadEndpoint = import.meta.env.VITE_LEAD_ENDPOINT as string | undefined
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -66,6 +106,14 @@ export function ContactPage() {
     setStatus('ready')
 
     if (!leadEndpoint) {
+      const count = saveLeadLocally({
+        ...form,
+        summary: generated,
+        submittedAt: new Date().toISOString(),
+      })
+      setQueuedCount(count)
+      setStatus('queued')
+      window.location.href = buildLeadMailto(form)
       return
     }
 
@@ -106,7 +154,7 @@ export function ContactPage() {
       <PageIntro
         eyebrow="Contact"
         title="Start your pilot request."
-        description="Submit once, then copy, download, or email the request instantly."
+        description="Works with or without backend API."
       />
 
       <section className="grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
@@ -188,6 +236,7 @@ export function ContactPage() {
           <p className="mt-3 text-sm text-[var(--sm-muted)]">
             {status === 'idle' && 'Generates a request immediately, with or without backend.'}
             {status === 'ready' && 'Request generated. Use Copy, Download, or Email buttons.'}
+            {status === 'queued' && `Saved locally (queue: ${queuedCount}). Email draft opened.`}
             {status === 'copied' && 'Request copied to clipboard.'}
             {status === 'submitted' && 'Request submitted to endpoint and generated locally.'}
             {status === 'error' && 'Copy or endpoint failed. Download or Email still works.'}
@@ -223,6 +272,7 @@ export function ContactPage() {
               Email
             </a>
           </div>
+          <p className="mt-3 text-xs text-slate-300">Local queue count: {queuedCount}</p>
         </aside>
       </section>
     </div>
