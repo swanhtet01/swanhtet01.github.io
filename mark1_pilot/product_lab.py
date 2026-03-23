@@ -5,6 +5,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from .client_context import build_client_context_report
 from .config import PilotConfig
 from .coverage import load_data_coverage_summary
 from .dqms import load_dqms_summary
@@ -53,6 +54,9 @@ def build_product_lab(config: PilotConfig, repo_root: Path | None = None) -> dic
     input_center = _load_json(output_dir / config.input_center.snapshot_file)
     execution_review = _load_json(output_dir / "execution_review.json")
     action_board = _load_json(output_dir / "action_board.json")
+    context_report = build_client_context_report(config.client_context)
+    context_summary = context_report.get("summary", {})
+    selected_products = context_report.get("selected_products", {})
 
     coverage_score = int(coverage.get("readiness_score", 0) or 0)
     hard_blockers = list(coverage.get("hard_blockers", []))
@@ -237,6 +241,13 @@ def build_product_lab(config: PilotConfig, repo_root: Path | None = None) -> dic
     }
 
     next_moves: list[str] = []
+    first_control_module = next(iter(selected_products.get("control_modules", [])), "")
+    if context_report.get("status") == "error":
+        next_moves.append("Fix the client context pack because the product templates still cannot be reused cleanly across other companies.")
+    elif first_control_module:
+        next_moves.append(
+            f"Use the context pack to push `{first_control_module}` from template into the first reusable client deployment."
+        )
     if not gmail_ready:
         next_moves.append("Restore Gmail auth so supplier, internal, and quality agents move from partial to full signal coverage.")
     if action_board.get("status") == "ready":
@@ -265,10 +276,19 @@ def build_product_lab(config: PilotConfig, repo_root: Path | None = None) -> dic
             "live_demo_count": status_counts.get("live_demo", 0),
             "pilot_ready_count": status_counts.get("pilot_ready", 0),
             "live_system_count": status_counts.get("live_system", 0),
+            "client_context_status": context_report.get("status", "not_configured"),
+            "client_name": context_summary.get("company_name", ""),
+            "selected_template_count": len(selected_products.get("control_modules", [])),
         },
         "products": sorted(products, key=lambda item: (-_status_rank(str(item["status"])), item["name"])),
         "learning_loops": learning_loops,
         "architecture": architecture,
+        "client_context": {
+            "status": context_report.get("status", "not_configured"),
+            "company_name": context_summary.get("company_name", ""),
+            "context_id": context_summary.get("context_id", ""),
+            "selected_control_modules": selected_products.get("control_modules", []),
+        },
         "next_moves": next_moves,
     }
 
@@ -281,10 +301,13 @@ def render_product_lab_markdown(payload: dict[str, Any]) -> str:
         f"- Coverage score: {payload.get('summary', {}).get('coverage_score', 0)}",
         f"- Hard blockers: `{payload.get('summary', {}).get('hard_blocker_count', 0)}`",
         f"- Flagship status: `{_status_label(str(payload.get('summary', {}).get('flagship_status', '')) )}`",
+        f"- Client context: `{payload.get('summary', {}).get('client_context_status', 'not_configured')}`",
+        f"- Client: `{payload.get('summary', {}).get('client_name', '')}`",
         f"- Free tools: `{payload.get('summary', {}).get('free_tool_count', 0)}`",
         f"- Control modules: `{payload.get('summary', {}).get('control_module_count', 0)}`",
         f"- Live demos: `{payload.get('summary', {}).get('live_demo_count', 0)}`",
         f"- Pilot-ready modules: `{payload.get('summary', {}).get('pilot_ready_count', 0)}`",
+        f"- Selected template count: `{payload.get('summary', {}).get('selected_template_count', 0)}`",
         "",
         "## Flagship",
         "",

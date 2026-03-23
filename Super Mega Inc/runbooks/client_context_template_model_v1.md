@@ -6,62 +6,82 @@ This model defines what must be collected to adapt one SuperMega product to a ne
 
 ## Context Pack
 
-Each client should get one context pack with these sections.
+Each client should get one context pack with a stable runtime shape.
 
-## 1. Company Identity
+## Runtime Sections
 
-- company name
-- industry
-- operating footprint
-- core roles
-- main business priorities
+## 1. Company
 
-## 2. Data Sources
+- `name`
+- `industry`
+- `footprint`
+- `roles`
+- `priorities`
 
-- Gmail mailboxes or forwarding rules
-- Drive folders
-- Shared Drives
-- Sheets
-- local exports
-- optional ERP or accounting source
+## 2. Selected Products
 
-## 3. Entity Maps
+- `flagship`
+- `free_tools`
+- `control_modules`
+- `role_dashboards`
+
+## 3. Connectors
+
+- `gmail`
+- `drive`
+- `sheets`
+- `external`
+
+This is the section that projects into the current runtime config.
+
+## 4. Entity Maps
 
 - suppliers
 - customers
 - plants
-- warehouses
-- owner list
-- approver list
+- teams
+- owners
+- approvers
+- aliases
 
-## 4. Business Rules
+## 5. Workflow Rules
 
 - severity levels
 - risk categories
+- routing rules
 - due-date rules
 - escalation rules
 - approval rules
 
-## 5. Module Selection
+## 6. Outputs
 
-- which free tool matters most
-- which control module lands first
-- what role dashboard is needed first
+- dashboard title
+- email profiles
+- search queries
+- input templates
+- views
 
-## 6. Success Metrics
+## 7. Governance
 
-- what success looks like in week 1
-- what success looks like in month 1
-- what gets measured
+- read-only vs draft-only vs write-back
+- approval-required actions
+- closers
+- overrides
+
+## 8. Success Metrics
+
+- week 1 outcomes
+- month 1 outcomes
+- KPIs
 
 ## Example Mapping
 
 ### Yangon Tyre
 
 - first modules:
+  - `Action OS`
   - `Supplier Watch`
   - `Quality Closeout`
-  - `Action Board`
 - key entities:
   - KIIC
   - JUNKY
@@ -95,6 +115,7 @@ These should not be redesigned for every client:
 - signal classification pattern
 - closeout pattern
 - weekly review pack
+- product blueprint registry
 
 ## What Can Be Adapted
 
@@ -106,3 +127,4 @@ These should be swapped per client:
 - thresholds
 - connectors
 - templates
+- governance rules

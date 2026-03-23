@@ -3,6 +3,12 @@ import { Link } from 'react-router-dom'
 import { engagementFlow, flagshipSystem, products, sellableTemplates } from '../content'
 
 const freeTools = products.filter((product) => product.kind === 'Free tool')
+const laneOrder = ['Run the day', 'Control risk', 'Commercial watch'] as const
+
+const laneSummaries = laneOrder.map((lane) => ({
+  lane,
+  templates: sellableTemplates.filter((template) => template.lane === lane),
+}))
 
 export function HomePage() {
   return (
@@ -92,13 +98,15 @@ export function HomePage() {
               </div>
 
               <div className="mt-5 grid gap-3">
-                {sellableTemplates.slice(0, 5).map((template) => (
-                  <div className="sm-command-row" key={template.name}>
+                {laneSummaries.map(({ lane, templates }) => (
+                  <div className="sm-command-row" key={lane}>
                     <div>
-                      <p className="font-semibold text-white">{template.name}</p>
-                      <p className="text-sm text-[var(--sm-muted)]">{template.problem}</p>
+                      <p className="font-semibold text-white">{lane}</p>
+                      <p className="text-sm text-[var(--sm-muted)]">
+                        {templates.map((template) => `${template.name}: ${template.firstWeekOutcome}`).join(' ')}
+                      </p>
                     </div>
-                    <span className="sm-status-pill">Template</span>
+                    <span className="sm-status-pill">{templates.length} templates</span>
                   </div>
                 ))}
               </div>
@@ -147,17 +155,27 @@ export function HomePage() {
       <section className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
         <article className="sm-surface p-6">
           <p className="sm-kicker text-[var(--sm-accent-alt)]">Deploy next</p>
-          <h2 className="mt-3 text-2xl font-bold text-white">Sellable workflow templates.</h2>
-          <div className="mt-4 grid gap-3">
-            {sellableTemplates.map((template) => (
-              <div className="sm-command-row" key={template.name}>
-                <div>
-                  <p className="font-semibold text-white">{template.name}</p>
-                  <p className="text-sm text-[var(--sm-muted)]">{template.rollout}</p>
+          <h2 className="mt-3 text-2xl font-bold text-white">Sellable workflow lanes.</h2>
+          <div className="mt-4 grid gap-4">
+            {laneSummaries.map(({ lane, templates }) => (
+              <div className="sm-surface-soft p-4" key={lane}>
+                <div className="flex items-center justify-between gap-3">
+                  <p className="font-semibold text-white">{lane}</p>
+                  <span className="sm-status-pill">{templates.length} templates</span>
                 </div>
-                <Link className="sm-link" to="/contact">
-                  Deploy
-                </Link>
+                <div className="mt-3 grid gap-3">
+                  {templates.map((template) => (
+                    <div className="sm-command-row" key={template.name}>
+                      <div>
+                        <p className="font-semibold text-white">{template.name}</p>
+                        <p className="text-sm text-[var(--sm-muted)]">{template.firstWeekOutcome}</p>
+                      </div>
+                      <Link className="sm-link" to="/contact">
+                        Start
+                      </Link>
+                    </div>
+                  ))}
+                </div>
               </div>
             ))}
           </div>

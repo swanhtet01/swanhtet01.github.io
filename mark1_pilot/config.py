@@ -245,6 +245,7 @@ class PilotConfig:
     dqms: DQMSConfig
     erp: ERPConfig
     output: OutputConfig
+    client_context: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
     def from_path(cls, config_path: str | Path) -> "PilotConfig":
@@ -264,6 +265,10 @@ class PilotConfig:
             if not isinstance(override_payload, dict):
                 raise ValueError(f"Config profile '{selected_profile}' must be a JSON object.")
             data = _deep_merge_dict(data, override_payload)
+
+        from .client_context import resolve_client_context
+
+        data, client_context = resolve_client_context(data, raw_path)
 
         drive = DriveSourceConfig(**data["sources"]["drive"])
         gmail = GmailSourceConfig(**data["sources"]["gmail"])
@@ -319,4 +324,5 @@ class PilotConfig:
             dqms=dqms,
             erp=erp,
             output=output,
+            client_context=client_context,
         )

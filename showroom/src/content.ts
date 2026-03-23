@@ -25,8 +25,13 @@ export type Product = {
 
 export type SellableTemplate = {
   name: string
+  lane: 'Run the day' | 'Control risk' | 'Commercial watch'
   buyer: string
   problem: string
+  useWhen: string
+  timeToFirstLiveOutput: string
+  primaryOperator: string
+  firstWeekOutcome: string
   requiredData: string[]
   outputs: string[]
   rollout: string
@@ -209,8 +214,13 @@ export const products: Product[] = [
 export const sellableTemplates: SellableTemplate[] = [
   {
     name: 'Action OS',
+    lane: 'Run the day',
     buyer: 'Founders, directors, plant and operations managers',
     problem: 'Important work is buried across inboxes, sheets, and verbal updates.',
+    useWhen: 'When the team still runs on chat, forwarded notes, and sticky follow-up.',
+    timeToFirstLiveOutput: '1 to 2 days',
+    primaryOperator: 'Operations lead',
+    firstWeekOutcome: 'One live owner queue with due dates and blocker review.',
     requiredData: ['Daily update sheet', 'Forwarded notes or emails', 'Owner list', 'Simple tracker'],
     outputs: ['Action board', 'Owner queue', 'Blocker list', 'Director summary'],
     rollout: 'Start with one update source and one owner list, then add write-back and review rhythm.',
@@ -218,8 +228,13 @@ export const sellableTemplates: SellableTemplate[] = [
   },
   {
     name: 'Supplier Watch',
+    lane: 'Control risk',
     buyer: 'Procurement managers and supply chain leads',
     problem: 'Delay, payment, and customs risk shows up too late.',
+    useWhen: 'When supplier threads are scattered and delay only gets noticed after it hurts output.',
+    timeToFirstLiveOutput: '2 to 3 days',
+    primaryOperator: 'Procurement manager',
+    firstWeekOutcome: 'A live supplier risk queue with owner, date, and escalation status.',
     requiredData: ['Supplier emails', 'PO or ETA sheet', 'Payment status', 'Supplier master'],
     outputs: ['Supplier risk board', 'Escalation queue', 'Owner follow-up list', 'Reply draft support'],
     rollout: 'Connect one mailbox and ETA sheet first, then add escalation rules and review cadence.',
@@ -227,8 +242,13 @@ export const sellableTemplates: SellableTemplate[] = [
   },
   {
     name: 'Quality Closeout',
+    lane: 'Control risk',
     buyer: 'Quality managers and plant managers',
     problem: 'Issues get logged, but CAPA follow-up breaks after the first report.',
+    useWhen: 'When quality incidents exist, but no one owns the closeout chain end to end.',
+    timeToFirstLiveOutput: '2 to 4 days',
+    primaryOperator: 'Quality head',
+    firstWeekOutcome: 'One incident-to-CAPA board with containment, owner, and verification steps.',
     requiredData: ['Incident log', 'Complaint emails', 'Evidence links', 'Owner list'],
     outputs: ['Incident register', 'CAPA chain', 'Closure checklist', 'Trend view'],
     rollout: 'Connect intake first, then run incident-to-CAPA workflow, then add closure discipline.',
@@ -236,8 +256,13 @@ export const sellableTemplates: SellableTemplate[] = [
   },
   {
     name: 'Cash Watch',
+    lane: 'Control risk',
     buyer: 'Finance managers and commercial controllers',
     problem: 'Collections risk is visible too late and follow-up is weak.',
+    useWhen: 'When invoices, reminders, and payment proof live in different places.',
+    timeToFirstLiveOutput: '2 to 3 days',
+    primaryOperator: 'Finance lead',
+    firstWeekOutcome: 'One overdue queue with collection priority and follow-up drafts.',
     requiredData: ['Invoice register', 'Cash book', 'Payment emails', 'Customer master'],
     outputs: ['Overdue queue', 'Collection priority list', 'Promised-payment tracker', 'Cash summary'],
     rollout: 'Connect invoice and cash data first, then add owner workflow and weekly review.',
@@ -245,12 +270,31 @@ export const sellableTemplates: SellableTemplate[] = [
   },
   {
     name: 'Sales Signal',
+    lane: 'Commercial watch',
     buyer: 'Sales managers and commercial directors',
     problem: 'Demand shifts and channel signals are not turned into action quickly enough.',
+    useWhen: 'When sales, distributor notes, and market headlines need one watch layer.',
+    timeToFirstLiveOutput: '1 to 2 days',
+    primaryOperator: 'Commercial lead',
+    firstWeekOutcome: 'One demand-shift brief with a live follow-up queue.',
     requiredData: ['Sales update sheet', 'Distributor notes', 'Market headlines', 'Channel master'],
     outputs: ['Sales signal brief', 'Demand-shift watchlist', 'Follow-up queue', 'Weekly summary'],
     rollout: 'Connect one channel update source first, then add signals, follow-up, and weekly rhythm.',
     reusePattern: 'Swap channel structure, product categories, and pricing assumptions without changing the signal engine.',
+  },
+  {
+    name: 'Production Pulse',
+    lane: 'Run the day',
+    buyer: 'Plant managers and operations directors',
+    problem: 'Shift updates and downtime notes do not become one daily execution view.',
+    useWhen: 'When production updates arrive by chat, paper, or partial sheets and need one clean board.',
+    timeToFirstLiveOutput: '2 to 4 days',
+    primaryOperator: 'Plant manager',
+    firstWeekOutcome: 'One daily plant brief with blockers, owners, and plan-vs-actual notes.',
+    requiredData: ['Shift updates', 'Downtime log', 'Plan vs actual source'],
+    outputs: ['Plant brief', 'Blocker queue', 'Owner actions', 'Daily summary'],
+    rollout: 'Connect shift updates first, then rank blockers, then add recurring plant review rhythm.',
+    reusePattern: 'Swap plant structure, KPI rules, and escalation ladder without changing the operating pattern.',
   },
 ]
 
