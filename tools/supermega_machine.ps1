@@ -136,6 +136,7 @@ try {
     $today = Join-Path $repoRoot "pilot-data\TODAY.md"
     $dqms = Join-Path $repoRoot "pilot-data\dqms_weekly_summary.md"
     $autopilot = Join-Path $repoRoot "pilot-data\autopilot_status.md"
+    $productLab = Join-Path $repoRoot "pilot-data\product_lab.md"
 
     $websiteCheckRaw = powershell -ExecutionPolicy Bypass -File $websiteDiagnose -Domain "supermega.dev"
     $websiteCheck = $null
@@ -164,6 +165,7 @@ try {
             director_brief = Get-FileHealth -PathValue $brief
             today_recap = Get-FileHealth -PathValue $today
             dqms_summary = Get-FileHealth -PathValue $dqms
+            product_lab = Get-FileHealth -PathValue $productLab
             autopilot_status = Get-FileHealth -PathValue $autopilot
             gmail_token_exists = if ([string]::IsNullOrWhiteSpace($gmailToken)) { $false } else { Test-Path -LiteralPath $gmailToken }
         }

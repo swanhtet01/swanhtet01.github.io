@@ -32,6 +32,7 @@ from .platform import (
     render_platform_digest_markdown,
 )
 from .pilot_solution import build_pilot_solution, write_pilot_solution
+from .product_lab import build_product_lab, write_product_lab_outputs
 from .input_center import (
     build_input_center_snapshot,
     resolve_input_templates,
@@ -769,10 +770,35 @@ def run_coverage_report(config_path: str) -> int:
 def run_execution_review(
     config_path: str,
     autopilot_status_override: dict[str, Any] | None = None,
+    refresh_domain_check: bool = True,
 ) -> int:
     config = PilotConfig.from_path(config_path)
     output_dir = config.output.inventory_path
     output_dir.mkdir(parents=True, exist_ok=True)
+    domain_refresh_status = "skipped"
+
+    if refresh_domain_check:
+        domain_script = Path(config_path).expanduser().resolve().parent / "tools" / "check_supermega_domain.py"
+        domain_report = output_dir / "domain_health_latest.json"
+        if domain_script.exists():
+            try:
+                completed = subprocess.run(
+                    [
+                        sys.executable,
+                        str(domain_script),
+                        "--json-out",
+                        str(domain_report),
+                    ],
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                    timeout=50,
+                )
+                domain_refresh_status = "ready" if completed.returncode == 0 else "warning"
+            except subprocess.TimeoutExpired:
+                domain_refresh_status = "timeout"
+        else:
+            domain_refresh_status = "script_missing"
 
     payload = build_execution_review(config, autopilot_status_override=autopilot_status_override)
     outputs = write_execution_review_outputs(payload, output_dir)
@@ -789,6 +815,7 @@ def run_execution_review(
                 "json_file": outputs["json_file"],
                 "markdown_file": outputs["markdown_file"],
                 "today_markdown_file": outputs["today_markdown_file"],
+                "domain_refresh_status": domain_refresh_status,
             },
             indent=2,
         )
@@ -1044,6 +1071,30 @@ def run_pilot_solution(config_path: str, email_max_results: int) -> int:
                 "email_signal_count": solution.get("email_signal_count", 0),
                 "drive_signal_count": solution.get("drive_signal_count", 0),
                 "priority_action_count": len(solution.get("priority_actions", [])),
+                "json_file": outputs["json_file"],
+                "markdown_file": outputs["markdown_file"],
+            },
+            indent=2,
+        )
+    )
+    return 0
+
+
+def run_product_lab(config_path: str) -> int:
+    config = PilotConfig.from_path(config_path)
+    output_dir = config.output.inventory_path
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    payload = build_product_lab(config)
+    outputs = write_product_lab_outputs(payload, output_dir)
+    summary = payload.get("summary", {})
+    print(
+        json.dumps(
+            {
+                "status": "ready",
+                "flagship_status": summary.get("flagship_status", ""),
+                "live_demo_count": summary.get("live_demo_count", 0),
+                "pilot_ready_count": summary.get("pilot_ready_count", 0),
                 "json_file": outputs["json_file"],
                 "markdown_file": outputs["markdown_file"],
             },
@@ -1414,6 +1465,11 @@ def run_autopilot(
         False,
         lambda: run_coverage_report(config_path),
     )
+    execute_step(
+        "product-lab",
+        False,
+        lambda: run_product_lab(config_path),
+    )
 
     if run_manus_catalog_step:
         execute_step(
@@ -1494,6 +1550,7 @@ def run_autopilot(
             "required_failure_count": len(preview_required_failures),
             "optional_failure_count": len(preview_optional_failures),
         },
+        refresh_domain_check=False,
     )
     review_elapsed = round(perf_counter() - review_tick, 3)
     review_step_finished = datetime.now().astimezone().isoformat()
@@ -1999,6 +2056,16 @@ def build_parser() -> argparse.ArgumentParser:
         help="Maximum number of emails sampled per profile.",
     )
 
+    product_lab_parser = subparsers.add_parser(
+        "product-lab",
+        help="Generate the SuperMega product machine view across showcase tools, client modules, and flagship ERP OS.",
+    )
+    product_lab_parser.add_argument(
+        "--config",
+        default="./config.example.json",
+        help="Path to pilot config JSON.",
+    )
+
     coverage_parser = subparsers.add_parser(
         "coverage-report",
         help="Generate a data coverage scorecard and collection actions for pilot operations.",
@@ -2017,6 +2084,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--config",
         default="./config.example.json",
         help="Path to pilot config JSON.",
+    )
+    execution_review_parser.add_argument(
+        "--skip-domain-check",
+        action="store_true",
+        help="Skip refreshing the supermega.dev domain report before generating execution review.",
     )
 
     dqms_sync_parser = subparsers.add_parser(
@@ -2213,10 +2285,12 @@ def main() -> int:
         return run_platform_publish(args.config, args.email_max_results, args.skip_drive, args.folder_id)
     if args.command == "pilot-solution":
         return run_pilot_solution(args.config, args.email_max_results)
+    if args.command == "product-lab":
+        return run_product_lab(args.config)
     if args.command == "coverage-report":
         return run_coverage_report(args.config)
     if args.command == "execution-review":
-        return run_execution_review(args.config)
+        return run_execution_review(args.config, refresh_domain_check=not args.skip_domain_check)
     if args.command == "dqms-sync":
         return run_dqms_sync(args.config, args.max_email_results, args.search_top_k)
     if args.command == "dqms-report":

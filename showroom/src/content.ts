@@ -20,6 +20,13 @@ export type PackageTier = {
   deliverables: string[]
 }
 
+export type FlagshipSystem = {
+  name: string
+  tagline: string
+  steps: string[]
+  bestFor: string
+}
+
 export type CaseStudy = {
   title: string
   baseline: string
@@ -96,6 +103,17 @@ export const packages: PackageTier[] = [
     deliverables: ['AI-native ERP foundation', 'Multi-team rollout', 'Governance playbook'],
   },
 ]
+
+export const flagshipSystem: FlagshipSystem = {
+  name: 'SuperMega OS',
+  tagline: 'The flagship system that turns Drive, Gmail, and Sheets into one action layer.',
+  steps: [
+    'Collect updates from files, email, and simple input forms',
+    'Agents turn raw signals into owner + due-date actions',
+    'Directors and managers work from one command view',
+  ],
+  bestFor: 'Owner-led companies replacing manual ERP work without a heavy rollout.',
+}
 
 export const trialModules: TrialModule[] = [
   {
