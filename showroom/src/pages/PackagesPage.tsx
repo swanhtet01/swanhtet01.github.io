@@ -8,8 +8,8 @@ export function PackagesPage() {
     <div className="space-y-8">
       <PageIntro
         eyebrow="Packages"
-        title="3 rollout tiers."
-        description="No public fixed pricing. Scope is set in discovery."
+        title="Three ways to land it."
+        description="We start small, prove value, then scale only if the workflow earns it."
       />
 
       <section className="grid gap-5 lg:grid-cols-3">

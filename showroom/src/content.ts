@@ -1,22 +1,18 @@
-export type Solution = {
+export type TrialModule = {
+  id: 'lead-to-pilot' | 'supplier-watch' | 'director-command'
   name: string
-  summary: string
-  outcomes: string[]
+  promise: string
+  testInput: string
 }
 
 export type Product = {
   name: string
+  availability: 'Live now' | 'Pilot'
   tagline: string
-  capabilities: string[]
+  input: string
+  output: string
   fit: string
-  exampleId: TrialModule['id']
-}
-
-export type PaidModule = {
-  name: string
-  tagline: string
-  outcomes: string[]
-  fit: string
+  exampleId?: TrialModule['id']
 }
 
 export type PackageTier = {
@@ -34,166 +30,119 @@ export type FlagshipSystem = {
   bestFor: string
 }
 
-export type CaseStudy = {
-  title: string
-  baseline: string
-  intervention: string
-  outcome: string
-  proof: string
-}
-
-export type DqmsModule = {
-  name: string
-  purpose: string
-  outputs: string[]
-}
-
-export type TrialModule = {
-  id: 'lead-finder' | 'news-brief' | 'action-planner'
-  name: string
-  promise: string
-  testInput: string
-}
-
 export const navItems = [
   { label: 'Home', to: '/' },
-  { label: 'Products', to: '/products' },
-  { label: 'Try Tools', to: '/examples' },
+  { label: 'Agents', to: '/products' },
+  { label: 'Live Lab', to: '/examples' },
   { label: 'Pricing', to: '/packages' },
   { label: 'Contact', to: '/contact' },
 ] as const
 
 export const products: Product[] = [
   {
-    name: 'Lead Finder',
-    tagline: 'Find and clean public business leads in minutes.',
-    capabilities: ['Scrape URL or pasted list', 'Extract contacts', 'Export scored CSV'],
-    fit: 'Sales, partnerships, and growth teams.',
-    exampleId: 'lead-finder',
+    name: 'Lead-to-Pilot Agent',
+    availability: 'Live now',
+    tagline: 'Turn messy lead lists into scored outreach-ready prospects.',
+    input: 'Directory text, URL, or pasted lead list',
+    output: 'Scored leads, contact pack, CSV export',
+    fit: 'Sales, outreach, and SuperMega growth.',
+    exampleId: 'lead-to-pilot',
   },
   {
-    name: 'Market Brief',
-    tagline: 'Turn a few headlines into one clear management brief.',
-    capabilities: ['Read source URLs', 'Tag market/ops risk', 'Generate brief + actions'],
-    fit: 'Directors, managers, and owner-led teams.',
-    exampleId: 'news-brief',
-  },
-  {
-    name: 'Action Board',
-    tagline: 'Convert raw updates into owner + due-date actions.',
-    capabilities: ['Parse messy notes', 'Assign owner lane', 'Set priority + due window'],
-    fit: 'Operations, project, and plant management teams.',
-    exampleId: 'action-planner',
-  },
-]
-
-export const paidModules: PaidModule[] = [
-  {
-    name: 'Supplier Watch',
-    tagline: 'Catch supplier risk before it turns into delay or payment pressure.',
-    outcomes: ['ETA and customs follow-up', 'Payment and invoice escalation', 'Supplier action list by owner'],
+    name: 'Supplier Watch Agent',
+    availability: 'Live now',
+    tagline: 'Read supplier threads and flag delay, payment, and document risk.',
+    input: 'Supplier email thread or pasted message',
+    output: 'Risk score, tags, owner, due date, next actions',
     fit: 'Procurement and supply chain teams.',
+    exampleId: 'supplier-watch',
   },
   {
-    name: 'Quality CAPA',
-    tagline: 'Turn one quality issue into a tracked close-out chain.',
-    outcomes: ['Incident register', 'CAPA action chain', 'Closure and verification tracking'],
+    name: 'Director Command Agent',
+    availability: 'Live now',
+    tagline: 'Convert daily noise into one clean director action brief.',
+    input: 'Daily ops updates, forwarded notes, management snippets',
+    output: 'Top actions, blockers, decisions needed',
+    fit: 'Directors, GMs, and founders.',
+    exampleId: 'director-command',
+  },
+  {
+    name: 'Quality CAPA Agent',
+    availability: 'Pilot',
+    tagline: 'Turn one issue into a structured close-out chain.',
+    input: 'Incident text, severity, supplier, evidence',
+    output: 'Incident record, containment, RCA, CAPA chain',
     fit: 'Quality teams and plant managers.',
   },
   {
-    name: 'Action Board Pro',
-    tagline: 'Give managers one board with real owners, due dates, and write-back flow.',
-    outcomes: ['Role-based action lanes', 'Manager review rhythm', 'Controlled write-back to team sheets'],
-    fit: 'Operations leads, directors, and management teams.',
+    name: 'Cash Control Agent',
+    availability: 'Pilot',
+    tagline: 'Pull invoices, cash books, and payment emails into one control view.',
+    input: 'Invoice sheets, cash books, payment notes',
+    output: 'Overdue queue, collections list, follow-up drafts',
+    fit: 'Finance and commercial control.',
   },
 ]
 
 export const packages: PackageTier[] = [
   {
     name: 'Starter',
-    timeline: 'Pilot sprint',
-    commercialModel: 'Focused scope',
-    bestFor: 'Teams that want one working agent fast.',
-    deliverables: ['One live agent', 'Simple dashboard', 'Pilot SOP'],
+    timeline: '2-week sprint',
+    commercialModel: 'One workflow',
+    bestFor: 'Teams that want one agent live fast.',
+    deliverables: ['One live agent', 'One operating view', 'Simple handover SOP'],
   },
   {
     name: 'Growth',
-    timeline: 'Team rollout',
-    commercialModel: 'Phased scope',
-    bestFor: 'Teams connecting multiple functions into one flow.',
-    deliverables: ['Three connected agents', 'Role-based views', 'Weekly operating cadence'],
+    timeline: '4 to 6 weeks',
+    commercialModel: 'Connected rollout',
+    bestFor: 'Teams connecting multiple workflows into one layer.',
+    deliverables: ['Three connected agents', 'Manager command view', 'Weekly operating rhythm'],
   },
   {
     name: 'Scale',
-    timeline: 'Company operating layer',
-    commercialModel: 'Program scope',
-    bestFor: 'Companies building an AI-native management layer.',
-    deliverables: ['AI-native ERP foundation', 'Multi-team rollout', 'Governance playbook'],
+    timeline: 'Program rollout',
+    commercialModel: 'Operating system build',
+    bestFor: 'Companies building an AI-native alternative to manual ERP work.',
+    deliverables: ['SuperMega OS foundation', 'Role dashboards', 'Governance and rollout playbook'],
   },
 ]
 
 export const flagshipSystem: FlagshipSystem = {
   name: 'SuperMega OS',
-  tagline: 'One action layer across email, files, and team updates.',
+  tagline: 'An AI-native operating layer on top of Gmail, Drive, Sheets, and messy real company data.',
   steps: [
-    'Collect updates from email, files, and simple team inputs',
-    'Turn raw signals into owner and due-date actions',
-    'Run managers and directors from one daily command layer',
+    'Pull signals from inboxes, files, and simple team inputs',
+    'Turn them into ranked actions, blockers, and approvals',
+    'Run managers and directors from one command layer instead of scattered tools',
   ],
-  bestFor: 'Owner-led companies replacing manual ERP work without a heavy rollout.',
+  bestFor: 'Companies that are too messy for traditional ERP and too operational for generic chatbots.',
 }
 
 export const trialModules: TrialModule[] = [
   {
-    id: 'lead-finder',
-    name: 'Lead Finder',
-    promise: 'Paste directory text or URL and get scored leads.',
-    testInput: 'Business text or page URL',
+    id: 'lead-to-pilot',
+    name: 'Lead-to-Pilot',
+    promise: 'Paste leads in. Get an outreach-ready contact pack out.',
+    testInput: 'Lead list or URL',
   },
   {
-    id: 'news-brief',
-    name: 'Market Brief',
-    promise: 'Turn a few headlines into a short market brief.',
-    testInput: 'Source URLs or pasted headlines',
+    id: 'supplier-watch',
+    name: 'Supplier Watch',
+    promise: 'Paste one supplier thread. Get risk, owner, and next actions.',
+    testInput: 'Supplier email or message',
   },
   {
-    id: 'action-planner',
-    name: 'Action Board',
-    promise: 'Turn raw notes into a clean action tracker.',
-    testInput: 'Messy updates or meeting notes',
+    id: 'director-command',
+    name: 'Director Command',
+    promise: 'Paste daily updates. Get a director brief with top actions.',
+    testInput: 'Daily notes or updates',
   },
 ]
 
 export const engagementFlow = [
-  'Open one free tool',
-  'See one useful output',
-  'Connect one workflow',
-  'Add owner and due-date actions',
-  'Run from one action layer',
-]
-
-export const solutions: Solution[] = [
-  {
-    name: 'AI Agent Operating Layer',
-    summary: 'Deploy practical agents first, then connect them into one management system.',
-    outcomes: ['Faster decisions', 'Clearer ownership', 'Less manual follow-up'],
-  },
-]
-
-export const caseStudies: CaseStudy[] = [
-  {
-    title: 'Yangon Tyre Pilot',
-    baseline: 'Scattered files and email threads made follow-up slow.',
-    intervention: 'Built structured signals and management outputs.',
-    outcome: 'Single daily execution view with clearer ownership.',
-    proof: 'Live workflow and dashboard artifacts.',
-  },
-]
-
-export const dqmsModules: DqmsModule[] = [
-  {
-    name: 'quality_incidents',
-    purpose: 'Track quality events in one register.',
-    outputs: ['incident_id', 'severity', 'owner', 'status'],
-  },
+  'Try one live agent',
+  'Connect one real workflow',
+  'Ship one manager view',
+  'Scale into SuperMega OS',
 ]

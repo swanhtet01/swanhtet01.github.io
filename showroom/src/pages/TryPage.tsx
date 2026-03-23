@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom'
 import { PageIntro } from '../components/PageIntro'
 import { trialModules } from '../content'
 
-type TrialTab = 'lead-finder' | 'news-brief' | 'action-planner'
+type TrialTab = 'lead-to-pilot' | 'supplier-watch' | 'director-command'
 
 type LeadRow = {
   name: string
@@ -12,20 +12,22 @@ type LeadRow = {
   phone: string
   website: string
   score: number
-  priority: 'high' | 'medium' | 'low'
 }
 
-type NewsItem = {
-  source: string
-  headline: string
-  tag: string
-}
-
-type PlannedAction = {
-  task: string
+type SupplierOutput = {
+  score: number
+  level: 'Low' | 'Medium' | 'High'
+  tags: string[]
   owner: string
   due: string
-  priority: 'high' | 'medium' | 'low'
+  actions: string[]
+  responseDraft: string
+}
+
+type DirectorOutput = {
+  actions: string[]
+  blockers: string[]
+  decisions: string[]
 }
 
 const LEAD_SAMPLE_TEXT = `Shwe Auto House | www.shweautohouse.com | sales@shweautohouse.com | +95 9 777 111 222 | tyre distributor Yangon
@@ -33,69 +35,34 @@ Mingalar Tyre Service, www.mingalartyreservice.com, contact@mingalartyreservice.
 Golden Highway Parts | www.goldenhighwayparts.com | +95 9 500 113 221 | truck and industrial tyre buyer
 Delta Auto Care | hello@deltaautocare.com | +95 9 330 888 999 | vehicle maintenance and tyres`
 
-const NEWS_SAMPLE_TEXT = `Long queues form as vehicles line up for fuel in Yangon
-MAI cuts baggage allowances due to jet fuel shortage
-Myanmar rubber prices hold steady amid softer regional demand
-Customs clearance delays reported at key import checkpoints
-MRPPA updates RSS market range for current week`
+const SUPPLIER_SAMPLE_TEXT = `From: zhuangshidong@kiic.example
+Subject: Shipment update for bead wire lot
 
-const ACTION_SAMPLE_TEXT = `Supplier shipment may slip by 4 days due to customs. Confirm ETA today. Review overdue invoice list and call top 3 customers. Prepare quality check for incoming batch tomorrow. Update weekly director brief by Friday.`
+Shipment delayed by 5 days due to customs inspection.
+Please settle the overdue invoice before release of the next lot.
+Packing list is attached but commercial invoice needs reconfirmation.`
 
-const LEAD_SAMPLE_KEYWORDS = 'tyre,auto,service,distributor,industrial'
+const DIRECTOR_SAMPLE_TEXT = `Plant A had a power fluctuation during the night shift. KIIC bead wire lot needs incoming inspection tomorrow morning. JUNKY customs documents are still pending. Sales team says distributor demand shifted to truck tyres this week. Cash collection from two overdue customers needs escalation today.`
 
 function resolveInitialTab(): TrialTab {
   const hash = window.location.hash.replace('#', '').trim()
-  if (hash === 'lead-finder' || hash === 'news-brief' || hash === 'action-planner') {
+  if (hash === 'lead-to-pilot' || hash === 'supplier-watch' || hash === 'director-command') {
     return hash
   }
-  return 'lead-finder'
-}
-
-function normalizeUrl(input: string) {
-  const trimmed = input.trim()
-  if (!trimmed) {
-    return ''
-  }
-  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
-    return trimmed
-  }
-  return `https://${trimmed}`
-}
-
-async function fetchReadableText(url: string) {
-  const normalized = normalizeUrl(url)
-  const withoutProtocol = normalized.replace(/^https?:\/\//i, '')
-  const proxyUrl = `https://r.jina.ai/http://${withoutProtocol}`
-  const controller = new AbortController()
-  const timeout = window.setTimeout(() => controller.abort(), 12000)
-  try {
-    const response = await fetch(proxyUrl, { signal: controller.signal })
-    if (!response.ok) {
-      throw new Error(`Fetch failed: ${response.status}`)
-    }
-    return response.text()
-  } finally {
-    window.clearTimeout(timeout)
-  }
+  return 'supplier-watch'
 }
 
 function uniqueValues(values: string[]) {
   return [...new Set(values.filter(Boolean))]
 }
 
-function parseLeads(rawText: string, keywordCsv: string): LeadRow[] {
+function parseLeads(rawText: string): LeadRow[] {
   const lines = rawText
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter(Boolean)
 
-  const keywords = keywordCsv
-    .split(',')
-    .map((item) => item.trim().toLowerCase())
-    .filter(Boolean)
-
   const rows: LeadRow[] = []
-
   for (const line of lines) {
     const emails = uniqueValues(line.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi) ?? [])
     const websites = uniqueValues(
@@ -105,476 +72,364 @@ function parseLeads(rawText: string, keywordCsv: string): LeadRow[] {
       line.match(/\+?\d[\d\s\-()]{7,}\d/g)?.map((value) => value.replace(/\s+/g, ' ').trim()) ?? [],
     )
 
-    const firstChunk = line.split('|')[0]?.split(',')[0]?.trim() ?? ''
-    let name = firstChunk
-    if (!name || /^[\d+().\s-]+$/.test(name)) {
-      name = websites[0]?.replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0] ?? 'Unknown Lead'
-    }
-
     let score = 0
-    if (emails.length > 0) score += 2
-    if (websites.length > 0) score += 1
-    if (phones.length > 0) score += 1
-    if (keywords.some((keyword) => line.toLowerCase().includes(keyword))) score += 2
+    if (emails.length) score += 2
+    if (websites.length) score += 2
+    if (phones.length) score += 1
+    if (/(tyre|truck|industrial|distributor|auto|service)/i.test(line)) score += 2
 
-    const priority = score >= 4 ? 'high' : score >= 2 ? 'medium' : 'low'
     rows.push({
-      name,
+      name: line.split('|')[0]?.split(',')[0]?.trim() || 'Unknown lead',
       email: emails[0] ?? '',
       phone: phones[0] ?? '',
       website: websites[0] ?? '',
       score,
-      priority,
     })
   }
 
-  const deduped = new Map<string, LeadRow>()
-  for (const row of rows) {
-    const key = `${row.name.toLowerCase()}|${row.email.toLowerCase()}|${row.website.toLowerCase()}`
-    if (!deduped.has(key) || (deduped.get(key)?.score ?? 0) < row.score) {
-      deduped.set(key, row)
-    }
-  }
-
-  return [...deduped.values()].sort((a, b) => b.score - a.score)
+  return rows.sort((a, b) => b.score - a.score).slice(0, 10)
 }
 
-function rowsToCsv(rows: LeadRow[]) {
-  const header = 'name,email,phone,website,score,priority'
-  const body = rows.map((row) => {
-    const fields = [row.name, row.email, row.phone, row.website, String(row.score), row.priority]
-    return fields.map((field) => `"${String(field).replace(/"/g, '""')}"`).join(',')
-  })
-  return [header, ...body].join('\n')
-}
-
-function downloadTextFile(filename: string, text: string) {
-  const blob = new Blob([text], { type: 'text/plain;charset=utf-8' })
+function downloadCsv(rows: LeadRow[]) {
+  const header = 'name,email,phone,website,score'
+  const body = rows.map((row) => [row.name, row.email, row.phone, row.website, String(row.score)].map((value) => `"${value.replace(/"/g, '""')}"`).join(','))
+  const blob = new Blob([[header, ...body].join('\n')], { type: 'text/csv;charset=utf-8' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = filename
+  a.download = 'lead_to_pilot.csv'
   a.click()
   URL.revokeObjectURL(url)
 }
 
-function extractHeadlines(rawText: string, maxCount = 8) {
-  const lines = rawText
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter((line) => line.length >= 28 && line.length <= 180)
-    .filter((line) => !/^https?:\/\//i.test(line))
-    .filter((line) => !/^[-*#>\d.]/.test(line))
+function analyzeSupplierMessage(text: string): SupplierOutput {
+  const lowered = text.toLowerCase()
+  const tags: string[] = []
+  const actions: string[] = []
+  let score = 1
+  let owner = 'Procurement'
+  let due = 'This week'
 
-  return uniqueValues(lines).slice(0, maxCount)
-}
-
-function classifyHeadline(headline: string) {
-  const value = headline.toLowerCase()
-  if (/(fuel|energy|power|gas|diesel)/.test(value)) return 'Energy'
-  if (/(port|shipment|logistics|customs|transport)/.test(value)) return 'Logistics'
-  if (/(policy|law|tax|government|ministry)/.test(value)) return 'Policy'
-  if (/(rubber|price|market|trade|demand|inflation|currency)/.test(value)) return 'Market'
-  return 'General'
-}
-
-function buildNewsBrief(items: NewsItem[]) {
-  if (items.length === 0) {
-    return ['No headlines found.']
+  if (/(delay|slip|late|postpone|hold)/.test(lowered)) {
+    tags.push('Delay risk')
+    actions.push('Confirm revised ETA and shipment release condition.')
+    score += 3
+    due = 'Today'
   }
-  const tags = new Map<string, number>()
-  for (const item of items) {
-    tags.set(item.tag, (tags.get(item.tag) ?? 0) + 1)
+  if (/(invoice|payment|overdue|settle|advance)/.test(lowered)) {
+    tags.push('Payment risk')
+    actions.push('Check invoice status and assign owner for payment follow-up.')
+    score += 3
+    owner = 'Finance + Procurement'
   }
-  const topTags = [...tags.entries()]
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 2)
-    .map(([tag]) => tag)
+  if (/(customs|packing list|invoice|document|bl|form e)/.test(lowered)) {
+    tags.push('Document risk')
+    actions.push('Validate required documents before next supplier reply.')
+    score += 2
+  }
+  if (/(quality|defect|reject|claim|bead wire)/.test(lowered)) {
+    tags.push('Quality risk')
+    actions.push('Prepare incoming inspection or quality containment check.')
+    score += 2
+    owner = 'Quality + Procurement'
+  }
 
-  const top = items.slice(0, 3).map((item) => `${item.source}: ${item.headline}`)
-  return [
-    `Watch today: ${topTags.join(' + ') || 'General'} signals.`,
-    `Top headline: ${items[0].headline}`,
-    `Action: review supplier and pricing assumptions against today's news.`,
-    ...top,
-  ]
+  const level = score >= 7 ? 'High' : score >= 4 ? 'Medium' : 'Low'
+
+  return {
+    score,
+    level,
+    tags: tags.length ? tags : ['General follow-up'],
+    owner,
+    due,
+    actions: actions.length ? actions : ['Review message and assign an owner.'],
+    responseDraft: `Thanks for the update. We are reviewing the ${tags.join(', ').toLowerCase() || 'issue'} now and will confirm owner, due date, and required documents shortly.`,
+  }
 }
 
-function parseActions(rawText: string): PlannedAction[] {
-  const chunks = rawText
-    .split(/\r?\n|[.](?=\s+[A-Z]|\s+$)/)
+function buildDirectorCommand(text: string): DirectorOutput {
+  const chunks = text
+    .split(/\r?\n|[.](?=\s+[A-Z]|\s*$)/)
     .map((item) => item.trim())
     .filter((item) => item.length > 8)
 
-  const planned: PlannedAction[] = []
+  const actions: string[] = []
+  const blockers: string[] = []
+  const decisions: string[] = []
 
   for (const chunk of chunks) {
-    const value = chunk.toLowerCase()
-    if (!/(send|check|review|follow|confirm|call|visit|pay|approve|update|close|prepare|arrange)/.test(value)) {
-      continue
+    const lowered = chunk.toLowerCase()
+    if (/(need|needs|confirm|review|inspect|escalation|follow)/.test(lowered)) {
+      actions.push(chunk)
     }
-
-    let owner = 'Operations'
-    if (/(supplier|purchase|procurement|shipment|customs)/.test(value)) owner = 'Procurement'
-    if (/(quality|defect|claim|capa|nonconformance)/.test(value)) owner = 'Quality'
-    if (/(invoice|payment|cash|collection|bank)/.test(value)) owner = 'Finance'
-    if (/(sales|customer|demand|distributor)/.test(value)) owner = 'Sales'
-
-    let priority: PlannedAction['priority'] = 'medium'
-    let due = 'This week'
-    if (/(urgent|today|asap|immediately|critical|delay)/.test(value)) {
-      priority = 'high'
-      due = 'Today'
-    } else if (/(next week|later|follow up next)/.test(value)) {
-      priority = 'low'
-      due = 'Next week'
+    if (/(delay|pending|blocked|issue|risk|overdue|fluctuation)/.test(lowered)) {
+      blockers.push(chunk)
     }
-
-    planned.push({ task: chunk, owner, due, priority })
+    if (/(demand shifted|approve|decide|priority|allocate)/.test(lowered)) {
+      decisions.push(chunk)
+    }
   }
 
-  return planned.slice(0, 15)
+  return {
+    actions: actions.slice(0, 5),
+    blockers: blockers.slice(0, 4),
+    decisions: decisions.slice(0, 3),
+  }
 }
-
-const SAMPLE_LEAD_ROWS = parseLeads(LEAD_SAMPLE_TEXT, LEAD_SAMPLE_KEYWORDS)
-const SAMPLE_NEWS_ITEMS = extractHeadlines(NEWS_SAMPLE_TEXT, 12).map((headline) => ({
-  source: 'Sample',
-  headline,
-  tag: classifyHeadline(headline),
-}))
-const SAMPLE_NEWS_BRIEF = buildNewsBrief(SAMPLE_NEWS_ITEMS)
-const SAMPLE_ACTION_ROWS = parseActions(ACTION_SAMPLE_TEXT)
 
 export function TryPage() {
   const [activeTab, setActiveTab] = useState<TrialTab>(resolveInitialTab)
 
-  const [leadUrl, setLeadUrl] = useState('')
-  const [leadKeywords, setLeadKeywords] = useState(LEAD_SAMPLE_KEYWORDS)
-  const [leadRawText, setLeadRawText] = useState(LEAD_SAMPLE_TEXT)
-  const [leadRows, setLeadRows] = useState<LeadRow[]>(SAMPLE_LEAD_ROWS)
-  const [leadStatus, setLeadStatus] = useState(`Sample loaded with ${SAMPLE_LEAD_ROWS.length} leads.`)
-  const [leadFetching, setLeadFetching] = useState(false)
+  const [leadInput, setLeadInput] = useState('')
+  const [leadRows, setLeadRows] = useState<LeadRow[]>([])
 
-  const [newsUrls, setNewsUrls] = useState('https://www.gnlm.com.mm/\nhttps://elevenmyanmar.com/')
-  const [newsFallbackText, setNewsFallbackText] = useState(NEWS_SAMPLE_TEXT)
-  const [newsItems, setNewsItems] = useState<NewsItem[]>(SAMPLE_NEWS_ITEMS)
-  const [newsBrief, setNewsBrief] = useState<string[]>(SAMPLE_NEWS_BRIEF)
-  const [newsStatus, setNewsStatus] = useState(`Sample loaded with ${SAMPLE_NEWS_ITEMS.length} headlines.`)
-  const [newsFetching, setNewsFetching] = useState(false)
+  const [supplierInput, setSupplierInput] = useState('')
+  const [supplierOutput, setSupplierOutput] = useState<SupplierOutput | null>(null)
 
-  const [plannerInput, setPlannerInput] = useState(ACTION_SAMPLE_TEXT)
-  const [plannerRows, setPlannerRows] = useState<PlannedAction[]>(SAMPLE_ACTION_ROWS)
+  const [directorInput, setDirectorInput] = useState('')
+  const [directorOutput, setDirectorOutput] = useState<DirectorOutput | null>(null)
 
   function activateTab(tab: TrialTab) {
     setActiveTab(tab)
     window.history.replaceState(null, '', `#${tab}`)
   }
 
-  async function handleLeadFetch() {
-    if (!leadUrl.trim()) {
-      setLeadStatus('Enter a page URL first.')
-      return
-    }
-    setLeadFetching(true)
-    try {
-      const text = await fetchReadableText(leadUrl)
-      setLeadRawText(text.slice(0, 30000))
-      setLeadStatus('Fetched source text. Now run it on your input.')
-    } catch {
-      setLeadStatus('Could not fetch page. Paste text manually or reset sample.')
-    } finally {
-      setLeadFetching(false)
-    }
-  }
-
-  function handleLeadRun() {
-    const rows = parseLeads(leadRawText, leadKeywords)
-    setLeadRows(rows)
-    setLeadStatus(rows.length > 0 ? `Generated ${rows.length} leads.` : 'No leads found. Try different input.')
-  }
-
-  function handleLeadSample() {
-    setLeadRawText(LEAD_SAMPLE_TEXT)
-    setLeadKeywords(LEAD_SAMPLE_KEYWORDS)
-    setLeadRows(SAMPLE_LEAD_ROWS)
-    setLeadStatus(`Sample loaded with ${SAMPLE_LEAD_ROWS.length} leads.`)
-  }
-
-  async function handleNewsFetch() {
-    setNewsFetching(true)
-    const items: NewsItem[] = []
-
-    try {
-      const urls = newsUrls
-        .split(/\r?\n/)
-        .map((value) => value.trim())
-        .filter(Boolean)
-        .slice(0, 6)
-
-      for (const url of urls) {
-        try {
-          const text = await fetchReadableText(url)
-          const source = normalizeUrl(url).replace(/^https?:\/\//, '').split('/')[0]
-          const headlines = extractHeadlines(text, 4)
-          headlines.forEach((headline) => {
-            items.push({ source, headline, tag: classifyHeadline(headline) })
-          })
-        } catch {
-          continue
-        }
-      }
-    } finally {
-      setNewsFetching(false)
-    }
-
-    if (items.length > 0) {
-      setNewsItems(items)
-      setNewsBrief(buildNewsBrief(items))
-      setNewsStatus(`Generated brief from ${items.length} fetched headlines.`)
-      return
-    }
-
-    setNewsStatus('Live fetch failed. Use your own headlines or reset sample.')
-  }
-
-  function handleManualNewsRun() {
-    const fallback = extractHeadlines(newsFallbackText, 12).map((headline) => ({
-      source: 'Manual',
-      headline,
-      tag: classifyHeadline(headline),
-    }))
-    setNewsItems(fallback)
-    setNewsBrief(buildNewsBrief(fallback))
-    setNewsStatus(fallback.length > 0 ? `Generated brief from ${fallback.length} headlines.` : 'No headlines found.')
-  }
-
-  function handleNewsSample() {
-    setNewsFallbackText(NEWS_SAMPLE_TEXT)
-    setNewsItems(SAMPLE_NEWS_ITEMS)
-    setNewsBrief(SAMPLE_NEWS_BRIEF)
-    setNewsStatus(`Sample loaded with ${SAMPLE_NEWS_ITEMS.length} headlines.`)
-  }
-
-  function handlePlannerRun() {
-    setPlannerRows(parseActions(plannerInput))
-  }
-
-  function handlePlannerSample() {
-    setPlannerInput(ACTION_SAMPLE_TEXT)
-    setPlannerRows(SAMPLE_ACTION_ROWS)
-  }
-
   return (
     <div className="space-y-8">
       <PageIntro
-        eyebrow="Try Tools"
-        title="Run these tools now."
-        description="Each tool opens in sample mode first, so it always works. Live fetching is optional beta."
+        eyebrow="Live Lab"
+        title="Run real agent workflows."
+        description="These are working agent tools, not fake mockups. Paste real input, or load a sample if you want to test fast."
       />
-
-      <section className="sm-surface p-4 text-sm text-[var(--sm-muted)]">
-        <strong className="text-[var(--sm-ink)]">Default mode:</strong> sample data is already loaded.
-        <span className="ml-2">Switch to your own input when you want, and use live fetch only as a beta test.</span>
-      </section>
 
       <section className="grid gap-3 md:grid-cols-3">
         {trialModules.map((module) => (
           <button
             className={`rounded-2xl border px-4 py-4 text-left transition ${
               activeTab === module.id
-                ? 'border-cyan-400/70 bg-white/80 shadow-[0_20px_46px_-34px_rgba(13,110,112,0.65)] backdrop-blur-xl'
-                : 'border-white/60 bg-white/58 backdrop-blur-xl hover:bg-white/76'
+                ? 'border-[rgba(37,208,255,0.28)] bg-[rgba(37,208,255,0.08)] shadow-[0_0_32px_rgba(37,208,255,0.08)]'
+                : 'border-white/8 bg-white/4 hover:bg-white/7'
             }`}
             key={module.id}
             onClick={() => activateTab(module.id)}
             type="button"
           >
-            <p className="text-sm font-bold text-[var(--sm-ink)]">{module.name}</p>
+            <p className="text-sm font-bold text-white">{module.name}</p>
             <p className="mt-1 text-sm text-[var(--sm-muted)]">{module.promise}</p>
           </button>
         ))}
       </section>
 
-      {activeTab === 'lead-finder' ? (
+      {activeTab === 'supplier-watch' ? (
         <section className="grid gap-5 lg:grid-cols-[1fr_1fr]">
           <article className="sm-surface p-6">
-            <h2 className="text-xl font-bold text-[var(--sm-ink)]">Lead Finder</h2>
-            <p className="mt-2 text-sm text-[var(--sm-muted)]">Paste raw listings first. Use page fetch only if you want to test beta mode.</p>
-            <label className="mt-4 block text-sm font-semibold text-[var(--sm-muted)]">
-              Source URL for beta fetch (optional)
-              <div className="mt-2 flex gap-2">
-                <input
-                  className="w-full rounded-xl border border-[var(--sm-line)] bg-white/70 px-3 py-2"
-                  onChange={(event) => setLeadUrl(event.target.value)}
-                  placeholder="https://example.com/business-directory"
-                  type="text"
-                  value={leadUrl}
-                />
-                <button
-                  className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-bold text-white hover:bg-slate-700 disabled:opacity-60"
-                  disabled={leadFetching}
-                  onClick={handleLeadFetch}
-                  type="button"
-                >
-                  {leadFetching ? 'Fetching...' : 'Fetch page'}
-                </button>
-              </div>
-            </label>
-            <label className="mt-4 block text-sm font-semibold text-[var(--sm-muted)]">
-              ICP keywords
-              <input
-                className="mt-2 w-full rounded-xl border border-[var(--sm-line)] bg-white/70 px-3 py-2"
-                onChange={(event) => setLeadKeywords(event.target.value)}
-                type="text"
-                value={leadKeywords}
-              />
-            </label>
-            <label className="mt-4 block text-sm font-semibold text-[var(--sm-muted)]">
-              Raw text input
-              <textarea
-                className="mt-2 min-h-52 w-full rounded-2xl border border-[var(--sm-line)] bg-white/70 px-3 py-3 text-sm"
-                onChange={(event) => setLeadRawText(event.target.value)}
-                placeholder="Paste directory listings here..."
-                value={leadRawText}
-              />
-            </label>
-            <div className="mt-4 flex flex-wrap gap-2">
-              <button className="sm-button-primary" onClick={handleLeadRun} type="button">
-                Run my input
+            <h2 className="text-xl font-bold text-white">Supplier Watch Agent</h2>
+            <p className="mt-2 text-sm text-[var(--sm-muted)]">Paste one supplier email or forwarded thread.</p>
+            <textarea
+              className="mt-4 min-h-72 w-full rounded-2xl border border-white/8 bg-white/4 px-4 py-4 text-sm text-white"
+              onChange={(event) => setSupplierInput(event.target.value)}
+              placeholder="Paste supplier message here..."
+              value={supplierInput}
+            />
+            <div className="mt-4 flex flex-wrap gap-3">
+              <button className="sm-button-primary" onClick={() => setSupplierOutput(analyzeSupplierMessage(supplierInput))} type="button">
+                Analyze thread
               </button>
-              <button className="sm-button-secondary" onClick={handleLeadSample} type="button">
-                Reset sample
+              <button
+                className="sm-button-secondary"
+                onClick={() => {
+                  setSupplierInput(SUPPLIER_SAMPLE_TEXT)
+                  setSupplierOutput(analyzeSupplierMessage(SUPPLIER_SAMPLE_TEXT))
+                }}
+                type="button"
+              >
+                Load sample
+              </button>
+            </div>
+          </article>
+
+          <article className="sm-surface-deep p-6">
+            <h3 className="text-lg font-bold text-white">Output</h3>
+            {supplierOutput ? (
+              <div className="mt-4 space-y-4">
+                <div className="flex flex-wrap items-center gap-3">
+                  <span className="rounded-full border border-[rgba(255,122,24,0.18)] bg-[rgba(255,122,24,0.08)] px-3 py-1 text-sm font-semibold text-[var(--sm-accent-alt)]">
+                    Risk {supplierOutput.level}
+                  </span>
+                  <span className="rounded-full border border-[rgba(37,208,255,0.18)] bg-[rgba(37,208,255,0.08)] px-3 py-1 text-sm font-semibold text-[var(--sm-accent)]">
+                    Score {supplierOutput.score}
+                  </span>
+                </div>
+                <div className="grid gap-3 md:grid-cols-2">
+                  <div className="sm-chip">
+                    <p className="sm-kicker text-[var(--sm-accent)]">Owner</p>
+                    <p className="mt-2 text-white">{supplierOutput.owner}</p>
+                  </div>
+                  <div className="sm-chip">
+                    <p className="sm-kicker text-[var(--sm-accent)]">Due</p>
+                    <p className="mt-2 text-white">{supplierOutput.due}</p>
+                  </div>
+                </div>
+                <div className="sm-chip">
+                  <p className="sm-kicker text-[var(--sm-accent)]">Detected risks</p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {supplierOutput.tags.map((tag) => (
+                      <span className="rounded-full border border-white/10 bg-white/6 px-3 py-1 text-xs font-semibold text-white" key={tag}>
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+                <div className="sm-chip">
+                  <p className="sm-kicker text-[var(--sm-accent)]">Next actions</p>
+                  <ul className="mt-3 space-y-2 text-sm text-white">
+                    {supplierOutput.actions.map((action) => (
+                      <li key={action}>- {action}</li>
+                    ))}
+                  </ul>
+                </div>
+                <div className="sm-chip">
+                  <p className="sm-kicker text-[var(--sm-accent)]">Reply draft</p>
+                  <p className="mt-3 text-sm text-white">{supplierOutput.responseDraft}</p>
+                </div>
+              </div>
+            ) : (
+              <p className="mt-4 text-sm text-[var(--sm-muted)]">Run the agent to see risk analysis and next actions.</p>
+            )}
+          </article>
+        </section>
+      ) : null}
+
+      {activeTab === 'director-command' ? (
+        <section className="grid gap-5 lg:grid-cols-[1fr_1fr]">
+          <article className="sm-surface p-6">
+            <h2 className="text-xl font-bold text-white">Director Command Agent</h2>
+            <p className="mt-2 text-sm text-[var(--sm-muted)]">Paste daily updates from operations, sales, procurement, or finance.</p>
+            <textarea
+              className="mt-4 min-h-72 w-full rounded-2xl border border-white/8 bg-white/4 px-4 py-4 text-sm text-white"
+              onChange={(event) => setDirectorInput(event.target.value)}
+              placeholder="Paste daily updates here..."
+              value={directorInput}
+            />
+            <div className="mt-4 flex flex-wrap gap-3">
+              <button className="sm-button-primary" onClick={() => setDirectorOutput(buildDirectorCommand(directorInput))} type="button">
+                Build command brief
+              </button>
+              <button
+                className="sm-button-secondary"
+                onClick={() => {
+                  setDirectorInput(DIRECTOR_SAMPLE_TEXT)
+                  setDirectorOutput(buildDirectorCommand(DIRECTOR_SAMPLE_TEXT))
+                }}
+                type="button"
+              >
+                Load sample
+              </button>
+            </div>
+          </article>
+
+          <article className="sm-surface-deep p-6">
+            <h3 className="text-lg font-bold text-white">Output</h3>
+            {directorOutput ? (
+              <div className="mt-4 grid gap-4">
+                <div className="sm-chip">
+                  <p className="sm-kicker text-[var(--sm-accent)]">Top actions</p>
+                  <ul className="mt-3 space-y-2 text-sm text-white">
+                    {directorOutput.actions.map((action) => (
+                      <li key={action}>- {action}</li>
+                    ))}
+                  </ul>
+                </div>
+                <div className="sm-chip">
+                  <p className="sm-kicker text-[var(--sm-accent)]">Blockers</p>
+                  <ul className="mt-3 space-y-2 text-sm text-white">
+                    {directorOutput.blockers.map((item) => (
+                      <li key={item}>- {item}</li>
+                    ))}
+                  </ul>
+                </div>
+                <div className="sm-chip">
+                  <p className="sm-kicker text-[var(--sm-accent)]">Decisions needed</p>
+                  <ul className="mt-3 space-y-2 text-sm text-white">
+                    {directorOutput.decisions.map((item) => (
+                      <li key={item}>- {item}</li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            ) : (
+              <p className="mt-4 text-sm text-[var(--sm-muted)]">Run the agent to generate a director-ready brief.</p>
+            )}
+          </article>
+        </section>
+      ) : null}
+
+      {activeTab === 'lead-to-pilot' ? (
+        <section className="grid gap-5 lg:grid-cols-[1fr_1fr]">
+          <article className="sm-surface p-6">
+            <h2 className="text-xl font-bold text-white">Lead-to-Pilot Agent</h2>
+            <p className="mt-2 text-sm text-[var(--sm-muted)]">Paste a messy lead list and get a cleaner outreach-ready pack.</p>
+            <textarea
+              className="mt-4 min-h-72 w-full rounded-2xl border border-white/8 bg-white/4 px-4 py-4 text-sm text-white"
+              onChange={(event) => setLeadInput(event.target.value)}
+              placeholder="Paste leads here..."
+              value={leadInput}
+            />
+            <div className="mt-4 flex flex-wrap gap-3">
+              <button className="sm-button-primary" onClick={() => setLeadRows(parseLeads(leadInput))} type="button">
+                Score leads
+              </button>
+              <button
+                className="sm-button-secondary"
+                onClick={() => {
+                  setLeadInput(LEAD_SAMPLE_TEXT)
+                  setLeadRows(parseLeads(LEAD_SAMPLE_TEXT))
+                }}
+                type="button"
+              >
+                Load sample
               </button>
               {leadRows.length > 0 ? (
-                <button className="sm-button-secondary" onClick={() => downloadTextFile('lead_finder_results.csv', rowsToCsv(leadRows))} type="button">
+                <button className="sm-button-secondary" onClick={() => downloadCsv(leadRows)} type="button">
                   Download CSV
                 </button>
               ) : null}
             </div>
-            <p className="mt-3 text-sm text-[var(--sm-muted)]">{leadStatus}</p>
           </article>
 
-          <article className="sm-surface-deep p-6 text-white">
-            <h3 className="text-lg font-bold">Output</h3>
-            <p className="mt-2 text-sm text-cyan-100">{leadRows.length} leads</p>
-            <div className="mt-4 space-y-2">
-              {leadRows.slice(0, 10).map((row) => (
-                <div className="rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm" key={`${row.name}|${row.email}|${row.website}`}>
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="font-semibold">{row.name}</span>
-                    <span className="text-xs uppercase tracking-wider text-cyan-200">{row.priority}</span>
+          <article className="sm-surface-deep p-6">
+            <h3 className="text-lg font-bold text-white">Output</h3>
+            <div className="mt-4 space-y-3">
+              {leadRows.length > 0 ? (
+                leadRows.map((row) => (
+                  <div className="sm-chip" key={`${row.name}-${row.email}-${row.website}`}>
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="font-semibold text-white">{row.name}</p>
+                      <span className="rounded-full border border-[rgba(37,208,255,0.18)] bg-[rgba(37,208,255,0.08)] px-3 py-1 text-xs font-semibold text-[var(--sm-accent)]">
+                        Score {row.score}
+                      </span>
+                    </div>
+                    <p className="mt-2 text-sm text-[var(--sm-muted)]">
+                      {row.email || 'no email'} | {row.phone || 'no phone'} | {row.website || 'no website'}
+                    </p>
                   </div>
-                  <p className="mt-1 text-xs text-slate-200">
-                    {row.email || 'no email'} | {row.phone || 'no phone'} | {row.website || 'no website'} | score {row.score}
-                  </p>
-                </div>
-              ))}
-              {leadRows.length === 0 ? <p className="text-sm text-slate-200">Run the tool to see results.</p> : null}
-            </div>
-          </article>
-        </section>
-      ) : null}
-
-      {activeTab === 'news-brief' ? (
-        <section className="grid gap-5 lg:grid-cols-[1fr_1fr]">
-          <article className="sm-surface p-6">
-            <h2 className="text-xl font-bold text-[var(--sm-ink)]">Market Brief</h2>
-            <p className="mt-2 text-sm text-[var(--sm-muted)]">Use sample headlines first. Live source fetch is optional beta.</p>
-            <label className="mt-4 block text-sm font-semibold text-[var(--sm-muted)]">
-              Source URLs for beta fetch (one per line)
-              <textarea
-                className="mt-2 min-h-28 w-full rounded-2xl border border-[var(--sm-line)] bg-white/70 px-3 py-3 text-sm"
-                onChange={(event) => setNewsUrls(event.target.value)}
-                value={newsUrls}
-              />
-            </label>
-            <div className="mt-4 flex flex-wrap gap-2">
-              <button className="sm-button-primary disabled:opacity-60" disabled={newsFetching} onClick={handleNewsFetch} type="button">
-                {newsFetching ? 'Fetching...' : 'Fetch sources'}
-              </button>
-              <button className="sm-button-secondary" onClick={handleNewsSample} type="button">
-                Reset sample
-              </button>
-            </div>
-            <label className="mt-4 block text-sm font-semibold text-[var(--sm-muted)]">
-              Your own headlines
-              <textarea
-                className="mt-2 min-h-28 w-full rounded-2xl border border-[var(--sm-line)] bg-white/70 px-3 py-3 text-sm"
-                onChange={(event) => setNewsFallbackText(event.target.value)}
-                placeholder="Paste headlines here..."
-                value={newsFallbackText}
-              />
-            </label>
-            <button className="sm-button-secondary mt-4" onClick={handleManualNewsRun} type="button">
-              Run my headlines
-            </button>
-            <p className="mt-3 text-sm text-[var(--sm-muted)]">{newsStatus}</p>
-          </article>
-
-          <article className="sm-surface-deep p-6 text-white">
-            <h3 className="text-lg font-bold">Brief Output</h3>
-            <ul className="mt-3 space-y-2 text-sm text-slate-100">
-              {newsBrief.length > 0 ? newsBrief.map((line) => <li key={line}>- {line}</li>) : <li>Run the tool to generate your brief.</li>}
-            </ul>
-            <div className="mt-5 space-y-2">
-              {newsItems.slice(0, 10).map((item) => (
-                <div className="rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm" key={`${item.source}-${item.headline}`}>
-                  <p className="font-semibold">{item.headline}</p>
-                  <p className="mt-1 text-xs text-cyan-200">
-                    {item.source} | {item.tag}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </article>
-        </section>
-      ) : null}
-
-      {activeTab === 'action-planner' ? (
-        <section className="grid gap-5 lg:grid-cols-[1fr_1fr]">
-          <article className="sm-surface p-6">
-            <h2 className="text-xl font-bold text-[var(--sm-ink)]">Action Board</h2>
-            <p className="mt-2 text-sm text-[var(--sm-muted)]">Paste notes. Get a clean owner-ready action list.</p>
-            <textarea
-              className="mt-4 min-h-64 w-full rounded-2xl border border-[var(--sm-line)] bg-white/70 px-3 py-3 text-sm"
-              onChange={(event) => setPlannerInput(event.target.value)}
-              value={plannerInput}
-            />
-            <div className="mt-4 flex flex-wrap gap-2">
-              <button className="sm-button-primary" onClick={handlePlannerRun} type="button">
-                Run my notes
-              </button>
-              <button className="sm-button-secondary" onClick={handlePlannerSample} type="button">
-                Reset sample
-              </button>
-            </div>
-          </article>
-
-          <article className="sm-surface-deep p-6 text-white">
-            <h3 className="text-lg font-bold">Output</h3>
-            <div className="mt-4 space-y-2">
-              {plannerRows.map((row) => (
-                <div className="rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm" key={`${row.task}-${row.owner}`}>
-                  <p className="font-semibold">{row.task}</p>
-                  <p className="mt-1 text-xs text-cyan-200">
-                    {row.owner} | {row.due} | {row.priority}
-                  </p>
-                </div>
-              ))}
-              {plannerRows.length === 0 ? <p className="text-sm text-slate-200">Run the tool to generate actions.</p> : null}
+                ))
+              ) : (
+                <p className="text-sm text-[var(--sm-muted)]">Run the agent to see scored leads.</p>
+              )}
             </div>
           </article>
         </section>
       ) : null}
 
       <section className="sm-surface p-6">
-        <h2 className="text-xl font-bold text-[var(--sm-ink)]">Want this on your real data?</h2>
+        <h2 className="text-xl font-bold text-white">Need this on your real data?</h2>
         <div className="mt-4 flex flex-wrap gap-3">
-          <Link className="sm-button-accent" to="/contact?intent=pilot">
-            Start Pilot
+          <Link className="sm-button-accent" to="/contact">
+            Start pilot
           </Link>
           <Link className="sm-button-secondary" to="/products">
-            Back to Products
+            See all agents
           </Link>
         </div>
       </section>
