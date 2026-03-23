@@ -6,8 +6,8 @@ import { navItems } from '../content'
 const navClassName = ({ isActive }: { isActive: boolean }) =>
   `rounded-full px-4 py-2 text-sm font-semibold transition ${
     isActive
-      ? 'bg-[var(--sm-accent)] text-white shadow-[0_10px_26px_-18px_rgba(13,110,112,0.85)]'
-      : 'text-[var(--sm-ink)] hover:bg-white/80'
+      ? 'bg-[var(--sm-accent)] text-white shadow-[0_14px_30px_-20px_rgba(13,110,112,0.9)]'
+      : 'text-[var(--sm-ink)] hover:bg-white/70'
   }`
 
 export function SiteFrame() {
@@ -15,7 +15,7 @@ export function SiteFrame() {
 
   return (
     <div className="min-h-screen text-[var(--sm-ink)]">
-      <div className="fixed inset-x-0 top-0 z-40 border-b border-[var(--sm-line)]/70 bg-[rgba(255,251,242,0.84)] backdrop-blur-lg">
+      <div className="fixed inset-x-0 top-0 z-40 border-b border-white/45 bg-[rgba(255,255,255,0.45)] backdrop-blur-xl">
         <nav className="mx-auto flex w-full max-w-6xl items-center justify-between px-4 py-3 lg:px-8">
           <NavLink className="flex flex-col" to="/">
             <span className="text-lg font-extrabold tracking-tight">SuperMega</span>
@@ -24,7 +24,7 @@ export function SiteFrame() {
             </span>
           </NavLink>
           <button
-            className="rounded-md border border-[var(--sm-line)] px-3 py-2 text-sm font-semibold md:hidden"
+            className="rounded-md border border-white/65 bg-white/45 px-3 py-2 text-sm font-semibold md:hidden"
             onClick={() => setMenuOpen((open) => !open)}
             type="button"
           >
@@ -45,7 +45,7 @@ export function SiteFrame() {
           </div>
         </nav>
         {menuOpen ? (
-          <div className="border-t border-[var(--sm-line)] bg-[var(--sm-paper)] px-4 py-3 md:hidden">
+          <div className="border-t border-white/45 bg-[rgba(255,255,255,0.55)] px-4 py-3 backdrop-blur-xl md:hidden">
             <div className="flex flex-col gap-2">
               {navItems.map((item) => (
                 <NavLink

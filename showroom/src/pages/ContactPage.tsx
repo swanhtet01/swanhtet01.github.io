@@ -77,13 +77,13 @@ export function ContactPage() {
   return (
     <div className="space-y-8">
       <PageIntro
-        eyebrow="Contact and Book Call"
-        title="Tell us your goal. We send a scoped proposal in under 24 hours after discovery."
-        description="Use this form to request a package or a custom scope. Leads move to qualification, discovery, and proposal stages with explicit next steps."
+        eyebrow="Contact"
+        title="Tell us what you need. We reply with a practical next step."
+        description="Use this form to request a package or a custom pilot scope."
       />
 
       <section className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
-        <form className="rounded-3xl border border-[var(--sm-line)] bg-white/92 p-6" onSubmit={handleSubmit}>
+        <form className="rounded-3xl border border-white/65 bg-white/45 p-6 backdrop-blur-xl" onSubmit={handleSubmit}>
           <div className="grid gap-4 md:grid-cols-2">
             <label className="flex flex-col gap-2 text-sm font-semibold text-[var(--sm-muted)]">
               Name
@@ -168,15 +168,15 @@ export function ContactPage() {
           </p>
         </form>
 
-        <aside className="rounded-3xl border border-[#184a4a] bg-[#112d31] p-6 text-sm text-slate-100">
-          <h2 className="text-lg font-bold">What happens next</h2>
+        <aside className="rounded-3xl border border-white/45 bg-[linear-gradient(135deg,rgba(12,64,76,0.86),rgba(12,42,66,0.88))] p-6 text-sm text-slate-100">
+          <h2 className="text-lg font-bold">Next steps</h2>
           <ul className="mt-3 space-y-2">
             <li className="rounded-2xl border border-white/15 px-3 py-2">1. Discovery call in 48 hours</li>
             <li className="rounded-2xl border border-white/15 px-3 py-2">2. Scope and price proposal in 24 hours</li>
             <li className="rounded-2xl border border-white/15 px-3 py-2">3. 14-day pilot kickoff</li>
           </ul>
           <p className="mt-4 text-sm text-slate-200">
-            If you want to test first, open the free prototypes page before the call.
+            Want to test first? Open the examples page before the call.
           </p>
         </aside>
       </section>

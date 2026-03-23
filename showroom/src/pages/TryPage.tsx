@@ -42,20 +42,20 @@ function buildBriefActions(incidentCount: number, openActions: number, risk: Bri
   const actions: string[] = []
   actions.push(
     incidentCount >= 12
-      ? 'Escalate top quality incidents to director review this week.'
+      ? 'Escalate top quality issues this week.'
       : 'Keep current quality cadence and close low-severity backlog.',
   )
   actions.push(
     openActions >= 10
-      ? 'Enforce owner and due-date closure on overdue action items.'
-      : 'Maintain action cadence and closure evidence quality.',
+      ? 'Enforce owner + due-date closure on overdue actions.'
+      : 'Maintain action cadence and closure discipline.',
   )
   if (risk === 'high') {
-    actions.push('Run supplier and logistics contingency check before next production window.')
+    actions.push('Run supplier and logistics contingency check now.')
   } else if (risk === 'medium') {
-    actions.push('Watch supplier and fuel updates daily and refresh plan on disruption.')
+    actions.push('Monitor supplier and fuel changes daily.')
   } else {
-    actions.push('No major disruption signal. Keep regular monitoring cadence.')
+    actions.push('No major external disruption signal.')
   }
   return actions
 }
@@ -67,19 +67,19 @@ function analyzeSupplierEmail(text: string): SupplierSnapshot {
 
   if (/(overdue|payment|remittance|invoice past due)/.test(normalized)) {
     score += 3
-    findings.push('Payment risk detected')
+    findings.push('Payment risk')
   }
   if (/(shipment|delay|eta|customs|clearance|port)/.test(normalized)) {
     score += 3
-    findings.push('Logistics risk detected')
+    findings.push('Logistics risk')
   }
   if (/(defect|claim|quality|reject|nonconformance)/.test(normalized)) {
     score += 3
-    findings.push('Quality risk detected')
+    findings.push('Quality risk')
   }
   if (/(missing docs|document|pi revision|passport copy)/.test(normalized)) {
     score += 2
-    findings.push('Documentation mismatch risk detected')
+    findings.push('Documentation risk')
   }
 
   const risk = score >= 7 ? 'high' : score >= 4 ? 'medium' : 'low'
@@ -87,16 +87,16 @@ function analyzeSupplierEmail(text: string): SupplierSnapshot {
     risk === 'high'
       ? [
           'Escalate to procurement lead today.',
-          'Confirm supplier commitment in writing within 24h.',
-          'Prepare alternate supplier or contingency stock.',
+          'Confirm supplier commitment in writing.',
+          'Prepare backup supplier or stock plan.',
         ]
       : risk === 'medium'
         ? [
-            'Assign owner and due date for supplier follow-up.',
-            'Validate documents and ETA with supplier.',
+            'Assign owner and due date for follow-up.',
+            'Validate documents and ETA.',
             'Track in weekly supplier review.',
           ]
-        : ['Log for monitoring.', 'Keep supplier follow-up in routine cycle.']
+        : ['Log and monitor in routine supplier cycle.']
 
   return { score, risk, findings, actions }
 }
@@ -115,10 +115,10 @@ function createQualitySnapshot(supplier: string, issue: string, severity: Qualit
     issue,
     severity,
     capaPlan: [
-      'Containment: isolate affected batch and stop further release.',
-      'Root cause: confirm issue source with supplier and receiving records.',
-      'Corrective action: define fix owner and deadline.',
-      'Verification: record closure evidence and sign-off.',
+      'Containment: isolate affected batch.',
+      'Root cause: confirm source with supplier and receiving record.',
+      'Corrective action: assign owner and due date.',
+      'Verification: attach closure evidence and sign-off.',
     ],
   }
 }
@@ -152,12 +152,17 @@ export function TryPage() {
     createQualitySnapshot('KIIC', 'Bead wire defect found in incoming batch.', 'high'),
   )
 
+  function activateTab(tab: TrialTab) {
+    setActiveTab(tab)
+    window.history.replaceState(null, '', `#${tab}`)
+  }
+
   return (
     <div className="space-y-8">
       <PageIntro
-        eyebrow="Free Prototypes"
-        title="Use full working prototypes in your browser."
-        description="Test behavior now. Then we connect the same modules to your real data."
+        eyebrow="Examples"
+        title="3 simple, testable AI agent examples."
+        description="Try each one now. If useful, we connect it to your real data in 14 days."
       />
 
       <section className="grid gap-3 md:grid-cols-3">
@@ -165,11 +170,11 @@ export function TryPage() {
           <button
             className={`rounded-2xl border px-4 py-4 text-left transition ${
               activeTab === module.id
-                ? 'border-[var(--sm-accent)] bg-[var(--sm-paper)] shadow-[0_16px_36px_-30px_rgba(13,110,112,0.75)]'
-                : 'border-[var(--sm-line)] bg-white/90 hover:bg-[var(--sm-paper)]'
+                ? 'border-[var(--sm-accent)] bg-white/55 shadow-[0_20px_46px_-34px_rgba(13,110,112,0.85)] backdrop-blur-xl'
+                : 'border-white/65 bg-white/35 backdrop-blur-xl hover:bg-white/55'
             }`}
             key={module.id}
-            onClick={() => setActiveTab(module.id)}
+            onClick={() => activateTab(module.id)}
             type="button"
           >
             <p className="text-sm font-bold text-[var(--sm-ink)]">{module.name}</p>
@@ -180,9 +185,9 @@ export function TryPage() {
 
       {activeTab === 'brief' ? (
         <section className="grid gap-5 lg:grid-cols-[1.05fr_0.95fr]">
-          <article className="rounded-3xl border border-[var(--sm-line)] bg-white/92 p-6">
-            <h2 className="text-xl font-bold text-[var(--sm-ink)]">Executive Brief Agent</h2>
-            <p className="mt-2 text-sm text-[var(--sm-muted)]">Set key numbers and generate leadership actions.</p>
+          <article className="rounded-3xl border border-white/65 bg-white/45 p-6 backdrop-blur-xl">
+            <h2 className="text-xl font-bold text-[var(--sm-ink)]">Daily Brief Example</h2>
+            <p className="mt-2 text-sm text-[var(--sm-muted)]">Set basic inputs and generate action points.</p>
             <div className="mt-5 grid gap-4">
               <label className="text-sm font-semibold text-[var(--sm-muted)]">
                 Open quality incidents
@@ -230,14 +235,14 @@ export function TryPage() {
                 }
                 type="button"
               >
-                Run Prototype
+                Run Example
               </button>
             </div>
           </article>
-          <article className="rounded-3xl border border-[#184a4a] bg-[#112d31] p-6 text-white">
-            <h3 className="text-lg font-bold">Generated Director Brief</h3>
+          <article className="rounded-3xl border border-white/45 bg-[linear-gradient(135deg,rgba(12,64,76,0.86),rgba(12,42,66,0.88))] p-6 text-white shadow-[0_24px_56px_-35px_rgba(8,23,42,0.95)]">
+            <h3 className="text-lg font-bold">Output</h3>
             <p className="mt-3 text-sm text-slate-200">
-              Incidents: {briefSnapshot.incidentCount} | Open actions: {briefSnapshot.openActions} | External risk: {briefSnapshot.risk}
+              Incidents: {briefSnapshot.incidentCount} | Open actions: {briefSnapshot.openActions} | Risk: {briefSnapshot.risk}
             </p>
             <ul className="mt-4 space-y-2 text-sm text-slate-100">
               {briefSnapshot.actions.map((action) => (
@@ -252,9 +257,9 @@ export function TryPage() {
 
       {activeTab === 'supplier' ? (
         <section className="grid gap-5 lg:grid-cols-[1.05fr_0.95fr]">
-          <article className="rounded-3xl border border-[var(--sm-line)] bg-white/92 p-6">
-            <h2 className="text-xl font-bold text-[var(--sm-ink)]">Supplier Control Agent</h2>
-            <p className="mt-2 text-sm text-[var(--sm-muted)]">Paste one supplier message for risk score and actions.</p>
+          <article className="rounded-3xl border border-white/65 bg-white/45 p-6 backdrop-blur-xl">
+            <h2 className="text-xl font-bold text-[var(--sm-ink)]">Supplier Risk Example</h2>
+            <p className="mt-2 text-sm text-[var(--sm-muted)]">Paste one supplier message.</p>
             <textarea
               className="mt-4 min-h-52 w-full rounded-2xl border border-[var(--sm-line)] bg-[var(--sm-paper)] px-3 py-3 text-sm"
               onChange={(event) => setSupplierText(event.target.value)}
@@ -265,23 +270,23 @@ export function TryPage() {
               onClick={() => setSupplierSnapshot(analyzeSupplierEmail(supplierText))}
               type="button"
             >
-              Run Prototype
+              Run Example
             </button>
           </article>
-          <article className="rounded-3xl border border-[#184a4a] bg-[#112d31] p-6 text-white">
-            <h3 className="text-lg font-bold">Analysis Output</h3>
+          <article className="rounded-3xl border border-white/45 bg-[linear-gradient(135deg,rgba(12,64,76,0.86),rgba(12,42,66,0.88))] p-6 text-white shadow-[0_24px_56px_-35px_rgba(8,23,42,0.95)]">
+            <h3 className="text-lg font-bold">Output</h3>
             <p className="mt-3 text-sm text-slate-200">
               Risk: <strong>{supplierSnapshot.risk.toUpperCase()}</strong> | Score: {supplierSnapshot.score}
             </p>
             <p className="mt-3 text-xs font-bold uppercase tracking-[0.16em] text-cyan-200">Findings</p>
             <ul className="mt-2 space-y-2 text-sm text-slate-100">
-              {(supplierSnapshot.findings.length ? supplierSnapshot.findings : ['No critical risk keywords detected.']).map((finding) => (
+              {(supplierSnapshot.findings.length ? supplierSnapshot.findings : ['No critical keywords detected']).map((finding) => (
                 <li className="rounded-xl border border-white/15 bg-white/5 px-3 py-2" key={finding}>
                   {finding}
                 </li>
               ))}
             </ul>
-            <p className="mt-4 text-xs font-bold uppercase tracking-[0.16em] text-cyan-200">Recommended actions</p>
+            <p className="mt-4 text-xs font-bold uppercase tracking-[0.16em] text-cyan-200">Actions</p>
             <ul className="mt-2 space-y-2 text-sm text-slate-100">
               {supplierSnapshot.actions.map((action) => (
                 <li className="rounded-xl border border-white/15 bg-white/5 px-3 py-2" key={action}>
@@ -295,9 +300,9 @@ export function TryPage() {
 
       {activeTab === 'quality' ? (
         <section className="grid gap-5 lg:grid-cols-[1.05fr_0.95fr]">
-          <article className="rounded-3xl border border-[var(--sm-line)] bg-white/92 p-6">
-            <h2 className="text-xl font-bold text-[var(--sm-ink)]">Quality CAPA Agent</h2>
-            <p className="mt-2 text-sm text-[var(--sm-muted)]">Turn one issue into incident and CAPA plan.</p>
+          <article className="rounded-3xl border border-white/65 bg-white/45 p-6 backdrop-blur-xl">
+            <h2 className="text-xl font-bold text-[var(--sm-ink)]">Quality CAPA Example</h2>
+            <p className="mt-2 text-sm text-[var(--sm-muted)]">Convert one issue into a CAPA chain.</p>
             <div className="mt-4 grid gap-4">
               <label className="text-sm font-semibold text-[var(--sm-muted)]">
                 Supplier
@@ -333,17 +338,17 @@ export function TryPage() {
                 onClick={() => setQualitySnapshot(createQualitySnapshot(qualitySupplier, qualityIssue, qualitySeverity))}
                 type="button"
               >
-                Run Prototype
+                Run Example
               </button>
             </div>
           </article>
-          <article className="rounded-3xl border border-[#184a4a] bg-[#112d31] p-6 text-white">
-            <h3 className="text-lg font-bold">Generated Output</h3>
+          <article className="rounded-3xl border border-white/45 bg-[linear-gradient(135deg,rgba(12,64,76,0.86),rgba(12,42,66,0.88))] p-6 text-white shadow-[0_24px_56px_-35px_rgba(8,23,42,0.95)]">
+            <h3 className="text-lg font-bold">Output</h3>
             <p className="mt-3 text-sm text-slate-200">Incident ID: {qualitySnapshot.incidentId}</p>
             <p className="mt-1 text-sm text-slate-200">Supplier: {qualitySnapshot.supplier}</p>
             <p className="mt-1 text-sm text-slate-200">Severity: {qualitySnapshot.severity}</p>
             <p className="mt-3 rounded-xl border border-white/15 bg-white/5 px-3 py-3 text-sm text-slate-100">{qualitySnapshot.issue}</p>
-            <p className="mt-4 text-xs font-bold uppercase tracking-[0.16em] text-cyan-200">CAPA chain</p>
+            <p className="mt-4 text-xs font-bold uppercase tracking-[0.16em] text-cyan-200">CAPA</p>
             <ul className="mt-2 space-y-2 text-sm text-slate-100">
               {qualitySnapshot.capaPlan.map((step) => (
                 <li className="rounded-xl border border-white/15 bg-white/5 px-3 py-2" key={step}>
@@ -355,17 +360,17 @@ export function TryPage() {
         </section>
       ) : null}
 
-      <section className="rounded-3xl border border-[var(--sm-line)] bg-[var(--sm-paper)] p-6">
-        <h2 className="text-xl font-bold text-[var(--sm-ink)]">Want these modules on your own data?</h2>
+      <section className="rounded-3xl border border-white/65 bg-white/45 p-6 backdrop-blur-xl">
+        <h2 className="text-xl font-bold text-[var(--sm-ink)]">Want this on your real data?</h2>
         <p className="mt-2 text-sm text-[var(--sm-muted)]">
-          Start a 14-day pilot and we connect these same prototypes to your real files, inbox, and operating process.
+          Start a 14-day pilot. We connect these examples to your files, email, and team workflow.
         </p>
         <div className="mt-4 flex flex-wrap gap-3">
           <Link
             className="rounded-full bg-[var(--sm-accent-alt)] px-5 py-3 text-sm font-bold text-white hover:bg-[#b84d1d]"
             to="/contact?intent=pilot"
           >
-            Start 14-Day Pilot
+            Start Pilot
           </Link>
           <Link
             className="rounded-full border border-[var(--sm-line)] px-5 py-3 text-sm font-semibold text-[var(--sm-ink)] hover:bg-white/80"
@@ -378,4 +383,3 @@ export function TryPage() {
     </div>
   )
 }
-

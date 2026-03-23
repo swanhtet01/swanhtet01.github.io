@@ -44,47 +44,59 @@ export type TrialModule = {
 export const navItems = [
   { label: 'Home', to: '/' },
   { label: 'Products', to: '/products' },
-  { label: 'Prototypes', to: '/prototypes' },
+  { label: 'Examples', to: '/examples' },
   { label: 'Pricing', to: '/packages' },
   { label: 'Contact', to: '/contact' },
 ] as const
 
 export const products: Product[] = [
   {
-    name: 'SignalGrid OS',
-    tagline: 'Decision cockpit across files, inbox, and operations updates.',
+    name: 'Daily Brief Agent',
+    tagline: 'One daily command view for leadership.',
     innovation:
-      'No heavy migration first. It runs on your current workflow and gives leadership a daily control view.',
+      'Turns daily business signals into one short priority brief with owner and due date.',
     capabilities: [
-      'Priority board with owner and due-date control',
-      'Daily and weekly leadership brief generation',
-      'Evidence links back to files and messages',
+      'Morning priority brief',
+      'Owner + due date tracking',
+      'Decision notes with evidence',
     ],
-    fit: 'Owner-led businesses that need visibility now.',
+    fit: 'Founders, CEOs, and directors who need fast decisions.',
   },
   {
-    name: 'FlowForge Agents',
-    tagline: 'Role agents for operations, sales, procurement, and management follow-through.',
+    name: 'Supplier Risk Agent',
+    tagline: 'Catch supplier risk before it hurts operations.',
     innovation:
-      'Each agent has defined outputs and escalation rules. Not one generic chatbot.',
+      'Reads supplier messages and flags payment, delay, and documentation risk.',
     capabilities: [
-      'Agent playbooks tied to SOP',
-      'Escalation loops for overdue actions',
-      'Handoffs across director, manager, operator',
+      'Risk score per supplier message',
+      'Delay and customs warning',
+      'Procurement follow-up actions',
     ],
-    fit: 'Teams with execution gaps between planning and delivery.',
+    fit: 'Procurement and supply chain teams.',
   },
   {
-    name: 'QualityPulse DQMS',
-    tagline: 'Quality and CAPA control for supplier and production risk.',
+    name: 'Quality CAPA Agent',
+    tagline: 'From one issue to one CAPA chain.',
     innovation:
-      'Turns quality signals into incident and CAPA chains with closure tracking.',
+      'Converts quality incidents into tracked CAPA actions with closure discipline.',
     capabilities: [
-      'Incident register from real evidence',
-      'CAPA with owner/date/status',
-      'Supplier nonconformance trend view',
+      'Incident capture',
+      'CAPA action chain',
+      'Closure status tracking',
     ],
-    fit: 'Manufacturing and distribution teams with recurring quality issues.',
+    fit: 'Quality teams and plant managers.',
+  },
+  {
+    name: 'Cash Control Agent',
+    tagline: 'Tighter control on invoice and payment follow-up.',
+    innovation:
+      'Turns invoices and payment signals into one collections action list.',
+    capabilities: [
+      'Overdue payment watchlist',
+      'Collections follow-up queue',
+      'Weekly cash control summary',
+    ],
+    fit: 'Finance and commercial managers.',
   },
 ]
 
@@ -219,7 +231,7 @@ export const dqmsModules: DqmsModule[] = [
 ]
 
 export const engagementFlow = [
-  'Open free prototypes on this site',
+  'Open live examples on this site',
   'Book a 30-minute discovery call',
   'Receive scoped implementation proposal within 24 hours',
   'Start 14-day pilot with weekly measurable outputs',
@@ -228,20 +240,20 @@ export const engagementFlow = [
 export const trialModules: TrialModule[] = [
   {
     id: 'brief',
-    name: 'Executive Brief Agent',
-    promise: 'Converts operational signals into a short director brief with top actions.',
-    testInput: 'Set incidents, open actions, and risk level, then generate a brief.',
+    name: 'Daily Brief Example',
+    promise: 'Generate a short leadership brief from core signals.',
+    testInput: 'Set incidents, open actions, and risk level.',
   },
   {
     id: 'supplier',
-    name: 'Supplier Control Agent',
-    promise: 'Reads supplier communication and returns risk score plus actions.',
-    testInput: 'Paste a supplier email and run analysis.',
+    name: 'Supplier Risk Example',
+    promise: 'Analyze one supplier message and return risk + actions.',
+    testInput: 'Paste a supplier message and run analysis.',
   },
   {
     id: 'quality',
-    name: 'Quality CAPA Agent',
-    promise: 'Turns one quality issue into a trackable incident and CAPA chain.',
-    testInput: 'Describe a defect and generate incident + CAPA plan.',
+    name: 'Quality CAPA Example',
+    promise: 'Generate incident and CAPA chain from one issue.',
+    testInput: 'Describe a defect and run CAPA generation.',
   },
 ]
