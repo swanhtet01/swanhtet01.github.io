@@ -55,6 +55,7 @@ def build_product_lab(config: PilotConfig, repo_root: Path | None = None) -> dic
     action_board = _load_json(output_dir / "action_board.json")
 
     coverage_score = int(coverage.get("readiness_score", 0) or 0)
+    hard_blockers = list(coverage.get("hard_blockers", []))
     required_failures = int(autopilot.get("required_failure_count", 0) or 0)
     dqms_ready = str(dqms.get("status", "")).startswith("ready")
     erp_ready = str(erp.get("status", "")) == "ready"
@@ -64,10 +65,18 @@ def build_product_lab(config: PilotConfig, repo_root: Path | None = None) -> dic
         for item in coverage.get("dimensions", [])
     )
 
-    flagship_status = "design_ready"
-    if coverage_score >= 85 and erp_ready and input_ready:
+    flagship_status = "blocked" if hard_blockers else "design_ready"
+    if not hard_blockers and coverage_score >= 85 and erp_ready and input_ready:
         flagship_status = "pilot_ready"
-    if coverage_score >= 90 and erp_ready and input_ready and dqms_ready and gmail_ready and required_failures == 0:
+    if (
+        not hard_blockers
+        and coverage_score >= 90
+        and erp_ready
+        and input_ready
+        and dqms_ready
+        and gmail_ready
+        and required_failures == 0
+    ):
         flagship_status = "live_system"
 
     products = [
@@ -84,7 +93,7 @@ def build_product_lab(config: PilotConfig, repo_root: Path | None = None) -> dic
         },
         {
             "id": "news-brief-agent",
-            "name": "News Brief",
+            "name": "Market Brief",
             "family": "showcase",
             "status": "live_demo",
             "promise": "Convert daily source links into one management brief.",
@@ -202,6 +211,7 @@ def build_product_lab(config: PilotConfig, repo_root: Path | None = None) -> dic
         "status": "ready",
         "summary": {
             "coverage_score": coverage_score,
+            "hard_blocker_count": len(hard_blockers),
             "required_failures": required_failures,
             "flagship_status": flagship_status,
             "website_status": website_status or "unknown",
@@ -223,6 +233,7 @@ def render_product_lab_markdown(payload: dict[str, Any]) -> str:
         "",
         f"- Generated: {payload.get('generated_at', '')}",
         f"- Coverage score: {payload.get('summary', {}).get('coverage_score', 0)}",
+        f"- Hard blockers: `{payload.get('summary', {}).get('hard_blocker_count', 0)}`",
         f"- Flagship status: `{_status_label(str(payload.get('summary', {}).get('flagship_status', '')) )}`",
         f"- Live demos: `{payload.get('summary', {}).get('live_demo_count', 0)}`",
         f"- Pilot-ready modules: `{payload.get('summary', {}).get('pilot_ready_count', 0)}`",

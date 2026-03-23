@@ -41,6 +41,8 @@ MRPPA updates RSS market range for current week`
 
 const ACTION_SAMPLE_TEXT = `Supplier shipment may slip by 4 days due to customs. Confirm ETA today. Review overdue invoice list and call top 3 customers. Prepare quality check for incoming batch tomorrow. Update weekly director brief by Friday.`
 
+const LEAD_SAMPLE_KEYWORDS = 'tyre,auto,service,distributor,industrial'
+
 function resolveInitialTab(): TrialTab {
   const hash = window.location.hash.replace('#', '').trim()
   if (hash === 'lead-finder' || hash === 'news-brief' || hash === 'action-planner') {
@@ -64,11 +66,17 @@ async function fetchReadableText(url: string) {
   const normalized = normalizeUrl(url)
   const withoutProtocol = normalized.replace(/^https?:\/\//i, '')
   const proxyUrl = `https://r.jina.ai/http://${withoutProtocol}`
-  const response = await fetch(proxyUrl)
-  if (!response.ok) {
-    throw new Error(`Fetch failed: ${response.status}`)
+  const controller = new AbortController()
+  const timeout = window.setTimeout(() => controller.abort(), 12000)
+  try {
+    const response = await fetch(proxyUrl, { signal: controller.signal })
+    if (!response.ok) {
+      throw new Error(`Fetch failed: ${response.status}`)
+    }
+    return response.text()
+  } finally {
+    window.clearTimeout(timeout)
   }
-  return response.text()
 }
 
 function uniqueValues(values: string[]) {
@@ -135,9 +143,7 @@ function rowsToCsv(rows: LeadRow[]) {
   const header = 'name,email,phone,website,score,priority'
   const body = rows.map((row) => {
     const fields = [row.name, row.email, row.phone, row.website, String(row.score), row.priority]
-    return fields
-      .map((field) => `"${String(field).replace(/"/g, '""')}"`)
-      .join(',')
+    return fields.map((field) => `"${String(field).replace(/"/g, '""')}"`).join(',')
   })
   return [header, ...body].join('\n')
 }
@@ -230,27 +236,34 @@ function parseActions(rawText: string): PlannedAction[] {
   return planned.slice(0, 15)
 }
 
+const SAMPLE_LEAD_ROWS = parseLeads(LEAD_SAMPLE_TEXT, LEAD_SAMPLE_KEYWORDS)
+const SAMPLE_NEWS_ITEMS = extractHeadlines(NEWS_SAMPLE_TEXT, 12).map((headline) => ({
+  source: 'Sample',
+  headline,
+  tag: classifyHeadline(headline),
+}))
+const SAMPLE_NEWS_BRIEF = buildNewsBrief(SAMPLE_NEWS_ITEMS)
+const SAMPLE_ACTION_ROWS = parseActions(ACTION_SAMPLE_TEXT)
+
 export function TryPage() {
   const [activeTab, setActiveTab] = useState<TrialTab>(resolveInitialTab)
 
   const [leadUrl, setLeadUrl] = useState('')
-  const [leadKeywords, setLeadKeywords] = useState('tyre, auto, distributor, industrial')
-  const [leadRawText, setLeadRawText] = useState('')
-  const [leadRows, setLeadRows] = useState<LeadRow[]>([])
-  const [leadStatus, setLeadStatus] = useState('Ready')
+  const [leadKeywords, setLeadKeywords] = useState(LEAD_SAMPLE_KEYWORDS)
+  const [leadRawText, setLeadRawText] = useState(LEAD_SAMPLE_TEXT)
+  const [leadRows, setLeadRows] = useState<LeadRow[]>(SAMPLE_LEAD_ROWS)
+  const [leadStatus, setLeadStatus] = useState(`Sample loaded with ${SAMPLE_LEAD_ROWS.length} leads.`)
   const [leadFetching, setLeadFetching] = useState(false)
 
   const [newsUrls, setNewsUrls] = useState('https://www.gnlm.com.mm/\nhttps://elevenmyanmar.com/')
-  const [newsFallbackText, setNewsFallbackText] = useState('')
-  const [newsItems, setNewsItems] = useState<NewsItem[]>([])
-  const [newsBrief, setNewsBrief] = useState<string[]>([])
-  const [newsStatus, setNewsStatus] = useState('Ready')
+  const [newsFallbackText, setNewsFallbackText] = useState(NEWS_SAMPLE_TEXT)
+  const [newsItems, setNewsItems] = useState<NewsItem[]>(SAMPLE_NEWS_ITEMS)
+  const [newsBrief, setNewsBrief] = useState<string[]>(SAMPLE_NEWS_BRIEF)
+  const [newsStatus, setNewsStatus] = useState(`Sample loaded with ${SAMPLE_NEWS_ITEMS.length} headlines.`)
   const [newsFetching, setNewsFetching] = useState(false)
 
-  const [plannerInput, setPlannerInput] = useState(
-    ACTION_SAMPLE_TEXT,
-  )
-  const [plannerRows, setPlannerRows] = useState<PlannedAction[]>([])
+  const [plannerInput, setPlannerInput] = useState(ACTION_SAMPLE_TEXT)
+  const [plannerRows, setPlannerRows] = useState<PlannedAction[]>(SAMPLE_ACTION_ROWS)
 
   function activateTab(tab: TrialTab) {
     setActiveTab(tab)
@@ -259,16 +272,16 @@ export function TryPage() {
 
   async function handleLeadFetch() {
     if (!leadUrl.trim()) {
-      setLeadStatus('Enter URL first.')
+      setLeadStatus('Enter a page URL first.')
       return
     }
     setLeadFetching(true)
     try {
       const text = await fetchReadableText(leadUrl)
       setLeadRawText(text.slice(0, 30000))
-      setLeadStatus('Fetched source text. Click "Run".')
+      setLeadStatus('Fetched source text. Now run it on your input.')
     } catch {
-      setLeadStatus('Could not fetch URL. Paste text manually and run.')
+      setLeadStatus('Could not fetch page. Paste text manually or reset sample.')
     } finally {
       setLeadFetching(false)
     }
@@ -281,12 +294,10 @@ export function TryPage() {
   }
 
   function handleLeadSample() {
-    const keywords = 'tyre,auto,service,distributor,industrial'
     setLeadRawText(LEAD_SAMPLE_TEXT)
-    setLeadKeywords(keywords)
-    const rows = parseLeads(LEAD_SAMPLE_TEXT, keywords)
-    setLeadRows(rows)
-    setLeadStatus(`Loaded sample and generated ${rows.length} leads.`)
+    setLeadKeywords(LEAD_SAMPLE_KEYWORDS)
+    setLeadRows(SAMPLE_LEAD_ROWS)
+    setLeadStatus(`Sample loaded with ${SAMPLE_LEAD_ROWS.length} leads.`)
   }
 
   async function handleNewsFetch() {
@@ -309,39 +320,21 @@ export function TryPage() {
             items.push({ source, headline, tag: classifyHeadline(headline) })
           })
         } catch {
-          items.push({
-            source: normalizeUrl(url).replace(/^https?:\/\//, '').split('/')[0],
-            headline: 'Source fetch failed. Use manual headlines input.',
-            tag: 'General',
-          })
+          continue
         }
       }
     } finally {
       setNewsFetching(false)
     }
 
-    if (items.length === 0 && newsFallbackText.trim()) {
-      const fallback = extractHeadlines(newsFallbackText, 12).map((headline) => ({
-        source: 'Manual',
-        headline,
-        tag: classifyHeadline(headline),
-      }))
-      setNewsItems(fallback)
-      setNewsBrief(buildNewsBrief(fallback))
-      setNewsStatus(`Generated brief from manual input (${fallback.length} headlines).`)
+    if (items.length > 0) {
+      setNewsItems(items)
+      setNewsBrief(buildNewsBrief(items))
+      setNewsStatus(`Generated brief from ${items.length} fetched headlines.`)
       return
     }
 
-    const cleaned = items.filter((item) => !item.headline.startsWith('Source fetch failed'))
-    if (cleaned.length > 0) {
-      setNewsItems(cleaned)
-      setNewsBrief(buildNewsBrief(cleaned))
-      setNewsStatus(`Generated brief from ${cleaned.length} headlines.`)
-    } else {
-      setNewsItems(items)
-      setNewsBrief(['Live fetch failed. Paste headlines below and click "Run Manual".'])
-      setNewsStatus('Live fetch failed.')
-    }
+    setNewsStatus('Live fetch failed. Use your own headlines or reset sample.')
   }
 
   function handleManualNewsRun() {
@@ -352,19 +345,14 @@ export function TryPage() {
     }))
     setNewsItems(fallback)
     setNewsBrief(buildNewsBrief(fallback))
-    setNewsStatus(fallback.length > 0 ? `Generated brief from ${fallback.length} manual headlines.` : 'No headlines found.')
+    setNewsStatus(fallback.length > 0 ? `Generated brief from ${fallback.length} headlines.` : 'No headlines found.')
   }
 
   function handleNewsSample() {
     setNewsFallbackText(NEWS_SAMPLE_TEXT)
-    const fallback = extractHeadlines(NEWS_SAMPLE_TEXT, 12).map((headline) => ({
-      source: 'Sample',
-      headline,
-      tag: classifyHeadline(headline),
-    }))
-    setNewsItems(fallback)
-    setNewsBrief(buildNewsBrief(fallback))
-    setNewsStatus(`Loaded sample and generated brief from ${fallback.length} headlines.`)
+    setNewsItems(SAMPLE_NEWS_ITEMS)
+    setNewsBrief(SAMPLE_NEWS_BRIEF)
+    setNewsStatus(`Sample loaded with ${SAMPLE_NEWS_ITEMS.length} headlines.`)
   }
 
   function handlePlannerRun() {
@@ -373,24 +361,29 @@ export function TryPage() {
 
   function handlePlannerSample() {
     setPlannerInput(ACTION_SAMPLE_TEXT)
-    setPlannerRows(parseActions(ACTION_SAMPLE_TEXT))
+    setPlannerRows(SAMPLE_ACTION_ROWS)
   }
 
   return (
     <div className="space-y-8">
       <PageIntro
-        eyebrow="Try Free"
+        eyebrow="Try Tools"
         title="Run these tools now."
-        description="Use sample data in one click, then test with your own input."
+        description="Each tool opens in sample mode first, so it always works. Live fetching is optional beta."
       />
+
+      <section className="sm-surface p-4 text-sm text-[var(--sm-muted)]">
+        <strong className="text-[var(--sm-ink)]">Default mode:</strong> sample data is already loaded.
+        <span className="ml-2">Switch to your own input when you want, and use live fetch only as a beta test.</span>
+      </section>
 
       <section className="grid gap-3 md:grid-cols-3">
         {trialModules.map((module) => (
           <button
             className={`rounded-2xl border px-4 py-4 text-left transition ${
               activeTab === module.id
-                ? 'border-cyan-400/70 bg-white/65 shadow-[0_20px_46px_-34px_rgba(13,110,112,0.85)] backdrop-blur-xl'
-                : 'border-white/60 bg-white/45 backdrop-blur-xl hover:bg-white/60'
+                ? 'border-cyan-400/70 bg-white/80 shadow-[0_20px_46px_-34px_rgba(13,110,112,0.65)] backdrop-blur-xl'
+                : 'border-white/60 bg-white/58 backdrop-blur-xl hover:bg-white/76'
             }`}
             key={module.id}
             onClick={() => activateTab(module.id)}
@@ -404,11 +397,11 @@ export function TryPage() {
 
       {activeTab === 'lead-finder' ? (
         <section className="grid gap-5 lg:grid-cols-[1fr_1fr]">
-          <article className="rounded-3xl border border-white/55 bg-white/55 p-6 backdrop-blur-xl">
-            <h2 className="text-xl font-bold text-[var(--sm-ink)]">Lead Scraper</h2>
-            <p className="mt-2 text-sm text-[var(--sm-muted)]">Fetch a page or paste text, then score leads.</p>
+          <article className="sm-surface p-6">
+            <h2 className="text-xl font-bold text-[var(--sm-ink)]">Lead Finder</h2>
+            <p className="mt-2 text-sm text-[var(--sm-muted)]">Paste raw listings first. Use page fetch only if you want to test beta mode.</p>
             <label className="mt-4 block text-sm font-semibold text-[var(--sm-muted)]">
-              Source URL (optional)
+              Source URL for beta fetch (optional)
               <div className="mt-2 flex gap-2">
                 <input
                   className="w-full rounded-xl border border-[var(--sm-line)] bg-white/70 px-3 py-2"
@@ -423,7 +416,7 @@ export function TryPage() {
                   onClick={handleLeadFetch}
                   type="button"
                 >
-                  {leadFetching ? 'Fetching...' : 'Fetch'}
+                  {leadFetching ? 'Fetching...' : 'Fetch page'}
                 </button>
               </div>
             </label>
@@ -446,26 +439,14 @@ export function TryPage() {
               />
             </label>
             <div className="mt-4 flex flex-wrap gap-2">
-              <button
-                className="rounded-full bg-[var(--sm-accent)] px-5 py-2.5 text-sm font-bold text-white hover:bg-cyan-700"
-                onClick={handleLeadRun}
-                type="button"
-              >
-                Run
+              <button className="sm-button-primary" onClick={handleLeadRun} type="button">
+                Run my input
               </button>
-              <button
-                className="rounded-full border border-white/70 bg-white/70 px-5 py-2.5 text-sm font-semibold text-[var(--sm-ink)] hover:bg-white"
-                onClick={handleLeadSample}
-                type="button"
-              >
-                Load Sample
+              <button className="sm-button-secondary" onClick={handleLeadSample} type="button">
+                Reset sample
               </button>
               {leadRows.length > 0 ? (
-                <button
-                  className="rounded-full border border-white/70 bg-white/70 px-5 py-2.5 text-sm font-semibold text-[var(--sm-ink)] hover:bg-white"
-                  onClick={() => downloadTextFile('lead_finder_results.csv', rowsToCsv(leadRows))}
-                  type="button"
-                >
+                <button className="sm-button-secondary" onClick={() => downloadTextFile('lead_finder_results.csv', rowsToCsv(leadRows))} type="button">
                   Download CSV
                 </button>
               ) : null}
@@ -473,7 +454,7 @@ export function TryPage() {
             <p className="mt-3 text-sm text-[var(--sm-muted)]">{leadStatus}</p>
           </article>
 
-          <article className="rounded-3xl border border-white/30 bg-[linear-gradient(145deg,rgba(10,21,38,0.88),rgba(17,45,65,0.86))] p-6 text-white">
+          <article className="sm-surface-deep p-6 text-white">
             <h3 className="text-lg font-bold">Output</h3>
             <p className="mt-2 text-sm text-cyan-100">{leadRows.length} leads</p>
             <div className="mt-4 space-y-2">
@@ -496,11 +477,11 @@ export function TryPage() {
 
       {activeTab === 'news-brief' ? (
         <section className="grid gap-5 lg:grid-cols-[1fr_1fr]">
-          <article className="rounded-3xl border border-white/55 bg-white/55 p-6 backdrop-blur-xl">
-            <h2 className="text-xl font-bold text-[var(--sm-ink)]">News Brief</h2>
-            <p className="mt-2 text-sm text-[var(--sm-muted)]">Use source links. If blocked, paste headlines manually.</p>
+          <article className="sm-surface p-6">
+            <h2 className="text-xl font-bold text-[var(--sm-ink)]">Market Brief</h2>
+            <p className="mt-2 text-sm text-[var(--sm-muted)]">Use sample headlines first. Live source fetch is optional beta.</p>
             <label className="mt-4 block text-sm font-semibold text-[var(--sm-muted)]">
-              Source URLs (one per line)
+              Source URLs for beta fetch (one per line)
               <textarea
                 className="mt-2 min-h-28 w-full rounded-2xl border border-[var(--sm-line)] bg-white/70 px-3 py-3 text-sm"
                 onChange={(event) => setNewsUrls(event.target.value)}
@@ -508,42 +489,29 @@ export function TryPage() {
               />
             </label>
             <div className="mt-4 flex flex-wrap gap-2">
-              <button
-                className="rounded-full bg-[var(--sm-accent)] px-5 py-2.5 text-sm font-bold text-white hover:bg-cyan-700 disabled:opacity-60"
-                disabled={newsFetching}
-                onClick={handleNewsFetch}
-                type="button"
-              >
-                {newsFetching ? 'Fetching...' : 'Run Live'}
+              <button className="sm-button-primary disabled:opacity-60" disabled={newsFetching} onClick={handleNewsFetch} type="button">
+                {newsFetching ? 'Fetching...' : 'Fetch sources'}
               </button>
-              <button
-                className="rounded-full border border-white/70 bg-white/70 px-5 py-2.5 text-sm font-semibold text-[var(--sm-ink)] hover:bg-white"
-                onClick={handleNewsSample}
-                type="button"
-              >
-                Load Sample
+              <button className="sm-button-secondary" onClick={handleNewsSample} type="button">
+                Reset sample
               </button>
             </div>
             <label className="mt-4 block text-sm font-semibold text-[var(--sm-muted)]">
-              Manual fallback headlines
+              Your own headlines
               <textarea
                 className="mt-2 min-h-28 w-full rounded-2xl border border-[var(--sm-line)] bg-white/70 px-3 py-3 text-sm"
                 onChange={(event) => setNewsFallbackText(event.target.value)}
-                placeholder="Paste headlines here if live fetch is blocked..."
+                placeholder="Paste headlines here..."
                 value={newsFallbackText}
               />
             </label>
-            <button
-              className="mt-4 rounded-full border border-white/70 bg-white/70 px-5 py-2.5 text-sm font-semibold text-[var(--sm-ink)] hover:bg-white"
-              onClick={handleManualNewsRun}
-              type="button"
-            >
-              Run Manual
+            <button className="sm-button-secondary mt-4" onClick={handleManualNewsRun} type="button">
+              Run my headlines
             </button>
             <p className="mt-3 text-sm text-[var(--sm-muted)]">{newsStatus}</p>
           </article>
 
-          <article className="rounded-3xl border border-white/30 bg-[linear-gradient(145deg,rgba(10,21,38,0.88),rgba(17,45,65,0.86))] p-6 text-white">
+          <article className="sm-surface-deep p-6 text-white">
             <h3 className="text-lg font-bold">Brief Output</h3>
             <ul className="mt-3 space-y-2 text-sm text-slate-100">
               {newsBrief.length > 0 ? newsBrief.map((line) => <li key={line}>- {line}</li>) : <li>Run the tool to generate your brief.</li>}
@@ -564,7 +532,7 @@ export function TryPage() {
 
       {activeTab === 'action-planner' ? (
         <section className="grid gap-5 lg:grid-cols-[1fr_1fr]">
-          <article className="rounded-3xl border border-white/55 bg-white/55 p-6 backdrop-blur-xl">
+          <article className="sm-surface p-6">
             <h2 className="text-xl font-bold text-[var(--sm-ink)]">Action Board</h2>
             <p className="mt-2 text-sm text-[var(--sm-muted)]">Paste notes. Get a clean owner-ready action list.</p>
             <textarea
@@ -573,24 +541,16 @@ export function TryPage() {
               value={plannerInput}
             />
             <div className="mt-4 flex flex-wrap gap-2">
-              <button
-                className="rounded-full bg-[var(--sm-accent)] px-5 py-2.5 text-sm font-bold text-white hover:bg-cyan-700"
-                onClick={handlePlannerRun}
-                type="button"
-              >
-                Run
+              <button className="sm-button-primary" onClick={handlePlannerRun} type="button">
+                Run my notes
               </button>
-              <button
-                className="rounded-full border border-white/70 bg-white/70 px-5 py-2.5 text-sm font-semibold text-[var(--sm-ink)] hover:bg-white"
-                onClick={handlePlannerSample}
-                type="button"
-              >
-                Load Sample
+              <button className="sm-button-secondary" onClick={handlePlannerSample} type="button">
+                Reset sample
               </button>
             </div>
           </article>
 
-          <article className="rounded-3xl border border-white/30 bg-[linear-gradient(145deg,rgba(10,21,38,0.88),rgba(17,45,65,0.86))] p-6 text-white">
+          <article className="sm-surface-deep p-6 text-white">
             <h3 className="text-lg font-bold">Output</h3>
             <div className="mt-4 space-y-2">
               {plannerRows.map((row) => (
@@ -607,19 +567,13 @@ export function TryPage() {
         </section>
       ) : null}
 
-      <section className="rounded-3xl border border-white/55 bg-white/55 p-6 backdrop-blur-xl">
+      <section className="sm-surface p-6">
         <h2 className="text-xl font-bold text-[var(--sm-ink)]">Want this on your real data?</h2>
         <div className="mt-4 flex flex-wrap gap-3">
-          <Link
-            className="rounded-full bg-orange-500 px-5 py-3 text-sm font-bold text-white hover:bg-orange-400"
-            to="/contact?intent=pilot"
-          >
+          <Link className="sm-button-accent" to="/contact?intent=pilot">
             Start Pilot
           </Link>
-          <Link
-            className="rounded-full border border-white/70 bg-white/70 px-5 py-3 text-sm font-semibold text-[var(--sm-ink)] hover:bg-white"
-            to="/products"
-          >
+          <Link className="sm-button-secondary" to="/products">
             Back to Products
           </Link>
         </div>

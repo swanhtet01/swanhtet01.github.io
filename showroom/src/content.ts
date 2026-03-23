@@ -12,6 +12,13 @@ export type Product = {
   exampleId: TrialModule['id']
 }
 
+export type PaidModule = {
+  name: string
+  tagline: string
+  outcomes: string[]
+  fit: string
+}
+
 export type PackageTier = {
   name: 'Starter' | 'Growth' | 'Scale'
   timeline: string
@@ -51,7 +58,7 @@ export type TrialModule = {
 export const navItems = [
   { label: 'Home', to: '/' },
   { label: 'Products', to: '/products' },
-  { label: 'Try Free', to: '/examples' },
+  { label: 'Try Tools', to: '/examples' },
   { label: 'Pricing', to: '/packages' },
   { label: 'Contact', to: '/contact' },
 ] as const
@@ -65,8 +72,8 @@ export const products: Product[] = [
     exampleId: 'lead-finder',
   },
   {
-    name: 'News Brief',
-    tagline: 'Turn daily news links into one clear management brief.',
+    name: 'Market Brief',
+    tagline: 'Turn a few headlines into one clear management brief.',
     capabilities: ['Read source URLs', 'Tag market/ops risk', 'Generate brief + actions'],
     fit: 'Directors, managers, and owner-led teams.',
     exampleId: 'news-brief',
@@ -77,6 +84,27 @@ export const products: Product[] = [
     capabilities: ['Parse messy notes', 'Assign owner lane', 'Set priority + due window'],
     fit: 'Operations, project, and plant management teams.',
     exampleId: 'action-planner',
+  },
+]
+
+export const paidModules: PaidModule[] = [
+  {
+    name: 'Supplier Watch',
+    tagline: 'Catch supplier risk before it turns into delay or payment pressure.',
+    outcomes: ['ETA and customs follow-up', 'Payment and invoice escalation', 'Supplier action list by owner'],
+    fit: 'Procurement and supply chain teams.',
+  },
+  {
+    name: 'Quality CAPA',
+    tagline: 'Turn one quality issue into a tracked close-out chain.',
+    outcomes: ['Incident register', 'CAPA action chain', 'Closure and verification tracking'],
+    fit: 'Quality teams and plant managers.',
+  },
+  {
+    name: 'Action Board Pro',
+    tagline: 'Give managers one board with real owners, due dates, and write-back flow.',
+    outcomes: ['Role-based action lanes', 'Manager review rhythm', 'Controlled write-back to team sheets'],
+    fit: 'Operations leads, directors, and management teams.',
   },
 ]
 
@@ -106,11 +134,11 @@ export const packages: PackageTier[] = [
 
 export const flagshipSystem: FlagshipSystem = {
   name: 'SuperMega OS',
-  tagline: 'One action layer on top of Drive, Gmail, and Sheets.',
+  tagline: 'One action layer across email, files, and team updates.',
   steps: [
-    'Collect updates from files, email, and simple input forms',
-    'Agents turn raw signals into owner + due-date actions',
-    'Directors and managers work from one command view',
+    'Collect updates from email, files, and simple team inputs',
+    'Turn raw signals into owner and due-date actions',
+    'Run managers and directors from one daily command layer',
   ],
   bestFor: 'Owner-led companies replacing manual ERP work without a heavy rollout.',
 }
@@ -118,14 +146,14 @@ export const flagshipSystem: FlagshipSystem = {
 export const trialModules: TrialModule[] = [
   {
     id: 'lead-finder',
-    name: 'Lead Scraper',
+    name: 'Lead Finder',
     promise: 'Paste directory text or URL and get scored leads.',
     testInput: 'Business text or page URL',
   },
   {
     id: 'news-brief',
-    name: 'News Brief',
-    promise: 'Pull headlines from source links and output a short brief.',
+    name: 'Market Brief',
+    promise: 'Turn a few headlines into a short market brief.',
     testInput: 'Source URLs or pasted headlines',
   },
   {
@@ -137,11 +165,11 @@ export const trialModules: TrialModule[] = [
 ]
 
 export const engagementFlow = [
-  'Open free tool',
-  'Run with sample input',
-  'Run with your own data',
-  'Pick one product for pilot',
-  'Go live with tracked outcomes',
+  'Open one free tool',
+  'See one useful output',
+  'Connect one workflow',
+  'Add owner and due-date actions',
+  'Run from one action layer',
 ]
 
 export const solutions: Solution[] = [

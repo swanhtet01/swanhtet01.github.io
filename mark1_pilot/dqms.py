@@ -30,11 +30,11 @@ def _contains_any(text: str, keywords: list[str]) -> list[str]:
 
 def _infer_supplier(source_text: str) -> str:
     lowered = source_text.lower()
-    if "kiic" in lowered or "zhuangshidong" in lowered:
+    if any(token in lowered for token in ("kiic", "zhuangshidong", "shidong")):
         return "KIIC"
-    if "junky" in lowered or "cheng" in lowered:
+    if any(token in lowered for token in ("junky", "mr.cheng", "j2135.junky", "msa.hinet.net", "cheng")):
         return "JUNKY"
-    if "yangontyre.com" in lowered or "ytf" in lowered:
+    if any(token in lowered for token in ("yangontyre.com", "ytf", "htinkyawoo", "htoo.maw")):
         return "YANGON_TYRE_INTERNAL"
     return "UNKNOWN"
 
@@ -158,10 +158,12 @@ def build_dqms_registers(
         due_date = (generated_at + timedelta(days=due_days)).date().isoformat()
         supplier = _infer_supplier(text)
 
+        file_status = "open" if severity == "high" or supplier != "UNKNOWN" else "triage"
+
         incidents.append(
             {
                 "incident_id": incident_id,
-                "status": "triage",
+                "status": file_status,
                 "severity": severity,
                 "owner": config.owner_default,
                 "supplier": supplier,

@@ -29,25 +29,9 @@ type StoredLead = LeadFormState & {
   submittedAt: string
 }
 
-function loadQueuedLeadCount() {
-  if (typeof window === 'undefined') {
-    return 0
-  }
-  try {
-    const payload = window.localStorage.getItem(LEAD_QUEUE_KEY)
-    if (!payload) {
-      return 0
-    }
-    const rows = JSON.parse(payload)
-    return Array.isArray(rows) ? rows.length : 0
-  } catch {
-    return 0
-  }
-}
-
 function saveLeadLocally(payload: StoredLead) {
   if (typeof window === 'undefined') {
-    return 0
+    return
   }
   try {
     const existingRaw = window.localStorage.getItem(LEAD_QUEUE_KEY)
@@ -55,9 +39,8 @@ function saveLeadLocally(payload: StoredLead) {
     const rows = Array.isArray(existing) ? existing : []
     rows.unshift(payload)
     window.localStorage.setItem(LEAD_QUEUE_KEY, JSON.stringify(rows.slice(0, 100)))
-    return rows.length
   } catch {
-    return 0
+    return
   }
 }
 
@@ -95,25 +78,21 @@ export function ContactPage() {
   const requestedPackage = searchParams.get('package') ?? ''
   const [form, setForm] = useState<LeadFormState>({ ...initialForm, package: requestedPackage })
   const [summary, setSummary] = useState('')
-  const [status, setStatus] = useState<'idle' | 'ready' | 'queued' | 'copied' | 'submitted' | 'error'>('idle')
-  const [queuedCount, setQueuedCount] = useState(loadQueuedLeadCount)
+  const [status, setStatus] = useState<'idle' | 'prepared' | 'copied' | 'submitted' | 'error'>('idle')
   const leadEndpoint = import.meta.env.VITE_LEAD_ENDPOINT as string | undefined
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const generated = buildLeadSummary(form)
     setSummary(generated)
-    setStatus('ready')
+    saveLeadLocally({
+      ...form,
+      summary: generated,
+      submittedAt: new Date().toISOString(),
+    })
 
     if (!leadEndpoint) {
-      const count = saveLeadLocally({
-        ...form,
-        summary: generated,
-        submittedAt: new Date().toISOString(),
-      })
-      setQueuedCount(count)
-      setStatus('queued')
-      window.location.href = buildLeadMailto(form)
+      setStatus('prepared')
       return
     }
 
@@ -154,11 +133,11 @@ export function ContactPage() {
       <PageIntro
         eyebrow="Contact"
         title="Start your pilot request."
-        description="Works with or without backend API."
+        description="Send a short brief. We turn it into a pilot scope and next-step plan."
       />
 
       <section className="grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
-        <form className="rounded-3xl border border-white/45 bg-white/55 p-6 backdrop-blur-xl" onSubmit={handleSubmit}>
+        <form className="sm-surface p-6" onSubmit={handleSubmit}>
           <div className="grid gap-4 md:grid-cols-2">
             <label className="flex flex-col gap-2 text-sm font-semibold text-[var(--sm-muted)]">
               Name
@@ -227,24 +206,20 @@ export function ContactPage() {
               />
             </label>
           </div>
-          <button
-            className="mt-5 rounded-full bg-[var(--sm-accent)] px-5 py-3 text-sm font-bold text-white hover:bg-cyan-700"
-            type="submit"
-          >
-            Generate Request
+          <button className="sm-button-primary mt-5" type="submit">
+            {leadEndpoint ? 'Send Request' : 'Prepare Request'}
           </button>
           <p className="mt-3 text-sm text-[var(--sm-muted)]">
-            {status === 'idle' && 'Generates a request immediately, with or without backend.'}
-            {status === 'ready' && 'Request generated. Use Copy, Download, or Email buttons.'}
-            {status === 'queued' && `Saved locally (queue: ${queuedCount}). Email draft opened.`}
+            {status === 'idle' && 'Keep it short. The goal is to define one useful first rollout.'}
+            {status === 'prepared' && 'Your request packet is ready below. Send it by email or copy it into your own workflow.'}
             {status === 'copied' && 'Request copied to clipboard.'}
-            {status === 'submitted' && 'Request submitted to endpoint and generated locally.'}
-            {status === 'error' && 'Copy or endpoint failed. Download or Email still works.'}
+            {status === 'submitted' && 'Request submitted. Your packet is also available below for review.'}
+            {status === 'error' && 'Submission failed. Your request packet is still available below.'}
           </p>
         </form>
 
-        <aside className="rounded-3xl border border-white/30 bg-[linear-gradient(145deg,rgba(10,21,38,0.88),rgba(17,45,65,0.86))] p-6 text-sm text-slate-100">
-          <h2 className="text-lg font-bold">Request Output</h2>
+        <aside className="sm-surface-deep p-6 text-sm text-slate-100">
+          <h2 className="text-lg font-bold">Request Packet</h2>
           <textarea
             className="mt-4 min-h-72 w-full rounded-2xl border border-white/20 bg-white/5 px-3 py-3 font-mono text-xs text-slate-100"
             readOnly
@@ -252,27 +227,24 @@ export function ContactPage() {
           />
           <div className="mt-4 flex flex-wrap gap-2">
             <button
-              className="rounded-full bg-cyan-400 px-4 py-2 text-xs font-bold text-slate-950 hover:bg-cyan-300"
+              className="sm-button-primary bg-cyan-400 px-4 py-2 text-xs text-slate-950 hover:bg-cyan-300"
               onClick={handleCopy}
               type="button"
             >
               Copy
             </button>
-            <button
-              className="rounded-full border border-white/25 bg-white/10 px-4 py-2 text-xs font-bold text-white hover:bg-white/20"
-              onClick={() => downloadLeadSummary(summary)}
-              type="button"
-            >
+            <button className="sm-button-dark px-4 py-2 text-xs" onClick={() => downloadLeadSummary(summary)} type="button">
               Download
             </button>
-            <a
-              className="rounded-full bg-orange-500 px-4 py-2 text-xs font-bold text-white hover:bg-orange-400"
-              href={buildLeadMailto(form)}
-            >
+            <a className="sm-button-accent px-4 py-2 text-xs" href={buildLeadMailto(form)}>
               Email
             </a>
           </div>
-          <p className="mt-3 text-xs text-slate-300">Local queue count: {queuedCount}</p>
+          <div className="mt-4 space-y-2 text-xs text-slate-300">
+            <p>1. Submit the form or prepare the request.</p>
+            <p>2. Review the packet and send it if needed.</p>
+            <p>3. We turn it into a pilot scope and rollout plan.</p>
+          </div>
         </aside>
       </section>
     </div>

@@ -52,6 +52,10 @@ Current operator commands:
 - `powershell -ExecutionPolicy Bypass -File .\tools\supermega_machine.ps1 -Action status -Config .\config.example.json`
 - `powershell -ExecutionPolicy Bypass -File .\tools\run_solution.ps1 -Config .\config.example.json -Serve -BindHost 0.0.0.0 -Port 8787`
 
+Related operating docs:
+- `Super Mega Inc/runbooks/agent_stack_strategy.md`
+- `Super Mega Inc/runbooks/agent_roles_operating_model.md`
+
 ## Design Rules
 
 - Start from the company's current tools before forcing migration.
