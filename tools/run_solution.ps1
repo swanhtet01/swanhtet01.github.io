@@ -69,8 +69,11 @@ function Show-GmailReauthHint {
     if (-not [string]::IsNullOrWhiteSpace($mailWarning)) {
         Write-Host ("Mail note: " + $mailWarning)
     }
-    Write-Host "Fix it with this one command:"
+    Write-Host "Fix it with local-server auth (fast path):"
     Write-Host ('powershell -ExecutionPolicy Bypass -File "{0}" gmail-auth --config "{1}" --host 127.0.0.1 --port 8765' -f $PilotWrapper, $ConfigPath)
+    Write-Host "If localhost callback fails, use manual auth fallback:"
+    Write-Host ('powershell -ExecutionPolicy Bypass -File "{0}" gmail-auth-start --config "{1}"' -f $PilotWrapper, $ConfigPath)
+    Write-Host ('powershell -ExecutionPolicy Bypass -File "{0}" gmail-auth-finish --config "{1}" --callback-url "<paste-full-callback-url>"' -f $PilotWrapper, $ConfigPath)
     Write-Host "Then rerun run_solution to restore full email + DQMS signal coverage."
 }
 
@@ -126,6 +129,7 @@ try {
     $today = Join-Path $repoRoot "pilot-data\TODAY.md"
     $dqms = Join-Path $repoRoot "pilot-data\dqms_weekly_summary.md"
     $autopilot = Join-Path $repoRoot "pilot-data\autopilot_status.md"
+    $productLab = Join-Path $repoRoot "pilot-data\product_lab.md"
 
     Write-Host ""
     Write-Host "Your live solution outputs:"
@@ -133,6 +137,7 @@ try {
     Write-Host ("- Director brief: " + $brief)
     Write-Host ("- Today recap: " + $today)
     Write-Host ("- DQMS weekly summary: " + $dqms)
+    Write-Host ("- Product lab: " + $productLab)
     Write-Host ("- Pipeline status: " + $autopilot)
     Show-GmailReauthHint -RepoRoot $repoRoot -ConfigPath $configPath -PilotWrapper $pilotWrapper
 

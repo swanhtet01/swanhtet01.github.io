@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom'
 
 import { PageIntro } from '../components/PageIntro'
-import { products } from '../content'
+import { flagshipSystem, products } from '../content'
 
 export function ProductsPage() {
   return (
@@ -11,6 +11,20 @@ export function ProductsPage() {
         title="Simple AI agent products."
         description="Open the free demo first. Then deploy on your own data."
       />
+
+      <section className="rounded-3xl border border-white/55 bg-[linear-gradient(145deg,rgba(8,36,56,0.92),rgba(14,81,92,0.88))] p-6 text-white shadow-[0_30px_70px_-46px_rgba(2,10,28,0.85)]">
+        <p className="text-xs font-bold uppercase tracking-[0.22em] text-cyan-200">Flagship</p>
+        <h2 className="mt-3 text-3xl font-bold">{flagshipSystem.name}</h2>
+        <p className="mt-2 max-w-3xl text-sm text-slate-100">{flagshipSystem.tagline}</p>
+        <div className="mt-5 grid gap-3 md:grid-cols-3">
+          {flagshipSystem.steps.map((step) => (
+            <div className="rounded-2xl border border-white/15 bg-white/8 px-4 py-3 text-sm text-slate-100 backdrop-blur" key={step}>
+              {step}
+            </div>
+          ))}
+        </div>
+        <p className="mt-4 text-sm text-cyan-100">{flagshipSystem.bestFor}</p>
+      </section>
 
       <section className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
         {products.map((product) => (
