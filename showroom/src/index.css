@@ -2,14 +2,14 @@
 @import 'tailwindcss';
 
 :root {
-  --sm-bg: #f3efe5;
-  --sm-paper: #fffbf2;
-  --sm-ink: #1b2a2f;
-  --sm-muted: #5f6d72;
+  --sm-bg: #edf3f2;
+  --sm-paper: #f9fcfb;
+  --sm-ink: #13262f;
+  --sm-muted: #4f6670;
   --sm-accent: #0d6e70;
   --sm-accent-alt: #ca5d29;
-  --sm-line: #d8cfbd;
-  --sm-shadow: 0 22px 50px -34px rgba(20, 26, 29, 0.55);
+  --sm-line: #cddddd;
+  --sm-shadow: 0 24px 55px -35px rgba(15, 43, 57, 0.55);
   font-family: 'Instrument Sans', 'Segoe UI', sans-serif;
   color: var(--sm-ink);
   background-color: var(--sm-bg);
@@ -25,10 +25,12 @@ body {
   margin: 0;
   min-width: 320px;
   background:
-    radial-gradient(circle at 9% 7%, rgba(13, 110, 112, 0.18), transparent 30%),
-    radial-gradient(circle at 90% 5%, rgba(202, 93, 41, 0.15), transparent 30%),
-    linear-gradient(140deg, #f4f0e6 0%, #fffaf0 40%, #f0ece2 100%);
+    radial-gradient(circle at 7% 6%, rgba(13, 110, 112, 0.24), transparent 30%),
+    radial-gradient(circle at 94% 8%, rgba(202, 93, 41, 0.2), transparent 32%),
+    radial-gradient(circle at 60% 95%, rgba(30, 113, 145, 0.13), transparent 36%),
+    linear-gradient(135deg, #eaf2f1 0%, #f7fbfb 52%, #eff4f5 100%);
   color: var(--sm-ink);
+  background-attachment: fixed;
 }
 
 h1,

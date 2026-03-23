@@ -1,12 +1,12 @@
 import { Link } from 'react-router-dom'
 
 import { PageIntro } from '../components/PageIntro'
-import { products, trialModules } from '../content'
+import { products } from '../content'
 
-const trialLinkByProduct: Record<string, string> = {
-  'SignalGrid OS': '#brief',
-  'FlowForge Agents': '#supplier',
-  'QualityPulse DQMS': '#quality',
+const demoLinkByProduct: Record<string, string> = {
+  'Daily Brief Agent': '#brief',
+  'Supplier Risk Agent': '#supplier',
+  'Quality CAPA Agent': '#quality',
 }
 
 export function ProductsPage() {
@@ -14,18 +14,16 @@ export function ProductsPage() {
     <div className="space-y-7">
       <PageIntro
         eyebrow="Products"
-        title="Three practical AI agent products."
-        description="Simple value: faster decisions, clearer ownership, and stronger execution."
+        title="Simple AI agent products teams can use fast."
+        description="Clear value, short rollout, and practical daily use."
       />
 
-      <section className="grid gap-5">
+      <section className="grid gap-5 lg:grid-cols-2">
         {products.map((product) => {
-          const mappedLink = trialLinkByProduct[product.name] ?? '#brief'
-          const mappedTrialName =
-            trialModules.find((module) => mappedLink === `#${module.id}`)?.name ?? 'Prototype'
+          const demoLink = demoLinkByProduct[product.name]
           return (
             <article
-              className="rounded-3xl border border-[var(--sm-line)] bg-white/95 p-6 shadow-[0_20px_50px_-40px_rgba(13,44,53,0.35)]"
+              className="rounded-3xl border border-white/55 bg-white/45 p-6 shadow-[0_24px_55px_-42px_rgba(15,37,52,0.85)] backdrop-blur-xl"
               key={product.name}
             >
               <h2 className="text-2xl font-bold text-[var(--sm-ink)]">{product.name}</h2>
@@ -33,7 +31,7 @@ export function ProductsPage() {
               <p className="mt-3 text-sm leading-relaxed text-[var(--sm-muted)]">{product.innovation}</p>
               <ul className="mt-4 grid gap-2 text-sm text-[var(--sm-muted)] md:grid-cols-3">
                 {product.capabilities.map((capability) => (
-                  <li className="rounded-2xl border border-[var(--sm-line)] bg-[var(--sm-paper)] px-3 py-3" key={capability}>
+                  <li className="rounded-2xl border border-white/65 bg-white/55 px-3 py-3" key={capability}>
                     {capability}
                   </li>
                 ))}
@@ -42,17 +40,19 @@ export function ProductsPage() {
                 <strong className="text-[var(--sm-ink)]">Best fit:</strong> {product.fit}
               </p>
               <div className="mt-5 flex flex-wrap gap-3">
+                {demoLink ? (
+                  <Link
+                    className="rounded-full bg-[var(--sm-accent)] px-4 py-2 text-sm font-bold text-white hover:bg-[#0a5b5d]"
+                    to={`/examples${demoLink}`}
+                  >
+                    Open Example
+                  </Link>
+                ) : null}
                 <Link
-                  className="rounded-full bg-[var(--sm-accent)] px-4 py-2 text-sm font-bold text-white hover:bg-[#0a5b5d]"
-                  to={`/prototypes${mappedLink}`}
-                >
-                  Open {mappedTrialName}
-                </Link>
-                <Link
-                  className="rounded-full border border-[var(--sm-line)] px-4 py-2 text-sm font-semibold text-[var(--sm-ink)] hover:bg-[var(--sm-paper)]"
+                  className="rounded-full border border-white/75 bg-white/55 px-4 py-2 text-sm font-semibold text-[var(--sm-ink)] hover:bg-white/85"
                   to="/contact?intent=pilot"
                 >
-                  Use on my data
+                  Use on My Data
                 </Link>
               </div>
             </article>
@@ -62,4 +62,3 @@ export function ProductsPage() {
     </div>
   )
 }
-

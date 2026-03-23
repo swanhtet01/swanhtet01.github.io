@@ -21,8 +21,10 @@ function App() {
         <Route element={<SiteFrame />} path="/">
           <Route element={<HomePage />} index />
           <Route element={<ProductsPage />} path="products" />
-          <Route element={<TryPage />} path="prototypes" />
-          <Route element={<TryPage />} path="try" />
+          <Route element={<TryPage />} path="examples" />
+          <Route element={<Navigate replace to="/examples" />} path="demos" />
+          <Route element={<Navigate replace to="/examples" />} path="prototypes" />
+          <Route element={<Navigate replace to="/examples" />} path="try" />
           <Route element={<SolutionsPage />} path="solutions" />
           <Route element={<PackagesPage />} path="packages" />
           <Route element={<CaseStudiesPage />} path="case-studies" />
