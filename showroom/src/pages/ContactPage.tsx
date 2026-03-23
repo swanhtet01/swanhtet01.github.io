@@ -16,7 +16,7 @@ const initialForm: LeadFormState = {
   name: '',
   email: '',
   company: '',
-  workflow: 'Supplier Watch',
+  workflow: 'Action OS',
   data: 'Gmail + Drive',
   goal: '',
 }
@@ -124,9 +124,11 @@ export function ContactPage() {
                 onChange={(event) => setForm((prev) => ({ ...prev, workflow: event.target.value }))}
                 value={form.workflow}
               >
+                <option>Action OS</option>
                 <option>Supplier Watch</option>
                 <option>Quality Closeout</option>
                 <option>Cash Watch</option>
+                <option>Sales Signal</option>
                 <option>Action Board</option>
                 <option>News Brief</option>
                 <option>Lead Finder</option>

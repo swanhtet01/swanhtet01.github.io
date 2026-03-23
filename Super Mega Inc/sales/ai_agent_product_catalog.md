@@ -1,128 +1,373 @@
-# SuperMega Product Catalog (V2)
+# SuperMega Product Catalog (V3)
 
-## Product Rule
+## Core Rule
 
-All products must pass this rule:
-- useful in one week
-- clear owner and due date
-- evidence-linked output
-- can run as standalone, then connect into ERP core
+Every product must be:
 
-## Public Products (Client Facing)
+- useful in the first sprint
+- tied to one clear business owner
+- linked to real evidence
+- reusable across clients by swapping context, not rebuilding the whole system
+
+## Product Ladder
+
+### Layer 1: Free Proof Tools
+
+Purpose:
+- show the behavior fast
+- qualify leads
+- generate trust without a long sales cycle
+
+Products:
+- `Lead Finder`
+- `News Brief`
+- `Action Board`
+
+### Layer 2: Control Modules
+
+Purpose:
+- solve one business function end-to-end
+- run on client data
+- create a repeatable deployment template
+
+Products:
+- `Supplier Watch`
+- `Quality Closeout`
+- `Cash Watch`
+- `Production Pulse`
+- `Sales Signal`
+
+### Layer 3: SuperMega OS
+
+Purpose:
+- connect multiple modules into one action system
+- become the AI-native ERP alternative
+- run managers and directors from one operating layer
+
+## Free Proof Tools
 
 ## 1) Lead Finder
 
-Input:
-- directory URL or pasted business list
+Buyer:
+- founder
+- growth lead
+- sales lead
 
-Output:
-- cleaned lead table
-- contact extraction
-- lead score and export
+Problem:
+- lead sources are messy and not easy to use fast
 
-Best for:
-- sales and partnership teams
+Required data:
+- directory URL or pasted lead list
+- simple ICP keywords
+
+Core workflow:
+- parse source
+- extract contacts
+- score fit
+- export shortlist
+
+Outputs:
+- clean lead table
+- lead score
+- contact pack
+- CSV export
+
+Reuse pattern:
+- same parser and scoring engine
+- swap ICP keywords, field mapping, and scoring logic per client
 
 ## 2) News Brief
 
-Input:
-- 3-5 source URLs or pasted headlines
+Buyer:
+- founder
+- director
+- commercial lead
 
-Output:
-- short daily brief
-- risk tags (market, logistics, policy, energy)
-- action recommendations
+Problem:
+- market and policy signals are noisy and slow to turn into decisions
 
-Best for:
-- directors, founders, and managers
+Required data:
+- copied headlines or source URLs
+- watch themes
+
+Core workflow:
+- group signals
+- tag themes
+- summarize impact
+- suggest next actions
+
+Outputs:
+- short operating brief
+- risk tags
+- action prompts
+
+Reuse pattern:
+- same brief engine
+- swap source pack, theme tags, and escalation rules per client
 
 ## 3) Action Board
 
-Input:
-- messy updates, call notes, meeting notes
+Buyer:
+- manager
+- operations lead
+- project lead
 
-Output:
-- action list with owner lane
-- due window
-- priority tag
+Problem:
+- updates live in chat, notes, and meetings with no clean follow-up system
 
-Best for:
-- operations and plant management
+Required data:
+- raw updates
+- team or owner list
+
+Core workflow:
+- split updates
+- infer owner
+- rank priority
+- assign due window
+
+Outputs:
+- action board
+- owner queue
+- due-date view
+
+Reuse pattern:
+- same action engine
+- swap owner map, lane names, and due-date rules per client
+
+## Control Modules
 
 ## 4) Supplier Watch
 
-Input:
-- supplier messages and shipment updates
+Buyer:
+- procurement manager
+- supply chain head
+- operations director
 
-Output:
-- risk score
-- delay/payment/document warnings
-- follow-up action list
+Problem:
+- supplier risk is discovered too late through scattered emails and files
 
-Best for:
-- procurement and supply chain
+Required data:
+- supplier mailbox or forwarded threads
+- PO or ETA sheet
+- supplier master list
+
+Core workflow:
+- ingest supplier signals
+- classify delay, payment, and documentation risk
+- assign owner
+- track escalation
+
+Outputs:
+- supplier risk queue
+- escalation board
+- owner and due-date list
+- supplier follow-up pack
+
+Standard deliverables:
+- mailbox profile setup
+- supplier alias map
+- risk rules
+- weekly supplier review template
+
+Reuse pattern:
+- same workflow engine
+- swap supplier aliases, procurement docs, and risk rules per client
 
 ## 5) Quality Closeout
 
-Input:
-- quality issue email or incident note
+Buyer:
+- quality head
+- plant manager
+- operations director
 
-Output:
-- incident record
-- CAPA action chain
-- closure checklist
+Problem:
+- incidents are not consistently turned into tracked CAPA closure
 
-Best for:
-- quality teams and plant managers
+Required data:
+- issue intake
+- evidence links
+- severity rules
+- owner map
+
+Core workflow:
+- log issue
+- containment step
+- root-cause draft
+- CAPA tracking
+- closeout verification
+
+Outputs:
+- incident register
+- CAPA chain
+- closeout checklist
+- weekly quality review input
+
+Standard deliverables:
+- incident template
+- CAPA template
+- severity matrix
+- owner and approval ladder
+
+Reuse pattern:
+- same closeout engine
+- swap taxonomy, severity rules, and approval steps per client
 
 ## 6) Cash Watch
 
-Input:
-- invoice sheets
-- cash book
-- payment reminders or follow-up emails
+Buyer:
+- finance lead
+- commercial controller
+- founder
 
-Output:
+Problem:
+- collections and payment follow-up are hidden across invoices, books, and emails
+
+Required data:
+- invoice register
+- cash book or AR sheet
+- payment reminder emails
+
+Core workflow:
+- match invoices and payments
+- rank overdue items
+- assign owner
+- draft follow-up
+
+Outputs:
 - overdue queue
-- collection priority list
-- follow-up drafts
+- collection priority board
+- follow-up draft set
+- weekly control summary
 
-Best for:
-- finance and commercial control
+Standard deliverables:
+- invoice mapping
+- aging logic
+- owner lane
+- collections review template
 
-## AI-Native ERP Core (Internal + Enterprise Rollout)
+Reuse pattern:
+- same control logic
+- swap invoice schema, aging rules, and cadence per client
 
-Core modules:
-- command center (CEO, director, manager views)
-- operations pulse
-- supplier control
-- sales and cash control
-- DQMS add-on (incidents, CAPA, supplier nonconformance)
+## 7) Production Pulse
 
-System behavior:
-- starts from existing Drive, Gmail, and Sheets
-- standard intake templates per function
-- weekly decision brief generated from live evidence
+Buyer:
+- plant manager
+- operations lead
 
-## Commercial Structure
+Problem:
+- daily plant execution is reactive and scattered
 
-Tiers:
-- Starter
-- Growth
-- Scale
+Required data:
+- shift updates
+- downtime log
+- plan-vs-actual source
 
-Pricing:
-- no public fixed numbers
-- scope after discovery
+Core workflow:
+- collect shift updates
+- detect blockers
+- rank actions
+- publish plant brief
 
-## Standard Deliverables Per Client
+Outputs:
+- daily plant brief
+- blocker queue
+- owner actions
 
-- solution map (`sources -> agents -> outputs`)
-- KPI baseline sheet
-- intake templates
-- operating SOP
-- weekly briefing loop
+Reuse pattern:
+- same daily operating loop
+- swap KPI logic, shift structure, and escalation ladder per client
 
-## Positioning
+## 8) Sales Signal
 
-SuperMega sells AI agent operating systems, not generic chatbots.
+Buyer:
+- commercial lead
+- sales head
+- founder
+
+Problem:
+- demand shifts are visible late because signals are fragmented
+
+Required data:
+- distributor updates
+- sales sheet
+- external source pack
+
+Core workflow:
+- collect signals
+- detect demand or price shift
+- tag impact
+- assign commercial action
+
+Outputs:
+- demand watch
+- channel alerts
+- commercial action list
+
+Reuse pattern:
+- same commercial engine
+- swap channels, sources, and signal thresholds per client
+
+## SuperMega OS
+
+Buyer:
+- founder
+- director
+- COO
+
+Problem:
+- the company is too messy for classic ERP and too operational for generic AI chat
+
+Required data:
+- Gmail
+- Drive
+- Sheets
+- simple intake templates
+- owner map
+
+Core workflow:
+- ingest signals from all modules
+- normalize into actions, blockers, approvals, and closeout items
+- publish role views
+- track status and evidence
+
+Outputs:
+- founder view
+- director view
+- manager view
+- weekly command brief
+- action system of record
+
+Reuse pattern:
+- same operating core
+- swap entities, templates, module mix, and role views per client
+
+## Resellable Delivery Model
+
+### Starter
+
+- one proof tool
+- one control workflow
+- one manager view
+
+### Control Pack
+
+- two to three control modules
+- one weekly operating rhythm
+- one role dashboard
+
+### OS Build
+
+- multi-module rollout
+- role-based operating layer
+- governance and scale template
+
+## What We Are Actually Selling
+
+We are not selling “AI agents” as a vague promise.
+
+We are selling:
+
+- one working business workflow
+- one repeatable operating template
+- one path from messy files to an AI-native operating system
