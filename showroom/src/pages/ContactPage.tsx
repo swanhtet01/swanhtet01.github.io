@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import type { FormEvent } from 'react'
-import { useSearchParams } from 'react-router-dom'
 
 import { PageIntro } from '../components/PageIntro'
 
@@ -8,8 +7,7 @@ type LeadFormState = {
   name: string
   email: string
   company: string
-  package: string
-  priority: string
+  agent: string
   brief: string
 }
 
@@ -17,132 +15,75 @@ const initialForm: LeadFormState = {
   name: '',
   email: '',
   company: '',
-  package: '',
-  priority: 'This month',
+  agent: 'Supplier Watch Agent',
   brief: '',
 }
 
-const LEAD_QUEUE_KEY = 'supermega_leads_v1'
-
-type StoredLead = LeadFormState & {
-  summary: string
-  submittedAt: string
-}
-
-function saveLeadLocally(payload: StoredLead) {
-  if (typeof window === 'undefined') {
-    return
-  }
-  try {
-    const existingRaw = window.localStorage.getItem(LEAD_QUEUE_KEY)
-    const existing = existingRaw ? JSON.parse(existingRaw) : []
-    const rows = Array.isArray(existing) ? existing : []
-    rows.unshift(payload)
-    window.localStorage.setItem(LEAD_QUEUE_KEY, JSON.stringify(rows.slice(0, 100)))
-  } catch {
-    return
-  }
-}
-
-function buildLeadSummary(payload: LeadFormState) {
-  return [
-    'SuperMega Pilot Request',
+function buildLeadMailto(payload: LeadFormState) {
+  const subject = `[SuperMega Pilot] ${payload.company || payload.name || 'New inquiry'}`
+  const body = [
+    'SuperMega Pilot Inquiry',
+    '',
     `Name: ${payload.name}`,
     `Email: ${payload.email}`,
     `Company: ${payload.company}`,
-    `Requested Tier: ${payload.package || 'Not selected'}`,
-    `Priority: ${payload.priority}`,
+    `Agent of interest: ${payload.agent}`,
     '',
     'Brief:',
-    payload.brief || '(none)',
+    payload.brief,
   ].join('\n')
-}
-
-function buildLeadMailto(payload: LeadFormState) {
-  const subject = `[SuperMega Lead] ${payload.company || payload.name || 'New inquiry'}`
-  return `mailto:swanhtet@supermega.dev?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(buildLeadSummary(payload))}`
-}
-
-function downloadLeadSummary(text: string) {
-  const blob = new Blob([text], { type: 'text/plain;charset=utf-8' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = 'supermega_lead_request.txt'
-  a.click()
-  URL.revokeObjectURL(url)
+  return `mailto:swanhtet@supermega.dev?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
 }
 
 export function ContactPage() {
-  const [searchParams] = useSearchParams()
-  const requestedPackage = searchParams.get('package') ?? ''
-  const [form, setForm] = useState<LeadFormState>({ ...initialForm, package: requestedPackage })
-  const [summary, setSummary] = useState('')
-  const [status, setStatus] = useState<'idle' | 'prepared' | 'copied' | 'submitted' | 'error'>('idle')
-  const leadEndpoint = import.meta.env.VITE_LEAD_ENDPOINT as string | undefined
+  const [form, setForm] = useState<LeadFormState>(initialForm)
+  const [status, setStatus] = useState<'idle' | 'sending'>('idle')
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    const generated = buildLeadSummary(form)
-    setSummary(generated)
-    saveLeadLocally({
-      ...form,
-      summary: generated,
-      submittedAt: new Date().toISOString(),
-    })
-
-    if (!leadEndpoint) {
-      setStatus('prepared')
-      return
-    }
-
-    try {
-      const response = await fetch(leadEndpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...form,
-          summary: generated,
-          source: 'supermega.dev',
-          submittedAt: new Date().toISOString(),
-        }),
-      })
-      if (!response.ok) {
-        throw new Error('Lead endpoint failed')
-      }
-      setStatus('submitted')
-    } catch {
-      setStatus('error')
-    }
-  }
-
-  async function handleCopy() {
-    if (!summary) {
-      return
-    }
-    try {
-      await navigator.clipboard.writeText(summary)
-      setStatus('copied')
-    } catch {
-      setStatus('error')
-    }
+    setStatus('sending')
+    window.location.href = buildLeadMailto(form)
+    window.setTimeout(() => setStatus('idle'), 800)
   }
 
   return (
     <div className="space-y-8">
       <PageIntro
         eyebrow="Contact"
-        title="Start your pilot request."
-        description="Send a short brief. We turn it into a pilot scope and next-step plan."
+        title="Start a real pilot."
+        description="Pick the workflow you want first. We scope one useful agent and move fast."
       />
 
-      <section className="grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
+      <section className="grid gap-6 lg:grid-cols-[0.92fr_1.08fr]">
+        <aside className="sm-surface-deep p-6">
+          <p className="sm-kicker text-[var(--sm-accent)]">Direct path</p>
+          <h2 className="mt-3 text-3xl font-bold text-white">No fake funnel.</h2>
+          <p className="mt-3 text-sm leading-relaxed text-[var(--sm-muted)]">
+            If the agent is useful, we scope the pilot on your real data. If it is not useful, we do not force it.
+          </p>
+
+          <div className="mt-6 grid gap-3">
+            <a className="sm-chip block" href="mailto:swanhtet@supermega.dev">
+              <p className="sm-kicker text-[var(--sm-accent)]">Email</p>
+              <p className="mt-2 text-white">swanhtet@supermega.dev</p>
+            </a>
+            <div className="sm-chip">
+              <p className="sm-kicker text-[var(--sm-accent)]">Best starting agents</p>
+              <p className="mt-2 text-white">Supplier Watch, Quality CAPA, Director Command</p>
+            </div>
+            <div className="sm-chip">
+              <p className="sm-kicker text-[var(--sm-accent)]">Pilot shape</p>
+              <p className="mt-2 text-white">One workflow. One owner view. Two-week first sprint.</p>
+            </div>
+          </div>
+        </aside>
+
         <form className="sm-surface p-6" onSubmit={handleSubmit}>
           <div className="grid gap-4 md:grid-cols-2">
             <label className="flex flex-col gap-2 text-sm font-semibold text-[var(--sm-muted)]">
               Name
               <input
-                className="rounded-xl border border-[var(--sm-line)] bg-white/70 px-3 py-2 text-sm font-normal"
+                className="rounded-xl border border-white/8 bg-white/4 px-3 py-2 text-sm font-normal text-white"
                 onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))}
                 required
                 type="text"
@@ -152,7 +93,7 @@ export function ContactPage() {
             <label className="flex flex-col gap-2 text-sm font-semibold text-[var(--sm-muted)]">
               Email
               <input
-                className="rounded-xl border border-[var(--sm-line)] bg-white/70 px-3 py-2 text-sm font-normal"
+                className="rounded-xl border border-white/8 bg-white/4 px-3 py-2 text-sm font-normal text-white"
                 onChange={(event) => setForm((prev) => ({ ...prev, email: event.target.value }))}
                 required
                 type="email"
@@ -162,7 +103,7 @@ export function ContactPage() {
             <label className="flex flex-col gap-2 text-sm font-semibold text-[var(--sm-muted)]">
               Company
               <input
-                className="rounded-xl border border-[var(--sm-line)] bg-white/70 px-3 py-2 text-sm font-normal"
+                className="rounded-xl border border-white/8 bg-white/4 px-3 py-2 text-sm font-normal text-white"
                 onChange={(event) => setForm((prev) => ({ ...prev, company: event.target.value }))}
                 required
                 type="text"
@@ -170,82 +111,41 @@ export function ContactPage() {
               />
             </label>
             <label className="flex flex-col gap-2 text-sm font-semibold text-[var(--sm-muted)]">
-              Tier
+              Agent
               <select
-                className="rounded-xl border border-[var(--sm-line)] bg-white/70 px-3 py-2 text-sm font-normal"
-                onChange={(event) => setForm((prev) => ({ ...prev, package: event.target.value }))}
-                value={form.package}
+                className="rounded-xl border border-white/8 bg-white/4 px-3 py-2 text-sm font-normal text-white"
+                onChange={(event) => setForm((prev) => ({ ...prev, agent: event.target.value }))}
+                value={form.agent}
               >
-                <option value="">Select tier</option>
-                <option value="Starter">Starter</option>
-                <option value="Growth">Growth</option>
-                <option value="Scale">Scale</option>
-                <option value="Custom">Custom</option>
-              </select>
-            </label>
-            <label className="flex flex-col gap-2 text-sm font-semibold text-[var(--sm-muted)] md:col-span-2">
-              Priority
-              <select
-                className="rounded-xl border border-[var(--sm-line)] bg-white/70 px-3 py-2 text-sm font-normal"
-                onChange={(event) => setForm((prev) => ({ ...prev, priority: event.target.value }))}
-                value={form.priority}
-              >
-                <option>This week</option>
-                <option>This month</option>
-                <option>Next quarter</option>
+                <option>Supplier Watch Agent</option>
+                <option>Quality CAPA Agent</option>
+                <option>Director Command Agent</option>
+                <option>Cash Control Agent</option>
+                <option>Lead-to-Pilot Agent</option>
+                <option>SuperMega OS</option>
               </select>
             </label>
             <label className="flex flex-col gap-2 text-sm font-semibold text-[var(--sm-muted)] md:col-span-2">
               Brief
               <textarea
-                className="min-h-40 rounded-xl border border-[var(--sm-line)] bg-white/70 px-3 py-2 text-sm font-normal"
+                className="min-h-52 rounded-xl border border-white/8 bg-white/4 px-3 py-3 text-sm font-normal text-white"
                 onChange={(event) => setForm((prev) => ({ ...prev, brief: event.target.value }))}
-                placeholder="What do you want automated first?"
+                placeholder="What workflow do you want fixed first?"
                 required
                 value={form.brief}
               />
             </label>
           </div>
-          <button className="sm-button-primary mt-5" type="submit">
-            {leadEndpoint ? 'Send Request' : 'Prepare Request'}
-          </button>
-          <p className="mt-3 text-sm text-[var(--sm-muted)]">
-            {status === 'idle' && 'Keep it short. The goal is to define one useful first rollout.'}
-            {status === 'prepared' && 'Your request packet is ready below. Send it by email or copy it into your own workflow.'}
-            {status === 'copied' && 'Request copied to clipboard.'}
-            {status === 'submitted' && 'Request submitted. Your packet is also available below for review.'}
-            {status === 'error' && 'Submission failed. Your request packet is still available below.'}
-          </p>
-        </form>
-
-        <aside className="sm-surface-deep p-6 text-sm text-slate-100">
-          <h2 className="text-lg font-bold">Request Packet</h2>
-          <textarea
-            className="mt-4 min-h-72 w-full rounded-2xl border border-white/20 bg-white/5 px-3 py-3 font-mono text-xs text-slate-100"
-            readOnly
-            value={summary}
-          />
-          <div className="mt-4 flex flex-wrap gap-2">
-            <button
-              className="sm-button-primary bg-cyan-400 px-4 py-2 text-xs text-slate-950 hover:bg-cyan-300"
-              onClick={handleCopy}
-              type="button"
-            >
-              Copy
+          <div className="mt-5 flex flex-wrap gap-3">
+            <button className="sm-button-accent" type="submit">
+              {status === 'sending' ? 'Opening email...' : 'Email this brief'}
             </button>
-            <button className="sm-button-dark px-4 py-2 text-xs" onClick={() => downloadLeadSummary(summary)} type="button">
-              Download
-            </button>
-            <a className="sm-button-accent px-4 py-2 text-xs" href={buildLeadMailto(form)}>
-              Email
+            <a className="sm-button-secondary" href="mailto:swanhtet@supermega.dev">
+              Email directly
             </a>
           </div>
-          <div className="mt-4 space-y-2 text-xs text-slate-300">
-            <p>1. Submit the form or prepare the request.</p>
-            <p>2. Review the packet and send it if needed.</p>
-            <p>3. We turn it into a pilot scope and rollout plan.</p>
-          </div>
-        </aside>
+          <p className="mt-3 text-sm text-[var(--sm-muted)]">This opens a direct email draft. No fake forms, no dead-end funnel.</p>
+        </form>
       </section>
     </div>
   )
