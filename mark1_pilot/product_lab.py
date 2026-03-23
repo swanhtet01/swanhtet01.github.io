@@ -66,7 +66,7 @@ def build_product_lab(config: PilotConfig, repo_root: Path | None = None) -> dic
     flagship_status = "design_ready"
     if coverage_score >= 85 and erp_ready and input_ready:
         flagship_status = "pilot_ready"
-    if coverage_score >= 90 and erp_ready and input_ready and dqms_ready and required_failures == 0:
+    if coverage_score >= 90 and erp_ready and input_ready and dqms_ready and gmail_ready and required_failures == 0:
         flagship_status = "live_system"
 
     products = [
