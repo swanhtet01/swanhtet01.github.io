@@ -4,7 +4,7 @@ import json
 import os
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse, urlunparse
 
 
 GMAIL_READONLY_SCOPE = "https://www.googleapis.com/auth/gmail.readonly"
@@ -32,6 +32,31 @@ def _is_loopback_redirect(uri: str) -> bool:
 def _allow_insecure_oauth_for_loopback(uri: str) -> None:
     if _is_loopback_redirect(uri):
         os.environ.setdefault("OAUTHLIB_INSECURE_TRANSPORT", "1")
+
+
+def _normalize_callback_url(callback_url: str, redirect_uri: str) -> str:
+    raw = (callback_url or "").strip()
+    if not raw:
+        return raw
+
+    if raw.startswith("?"):
+        raw = f"{redirect_uri}{raw}"
+    elif "://" not in raw and ("code=" in raw or "state=" in raw):
+        separator = "&" if "?" in redirect_uri else "?"
+        raw = f"{redirect_uri}{separator}{raw.lstrip('?')}"
+
+    parsed_callback = urlparse(raw)
+    parsed_redirect = urlparse(redirect_uri)
+
+    if parsed_callback.query and parsed_redirect.scheme and parsed_redirect.netloc:
+        rebuilt = parsed_redirect._replace(
+            path=parsed_redirect.path or parsed_callback.path or "",
+            query=parsed_callback.query,
+            fragment="",
+        )
+        return urlunparse(rebuilt)
+
+    return raw
 
 
 class GmailProbe:
@@ -350,8 +375,23 @@ class GmailProbe:
         try:
             session = json.loads(session_path.read_text(encoding="utf-8"))
             redirect_uri = session.get("redirect_uri", "")
+            normalized_callback = _normalize_callback_url(callback_url, redirect_uri)
+            callback_params = parse_qs(urlparse(normalized_callback).query)
+            expected_state = str(session.get("state", "")).strip()
+            callback_state = str((callback_params.get("state") or [""])[0]).strip()
+            code = str((callback_params.get("code") or [""])[0]).strip()
+            if expected_state and callback_state and expected_state != callback_state:
+                return {
+                    "status": "error",
+                    "message": "OAuth callback state does not match the current Gmail auth session. Run gmail-auth-start again.",
+                }
+            if not code:
+                return {
+                    "status": "error",
+                    "message": "OAuth callback URL does not contain an authorization code.",
+                }
             _allow_insecure_oauth_for_loopback(redirect_uri)
-            _allow_insecure_oauth_for_loopback(callback_url)
+            _allow_insecure_oauth_for_loopback(normalized_callback)
             flow = Flow.from_client_secrets_file(
                 str(self.client_secret_json),
                 scopes=session["scopes"],
@@ -361,7 +401,10 @@ class GmailProbe:
             code_verifier = session.get("code_verifier", "")
             if code_verifier:
                 flow.code_verifier = code_verifier
-            flow.fetch_token(authorization_response=callback_url)
+            try:
+                flow.fetch_token(code=code)
+            except Exception:
+                flow.fetch_token(authorization_response=normalized_callback)
             credentials = flow.credentials
             self.token_json.parent.mkdir(parents=True, exist_ok=True)
             self.token_json.write_text(credentials.to_json(), encoding="utf-8")

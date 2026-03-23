@@ -546,7 +546,7 @@ export function TryPage() {
           <article className="rounded-3xl border border-white/30 bg-[linear-gradient(145deg,rgba(10,21,38,0.88),rgba(17,45,65,0.86))] p-6 text-white">
             <h3 className="text-lg font-bold">Brief Output</h3>
             <ul className="mt-3 space-y-2 text-sm text-slate-100">
-              {newsBrief.length > 0 ? newsBrief.map((line) => <li key={line}>• {line}</li>) : <li>Run the tool to generate your brief.</li>}
+              {newsBrief.length > 0 ? newsBrief.map((line) => <li key={line}>- {line}</li>) : <li>Run the tool to generate your brief.</li>}
             </ul>
             <div className="mt-5 space-y-2">
               {newsItems.slice(0, 10).map((item) => (

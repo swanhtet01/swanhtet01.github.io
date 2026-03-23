@@ -130,6 +130,7 @@ try {
     $dqms = Join-Path $repoRoot "pilot-data\dqms_weekly_summary.md"
     $autopilot = Join-Path $repoRoot "pilot-data\autopilot_status.md"
     $productLab = Join-Path $repoRoot "pilot-data\product_lab.md"
+    $actionBoard = Join-Path $repoRoot "pilot-data\action_board.md"
 
     Write-Host ""
     Write-Host "Your live solution outputs:"
@@ -137,6 +138,7 @@ try {
     Write-Host ("- Director brief: " + $brief)
     Write-Host ("- Today recap: " + $today)
     Write-Host ("- DQMS weekly summary: " + $dqms)
+    Write-Host ("- Action board: " + $actionBoard)
     Write-Host ("- Product lab: " + $productLab)
     Write-Host ("- Pipeline status: " + $autopilot)
     Show-GmailReauthHint -RepoRoot $repoRoot -ConfigPath $configPath -PilotWrapper $pilotWrapper
@@ -150,6 +152,9 @@ try {
         }
         if (Test-Path -LiteralPath $brief) {
             Start-Process $brief | Out-Null
+        }
+        if (Test-Path -LiteralPath $actionBoard) {
+            Start-Process $actionBoard | Out-Null
         }
     }
 
