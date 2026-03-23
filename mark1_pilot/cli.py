@@ -11,6 +11,7 @@ from pathlib import Path
 from time import perf_counter
 from typing import Any, Callable
 
+from .action_board import build_action_board, write_action_board_outputs
 from .briefing import build_gmail_brief_markdown, build_query_brief_markdown
 from .config import PilotConfig
 from .connectors.gmail import DEFAULT_GMAIL_AUTH_HOST, DEFAULT_GMAIL_AUTH_PORT, GmailProbe
@@ -1104,6 +1105,35 @@ def run_product_lab(config_path: str) -> int:
     return 0
 
 
+def run_action_board(config_path: str) -> int:
+    config = PilotConfig.from_path(config_path)
+    output_dir = config.output.inventory_path
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    payload = build_action_board(
+        output_dir,
+        input_config=config.input_center,
+        dqms_config=config.dqms,
+        erp_config=config.erp,
+    )
+    outputs = write_action_board_outputs(payload, output_dir)
+    summary = payload.get("summary", {})
+    print(
+        json.dumps(
+            {
+                "status": payload.get("status", "unknown"),
+                "total_items": summary.get("total_items", 0),
+                "do_now_count": summary.get("do_now_count", 0),
+                "this_week_count": summary.get("this_week_count", 0),
+                "json_file": outputs["json_file"],
+                "markdown_file": outputs["markdown_file"],
+            },
+            indent=2,
+        )
+    )
+    return 0 if payload.get("status") == "ready" else 1
+
+
 def run_manus_catalog(config_path: str, zip_paths: list[str]) -> int:
     config = PilotConfig.from_path(config_path)
     root = Path(config_path).expanduser().resolve().parent
@@ -1459,6 +1489,11 @@ def run_autopilot(
             config_path,
             email_max_results=publish_email_max_results,
         ),
+    )
+    execute_step(
+        "action-board",
+        False,
+        lambda: run_action_board(config_path),
     )
     execute_step(
         "coverage-report",
@@ -2056,6 +2091,16 @@ def build_parser() -> argparse.ArgumentParser:
         help="Maximum number of emails sampled per profile.",
     )
 
+    action_board_parser = subparsers.add_parser(
+        "action-board",
+        help="Build the manager-ready action board from team sheets, DQMS, ERP, and system gaps.",
+    )
+    action_board_parser.add_argument(
+        "--config",
+        default="./config.example.json",
+        help="Path to pilot config JSON.",
+    )
+
     product_lab_parser = subparsers.add_parser(
         "product-lab",
         help="Generate the SuperMega product machine view across showcase tools, client modules, and flagship ERP OS.",
@@ -2285,6 +2330,8 @@ def main() -> int:
         return run_platform_publish(args.config, args.email_max_results, args.skip_drive, args.folder_id)
     if args.command == "pilot-solution":
         return run_pilot_solution(args.config, args.email_max_results)
+    if args.command == "action-board":
+        return run_action_board(args.config)
     if args.command == "product-lab":
         return run_product_lab(args.config)
     if args.command == "coverage-report":

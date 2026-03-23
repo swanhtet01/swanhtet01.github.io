@@ -52,6 +52,7 @@ def build_product_lab(config: PilotConfig, repo_root: Path | None = None) -> dic
     autopilot = _load_json(output_dir / "autopilot_status.json")
     input_center = _load_json(output_dir / config.input_center.snapshot_file)
     execution_review = _load_json(output_dir / "execution_review.json")
+    action_board = _load_json(output_dir / "action_board.json")
 
     coverage_score = int(coverage.get("readiness_score", 0) or 0)
     required_failures = int(autopilot.get("required_failure_count", 0) or 0)
@@ -72,7 +73,7 @@ def build_product_lab(config: PilotConfig, repo_root: Path | None = None) -> dic
     products = [
         {
             "id": "lead-scraper-agent",
-            "name": "Lead Scraper Agent",
+            "name": "Lead Finder",
             "family": "showcase",
             "status": "live_demo",
             "promise": "Turn messy directories into scored leads fast.",
@@ -83,7 +84,7 @@ def build_product_lab(config: PilotConfig, repo_root: Path | None = None) -> dic
         },
         {
             "id": "news-brief-agent",
-            "name": "News Brief Agent",
+            "name": "News Brief",
             "family": "showcase",
             "status": "live_demo",
             "promise": "Convert daily source links into one management brief.",
@@ -94,7 +95,7 @@ def build_product_lab(config: PilotConfig, repo_root: Path | None = None) -> dic
         },
         {
             "id": "action-board-agent",
-            "name": "Action Board Agent",
+            "name": "Action Board",
             "family": "showcase",
             "status": "live_demo",
             "promise": "Turn raw updates into owner-ready actions.",
@@ -105,7 +106,7 @@ def build_product_lab(config: PilotConfig, repo_root: Path | None = None) -> dic
         },
         {
             "id": "supplier-risk-agent",
-            "name": "Supplier Risk Agent",
+            "name": "Supplier Watch",
             "family": "client_module",
             "status": "pilot_ready" if erp_ready else "design_ready",
             "promise": "Track ETA, payment, customs, and supplier follow-up risk.",
@@ -116,7 +117,7 @@ def build_product_lab(config: PilotConfig, repo_root: Path | None = None) -> dic
         },
         {
             "id": "quality-capa-agent",
-            "name": "Quality CAPA Agent",
+            "name": "Quality CAPA",
             "family": "client_module",
             "status": "pilot_ready" if dqms_ready else "design_ready",
             "promise": "Convert quality issues into tracked CAPA chains.",
@@ -134,7 +135,7 @@ def build_product_lab(config: PilotConfig, repo_root: Path | None = None) -> dic
             "best_for": "SMBs that run on Drive, Gmail, and Sheets today",
             "demo_route": "",
             "data_sources": ["Drive", "Gmail", "input center", "external watch"],
-            "next_build": "Move from file-first outputs to record-first action board and role dashboards.",
+            "next_build": "Expand the action board into role dashboards and controlled write-backs.",
         },
     ]
 
@@ -185,7 +186,9 @@ def build_product_lab(config: PilotConfig, repo_root: Path | None = None) -> dic
     next_moves: list[str] = []
     if not gmail_ready:
         next_moves.append("Restore Gmail auth so supplier, internal, and quality agents move from partial to full signal coverage.")
-    if flagship_status != "live_system":
+    if action_board.get("status") == "ready":
+        next_moves.append("Expand the action board into role dashboards and controlled write-backs for SuperMega OS.")
+    elif flagship_status != "live_system":
         next_moves.append("Build the first record-first action board behind SuperMega OS so the flagship product is more than a reporting layer.")
     if erp_ready and dqms_ready:
         next_moves.append("Turn supplier risk and quality CAPA into first paid modules under the flagship OS.")

@@ -18,6 +18,11 @@ def _stable_id(prefix: str, seed: str) -> str:
     return f"{prefix}-{digest}"
 
 
+def _normalized_file_key(path: str) -> str:
+    name = Path(path).name.lower()
+    return "".join(char for char in name if char.isalnum())
+
+
 def _contains_any(text: str, keywords: list[str]) -> list[str]:
     lowered = text.lower()
     return [keyword for keyword in keywords if keyword.lower() in lowered]
@@ -47,6 +52,43 @@ def _date_or_now(value: str | None, fallback: datetime) -> str:
     if not value:
         return fallback.isoformat()
     return value
+
+
+NON_OPERATIONAL_PATH_PREFIXES = (
+    "director_manual/",
+    "mark1_pilot/",
+    "showroom/",
+    "super mega inc/",
+    "pilot-data/",
+    ".github/",
+    "tools/",
+)
+
+FILE_INCIDENT_KEYWORDS = (
+    "claim",
+    "complaint",
+    "defect",
+    "reject",
+    "nonconformance",
+    "ncr",
+    "return",
+    "capa",
+)
+
+
+def _is_operational_quality_file(path: str, snippet: str) -> bool:
+    normalized_path = str(path).replace("\\", "/").strip().lower()
+    if not normalized_path:
+        return False
+    if normalized_path.startswith(NON_OPERATIONAL_PATH_PREFIXES):
+        return False
+
+    ext = Path(normalized_path).suffix.lower()
+    if ext in {".py", ".md", ".json", ".html", ".ts", ".tsx", ".js", ".css"}:
+        return False
+
+    text = f"{normalized_path} {snippet}".lower()
+    return any(keyword in text for keyword in FILE_INCIDENT_KEYWORDS)
 
 
 def build_dqms_registers(
@@ -104,6 +146,8 @@ def build_dqms_registers(
         path = item.get("path", "")
         snippet = item.get("snippet", "")
         text = f"{path} {snippet}"
+        if not _is_operational_quality_file(path, snippet):
+            continue
         matches = _contains_any(text, config.incident_keywords)
         if not matches:
             continue
@@ -133,7 +177,21 @@ def build_dqms_registers(
             }
         )
 
-    deduped: dict[str, dict[str, Any]] = {item["incident_id"]: item for item in incidents}
+    deduped: dict[str, dict[str, Any]] = {}
+    for item in incidents:
+        dedupe_key = item["incident_id"]
+        if item.get("source_type") == "local_file":
+            dedupe_key = f"local:{_normalized_file_key(str(item.get('source_ref', {}).get('path', '')))}"
+        if dedupe_key not in deduped:
+            deduped[dedupe_key] = item
+            continue
+
+        existing = deduped[dedupe_key]
+        existing_supplier = str(existing.get("supplier", "")).strip().upper()
+        new_supplier = str(item.get("supplier", "")).strip().upper()
+        if existing_supplier == "UNKNOWN" and new_supplier not in {"", "UNKNOWN"}:
+            deduped[dedupe_key] = item
+
     incidents = sorted(deduped.values(), key=lambda item: (item["status"], item["severity"], item["title"]))
 
     for incident in incidents:

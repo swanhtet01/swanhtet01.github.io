@@ -10,10 +10,10 @@ export function HomePage() {
         <div className="pointer-events-none absolute -bottom-20 left-0 h-56 w-56 rounded-full bg-[radial-gradient(circle,_rgba(255,144,93,0.28),_transparent_70%)]" />
         <p className="text-xs font-bold uppercase tracking-[0.28em] text-cyan-200">SuperMega</p>
         <h1 className="mt-3 max-w-4xl text-4xl font-extrabold tracking-tight lg:text-6xl">
-          3 AI agents you can test now.
+          3 tools now. One operating system later.
         </h1>
         <p className="mt-4 max-w-3xl text-base text-slate-100 lg:text-lg">
-          Try free demos first. If useful, we connect the same flow to your live data.
+          Start with a live tool. If it helps, we connect it to your real data and team workflow.
         </p>
         <div className="mt-8 flex flex-wrap gap-3">
           <Link
@@ -36,9 +36,9 @@ export function HomePage() {
           </Link>
         </div>
         <div className="mt-8 grid gap-3 text-sm md:grid-cols-3">
-          <div className="rounded-2xl border border-white/20 bg-white/10 px-4 py-3 backdrop-blur">Lead scraping + scoring</div>
-          <div className="rounded-2xl border border-white/20 bg-white/10 px-4 py-3 backdrop-blur">Daily news brief + actions</div>
-          <div className="rounded-2xl border border-white/20 bg-white/10 px-4 py-3 backdrop-blur">Action board from raw notes</div>
+          <div className="rounded-2xl border border-white/20 bg-white/10 px-4 py-3 backdrop-blur">Lead finder</div>
+          <div className="rounded-2xl border border-white/20 bg-white/10 px-4 py-3 backdrop-blur">News brief</div>
+          <div className="rounded-2xl border border-white/20 bg-white/10 px-4 py-3 backdrop-blur">Action board</div>
         </div>
       </section>
 

@@ -58,21 +58,21 @@ export const navItems = [
 
 export const products: Product[] = [
   {
-    name: 'Lead Scraper Agent',
+    name: 'Lead Finder',
     tagline: 'Find and clean public business leads in minutes.',
     capabilities: ['Scrape URL or pasted list', 'Extract contacts', 'Export scored CSV'],
     fit: 'Sales, partnerships, and growth teams.',
     exampleId: 'lead-finder',
   },
   {
-    name: 'News Brief Agent',
+    name: 'News Brief',
     tagline: 'Turn daily news links into one clear management brief.',
     capabilities: ['Read source URLs', 'Tag market/ops risk', 'Generate brief + actions'],
     fit: 'Directors, managers, and owner-led teams.',
     exampleId: 'news-brief',
   },
   {
-    name: 'Action Board Agent',
+    name: 'Action Board',
     tagline: 'Convert raw updates into owner + due-date actions.',
     capabilities: ['Parse messy notes', 'Assign owner lane', 'Set priority + due window'],
     fit: 'Operations, project, and plant management teams.',
@@ -106,7 +106,7 @@ export const packages: PackageTier[] = [
 
 export const flagshipSystem: FlagshipSystem = {
   name: 'SuperMega OS',
-  tagline: 'The flagship system that turns Drive, Gmail, and Sheets into one action layer.',
+  tagline: 'One action layer on top of Drive, Gmail, and Sheets.',
   steps: [
     'Collect updates from files, email, and simple input forms',
     'Agents turn raw signals into owner + due-date actions',

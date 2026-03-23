@@ -8,8 +8,8 @@ export function ProductsPage() {
     <div className="space-y-8">
       <PageIntro
         eyebrow="Products"
-        title="Simple AI agent products."
-        description="Open the free demo first. Then deploy on your own data."
+        title="Simple AI tools."
+        description="Try the public version first. Then deploy on your own data."
       />
 
       <section className="rounded-3xl border border-white/55 bg-[linear-gradient(145deg,rgba(8,36,56,0.92),rgba(14,81,92,0.88))] p-6 text-white shadow-[0_30px_70px_-46px_rgba(2,10,28,0.85)]">

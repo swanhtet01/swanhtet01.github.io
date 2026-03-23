@@ -140,12 +140,12 @@
         "query": "sales",
         "top_k": 5
       },
-      {
-        "name": "quality",
-        "query": "claim OR complaint OR defect OR reject OR quality",
-        "top_k": 5
-      }
-    ]
+        {
+          "name": "quality",
+          "query": "claim OR complaint OR defect OR reject OR nonconformance OR ncr OR capa",
+          "top_k": 5
+        }
+      ]
   },
   "input_center": {
     "enabled": true,
@@ -275,7 +275,7 @@
   },
   "dqms": {
     "quality_profile_name": "quality_watch",
-    "quality_search_query": "claim OR complaint OR defect OR reject OR quality",
+    "quality_search_query": "claim OR complaint OR defect OR reject OR nonconformance OR ncr OR capa",
     "owner_default": "Quality Team",
     "due_days_default": 14,
     "incident_keywords": [
