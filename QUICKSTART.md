@@ -24,6 +24,13 @@ Run:
 powershell -ExecutionPolicy Bypass -File .\tools\pilot.ps1 gmail-auth --config .\config.example.json --host 127.0.0.1 --port 8765
 ```
 
+If localhost callback fails, use manual flow:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\tools\pilot.ps1 gmail-auth-start --config .\config.example.json
+powershell -ExecutionPolicy Bypass -File .\tools\pilot.ps1 gmail-auth-finish --config .\config.example.json --callback-url "<paste-full-callback-url>"
+```
+
 Then run the main solution command again.
 
 ## 3) Serve locally for phone/laptop testing
@@ -51,7 +58,19 @@ Deployment target:
 - GitHub Pages workflow: `.github/workflows/showroom-pages.yml`
 - Domain: `https://supermega.dev`
 
-## 5) Create another setup profile (for new company/client)
+## 5) One command to check whole machine health
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\tools\supermega_machine.ps1 -Action status -Config .\config.example.json
+```
+
+Includes:
+- website DNS + HTTPS diagnosis
+- internal output freshness (dashboard/brief/DQMS)
+- Gmail token presence check
+- next command suggestions
+
+## 6) Create another setup profile (for new company/client)
 
 List current profiles:
 

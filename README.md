@@ -22,6 +22,7 @@ Core docs:
 - `TODO.md` - current delegated workstreams
 - `Super Mega Inc/runbooks/` - domain cutover and showroom operations runbooks
 - `Super Mega Inc/runbooks/ai_native_erp_architecture_v1.md` - production blueprint for AI-native ERP rollout from single-tenant to multi-tenant
+- `Super Mega Inc/runbooks/supermega_machine_architecture.md` - unified architecture for internal platform + website + product modules
 - `Super Mega Inc/sales/` - package one-pagers and proposal/discovery collateral
 
 Quick commands:
@@ -67,8 +68,21 @@ powershell -ExecutionPolicy Bypass -File .\tools\pilot.ps1 execution-review --co
 # Re-auth Gmail if token expired/revoked
 powershell -ExecutionPolicy Bypass -File .\tools\pilot.ps1 gmail-auth --config .\config.example.json --host 127.0.0.1 --port 8765
 
+# Manual fallback if localhost callback fails
+powershell -ExecutionPolicy Bypass -File .\tools\pilot.ps1 gmail-auth-start --config .\config.example.json
+powershell -ExecutionPolicy Bypass -File .\tools\pilot.ps1 gmail-auth-finish --config .\config.example.json --callback-url "<paste-full-callback-url>"
+
 # Full one-command run + open outputs
 powershell -ExecutionPolicy Bypass -File .\tools\run_solution.ps1 -Config .\config.example.json -SkipDrive
+
+# Unified machine status (website + internal platform health)
+powershell -ExecutionPolicy Bypass -File .\tools\supermega_machine.ps1 -Action status -Config .\config.example.json
+
+# Unified daily run
+powershell -ExecutionPolicy Bypass -File .\tools\supermega_machine.ps1 -Action daily -Config .\config.example.json
+
+# Unified website DNS/HTTPS diagnose
+powershell -ExecutionPolicy Bypass -File .\tools\supermega_machine.ps1 -Action website-check
 
 # Run against a profile overlay (multi-client setup)
 powershell -ExecutionPolicy Bypass -File .\tools\run_solution.ps1 -Config .\config.example.json -Profile smb_template -SkipDrive
