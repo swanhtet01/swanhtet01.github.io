@@ -66,7 +66,17 @@ try {
     }
 
     if ($Action -eq "cloudrun-preflight") {
-        powershell -ExecutionPolicy Bypass -File $cloudRunPreflight -ProjectId $ProjectId -Region $Region -Service $Service -ServiceAccountEmail $ServiceAccountEmail
+        $preflightArgs = @(
+            "-ExecutionPolicy", "Bypass",
+            "-File", $cloudRunPreflight,
+            "-ProjectId", $ProjectId,
+            "-Region", $Region,
+            "-Service", $Service
+        )
+        if (-not [string]::IsNullOrWhiteSpace($ServiceAccountEmail)) {
+            $preflightArgs += @("-ServiceAccountEmail", $ServiceAccountEmail)
+        }
+        powershell @preflightArgs
         exit $LASTEXITCODE
     }
 
