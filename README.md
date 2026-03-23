@@ -84,6 +84,10 @@ powershell -ExecutionPolicy Bypass -File .\tools\supermega_machine.ps1 -Action d
 # Unified website DNS/HTTPS diagnose
 powershell -ExecutionPolicy Bypass -File .\tools\supermega_machine.ps1 -Action website-check
 
+# Cloud Run fallback preflight + deploy
+powershell -ExecutionPolicy Bypass -File .\tools\supermega_machine.ps1 -Action cloudrun-preflight -ProjectId supermega-468612 -Region asia-southeast1 -Service supermega-showroom
+powershell -ExecutionPolicy Bypass -File .\tools\supermega_machine.ps1 -Action cloudrun-deploy -ProjectId supermega-468612 -Region asia-southeast1 -Service supermega-showroom
+
 # Run against a profile overlay (multi-client setup)
 powershell -ExecutionPolicy Bypass -File .\tools\run_solution.ps1 -Config .\config.example.json -Profile smb_template -SkipDrive
 
