@@ -1,10 +1,14 @@
 param(
-    [ValidateSet("status", "daily", "serve", "website-check", "website-deploy")]
+    [ValidateSet("status", "daily", "serve", "website-check", "website-deploy", "cloudrun-preflight", "cloudrun-deploy")]
     [string]$Action = "status",
     [string]$Config = "config.example.json",
     [string]$Profile = "",
     [switch]$SkipDrive,
     [switch]$SkipDomainCheck,
+    [string]$ProjectId = "supermega-468612",
+    [string]$Region = "asia-southeast1",
+    [string]$Service = "supermega-showroom",
+    [string]$ServiceAccountEmail = "",
     [string]$BindHost = "0.0.0.0",
     [int]$Port = 8787
 )
@@ -16,6 +20,8 @@ $repoRoot = Split-Path -Parent $scriptDir
 $runSolution = Join-Path $scriptDir "run_solution.ps1"
 $websiteDiagnose = Join-Path $scriptDir "website_diagnose.ps1"
 $deployWebsite = Join-Path $scriptDir "deploy_website_actions.ps1"
+$deployCloudRun = Join-Path $scriptDir "deploy_showroom_cloud_run.ps1"
+$cloudRunPreflight = Join-Path $scriptDir "cloudrun_preflight.ps1"
 $pilotWrapper = Join-Path $scriptDir "pilot.ps1"
 
 function Resolve-ConfigPath {
@@ -56,6 +62,16 @@ try {
 
     if ($Action -eq "website-deploy") {
         powershell -ExecutionPolicy Bypass -File $deployWebsite -Branch "main" -SkipCloudRun
+        exit $LASTEXITCODE
+    }
+
+    if ($Action -eq "cloudrun-preflight") {
+        powershell -ExecutionPolicy Bypass -File $cloudRunPreflight -ProjectId $ProjectId -Region $Region -Service $Service -ServiceAccountEmail $ServiceAccountEmail
+        exit $LASTEXITCODE
+    }
+
+    if ($Action -eq "cloudrun-deploy") {
+        powershell -ExecutionPolicy Bypass -File $deployCloudRun -ProjectId $ProjectId -Region $Region -Service $Service -Domain "supermega.dev"
         exit $LASTEXITCODE
     }
 
@@ -146,6 +162,8 @@ try {
             serve_lan = 'powershell -ExecutionPolicy Bypass -File .\tools\supermega_machine.ps1 -Action serve -Config .\config.example.json -BindHost 0.0.0.0 -Port 8787'
             website_check = 'powershell -ExecutionPolicy Bypass -File .\tools\supermega_machine.ps1 -Action website-check'
             website_deploy = 'powershell -ExecutionPolicy Bypass -File .\tools\supermega_machine.ps1 -Action website-deploy'
+            cloudrun_preflight = 'powershell -ExecutionPolicy Bypass -File .\tools\supermega_machine.ps1 -Action cloudrun-preflight -ProjectId supermega-468612 -Region asia-southeast1 -Service supermega-showroom'
+            cloudrun_deploy = 'powershell -ExecutionPolicy Bypass -File .\tools\supermega_machine.ps1 -Action cloudrun-deploy -ProjectId supermega-468612 -Region asia-southeast1 -Service supermega-showroom'
             execution_review = ('powershell -ExecutionPolicy Bypass -File "{0}" execution-review --config "{1}"' -f $pilotWrapper, $resolvedConfig)
         }
     }

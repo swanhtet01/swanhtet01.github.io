@@ -70,7 +70,19 @@ Includes:
 - Gmail token presence check
 - next command suggestions
 
-## 6) Create another setup profile (for new company/client)
+## 6) Cloud Run fallback preflight (if your network blocks supermega.dev on Pages)
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\tools\supermega_machine.ps1 -Action cloudrun-preflight -ProjectId supermega-468612 -Region asia-southeast1 -Service supermega-showroom
+```
+
+If preflight returns ready:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\tools\supermega_machine.ps1 -Action cloudrun-deploy -ProjectId supermega-468612 -Region asia-southeast1 -Service supermega-showroom
+```
+
+## 7) Create another setup profile (for new company/client)
 
 List current profiles:
 
