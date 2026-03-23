@@ -8,20 +8,23 @@ export function PackagesPage() {
     <div className="space-y-8">
       <PageIntro
         eyebrow="Packages"
-        title="Simple pricing."
-        description="Pick Starter, Growth, or Scale."
+        title="3 engagement tiers."
+        description="No fixed public pricing. Scope is agreed after discovery."
       />
 
       <section className="grid gap-5 lg:grid-cols-3">
         {packages.map((pkg) => (
-          <article className="rounded-3xl border border-white/65 bg-white/45 p-6 backdrop-blur-xl" key={pkg.name}>
+          <article
+            className="rounded-3xl border border-white/45 bg-white/55 p-6 shadow-[0_22px_50px_-38px_rgba(14,34,55,0.85)] backdrop-blur-xl"
+            key={pkg.name}
+          >
             <p className="text-xs font-bold uppercase tracking-[0.2em] text-[var(--sm-accent)]">{pkg.name}</p>
-            <p className="mt-2 text-2xl font-extrabold text-[var(--sm-ink)]">{pkg.investment}</p>
+            <p className="mt-2 text-2xl font-extrabold text-[var(--sm-ink)]">{pkg.commercialModel}</p>
             <p className="mt-1 text-sm font-medium text-[var(--sm-muted)]">{pkg.timeline}</p>
             <p className="mt-4 text-sm leading-relaxed text-[var(--sm-muted)]">{pkg.bestFor}</p>
             <ul className="mt-4 space-y-2 text-sm text-[var(--sm-muted)]">
               {pkg.deliverables.map((deliverable) => (
-                <li className="rounded-2xl border border-[var(--sm-line)] bg-[var(--sm-paper)] px-3 py-3" key={deliverable}>
+                <li className="rounded-2xl border border-white/65 bg-white/65 px-3 py-3" key={deliverable}>
                   {deliverable}
                 </li>
               ))}
