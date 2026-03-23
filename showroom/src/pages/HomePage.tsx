@@ -1,9 +1,8 @@
 import { Link } from 'react-router-dom'
 
-import { engagementFlow, flagshipSystem, products } from '../content'
+import { engagementFlow, flagshipSystem, products, sellableTemplates } from '../content'
 
 const freeTools = products.filter((product) => product.kind === 'Free tool')
-const controlModules = products.filter((product) => product.kind === 'Control module')
 
 export function HomePage() {
   return (
@@ -18,7 +17,7 @@ export function HomePage() {
             <span className="sm-led bg-emerald-400" />
             Live tools {freeTools.length}
           </span>
-          <span className="sm-status-pill">Control modules {controlModules.length}</span>
+          <span className="sm-status-pill">Templates {sellableTemplates.length}</span>
           <span className="sm-status-pill">Gmail + Drive + Sheets</span>
           <span className="sm-status-pill">Operator-first</span>
         </div>
@@ -30,7 +29,7 @@ export function HomePage() {
               AI agents for messy operators.
             </h1>
             <p className="mt-5 max-w-3xl text-base leading-relaxed text-[var(--sm-muted)] lg:text-lg">
-              Try three free tools. Deploy one control module. Then run your company from one action layer.
+              Try the proof tools first. Then deploy one reusable workflow template. Then run your company from one action layer.
             </p>
             <div className="mt-7 flex flex-wrap gap-3">
               <Link className="sm-button-primary" to="/examples">
@@ -48,8 +47,8 @@ export function HomePage() {
               </div>
               <div className="sm-metric-card">
                 <p className="sm-kicker text-[var(--sm-accent-alt)]">Deploy</p>
-                <p className="mt-3 text-3xl font-bold text-white">{controlModules.length}</p>
-                <p className="mt-2 text-sm text-[var(--sm-muted)]">Control modules for real operations</p>
+                <p className="mt-3 text-3xl font-bold text-white">{sellableTemplates.length}</p>
+                <p className="mt-2 text-sm text-[var(--sm-muted)]">Reusable workflow templates to sell and deploy</p>
               </div>
               <div className="sm-metric-card">
                 <p className="sm-kicker text-[var(--sm-accent)]">Flagship</p>
@@ -93,13 +92,13 @@ export function HomePage() {
               </div>
 
               <div className="mt-5 grid gap-3">
-                {controlModules.map((product) => (
-                  <div className="sm-command-row" key={product.name}>
+                {sellableTemplates.slice(0, 5).map((template) => (
+                  <div className="sm-command-row" key={template.name}>
                     <div>
-                      <p className="font-semibold text-white">{product.name}</p>
-                      <p className="text-sm text-[var(--sm-muted)]">{product.tagline}</p>
+                      <p className="font-semibold text-white">{template.name}</p>
+                      <p className="text-sm text-[var(--sm-muted)]">{template.problem}</p>
                     </div>
-                    <span className="sm-status-pill">{product.availability}</span>
+                    <span className="sm-status-pill">Template</span>
                   </div>
                 ))}
               </div>
@@ -111,7 +110,7 @@ export function HomePage() {
       <section className="space-y-4">
         <div className="flex items-center justify-between gap-4">
           <div>
-            <p className="sm-kicker text-[var(--sm-accent)]">Try first</p>
+            <p className="sm-kicker text-[var(--sm-accent)]">Proof layer</p>
             <h2 className="mt-2 text-2xl font-bold text-white">Three free tools.</h2>
           </div>
           <Link className="sm-link" to="/examples">
@@ -148,13 +147,13 @@ export function HomePage() {
       <section className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
         <article className="sm-surface p-6">
           <p className="sm-kicker text-[var(--sm-accent-alt)]">Deploy next</p>
-          <h2 className="mt-3 text-2xl font-bold text-white">Control modules for real workflows.</h2>
+          <h2 className="mt-3 text-2xl font-bold text-white">Sellable workflow templates.</h2>
           <div className="mt-4 grid gap-3">
-            {controlModules.map((product) => (
-              <div className="sm-command-row" key={product.name}>
+            {sellableTemplates.map((template) => (
+              <div className="sm-command-row" key={template.name}>
                 <div>
-                  <p className="font-semibold text-white">{product.name}</p>
-                  <p className="text-sm text-[var(--sm-muted)]">{product.output}</p>
+                  <p className="font-semibold text-white">{template.name}</p>
+                  <p className="text-sm text-[var(--sm-muted)]">{template.rollout}</p>
                 </div>
                 <Link className="sm-link" to="/contact">
                   Deploy

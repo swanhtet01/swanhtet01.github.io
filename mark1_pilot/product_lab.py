@@ -114,6 +114,17 @@ def build_product_lab(config: PilotConfig, repo_root: Path | None = None) -> dic
             "next_build": "Add write-back into manager boards and role-specific action lanes.",
         },
         {
+            "id": "action-os",
+            "name": "Action OS",
+            "family": "control_module",
+            "status": "pilot_ready" if input_ready else "design_ready",
+            "promise": "Turn inboxes, notes, and sheets into one manager action system.",
+            "best_for": "founders, general managers, operations directors",
+            "demo_route": "",
+            "data_sources": ["input center", "notes", "emails", "action board"],
+            "next_build": "Promote the current action board into the first write-back manager operating layer.",
+        },
+        {
             "id": "supplier-watch",
             "name": "Supplier Watch",
             "family": "control_module",

@@ -110,6 +110,22 @@ export const products: Product[] = [
   },
   {
     kind: 'Control module',
+    name: 'Action OS',
+    availability: 'Deploy',
+    tagline: 'Turn inboxes, notes, and sheets into one manager action system.',
+    buyer: 'Founder, GM, or operations director',
+    input: 'Daily update sheet, forwarded notes, and role owner list',
+    output: 'Action board, blocker queue, owner + due-date system',
+    fit: 'Owner-led teams that need one working management layer first.',
+    connectors: ['Sheets', 'Gmail', 'Drive'],
+    requiredData: ['Daily update source', 'Owner map', 'Simple tracker or board'],
+    workflow: ['Ingest updates', 'Classify urgency', 'Assign owner', 'Publish manager and director views'],
+    deliverables: ['Action board', 'Blocker queue', 'Director summary'],
+    variants: ['Daily ops OS', 'Director OS', 'Project follow-up OS'],
+    adaptation: 'Reuse the same action operating model. Swap the owner map, review cadence, and issue taxonomy per client.',
+  },
+  {
+    kind: 'Control module',
     name: 'Supplier Watch',
     availability: 'Deploy',
     tagline: 'Catch delay, payment, and customs risk before it hurts operations.',
@@ -249,7 +265,7 @@ export const packages: PackageTier[] = [
   {
     name: 'Control Pack',
     timeline: '4 to 6 weeks',
-    commercialModel: 'Two or three connected modules',
+    commercialModel: 'Two or three connected workflow templates',
     bestFor: 'Teams fixing a function end-to-end.',
     deliverables: ['Supplier, quality, cash, or ops pack', 'Manager control board', 'Weekly operating rhythm'],
   },
@@ -296,7 +312,7 @@ export const trialModules: TrialModule[] = [
 
 export const engagementFlow = [
   'Try one free tool',
-  'Deploy one control module',
+  'Deploy one workflow template',
   'Ship one manager view',
   'Scale into SuperMega OS',
 ]
