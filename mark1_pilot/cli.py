@@ -13,6 +13,11 @@ from typing import Any, Callable
 
 from .action_board import build_action_board, write_action_board_outputs
 from .briefing import build_gmail_brief_markdown, build_query_brief_markdown
+from .client_context import (
+    build_client_context_report,
+    scaffold_client_context_template,
+    write_client_context_outputs,
+)
 from .config import PilotConfig
 from .connectors.gmail import DEFAULT_GMAIL_AUTH_HOST, DEFAULT_GMAIL_AUTH_PORT, GmailProbe
 from .connectors.google_drive import GoogleDriveProbe
@@ -290,6 +295,56 @@ def _render_drive_tree(node: dict, depth: int = 0) -> list[str]:
     for child in node.get("children", []):
         lines.extend(_render_drive_tree(child, depth + 1))
     return lines
+
+
+def run_context_validate(config_path: str) -> int:
+    config = PilotConfig.from_path(config_path)
+    report = build_client_context_report(config.client_context)
+    print(
+        json.dumps(
+            {
+                "status": report.get("status", "unknown"),
+                "company_name": report.get("summary", {}).get("company_name", ""),
+                "context_id": report.get("summary", {}).get("context_id", ""),
+                "readiness_score": report.get("summary", {}).get("readiness_score", 0),
+                "validation_errors": report.get("validation_errors", []),
+                "validation_warnings": report.get("validation_warnings", []),
+            },
+            indent=2,
+        )
+    )
+    return 0 if report.get("status") in {"ready", "warning", "not_configured"} else 1
+
+
+def run_context_blueprint(config_path: str) -> int:
+    config = PilotConfig.from_path(config_path)
+    output_dir = config.output.inventory_path
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    report = build_client_context_report(config.client_context)
+    outputs = write_client_context_outputs(report, output_dir)
+    print(
+        json.dumps(
+            {
+                "status": report.get("status", "unknown"),
+                "company_name": report.get("summary", {}).get("company_name", ""),
+                "selected_module_count": report.get("summary", {}).get("selected_module_count", 0),
+                "json_file": outputs["json_file"],
+                "markdown_file": outputs["markdown_file"],
+                "context_markdown_file": outputs["context_markdown_file"],
+            },
+            indent=2,
+        )
+    )
+    return 0 if report.get("status") in {"ready", "warning", "not_configured"} else 1
+
+
+def run_context_init(output_path: str, force: bool) -> int:
+    repo_root = Path(__file__).resolve().parent.parent
+    template_path = repo_root / "Super Mega Inc" / "templates" / "client_context_template.json"
+    outputs = scaffold_client_context_template(Path(output_path).expanduser(), template_path, force=force)
+    print(json.dumps({"status": "ready", **outputs}, indent=2))
+    return 0
 
 
 def run_drive_map(config_path: str, max_depth: int, folder_id: str | None = None) -> int:
@@ -1086,6 +1141,8 @@ def run_product_lab(config_path: str) -> int:
     output_dir = config.output.inventory_path
     output_dir.mkdir(parents=True, exist_ok=True)
 
+    context_report = build_client_context_report(config.client_context)
+    context_outputs = write_client_context_outputs(context_report, output_dir)
     payload = build_product_lab(config)
     outputs = write_product_lab_outputs(payload, output_dir)
     summary = payload.get("summary", {})
@@ -1096,8 +1153,11 @@ def run_product_lab(config_path: str) -> int:
                 "flagship_status": summary.get("flagship_status", ""),
                 "live_demo_count": summary.get("live_demo_count", 0),
                 "pilot_ready_count": summary.get("pilot_ready_count", 0),
+                "client_context_status": context_report.get("status", "unknown"),
                 "json_file": outputs["json_file"],
                 "markdown_file": outputs["markdown_file"],
+                "client_context_markdown_file": context_outputs["markdown_file"],
+                "client_context_profile_markdown_file": context_outputs["context_markdown_file"],
             },
             indent=2,
         )
@@ -1709,6 +1769,41 @@ def build_parser() -> argparse.ArgumentParser:
         help="Replace the target profile if it already exists.",
     )
 
+    context_validate_parser = subparsers.add_parser(
+        "context-validate",
+        help="Validate the configured client context pack.",
+    )
+    context_validate_parser.add_argument(
+        "--config",
+        default="./config.example.json",
+        help="Path to pilot config JSON.",
+    )
+
+    context_blueprint_parser = subparsers.add_parser(
+        "context-blueprint",
+        help="Write the current client context blueprint outputs into pilot-data.",
+    )
+    context_blueprint_parser.add_argument(
+        "--config",
+        default="./config.example.json",
+        help="Path to pilot config JSON.",
+    )
+
+    context_init_parser = subparsers.add_parser(
+        "context-init",
+        help="Scaffold a new client context JSON file from the repo template.",
+    )
+    context_init_parser.add_argument(
+        "--output",
+        required=True,
+        help="Where to write the new client context JSON.",
+    )
+    context_init_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Overwrite the output file if it already exists.",
+    )
+
     drive_map_parser = subparsers.add_parser(
         "drive-map",
         help="Snapshot the shared Yangon Tyre Google Drive folder tree.",
@@ -2286,6 +2381,12 @@ def main() -> int:
             set_default=args.set_default,
             overwrite=args.overwrite,
         )
+    if args.command == "context-validate":
+        return run_context_validate(args.config)
+    if args.command == "context-blueprint":
+        return run_context_blueprint(args.config)
+    if args.command == "context-init":
+        return run_context_init(args.output, args.force)
     if args.command == "drive-map":
         return run_drive_map(args.config, args.max_depth, args.folder_id)
     if args.command == "drive-shared-list":

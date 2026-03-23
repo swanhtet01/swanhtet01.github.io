@@ -1,37 +1,71 @@
 {
+  "context_id": "new_client",
   "company": {
     "name": "",
     "industry": "",
     "footprint": "",
-    "priority": ""
+    "roles": [],
+    "priorities": []
   },
-  "sources": {
-    "gmail": [],
-    "drive": [],
-    "sheets": [],
-    "external": []
+  "selected_products": {
+    "flagship": "supermega_os",
+    "free_tools": [],
+    "control_modules": [],
+    "role_dashboards": []
   },
-  "entities": {
+  "connectors": {
+    "gmail": {
+      "user_email": "",
+      "query_profiles": {}
+    },
+    "drive": {
+      "local_root": "",
+      "folder_id": "",
+      "publish_folder_id": ""
+    },
+    "sheets": {
+      "workspace_folder_name": "",
+      "templates": []
+    },
+    "external": {
+      "watch_keywords": [],
+      "sources": []
+    }
+  },
+  "entity_maps": {
     "suppliers": [],
     "customers": [],
     "plants": [],
+    "teams": [],
     "owners": [],
-    "approvers": []
+    "approvers": [],
+    "aliases": {}
   },
-  "rules": {
+  "workflow_rules": {
     "severity_levels": [],
     "risk_categories": [],
+    "routing_rules": [],
     "due_date_rules": [],
     "escalation_rules": [],
     "approval_rules": []
   },
-  "module_selection": {
-    "free_tool": "",
-    "first_control_module": "",
-    "next_modules": []
+  "outputs": {
+    "dashboard_title": "",
+    "email_profiles": [],
+    "search_queries": [],
+    "input_templates": [],
+    "views": []
+  },
+  "governance": {
+    "mode": "read_only",
+    "writeback_allowed": false,
+    "approval_required_for": [],
+    "closers": [],
+    "overrides": []
   },
   "success_metrics": {
     "week_1": [],
-    "month_1": []
+    "month_1": [],
+    "kpis": []
   }
 }

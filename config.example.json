@@ -5,6 +5,9 @@
     "ytf_personal": {},
     "smb_template": {
       "project_name": "smb-ai-erp-pilot",
+      "client_context": {
+        "path": "./Super Mega Inc/templates/contexts/smb_distributor_context.json"
+      },
       "sources": {
         "drive": {
           "local_root": "C:/Data/ClientA",
@@ -34,6 +37,9 @@
         "drive_folder_id": "REPLACE_WITH_PUBLISH_FOLDER_ID"
       }
     }
+  },
+  "client_context": {
+    "path": "./Super Mega Inc/templates/contexts/yangon_tyre_context.json"
   },
   "sources": {
     "drive": {

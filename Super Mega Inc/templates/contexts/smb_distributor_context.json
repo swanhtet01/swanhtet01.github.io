@@ -1,0 +1,73 @@
+{
+  "context_id": "smb_distributor",
+  "company": {
+    "name": "ClientA Distributor",
+    "industry": "Distribution",
+    "footprint": "Head office with regional sales coverage",
+    "roles": ["founder", "sales_manager", "finance_manager", "operations_manager"],
+    "priorities": ["cash collection control", "sales signal watch", "one action layer for managers"]
+  },
+  "selected_products": {
+    "flagship": "supermega_os",
+    "free_tools": ["lead_finder", "action_board"],
+    "control_modules": ["action_os", "cash_watch", "sales_signal"],
+    "role_dashboards": ["founder", "sales_manager", "finance_manager"]
+  },
+  "connectors": {
+    "gmail": {
+      "user_email": "owner@clienta.com",
+      "query_profiles": {
+        "collections_watch": "(invoice OR overdue OR remittance OR payment) newer_than:180d",
+        "sales_watch": "(customer OR distributor OR demand OR quotation) newer_than:180d"
+      }
+    },
+    "drive": {
+      "local_root": "C:/Data/ClientA",
+      "folder_id": "REPLACE_WITH_CLIENT_FOLDER_ID",
+      "publish_folder_id": "REPLACE_WITH_PUBLISH_FOLDER_ID"
+    },
+    "sheets": {
+      "workspace_folder_name": "ClientA Input Center"
+    },
+    "external": {
+      "watch_keywords": ["market", "customer", "pricing", "import", "competitor"],
+      "sources": [
+        { "name": "Industry News", "kind": "homepage", "url": "https://example.com" }
+      ]
+    }
+  },
+  "entity_maps": {
+    "customers": ["Top 20 Accounts"],
+    "teams": ["Sales", "Finance", "Operations"],
+    "owners": ["Sales Manager", "Finance Manager", "Operations Manager"],
+    "approvers": ["Founder"]
+  },
+  "workflow_rules": {
+    "severity_levels": ["low", "medium", "high"],
+    "risk_categories": ["overdue", "churn", "price_pressure", "stockout"],
+    "due_date_rules": ["overdue items receive owner within 1 day"],
+    "escalation_rules": ["critical overdue items escalate to founder"],
+    "approval_rules": ["promise-date changes require manager approval"]
+  },
+  "outputs": {
+    "dashboard_title": "ClientA Command Layer",
+    "email_profiles": ["collections_watch", "sales_watch"],
+    "search_queries": [
+      { "name": "invoice", "query": "invoice", "top_k": 5 },
+      { "name": "sales", "query": "sales", "top_k": 5 }
+    ],
+    "views": ["action_board", "founder_view", "collections_queue", "sales_watch"]
+  },
+  "governance": {
+    "mode": "draft_only",
+    "writeback_allowed": false,
+    "approval_required_for": ["send_collection_draft"],
+    "closers": ["Finance Manager"],
+    "overrides": ["Founder"]
+  },
+  "success_metrics": {
+    "week_1": ["live overdue queue", "first founder sales signal brief"],
+    "month_1": ["reduced manual follow-up load", "repeatable weekly review rhythm"],
+    "kpis": ["overdue_queue_size", "sales_signal_followup_rate"]
+  }
+}

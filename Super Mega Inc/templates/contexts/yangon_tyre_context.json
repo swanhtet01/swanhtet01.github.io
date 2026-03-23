@@ -1,0 +1,125 @@
+{
+  "context_id": "yangon_tyre",
+  "company": {
+    "name": "Yangon Tyre",
+    "industry": "Tyre manufacturing and distribution",
+    "footprint": "Yangon plant, procurement, and distributor network",
+    "roles": [
+      "director",
+      "plant_manager",
+      "quality_manager",
+      "procurement_manager",
+      "sales_manager"
+    ],
+    "priorities": [
+      "supplier risk control",
+      "quality closeout discipline",
+      "daily management action tracking"
+    ]
+  },
+  "selected_products": {
+    "flagship": "supermega_os",
+    "free_tools": [
+      "action_board",
+      "news_brief"
+    ],
+    "control_modules": [
+      "action_os",
+      "supplier_watch",
+      "quality_closeout",
+      "cash_watch"
+    ],
+    "role_dashboards": [
+      "director",
+      "plant_manager",
+      "procurement"
+    ]
+  },
+  "connectors": {
+    "gmail": {
+      "user_email": "your-email@example.com",
+      "query_profiles": {
+        "internal_ytf": "(from:htinkyawoo@yangontyre.com OR from:htoo.maw@mptmail.net.mm OR from:htoomaw.ytf@gmail.com OR to:htinkyawoo@yangontyre.com OR yangon OR tyre OR ytf) newer_than:365d",
+        "supplier_kiic": "(zhuangshidong OR KIIC OR (from:htinkyawoo@yangontyre.com AND (KIIC OR zhuangshidong))) newer_than:365d",
+        "supplier_junky": "(from:j2135.junky@msa.hinet.net OR junky OR cheng OR (from:htinkyawoo@yangontyre.com AND (junky OR cheng))) newer_than:365d",
+        "supplier_forwarded": "(from:htinkyawoo@yangontyre.com AND (KIIC OR zhuangshidong OR junky OR cheng OR supplier OR quotation OR shipment)) newer_than:365d",
+        "quality_watch": "((quality OR claim OR complaint OR defect OR reject OR ncr OR capa) AND (yangon OR tyre OR ytf OR supplier OR KIIC OR junky)) newer_than:365d",
+        "relevant_all": "((yangon OR tyre OR ytf OR KIIC OR junky OR zhuangshidong) OR from:htinkyawoo@yangontyre.com) newer_than:365d"
+      }
+    },
+    "drive": {
+      "local_root": "C:/Users/swann/OneDrive - BDA/Yangon Tyre",
+      "folder_id": "1lvNk73XNxIdPIagwal7YKEzlCtAkk-yv",
+      "publish_folder_id": "0AKDvTcEQkhObUk9PVA"
+    },
+    "sheets": {
+      "workspace_folder_name": "YTF Input Center",
+      "templates": [
+        {
+          "key": "daily_ops_update",
+          "title": "YTF Daily Ops Update",
+          "description": "Daily production and operating pulse from each team.",
+          "headers": ["updated_at", "plant", "team", "shift", "production_status", "top_issue", "action_owner", "action_due_date", "remarks"],
+          "sample_row": ["2026-03-10", "Plant A", "Production", "Day", "On track", "Power fluctuation", "Ko Aung", "2026-03-11", "Escalated to maintenance"]
+        },
+        {
+          "key": "quality_incident_log",
+          "title": "YTF Quality Incident Log",
+          "description": "Incident and CAPA intake for DQMS follow-up.",
+          "headers": ["reported_at", "incident_id", "supplier", "product_or_batch", "issue_type", "severity", "status", "owner", "target_close_date", "evidence_link", "notes"],
+          "sample_row": ["2026-03-10", "INC-MANUAL-001", "KIIC", "Batch-101", "Bead wire defect", "high", "open", "Quality Team", "2026-03-14", "", "Containment started"]
+        }
+      ]
+    },
+    "external": {
+      "watch_keywords": ["rubber", "tyre", "yangon", "myanmar", "shipment", "customs", "fuel", "factory"],
+      "sources": [
+        { "name": "Global New Light of Myanmar", "kind": "homepage", "url": "https://www.gnlm.com.mm/" },
+        { "name": "Eleven Myanmar", "kind": "homepage", "url": "https://elevenmyanmar.com/" },
+        { "name": "MRPPA Market", "kind": "mrppa_market", "url": "https://www.mrppa-myanmar.com.mm/" }
+      ]
+    }
+  },
+  "entity_maps": {
+    "suppliers": ["KIIC", "JUNKY"],
+    "plants": ["Plant A"],
+    "teams": ["Production", "Quality", "Procurement", "Sales"],
+    "owners": ["Quality Team", "Procurement Team", "Ko Aung"],
+    "approvers": ["Director"],
+    "aliases": {
+      "supplier": {
+        "kiic": ["zhuangshidong", "KIIC"],
+        "junky": ["JUNKY", "cheng", "j2135.junky@msa.hinet.net"]
+      }
+    }
+  },
+  "workflow_rules": {
+    "severity_levels": ["low", "medium", "high", "critical"],
+    "risk_categories": ["delay", "payment", "quality", "documentation", "demand_shift"],
+    "due_date_rules": ["high quality issues close target within 7 days", "supplier delay follow-up assigned same day"],
+    "escalation_rules": ["critical supplier or quality risks escalate to director"],
+    "approval_rules": ["close CAPA only with evidence attached"]
+  },
+  "outputs": {
+    "dashboard_title": "Yangon Tyre Intelligence Hub",
+    "email_profiles": ["internal_ytf", "supplier_kiic", "supplier_junky", "supplier_forwarded", "quality_watch", "relevant_all"],
+    "search_queries": [
+      { "name": "cash", "query": "cash", "top_k": 5 },
+      { "name": "invoice", "query": "invoice", "top_k": 5 },
+      { "name": "quality", "query": "claim OR complaint OR defect OR reject OR nonconformance OR ncr OR capa", "top_k": 5 }
+    ],
+    "views": ["action_board", "weekly_brief", "exception_queue", "director_view"]
+  },
+  "governance": {
+    "mode": "read_only",
+    "writeback_allowed": false,
+    "approval_required_for": ["close_quality_incident", "supplier_override"],
+    "closers": ["Quality Team"],
+    "overrides": ["Director"]
+  },
+  "success_metrics": {
+    "week_1": ["daily owner queue from ops and supplier signals", "first live quality closeout board"],
+    "month_1": ["recurring director brief", "measurable closure discipline on open incidents"],
+    "kpis": ["open_action_count", "capa_closure_rate", "supplier_risk_backlog"]
+  }
+}

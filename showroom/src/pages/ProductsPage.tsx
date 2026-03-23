@@ -4,6 +4,12 @@ import { PageIntro } from '../components/PageIntro'
 import { flagshipSystem, products, sellableTemplates } from '../content'
 
 const freeTools = products.filter((product) => product.kind === 'Free tool')
+const laneOrder = ['Run the day', 'Control risk', 'Commercial watch'] as const
+
+const templatesByLane = laneOrder.map((lane) => ({
+  lane,
+  templates: sellableTemplates.filter((template) => template.lane === lane),
+}))
 
 export function ProductsPage() {
   return (
@@ -18,55 +24,89 @@ export function ProductsPage() {
         <div className="flex items-center justify-between gap-4">
           <div>
             <p className="sm-kicker text-[var(--sm-accent)]">Sellable layer</p>
-            <h2 className="mt-2 text-2xl font-bold text-white">Workflow templates</h2>
+            <h2 className="mt-2 text-2xl font-bold text-white">Workflow templates by lane</h2>
           </div>
           <Link className="sm-link" to="/contact">
-            Scope one
+            Deploy one
           </Link>
         </div>
-        <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-          {sellableTemplates.map((template) => (
-            <article className="sm-surface p-6" key={template.name}>
+        <div className="space-y-8">
+          {templatesByLane.map(({ lane, templates }) => (
+            <section className="space-y-4" key={lane}>
               <div className="flex items-center justify-between gap-3">
-                <h2 className="text-2xl font-bold text-white">{template.name}</h2>
-                <span className="sm-status-pill border-[rgba(255,122,24,0.18)] bg-[rgba(255,122,24,0.08)] text-[var(--sm-accent-alt)]">
-                  Sellable
-                </span>
-              </div>
-              <p className="mt-3 text-sm text-[var(--sm-muted)]">{template.problem}</p>
-              <p className="mt-4 text-sm text-[var(--sm-muted)]">
-                <strong className="text-white">Buyer:</strong> {template.buyer}
-              </p>
-              <div className="mt-4">
-                <p className="sm-kicker text-[var(--sm-accent-alt)]">Needs</p>
-                <div className="mt-3 grid gap-2">
-                  {template.requiredData.map((item) => (
-                    <div className="sm-chip text-sm text-white" key={item}>
-                      {item}
-                    </div>
-                  ))}
+                <div>
+                  <p className="sm-kicker text-[var(--sm-accent)]">{lane}</p>
+                  <p className="mt-2 text-sm text-[var(--sm-muted)]">Templates that land fast and show a real first-week result.</p>
                 </div>
+                <span className="sm-status-pill">{templates.length} templates</span>
               </div>
-              <div className="mt-4">
-                <p className="sm-kicker text-[var(--sm-accent-alt)]">Outputs</p>
-                <div className="mt-3 grid gap-2">
-                  {template.outputs.map((item) => (
-                    <div className="sm-chip text-sm text-white" key={item}>
-                      {item}
+              <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+                {templates.map((template) => (
+                  <article className="sm-surface p-6" key={template.name}>
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <h2 className="text-2xl font-bold text-white">{template.name}</h2>
+                        <p className="mt-1 text-xs font-semibold uppercase tracking-[0.28em] text-[var(--sm-muted)]">{template.lane}</p>
+                      </div>
+                      <span className="sm-status-pill border-[rgba(255,122,24,0.18)] bg-[rgba(255,122,24,0.08)] text-[var(--sm-accent-alt)]">
+                        Sellable
+                      </span>
                     </div>
-                  ))}
-                </div>
+                    <p className="mt-3 text-sm text-[var(--sm-muted)]">{template.problem}</p>
+                    <div className="mt-4 grid gap-2 text-sm">
+                      <div className="sm-chip text-white">
+                        <span className="sm-kicker text-[var(--sm-accent)]">Use when</span>
+                        <p className="mt-2">{template.useWhen}</p>
+                      </div>
+                      <div className="sm-chip text-white">
+                        <span className="sm-kicker text-[var(--sm-accent)]">Time to output</span>
+                        <p className="mt-2">{template.timeToFirstLiveOutput}</p>
+                      </div>
+                      <div className="sm-chip text-white">
+                        <span className="sm-kicker text-[var(--sm-accent)]">Primary operator</span>
+                        <p className="mt-2">{template.primaryOperator}</p>
+                      </div>
+                      <div className="sm-chip text-white">
+                        <span className="sm-kicker text-[var(--sm-accent)]">Week 1</span>
+                        <p className="mt-2">{template.firstWeekOutcome}</p>
+                      </div>
+                    </div>
+                    <p className="mt-4 text-sm text-[var(--sm-muted)]">
+                      <strong className="text-white">Buyer:</strong> {template.buyer}
+                    </p>
+                    <div className="mt-4">
+                      <p className="sm-kicker text-[var(--sm-accent-alt)]">Needs</p>
+                      <div className="mt-3 grid gap-2">
+                        {template.requiredData.map((item) => (
+                          <div className="sm-chip text-sm text-white" key={item}>
+                            {item}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="mt-4">
+                      <p className="sm-kicker text-[var(--sm-accent-alt)]">Outputs</p>
+                      <div className="mt-3 grid gap-2">
+                        {template.outputs.map((item) => (
+                          <div className="sm-chip text-sm text-white" key={item}>
+                            {item}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    <p className="mt-4 text-sm text-[var(--sm-muted)]">
+                      <strong className="text-white">Rollout:</strong> {template.rollout}
+                    </p>
+                    <p className="mt-4 text-sm text-[var(--sm-muted)]">
+                      <strong className="text-white">Reuse pattern:</strong> {template.reusePattern}
+                    </p>
+                    <Link className="sm-button-accent mt-5" to="/contact">
+                      Start this template
+                    </Link>
+                  </article>
+                ))}
               </div>
-              <p className="mt-4 text-sm text-[var(--sm-muted)]">
-                <strong className="text-white">Rollout:</strong> {template.rollout}
-              </p>
-              <p className="mt-4 text-sm text-[var(--sm-muted)]">
-                <strong className="text-white">Reuse pattern:</strong> {template.reusePattern}
-              </p>
-              <Link className="sm-button-accent mt-5" to="/contact">
-                Deploy template
-              </Link>
-            </article>
+            </section>
           ))}
         </div>
       </section>
