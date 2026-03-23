@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@500;600;700;800&family=Space+Grotesk:wght@400;500;700&family=Manrope:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Orbitron:wght@500;600;700;800&family=Space+Grotesk:wght@400;500;700&family=Manrope:wght@400;500;600;700;800&display=swap');
 @import 'tailwindcss';
 
 :root {
@@ -28,10 +28,10 @@ body {
   margin: 0;
   min-width: 320px;
   background:
-    radial-gradient(circle at 18% 18%, rgba(37, 208, 255, 0.16), transparent 26%),
-    radial-gradient(circle at 82% 16%, rgba(255, 122, 24, 0.18), transparent 24%),
-    radial-gradient(circle at 50% 88%, rgba(23, 84, 138, 0.22), transparent 36%),
-    linear-gradient(180deg, #020817 0%, #041227 46%, #071a33 100%);
+    radial-gradient(circle at 18% 18%, rgba(37, 208, 255, 0.15), transparent 28%),
+    radial-gradient(circle at 82% 16%, rgba(255, 122, 24, 0.16), transparent 22%),
+    radial-gradient(circle at 50% 88%, rgba(23, 84, 138, 0.22), transparent 34%),
+    linear-gradient(180deg, #01050f 0%, #030a17 38%, #071325 100%);
   color: var(--sm-ink);
   background-attachment: fixed;
 }
@@ -46,6 +46,16 @@ body::before {
     linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
   background-size: 44px 44px;
   mask-image: radial-gradient(circle at center, black 45%, transparent 92%);
+}
+
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.1;
+  background: linear-gradient(180deg, transparent, rgba(37, 208, 255, 0.04), transparent);
+  animation: scan-sweep 8s linear infinite;
 }
 
 h1,
@@ -71,27 +81,39 @@ a {
 
 .sm-surface {
   border: 1px solid rgba(255, 255, 255, 0.08);
-  background: linear-gradient(180deg, rgba(10, 18, 35, 0.84), rgba(6, 14, 30, 0.78));
+  background: linear-gradient(180deg, rgba(7, 15, 29, 0.9), rgba(4, 10, 22, 0.86));
   box-shadow: var(--sm-shadow);
   backdrop-filter: blur(20px);
-  border-radius: 1.75rem;
+  border-radius: 1.2rem;
 }
 
 .sm-surface-soft {
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(10, 18, 35, 0.62);
-  border-radius: 1.2rem;
+  border-radius: 0.95rem;
 }
 
 .sm-surface-deep {
   border: 1px solid rgba(92, 132, 174, 0.22);
   background:
-    radial-gradient(circle at top right, rgba(37, 208, 255, 0.12), transparent 24%),
+    radial-gradient(circle at top right, rgba(37, 208, 255, 0.14), transparent 24%),
     radial-gradient(circle at top left, rgba(255, 122, 24, 0.12), transparent 26%),
-    linear-gradient(180deg, rgba(7, 17, 33, 0.96), rgba(4, 11, 24, 0.94));
+    linear-gradient(180deg, rgba(5, 12, 24, 0.97), rgba(3, 9, 20, 0.96));
   box-shadow: 0 34px 90px -50px rgba(0, 0, 0, 0.82);
   backdrop-filter: blur(24px);
-  border-radius: 2rem;
+  border-radius: 1.4rem;
+}
+
+.sm-terminal {
+  border: 1px solid rgba(37, 208, 255, 0.14);
+  background:
+    linear-gradient(180deg, rgba(5, 12, 24, 0.97), rgba(4, 9, 19, 0.94)),
+    repeating-linear-gradient(0deg, transparent, transparent 18px, rgba(37, 208, 255, 0.025) 18px, rgba(37, 208, 255, 0.025) 19px);
+  box-shadow:
+    0 28px 70px -38px rgba(0, 0, 0, 0.72),
+    0 0 0 1px rgba(37, 208, 255, 0.04) inset;
+  backdrop-filter: blur(18px);
+  border-radius: 1.2rem;
 }
 
 .sm-button-primary,
@@ -175,8 +197,57 @@ a {
 .sm-chip {
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(255, 255, 255, 0.03);
-  border-radius: 1rem;
+  border-radius: 0.95rem;
   padding: 0.85rem 1rem;
+}
+
+.sm-metric-card {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.01));
+  border-radius: 1rem;
+  padding: 1rem;
+}
+
+.sm-status-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  font-family: 'JetBrains Mono', monospace;
+  text-transform: uppercase;
+}
+
+.sm-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+  padding: 0.38rem 0.72rem;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--sm-muted);
+}
+
+.sm-led {
+  height: 0.5rem;
+  width: 0.5rem;
+  border-radius: 999px;
+  box-shadow: 0 0 14px currentColor;
+}
+
+.sm-command-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 1rem;
+  padding: 0.95rem 1rem;
 }
 
 .sm-kicker {
@@ -207,5 +278,14 @@ a {
   to {
     opacity: 1;
     transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes scan-sweep {
+  from {
+    transform: translateY(-100%);
+  }
+  to {
+    transform: translateY(100%);
   }
 }

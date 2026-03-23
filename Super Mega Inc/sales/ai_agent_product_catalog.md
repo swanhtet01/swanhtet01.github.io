@@ -10,7 +10,7 @@ All products must pass this rule:
 
 ## Public Products (Client Facing)
 
-## 1) Lead Scraper Agent
+## 1) Lead Finder
 
 Input:
 - directory URL or pasted business list
@@ -23,7 +23,7 @@ Output:
 Best for:
 - sales and partnership teams
 
-## 2) News Brief Agent
+## 2) News Brief
 
 Input:
 - 3-5 source URLs or pasted headlines
@@ -36,7 +36,7 @@ Output:
 Best for:
 - directors, founders, and managers
 
-## 3) Action Board Agent
+## 3) Action Board
 
 Input:
 - messy updates, call notes, meeting notes
@@ -49,7 +49,7 @@ Output:
 Best for:
 - operations and plant management
 
-## 4) Supplier Risk Agent
+## 4) Supplier Watch
 
 Input:
 - supplier messages and shipment updates
@@ -62,7 +62,7 @@ Output:
 Best for:
 - procurement and supply chain
 
-## 5) Quality CAPA Agent
+## 5) Quality Closeout
 
 Input:
 - quality issue email or incident note
@@ -74,6 +74,21 @@ Output:
 
 Best for:
 - quality teams and plant managers
+
+## 6) Cash Watch
+
+Input:
+- invoice sheets
+- cash book
+- payment reminders or follow-up emails
+
+Output:
+- overdue queue
+- collection priority list
+- follow-up drafts
+
+Best for:
+- finance and commercial control
 
 ## AI-Native ERP Core (Internal + Enterprise Rollout)
 
