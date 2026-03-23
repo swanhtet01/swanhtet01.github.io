@@ -31,17 +31,17 @@ def _cadence_for_template(key: str) -> str:
 def _score_for_status(status: str) -> int:
     mapping = {
         "ready": 20,
-        "warning": 12,
+        "warning": 8,
         "error": 0,
-        "not_ready": 6,
+        "not_ready": 0,
     }
-    return mapping.get(status, 6)
+    return mapping.get(status, 0)
 
 
 def _status_from_score(score: int) -> str:
-    if score >= 85:
+    if score >= 90:
         return "ready"
-    if score >= 65:
+    if score >= 70:
         return "warning"
     return "error"
 
@@ -70,7 +70,7 @@ def build_data_coverage_report(config: PilotConfig) -> dict[str, Any]:
     ):
         gmail_status = "ready"
     elif gmail_client_status == "ready":
-        gmail_status = "warning"
+        gmail_status = "error"
         actions.append("Gmail token is not ready. Run gmail-auth to restore email signal coverage.")
     else:
         gmail_status = "error"
@@ -136,9 +136,9 @@ def build_data_coverage_report(config: PilotConfig) -> dict[str, Any]:
 
     dqms_incident_count = int(dqms_sync.get("incident_count", 0) or 0)
     dqms_file_hits = int(dqms_sync.get("file_hits", 0) or 0)
-    if dqms_incident_count > 0:
+    if dqms_mail_status == "ready" and dqms_incident_count > 0:
         dqms_status = "ready"
-    elif dqms_file_hits > 0:
+    elif dqms_incident_count > 0 or dqms_file_hits > 0:
         dqms_status = "warning"
     elif dqms_sync:
         dqms_status = "warning"
@@ -187,8 +187,11 @@ def build_data_coverage_report(config: PilotConfig) -> dict[str, Any]:
     )
 
     publish_status_raw = str(platform_publish.get("status", "not_ready"))
-    if publish_status_raw in {"ready", "skipped"}:
+    if publish_status_raw == "ready":
         publish_status = "ready"
+    elif publish_status_raw == "skipped":
+        publish_status = "warning"
+        actions.append("Platform publish was skipped. Re-enable publish target before calling this setup fully ready.")
     elif platform_publish:
         publish_status = "warning"
         actions.append("Platform publish has issues. Check Drive publish target and service-account write access.")
@@ -224,11 +227,19 @@ def build_data_coverage_report(config: PilotConfig) -> dict[str, Any]:
     score_total = sum(_score_for_status(item["status"]) for item in dimensions)
     score_max = max(1, len(dimensions) * 20)
     readiness_score = int(round((score_total / score_max) * 100))
+    hard_blockers = [
+        item["name"]
+        for item in dimensions
+        if item["name"] in {"gmail_feed"} and item["status"] != "ready"
+    ]
+    if hard_blockers and readiness_score > 69:
+        readiness_score = 69
 
     return {
         "generated_at": now,
         "status": _status_from_score(readiness_score),
         "readiness_score": readiness_score,
+        "hard_blockers": hard_blockers,
         "dimensions": dimensions,
         "actions": actions,
         "collection_protocol": collection_protocol,
@@ -243,9 +254,21 @@ def render_data_coverage_markdown(payload: dict[str, Any]) -> str:
         f"- Status: `{payload.get('status', '')}`",
         f"- Readiness score: `{payload.get('readiness_score', 0)}`",
         "",
-        "## Coverage Dimensions",
+        "## Hard Blockers",
         "",
     ]
+    blockers = payload.get("hard_blockers", [])
+    if blockers:
+        for blocker in blockers:
+            lines.append(f"- `{blocker}`")
+    else:
+        lines.append("- None")
+
+    lines.extend([
+        "",
+        "## Coverage Dimensions",
+        "",
+    ])
     for item in payload.get("dimensions", []):
         lines.append(f"- `{item.get('name', '')}` | `{item.get('status', '')}`")
         for key, value in item.get("details", {}).items():
@@ -284,10 +307,14 @@ def load_data_coverage_summary(output_dir: Path) -> dict[str, Any]:
         return {
             "status": "not_ready",
             "readiness_score": 0,
+            "hard_blockers": [],
+            "dimensions": [],
             "top_actions": [],
         }
     return {
         "status": payload.get("status", "not_ready"),
         "readiness_score": int(payload.get("readiness_score", 0) or 0),
+        "hard_blockers": payload.get("hard_blockers", []),
+        "dimensions": payload.get("dimensions", []),
         "top_actions": payload.get("actions", [])[:4],
     }

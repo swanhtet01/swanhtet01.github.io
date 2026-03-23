@@ -13,12 +13,17 @@ Public conversion-oriented showroom for `supermega.dev`.
 ## Information Architecture
 
 - `/`
-- `/solutions`
+- `/products`
+- `/examples`
 - `/packages`
-- `/case-studies`
-- `/dqms`
-- `/about`
 - `/contact`
+
+Legacy redirects kept intentionally:
+
+- `/demos`
+- `/prototypes`
+- `/try`
+- `/home`
 
 ## Local run
 
@@ -43,7 +48,7 @@ Build script also creates:
 ## Lead form behavior
 
 - If `VITE_LEAD_ENDPOINT` is configured, form posts JSON to endpoint.
-- If not configured, form falls back to prefilled `mailto:` lead delivery.
+- If not configured, form still prepares a complete request packet and keeps email/copy/download actions available.
 
 ## Deployment
 

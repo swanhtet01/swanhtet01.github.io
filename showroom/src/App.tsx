@@ -22,10 +22,6 @@ function App() {
           <Route element={<Navigate replace to="/examples" />} path="prototypes" />
           <Route element={<Navigate replace to="/examples" />} path="try" />
           <Route element={<PackagesPage />} path="packages" />
-          <Route element={<Navigate replace to="/products" />} path="solutions" />
-          <Route element={<Navigate replace to="/products" />} path="case-studies" />
-          <Route element={<Navigate replace to="/products" />} path="dqms" />
-          <Route element={<Navigate replace to="/" />} path="about" />
           <Route element={<ContactPage />} path="contact" />
           <Route element={<Navigate replace to="/" />} path="home" />
           <Route element={<NotFoundPage />} path="*" />

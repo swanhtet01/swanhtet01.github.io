@@ -20,7 +20,7 @@ export function SiteFrame() {
           <NavLink className="flex flex-col" to="/">
             <span className="text-lg font-extrabold tracking-tight text-[var(--sm-ink)]">SuperMega</span>
             <span className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[var(--sm-muted)]">
-              AI-native operations
+              AI tools for operators
             </span>
           </NavLink>
           <button
@@ -37,7 +37,7 @@ export function SiteFrame() {
               </NavLink>
             ))}
             <NavLink
-              className="ml-2 rounded-full bg-orange-500 px-4 py-2 text-sm font-bold text-white shadow-[0_16px_30px_-20px_rgba(240,124,74,0.9)] transition hover:bg-orange-400"
+              className="sm-button-accent ml-2 shadow-[0_16px_30px_-20px_rgba(240,124,74,0.9)]"
               to="/contact?intent=discovery"
             >
               Start Pilot
@@ -58,7 +58,7 @@ export function SiteFrame() {
                 </NavLink>
               ))}
               <NavLink
-                className="mt-1 rounded-full bg-orange-500 px-4 py-2 text-center text-sm font-bold text-white"
+                className="sm-button-accent mt-1 text-center"
                 onClick={() => setMenuOpen(false)}
                 to="/contact?intent=discovery"
               >
@@ -75,7 +75,7 @@ export function SiteFrame() {
 
       <footer className="border-t border-white/60 bg-[rgba(238,246,252,0.65)]">
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 px-4 py-6 text-sm text-[var(--sm-muted)] lg:flex-row lg:items-center lg:justify-between lg:px-8">
-          <p>AI agents with live demos.</p>
+          <p>Free tools. Paid modules. One action layer.</p>
           <p>supermega.dev</p>
         </div>
       </footer>
