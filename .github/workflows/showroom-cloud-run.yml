@@ -43,6 +43,14 @@ jobs:
       - name: Set active project
         run: gcloud config set project "$PROJECT_ID"
 
+      - name: Preflight Cloud Run API
+        run: |
+          run_api="$(gcloud services list --enabled --filter='name:run.googleapis.com' --format='value(name)')"
+          if [ -z "$run_api" ]; then
+            echo "::error title=Cloud Run API disabled::Enable run.googleapis.com on project $PROJECT_ID (and grant Service Usage Admin if enabling via CI)."
+            exit 1
+          fi
+
       - name: Configure Docker auth
         run: gcloud auth configure-docker --quiet
 
