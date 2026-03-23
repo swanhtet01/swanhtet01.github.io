@@ -8,8 +8,8 @@ export function PackagesPage() {
     <div className="space-y-8">
       <PageIntro
         eyebrow="Packages"
-        title="Three productized offers. Clear scope, clear delivery, clear outcomes."
-        description="Start small or scale wide, but stay execution-first. Each package includes implementation artifacts, operating documentation, and measurable checkpoints."
+        title="Simple pricing with clear delivery."
+        description="Pick Starter, Growth, or Scale. Each package has fixed outcomes and implementation support."
       />
 
       <section className="grid gap-5 lg:grid-cols-3">

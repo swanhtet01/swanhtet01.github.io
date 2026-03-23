@@ -40,7 +40,7 @@ export function SiteFrame() {
               className="ml-2 rounded-full bg-[var(--sm-accent-alt)] px-4 py-2 text-sm font-bold text-white shadow-[0_16px_30px_-20px_rgba(202,93,41,0.8)] transition hover:bg-[#b84d1d]"
               to="/contact?intent=discovery"
             >
-              Start Pilot
+              Book Pilot
             </NavLink>
           </div>
         </nav>
@@ -62,7 +62,7 @@ export function SiteFrame() {
                 onClick={() => setMenuOpen(false)}
                 to="/contact?intent=discovery"
               >
-                Start Pilot
+                Book Pilot
               </NavLink>
             </div>
           </div>
@@ -75,8 +75,8 @@ export function SiteFrame() {
 
       <footer className="border-t border-[var(--sm-line)]/80 bg-[rgba(255,251,242,0.72)]">
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 px-4 py-6 text-sm text-[var(--sm-muted)] lg:flex-row lg:items-center lg:justify-between lg:px-8">
-          <p>AI-native ERP systems and automation for owner-led teams.</p>
-          <p>supermega.dev | Yangon + remote implementation</p>
+          <p>AI agent solutions for operations, suppliers, and quality.</p>
+          <p>supermega.dev</p>
         </div>
       </footer>
     </div>

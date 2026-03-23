@@ -34,53 +34,57 @@ export type DqmsModule = {
   outputs: string[]
 }
 
+export type TrialModule = {
+  id: 'brief' | 'supplier' | 'quality'
+  name: string
+  promise: string
+  testInput: string
+}
+
 export const navItems = [
   { label: 'Home', to: '/' },
   { label: 'Products', to: '/products' },
-  { label: 'Solutions', to: '/solutions' },
-  { label: 'Packages', to: '/packages' },
-  { label: 'Case Studies', to: '/case-studies' },
-  { label: 'DQMS Add-ons', to: '/dqms' },
-  { label: 'About', to: '/about' },
+  { label: 'Prototypes', to: '/prototypes' },
+  { label: 'Pricing', to: '/packages' },
   { label: 'Contact', to: '/contact' },
 ] as const
 
 export const products: Product[] = [
   {
     name: 'SignalGrid OS',
-    tagline: 'Unified decision operating system over email, files, sheets, and external market signals.',
+    tagline: 'Decision cockpit across files, inbox, and operations updates.',
     innovation:
-      'Most ERP projects force data migration first. SignalGrid runs on top of your existing stack and creates a live decision layer from day one.',
+      'No heavy migration first. It runs on your current workflow and gives leadership a daily control view.',
     capabilities: [
-      'Cross-source signal extraction with priority scoring',
-      'Owner-level daily and weekly brief generation',
-      'Evidence-linked action routing to named team owners',
+      'Priority board with owner and due-date control',
+      'Daily and weekly leadership brief generation',
+      'Evidence links back to files and messages',
     ],
-    fit: 'CEO/founder-led teams that need instant visibility without replacing everything.',
+    fit: 'Owner-led businesses that need visibility now.',
   },
   {
     name: 'FlowForge Agents',
-    tagline: 'Role-specific autonomous agents for operations, sales, procurement, and finance follow-through.',
+    tagline: 'Role agents for operations, sales, procurement, and management follow-through.',
     innovation:
-      'Instead of one generic chatbot, each agent has explicit operating boundaries, outputs, and escalation rules aligned to real roles.',
+      'Each agent has defined outputs and escalation rules. Not one generic chatbot.',
     capabilities: [
-      'Agent playbooks tied to operating SOPs',
-      'Automated reminder/escalation loops for overdue actions',
-      'Workflow handoff between director, manager, and operator levels',
+      'Agent playbooks tied to SOP',
+      'Escalation loops for overdue actions',
+      'Handoffs across director, manager, operator',
     ],
-    fit: 'Businesses with execution gaps between management instruction and ground-level completion.',
+    fit: 'Teams with execution gaps between planning and delivery.',
   },
   {
     name: 'QualityPulse DQMS',
-    tagline: 'AI-native quality intelligence and CAPA control plane for supplier and production risk.',
+    tagline: 'Quality and CAPA control for supplier and production risk.',
     innovation:
-      'QualityPulse converts unstructured quality signals from email/files into incident and CAPA chains automatically, then tracks closure velocity.',
+      'Turns quality signals into incident and CAPA chains with closure tracking.',
     capabilities: [
-      'Incident register auto-generated from live evidence',
-      'CAPA generation with owner/date/status tracking',
-      'Supplier nonconformance trend snapshots for escalation',
+      'Incident register from real evidence',
+      'CAPA with owner/date/status',
+      'Supplier nonconformance trend view',
     ],
-    fit: 'Manufacturing and distribution teams where quality drift creates hidden margin loss.',
+    fit: 'Manufacturing and distribution teams with recurring quality issues.',
   },
 ]
 
@@ -215,8 +219,29 @@ export const dqmsModules: DqmsModule[] = [
 ]
 
 export const engagementFlow = [
-  'Lead form submission from showroom',
-  '30-minute discovery call within 48 hours',
-  'Proposal and implementation plan in under 24 hours after discovery',
-  'Weekly delivery artifacts with measurable outcomes',
+  'Open free prototypes on this site',
+  'Book a 30-minute discovery call',
+  'Receive scoped implementation proposal within 24 hours',
+  'Start 14-day pilot with weekly measurable outputs',
+]
+
+export const trialModules: TrialModule[] = [
+  {
+    id: 'brief',
+    name: 'Executive Brief Agent',
+    promise: 'Converts operational signals into a short director brief with top actions.',
+    testInput: 'Set incidents, open actions, and risk level, then generate a brief.',
+  },
+  {
+    id: 'supplier',
+    name: 'Supplier Control Agent',
+    promise: 'Reads supplier communication and returns risk score plus actions.',
+    testInput: 'Paste a supplier email and run analysis.',
+  },
+  {
+    id: 'quality',
+    name: 'Quality CAPA Agent',
+    promise: 'Turns one quality issue into a trackable incident and CAPA chain.',
+    testInput: 'Describe a defect and generate incident + CAPA plan.',
+  },
 ]

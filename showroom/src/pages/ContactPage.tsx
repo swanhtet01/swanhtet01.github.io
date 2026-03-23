@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import type { FormEvent } from 'react'
 import { useSearchParams } from 'react-router-dom'
 
@@ -44,11 +44,6 @@ export function ContactPage() {
   const [status, setStatus] = useState<'idle' | 'sending' | 'sent' | 'fallback' | 'error'>('idle')
   const leadEndpoint = import.meta.env.VITE_LEAD_ENDPOINT as string | undefined
 
-  const leadPreview = useMemo(
-    () => JSON.stringify(form, null, 2),
-    [form],
-  )
-
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setStatus('sending')
@@ -76,14 +71,6 @@ export function ContactPage() {
       setForm({ ...initialForm, package: requestedPackage })
     } catch {
       setStatus('error')
-    }
-  }
-
-  async function copyLeadPreview() {
-    try {
-      await navigator.clipboard.writeText(leadPreview)
-    } catch {
-      // no-op fallback for restricted browsers
     }
   }
 
@@ -182,24 +169,15 @@ export function ContactPage() {
         </form>
 
         <aside className="rounded-3xl border border-[#184a4a] bg-[#112d31] p-6 text-sm text-slate-100">
-          <h2 className="text-lg font-bold">Pipeline stages</h2>
+          <h2 className="text-lg font-bold">What happens next</h2>
           <ul className="mt-3 space-y-2">
-            <li className="rounded-2xl border border-white/15 px-3 py-2">New Lead</li>
-            <li className="rounded-2xl border border-white/15 px-3 py-2">Qualified</li>
-            <li className="rounded-2xl border border-white/15 px-3 py-2">Discovery Done</li>
-            <li className="rounded-2xl border border-white/15 px-3 py-2">Proposal Sent</li>
-            <li className="rounded-2xl border border-white/15 px-3 py-2">Won or Lost</li>
+            <li className="rounded-2xl border border-white/15 px-3 py-2">1. Discovery call in 48 hours</li>
+            <li className="rounded-2xl border border-white/15 px-3 py-2">2. Scope and price proposal in 24 hours</li>
+            <li className="rounded-2xl border border-white/15 px-3 py-2">3. 14-day pilot kickoff</li>
           </ul>
-          <button
-            className="mt-4 rounded-full border border-white/25 px-4 py-2 text-xs font-semibold uppercase tracking-[0.16em] hover:bg-white/10"
-            onClick={copyLeadPreview}
-            type="button"
-          >
-            Copy lead JSON preview
-          </button>
-          <pre className="mt-3 overflow-x-auto rounded-2xl border border-white/20 bg-black/20 p-3 text-xs leading-relaxed">
-            {leadPreview}
-          </pre>
+          <p className="mt-4 text-sm text-slate-200">
+            If you want to test first, open the free prototypes page before the call.
+          </p>
         </aside>
       </section>
     </div>

@@ -11,6 +11,7 @@ import { NotFoundPage } from './pages/NotFoundPage'
 import { PackagesPage } from './pages/PackagesPage'
 import { ProductsPage } from './pages/ProductsPage'
 import { SolutionsPage } from './pages/SolutionsPage'
+import { TryPage } from './pages/TryPage'
 
 function App() {
   return (
@@ -20,6 +21,8 @@ function App() {
         <Route element={<SiteFrame />} path="/">
           <Route element={<HomePage />} index />
           <Route element={<ProductsPage />} path="products" />
+          <Route element={<TryPage />} path="prototypes" />
+          <Route element={<TryPage />} path="try" />
           <Route element={<SolutionsPage />} path="solutions" />
           <Route element={<PackagesPage />} path="packages" />
           <Route element={<CaseStudiesPage />} path="case-studies" />
