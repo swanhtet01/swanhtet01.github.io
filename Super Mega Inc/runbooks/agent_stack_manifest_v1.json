@@ -1,0 +1,56 @@
+{
+  "version": "v1",
+  "generated_on": "2026-03-24",
+  "layers": {
+    "core_runtime": {
+      "current": ["mark1_pilot", "gmail_connector", "google_drive_connector", "google_sheets_input_center"],
+      "add_now": ["fastapi", "sqlmodel", "sqlite"],
+      "add_later": ["postgresql"]
+    },
+    "data_analytics": {
+      "add_now": ["polars", "duckdb", "openpyxl", "pyxlsb"]
+    },
+    "agent_orchestration": {
+      "add_next": ["langgraph"]
+    },
+    "llm_tooling": {
+      "add_next": ["openai_responses_api", "pydantic", "pydanticai"]
+    },
+    "jobs_and_scheduling": {
+      "add_now": ["cloud_run", "cloud_scheduler", "cloud_tasks"],
+      "add_later": ["temporal"]
+    },
+    "browser_sidecars": {
+      "add_next": ["playwright"],
+      "optional": ["stagehand", "openai_computer_use", "openclaw"]
+    },
+    "secrets": {
+      "add_now": ["google_secret_manager"]
+    }
+  },
+  "agent_equipment_standard": {
+    "required_fields": [
+      "role",
+      "inputs",
+      "tools",
+      "output_schema",
+      "write_scope",
+      "approval_gate",
+      "eval_set"
+    ],
+    "rules": [
+      "schema_first",
+      "scoped_context_only",
+      "read_and_write_roles_separated",
+      "evidence_link_required",
+      "measure_cost_and_latency",
+      "review_before_expansion"
+    ]
+  },
+  "priority_products": [
+    "action_os",
+    "supplier_watch",
+    "quality_closeout",
+    "cash_watch"
+  ]
+}
