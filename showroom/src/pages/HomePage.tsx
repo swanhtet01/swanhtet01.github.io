@@ -1,14 +1,9 @@
 import { Link } from 'react-router-dom'
 
-import { engagementFlow, flagshipSystem, products, sellableTemplates } from '../content'
+import { engagementFlow, flagshipSystem, miniProducts, products, sellableTemplates } from '../content'
 
 const freeTools = products.filter((product) => product.kind === 'Free tool')
-const laneOrder = ['Run the day', 'Control risk', 'Commercial watch'] as const
-
-const laneSummaries = laneOrder.map((lane) => ({
-  lane,
-  templates: sellableTemplates.filter((template) => template.lane === lane),
-}))
+const keyTemplates = sellableTemplates.slice(0, 4)
 
 export function HomePage() {
   return (
@@ -18,28 +13,18 @@ export function HomePage() {
         <div className="pointer-events-none absolute right-0 top-0 h-64 w-64 rounded-full bg-[radial-gradient(circle,_rgba(37,208,255,0.14),_transparent_70%)]" />
         <div className="pointer-events-none absolute -left-10 bottom-0 h-56 w-56 rounded-full bg-[radial-gradient(circle,_rgba(255,122,24,0.16),_transparent_72%)]" />
 
-        <div className="sm-status-bar">
-          <span className="sm-status-pill">
-            <span className="sm-led bg-emerald-400" />
-            Live tools {freeTools.length}
-          </span>
-          <span className="sm-status-pill">Templates {sellableTemplates.length}</span>
-          <span className="sm-status-pill">Gmail + Drive + Sheets</span>
-          <span className="sm-status-pill">Operator-first</span>
-        </div>
-
-        <div className="mt-8 grid gap-8 lg:grid-cols-[1.05fr_0.95fr]">
+        <div className="grid gap-8 lg:grid-cols-[1.05fr_0.95fr]">
           <div className="animate-rise">
             <p className="sm-kicker text-[var(--sm-accent)]">SuperMega</p>
             <h1 className="mt-4 max-w-4xl text-4xl font-extrabold tracking-tight text-white lg:text-6xl">
-              AI agents for messy operators.
+              One action layer for Gmail, Drive, Sheets, and messy company work.
             </h1>
             <p className="mt-5 max-w-3xl text-base leading-relaxed text-[var(--sm-muted)] lg:text-lg">
-              Start with one free tool. Then connect Gmail, Drive, and Sheets. Then run one clean action system for the team.
+              Start with one free proof tool. Deploy one workflow. Then run managers and directors from a cleaner operating system.
             </p>
             <div className="mt-7 flex flex-wrap gap-3">
-              <Link className="sm-button-primary" to="/examples">
-                Try free tools
+              <Link className="sm-button-primary" to="/workspace">
+                Open workspace
               </Link>
               <Link className="sm-button-secondary" to="/products">
                 See products
@@ -49,17 +34,17 @@ export function HomePage() {
               <div className="sm-metric-card">
                 <p className="sm-kicker text-[var(--sm-accent)]">Free</p>
                 <p className="mt-3 text-3xl font-bold text-white">{freeTools.length}</p>
-                <p className="mt-2 text-sm text-[var(--sm-muted)]">Tools you can try now</p>
+                <p className="mt-2 text-sm text-[var(--sm-muted)]">Tools you can test now</p>
               </div>
               <div className="sm-metric-card">
                 <p className="sm-kicker text-[var(--sm-accent-alt)]">Deploy</p>
                 <p className="mt-3 text-3xl font-bold text-white">{sellableTemplates.length}</p>
-                <p className="mt-2 text-sm text-[var(--sm-muted)]">Workflows we deploy on your data</p>
+                <p className="mt-2 text-sm text-[var(--sm-muted)]">Workflow templates on your data</p>
               </div>
               <div className="sm-metric-card">
                 <p className="sm-kicker text-[var(--sm-accent)]">Flagship</p>
                 <p className="mt-3 text-lg font-bold text-white">{flagshipSystem.name}</p>
-                <p className="mt-2 text-sm text-[var(--sm-muted)]">One action layer for managers and directors</p>
+                <p className="mt-2 text-sm text-[var(--sm-muted)]">The connected manager control layer</p>
               </div>
             </div>
           </div>
@@ -68,12 +53,12 @@ export function HomePage() {
             <div className="sm-terminal p-5">
               <div className="flex items-center justify-between gap-3 border-b border-white/8 pb-4">
                 <div>
-                  <p className="sm-kicker text-[var(--sm-accent)]">Mission control</p>
-                  <h2 className="mt-2 text-2xl font-bold text-white">{flagshipSystem.name}</h2>
+                  <p className="sm-kicker text-[var(--sm-accent)]">Live shape</p>
+                  <h2 className="mt-2 text-2xl font-bold text-white">What the system does</h2>
                 </div>
                 <span className="sm-status-pill">
                   <span className="sm-led bg-cyan-400" />
-                  Action layer
+                  Operator-first
                 </span>
               </div>
 
@@ -89,26 +74,17 @@ export function HomePage() {
               <div className="mt-5 grid gap-3 md:grid-cols-2">
                 <div className="sm-surface-soft p-4">
                   <p className="sm-kicker text-[var(--sm-accent)]">Signals in</p>
-                  <p className="mt-2 text-sm text-white">Emails, files, sheets, forwarded notes, market headlines</p>
+                  <p className="mt-2 text-sm text-white">Emails, files, sheets, updates, notes</p>
                 </div>
                 <div className="sm-surface-soft p-4">
                   <p className="sm-kicker text-[var(--sm-accent-alt)]">Actions out</p>
-                  <p className="mt-2 text-sm text-white">Owners, due dates, escalations, close-out chains</p>
+                  <p className="mt-2 text-sm text-white">Owners, due dates, escalations, closeout chains</p>
                 </div>
               </div>
 
-              <div className="mt-5 grid gap-3">
-                {laneSummaries.map(({ lane, templates }) => (
-                  <div className="sm-command-row" key={lane}>
-                    <div>
-                      <p className="font-semibold text-white">{lane}</p>
-                      <p className="text-sm text-[var(--sm-muted)]">
-                        {templates.map((template) => template.name).join(' · ')}
-                      </p>
-                    </div>
-                    <span className="sm-status-pill">{templates.length} templates</span>
-                  </div>
-                ))}
+              <div className="mt-5 sm-chip">
+                <p className="sm-kicker text-[var(--sm-accent)]">Best for</p>
+                <p className="mt-2 text-sm text-white">{flagshipSystem.bestFor}</p>
               </div>
             </div>
           </div>
@@ -119,7 +95,7 @@ export function HomePage() {
         <div className="flex items-center justify-between gap-4">
           <div>
             <p className="sm-kicker text-[var(--sm-accent)]">Try free</p>
-            <h2 className="mt-2 text-2xl font-bold text-white">Three free tools.</h2>
+            <h2 className="mt-2 text-2xl font-bold text-white">Use the proof layer first.</h2>
           </div>
           <Link className="sm-link" to="/examples">
             Open tools
@@ -135,13 +111,7 @@ export function HomePage() {
                 </div>
                 <span className="sm-status-pill">{product.availability}</span>
               </div>
-              <div className="mt-5 grid gap-2 text-sm">
-                {product.variants.map((variant) => (
-                  <div className="sm-chip text-white" key={variant}>
-                    {variant}
-                  </div>
-                ))}
-              </div>
+              <p className="mt-4 text-sm text-white">{product.output}</p>
               {product.exampleId ? (
                 <Link className="sm-button-primary mt-5" to={`/examples#${product.exampleId}`}>
                   Try it
@@ -154,45 +124,48 @@ export function HomePage() {
 
       <section className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
         <article className="sm-surface p-6">
-          <p className="sm-kicker text-[var(--sm-accent-alt)]">Deploy on your data</p>
-          <h2 className="mt-3 text-2xl font-bold text-white">Pick one workflow first.</h2>
-          <div className="mt-4 grid gap-4">
-            {laneSummaries.map(({ lane, templates }) => (
-              <div className="sm-surface-soft p-4" key={lane}>
-                <div className="flex items-center justify-between gap-3">
-                  <p className="font-semibold text-white">{lane}</p>
-                  <span className="sm-status-pill">{templates.length} templates</span>
+          <p className="sm-kicker text-[var(--sm-accent-alt)]">Deploy first</p>
+          <h2 className="mt-3 text-2xl font-bold text-white">Start with one workflow.</h2>
+          <div className="mt-4 grid gap-3">
+            {keyTemplates.map((template) => (
+              <div className="sm-command-row" key={template.name}>
+                <div>
+                  <p className="font-semibold text-white">{template.name}</p>
+                  <p className="text-sm text-[var(--sm-muted)]">{template.firstWeekOutcome}</p>
                 </div>
-                <div className="mt-3 grid gap-3">
-                  {templates.map((template) => (
-                    <div className="sm-command-row" key={template.name}>
-                      <div>
-                        <p className="font-semibold text-white">{template.name}</p>
-                        <p className="text-sm text-[var(--sm-muted)]">{template.firstWeekOutcome}</p>
-                      </div>
-                      <Link className="sm-link" to="/contact">
-                        Start
-                      </Link>
-                    </div>
-                  ))}
-                </div>
+                <Link className="sm-link" to="/contact">
+                  Start
+                </Link>
               </div>
             ))}
           </div>
         </article>
 
         <article className="sm-surface p-6">
-          <p className="sm-kicker text-[var(--sm-accent)]">How it works</p>
-          <h2 className="mt-3 text-2xl font-bold text-white">Simple rollout.</h2>
+          <p className="sm-kicker text-[var(--sm-accent)]">Mini products</p>
+          <h2 className="mt-3 text-2xl font-bold text-white">Small modules that add value fast.</h2>
           <div className="mt-4 grid gap-3">
-            {engagementFlow.map((step, index) => (
-              <div className="sm-chip flex items-center gap-3 text-sm text-white" key={step}>
-                <span className="font-mono text-[var(--sm-accent)]">0{index + 1}</span>
-                <span>{step}</span>
+            {miniProducts.map((item) => (
+              <div className="sm-chip" key={item.name}>
+                <p className="font-semibold text-white">{item.name}</p>
+                <p className="mt-2 text-sm text-[var(--sm-muted)]">{item.tagline}</p>
               </div>
             ))}
           </div>
         </article>
+      </section>
+
+      <section className="sm-surface p-6">
+        <p className="sm-kicker text-[var(--sm-accent)]">How it works</p>
+        <h2 className="mt-3 text-2xl font-bold text-white">Simple rollout.</h2>
+        <div className="mt-4 grid gap-3 md:grid-cols-4">
+          {engagementFlow.map((step, index) => (
+            <div className="sm-chip flex items-center gap-3 text-sm text-white" key={step}>
+              <span className="font-mono text-[var(--sm-accent)]">0{index + 1}</span>
+              <span>{step}</span>
+            </div>
+          ))}
+        </div>
       </section>
     </div>
   )

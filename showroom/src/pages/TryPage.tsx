@@ -1,8 +1,9 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import { PageIntro } from '../components/PageIntro'
 import { trialModules } from '../content'
+import { checkWorkspaceHealth, workspaceFetch } from '../lib/workspaceApi'
 
 type TrialTab = 'lead-finder' | 'market-brief' | 'action-board'
 
@@ -90,22 +91,6 @@ function parseLeads(rawText: string): LeadRow[] {
   return rows.sort((a, b) => b.score - a.score).slice(0, 10)
 }
 
-function downloadCsv(rows: LeadRow[]) {
-  const header = 'name,email,phone,website,score'
-  const body = rows.map((row) =>
-    [row.name, row.email, row.phone, row.website, String(row.score)]
-      .map((value) => `"${value.replace(/"/g, '""')}"`)
-      .join(','),
-  )
-  const blob = new Blob([[header, ...body].join('\n')], { type: 'text/csv;charset=utf-8' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = 'lead_finder.csv'
-  a.click()
-  URL.revokeObjectURL(url)
-}
-
 function buildMarketBrief(text: string): MarketOutput {
   const lowered = text.toLowerCase()
   const themes: string[] = []
@@ -191,8 +176,26 @@ function buildActionBoard(text: string): ActionRow[] {
     })
 }
 
+function downloadCsv(rows: LeadRow[]) {
+  const header = 'name,email,phone,website,score'
+  const body = rows.map((row) =>
+    [row.name, row.email, row.phone, row.website, String(row.score)]
+      .map((value) => `"${value.replace(/"/g, '""')}"`)
+      .join(','),
+  )
+  const blob = new Blob([[header, ...body].join('\n')], { type: 'text/csv;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = 'lead_finder.csv'
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
 export function TryPage() {
   const [activeTab, setActiveTab] = useState<TrialTab>(resolveInitialTab)
+  const [apiReady, setApiReady] = useState(false)
+  const [busy, setBusy] = useState(false)
 
   const [leadInput, setLeadInput] = useState('')
   const [leadRows, setLeadRows] = useState<LeadRow[]>([])
@@ -203,9 +206,101 @@ export function TryPage() {
   const [actionInput, setActionInput] = useState('')
   const [actionRows, setActionRows] = useState<ActionRow[]>([])
 
+  useEffect(() => {
+    let cancelled = false
+
+    async function checkApi() {
+      const result = await checkWorkspaceHealth()
+      if (!cancelled) {
+        setApiReady(result.ready)
+      }
+    }
+
+    void checkApi()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
   function activateTab(tab: TrialTab) {
     setActiveTab(tab)
     window.history.replaceState(null, '', `#${tab}`)
+  }
+
+  async function runLeadFinder(text: string) {
+    setBusy(true)
+    try {
+      if (apiReady) {
+        const payload = await workspaceFetch<{ rows: LeadRow[] }>('/api/tools/lead-finder', {
+          method: 'POST',
+          body: JSON.stringify({ raw_text: text }),
+        })
+        setLeadRows(payload.rows ?? [])
+      } else {
+        setLeadRows(parseLeads(text))
+      }
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function runNewsBrief(text: string) {
+    setBusy(true)
+    try {
+      if (apiReady) {
+        const payload = await workspaceFetch<{ summary: string; themes: string[]; watch_items: string[]; actions: string[] }>(
+          '/api/tools/news-brief',
+          {
+            method: 'POST',
+            body: JSON.stringify({ raw_text: text }),
+          },
+        )
+        setMarketOutput({
+          summary: payload.summary,
+          themes: payload.themes,
+          watchItems: payload.watch_items,
+          actions: payload.actions,
+        })
+      } else {
+        setMarketOutput(buildMarketBrief(text))
+      }
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function runActionBoard(text: string) {
+    setBusy(true)
+    try {
+      if (apiReady) {
+        const payload = await workspaceFetch<{ rows: ActionRow[] }>('/api/tools/action-board', {
+          method: 'POST',
+          body: JSON.stringify({ raw_text: text }),
+        })
+        setActionRows(payload.rows ?? [])
+      } else {
+        setActionRows(buildActionBoard(text))
+      }
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function loadLiveWorkspaceActions() {
+    setBusy(true)
+    try {
+      const payload = await workspaceFetch<{ items: Array<{ title: string; owner: string; priority: string; due: string }> }>('/api/actions?limit=10')
+      setActionRows(
+        (payload.items ?? []).map((item) => ({
+          title: item.title,
+          owner: item.owner,
+          priority: (item.priority?.charAt(0).toUpperCase() + item.priority?.slice(1).toLowerCase()) as ActionRow['priority'],
+          due: item.due,
+        })),
+      )
+    } finally {
+      setBusy(false)
+    }
   }
 
   return (
@@ -213,8 +308,22 @@ export function TryPage() {
       <PageIntro
         eyebrow="Tools"
         title="Try the real free tools."
-        description="Paste your own input, or load one Myanmar ops example and see how the tool behaves."
+        description="Use backend mode when the workspace service is live. Fall back to local mode when you just want a quick proof."
       />
+
+      <section className="sm-surface p-4">
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="sm-status-pill">
+            <span className={`sm-led ${apiReady ? 'bg-emerald-400' : 'bg-amber-400'}`} />
+            {apiReady ? 'Workspace mode' : 'Local mode'}
+          </span>
+          <span className="text-sm text-[var(--sm-muted)]">
+            {apiReady
+              ? 'This page is connected to the local workspace API.'
+              : 'Backend is not connected here yet, so tools fall back to local demo logic.'}
+          </span>
+        </div>
+      </section>
 
       <section className="grid gap-3 md:grid-cols-3">
         {trialModules.map((module) => (
@@ -246,14 +355,14 @@ export function TryPage() {
               value={leadInput}
             />
             <div className="mt-4 flex flex-wrap gap-3">
-              <button className="sm-button-primary" onClick={() => setLeadRows(parseLeads(leadInput))} type="button">
-                Score leads
+              <button className="sm-button-primary" disabled={busy} onClick={() => runLeadFinder(leadInput)} type="button">
+                {busy ? 'Running...' : apiReady ? 'Run on workspace API' : 'Score leads'}
               </button>
               <button
                 className="sm-button-secondary"
                 onClick={() => {
                   setLeadInput(LEAD_SAMPLE_TEXT)
-                  setLeadRows(parseLeads(LEAD_SAMPLE_TEXT))
+                  void runLeadFinder(LEAD_SAMPLE_TEXT)
                 }}
                 type="button"
               >
@@ -302,14 +411,14 @@ export function TryPage() {
               value={marketInput}
             />
             <div className="mt-4 flex flex-wrap gap-3">
-              <button className="sm-button-primary" onClick={() => setMarketOutput(buildMarketBrief(marketInput))} type="button">
-                Build brief
+              <button className="sm-button-primary" disabled={busy} onClick={() => runNewsBrief(marketInput)} type="button">
+                {busy ? 'Running...' : apiReady ? 'Run on workspace API' : 'Build brief'}
               </button>
               <button
                 className="sm-button-secondary"
                 onClick={() => {
                   setMarketInput(MARKET_SAMPLE_TEXT)
-                  setMarketOutput(buildMarketBrief(MARKET_SAMPLE_TEXT))
+                  void runNewsBrief(MARKET_SAMPLE_TEXT)
                 }}
                 type="button"
               >
@@ -374,19 +483,24 @@ export function TryPage() {
               value={actionInput}
             />
             <div className="mt-4 flex flex-wrap gap-3">
-              <button className="sm-button-primary" onClick={() => setActionRows(buildActionBoard(actionInput))} type="button">
-                Build board
+              <button className="sm-button-primary" disabled={busy} onClick={() => runActionBoard(actionInput)} type="button">
+                {busy ? 'Running...' : apiReady ? 'Run on workspace API' : 'Build board'}
               </button>
               <button
                 className="sm-button-secondary"
                 onClick={() => {
                   setActionInput(ACTION_SAMPLE_TEXT)
-                  setActionRows(buildActionBoard(ACTION_SAMPLE_TEXT))
+                  void runActionBoard(ACTION_SAMPLE_TEXT)
                 }}
                 type="button"
               >
                 Load example
               </button>
+              {apiReady ? (
+                <button className="sm-button-secondary" disabled={busy} onClick={() => void loadLiveWorkspaceActions()} type="button">
+                  Load live workspace board
+                </button>
+              ) : null}
             </div>
           </article>
 
@@ -436,15 +550,15 @@ export function TryPage() {
             <p className="sm-kicker text-[var(--sm-accent)]">Next step</p>
             <h2 className="mt-2 text-2xl font-bold text-white">Want the same logic on your own data?</h2>
             <p className="mt-2 text-sm text-[var(--sm-muted)]">
-              The free tools show the behavior. The deploy modules connect it to Gmail, Drive, and Sheets.
+              The free tools prove behavior. The deploy modules connect it to Gmail, Drive, Sheets, and your live workspace.
             </p>
           </div>
           <div className="flex flex-wrap gap-3">
             <Link className="sm-button-accent" to="/products">
               See deploy modules
             </Link>
-            <Link className="sm-button-secondary" to="/contact">
-              Start a pilot
+            <Link className="sm-button-secondary" to="/workspace">
+              Open workspace
             </Link>
           </div>
         </div>

@@ -32,6 +32,24 @@ Rule:
 - these are not the main business
 - they are the proof layer
 
+### Layer 1.5: Mini Products
+
+These are small sellable add-ons or fast pilot wedges.
+
+- `Attendance Check-In`
+  Purpose: simple shift attendance with proof and review
+- `Reply Draft`
+  Purpose: convert recurring thread types into usable draft replies
+- `Document Intake`
+  Purpose: turn a file or note into one structured record
+- `Director Flash`
+  Purpose: one short daily or weekly management brief
+
+Rule:
+- these should be fast to deploy
+- these should plug into bigger modules later
+- they are ideal when a buyer is not ready for a full control module yet
+
 ### Layer 2: Functional Control Modules
 
 These are the first real sellable products.

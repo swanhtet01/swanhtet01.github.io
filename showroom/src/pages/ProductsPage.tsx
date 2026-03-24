@@ -1,92 +1,83 @@
 import { Link } from 'react-router-dom'
 
 import { PageIntro } from '../components/PageIntro'
-import { flagshipSystem, products, sellableTemplates } from '../content'
+import { flagshipSystem, miniProducts, products, sellableTemplates } from '../content'
 
 const freeTools = products.filter((product) => product.kind === 'Free tool')
-const laneOrder = ['Run the day', 'Control risk', 'Commercial watch'] as const
-
-const templatesByLane = laneOrder.map((lane) => ({
-  lane,
-  templates: sellableTemplates.filter((template) => template.lane === lane),
-}))
+const controlModules = products.filter((product) => product.kind === 'Control module')
 
 export function ProductsPage() {
   return (
     <div className="space-y-8">
       <PageIntro
         eyebrow="Products"
-        title="Pick one problem. Deploy one agent workflow."
-        description="Try the free tools first. Then deploy one workflow on your real Gmail, Drive, and Sheets data."
+        title="One stack. Three layers."
+        description="Free proof tools, deployable modules, and one flagship operating system."
       />
 
       <section className="space-y-4">
         <div className="flex items-center justify-between gap-4">
           <div>
             <p className="sm-kicker text-[var(--sm-accent)]">Deploy layer</p>
-            <h2 className="mt-2 text-2xl font-bold text-white">Workflow templates by lane</h2>
+            <h2 className="mt-2 text-2xl font-bold text-white">Core modules</h2>
           </div>
           <Link className="sm-link" to="/contact">
             Deploy one
           </Link>
         </div>
-        <div className="space-y-8">
-          {templatesByLane.map(({ lane, templates }) => (
-            <section className="space-y-4" key={lane}>
+        <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+          {controlModules.map((product) => (
+            <article className="sm-surface p-6" key={product.name}>
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <p className="sm-kicker text-[var(--sm-accent)]">{lane}</p>
-                  <p className="mt-2 text-sm text-[var(--sm-muted)]">Templates that land fast and show a real first-week result.</p>
+                  <h2 className="text-2xl font-bold text-white">{product.name}</h2>
+                  <p className="mt-1 text-xs font-semibold uppercase tracking-[0.28em] text-[var(--sm-muted)]">{product.availability}</p>
                 </div>
-                <span className="sm-status-pill">{templates.length} templates</span>
+                <span className="sm-status-pill border-[rgba(255,122,24,0.18)] bg-[rgba(255,122,24,0.08)] text-[var(--sm-accent-alt)]">
+                  Module
+                </span>
               </div>
-              <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-                {templates.map((template) => (
-                  <article className="sm-surface p-6" key={template.name}>
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <h2 className="text-2xl font-bold text-white">{template.name}</h2>
-                        <p className="mt-1 text-xs font-semibold uppercase tracking-[0.28em] text-[var(--sm-muted)]">{template.lane}</p>
-                      </div>
-                      <span className="sm-status-pill border-[rgba(255,122,24,0.18)] bg-[rgba(255,122,24,0.08)] text-[var(--sm-accent-alt)]">
-                        Sellable
-                      </span>
-                    </div>
-                    <p className="mt-3 text-sm text-[var(--sm-muted)]">{template.problem}</p>
-                    <div className="mt-4 grid gap-2 text-sm">
-                      <div className="sm-chip text-white">
-                        <span className="sm-kicker text-[var(--sm-accent)]">Week 1 result</span>
-                        <p className="mt-2">{template.firstWeekOutcome}</p>
-                      </div>
-                      <div className="sm-chip text-white">
-                        <span className="sm-kicker text-[var(--sm-accent)]">Works with</span>
-                        <p className="mt-2">{template.requiredData.slice(0, 3).join(' · ')}</p>
-                      </div>
-                      <div className="sm-chip text-white">
-                        <span className="sm-kicker text-[var(--sm-accent)]">Live in</span>
-                        <p className="mt-2">{template.timeToFirstLiveOutput}</p>
-                      </div>
-                    </div>
-                    <p className="mt-4 text-sm text-[var(--sm-muted)]">
-                      <strong className="text-white">Best for:</strong> {template.buyer}
-                    </p>
-                    <div className="mt-4">
-                      <p className="sm-kicker text-[var(--sm-accent-alt)]">Outputs</p>
-                      <div className="mt-3 grid gap-2">
-                        {template.outputs.slice(0, 3).map((item) => (
-                          <div className="sm-chip text-sm text-white" key={item}>
-                            {item}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                    <Link className="sm-button-accent mt-5" to="/contact">
-                      Start this template
-                    </Link>
-                  </article>
-                ))}
+              <p className="mt-3 text-sm text-[var(--sm-muted)]">{product.tagline}</p>
+              <div className="mt-4 grid gap-2 text-sm">
+                <div className="sm-chip text-white">
+                  <span className="sm-kicker text-[var(--sm-accent)]">Input</span>
+                  <p className="mt-2">{product.input}</p>
+                </div>
+                <div className="sm-chip text-white">
+                  <span className="sm-kicker text-[var(--sm-accent-alt)]">Output</span>
+                  <p className="mt-2">{product.output}</p>
+                </div>
               </div>
-            </section>
+              <p className="mt-4 text-sm text-[var(--sm-muted)]">
+                <strong className="text-white">Best for:</strong> {product.buyer}
+              </p>
+              <div className="mt-5 flex flex-wrap gap-3">
+                <Link className="sm-button-accent" to="/contact">
+                  Start module
+                </Link>
+                <Link className="sm-button-secondary" to="/workspace">
+                  Open workspace
+                </Link>
+              </div>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section className="space-y-4">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <p className="sm-kicker text-[var(--sm-accent)]">Mini layer</p>
+            <h2 className="mt-2 text-2xl font-bold text-white">Small products and add-ons</h2>
+          </div>
+        </div>
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          {miniProducts.map((item) => (
+            <article className="sm-surface-soft p-5" key={item.name}>
+              <p className="text-lg font-bold text-white">{item.name}</p>
+              <p className="mt-2 text-sm text-[var(--sm-muted)]">{item.tagline}</p>
+              <p className="mt-4 text-sm text-white">{item.note}</p>
+            </article>
           ))}
         </div>
       </section>
@@ -109,26 +100,7 @@ export function ProductsPage() {
                 <span className="sm-status-pill">{product.availability}</span>
               </div>
               <p className="mt-3 text-sm text-[var(--sm-muted)]">{product.tagline}</p>
-              <div className="mt-5 space-y-3 text-sm">
-                <div className="sm-chip">
-                  <p className="sm-kicker text-[var(--sm-accent)]">Input</p>
-                  <p className="mt-2 text-white">{product.input}</p>
-                </div>
-                <div className="sm-chip">
-                  <p className="sm-kicker text-[var(--sm-accent)]">Output</p>
-                  <p className="mt-2 text-white">{product.output}</p>
-                </div>
-              </div>
-              <p className="mt-4 text-sm text-[var(--sm-muted)]">
-                <strong className="text-white">Best fit:</strong> {product.fit}
-              </p>
-              <div className="mt-4 flex flex-wrap gap-2">
-                {product.variants.map((variant) => (
-                  <span className="rounded-full border border-white/10 bg-white/4 px-3 py-1 text-xs font-semibold text-white" key={variant}>
-                    {variant}
-                  </span>
-                ))}
-              </div>
+              <p className="mt-4 text-sm text-white">{product.output}</p>
               {product.exampleId ? (
                 <div className="mt-5 flex flex-wrap gap-3">
                   <Link className="sm-button-primary" to={`/examples#${product.exampleId}`}>
@@ -156,33 +128,22 @@ export function ProductsPage() {
             </div>
           ))}
         </div>
+        <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {sellableTemplates.slice(0, 3).map((template) => (
+            <div className="sm-chip text-sm text-white" key={template.name}>
+              <p className="font-semibold">{template.name}</p>
+              <p className="mt-2 text-[var(--sm-muted)]">{template.firstWeekOutcome}</p>
+            </div>
+          ))}
+        </div>
         <p className="mt-4 text-sm text-[var(--sm-muted)]">{flagshipSystem.bestFor}</p>
         <div className="mt-5 flex flex-wrap gap-3">
           <Link className="sm-button-primary" to="/contact">
             Start OS pilot
           </Link>
-          <Link className="sm-button-secondary" to="/examples">
-            Try the proof tools
+          <Link className="sm-button-secondary" to="/workspace">
+            Open workspace
           </Link>
-        </div>
-      </section>
-
-      <section className="sm-surface p-6">
-        <p className="sm-kicker text-[var(--sm-accent)]">Works with your stack</p>
-        <h2 className="mt-3 text-2xl font-bold text-white">Built for Gmail, Drive, and Sheets first.</h2>
-        <div className="mt-5 grid gap-4 md:grid-cols-3">
-          <div className="sm-chip">
-            <p className="sm-kicker text-[var(--sm-accent)]">Connectors</p>
-            <p className="mt-2 text-sm text-white">Gmail, Drive, Sheets, forms, ERP exports, and external feeds.</p>
-          </div>
-          <div className="sm-chip">
-            <p className="sm-kicker text-[var(--sm-accent-alt)]">Real ops context</p>
-            <p className="mt-2 text-sm text-white">Suppliers, incidents, invoices, actions, approvals, and owners.</p>
-          </div>
-          <div className="sm-chip">
-            <p className="sm-kicker text-[var(--sm-accent)]">Views</p>
-            <p className="mt-2 text-sm text-white">Manager board, founder brief, weekly report, and exception queue.</p>
-          </div>
         </div>
       </section>
     </div>

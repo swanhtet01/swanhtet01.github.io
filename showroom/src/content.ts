@@ -53,10 +53,19 @@ export type FlagshipSystem = {
   bestFor: string
 }
 
+export type MiniProduct = {
+  name: string
+  tagline: string
+  bestFor: string
+  data: string
+  note: string
+}
+
 export const navItems = [
   { label: 'Home', to: '/' },
   { label: 'Products', to: '/products' },
   { label: 'Try free', to: '/examples' },
+  { label: 'Workspace', to: '/workspace' },
   { label: 'Plans', to: '/packages' },
   { label: 'Contact', to: '/contact' },
 ] as const
@@ -332,6 +341,37 @@ export const flagshipSystem: FlagshipSystem = {
   ],
   bestFor: 'Owner-led companies that are too messy for ERP and too operational for generic AI chat.',
 }
+
+export const miniProducts: MiniProduct[] = [
+  {
+    name: 'Attendance Check-In',
+    tagline: 'Simple shift attendance with photo-assisted proof.',
+    bestFor: 'Factories, warehouses, and field teams that still run attendance manually.',
+    data: 'Name, shift, station, status, optional photo link',
+    note: 'Live now as a minimal attendance event workflow. Face matching is a later add-on, not fake-magic day one.',
+  },
+  {
+    name: 'Reply Draft',
+    tagline: 'Turn supplier or customer threads into a cleaner response draft.',
+    bestFor: 'Procurement, sales, and directors who answer the same thread types repeatedly.',
+    data: 'One email thread or copied message',
+    note: 'Best used beside Supplier Watch, Cash Watch, or Sales Signal.',
+  },
+  {
+    name: 'Document Intake',
+    tagline: 'Turn a messy file or email into one structured record.',
+    bestFor: 'Teams handling invoices, complaints, shipment docs, and quality evidence.',
+    data: 'Drive file, email snippet, or pasted note',
+    note: 'This is the fast lane into larger modules because it cleans the intake first.',
+  },
+  {
+    name: 'Director Flash',
+    tagline: 'One short management brief from the latest actions and signals.',
+    bestFor: 'Owners and directors who need one command view instead of ten updates.',
+    data: 'Current action board, market notes, and top exceptions',
+    note: 'Works as a daily or weekly summary surface on top of the main system.',
+  },
+]
 
 export const trialModules: TrialModule[] = [
   {
