@@ -56,7 +56,7 @@ export type FlagshipSystem = {
 export const navItems = [
   { label: 'Home', to: '/' },
   { label: 'Products', to: '/products' },
-  { label: 'Tools', to: '/examples' },
+  { label: 'Try free', to: '/examples' },
   { label: 'Plans', to: '/packages' },
   { label: 'Contact', to: '/contact' },
 ] as const

@@ -16,14 +16,14 @@ export function ProductsPage() {
     <div className="space-y-8">
       <PageIntro
         eyebrow="Products"
-        title="Reusable workflow templates, not one-off demos."
-        description="The free tools are the proof layer. The real sellable products are repeatable workflow templates that can be adapted to different client data contexts."
+        title="Pick one problem. Deploy one agent workflow."
+        description="Try the free tools first. Then deploy one workflow on your real Gmail, Drive, and Sheets data."
       />
 
       <section className="space-y-4">
         <div className="flex items-center justify-between gap-4">
           <div>
-            <p className="sm-kicker text-[var(--sm-accent)]">Sellable layer</p>
+            <p className="sm-kicker text-[var(--sm-accent)]">Deploy layer</p>
             <h2 className="mt-2 text-2xl font-bold text-white">Workflow templates by lane</h2>
           </div>
           <Link className="sm-link" to="/contact">
@@ -55,51 +55,31 @@ export function ProductsPage() {
                     <p className="mt-3 text-sm text-[var(--sm-muted)]">{template.problem}</p>
                     <div className="mt-4 grid gap-2 text-sm">
                       <div className="sm-chip text-white">
-                        <span className="sm-kicker text-[var(--sm-accent)]">Use when</span>
-                        <p className="mt-2">{template.useWhen}</p>
-                      </div>
-                      <div className="sm-chip text-white">
-                        <span className="sm-kicker text-[var(--sm-accent)]">Time to output</span>
-                        <p className="mt-2">{template.timeToFirstLiveOutput}</p>
-                      </div>
-                      <div className="sm-chip text-white">
-                        <span className="sm-kicker text-[var(--sm-accent)]">Primary operator</span>
-                        <p className="mt-2">{template.primaryOperator}</p>
-                      </div>
-                      <div className="sm-chip text-white">
-                        <span className="sm-kicker text-[var(--sm-accent)]">Week 1</span>
+                        <span className="sm-kicker text-[var(--sm-accent)]">Week 1 result</span>
                         <p className="mt-2">{template.firstWeekOutcome}</p>
+                      </div>
+                      <div className="sm-chip text-white">
+                        <span className="sm-kicker text-[var(--sm-accent)]">Works with</span>
+                        <p className="mt-2">{template.requiredData.slice(0, 3).join(' · ')}</p>
+                      </div>
+                      <div className="sm-chip text-white">
+                        <span className="sm-kicker text-[var(--sm-accent)]">Live in</span>
+                        <p className="mt-2">{template.timeToFirstLiveOutput}</p>
                       </div>
                     </div>
                     <p className="mt-4 text-sm text-[var(--sm-muted)]">
-                      <strong className="text-white">Buyer:</strong> {template.buyer}
+                      <strong className="text-white">Best for:</strong> {template.buyer}
                     </p>
-                    <div className="mt-4">
-                      <p className="sm-kicker text-[var(--sm-accent-alt)]">Needs</p>
-                      <div className="mt-3 grid gap-2">
-                        {template.requiredData.map((item) => (
-                          <div className="sm-chip text-sm text-white" key={item}>
-                            {item}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
                     <div className="mt-4">
                       <p className="sm-kicker text-[var(--sm-accent-alt)]">Outputs</p>
                       <div className="mt-3 grid gap-2">
-                        {template.outputs.map((item) => (
+                        {template.outputs.slice(0, 3).map((item) => (
                           <div className="sm-chip text-sm text-white" key={item}>
                             {item}
                           </div>
                         ))}
                       </div>
                     </div>
-                    <p className="mt-4 text-sm text-[var(--sm-muted)]">
-                      <strong className="text-white">Rollout:</strong> {template.rollout}
-                    </p>
-                    <p className="mt-4 text-sm text-[var(--sm-muted)]">
-                      <strong className="text-white">Reuse pattern:</strong> {template.reusePattern}
-                    </p>
                     <Link className="sm-button-accent mt-5" to="/contact">
                       Start this template
                     </Link>
@@ -188,19 +168,19 @@ export function ProductsPage() {
       </section>
 
       <section className="sm-surface p-6">
-        <p className="sm-kicker text-[var(--sm-accent)]">Context adapter</p>
-        <h2 className="mt-3 text-2xl font-bold text-white">Built to swap client context, not rebuild from zero.</h2>
+        <p className="sm-kicker text-[var(--sm-accent)]">Works with your stack</p>
+        <h2 className="mt-3 text-2xl font-bold text-white">Built for Gmail, Drive, and Sheets first.</h2>
         <div className="mt-5 grid gap-4 md:grid-cols-3">
           <div className="sm-chip">
-            <p className="sm-kicker text-[var(--sm-accent)]">Connector pack</p>
+            <p className="sm-kicker text-[var(--sm-accent)]">Connectors</p>
             <p className="mt-2 text-sm text-white">Gmail, Drive, Sheets, forms, ERP exports, and external feeds.</p>
           </div>
           <div className="sm-chip">
-            <p className="sm-kicker text-[var(--sm-accent-alt)]">Entity map</p>
+            <p className="sm-kicker text-[var(--sm-accent-alt)]">Real ops context</p>
             <p className="mt-2 text-sm text-white">Suppliers, incidents, invoices, actions, approvals, and owners.</p>
           </div>
           <div className="sm-chip">
-            <p className="sm-kicker text-[var(--sm-accent)]">Output pack</p>
+            <p className="sm-kicker text-[var(--sm-accent)]">Views</p>
             <p className="mt-2 text-sm text-white">Manager board, founder brief, weekly report, and exception queue.</p>
           </div>
         </div>

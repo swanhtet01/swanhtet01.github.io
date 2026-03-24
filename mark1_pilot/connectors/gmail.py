@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlparse, urlunparse
@@ -22,6 +23,10 @@ NON_FATAL_AUTH_ERROR_HINTS = (
 
 def _normalize_redirect_uri(uri: str) -> str:
     return uri if uri.endswith("/") else f"{uri}/"
+
+
+def _default_loopback_redirect_uri(host: str, port: int) -> str:
+    return _normalize_redirect_uri(f"http://{host}:{port}")
 
 
 def _is_loopback_redirect(uri: str) -> bool:
@@ -59,6 +64,21 @@ def _normalize_callback_url(callback_url: str, redirect_uri: str) -> str:
     return raw
 
 
+def _looks_like_raw_auth_code(value: str) -> bool:
+    raw = (value or "").strip()
+    if not raw:
+        return False
+    if "://" in raw or "code=" in raw or "state=" in raw or " " in raw:
+        return False
+    return len(raw) >= 12
+
+
+def _recommended_cli_command(command: str, *args: str) -> str:
+    joined_args = " ".join(str(arg) for arg in args if str(arg).strip())
+    base = f".\\tools\\pilot.ps1 {command}".strip()
+    return f"{base} {joined_args}".strip()
+
+
 class GmailProbe:
     def __init__(self, client_secret_json: Path | None, token_json: Path | None) -> None:
         self.client_secret_json = client_secret_json
@@ -74,12 +94,23 @@ class GmailProbe:
             return None
         return self.token_json.parent / "gmail-oauth-session.json"
 
-    def _resolve_manual_redirect_uri(self, payload: dict[str, Any]) -> str:
+    def _resolve_manual_redirect_uri(
+        self,
+        payload: dict[str, Any],
+        *,
+        host: str = DEFAULT_GMAIL_AUTH_HOST,
+        port: int = DEFAULT_GMAIL_AUTH_PORT,
+    ) -> str:
+        expected_redirect_uri = _default_loopback_redirect_uri(host, port)
         if "installed" in payload:
             redirect_uris = payload["installed"].get("redirect_uris", [])
-            if redirect_uris:
-                return redirect_uris[0]
-            return "http://localhost"
+            normalized_redirects = [_normalize_redirect_uri(uri) for uri in redirect_uris if uri]
+            loopbacks = [uri for uri in normalized_redirects if _is_loopback_redirect(uri)]
+            if expected_redirect_uri in loopbacks:
+                return expected_redirect_uri
+            if loopbacks:
+                return loopbacks[0]
+            return _normalize_redirect_uri("http://localhost")
         if "web" in payload:
             redirect_uris = payload["web"].get("redirect_uris", [])
             loopbacks = [
@@ -87,9 +118,11 @@ class GmailProbe:
                 for uri in redirect_uris
                 if _is_loopback_redirect(uri)
             ]
+            if expected_redirect_uri in loopbacks:
+                return expected_redirect_uri
             if loopbacks:
                 return loopbacks[0]
-        return "http://localhost"
+        return _normalize_redirect_uri("http://localhost")
 
     def probe(self) -> dict[str, Any]:
         if not self.client_secret_json:
@@ -143,9 +176,19 @@ class GmailProbe:
                 "messages_total": profile.get("messagesTotal", 0),
             }
         except Exception as exc:
+            message = str(exc)
+            if any(hint in message.lower() for hint in NON_FATAL_AUTH_ERROR_HINTS):
+                return {
+                    "status": "reauth_required",
+                    "message": (
+                        "Stored Gmail token is expired or revoked. "
+                        f"Run `{_recommended_cli_command('gmail-auth-start')}` or `{_recommended_cli_command('gmail-auth')}` again."
+                    ),
+                    "raw_message": message,
+                }
             return {
                 "status": "error",
-                "message": str(exc),
+                "message": message,
             }
 
     def validate_client_config(
@@ -174,7 +217,21 @@ class GmailProbe:
                 "message": f"Could not parse Gmail OAuth client JSON: {exc}",
             }
 
-        expected_redirect_uri = _normalize_redirect_uri(f"http://{host}:{port}")
+        expected_redirect_uri = _default_loopback_redirect_uri(host, port)
+        recommended_command = _recommended_cli_command(
+            "gmail-auth",
+            "--host",
+            host,
+            "--port",
+            str(port),
+        )
+        manual_start_command = _recommended_cli_command(
+            "gmail-auth-start",
+            "--host",
+            host,
+            "--port",
+            str(port),
+        )
         if "installed" in payload:
             client = payload["installed"]
             return {
@@ -183,7 +240,8 @@ class GmailProbe:
                 "client_id": client.get("client_id", ""),
                 "auth_host": host,
                 "auth_port": port,
-                "recommended_command": f"python -m mark1_pilot.cli gmail-auth --host {host} --port {port}",
+                "recommended_command": recommended_command,
+                "manual_start_command": manual_start_command,
             }
 
         if "web" in payload:
@@ -218,7 +276,8 @@ class GmailProbe:
                 "redirect_uris": normalized_redirect_uris,
                 "auth_host": host,
                 "auth_port": port,
-                "recommended_command": f"python -m mark1_pilot.cli gmail-auth --host {host} --port {port}",
+                "recommended_command": recommended_command,
+                "manual_start_command": manual_start_command,
             }
 
         return {
@@ -278,7 +337,12 @@ class GmailProbe:
                 "message": str(exc),
             }
 
-    def start_manual_auth_session(self) -> dict[str, Any]:
+    def start_manual_auth_session(
+        self,
+        *,
+        host: str = DEFAULT_GMAIL_AUTH_HOST,
+        port: int = DEFAULT_GMAIL_AUTH_PORT,
+    ) -> dict[str, Any]:
         if not self.client_secret_json:
             return {
                 "status": "not_configured",
@@ -305,7 +369,7 @@ class GmailProbe:
 
         try:
             payload = self._load_client_payload()
-            redirect_uri = self._resolve_manual_redirect_uri(payload)
+            redirect_uri = self._resolve_manual_redirect_uri(payload, host=host, port=port)
             _allow_insecure_oauth_for_loopback(redirect_uri)
             flow = Flow.from_client_secrets_file(
                 str(self.client_secret_json),
@@ -343,7 +407,18 @@ class GmailProbe:
                 "authorization_url": auth_url,
                 "redirect_uri": redirect_uri,
                 "session_path": str(session_path),
-                "next_step": "Open the authorization URL, sign in, then run gmail-auth-finish with the full callback URL from the browser address bar.",
+                "auth_host": host,
+                "auth_port": port,
+                "next_step": (
+                    "Open the authorization URL, sign in, ignore any localhost browser error page, "
+                    "then run gmail-auth-finish with the full callback URL from the browser address bar."
+                ),
+                "recommended_finish_command": _recommended_cli_command(
+                    "gmail-auth-finish",
+                    "--callback-url",
+                    "\"<paste-full-callback-url-here>\"",
+                ),
+                "recommended_reset_command": _recommended_cli_command("gmail-auth-reset"),
             }
         except Exception as exc:
             return {
@@ -375,11 +450,17 @@ class GmailProbe:
         try:
             session = json.loads(session_path.read_text(encoding="utf-8"))
             redirect_uri = session.get("redirect_uri", "")
-            normalized_callback = _normalize_callback_url(callback_url, redirect_uri)
-            callback_params = parse_qs(urlparse(normalized_callback).query)
             expected_state = str(session.get("state", "")).strip()
-            callback_state = str((callback_params.get("state") or [""])[0]).strip()
-            code = str((callback_params.get("code") or [""])[0]).strip()
+            raw_callback = str(callback_url or "").strip()
+            if _looks_like_raw_auth_code(raw_callback):
+                normalized_callback = ""
+                callback_state = expected_state
+                code = raw_callback
+            else:
+                normalized_callback = _normalize_callback_url(raw_callback, redirect_uri)
+                callback_params = parse_qs(urlparse(normalized_callback).query)
+                callback_state = str((callback_params.get("state") or [""])[0]).strip()
+                code = str((callback_params.get("code") or [""])[0]).strip()
             if expected_state and callback_state and expected_state != callback_state:
                 return {
                     "status": "error",
@@ -419,6 +500,35 @@ class GmailProbe:
                 "status": "error",
                 "message": str(exc),
             }
+
+    def reset_local_auth_state(self) -> dict[str, Any]:
+        archived_token = ""
+        archived_session = ""
+
+        if self.token_json and self.token_json.exists():
+            timestamp = datetime.now().astimezone().strftime("%Y%m%d-%H%M%S")
+            archived_token_path = self.token_json.with_name(
+                f"{self.token_json.stem}.bak-{timestamp}{self.token_json.suffix}"
+            )
+            self.token_json.replace(archived_token_path)
+            archived_token = str(archived_token_path)
+
+        session_path = self._session_path()
+        if session_path and session_path.exists():
+            timestamp = datetime.now().astimezone().strftime("%Y%m%d-%H%M%S")
+            archived_session_path = session_path.with_name(
+                f"{session_path.stem}.bak-{timestamp}{session_path.suffix}"
+            )
+            session_path.replace(archived_session_path)
+            archived_session = str(archived_session_path)
+
+        return {
+            "status": "ready",
+            "message": "Local Gmail auth state archived. Start a fresh auth flow next.",
+            "archived_token": archived_token,
+            "archived_session": archived_session,
+            "next_command": _recommended_cli_command("gmail-auth-start"),
+        }
 
     def search_messages(self, query: str, max_results: int = 10) -> dict[str, Any]:
         if not self.token_json or not self.token_json.exists():
@@ -493,7 +603,13 @@ class GmailProbe:
     @staticmethod
     def is_non_fatal_mail_gap(result: dict[str, Any]) -> bool:
         status = str(result.get("status", "")).strip().lower()
-        if status in {"missing_token_file", "missing_client_secret", "not_configured", "missing_token_path"}:
+        if status in {
+            "missing_token_file",
+            "missing_client_secret",
+            "not_configured",
+            "missing_token_path",
+            "reauth_required",
+        }:
             return True
         if status != "error":
             return False
@@ -507,7 +623,14 @@ class GmailProbe:
         port: int = DEFAULT_GMAIL_AUTH_PORT,
     ) -> str:
         validation = self.validate_client_config(host=host, port=port)
-        expected_redirect_uri = _normalize_redirect_uri(f"http://{host}:{port}")
+        expected_redirect_uri = _default_loopback_redirect_uri(host, port)
+        live_command = _recommended_cli_command("gmail-auth", "--host", host, "--port", str(port))
+        manual_start = _recommended_cli_command("gmail-auth-start", "--host", host, "--port", str(port))
+        manual_finish = _recommended_cli_command(
+            "gmail-auth-finish",
+            "--callback-url",
+            "\"<paste-full-callback-url-here>\"",
+        )
         lines = [
             "# Gmail OAuth Setup Guide",
             "",
@@ -532,14 +655,16 @@ class GmailProbe:
                 "",
                 "Preferred path:",
                 "- In Google Cloud Console, create a new OAuth client of type `Desktop app` in the same project.",
-                "- Download the new JSON and replace `.secrets/gmail-oauth-client.json` with that file.",
-                f"- Run `python -m mark1_pilot.cli gmail-auth --host {host} --port {port}` from the repo root.",
+                f"- Download the new JSON and point `GMAIL_OAUTH_CLIENT_JSON` to that file. Current configured path: `{self.client_secret_json}`.",
+                f"- Run `{live_command}` from the repo root.",
                 "",
                 "Alternative path using the existing web client:",
                 f"- Edit the existing web OAuth client and add the exact redirect URI `{expected_redirect_uri}`.",
-                "- Save the client, download the updated JSON again, and replace `.secrets/gmail-oauth-client.json`.",
-                f"- Run `python -m mark1_pilot.cli gmail-auth --host {host} --port {port}` from the repo root.",
-                "- If the local server flow is awkward, use `gmail-auth-start` and `gmail-auth-finish` instead.",
+                f"- Save the client, download the updated JSON again, and point `GMAIL_OAUTH_CLIENT_JSON` to it. Current configured path: `{self.client_secret_json}`.",
+                f"- Run `{live_command}` from the repo root.",
+                f"- If the local server flow is awkward, use `{manual_start}` and then `{manual_finish}` instead.",
+                "- During manual auth, the browser may land on a localhost URL that does not render a page. That is fine. Copy the full address bar and finish the flow in the terminal.",
+                "- Do not open `python` manually from the browser or VS Code. Use the PowerShell wrapper so the correct interpreter is selected automatically.",
                 "",
                 "## Google Console Checklist",
                 "",
@@ -550,7 +675,7 @@ class GmailProbe:
                 "",
                 "## After Auth Works",
                 "",
-                "- A token file will be created at `.secrets/gmail-oauth-token.json`.",
+                f"- A token file will be created at `{self.token_json}`.",
                 "- Then `gmail-preview` can pull Yangon Tyre internal and supplier-related emails using the saved query profiles.",
             ]
         )

@@ -1,11 +1,28 @@
 from __future__ import annotations
 
+import csv
 import json
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
 from .config import DQMSConfig, ERPConfig, InputCenterConfig
+
+
+ACTION_BOARD_MANAGER_HEADERS = [
+    "captured_at",
+    "action_id",
+    "lane",
+    "title",
+    "action",
+    "owner",
+    "priority",
+    "due",
+    "status",
+    "source",
+    "evidence_link",
+    "notes",
+]
 
 
 def _load_json(path: Path) -> Any:
@@ -117,6 +134,7 @@ def _build_input_items(input_snapshot: dict[str, Any]) -> list[dict[str, Any]]:
             priority = str(recent.get("priority", "medium")).strip().lower()
             status = str(recent.get("status", "")).strip() or "open"
             evidence_link = str(template.get("web_view_link", "")).strip()
+            item_id = f"input-{template_key}-{row.get('__row_number', recent.get('updated_at', 'row'))}"
 
             action = "Review and assign next action."
             due = ""
@@ -133,10 +151,19 @@ def _build_input_items(input_snapshot: dict[str, Any]) -> list[dict[str, Any]]:
             elif template_key == "sales_market_signal":
                 action = str(row.get("next_action", "")).strip() or "Review sales signal and update forecast."
                 due = ""
+            elif template_key == "manager_action_board":
+                item_id = str(row.get("action_id", "")).strip() or item_id
+                summary = str(row.get("title", "")).strip() or summary
+                action = str(row.get("action", "")).strip() or "Review action board item."
+                due = str(row.get("due", "")).strip()
+                owner = owner or str(row.get("owner", "")).strip()
+                priority = str(row.get("priority", priority)).strip().lower()
+                status = str(row.get("status", "")).strip() or status
+                evidence_link = str(row.get("evidence_link", "")).strip() or evidence_link
 
             items.append(
                 _item(
-                    item_id=f"input-{template_key}-{row.get('__row_number', recent.get('updated_at', 'row'))}",
+                    item_id=item_id,
                     title=summary,
                     action=action,
                     owner=owner,
@@ -327,14 +354,51 @@ def render_action_board_markdown(payload: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def build_action_board_seed_rows(payload: dict[str, Any], max_rows: int = 25) -> list[dict[str, str]]:
+    generated_at = str(payload.get("generated_at", "")).strip()
+    rows: list[dict[str, str]] = []
+    for item in payload.get("items", []):
+        if str(item.get("lane", "")).strip() == "system":
+            continue
+        rows.append(
+            {
+                "captured_at": generated_at,
+                "action_id": str(item.get("id", "")).strip(),
+                "lane": str(item.get("lane", "")).strip(),
+                "title": str(item.get("title", "")).strip(),
+                "action": str(item.get("action", "")).strip(),
+                "owner": str(item.get("owner", "")).strip(),
+                "priority": str(item.get("priority", "")).strip(),
+                "due": str(item.get("due", "")).strip(),
+                "status": str(item.get("status", "")).strip() or "open",
+                "source": str(item.get("source", "")).strip(),
+                "evidence_link": str(item.get("evidence_link", "") or item.get("evidence_path", "")).strip(),
+                "notes": "Seeded from Action OS. Update status, owner, due date, and closure notes here.",
+            }
+        )
+        if len(rows) >= max(1, int(max_rows)):
+            break
+    return rows
+
+
 def write_action_board_outputs(payload: dict[str, Any], output_dir: Path) -> dict[str, str]:
     output_dir = output_dir.expanduser().resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
     json_file = output_dir / "action_board.json"
     md_file = output_dir / "action_board.md"
+    seed_json_file = output_dir / "action_board_seed.json"
+    seed_csv_file = output_dir / "action_board_seed.csv"
     json_file.write_text(json.dumps(payload, indent=2), encoding="utf-8")
     md_file.write_text(render_action_board_markdown(payload), encoding="utf-8")
+    seed_rows = build_action_board_seed_rows(payload)
+    seed_json_file.write_text(json.dumps(seed_rows, indent=2), encoding="utf-8")
+    with seed_csv_file.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=ACTION_BOARD_MANAGER_HEADERS)
+        writer.writeheader()
+        writer.writerows(seed_rows)
     return {
         "json_file": str(json_file.resolve()),
         "markdown_file": str(md_file.resolve()),
+        "seed_json_file": str(seed_json_file.resolve()),
+        "seed_csv_file": str(seed_csv_file.resolve()),
     }

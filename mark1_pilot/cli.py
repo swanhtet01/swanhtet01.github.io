@@ -11,7 +11,12 @@ from pathlib import Path
 from time import perf_counter
 from typing import Any, Callable
 
-from .action_board import build_action_board, write_action_board_outputs
+from .action_board import (
+    ACTION_BOARD_MANAGER_HEADERS,
+    build_action_board,
+    build_action_board_seed_rows,
+    write_action_board_outputs,
+)
 from .briefing import build_gmail_brief_markdown, build_query_brief_markdown
 from .client_context import (
     build_client_context_report,
@@ -473,7 +478,7 @@ def run_gmail_setup(config_path: str, host: str, port: int) -> int:
     return 0 if validation.get("status") == "ready" else 1
 
 
-def run_gmail_auth_start(config_path: str) -> int:
+def run_gmail_auth_start(config_path: str, host: str, port: int) -> int:
     config = PilotConfig.from_path(config_path)
     output_dir = config.output.inventory_path
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -482,8 +487,23 @@ def run_gmail_auth_start(config_path: str) -> int:
         client_secret_json=config.gmail.client_secret_path,
         token_json=config.gmail.token_path,
     )
-    result = gmail.start_manual_auth_session()
+    result = gmail.start_manual_auth_session(host=host, port=port)
     _write_json(output_dir / "gmail_auth_start.json", result)
+    print(json.dumps(result, indent=2))
+    return 0 if result.get("status") == "ready" else 1
+
+
+def run_gmail_auth_reset(config_path: str) -> int:
+    config = PilotConfig.from_path(config_path)
+    output_dir = config.output.inventory_path
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    gmail = GmailProbe(
+        client_secret_json=config.gmail.client_secret_path,
+        token_json=config.gmail.token_path,
+    )
+    result = gmail.reset_local_auth_state()
+    _write_json(output_dir / "gmail_auth_reset.json", result)
     print(json.dumps(result, indent=2))
     return 0 if result.get("status") == "ready" else 1
 
@@ -912,6 +932,7 @@ def run_input_center_setup(config_path: str, folder_id: str | None = None) -> in
     )
 
     registry_path = output_dir / config.input_center.registry_file
+    registry_preserved = False
     if result.get("status") == "ready":
         registry_payload = {
             "generated_at": result.get("generated_at", ""),
@@ -923,16 +944,30 @@ def run_input_center_setup(config_path: str, folder_id: str | None = None) -> in
         }
         _write_json(registry_path, registry_payload)
     else:
-        _write_json(
-            registry_path,
-            {
-                "generated_at": datetime.now().astimezone().isoformat(),
-                "status": "error",
-                "drive_folder_id": target_folder_id,
-                "templates": templates,
-                "last_error": result,
-            },
-        )
+        preserved_existing_registry = False
+        if registry_path.exists():
+            try:
+                existing_registry = json.loads(registry_path.read_text(encoding="utf-8"))
+                if (
+                    str(existing_registry.get("status", "")).strip() == "ready"
+                    and existing_registry.get("templates")
+                ):
+                    preserved_existing_registry = True
+            except Exception:
+                preserved_existing_registry = False
+
+        registry_preserved = preserved_existing_registry
+        if not preserved_existing_registry:
+            _write_json(
+                registry_path,
+                {
+                    "generated_at": datetime.now().astimezone().isoformat(),
+                    "status": "error",
+                    "drive_folder_id": target_folder_id,
+                    "templates": templates,
+                    "last_error": result,
+                },
+            )
 
     _write_json(output_dir / "input_center_setup_status.json", result)
     print(
@@ -941,6 +976,7 @@ def run_input_center_setup(config_path: str, folder_id: str | None = None) -> in
                 "status": result.get("status", "unknown"),
                 "template_count": len(result.get("templates", [])),
                 "registry_file": str(registry_path.resolve()),
+                "registry_preserved": registry_preserved,
                 "workspace_folder": result.get("target_folder", {}).get("name", ""),
                 "workspace_link": result.get("target_folder", {}).get("webViewLink", ""),
             },
@@ -1187,11 +1223,88 @@ def run_action_board(config_path: str) -> int:
                 "this_week_count": summary.get("this_week_count", 0),
                 "json_file": outputs["json_file"],
                 "markdown_file": outputs["markdown_file"],
+                "seed_json_file": outputs["seed_json_file"],
+                "seed_csv_file": outputs["seed_csv_file"],
             },
             indent=2,
         )
     )
     return 0 if payload.get("status") == "ready" else 1
+
+
+def run_action_board_seed(config_path: str, max_rows: int) -> int:
+    config = PilotConfig.from_path(config_path)
+    output_dir = config.output.inventory_path
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    registry_path = output_dir / config.input_center.registry_file
+    if not registry_path.exists():
+        result = {
+            "status": "missing_registry",
+            "message": "Run input-center-setup first so the manager action board sheet exists.",
+            "registry_file": str(registry_path.resolve()),
+        }
+        _write_json(output_dir / "action_board_seed_status.json", result)
+        print(json.dumps(result, indent=2))
+        return 1
+
+    registry = json.loads(registry_path.read_text(encoding="utf-8"))
+    templates = registry.get("templates", [])
+    target_template = None
+    for template in templates:
+        if str(template.get("key", "")).strip() == "manager_action_board":
+            target_template = template
+            break
+
+    if not target_template:
+        result = {
+            "status": "missing_manager_template",
+            "message": "Manager action board template is missing. Re-run input-center-setup after updating templates.",
+            "registry_file": str(registry_path.resolve()),
+        }
+        _write_json(output_dir / "action_board_seed_status.json", result)
+        print(json.dumps(result, indent=2))
+        return 1
+
+    payload = build_action_board(
+        output_dir,
+        input_config=config.input_center,
+        dqms_config=config.dqms,
+        erp_config=config.erp,
+    )
+    write_action_board_outputs(payload, output_dir)
+    seed_rows = build_action_board_seed_rows(payload, max_rows=max_rows)
+    headers = target_template.get("headers", []) or ACTION_BOARD_MANAGER_HEADERS
+    row_matrix = [[str(row.get(header, "")) for header in headers] for row in seed_rows]
+    target_folder_id = (
+        registry.get("drive_folder_id", "")
+        or config.input_center.drive_folder_id
+        or config.platform.publish.drive_folder_id
+        or config.drive.google_drive_folder_id
+    )
+    drive = GoogleDriveProbe(
+        service_account_json=config.drive.service_account_path,
+        folder_id=target_folder_id,
+    )
+    write_result = drive.overwrite_input_center_template_rows(
+        spreadsheet_id=str(target_template.get("spreadsheet_id", "")).strip(),
+        sheet_name=str(target_template.get("sheet_name", config.input_center.sheet_name)).strip() or config.input_center.sheet_name,
+        headers=headers,
+        rows=row_matrix,
+    )
+    result = {
+        "status": write_result.get("status", "unknown"),
+        "seeded_row_count": len(seed_rows),
+        "max_rows": max_rows,
+        "template_key": target_template.get("key", ""),
+        "template_title": target_template.get("title", ""),
+        "spreadsheet_id": target_template.get("spreadsheet_id", ""),
+        "web_view_link": target_template.get("web_view_link", ""),
+        "write_result": write_result,
+    }
+    _write_json(output_dir / "action_board_seed_status.json", result)
+    print(json.dumps(result, indent=2))
+    return 0 if write_result.get("status") == "ready" else 1
 
 
 def run_manus_catalog(config_path: str, zip_paths: list[str]) -> int:
@@ -1561,6 +1674,36 @@ def run_autopilot(
         False,
         lambda: run_action_board(config_path),
     )
+    if skip_input_center:
+        steps.append(
+            {
+                "name": "action-board-seed",
+                "required": False,
+                "status": "skipped",
+                "exit_code": 0,
+                "reason": "skip_input_center_flag",
+            }
+        )
+        steps.append(
+            {
+                "name": "input-center-resync",
+                "required": False,
+                "status": "skipped",
+                "exit_code": 0,
+                "reason": "skip_input_center_flag",
+            }
+        )
+    else:
+        execute_step(
+            "action-board-seed",
+            False,
+            lambda: run_action_board_seed(config_path, max_rows=25),
+        )
+        execute_step(
+            "input-center-resync",
+            False,
+            lambda: run_input_center_sync(config_path, max_rows=0),
+        )
     execute_step(
         "coverage-report",
         False,
@@ -1934,6 +2077,27 @@ def build_parser() -> argparse.ArgumentParser:
         default="./config.example.json",
         help="Path to pilot config JSON.",
     )
+    gmail_auth_start_parser.add_argument(
+        "--host",
+        default=DEFAULT_GMAIL_AUTH_HOST,
+        help="Preferred loopback host to mention in manual auth guidance.",
+    )
+    gmail_auth_start_parser.add_argument(
+        "--port",
+        type=int,
+        default=DEFAULT_GMAIL_AUTH_PORT,
+        help="Preferred loopback port to mention in manual auth guidance.",
+    )
+
+    gmail_auth_reset_parser = subparsers.add_parser(
+        "gmail-auth-reset",
+        help="Archive the current local Gmail token/session so you can start a clean auth flow.",
+    )
+    gmail_auth_reset_parser.add_argument(
+        "--config",
+        default="./config.example.json",
+        help="Path to pilot config JSON.",
+    )
 
     gmail_auth_finish_parser = subparsers.add_parser(
         "gmail-auth-finish",
@@ -2202,6 +2366,22 @@ def build_parser() -> argparse.ArgumentParser:
         help="Path to pilot config JSON.",
     )
 
+    action_board_seed_parser = subparsers.add_parser(
+        "action-board-seed",
+        help="Write the latest action board into the manager action sheet in the input center.",
+    )
+    action_board_seed_parser.add_argument(
+        "--config",
+        default="./config.example.json",
+        help="Path to pilot config JSON.",
+    )
+    action_board_seed_parser.add_argument(
+        "--max-rows",
+        type=int,
+        default=25,
+        help="Maximum number of action items to seed into the manager sheet.",
+    )
+
     product_lab_parser = subparsers.add_parser(
         "product-lab",
         help="Generate the SuperMega product machine view across showcase tools, client modules, and flagship ERP OS.",
@@ -2410,7 +2590,9 @@ def main() -> int:
     if args.command == "gmail-setup":
         return run_gmail_setup(args.config, args.host, args.port)
     if args.command == "gmail-auth-start":
-        return run_gmail_auth_start(args.config)
+        return run_gmail_auth_start(args.config, args.host, args.port)
+    if args.command == "gmail-auth-reset":
+        return run_gmail_auth_reset(args.config)
     if args.command == "gmail-auth-finish":
         return run_gmail_auth_finish(args.config, args.callback_url)
     if args.command == "gmail-preview":
@@ -2439,6 +2621,8 @@ def main() -> int:
         return run_pilot_solution(args.config, args.email_max_results)
     if args.command == "action-board":
         return run_action_board(args.config)
+    if args.command == "action-board-seed":
+        return run_action_board_seed(args.config, args.max_rows)
     if args.command == "product-lab":
         return run_product_lab(args.config)
     if args.command == "coverage-report":
