@@ -35,7 +35,6 @@
       "**/.git": true
     },
     "typescript.preferences.importModuleSpecifier": "non-relative",
-    "python.defaultInterpreterPath": "/usr/local/bin/python3",
     "cline.mcpServers": {
       "mark1": {
         "command": "node",
