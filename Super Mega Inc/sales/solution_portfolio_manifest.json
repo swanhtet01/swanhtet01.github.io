@@ -1,0 +1,143 @@
+{
+  "version": "v1",
+  "generated_on": "2026-03-24",
+  "strategy": {
+    "wedge_product": "action_os",
+    "flagship_product": "supermega_os",
+    "proof_layer_role": "trust_and_qualification",
+    "core_rule": "sell one problem, one owner, one review rhythm, and one command layer"
+  },
+  "free_tools": [
+    {
+      "id": "lead_finder",
+      "name": "Lead Finder",
+      "purpose": "Score messy lead lists and public directories",
+      "buyer": ["growth", "sales", "founder"],
+      "role": "proof"
+    },
+    {
+      "id": "news_brief",
+      "name": "News Brief",
+      "purpose": "Convert headlines and copied notes into one management brief",
+      "buyer": ["director", "founder", "commercial_lead"],
+      "role": "proof"
+    },
+    {
+      "id": "action_board",
+      "name": "Action Board",
+      "purpose": "Turn raw updates into owners, priorities, and due dates",
+      "buyer": ["manager", "operations", "project_lead"],
+      "role": "proof"
+    }
+  ],
+  "modules": [
+    {
+      "id": "action_os",
+      "name": "Action OS",
+      "status": "pilot_ready",
+      "buyer": ["founder", "gm", "operations_director"],
+      "data_sources": ["gmail", "drive", "sheets", "notes"],
+      "priority": "now"
+    },
+    {
+      "id": "supplier_watch",
+      "name": "Supplier Watch",
+      "status": "pilot_ready",
+      "buyer": ["procurement", "supply_chain", "operations"],
+      "data_sources": ["gmail", "eta_sheet", "payment_sheet", "customs_notes"],
+      "priority": "now"
+    },
+    {
+      "id": "quality_closeout",
+      "name": "Quality Closeout",
+      "status": "pilot_ready",
+      "buyer": ["qa", "plant_manager", "operations_director"],
+      "data_sources": ["incident_sheet", "gmail", "evidence_files"],
+      "priority": "now"
+    },
+    {
+      "id": "cash_watch",
+      "name": "Cash Watch",
+      "status": "pilot_ready",
+      "buyer": ["finance", "commercial_control", "director"],
+      "data_sources": ["invoice_files", "cash_book", "payment_emails"],
+      "priority": "now"
+    },
+    {
+      "id": "production_pulse",
+      "name": "Production Pulse",
+      "status": "design_ready",
+      "buyer": ["plant_manager", "production_head"],
+      "data_sources": ["shift_sheet", "downtime_log", "production_notes"],
+      "priority": "next"
+    },
+    {
+      "id": "sales_signal",
+      "name": "Sales Signal",
+      "status": "design_ready",
+      "buyer": ["sales", "commercial", "founder"],
+      "data_sources": ["sales_sheet", "distributor_updates", "external_watch"],
+      "priority": "next"
+    }
+  ],
+  "operating_packs": [
+    {
+      "id": "owner_operator_pack",
+      "name": "Owner Operator Pack",
+      "includes": ["action_os", "news_brief"]
+    },
+    {
+      "id": "procurement_control_pack",
+      "name": "Procurement Control Pack",
+      "includes": ["supplier_watch", "action_os"]
+    },
+    {
+      "id": "plant_control_pack",
+      "name": "Plant Control Pack",
+      "includes": ["production_pulse", "quality_closeout", "action_os"]
+    },
+    {
+      "id": "commercial_control_pack",
+      "name": "Commercial Control Pack",
+      "includes": ["cash_watch", "sales_signal", "action_os"]
+    },
+    {
+      "id": "factory_command_pack",
+      "name": "Factory Command Pack",
+      "includes": ["production_pulse", "quality_closeout", "supplier_watch", "action_os"]
+    }
+  ],
+  "flagship": {
+    "id": "supermega_os",
+    "name": "SuperMega OS",
+    "status": "live_system",
+    "promise": "Connected action layer above Gmail, Drive, Sheets, and team inputs"
+  },
+  "replication_model": {
+    "client_specific": [
+      "terminology",
+      "owner_map",
+      "approval_ladder",
+      "data_source_paths",
+      "taxonomy",
+      "thresholds",
+      "cadence"
+    ],
+    "reusable": [
+      "workflows",
+      "output_shapes",
+      "review_rhythm",
+      "product_templates",
+      "implementation_checklists"
+    ],
+    "standard_assets": [
+      "client_context_pack",
+      "source_map",
+      "input_center_sheets",
+      "manager_action_board",
+      "role_summary_view",
+      "operating_sop",
+      "handover_checklist"
+    ]
+  }
+}
