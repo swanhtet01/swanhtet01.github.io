@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
 
 import { PageIntro } from '../components/PageIntro'
+import { checkWorkspaceHealth, workspaceFetch } from '../lib/workspaceApi'
 
 type LeadFormState = {
   name: string
@@ -10,15 +11,6 @@ type LeadFormState = {
   workflow: string
   data: string
   goal: string
-}
-
-const initialForm: LeadFormState = {
-  name: '',
-  email: '',
-  company: '',
-  workflow: 'Action OS',
-  data: 'Gmail + Drive',
-  goal: '',
 }
 
 function buildLeadMailto(payload: LeadFormState) {
@@ -38,14 +30,62 @@ function buildLeadMailto(payload: LeadFormState) {
   return `mailto:swanhtet@supermega.dev?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
 }
 
-export function ContactPage() {
-  const [form, setForm] = useState<LeadFormState>(initialForm)
-  const [status, setStatus] = useState<'idle' | 'sending'>('idle')
+function initialFormFromQuery(): LeadFormState {
+  const params = new URLSearchParams(window.location.search)
+  const requestedPackage = params.get('package')?.trim()
+  const intent = params.get('intent')?.trim()
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  return {
+    name: '',
+    email: '',
+    company: '',
+    workflow: requestedPackage || (intent === 'proposal' ? 'Action OS' : 'Action OS'),
+    data: 'Gmail + Drive',
+    goal: '',
+  }
+}
+
+export function ContactPage() {
+  const [form, setForm] = useState<LeadFormState>(initialFormFromQuery)
+  const [status, setStatus] = useState<'idle' | 'saving' | 'saved' | 'fallback'>('idle')
+  const [apiReady, setApiReady] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function checkApi() {
+      const result = await checkWorkspaceHealth()
+      if (!cancelled) {
+        setApiReady(result.ready)
+      }
+    }
+
+    void checkApi()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const mailtoUrl = useMemo(() => buildLeadMailto(form), [form])
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    setStatus('sending')
-    window.location.href = buildLeadMailto(form)
+    setStatus('saving')
+
+    if (apiReady) {
+      try {
+        await workspaceFetch('/api/contact-submissions', {
+          method: 'POST',
+          body: JSON.stringify(form),
+        })
+        setStatus('saved')
+        return
+      } catch {
+        setStatus('fallback')
+      }
+    }
+
+    window.location.href = mailtoUrl
     window.setTimeout(() => setStatus('idle'), 800)
   }
 
@@ -54,7 +94,7 @@ export function ContactPage() {
       <PageIntro
         eyebrow="Contact"
         title="Start one useful pilot."
-        description="Tell us the workflow, the data you already have, and the outcome you want first."
+        description="Tell us the workflow, the data you already have, and the first outcome you want. If the workspace API is live, the request is saved directly."
       />
 
       <section className="grid gap-6 lg:grid-cols-[0.92fr_1.08fr]">
@@ -62,25 +102,29 @@ export function ContactPage() {
           <p className="sm-kicker text-[var(--sm-accent)]">Direct path</p>
           <h2 className="mt-3 text-3xl font-bold text-white">Short brief. Fast reply.</h2>
           <p className="mt-3 text-sm leading-relaxed text-[var(--sm-muted)]">
-            We use this to scope the first useful rollout. No fake funnel. No dead-end request form.
+            This is meant to land one real pilot scope, not collect empty lead forms.
           </p>
 
           <div className="mt-6 grid gap-3">
+            <div className="sm-chip">
+              <p className="sm-kicker text-[var(--sm-accent)]">Mode</p>
+              <p className="mt-2 text-white">{apiReady ? 'Workspace API save is live' : 'Direct email fallback'}</p>
+            </div>
             <a className="sm-chip block" href="mailto:swanhtet@supermega.dev">
               <p className="sm-kicker text-[var(--sm-accent)]">Email</p>
               <p className="mt-2 text-white">swanhtet@supermega.dev</p>
             </a>
             <div className="sm-chip">
               <p className="sm-kicker text-[var(--sm-accent)]">Good first workflows</p>
-              <p className="mt-2 text-white">Supplier risk, quality closeout, cash control, daily action board</p>
+              <p className="mt-2 text-white">Supplier Watch, Quality Closeout, Cash Watch, Action OS</p>
             </div>
             <div className="sm-chip">
-              <p className="sm-kicker text-[var(--sm-accent-alt)]">Pilot shape</p>
-              <p className="mt-2 text-white">One workflow. One owner view. Two-week first sprint.</p>
+              <p className="sm-kicker text-[var(--sm-accent-alt)]">Mini add-ons</p>
+              <p className="mt-2 text-white">Attendance check-in, reply draft, document intake, director flash</p>
             </div>
             <div className="sm-chip">
-              <p className="sm-kicker text-[var(--sm-accent)]">What helps</p>
-              <p className="mt-2 text-white">One sample sheet, one mailbox, one raw process we can clean up first.</p>
+              <p className="sm-kicker text-[var(--sm-accent)]">Pilot shape</p>
+              <p className="mt-2 text-white">One workflow. One owner view. One review rhythm. Two-week first sprint.</p>
             </div>
           </div>
         </aside>
@@ -128,10 +172,11 @@ export function ContactPage() {
                 <option>Supplier Watch</option>
                 <option>Quality Closeout</option>
                 <option>Cash Watch</option>
+                <option>Production Pulse</option>
                 <option>Sales Signal</option>
-                <option>Action Board</option>
-                <option>News Brief</option>
-                <option>Lead Finder</option>
+                <option>Attendance Check-In</option>
+                <option>Document Intake</option>
+                <option>Director Flash</option>
                 <option>SuperMega OS</option>
               </select>
             </label>
@@ -159,16 +204,28 @@ export function ContactPage() {
           </div>
           <div className="mt-5 flex flex-wrap gap-3">
             <button className="sm-button-accent" type="submit">
-              {status === 'sending' ? 'Opening email...' : 'Email this brief'}
+              {status === 'saving'
+                ? 'Saving...'
+                : apiReady
+                  ? 'Save pilot request'
+                  : 'Email this brief'}
             </button>
-            <a className="sm-button-primary" href="/examples">
-              Try the tools first
+            <a className="sm-button-primary" href={mailtoUrl}>
+              Open email draft
             </a>
-            <a className="sm-button-secondary" href="mailto:swanhtet@supermega.dev">
-              Email directly
+            <a className="sm-button-secondary" href="/workspace">
+              Open workspace
             </a>
           </div>
-          <p className="mt-3 text-sm text-[var(--sm-muted)]">This opens a direct email draft. Keep it short and concrete.</p>
+          <p className="mt-3 text-sm text-[var(--sm-muted)]">
+            {status === 'saved'
+              ? 'Request saved in the workspace backend.'
+              : status === 'fallback'
+                ? 'Backend save failed, so direct email is still available.'
+                : apiReady
+                  ? 'This request will be saved directly when the workspace API is available.'
+                  : 'This falls back to direct email when the workspace API is not running.'}
+          </p>
         </form>
       </section>
     </div>

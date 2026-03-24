@@ -1,8 +1,12 @@
 beautifulsoup4
+fastapi
 google-api-python-client
 google-auth
 google-auth-oauthlib
 langgraph
 openpyxl
+pydantic
 pypdf
 python-dotenv
+sqlmodel
+uvicorn

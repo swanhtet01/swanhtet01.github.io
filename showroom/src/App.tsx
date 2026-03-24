@@ -8,6 +8,7 @@ import { NotFoundPage } from './pages/NotFoundPage'
 import { PackagesPage } from './pages/PackagesPage'
 import { ProductsPage } from './pages/ProductsPage'
 import { TryPage } from './pages/TryPage'
+import { WorkspacePage } from './pages/WorkspacePage'
 
 function App() {
   return (
@@ -18,6 +19,7 @@ function App() {
           <Route element={<HomePage />} index />
           <Route element={<ProductsPage />} path="products" />
           <Route element={<TryPage />} path="examples" />
+          <Route element={<WorkspacePage />} path="workspace" />
           <Route element={<Navigate replace to="/examples" />} path="demos" />
           <Route element={<Navigate replace to="/examples" />} path="prototypes" />
           <Route element={<Navigate replace to="/examples" />} path="try" />

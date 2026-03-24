@@ -30,6 +30,36 @@
       "role": "proof"
     }
   ],
+  "mini_products": [
+    {
+      "id": "attendance_checkin",
+      "name": "Attendance Check-In",
+      "purpose": "Simple shift attendance with photo-assisted proof",
+      "buyer": ["plant_manager", "hr", "operations"],
+      "role": "mini_product"
+    },
+    {
+      "id": "reply_draft",
+      "name": "Reply Draft",
+      "purpose": "Turn recurring supplier or customer threads into a cleaner draft response",
+      "buyer": ["procurement", "sales", "director"],
+      "role": "mini_product"
+    },
+    {
+      "id": "document_intake",
+      "name": "Document Intake",
+      "purpose": "Turn a messy file or email into a structured record",
+      "buyer": ["operations", "finance", "quality"],
+      "role": "mini_product"
+    },
+    {
+      "id": "director_flash",
+      "name": "Director Flash",
+      "purpose": "One short management brief from the latest actions and signals",
+      "buyer": ["director", "founder", "gm"],
+      "role": "mini_product"
+    }
+  ],
   "modules": [
     {
       "id": "action_os",
