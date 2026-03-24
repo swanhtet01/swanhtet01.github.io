@@ -27,7 +27,23 @@
       "publish_folder_id": "REPLACE_WITH_PUBLISH_FOLDER_ID"
     },
     "sheets": {
-      "workspace_folder_name": "ClientA Input Center"
+      "workspace_folder_name": "ClientA Input Center",
+      "templates": [
+        {
+          "key": "daily_action_update",
+          "title": "Daily Action Update",
+          "description": "Daily management updates from sales, finance, and operations.",
+          "headers": ["updated_at", "team", "summary", "priority", "owner", "due_date", "status", "notes"],
+          "sample_row": ["2026-03-24", "Sales", "Distributor demand softer in Mandalay", "medium", "Sales Manager", "2026-03-25", "open", "Review weekly order trend"]
+        },
+        {
+          "key": "collections_tracker",
+          "title": "Collections Tracker",
+          "description": "Track overdue invoices, promises, and next follow-up.",
+          "headers": ["updated_at", "customer", "invoice_no", "amount", "overdue_days", "promise_date", "owner", "status", "next_action"],
+          "sample_row": ["2026-03-24", "Top 20 Accounts", "INV-1001", "2500000", "18", "2026-03-27", "Finance Manager", "open", "Call customer and confirm remittance date"]
+        }
+      ]
     },
     "external": {
       "watch_keywords": ["market", "customer", "pricing", "import", "competitor"],
@@ -55,6 +71,22 @@
     "search_queries": [
       { "name": "invoice", "query": "invoice", "top_k": 5 },
       { "name": "sales", "query": "sales", "top_k": 5 }
+    ],
+    "input_templates": [
+      {
+        "key": "daily_action_update",
+        "title": "Daily Action Update",
+        "description": "Daily management updates from sales, finance, and operations.",
+        "headers": ["updated_at", "team", "summary", "priority", "owner", "due_date", "status", "notes"],
+        "sample_row": ["2026-03-24", "Sales", "Distributor demand softer in Mandalay", "medium", "Sales Manager", "2026-03-25", "open", "Review weekly order trend"]
+      },
+      {
+        "key": "collections_tracker",
+        "title": "Collections Tracker",
+        "description": "Track overdue invoices, promises, and next follow-up.",
+        "headers": ["updated_at", "customer", "invoice_no", "amount", "overdue_days", "promise_date", "owner", "status", "next_action"],
+        "sample_row": ["2026-03-24", "Top 20 Accounts", "INV-1001", "2500000", "18", "2026-03-27", "Finance Manager", "open", "Call customer and confirm remittance date"]
+      }
     ],
     "views": ["action_board", "founder_view", "collections_queue", "sales_watch"]
   },

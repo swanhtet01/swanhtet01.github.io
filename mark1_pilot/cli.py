@@ -1543,6 +1543,12 @@ def run_autopilot(
         )
 
     execute_step(
+        "context-blueprint",
+        False,
+        lambda: run_context_blueprint(config_path),
+    )
+
+    execute_step(
         "pilot-solution",
         True,
         lambda: run_pilot_solution(
