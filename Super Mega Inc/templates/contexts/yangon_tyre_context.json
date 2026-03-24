@@ -68,6 +68,27 @@
           "description": "Incident and CAPA intake for DQMS follow-up.",
           "headers": ["reported_at", "incident_id", "supplier", "product_or_batch", "issue_type", "severity", "status", "owner", "target_close_date", "evidence_link", "notes"],
           "sample_row": ["2026-03-10", "INC-MANUAL-001", "KIIC", "Batch-101", "Bead wire defect", "high", "open", "Quality Team", "2026-03-14", "", "Containment started"]
+        },
+        {
+          "key": "procurement_supplier_tracker",
+          "title": "YTF Procurement Supplier Tracker",
+          "description": "Track supplier commitments, ETAs, and procurement risks.",
+          "headers": ["updated_at", "supplier", "po_or_pi", "material", "quantity", "eta", "status", "risk_level", "owner", "next_action"],
+          "sample_row": ["2026-03-10", "JUNKY", "PI-12345", "Raw material", "2 containers", "2026-03-22", "in_transit", "medium", "Procurement Team", "Confirm customs docs"]
+        },
+        {
+          "key": "sales_market_signal",
+          "title": "YTF Sales And Market Signal",
+          "description": "Sales team updates and market movement signals.",
+          "headers": ["updated_at", "customer_or_market", "signal_type", "product", "volume_or_value", "status", "owner", "next_action", "link_or_source"],
+          "sample_row": ["2026-03-10", "Yangon distributors", "demand_shift", "PCR", "+8%", "review", "Sales Team", "Recheck weekly forecast", ""]
+        },
+        {
+          "key": "manager_action_board",
+          "title": "YTF Manager Action Board",
+          "description": "One manager-facing queue of actions, owners, due dates, and closure status seeded from the Action OS.",
+          "headers": ["captured_at", "action_id", "lane", "title", "action", "owner", "priority", "due", "status", "source", "evidence_link", "notes"],
+          "sample_row": ["2026-03-10T08:30:00+06:30", "input-daily_ops_update-2", "do_now", "Power fluctuation | Plant A | Ko Aung", "Escalate maintenance and confirm recovery plan.", "Ko Aung", "high", "2026-03-11", "open", "input:daily_ops_update", "", "Seeded from Action OS. Update status, owner, due date, and closure notes here."]
         }
       ]
     },
@@ -112,7 +133,7 @@
   },
   "governance": {
     "mode": "read_only",
-    "writeback_allowed": false,
+    "writeback_allowed": true,
     "approval_required_for": ["close_quality_incident", "supplier_override"],
     "closers": ["Quality Team"],
     "overrides": ["Director"]

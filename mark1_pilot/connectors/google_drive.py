@@ -788,6 +788,74 @@ class GoogleDriveProbe:
                 "message": str(exc),
             }
 
+    def overwrite_input_center_template_rows(
+        self,
+        *,
+        spreadsheet_id: str,
+        sheet_name: str,
+        headers: list[str],
+        rows: list[list[str]],
+    ) -> dict[str, Any]:
+        base_error = self._validate_base_config()
+        if base_error:
+            return base_error
+
+        if not spreadsheet_id:
+            return {
+                "status": "missing_spreadsheet_id",
+                "message": "No spreadsheet ID was provided for the input-center write-back step.",
+            }
+
+        normalized_headers = [str(value).strip() for value in headers if str(value).strip()]
+        if not normalized_headers:
+            return {
+                "status": "missing_headers",
+                "message": "Input-center write-back requires at least one header.",
+            }
+
+        normalized_rows: list[list[str]] = []
+        for row in rows:
+            padded = [str(value) for value in list(row[: len(normalized_headers)])]
+            while len(padded) < len(normalized_headers):
+                padded.append("")
+            normalized_rows.append(padded)
+
+        try:
+            _, sheets_service, credentials = self._build_drive_and_sheets_services(
+                [DRIVE_FULL_SCOPE, SHEETS_SCOPE]
+            )
+            sheets_service.spreadsheets().values().clear(
+                spreadsheetId=spreadsheet_id,
+                range=f"{sheet_name}!A:ZZ",
+                body={},
+            ).execute()
+            sheets_service.spreadsheets().values().update(
+                spreadsheetId=spreadsheet_id,
+                range=f"{sheet_name}!A1",
+                valueInputOption="RAW",
+                body={"values": [normalized_headers] + normalized_rows},
+            ).execute()
+
+            return {
+                "status": "ready",
+                "service_account_email": getattr(credentials, "service_account_email", ""),
+                "spreadsheet_id": spreadsheet_id,
+                "sheet_name": sheet_name,
+                "row_count": len(normalized_rows),
+            }
+        except ImportError as exc:
+            return {
+                "status": "dependency_missing",
+                "message": f"Google API client libraries are not available: {exc}",
+            }
+        except Exception as exc:
+            return {
+                "status": "error",
+                "message": str(exc),
+                "spreadsheet_id": spreadsheet_id,
+                "sheet_name": sheet_name,
+            }
+
     def publish_dashboard_bundle(
         self,
         *,

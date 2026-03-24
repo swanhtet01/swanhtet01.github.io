@@ -68,9 +68,19 @@ function Invoke-CommandAttempt {
 
     Push-Location $RepoRoot
     try {
-        & $Attempt.CommandPath @($Attempt.PrefixArgs + $CliArgsToPass) | Out-Host
-        $exitCode = $LASTEXITCODE
-        return [int]$exitCode
+        if ($Attempt.Name -eq "wsl-python3") {
+            & $Attempt.CommandPath @($Attempt.PrefixArgs + $CliArgsToPass)
+            return [int]$LASTEXITCODE
+        }
+
+        $process = Start-Process `
+            -FilePath $Attempt.CommandPath `
+            -ArgumentList ($Attempt.PrefixArgs + $CliArgsToPass) `
+            -WorkingDirectory $RepoRoot `
+            -NoNewWindow `
+            -Wait `
+            -PassThru
+        return [int]$process.ExitCode
     }
     finally {
         Pop-Location
@@ -123,16 +133,6 @@ if ($gcpServiceMatches) {
 }
 Set-EnvPathIfMissing -Name "GOOGLE_SERVICE_ACCOUNT_JSON" -Candidates $gcpServiceCandidates
 
-$pythonCmd = Get-Command python -ErrorAction SilentlyContinue
-if ($pythonCmd -and $pythonCmd.Source -notmatch "WindowsApps\\python.exe$") {
-    Add-Attempt -List $attempts -Name "python" -CommandPath $pythonCmd.Source -PrefixArgs @("-m", "mark1_pilot.cli")
-}
-
-$pyCmd = Get-Command py -ErrorAction SilentlyContinue
-if ($pyCmd -and $pyCmd.Source -notmatch "WindowsApps\\py.exe$") {
-    Add-Attempt -List $attempts -Name "py" -CommandPath $pyCmd.Source -PrefixArgs @("-3", "-m", "mark1_pilot.cli")
-}
-
 $venvDotWindowsPython = Join-Path $repoRoot ".venv\Scripts\python.exe"
 if (Test-Path $venvDotWindowsPython) {
     Add-Attempt -List $attempts -Name ".venv-windows" -CommandPath $venvDotWindowsPython -PrefixArgs @("-m", "mark1_pilot.cli")
@@ -147,6 +147,16 @@ if (Test-Path $sharedVenvWindowsPython) {
 $venvWindowsPython = Join-Path $repoRoot "venv\Scripts\python.exe"
 if (Test-Path $venvWindowsPython) {
     Add-Attempt -List $attempts -Name "venv-windows" -CommandPath $venvWindowsPython -PrefixArgs @("-m", "mark1_pilot.cli")
+}
+
+$pythonCmd = Get-Command python -ErrorAction SilentlyContinue
+if ($pythonCmd -and $pythonCmd.Source -notmatch "WindowsApps\\python.exe$") {
+    Add-Attempt -List $attempts -Name "python" -CommandPath $pythonCmd.Source -PrefixArgs @("-m", "mark1_pilot.cli")
+}
+
+$pyCmd = Get-Command py -ErrorAction SilentlyContinue
+if ($pyCmd -and $pyCmd.Source -notmatch "WindowsApps\\py.exe$") {
+    Add-Attempt -List $attempts -Name "py" -CommandPath $pyCmd.Source -PrefixArgs @("-3", "-m", "mark1_pilot.cli")
 }
 
 $wslCmd = Get-Command wsl -ErrorAction SilentlyContinue

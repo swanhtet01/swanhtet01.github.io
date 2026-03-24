@@ -86,13 +86,20 @@
         "description": "Track overdue invoices, promises, and next follow-up.",
         "headers": ["updated_at", "customer", "invoice_no", "amount", "overdue_days", "promise_date", "owner", "status", "next_action"],
         "sample_row": ["2026-03-24", "Top 20 Accounts", "INV-1001", "2500000", "18", "2026-03-27", "Finance Manager", "open", "Call customer and confirm remittance date"]
+      },
+      {
+        "key": "manager_action_board",
+        "title": "Manager Action Board",
+        "description": "One manager-facing queue of actions, owners, due dates, and closure status seeded from Action OS.",
+        "headers": ["captured_at", "action_id", "lane", "title", "action", "owner", "priority", "due", "status", "source", "evidence_link", "notes"],
+        "sample_row": ["2026-03-24T09:00:00+06:30", "collections-INV-1001", "do_now", "Top 20 Accounts overdue follow-up", "Call customer and confirm remittance date.", "Finance Manager", "high", "2026-03-25", "open", "sheet:collections_tracker", "", "Seeded from Action OS. Update status, owner, due date, and closure notes here."]
       }
     ],
     "views": ["action_board", "founder_view", "collections_queue", "sales_watch"]
   },
   "governance": {
     "mode": "draft_only",
-    "writeback_allowed": false,
+    "writeback_allowed": true,
     "approval_required_for": ["send_collection_draft"],
     "closers": ["Finance Manager"],
     "overrides": ["Founder"]

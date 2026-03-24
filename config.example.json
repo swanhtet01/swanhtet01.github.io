@@ -276,6 +276,39 @@
           "Recheck weekly forecast",
           ""
         ]
+      },
+      {
+        "key": "manager_action_board",
+        "title": "YTF Manager Action Board",
+        "description": "One manager-facing queue of actions, owners, due dates, and closure status seeded from the Action OS.",
+        "headers": [
+          "captured_at",
+          "action_id",
+          "lane",
+          "title",
+          "action",
+          "owner",
+          "priority",
+          "due",
+          "status",
+          "source",
+          "evidence_link",
+          "notes"
+        ],
+        "sample_row": [
+          "2026-03-10T08:30:00+06:30",
+          "input-daily_ops_update-2",
+          "do_now",
+          "Power fluctuation | Plant A | Ko Aung",
+          "Escalate maintenance and confirm recovery plan.",
+          "Ko Aung",
+          "high",
+          "2026-03-11",
+          "open",
+          "input:daily_ops_update",
+          "",
+          "Seeded from Action OS. Update status, owner, due date, and closure notes here."
+        ]
       }
     ]
   },

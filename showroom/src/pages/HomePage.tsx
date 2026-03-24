@@ -35,7 +35,7 @@ export function HomePage() {
               AI agents for messy operators.
             </h1>
             <p className="mt-5 max-w-3xl text-base leading-relaxed text-[var(--sm-muted)] lg:text-lg">
-              Try the proof tools first. Then deploy one reusable workflow template. Then run your company from one action layer.
+              Start with one free tool. Then connect Gmail, Drive, and Sheets. Then run one clean action system for the team.
             </p>
             <div className="mt-7 flex flex-wrap gap-3">
               <Link className="sm-button-primary" to="/examples">
@@ -49,17 +49,17 @@ export function HomePage() {
               <div className="sm-metric-card">
                 <p className="sm-kicker text-[var(--sm-accent)]">Free</p>
                 <p className="mt-3 text-3xl font-bold text-white">{freeTools.length}</p>
-                <p className="mt-2 text-sm text-[var(--sm-muted)]">Simple tools anyone can test now</p>
+                <p className="mt-2 text-sm text-[var(--sm-muted)]">Tools you can try now</p>
               </div>
               <div className="sm-metric-card">
                 <p className="sm-kicker text-[var(--sm-accent-alt)]">Deploy</p>
                 <p className="mt-3 text-3xl font-bold text-white">{sellableTemplates.length}</p>
-                <p className="mt-2 text-sm text-[var(--sm-muted)]">Reusable workflow templates to sell and deploy</p>
+                <p className="mt-2 text-sm text-[var(--sm-muted)]">Workflows we deploy on your data</p>
               </div>
               <div className="sm-metric-card">
                 <p className="sm-kicker text-[var(--sm-accent)]">Flagship</p>
                 <p className="mt-3 text-lg font-bold text-white">{flagshipSystem.name}</p>
-                <p className="mt-2 text-sm text-[var(--sm-muted)]">AI-native ERP alternative</p>
+                <p className="mt-2 text-sm text-[var(--sm-muted)]">One action layer for managers and directors</p>
               </div>
             </div>
           </div>
@@ -103,7 +103,7 @@ export function HomePage() {
                     <div>
                       <p className="font-semibold text-white">{lane}</p>
                       <p className="text-sm text-[var(--sm-muted)]">
-                        {templates.map((template) => `${template.name}: ${template.firstWeekOutcome}`).join(' ')}
+                        {templates.map((template) => template.name).join(' · ')}
                       </p>
                     </div>
                     <span className="sm-status-pill">{templates.length} templates</span>
@@ -118,7 +118,7 @@ export function HomePage() {
       <section className="space-y-4">
         <div className="flex items-center justify-between gap-4">
           <div>
-            <p className="sm-kicker text-[var(--sm-accent)]">Proof layer</p>
+            <p className="sm-kicker text-[var(--sm-accent)]">Try free</p>
             <h2 className="mt-2 text-2xl font-bold text-white">Three free tools.</h2>
           </div>
           <Link className="sm-link" to="/examples">
@@ -154,8 +154,8 @@ export function HomePage() {
 
       <section className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
         <article className="sm-surface p-6">
-          <p className="sm-kicker text-[var(--sm-accent-alt)]">Deploy next</p>
-          <h2 className="mt-3 text-2xl font-bold text-white">Sellable workflow lanes.</h2>
+          <p className="sm-kicker text-[var(--sm-accent-alt)]">Deploy on your data</p>
+          <h2 className="mt-3 text-2xl font-bold text-white">Pick one workflow first.</h2>
           <div className="mt-4 grid gap-4">
             {laneSummaries.map(({ lane, templates }) => (
               <div className="sm-surface-soft p-4" key={lane}>
@@ -182,8 +182,8 @@ export function HomePage() {
         </article>
 
         <article className="sm-surface p-6">
-          <p className="sm-kicker text-[var(--sm-accent)]">How it lands</p>
-          <h2 className="mt-3 text-2xl font-bold text-white">One clean buying path.</h2>
+          <p className="sm-kicker text-[var(--sm-accent)]">How it works</p>
+          <h2 className="mt-3 text-2xl font-bold text-white">Simple rollout.</h2>
           <div className="mt-4 grid gap-3">
             {engagementFlow.map((step, index) => (
               <div className="sm-chip flex items-center gap-3 text-sm text-white" key={step}>

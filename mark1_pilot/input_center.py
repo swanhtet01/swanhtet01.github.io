@@ -123,6 +123,39 @@ DEFAULT_INPUT_TEMPLATE_SPECS: list[dict[str, Any]] = [
             "",
         ],
     },
+    {
+        "key": "manager_action_board",
+        "title": "YTF Manager Action Board",
+        "description": "One manager-facing queue of actions, owners, due dates, and closure status seeded from the Action OS.",
+        "headers": [
+            "captured_at",
+            "action_id",
+            "lane",
+            "title",
+            "action",
+            "owner",
+            "priority",
+            "due",
+            "status",
+            "source",
+            "evidence_link",
+            "notes",
+        ],
+        "sample_row": [
+            "2026-03-10T08:30:00+06:30",
+            "input-daily_ops_update-2",
+            "do_now",
+            "Power fluctuation | Plant A | Ko Aung",
+            "Escalate maintenance and confirm recovery plan.",
+            "Ko Aung",
+            "high",
+            "2026-03-11",
+            "open",
+            "input:daily_ops_update",
+            "",
+            "Seeded from Action OS. Update status, owner, due date, and closure notes here.",
+        ],
+    },
 ]
 
 
@@ -244,7 +277,7 @@ def _row_is_open(row: dict[str, Any]) -> bool:
 def _row_summary(row: dict[str, Any]) -> str:
     lower_row = {key.lower(): value for key, value in row.items()}
     main_parts = [
-        _first_present(lower_row, ("top_issue", "issue_type", "signal_type", "next_action", "notes")),
+        _first_present(lower_row, ("title", "top_issue", "issue_type", "signal_type", "next_action", "action", "notes")),
         _first_present(lower_row, ("supplier", "plant", "team", "customer_or_market", "product_or_batch")),
         _first_present(lower_row, ("owner", "action_owner")),
     ]
@@ -258,6 +291,7 @@ def _row_updated_at(row: dict[str, Any]) -> tuple[str, datetime | None]:
         lower_row,
         (
             "updated_at",
+            "captured_at",
             "reported_at",
             "target_close_date",
             "action_due_date",
