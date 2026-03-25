@@ -41,7 +41,7 @@ export async function workspaceFetch<T>(path: string, init?: RequestInit): Promi
 }
 
 export async function checkWorkspaceHealth() {
-  if (!workspaceApiBase) {
+  if (typeof window === 'undefined') {
     return { ready: false as const }
   }
 

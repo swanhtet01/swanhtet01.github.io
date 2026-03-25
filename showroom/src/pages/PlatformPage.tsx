@@ -68,11 +68,11 @@ export function PlatformPage() {
           </div>
 
           <div className="mt-6 flex flex-wrap gap-3">
-            <Link className="sm-button-primary" to="/workspace">
-              Open Action OS
+            <Link className="sm-button-primary" to="/workbench">
+              Open Workbench
             </Link>
-            <Link className="sm-button-secondary" to="/solution-architect">
-              Design a rollout
+            <Link className="sm-button-secondary" to="/workspace">
+              Open Action OS
             </Link>
             <Link className="sm-button-accent" to="/contact?package=Action%20OS">
               Start with this

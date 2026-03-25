@@ -103,6 +103,17 @@ def ensure_schema(db_path: Path) -> None:
                 goal TEXT NOT NULL
             );
 
+            CREATE TABLE IF NOT EXISTS product_feedback (
+                feedback_id TEXT PRIMARY KEY,
+                created_at TEXT NOT NULL,
+                source TEXT NOT NULL,
+                surface TEXT NOT NULL,
+                category TEXT NOT NULL,
+                priority TEXT NOT NULL,
+                status TEXT NOT NULL,
+                note TEXT NOT NULL
+            );
+
             CREATE TABLE IF NOT EXISTS attendance_events (
                 event_id INTEGER PRIMARY KEY AUTOINCREMENT,
                 created_at TEXT NOT NULL,
@@ -883,6 +894,116 @@ def list_contact_submissions(db_path: Path, *, limit: int = 50) -> list[dict[str
             "workflow": row["workflow"],
             "data_summary": row["data_summary"],
             "goal": row["goal"],
+        }
+        for row in rows
+    ]
+
+
+def add_product_feedback(
+    db_path: Path,
+    *,
+    source: str,
+    surface: str,
+    category: str,
+    priority: str,
+    status: str,
+    note: str,
+) -> dict[str, Any]:
+    ensure_schema(db_path)
+    created_at = datetime.now().astimezone().isoformat()
+    normalized_source = str(source or "").strip() or "workbench"
+    normalized_surface = str(surface or "").strip().lower() or "general"
+    normalized_category = str(category or "").strip().lower() or "idea"
+    normalized_priority = str(priority or "").strip().lower() or "medium"
+    normalized_status = str(status or "").strip().lower() or "open"
+    normalized_note = str(note or "").strip()
+    feedback_id = _stable_key(
+        "FDB",
+        f"{normalized_surface}:{normalized_category}:{normalized_priority}:{normalized_note}:{created_at}",
+    )
+
+    with _connect(db_path) as connection:
+        connection.execute(
+            """
+            INSERT INTO product_feedback (
+                feedback_id,
+                created_at,
+                source,
+                surface,
+                category,
+                priority,
+                status,
+                note
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                feedback_id,
+                created_at,
+                normalized_source,
+                normalized_surface,
+                normalized_category,
+                normalized_priority,
+                normalized_status,
+                normalized_note,
+            ),
+        )
+        connection.commit()
+    return {
+        "feedback_id": feedback_id,
+        "created_at": created_at,
+        "source": normalized_source,
+        "surface": normalized_surface,
+        "category": normalized_category,
+        "priority": normalized_priority,
+        "status": normalized_status,
+        "note": normalized_note,
+    }
+
+
+def list_product_feedback(
+    db_path: Path,
+    *,
+    surface: str | None = None,
+    status: str | None = None,
+    limit: int = 50,
+) -> list[dict[str, Any]]:
+    ensure_schema(db_path)
+    query = """
+        SELECT
+            feedback_id,
+            created_at,
+            source,
+            surface,
+            category,
+            priority,
+            status,
+            note
+        FROM product_feedback
+    """
+    conditions: list[str] = []
+    params: list[Any] = []
+    if surface:
+        conditions.append("surface = ?")
+        params.append(surface)
+    if status:
+        conditions.append("status = ?")
+        params.append(status)
+    if conditions:
+        query += " WHERE " + " AND ".join(conditions)
+    query += " ORDER BY CASE status WHEN 'open' THEN 0 WHEN 'review' THEN 1 ELSE 2 END, CASE priority WHEN 'high' THEN 0 WHEN 'medium' THEN 1 ELSE 2 END, created_at DESC LIMIT ?"
+    params.append(max(1, int(limit)))
+    with _connect(db_path) as connection:
+        rows = connection.execute(query, params).fetchall()
+    return [
+        {
+            "feedback_id": row["feedback_id"],
+            "created_at": row["created_at"],
+            "source": row["source"],
+            "surface": row["surface"],
+            "category": row["category"],
+            "priority": row["priority"],
+            "status": row["status"],
+            "note": row["note"],
         }
         for row in rows
     ]
@@ -1942,6 +2063,27 @@ def load_metric_summary(db_path: Path) -> dict[str, Any]:
             {"metric_group": str(row["metric_group"]), "item_count": int(row["item_count"])}
             for row in group_rows
         ],
+    }
+
+
+def load_product_feedback_summary(db_path: Path) -> dict[str, Any]:
+    ensure_schema(db_path)
+    with _connect(db_path) as connection:
+        total = int(connection.execute("SELECT COUNT(*) FROM product_feedback").fetchone()[0])
+        open_rows = connection.execute(
+            "SELECT COUNT(*) FROM product_feedback WHERE status IN ('open', 'review')"
+        ).fetchone()
+        high_rows = connection.execute(
+            "SELECT COUNT(*) FROM product_feedback WHERE priority = 'high'"
+        ).fetchone()
+        category_rows = connection.execute(
+            "SELECT category, COUNT(*) AS item_count FROM product_feedback GROUP BY category ORDER BY item_count DESC, category LIMIT 8"
+        ).fetchall()
+    return {
+        "feedback_count": total,
+        "open_count": int(open_rows[0] if open_rows else 0),
+        "high_priority_count": int(high_rows[0] if high_rows else 0),
+        "by_category": {str(row["category"]): int(row["item_count"]) for row in category_rows},
     }
 
 

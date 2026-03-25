@@ -23,11 +23,11 @@ export function HomePage() {
             </p>
 
             <div className="mt-7 flex flex-wrap gap-3">
-              <Link className="sm-button-primary" to="/platform">
-                See Action OS
+              <Link className="sm-button-primary" to="/workbench">
+                Open Workbench
               </Link>
-              <Link className="sm-button-secondary" to="/products">
-                See products
+              <Link className="sm-button-secondary" to="/platform">
+                See Action OS
               </Link>
               <Link className="sm-button-accent" to="/contact">
                 Start pilot
@@ -69,6 +69,12 @@ export function HomePage() {
                   <p className="sm-kicker text-[var(--sm-accent-alt)]">Action OS</p>
                   <p className="mt-3 text-lg font-bold text-white">One action board for managers and directors.</p>
                   <p className="mt-2 text-sm text-[var(--sm-muted)]">Messy updates get cleaned into one owner queue instead of scattered follow-up.</p>
+                </div>
+
+                <div className="sm-proof-card">
+                  <p className="sm-kicker text-[var(--sm-accent)]">Workbench</p>
+                  <p className="mt-3 text-lg font-bold text-white">One daily surface to run and improve the product.</p>
+                  <p className="mt-2 text-sm text-[var(--sm-muted)]">Open the live modules, see system pulse, and save product feedback directly into the workbench.</p>
                 </div>
 
                 <div className="sm-proof-card">

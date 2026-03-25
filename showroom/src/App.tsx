@@ -17,6 +17,7 @@ import { ProductsPage } from './pages/ProductsPage'
 import { ReceivingControlPage } from './pages/ReceivingControlPage'
 import { SolutionArchitectPage } from './pages/SolutionArchitectPage'
 import { TryPage } from './pages/TryPage'
+import { WorkbenchPage } from './pages/WorkbenchPage'
 import { WorkspacePage } from './pages/WorkspacePage'
 
 function App() {
@@ -27,6 +28,8 @@ function App() {
         <Route element={<SiteFrame />} path="/">
           <Route element={<HomePage />} index />
           <Route element={<PlatformPage />} path="platform" />
+          <Route element={<WorkbenchPage />} path="workbench" />
+          <Route element={<WorkbenchPage />} path="app" />
           <Route element={<ProductsPage />} path="products" />
           <Route element={<PackagesPage />} path="solutions" />
           <Route element={<TryPage />} path="examples" />

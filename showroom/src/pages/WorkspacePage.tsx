@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import { PageIntro } from '../components/PageIntro'
-import { workspaceApiBase, workspaceFetch } from '../lib/workspaceApi'
+import { checkWorkspaceHealth, workspaceFetch } from '../lib/workspaceApi'
 
 type SummaryPayload = {
   coverage_score?: number
@@ -90,7 +90,9 @@ export function WorkspacePage() {
     let cancelled = false
 
     async function load() {
-      if (!workspaceApiBase) {
+      const health = await checkWorkspaceHealth()
+      if (cancelled) return
+      if (!health.ready) {
         setError('Workspace API is not connected on this host yet.')
         setLoading(false)
         return
@@ -148,7 +150,10 @@ export function WorkspacePage() {
           </div>
 
           <div className="mt-6 flex flex-wrap gap-3">
-            <Link className="sm-button-primary" to="/receiving-control">
+            <Link className="sm-button-primary" to="/workbench">
+              Open Workbench
+            </Link>
+            <Link className="sm-button-secondary" to="/receiving-control">
               Open Receiving Control
             </Link>
             <Link className="sm-button-secondary" to="/inventory-pulse">
