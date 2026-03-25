@@ -6,12 +6,19 @@ import { trialModules } from '../content'
 import { checkWorkspaceHealth, workspaceFetch } from '../lib/workspaceApi'
 
 type TrialTab = 'lead-finder' | 'market-brief' | 'action-board'
+type LeadSource = 'web' | 'social' | 'maps'
 
 type LeadRow = {
   name: string
   email: string
   phone: string
   website: string
+  source: string
+  source_url: string
+  snippet: string
+  social_profiles: string[]
+  fit_reasons: string[]
+  provider: string
   score: number
 }
 
@@ -29,6 +36,7 @@ type ActionRow = {
   due: string
 }
 
+const LEAD_SAMPLE_QUERY = 'spa in yangon'
 const LEAD_SAMPLE_TEXT = `Shwe Auto House | www.shweautohouse.com | sales@shweautohouse.com | +95 9 777 111 222 | tyre distributor Yangon
 Mingalar Tyre Service, www.mingalartyreservice.com, contact@mingalartyreservice.com, +95 9 765 444 222, auto service and tyre retail
 Golden Highway Parts | www.goldenhighwayparts.com | +95 9 500 113 221 | truck and industrial tyre buyer
@@ -38,6 +46,8 @@ const MARKET_SAMPLE_TEXT = `Long queues form as vehicles line up for fuel in Yan
 MRPPA market note: RSS 1 at USD 1800 to 2200 per ton.
 Customs clearance delay reported on one inbound industrial shipment.
 Distributor demand shifts toward truck tyres this week.`
+const MARKET_SAMPLE_URLS = `https://www.gnlm.com.mm/
+https://elevenmyanmar.com/`
 
 const ACTION_SAMPLE_TEXT = `Bead wire defect | KIIC | Quality Team
 Confirm customs docs | JUNKY | Procurement Team
@@ -84,6 +94,12 @@ function parseLeads(rawText: string): LeadRow[] {
       email: emails[0] ?? '',
       phone: phones[0] ?? '',
       website: websites[0] ?? '',
+      source: 'Pasted list',
+      source_url: '',
+      snippet: '',
+      social_profiles: [],
+      fit_reasons: ['manual input'],
+      provider: 'Manual',
       score,
     })
   }
@@ -197,10 +213,20 @@ export function TryPage() {
   const [apiReady, setApiReady] = useState(false)
   const [busy, setBusy] = useState(false)
 
+  const [leadQuery, setLeadQuery] = useState('')
+  const [leadKeywords, setLeadKeywords] = useState('')
+  const [leadLimit, setLeadLimit] = useState(8)
+  const [leadSources, setLeadSources] = useState<Record<LeadSource, boolean>>({
+    web: true,
+    social: true,
+    maps: true,
+  })
   const [leadInput, setLeadInput] = useState('')
   const [leadRows, setLeadRows] = useState<LeadRow[]>([])
+  const [leadProvider, setLeadProvider] = useState('')
 
   const [marketInput, setMarketInput] = useState('')
+  const [marketUrls, setMarketUrls] = useState('')
   const [marketOutput, setMarketOutput] = useState<MarketOutput | null>(null)
 
   const [actionInput, setActionInput] = useState('')
@@ -227,32 +253,57 @@ export function TryPage() {
     window.history.replaceState(null, '', `#${tab}`)
   }
 
-  async function runLeadFinder(text: string) {
+  function selectedLeadSources() {
+    return (Object.entries(leadSources) as Array<[LeadSource, boolean]>)
+      .filter(([, enabled]) => enabled)
+      .map(([source]) => source)
+  }
+
+  function toggleLeadSource(source: LeadSource) {
+    setLeadSources((previous) => ({ ...previous, [source]: !previous[source] }))
+  }
+
+  async function runLeadFinder({ query = leadQuery, text = leadInput }: { query?: string; text?: string } = {}) {
     setBusy(true)
     try {
-      if (apiReady) {
-        const payload = await workspaceFetch<{ rows: LeadRow[] }>('/api/tools/lead-finder', {
+      if (apiReady && (query.trim() || text.trim())) {
+        const payload = await workspaceFetch<{ rows: LeadRow[]; provider?: string }>('/api/tools/lead-finder', {
           method: 'POST',
-          body: JSON.stringify({ raw_text: text }),
+          body: JSON.stringify({
+            raw_text: text,
+            query,
+            keywords: leadKeywords
+              .split(',')
+              .map((value) => value.trim())
+              .filter(Boolean),
+            sources: selectedLeadSources(),
+            limit: leadLimit,
+          }),
         })
         setLeadRows(payload.rows ?? [])
+        setLeadProvider(payload.provider ?? '')
       } else {
         setLeadRows(parseLeads(text))
+        setLeadProvider('Manual')
       }
     } finally {
       setBusy(false)
     }
   }
 
-  async function runNewsBrief(text: string) {
+  async function runNewsBrief(text: string, urlsText = marketUrls) {
     setBusy(true)
     try {
       if (apiReady) {
+        const urls = urlsText
+          .split(/\r?\n|,/)
+          .map((value) => value.trim())
+          .filter(Boolean)
         const payload = await workspaceFetch<{ summary: string; themes: string[]; watch_items: string[]; actions: string[] }>(
           '/api/tools/news-brief',
           {
             method: 'POST',
-            body: JSON.stringify({ raw_text: text }),
+            body: JSON.stringify({ raw_text: text, urls }),
           },
         )
         setMarketOutput({
@@ -347,26 +398,97 @@ export function TryPage() {
         <section className="grid gap-5 lg:grid-cols-[1fr_1fr]">
           <article className="sm-surface p-6">
             <h2 className="text-xl font-bold text-white">Lead Finder</h2>
-            <p className="mt-2 text-sm text-[var(--sm-muted)]">Paste a rough list. The tool scores it and makes it easier to work.</p>
-            <textarea
-              className="mt-4 min-h-72 w-full rounded-2xl border border-white/8 bg-white/4 px-4 py-4 text-sm text-white"
-              onChange={(event) => setLeadInput(event.target.value)}
-              placeholder="Paste leads here..."
-              value={leadInput}
-            />
+            <p className="mt-2 text-sm text-[var(--sm-muted)]">
+              Search live sources for businesses, then extract cleaner lead candidates with contact clues and source links.
+            </p>
+
+            <div className="mt-4 grid gap-4">
+              <label className="flex flex-col gap-2 text-sm font-semibold text-[var(--sm-muted)]">
+                Search phrase
+                <input
+                  className="rounded-2xl border border-white/8 bg-white/4 px-4 py-3 text-sm text-white"
+                  onChange={(event) => setLeadQuery(event.target.value)}
+                  placeholder="For example: spa in yangon"
+                  value={leadQuery}
+                />
+              </label>
+
+              <label className="flex flex-col gap-2 text-sm font-semibold text-[var(--sm-muted)]">
+                Keywords to rank for
+                <input
+                  className="rounded-2xl border border-white/8 bg-white/4 px-4 py-3 text-sm text-white"
+                  onChange={(event) => setLeadKeywords(event.target.value)}
+                  placeholder="spa, wellness, massage, premium"
+                  value={leadKeywords}
+                />
+              </label>
+
+              <div className="grid gap-4 md:grid-cols-[1fr_auto]">
+                <div>
+                  <p className="text-sm font-semibold text-[var(--sm-muted)]">Sources</p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {(['web', 'social', 'maps'] as LeadSource[]).map((source) => (
+                      <button
+                        className={`rounded-full border px-4 py-2 text-sm font-semibold transition ${
+                          leadSources[source]
+                            ? 'border-[rgba(37,208,255,0.28)] bg-[rgba(37,208,255,0.08)] text-[var(--sm-accent)]'
+                            : 'border-white/10 bg-white/4 text-[var(--sm-muted)]'
+                        }`}
+                        key={source}
+                        onClick={() => toggleLeadSource(source)}
+                        type="button"
+                      >
+                        {source === 'web' ? 'Websites' : source === 'social' ? 'Social' : 'Maps'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <label className="flex flex-col gap-2 text-sm font-semibold text-[var(--sm-muted)]">
+                  Result limit
+                  <select
+                    className="rounded-2xl border border-white/8 bg-white/4 px-4 py-3 text-sm text-white"
+                    onChange={(event) => setLeadLimit(Number(event.target.value))}
+                    value={leadLimit}
+                  >
+                    <option value={5}>5</option>
+                    <option value={8}>8</option>
+                    <option value={12}>12</option>
+                  </select>
+                </label>
+              </div>
+
+              <details className="sm-chip">
+                <summary className="cursor-pointer text-sm font-semibold text-white">Manual fallback: paste a list instead</summary>
+                <textarea
+                  className="mt-4 min-h-48 w-full rounded-2xl border border-white/8 bg-white/4 px-4 py-4 text-sm text-white"
+                  onChange={(event) => setLeadInput(event.target.value)}
+                  placeholder="Paste leads here if you already have a rough list..."
+                  value={leadInput}
+                />
+              </details>
+            </div>
+
             <div className="mt-4 flex flex-wrap gap-3">
-              <button className="sm-button-primary" disabled={busy} onClick={() => runLeadFinder(leadInput)} type="button">
-                {busy ? 'Running...' : apiReady ? 'Run on workspace API' : 'Score leads'}
+              <button
+                className="sm-button-primary"
+                disabled={busy || (!apiReady && !leadInput.trim())}
+                onClick={() => void runLeadFinder()}
+                type="button"
+              >
+                {busy ? 'Running...' : apiReady ? 'Search live sources' : 'Parse pasted list'}
               </button>
               <button
                 className="sm-button-secondary"
                 onClick={() => {
+                  setLeadQuery(LEAD_SAMPLE_QUERY)
+                  setLeadKeywords('spa, wellness, massage')
                   setLeadInput(LEAD_SAMPLE_TEXT)
-                  void runLeadFinder(LEAD_SAMPLE_TEXT)
+                  void runLeadFinder({ query: LEAD_SAMPLE_QUERY, text: LEAD_SAMPLE_TEXT })
                 }}
                 type="button"
               >
-                Load example
+                Load sample search
               </button>
               {leadRows.length > 0 ? (
                 <button className="sm-button-secondary" onClick={() => downloadCsv(leadRows)} type="button">
@@ -374,25 +496,68 @@ export function TryPage() {
                 </button>
               ) : null}
             </div>
+            <p className="mt-3 text-sm text-[var(--sm-muted)]">
+              {apiReady
+                ? 'Live search is on. When a maps key is configured, the tool can also use Google Places results.'
+                : 'Live search needs the workspace service. You can still test the scoring and CSV flow with a pasted list here.'}
+            </p>
           </article>
 
           <article className="sm-terminal p-6">
-            <h3 className="text-lg font-bold text-white">Output</h3>
+            <div className="flex items-center justify-between gap-3">
+              <h3 className="text-lg font-bold text-white">Output</h3>
+              {leadProvider ? <span className="sm-status-pill">{leadProvider}</span> : null}
+            </div>
             <div className="mt-4 space-y-3">
               {leadRows.length > 0 ? (
                 leadRows.map((row) => (
-                  <div className="sm-chip" key={`${row.name}-${row.email}-${row.website}`}>
+                  <div className="sm-chip" key={`${row.name}-${row.email}-${row.website}-${row.source_url}`}>
                     <div className="flex items-center justify-between gap-3">
                       <p className="font-semibold text-white">{row.name}</p>
-                      <span className="sm-status-pill">Score {row.score}</span>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="sm-status-pill">{row.source}</span>
+                        <span className="sm-status-pill">Score {row.score}</span>
+                      </div>
                     </div>
                     <p className="mt-2 text-sm text-[var(--sm-muted)]">
                       {row.email || 'no email'} | {row.phone || 'no phone'} | {row.website || 'no website'}
                     </p>
+                    {row.snippet ? <p className="mt-3 text-sm text-white">{row.snippet}</p> : null}
+                    {row.fit_reasons.length > 0 ? (
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {row.fit_reasons.map((reason) => (
+                          <span className="rounded-full border border-white/10 bg-white/6 px-3 py-1 text-xs font-semibold text-white" key={reason}>
+                            {reason}
+                          </span>
+                        ))}
+                      </div>
+                    ) : null}
+                    {row.social_profiles.length > 0 ? (
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {row.social_profiles.map((profile) => (
+                          <a
+                            className="rounded-full border border-[rgba(37,208,255,0.18)] bg-[rgba(37,208,255,0.06)] px-3 py-1 text-xs font-semibold text-[var(--sm-accent)]"
+                            href={profile}
+                            key={profile}
+                            rel="noreferrer"
+                            target="_blank"
+                          >
+                            Social profile
+                          </a>
+                        ))}
+                      </div>
+                    ) : null}
+                    {row.source_url ? (
+                      <div className="mt-3">
+                        <a className="sm-link" href={row.source_url} rel="noreferrer" target="_blank">
+                          Open source
+                        </a>
+                      </div>
+                    ) : null}
                   </div>
                 ))
               ) : (
-                <p className="text-sm text-[var(--sm-muted)]">Run the tool to see cleaner leads here.</p>
+                <p className="text-sm text-[var(--sm-muted)]">Run the tool to see extracted lead candidates here.</p>
               )}
             </div>
           </article>
@@ -410,15 +575,25 @@ export function TryPage() {
               placeholder="Paste headlines or notes here..."
               value={marketInput}
             />
+            <label className="mt-4 flex flex-col gap-2 text-sm font-semibold text-[var(--sm-muted)]">
+              Optional source URLs
+              <textarea
+                className="min-h-28 rounded-2xl border border-white/8 bg-white/4 px-4 py-4 text-sm font-normal text-white"
+                onChange={(event) => setMarketUrls(event.target.value)}
+                placeholder="Paste article or source URLs here, one per line..."
+                value={marketUrls}
+              />
+            </label>
             <div className="mt-4 flex flex-wrap gap-3">
               <button className="sm-button-primary" disabled={busy} onClick={() => runNewsBrief(marketInput)} type="button">
-                {busy ? 'Running...' : apiReady ? 'Run on workspace API' : 'Build brief'}
+                {busy ? 'Running...' : apiReady ? 'Fetch + build brief' : 'Build brief'}
               </button>
               <button
                 className="sm-button-secondary"
                 onClick={() => {
                   setMarketInput(MARKET_SAMPLE_TEXT)
-                  void runNewsBrief(MARKET_SAMPLE_TEXT)
+                  setMarketUrls(MARKET_SAMPLE_URLS)
+                  void runNewsBrief(MARKET_SAMPLE_TEXT, MARKET_SAMPLE_URLS)
                 }}
                 type="button"
               >
