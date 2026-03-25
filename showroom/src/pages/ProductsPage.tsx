@@ -1,9 +1,8 @@
 import { Link } from 'react-router-dom'
 
 import { PageIntro } from '../components/PageIntro'
-import { flagshipSystem, miniProducts, products, servicePacks } from '../content'
+import { featuredProducts, flagshipSystem, miniProducts, products, servicePacks } from '../content'
 
-const freeTools = products.filter((product) => product.kind === 'Free tool')
 const controlModules = products.filter((product) => product.kind === 'Control module')
 
 function packForModule(moduleName: string) {
@@ -15,54 +14,34 @@ export function ProductsPage() {
   return (
     <div className="space-y-8">
       <PageIntro
-        eyebrow="Solutions"
-        title="Three packs. Six core modules. One operating layer."
-        description="Start with the business function you need to fix first. The packs are the commercial offer. The modules are the building blocks underneath."
+        eyebrow="Products"
+        title="Start with one useful product. Expand only after it works."
+        description="SuperMega has a simple ladder: a few public tools, a few deployable systems, and one larger operating layer when the team is ready."
       />
 
       <section className="space-y-4">
         <div className="flex items-center justify-between gap-4">
           <div>
-            <p className="sm-kicker text-[var(--sm-accent)]">Packs</p>
-            <h2 className="mt-2 text-2xl font-bold text-white">What we actually sell.</h2>
+            <p className="sm-kicker text-[var(--sm-accent)]">Use now</p>
+            <h2 className="mt-2 text-2xl font-bold text-white">Front-door products.</h2>
           </div>
-          <Link className="sm-link" to="/contact">
-            Book pilot
-          </Link>
         </div>
 
         <div className="grid gap-5 xl:grid-cols-3">
-          {servicePacks.map((pack) => (
-            <article className="sm-surface p-6" key={pack.name}>
-              <p className="sm-kicker text-[var(--sm-accent)]">{pack.audience}</p>
-              <h2 className="mt-3 text-2xl font-bold text-white">{pack.name}</h2>
-              <p className="mt-3 text-sm text-[var(--sm-muted)]">{pack.promise}</p>
-              <p className="mt-4 text-sm text-white">{pack.bestFor}</p>
-
+          {featuredProducts.map((item) => (
+            <article className="sm-pack-card p-6" key={item.name}>
+              <p className="sm-kicker text-[var(--sm-accent)]">{item.kind}</p>
+              <h2 className="mt-3 text-2xl font-bold text-white">{item.name}</h2>
+              <p className="mt-3 text-sm text-[var(--sm-muted)]">{item.tagline}</p>
               <div className="mt-5 grid gap-3">
-                <div className="sm-chip">
-                  <p className="sm-kicker text-[var(--sm-accent)]">Includes</p>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {pack.includes.map((item) => (
-                      <span className="rounded-full border border-white/10 bg-white/6 px-3 py-1 text-xs font-semibold text-white" key={item}>
-                        {item}
-                      </span>
-                    ))}
+                {item.bullets.map((bullet) => (
+                  <div className="sm-chip text-white" key={bullet}>
+                    {bullet}
                   </div>
-                </div>
-                <div className="sm-chip">
-                  <p className="sm-kicker text-[var(--sm-accent-alt)]">Outcomes</p>
-                  <ul className="mt-3 space-y-2 text-sm text-white">
-                    {pack.outcomes.map((item) => (
-                      <li key={item}>- {item}</li>
-                    ))}
-                  </ul>
-                </div>
+                ))}
               </div>
-
-              <p className="mt-4 text-sm text-[var(--sm-muted)]">{pack.rollout}</p>
-              <Link className="sm-button-accent mt-5" to={`/contact?package=${encodeURIComponent(pack.name)}`}>
-                Start this pack
+              <Link className="sm-button-accent mt-5" to={item.path}>
+                {item.kind === 'Free tool' ? 'Open product' : 'See system'}
               </Link>
             </article>
           ))}
@@ -72,8 +51,8 @@ export function ProductsPage() {
       <section className="space-y-4">
         <div className="flex items-center justify-between gap-4">
           <div>
-            <p className="sm-kicker text-[var(--sm-accent)]">Modules</p>
-            <h2 className="mt-2 text-2xl font-bold text-white">The modules that power the packs.</h2>
+            <p className="sm-kicker text-[var(--sm-accent)]">Deployable systems</p>
+            <h2 className="mt-2 text-2xl font-bold text-white">Core systems we can put on your data.</h2>
           </div>
         </div>
 
@@ -82,9 +61,7 @@ export function ProductsPage() {
             <article className="sm-surface-soft p-6" key={product.name}>
               <div className="flex items-center justify-between gap-3">
                 <h3 className="text-2xl font-bold text-white">{product.name}</h3>
-                <span className="sm-status-pill border-[rgba(255,122,24,0.18)] bg-[rgba(255,122,24,0.08)] text-[var(--sm-accent-alt)]">
-                  {packForModule(product.name)}
-                </span>
+                <span className="sm-status-pill border-[rgba(255,122,24,0.18)] bg-[rgba(255,122,24,0.08)] text-[var(--sm-accent-alt)]">{packForModule(product.name)}</span>
               </div>
               <p className="mt-3 text-sm text-[var(--sm-muted)]">{product.tagline}</p>
 
@@ -132,8 +109,8 @@ export function ProductsPage() {
         </article>
 
         <article className="sm-surface p-6">
-          <p className="sm-kicker text-[var(--sm-accent)]">Quick wins</p>
-          <h2 className="mt-3 text-2xl font-bold text-white">Small add-ons that land fast.</h2>
+          <p className="sm-kicker text-[var(--sm-accent)]">Small add-ons</p>
+          <h2 className="mt-3 text-2xl font-bold text-white">Mini products that help teams start faster.</h2>
           <div className="mt-5 grid gap-3">
             {miniProducts.map((item) => (
               <div className="sm-chip" key={item.name}>
@@ -148,33 +125,19 @@ export function ProductsPage() {
       <section className="space-y-4">
         <div className="flex items-center justify-between gap-4">
           <div>
-            <p className="sm-kicker text-[var(--sm-accent)]">Free proof</p>
-            <h2 className="mt-2 text-2xl font-bold text-white">Public tools that show how the system works.</h2>
+            <p className="sm-kicker text-[var(--sm-accent)]">Rollout shape</p>
+            <h2 className="mt-2 text-2xl font-bold text-white">How these systems usually land.</h2>
           </div>
-          <Link className="sm-link" to="/examples">
-            Open free tools
-          </Link>
+          <Link className="sm-link" to="/packages">See rollout</Link>
         </div>
 
         <div className="grid gap-5 md:grid-cols-3">
-          {freeTools.map((product) => (
-            <article className="sm-surface p-6" key={product.name}>
-              <div className="flex items-center justify-between gap-3">
-                <h3 className="text-2xl font-bold text-white">{product.name}</h3>
-                <span className="sm-status-pill">{product.availability}</span>
-              </div>
-              <p className="mt-3 text-sm text-[var(--sm-muted)]">{product.tagline}</p>
-              <p className="mt-4 text-sm text-white">{product.output}</p>
-              {product.exampleId ? (
-                <div className="mt-5 flex flex-wrap gap-3">
-                  <Link className="sm-button-primary" to={`/examples#${product.exampleId}`}>
-                    Try free
-                  </Link>
-                  <Link className="sm-button-secondary" to="/contact">
-                    Use on my data
-                  </Link>
-                </div>
-              ) : null}
+          {servicePacks.map((pack) => (
+            <article className="sm-surface p-6" key={pack.name}>
+              <p className="sm-kicker text-[var(--sm-accent)]">{pack.audience}</p>
+              <h3 className="mt-3 text-2xl font-bold text-white">{pack.name}</h3>
+              <p className="mt-3 text-sm text-[var(--sm-muted)]">{pack.promise}</p>
+              <p className="mt-4 text-sm text-white">{pack.bestFor}</p>
             </article>
           ))}
         </div>

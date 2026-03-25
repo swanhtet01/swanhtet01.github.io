@@ -62,6 +62,14 @@ export type ProofPoint = {
   detail: string
 }
 
+export type FeaturedProduct = {
+  name: string
+  kind: 'Free tool' | 'Deployable system'
+  path: string
+  tagline: string
+  bullets: string[]
+}
+
 export type FlagshipSystem = {
   name: string
   tagline: string
@@ -79,9 +87,10 @@ export type MiniProduct = {
 
 export const navItems = [
   { label: 'Home', to: '/' },
-  { label: 'Services', to: '/products' },
-  { label: 'Free tools', to: '/examples' },
-  { label: 'How we work', to: '/packages' },
+  { label: 'Products', to: '/products' },
+  { label: 'Lead Finder', to: '/lead-finder' },
+  { label: 'News Brief', to: '/news-brief' },
+  { label: 'Action Board', to: '/action-board' },
   { label: 'Contact', to: '/contact' },
 ] as const
 
@@ -346,6 +355,30 @@ export const packages: PackageTier[] = [
   },
 ]
 
+export const featuredProducts: FeaturedProduct[] = [
+  {
+    name: 'Lead Finder',
+    kind: 'Free tool',
+    path: '/lead-finder',
+    tagline: 'Search for businesses by market, then pull cleaner contact packs from public web, social, and map-style sources.',
+    bullets: ['Real search input', 'Ranked result cards', 'Shortlist and CSV export'],
+  },
+  {
+    name: 'News Brief',
+    kind: 'Free tool',
+    path: '/news-brief',
+    tagline: 'Turn public links and rough notes into one short management brief with themes and next actions.',
+    bullets: ['URL-backed input', 'Short director summary', 'Theme and action extraction'],
+  },
+  {
+    name: 'Supplier Watch',
+    kind: 'Deployable system',
+    path: '/products',
+    tagline: 'Catch supplier delay, payment, customs, and documentation risk before it hurts operations.',
+    bullets: ['Inbox + sheet monitoring', 'Risk queue with owners', 'Escalation-ready follow-up'],
+  },
+]
+
 export const flagshipSystem: FlagshipSystem = {
   name: 'SuperMega OS',
   tagline: 'An AI-native operating layer on top of Gmail, Drive, Sheets, and the records companies already have.',
@@ -448,23 +481,23 @@ export const servicePacks: ServicePack[] = [
 
 export const proofPoints: ProofPoint[] = [
   {
-    label: 'Pilot client',
+    label: 'Live pilot',
     value: 'Yangon Tyre',
-    detail: 'Live pilot using Gmail, Drive, Sheets, and shared team inputs.',
+    detail: 'Running on Gmail, Drive, Sheets, and shared team inputs.',
   },
   {
     label: 'Connected sources',
     value: 'Gmail + Drive + Sheets',
-    detail: 'The system already reads the tools teams use today instead of asking for a big rip-and-replace first.',
+    detail: 'Built on the tools teams already use instead of a big first rip-and-replace.',
   },
   {
-    label: 'Control outputs',
+    label: 'Working outputs',
     value: 'Actions, supplier risk, quality closeout',
-    detail: 'The pilot already publishes real queues and role-based outputs instead of static reports.',
+    detail: 'The pilot already publishes queues and role-based views, not static reports.',
   },
   {
-    label: 'Rollout model',
+    label: 'Reuse model',
     value: 'Template-based',
-    detail: 'The same modules are meant to be reused for other clients by swapping context, owners, and thresholds.',
+    detail: 'The same modules can be reused for other clients by swapping context, owners, and thresholds.',
   },
 ]

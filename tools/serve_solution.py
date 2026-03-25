@@ -22,6 +22,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from mark1_pilot.state_store import (  # noqa: E402
+    add_action_items,
     add_attendance_event,
     add_contact_submission,
     list_actions,
@@ -57,6 +58,10 @@ class NewsBriefRequest(BaseModel):
 
 class ActionBoardRequest(BaseModel):
     raw_text: str = Field(default="")
+
+
+class ActionBoardSaveRequest(BaseModel):
+    rows: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class ContactSubmissionRequest(BaseModel):
@@ -356,6 +361,11 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
     def tool_action_board(request: ActionBoardRequest) -> dict[str, Any]:
         rows = _build_action_rows(request.raw_text)
         return {"status": "ready", "count": len(rows), "rows": rows}
+
+    @app.post("/api/tools/action-board/save")
+    def tool_action_board_save(request: ActionBoardSaveRequest) -> dict[str, Any]:
+        payload = add_action_items(state_db, rows=request.rows, source="tool:action_board", lane="do_now")
+        return payload
 
     @app.get("/api/portfolio")
     def portfolio() -> dict[str, Any]:

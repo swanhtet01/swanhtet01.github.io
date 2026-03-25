@@ -6,7 +6,7 @@ import { navItems } from '../content'
 const navClassName = ({ isActive }: { isActive: boolean }) =>
   `rounded-full px-4 py-2 text-sm font-semibold transition ${
     isActive
-      ? 'bg-[rgba(37,208,255,0.14)] text-[var(--sm-accent)] shadow-[0_0_24px_rgba(37,208,255,0.12)]'
+      ? 'bg-[rgba(37,208,255,0.12)] text-white shadow-[0_0_24px_rgba(37,208,255,0.1)]'
       : 'text-[var(--sm-muted)] hover:bg-white/6 hover:text-white'
   }`
 
@@ -15,7 +15,7 @@ export function SiteFrame() {
 
   return (
     <div className="min-h-screen text-[var(--sm-ink)]">
-      <div className="fixed inset-x-0 top-0 z-40 border-b border-white/8 bg-[rgba(3,8,18,0.86)] backdrop-blur-xl">
+      <div className="fixed inset-x-0 top-0 z-40 border-b border-white/8 bg-[rgba(3,8,18,0.84)] backdrop-blur-xl">
         <nav className="mx-auto flex w-full max-w-6xl items-center justify-between px-4 py-3 lg:px-8">
           <NavLink className="flex items-center gap-3" to="/">
             <span className="flex h-10 w-10 items-center justify-center rounded-xl border border-[rgba(37,208,255,0.22)] bg-[rgba(37,208,255,0.08)] text-sm font-extrabold text-[var(--sm-accent)]">
@@ -24,7 +24,7 @@ export function SiteFrame() {
             <span className="flex flex-col">
               <span className="sm-logo text-lg font-extrabold tracking-tight text-white">SuperMega</span>
               <span className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[var(--sm-muted)]">
-                AI operations software
+                AI software for operators
               </span>
             </span>
           </NavLink>
@@ -68,8 +68,8 @@ export function SiteFrame() {
 
       <footer className="border-t border-white/8 bg-[rgba(4,10,22,0.78)]">
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 px-4 py-6 text-sm text-[var(--sm-muted)] lg:flex-row lg:items-center lg:justify-between lg:px-8">
-          <p>AI operations software for owner-led teams.</p>
-          <p>Start small. Keep what works. Expand from there.</p>
+          <p>AI software for owner-led teams running on Gmail, Drive, Sheets, and messy files.</p>
+          <p>Try a product. Fix one workflow. Then expand.</p>
         </div>
       </footer>
     </div>
