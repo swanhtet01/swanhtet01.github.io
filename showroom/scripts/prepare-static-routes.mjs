@@ -3,7 +3,33 @@ import { resolve } from 'node:path'
 
 const distDir = resolve(process.cwd(), 'dist')
 const indexFile = resolve(distDir, 'index.html')
-const routePaths = ['products', 'examples', 'demos', 'prototypes', 'try', 'solutions', 'packages', 'case-studies', 'dqms', 'about', 'contact']
+const routePaths = [
+  'platform',
+  'workbench',
+  'app',
+  'products',
+  'solutions',
+  'packages',
+  'examples',
+  'tools',
+  'demos',
+  'prototypes',
+  'try',
+  'lead-finder',
+  'news-brief',
+  'action-board',
+  'document-intake',
+  'ops-intake',
+  'metric-intake',
+  'solution-architect',
+  'receiving-control',
+  'inventory-pulse',
+  'workspace',
+  'case-studies',
+  'dqms',
+  'about',
+  'contact',
+]
 
 async function main() {
   const indexHtml = await readFile(indexFile, 'utf8')
