@@ -306,21 +306,21 @@ export function TryPage() {
   return (
     <div className="space-y-8">
       <PageIntro
-        eyebrow="Tools"
+        eyebrow="Free tools"
         title="Try the real free tools."
-        description="Use backend mode when the workspace service is live. Fall back to local mode when you just want a quick proof."
+        description="These are the fast proof tools. Use sample input now, then connect the same logic to your live data in a pilot."
       />
 
       <section className="sm-surface p-4">
         <div className="flex flex-wrap items-center gap-3">
           <span className="sm-status-pill">
             <span className={`sm-led ${apiReady ? 'bg-emerald-400' : 'bg-amber-400'}`} />
-            {apiReady ? 'Workspace mode' : 'Local mode'}
+            {apiReady ? 'Live tool mode' : 'Quick sample mode'}
           </span>
           <span className="text-sm text-[var(--sm-muted)]">
             {apiReady
-              ? 'This page is connected to the local workspace API.'
-              : 'Backend is not connected here yet, so tools fall back to local demo logic.'}
+              ? 'This tool is connected to the live workspace service on this machine.'
+              : 'This tool is still usable with sample input even when the workspace service is not running.'}
           </span>
         </div>
       </section>
@@ -550,15 +550,15 @@ export function TryPage() {
             <p className="sm-kicker text-[var(--sm-accent)]">Next step</p>
             <h2 className="mt-2 text-2xl font-bold text-white">Want the same logic on your own data?</h2>
             <p className="mt-2 text-sm text-[var(--sm-muted)]">
-              The free tools prove behavior. The deploy modules connect it to Gmail, Drive, Sheets, and your live workspace.
+              The free tools prove behavior first. The service packs connect the same logic to Gmail, Drive, Sheets, and live team workflows.
             </p>
           </div>
           <div className="flex flex-wrap gap-3">
             <Link className="sm-button-accent" to="/products">
-              See deploy modules
+              See service packs
             </Link>
-            <Link className="sm-button-secondary" to="/workspace">
-              Open workspace
+            <Link className="sm-button-secondary" to="/contact">
+              Use on my data
             </Link>
           </div>
         </div>

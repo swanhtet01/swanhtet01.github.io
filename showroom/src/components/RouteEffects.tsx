@@ -2,11 +2,12 @@ import { useEffect } from 'react'
 import { useLocation } from 'react-router-dom'
 
 const titleMap: Record<string, string> = {
-  '/': 'SuperMega | AI agent systems',
-  '/products': 'Agents | SuperMega',
-  '/examples': 'Live Lab | SuperMega',
-  '/packages': 'Pricing | SuperMega',
+  '/': 'SuperMega | AI operating software',
+  '/products': 'Services | SuperMega',
+  '/examples': 'Free tools | SuperMega',
+  '/packages': 'Delivery | SuperMega',
   '/contact': 'Contact | SuperMega',
+  '/workspace': 'Workspace | SuperMega',
 }
 
 export function RouteEffects() {

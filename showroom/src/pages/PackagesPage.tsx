@@ -7,9 +7,9 @@ export function PackagesPage() {
   return (
     <div className="space-y-8">
       <PageIntro
-        eyebrow="Plans"
-        title="Three ways to land it."
-        description="Start with one useful workflow. Expand only when the first layer earns it."
+        eyebrow="Delivery"
+        title="Three rollout paths."
+        description="Start with one useful workflow. Expand only when the first layer proves value."
       />
 
       <section className="grid gap-5 lg:grid-cols-3">
@@ -27,7 +27,7 @@ export function PackagesPage() {
               ))}
             </ul>
             <Link className="sm-button-accent mt-5" to={`/contact?intent=proposal&package=${pkg.name}`}>
-              Start with {pkg.name}
+              Start {pkg.name}
             </Link>
           </article>
         ))}
