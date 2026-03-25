@@ -1,0 +1,98 @@
+{
+  "generated_on": "2026-03-25",
+  "principle": "strengthen records first, then cloud execution, then orchestration, then browser sidecars",
+  "priorities": [
+    {
+      "order": 1,
+      "name": "SQLModel",
+      "role": "canonical business records",
+      "adopt_now": true,
+      "unlocks": [
+        "receiving control",
+        "inventory pulse",
+        "approval history",
+        "typed write-back"
+      ]
+    },
+    {
+      "order": 2,
+      "name": "Cloud Run stack",
+      "components": [
+        "Cloud Run",
+        "Cloud Scheduler",
+        "Cloud Tasks",
+        "Secret Manager"
+      ],
+      "role": "always-on execution and secure hosting",
+      "adopt_now": true,
+      "unlocks": [
+        "hosted API",
+        "scheduled cycles",
+        "queued jobs",
+        "safer secret handling"
+      ]
+    },
+    {
+      "order": 3,
+      "name": "Polars and DuckDB",
+      "role": "spreadsheet-native ingestion and analysis",
+      "adopt_now": true,
+      "unlocks": [
+        "large Excel parsing",
+        "fast joins over messy files",
+        "inventory and cash analysis"
+      ]
+    },
+    {
+      "order": 4,
+      "name": "LangGraph",
+      "role": "checkpointed agent workflow orchestration",
+      "adopt_now": "next",
+      "unlocks": [
+        "supplier escalation workflows",
+        "receiving review flows",
+        "incident to CAPA workflows",
+        "human approval nodes"
+      ]
+    },
+    {
+      "order": 5,
+      "name": "PydanticAI",
+      "role": "typed agent output contracts",
+      "adopt_now": "next",
+      "unlocks": [
+        "safer business-state writes",
+        "reusable module schemas",
+        "cleaner evals"
+      ]
+    },
+    {
+      "order": 6,
+      "name": "Stagehand or Playwright sidecars",
+      "role": "browser automation sidecar",
+      "adopt_now": "bounded",
+      "unlocks": [
+        "portal scraping",
+        "public lead collection",
+        "browser-side document retrieval"
+      ]
+    },
+    {
+      "order": 7,
+      "name": "Temporal",
+      "role": "durable workflow engine at larger scale",
+      "adopt_now": false,
+      "unlocks": [
+        "long-lived jobs",
+        "richer retries",
+        "larger multi-client runtime"
+      ]
+    }
+  ],
+  "avoid_for_core": [
+    "vector database first",
+    "CrewAI as the main state runtime",
+    "OpenClaw as the core business system",
+    "full autonomy before deeper canonical records"
+  ]
+}

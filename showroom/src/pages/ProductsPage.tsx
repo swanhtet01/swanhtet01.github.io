@@ -4,6 +4,15 @@ import { PageIntro } from '../components/PageIntro'
 import { featuredProducts, flagshipSystem, miniProducts, products, servicePacks } from '../content'
 
 const controlModules = products.filter((product) => product.kind === 'Control module')
+const moduleRoutes: Record<string, string> = {
+  'Action OS': '/workspace',
+  'Supplier Watch': '/workspace',
+  'Receiving Control': '/receiving-control',
+  'Quality Closeout': '/workspace',
+  'Cash Watch': '/workspace',
+  'Production Pulse': '/workspace',
+  'Sales Signal': '/workspace',
+}
 
 function packForModule(moduleName: string) {
   const match = servicePacks.find((pack) => pack.includes.includes(moduleName))
@@ -16,7 +25,7 @@ export function ProductsPage() {
       <PageIntro
         eyebrow="Products"
         title="Start with one useful product. Expand only after it works."
-        description="SuperMega has a simple ladder: a few public tools, a few deployable systems, and one larger operating layer when the team is ready."
+        description="The key solution is Action OS. It gives the client one live control layer first. Then we add deeper modules like Receiving Control, Supplier Watch, Quality Closeout, and Cash Watch."
       />
 
       <section className="space-y-4">
@@ -79,6 +88,15 @@ export function ProductsPage() {
               <p className="mt-4 text-sm text-[var(--sm-muted)]">
                 <strong className="text-white">Best for:</strong> {product.buyer}
               </p>
+
+              <div className="mt-5 flex flex-wrap gap-3">
+                <Link className="sm-button-secondary" to={moduleRoutes[product.name] || '/workspace'}>
+                  {product.name === 'Receiving Control' ? 'Open live module' : 'Open live view'}
+                </Link>
+                <Link className="sm-button-accent" to={`/contact?package=${encodeURIComponent(product.name)}`}>
+                  Use on my data
+                </Link>
+              </div>
             </article>
           ))}
         </div>
