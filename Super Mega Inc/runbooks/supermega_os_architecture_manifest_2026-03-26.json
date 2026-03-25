@@ -1,0 +1,64 @@
+{
+  "generated_at": "2026-03-26T02:20:00+06:30",
+  "company": "SuperMega",
+  "wedge_product": "Action OS",
+  "flagship": "SuperMega OS",
+  "free_tools": [
+    "Lead Finder",
+    "News Brief",
+    "Action Board"
+  ],
+  "semi_products": [
+    "Attendance Check-In",
+    "Reply Draft",
+    "Document Intake",
+    "Director Flash"
+  ],
+  "core_modules": [
+    "Action OS",
+    "Supplier Watch",
+    "Receiving Control",
+    "Inventory Pulse",
+    "Quality Closeout",
+    "Cash Watch",
+    "Production Pulse",
+    "Sales Signal"
+  ],
+  "current_stack": [
+    "React",
+    "Vite",
+    "TypeScript",
+    "FastAPI",
+    "SQLite",
+    "Google APIs",
+    "PowerShell operators"
+  ],
+  "next_stack": [
+    "SQLModel",
+    "Cloud Run",
+    "Cloud Scheduler",
+    "Cloud Tasks",
+    "Secret Manager",
+    "Polars",
+    "DuckDB",
+    "LangGraph",
+    "PydanticAI",
+    "Playwright or Stagehand"
+  ],
+  "agent_teams": [
+    "Command Office",
+    "Control Tower",
+    "Client Delivery",
+    "Growth Studio",
+    "R&D Lab",
+    "Platform Engineering"
+  ],
+  "next_build_order": [
+    "Approval Layer",
+    "Inventory Pulse deeper flows",
+    "Receiving Control write-back",
+    "Supplier Watch escalation and reply support",
+    "Director / Manager / Operator role views",
+    "Cloud hosting and scheduled orchestration"
+  ]
+}
