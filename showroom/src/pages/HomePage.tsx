@@ -23,11 +23,11 @@ export function HomePage() {
             </p>
 
             <div className="mt-7 flex flex-wrap gap-3">
-              <Link className="sm-button-primary" to="/products">
+              <Link className="sm-button-primary" to="/platform">
                 See Action OS
               </Link>
-              <Link className="sm-button-secondary" to="/lead-finder">
-                Try Lead Finder
+              <Link className="sm-button-secondary" to="/solution-architect">
+                Open Architect
               </Link>
               <Link className="sm-button-accent" to="/contact">
                 Start pilot
@@ -98,8 +98,8 @@ export function HomePage() {
       <section className="space-y-4">
         <div className="flex items-center justify-between gap-4">
           <div>
-            <p className="sm-kicker text-[var(--sm-accent)]">What you can use now</p>
-            <h2 className="mt-2 text-2xl font-bold text-white">Three products worth opening first.</h2>
+          <p className="sm-kicker text-[var(--sm-accent)]">What you can use now</p>
+            <h2 className="mt-2 text-2xl font-bold text-white">Start with one real surface, not a vague brochure.</h2>
           </div>
           <Link className="sm-link" to="/products">
             See all products
@@ -169,7 +169,9 @@ export function HomePage() {
                   <p className="font-semibold text-white">{tool.name}</p>
                   <p className="text-sm text-[var(--sm-muted)]">{tool.tagline}</p>
                 </div>
-                <Link className="sm-link" to="/contact">Use it</Link>
+                <Link className="sm-link" to={tool.path ?? '/contact'}>
+                  {tool.path ? 'Open it' : 'Use it'}
+                </Link>
               </div>
             ))}
           </div>

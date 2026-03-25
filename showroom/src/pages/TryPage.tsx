@@ -21,6 +21,18 @@ const toolCards = [
     tagline: 'Convert raw updates into owners, due dates, and follow-up lanes.',
     bullets: ['Paste messy updates', 'Generate action rows', 'Save into the workspace'],
   },
+  {
+    name: 'Document Intake',
+    path: '/document-intake',
+    tagline: 'Upload real files and route them into the right operating module.',
+    bullets: ['Read PDFs and spreadsheets', 'Extract fields', 'Recommend the next module'],
+  },
+  {
+    name: 'Solution Architect',
+    path: '/solution-architect',
+    tagline: 'Design the right SuperMega rollout before selling or building it.',
+    bullets: ['Choose the wedge product', 'See the first module stack', 'Get the next tooling layer'],
+  },
 ]
 
 export function TryPage() {

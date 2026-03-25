@@ -64,7 +64,7 @@ export type ProofPoint = {
 
 export type FeaturedProduct = {
   name: string
-  kind: 'Free tool' | 'Deployable system'
+  kind: 'Free tool' | 'Deployable system' | 'Planning tool'
   path: string
   tagline: string
   bullets: string[]
@@ -83,14 +83,14 @@ export type MiniProduct = {
   bestFor: string
   data: string
   note: string
+  path?: string
 }
 
 export const navItems = [
   { label: 'Home', to: '/' },
+  { label: 'Platform', to: '/platform' },
   { label: 'Products', to: '/products' },
-  { label: 'Lead Finder', to: '/lead-finder' },
-  { label: 'News Brief', to: '/news-brief' },
-  { label: 'Action Board', to: '/action-board' },
+  { label: 'Architect', to: '/solution-architect' },
   { label: 'Contact', to: '/contact' },
 ] as const
 
@@ -193,6 +193,22 @@ export const products: Product[] = [
     deliverables: ['Receiving board', 'Variance queue', 'Hold and release actions'],
     variants: ['Raw material receipt', 'Imported goods receipt', 'Warehouse inbound control'],
     adaptation: 'Reuse the same receipt workflow. Swap inbound document fields, batch logic, and review rules per client.',
+  },
+  {
+    kind: 'Control module',
+    name: 'Inventory Pulse',
+    availability: 'Deploy',
+    tagline: 'Watch stock, reserved balance, and reorder pressure in one control layer.',
+    buyer: 'Stores lead, operations manager, or finance controller',
+    input: 'Stock sheet, receiving records, issue slips, and reorder threshold',
+    output: 'Stock watch board, reorder queue, warehouse-level action list',
+    fit: 'Factories and distributors that still manage stock in messy spreadsheets.',
+    connectors: ['Sheets', 'Drive', 'Receiving Control'],
+    requiredData: ['Stock snapshot', 'Reserved quantity', 'Reorder point', 'Owner map'],
+    workflow: ['Read current stock', 'Compute available balance', 'Detect reorder pressure', 'Assign next action'],
+    deliverables: ['Stock watch board', 'Reorder queue', 'Warehouse summary'],
+    variants: ['Raw material stock', 'Finished goods stock', 'Warehouse control'],
+    adaptation: 'Reuse the same inventory logic. Swap item schema, warehouse structure, and reorder rules per client.',
   },
   {
     kind: 'Control module',
@@ -375,7 +391,7 @@ export const featuredProducts: FeaturedProduct[] = [
   {
     name: 'Action OS',
     kind: 'Deployable system',
-    path: '/products',
+    path: '/platform',
     tagline: 'The main wedge product: one live action layer across inboxes, files, sheets, and team updates.',
     bullets: ['Manager board', 'Director view', 'Owner + due-date discipline'],
   },
@@ -387,11 +403,25 @@ export const featuredProducts: FeaturedProduct[] = [
     bullets: ['Real search input', 'Ranked result cards', 'Shortlist and CSV export'],
   },
   {
+    name: 'Solution Architect',
+    kind: 'Planning tool',
+    path: '/solution-architect',
+    tagline: 'Turn one business profile into the right SuperMega wedge, modules, agent teams, and rollout order.',
+    bullets: ['Structured company profile', 'Module recommendation', 'Tooling and UX plan'],
+  },
+  {
     name: 'Receiving Control',
     kind: 'Deployable system',
     path: '/receiving-control',
     tagline: 'The first serious ERP slice: inbound receipt, variance, and hold status in one working control layer.',
     bullets: ['GRN / batch status', 'Variance visibility', 'Owner + next-action queue'],
+  },
+  {
+    name: 'Inventory Pulse',
+    kind: 'Deployable system',
+    path: '/inventory-pulse',
+    tagline: 'The next ERP slice: stock watch, reserved balance, and reorder pressure in one board.',
+    bullets: ['Available balance', 'Reorder queue', 'Warehouse-level view'],
   },
 ]
 
@@ -427,6 +457,7 @@ export const miniProducts: MiniProduct[] = [
     bestFor: 'Teams handling invoices, complaints, shipment docs, and quality evidence.',
     data: 'Drive file, email snippet, or pasted note',
     note: 'This is the fast lane into larger modules because it cleans the intake first.',
+    path: '/document-intake',
   },
   {
     name: 'Director Flash',
@@ -480,8 +511,8 @@ export const servicePacks: ServicePack[] = [
     audience: 'Plant managers, operations leads, and quality teams',
     promise: 'One control layer for supplier risk, quality issues, and plant execution.',
     bestFor: 'Factories and operations teams that need control before a full ERP rollout.',
-    includes: ['Supplier Watch', 'Receiving Control', 'Quality Closeout', 'Production Pulse', 'Attendance Check-In'],
-    outcomes: ['Inbound receipt board', 'Supplier risk queue', 'Incident-to-CAPA board', 'Daily plant brief'],
+    includes: ['Supplier Watch', 'Receiving Control', 'Inventory Pulse', 'Quality Closeout', 'Production Pulse', 'Attendance Check-In'],
+    outcomes: ['Inbound receipt board', 'Stock watch queue', 'Supplier risk queue', 'Incident-to-CAPA board', 'Daily plant brief'],
     rollout: 'Start with incoming material or one plant. Expand into inventory, approvals, and full plant control after the first live board works.',
   },
   {
@@ -508,8 +539,8 @@ export const proofPoints: ProofPoint[] = [
   },
   {
     label: 'Working outputs',
-    value: 'Actions, supplier risk, receiving, quality',
-    detail: 'The pilot is moving beyond static reports into live operational control records.',
+    value: 'Actions, supplier risk, receiving, inventory',
+    detail: 'The pilot is moving beyond static reports into live operational control records and module boards.',
   },
   {
     label: 'Reuse model',

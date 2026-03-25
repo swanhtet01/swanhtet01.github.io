@@ -8,6 +8,7 @@ const moduleRoutes: Record<string, string> = {
   'Action OS': '/workspace',
   'Supplier Watch': '/workspace',
   'Receiving Control': '/receiving-control',
+  'Inventory Pulse': '/inventory-pulse',
   'Quality Closeout': '/workspace',
   'Cash Watch': '/workspace',
   'Production Pulse': '/workspace',
@@ -25,7 +26,7 @@ export function ProductsPage() {
       <PageIntro
         eyebrow="Products"
         title="Start with one useful product. Expand only after it works."
-        description="The key solution is Action OS. It gives the client one live control layer first. Then we add deeper modules like Receiving Control, Supplier Watch, Quality Closeout, and Cash Watch."
+        description="The key solution is Action OS. It gives the client one live control layer first. Then we add deeper modules like Receiving Control, Supplier Watch, Quality Closeout, and Cash Watch. Use Solution Architect to design the right rollout before we sell it."
       />
 
       <section className="space-y-4">
@@ -34,6 +35,9 @@ export function ProductsPage() {
             <p className="sm-kicker text-[var(--sm-accent)]">Use now</p>
             <h2 className="mt-2 text-2xl font-bold text-white">Front-door products.</h2>
           </div>
+          <Link className="sm-link" to="/solution-architect">
+            Open architect
+          </Link>
         </div>
 
         <div className="grid gap-5 xl:grid-cols-3">
@@ -134,6 +138,11 @@ export function ProductsPage() {
               <div className="sm-chip" key={item.name}>
                 <p className="font-semibold text-white">{item.name}</p>
                 <p className="mt-2 text-sm text-[var(--sm-muted)]">{item.tagline}</p>
+                <div className="mt-3">
+                  <Link className="sm-link" to={item.path ?? '/contact'}>
+                    {item.path ? 'Open live tool' : 'Use on my data'}
+                  </Link>
+                </div>
               </div>
             ))}
           </div>

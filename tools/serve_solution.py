@@ -47,6 +47,8 @@ from mark1_pilot.state_store import (  # noqa: E402
     sync_state_from_output_dir,
 )
 from mark1_pilot.lead_finder import run_lead_finder  # noqa: E402
+from mark1_pilot.document_intake import analyze_document  # noqa: E402
+from mark1_pilot.solution_architect import build_solution_blueprint  # noqa: E402
 
 
 class LeadFinderRequest(BaseModel):
@@ -116,6 +118,22 @@ class InventoryRecordRequest(BaseModel):
     owner: str = "Stores Team"
     next_action: str = ""
     evidence_link: str = ""
+
+
+class DocumentIntakeRequest(BaseModel):
+    filename: str
+    content_base64: str
+
+
+class SolutionArchitectRequest(BaseModel):
+    company_name: str = "New Client"
+    sector: str = "mixed"
+    team_size: int = 25
+    site_count: int = 1
+    priorities: list[str] = Field(default_factory=list)
+    current_tools: list[str] = Field(default_factory=list)
+    data_sources: list[str] = Field(default_factory=list)
+    pain_points: str = ""
 
 
 def _load_json(path: Path) -> dict[str, Any]:
@@ -395,6 +413,14 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             **_build_news_brief(payload),
         }
 
+    @app.post("/api/tools/document-intake")
+    def tool_document_intake(request: DocumentIntakeRequest) -> dict[str, Any]:
+        return {"status": "ready", "analysis": analyze_document(request.filename, request.content_base64)}
+
+    @app.post("/api/tools/solution-architect")
+    def tool_solution_architect(request: SolutionArchitectRequest) -> dict[str, Any]:
+        return {"status": "ready", "blueprint": build_solution_blueprint(request.model_dump())}
+
     @app.post("/api/tools/action-board")
     def tool_action_board(request: ActionBoardRequest) -> dict[str, Any]:
         rows = _build_action_rows(request.raw_text)
@@ -410,6 +436,11 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
         payload = load_snapshot(state_db, "solution_portfolio_manifest") or _load_json(
             REPO_ROOT / "Super Mega Inc" / "sales" / "solution_portfolio_manifest.json"
         )
+        return {"status": "ready", "payload": payload}
+
+    @app.get("/api/supermega/operating-model")
+    def supermega_operating_model() -> dict[str, Any]:
+        payload = _load_json(REPO_ROOT / "Super Mega Inc" / "runbooks" / "supermega_os_architecture_manifest_2026-03-26.json")
         return {"status": "ready", "payload": payload}
 
     @app.get("/api/quality/incidents")
