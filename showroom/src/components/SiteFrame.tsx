@@ -24,7 +24,7 @@ export function SiteFrame() {
             <span className="flex flex-col">
               <span className="sm-logo text-lg font-extrabold tracking-tight text-white">SuperMega</span>
               <span className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[var(--sm-muted)]">
-                AI operating software
+                AI operations software
               </span>
             </span>
           </NavLink>
@@ -68,8 +68,8 @@ export function SiteFrame() {
 
       <footer className="border-t border-white/8 bg-[rgba(4,10,22,0.78)]">
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 px-4 py-6 text-sm text-[var(--sm-muted)] lg:flex-row lg:items-center lg:justify-between lg:px-8">
-          <p>AI operating systems for real companies.</p>
-          <p>supermega.dev | Yangon pilot live, reusable client packs in progress</p>
+          <p>AI operations software for owner-led teams.</p>
+          <p>Start small. Keep what works. Expand from there.</p>
         </div>
       </footer>
     </div>
