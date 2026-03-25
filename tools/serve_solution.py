@@ -47,6 +47,7 @@ from mark1_pilot.state_store import (  # noqa: E402
     sync_state_from_output_dir,
 )
 from mark1_pilot.lead_finder import run_lead_finder  # noqa: E402
+from mark1_pilot.lead_to_pilot import build_lead_to_pilot_pack  # noqa: E402
 from mark1_pilot.document_intake import analyze_document  # noqa: E402
 from mark1_pilot.solution_architect import build_solution_blueprint  # noqa: E402
 
@@ -57,6 +58,11 @@ class LeadFinderRequest(BaseModel):
     keywords: list[str] = Field(default_factory=list)
     sources: list[str] = Field(default_factory=lambda: ["web", "social", "maps"])
     limit: int = Field(default=10, ge=1, le=20)
+
+
+class LeadToPilotRequest(BaseModel):
+    leads: list[dict[str, Any]] = Field(default_factory=list)
+    campaign_goal: str = ""
 
 
 class NewsBriefRequest(BaseModel):
@@ -416,6 +422,10 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
     @app.post("/api/tools/document-intake")
     def tool_document_intake(request: DocumentIntakeRequest) -> dict[str, Any]:
         return {"status": "ready", "analysis": analyze_document(request.filename, request.content_base64)}
+
+    @app.post("/api/tools/lead-to-pilot")
+    def tool_lead_to_pilot(request: LeadToPilotRequest) -> dict[str, Any]:
+        return build_lead_to_pilot_pack(leads=request.leads, campaign_goal=request.campaign_goal)
 
     @app.post("/api/tools/solution-architect")
     def tool_solution_architect(request: SolutionArchitectRequest) -> dict[str, Any]:
