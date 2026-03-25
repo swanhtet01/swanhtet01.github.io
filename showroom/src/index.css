@@ -42,10 +42,10 @@ body::before {
   inset: 0;
   pointer-events: none;
   background:
-    linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
-  background-size: 44px 44px;
-  mask-image: radial-gradient(circle at center, black 45%, transparent 92%);
+    linear-gradient(rgba(255, 255, 255, 0.014) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.014) 1px, transparent 1px);
+  background-size: 64px 64px;
+  mask-image: radial-gradient(circle at center, black 32%, transparent 86%);
 }
 
 body::after {
@@ -81,7 +81,9 @@ a {
 
 .sm-surface {
   border: 1px solid rgba(255, 255, 255, 0.08);
-  background: linear-gradient(180deg, rgba(7, 15, 29, 0.9), rgba(4, 10, 22, 0.86));
+  background:
+    radial-gradient(circle at top right, rgba(37, 208, 255, 0.08), transparent 28%),
+    linear-gradient(180deg, rgba(7, 15, 29, 0.94), rgba(4, 10, 22, 0.9));
   box-shadow: var(--sm-shadow);
   backdrop-filter: blur(20px);
   border-radius: 1.2rem;
@@ -209,9 +211,9 @@ a {
 }
 
 .sm-proof-card {
-  border: 1px solid rgba(37, 208, 255, 0.12);
+  border: 1px solid rgba(37, 208, 255, 0.14);
   background:
-    linear-gradient(180deg, rgba(11, 20, 38, 0.92), rgba(6, 12, 24, 0.88)),
+    linear-gradient(180deg, rgba(11, 20, 38, 0.95), rgba(6, 12, 24, 0.9)),
     radial-gradient(circle at top right, rgba(37, 208, 255, 0.1), transparent 35%);
   border-radius: 1rem;
   padding: 1rem;
@@ -221,8 +223,8 @@ a {
 .sm-pack-card {
   border: 1px solid rgba(92, 132, 174, 0.22);
   background:
-    radial-gradient(circle at top right, rgba(37, 208, 255, 0.12), transparent 28%),
-    radial-gradient(circle at bottom left, rgba(255, 122, 24, 0.1), transparent 24%),
+    radial-gradient(circle at top right, rgba(37, 208, 255, 0.14), transparent 28%),
+    radial-gradient(circle at bottom left, rgba(255, 122, 24, 0.12), transparent 24%),
     linear-gradient(180deg, rgba(6, 13, 26, 0.96), rgba(4, 10, 22, 0.92));
   box-shadow: 0 32px 80px -48px rgba(0, 0, 0, 0.8);
   backdrop-filter: blur(22px);

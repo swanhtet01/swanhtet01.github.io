@@ -2,8 +2,11 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 
 import { RouteEffects } from './components/RouteEffects'
 import { SiteFrame } from './components/SiteFrame'
+import { ActionBoardPage } from './pages/ActionBoardPage'
 import { ContactPage } from './pages/ContactPage'
 import { HomePage } from './pages/HomePage'
+import { LeadFinderPage } from './pages/LeadFinderPage'
+import { NewsBriefPage } from './pages/NewsBriefPage'
 import { NotFoundPage } from './pages/NotFoundPage'
 import { PackagesPage } from './pages/PackagesPage'
 import { ProductsPage } from './pages/ProductsPage'
@@ -19,6 +22,9 @@ function App() {
           <Route element={<HomePage />} index />
           <Route element={<ProductsPage />} path="products" />
           <Route element={<TryPage />} path="examples" />
+          <Route element={<LeadFinderPage />} path="lead-finder" />
+          <Route element={<NewsBriefPage />} path="news-brief" />
+          <Route element={<ActionBoardPage />} path="action-board" />
           <Route element={<WorkspacePage />} path="workspace" />
           <Route element={<Navigate replace to="/examples" />} path="demos" />
           <Route element={<Navigate replace to="/examples" />} path="prototypes" />

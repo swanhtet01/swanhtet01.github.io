@@ -8,7 +8,6 @@ type LeadFormState = {
   name: string
   email: string
   company: string
-  workflow: string
   data: string
   goal: string
 }
@@ -16,15 +15,14 @@ type LeadFormState = {
 function buildLeadMailto(payload: LeadFormState) {
   const subject = `[SuperMega Pilot] ${payload.company || payload.name || 'New inquiry'}`
   const body = [
-    'SuperMega Pilot Inquiry',
+    'SuperMega Inquiry',
     '',
     `Name: ${payload.name}`,
     `Email: ${payload.email}`,
     `Company: ${payload.company}`,
-    `First workflow: ${payload.workflow}`,
     `Data already available: ${payload.data}`,
     '',
-    'Goal:',
+    'What needs fixing first:',
     payload.goal,
   ].join('\n')
   return `mailto:swanhtet@supermega.dev?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
@@ -33,15 +31,12 @@ function buildLeadMailto(payload: LeadFormState) {
 function initialFormFromQuery(): LeadFormState {
   const params = new URLSearchParams(window.location.search)
   const requestedPackage = params.get('package')?.trim()
-  const intent = params.get('intent')?.trim()
-
   return {
     name: '',
     email: '',
     company: '',
-    workflow: requestedPackage || (intent === 'proposal' ? 'Action OS' : 'Action OS'),
     data: 'Gmail + Drive',
-    goal: '',
+    goal: requestedPackage ? `I want to start with ${requestedPackage}.` : '',
   }
 }
 
@@ -52,14 +47,12 @@ export function ContactPage() {
 
   useEffect(() => {
     let cancelled = false
-
     async function checkApi() {
       const result = await checkWorkspaceHealth()
       if (!cancelled) {
         setApiReady(result.ready)
       }
     }
-
     void checkApi()
     return () => {
       cancelled = true
@@ -76,7 +69,10 @@ export function ContactPage() {
       try {
         await workspaceFetch('/api/contact-submissions', {
           method: 'POST',
-          body: JSON.stringify(form),
+          body: JSON.stringify({
+            ...form,
+            workflow: 'Discovery request',
+          }),
         })
         setStatus('saved')
         return
@@ -93,34 +89,34 @@ export function ContactPage() {
     <div className="space-y-8">
       <PageIntro
         eyebrow="Contact"
-        title="Start one useful pilot."
-        description="Send a short brief with the team, the workflow, and the data you already have. We use that to shape the first live rollout."
+        title="Book a live walkthrough."
+        description="Send a short note about what you want fixed and what data you already have. We will use that to shape the first useful rollout."
       />
 
       <section className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
         <aside className="sm-terminal p-6">
           <p className="sm-kicker text-[var(--sm-accent)]">What happens next</p>
-          <h2 className="mt-3 text-3xl font-bold text-white">Short brief. Fast next step.</h2>
+          <h2 className="mt-3 text-3xl font-bold text-white">We look for one fast win.</h2>
           <p className="mt-3 text-sm leading-relaxed text-[var(--sm-muted)]">
-            We look for one team, one workflow, and one first live win. That keeps the rollout useful and avoids bloated software projects.
+            We do not start with a bloated ERP project. We look for one team, one workflow, and one first live result that is worth keeping.
           </p>
 
           <div className="mt-6 grid gap-3">
             <div className="sm-chip">
-              <p className="sm-kicker text-[var(--sm-accent)]">Good first workflows</p>
+              <p className="sm-kicker text-[var(--sm-accent)]">Good first systems</p>
               <p className="mt-2 text-white">Action OS, Supplier Watch, Quality Closeout, Cash Watch</p>
             </div>
             <div className="sm-chip">
               <p className="sm-kicker text-[var(--sm-accent-alt)]">Good enough data</p>
-              <p className="mt-2 text-white">Gmail, Drive, Sheets, or even one messy folder and a simple owner list</p>
+              <p className="mt-2 text-white">Gmail, Drive, Sheets, or one messy folder and a simple owner list</p>
             </div>
             <div className="sm-chip">
-              <p className="sm-kicker text-[var(--sm-accent)]">Typical first sprint</p>
-              <p className="mt-2 text-white">One workflow, one control board, one review rhythm, two-week start</p>
+              <p className="sm-kicker text-[var(--sm-accent)]">Typical first step</p>
+              <p className="mt-2 text-white">One workflow, one control board, one review rhythm</p>
             </div>
             <div className="sm-chip">
               <p className="sm-kicker text-[var(--sm-accent-alt)]">Response</p>
-              <p className="mt-2 text-white">Reply within 24 hours with scope, fit, and next step</p>
+              <p className="mt-2 text-white">Reply within 24 hours with fit, scope, and next step</p>
             </div>
             <a className="sm-chip block" href="mailto:swanhtet@supermega.dev">
               <p className="sm-kicker text-[var(--sm-accent)]">Direct email</p>
@@ -151,7 +147,7 @@ export function ContactPage() {
                 value={form.email}
               />
             </label>
-            <label className="flex flex-col gap-2 text-sm font-semibold text-[var(--sm-muted)]">
+            <label className="flex flex-col gap-2 text-sm font-semibold text-[var(--sm-muted)] md:col-span-2">
               Company
               <input
                 className="rounded-xl border border-white/8 bg-white/4 px-3 py-2 text-sm font-normal text-white"
@@ -161,31 +157,12 @@ export function ContactPage() {
                 value={form.company}
               />
             </label>
-            <label className="flex flex-col gap-2 text-sm font-semibold text-[var(--sm-muted)]">
-              First workflow
-              <select
-                className="rounded-xl border border-white/8 bg-white/4 px-3 py-2 text-sm font-normal text-white"
-                onChange={(event) => setForm((prev) => ({ ...prev, workflow: event.target.value }))}
-                value={form.workflow}
-              >
-                <option>Action OS</option>
-                <option>Supplier Watch</option>
-                <option>Quality Closeout</option>
-                <option>Cash Watch</option>
-                <option>Production Pulse</option>
-                <option>Sales Signal</option>
-                <option>Attendance Check-In</option>
-                <option>Document Intake</option>
-                <option>Director Flash</option>
-                <option>SuperMega OS</option>
-              </select>
-            </label>
             <label className="flex flex-col gap-2 text-sm font-semibold text-[var(--sm-muted)] md:col-span-2">
-              Data already available
+              What data do you already have?
               <input
                 className="rounded-xl border border-white/8 bg-white/4 px-3 py-2 text-sm font-normal text-white"
                 onChange={(event) => setForm((prev) => ({ ...prev, data: event.target.value }))}
-                placeholder="For example: Gmail + Drive, shared folder + sheet, or one mailbox + one owner list"
+                placeholder="For example: Gmail + Drive, one shared sheet, or one messy folder"
                 required
                 type="text"
                 value={form.data}
@@ -196,7 +173,7 @@ export function ContactPage() {
               <textarea
                 className="min-h-52 rounded-xl border border-white/8 bg-white/4 px-3 py-3 text-sm font-normal text-white"
                 onChange={(event) => setForm((prev) => ({ ...prev, goal: event.target.value }))}
-                placeholder="For example: supplier follow-up is scattered, quality issues are not closing, directors do not have one clean view"
+                placeholder="For example: supplier follow-up is scattered, directors have no clean brief, or quality issues are not closing."
                 required
                 value={form.goal}
               />
@@ -204,7 +181,7 @@ export function ContactPage() {
           </div>
           <div className="mt-5 flex flex-wrap gap-3">
             <button className="sm-button-accent" type="submit">
-              {status === 'saving' ? 'Sending...' : 'Send pilot brief'}
+              {status === 'saving' ? 'Sending...' : 'Book walkthrough'}
             </button>
             <a className="sm-button-secondary" href={mailtoUrl}>
               Email directly
@@ -212,10 +189,10 @@ export function ContactPage() {
           </div>
           <p className="mt-3 text-sm text-[var(--sm-muted)]">
             {status === 'saved'
-              ? 'Thanks. Your brief is in and we will follow up with the next step.'
+              ? 'Thanks. Your note is in and we will follow up with the next step.'
               : status === 'fallback'
-                ? 'The web form fell back to email so your request does not get lost.'
-                : 'Keep it short. One team, one workflow, one first result is enough to start.'}
+                ? 'The web form fell back to email so your note does not get lost.'
+                : 'Keep it short. One team and one problem is enough to start.'}
           </p>
         </form>
       </section>

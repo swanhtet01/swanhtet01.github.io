@@ -1,8 +1,7 @@
 import { Link } from 'react-router-dom'
 
-import { flagshipSystem, packages, products, proofPoints, servicePacks } from '../content'
+import { featuredProducts, flagshipSystem, miniProducts, packages, products, proofPoints } from '../content'
 
-const freeTools = products.filter((product) => product.kind === 'Free tool')
 const coreModules = products.filter((product) => product.kind === 'Control module')
 
 export function HomePage() {
@@ -15,21 +14,20 @@ export function HomePage() {
 
         <div className="grid gap-8 lg:grid-cols-[1.08fr_0.92fr]">
           <div className="animate-rise">
-            <p className="sm-kicker text-[var(--sm-accent)]">AI operations software</p>
+            <p className="sm-kicker text-[var(--sm-accent)]">AI software for operators</p>
             <h1 className="mt-4 max-w-4xl text-4xl font-extrabold tracking-tight text-white lg:text-6xl">
-              Replace follow-up chaos with one control system.
+              Turn messy business work into one clean system.
             </h1>
             <p className="mt-5 max-w-3xl text-base leading-relaxed text-[var(--sm-muted)] lg:text-lg">
-              SuperMega helps owner-led teams run on top of Gmail, Drive, Sheets, and existing records. Start with one live
-              workflow. Expand into a full operating layer only after the first result is working.
+              SuperMega sits on top of Gmail, Drive, Sheets, and existing files. We start with one working tool or one live control workflow, then expand only after the first result is useful.
             </p>
 
             <div className="mt-7 flex flex-wrap gap-3">
-              <Link className="sm-button-primary" to="/examples">
-                Try free tools
+              <Link className="sm-button-primary" to="/lead-finder">
+                Open Lead Finder
               </Link>
               <Link className="sm-button-accent" to="/contact">
-                Book pilot
+                Start pilot
               </Link>
             </div>
 
@@ -48,8 +46,8 @@ export function HomePage() {
             <div className="sm-terminal p-5">
               <div className="flex items-center justify-between gap-3 border-b border-white/8 pb-4">
                 <div>
-                  <p className="sm-kicker text-[var(--sm-accent)]">Pilot control view</p>
-                  <h2 className="mt-2 text-2xl font-bold text-white">What the system already runs</h2>
+                  <p className="sm-kicker text-[var(--sm-accent)]">Live proof</p>
+                  <h2 className="mt-2 text-2xl font-bold text-white">What this already does</h2>
                 </div>
                 <span className="sm-status-pill">
                   <span className="sm-led bg-emerald-400" />
@@ -58,28 +56,22 @@ export function HomePage() {
               </div>
 
               <div className="mt-5 grid gap-3">
-                <div className="sm-chip">
-                  <p className="sm-kicker text-[var(--sm-accent)]">Owner / director</p>
-                  <div className="mt-3 grid gap-2 text-sm text-white">
-                    <span>Action OS keeps one owner board and blocker list live.</span>
-                    <span>Director Flash turns updates into a short management brief.</span>
-                  </div>
+                <div className="sm-proof-card">
+                  <p className="sm-kicker text-[var(--sm-accent)]">Supplier Watch</p>
+                  <p className="mt-3 text-lg font-bold text-white">Delay, payment, and customs risk in one queue.</p>
+                  <p className="mt-2 text-sm text-[var(--sm-muted)]">Live supplier signals turn into owners, due dates, and escalation notes.</p>
                 </div>
 
-                <div className="sm-chip">
-                  <p className="sm-kicker text-[var(--sm-accent-alt)]">Factory control</p>
-                  <div className="mt-3 grid gap-2 text-sm text-white">
-                    <span>Supplier Watch flags delay, payment, and customs risk.</span>
-                    <span>Quality Closeout moves issues into containment, CAPA, and closeout.</span>
-                  </div>
+                <div className="sm-proof-card">
+                  <p className="sm-kicker text-[var(--sm-accent-alt)]">Action OS</p>
+                  <p className="mt-3 text-lg font-bold text-white">One action board for managers and directors.</p>
+                  <p className="mt-2 text-sm text-[var(--sm-muted)]">Messy updates get cleaned into one owner queue instead of scattered follow-up.</p>
                 </div>
 
-                <div className="sm-chip">
-                  <p className="sm-kicker text-[var(--sm-accent)]">Commercial control</p>
-                  <div className="mt-3 grid gap-2 text-sm text-white">
-                    <span>Cash Watch ranks overdue collections and next follow-up.</span>
-                    <span>Sales Signal turns channel notes and headlines into one watchlist.</span>
-                  </div>
+                <div className="sm-proof-card">
+                  <p className="sm-kicker text-[var(--sm-accent)]">Quality Closeout</p>
+                  <p className="mt-3 text-lg font-bold text-white">Incident to CAPA to closeout.</p>
+                  <p className="mt-2 text-sm text-[var(--sm-muted)]">Quality issues move into containment, action, and verification instead of dying in email threads.</p>
                 </div>
               </div>
 
@@ -103,45 +95,29 @@ export function HomePage() {
       <section className="space-y-4">
         <div className="flex items-center justify-between gap-4">
           <div>
-            <p className="sm-kicker text-[var(--sm-accent)]">Core services</p>
-            <h2 className="mt-2 text-2xl font-bold text-white">Three packs for real business teams.</h2>
+            <p className="sm-kicker text-[var(--sm-accent)]">What you can use now</p>
+            <h2 className="mt-2 text-2xl font-bold text-white">Three products worth opening first.</h2>
           </div>
           <Link className="sm-link" to="/products">
-            See all modules
+            See all products
           </Link>
         </div>
 
         <div className="grid gap-5 xl:grid-cols-3">
-          {servicePacks.map((pack) => (
-            <article className="sm-surface p-6" key={pack.name}>
-              <p className="sm-kicker text-[var(--sm-accent)]">{pack.audience}</p>
-              <h3 className="mt-3 text-2xl font-bold text-white">{pack.name}</h3>
-              <p className="mt-3 text-sm text-[var(--sm-muted)]">{pack.promise}</p>
-
+          {featuredProducts.map((item) => (
+            <article className="sm-pack-card p-6" key={item.name}>
+              <p className="sm-kicker text-[var(--sm-accent)]">{item.kind}</p>
+              <h3 className="mt-3 text-2xl font-bold text-white">{item.name}</h3>
+              <p className="mt-3 text-sm text-[var(--sm-muted)]">{item.tagline}</p>
               <div className="mt-5 grid gap-3">
-                <div className="sm-chip">
-                  <p className="sm-kicker text-[var(--sm-accent)]">Modules</p>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {pack.includes.map((item) => (
-                      <span className="rounded-full border border-white/10 bg-white/6 px-3 py-1 text-xs font-semibold text-white" key={item}>
-                        {item}
-                      </span>
-                    ))}
+                {item.bullets.map((bullet) => (
+                  <div className="sm-chip text-white" key={bullet}>
+                    {bullet}
                   </div>
-                </div>
-                <div className="sm-chip">
-                  <p className="sm-kicker text-[var(--sm-accent-alt)]">Outcomes</p>
-                  <ul className="mt-3 space-y-2 text-sm text-white">
-                    {pack.outcomes.map((item) => (
-                      <li key={item}>- {item}</li>
-                    ))}
-                  </ul>
-                </div>
+                ))}
               </div>
-
-              <p className="mt-4 text-sm text-[var(--sm-muted)]">{pack.rollout}</p>
-              <Link className="sm-button-accent mt-5" to={`/contact?package=${encodeURIComponent(pack.name)}`}>
-                Start this pack
+              <Link className="sm-button-accent mt-5" to={item.path}>
+                {item.kind === 'Free tool' ? 'Open product' : 'See system'}
               </Link>
             </article>
           ))}
@@ -151,11 +127,11 @@ export function HomePage() {
       <section className="space-y-4">
         <div className="flex items-center justify-between gap-4">
           <div>
-            <p className="sm-kicker text-[var(--sm-accent)]">Core modules</p>
-            <h2 className="mt-2 text-2xl font-bold text-white">The modules inside the packs.</h2>
+            <p className="sm-kicker text-[var(--sm-accent)]">Deployable systems</p>
+            <h2 className="mt-2 text-2xl font-bold text-white">What we put into a live rollout.</h2>
           </div>
           <Link className="sm-link" to="/contact">
-            Book a scoping call
+            Book walkthrough
           </Link>
         </div>
 
@@ -164,9 +140,7 @@ export function HomePage() {
             <article className="sm-surface-soft p-5" key={product.name}>
               <div className="flex items-center justify-between gap-3">
                 <h3 className="text-lg font-bold text-white">{product.name}</h3>
-                <span className="sm-status-pill border-[rgba(255,122,24,0.18)] bg-[rgba(255,122,24,0.08)] text-[var(--sm-accent-alt)]">
-                  Deploy
-                </span>
+                <span className="sm-status-pill border-[rgba(255,122,24,0.18)] bg-[rgba(255,122,24,0.08)] text-[var(--sm-accent-alt)]">Deploy</span>
               </div>
               <p className="mt-3 text-sm text-[var(--sm-muted)]">{product.tagline}</p>
               <p className="mt-4 text-sm text-white">{product.output}</p>
@@ -178,31 +152,29 @@ export function HomePage() {
         </div>
       </section>
 
-      <section className="grid gap-5 lg:grid-cols-[0.9fr_1.1fr]">
+      <section className="grid gap-5 lg:grid-cols-[1.1fr_0.9fr]">
         <article className="sm-surface p-6">
-          <p className="sm-kicker text-[var(--sm-accent)]">Free tools</p>
-          <h2 className="mt-3 text-2xl font-bold text-white">Use the proof layer first.</h2>
+          <p className="sm-kicker text-[var(--sm-accent)]">Mini products</p>
+          <h2 className="mt-3 text-2xl font-bold text-white">Small workflows that land fast.</h2>
           <p className="mt-3 text-sm text-[var(--sm-muted)]">
-            These are public tools. They let a team test how SuperMega turns messy input into something more usable.
+            These are smaller products that fit beside the core systems and help teams start without a heavy rebuild.
           </p>
           <div className="mt-5 grid gap-3">
-            {freeTools.map((tool) => (
+            {miniProducts.map((tool) => (
               <div className="sm-command-row" key={tool.name}>
                 <div>
                   <p className="font-semibold text-white">{tool.name}</p>
                   <p className="text-sm text-[var(--sm-muted)]">{tool.tagline}</p>
                 </div>
-                <Link className="sm-link" to={tool.exampleId ? `/examples#${tool.exampleId}` : '/examples'}>
-                  Try it
-                </Link>
+                <Link className="sm-link" to="/contact">Use it</Link>
               </div>
             ))}
           </div>
         </article>
 
         <article className="sm-surface p-6">
-          <p className="sm-kicker text-[var(--sm-accent-alt)]">How we work</p>
-          <h2 className="mt-3 text-2xl font-bold text-white">Start small. Keep what works. Expand only after proof.</h2>
+          <p className="sm-kicker text-[var(--sm-accent-alt)]">How rollout works</p>
+          <h2 className="mt-3 text-2xl font-bold text-white">Start small. Keep what works. Then expand.</h2>
           <div className="mt-5 grid gap-3 md:grid-cols-3">
             {packages.map((pkg) => (
               <div className="sm-chip" key={pkg.name}>

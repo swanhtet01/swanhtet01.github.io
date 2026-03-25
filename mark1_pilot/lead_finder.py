@@ -161,6 +161,40 @@ def _parse_duckduckgo_results(query: str, limit: int) -> list[dict[str, str]]:
     return rows
 
 
+def _parse_bing_results(query: str, limit: int) -> list[dict[str, str]]:
+    search_url = "https://www.bing.com/search?" + urlencode({"q": query})
+    html = _http_get(search_url)
+
+    block_pattern = re.compile(r'<li class="b_algo".*?</li>', flags=re.I | re.S)
+    link_pattern = re.compile(r'<h2><a href="(?P<href>[^"]+)"[^>]*>(?P<title>.*?)</a>', flags=re.I | re.S)
+    snippet_pattern = re.compile(r'<p>(?P<snippet>.*?)</p>', flags=re.I | re.S)
+
+    rows: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for block_match in block_pattern.finditer(html):
+        block = block_match.group(0)
+        link_match = link_pattern.search(block)
+        if not link_match:
+            continue
+        resolved = _resolve_redirect_url(link_match.group("href"))
+        if not resolved or resolved in seen:
+            continue
+        seen.add(resolved)
+        snippet_match = snippet_pattern.search(block)
+        rows.append(
+            {
+                "title": _strip_html(link_match.group("title")),
+                "url": resolved,
+                "snippet": _strip_html(snippet_match.group("snippet")) if snippet_match else "",
+                "source": _source_kind_for_url(resolved),
+                "provider": "Bing",
+            }
+        )
+        if len(rows) >= limit:
+            break
+    return rows
+
+
 def _google_places_results(query: str, limit: int) -> list[dict[str, Any]]:
     api_key = (
         os.environ.get("GOOGLE_PLACES_API_KEY")
@@ -397,9 +431,16 @@ def discover_leads(query: str, keywords: list[str] | None = None, sources: list[
         try:
             candidates = _parse_duckduckgo_results(search_query, per_query_limit)
         except Exception:
-            continue
+            candidates = []
         if candidates:
             providers.append("DuckDuckGo")
+        else:
+            try:
+                candidates = _parse_bing_results(search_query, per_query_limit)
+            except Exception:
+                candidates = []
+            if candidates:
+                providers.append("Bing")
         for candidate in candidates:
             rows.append(_candidate_to_row(candidate, normalized_keywords))
 
