@@ -29,6 +29,7 @@ from mark1_pilot.state_store import (  # noqa: E402
     add_metric_entries,
     add_metric_entry,
     add_inventory_record,
+    add_product_feedback,
     add_receiving_record,
     list_actions,
     list_agent_teams,
@@ -37,6 +38,7 @@ from mark1_pilot.state_store import (  # noqa: E402
     list_contact_submissions,
     list_inventory_records,
     list_metric_entries,
+    list_product_feedback,
     list_receiving_records,
     list_quality_incidents,
     list_supplier_risks,
@@ -44,6 +46,7 @@ from mark1_pilot.state_store import (  # noqa: E402
     load_agent_team_summary,
     load_inventory_summary,
     load_metric_summary,
+    load_product_feedback_summary,
     load_receiving_summary,
     load_quality_summary,
     load_snapshot,
@@ -169,6 +172,14 @@ class MetricRecordRequest(BaseModel):
 
 class MetricBulkSaveRequest(BaseModel):
     rows: list[MetricRecordRequest] = Field(default_factory=list)
+
+
+class ProductFeedbackRequest(BaseModel):
+    surface: str = "general"
+    category: str = "idea"
+    priority: str = "medium"
+    status: str = "open"
+    note: str
 
 
 def _load_json(path: Path) -> dict[str, Any]:
@@ -376,6 +387,7 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
         receiving_summary = load_receiving_summary(state_db)
         inventory_summary = load_inventory_summary(state_db)
         metric_summary = load_metric_summary(state_db)
+        feedback_summary = load_product_feedback_summary(state_db)
         portfolio = load_snapshot(state_db, "solution_portfolio_manifest") or _load_json(
             REPO_ROOT / "Super Mega Inc" / "sales" / "solution_portfolio_manifest.json"
         )
@@ -400,6 +412,7 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             "receiving": receiving_summary,
             "inventory": inventory_summary,
             "metrics": metric_summary,
+            "feedback": feedback_summary,
             "product_lab": {
                 "flagship_status": product_lab.get("summary", {}).get("flagship_status", ""),
                 "pilot_ready_count": product_lab.get("summary", {}).get("pilot_ready_count", 0),
@@ -515,6 +528,30 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
     def create_metric_records_bulk(request: MetricBulkSaveRequest) -> dict[str, Any]:
         rows = [row.model_dump() for row in request.rows]
         return add_metric_entries(state_db, rows=rows, source_mode="metric_intake_review")
+
+    @app.get("/api/product-feedback")
+    def product_feedback(surface: str | None = None, status: str | None = None, limit: int = 50) -> dict[str, Any]:
+        rows = list_product_feedback(state_db, surface=surface, status=status, limit=limit)
+        return {"status": "ready", "summary": load_product_feedback_summary(state_db), "count": len(rows), "rows": rows}
+
+    @app.post("/api/product-feedback")
+    def create_product_feedback(request: ProductFeedbackRequest) -> dict[str, Any]:
+        row = add_product_feedback(
+            state_db,
+            source="workbench",
+            surface=request.surface.strip(),
+            category=request.category.strip(),
+            priority=request.priority.strip(),
+            status=request.status.strip(),
+            note=request.note.strip(),
+        )
+        return {
+            "status": "ready",
+            "message": "Feedback saved.",
+            "row": row,
+            "rows": list_product_feedback(state_db, limit=50),
+            "summary": load_product_feedback_summary(state_db),
+        }
 
     @app.get("/api/supermega/operating-model")
     def supermega_operating_model() -> dict[str, Any]:

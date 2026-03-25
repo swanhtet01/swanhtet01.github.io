@@ -87,6 +87,7 @@ export type MiniProduct = {
 }
 
 export const navItems = [
+  { label: 'Workbench', to: '/workbench' },
   { label: 'Platform', to: '/platform' },
   { label: 'Solutions', to: '/solutions' },
   { label: 'Products', to: '/products' },
@@ -403,6 +404,13 @@ export const packages: PackageTier[] = [
 ]
 
 export const featuredProducts: FeaturedProduct[] = [
+  {
+    name: 'Workbench',
+    kind: 'Planning tool',
+    path: '/workbench',
+    tagline: 'The easiest daily-use surface: open modules, see live system pulse, and save product improvements while you work.',
+    bullets: ['Daily cockpit', 'Testing notebook', 'Quick launch into real modules'],
+  },
   {
     name: 'Action OS',
     kind: 'Deployable system',
