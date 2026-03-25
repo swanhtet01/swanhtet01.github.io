@@ -195,6 +195,23 @@ def ensure_schema(db_path: Path) -> None:
                 synced_at TEXT NOT NULL
             );
 
+            CREATE TABLE IF NOT EXISTS metric_entries (
+                metric_id TEXT PRIMARY KEY,
+                captured_at TEXT NOT NULL,
+                metric_name TEXT NOT NULL,
+                metric_group TEXT NOT NULL,
+                metric_value TEXT NOT NULL,
+                unit TEXT NOT NULL,
+                period_label TEXT NOT NULL,
+                scope TEXT NOT NULL,
+                owner TEXT NOT NULL,
+                status TEXT NOT NULL,
+                notes TEXT NOT NULL,
+                evidence_link TEXT NOT NULL,
+                source_ref_json TEXT NOT NULL,
+                synced_at TEXT NOT NULL
+            );
+
             CREATE TABLE IF NOT EXISTS agent_teams (
                 team_id TEXT PRIMARY KEY,
                 name TEXT NOT NULL,
@@ -1277,6 +1294,127 @@ def add_inventory_record(
     }
 
 
+def add_metric_entry(
+    db_path: Path,
+    *,
+    captured_at: str,
+    metric_name: str,
+    metric_group: str,
+    metric_value: str,
+    unit: str,
+    period_label: str,
+    scope: str,
+    owner: str,
+    status: str,
+    notes: str,
+    evidence_link: str,
+    source_mode: str = "manual_entry",
+) -> dict[str, Any]:
+    ensure_schema(db_path)
+    created_at = datetime.now().astimezone().isoformat()
+    normalized_captured_at = str(captured_at or "").strip() or created_at
+    normalized_name = str(metric_name or "").strip() or "metric_value"
+    normalized_group = str(metric_group or "").strip().lower() or "general"
+    normalized_value = str(metric_value or "").strip()
+    normalized_unit = str(unit or "").strip() or "value"
+    normalized_period = str(period_label or "").strip()
+    normalized_scope = str(scope or "").strip()
+    normalized_owner = str(owner or "").strip() or "Management"
+    normalized_status = str(status or "").strip().lower() or "reported"
+    normalized_notes = str(notes or "").strip()
+    normalized_evidence = str(evidence_link or "").strip()
+    metric_id = _stable_key(
+        "MET",
+        f"{normalized_name}:{normalized_group}:{normalized_scope}:{normalized_captured_at}:{normalized_value}:{created_at}",
+    )
+    source_ref = {"source": "tool:metric_intake", "mode": source_mode}
+
+    with _connect(db_path) as connection:
+        connection.execute(
+            """
+            INSERT INTO metric_entries (
+                metric_id,
+                captured_at,
+                metric_name,
+                metric_group,
+                metric_value,
+                unit,
+                period_label,
+                scope,
+                owner,
+                status,
+                notes,
+                evidence_link,
+                source_ref_json,
+                synced_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                metric_id,
+                normalized_captured_at,
+                normalized_name,
+                normalized_group,
+                normalized_value,
+                normalized_unit,
+                normalized_period,
+                normalized_scope,
+                normalized_owner,
+                normalized_status,
+                normalized_notes,
+                normalized_evidence,
+                json.dumps(source_ref),
+                created_at,
+            ),
+        )
+        connection.commit()
+
+    return {
+        "metric_id": metric_id,
+        "captured_at": normalized_captured_at,
+        "metric_name": normalized_name,
+        "metric_group": normalized_group,
+        "metric_value": normalized_value,
+        "unit": normalized_unit,
+        "period_label": normalized_period,
+        "scope": normalized_scope,
+        "owner": normalized_owner,
+        "status": normalized_status,
+        "notes": normalized_notes,
+        "evidence_link": normalized_evidence,
+        "source_ref": source_ref,
+        "synced_at": created_at,
+    }
+
+
+def add_metric_entries(db_path: Path, *, rows: list[dict[str, Any]], source_mode: str = "extracted_file") -> dict[str, Any]:
+    ensure_schema(db_path)
+    created_rows: list[dict[str, Any]] = []
+    for row in rows:
+        created_rows.append(
+            add_metric_entry(
+                db_path,
+                captured_at=str(row.get("captured_at", "")).strip(),
+                metric_name=str(row.get("metric_name", "")).strip(),
+                metric_group=str(row.get("metric_group", "")).strip(),
+                metric_value=str(row.get("metric_value", "")).strip(),
+                unit=str(row.get("unit", "")).strip(),
+                period_label=str(row.get("period_label", "")).strip(),
+                scope=str(row.get("scope", "")).strip(),
+                owner=str(row.get("owner", "")).strip(),
+                status=str(row.get("status", "")).strip(),
+                notes=str(row.get("notes", "")).strip(),
+                evidence_link=str(row.get("evidence_link", "")).strip(),
+                source_mode=source_mode,
+            )
+        )
+    return {
+        "status": "ready",
+        "saved_count": len(created_rows),
+        "rows": list_metric_entries(db_path, limit=100),
+        "summary": load_metric_summary(db_path),
+    }
+
+
 def list_actions(
     db_path: Path,
     *,
@@ -1721,6 +1859,88 @@ def load_inventory_summary(db_path: Path) -> dict[str, Any]:
         "top_warehouses": [
             {"warehouse": str(row["warehouse"]), "item_count": int(row["item_count"])}
             for row in warehouse_rows
+        ],
+    }
+
+
+def list_metric_entries(
+    db_path: Path,
+    *,
+    metric_group: str | None = None,
+    status: str | None = None,
+    limit: int = 100,
+) -> list[dict[str, Any]]:
+    ensure_schema(db_path)
+    query = """
+        SELECT
+            metric_id,
+            captured_at,
+            metric_name,
+            metric_group,
+            metric_value,
+            unit,
+            period_label,
+            scope,
+            owner,
+            status,
+            notes,
+            evidence_link,
+            source_ref_json,
+            synced_at
+        FROM metric_entries
+    """
+    conditions: list[str] = []
+    params: list[Any] = []
+    if metric_group:
+        conditions.append("metric_group = ?")
+        params.append(metric_group)
+    if status:
+        conditions.append("status = ?")
+        params.append(status)
+    if conditions:
+        query += " WHERE " + " AND ".join(conditions)
+    query += " ORDER BY captured_at DESC, metric_group, metric_name LIMIT ?"
+    params.append(max(1, int(limit)))
+    with _connect(db_path) as connection:
+        rows = connection.execute(query, params).fetchall()
+    return [
+        {
+            "metric_id": row["metric_id"],
+            "captured_at": row["captured_at"],
+            "metric_name": row["metric_name"],
+            "metric_group": row["metric_group"],
+            "metric_value": row["metric_value"],
+            "unit": row["unit"],
+            "period_label": row["period_label"],
+            "scope": row["scope"],
+            "owner": row["owner"],
+            "status": row["status"],
+            "notes": row["notes"],
+            "evidence_link": row["evidence_link"],
+            "source_ref": json.loads(row["source_ref_json"]) if row["source_ref_json"] else {},
+            "synced_at": row["synced_at"],
+        }
+        for row in rows
+    ]
+
+
+def load_metric_summary(db_path: Path) -> dict[str, Any]:
+    ensure_schema(db_path)
+    with _connect(db_path) as connection:
+        total = int(connection.execute("SELECT COUNT(*) FROM metric_entries").fetchone()[0])
+        group_rows = connection.execute(
+            "SELECT metric_group, COUNT(*) AS item_count FROM metric_entries GROUP BY metric_group ORDER BY item_count DESC, metric_group LIMIT 8"
+        ).fetchall()
+        status_rows = connection.execute(
+            "SELECT status, COUNT(*) AS item_count FROM metric_entries GROUP BY status"
+        ).fetchall()
+    return {
+        "metric_count": total,
+        "by_group": {str(row["metric_group"]): int(row["item_count"]) for row in group_rows},
+        "by_status": {str(row["status"]): int(row["item_count"]) for row in status_rows},
+        "top_groups": [
+            {"metric_group": str(row["metric_group"]), "item_count": int(row["item_count"])}
+            for row in group_rows
         ],
     }
 

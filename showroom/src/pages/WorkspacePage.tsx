@@ -27,6 +27,10 @@ type SummaryPayload = {
     reorder_count?: number
     watch_count?: number
   }
+  metrics?: {
+    metric_count?: number
+    by_group?: Record<string, number>
+  }
   supervisor?: {
     status?: string
     cycle_count?: number
@@ -140,6 +144,7 @@ export function WorkspacePage() {
             <div className="sm-chip text-white">Today queue from actions and updates</div>
             <div className="sm-chip text-white">Exception queue from supplier and quality risk</div>
             <div className="sm-chip text-white">Operator links into receiving and inventory control</div>
+            <div className="sm-chip text-white">Ops Intake for uploads, spreadsheets, and manual KPI rows</div>
           </div>
 
           <div className="mt-6 flex flex-wrap gap-3">
@@ -151,6 +156,9 @@ export function WorkspacePage() {
             </Link>
             <Link className="sm-button-secondary" to="/solution-architect">
               Open Solution Architect
+            </Link>
+            <Link className="sm-button-secondary" to="/ops-intake">
+              Open Ops Intake
             </Link>
           </div>
         </article>
@@ -187,7 +195,7 @@ export function WorkspacePage() {
                 </div>
               </div>
 
-              <div className="grid gap-4 md:grid-cols-3">
+              <div className="grid gap-4 md:grid-cols-4">
                 <div className="sm-chip text-white">
                   <p className="sm-kicker text-[var(--sm-accent)]">Receiving</p>
                   <p className="mt-2 text-2xl font-bold">{summary?.receiving?.receiving_count ?? 0}</p>
@@ -202,6 +210,11 @@ export function WorkspacePage() {
                   <p className="sm-kicker text-[var(--sm-accent)]">Coverage</p>
                   <p className="mt-2 text-2xl font-bold">{summary?.coverage_score ?? 0}</p>
                   <p className="mt-2 text-sm text-[var(--sm-muted)]">System readiness</p>
+                </div>
+                <div className="sm-chip text-white">
+                  <p className="sm-kicker text-[var(--sm-accent-alt)]">Metrics</p>
+                  <p className="mt-2 text-2xl font-bold">{summary?.metrics?.metric_count ?? 0}</p>
+                  <p className="mt-2 text-sm text-[var(--sm-muted)]">Uploaded or entered KPI rows</p>
                 </div>
               </div>
             </div>
