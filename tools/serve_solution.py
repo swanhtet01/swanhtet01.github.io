@@ -25,6 +25,8 @@ from mark1_pilot.state_store import (  # noqa: E402
     add_action_items,
     add_attendance_event,
     add_contact_submission,
+    add_metric_entries,
+    add_metric_entry,
     add_inventory_record,
     add_receiving_record,
     list_actions,
@@ -33,12 +35,14 @@ from mark1_pilot.state_store import (  # noqa: E402
     list_capa_actions,
     list_contact_submissions,
     list_inventory_records,
+    list_metric_entries,
     list_receiving_records,
     list_quality_incidents,
     list_supplier_risks,
     load_action_summary,
     load_agent_team_summary,
     load_inventory_summary,
+    load_metric_summary,
     load_receiving_summary,
     load_quality_summary,
     load_snapshot,
@@ -49,6 +53,7 @@ from mark1_pilot.state_store import (  # noqa: E402
 from mark1_pilot.lead_finder import run_lead_finder  # noqa: E402
 from mark1_pilot.lead_to_pilot import build_lead_to_pilot_pack  # noqa: E402
 from mark1_pilot.document_intake import analyze_document  # noqa: E402
+from mark1_pilot.metric_intake import extract_metric_candidates, summarize_metric_rows  # noqa: E402
 from mark1_pilot.solution_architect import build_solution_blueprint  # noqa: E402
 
 
@@ -140,6 +145,29 @@ class SolutionArchitectRequest(BaseModel):
     current_tools: list[str] = Field(default_factory=list)
     data_sources: list[str] = Field(default_factory=list)
     pain_points: str = ""
+
+
+class MetricExtractRequest(BaseModel):
+    filename: str
+    content_base64: str
+
+
+class MetricRecordRequest(BaseModel):
+    captured_at: str = ""
+    metric_name: str
+    metric_group: str = "general"
+    metric_value: str
+    unit: str = "value"
+    period_label: str = ""
+    scope: str = ""
+    owner: str = "Management"
+    status: str = "reported"
+    notes: str = ""
+    evidence_link: str = ""
+
+
+class MetricBulkSaveRequest(BaseModel):
+    rows: list[MetricRecordRequest] = Field(default_factory=list)
 
 
 def _load_json(path: Path) -> dict[str, Any]:
@@ -343,6 +371,7 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
         supplier_summary = load_supplier_risk_summary(state_db)
         receiving_summary = load_receiving_summary(state_db)
         inventory_summary = load_inventory_summary(state_db)
+        metric_summary = load_metric_summary(state_db)
         portfolio = load_snapshot(state_db, "solution_portfolio_manifest") or _load_json(
             REPO_ROOT / "Super Mega Inc" / "sales" / "solution_portfolio_manifest.json"
         )
@@ -366,6 +395,7 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             "supplier_watch": supplier_summary,
             "receiving": receiving_summary,
             "inventory": inventory_summary,
+            "metrics": metric_summary,
             "product_lab": {
                 "flagship_status": product_lab.get("summary", {}).get("flagship_status", ""),
                 "pilot_ready_count": product_lab.get("summary", {}).get("pilot_ready_count", 0),
@@ -423,6 +453,12 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
     def tool_document_intake(request: DocumentIntakeRequest) -> dict[str, Any]:
         return {"status": "ready", "analysis": analyze_document(request.filename, request.content_base64)}
 
+    @app.post("/api/tools/metric-intake")
+    def tool_metric_intake(request: MetricExtractRequest) -> dict[str, Any]:
+        analysis = extract_metric_candidates(request.filename, request.content_base64)
+        analysis["summary_stats"] = summarize_metric_rows(analysis.get("metrics", []))
+        return {"status": "ready", "analysis": analysis}
+
     @app.post("/api/tools/lead-to-pilot")
     def tool_lead_to_pilot(request: LeadToPilotRequest) -> dict[str, Any]:
         return build_lead_to_pilot_pack(leads=request.leads, campaign_goal=request.campaign_goal)
@@ -447,6 +483,34 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             REPO_ROOT / "Super Mega Inc" / "sales" / "solution_portfolio_manifest.json"
         )
         return {"status": "ready", "payload": payload}
+
+    @app.get("/api/metrics/records")
+    def metrics(metric_group: str | None = None, status: str | None = None, limit: int = 100) -> dict[str, Any]:
+        rows = list_metric_entries(state_db, metric_group=metric_group, status=status, limit=limit)
+        return {"status": "ready", "summary": load_metric_summary(state_db), "count": len(rows), "rows": rows}
+
+    @app.post("/api/metrics/records")
+    def create_metric_record(request: MetricRecordRequest) -> dict[str, Any]:
+        row = add_metric_entry(
+            state_db,
+            captured_at=request.captured_at.strip(),
+            metric_name=request.metric_name.strip(),
+            metric_group=request.metric_group.strip(),
+            metric_value=request.metric_value.strip(),
+            unit=request.unit.strip(),
+            period_label=request.period_label.strip(),
+            scope=request.scope.strip(),
+            owner=request.owner.strip(),
+            status=request.status.strip(),
+            notes=request.notes.strip(),
+            evidence_link=request.evidence_link.strip(),
+        )
+        return {"status": "ready", "message": f"Metric saved for {row['metric_name']}.", "row": row, "rows": list_metric_entries(state_db, limit=100), "summary": load_metric_summary(state_db)}
+
+    @app.post("/api/metrics/records/bulk")
+    def create_metric_records_bulk(request: MetricBulkSaveRequest) -> dict[str, Any]:
+        rows = [row.model_dump() for row in request.rows]
+        return add_metric_entries(state_db, rows=rows, source_mode="metric_intake_review")
 
     @app.get("/api/supermega/operating-model")
     def supermega_operating_model() -> dict[str, Any]:

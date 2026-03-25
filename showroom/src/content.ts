@@ -164,6 +164,22 @@ export const products: Product[] = [
   },
   {
     kind: 'Control module',
+    name: 'Ops Intake',
+    availability: 'Deploy',
+    tagline: 'Turn uploads, spreadsheets, and manual updates into clean live records.',
+    buyer: 'Operations lead, analyst, or team owner',
+    input: 'Uploaded files, pasted metric rows, and basic team updates',
+    output: 'Clean metric records, grouped exceptions, module-ready operating inputs',
+    fit: 'Any team starting from messy files or manual KPI reporting.',
+    connectors: ['Uploads', 'Sheets', 'Drive'],
+    requiredData: ['Source file or pasted rows', 'Basic group mapping', 'Owner or scope field'],
+    workflow: ['Read file or rows', 'Extract candidates', 'Review and save records', 'Feed Action OS and module boards'],
+    deliverables: ['Metric inbox', 'Clean record layer', 'Module-ready input rows'],
+    variants: ['Factory KPI intake', 'Commercial KPI intake', 'Director daily numbers'],
+    adaptation: 'Reuse the same intake engine. Swap metric groups, field labels, and review rules per client.',
+  },
+  {
+    kind: 'Control module',
     name: 'Supplier Watch',
     availability: 'Deploy',
     tagline: 'See supplier delay, payment, and customs risk before it hits production.',
@@ -403,6 +419,13 @@ export const featuredProducts: FeaturedProduct[] = [
     bullets: ['Real search input', 'Ranked result cards', 'Shortlist and CSV export'],
   },
   {
+    name: 'Ops Intake',
+    kind: 'Deployable system',
+    path: '/ops-intake',
+    tagline: 'The intake layer for the platform: upload files, review extracted metrics, and save clean operating rows.',
+    bullets: ['Upload KPI sheets', 'Review extracted records', 'Feed Action OS and control modules'],
+  },
+  {
     name: 'Solution Architect',
     kind: 'Planning tool',
     path: '/solution-architect',
@@ -415,13 +438,6 @@ export const featuredProducts: FeaturedProduct[] = [
     path: '/receiving-control',
     tagline: 'The first serious ERP slice: inbound receipt, variance, and hold status in one working control layer.',
     bullets: ['GRN / batch status', 'Variance visibility', 'Owner + next-action queue'],
-  },
-  {
-    name: 'Inventory Pulse',
-    kind: 'Deployable system',
-    path: '/inventory-pulse',
-    tagline: 'The next ERP slice: stock watch, reserved balance, and reorder pressure in one board.',
-    bullets: ['Available balance', 'Reorder queue', 'Warehouse-level view'],
   },
 ]
 
