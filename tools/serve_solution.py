@@ -4,8 +4,11 @@ import argparse
 import json
 import re
 import sys
+from html import unescape
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
+from urllib.request import Request, urlopen
 
 import uvicorn
 from fastapi import FastAPI, HTTPException
@@ -22,21 +25,34 @@ from mark1_pilot.state_store import (  # noqa: E402
     add_attendance_event,
     add_contact_submission,
     list_actions,
+    list_agent_teams,
     list_attendance_events,
+    list_capa_actions,
     list_contact_submissions,
+    list_quality_incidents,
+    list_supplier_risks,
     load_action_summary,
+    load_agent_team_summary,
+    load_quality_summary,
     load_snapshot,
+    load_supplier_risk_summary,
     resolve_state_db,
     sync_state_from_output_dir,
 )
+from mark1_pilot.lead_finder import run_lead_finder  # noqa: E402
 
 
 class LeadFinderRequest(BaseModel):
     raw_text: str = Field(default="")
+    query: str = Field(default="")
+    keywords: list[str] = Field(default_factory=list)
+    sources: list[str] = Field(default_factory=lambda: ["web", "social", "maps"])
+    limit: int = Field(default=10, ge=1, le=20)
 
 
 class NewsBriefRequest(BaseModel):
     raw_text: str = Field(default="")
+    urls: list[str] = Field(default_factory=list)
 
 
 class ActionBoardRequest(BaseModel):
@@ -146,6 +162,41 @@ def _build_news_brief(raw_text: str) -> dict[str, Any]:
     return {"summary": summary, "themes": themes[:4], "watch_items": watch_items[:4], "actions": actions[:4]}
 
 
+def _strip_html(value: str) -> str:
+    cleaned = re.sub(r"<[^>]+>", " ", str(value or ""))
+    cleaned = unescape(cleaned)
+    return re.sub(r"\s+", " ", cleaned).strip()
+
+
+def _fetch_url_brief_context(urls: list[str]) -> list[str]:
+    snippets: list[str] = []
+    for raw_url in urls[:4]:
+        normalized = str(raw_url or "").strip()
+        if not normalized:
+            continue
+        if not normalized.startswith(("http://", "https://")):
+            normalized = f"https://{normalized}"
+        try:
+            request = Request(
+                normalized,
+                headers={
+                    "User-Agent": "Mozilla/5.0",
+                    "Accept-Language": "en-US,en;q=0.9",
+                },
+            )
+            with urlopen(request, timeout=15) as response:
+                html = response.read(120_000).decode("utf-8", errors="ignore")
+        except Exception:
+            continue
+
+        title_match = re.search(r"<title[^>]*>(.*?)</title>", html, flags=re.I | re.S)
+        title = _strip_html(title_match.group(1)) if title_match else urlparse(normalized).netloc
+        body = _strip_html(html[:6000])
+        if body:
+            snippets.append(f"{title}. {body[:800]}")
+    return snippets
+
+
 def _infer_owner(text: str) -> str:
     lowered = str(text or "").lower()
     if re.search(r"(quality|defect|capa|reject|inspection|bead wire|ncr)", lowered):
@@ -224,9 +275,14 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
         publish = _load_json(pilot_data / "platform_publish.json")
         product_lab = load_snapshot(state_db, "product_lab") or _load_json(pilot_data / "product_lab.json")
         action_summary = load_action_summary(state_db)
+        agent_team_summary = load_agent_team_summary(state_db)
+        quality_summary = load_quality_summary(state_db)
+        supplier_summary = load_supplier_risk_summary(state_db)
         portfolio = load_snapshot(state_db, "solution_portfolio_manifest") or _load_json(
             REPO_ROOT / "Super Mega Inc" / "sales" / "solution_portfolio_manifest.json"
         )
+        platform_digest = load_snapshot(state_db, "platform_digest") or _load_json(pilot_data / "platform_digest.json")
+        supervisor = _load_json(pilot_data / "supervisor_status.json")
         return {
             "status": "ready",
             "review": {
@@ -240,6 +296,9 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             },
             "coverage_score": int(coverage.get("readiness_score", 0) or 0),
             "actions": action_summary,
+            "agent_system": agent_team_summary,
+            "quality": quality_summary,
+            "supplier_watch": supplier_summary,
             "product_lab": {
                 "flagship_status": product_lab.get("summary", {}).get("flagship_status", ""),
                 "pilot_ready_count": product_lab.get("summary", {}).get("pilot_ready_count", 0),
@@ -248,6 +307,13 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             "workspace": {
                 "drive_folder_link": publish.get("workspace_link", ""),
                 "google_doc_link": publish.get("google_doc_link", ""),
+            },
+            "role_views": platform_digest.get("role_views", {}) if isinstance(platform_digest, dict) else {},
+            "supervisor": {
+                "status": supervisor.get("status", ""),
+                "cycle_count": supervisor.get("cycle_count", 0),
+                "last_finished_at": supervisor.get("last_finished_at", ""),
+                "interval_minutes": supervisor.get("interval_minutes", 0),
             },
             "portfolio": portfolio,
         }
@@ -259,12 +325,32 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
 
     @app.post("/api/tools/lead-finder")
     def tool_lead_finder(request: LeadFinderRequest) -> dict[str, Any]:
-        rows = _parse_leads(request.raw_text)
-        return {"status": "ready", "count": len(rows), "rows": rows}
+        result = run_lead_finder(
+            raw_text=request.raw_text,
+            query=request.query,
+            keywords=request.keywords,
+            sources=request.sources,
+            limit=request.limit,
+        )
+        rows = result.get("rows", []) if isinstance(result, dict) else []
+        return {
+            "status": "ready",
+            "count": len(rows),
+            "provider": result.get("provider", ""),
+            "keywords": result.get("keywords", []),
+            "rows": rows,
+        }
 
     @app.post("/api/tools/news-brief")
     def tool_news_brief(request: NewsBriefRequest) -> dict[str, Any]:
-        return {"status": "ready", **_build_news_brief(request.raw_text)}
+        hydrated_parts = [request.raw_text.strip()]
+        hydrated_parts.extend(_fetch_url_brief_context(request.urls))
+        payload = "\n".join(part for part in hydrated_parts if part)
+        return {
+            "status": "ready",
+            "source_count": len([url for url in request.urls if str(url).strip()]),
+            **_build_news_brief(payload),
+        }
 
     @app.post("/api/tools/action-board")
     def tool_action_board(request: ActionBoardRequest) -> dict[str, Any]:
@@ -277,6 +363,48 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             REPO_ROOT / "Super Mega Inc" / "sales" / "solution_portfolio_manifest.json"
         )
         return {"status": "ready", "payload": payload}
+
+    @app.get("/api/quality/incidents")
+    def quality_incidents(status: str | None = None, limit: int = 100) -> dict[str, Any]:
+        rows = list_quality_incidents(state_db, status=status, limit=limit)
+        return {"status": "ready", "summary": load_quality_summary(state_db), "count": len(rows), "rows": rows}
+
+    @app.get("/api/quality/capa")
+    def quality_capa(status: str | None = None, limit: int = 100) -> dict[str, Any]:
+        rows = list_capa_actions(state_db, status=status, limit=limit)
+        return {"status": "ready", "summary": load_quality_summary(state_db), "count": len(rows), "rows": rows}
+
+    @app.get("/api/suppliers/risks")
+    def supplier_risks(supplier: str | None = None, status: str | None = None, limit: int = 100) -> dict[str, Any]:
+        rows = list_supplier_risks(state_db, supplier=supplier, status=status, limit=limit)
+        return {"status": "ready", "summary": load_supplier_risk_summary(state_db), "count": len(rows), "rows": rows}
+
+    @app.get("/api/reports/role/{role}")
+    def role_report(role: str) -> dict[str, Any]:
+        normalized_role = str(role).strip().lower()
+        if normalized_role not in {"ceo", "director", "manager"}:
+            raise HTTPException(status_code=404, detail=f"Unknown role report: {role}")
+        platform_digest = load_snapshot(state_db, "platform_digest") or _load_json(pilot_data / "platform_digest.json")
+        role_views = platform_digest.get("role_views", {}) if isinstance(platform_digest, dict) else {}
+        rows = role_views.get(normalized_role, []) if isinstance(role_views, dict) else []
+        return {"status": "ready", "role": normalized_role, "count": len(rows), "rows": rows}
+
+    @app.get("/api/supervisor")
+    def supervisor_status() -> dict[str, Any]:
+        payload = _load_json(pilot_data / "supervisor_status.json")
+        return {"status": "ready", "payload": payload}
+
+    @app.get("/api/agent-teams")
+    def agent_teams() -> dict[str, Any]:
+        payload = load_snapshot(state_db, "agent_team_system")
+        return {
+            "status": "ready",
+            "summary": load_agent_team_summary(state_db),
+            "teams": list_agent_teams(state_db),
+            "gaps": payload.get("gaps", []) if isinstance(payload, dict) else [],
+            "scaling_model": payload.get("scaling_model", {}) if isinstance(payload, dict) else {},
+            "next_moves": payload.get("next_moves", []) if isinstance(payload, dict) else [],
+        }
 
     @app.get("/api/snapshots/{snapshot_key}")
     def snapshot(snapshot_key: str) -> dict[str, Any]:
