@@ -1,14 +1,15 @@
 {
-  "generated_at": "2026-03-26T02:20:00+06:30",
+  "generated_at": "2026-03-26T06:15:00+06:30",
   "company": "SuperMega",
   "wedge_product": "Action OS",
   "flagship": "SuperMega OS",
+  "flagship_positioning": "Context-aware work OS across operations, knowledge work, and creative workspaces",
   "free_tools": [
     "Lead Finder",
     "News Brief",
     "Action Board"
   ],
-  "semi_products": [
+  "add_on_utilities": [
     "Attendance Check-In",
     "Reply Draft",
     "Document Intake",
@@ -16,6 +17,7 @@
   ],
   "core_modules": [
     "Action OS",
+    "Ops Intake",
     "Supplier Watch",
     "Receiving Control",
     "Inventory Pulse",
@@ -31,10 +33,12 @@
     "FastAPI",
     "SQLite",
     "Google APIs",
-    "PowerShell operators"
+    "PowerShell operators",
+    "Docker single-app deploy path"
   ],
   "next_stack": [
     "SQLModel",
+    "Postgres",
     "Cloud Run",
     "Cloud Scheduler",
     "Cloud Tasks",
@@ -45,6 +49,22 @@
     "PydanticAI",
     "Playwright or Stagehand"
   ],
+  "workspace_constellation": [
+    "Operations workspace",
+    "Knowledge workspace",
+    "Creative workspace"
+  ],
+  "workspace_apps": [
+    "Gmail",
+    "Google Drive",
+    "Google Sheets",
+    "Browser research",
+    "ChatGPT-style prompt workspaces",
+    "VS Code",
+    "Canva",
+    "Photoshop",
+    "Premiere"
+  ],
   "agent_teams": [
     "Command Office",
     "Control Tower",
@@ -54,11 +74,13 @@
     "Platform Engineering"
   ],
   "next_build_order": [
+    "Auth + workspace / tenant model",
+    "Postgres + migration layer",
     "Approval Layer",
     "Inventory Pulse deeper flows",
     "Receiving Control write-back",
     "Supplier Watch escalation and reply support",
     "Director / Manager / Operator role views",
-    "Cloud hosting and scheduled orchestration"
+    "Cross-tool context layer"
   ]
 }

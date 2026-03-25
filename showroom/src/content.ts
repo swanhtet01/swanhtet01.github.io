@@ -435,13 +435,13 @@ export const featuredProducts: FeaturedProduct[] = [
 
 export const flagshipSystem: FlagshipSystem = {
   name: 'SuperMega OS',
-  tagline: 'An AI-native operating layer on top of Gmail, Drive, Sheets, and the records companies already have.',
+  tagline: 'A context-aware work OS that sits across Gmail, Drive, Sheets, chat tools, coding tools, and creative workspaces.',
   steps: [
-    'Pull signals from inboxes, files, and simple team inputs',
-    'Convert them into owners, due dates, blockers, and approvals',
-    'Run managers and directors from one control layer instead of scattered trackers',
+    'Pull work context from inboxes, files, sheets, prompts, and app workspaces',
+    'Turn that context into owners, due dates, blockers, records, and reusable system memory',
+    'Give each person and team a cleaner working surface without forcing them into one app on day one',
   ],
-  bestFor: 'Owner-led companies that need control now and ERP replacement later.',
+  bestFor: 'Companies that need control now, then a broader AI-native work OS across operations, knowledge work, and creative execution.',
 }
 
 export const miniProducts: MiniProduct[] = [
@@ -544,6 +544,11 @@ export const proofPoints: ProofPoint[] = [
     label: 'Connected sources',
     value: 'Gmail + Drive + Sheets',
     detail: 'Built on the tools teams already use instead of a big first rip-and-replace.',
+  },
+  {
+    label: 'Future surface',
+    value: 'Cross-tool work OS',
+    detail: 'Designed to expand into coding, chat, creative, and browser workspaces with shared context and agents.',
   },
   {
     label: 'Working outputs',

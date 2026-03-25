@@ -41,6 +41,20 @@ const agentSpine = [
 
 const stackNow = ['React', 'FastAPI', 'SQLite', 'Google APIs', 'Workspace service']
 const stackNext = ['SQLModel', 'Cloud Run', 'Cloud Scheduler', 'Cloud Tasks', 'Secret Manager', 'Polars', 'DuckDB', 'LangGraph', 'PydanticAI']
+const workspaceConstellation = [
+  {
+    name: 'Operations workspace',
+    detail: 'Gmail, Drive, Sheets, and role-based control boards for actions, risk, receiving, inventory, quality, and cash.',
+  },
+  {
+    name: 'Knowledge workspace',
+    detail: 'Docs, browser research, prompts, notes, and coding tools such as ChatGPT and VS Code with shared context and agent memory.',
+  },
+  {
+    name: 'Creative workspace',
+    detail: 'Canva, Photoshop, Premiere, and media-production flows where agents help keep briefs, assets, approvals, and output aligned.',
+  },
+]
 
 export function PlatformPage() {
   return (
@@ -56,7 +70,7 @@ export function PlatformPage() {
           <p className="sm-kicker text-[var(--sm-accent)]">Wedge product</p>
           <h2 className="mt-3 text-4xl font-bold text-white">Action OS</h2>
           <p className="mt-4 text-sm leading-relaxed text-[var(--sm-muted)]">
-            This is the core SuperMega value proposition: pull messy business signals out of Gmail, Drive, Sheets, and simple operator inputs, then turn them into one clean owner and due-date system. Once that board is trusted, we add the deeper control modules.
+            This is the core SuperMega value proposition: pull messy business signals out of Gmail, Drive, Sheets, and simple operator inputs, then turn them into one clean owner and due-date system. Once that board is trusted, we add the deeper control modules and expand toward a broader work OS across more apps and workspaces.
           </p>
 
           <div className="mt-6 grid gap-3 md:grid-cols-3">
@@ -103,9 +117,24 @@ export function PlatformPage() {
 
           <div className="mt-5 sm-chip text-white">
             <p className="sm-kicker text-[var(--sm-accent-alt)]">Long-term layer</p>
-            <p className="mt-2 text-sm">{flagshipSystem.name} becomes the shared layer above actions, records, approvals, and role views.</p>
+            <p className="mt-2 text-sm">{flagshipSystem.name} becomes the shared layer above actions, records, approvals, role views, and cross-tool work context.</p>
           </div>
         </article>
+      </section>
+
+      <section className="space-y-4">
+        <div>
+          <p className="sm-kicker text-[var(--sm-accent)]">Workspace model</p>
+          <h2 className="mt-2 text-2xl font-bold text-white">The OS should sit across the tools people already use.</h2>
+        </div>
+        <div className="grid gap-5 md:grid-cols-3">
+          {workspaceConstellation.map((surface) => (
+            <article className="sm-surface-soft p-5" key={surface.name}>
+              <h3 className="text-xl font-bold text-white">{surface.name}</h3>
+              <p className="mt-3 text-sm text-[var(--sm-muted)]">{surface.detail}</p>
+            </article>
+          ))}
+        </div>
       </section>
 
       <section className="space-y-4">

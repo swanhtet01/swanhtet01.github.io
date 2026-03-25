@@ -19,7 +19,7 @@ export function HomePage() {
               One operating system for companies still running on Gmail, Drive, and spreadsheets.
             </h1>
             <p className="mt-5 max-w-3xl text-base leading-relaxed text-[var(--sm-muted)] lg:text-lg">
-              SuperMega starts with Action OS, then adds intake, receiving, inventory, supplier, quality, and cash control only where the business actually needs them. The goal is simple: fewer missed actions, cleaner records, and a real operating layer without a heavy ERP rollout first.
+              SuperMega starts with Action OS, then adds intake, receiving, inventory, supplier, quality, and cash control only where the business actually needs them. Long term, the same system expands into a broader work OS across the tools people already use, from Gmail and Drive to chat, coding, and creative workspaces.
             </p>
 
             <div className="mt-7 flex flex-wrap gap-3">
