@@ -58,6 +58,17 @@ Deployment target:
 - GitHub Pages workflow: `.github/workflows/showroom-pages.yml`
 - Domain: `https://supermega.dev`
 
+## 4b) Run the full app in one container
+
+```powershell
+docker compose -f .\docker-compose.app.yml up --build
+```
+
+Open:
+- `http://localhost:8787`
+
+This serves the website and API together and keeps saved state in the Docker volume.
+
 ## 5) One command to check whole machine health
 
 ```powershell

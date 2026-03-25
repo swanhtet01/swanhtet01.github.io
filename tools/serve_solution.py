@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
 from html import unescape
@@ -334,9 +335,12 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
     sync_state_from_output_dir(pilot_data)
 
     app = FastAPI(title="SuperMega Service", version="0.2.0")
+    cors_origins = [origin.strip() for origin in os.getenv("SUPERMEGA_CORS_ORIGINS", "*").split(",") if origin.strip()]
+    if not cors_origins:
+        cors_origins = ["*"]
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
+        allow_origins=cors_origins,
         allow_credentials=False,
         allow_methods=["*"],
         allow_headers=["*"],
@@ -706,12 +710,25 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
     return app
 
 
+def create_default_app() -> FastAPI:
+    configured_site_root = Path(os.getenv("SUPERMEGA_SITE_ROOT", str(REPO_ROOT / "showroom" / "dist")))
+    site_root = configured_site_root
+    if not site_root.exists():
+        fallback_site_root = REPO_ROOT / "swan-intelligence-hub"
+        site_root = fallback_site_root if fallback_site_root.exists() else configured_site_root
+    pilot_data = Path(os.getenv("SUPERMEGA_PILOT_DATA", str(REPO_ROOT / "pilot-data")))
+    return create_app(site_root, pilot_data)
+
+
+app = create_default_app()
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Serve SuperMega pilot outputs with a JSON API.")
-    parser.add_argument("--host", default="0.0.0.0", help="Bind host.")
-    parser.add_argument("--port", type=int, default=8787, help="Bind port.")
-    parser.add_argument("--site-root", default="swan-intelligence-hub", help="Static site root.")
-    parser.add_argument("--pilot-data", default="pilot-data", help="Generated output directory.")
+    parser.add_argument("--host", default=os.getenv("SUPERMEGA_HOST", "0.0.0.0"), help="Bind host.")
+    parser.add_argument("--port", type=int, default=int(os.getenv("PORT", os.getenv("SUPERMEGA_PORT", "8787"))), help="Bind port.")
+    parser.add_argument("--site-root", default=os.getenv("SUPERMEGA_SITE_ROOT", "showroom/dist"), help="Static site root.")
+    parser.add_argument("--pilot-data", default=os.getenv("SUPERMEGA_PILOT_DATA", "pilot-data"), help="Generated output directory.")
     args = parser.parse_args()
 
     site_root = Path(args.site_root).expanduser().resolve()

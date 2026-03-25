@@ -14,9 +14,9 @@ export function PackagesPage() {
   return (
     <div className="space-y-8">
       <PageIntro
-        eyebrow="How We Work"
-        title="Start with one workflow. Expand only after proof."
-        description="We do not begin with a heavy ERP rollout. We begin with one useful operating slice and grow from there."
+        eyebrow="Solutions"
+        title="Choose the solution track that fits the business first."
+        description="We do not begin with a heavy ERP rollout. We begin with one useful operating slice, make it trusted, and only then expand."
       />
 
       <section className="grid gap-5 lg:grid-cols-3">

@@ -19,6 +19,7 @@ Core docs:
 - `command-center/ARCHITECTURE_v2.3.md` - broader Mark 1 machine vision and long-term architecture
 - `DOCUMENTATION-INDEX.md` - map of active vs legacy docs
 - `QUICKSTART.md` - fastest path to run pilot, fix Gmail, and test on phone/laptop
+- `DEPLOY_APP.md` - single-app deploy path for the website + API together
 - `TODO.md` - current delegated workstreams
 - `Super Mega Inc/runbooks/` - domain cutover and showroom operations runbooks
 - `Super Mega Inc/runbooks/ai_native_erp_architecture_v1.md` - production blueprint for AI-native ERP rollout from single-tenant to multi-tenant
@@ -96,6 +97,9 @@ powershell -ExecutionPolicy Bypass -File .\tools\run_solution.ps1 -Config .\conf
 
 # Serve dashboard/API for phone/laptop access on LAN
 powershell -ExecutionPolicy Bypass -File .\tools\run_solution.ps1 -Config .\config.example.json -SkipRun -Serve -BindHost 0.0.0.0 -Port 8787
+
+# Run the full app as one container with persistent saved data
+docker compose -f .\docker-compose.app.yml up --build
 
 # Deploy website via GitHub Actions (sync secret + dispatch Pages/Cloud Run)
 powershell -ExecutionPolicy Bypass -File .\tools\deploy_website_actions.ps1 -ProjectId supermega-468612 -Region asia-southeast1 -Service supermega-showroom

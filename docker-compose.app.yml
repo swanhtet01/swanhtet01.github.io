@@ -1,0 +1,17 @@
+services:
+  supermega-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: supermega-app
+    ports:
+      - "8787:8080"
+    environment:
+      SUPERMEGA_PILOT_DATA: /app/data/pilot-data
+      SUPERMEGA_CORS_ORIGINS: http://localhost:8787
+    volumes:
+      - supermega-app-data:/app/data
+    restart: unless-stopped
+
+volumes:
+  supermega-app-data:

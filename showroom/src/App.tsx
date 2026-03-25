@@ -28,7 +28,9 @@ function App() {
           <Route element={<HomePage />} index />
           <Route element={<PlatformPage />} path="platform" />
           <Route element={<ProductsPage />} path="products" />
+          <Route element={<PackagesPage />} path="solutions" />
           <Route element={<TryPage />} path="examples" />
+          <Route element={<TryPage />} path="tools" />
           <Route element={<LeadFinderPage />} path="lead-finder" />
           <Route element={<NewsBriefPage />} path="news-brief" />
           <Route element={<ActionBoardPage />} path="action-board" />
