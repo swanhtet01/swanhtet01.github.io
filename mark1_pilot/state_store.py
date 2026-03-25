@@ -146,6 +146,24 @@ def ensure_schema(db_path: Path) -> None:
                 synced_at TEXT NOT NULL
             );
 
+            CREATE TABLE IF NOT EXISTS receiving_records (
+                receiving_id TEXT PRIMARY KEY,
+                received_at TEXT NOT NULL,
+                supplier TEXT NOT NULL,
+                po_or_pi TEXT NOT NULL,
+                grn_or_batch TEXT NOT NULL,
+                material TEXT NOT NULL,
+                expected_qty TEXT NOT NULL,
+                received_qty TEXT NOT NULL,
+                variance_note TEXT NOT NULL,
+                status TEXT NOT NULL,
+                owner TEXT NOT NULL,
+                next_action TEXT NOT NULL,
+                evidence_link TEXT NOT NULL,
+                source_ref_json TEXT NOT NULL,
+                synced_at TEXT NOT NULL
+            );
+
             CREATE TABLE IF NOT EXISTS agent_teams (
                 team_id TEXT PRIMARY KEY,
                 name TEXT NOT NULL,
@@ -467,6 +485,102 @@ def sync_supplier_risks(
     }
 
 
+def _build_receiving_rows(input_center_payload: dict[str, Any]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    templates = input_center_payload.get("templates", []) if isinstance(input_center_payload, dict) else []
+    for template in templates:
+        if str(template.get("key", "")).strip() != "receiving_control_log":
+            continue
+        sheet_link = str(template.get("web_view_link", "")).strip()
+        for recent in template.get("recent_rows", []):
+            row = recent.get("row", {}) if isinstance(recent, dict) else {}
+            receiving_id = _stable_key(
+                "RCV",
+                f"{row.get('supplier', '')}:{row.get('po_or_pi', '')}:{row.get('grn_or_batch', '')}:{row.get('__row_number', '')}",
+            )
+            expected_qty = str(row.get("expected_qty", "")).strip()
+            received_qty = str(row.get("received_qty", "")).strip()
+            variance_note = "matched"
+            if expected_qty and received_qty and expected_qty != received_qty:
+                variance_note = f"expected {expected_qty}, received {received_qty}"
+
+            rows.append(
+                {
+                    "receiving_id": receiving_id,
+                    "received_at": str(row.get("received_at", "")).strip(),
+                    "supplier": str(row.get("supplier", "")).strip() or "UNKNOWN",
+                    "po_or_pi": str(row.get("po_or_pi", "")).strip(),
+                    "grn_or_batch": str(row.get("grn_or_batch", "")).strip(),
+                    "material": str(row.get("material", "")).strip(),
+                    "expected_qty": expected_qty,
+                    "received_qty": received_qty,
+                    "variance_note": variance_note,
+                    "status": str(row.get("status", "")).strip() or "review",
+                    "owner": str(row.get("owner", "")).strip() or "Stores Team",
+                    "next_action": str(row.get("next_action", "")).strip() or "Review receipt status",
+                    "evidence_link": str(row.get("evidence_link", "")).strip(),
+                    "source_ref": {
+                        "template_key": "receiving_control_log",
+                        "sheet_link": sheet_link,
+                        "row_number": row.get("__row_number", ""),
+                    },
+                }
+            )
+    return rows
+
+
+def sync_receiving_records(db_path: Path, *, input_center_payload: dict[str, Any]) -> dict[str, Any]:
+    ensure_schema(db_path)
+    synced_at = datetime.now().astimezone().isoformat()
+    rows = _build_receiving_rows(input_center_payload)
+    with _connect(db_path) as connection:
+        connection.execute("DELETE FROM receiving_records")
+        connection.executemany(
+            """
+            INSERT INTO receiving_records (
+                receiving_id,
+                received_at,
+                supplier,
+                po_or_pi,
+                grn_or_batch,
+                material,
+                expected_qty,
+                received_qty,
+                variance_note,
+                status,
+                owner,
+                next_action,
+                evidence_link,
+                source_ref_json,
+                synced_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    str(row.get("receiving_id", "")).strip(),
+                    str(row.get("received_at", "")).strip(),
+                    str(row.get("supplier", "")).strip(),
+                    str(row.get("po_or_pi", "")).strip(),
+                    str(row.get("grn_or_batch", "")).strip(),
+                    str(row.get("material", "")).strip(),
+                    str(row.get("expected_qty", "")).strip(),
+                    str(row.get("received_qty", "")).strip(),
+                    str(row.get("variance_note", "")).strip(),
+                    str(row.get("status", "")).strip(),
+                    str(row.get("owner", "")).strip(),
+                    str(row.get("next_action", "")).strip(),
+                    str(row.get("evidence_link", "")).strip(),
+                    json.dumps(row.get("source_ref", {}), ensure_ascii=False),
+                    synced_at,
+                )
+                for row in rows
+                if str(row.get("receiving_id", "")).strip()
+            ],
+        )
+        connection.commit()
+    return {"status": "ready", "receiving_count": len(rows), "synced_at": synced_at}
+
+
 def sync_state_from_output_dir(output_dir: Path) -> dict[str, Any]:
     output_dir = output_dir.expanduser().resolve()
     db_path = resolve_state_db(output_dir)
@@ -506,6 +620,11 @@ def sync_state_from_output_dir(output_dir: Path) -> dict[str, Any]:
         db_path,
         input_center_payload=payloads.get("input_center_snapshot", {}) if isinstance(payloads.get("input_center_snapshot", {}), dict) else {},
         supplier_nonconformance_payload=payloads.get("dqms_supplier_nonconformance", []) if isinstance(payloads.get("dqms_supplier_nonconformance", []), list) else [],
+    )
+
+    sync_receiving_records(
+        db_path,
+        input_center_payload=payloads.get("input_center_snapshot", {}) if isinstance(payloads.get("input_center_snapshot", {}), dict) else {},
     )
 
     return {
@@ -1041,6 +1160,98 @@ def load_supplier_risk_summary(db_path: Path) -> dict[str, Any]:
         "by_severity": {str(row["severity"]): int(row["item_count"]) for row in severity_rows},
         "top_suppliers": [
             {"supplier": str(row["supplier"]), "risk_count": int(row["item_count"])}
+            for row in supplier_rows
+        ],
+    }
+
+
+def list_receiving_records(
+    db_path: Path,
+    *,
+    supplier: str | None = None,
+    status: str | None = None,
+    limit: int = 100,
+) -> list[dict[str, Any]]:
+    ensure_schema(db_path)
+    query = """
+        SELECT
+            receiving_id,
+            received_at,
+            supplier,
+            po_or_pi,
+            grn_or_batch,
+            material,
+            expected_qty,
+            received_qty,
+            variance_note,
+            status,
+            owner,
+            next_action,
+            evidence_link,
+            source_ref_json,
+            synced_at
+        FROM receiving_records
+    """
+    conditions: list[str] = []
+    params: list[Any] = []
+    if supplier:
+        conditions.append("supplier = ?")
+        params.append(supplier)
+    if status:
+        conditions.append("status = ?")
+        params.append(status)
+    if conditions:
+        query += " WHERE " + " AND ".join(conditions)
+    query += " ORDER BY received_at DESC, supplier, material LIMIT ?"
+    params.append(max(1, int(limit)))
+
+    with _connect(db_path) as connection:
+        rows = connection.execute(query, params).fetchall()
+    return [
+        {
+            "receiving_id": row["receiving_id"],
+            "received_at": row["received_at"],
+            "supplier": row["supplier"],
+            "po_or_pi": row["po_or_pi"],
+            "grn_or_batch": row["grn_or_batch"],
+            "material": row["material"],
+            "expected_qty": row["expected_qty"],
+            "received_qty": row["received_qty"],
+            "variance_note": row["variance_note"],
+            "status": row["status"],
+            "owner": row["owner"],
+            "next_action": row["next_action"],
+            "evidence_link": row["evidence_link"],
+            "source_ref": json.loads(row["source_ref_json"]) if row["source_ref_json"] else {},
+            "synced_at": row["synced_at"],
+        }
+        for row in rows
+    ]
+
+
+def load_receiving_summary(db_path: Path) -> dict[str, Any]:
+    ensure_schema(db_path)
+    with _connect(db_path) as connection:
+        total = int(connection.execute("SELECT COUNT(*) FROM receiving_records").fetchone()[0])
+        status_rows = connection.execute(
+            "SELECT status, COUNT(*) AS item_count FROM receiving_records GROUP BY status"
+        ).fetchall()
+        supplier_rows = connection.execute(
+            "SELECT supplier, COUNT(*) AS item_count FROM receiving_records GROUP BY supplier ORDER BY item_count DESC, supplier LIMIT 5"
+        ).fetchall()
+        variance_rows = connection.execute(
+            "SELECT COUNT(*) FROM receiving_records WHERE variance_note != 'matched'"
+        ).fetchone()
+        hold_rows = connection.execute(
+            "SELECT COUNT(*) FROM receiving_records WHERE status IN ('hold', 'blocked', 'review')"
+        ).fetchone()
+    return {
+        "receiving_count": total,
+        "by_status": {str(row["status"]): int(row["item_count"]) for row in status_rows},
+        "variance_count": int(variance_rows[0] if variance_rows else 0),
+        "hold_count": int(hold_rows[0] if hold_rows else 0),
+        "top_suppliers": [
+            {"supplier": str(row["supplier"]), "receiving_count": int(row["item_count"])}
             for row in supplier_rows
         ],
     }

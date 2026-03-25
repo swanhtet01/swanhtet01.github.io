@@ -5,14 +5,38 @@ import { workspaceApiBase, workspaceFetch } from '../lib/workspaceApi'
 
 type SummaryPayload = {
   coverage_score?: number
+  agent_system?: {
+    team_count?: number
+    autonomy_score?: number
+    autonomy_level?: string
+    status?: string
+  }
   actions?: {
     total_items?: number
     by_lane?: Record<string, number>
+  }
+  quality?: {
+    incident_count?: number
+    capa_count?: number
+  }
+  supplier_watch?: {
+    risk_count?: number
+  }
+  receiving?: {
+    receiving_count?: number
+    variance_count?: number
+    hold_count?: number
   }
   product_lab?: {
     flagship_status?: string
     pilot_ready_count?: number
     live_demo_count?: number
+  }
+  supervisor?: {
+    status?: string
+    cycle_count?: number
+    last_finished_at?: string
+    interval_minutes?: number
   }
   workspace?: {
     drive_folder_link?: string
@@ -111,6 +135,68 @@ export function WorkspacePage() {
                 <div className="sm-metric-card">
                   <p className="sm-kicker text-[var(--sm-accent)]">Flagship</p>
                   <p className="mt-3 text-lg font-bold text-white">{summary?.product_lab?.flagship_status ?? 'unknown'}</p>
+                </div>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-3">
+                <div className="sm-metric-card">
+                  <p className="sm-kicker text-[var(--sm-accent-alt)]">Agent teams</p>
+                  <p className="mt-3 text-3xl font-bold text-white">{summary?.agent_system?.team_count ?? 0}</p>
+                </div>
+                <div className="sm-metric-card">
+                  <p className="sm-kicker text-[var(--sm-accent)]">Autonomy score</p>
+                  <p className="mt-3 text-3xl font-bold text-white">{summary?.agent_system?.autonomy_score ?? 0}</p>
+                </div>
+                <div className="sm-metric-card">
+                  <p className="sm-kicker text-[var(--sm-accent-alt)]">Agent mode</p>
+                  <p className="mt-3 text-lg font-bold text-white">{summary?.agent_system?.autonomy_level ?? 'unknown'}</p>
+                </div>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-3">
+                <div className="sm-metric-card">
+                  <p className="sm-kicker text-[var(--sm-accent)]">Supplier risks</p>
+                  <p className="mt-3 text-3xl font-bold text-white">{summary?.supplier_watch?.risk_count ?? 0}</p>
+                </div>
+                <div className="sm-metric-card">
+                  <p className="sm-kicker text-[var(--sm-accent-alt)]">Receiving records</p>
+                  <p className="mt-3 text-3xl font-bold text-white">{summary?.receiving?.receiving_count ?? 0}</p>
+                </div>
+                <div className="sm-metric-card">
+                  <p className="sm-kicker text-[var(--sm-accent)]">Receiving variance</p>
+                  <p className="mt-3 text-3xl font-bold text-white">{summary?.receiving?.variance_count ?? 0}</p>
+                </div>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-3">
+                <div className="sm-metric-card">
+                  <p className="sm-kicker text-[var(--sm-accent-alt)]">Quality incidents</p>
+                  <p className="mt-3 text-3xl font-bold text-white">{summary?.quality?.incident_count ?? 0}</p>
+                </div>
+                <div className="sm-metric-card">
+                  <p className="sm-kicker text-[var(--sm-accent)]">CAPA actions</p>
+                  <p className="mt-3 text-3xl font-bold text-white">{summary?.quality?.capa_count ?? 0}</p>
+                </div>
+                <div className="sm-metric-card">
+                  <p className="sm-kicker text-[var(--sm-accent-alt)]">Receiving hold</p>
+                  <p className="mt-3 text-3xl font-bold text-white">{summary?.receiving?.hold_count ?? 0}</p>
+                </div>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-3">
+                <div className="sm-metric-card">
+                  <p className="sm-kicker text-[var(--sm-accent-alt)]">Supervisor</p>
+                  <p className="mt-3 text-lg font-bold text-white">{summary?.supervisor?.status || 'manual'}</p>
+                </div>
+                <div className="sm-metric-card">
+                  <p className="sm-kicker text-[var(--sm-accent)]">Cycles</p>
+                  <p className="mt-3 text-3xl font-bold text-white">{summary?.supervisor?.cycle_count ?? 0}</p>
+                </div>
+                <div className="sm-metric-card">
+                  <p className="sm-kicker text-[var(--sm-accent-alt)]">Refresh cadence</p>
+                  <p className="mt-3 text-lg font-bold text-white">
+                    {summary?.supervisor?.interval_minutes ? `${summary.supervisor.interval_minutes} min` : 'manual'}
+                  </p>
                 </div>
               </div>
 

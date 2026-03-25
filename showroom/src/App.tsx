@@ -10,6 +10,7 @@ import { NewsBriefPage } from './pages/NewsBriefPage'
 import { NotFoundPage } from './pages/NotFoundPage'
 import { PackagesPage } from './pages/PackagesPage'
 import { ProductsPage } from './pages/ProductsPage'
+import { ReceivingControlPage } from './pages/ReceivingControlPage'
 import { TryPage } from './pages/TryPage'
 import { WorkspacePage } from './pages/WorkspacePage'
 
@@ -25,6 +26,7 @@ function App() {
           <Route element={<LeadFinderPage />} path="lead-finder" />
           <Route element={<NewsBriefPage />} path="news-brief" />
           <Route element={<ActionBoardPage />} path="action-board" />
+          <Route element={<ReceivingControlPage />} path="receiving-control" />
           <Route element={<WorkspacePage />} path="workspace" />
           <Route element={<Navigate replace to="/examples" />} path="demos" />
           <Route element={<Navigate replace to="/examples" />} path="prototypes" />

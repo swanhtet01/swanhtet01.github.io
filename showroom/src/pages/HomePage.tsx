@@ -19,12 +19,15 @@ export function HomePage() {
               Turn messy business work into one clean system.
             </h1>
             <p className="mt-5 max-w-3xl text-base leading-relaxed text-[var(--sm-muted)] lg:text-lg">
-              SuperMega sits on top of Gmail, Drive, Sheets, and existing files. We start with one working tool or one live control workflow, then expand only after the first result is useful.
+              SuperMega sits on top of Gmail, Drive, Sheets, and existing files. The main wedge is Action OS: one live control layer first, then deeper modules like receiving, supplier, quality, cash, and inventory after the first board is already useful.
             </p>
 
             <div className="mt-7 flex flex-wrap gap-3">
-              <Link className="sm-button-primary" to="/lead-finder">
-                Open Lead Finder
+              <Link className="sm-button-primary" to="/products">
+                See Action OS
+              </Link>
+              <Link className="sm-button-secondary" to="/lead-finder">
+                Try Lead Finder
               </Link>
               <Link className="sm-button-accent" to="/contact">
                 Start pilot

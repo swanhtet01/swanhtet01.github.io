@@ -30,10 +30,12 @@ from mark1_pilot.state_store import (  # noqa: E402
     list_attendance_events,
     list_capa_actions,
     list_contact_submissions,
+    list_receiving_records,
     list_quality_incidents,
     list_supplier_risks,
     load_action_summary,
     load_agent_team_summary,
+    load_receiving_summary,
     load_quality_summary,
     load_snapshot,
     load_supplier_risk_summary,
@@ -283,6 +285,7 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
         agent_team_summary = load_agent_team_summary(state_db)
         quality_summary = load_quality_summary(state_db)
         supplier_summary = load_supplier_risk_summary(state_db)
+        receiving_summary = load_receiving_summary(state_db)
         portfolio = load_snapshot(state_db, "solution_portfolio_manifest") or _load_json(
             REPO_ROOT / "Super Mega Inc" / "sales" / "solution_portfolio_manifest.json"
         )
@@ -304,6 +307,7 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             "agent_system": agent_team_summary,
             "quality": quality_summary,
             "supplier_watch": supplier_summary,
+            "receiving": receiving_summary,
             "product_lab": {
                 "flagship_status": product_lab.get("summary", {}).get("flagship_status", ""),
                 "pilot_ready_count": product_lab.get("summary", {}).get("pilot_ready_count", 0),
@@ -388,6 +392,11 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
     def supplier_risks(supplier: str | None = None, status: str | None = None, limit: int = 100) -> dict[str, Any]:
         rows = list_supplier_risks(state_db, supplier=supplier, status=status, limit=limit)
         return {"status": "ready", "summary": load_supplier_risk_summary(state_db), "count": len(rows), "rows": rows}
+
+    @app.get("/api/receiving/records")
+    def receiving_records(supplier: str | None = None, status: str | None = None, limit: int = 100) -> dict[str, Any]:
+        rows = list_receiving_records(state_db, supplier=supplier, status=status, limit=limit)
+        return {"status": "ready", "summary": load_receiving_summary(state_db), "count": len(rows), "rows": rows}
 
     @app.get("/api/reports/role/{role}")
     def role_report(role: str) -> dict[str, Any]:

@@ -180,6 +180,22 @@ export const products: Product[] = [
   },
   {
     kind: 'Control module',
+    name: 'Receiving Control',
+    availability: 'Deploy',
+    tagline: 'Track inbound receipt, GRN status, variance, and hold actions in one control board.',
+    buyer: 'Stores lead, procurement manager, or plant manager',
+    input: 'Receiving log, PI or PO, GRN or batch, quantity, QC hold note',
+    output: 'Inbound receipt board, variance queue, hold list, release follow-up',
+    fit: 'Factories and trading businesses that need a real bridge between buying and stock control.',
+    connectors: ['Sheets', 'Drive', 'Receiving forms'],
+    requiredData: ['Receiving sheet', 'PI / PO reference', 'GRN or batch reference', 'Owner map'],
+    workflow: ['Capture receipt', 'Compare expected vs received', 'Flag hold or variance', 'Assign owner and next action'],
+    deliverables: ['Receiving board', 'Variance queue', 'Hold and release actions'],
+    variants: ['Raw material receipt', 'Imported goods receipt', 'Warehouse inbound control'],
+    adaptation: 'Reuse the same receipt workflow. Swap inbound document fields, batch logic, and review rules per client.',
+  },
+  {
+    kind: 'Control module',
     name: 'Quality Closeout',
     availability: 'Deploy',
     tagline: 'Turn one quality issue into a tracked closeout chain with ownership.',
@@ -357,6 +373,13 @@ export const packages: PackageTier[] = [
 
 export const featuredProducts: FeaturedProduct[] = [
   {
+    name: 'Action OS',
+    kind: 'Deployable system',
+    path: '/products',
+    tagline: 'The main wedge product: one live action layer across inboxes, files, sheets, and team updates.',
+    bullets: ['Manager board', 'Director view', 'Owner + due-date discipline'],
+  },
+  {
     name: 'Lead Finder',
     kind: 'Free tool',
     path: '/lead-finder',
@@ -364,18 +387,11 @@ export const featuredProducts: FeaturedProduct[] = [
     bullets: ['Real search input', 'Ranked result cards', 'Shortlist and CSV export'],
   },
   {
-    name: 'News Brief',
-    kind: 'Free tool',
-    path: '/news-brief',
-    tagline: 'Turn public links and rough notes into one short management brief with themes and next actions.',
-    bullets: ['URL-backed input', 'Short director summary', 'Theme and action extraction'],
-  },
-  {
-    name: 'Supplier Watch',
+    name: 'Receiving Control',
     kind: 'Deployable system',
-    path: '/products',
-    tagline: 'Catch supplier delay, payment, customs, and documentation risk before it hurts operations.',
-    bullets: ['Inbox + sheet monitoring', 'Risk queue with owners', 'Escalation-ready follow-up'],
+    path: '/receiving-control',
+    tagline: 'The first serious ERP slice: inbound receipt, variance, and hold status in one working control layer.',
+    bullets: ['GRN / batch status', 'Variance visibility', 'Owner + next-action queue'],
   },
 ]
 
@@ -464,9 +480,9 @@ export const servicePacks: ServicePack[] = [
     audience: 'Plant managers, operations leads, and quality teams',
     promise: 'One control layer for supplier risk, quality issues, and plant execution.',
     bestFor: 'Factories and operations teams that need control before a full ERP rollout.',
-    includes: ['Supplier Watch', 'Quality Closeout', 'Production Pulse', 'Attendance Check-In'],
-    outcomes: ['Supplier risk queue', 'Incident-to-CAPA board', 'Daily plant brief'],
-    rollout: 'Start with one plant or one incoming-material workflow. Expand into receiving, inventory, and approvals.',
+    includes: ['Supplier Watch', 'Receiving Control', 'Quality Closeout', 'Production Pulse', 'Attendance Check-In'],
+    outcomes: ['Inbound receipt board', 'Supplier risk queue', 'Incident-to-CAPA board', 'Daily plant brief'],
+    rollout: 'Start with incoming material or one plant. Expand into inventory, approvals, and full plant control after the first live board works.',
   },
   {
     name: 'Commercial Control',
@@ -492,8 +508,8 @@ export const proofPoints: ProofPoint[] = [
   },
   {
     label: 'Working outputs',
-    value: 'Actions, supplier risk, quality closeout',
-    detail: 'The pilot already publishes queues and role-based views, not static reports.',
+    value: 'Actions, supplier risk, receiving, quality',
+    detail: 'The pilot is moving beyond static reports into live operational control records.',
   },
   {
     label: 'Reuse model',

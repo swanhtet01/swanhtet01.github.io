@@ -78,6 +78,14 @@
       "priority": "now"
     },
     {
+      "id": "receiving_control",
+      "name": "Receiving Control",
+      "status": "pilot_ready",
+      "buyer": ["stores", "procurement", "plant_manager"],
+      "data_sources": ["receiving_sheet", "po_or_pi", "grn_or_batch", "evidence_links"],
+      "priority": "now"
+    },
+    {
       "id": "quality_closeout",
       "name": "Quality Closeout",
       "status": "pilot_ready",
@@ -99,6 +107,14 @@
       "status": "design_ready",
       "buyer": ["plant_manager", "production_head"],
       "data_sources": ["shift_sheet", "downtime_log", "production_notes"],
+      "priority": "next"
+    },
+    {
+      "id": "inventory_pulse",
+      "name": "Inventory Pulse",
+      "status": "design_ready",
+      "buyer": ["stores", "procurement", "finance", "operations"],
+      "data_sources": ["stock_sheet", "receiving_records", "issue_slips", "adjustments"],
       "priority": "next"
     },
     {
@@ -124,7 +140,7 @@
     {
       "id": "plant_control_pack",
       "name": "Plant Control Pack",
-      "includes": ["production_pulse", "quality_closeout", "action_os"]
+      "includes": ["receiving_control", "production_pulse", "quality_closeout", "action_os"]
     },
     {
       "id": "commercial_control_pack",
@@ -134,7 +150,7 @@
     {
       "id": "factory_command_pack",
       "name": "Factory Command Pack",
-      "includes": ["production_pulse", "quality_closeout", "supplier_watch", "action_os"]
+      "includes": ["supplier_watch", "receiving_control", "production_pulse", "quality_closeout", "action_os"]
     }
   ],
   "flagship": {
