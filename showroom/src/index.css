@@ -203,6 +203,26 @@ a {
   padding: 0.85rem 1rem;
 }
 
+.sm-input {
+  width: 100%;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--sm-ink);
+  border-radius: 1rem;
+  padding: 0.9rem 1rem;
+  outline: none;
+  transition:
+    border-color 140ms ease,
+    box-shadow 140ms ease,
+    background 140ms ease;
+}
+
+.sm-input:focus {
+  border-color: rgba(37, 208, 255, 0.48);
+  box-shadow: 0 0 0 3px rgba(37, 208, 255, 0.14);
+  background: rgba(255, 255, 255, 0.06);
+}
+
 .sm-metric-card {
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.01));

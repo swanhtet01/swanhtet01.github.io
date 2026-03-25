@@ -28,12 +28,39 @@ type ReceivingSummary = {
   top_suppliers?: Array<{ supplier: string; receiving_count: number }>
 }
 
+type ReceivingPayload = {
+  rows: ReceivingRow[]
+  summary: ReceivingSummary | null
+}
+
+const RECEIVING_FORM_DEFAULT = {
+  supplier: '',
+  po_or_pi: '',
+  grn_or_batch: '',
+  material: '',
+  expected_qty: '',
+  received_qty: '',
+  status: 'review',
+  owner: 'Stores Team',
+  next_action: '',
+  evidence_link: '',
+}
+
 export function ReceivingControlPage() {
   const [apiReady, setApiReady] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [saved, setSaved] = useState<string | null>(null)
   const [rows, setRows] = useState<ReceivingRow[]>([])
   const [summary, setSummary] = useState<ReceivingSummary | null>(null)
+  const [form, setForm] = useState(RECEIVING_FORM_DEFAULT)
+
+  async function loadRecords() {
+    const payload = await workspaceFetch<ReceivingPayload>('/api/receiving/records')
+    setRows(payload.rows ?? [])
+    setSummary(payload.summary ?? null)
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -48,13 +75,11 @@ export function ReceivingControlPage() {
       }
 
       try {
-        const payload = await workspaceFetch<{ rows: ReceivingRow[]; summary: ReceivingSummary }>('/api/receiving/records')
-        if (cancelled) return
-        setRows(payload.rows ?? [])
-        setSummary(payload.summary ?? null)
+        await loadRecords()
       } catch {
-        if (cancelled) return
-        setError('Receiving service is not responding yet.')
+        if (!cancelled) {
+          setError('Receiving service is not responding yet.')
+        }
       } finally {
         if (!cancelled) {
           setLoading(false)
@@ -73,38 +98,101 @@ export function ReceivingControlPage() {
     [rows],
   )
 
+  async function saveRecord() {
+    if (!apiReady || !form.supplier.trim() || !form.material.trim()) {
+      return
+    }
+    setSaving(true)
+    setSaved(null)
+    setError(null)
+    try {
+      const payload = await workspaceFetch<ReceivingPayload & { message?: string }>('/api/receiving/records', {
+        method: 'POST',
+        body: JSON.stringify(form),
+      })
+      setRows(payload.rows ?? [])
+      setSummary(payload.summary ?? null)
+      setForm(RECEIVING_FORM_DEFAULT)
+      setSaved(payload.message ?? 'Receiving record saved.')
+    } catch {
+      setError('Could not save the receiving record right now.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
   return (
     <div className="space-y-8">
       <PageIntro
         eyebrow="Deployable system"
         title="Receiving Control"
-        description="Track inbound material, GRN or batch status, quantity variance, and the next action to clear the receipt."
+        description="Log inbound material, track GRN or batch status, catch quantity variance, and assign the next action before stock disappears into email and paper."
       />
 
       <section className="grid gap-6 lg:grid-cols-[0.92fr_1.08fr]">
         <article className="sm-surface-deep p-6">
-          <p className="sm-kicker text-[var(--sm-accent)]">Why this matters</p>
-          <h2 className="mt-3 text-3xl font-bold text-white">This is where the ERP story becomes real.</h2>
+          <p className="sm-kicker text-[var(--sm-accent)]">Log a receipt</p>
+          <h2 className="mt-3 text-3xl font-bold text-white">Use this like the first real ERP screen.</h2>
           <p className="mt-3 text-sm text-[var(--sm-muted)]">
-            A lot of companies know what they ordered, but not what was actually received, what is on hold, and what still needs action.
-            Receiving Control fixes that first.
+            This is the point where ordered material becomes traceable operational state. Capture the inbound record once, then use the board on the right to manage exceptions.
           </p>
 
-          <div className="mt-5 grid gap-3">
-            <div className="sm-chip text-white">PI / PO to receipt trace</div>
-            <div className="sm-chip text-white">GRN or batch-level status</div>
-            <div className="sm-chip text-white">Quantity variance visibility</div>
-            <div className="sm-chip text-white">Owner + next action for release or follow-up</div>
+          <div className="mt-6 grid gap-4 md:grid-cols-2">
+            <label className="space-y-2">
+              <span className="text-sm text-[var(--sm-muted)]">Supplier</span>
+              <input className="sm-input" value={form.supplier} onChange={(event) => setForm((current) => ({ ...current, supplier: event.target.value }))} />
+            </label>
+            <label className="space-y-2">
+              <span className="text-sm text-[var(--sm-muted)]">Material</span>
+              <input className="sm-input" value={form.material} onChange={(event) => setForm((current) => ({ ...current, material: event.target.value }))} />
+            </label>
+            <label className="space-y-2">
+              <span className="text-sm text-[var(--sm-muted)]">PI / PO</span>
+              <input className="sm-input" value={form.po_or_pi} onChange={(event) => setForm((current) => ({ ...current, po_or_pi: event.target.value }))} />
+            </label>
+            <label className="space-y-2">
+              <span className="text-sm text-[var(--sm-muted)]">GRN / Batch</span>
+              <input className="sm-input" value={form.grn_or_batch} onChange={(event) => setForm((current) => ({ ...current, grn_or_batch: event.target.value }))} />
+            </label>
+            <label className="space-y-2">
+              <span className="text-sm text-[var(--sm-muted)]">Expected qty</span>
+              <input className="sm-input" value={form.expected_qty} onChange={(event) => setForm((current) => ({ ...current, expected_qty: event.target.value }))} />
+            </label>
+            <label className="space-y-2">
+              <span className="text-sm text-[var(--sm-muted)]">Received qty</span>
+              <input className="sm-input" value={form.received_qty} onChange={(event) => setForm((current) => ({ ...current, received_qty: event.target.value }))} />
+            </label>
+            <label className="space-y-2">
+              <span className="text-sm text-[var(--sm-muted)]">Status</span>
+              <select className="sm-input" value={form.status} onChange={(event) => setForm((current) => ({ ...current, status: event.target.value }))}>
+                <option value="review">review</option>
+                <option value="received">received</option>
+                <option value="hold">hold</option>
+                <option value="blocked">blocked</option>
+              </select>
+            </label>
+            <label className="space-y-2">
+              <span className="text-sm text-[var(--sm-muted)]">Owner</span>
+              <input className="sm-input" value={form.owner} onChange={(event) => setForm((current) => ({ ...current, owner: event.target.value }))} />
+            </label>
           </div>
 
+          <label className="mt-4 block space-y-2">
+            <span className="text-sm text-[var(--sm-muted)]">Next action</span>
+            <input className="sm-input" value={form.next_action} onChange={(event) => setForm((current) => ({ ...current, next_action: event.target.value }))} />
+          </label>
+
           <div className="mt-6 flex flex-wrap gap-3">
-            <Link className="sm-button-primary" to="/contact?package=Receiving%20Control">
-              Use on my team
-            </Link>
-            <Link className="sm-button-secondary" to="/products">
-              See all systems
+            <button className="sm-button-primary" disabled={!apiReady || saving || !form.supplier.trim() || !form.material.trim()} onClick={() => void saveRecord()} type="button">
+              {saving ? 'Saving...' : 'Save receiving record'}
+            </button>
+            <Link className="sm-button-secondary" to="/inventory-pulse">
+              Open Inventory Pulse
             </Link>
           </div>
+
+          {saved ? <div className="mt-4 sm-chip text-white">{saved}</div> : null}
+          {error ? <div className="mt-4 sm-chip text-white">{error}</div> : null}
         </article>
 
         <article className="sm-terminal p-6">
@@ -115,8 +203,6 @@ export function ReceivingControlPage() {
               <p className="text-sm text-[var(--sm-muted)]">Workspace API is not connected on this host yet.</p>
               <div className="sm-chip text-white">Run the local workspace service to see live receiving records.</div>
             </div>
-          ) : error ? (
-            <p className="text-sm text-[var(--sm-muted)]">{error}</p>
           ) : (
             <div className="space-y-5">
               <div className="flex items-center justify-between gap-3 border-b border-white/8 pb-4">
@@ -152,7 +238,7 @@ export function ReceivingControlPage() {
                       <div>
                         <p className="text-lg font-bold text-white">{row.material || 'Inbound material'}</p>
                         <p className="mt-1 text-sm text-[var(--sm-muted)]">
-                          {row.supplier} · {row.po_or_pi || 'No PI/PO'} · {row.grn_or_batch || 'No GRN'}
+                          {row.supplier} | {row.po_or_pi || 'No PI/PO'} | {row.grn_or_batch || 'No GRN'}
                         </p>
                       </div>
                       <span className="sm-status-pill">{row.status || 'review'}</span>
@@ -175,7 +261,7 @@ export function ReceivingControlPage() {
                 ))}
 
                 {rows.length === 0 ? (
-                  <div className="sm-chip text-[var(--sm-muted)]">No receiving rows have been synced into the workspace yet.</div>
+                  <div className="sm-chip text-[var(--sm-muted)]">No receiving rows yet. Add the first live inbound record from the form on the left.</div>
                 ) : null}
               </div>
             </div>

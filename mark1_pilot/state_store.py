@@ -32,6 +32,19 @@ def _stable_key(prefix: str, seed: str) -> str:
     return f"{prefix}-{digest}"
 
 
+def _coerce_number(value: str) -> float | None:
+    text = str(value or "").strip().replace(",", "")
+    if not text:
+        return None
+    cleaned = "".join(char for char in text if char.isdigit() or char in {".", "-"})
+    if not cleaned or cleaned in {"-", ".", "-."}:
+        return None
+    try:
+        return float(cleaned)
+    except ValueError:
+        return None
+
+
 def resolve_state_db(output_dir: Path) -> Path:
     return output_dir.expanduser().resolve() / STATE_DB_FILE
 
@@ -156,6 +169,24 @@ def ensure_schema(db_path: Path) -> None:
                 expected_qty TEXT NOT NULL,
                 received_qty TEXT NOT NULL,
                 variance_note TEXT NOT NULL,
+                status TEXT NOT NULL,
+                owner TEXT NOT NULL,
+                next_action TEXT NOT NULL,
+                evidence_link TEXT NOT NULL,
+                source_ref_json TEXT NOT NULL,
+                synced_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS inventory_records (
+                inventory_id TEXT PRIMARY KEY,
+                captured_at TEXT NOT NULL,
+                item_code TEXT NOT NULL,
+                item_name TEXT NOT NULL,
+                warehouse TEXT NOT NULL,
+                on_hand_qty TEXT NOT NULL,
+                reserved_qty TEXT NOT NULL,
+                available_qty TEXT NOT NULL,
+                reorder_point TEXT NOT NULL,
                 status TEXT NOT NULL,
                 owner TEXT NOT NULL,
                 next_action TEXT NOT NULL,
@@ -581,6 +612,124 @@ def sync_receiving_records(db_path: Path, *, input_center_payload: dict[str, Any
     return {"status": "ready", "receiving_count": len(rows), "synced_at": synced_at}
 
 
+def _build_inventory_rows(input_center_payload: dict[str, Any]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    templates = input_center_payload.get("templates", []) if isinstance(input_center_payload, dict) else []
+    for template in templates:
+        if str(template.get("key", "")).strip() != "inventory_pulse_log":
+            continue
+        sheet_link = str(template.get("web_view_link", "")).strip()
+        for recent in template.get("recent_rows", []):
+            row = recent.get("row", {}) if isinstance(recent, dict) else {}
+            item_code = str(row.get("item_code", "")).strip()
+            item_name = str(row.get("item_name", "")).strip() or "Unknown item"
+            warehouse = str(row.get("warehouse", "")).strip() or "Main"
+            on_hand_qty = str(row.get("on_hand_qty", "")).strip()
+            reserved_qty = str(row.get("reserved_qty", "")).strip()
+            reorder_point = str(row.get("reorder_point", "")).strip()
+
+            on_hand_num = _coerce_number(on_hand_qty)
+            reserved_num = _coerce_number(reserved_qty)
+            reorder_num = _coerce_number(reorder_point)
+            available_num = None
+            if on_hand_num is not None and reserved_num is not None:
+                available_num = on_hand_num - reserved_num
+            available_qty = (
+                f"{available_num:.2f}".rstrip("0").rstrip(".")
+                if available_num is not None
+                else on_hand_qty
+            )
+
+            status = str(row.get("status", "")).strip().lower() or "review"
+            if available_num is not None and reorder_num is not None:
+                if available_num <= reorder_num:
+                    status = "reorder"
+                elif available_num <= reorder_num * 1.25:
+                    status = "watch"
+                elif status == "review":
+                    status = "healthy"
+
+            inventory_id = _stable_key(
+                "INV",
+                f"{item_code}:{item_name}:{warehouse}:{row.get('__row_number', '')}",
+            )
+            rows.append(
+                {
+                    "inventory_id": inventory_id,
+                    "captured_at": str(row.get("captured_at", "")).strip() or str(row.get("updated_at", "")).strip(),
+                    "item_code": item_code,
+                    "item_name": item_name,
+                    "warehouse": warehouse,
+                    "on_hand_qty": on_hand_qty,
+                    "reserved_qty": reserved_qty,
+                    "available_qty": available_qty,
+                    "reorder_point": reorder_point,
+                    "status": status,
+                    "owner": str(row.get("owner", "")).strip() or "Stores Team",
+                    "next_action": str(row.get("next_action", "")).strip() or "Review stock position",
+                    "evidence_link": str(row.get("evidence_link", "")).strip(),
+                    "source_ref": {
+                        "template_key": "inventory_pulse_log",
+                        "sheet_link": sheet_link,
+                        "row_number": row.get("__row_number", ""),
+                    },
+                }
+            )
+    return rows
+
+
+def sync_inventory_records(db_path: Path, *, input_center_payload: dict[str, Any]) -> dict[str, Any]:
+    ensure_schema(db_path)
+    synced_at = datetime.now().astimezone().isoformat()
+    rows = _build_inventory_rows(input_center_payload)
+    with _connect(db_path) as connection:
+        connection.execute("DELETE FROM inventory_records")
+        connection.executemany(
+            """
+            INSERT INTO inventory_records (
+                inventory_id,
+                captured_at,
+                item_code,
+                item_name,
+                warehouse,
+                on_hand_qty,
+                reserved_qty,
+                available_qty,
+                reorder_point,
+                status,
+                owner,
+                next_action,
+                evidence_link,
+                source_ref_json,
+                synced_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    str(row.get("inventory_id", "")).strip(),
+                    str(row.get("captured_at", "")).strip(),
+                    str(row.get("item_code", "")).strip(),
+                    str(row.get("item_name", "")).strip(),
+                    str(row.get("warehouse", "")).strip(),
+                    str(row.get("on_hand_qty", "")).strip(),
+                    str(row.get("reserved_qty", "")).strip(),
+                    str(row.get("available_qty", "")).strip(),
+                    str(row.get("reorder_point", "")).strip(),
+                    str(row.get("status", "")).strip(),
+                    str(row.get("owner", "")).strip(),
+                    str(row.get("next_action", "")).strip(),
+                    str(row.get("evidence_link", "")).strip(),
+                    json.dumps(row.get("source_ref", {}), ensure_ascii=False),
+                    synced_at,
+                )
+                for row in rows
+                if str(row.get("inventory_id", "")).strip()
+            ],
+        )
+        connection.commit()
+    return {"status": "ready", "inventory_count": len(rows), "synced_at": synced_at}
+
+
 def sync_state_from_output_dir(output_dir: Path) -> dict[str, Any]:
     output_dir = output_dir.expanduser().resolve()
     db_path = resolve_state_db(output_dir)
@@ -623,6 +772,11 @@ def sync_state_from_output_dir(output_dir: Path) -> dict[str, Any]:
     )
 
     sync_receiving_records(
+        db_path,
+        input_center_payload=payloads.get("input_center_snapshot", {}) if isinstance(payloads.get("input_center_snapshot", {}), dict) else {},
+    )
+
+    sync_inventory_records(
         db_path,
         input_center_payload=payloads.get("input_center_snapshot", {}) if isinstance(payloads.get("input_center_snapshot", {}), dict) else {},
     )
@@ -899,6 +1053,228 @@ def list_attendance_events(db_path: Path, *, limit: int = 100) -> list[dict[str,
         }
         for row in rows
     ]
+
+
+def _derive_receiving_variance(expected_qty: str, received_qty: str) -> str:
+    expected = str(expected_qty or "").strip()
+    received = str(received_qty or "").strip()
+    if expected and received and expected != received:
+        return f"expected {expected}, received {received}"
+    return "matched"
+
+
+def add_receiving_record(
+    db_path: Path,
+    *,
+    received_at: str,
+    supplier: str,
+    po_or_pi: str,
+    grn_or_batch: str,
+    material: str,
+    expected_qty: str,
+    received_qty: str,
+    status: str,
+    owner: str,
+    next_action: str,
+    evidence_link: str,
+) -> dict[str, Any]:
+    ensure_schema(db_path)
+    created_at = datetime.now().astimezone().isoformat()
+    normalized_received_at = str(received_at or "").strip() or created_at
+    normalized_supplier = str(supplier or "").strip() or "Unknown supplier"
+    normalized_po = str(po_or_pi or "").strip()
+    normalized_grn = str(grn_or_batch or "").strip()
+    normalized_material = str(material or "").strip() or "Inbound material"
+    normalized_expected = str(expected_qty or "").strip()
+    normalized_received = str(received_qty or "").strip()
+    normalized_status = str(status or "").strip().lower() or "review"
+    normalized_owner = str(owner or "").strip() or "Stores Team"
+    normalized_action = str(next_action or "").strip() or "Review receipt status"
+    normalized_evidence = str(evidence_link or "").strip()
+    receiving_id = _stable_key(
+        "RCV",
+        f"{normalized_supplier}:{normalized_po}:{normalized_grn}:{normalized_material}:{normalized_received_at}:{created_at}",
+    )
+    variance_note = _derive_receiving_variance(normalized_expected, normalized_received)
+    source_ref = {"source": "tool:receiving_control", "mode": "manual_entry"}
+
+    with _connect(db_path) as connection:
+        connection.execute(
+            """
+            INSERT INTO receiving_records (
+                receiving_id,
+                received_at,
+                supplier,
+                po_or_pi,
+                grn_or_batch,
+                material,
+                expected_qty,
+                received_qty,
+                variance_note,
+                status,
+                owner,
+                next_action,
+                evidence_link,
+                source_ref_json,
+                synced_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                receiving_id,
+                normalized_received_at,
+                normalized_supplier,
+                normalized_po,
+                normalized_grn,
+                normalized_material,
+                normalized_expected,
+                normalized_received,
+                variance_note,
+                normalized_status,
+                normalized_owner,
+                normalized_action,
+                normalized_evidence,
+                json.dumps(source_ref),
+                created_at,
+            ),
+        )
+        connection.commit()
+
+    return {
+        "receiving_id": receiving_id,
+        "received_at": normalized_received_at,
+        "supplier": normalized_supplier,
+        "po_or_pi": normalized_po,
+        "grn_or_batch": normalized_grn,
+        "material": normalized_material,
+        "expected_qty": normalized_expected,
+        "received_qty": normalized_received,
+        "variance_note": variance_note,
+        "status": normalized_status,
+        "owner": normalized_owner,
+        "next_action": normalized_action,
+        "evidence_link": normalized_evidence,
+        "source_ref": source_ref,
+        "synced_at": created_at,
+    }
+
+
+def _derive_inventory_available_qty(on_hand_qty: str, reserved_qty: str) -> str:
+    on_hand_num = _coerce_number(on_hand_qty)
+    reserved_num = _coerce_number(reserved_qty)
+    if on_hand_num is None or reserved_num is None:
+        return ""
+    available_num = on_hand_num - reserved_num
+    return str(int(available_num)) if available_num.is_integer() else f"{available_num:.2f}".rstrip("0").rstrip(".")
+
+
+def _derive_inventory_status(status: str, available_qty: str, reorder_point: str) -> str:
+    normalized = str(status or "").strip().lower()
+    if normalized:
+        return normalized
+    available_num = _coerce_number(available_qty)
+    reorder_num = _coerce_number(reorder_point)
+    if available_num is None or reorder_num is None:
+        return "review"
+    if available_num <= reorder_num:
+        return "reorder"
+    if available_num <= reorder_num * 1.25:
+        return "watch"
+    return "healthy"
+
+
+def add_inventory_record(
+    db_path: Path,
+    *,
+    captured_at: str,
+    item_code: str,
+    item_name: str,
+    warehouse: str,
+    on_hand_qty: str,
+    reserved_qty: str,
+    reorder_point: str,
+    status: str,
+    owner: str,
+    next_action: str,
+    evidence_link: str,
+) -> dict[str, Any]:
+    ensure_schema(db_path)
+    created_at = datetime.now().astimezone().isoformat()
+    normalized_captured_at = str(captured_at or "").strip() or created_at
+    normalized_item_code = str(item_code or "").strip()
+    normalized_item_name = str(item_name or "").strip() or "Unknown item"
+    normalized_warehouse = str(warehouse or "").strip() or "Main Warehouse"
+    normalized_on_hand = str(on_hand_qty or "").strip()
+    normalized_reserved = str(reserved_qty or "").strip()
+    normalized_reorder = str(reorder_point or "").strip()
+    available_qty = _derive_inventory_available_qty(normalized_on_hand, normalized_reserved)
+    normalized_status = _derive_inventory_status(status, available_qty, normalized_reorder)
+    normalized_owner = str(owner or "").strip() or "Stores Team"
+    normalized_action = str(next_action or "").strip() or "Review stock position"
+    normalized_evidence = str(evidence_link or "").strip()
+    inventory_id = _stable_key(
+        "INV",
+        f"{normalized_item_code}:{normalized_item_name}:{normalized_warehouse}:{normalized_captured_at}:{created_at}",
+    )
+    source_ref = {"source": "tool:inventory_pulse", "mode": "manual_entry"}
+
+    with _connect(db_path) as connection:
+        connection.execute(
+            """
+            INSERT INTO inventory_records (
+                inventory_id,
+                captured_at,
+                item_code,
+                item_name,
+                warehouse,
+                on_hand_qty,
+                reserved_qty,
+                available_qty,
+                reorder_point,
+                status,
+                owner,
+                next_action,
+                evidence_link,
+                source_ref_json,
+                synced_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                inventory_id,
+                normalized_captured_at,
+                normalized_item_code,
+                normalized_item_name,
+                normalized_warehouse,
+                normalized_on_hand,
+                normalized_reserved,
+                available_qty,
+                normalized_reorder,
+                normalized_status,
+                normalized_owner,
+                normalized_action,
+                normalized_evidence,
+                json.dumps(source_ref),
+                created_at,
+            ),
+        )
+        connection.commit()
+
+    return {
+        "inventory_id": inventory_id,
+        "captured_at": normalized_captured_at,
+        "item_code": normalized_item_code,
+        "item_name": normalized_item_name,
+        "warehouse": normalized_warehouse,
+        "on_hand_qty": normalized_on_hand,
+        "reserved_qty": normalized_reserved,
+        "available_qty": available_qty,
+        "reorder_point": normalized_reorder,
+        "status": normalized_status,
+        "owner": normalized_owner,
+        "next_action": normalized_action,
+        "evidence_link": normalized_evidence,
+        "source_ref": source_ref,
+        "synced_at": created_at,
+    }
 
 
 def list_actions(
@@ -1253,6 +1629,98 @@ def load_receiving_summary(db_path: Path) -> dict[str, Any]:
         "top_suppliers": [
             {"supplier": str(row["supplier"]), "receiving_count": int(row["item_count"])}
             for row in supplier_rows
+        ],
+    }
+
+
+def list_inventory_records(
+    db_path: Path,
+    *,
+    warehouse: str | None = None,
+    status: str | None = None,
+    limit: int = 100,
+) -> list[dict[str, Any]]:
+    ensure_schema(db_path)
+    query = """
+        SELECT
+            inventory_id,
+            captured_at,
+            item_code,
+            item_name,
+            warehouse,
+            on_hand_qty,
+            reserved_qty,
+            available_qty,
+            reorder_point,
+            status,
+            owner,
+            next_action,
+            evidence_link,
+            source_ref_json,
+            synced_at
+        FROM inventory_records
+    """
+    conditions: list[str] = []
+    params: list[Any] = []
+    if warehouse:
+        conditions.append("warehouse = ?")
+        params.append(warehouse)
+    if status:
+        conditions.append("status = ?")
+        params.append(status)
+    if conditions:
+        query += " WHERE " + " AND ".join(conditions)
+    query += " ORDER BY CASE status WHEN 'reorder' THEN 0 WHEN 'watch' THEN 1 WHEN 'review' THEN 2 ELSE 3 END, item_name LIMIT ?"
+    params.append(max(1, int(limit)))
+
+    with _connect(db_path) as connection:
+        rows = connection.execute(query, params).fetchall()
+    return [
+        {
+            "inventory_id": row["inventory_id"],
+            "captured_at": row["captured_at"],
+            "item_code": row["item_code"],
+            "item_name": row["item_name"],
+            "warehouse": row["warehouse"],
+            "on_hand_qty": row["on_hand_qty"],
+            "reserved_qty": row["reserved_qty"],
+            "available_qty": row["available_qty"],
+            "reorder_point": row["reorder_point"],
+            "status": row["status"],
+            "owner": row["owner"],
+            "next_action": row["next_action"],
+            "evidence_link": row["evidence_link"],
+            "source_ref": json.loads(row["source_ref_json"]) if row["source_ref_json"] else {},
+            "synced_at": row["synced_at"],
+        }
+        for row in rows
+    ]
+
+
+def load_inventory_summary(db_path: Path) -> dict[str, Any]:
+    ensure_schema(db_path)
+    with _connect(db_path) as connection:
+        total = int(connection.execute("SELECT COUNT(*) FROM inventory_records").fetchone()[0])
+        status_rows = connection.execute(
+            "SELECT status, COUNT(*) AS item_count FROM inventory_records GROUP BY status"
+        ).fetchall()
+        warehouse_rows = connection.execute(
+            "SELECT warehouse, COUNT(*) AS item_count FROM inventory_records GROUP BY warehouse ORDER BY item_count DESC, warehouse LIMIT 5"
+        ).fetchall()
+        reorder_rows = connection.execute(
+            "SELECT COUNT(*) FROM inventory_records WHERE status = 'reorder'"
+        ).fetchone()
+        watch_rows = connection.execute(
+            "SELECT COUNT(*) FROM inventory_records WHERE status = 'watch'"
+        ).fetchone()
+    return {
+        "inventory_count": total,
+        "by_status": {str(row["status"]): int(row["item_count"]) for row in status_rows},
+        "reorder_count": int(reorder_rows[0] if reorder_rows else 0),
+        "watch_count": int(watch_rows[0] if watch_rows else 0),
+        "top_warehouses": [
+            {"warehouse": str(row["warehouse"]), "item_count": int(row["item_count"])}
+            for row in warehouse_rows
         ],
     }
 
