@@ -14,25 +14,31 @@
     "priorities": [
       "supplier risk control",
       "quality closeout discipline",
-      "daily management action tracking"
+      "daily management action tracking",
+      "receiving discipline",
+      "inventory pressure visibility"
     ]
   },
   "selected_products": {
     "flagship": "supermega_os",
     "free_tools": [
       "action_board",
-      "news_brief"
+      "news_brief",
+      "lead_finder"
     ],
     "control_modules": [
       "action_os",
       "supplier_watch",
+      "receiving_control",
+      "inventory_pulse",
       "quality_closeout",
       "cash_watch"
     ],
     "role_dashboards": [
       "director",
       "plant_manager",
-      "procurement"
+      "procurement",
+      "stores"
     ]
   },
   "connectors": {
@@ -77,6 +83,20 @@
           "sample_row": ["2026-03-10", "JUNKY", "PI-12345", "Raw material", "2 containers", "2026-03-22", "in_transit", "medium", "Procurement Team", "Confirm customs docs"]
         },
         {
+          "key": "receiving_control_log",
+          "title": "YTF Receiving Control Log",
+          "description": "Track inbound material receipt, GRN status, quantity variance, and hold actions.",
+          "headers": ["received_at", "supplier", "po_or_pi", "grn_or_batch", "material", "expected_qty", "received_qty", "status", "owner", "next_action", "evidence_link"],
+          "sample_row": ["2026-03-10", "JUNKY", "PI-12345", "GRN-0001", "Raw material", "2 containers", "2 containers", "received", "Stores Team", "Confirm QC release", ""]
+        },
+        {
+          "key": "inventory_pulse_log",
+          "title": "YTF Inventory Pulse Log",
+          "description": "Track on-hand stock, reserved balance, reorder pressure, and next action.",
+          "headers": ["captured_at", "item_code", "item_name", "warehouse", "on_hand_qty", "reserved_qty", "reorder_point", "status", "owner", "next_action", "evidence_link"],
+          "sample_row": ["2026-03-10", "RM-001", "Carbon Black", "Main Warehouse", "1200", "300", "500", "healthy", "Stores Team", "Review next inbound plan", ""]
+        },
+        {
           "key": "sales_market_signal",
           "title": "YTF Sales And Market Signal",
           "description": "Sales team updates and market movement signals.",
@@ -104,8 +124,8 @@
   "entity_maps": {
     "suppliers": ["KIIC", "JUNKY"],
     "plants": ["Plant A"],
-    "teams": ["Production", "Quality", "Procurement", "Sales"],
-    "owners": ["Quality Team", "Procurement Team", "Ko Aung"],
+    "teams": ["Production", "Quality", "Procurement", "Stores", "Sales"],
+    "owners": ["Quality Team", "Procurement Team", "Stores Team", "Ko Aung"],
     "approvers": ["Director"],
     "aliases": {
       "supplier": {

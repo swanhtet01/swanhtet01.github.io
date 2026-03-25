@@ -25,16 +25,20 @@ from mark1_pilot.state_store import (  # noqa: E402
     add_action_items,
     add_attendance_event,
     add_contact_submission,
+    add_inventory_record,
+    add_receiving_record,
     list_actions,
     list_agent_teams,
     list_attendance_events,
     list_capa_actions,
     list_contact_submissions,
+    list_inventory_records,
     list_receiving_records,
     list_quality_incidents,
     list_supplier_risks,
     load_action_summary,
     load_agent_team_summary,
+    load_inventory_summary,
     load_receiving_summary,
     load_quality_summary,
     load_snapshot,
@@ -84,6 +88,34 @@ class AttendanceCheckinRequest(BaseModel):
     method: str = "photo_checkin"
     evidence_url: str = ""
     note: str = ""
+
+
+class ReceivingRecordRequest(BaseModel):
+    received_at: str = ""
+    supplier: str
+    po_or_pi: str = ""
+    grn_or_batch: str = ""
+    material: str
+    expected_qty: str = ""
+    received_qty: str = ""
+    status: str = "review"
+    owner: str = "Stores Team"
+    next_action: str = ""
+    evidence_link: str = ""
+
+
+class InventoryRecordRequest(BaseModel):
+    captured_at: str = ""
+    item_code: str = ""
+    item_name: str
+    warehouse: str = "Main Warehouse"
+    on_hand_qty: str = ""
+    reserved_qty: str = ""
+    reorder_point: str = ""
+    status: str = ""
+    owner: str = "Stores Team"
+    next_action: str = ""
+    evidence_link: str = ""
 
 
 def _load_json(path: Path) -> dict[str, Any]:
@@ -286,6 +318,7 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
         quality_summary = load_quality_summary(state_db)
         supplier_summary = load_supplier_risk_summary(state_db)
         receiving_summary = load_receiving_summary(state_db)
+        inventory_summary = load_inventory_summary(state_db)
         portfolio = load_snapshot(state_db, "solution_portfolio_manifest") or _load_json(
             REPO_ROOT / "Super Mega Inc" / "sales" / "solution_portfolio_manifest.json"
         )
@@ -308,6 +341,7 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             "quality": quality_summary,
             "supplier_watch": supplier_summary,
             "receiving": receiving_summary,
+            "inventory": inventory_summary,
             "product_lab": {
                 "flagship_status": product_lab.get("summary", {}).get("flagship_status", ""),
                 "pilot_ready_count": product_lab.get("summary", {}).get("pilot_ready_count", 0),
@@ -397,6 +431,63 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
     def receiving_records(supplier: str | None = None, status: str | None = None, limit: int = 100) -> dict[str, Any]:
         rows = list_receiving_records(state_db, supplier=supplier, status=status, limit=limit)
         return {"status": "ready", "summary": load_receiving_summary(state_db), "count": len(rows), "rows": rows}
+
+    @app.post("/api/receiving/records")
+    def create_receiving_record(request: ReceivingRecordRequest) -> dict[str, Any]:
+        row = add_receiving_record(
+            state_db,
+            received_at=request.received_at.strip(),
+            supplier=request.supplier.strip(),
+            po_or_pi=request.po_or_pi.strip(),
+            grn_or_batch=request.grn_or_batch.strip(),
+            material=request.material.strip(),
+            expected_qty=request.expected_qty.strip(),
+            received_qty=request.received_qty.strip(),
+            status=request.status.strip(),
+            owner=request.owner.strip(),
+            next_action=request.next_action.strip(),
+            evidence_link=request.evidence_link.strip(),
+        )
+        rows = list_receiving_records(state_db, limit=100)
+        return {
+            "status": "ready",
+            "message": "Receiving record saved.",
+            "record": row,
+            "summary": load_receiving_summary(state_db),
+            "count": len(rows),
+            "rows": rows,
+        }
+
+    @app.get("/api/inventory/records")
+    def inventory_records(warehouse: str | None = None, status: str | None = None, limit: int = 100) -> dict[str, Any]:
+        rows = list_inventory_records(state_db, warehouse=warehouse, status=status, limit=limit)
+        return {"status": "ready", "summary": load_inventory_summary(state_db), "count": len(rows), "rows": rows}
+
+    @app.post("/api/inventory/records")
+    def create_inventory_record(request: InventoryRecordRequest) -> dict[str, Any]:
+        row = add_inventory_record(
+            state_db,
+            captured_at=request.captured_at.strip(),
+            item_code=request.item_code.strip(),
+            item_name=request.item_name.strip(),
+            warehouse=request.warehouse.strip(),
+            on_hand_qty=request.on_hand_qty.strip(),
+            reserved_qty=request.reserved_qty.strip(),
+            reorder_point=request.reorder_point.strip(),
+            status=request.status.strip(),
+            owner=request.owner.strip(),
+            next_action=request.next_action.strip(),
+            evidence_link=request.evidence_link.strip(),
+        )
+        rows = list_inventory_records(state_db, limit=100)
+        return {
+            "status": "ready",
+            "message": "Inventory record saved.",
+            "record": row,
+            "summary": load_inventory_summary(state_db),
+            "count": len(rows),
+            "rows": rows,
+        }
 
     @app.get("/api/reports/role/{role}")
     def role_report(role: str) -> dict[str, Any]:
