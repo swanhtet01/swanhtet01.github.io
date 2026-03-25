@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 
-import { featuredProducts, flagshipSystem, miniProducts, packages, products, proofPoints } from '../content'
+import { flagshipSystem, miniProducts, packages, products, proofPoints, servicePacks } from '../content'
 
 const coreModules = products.filter((product) => product.kind === 'Control module')
 
@@ -14,20 +14,20 @@ export function HomePage() {
 
         <div className="grid gap-8 lg:grid-cols-[1.08fr_0.92fr]">
           <div className="animate-rise">
-            <p className="sm-kicker text-[var(--sm-accent)]">AI software for operators</p>
+            <p className="sm-kicker text-[var(--sm-accent)]">Enterprise AI operations software</p>
             <h1 className="mt-4 max-w-4xl text-4xl font-extrabold tracking-tight text-white lg:text-6xl">
-              Turn messy business work into one clean system.
+              One operating system for companies still running on Gmail, Drive, and spreadsheets.
             </h1>
             <p className="mt-5 max-w-3xl text-base leading-relaxed text-[var(--sm-muted)] lg:text-lg">
-              SuperMega sits on top of Gmail, Drive, Sheets, and existing files. The main wedge is Action OS: one live control layer first, then deeper modules like receiving, supplier, quality, cash, and inventory after the first board is already useful.
+              SuperMega starts with Action OS, then adds intake, receiving, inventory, supplier, quality, and cash control only where the business actually needs them. The goal is simple: fewer missed actions, cleaner records, and a real operating layer without a heavy ERP rollout first.
             </p>
 
             <div className="mt-7 flex flex-wrap gap-3">
               <Link className="sm-button-primary" to="/platform">
                 See Action OS
               </Link>
-              <Link className="sm-button-secondary" to="/solution-architect">
-                Open Architect
+              <Link className="sm-button-secondary" to="/products">
+                See products
               </Link>
               <Link className="sm-button-accent" to="/contact">
                 Start pilot
@@ -98,29 +98,29 @@ export function HomePage() {
       <section className="space-y-4">
         <div className="flex items-center justify-between gap-4">
           <div>
-          <p className="sm-kicker text-[var(--sm-accent)]">What you can use now</p>
-            <h2 className="mt-2 text-2xl font-bold text-white">Start with one real surface, not a vague brochure.</h2>
+            <p className="sm-kicker text-[var(--sm-accent)]">What enterprises buy</p>
+            <h2 className="mt-2 text-2xl font-bold text-white">Three clear rollout tracks.</h2>
           </div>
           <Link className="sm-link" to="/products">
-            See all products
+            See product stack
           </Link>
         </div>
 
         <div className="grid gap-5 xl:grid-cols-3">
-          {featuredProducts.map((item) => (
-            <article className="sm-pack-card p-6" key={item.name}>
-              <p className="sm-kicker text-[var(--sm-accent)]">{item.kind}</p>
-              <h3 className="mt-3 text-2xl font-bold text-white">{item.name}</h3>
-              <p className="mt-3 text-sm text-[var(--sm-muted)]">{item.tagline}</p>
+          {servicePacks.map((pack) => (
+            <article className="sm-pack-card p-6" key={pack.name}>
+              <p className="sm-kicker text-[var(--sm-accent)]">{pack.audience}</p>
+              <h3 className="mt-3 text-2xl font-bold text-white">{pack.name}</h3>
+              <p className="mt-3 text-sm text-[var(--sm-muted)]">{pack.promise}</p>
               <div className="mt-5 grid gap-3">
-                {item.bullets.map((bullet) => (
-                  <div className="sm-chip text-white" key={bullet}>
-                    {bullet}
+                {pack.outcomes.map((outcome) => (
+                  <div className="sm-chip text-white" key={outcome}>
+                    {outcome}
                   </div>
                 ))}
               </div>
-              <Link className="sm-button-accent mt-5" to={item.path}>
-                {item.kind === 'Free tool' ? 'Open product' : 'See system'}
+              <Link className="sm-button-accent mt-5" to={`/contact?package=${encodeURIComponent(pack.name)}`}>
+                Start this rollout
               </Link>
             </article>
           ))}
@@ -131,7 +131,7 @@ export function HomePage() {
         <div className="flex items-center justify-between gap-4">
           <div>
             <p className="sm-kicker text-[var(--sm-accent)]">Deployable systems</p>
-            <h2 className="mt-2 text-2xl font-bold text-white">What we put into a live rollout.</h2>
+            <h2 className="mt-2 text-2xl font-bold text-white">Core modules behind the rollout.</h2>
           </div>
           <Link className="sm-link" to="/contact">
             Book walkthrough
@@ -157,10 +157,10 @@ export function HomePage() {
 
       <section className="grid gap-5 lg:grid-cols-[1.1fr_0.9fr]">
         <article className="sm-surface p-6">
-          <p className="sm-kicker text-[var(--sm-accent)]">Mini products</p>
-          <h2 className="mt-3 text-2xl font-bold text-white">Small workflows that land fast.</h2>
+          <p className="sm-kicker text-[var(--sm-accent)]">Add-on utilities</p>
+          <h2 className="mt-3 text-2xl font-bold text-white">Smaller workflows that support the core system.</h2>
           <p className="mt-3 text-sm text-[var(--sm-muted)]">
-            These are smaller products that fit beside the core systems and help teams start without a heavy rebuild.
+            These help teams start faster, but they are not the main story. The main story is still Action OS plus the control modules.
           </p>
           <div className="mt-5 grid gap-3">
             {miniProducts.map((tool) => (

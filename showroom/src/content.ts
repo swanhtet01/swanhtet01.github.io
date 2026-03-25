@@ -87,10 +87,9 @@ export type MiniProduct = {
 }
 
 export const navItems = [
-  { label: 'Home', to: '/' },
   { label: 'Platform', to: '/platform' },
+  { label: 'Solutions', to: '/solutions' },
   { label: 'Products', to: '/products' },
-  { label: 'Architect', to: '/solution-architect' },
   { label: 'Contact', to: '/contact' },
 ] as const
 
@@ -426,13 +425,6 @@ export const featuredProducts: FeaturedProduct[] = [
     bullets: ['Upload KPI sheets', 'Review extracted records', 'Feed Action OS and control modules'],
   },
   {
-    name: 'Solution Architect',
-    kind: 'Planning tool',
-    path: '/solution-architect',
-    tagline: 'Turn one business profile into the right SuperMega wedge, modules, agent teams, and rollout order.',
-    bullets: ['Structured company profile', 'Module recommendation', 'Tooling and UX plan'],
-  },
-  {
     name: 'Receiving Control',
     kind: 'Deployable system',
     path: '/receiving-control',
@@ -518,7 +510,7 @@ export const servicePacks: ServicePack[] = [
     audience: 'Owners, directors, and general managers',
     promise: 'One place to see what matters, who owns it, and what is blocked.',
     bestFor: 'Owner-led companies that still run on Gmail, Drive, WhatsApp, and spreadsheets.',
-    includes: ['Action OS', 'Director Flash', 'Document Intake'],
+    includes: ['Action OS', 'Ops Intake', 'Director Flash'],
     outcomes: ['Daily priority board', 'Weekly director brief', 'Cleaner follow-up discipline'],
     rollout: 'Start with one action board and one summary rhythm. Add approvals and role views after the first win.',
   },
@@ -544,9 +536,9 @@ export const servicePacks: ServicePack[] = [
 
 export const proofPoints: ProofPoint[] = [
   {
-    label: 'Live pilot',
-    value: 'Yangon Tyre',
-    detail: 'Running on Gmail, Drive, Sheets, and shared team inputs.',
+    label: 'Live deployment model',
+    value: 'Single-tenant first',
+    detail: 'Running against real Gmail, Drive, Sheets, uploaded files, and saved state.',
   },
   {
     label: 'Connected sources',
