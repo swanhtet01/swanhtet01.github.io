@@ -39,11 +39,27 @@ export type SellableTemplate = {
 }
 
 export type PackageTier = {
-  name: 'Starter' | 'Control Pack' | 'OS Build'
+  name: 'Pilot Sprint' | 'Control Build' | 'OS Rollout'
   timeline: string
   commercialModel: string
   bestFor: string
   deliverables: string[]
+}
+
+export type ServicePack = {
+  name: 'Owner / Director OS' | 'Factory Control' | 'Commercial Control'
+  audience: string
+  promise: string
+  bestFor: string
+  includes: string[]
+  outcomes: string[]
+  rollout: string
+}
+
+export type ProofPoint = {
+  label: string
+  value: string
+  detail: string
 }
 
 export type FlagshipSystem = {
@@ -63,10 +79,9 @@ export type MiniProduct = {
 
 export const navItems = [
   { label: 'Home', to: '/' },
-  { label: 'Products', to: '/products' },
-  { label: 'Try free', to: '/examples' },
-  { label: 'Workspace', to: '/workspace' },
-  { label: 'Plans', to: '/packages' },
+  { label: 'Services', to: '/products' },
+  { label: 'Free tools', to: '/examples' },
+  { label: 'How we work', to: '/packages' },
   { label: 'Contact', to: '/contact' },
 ] as const
 
@@ -75,7 +90,7 @@ export const products: Product[] = [
     kind: 'Free tool',
     name: 'Lead Finder',
     availability: 'Try free',
-    tagline: 'Turn a messy list into a cleaner lead sheet in minutes.',
+    tagline: 'Find clean business leads from messy directories in minutes.',
     buyer: 'Growth lead or founder',
     input: 'Directory text, URL, or pasted lead list',
     output: 'Scored leads, contact pack, CSV export',
@@ -92,7 +107,7 @@ export const products: Product[] = [
     kind: 'Free tool',
     name: 'News Brief',
     availability: 'Try free',
-    tagline: 'Convert messy headlines into one short operating brief.',
+    tagline: 'Turn public signals into one director-ready brief.',
     buyer: 'Director or market-watch owner',
     input: 'Headlines, copied articles, or pasted notes',
     output: 'Priority summary, risk tags, next actions',
@@ -109,7 +124,7 @@ export const products: Product[] = [
     kind: 'Free tool',
     name: 'Action Board',
     availability: 'Try free',
-    tagline: 'Turn raw updates into owners, priorities, and due windows.',
+    tagline: 'Convert raw updates into owners, due dates, and next actions.',
     buyer: 'Manager or operations lead',
     input: 'Team updates, forwarded notes, or meeting scraps',
     output: 'Action list, priority lane, owner queue',
@@ -126,7 +141,7 @@ export const products: Product[] = [
     kind: 'Control module',
     name: 'Action OS',
     availability: 'Deploy',
-    tagline: 'Turn inboxes, notes, and sheets into one manager action system.',
+    tagline: 'Run one management board across Gmail, Drive, Sheets, and team updates.',
     buyer: 'Founder, GM, or operations director',
     input: 'Daily update sheet, forwarded notes, and role owner list',
     output: 'Action board, blocker queue, owner + due-date system',
@@ -142,7 +157,7 @@ export const products: Product[] = [
     kind: 'Control module',
     name: 'Supplier Watch',
     availability: 'Deploy',
-    tagline: 'Catch delay, payment, and customs risk before it hurts operations.',
+    tagline: 'See supplier delay, payment, and customs risk before it hits production.',
     buyer: 'Procurement manager or director',
     input: 'Supplier emails, ETA sheets, customs notes',
     output: 'Risk score, escalation queue, owner + due date',
@@ -158,7 +173,7 @@ export const products: Product[] = [
     kind: 'Control module',
     name: 'Quality Closeout',
     availability: 'Deploy',
-    tagline: 'Turn one quality issue into a tracked close-out chain.',
+    tagline: 'Turn one quality issue into a tracked closeout chain with ownership.',
     buyer: 'Quality head or plant manager',
     input: 'Incident text, severity, supplier, evidence',
     output: 'Incident record, containment, RCA, CAPA chain',
@@ -174,7 +189,7 @@ export const products: Product[] = [
     kind: 'Control module',
     name: 'Cash Watch',
     availability: 'Deploy',
-    tagline: 'Put invoices, reminders, and collections into one control view.',
+    tagline: 'Put invoices, payment follow-up, and collections into one control view.',
     buyer: 'Finance lead or commercial controller',
     input: 'Invoice sheets, cash books, payment notes',
     output: 'Overdue queue, collections list, follow-up drafts',
@@ -190,7 +205,7 @@ export const products: Product[] = [
     kind: 'Control module',
     name: 'Production Pulse',
     availability: 'Deploy',
-    tagline: 'Turn plant updates into one daily execution board.',
+    tagline: 'Turn shift updates and downtime into one daily plant control board.',
     buyer: 'Plant manager or operations director',
     input: 'Shift updates, downtime notes, output logs',
     output: 'Daily plant brief, blocker queue, owner actions',
@@ -206,7 +221,7 @@ export const products: Product[] = [
     kind: 'Control module',
     name: 'Sales Signal',
     availability: 'Deploy',
-    tagline: 'Turn scattered market updates into one commercial watch layer.',
+    tagline: 'Turn scattered market and distributor updates into one commercial watch.',
     buyer: 'Commercial lead or founder',
     input: 'Distributor notes, sales sheets, market headlines',
     output: 'Demand shift alerts, watchlist, follow-up actions',
@@ -309,37 +324,37 @@ export const sellableTemplates: SellableTemplate[] = [
 
 export const packages: PackageTier[] = [
   {
-    name: 'Starter',
-    timeline: '2-week sprint',
-    commercialModel: 'One free tool + one first workflow',
-    bestFor: 'Teams that want one useful win without a heavy rollout.',
-    deliverables: ['One live tool setup', 'One operator workflow', 'Simple handover SOP'],
+    name: 'Pilot Sprint',
+    timeline: '2 weeks',
+    commercialModel: 'One workflow, one owner board, one weekly review',
+    bestFor: 'Teams that need one useful live result fast.',
+    deliverables: ['One connected workflow', 'One manager board', 'Pilot handover SOP'],
   },
   {
-    name: 'Control Pack',
+    name: 'Control Build',
     timeline: '4 to 6 weeks',
-    commercialModel: 'Two or three connected workflow templates',
-    bestFor: 'Teams fixing a function end-to-end.',
-    deliverables: ['Supplier, quality, cash, or ops pack', 'Manager control board', 'Weekly operating rhythm'],
+    commercialModel: 'Two or three connected modules around one team',
+    bestFor: 'Teams fixing a function end to end.',
+    deliverables: ['Connected module pack', 'Role-based control views', 'Operating rhythm and SOP'],
   },
   {
-    name: 'OS Build',
-    timeline: 'Program rollout',
-    commercialModel: 'AI-native operating layer',
-    bestFor: 'Companies replacing manual ERP work with one action system.',
-    deliverables: ['SuperMega OS foundation', 'Role views', 'Governance and rollout playbook'],
+    name: 'OS Rollout',
+    timeline: 'Phased program',
+    commercialModel: 'Shared action layer, records, approvals, and role views',
+    bestFor: 'Companies replacing manual ERP work step by step.',
+    deliverables: ['SuperMega OS foundation', 'Manager and director views', 'Rollout playbook'],
   },
 ]
 
 export const flagshipSystem: FlagshipSystem = {
   name: 'SuperMega OS',
-  tagline: 'An AI-native action layer on top of Gmail, Drive, Sheets, and messy company data.',
+  tagline: 'An AI-native operating layer on top of Gmail, Drive, Sheets, and the records companies already have.',
   steps: [
     'Pull signals from inboxes, files, and simple team inputs',
     'Convert them into owners, due dates, blockers, and approvals',
-    'Run managers and directors from one control layer instead of scattered spreadsheets',
+    'Run managers and directors from one control layer instead of scattered trackers',
   ],
-  bestFor: 'Owner-led companies that are too messy for ERP and too operational for generic AI chat.',
+  bestFor: 'Owner-led companies that need control now and ERP replacement later.',
 }
 
 export const miniProducts: MiniProduct[] = [
@@ -396,7 +411,60 @@ export const trialModules: TrialModule[] = [
 
 export const engagementFlow = [
   'Try one free tool',
-  'Deploy one workflow template',
+  'Connect one live data source',
   'Ship one manager view',
   'Scale into SuperMega OS',
+]
+
+export const servicePacks: ServicePack[] = [
+  {
+    name: 'Owner / Director OS',
+    audience: 'Owners, directors, and general managers',
+    promise: 'One place to see what matters, who owns it, and what is blocked.',
+    bestFor: 'Owner-led companies that still run on Gmail, Drive, WhatsApp, and spreadsheets.',
+    includes: ['Action OS', 'Director Flash', 'Document Intake'],
+    outcomes: ['Daily priority board', 'Weekly director brief', 'Cleaner follow-up discipline'],
+    rollout: 'Start with one action board and one summary rhythm. Add approvals and role views after the first win.',
+  },
+  {
+    name: 'Factory Control',
+    audience: 'Plant managers, operations leads, and quality teams',
+    promise: 'One control layer for supplier risk, quality issues, and plant execution.',
+    bestFor: 'Factories and operations teams that need control before a full ERP rollout.',
+    includes: ['Supplier Watch', 'Quality Closeout', 'Production Pulse', 'Attendance Check-In'],
+    outcomes: ['Supplier risk queue', 'Incident-to-CAPA board', 'Daily plant brief'],
+    rollout: 'Start with one plant or one incoming-material workflow. Expand into receiving, inventory, and approvals.',
+  },
+  {
+    name: 'Commercial Control',
+    audience: 'Commercial leads, finance managers, and founders',
+    promise: 'Turn invoices, market signals, and follow-up into one commercial control layer.',
+    bestFor: 'Trading, distribution, and owner-managed sales teams.',
+    includes: ['Cash Watch', 'Sales Signal', 'Reply Draft', 'Document Intake'],
+    outcomes: ['Overdue queue', 'Demand-shift watchlist', 'Faster follow-up and reply support'],
+    rollout: 'Start with cash or sales first, then connect the second workflow once the first board is live.',
+  },
+]
+
+export const proofPoints: ProofPoint[] = [
+  {
+    label: 'Pilot client',
+    value: 'Yangon Tyre',
+    detail: 'Live pilot using Gmail, Drive, Sheets, and shared team inputs.',
+  },
+  {
+    label: 'Connected sources',
+    value: 'Gmail + Drive + Sheets',
+    detail: 'The system already reads the tools teams use today instead of asking for a big rip-and-replace first.',
+  },
+  {
+    label: 'Control outputs',
+    value: 'Actions, supplier risk, quality closeout',
+    detail: 'The pilot already publishes real queues and role-based outputs instead of static reports.',
+  },
+  {
+    label: 'Rollout model',
+    value: 'Template-based',
+    detail: 'The same modules are meant to be reused for other clients by swapping context, owners, and thresholds.',
+  },
 ]
