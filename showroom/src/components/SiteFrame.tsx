@@ -24,7 +24,7 @@ export function SiteFrame() {
             <span className="flex flex-col">
               <span className="sm-logo text-lg font-extrabold tracking-tight text-white">SuperMega</span>
               <span className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[var(--sm-muted)]">
-                AI operating systems
+                AI operations software
               </span>
             </span>
           </NavLink>
@@ -42,7 +42,7 @@ export function SiteFrame() {
               </NavLink>
             ))}
             <NavLink className="sm-button-accent ml-2" to="/contact">
-              Start pilot
+              Book call
             </NavLink>
           </div>
         </nav>
@@ -55,7 +55,7 @@ export function SiteFrame() {
                 </NavLink>
               ))}
               <NavLink className="sm-button-accent mt-1 text-center" onClick={() => setMenuOpen(false)} to="/contact">
-                Start pilot
+                Book call
               </NavLink>
             </div>
           </div>
@@ -68,8 +68,8 @@ export function SiteFrame() {
 
       <footer className="border-t border-white/8 bg-[rgba(4,10,22,0.78)]">
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 px-4 py-6 text-sm text-[var(--sm-muted)] lg:flex-row lg:items-center lg:justify-between lg:px-8">
-          <p>AI operating systems for companies still running on Gmail, Drive, Sheets, and messy files.</p>
-          <p>Start with Action OS. Add control modules only after the first system works.</p>
+          <p>Turn Gmail, Drive, and spreadsheets into one operating layer.</p>
+          <p>Start with Action OS. Add modules only where they are needed.</p>
         </div>
       </footer>
     </div>
