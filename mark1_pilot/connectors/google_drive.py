@@ -856,6 +856,93 @@ class GoogleDriveProbe:
                 "sheet_name": sheet_name,
             }
 
+    def publish_rows_sheet(
+        self,
+        *,
+        spreadsheet_name: str,
+        headers: list[str],
+        rows: list[list[str]],
+        sheet_name: str = "Leads",
+        workspace_folder_name: str = "",
+        description: str = "",
+    ) -> dict[str, Any]:
+        base_error = self._validate_base_config()
+        if base_error:
+            return base_error
+
+        if not self.folder_id:
+            return {
+                "status": "missing_folder_id",
+                "message": "No Google Drive folder ID is configured.",
+            }
+
+        normalized_headers = [str(value).strip() for value in headers if str(value).strip()]
+        normalized_rows = [[str(value or "").strip() for value in row] for row in rows]
+        sample_row = normalized_rows[0] if normalized_rows else [""] * len(normalized_headers)
+
+        try:
+            drive_service, sheets_service, _ = self._build_drive_and_sheets_services([DRIVE_FULL_SCOPE, SHEETS_SCOPE])
+            target_parent_id = self.folder_id
+            target_folder = None
+            if workspace_folder_name.strip():
+                target_folder = self._ensure_folder(drive_service, self.folder_id, workspace_folder_name.strip())
+                target_parent_id = str(target_folder.get("id", "")).strip() or self.folder_id
+
+            spreadsheet_file = self._find_child_by_name(
+                drive_service,
+                target_parent_id,
+                spreadsheet_name,
+                SPREADSHEET_MIME_TYPE,
+            )
+            created = False
+            if spreadsheet_file is None:
+                spreadsheet_file = self._create_spreadsheet(
+                    drive_service,
+                    parent_id=target_parent_id,
+                    name=spreadsheet_name,
+                )
+                created = True
+
+            template_status = self._ensure_spreadsheet_template(
+                sheets_service=sheets_service,
+                spreadsheet_id=str(spreadsheet_file.get("id", "")).strip(),
+                sheet_name=sheet_name,
+                headers=normalized_headers,
+                description=description,
+                sample_row=sample_row,
+            )
+            write_status = self.overwrite_input_center_template_rows(
+                spreadsheet_id=str(spreadsheet_file.get("id", "")).strip(),
+                sheet_name=sheet_name,
+                headers=normalized_headers,
+                rows=normalized_rows,
+            )
+
+            return {
+                "status": write_status.get("status", "ready"),
+                "created": created,
+                "spreadsheet_id": spreadsheet_file.get("id", ""),
+                "web_view_link": spreadsheet_file.get("webViewLink", ""),
+                "sheet_name": sheet_name,
+                "row_count": len(normalized_rows),
+                "workspace_folder_name": workspace_folder_name.strip(),
+                "workspace_folder_link": target_folder.get("webViewLink", "") if isinstance(target_folder, dict) else "",
+                "template_status": template_status,
+                "write_status": write_status,
+            }
+        except ImportError as exc:
+            return {
+                "status": "dependency_missing",
+                "message": f"Google API client libraries are not available: {exc}",
+            }
+        except Exception as exc:
+            return {
+                "status": "error",
+                "message": str(exc),
+                "spreadsheet_name": spreadsheet_name,
+                "sheet_name": sheet_name,
+            }
+
     def publish_dashboard_bundle(
         self,
         *,

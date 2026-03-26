@@ -26,6 +26,7 @@ from mark1_pilot.state_store import (  # noqa: E402
     add_action_items,
     add_attendance_event,
     add_contact_submission,
+    add_lead_pipeline_rows,
     add_metric_entries,
     add_metric_entry,
     add_inventory_record,
@@ -37,6 +38,7 @@ from mark1_pilot.state_store import (  # noqa: E402
     list_capa_actions,
     list_contact_submissions,
     list_inventory_records,
+    list_lead_pipeline,
     list_metric_entries,
     list_product_feedback,
     list_receiving_records,
@@ -45,6 +47,7 @@ from mark1_pilot.state_store import (  # noqa: E402
     load_action_summary,
     load_agent_team_summary,
     load_inventory_summary,
+    load_lead_pipeline_summary,
     load_metric_summary,
     load_product_feedback_summary,
     load_receiving_summary,
@@ -53,12 +56,14 @@ from mark1_pilot.state_store import (  # noqa: E402
     load_supplier_risk_summary,
     resolve_state_db,
     sync_state_from_output_dir,
+    update_lead_pipeline_row,
 )
 from mark1_pilot.lead_finder import run_lead_finder  # noqa: E402
 from mark1_pilot.lead_to_pilot import build_lead_to_pilot_pack  # noqa: E402
 from mark1_pilot.document_intake import analyze_document  # noqa: E402
 from mark1_pilot.metric_intake import extract_metric_candidates, summarize_metric_rows  # noqa: E402
 from mark1_pilot.solution_architect import build_solution_blueprint  # noqa: E402
+from mark1_pilot.connectors.google_drive import GoogleDriveProbe  # noqa: E402
 
 
 class LeadFinderRequest(BaseModel):
@@ -180,6 +185,24 @@ class ProductFeedbackRequest(BaseModel):
     priority: str = "medium"
     status: str = "open"
     note: str
+
+
+class LeadPipelineImportRequest(BaseModel):
+    rows: list[dict[str, Any]] = Field(default_factory=list)
+    campaign_goal: str = ""
+
+
+class LeadPipelineUpdateRequest(BaseModel):
+    stage: str | None = None
+    status: str | None = None
+    owner: str | None = None
+    notes: str | None = None
+
+
+class LeadPipelineExportRequest(BaseModel):
+    workspace_folder_name: str = "SuperMega Sales"
+    spreadsheet_name: str = "SuperMega Lead Pipeline"
+    sheet_name: str = "Leads"
 
 
 def _load_json(path: Path) -> dict[str, Any]:
@@ -339,6 +362,85 @@ def _build_action_rows(raw_text: str) -> list[dict[str, Any]]:
     return rows
 
 
+def _expand_env_tokens(value: Any) -> Any:
+    if isinstance(value, str):
+        def replace(match: re.Match[str]) -> str:
+            env_name = match.group(1)
+            return os.getenv(env_name, match.group(0))
+
+        return re.sub(r"\$\{([^}]+)\}", replace, value)
+    if isinstance(value, list):
+        return [_expand_env_tokens(item) for item in value]
+    if isinstance(value, dict):
+        return {key: _expand_env_tokens(item) for key, item in value.items()}
+    return value
+
+
+def _load_runtime_config() -> dict[str, Any]:
+    config_path = Path(os.getenv("SUPERMEGA_CONFIG", str(REPO_ROOT / "config.example.json"))).expanduser().resolve()
+    payload = _load_json(config_path)
+    if not isinstance(payload, dict):
+        return {}
+    return _expand_env_tokens(payload)
+
+
+def _drive_probe_from_config(config: dict[str, Any]) -> GoogleDriveProbe:
+    sources = config.get("sources", {}) if isinstance(config, dict) else {}
+    platform = config.get("platform", {}) if isinstance(config, dict) else {}
+    drive = sources.get("drive", {}) if isinstance(sources, dict) else {}
+    publish = platform.get("publish", {}) if isinstance(platform, dict) else {}
+
+    service_account_value = str(drive.get("service_account_json", "")).strip() or os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON", "").strip()
+    folder_id = str(publish.get("drive_folder_id", "")).strip() or str(config.get("input_center", {}).get("drive_folder_id", "")).strip()
+    service_account_path = Path(service_account_value).expanduser() if service_account_value else None
+    return GoogleDriveProbe(service_account_path, folder_id)
+
+
+def _lead_pipeline_sheet_rows(rows: list[dict[str, Any]]) -> tuple[list[str], list[list[str]]]:
+    headers = [
+        "company_name",
+        "stage",
+        "status",
+        "owner",
+        "service_pack",
+        "wedge_product",
+        "contact_email",
+        "contact_phone",
+        "website",
+        "source",
+        "source_url",
+        "provider",
+        "score",
+        "outreach_subject",
+        "outreach_message",
+        "next_questions",
+        "notes",
+    ]
+    values = [
+        [
+            str(row.get("company_name", "")).strip(),
+            str(row.get("stage", "")).strip(),
+            str(row.get("status", "")).strip(),
+            str(row.get("owner", "")).strip(),
+            str(row.get("service_pack", "")).strip(),
+            str(row.get("wedge_product", "")).strip(),
+            str(row.get("contact_email", "")).strip(),
+            str(row.get("contact_phone", "")).strip(),
+            str(row.get("website", "")).strip(),
+            str(row.get("source", "")).strip(),
+            str(row.get("source_url", "")).strip(),
+            str(row.get("provider", "")).strip(),
+            str(row.get("score", "")).strip(),
+            str(row.get("outreach_subject", "")).strip(),
+            str(row.get("outreach_message", "")).strip(),
+            " | ".join(str(item).strip() for item in row.get("discovery_questions", []) if str(item).strip()),
+            str(row.get("notes", "")).strip(),
+        ]
+        for row in rows
+    ]
+    return headers, values
+
+
 def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
     site_root = site_root.expanduser().resolve()
     pilot_data = pilot_data.expanduser().resolve()
@@ -388,6 +490,7 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
         inventory_summary = load_inventory_summary(state_db)
         metric_summary = load_metric_summary(state_db)
         feedback_summary = load_product_feedback_summary(state_db)
+        lead_pipeline_summary = load_lead_pipeline_summary(state_db)
         portfolio = load_snapshot(state_db, "solution_portfolio_manifest") or _load_json(
             REPO_ROOT / "Super Mega Inc" / "sales" / "solution_portfolio_manifest.json"
         )
@@ -409,6 +512,7 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             "agent_system": agent_team_summary,
             "quality": quality_summary,
             "supplier_watch": supplier_summary,
+            "lead_pipeline": lead_pipeline_summary,
             "receiving": receiving_summary,
             "inventory": inventory_summary,
             "metrics": metric_summary,
@@ -479,6 +583,64 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
     @app.post("/api/tools/lead-to-pilot")
     def tool_lead_to_pilot(request: LeadToPilotRequest) -> dict[str, Any]:
         return build_lead_to_pilot_pack(leads=request.leads, campaign_goal=request.campaign_goal)
+
+    @app.get("/api/lead-pipeline")
+    def lead_pipeline(stage: str | None = None, status: str | None = None, limit: int = 100) -> dict[str, Any]:
+        rows = list_lead_pipeline(state_db, stage=stage, status=status, limit=limit)
+        return {
+            "status": "ready",
+            "summary": load_lead_pipeline_summary(state_db),
+            "count": len(rows),
+            "rows": rows,
+        }
+
+    @app.post("/api/lead-pipeline/import")
+    def import_lead_pipeline(request: LeadPipelineImportRequest) -> dict[str, Any]:
+        return add_lead_pipeline_rows(
+            state_db,
+            rows=request.rows,
+            campaign_goal=request.campaign_goal,
+            source="lead_to_pilot",
+        )
+
+    @app.post("/api/lead-pipeline/{lead_id}")
+    def update_lead_pipeline(lead_id: str, request: LeadPipelineUpdateRequest) -> dict[str, Any]:
+        row = update_lead_pipeline_row(
+            state_db,
+            lead_id=lead_id,
+            stage=request.stage,
+            status=request.status,
+            owner=request.owner,
+            notes=request.notes,
+        )
+        if not row:
+            raise HTTPException(status_code=404, detail=f"Lead not found: {lead_id}")
+        return {
+            "status": "ready",
+            "row": row,
+            "summary": load_lead_pipeline_summary(state_db),
+        }
+
+    @app.post("/api/lead-pipeline/export/workspace")
+    def export_lead_pipeline_to_workspace(request: LeadPipelineExportRequest) -> dict[str, Any]:
+        config = _load_runtime_config()
+        probe = _drive_probe_from_config(config)
+        rows = list_lead_pipeline(state_db, limit=500)
+        headers, values = _lead_pipeline_sheet_rows(rows)
+        export_result = probe.publish_rows_sheet(
+            spreadsheet_name=request.spreadsheet_name.strip() or "SuperMega Lead Pipeline",
+            sheet_name=request.sheet_name.strip() or "Leads",
+            workspace_folder_name=request.workspace_folder_name.strip() or "SuperMega Sales",
+            headers=headers,
+            rows=values,
+            description="Lead pipeline generated by SuperMega Lead Finder and lead-to-pilot workflow.",
+        )
+        return {
+            "status": export_result.get("status", "ready"),
+            "summary": load_lead_pipeline_summary(state_db),
+            "row_count": len(rows),
+            "export": export_result,
+        }
 
     @app.post("/api/tools/solution-architect")
     def tool_solution_architect(request: SolutionArchitectRequest) -> dict[str, Any]:

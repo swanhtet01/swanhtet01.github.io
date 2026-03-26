@@ -151,6 +151,9 @@ def build_lead_to_pilot_pack(*, leads: list[dict[str, Any]], campaign_goal: str 
             {
                 "name": name,
                 "archetype": archetype,
+                "stage": "offer_ready",
+                "status": "open",
+                "owner": "Growth Studio",
                 "service_pack": offer["service_pack"],
                 "wedge_product": offer["wedge"],
                 "starter_modules": offer["starter_modules"],
@@ -161,7 +164,13 @@ def build_lead_to_pilot_pack(*, leads: list[dict[str, Any]], campaign_goal: str 
                 "outreach_subject": f"{name}: {offer['wedge']} + {offer['service_pack']} pilot",
                 "outreach_message": _outreach_message(name, offer, pains),
                 "discovery_questions": _discovery_questions(archetype),
+                "email": str(lead.get("email") or "").strip(),
+                "phone": str(lead.get("phone") or "").strip(),
+                "website": str(lead.get("website") or "").strip(),
+                "source": str(lead.get("source") or "").strip(),
                 "source_url": str(lead.get("source_url") or lead.get("website") or "").strip(),
+                "provider": str(lead.get("provider") or "").strip(),
+                "score": int(lead.get("score", 0) or 0),
                 "contact_hint": str(lead.get("email") or lead.get("phone") or lead.get("website") or "Public source only").strip(),
             }
         )

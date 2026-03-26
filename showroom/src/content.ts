@@ -87,12 +87,13 @@ export type MiniProduct = {
 }
 
 export const navItems = [
-  { label: 'Workbench', to: '/workbench' },
-  { label: 'Platform', to: '/platform' },
-  { label: 'Solutions', to: '/solutions' },
-  { label: 'Products', to: '/products' },
+  { label: 'Action OS', to: '/platform' },
+  { label: 'Modules', to: '/products' },
+  { label: 'Lead Finder', to: '/lead-finder' },
   { label: 'Contact', to: '/contact' },
 ] as const
+
+export const bookingUrl = (import.meta.env.VITE_BOOKING_URL ?? '').trim()
 
 export const products: Product[] = [
   {
@@ -405,13 +406,6 @@ export const packages: PackageTier[] = [
 
 export const featuredProducts: FeaturedProduct[] = [
   {
-    name: 'Workbench',
-    kind: 'Planning tool',
-    path: '/workbench',
-    tagline: 'The easiest daily-use surface: open modules, see live system pulse, and save product improvements while you work.',
-    bullets: ['Daily cockpit', 'Testing notebook', 'Quick launch into real modules'],
-  },
-  {
     name: 'Action OS',
     kind: 'Deployable system',
     path: '/platform',
@@ -443,13 +437,13 @@ export const featuredProducts: FeaturedProduct[] = [
 
 export const flagshipSystem: FlagshipSystem = {
   name: 'SuperMega OS',
-  tagline: 'An AI-native operating layer on top of Gmail, Drive, Sheets, and the records companies already have.',
+  tagline: 'A context-aware work OS that sits across Gmail, Drive, Sheets, chat tools, coding tools, and creative workspaces.',
   steps: [
-    'Pull signals from inboxes, files, and simple team inputs',
-    'Convert them into owners, due dates, blockers, and approvals',
-    'Run managers and directors from one control layer instead of scattered trackers',
+    'Pull work context from inboxes, files, sheets, prompts, and app workspaces',
+    'Turn that context into owners, due dates, blockers, records, and reusable system memory',
+    'Give each person and team a cleaner working surface without forcing them into one app on day one',
   ],
-  bestFor: 'Owner-led companies that need control now and ERP replacement later.',
+  bestFor: 'Companies that need control now, then a broader AI-native work OS across operations, knowledge work, and creative execution.',
 }
 
 export const miniProducts: MiniProduct[] = [
@@ -544,14 +538,14 @@ export const servicePacks: ServicePack[] = [
 
 export const proofPoints: ProofPoint[] = [
   {
-    label: 'Live deployment model',
-    value: 'Single-tenant first',
-    detail: 'Running against real Gmail, Drive, Sheets, uploaded files, and saved state.',
+    label: 'Main product',
+    value: 'Action OS',
+    detail: 'One shared action layer across Gmail, Drive, Sheets, and team updates.',
   },
   {
-    label: 'Connected sources',
+    label: 'Data inputs',
     value: 'Gmail + Drive + Sheets',
-    detail: 'Built on the tools teams already use instead of a big first rip-and-replace.',
+    detail: 'Start with tools teams already use instead of a heavy rip-and-replace.',
   },
   {
     label: 'Working outputs',
@@ -559,8 +553,8 @@ export const proofPoints: ProofPoint[] = [
     detail: 'The pilot is moving beyond static reports into live operational control records and module boards.',
   },
   {
-    label: 'Reuse model',
+    label: 'Rollout model',
     value: 'Template-based',
-    detail: 'The same modules can be reused for other clients by swapping context, owners, and thresholds.',
+    detail: 'Reuse the same system per client by swapping context, owners, and thresholds.',
   },
 ]
