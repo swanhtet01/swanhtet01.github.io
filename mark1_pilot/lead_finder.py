@@ -462,6 +462,12 @@ def discover_leads(query: str, keywords: list[str] | None = None, sources: list[
 
 
 def run_lead_finder(*, raw_text: str = "", query: str = "", keywords: list[str] | None = None, sources: list[str] | None = None, limit: int = 10) -> dict[str, Any]:
+    normalized_raw_text = str(raw_text or "").strip()
+    normalized_sources = [str(source or "").strip() for source in (sources or []) if str(source or "").strip()]
+
+    if normalized_raw_text and not normalized_sources:
+        return {"provider": "Manual", "keywords": [], "rows": parse_leads_from_text(normalized_raw_text)}
+
     if str(query or "").strip():
         return discover_leads(query=query, keywords=keywords, sources=sources, limit=limit)
-    return {"provider": "Manual", "keywords": [], "rows": parse_leads_from_text(raw_text)}
+    return {"provider": "Manual", "keywords": [], "rows": parse_leads_from_text(normalized_raw_text)}

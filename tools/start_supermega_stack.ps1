@@ -31,6 +31,27 @@ function Wait-ForLocalUrl {
     return $false
 }
 
+function Stop-ExistingListener {
+    param(
+        [int]$PortToStop
+    )
+
+    $listeners = @(Get-NetTCPConnection -LocalPort $PortToStop -State Listen -ErrorAction SilentlyContinue)
+    foreach ($listener in $listeners) {
+        $processId = [int]$listener.OwningProcess
+        if ($processId -gt 0) {
+            try {
+                $proc = Get-Process -Id $processId -ErrorAction Stop
+                Write-Host ("Stopping existing process on port {0}: PID {1} ({2})" -f $PortToStop, $processId, $proc.ProcessName)
+                Stop-Process -Id $processId -Force -ErrorAction Stop
+            }
+            catch {
+                Write-Warning ("Could not stop PID {0} on port {1}: {2}" -f $processId, $PortToStop, $_.Exception.Message)
+            }
+        }
+    }
+}
+
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repoRoot = Split-Path -Parent $scriptDir
 $runSolution = Join-Path $scriptDir "run_solution.ps1"
@@ -64,6 +85,7 @@ try {
     Write-Host ("Supervisor PID: " + $supervisorProc.Id)
 
     Write-Host "Starting app server..."
+    Stop-ExistingListener -PortToStop $Port
     $serveArgs = @(
         "-ExecutionPolicy", "Bypass",
         "-File", $runSolution,
