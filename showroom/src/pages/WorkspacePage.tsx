@@ -171,6 +171,9 @@ export function WorkspacePage() {
             <Link className="sm-button-primary" to="/app">
               Open Workbench
             </Link>
+            <Link className="sm-button-secondary" to="/app/exceptions">
+              Open Exception Queue
+            </Link>
             <Link className="sm-button-secondary" to="/app/receiving">
               Open Receiving Control
             </Link>

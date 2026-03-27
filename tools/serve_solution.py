@@ -26,26 +26,19 @@ from mark1_pilot.state_store import (  # noqa: E402
     add_action_items,
     add_attendance_event,
     add_contact_submission,
-    add_lead_activity,
-    add_lead_pipeline_rows,
     add_metric_entries,
     add_metric_entry,
     add_inventory_record,
     add_product_feedback,
     add_receiving_record,
-    authenticate_app_user,
-    create_app_session,
-    ensure_app_user,
     grant_workspace_access,
-    get_app_session,
     list_actions,
     list_agent_teams,
     list_attendance_events,
     list_capa_actions,
     list_contact_submissions,
     list_inventory_records,
-    list_lead_activity,
-    list_lead_pipeline,
+    list_lead_pipeline as state_list_lead_pipeline,
     list_metric_entries,
     list_product_feedback,
     list_receiving_records,
@@ -55,7 +48,6 @@ from mark1_pilot.state_store import (  # noqa: E402
     load_action_summary,
     load_agent_team_summary,
     load_inventory_summary,
-    load_lead_pipeline_summary,
     load_metric_summary,
     load_product_feedback_summary,
     load_receiving_summary,
@@ -63,10 +55,24 @@ from mark1_pilot.state_store import (  # noqa: E402
     load_snapshot,
     load_supplier_risk_summary,
     load_workspace_member_summary,
-    revoke_app_session,
     resolve_state_db,
     sync_state_from_output_dir,
-    update_lead_pipeline_row,
+)
+from mark1_pilot.enterprise_store import (  # noqa: E402
+    add_lead_activity as enterprise_add_lead_activity,
+    add_leads as enterprise_add_leads,
+    authenticate_user as enterprise_authenticate_user,
+    bootstrap_workspace_leads,
+    create_session as enterprise_create_session,
+    ensure_user as enterprise_ensure_user,
+    get_session as enterprise_get_session,
+    list_lead_activities as enterprise_list_lead_activities,
+    list_leads as enterprise_list_leads,
+    list_user_workspaces as enterprise_list_user_workspaces,
+    load_lead_summary as enterprise_load_lead_summary,
+    resolve_database_url as resolve_enterprise_database_url,
+    revoke_session as enterprise_revoke_session,
+    update_lead as enterprise_update_lead,
 )
 from mark1_pilot.lead_finder import run_lead_finder  # noqa: E402
 from mark1_pilot.lead_to_pilot import build_lead_to_pilot_pack  # noqa: E402
@@ -234,6 +240,7 @@ class LeadActivityRequest(BaseModel):
 class LoginRequest(BaseModel):
     username: str
     password: str
+    workspace_slug: str = ""
 
 
 def _load_json(path: Path) -> dict[str, Any]:
@@ -378,6 +385,108 @@ def _infer_priority(text: str) -> str:
     return "Low"
 
 
+def _exception_rank(priority: str) -> int:
+    normalized = str(priority or "").strip().lower()
+    if normalized == "high":
+        return 0
+    if normalized == "medium":
+        return 1
+    return 2
+
+
+def _load_exception_rows(state_db: Path, *, limit: int = 50) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+
+    for item in list_supplier_risks(state_db, limit=limit):
+        severity = str(item.get("severity", "medium")).strip().lower() or "medium"
+        rows.append(
+            {
+                "exception_id": str(item.get("risk_id", "")),
+                "source_type": "supplier_risk",
+                "priority": severity,
+                "status": str(item.get("status", "")),
+                "owner": str(item.get("owner", "")),
+                "title": str(item.get("title", "")),
+                "summary": str(item.get("summary", "")),
+                "entity": str(item.get("supplier", "")),
+                "next_action": str(item.get("next_action", "")),
+                "due": str(item.get("eta", "")),
+                "route": "/app/actions",
+            }
+        )
+
+    for item in list_quality_incidents(state_db, limit=limit):
+        severity = str(item.get("severity", "medium")).strip().lower() or "medium"
+        rows.append(
+            {
+                "exception_id": str(item.get("incident_id", "")),
+                "source_type": "quality_incident",
+                "priority": severity,
+                "status": str(item.get("status", "")),
+                "owner": str(item.get("owner", "")),
+                "title": str(item.get("title", "")),
+                "summary": str(item.get("summary", "")),
+                "entity": str(item.get("supplier", "")),
+                "next_action": "Review containment and CAPA next step.",
+                "due": str(item.get("target_close_date", "")),
+                "route": "/app/actions",
+            }
+        )
+
+    for item in list_receiving_records(state_db, limit=limit):
+        status = str(item.get("status", "")).strip().lower()
+        variance_note = str(item.get("variance_note", "")).strip().lower()
+        if status not in {"hold", "blocked", "review"} and variance_note in {"", "matched"}:
+            continue
+        priority = "high" if status in {"hold", "blocked"} else "medium"
+        rows.append(
+            {
+                "exception_id": str(item.get("receiving_id", "")),
+                "source_type": "receiving",
+                "priority": priority,
+                "status": str(item.get("status", "")),
+                "owner": str(item.get("owner", "")),
+                "title": f"{item.get('material', 'Material')} receiving exception",
+                "summary": f"{item.get('supplier', 'Unknown supplier')} / variance: {item.get('variance_note', 'review')}",
+                "entity": str(item.get("supplier", "")),
+                "next_action": str(item.get("next_action", "")),
+                "due": str(item.get("received_at", "")),
+                "route": "/app/receiving",
+            }
+        )
+
+    for item in list_inventory_records(state_db, limit=limit):
+        status = str(item.get("status", "")).strip().lower()
+        if status not in {"reorder", "watch", "review"}:
+            continue
+        priority = "high" if status == "reorder" else "medium"
+        rows.append(
+            {
+                "exception_id": str(item.get("inventory_id", "")),
+                "source_type": "inventory",
+                "priority": priority,
+                "status": str(item.get("status", "")),
+                "owner": str(item.get("owner", "")),
+                "title": f"{item.get('item_name', 'Inventory item')} stock exception",
+                "summary": f"{item.get('warehouse', 'Unknown warehouse')} / available {item.get('available_qty', '')} / reorder {item.get('reorder_point', '')}",
+                "entity": str(item.get("warehouse", "")),
+                "next_action": str(item.get("next_action", "")),
+                "due": str(item.get("captured_at", "")),
+                "route": "/app/inventory",
+            }
+        )
+
+    rows.sort(
+        key=lambda row: (
+            _exception_rank(str(row.get("priority", ""))),
+            str(row.get("status", "")),
+            str(row.get("due", "")),
+            str(row.get("title", "")),
+        )
+    )
+    return rows[: max(1, int(limit))]
+
+
 def _build_action_rows(raw_text: str) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for line in [item.strip() for item in str(raw_text or "").splitlines() if item.strip()]:
@@ -484,19 +593,32 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
     site_root = site_root.expanduser().resolve()
     pilot_data = pilot_data.expanduser().resolve()
     state_db = resolve_state_db(pilot_data)
+    enterprise_db_url = resolve_enterprise_database_url(pilot_data)
     sync_state_from_output_dir(pilot_data)
     auth_required = _env_truthy("SUPERMEGA_AUTH_REQUIRED", True)
     auth_username = str(os.getenv("SUPERMEGA_APP_USERNAME", "owner")).strip().lower() or "owner"
     auth_password = str(os.getenv("SUPERMEGA_APP_PASSWORD", "supermega-demo")).strip() or "supermega-demo"
     auth_display_name = str(os.getenv("SUPERMEGA_APP_DISPLAY_NAME", "Owner")).strip() or "Owner"
     auth_role = str(os.getenv("SUPERMEGA_APP_ROLE", "owner")).strip() or "owner"
+    auth_workspace_slug = str(os.getenv("SUPERMEGA_WORKSPACE_SLUG", "supermega-lab")).strip().lower() or "supermega-lab"
+    auth_workspace_name = str(os.getenv("SUPERMEGA_WORKSPACE_NAME", "SuperMega Lab")).strip() or "SuperMega Lab"
+    auth_workspace_plan = str(os.getenv("SUPERMEGA_WORKSPACE_PLAN", "pilot")).strip() or "pilot"
     session_ttl_hours = int(os.getenv("SUPERMEGA_SESSION_HOURS", str(24 * 14)) or (24 * 14))
-    ensure_app_user(
-        state_db,
+    default_user_payload = enterprise_ensure_user(
+        enterprise_db_url,
         username=auth_username,
         password=auth_password,
         display_name=auth_display_name,
         role=auth_role,
+        workspace_slug=auth_workspace_slug,
+        workspace_name=auth_workspace_name,
+        workspace_plan=auth_workspace_plan,
+    )
+    default_workspace = default_user_payload.get("workspace", {}) if isinstance(default_user_payload, dict) else {}
+    bootstrap_workspace_leads(
+        enterprise_db_url,
+        workspace_id=str(default_workspace.get("workspace_id", "")).strip(),
+        rows=state_list_lead_pipeline(state_db, limit=500),
     )
     uses_default_credentials = auth_username == "owner" and auth_password == "supermega-demo"
 
@@ -516,7 +638,7 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
         session_id = str(request.cookies.get(SESSION_COOKIE_NAME, "")).strip()
         if not session_id:
             return None
-        return get_app_session(state_db, session_id=session_id)
+        return enterprise_get_session(enterprise_db_url, session_id=session_id)
 
     def _require_session(request: Request) -> dict[str, Any]:
         if not auth_required:
@@ -524,6 +646,10 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
                 "username": auth_username,
                 "role": auth_role,
                 "display_name": auth_display_name,
+                "workspace_id": str(default_workspace.get("workspace_id", "")).strip(),
+                "workspace_slug": str(default_workspace.get("slug", auth_workspace_slug)).strip(),
+                "workspace_name": str(default_workspace.get("name", auth_workspace_name)).strip(),
+                "workspace_plan": str(default_workspace.get("plan", auth_workspace_plan)).strip(),
                 "authenticated": True,
             }
         session = _session_from_request(request)
@@ -564,6 +690,7 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             "site_root": str(site_root),
             "pilot_data": str(pilot_data),
             "state_db": str(state_db),
+            "enterprise_db": enterprise_db_url,
             "review_status": review.get("status", "unknown"),
             "autopilot_status": autopilot.get("status", "unknown"),
             "coverage_score": int(coverage.get("readiness_score", 0) or 0),
@@ -582,22 +709,28 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
                     "username": auth_username,
                     "role": auth_role,
                     "display_name": auth_display_name,
+                    "workspace_id": str(default_workspace.get("workspace_id", "")).strip(),
+                    "workspace_slug": str(default_workspace.get("slug", auth_workspace_slug)).strip(),
+                    "workspace_name": str(default_workspace.get("name", auth_workspace_name)).strip(),
+                    "workspace_plan": str(default_workspace.get("plan", auth_workspace_plan)).strip(),
                 }
                 if not auth_required
                 else None
             ),
             "uses_default_credentials": uses_default_credentials,
+            "workspaces": enterprise_list_user_workspaces(enterprise_db_url, username=str(session.get("username", auth_username) if session else auth_username)),
         }
 
     @app.post("/api/auth/login")
     def auth_login(request: Request, response: Response, payload: LoginRequest) -> dict[str, Any]:
-        user = authenticate_app_user(state_db, username=payload.username, password=payload.password)
+        user = enterprise_authenticate_user(enterprise_db_url, username=payload.username, password=payload.password)
         if not user:
             raise HTTPException(status_code=401, detail="Invalid username or password.")
-        session = create_app_session(
-            state_db,
+        session = enterprise_create_session(
+            enterprise_db_url,
             username=str(user.get("username", "")),
             role=str(user.get("role", "")),
+            workspace_slug=payload.workspace_slug,
             ttl_hours=session_ttl_hours,
         )
         _set_session_cookie(response, request, str(session.get("session_id", "")))
@@ -608,15 +741,20 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
                 "username": user.get("username", ""),
                 "display_name": user.get("display_name", ""),
                 "role": user.get("role", ""),
+                "workspace_id": session.get("workspace_id", ""),
+                "workspace_slug": session.get("workspace_slug", ""),
+                "workspace_name": session.get("workspace_name", ""),
+                "workspace_plan": session.get("workspace_plan", ""),
             },
             "uses_default_credentials": uses_default_credentials,
+            "workspaces": enterprise_list_user_workspaces(enterprise_db_url, username=str(user.get("username", ""))),
         }
 
     @app.post("/api/auth/logout")
     def auth_logout(request: Request, response: Response) -> dict[str, Any]:
         session = _session_from_request(request)
         if session:
-            revoke_app_session(state_db, session_id=str(session.get("session_id", "")))
+            enterprise_revoke_session(enterprise_db_url, session_id=str(session.get("session_id", "")))
         _clear_session_cookie(response, request)
         return {"status": "ready", "authenticated": False}
 
@@ -636,7 +774,10 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
         inventory_summary = load_inventory_summary(state_db)
         metric_summary = load_metric_summary(state_db)
         feedback_summary = load_product_feedback_summary(state_db)
-        lead_pipeline_summary = load_lead_pipeline_summary(state_db)
+        lead_pipeline_summary = enterprise_load_lead_summary(
+            enterprise_db_url,
+            workspace_id=str(session.get("workspace_id", "")).strip(),
+        )
         portfolio = load_snapshot(state_db, "solution_portfolio_manifest") or _load_json(
             REPO_ROOT / "Super Mega Inc" / "sales" / "solution_portfolio_manifest.json"
         )
@@ -738,20 +879,30 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
 
     @app.get("/api/lead-pipeline")
     def lead_pipeline(request: Request, stage: str | None = None, status: str | None = None, limit: int = 100) -> dict[str, Any]:
-        _require_session(request)
-        rows = list_lead_pipeline(state_db, stage=stage, status=status, limit=limit)
+        session = _require_session(request)
+        rows = enterprise_list_leads(
+            enterprise_db_url,
+            workspace_id=str(session.get("workspace_id", "")).strip(),
+            stage=stage,
+            status=status,
+            limit=limit,
+        )
         return {
             "status": "ready",
-            "summary": load_lead_pipeline_summary(state_db),
+            "summary": enterprise_load_lead_summary(
+                enterprise_db_url,
+                workspace_id=str(session.get("workspace_id", "")).strip(),
+            ),
             "count": len(rows),
             "rows": rows,
         }
 
     @app.post("/api/lead-pipeline/import")
     def import_lead_pipeline(request_http: Request, request: LeadPipelineImportRequest) -> dict[str, Any]:
-        _require_session(request_http)
-        return add_lead_pipeline_rows(
-            state_db,
+        session = _require_session(request_http)
+        return enterprise_add_leads(
+            enterprise_db_url,
+            workspace_id=str(session.get("workspace_id", "")).strip(),
             rows=request.rows,
             campaign_goal=request.campaign_goal,
             source="lead_to_pilot",
@@ -759,9 +910,10 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
 
     @app.post("/api/lead-pipeline/{lead_id}")
     def update_lead_pipeline(lead_id: str, request_http: Request, request: LeadPipelineUpdateRequest) -> dict[str, Any]:
-        _require_session(request_http)
-        row = update_lead_pipeline_row(
-            state_db,
+        session = _require_session(request_http)
+        row = enterprise_update_lead(
+            enterprise_db_url,
+            workspace_id=str(session.get("workspace_id", "")).strip(),
             lead_id=lead_id,
             stage=request.stage,
             status=request.status,
@@ -773,20 +925,29 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
         return {
             "status": "ready",
             "row": row,
-            "summary": load_lead_pipeline_summary(state_db),
+            "summary": enterprise_load_lead_summary(
+                enterprise_db_url,
+                workspace_id=str(session.get("workspace_id", "")).strip(),
+            ),
         }
 
     @app.get("/api/lead-pipeline/{lead_id}/activities")
     def lead_pipeline_activities(lead_id: str, request: Request, limit: int = 20) -> dict[str, Any]:
-        _require_session(request)
-        rows = list_lead_activity(state_db, lead_id=lead_id, limit=limit)
+        session = _require_session(request)
+        rows = enterprise_list_lead_activities(
+            enterprise_db_url,
+            workspace_id=str(session.get("workspace_id", "")).strip(),
+            lead_id=lead_id,
+            limit=limit,
+        )
         return {"status": "ready", "count": len(rows), "rows": rows}
 
     @app.post("/api/lead-pipeline/{lead_id}/activities")
     def create_lead_pipeline_activity(lead_id: str, request_http: Request, request: LeadActivityRequest) -> dict[str, Any]:
         session = _require_session(request_http)
-        row = add_lead_activity(
-            state_db,
+        row = enterprise_add_lead_activity(
+            enterprise_db_url,
+            workspace_id=str(session.get("workspace_id", "")).strip(),
             lead_id=lead_id,
             actor=str(session.get("display_name", session.get("username", "Owner"))),
             activity_type=request.activity_type.strip(),
@@ -796,33 +957,52 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             stage_after=request.stage_after.strip(),
             next_step=request.next_step.strip(),
         )
-        lead_row = update_lead_pipeline_row(state_db, lead_id=lead_id)
+        lead_row = enterprise_update_lead(
+            enterprise_db_url,
+            workspace_id=str(session.get("workspace_id", "")).strip(),
+            lead_id=lead_id,
+        )
         return {
             "status": "ready",
             "row": row,
             "lead": lead_row,
-            "activities": list_lead_activity(state_db, lead_id=lead_id, limit=20),
-            "summary": load_lead_pipeline_summary(state_db),
+            "activities": enterprise_list_lead_activities(
+                enterprise_db_url,
+                workspace_id=str(session.get("workspace_id", "")).strip(),
+                lead_id=lead_id,
+                limit=20,
+            ),
+            "summary": enterprise_load_lead_summary(
+                enterprise_db_url,
+                workspace_id=str(session.get("workspace_id", "")).strip(),
+            ),
         }
 
     @app.post("/api/lead-pipeline/export/workspace")
     def export_lead_pipeline_to_workspace(request_http: Request, request: LeadPipelineExportRequest) -> dict[str, Any]:
-        _require_session(request_http)
+        session = _require_session(request_http)
         config = _load_runtime_config()
         probe = _drive_probe_from_config(config)
-        rows = list_lead_pipeline(state_db, limit=500)
+        rows = enterprise_list_leads(
+            enterprise_db_url,
+            workspace_id=str(session.get("workspace_id", "")).strip(),
+            limit=500,
+        )
         headers, values = _lead_pipeline_sheet_rows(rows)
         export_result = probe.publish_rows_sheet(
             spreadsheet_name=request.spreadsheet_name.strip() or "SuperMega Lead Pipeline",
             sheet_name=request.sheet_name.strip() or "Leads",
-            workspace_folder_name=request.workspace_folder_name.strip() or "SuperMega Sales",
+            workspace_folder_name=request.workspace_folder_name.strip() or str(session.get("workspace_name", "")).strip() or "SuperMega Sales",
             headers=headers,
             rows=values,
             description="Lead pipeline generated by SuperMega Lead Finder and lead-to-pilot workflow.",
         )
         return {
             "status": export_result.get("status", "ready"),
-            "summary": load_lead_pipeline_summary(state_db),
+            "summary": enterprise_load_lead_summary(
+                enterprise_db_url,
+                workspace_id=str(session.get("workspace_id", "")).strip(),
+            ),
             "row_count": len(rows),
             "export": export_result,
         }
@@ -995,6 +1175,22 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             "rows": rows,
         }
 
+    @app.get("/api/exceptions")
+    def exception_queue(request: Request, limit: int = 100) -> dict[str, Any]:
+        _require_session(request)
+        rows = _load_exception_rows(state_db, limit=limit)
+        summary = {
+            "total_items": len(rows),
+            "by_source": {},
+            "by_priority": {},
+        }
+        for row in rows:
+            source_type = str(row.get("source_type", "unknown"))
+            priority = str(row.get("priority", "unknown"))
+            summary["by_source"][source_type] = int(summary["by_source"].get(source_type, 0)) + 1
+            summary["by_priority"][priority] = int(summary["by_priority"].get(priority, 0)) + 1
+        return {"status": "ready", "summary": summary, "count": len(rows), "rows": rows}
+
     @app.get("/api/reports/role/{role}")
     def role_report(role: str, request: Request) -> dict[str, Any]:
         _require_session(request)
@@ -1040,12 +1236,22 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
 
     @app.get("/api/workspaces")
     def workspaces(request: Request) -> dict[str, Any]:
-        _require_session(request)
+        session = _require_session(request)
         registry = _load_json(pilot_data / "input_center_registry.json")
         publish = _load_json(pilot_data / "platform_publish.json")
         templates = registry.get("templates", []) if isinstance(registry, dict) else []
         return {
             "status": "ready",
+            "active_workspace": {
+                "workspace_id": session.get("workspace_id", ""),
+                "workspace_slug": session.get("workspace_slug", ""),
+                "workspace_name": session.get("workspace_name", ""),
+                "workspace_plan": session.get("workspace_plan", ""),
+            },
+            "app_workspaces": enterprise_list_user_workspaces(
+                enterprise_db_url,
+                username=str(session.get("username", "")),
+            ),
             "input_center_workspace": registry.get("workspace_link", ""),
             "published_workspace": publish.get("workspace_link", ""),
             "published_google_doc": publish.get("google_doc_link", ""),
