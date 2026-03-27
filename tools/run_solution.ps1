@@ -39,6 +39,23 @@ function Get-PreferredPythonExecutable {
     return ""
 }
 
+function Get-AppSiteRoot {
+    param([string]$RepoRoot)
+
+    $candidates = @(
+        (Join-Path $RepoRoot "showroom\dist"),
+        (Join-Path $RepoRoot "swan-intelligence-hub")
+    )
+
+    foreach ($candidate in $candidates) {
+        if (Test-Path -LiteralPath $candidate) {
+            return (Resolve-Path -LiteralPath $candidate).Path
+        }
+    }
+
+    return ""
+}
+
 function Show-GmailReauthHint {
     param(
         [string]$RepoRoot,
@@ -124,13 +141,45 @@ try {
         }
     }
 
-    $dashboard = Join-Path $repoRoot "swan-intelligence-hub\index.html"
+    $pythonExe = Get-PreferredPythonExecutable -RepoRoot $repoRoot
+    if (-not $pythonExe) {
+        Write-Error "Cannot find Python executable for local scripts."
+        exit 1
+    }
+
+    $agentTeamsModule = "mark1_pilot.agent_teams"
+    Write-Host "Refreshing agent team system..."
+    & $pythonExe -m $agentTeamsModule --config $configPath --repo-root $repoRoot
+    if ($LASTEXITCODE -ne 0) {
+        Write-Error "Agent team system refresh failed with exit code $LASTEXITCODE"
+        exit $LASTEXITCODE
+    }
+
+    $stateSyncArgs = @(
+        "-ExecutionPolicy", "Bypass",
+        "-File", $pilotWrapper,
+        "state-sync",
+        "--config", $configPath
+    )
+    powershell @stateSyncArgs
+    if ($LASTEXITCODE -ne 0) {
+        Write-Error "State sync failed after agent team refresh."
+        exit $LASTEXITCODE
+    }
+
+    $siteRootPath = Get-AppSiteRoot -RepoRoot $repoRoot
+    if (-not $siteRootPath) {
+        Write-Warning "No built app shell found. Build the showroom first with: npm run build (in showroom)"
+    }
+
+    $dashboard = if ($siteRootPath) { Join-Path $siteRootPath "index.html" } else { Join-Path $repoRoot "showroom\dist\index.html" }
     $brief = Join-Path $repoRoot "pilot-data\pilot_solution.md"
     $today = Join-Path $repoRoot "pilot-data\TODAY.md"
     $dqms = Join-Path $repoRoot "pilot-data\dqms_weekly_summary.md"
     $autopilot = Join-Path $repoRoot "pilot-data\autopilot_status.md"
     $productLab = Join-Path $repoRoot "pilot-data\product_lab.md"
     $actionBoard = Join-Path $repoRoot "pilot-data\action_board.md"
+    $agentTeams = Join-Path $repoRoot "pilot-data\agent_team_system.md"
 
     Write-Host ""
     Write-Host "Your live solution outputs:"
@@ -139,6 +188,7 @@ try {
     Write-Host ("- Today recap: " + $today)
     Write-Host ("- DQMS weekly summary: " + $dqms)
     Write-Host ("- Action board: " + $actionBoard)
+    Write-Host ("- Agent team system: " + $agentTeams)
     Write-Host ("- Product lab: " + $productLab)
     Write-Host ("- Pipeline status: " + $autopilot)
     Show-GmailReauthHint -RepoRoot $repoRoot -ConfigPath $configPath -PilotWrapper $pilotWrapper
@@ -156,15 +206,12 @@ try {
         if (Test-Path -LiteralPath $actionBoard) {
             Start-Process $actionBoard | Out-Null
         }
+        if (Test-Path -LiteralPath $agentTeams) {
+            Start-Process $agentTeams | Out-Null
+        }
     }
 
     if ($Serve) {
-        $pythonExe = Get-PreferredPythonExecutable -RepoRoot $repoRoot
-        if (-not $pythonExe) {
-            Write-Error "Cannot find Python executable for local server."
-            exit 1
-        }
-
         $serveScript = Join-Path $repoRoot "tools\serve_solution.py"
         if (-not (Test-Path -LiteralPath $serveScript)) {
             Write-Error "Missing server script: $serveScript"
@@ -174,7 +221,11 @@ try {
         Write-Host ""
         Write-Host ("Serving dashboard at http://{0}:{1}" -f $BindHost, $Port)
         if ($ServeBackground) {
-            $siteRootPath = Join-Path $repoRoot "swan-intelligence-hub"
+            $siteRootPath = Get-AppSiteRoot -RepoRoot $repoRoot
+            if (-not $siteRootPath) {
+                Write-Error "No built app shell found. Run npm run build in the showroom directory first."
+                exit 1
+            }
             $pilotDataPath = Join-Path $repoRoot "pilot-data"
             $logDir = Join-Path $repoRoot "pilot-data"
             if (-not (Test-Path -LiteralPath $logDir)) {
@@ -205,10 +256,15 @@ try {
             Write-Host ("Logs: " + $stdoutLog)
         }
         else {
+            $siteRootPath = Get-AppSiteRoot -RepoRoot $repoRoot
+            if (-not $siteRootPath) {
+                Write-Error "No built app shell found. Run npm run build in the showroom directory first."
+                exit 1
+            }
             & $pythonExe $serveScript `
                 --host $BindHost `
                 --port $Port `
-                --site-root (Join-Path $repoRoot "swan-intelligence-hub") `
+                --site-root $siteRootPath `
                 --pilot-data (Join-Path $repoRoot "pilot-data")
             if ($LASTEXITCODE -ne 0) {
                 exit $LASTEXITCODE
