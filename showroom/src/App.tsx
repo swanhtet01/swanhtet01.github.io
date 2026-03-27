@@ -7,6 +7,7 @@ import { ActionBoardPage } from './pages/ActionBoardPage'
 import { BookPage } from './pages/BookPage'
 import { ContactPage } from './pages/ContactPage'
 import { DecisionJournalPage } from './pages/DecisionJournalPage'
+import { DirectorDashboardPage } from './pages/DirectorDashboardPage'
 import { DocumentIntakePage } from './pages/DocumentIntakePage'
 import { ExceptionQueuePage } from './pages/ExceptionQueuePage'
 import { HomePage } from './pages/HomePage'
@@ -39,6 +40,7 @@ function App() {
           <Route element={<BookPage />} path="book" />
           <Route element={<Navigate replace to="/app" />} path="workbench" />
           <Route element={<Navigate replace to="/app/actions" />} path="workspace" />
+          <Route element={<Navigate replace to="/app/director" />} path="director" />
           <Route element={<Navigate replace to="/app/decisions" />} path="decisions" />
           <Route element={<Navigate replace to="/app/exceptions" />} path="exceptions" />
           <Route element={<Navigate replace to="/app/intake" />} path="ops-intake" />
@@ -61,6 +63,7 @@ function App() {
         </Route>
         <Route element={<AppFrame />} path="/app">
           <Route element={<WorkbenchPage />} index />
+          <Route element={<DirectorDashboardPage />} path="director" />
           <Route element={<WorkspacePage />} path="actions" />
           <Route element={<DecisionJournalPage />} path="decisions" />
           <Route element={<ExceptionQueuePage />} path="exceptions" />

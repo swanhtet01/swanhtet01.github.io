@@ -9,6 +9,28 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+function Wait-ForLocalUrl {
+    param(
+        [string]$Url,
+        [int]$TimeoutSeconds = 45
+    )
+
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    while ((Get-Date) -lt $deadline) {
+        try {
+            $response = Invoke-WebRequest -Uri $Url -UseBasicParsing -TimeoutSec 3
+            if ($response.StatusCode -ge 200 -and $response.StatusCode -lt 500) {
+                return $true
+            }
+        }
+        catch {
+            Start-Sleep -Milliseconds 750
+        }
+    }
+
+    return $false
+}
+
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repoRoot = Split-Path -Parent $scriptDir
 $runSolution = Join-Path $scriptDir "run_solution.ps1"
@@ -49,17 +71,28 @@ try {
         "-SkipRun",
         "-NoOpen",
         "-Serve",
+        "-ServeBackground",
         "-BindHost", $BindHost,
         "-Port", $Port
     )
-
-    if (-not $NoOpen) {
-        Start-Sleep -Seconds 2
-        Start-Process ("http://localhost:{0}/login/" -f $Port) | Out-Null
+    powershell @serveArgs
+    if ($LASTEXITCODE -ne 0) {
+        exit $LASTEXITCODE
     }
 
-    powershell @serveArgs
-    exit $LASTEXITCODE
+    $loginUrl = "http://localhost:{0}/login/" -f $Port
+    $healthUrl = "http://localhost:{0}/api/health" -f $Port
+    Write-Host ("Waiting for app server at " + $healthUrl)
+    $serverReady = Wait-ForLocalUrl -Url $healthUrl
+    if (-not $serverReady) {
+        Write-Warning "App server did not become ready before timeout. Check pilot-data\\serve_solution.stderr.log"
+        exit 1
+    }
+
+    Write-Host ("App server ready: " + $loginUrl)
+    if (-not $NoOpen) {
+        Start-Process $loginUrl | Out-Null
+    }
 }
 finally {
     Pop-Location
