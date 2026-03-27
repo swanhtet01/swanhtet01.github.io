@@ -81,6 +81,57 @@ type LeadPipelineResponse = {
   rows: LeadPipelineRow[]
 }
 
+type LeadActivity = {
+  activity_id: string
+  lead_id: string
+  created_at: string
+  actor: string
+  activity_type: string
+  channel: string
+  direction: string
+  message: string
+  stage_after: string
+  next_step: string
+}
+
+type LeadActivityDraft = {
+  activity_type: string
+  channel: string
+  direction: string
+  message: string
+  stage_after: string
+  next_step: string
+}
+
+const defaultActivityDraft = (message = ''): LeadActivityDraft => ({
+  activity_type: 'note',
+  channel: 'email',
+  direction: 'outbound',
+  message,
+  stage_after: '',
+  next_step: '',
+})
+
+const stageLabel: Record<string, string> = {
+  offer_ready: 'Offer ready',
+  contacted: 'Contacted',
+  discovery: 'Discovery',
+  proposal: 'Proposal',
+  won: 'Won',
+  lost: 'Lost',
+}
+
+function formatActivityTime(value: string) {
+  if (!value) {
+    return 'recent'
+  }
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return value
+  }
+  return date.toLocaleString()
+}
+
 export function LeadFinderPage() {
   const [apiReady, setApiReady] = useState(false)
   const [authLoading, setAuthLoading] = useState(true)
@@ -100,22 +151,59 @@ export function LeadFinderPage() {
   const [pipelineBusy, setPipelineBusy] = useState(false)
   const [pipelineMessage, setPipelineMessage] = useState('')
   const [pipeline, setPipeline] = useState<LeadPipelineResponse | null>(null)
+  const [activitiesByLead, setActivitiesByLead] = useState<Record<string, LeadActivity[]>>({})
+  const [activityDrafts, setActivityDrafts] = useState<Record<string, LeadActivityDraft>>({})
+
+  const loadActivitiesForLeadIds = useCallback(
+    async (leadIds: string[]) => {
+      if (!authenticated || !leadIds.length) {
+        setActivitiesByLead({})
+        return
+      }
+      const uniqueIds = [...new Set(leadIds.filter(Boolean))]
+      const results = await Promise.all(
+        uniqueIds.map(async (leadId) => {
+          try {
+            const payload = await workspaceFetch<{ rows: LeadActivity[] }>(`/api/lead-pipeline/${encodeURIComponent(leadId)}/activities`)
+            return [leadId, payload.rows ?? []] as const
+          } catch {
+            return [leadId, []] as const
+          }
+        }),
+      )
+      setActivitiesByLead(Object.fromEntries(results))
+      setActivityDrafts((current) => {
+        const next = { ...current }
+        for (const [leadId] of results) {
+          if (!next[leadId]) {
+            next[leadId] = defaultActivityDraft()
+          }
+        }
+        return next
+      })
+    },
+    [authenticated],
+  )
 
   const loadPipeline = useCallback(async () => {
     if (!authenticated) {
       setPipeline(null)
+      setActivitiesByLead({})
       return
     }
     try {
       const payload = await workspaceFetch<LeadPipelineResponse & { status: string; count: number }>('/api/lead-pipeline')
-      setPipeline({
+      const nextPipeline = {
         summary: payload.summary,
         rows: payload.rows,
-      })
+      }
+      setPipeline(nextPipeline)
+      await loadActivitiesForLeadIds(nextPipeline.rows.map((row) => row.lead_id))
     } catch {
       setPipeline(null)
+      setActivitiesByLead({})
     }
-  }, [authenticated])
+  }, [authenticated, loadActivitiesForLeadIds])
 
   useEffect(() => {
     let cancelled = false
@@ -174,22 +262,19 @@ export function LeadFinderPage() {
     setPipelineMessage('')
     try {
       if (apiReady && (nextQuery.trim() || nextInput.trim())) {
-        const payload = await workspaceFetch<{ rows: LeadRow[]; provider?: string }>(
-          '/api/tools/lead-finder',
-          {
-            method: 'POST',
-            body: JSON.stringify({
-              raw_text: nextInput,
-              query: nextQuery,
-              keywords: keywords
-                .split(',')
-                .map((value) => value.trim())
-                .filter(Boolean),
-              sources: selectedSources,
-              limit,
-            }),
-          },
-        )
+        const payload = await workspaceFetch<{ rows: LeadRow[]; provider?: string }>('/api/tools/lead-finder', {
+          method: 'POST',
+          body: JSON.stringify({
+            raw_text: nextInput,
+            query: nextQuery,
+            keywords: keywords
+              .split(',')
+              .map((value) => value.trim())
+              .filter(Boolean),
+            sources: selectedSources,
+            limit,
+          }),
+        })
         setRows(payload.rows ?? [])
         setProvider(payload.provider ?? '')
         return
@@ -281,10 +366,12 @@ export function LeadFinderPage() {
           campaign_goal: campaignGoal,
         }),
       })
-      setPipeline({
+      const nextPipeline = {
         summary: payload.summary,
         rows: payload.rows,
-      })
+      }
+      setPipeline(nextPipeline)
+      await loadActivitiesForLeadIds(nextPipeline.rows.map((row) => row.lead_id))
       setPipelineMessage(`Saved ${payload.saved_count} lead${payload.saved_count === 1 ? '' : 's'} into the pipeline.`)
     } catch {
       setPipelineMessage(authenticated ? 'Could not save the lead pack into the pipeline.' : 'Login is required before the lead pack can be saved.')
@@ -322,32 +409,90 @@ export function LeadFinderPage() {
     }
   }
 
-  async function moveLeadStage(leadId: string, stage: string) {
-    if (!apiReady) {
+  async function saveLeadActivity(leadId: string) {
+    if (!apiReady || !authenticated) {
+      setPipelineMessage('Login is required before saving activity.')
+      return
+    }
+    const draft = activityDrafts[leadId] ?? defaultActivityDraft()
+    if (!draft.message.trim()) {
+      setPipelineMessage('Add a message before saving lead activity.')
       return
     }
     setPipelineBusy(true)
+    setPipelineMessage('')
     try {
-      await workspaceFetch(`/api/lead-pipeline/${encodeURIComponent(leadId)}`, {
+      const payload = await workspaceFetch<{ activities: LeadActivity[] }>(`/api/lead-pipeline/${encodeURIComponent(leadId)}/activities`, {
         method: 'POST',
         body: JSON.stringify({
-          stage,
-          status: stage === 'contacted' ? 'active' : 'open',
+          activity_type: draft.activity_type,
+          channel: draft.channel,
+          direction: draft.direction,
+          message: draft.message,
+          stage_after: draft.stage_after,
+          next_step: draft.next_step,
         }),
       })
+      setActivitiesByLead((current) => ({ ...current, [leadId]: payload.activities ?? current[leadId] ?? [] }))
+      setActivityDrafts((current) => ({ ...current, [leadId]: defaultActivityDraft() }))
+      setPipelineMessage('Lead activity saved.')
       await loadPipeline()
+    } catch {
+      setPipelineMessage('Could not save the lead activity.')
     } finally {
       setPipelineBusy(false)
     }
   }
 
-  async function copyText(value: string) {
+  async function moveLeadStage(leadId: string, stage: string) {
+    if (!apiReady || !authenticated) {
+      setPipelineMessage('Login is required before moving the lead.')
+      return
+    }
+    const nextStep = stage === 'contacted' ? 'Wait for reply or send one follow-up.' : stage === 'discovery' ? 'Schedule discovery call.' : ''
+    setPipelineBusy(true)
+    setPipelineMessage('')
+    try {
+      const payload = await workspaceFetch<{ activities: LeadActivity[] }>(`/api/lead-pipeline/${encodeURIComponent(leadId)}/activities`, {
+        method: 'POST',
+        body: JSON.stringify({
+          activity_type: 'stage_change',
+          channel: 'workflow',
+          direction: 'internal',
+          message: `Moved lead to ${stageLabel[stage] ?? stage}.`,
+          stage_after: stage,
+          next_step: nextStep,
+        }),
+      })
+      setActivitiesByLead((current) => ({ ...current, [leadId]: payload.activities ?? current[leadId] ?? [] }))
+      setPipelineMessage(`Lead moved to ${stageLabel[stage] ?? stage}.`)
+      await loadPipeline()
+    } catch {
+      setPipelineMessage('Could not move the lead stage.')
+    } finally {
+      setPipelineBusy(false)
+    }
+  }
+
+  async function copyText(value: string, leadId?: string) {
     if (!value) {
       return
     }
     try {
       await navigator.clipboard.writeText(value)
       setPipelineMessage('Copied to clipboard.')
+      if (leadId) {
+        setActivityDrafts((current) => ({
+          ...current,
+          [leadId]: {
+            ...(current[leadId] ?? defaultActivityDraft()),
+            activity_type: 'outreach_draft',
+            channel: 'email',
+            direction: 'outbound',
+            message: value,
+          },
+        }))
+      }
     } catch {
       setPipelineMessage('Could not copy to clipboard on this browser.')
     }
@@ -358,7 +503,7 @@ export function LeadFinderPage() {
       <PageIntro
         eyebrow="Free tool"
         title="Lead Finder"
-        description="Search for real businesses, build the right SuperMega offer, save it into the pipeline, and push the shortlist into Google Workspace."
+        description="Search for real businesses, shape the right SuperMega offer, and move the shortlist into a private sales pipeline with outreach history."
       />
 
       {!apiReady ? (
@@ -367,7 +512,7 @@ export function LeadFinderPage() {
         </section>
       ) : !authLoading && !authenticated ? (
         <section className="sm-chip border-[rgba(37,208,255,0.2)] bg-[rgba(37,208,255,0.08)] text-[var(--sm-muted)]">
-          Search works here. Login is required to save the pipeline, export to Google Workspace, and run the private outreach flow.
+          Search works here. Login is required to save the pipeline, keep an outreach history, and export the queue to Google Workspace.
         </section>
       ) : null}
 
@@ -617,14 +762,20 @@ export function LeadFinderPage() {
         <div className="flex items-center justify-between gap-4">
           <div>
             <p className="sm-kicker text-[var(--sm-accent)]">Saved pipeline</p>
-            <h2 className="mt-2 text-2xl font-bold text-white">Real comms pipeline.</h2>
+            <h2 className="mt-2 text-2xl font-bold text-white">Private comms pipeline.</h2>
           </div>
-          <Link className="sm-link" to="/contact">
-            Need outbound help?
-          </Link>
+          {authenticated ? (
+            <Link className="sm-link" to="/app">
+              Open private app
+            </Link>
+          ) : (
+            <Link className="sm-link" to="/login?next=/app/leads">
+              Login
+            </Link>
+          )}
         </div>
 
-        <div className="grid gap-5 lg:grid-cols-[0.84fr_1.16fr]">
+        <div className="grid gap-5 lg:grid-cols-[0.82fr_1.18fr]">
           <article className="sm-surface p-6">
             <div className="grid gap-3 md:grid-cols-3">
               <div className="sm-chip text-white">
@@ -636,43 +787,212 @@ export function LeadFinderPage() {
                 <p className="mt-2 text-xl font-bold">{pipeline?.summary.by_stage.offer_ready ?? 0}</p>
               </div>
               <div className="sm-chip text-white">
-                <p className="sm-kicker text-[var(--sm-accent)]">Contacted</p>
-                <p className="mt-2 text-xl font-bold">{pipeline?.summary.by_stage.contacted ?? 0}</p>
+                <p className="sm-kicker text-[var(--sm-accent)]">Discovery</p>
+                <p className="mt-2 text-xl font-bold">{pipeline?.summary.by_stage.discovery ?? 0}</p>
+              </div>
+            </div>
+
+            <div className="mt-5 space-y-3">
+              <div className="sm-chip">
+                <p className="sm-kicker text-[var(--sm-accent)]">How to use it</p>
+                <ol className="mt-3 space-y-2 text-sm text-[var(--sm-muted)]">
+                  <li>1. Search and shortlist leads.</li>
+                  <li>2. Build the offer and save the shortlist.</li>
+                  <li>3. Copy the outreach and log the send.</li>
+                  <li>4. Move the lead to discovery once they reply.</li>
+                </ol>
               </div>
             </div>
           </article>
 
           <article className="sm-terminal p-6">
-            <div className="space-y-3">
+            <div className="space-y-4">
               {pipeline?.rows?.length ? (
-                pipeline.rows.map((row) => (
-                  <div className="sm-proof-card" key={row.lead_id}>
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div>
-                        <p className="text-lg font-bold text-white">{row.company_name}</p>
-                        <p className="mt-1 text-sm text-[var(--sm-muted)]">
-                          {row.service_pack} · {row.wedge_product}
-                        </p>
+                pipeline.rows.map((row) => {
+                  const draft = activityDrafts[row.lead_id] ?? defaultActivityDraft()
+                  const activities = activitiesByLead[row.lead_id] ?? []
+                  return (
+                    <div className="sm-proof-card" key={row.lead_id}>
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <p className="text-lg font-bold text-white">{row.company_name}</p>
+                          <p className="mt-1 text-sm text-[var(--sm-muted)]">
+                            {row.service_pack} · {row.wedge_product}
+                          </p>
+                        </div>
+                        <span className="sm-status-pill">{stageLabel[row.stage] ?? row.stage}</span>
                       </div>
-                      <span className="sm-status-pill">{row.stage}</span>
-                    </div>
 
-                    <p className="mt-4 text-sm text-white">{row.contact_email || row.contact_phone || row.website || 'Public source only'}</p>
-                    <p className="mt-2 text-sm text-[var(--sm-muted)]">{row.outreach_subject}</p>
+                      <div className="mt-4 grid gap-3 md:grid-cols-2">
+                        <div className="sm-chip text-sm text-white">
+                          <p className="sm-kicker text-[var(--sm-accent)]">Contact</p>
+                          <p className="mt-2">{row.contact_email || row.contact_phone || row.website || 'Public source only'}</p>
+                        </div>
+                        <div className="sm-chip text-sm text-white">
+                          <p className="sm-kicker text-[var(--sm-accent-alt)]">Next outreach</p>
+                          <p className="mt-2">{row.outreach_subject}</p>
+                        </div>
+                      </div>
 
-                    <div className="mt-4 flex flex-wrap gap-3">
-                      <button className="sm-button-secondary" onClick={() => void copyText(row.outreach_message)} type="button">
-                        Copy outreach
-                      </button>
-                      <button className="sm-button-secondary" onClick={() => void moveLeadStage(row.lead_id, 'contacted')} type="button">
-                        Mark contacted
-                      </button>
-                      <button className="sm-button-accent" onClick={() => void moveLeadStage(row.lead_id, 'discovery')} type="button">
-                        Move to discovery
-                      </button>
+                      <div className="mt-4 flex flex-wrap gap-3">
+                        <button className="sm-button-secondary" onClick={() => void copyText(row.outreach_message, row.lead_id)} type="button">
+                          Copy outreach
+                        </button>
+                        <button className="sm-button-secondary" onClick={() => void moveLeadStage(row.lead_id, 'contacted')} type="button">
+                          Mark contacted
+                        </button>
+                        <button className="sm-button-accent" onClick={() => void moveLeadStage(row.lead_id, 'discovery')} type="button">
+                          Move to discovery
+                        </button>
+                      </div>
+
+                      <div className="mt-5 grid gap-4 lg:grid-cols-[0.92fr_1.08fr]">
+                        <div className="sm-chip text-white">
+                          <p className="sm-kicker text-[var(--sm-accent)]">Log activity</p>
+                          <div className="mt-3 grid gap-3 md:grid-cols-2">
+                            <label className="grid gap-2 text-xs font-semibold text-[var(--sm-muted)]">
+                              Type
+                              <select
+                                className="sm-input"
+                                onChange={(event) =>
+                                  setActivityDrafts((current) => ({
+                                    ...current,
+                                    [row.lead_id]: { ...draft, activity_type: event.target.value },
+                                  }))
+                                }
+                                value={draft.activity_type}
+                              >
+                                <option value="note">Note</option>
+                                <option value="outreach">Outreach</option>
+                                <option value="reply">Reply</option>
+                                <option value="meeting">Meeting</option>
+                                <option value="stage_change">Stage change</option>
+                              </select>
+                            </label>
+                            <label className="grid gap-2 text-xs font-semibold text-[var(--sm-muted)]">
+                              Channel
+                              <select
+                                className="sm-input"
+                                onChange={(event) =>
+                                  setActivityDrafts((current) => ({
+                                    ...current,
+                                    [row.lead_id]: { ...draft, channel: event.target.value },
+                                  }))
+                                }
+                                value={draft.channel}
+                              >
+                                <option value="email">Email</option>
+                                <option value="whatsapp">WhatsApp</option>
+                                <option value="call">Call</option>
+                                <option value="meeting">Meeting</option>
+                                <option value="manual">Manual</option>
+                              </select>
+                            </label>
+                          </div>
+
+                          <label className="mt-3 grid gap-2 text-xs font-semibold text-[var(--sm-muted)]">
+                            Message
+                            <textarea
+                              className="sm-input min-h-28"
+                              onChange={(event) =>
+                                setActivityDrafts((current) => ({
+                                  ...current,
+                                  [row.lead_id]: { ...draft, message: event.target.value },
+                                }))
+                              }
+                              placeholder="Log what was sent, what they replied, or the next thing you need to do."
+                              value={draft.message}
+                            />
+                          </label>
+
+                          <div className="mt-3 grid gap-3 md:grid-cols-2">
+                            <label className="grid gap-2 text-xs font-semibold text-[var(--sm-muted)]">
+                              Move stage after save
+                              <select
+                                className="sm-input"
+                                onChange={(event) =>
+                                  setActivityDrafts((current) => ({
+                                    ...current,
+                                    [row.lead_id]: { ...draft, stage_after: event.target.value },
+                                  }))
+                                }
+                                value={draft.stage_after}
+                              >
+                                <option value="">Keep current stage</option>
+                                <option value="contacted">Contacted</option>
+                                <option value="discovery">Discovery</option>
+                                <option value="proposal">Proposal</option>
+                                <option value="won">Won</option>
+                                <option value="lost">Lost</option>
+                              </select>
+                            </label>
+                            <label className="grid gap-2 text-xs font-semibold text-[var(--sm-muted)]">
+                              Next step
+                              <input
+                                className="sm-input"
+                                onChange={(event) =>
+                                  setActivityDrafts((current) => ({
+                                    ...current,
+                                    [row.lead_id]: { ...draft, next_step: event.target.value },
+                                  }))
+                                }
+                                placeholder="For example: follow up next Tuesday"
+                                value={draft.next_step}
+                              />
+                            </label>
+                          </div>
+
+                          <div className="mt-4 flex flex-wrap gap-3">
+                            <button className="sm-button-primary" disabled={pipelineBusy || !draft.message.trim()} onClick={() => void saveLeadActivity(row.lead_id)} type="button">
+                              Save activity
+                            </button>
+                            <button
+                              className="sm-button-secondary"
+                              onClick={() =>
+                                setActivityDrafts((current) => ({
+                                  ...current,
+                                  [row.lead_id]: defaultActivityDraft(row.outreach_message),
+                                }))
+                              }
+                              type="button"
+                            >
+                              Load outreach
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="sm-chip text-white">
+                          <p className="sm-kicker text-[var(--sm-accent-alt)]">Recent activity</p>
+                          <div className="mt-3 space-y-3">
+                            {activities.length ? (
+                              activities.map((activity) => (
+                                <div className="rounded-2xl border border-white/8 bg-[rgba(255,255,255,0.03)] px-4 py-3" key={activity.activity_id}>
+                                  <div className="flex flex-wrap items-center justify-between gap-2">
+                                    <p className="text-sm font-semibold text-white">
+                                      {activity.activity_type} / {activity.channel}
+                                    </p>
+                                    <span className="text-xs text-[var(--sm-muted)]">{formatActivityTime(activity.created_at)}</span>
+                                  </div>
+                                  <p className="mt-2 text-sm text-[var(--sm-muted)]">{activity.message}</p>
+                                  {activity.stage_after || activity.next_step ? (
+                                    <div className="mt-2 flex flex-wrap gap-2 text-xs text-[var(--sm-muted)]">
+                                      {activity.stage_after ? <span className="sm-status-pill">Stage: {stageLabel[activity.stage_after] ?? activity.stage_after}</span> : null}
+                                      {activity.next_step ? <span className="sm-status-pill">Next: {activity.next_step}</span> : null}
+                                    </div>
+                                  ) : null}
+                                </div>
+                              ))
+                            ) : (
+                              <div className="rounded-2xl border border-white/8 bg-[rgba(255,255,255,0.03)] px-4 py-3 text-sm text-[var(--sm-muted)]">
+                                No activity logged yet. Save the first outreach, reply, or next-step note here.
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                ))
+                  )
+                })
               ) : apiReady && !authenticated ? (
                 <div className="sm-chip text-[var(--sm-muted)]">
                   Login to keep a private lead pipeline, move leads through stages, and export the queue into Google Workspace.
