@@ -2,151 +2,107 @@
 
 Date: 2026-03-27
 
-## What the stack already has
+## Current repo reality
 
-- Frontend: React 19, Vite 7, Tailwind 4
-- Backend: FastAPI
-- Data tools: Polars, DuckDB, OpenPyXL, PyPDF
-- State/persistence: SQLite today
-- Workflow framework available: LangGraph
-- Google connectors: Gmail, Drive, Sheets-adjacent exports
+The repo already carries modern foundations:
 
-## Latest tool decisions worth using now
+- React 19
+- Vite 7
+- Tailwind 4
+- FastAPI
+- SQLModel
+- DuckDB
+- Polars
+- LangGraph
 
-### 1. OpenAI Responses API as the default LLM runtime
+The main gap was not missing libraries. The gap was that auth, workspaces, and the saved lead pipeline were still effectively single-tenant pilot code.
 
-Use this for new LLM-backed product flows instead of designing around older chat-only patterns.
+## What changed in this pass
 
-Why:
-- OpenAI recommends the Responses API for new projects and says the Agents SDK works with it.
-- Good fit for lead qualification, document analysis, briefing, and structured workflow steps.
+- Added a workspace-aware enterprise store in `mark1_pilot/enterprise_store.py`
+- Moved login/session handling in `tools/serve_solution.py` onto that store
+- Moved the saved lead pipeline and lead activity flow onto that store
+- Added support for workspace-aware runtime settings:
+  - `SUPERMEGA_WORKSPACE_SLUG`
+  - `SUPERMEGA_WORKSPACE_NAME`
+  - `SUPERMEGA_WORKSPACE_PLAN`
+  - `SUPERMEGA_DATABASE_URL`
+- Added Postgres driver support via `psycopg[binary]`
 
-Use for:
-- lead qualification
-- outreach draft generation
-- document intake classification
-- director brief synthesis
+## Why this matters
 
-### 2. LangGraph for multi-step workflow orchestration
+This is the first step from:
 
-LangGraph is the best fit for SuperMega where workflows are stateful and often need:
-- branching
-- retries
-- human review
-- persistence
-- handoff between product steps
+- one local owner app
 
-Use for:
-- Lead Finder -> offer builder -> pipeline save -> outreach prep
-- Ops Intake -> exception detection -> action creation
-- Receiving -> variance -> owner assignment -> escalation
+to:
 
-### 3. PydanticAI for typed agent outputs
+- one app that can support multiple client workspaces
 
-Use this once we start using real LLM-backed agent steps in production.
+without rewriting the whole platform first.
 
-Why:
-- It keeps outputs typed and easier to test.
-- It fits the need for structured records instead of free-form prose.
+## Best stack choices now
 
-Use for:
-- typed lead packs
-- typed issue classification
-- typed risk scoring payloads
-- typed director brief blocks
+### Keep
 
-### 4. FastAPI + SQLModel + Postgres for enterprise state
+- FastAPI for the app/API boundary
+- SQLModel for new relational app state
+- Polars and DuckDB for messy spreadsheet-heavy client data
+- LangGraph for multi-step business workflows when the workflow is truly stateful
 
-FastAPI is already the right app/API layer. The current weakness is persistence, not the web framework.
+### Add next
 
-Next move:
-- keep FastAPI
-- migrate state from raw sqlite tables to a clearer SQLModel/Postgres path
-- use SQLite only for local/dev
+- Postgres as the real shared database target
+- Cloud Run for the app host
+- Cloud SQL for Postgres
+- Cloud Tasks and Cloud Scheduler for durable recurring jobs
+- Secret Manager for runtime secrets
 
-### 5. Cloud Run + Cloud Tasks + Cloud Scheduler + Secret Manager
+### Use carefully
 
-This is the best practical Google Cloud operating stack for SuperMega right now.
+- OpenAI Responses API for tool-using flows
+- OpenAI Agents SDK or LangGraph for orchestrated agent systems
+- PydanticAI for stricter typed agent output
 
-Use for:
-- public app hosting
-- background pipeline cycles
-- scheduled refresh jobs
-- secret storage
+These should support the platform, not replace the product model.
 
-### 6. Stagehand as a browser sidecar only
+## Product direction
 
-Use computer/browser automation only as a helper for browser tasks.
+### Main wedge
 
-Do not make it the core product runtime.
+- `Action OS`
 
-Use for:
-- lead capture from public websites
-- data collection from sources without APIs
-- browser-side workflow helpers
+### Core modules
 
-## What to implement next
+- `Supplier Watch`
+- `Receiving Control`
+- `Inventory Pulse`
+- `Quality Closeout`
+- `Cash Watch`
+- `Production Pulse`
+- `Sales Signal`
 
-### Now
+### Intake bridge
 
-- Simplify the public site into:
-  - Product
-  - Use cases
-  - Lead Finder
-  - Book demo
-- Keep the real work in the private app:
-  - `/app`
-  - `/app/actions`
-  - `/app/intake`
-  - `/app/receiving`
-  - `/app/inventory`
+- `Ops Intake`
 
-### Next
+### Growth wedge
 
-- Public backend hosting
-- Lead pipeline communication activity UI
-- booking/calendar integration
-- workspace/tenant model
+- `Lead Finder` -> `Lead-to-Pilot` -> pipeline -> outreach -> discovery
 
-### After that
+## Biggest remaining gaps
 
-- LangGraph workflow for lead-to-pilot and ops exception handling
-- SQLModel + Postgres migration
-- role-specific app surfaces for:
-  - owner/director
-  - manager
-  - operator
+1. Public backend hosting is still not fully closed.
+2. Website UX is still too text-heavy and not yet at the reference quality bar.
+3. Workspace switching exists in the data model, but the private app still needs stronger role- and workspace-aware UI.
+4. Lead pipeline needs direct outreach and scheduling actions, not just save/export.
+5. Approval layer and deeper inventory/receiving exception flow are still not complete.
 
-## What not to do
+## Next build order
 
-- Do not keep exposing internal app surfaces as public marketing pages.
-- Do not keep adding static product copy without strengthening the saved workflows.
-- Do not treat browser/computer use as the source of truth.
-- Do not market SuperMega as a giant ERP replacement first.
-
-## SuperMega product rule
-
-Start with:
-- Action OS
-
-Then add:
-- Supplier Watch
-- Receiving Control
-- Inventory Pulse
-- Cash Watch
-
-That is the clearest enterprise path.
-
-## Primary sources
-
-- OpenAI Responses migration guide: https://developers.openai.com/api/docs/guides/migrate-to-responses
-- OpenAI Agents SDK: https://developers.openai.com/api/docs/guides/agents-sdk
-- LangGraph overview: https://docs.langchain.com/oss/python/langgraph/overview
-- PydanticAI docs: https://ai.pydantic.dev/
-- FastAPI security: https://fastapi.tiangolo.com/tutorial/security/first-steps/
-- SQLModel with FastAPI: https://sqlmodel.tiangolo.com/tutorial/fastapi/
-- Cloud Run overview: https://cloud.google.com/run/docs/overview/what-is-cloud-run
-- Cloud Tasks docs: https://cloud.google.com/tasks/docs
-- Cloud Scheduler docs: https://cloud.google.com/scheduler/docs
-- Secret Manager docs: https://cloud.google.com/secret-manager/docs
-- Stagehand docs: https://docs.stagehand.dev/
+1. Public backend deploy with the same workspace-aware config model.
+2. Inventory exception queue and approval layer.
+3. Lead pipeline comms actions and scheduling integration.
+4. UI simplification pass around one message:
+   - public site sells `Action OS`
+   - private app runs the real system
