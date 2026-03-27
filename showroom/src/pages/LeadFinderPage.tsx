@@ -356,9 +356,9 @@ export function LeadFinderPage() {
   return (
     <div className="space-y-8">
       <PageIntro
-        eyebrow="Live product"
+        eyebrow="Free tool"
         title="Lead Finder"
-        description="Search for real businesses, build the right SuperMega offer, save it into a pipeline, and push the pipeline into Google Workspace."
+        description="Search for real businesses, build the right SuperMega offer, save it into the pipeline, and push the shortlist into Google Workspace."
       />
 
       {!apiReady ? (
@@ -545,7 +545,7 @@ export function LeadFinderPage() {
               Export to Workspace
             </button>
             {apiReady && !authenticated ? (
-              <Link className="sm-button-secondary" to="/login?next=/lead-finder">
+              <Link className="sm-button-secondary" to="/login?next=/app/leads">
                 Login to save
               </Link>
             ) : null}

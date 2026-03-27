@@ -1,8 +1,6 @@
 import { Link } from 'react-router-dom'
 
-import { featuredProducts, proofPoints, servicePacks } from '../content'
-
-const liveNow = featuredProducts.filter((item) => ['Action OS', 'Lead Finder', 'Ops Intake', 'Receiving Control'].includes(item.name))
+import { coreProduct, hero, proofPoints, publicModules, useCases } from '../content'
 
 export function HomePage() {
   return (
@@ -14,13 +12,12 @@ export function HomePage() {
 
         <div className="grid gap-8 lg:grid-cols-[1.15fr_0.85fr]">
           <div>
-            <p className="sm-kicker text-[var(--sm-accent)]">Main product</p>
+            <p className="sm-kicker text-[var(--sm-accent)]">{hero.eyebrow}</p>
             <h1 className="mt-4 max-w-4xl text-4xl font-extrabold tracking-tight text-white lg:text-6xl">
-              Turn Gmail, Drive, and spreadsheets into one operating system.
+              {hero.title}
             </h1>
             <p className="mt-5 max-w-3xl text-base leading-relaxed text-[var(--sm-muted)] lg:text-lg">
-              Start with Action OS. It gives one action board for managers and directors. Then add receiving, inventory, supplier,
-              quality, or cash control only where the business needs more depth.
+              {hero.description}
             </p>
 
             <div className="mt-7 flex flex-wrap gap-3">
@@ -31,7 +28,7 @@ export function HomePage() {
                 Try Lead Finder
               </Link>
               <Link className="sm-button-accent" to="/contact">
-                Book call
+                Book demo
               </Link>
             </div>
           </div>
@@ -53,18 +50,18 @@ export function HomePage() {
 
       <section className="space-y-4">
         <div>
-          <p className="sm-kicker text-[var(--sm-accent)]">Where it fits</p>
-          <h2 className="mt-2 text-2xl font-bold text-white">Three simple starting points.</h2>
+          <p className="sm-kicker text-[var(--sm-accent)]">Use cases</p>
+          <h2 className="mt-2 text-2xl font-bold text-white">Three clear starting points.</h2>
         </div>
 
         <div className="grid gap-5 xl:grid-cols-3">
-          {servicePacks.map((pack) => (
+          {useCases.map((pack) => (
             <article className="sm-pack-card p-6" key={pack.name}>
               <p className="sm-kicker text-[var(--sm-accent)]">{pack.audience}</p>
               <h3 className="mt-3 text-2xl font-bold text-white">{pack.name}</h3>
               <p className="mt-3 text-sm text-[var(--sm-muted)]">{pack.promise}</p>
               <div className="mt-5 grid gap-3">
-                {pack.includes.slice(0, 3).map((item) => (
+                {pack.outcomes.slice(0, 3).map((item) => (
                   <div className="sm-chip text-white" key={item}>
                     {item}
                   </div>
@@ -78,64 +75,80 @@ export function HomePage() {
       <section className="space-y-4">
         <div className="flex items-center justify-between gap-4">
           <div>
-            <p className="sm-kicker text-[var(--sm-accent)]">Use now</p>
-            <h2 className="mt-2 text-2xl font-bold text-white">Products you can actually open.</h2>
+            <p className="sm-kicker text-[var(--sm-accent)]">Action OS</p>
+            <h2 className="mt-2 text-2xl font-bold text-white">The first product to trust.</h2>
           </div>
-          <Link className="sm-link" to="/products">
-            See all modules
-          </Link>
         </div>
 
-        <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
-          {liveNow.map((item) => (
-            <article className="sm-surface-soft p-5" key={item.name}>
-              <p className="sm-kicker text-[var(--sm-accent)]">{item.kind}</p>
-              <h3 className="mt-3 text-xl font-bold text-white">{item.name}</h3>
-              <p className="mt-3 text-sm text-[var(--sm-muted)]">{item.tagline}</p>
-              <div className="mt-5 grid gap-2">
-                {item.bullets.slice(0, 3).map((bullet) => (
-                  <div className="sm-chip text-white" key={bullet}>
-                    {bullet}
-                  </div>
-                ))}
+        <div className="grid gap-5 lg:grid-cols-[1.1fr_0.9fr]">
+          <article className="sm-surface-soft p-6">
+            <h3 className="text-3xl font-bold text-white">{coreProduct.name}</h3>
+            <p className="mt-3 text-sm text-[var(--sm-muted)]">{coreProduct.tagline}</p>
+            <div className="mt-5 grid gap-3 md:grid-cols-3">
+              <div className="sm-chip text-white">
+                <p className="sm-kicker text-[var(--sm-accent)]">Replaces</p>
+                <p className="mt-2 text-sm">{coreProduct.replaces.join(', ')}</p>
               </div>
-              <Link className="sm-button-secondary mt-5" to={item.path}>
-                Open
+              <div className="sm-chip text-white">
+                <p className="sm-kicker text-[var(--sm-accent-alt)]">Inputs</p>
+                <p className="mt-2 text-sm">{coreProduct.inputs.join(', ')}</p>
+              </div>
+              <div className="sm-chip text-white">
+                <p className="sm-kicker text-[var(--sm-accent)]">Outputs</p>
+                <p className="mt-2 text-sm">{coreProduct.outputs.join(', ')}</p>
+              </div>
+            </div>
+            <div className="mt-5 flex flex-wrap gap-3">
+              <Link className="sm-button-primary" to="/platform">
+                See product
               </Link>
-            </article>
-          ))}
+              <Link className="sm-button-secondary" to="/login?next=/app">
+                Login to app
+              </Link>
+            </div>
+          </article>
+
+          <article className="sm-terminal p-6">
+            <p className="sm-kicker text-[var(--sm-accent)]">First rollout</p>
+            <div className="mt-5 grid gap-3">
+              {coreProduct.rollout.map((step) => (
+                <div className="sm-proof-card" key={step}>
+                  <p className="text-sm text-white">{step}</p>
+                </div>
+              ))}
+            </div>
+          </article>
         </div>
       </section>
 
       <section className="grid gap-5 lg:grid-cols-[1fr_1fr]">
         <article className="sm-surface p-6">
-          <p className="sm-kicker text-[var(--sm-accent)]">How we start</p>
-          <h2 className="mt-3 text-2xl font-bold text-white">Keep the first rollout small.</h2>
+          <p className="sm-kicker text-[var(--sm-accent)]">Add-ons</p>
+          <h2 className="mt-3 text-2xl font-bold text-white">Go deeper only where control matters.</h2>
           <div className="mt-5 grid gap-3">
-            {[
-              'Connect one data source or one daily team update.',
-              'Ship one live board that people actually use.',
-              'Add deeper modules only after the first board is trusted.',
-            ].map((step) => (
-              <div className="sm-command-row" key={step}>
-                <p className="text-white">{step}</p>
+            {publicModules.map((module) => (
+              <div className="sm-command-row" key={module.name}>
+                <div>
+                  <p className="font-semibold text-white">{module.name}</p>
+                  <p className="mt-2 text-sm text-[var(--sm-muted)]">{module.tagline}</p>
+                </div>
               </div>
             ))}
           </div>
         </article>
 
         <article className="sm-surface p-6">
-          <p className="sm-kicker text-[var(--sm-accent-alt)]">Need a fit check?</p>
-          <h2 className="mt-3 text-2xl font-bold text-white">Tell us the workflow first.</h2>
+          <p className="sm-kicker text-[var(--sm-accent-alt)]">Next step</p>
+          <h2 className="mt-3 text-2xl font-bold text-white">Start with one workflow, not a giant rollout.</h2>
           <p className="mt-3 text-sm text-[var(--sm-muted)]">
-            The best starting point is usually one management board, one receiving queue, one supplier queue, or one cash queue.
+            The best first move is usually one board, one queue, or one control loop. We make that work first, then expand.
           </p>
           <div className="mt-5 flex flex-wrap gap-3">
             <Link className="sm-button-primary" to="/contact">
-              Book intro call
+              Book demo
             </Link>
-            <Link className="sm-button-secondary" to="/login?next=/workspace">
-              Login to app
+            <Link className="sm-button-secondary" to="/solutions">
+              See use cases
             </Link>
           </div>
         </article>
