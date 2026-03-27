@@ -87,10 +87,9 @@ export type MiniProduct = {
 }
 
 export const navItems = [
-  { label: 'Action OS', to: '/platform' },
+  { label: 'Platform', to: '/platform' },
   { label: 'Modules', to: '/products' },
   { label: 'Lead Finder', to: '/lead-finder' },
-  { label: 'Contact', to: '/contact' },
 ] as const
 
 export const bookingUrl = (import.meta.env.VITE_BOOKING_URL ?? '').trim()

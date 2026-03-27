@@ -50,11 +50,8 @@ export function PlatformPage() {
           </div>
 
           <div className="mt-6 flex flex-wrap gap-3">
-            <Link className="sm-button-primary" to="/workspace">
-              Open Action OS
-            </Link>
-            <Link className="sm-button-secondary" to="/workbench">
-              Open live demo
+            <Link className="sm-button-primary" to="/login?next=/workspace">
+              Login to Action OS
             </Link>
             <Link className="sm-button-accent" to="/contact?package=Action%20OS">
               Start with this

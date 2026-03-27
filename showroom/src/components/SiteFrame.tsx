@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 
-import { navItems } from '../content'
+import { bookingUrl, navItems } from '../content'
 
 const navClassName = ({ isActive }: { isActive: boolean }) =>
   `rounded-full px-4 py-2 text-sm font-semibold transition ${
@@ -41,8 +41,20 @@ export function SiteFrame() {
                 {item.label}
               </NavLink>
             ))}
-            <NavLink className="sm-button-accent ml-2" to="/contact">
-              Book call
+            <NavLink className="sm-button-secondary ml-2" to="/login?next=/workspace">
+              Login
+            </NavLink>
+            {bookingUrl ? (
+              <a className="sm-button-accent ml-2" href={bookingUrl} rel="noreferrer" target="_blank">
+                Book call
+              </a>
+            ) : (
+              <NavLink className="sm-button-accent ml-2" to="/contact">
+                Book call
+              </NavLink>
+            )}
+            <NavLink className="sm-link ml-2" to="/contact">
+              Contact
             </NavLink>
           </div>
         </nav>
@@ -54,8 +66,20 @@ export function SiteFrame() {
                   {item.label}
                 </NavLink>
               ))}
-              <NavLink className="sm-button-accent mt-1 text-center" onClick={() => setMenuOpen(false)} to="/contact">
-                Book call
+              <NavLink className="sm-button-secondary mt-1 text-center" onClick={() => setMenuOpen(false)} to="/login?next=/workspace">
+                Login
+              </NavLink>
+              {bookingUrl ? (
+                <a className="sm-button-accent mt-1 text-center" href={bookingUrl} rel="noreferrer" target="_blank">
+                  Book call
+                </a>
+              ) : (
+                <NavLink className="sm-button-accent mt-1 text-center" onClick={() => setMenuOpen(false)} to="/contact">
+                  Book call
+                </NavLink>
+              )}
+              <NavLink className={navClassName} onClick={() => setMenuOpen(false)} to="/contact">
+                Contact
               </NavLink>
             </div>
           </div>

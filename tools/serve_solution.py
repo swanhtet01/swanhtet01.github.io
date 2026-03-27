@@ -9,10 +9,10 @@ from html import unescape
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
-from urllib.request import Request, urlopen
+from urllib.request import Request as UrlRequest, urlopen
 
 import uvicorn
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -26,22 +26,30 @@ from mark1_pilot.state_store import (  # noqa: E402
     add_action_items,
     add_attendance_event,
     add_contact_submission,
+    add_lead_activity,
     add_lead_pipeline_rows,
     add_metric_entries,
     add_metric_entry,
     add_inventory_record,
     add_product_feedback,
     add_receiving_record,
+    authenticate_app_user,
+    create_app_session,
+    ensure_app_user,
+    grant_workspace_access,
+    get_app_session,
     list_actions,
     list_agent_teams,
     list_attendance_events,
     list_capa_actions,
     list_contact_submissions,
     list_inventory_records,
+    list_lead_activity,
     list_lead_pipeline,
     list_metric_entries,
     list_product_feedback,
     list_receiving_records,
+    list_workspace_members,
     list_quality_incidents,
     list_supplier_risks,
     load_action_summary,
@@ -54,6 +62,8 @@ from mark1_pilot.state_store import (  # noqa: E402
     load_quality_summary,
     load_snapshot,
     load_supplier_risk_summary,
+    load_workspace_member_summary,
+    revoke_app_session,
     resolve_state_db,
     sync_state_from_output_dir,
     update_lead_pipeline_row,
@@ -99,6 +109,13 @@ class ContactSubmissionRequest(BaseModel):
     workflow: str
     data: str
     goal: str
+
+
+class WorkspaceAccessRequest(BaseModel):
+    name: str
+    email: str
+    company: str
+    role: str = "operator"
 
 
 class AttendanceCheckinRequest(BaseModel):
@@ -205,6 +222,20 @@ class LeadPipelineExportRequest(BaseModel):
     sheet_name: str = "Leads"
 
 
+class LeadActivityRequest(BaseModel):
+    activity_type: str = "note"
+    channel: str = "email"
+    direction: str = "outbound"
+    message: str
+    stage_after: str = ""
+    next_step: str = ""
+
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+
 def _load_json(path: Path) -> dict[str, Any]:
     if not path.exists():
         return {}
@@ -303,7 +334,7 @@ def _fetch_url_brief_context(urls: list[str]) -> list[str]:
         if not normalized.startswith(("http://", "https://")):
             normalized = f"https://{normalized}"
         try:
-            request = Request(
+            request = UrlRequest(
                 normalized,
                 headers={
                     "User-Agent": "Mozilla/5.0",
@@ -441,11 +472,33 @@ def _lead_pipeline_sheet_rows(rows: list[dict[str, Any]]) -> tuple[list[str], li
     return headers, values
 
 
+SESSION_COOKIE_NAME = "supermega_session"
+
+
+def _env_truthy(name: str, default: bool) -> bool:
+    raw = os.getenv(name, "1" if default else "0").strip().lower()
+    return raw not in {"0", "false", "no", "off"}
+
+
 def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
     site_root = site_root.expanduser().resolve()
     pilot_data = pilot_data.expanduser().resolve()
     state_db = resolve_state_db(pilot_data)
     sync_state_from_output_dir(pilot_data)
+    auth_required = _env_truthy("SUPERMEGA_AUTH_REQUIRED", True)
+    auth_username = str(os.getenv("SUPERMEGA_APP_USERNAME", "owner")).strip().lower() or "owner"
+    auth_password = str(os.getenv("SUPERMEGA_APP_PASSWORD", "supermega-demo")).strip() or "supermega-demo"
+    auth_display_name = str(os.getenv("SUPERMEGA_APP_DISPLAY_NAME", "Owner")).strip() or "Owner"
+    auth_role = str(os.getenv("SUPERMEGA_APP_ROLE", "owner")).strip() or "owner"
+    session_ttl_hours = int(os.getenv("SUPERMEGA_SESSION_HOURS", str(24 * 14)) or (24 * 14))
+    ensure_app_user(
+        state_db,
+        username=auth_username,
+        password=auth_password,
+        display_name=auth_display_name,
+        role=auth_role,
+    )
+    uses_default_credentials = auth_username == "owner" and auth_password == "supermega-demo"
 
     app = FastAPI(title="SuperMega Service", version="0.2.0")
     cors_origins = [origin.strip() for origin in os.getenv("SUPERMEGA_CORS_ORIGINS", "*").split(",") if origin.strip()]
@@ -454,10 +507,51 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=cors_origins,
-        allow_credentials=False,
+        allow_credentials="*" not in cors_origins,
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    def _session_from_request(request: Request) -> dict[str, Any] | None:
+        session_id = str(request.cookies.get(SESSION_COOKIE_NAME, "")).strip()
+        if not session_id:
+            return None
+        return get_app_session(state_db, session_id=session_id)
+
+    def _require_session(request: Request) -> dict[str, Any]:
+        if not auth_required:
+            return {
+                "username": auth_username,
+                "role": auth_role,
+                "display_name": auth_display_name,
+                "authenticated": True,
+            }
+        session = _session_from_request(request)
+        if not session:
+            raise HTTPException(status_code=401, detail="Login required.")
+        return session
+
+    def _set_session_cookie(response: Response, request: Request, session_id: str) -> None:
+        secure_cookie = str(request.url.scheme).lower() == "https"
+        response.set_cookie(
+            key=SESSION_COOKIE_NAME,
+            value=session_id,
+            max_age=session_ttl_hours * 60 * 60,
+            httponly=True,
+            samesite="lax",
+            secure=secure_cookie,
+            path="/",
+        )
+
+    def _clear_session_cookie(response: Response, request: Request) -> None:
+        secure_cookie = str(request.url.scheme).lower() == "https"
+        response.delete_cookie(
+            key=SESSION_COOKIE_NAME,
+            path="/",
+            httponly=True,
+            samesite="lax",
+            secure=secure_cookie,
+        )
 
     @app.get("/api/health")
     def health() -> dict[str, Any]:
@@ -475,8 +569,60 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             "coverage_score": int(coverage.get("readiness_score", 0) or 0),
         }
 
+    @app.get("/api/auth/session")
+    def auth_session(request: Request) -> dict[str, Any]:
+        session = _session_from_request(request)
+        return {
+            "status": "ready",
+            "auth_required": auth_required,
+            "authenticated": session is not None or not auth_required,
+            "session": session
+            or (
+                {
+                    "username": auth_username,
+                    "role": auth_role,
+                    "display_name": auth_display_name,
+                }
+                if not auth_required
+                else None
+            ),
+            "uses_default_credentials": uses_default_credentials,
+        }
+
+    @app.post("/api/auth/login")
+    def auth_login(request: Request, response: Response, payload: LoginRequest) -> dict[str, Any]:
+        user = authenticate_app_user(state_db, username=payload.username, password=payload.password)
+        if not user:
+            raise HTTPException(status_code=401, detail="Invalid username or password.")
+        session = create_app_session(
+            state_db,
+            username=str(user.get("username", "")),
+            role=str(user.get("role", "")),
+            ttl_hours=session_ttl_hours,
+        )
+        _set_session_cookie(response, request, str(session.get("session_id", "")))
+        return {
+            "status": "ready",
+            "authenticated": True,
+            "session": {
+                "username": user.get("username", ""),
+                "display_name": user.get("display_name", ""),
+                "role": user.get("role", ""),
+            },
+            "uses_default_credentials": uses_default_credentials,
+        }
+
+    @app.post("/api/auth/logout")
+    def auth_logout(request: Request, response: Response) -> dict[str, Any]:
+        session = _session_from_request(request)
+        if session:
+            revoke_app_session(state_db, session_id=str(session.get("session_id", "")))
+        _clear_session_cookie(response, request)
+        return {"status": "ready", "authenticated": False}
+
     @app.get("/api/summary")
-    def summary() -> dict[str, Any]:
+    def summary(request: Request) -> dict[str, Any]:
+        session = _require_session(request)
         review = _load_json(pilot_data / "execution_review.json")
         autopilot = _load_json(pilot_data / "autopilot_status.json")
         coverage = _load_json(pilot_data / "data_coverage_report.json")
@@ -534,10 +680,16 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
                 "interval_minutes": supervisor.get("interval_minutes", 0),
             },
             "portfolio": portfolio,
+            "session": {
+                "username": session.get("username", ""),
+                "role": session.get("role", ""),
+                "display_name": session.get("display_name", session.get("username", "")),
+            },
         }
 
     @app.get("/api/actions")
-    def actions(lane: str | None = None, status: str | None = None, limit: int = 100) -> dict[str, Any]:
+    def actions(request: Request, lane: str | None = None, status: str | None = None, limit: int = 100) -> dict[str, Any]:
+        _require_session(request)
         items = list_actions(state_db, lane=lane, status=status, limit=limit)
         return {"status": "ready", "count": len(items), "items": items}
 
@@ -585,7 +737,8 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
         return build_lead_to_pilot_pack(leads=request.leads, campaign_goal=request.campaign_goal)
 
     @app.get("/api/lead-pipeline")
-    def lead_pipeline(stage: str | None = None, status: str | None = None, limit: int = 100) -> dict[str, Any]:
+    def lead_pipeline(request: Request, stage: str | None = None, status: str | None = None, limit: int = 100) -> dict[str, Any]:
+        _require_session(request)
         rows = list_lead_pipeline(state_db, stage=stage, status=status, limit=limit)
         return {
             "status": "ready",
@@ -595,7 +748,8 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
         }
 
     @app.post("/api/lead-pipeline/import")
-    def import_lead_pipeline(request: LeadPipelineImportRequest) -> dict[str, Any]:
+    def import_lead_pipeline(request_http: Request, request: LeadPipelineImportRequest) -> dict[str, Any]:
+        _require_session(request_http)
         return add_lead_pipeline_rows(
             state_db,
             rows=request.rows,
@@ -604,7 +758,8 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
         )
 
     @app.post("/api/lead-pipeline/{lead_id}")
-    def update_lead_pipeline(lead_id: str, request: LeadPipelineUpdateRequest) -> dict[str, Any]:
+    def update_lead_pipeline(lead_id: str, request_http: Request, request: LeadPipelineUpdateRequest) -> dict[str, Any]:
+        _require_session(request_http)
         row = update_lead_pipeline_row(
             state_db,
             lead_id=lead_id,
@@ -621,8 +776,38 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             "summary": load_lead_pipeline_summary(state_db),
         }
 
+    @app.get("/api/lead-pipeline/{lead_id}/activities")
+    def lead_pipeline_activities(lead_id: str, request: Request, limit: int = 20) -> dict[str, Any]:
+        _require_session(request)
+        rows = list_lead_activity(state_db, lead_id=lead_id, limit=limit)
+        return {"status": "ready", "count": len(rows), "rows": rows}
+
+    @app.post("/api/lead-pipeline/{lead_id}/activities")
+    def create_lead_pipeline_activity(lead_id: str, request_http: Request, request: LeadActivityRequest) -> dict[str, Any]:
+        session = _require_session(request_http)
+        row = add_lead_activity(
+            state_db,
+            lead_id=lead_id,
+            actor=str(session.get("display_name", session.get("username", "Owner"))),
+            activity_type=request.activity_type.strip(),
+            channel=request.channel.strip(),
+            direction=request.direction.strip(),
+            message=request.message.strip(),
+            stage_after=request.stage_after.strip(),
+            next_step=request.next_step.strip(),
+        )
+        lead_row = update_lead_pipeline_row(state_db, lead_id=lead_id)
+        return {
+            "status": "ready",
+            "row": row,
+            "lead": lead_row,
+            "activities": list_lead_activity(state_db, lead_id=lead_id, limit=20),
+            "summary": load_lead_pipeline_summary(state_db),
+        }
+
     @app.post("/api/lead-pipeline/export/workspace")
-    def export_lead_pipeline_to_workspace(request: LeadPipelineExportRequest) -> dict[str, Any]:
+    def export_lead_pipeline_to_workspace(request_http: Request, request: LeadPipelineExportRequest) -> dict[str, Any]:
+        _require_session(request_http)
         config = _load_runtime_config()
         probe = _drive_probe_from_config(config)
         rows = list_lead_pipeline(state_db, limit=500)
@@ -652,7 +837,8 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
         return {"status": "ready", "count": len(rows), "rows": rows}
 
     @app.post("/api/tools/action-board/save")
-    def tool_action_board_save(request: ActionBoardSaveRequest) -> dict[str, Any]:
+    def tool_action_board_save(request_http: Request, request: ActionBoardSaveRequest) -> dict[str, Any]:
+        _require_session(request_http)
         payload = add_action_items(state_db, rows=request.rows, source="tool:action_board", lane="do_now")
         return payload
 
@@ -664,12 +850,14 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
         return {"status": "ready", "payload": payload}
 
     @app.get("/api/metrics/records")
-    def metrics(metric_group: str | None = None, status: str | None = None, limit: int = 100) -> dict[str, Any]:
+    def metrics(request: Request, metric_group: str | None = None, status: str | None = None, limit: int = 100) -> dict[str, Any]:
+        _require_session(request)
         rows = list_metric_entries(state_db, metric_group=metric_group, status=status, limit=limit)
         return {"status": "ready", "summary": load_metric_summary(state_db), "count": len(rows), "rows": rows}
 
     @app.post("/api/metrics/records")
-    def create_metric_record(request: MetricRecordRequest) -> dict[str, Any]:
+    def create_metric_record(request_http: Request, request: MetricRecordRequest) -> dict[str, Any]:
+        _require_session(request_http)
         row = add_metric_entry(
             state_db,
             captured_at=request.captured_at.strip(),
@@ -687,17 +875,20 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
         return {"status": "ready", "message": f"Metric saved for {row['metric_name']}.", "row": row, "rows": list_metric_entries(state_db, limit=100), "summary": load_metric_summary(state_db)}
 
     @app.post("/api/metrics/records/bulk")
-    def create_metric_records_bulk(request: MetricBulkSaveRequest) -> dict[str, Any]:
+    def create_metric_records_bulk(request_http: Request, request: MetricBulkSaveRequest) -> dict[str, Any]:
+        _require_session(request_http)
         rows = [row.model_dump() for row in request.rows]
         return add_metric_entries(state_db, rows=rows, source_mode="metric_intake_review")
 
     @app.get("/api/product-feedback")
-    def product_feedback(surface: str | None = None, status: str | None = None, limit: int = 50) -> dict[str, Any]:
+    def product_feedback(request: Request, surface: str | None = None, status: str | None = None, limit: int = 50) -> dict[str, Any]:
+        _require_session(request)
         rows = list_product_feedback(state_db, surface=surface, status=status, limit=limit)
         return {"status": "ready", "summary": load_product_feedback_summary(state_db), "count": len(rows), "rows": rows}
 
     @app.post("/api/product-feedback")
-    def create_product_feedback(request: ProductFeedbackRequest) -> dict[str, Any]:
+    def create_product_feedback(request_http: Request, request: ProductFeedbackRequest) -> dict[str, Any]:
+        _require_session(request_http)
         row = add_product_feedback(
             state_db,
             source="workbench",
@@ -721,27 +912,32 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
         return {"status": "ready", "payload": payload}
 
     @app.get("/api/quality/incidents")
-    def quality_incidents(status: str | None = None, limit: int = 100) -> dict[str, Any]:
+    def quality_incidents(request: Request, status: str | None = None, limit: int = 100) -> dict[str, Any]:
+        _require_session(request)
         rows = list_quality_incidents(state_db, status=status, limit=limit)
         return {"status": "ready", "summary": load_quality_summary(state_db), "count": len(rows), "rows": rows}
 
     @app.get("/api/quality/capa")
-    def quality_capa(status: str | None = None, limit: int = 100) -> dict[str, Any]:
+    def quality_capa(request: Request, status: str | None = None, limit: int = 100) -> dict[str, Any]:
+        _require_session(request)
         rows = list_capa_actions(state_db, status=status, limit=limit)
         return {"status": "ready", "summary": load_quality_summary(state_db), "count": len(rows), "rows": rows}
 
     @app.get("/api/suppliers/risks")
-    def supplier_risks(supplier: str | None = None, status: str | None = None, limit: int = 100) -> dict[str, Any]:
+    def supplier_risks(request: Request, supplier: str | None = None, status: str | None = None, limit: int = 100) -> dict[str, Any]:
+        _require_session(request)
         rows = list_supplier_risks(state_db, supplier=supplier, status=status, limit=limit)
         return {"status": "ready", "summary": load_supplier_risk_summary(state_db), "count": len(rows), "rows": rows}
 
     @app.get("/api/receiving/records")
-    def receiving_records(supplier: str | None = None, status: str | None = None, limit: int = 100) -> dict[str, Any]:
+    def receiving_records(request: Request, supplier: str | None = None, status: str | None = None, limit: int = 100) -> dict[str, Any]:
+        _require_session(request)
         rows = list_receiving_records(state_db, supplier=supplier, status=status, limit=limit)
         return {"status": "ready", "summary": load_receiving_summary(state_db), "count": len(rows), "rows": rows}
 
     @app.post("/api/receiving/records")
-    def create_receiving_record(request: ReceivingRecordRequest) -> dict[str, Any]:
+    def create_receiving_record(request_http: Request, request: ReceivingRecordRequest) -> dict[str, Any]:
+        _require_session(request_http)
         row = add_receiving_record(
             state_db,
             received_at=request.received_at.strip(),
@@ -767,12 +963,14 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
         }
 
     @app.get("/api/inventory/records")
-    def inventory_records(warehouse: str | None = None, status: str | None = None, limit: int = 100) -> dict[str, Any]:
+    def inventory_records(request: Request, warehouse: str | None = None, status: str | None = None, limit: int = 100) -> dict[str, Any]:
+        _require_session(request)
         rows = list_inventory_records(state_db, warehouse=warehouse, status=status, limit=limit)
         return {"status": "ready", "summary": load_inventory_summary(state_db), "count": len(rows), "rows": rows}
 
     @app.post("/api/inventory/records")
-    def create_inventory_record(request: InventoryRecordRequest) -> dict[str, Any]:
+    def create_inventory_record(request_http: Request, request: InventoryRecordRequest) -> dict[str, Any]:
+        _require_session(request_http)
         row = add_inventory_record(
             state_db,
             captured_at=request.captured_at.strip(),
@@ -798,7 +996,8 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
         }
 
     @app.get("/api/reports/role/{role}")
-    def role_report(role: str) -> dict[str, Any]:
+    def role_report(role: str, request: Request) -> dict[str, Any]:
+        _require_session(request)
         normalized_role = str(role).strip().lower()
         if normalized_role not in {"ceo", "director", "manager"}:
             raise HTTPException(status_code=404, detail=f"Unknown role report: {role}")
@@ -808,12 +1007,14 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
         return {"status": "ready", "role": normalized_role, "count": len(rows), "rows": rows}
 
     @app.get("/api/supervisor")
-    def supervisor_status() -> dict[str, Any]:
+    def supervisor_status(request: Request) -> dict[str, Any]:
+        _require_session(request)
         payload = _load_json(pilot_data / "supervisor_status.json")
         return {"status": "ready", "payload": payload}
 
     @app.get("/api/agent-teams")
-    def agent_teams() -> dict[str, Any]:
+    def agent_teams(request: Request) -> dict[str, Any]:
+        _require_session(request)
         payload = load_snapshot(state_db, "agent_team_system")
         return {
             "status": "ready",
@@ -825,18 +1026,21 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
         }
 
     @app.get("/api/snapshots/{snapshot_key}")
-    def snapshot(snapshot_key: str) -> dict[str, Any]:
+    def snapshot(snapshot_key: str, request: Request) -> dict[str, Any]:
+        _require_session(request)
         payload = load_snapshot(state_db, snapshot_key)
         if not payload:
             raise HTTPException(status_code=404, detail=f"Snapshot not found: {snapshot_key}")
         return {"status": "ready", "snapshot_key": snapshot_key, "payload": payload}
 
     @app.post("/api/state/sync")
-    def state_sync() -> dict[str, Any]:
+    def state_sync(request: Request) -> dict[str, Any]:
+        _require_session(request)
         return sync_state_from_output_dir(pilot_data)
 
     @app.get("/api/workspaces")
-    def workspaces() -> dict[str, Any]:
+    def workspaces(request: Request) -> dict[str, Any]:
+        _require_session(request)
         registry = _load_json(pilot_data / "input_center_registry.json")
         publish = _load_json(pilot_data / "platform_publish.json")
         templates = registry.get("templates", []) if isinstance(registry, dict) else []
@@ -871,12 +1075,14 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
         return {"status": "ready", "message": "Submission saved.", "submission": row}
 
     @app.get("/api/contact-submissions")
-    def contact_submissions(limit: int = 50) -> dict[str, Any]:
+    def contact_submissions(request: Request, limit: int = 50) -> dict[str, Any]:
+        _require_session(request)
         rows = list_contact_submissions(state_db, limit=limit)
         return {"status": "ready", "count": len(rows), "rows": rows}
 
     @app.post("/api/attendance/checkins")
-    def create_attendance_checkin(request: AttendanceCheckinRequest) -> dict[str, Any]:
+    def create_attendance_checkin(request_http: Request, request: AttendanceCheckinRequest) -> dict[str, Any]:
+        _require_session(request_http)
         row = add_attendance_event(
             state_db,
             employee_name=request.employee_name.strip(),
@@ -897,7 +1103,8 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
         }
 
     @app.get("/api/attendance/checkins")
-    def attendance_checkins(limit: int = 100) -> dict[str, Any]:
+    def attendance_checkins(request: Request, limit: int = 100) -> dict[str, Any]:
+        _require_session(request)
         rows = list_attendance_events(state_db, limit=limit)
         status_counts: dict[str, int] = {}
         for row in rows:

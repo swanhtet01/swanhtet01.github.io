@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import { PageIntro } from '../components/PageIntro'
-import { checkWorkspaceHealth, workspaceFetch } from '../lib/workspaceApi'
+import { checkWorkspaceHealth, getWorkspaceSession, workspaceFetch } from '../lib/workspaceApi'
 
 type SummaryPayload = {
   coverage_score?: number
@@ -81,6 +81,7 @@ type QualityIncidentRow = {
 export function WorkspacePage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [authenticated, setAuthenticated] = useState(false)
   const [summary, setSummary] = useState<SummaryPayload | null>(null)
   const [actions, setActions] = useState<ActionRow[]>([])
   const [risks, setRisks] = useState<SupplierRiskRow[]>([])
@@ -94,6 +95,23 @@ export function WorkspacePage() {
       if (cancelled) return
       if (!health.ready) {
         setError('Workspace API is not connected on this host yet.')
+        setLoading(false)
+        return
+      }
+
+       try {
+        const session = await getWorkspaceSession()
+        if (cancelled) return
+        if (!session.authenticated) {
+          setAuthenticated(false)
+          setError('Login is required to open the private Action OS workspace.')
+          setLoading(false)
+          return
+        }
+        setAuthenticated(true)
+      } catch {
+        if (cancelled) return
+        setError('Workspace login could not be verified on this host yet.')
         setLoading(false)
         return
       }
@@ -172,9 +190,15 @@ export function WorkspacePage() {
           {loading ? (
             <p className="text-sm text-[var(--sm-muted)]">Loading Action OS...</p>
           ) : error ? (
-            <div className="space-y-4">
+          <div className="space-y-4">
               <p className="text-sm text-[var(--sm-muted)]">{error}</p>
-              <div className="sm-chip text-white">Run `powershell -ExecutionPolicy Bypass -File .\tools\run_solution.ps1 -Config .\config.example.json -SkipRun -Serve`</div>
+              {authenticated ? (
+                <div className="sm-chip text-white">Run `powershell -ExecutionPolicy Bypass -File .\tools\run_solution.ps1 -Config .\config.example.json -SkipRun -Serve`</div>
+              ) : (
+                <Link className="sm-button-primary" to="/login?next=/workspace">
+                  Login to workspace
+                </Link>
+              )}
             </div>
           ) : (
             <div className="space-y-5">

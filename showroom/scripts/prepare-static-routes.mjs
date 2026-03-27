@@ -16,6 +16,7 @@ const routePaths = [
   'prototypes',
   'try',
   'lead-finder',
+  'login',
   'news-brief',
   'action-board',
   'document-intake',

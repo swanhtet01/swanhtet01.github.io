@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import secrets
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -103,6 +104,17 @@ def ensure_schema(db_path: Path) -> None:
                 goal TEXT NOT NULL
             );
 
+            CREATE TABLE IF NOT EXISTS workspace_members (
+                email TEXT PRIMARY KEY,
+                created_at TEXT NOT NULL,
+                last_seen_at TEXT NOT NULL,
+                source TEXT NOT NULL,
+                name TEXT NOT NULL,
+                company TEXT NOT NULL,
+                role TEXT NOT NULL,
+                status TEXT NOT NULL
+            );
+
             CREATE TABLE IF NOT EXISTS product_feedback (
                 feedback_id TEXT PRIMARY KEY,
                 created_at TEXT NOT NULL,
@@ -112,6 +124,46 @@ def ensure_schema(db_path: Path) -> None:
                 priority TEXT NOT NULL,
                 status TEXT NOT NULL,
                 note TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS lead_pipeline (
+                lead_id TEXT PRIMARY KEY,
+                created_at TEXT NOT NULL,
+                company_name TEXT NOT NULL,
+                archetype TEXT NOT NULL,
+                stage TEXT NOT NULL,
+                status TEXT NOT NULL,
+                owner TEXT NOT NULL,
+                campaign_goal TEXT NOT NULL,
+                service_pack TEXT NOT NULL,
+                wedge_product TEXT NOT NULL,
+                starter_modules_json TEXT NOT NULL,
+                semi_products_json TEXT NOT NULL,
+                outreach_subject TEXT NOT NULL,
+                outreach_message TEXT NOT NULL,
+                discovery_questions_json TEXT NOT NULL,
+                contact_email TEXT NOT NULL,
+                contact_phone TEXT NOT NULL,
+                website TEXT NOT NULL,
+                source TEXT NOT NULL,
+                source_url TEXT NOT NULL,
+                provider TEXT NOT NULL,
+                score INTEGER NOT NULL,
+                notes TEXT NOT NULL,
+                synced_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS lead_activity (
+                activity_id TEXT PRIMARY KEY,
+                lead_id TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                actor TEXT NOT NULL,
+                activity_type TEXT NOT NULL,
+                channel TEXT NOT NULL,
+                direction TEXT NOT NULL,
+                message TEXT NOT NULL,
+                stage_after TEXT NOT NULL,
+                next_step TEXT NOT NULL
             );
 
             CREATE TABLE IF NOT EXISTS attendance_events (
@@ -245,6 +297,25 @@ def ensure_schema(db_path: Path) -> None:
                 approval_gate TEXT NOT NULL,
                 focus TEXT NOT NULL,
                 generated_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS app_users (
+                username TEXT PRIMARY KEY,
+                display_name TEXT NOT NULL,
+                password_hash TEXT NOT NULL,
+                role TEXT NOT NULL,
+                status TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS app_sessions (
+                session_id TEXT PRIMARY KEY,
+                username TEXT NOT NULL,
+                role TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                expires_at TEXT NOT NULL,
+                last_seen_at TEXT NOT NULL
             );
             """
         )
@@ -897,6 +968,446 @@ def list_contact_submissions(db_path: Path, *, limit: int = 50) -> list[dict[str
         }
         for row in rows
     ]
+
+
+def grant_workspace_access(
+    db_path: Path,
+    *,
+    source: str,
+    name: str,
+    email: str,
+    company: str,
+    role: str,
+    status: str = "active",
+) -> dict[str, Any]:
+    ensure_schema(db_path)
+    created_at = datetime.now().astimezone().isoformat()
+    normalized_email = str(email or "").strip().lower()
+    normalized_name = str(name or "").strip()
+    normalized_company = str(company or "").strip()
+    normalized_role = str(role or "").strip() or "operator"
+    normalized_source = str(source or "").strip() or "access_page"
+    normalized_status = str(status or "").strip() or "active"
+    if not normalized_email:
+        raise ValueError("Workspace access requires an email.")
+
+    with _connect(db_path) as connection:
+        connection.execute(
+            """
+            INSERT INTO workspace_members (
+                email,
+                created_at,
+                last_seen_at,
+                source,
+                name,
+                company,
+                role,
+                status
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(email) DO UPDATE SET
+                last_seen_at = excluded.last_seen_at,
+                source = excluded.source,
+                name = excluded.name,
+                company = excluded.company,
+                role = excluded.role,
+                status = excluded.status
+            """,
+            (
+                normalized_email,
+                created_at,
+                created_at,
+                normalized_source,
+                normalized_name,
+                normalized_company,
+                normalized_role,
+                normalized_status,
+            ),
+        )
+        connection.commit()
+
+    return {
+        "email": normalized_email,
+        "created_at": created_at,
+        "last_seen_at": created_at,
+        "source": normalized_source,
+        "name": normalized_name,
+        "company": normalized_company,
+        "role": normalized_role,
+        "status": normalized_status,
+    }
+
+
+def list_workspace_members(db_path: Path, *, limit: int = 50) -> list[dict[str, Any]]:
+    ensure_schema(db_path)
+    with _connect(db_path) as connection:
+        rows = connection.execute(
+            """
+            SELECT
+                email,
+                created_at,
+                last_seen_at,
+                source,
+                name,
+                company,
+                role,
+                status
+            FROM workspace_members
+            ORDER BY last_seen_at DESC, email
+            LIMIT ?
+            """,
+            (max(1, int(limit or 50)),),
+        ).fetchall()
+
+    return [
+        {
+            "email": row["email"],
+            "created_at": row["created_at"],
+            "last_seen_at": row["last_seen_at"],
+            "source": row["source"],
+            "name": row["name"],
+            "company": row["company"],
+            "role": row["role"],
+            "status": row["status"],
+        }
+        for row in rows
+    ]
+
+
+def load_workspace_member_summary(db_path: Path) -> dict[str, Any]:
+    ensure_schema(db_path)
+    with _connect(db_path) as connection:
+        total = int(connection.execute("SELECT COUNT(*) FROM workspace_members").fetchone()[0])
+        active_rows = connection.execute(
+            "SELECT COUNT(*) FROM workspace_members WHERE status = 'active'"
+        ).fetchone()
+        last_seen_row = connection.execute(
+            "SELECT last_seen_at FROM workspace_members ORDER BY last_seen_at DESC LIMIT 1"
+        ).fetchone()
+
+    return {
+        "member_count": total,
+        "active_count": int(active_rows[0] if active_rows else 0),
+        "last_seen_at": str(last_seen_row["last_seen_at"]) if last_seen_row else "",
+    }
+
+
+def add_lead_pipeline_rows(
+    db_path: Path,
+    *,
+    rows: list[dict[str, Any]],
+    campaign_goal: str = "",
+    source: str = "lead_to_pilot",
+) -> dict[str, Any]:
+    ensure_schema(db_path)
+    created_at = datetime.now().astimezone().isoformat()
+    inserted_rows: list[dict[str, Any]] = []
+
+    with _connect(db_path) as connection:
+        for row in rows:
+            company_name = str(row.get("name", "")).strip() or "Unknown lead"
+            source_url = str(row.get("source_url", "")).strip()
+            website = str(row.get("website", "")).strip()
+            contact_email = str(row.get("email", "")).strip()
+            contact_phone = str(row.get("phone", "")).strip()
+            provider = str(row.get("provider", "")).strip()
+            score = int(row.get("score", 0) or 0)
+            lead_id = _stable_key(
+                "LED",
+                f"{company_name}:{source_url or website}:{contact_email}:{contact_phone}",
+            )
+
+            normalized_row = {
+                "lead_id": lead_id,
+                "created_at": created_at,
+                "company_name": company_name,
+                "archetype": str(row.get("archetype", "")).strip() or "owner_led_business",
+                "stage": str(row.get("stage", "")).strip().lower() or "offer_ready",
+                "status": str(row.get("status", "")).strip().lower() or "open",
+                "owner": str(row.get("owner", "")).strip() or "Growth Studio",
+                "campaign_goal": str(campaign_goal or row.get("campaign_goal", "")).strip(),
+                "service_pack": str(row.get("service_pack", "")).strip(),
+                "wedge_product": str(row.get("wedge_product", "")).strip() or "Action OS",
+                "starter_modules": list(row.get("starter_modules", []) or []),
+                "semi_products": list(row.get("semi_products", []) or []),
+                "outreach_subject": str(row.get("outreach_subject", "")).strip(),
+                "outreach_message": str(row.get("outreach_message", "")).strip(),
+                "discovery_questions": list(row.get("discovery_questions", []) or []),
+                "contact_email": contact_email,
+                "contact_phone": contact_phone,
+                "website": website,
+                "source": str(row.get("source", "")).strip() or source,
+                "source_url": source_url,
+                "provider": provider,
+                "score": score,
+                "notes": str(row.get("notes", "")).strip(),
+            }
+
+            connection.execute(
+                """
+                INSERT INTO lead_pipeline (
+                    lead_id,
+                    created_at,
+                    company_name,
+                    archetype,
+                    stage,
+                    status,
+                    owner,
+                    campaign_goal,
+                    service_pack,
+                    wedge_product,
+                    starter_modules_json,
+                    semi_products_json,
+                    outreach_subject,
+                    outreach_message,
+                    discovery_questions_json,
+                    contact_email,
+                    contact_phone,
+                    website,
+                    source,
+                    source_url,
+                    provider,
+                    score,
+                    notes,
+                    synced_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(lead_id) DO UPDATE SET
+                    archetype = excluded.archetype,
+                    stage = excluded.stage,
+                    status = excluded.status,
+                    owner = excluded.owner,
+                    campaign_goal = excluded.campaign_goal,
+                    service_pack = excluded.service_pack,
+                    wedge_product = excluded.wedge_product,
+                    starter_modules_json = excluded.starter_modules_json,
+                    semi_products_json = excluded.semi_products_json,
+                    outreach_subject = excluded.outreach_subject,
+                    outreach_message = excluded.outreach_message,
+                    discovery_questions_json = excluded.discovery_questions_json,
+                    contact_email = excluded.contact_email,
+                    contact_phone = excluded.contact_phone,
+                    website = excluded.website,
+                    source = excluded.source,
+                    source_url = excluded.source_url,
+                    provider = excluded.provider,
+                    score = excluded.score,
+                    notes = excluded.notes,
+                    synced_at = excluded.synced_at
+                """,
+                (
+                    normalized_row["lead_id"],
+                    normalized_row["created_at"],
+                    normalized_row["company_name"],
+                    normalized_row["archetype"],
+                    normalized_row["stage"],
+                    normalized_row["status"],
+                    normalized_row["owner"],
+                    normalized_row["campaign_goal"],
+                    normalized_row["service_pack"],
+                    normalized_row["wedge_product"],
+                    json.dumps(normalized_row["starter_modules"], ensure_ascii=False),
+                    json.dumps(normalized_row["semi_products"], ensure_ascii=False),
+                    normalized_row["outreach_subject"],
+                    normalized_row["outreach_message"],
+                    json.dumps(normalized_row["discovery_questions"], ensure_ascii=False),
+                    normalized_row["contact_email"],
+                    normalized_row["contact_phone"],
+                    normalized_row["website"],
+                    normalized_row["source"],
+                    normalized_row["source_url"],
+                    normalized_row["provider"],
+                    normalized_row["score"],
+                    normalized_row["notes"],
+                    created_at,
+                ),
+            )
+            inserted_rows.append(normalized_row)
+        connection.commit()
+
+    return {
+        "status": "ready",
+        "saved_count": len(inserted_rows),
+        "rows": list_lead_pipeline(db_path, limit=100),
+        "summary": load_lead_pipeline_summary(db_path),
+        "saved_at": created_at,
+    }
+
+
+def update_lead_pipeline_row(
+    db_path: Path,
+    *,
+    lead_id: str,
+    stage: str | None = None,
+    status: str | None = None,
+    owner: str | None = None,
+    notes: str | None = None,
+) -> dict[str, Any] | None:
+    ensure_schema(db_path)
+    normalized_id = str(lead_id or "").strip()
+    if not normalized_id:
+        return None
+
+    fields: list[str] = []
+    params: list[Any] = []
+    if stage is not None:
+        fields.append("stage = ?")
+        params.append(str(stage).strip().lower() or "offer_ready")
+    if status is not None:
+        fields.append("status = ?")
+        params.append(str(status).strip().lower() or "open")
+    if owner is not None:
+        fields.append("owner = ?")
+        params.append(str(owner).strip() or "Growth Studio")
+    if notes is not None:
+        fields.append("notes = ?")
+        params.append(str(notes).strip())
+    fields.append("synced_at = ?")
+    params.append(datetime.now().astimezone().isoformat())
+    params.append(normalized_id)
+
+    with _connect(db_path) as connection:
+        connection.execute(
+            f"UPDATE lead_pipeline SET {', '.join(fields)} WHERE lead_id = ?",
+            params,
+        )
+        connection.commit()
+        row = connection.execute(
+            """
+            SELECT
+                lead_id,
+                created_at,
+                company_name,
+                archetype,
+                stage,
+                status,
+                owner,
+                campaign_goal,
+                service_pack,
+                wedge_product,
+                starter_modules_json,
+                semi_products_json,
+                outreach_subject,
+                outreach_message,
+                discovery_questions_json,
+                contact_email,
+                contact_phone,
+                website,
+                source,
+                source_url,
+                provider,
+                score,
+                notes,
+                synced_at
+            FROM lead_pipeline
+            WHERE lead_id = ?
+            """,
+            (normalized_id,),
+        ).fetchone()
+    if not row:
+        return None
+    return _lead_pipeline_row_to_dict(row)
+
+
+def _lead_pipeline_row_to_dict(row: sqlite3.Row) -> dict[str, Any]:
+    return {
+        "lead_id": row["lead_id"],
+        "created_at": row["created_at"],
+        "company_name": row["company_name"],
+        "archetype": row["archetype"],
+        "stage": row["stage"],
+        "status": row["status"],
+        "owner": row["owner"],
+        "campaign_goal": row["campaign_goal"],
+        "service_pack": row["service_pack"],
+        "wedge_product": row["wedge_product"],
+        "starter_modules": json.loads(row["starter_modules_json"]) if row["starter_modules_json"] else [],
+        "semi_products": json.loads(row["semi_products_json"]) if row["semi_products_json"] else [],
+        "outreach_subject": row["outreach_subject"],
+        "outreach_message": row["outreach_message"],
+        "discovery_questions": json.loads(row["discovery_questions_json"]) if row["discovery_questions_json"] else [],
+        "contact_email": row["contact_email"],
+        "contact_phone": row["contact_phone"],
+        "website": row["website"],
+        "source": row["source"],
+        "source_url": row["source_url"],
+        "provider": row["provider"],
+        "score": int(row["score"] or 0),
+        "notes": row["notes"],
+        "synced_at": row["synced_at"],
+    }
+
+
+def list_lead_pipeline(
+    db_path: Path,
+    *,
+    stage: str | None = None,
+    status: str | None = None,
+    limit: int = 100,
+) -> list[dict[str, Any]]:
+    ensure_schema(db_path)
+    query = """
+        SELECT
+            lead_id,
+            created_at,
+            company_name,
+            archetype,
+            stage,
+            status,
+            owner,
+            campaign_goal,
+            service_pack,
+            wedge_product,
+            starter_modules_json,
+            semi_products_json,
+            outreach_subject,
+            outreach_message,
+            discovery_questions_json,
+            contact_email,
+            contact_phone,
+            website,
+            source,
+            source_url,
+            provider,
+            score,
+            notes,
+            synced_at
+        FROM lead_pipeline
+    """
+    conditions: list[str] = []
+    params: list[Any] = []
+    if stage:
+        conditions.append("stage = ?")
+        params.append(stage)
+    if status:
+        conditions.append("status = ?")
+        params.append(status)
+    if conditions:
+        query += " WHERE " + " AND ".join(conditions)
+    query += " ORDER BY CASE stage WHEN 'contact_ready' THEN 0 WHEN 'offer_ready' THEN 1 WHEN 'contacted' THEN 2 WHEN 'discovery' THEN 3 WHEN 'proposal' THEN 4 ELSE 5 END, score DESC, company_name LIMIT ?"
+    params.append(max(1, int(limit)))
+    with _connect(db_path) as connection:
+        rows = connection.execute(query, params).fetchall()
+    return [_lead_pipeline_row_to_dict(row) for row in rows]
+
+
+def load_lead_pipeline_summary(db_path: Path) -> dict[str, Any]:
+    ensure_schema(db_path)
+    with _connect(db_path) as connection:
+        total = int(connection.execute("SELECT COUNT(*) FROM lead_pipeline").fetchone()[0])
+        stage_rows = connection.execute(
+            "SELECT stage, COUNT(*) AS item_count FROM lead_pipeline GROUP BY stage"
+        ).fetchall()
+        status_rows = connection.execute(
+            "SELECT status, COUNT(*) AS item_count FROM lead_pipeline GROUP BY status"
+        ).fetchall()
+        pack_rows = connection.execute(
+            "SELECT service_pack, COUNT(*) AS item_count FROM lead_pipeline GROUP BY service_pack ORDER BY item_count DESC, service_pack LIMIT 6"
+        ).fetchall()
+    return {
+        "lead_count": total,
+        "by_stage": {str(row["stage"]): int(row["item_count"]) for row in stage_rows},
+        "by_status": {str(row["status"]): int(row["item_count"]) for row in status_rows},
+        "by_pack": {str(row["service_pack"]): int(row["item_count"]) for row in pack_rows},
+    }
 
 
 def add_product_feedback(
@@ -2261,3 +2772,316 @@ def load_snapshot(db_path: Path, key: str) -> Any:
         return json.loads(row["payload_json"])
     except Exception:
         return {}
+
+
+def _hash_password(password: str) -> str:
+    return hashlib.sha256(str(password or "").encode("utf-8")).hexdigest()
+
+
+def ensure_app_user(
+    db_path: Path,
+    *,
+    username: str,
+    password: str,
+    display_name: str = "",
+    role: str = "owner",
+) -> dict[str, Any]:
+    ensure_schema(db_path)
+    normalized_username = str(username or "").strip().lower()
+    normalized_password = str(password or "").strip()
+    normalized_display_name = str(display_name or "").strip() or normalized_username or "Owner"
+    normalized_role = str(role or "").strip() or "owner"
+    if not normalized_username or not normalized_password:
+        return {"status": "skipped", "message": "Username or password is missing."}
+
+    now = datetime.now().astimezone().isoformat()
+    password_hash = _hash_password(normalized_password)
+    with _connect(db_path) as connection:
+        existing = connection.execute(
+            "SELECT username, display_name, role, status, created_at FROM app_users WHERE username = ?",
+            (normalized_username,),
+        ).fetchone()
+        if existing:
+            connection.execute(
+                """
+                UPDATE app_users
+                SET display_name = ?,
+                    password_hash = ?,
+                    role = ?,
+                    status = 'active',
+                    updated_at = ?
+                WHERE username = ?
+                """,
+                (normalized_display_name, password_hash, normalized_role, now, normalized_username),
+            )
+        else:
+            connection.execute(
+                """
+                INSERT INTO app_users (
+                    username,
+                    display_name,
+                    password_hash,
+                    role,
+                    status,
+                    created_at,
+                    updated_at
+                ) VALUES (?, ?, ?, ?, 'active', ?, ?)
+                """,
+                (normalized_username, normalized_display_name, password_hash, normalized_role, now, now),
+            )
+        connection.commit()
+
+    return {
+        "status": "ready",
+        "username": normalized_username,
+        "display_name": normalized_display_name,
+        "role": normalized_role,
+    }
+
+
+def authenticate_app_user(db_path: Path, *, username: str, password: str) -> dict[str, Any] | None:
+    ensure_schema(db_path)
+    normalized_username = str(username or "").strip().lower()
+    password_hash = _hash_password(password)
+    with _connect(db_path) as connection:
+        row = connection.execute(
+            """
+            SELECT username, display_name, role, status
+            FROM app_users
+            WHERE username = ? AND password_hash = ?
+            """,
+            (normalized_username, password_hash),
+        ).fetchone()
+    if not row or str(row["status"]).strip().lower() != "active":
+        return None
+    return {
+        "username": row["username"],
+        "display_name": row["display_name"],
+        "role": row["role"],
+        "status": row["status"],
+    }
+
+
+def create_app_session(
+    db_path: Path,
+    *,
+    username: str,
+    role: str,
+    ttl_hours: int = 24 * 14,
+) -> dict[str, Any]:
+    ensure_schema(db_path)
+    created_at = datetime.now().astimezone()
+    expires_at = created_at + timedelta(hours=max(ttl_hours, 1))
+    session_id = secrets.token_urlsafe(32)
+    payload = {
+        "session_id": session_id,
+        "username": str(username or "").strip().lower(),
+        "role": str(role or "").strip() or "owner",
+        "created_at": created_at.isoformat(),
+        "expires_at": expires_at.isoformat(),
+        "last_seen_at": created_at.isoformat(),
+    }
+    with _connect(db_path) as connection:
+        connection.execute(
+            """
+            INSERT INTO app_sessions (
+                session_id,
+                username,
+                role,
+                created_at,
+                expires_at,
+                last_seen_at
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                payload["session_id"],
+                payload["username"],
+                payload["role"],
+                payload["created_at"],
+                payload["expires_at"],
+                payload["last_seen_at"],
+            ),
+        )
+        connection.commit()
+    return payload
+
+
+def get_app_session(db_path: Path, *, session_id: str) -> dict[str, Any] | None:
+    ensure_schema(db_path)
+    normalized_session_id = str(session_id or "").strip()
+    if not normalized_session_id:
+        return None
+
+    now = datetime.now().astimezone()
+    with _connect(db_path) as connection:
+        row = connection.execute(
+            """
+            SELECT session_id, username, role, created_at, expires_at, last_seen_at
+            FROM app_sessions
+            WHERE session_id = ?
+            """,
+            (normalized_session_id,),
+        ).fetchone()
+        if not row:
+            return None
+
+        expires_at = datetime.fromisoformat(str(row["expires_at"]))
+        if expires_at <= now:
+            connection.execute("DELETE FROM app_sessions WHERE session_id = ?", (normalized_session_id,))
+            connection.commit()
+            return None
+
+        last_seen = now.isoformat()
+        connection.execute(
+            "UPDATE app_sessions SET last_seen_at = ? WHERE session_id = ?",
+            (last_seen, normalized_session_id),
+        )
+        connection.commit()
+
+    return {
+        "session_id": row["session_id"],
+        "username": row["username"],
+        "role": row["role"],
+        "created_at": row["created_at"],
+        "expires_at": row["expires_at"],
+        "last_seen_at": now.isoformat(),
+    }
+
+
+def revoke_app_session(db_path: Path, *, session_id: str) -> None:
+    ensure_schema(db_path)
+    normalized_session_id = str(session_id or "").strip()
+    if not normalized_session_id:
+        return
+    with _connect(db_path) as connection:
+        connection.execute("DELETE FROM app_sessions WHERE session_id = ?", (normalized_session_id,))
+        connection.commit()
+
+
+def add_lead_activity(
+    db_path: Path,
+    *,
+    lead_id: str,
+    actor: str,
+    activity_type: str,
+    channel: str,
+    direction: str,
+    message: str,
+    stage_after: str = "",
+    next_step: str = "",
+) -> dict[str, Any]:
+    ensure_schema(db_path)
+    normalized_lead_id = str(lead_id or "").strip()
+    created_at = datetime.now().astimezone().isoformat()
+    activity_id = _stable_key(
+        "ACT",
+        "|".join(
+            [
+                normalized_lead_id,
+                str(activity_type or "").strip(),
+                str(channel or "").strip(),
+                created_at,
+                str(message or "").strip(),
+            ]
+        ),
+    )
+    payload = {
+        "activity_id": activity_id,
+        "lead_id": normalized_lead_id,
+        "created_at": created_at,
+        "actor": str(actor or "").strip() or "Growth Studio",
+        "activity_type": str(activity_type or "").strip() or "note",
+        "channel": str(channel or "").strip() or "manual",
+        "direction": str(direction or "").strip() or "internal",
+        "message": str(message or "").strip(),
+        "stage_after": str(stage_after or "").strip(),
+        "next_step": str(next_step or "").strip(),
+    }
+    with _connect(db_path) as connection:
+        connection.execute(
+            """
+            INSERT INTO lead_activity (
+                activity_id,
+                lead_id,
+                created_at,
+                actor,
+                activity_type,
+                channel,
+                direction,
+                message,
+                stage_after,
+                next_step
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                payload["activity_id"],
+                payload["lead_id"],
+                payload["created_at"],
+                payload["actor"],
+                payload["activity_type"],
+                payload["channel"],
+                payload["direction"],
+                payload["message"],
+                payload["stage_after"],
+                payload["next_step"],
+            ),
+        )
+        if payload["stage_after"]:
+            status = "active" if payload["stage_after"] in {"contacted", "discovery", "proposal"} else "open"
+            connection.execute(
+                """
+                UPDATE lead_pipeline
+                SET stage = ?, status = ?, notes = ?, synced_at = ?
+                WHERE lead_id = ?
+                """,
+                (
+                    payload["stage_after"],
+                    status,
+                    payload["next_step"] or payload["message"],
+                    created_at,
+                    payload["lead_id"],
+                ),
+            )
+        connection.commit()
+    return payload
+
+
+def list_lead_activity(db_path: Path, *, lead_id: str, limit: int = 20) -> list[dict[str, Any]]:
+    ensure_schema(db_path)
+    normalized_lead_id = str(lead_id or "").strip()
+    with _connect(db_path) as connection:
+        rows = connection.execute(
+            """
+            SELECT
+                activity_id,
+                lead_id,
+                created_at,
+                actor,
+                activity_type,
+                channel,
+                direction,
+                message,
+                stage_after,
+                next_step
+            FROM lead_activity
+            WHERE lead_id = ?
+            ORDER BY created_at DESC
+            LIMIT ?
+            """,
+            (normalized_lead_id, max(limit, 1)),
+        ).fetchall()
+    return [
+        {
+            "activity_id": row["activity_id"],
+            "lead_id": row["lead_id"],
+            "created_at": row["created_at"],
+            "actor": row["actor"],
+            "activity_type": row["activity_type"],
+            "channel": row["channel"],
+            "direction": row["direction"],
+            "message": row["message"],
+            "stage_after": row["stage_after"],
+            "next_step": row["next_step"],
+        }
+        for row in rows
+    ]

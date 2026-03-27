@@ -27,6 +27,7 @@ export async function workspaceFetch<T>(path: string, init?: RequestInit): Promi
   const base = workspaceApiBase
   const response = await fetch(`${base}${path}`, {
     ...init,
+    credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
       ...(init?.headers ?? {}),
@@ -34,7 +35,9 @@ export async function workspaceFetch<T>(path: string, init?: RequestInit): Promi
   })
 
   if (!response.ok) {
-    throw new Error(`Workspace API request failed: ${response.status}`)
+    const error = new Error(`Workspace API request failed: ${response.status}`) as Error & { status?: number }
+    error.status = response.status
+    throw error
   }
 
   return (await response.json()) as T
@@ -51,4 +54,34 @@ export async function checkWorkspaceHealth() {
   } catch {
     return { ready: false as const }
   }
+}
+
+export type WorkspaceSessionPayload = {
+  status?: string
+  auth_required?: boolean
+  authenticated?: boolean
+  uses_default_credentials?: boolean
+  session?: {
+    username?: string
+    display_name?: string
+    role?: string
+  } | null
+}
+
+export async function getWorkspaceSession() {
+  return workspaceFetch<WorkspaceSessionPayload>('/api/auth/session')
+}
+
+export async function loginWorkspace(username: string, password: string) {
+  return workspaceFetch<WorkspaceSessionPayload>('/api/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({ username, password }),
+  })
+}
+
+export async function logoutWorkspace() {
+  return workspaceFetch<{ status?: string; authenticated?: boolean }>('/api/auth/logout', {
+    method: 'POST',
+    body: JSON.stringify({}),
+  })
 }

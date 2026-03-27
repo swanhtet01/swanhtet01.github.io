@@ -134,8 +134,8 @@ export function HomePage() {
             <Link className="sm-button-primary" to="/contact">
               Book intro call
             </Link>
-            <Link className="sm-button-secondary" to="/workbench">
-              Open live demo
+            <Link className="sm-button-secondary" to="/login?next=/workspace">
+              Login to app
             </Link>
           </div>
         </article>
