@@ -24,7 +24,7 @@ export function SiteFrame() {
             <span className="flex flex-col">
               <span className="sm-logo text-lg font-extrabold tracking-tight text-white">SuperMega</span>
               <span className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[var(--sm-muted)]">
-                Action OS + AI workflows
+                Action OS
               </span>
             </span>
           </NavLink>
@@ -87,7 +87,7 @@ export function SiteFrame() {
       <footer className="border-t border-white/8 bg-[rgba(4,10,22,0.78)]">
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 px-4 py-6 text-sm text-[var(--sm-muted)] lg:flex-row lg:items-center lg:justify-between lg:px-8">
           <p>One operating system for follow-up, risk, and execution.</p>
-          <p>Start with Action OS. Add modules only where the business needs depth.</p>
+          <p>Start with Action OS. Add modules only when you need them.</p>
         </div>
       </footer>
     </div>

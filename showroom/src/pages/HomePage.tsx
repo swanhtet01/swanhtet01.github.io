@@ -47,8 +47,8 @@ export function HomePage() {
 
       <section className="space-y-4">
         <div>
-          <p className="sm-kicker text-[var(--sm-accent)]">Use cases</p>
-          <h2 className="mt-2 text-2xl font-bold text-white">Three clear starting points.</h2>
+          <p className="sm-kicker text-[var(--sm-accent)]">Start here</p>
+          <h2 className="mt-2 text-2xl font-bold text-white">Three simple entry points.</h2>
         </div>
 
         <div className="grid gap-5 xl:grid-cols-3">
@@ -73,7 +73,7 @@ export function HomePage() {
         <div className="flex items-center justify-between gap-4">
           <div>
             <p className="sm-kicker text-[var(--sm-accent)]">Action OS</p>
-            <h2 className="mt-2 text-2xl font-bold text-white">The first product to trust.</h2>
+            <h2 className="mt-2 text-2xl font-bold text-white">The first screen to trust.</h2>
           </div>
         </div>
 
@@ -97,7 +97,7 @@ export function HomePage() {
             </div>
             <div className="mt-5 flex flex-wrap gap-3">
               <Link className="sm-button-primary" to="/platform">
-                See product
+                See Action OS
               </Link>
               <Link className="sm-button-secondary" to="/login?next=/app">
                 Login to app
@@ -120,8 +120,8 @@ export function HomePage() {
 
       <section className="grid gap-5 lg:grid-cols-[1fr_1fr]">
         <article className="sm-surface p-6">
-          <p className="sm-kicker text-[var(--sm-accent)]">Add-ons</p>
-          <h2 className="mt-3 text-2xl font-bold text-white">Go deeper only where control matters.</h2>
+          <p className="sm-kicker text-[var(--sm-accent)]">Modules</p>
+          <h2 className="mt-3 text-2xl font-bold text-white">Add depth only where you need control.</h2>
           <div className="mt-5 grid gap-3">
             {publicModules.map((module) => (
               <div className="sm-command-row" key={module.name}>
@@ -136,16 +136,16 @@ export function HomePage() {
 
         <article className="sm-surface p-6">
           <p className="sm-kicker text-[var(--sm-accent-alt)]">Next step</p>
-          <h2 className="mt-3 text-2xl font-bold text-white">Start with one workflow, not a giant rollout.</h2>
+          <h2 className="mt-3 text-2xl font-bold text-white">Book a demo or log into the app.</h2>
           <p className="mt-3 text-sm text-[var(--sm-muted)]">
-            The best first move is usually one board, one queue, or one control loop. We make that work first, then expand.
+            Keep the first rollout small: one workflow, one team, one live board.
           </p>
           <div className="mt-5 flex flex-wrap gap-3">
             <Link className="sm-button-primary" to="/book">
               Book demo
             </Link>
-            <Link className="sm-button-secondary" to="/solutions">
-              See use cases
+            <Link className="sm-button-secondary" to="/login?next=/app">
+              Login
             </Link>
           </div>
         </article>

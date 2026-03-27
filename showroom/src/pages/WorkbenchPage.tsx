@@ -230,8 +230,8 @@ export function WorkbenchPage() {
     <div className="space-y-8">
       <PageIntro
         eyebrow="Daily workbench"
-        title="One place to run the product, test it, and improve it."
-        description="This is the simplest serious SuperMega surface: open your live boards, see what is moving, and save product notes directly into the system while you work."
+        title="Run the app from here."
+        description="Open the live modules, see what is moving, and save improvement notes while you work."
       />
 
       <section className="grid gap-3 md:grid-cols-4">
@@ -256,9 +256,9 @@ export function WorkbenchPage() {
       <section className="grid gap-6 lg:grid-cols-[0.96fr_1.04fr]">
         <article className="sm-surface-deep p-6">
           <p className="sm-kicker text-[var(--sm-accent)]">Daily cockpit</p>
-          <h2 className="mt-3 text-3xl font-bold text-white">The meta app for working inside SuperMega.</h2>
+          <h2 className="mt-3 text-3xl font-bold text-white">One place to open the real modules.</h2>
           <p className="mt-3 text-sm text-[var(--sm-muted)]">
-            Open the real modules from here, keep one testing notebook, and push improvements into the backlog while the system is running. The goal is not more pages. The goal is less context-switching.
+            Use this as the start screen. Open the module you need, do the work, and save fixes while the system is running.
           </p>
 
           <div className="mt-6 grid gap-3 md:grid-cols-2">
@@ -274,14 +274,8 @@ export function WorkbenchPage() {
           </div>
 
           <div className="mt-6 grid gap-3 md:grid-cols-2">
-            <div className="sm-chip text-white">
-              <p className="sm-kicker text-[var(--sm-accent)]">Best daily loop</p>
-              <p className="mt-2 text-sm">Check Workbench, clear actions, update records, save improvement notes, repeat.</p>
-            </div>
-            <div className="sm-chip text-white">
-              <p className="sm-kicker text-[var(--sm-accent-alt)]">Testing rule</p>
-              <p className="mt-2 text-sm">If something is annoying, broken, or missing, save it here before it gets lost.</p>
-            </div>
+            <div className="sm-chip text-white">Open the module you need.</div>
+            <div className="sm-chip text-white">Save what is broken before it gets lost.</div>
           </div>
         </article>
 

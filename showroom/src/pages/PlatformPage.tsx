@@ -9,7 +9,7 @@ export function PlatformPage() {
       <PageIntro
         eyebrow="Core product"
         title="Action OS"
-        description="The main SuperMega product for companies that still run important work through Gmail, Drive, Sheets, and manual follow-up."
+        description="The main SuperMega product. One live action layer for teams still running work through Gmail, Drive, Sheets, and manual follow-up."
       />
 
       <section className="grid gap-6 lg:grid-cols-[1.08fr_0.92fr]">
@@ -17,8 +17,7 @@ export function PlatformPage() {
           <p className="sm-kicker text-[var(--sm-accent)]">What it does</p>
           <h2 className="mt-3 text-4xl font-bold text-white">{coreProduct.tagline}</h2>
           <p className="mt-4 text-sm leading-relaxed text-[var(--sm-muted)]">
-            Action OS is the first operating screen. It is built for companies where work still gets buried in inboxes, spreadsheets, and verbal updates, and
-            where managers need one live place to see what matters, who owns it, and what is blocked.
+            Action OS gives managers one place to see what matters, who owns it, and what is blocked.
           </p>
 
           <div className="mt-6 grid gap-3 md:grid-cols-3">
@@ -38,7 +37,7 @@ export function PlatformPage() {
 
           <div className="mt-6 flex flex-wrap gap-3">
             <Link className="sm-button-primary" to="/login?next=/app/actions">
-              Login to app
+              Open app
             </Link>
             <Link className="sm-button-accent" to="/book">
               Book demo
@@ -59,11 +58,11 @@ export function PlatformPage() {
       </section>
 
       <section className="space-y-4">
-        <div className="flex items-center justify-between gap-4">
-          <div>
-            <p className="sm-kicker text-[var(--sm-accent)]">Add-on modules</p>
-            <h2 className="mt-2 text-2xl font-bold text-white">Add depth only where control matters.</h2>
-          </div>
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="sm-kicker text-[var(--sm-accent)]">Add-on modules</p>
+              <h2 className="mt-2 text-2xl font-bold text-white">Add depth only where the business needs it.</h2>
+            </div>
           <Link className="sm-link" to="/products">
             See modules
           </Link>

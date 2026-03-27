@@ -91,8 +91,8 @@ export function ContactPage() {
     <div className="space-y-8">
       <PageIntro
         eyebrow="Contact"
-        title="Request access or ask a question."
-        description="If you are not ready to book a demo yet, send the first workflow you want help with and we will take it from there."
+        title="Book a demo or send one short request."
+        description="If you are not ready to book yet, send the first workflow you want fixed and we will take it from there."
       />
 
       <section className="grid gap-6 lg:grid-cols-[0.88fr_1.12fr]">
@@ -113,7 +113,7 @@ export function ContactPage() {
           <div className="mt-6 grid gap-3">
             {bookingUrl ? (
               <a className="sm-button-accent text-center" href={bookingUrl} rel="noreferrer" target="_blank">
-                Schedule demo
+                Book demo now
               </a>
             ) : (
               <div className="sm-chip text-[var(--sm-muted)]">
@@ -174,7 +174,7 @@ export function ContactPage() {
               <textarea
                 className="min-h-48 rounded-xl border border-white/8 bg-white/4 px-3 py-3 text-sm font-normal text-white"
                 onChange={(event) => setForm((prev) => ({ ...prev, goal: event.target.value }))}
-                placeholder="For example: incoming receipt is messy, supplier follow-up is scattered, or directors have no clean board."
+                placeholder="For example: supplier follow-up is scattered, receiving is messy, or directors have no clean board."
                 required
                 value={form.goal}
               />

@@ -32,38 +32,38 @@ export const bookingUrl = (import.meta.env.VITE_BOOKING_URL ?? '').trim()
 
 export const hero = {
   eyebrow: 'Main product',
-  title: 'One operating system for follow-up, risk, and execution.',
+  title: 'Run work in one place.',
   description:
-    'SuperMega connects Gmail, Drive, Sheets, and team updates into one live action layer. Start with Action OS. Add deeper modules only where the business actually needs control.',
+    'SuperMega turns Gmail, Drive, Sheets, and team updates into one live operating layer. Start with Action OS. Add deeper modules only when you need them.',
 }
 
 export const proofPoints: ProofPoint[] = [
   {
     label: 'Core product',
     value: 'Action OS',
-    detail: 'The first live action layer for managers and directors.',
+    detail: 'One board for owners, due dates, and blockers.',
   },
   {
     label: 'Top of funnel',
     value: 'Lead Finder',
-    detail: 'Find leads, shape the offer, and move them into the pipeline.',
+    detail: 'Find leads, shape the offer, and save them into the pipeline.',
   },
   {
     label: 'Private workspace',
     value: 'App + Workbench',
-    detail: 'Saved boards, queues, and product improvement all in one place.',
+    detail: 'The private app for saved boards, queues, and work notes.',
   },
 ]
 
 export const coreProduct = {
   name: 'Action OS',
   tagline: 'Turn scattered updates into one board with owners, due dates, and exceptions.',
-  replaces: ['Manual chasing', 'Buried inbox follow-up', 'Director reporting scramble'],
+  replaces: ['Manual chasing', 'Buried follow-up', 'Last-minute reporting'],
   inputs: ['Gmail', 'Drive', 'Sheets', 'Daily updates'],
   outputs: ['Action board', 'Exception queue', 'Director summary'],
   rollout: [
-    'Connect one inbox, one sheet, or one daily update source.',
-    'Assign owners and due windows on one board.',
+    'Connect one inbox, one sheet, or one update source.',
+    'Assign owners and due dates on one board.',
     'Add deeper modules only after the first board is trusted.',
   ],
 }
@@ -72,7 +72,7 @@ export const useCases: UseCase[] = [
   {
     name: 'Operations',
     audience: 'GMs, operations leads, and owner-led teams',
-    promise: 'Get one board for follow-up, blockers, and the daily management rhythm.',
+    promise: 'Get one board for follow-up, blockers, and today’s priorities.',
     firstRollout: 'Action OS plus one team update source.',
     inputs: ['Daily updates', 'Meeting notes', 'Shared trackers'],
     outcomes: ['Clear ownership', 'Fewer missed follow-ups', 'Faster weekly review'],
@@ -80,7 +80,7 @@ export const useCases: UseCase[] = [
   {
     name: 'Procurement',
     audience: 'Procurement leads, stores, and plant managers',
-    promise: 'Control supplier risk and inbound receipt before it turns into plant disruption.',
+    promise: 'Control supplier risk and inbound receipt before they turn into delays.',
     firstRollout: 'Receiving Control or Supplier Watch on top of Action OS.',
     inputs: ['Supplier emails', 'PO or ETA sheets', 'Receiving logs'],
     outcomes: ['Supplier risk queue', 'Variance control', 'Cleaner inbound follow-up'],

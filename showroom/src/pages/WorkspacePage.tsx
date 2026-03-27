@@ -149,7 +149,7 @@ export function WorkspacePage() {
       <PageIntro
         eyebrow="Core product"
         title="Action OS"
-        description="This is the real SuperMega wedge: one action layer across files, Gmail, sheets, risks, and operating updates."
+        description="One action layer across Gmail, files, sheets, risks, and operating updates."
       />
 
       <section className="grid gap-5 lg:grid-cols-[0.88fr_1.12fr]">
@@ -157,14 +157,14 @@ export function WorkspacePage() {
           <p className="sm-kicker text-[var(--sm-accent)]">What this is</p>
           <h2 className="mt-3 text-3xl font-bold text-white">The first real operating screen.</h2>
           <p className="mt-3 text-sm text-[var(--sm-muted)]">
-            This is where SuperMega stops being a brochure and starts behaving like software. The goal is simple: show what needs action, who owns it, and what is starting to break.
+            This screen shows what needs action, who owns it, and what is starting to break.
           </p>
 
           <div className="mt-5 grid gap-3">
-            <div className="sm-chip text-white">Today queue from actions and updates</div>
-            <div className="sm-chip text-white">Exception queue from supplier and quality risk</div>
-            <div className="sm-chip text-white">Operator links into receiving and inventory control</div>
-            <div className="sm-chip text-white">Ops Intake for uploads, spreadsheets, and manual KPI rows</div>
+            <div className="sm-chip text-white">Today queue</div>
+            <div className="sm-chip text-white">Exception queue</div>
+            <div className="sm-chip text-white">Receiving and inventory links</div>
+            <div className="sm-chip text-white">Ops Intake for uploads and KPI rows</div>
           </div>
 
           <div className="mt-6 flex flex-wrap gap-3">

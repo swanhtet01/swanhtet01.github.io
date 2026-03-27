@@ -9,7 +9,7 @@ export function ProductsPage() {
       <PageIntro
         eyebrow="Modules"
         title="One core product. A small set of add-ons."
-        description="Start with Action OS. Add the next module only when the business needs deeper control in that area."
+        description="Start with Action OS. Add one module only when you need deeper control in that area."
       />
 
       <section className="sm-surface-deep p-6">
@@ -20,10 +20,10 @@ export function ProductsPage() {
             <p className="mt-4 text-sm leading-relaxed text-[var(--sm-muted)]">{coreProduct.tagline}</p>
             <div className="mt-5 flex flex-wrap gap-3">
               <Link className="sm-button-primary" to="/platform">
-                See product
+                See Action OS
               </Link>
               <Link className="sm-button-secondary" to="/login?next=/app/actions">
-                Login to app
+                Open app
               </Link>
             </div>
           </div>
@@ -38,13 +38,13 @@ export function ProductsPage() {
       </section>
 
       <section className="space-y-4">
-        <div className="flex items-center justify-between gap-4">
-          <div>
-            <p className="sm-kicker text-[var(--sm-accent)]">Add-on modules</p>
-            <h2 className="mt-2 text-2xl font-bold text-white">The next screens after Action OS.</h2>
-          </div>
-          <Link className="sm-link" to="/book">
-            Book demo
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="sm-kicker text-[var(--sm-accent)]">Add-on modules</p>
+              <h2 className="mt-2 text-2xl font-bold text-white">The next screens after Action OS.</h2>
+            </div>
+            <Link className="sm-link" to="/book">
+              Book demo
           </Link>
         </div>
 
