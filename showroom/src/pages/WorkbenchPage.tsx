@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import { PageIntro } from '../components/PageIntro'
-import { checkWorkspaceHealth, workspaceApiBase, workspaceFetch } from '../lib/workspaceApi'
+import { checkWorkspaceHealth, getWorkspaceSession, workspaceApiBase, workspaceFetch } from '../lib/workspaceApi'
 
 type SummaryPayload = {
   coverage_score?: number
@@ -126,6 +126,7 @@ const feedbackDefaults: FeedbackForm = {
 export function WorkbenchPage() {
   const [loading, setLoading] = useState(true)
   const [apiReady, setApiReady] = useState(false)
+  const [authenticated, setAuthenticated] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [saved, setSaved] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
@@ -157,6 +158,23 @@ export function WorkbenchPage() {
       setApiReady(health.ready)
       if (!health.ready) {
         setLoading(false)
+        return
+      }
+
+      try {
+        const session = await getWorkspaceSession()
+        if (cancelled) return
+        if (!session.authenticated) {
+          setAuthenticated(false)
+          setLoading(false)
+          return
+        }
+        setAuthenticated(true)
+      } catch {
+        if (!cancelled) {
+          setError('Workbench login could not be verified on this host.')
+          setLoading(false)
+        }
         return
       }
 
@@ -219,7 +237,7 @@ export function WorkbenchPage() {
       <section className="grid gap-3 md:grid-cols-4">
         <div className="sm-chip text-white">
           <p className="sm-kicker text-[var(--sm-accent)]">Mode</p>
-          <p className="mt-2">{apiReady ? 'live workspace' : 'offline shell'}</p>
+          <p className="mt-2">{apiReady && authenticated ? 'live workspace' : 'preview shell'}</p>
         </div>
         <div className="sm-chip text-white">
           <p className="sm-kicker text-[var(--sm-accent-alt)]">Records</p>
@@ -278,6 +296,13 @@ export function WorkbenchPage() {
                   ? `Current API base: ${workspaceApiBase}`
                   : 'Run the local workspace service or deploy the single-app backend to use the live workbench.'}
               </div>
+            </div>
+          ) : !authenticated ? (
+            <div className="space-y-4">
+              <p className="text-sm text-[var(--sm-muted)]">Login is required to open the private workbench.</p>
+              <Link className="sm-button-primary" to="/login?next=/workbench">
+                Login to workbench
+              </Link>
             </div>
           ) : (
             <div className="space-y-5">

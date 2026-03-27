@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import { PageIntro } from '../components/PageIntro'
-import { checkWorkspaceHealth, workspaceFetch } from '../lib/workspaceApi'
+import { checkWorkspaceHealth, getWorkspaceSession, workspaceFetch } from '../lib/workspaceApi'
 
 type ReceivingRow = {
   receiving_id: string
@@ -48,6 +48,7 @@ const RECEIVING_FORM_DEFAULT = {
 
 export function ReceivingControlPage() {
   const [apiReady, setApiReady] = useState(false)
+  const [authenticated, setAuthenticated] = useState(false)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -71,6 +72,23 @@ export function ReceivingControlPage() {
       setApiReady(health.ready)
       if (!health.ready) {
         setLoading(false)
+        return
+      }
+
+      try {
+        const session = await getWorkspaceSession()
+        if (cancelled) return
+        if (!session.authenticated) {
+          setAuthenticated(false)
+          setLoading(false)
+          return
+        }
+        setAuthenticated(true)
+      } catch {
+        if (!cancelled) {
+          setError('Receiving login could not be verified on this host yet.')
+          setLoading(false)
+        }
         return
       }
 
@@ -202,6 +220,13 @@ export function ReceivingControlPage() {
             <div className="space-y-4">
               <p className="text-sm text-[var(--sm-muted)]">Workspace API is not connected on this host yet.</p>
               <div className="sm-chip text-white">Run the local workspace service to see live receiving records.</div>
+            </div>
+          ) : !authenticated ? (
+            <div className="space-y-4">
+              <p className="text-sm text-[var(--sm-muted)]">Login is required to use the live receiving board.</p>
+              <Link className="sm-button-primary" to="/login?next=/receiving-control">
+                Login to Receiving Control
+              </Link>
             </div>
           ) : (
             <div className="space-y-5">

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import { PageIntro } from '../components/PageIntro'
-import { checkWorkspaceHealth, workspaceFetch } from '../lib/workspaceApi'
+import { checkWorkspaceHealth, getWorkspaceSession, workspaceFetch } from '../lib/workspaceApi'
 
 type MetricRow = {
   metric_id?: string
@@ -95,6 +95,7 @@ function parseQuickPaste(rawText: string): MetricRow[] {
 
 export function MetricIntakePage() {
   const [apiReady, setApiReady] = useState<boolean | null>(null)
+  const [authenticated, setAuthenticated] = useState(false)
   const [busy, setBusy] = useState(false)
   const [saving, setSaving] = useState(false)
   const [fileName, setFileName] = useState('')
@@ -119,6 +120,20 @@ export function MetricIntakePage() {
       if (cancelled) return
       setApiReady(health.ready)
       if (!health.ready) return
+      try {
+        const session = await getWorkspaceSession()
+        if (cancelled) return
+        if (!session.authenticated) {
+          setAuthenticated(false)
+          return
+        }
+        setAuthenticated(true)
+      } catch {
+        if (!cancelled) {
+          setError('Ops Intake login could not be verified on this host yet.')
+        }
+        return
+      }
       try {
         await loadRows()
       } catch {
@@ -147,6 +162,13 @@ export function MetricIntakePage() {
         setError('Workspace API is not connected on this host yet.')
         return
       }
+      const session = await getWorkspaceSession()
+      if (!session.authenticated) {
+        setAuthenticated(false)
+        setError('Login is required before files can be extracted into live records.')
+        return
+      }
+      setAuthenticated(true)
       const contentBase64 = await fileToBase64(file)
       const payload = await workspaceFetch<{ analysis: MetricAnalysis }>('/api/tools/metric-intake', {
         method: 'POST',
@@ -164,7 +186,7 @@ export function MetricIntakePage() {
   }
 
   async function saveMetric() {
-    if (!apiReady || !form.metric_name.trim() || !form.metric_value.trim()) return
+    if (!apiReady || !authenticated || !form.metric_name.trim() || !form.metric_value.trim()) return
     setSaving(true)
     setSaved(null)
     setError(null)
@@ -185,7 +207,7 @@ export function MetricIntakePage() {
   }
 
   async function saveExtractedMetrics() {
-    if (!apiReady || !analysis?.metrics?.length) return
+    if (!apiReady || !authenticated || !analysis?.metrics?.length) return
     setSaving(true)
     setSaved(null)
     setError(null)
@@ -213,7 +235,7 @@ export function MetricIntakePage() {
   }
 
   async function saveQuickPasteMetrics() {
-    if (!apiReady) return
+    if (!apiReady || !authenticated) return
     const parsedRows = parseQuickPaste(quickPaste)
     if (!parsedRows.length) {
       setError('Paste at least one valid metric row first.')
@@ -245,6 +267,12 @@ export function MetricIntakePage() {
         title="Ops Intake"
         description="Turn uploads, spreadsheets, and manual KPI updates into clean live records the rest of the system can actually use."
       />
+
+      {apiReady && !authenticated ? (
+        <section className="sm-chip border-[rgba(37,208,255,0.2)] bg-[rgba(37,208,255,0.08)] text-[var(--sm-muted)]">
+          Login is required to save live KPI records. The public site can explain the module, but the private app host is where the saved record layer lives.
+        </section>
+      ) : null}
 
       <section className="grid gap-6 lg:grid-cols-[0.92fr_1.08fr]">
         <article className="sm-surface-deep p-6">
@@ -318,16 +346,21 @@ export function MetricIntakePage() {
           </div>
 
           <div className="mt-4 flex flex-wrap gap-3">
-            <button className="sm-button-primary" disabled={!apiReady || saving || !form.metric_name.trim() || !form.metric_value.trim()} onClick={() => void saveMetric()} type="button">
+            <button className="sm-button-primary" disabled={!apiReady || !authenticated || saving || !form.metric_name.trim() || !form.metric_value.trim()} onClick={() => void saveMetric()} type="button">
               {saving ? 'Saving...' : 'Save metric'}
             </button>
-            <button className="sm-button-secondary" disabled={!apiReady || saving || !quickPaste.trim()} onClick={() => void saveQuickPasteMetrics()} type="button">
+            <button className="sm-button-secondary" disabled={!apiReady || !authenticated || saving || !quickPaste.trim()} onClick={() => void saveQuickPasteMetrics()} type="button">
               Save pasted rows
             </button>
             {analysis?.metrics?.length ? (
-              <button className="sm-button-secondary" disabled={!apiReady || saving} onClick={() => void saveExtractedMetrics()} type="button">
+              <button className="sm-button-secondary" disabled={!apiReady || !authenticated || saving} onClick={() => void saveExtractedMetrics()} type="button">
                 Save extracted metrics
               </button>
+            ) : null}
+            {apiReady && !authenticated ? (
+              <Link className="sm-button-secondary" to="/login?next=/ops-intake">
+                Login to save
+              </Link>
             ) : null}
           </div>
 

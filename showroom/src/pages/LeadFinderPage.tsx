@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import { PageIntro } from '../components/PageIntro'
-import { checkWorkspaceHealth, workspaceFetch } from '../lib/workspaceApi'
+import { checkWorkspaceHealth, getWorkspaceSession, workspaceFetch } from '../lib/workspaceApi'
 import { downloadLeadCsv, LEAD_SAMPLE_QUERY, LEAD_SAMPLE_TEXT, type LeadRow, type LeadSource, parseLeads } from '../lib/tooling'
 
 const sourceLabels: Array<{ key: LeadSource; label: string; hint: string }> = [
@@ -83,6 +83,8 @@ type LeadPipelineResponse = {
 
 export function LeadFinderPage() {
   const [apiReady, setApiReady] = useState(false)
+  const [authLoading, setAuthLoading] = useState(true)
+  const [authenticated, setAuthenticated] = useState(false)
   const [busy, setBusy] = useState(false)
   const [query, setQuery] = useState('')
   const [keywords, setKeywords] = useState('spa,wellness,massage,yangon')
@@ -99,6 +101,22 @@ export function LeadFinderPage() {
   const [pipelineMessage, setPipelineMessage] = useState('')
   const [pipeline, setPipeline] = useState<LeadPipelineResponse | null>(null)
 
+  const loadPipeline = useCallback(async () => {
+    if (!authenticated) {
+      setPipeline(null)
+      return
+    }
+    try {
+      const payload = await workspaceFetch<LeadPipelineResponse & { status: string; count: number }>('/api/lead-pipeline')
+      setPipeline({
+        summary: payload.summary,
+        rows: payload.rows,
+      })
+    } catch {
+      setPipeline(null)
+    }
+  }, [authenticated])
+
   useEffect(() => {
     let cancelled = false
 
@@ -108,8 +126,28 @@ export function LeadFinderPage() {
         return
       }
       setApiReady(result.ready)
+      let canLoadPipeline = false
       if (result.ready) {
+        try {
+          const session = await getWorkspaceSession()
+          if (cancelled) {
+            return
+          }
+          canLoadPipeline = Boolean(session.authenticated)
+          setAuthenticated(canLoadPipeline)
+        } catch {
+          if (!cancelled) {
+            setAuthenticated(false)
+          }
+        }
+      } else {
+        setAuthenticated(false)
+      }
+      if (result.ready && canLoadPipeline && !cancelled) {
         await loadPipeline()
+      }
+      if (!cancelled) {
+        setAuthLoading(false)
       }
     }
 
@@ -117,7 +155,7 @@ export function LeadFinderPage() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [loadPipeline])
 
   const selectedSources = useMemo(
     () =>
@@ -129,18 +167,6 @@ export function LeadFinderPage() {
 
   const shortlistedRows = rows.filter((row) => shortlist.includes(row.name))
   const leadPackRows = shortlistedRows.length ? shortlistedRows : rows.slice(0, 3)
-
-  async function loadPipeline() {
-    try {
-      const payload = await workspaceFetch<LeadPipelineResponse & { status: string; count: number }>('/api/lead-pipeline')
-      setPipeline({
-        summary: payload.summary,
-        rows: payload.rows,
-      })
-    } catch {
-      setPipeline(null)
-    }
-  }
 
   async function runSearch({ nextQuery = query, nextInput = manualInput }: { nextQuery?: string; nextInput?: string } = {}) {
     setBusy(true)
@@ -261,7 +287,7 @@ export function LeadFinderPage() {
       })
       setPipelineMessage(`Saved ${payload.saved_count} lead${payload.saved_count === 1 ? '' : 's'} into the pipeline.`)
     } catch {
-      setPipelineMessage('Could not save the lead pack into the pipeline.')
+      setPipelineMessage(authenticated ? 'Could not save the lead pack into the pipeline.' : 'Login is required before the lead pack can be saved.')
     } finally {
       setPipelineBusy(false)
     }
@@ -284,7 +310,13 @@ export function LeadFinderPage() {
       const link = payload.export?.web_view_link?.trim()
       setPipelineMessage(link ? `Lead pipeline exported to Google Workspace. ${link}` : 'Lead pipeline exported to Google Workspace.')
     } catch (error) {
-      setPipelineMessage(error instanceof Error ? error.message : 'Could not export the pipeline to Google Workspace.')
+      setPipelineMessage(
+        error instanceof Error && 'status' in error && (error as Error & { status?: number }).status === 401
+          ? 'Login is required before the pipeline can be exported.'
+          : error instanceof Error
+            ? error.message
+            : 'Could not export the pipeline to Google Workspace.',
+      )
     } finally {
       setPipelineBusy(false)
     }
@@ -332,6 +364,10 @@ export function LeadFinderPage() {
       {!apiReady ? (
         <section className="sm-chip border-[rgba(255,122,24,0.22)] bg-[rgba(255,122,24,0.08)] text-[var(--sm-muted)]">
           This host is only the public shell. Live search, saved pipeline, and Workspace export work on the app host with the backend attached.
+        </section>
+      ) : !authLoading && !authenticated ? (
+        <section className="sm-chip border-[rgba(37,208,255,0.2)] bg-[rgba(37,208,255,0.08)] text-[var(--sm-muted)]">
+          Search works here. Login is required to save the pipeline, export to Google Workspace, and run the private outreach flow.
         </section>
       ) : null}
 
@@ -502,12 +538,17 @@ export function LeadFinderPage() {
             <button className="sm-button-primary" onClick={() => void buildLeadPack()} type="button">
               {offerBusy ? 'Building...' : 'Build offer'}
             </button>
-            <button className="sm-button-secondary" disabled={!apiReady || !leadPack?.opportunities.length || pipelineBusy} onClick={() => void saveLeadPackToPipeline()} type="button">
+            <button className="sm-button-secondary" disabled={!apiReady || !authenticated || !leadPack?.opportunities.length || pipelineBusy} onClick={() => void saveLeadPackToPipeline()} type="button">
               {pipelineBusy ? 'Saving...' : 'Save to pipeline'}
             </button>
-            <button className="sm-button-accent" disabled={!apiReady || pipelineBusy} onClick={() => void exportPipelineToWorkspace()} type="button">
+            <button className="sm-button-accent" disabled={!apiReady || !authenticated || pipelineBusy} onClick={() => void exportPipelineToWorkspace()} type="button">
               Export to Workspace
             </button>
+            {apiReady && !authenticated ? (
+              <Link className="sm-button-secondary" to="/login?next=/lead-finder">
+                Login to save
+              </Link>
+            ) : null}
           </div>
 
           {pipelineMessage ? <p className="mt-3 text-sm text-[var(--sm-muted)]">{pipelineMessage}</p> : null}
@@ -632,6 +673,10 @@ export function LeadFinderPage() {
                     </div>
                   </div>
                 ))
+              ) : apiReady && !authenticated ? (
+                <div className="sm-chip text-[var(--sm-muted)]">
+                  Login to keep a private lead pipeline, move leads through stages, and export the queue into Google Workspace.
+                </div>
               ) : (
                 <div className="sm-chip text-[var(--sm-muted)]">Save a lead pack to start the real pipeline.</div>
               )}

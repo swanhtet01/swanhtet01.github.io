@@ -8,6 +8,7 @@ import { DocumentIntakePage } from './pages/DocumentIntakePage'
 import { HomePage } from './pages/HomePage'
 import { InventoryPulsePage } from './pages/InventoryPulsePage'
 import { LeadFinderPage } from './pages/LeadFinderPage'
+import { LoginPage } from './pages/LoginPage'
 import { MetricIntakePage } from './pages/MetricIntakePage'
 import { NewsBriefPage } from './pages/NewsBriefPage'
 import { NotFoundPage } from './pages/NotFoundPage'
@@ -35,6 +36,7 @@ function App() {
           <Route element={<TryPage />} path="examples" />
           <Route element={<TryPage />} path="tools" />
           <Route element={<LeadFinderPage />} path="lead-finder" />
+          <Route element={<LoginPage />} path="login" />
           <Route element={<NewsBriefPage />} path="news-brief" />
           <Route element={<ActionBoardPage />} path="action-board" />
           <Route element={<DocumentIntakePage />} path="document-intake" />
