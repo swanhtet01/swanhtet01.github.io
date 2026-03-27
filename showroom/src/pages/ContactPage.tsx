@@ -91,13 +91,13 @@ export function ContactPage() {
     <div className="space-y-8">
       <PageIntro
         eyebrow="Contact"
-        title="Book a live walkthrough."
-        description="Tell us the one workflow you want fixed first. We will use that to shape the first useful rollout."
+        title="Book a demo."
+        description="Tell us the first workflow you want fixed. We will shape the first rollout around that."
       />
 
       <section className="grid gap-6 lg:grid-cols-[0.88fr_1.12fr]">
         <aside className="sm-terminal p-6">
-          <p className="sm-kicker text-[var(--sm-accent)]">Best first use cases</p>
+          <p className="sm-kicker text-[var(--sm-accent)]">Best first demos</p>
           <div className="mt-5 grid gap-3">
             {[
               'One management board',
@@ -113,15 +113,15 @@ export function ContactPage() {
           <div className="mt-6 grid gap-3">
             {bookingUrl ? (
               <a className="sm-button-accent text-center" href={bookingUrl} rel="noreferrer" target="_blank">
-                Schedule intro call
+                Schedule demo
               </a>
             ) : (
               <div className="sm-chip text-[var(--sm-muted)]">
-                Add a booking link to enable direct call scheduling from the site.
+                Add a booking link to enable direct demo scheduling from the site.
               </div>
             )}
             <Link className="sm-button-secondary text-center" to="/lead-finder">
-              Try the live demo first
+              Try Lead Finder first
             </Link>
           </div>
         </aside>
@@ -183,11 +183,11 @@ export function ContactPage() {
 
           <div className="mt-5 flex flex-wrap gap-3">
             <button className="sm-button-accent" type="submit">
-              {status === 'saving' ? 'Saving...' : 'Send request'}
+              {status === 'saving' ? 'Saving...' : 'Request demo'}
             </button>
             {bookingUrl ? (
               <a className="sm-button-secondary" href={bookingUrl} rel="noreferrer" target="_blank">
-                Schedule call
+                Schedule demo
               </a>
             ) : null}
           </div>

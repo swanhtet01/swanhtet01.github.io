@@ -2,7 +2,7 @@
 
 This is the cleanest way to run SuperMega as one connected system:
 
-- public website shell
+- public website
 - private app and login
 - API
 - saved state
@@ -10,12 +10,20 @@ This is the cleanest way to run SuperMega as one connected system:
 
 ## What is actually live in this setup
 
-- `Lead Finder` with saved pipeline support
-- `Action OS` private workspace
-- `Ops Intake`
-- `Receiving Control`
-- `Inventory Pulse`
-- product feedback/workbench loop
+- public:
+  - `/`
+  - `/platform`
+  - `/solutions`
+  - `/products`
+  - `/lead-finder`
+  - `/contact`
+- private:
+  - `/login`
+  - `/app`
+  - `/app/actions`
+  - `/app/intake`
+  - `/app/receiving`
+  - `/app/inventory`
 
 ## Fastest local start
 
