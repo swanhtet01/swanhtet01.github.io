@@ -43,7 +43,7 @@ export function ProductsPage() {
             <p className="sm-kicker text-[var(--sm-accent)]">Add-on modules</p>
             <h2 className="mt-2 text-2xl font-bold text-white">The next screens after Action OS.</h2>
           </div>
-          <Link className="sm-link" to="/contact">
+          <Link className="sm-link" to="/book">
             Book demo
           </Link>
         </div>

@@ -7,15 +7,17 @@ import { getWorkspaceSession, loginWorkspace } from '../lib/workspaceApi'
 export function LoginPage() {
   const navigate = useNavigate()
   const location = useLocation()
-  const next = new URLSearchParams(location.search).get('next') || '/workspace'
+  const next = new URLSearchParams(location.search).get('next') || '/app/actions'
 
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [username, setUsername] = useState('owner')
   const [password, setPassword] = useState('')
+  const [workspaceSlug, setWorkspaceSlug] = useState('')
   const [error, setError] = useState('')
   const [authRequired, setAuthRequired] = useState(true)
   const [usesDefaultCredentials, setUsesDefaultCredentials] = useState(false)
+  const [workspaceOptions, setWorkspaceOptions] = useState<Array<{ slug?: string; name?: string; role?: string }>>([])
 
   useEffect(() => {
     let cancelled = false
@@ -27,6 +29,10 @@ export function LoginPage() {
         }
         setAuthRequired(session.auth_required !== false)
         setUsesDefaultCredentials(Boolean(session.uses_default_credentials))
+        setWorkspaceOptions(session.workspaces ?? [])
+        if (!workspaceSlug && session.workspaces?.length === 1) {
+          setWorkspaceSlug(session.workspaces[0].slug ?? '')
+        }
         if (session.authenticated) {
           navigate(next, { replace: true })
           return
@@ -46,14 +52,14 @@ export function LoginPage() {
     return () => {
       cancelled = true
     }
-  }, [navigate, next])
+  }, [navigate, next, workspaceSlug])
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setSubmitting(true)
     setError('')
     try {
-      const payload = await loginWorkspace(username, password)
+      const payload = await loginWorkspace(username, password, workspaceSlug)
       if (payload.authenticated) {
         navigate(next, { replace: true })
         return
@@ -102,6 +108,15 @@ export function LoginPage() {
               Password
               <input className="sm-input" onChange={(event) => setPassword(event.target.value)} type="password" value={password} />
             </label>
+            <label className="grid gap-2 text-sm font-semibold text-[var(--sm-muted)]">
+              Workspace
+              <input
+                className="sm-input"
+                onChange={(event) => setWorkspaceSlug(event.target.value)}
+                placeholder={workspaceOptions[0]?.slug ? `Default: ${workspaceOptions[0].slug}` : 'Leave blank for default workspace'}
+                value={workspaceSlug}
+              />
+            </label>
           </div>
 
           <div className="mt-5 flex flex-wrap gap-3">
@@ -116,6 +131,11 @@ export function LoginPage() {
           {usesDefaultCredentials ? (
             <div className="mt-4 sm-chip text-[var(--sm-muted)]">
               This host is still using the default demo credentials. Change `SUPERMEGA_APP_USERNAME` and `SUPERMEGA_APP_PASSWORD` before sharing it widely.
+            </div>
+          ) : null}
+          {workspaceOptions.length ? (
+            <div className="mt-4 sm-chip text-[var(--sm-muted)]">
+              Available workspaces: {workspaceOptions.map((item) => `${item.name || item.slug} (${item.role || 'member'})`).join(' / ')}
             </div>
           ) : null}
           {error ? <div className="mt-4 sm-chip text-white">{error}</div> : null}

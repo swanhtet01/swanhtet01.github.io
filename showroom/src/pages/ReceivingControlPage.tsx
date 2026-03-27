@@ -204,7 +204,7 @@ export function ReceivingControlPage() {
             <button className="sm-button-primary" disabled={!apiReady || saving || !form.supplier.trim() || !form.material.trim()} onClick={() => void saveRecord()} type="button">
               {saving ? 'Saving...' : 'Save receiving record'}
             </button>
-            <Link className="sm-button-secondary" to="/inventory-pulse">
+            <Link className="sm-button-secondary" to="/app/inventory">
               Open Inventory Pulse
             </Link>
           </div>

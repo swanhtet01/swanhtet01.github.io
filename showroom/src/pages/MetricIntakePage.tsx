@@ -465,10 +465,10 @@ export function MetricIntakePage() {
             This lets a company start with rough KPI sheets and manual entries, then gradually move toward cleaner module-specific records without forcing a heavy setup first.
           </p>
           <div className="mt-5 flex flex-wrap gap-3">
-            <Link className="sm-button-primary" to="/workspace">
+            <Link className="sm-button-primary" to="/app/actions">
               Open Action OS
             </Link>
-            <Link className="sm-button-secondary" to="/inventory-pulse">
+            <Link className="sm-button-secondary" to="/app/inventory">
               Open Inventory Pulse
             </Link>
           </div>

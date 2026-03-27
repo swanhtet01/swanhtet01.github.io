@@ -40,7 +40,7 @@ export function PlatformPage() {
             <Link className="sm-button-primary" to="/login?next=/app/actions">
               Login to app
             </Link>
-            <Link className="sm-button-accent" to="/contact">
+            <Link className="sm-button-accent" to="/book">
               Book demo
             </Link>
           </div>

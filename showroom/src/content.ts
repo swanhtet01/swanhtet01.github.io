@@ -23,8 +23,8 @@ export type PublicModule = {
 }
 
 export const navItems = [
+  { label: 'Home', to: '/' },
   { label: 'Product', to: '/platform' },
-  { label: 'Use cases', to: '/solutions' },
   { label: 'Lead Finder', to: '/lead-finder' },
 ] as const
 
@@ -39,19 +39,19 @@ export const hero = {
 
 export const proofPoints: ProofPoint[] = [
   {
-    label: 'Wedge',
+    label: 'Core product',
     value: 'Action OS',
-    detail: 'The first live board for managers and directors.',
+    detail: 'The first live action layer for managers and directors.',
   },
   {
-    label: 'Public proof',
+    label: 'Top of funnel',
     value: 'Lead Finder',
-    detail: 'A real top-of-funnel tool that turns search into offers.',
+    detail: 'Find leads, shape the offer, and move them into the pipeline.',
   },
   {
-    label: 'Private app',
-    value: 'Workspace + Workbench',
-    detail: 'The saved app side for actual use, testing, and rollout.',
+    label: 'Private workspace',
+    value: 'App + Workbench',
+    detail: 'Saved boards, queues, and product improvement all in one place.',
   },
 ]
 

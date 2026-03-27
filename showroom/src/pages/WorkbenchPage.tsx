@@ -87,32 +87,32 @@ const quickLaunches = [
   {
     name: 'Action OS',
     detail: 'Run the live owner board.',
-    to: '/workspace',
+    to: '/app/actions',
   },
   {
     name: 'Ops Intake',
     detail: 'Upload files and save KPI rows.',
-    to: '/ops-intake',
+    to: '/app/intake',
   },
   {
     name: 'Receiving',
     detail: 'Capture inbound material and holds.',
-    to: '/receiving-control',
+    to: '/app/receiving',
   },
   {
     name: 'Inventory',
     detail: 'Watch stock and reorder pressure.',
-    to: '/inventory-pulse',
+    to: '/app/inventory',
   },
   {
     name: 'Lead Finder',
     detail: 'Find leads and build offers.',
-    to: '/lead-finder',
+    to: '/app/leads',
   },
   {
     name: 'News Brief',
     detail: 'Turn signals into one short brief.',
-    to: '/news-brief',
+    to: '/app/news',
   },
 ] as const
 
@@ -300,7 +300,7 @@ export function WorkbenchPage() {
           ) : !authenticated ? (
             <div className="space-y-4">
               <p className="text-sm text-[var(--sm-muted)]">Login is required to open the private workbench.</p>
-              <Link className="sm-button-primary" to="/login?next=/workbench">
+              <Link className="sm-button-primary" to="/login?next=/app">
                 Login to workbench
               </Link>
             </div>
@@ -375,7 +375,7 @@ export function WorkbenchPage() {
               <p className="sm-kicker text-[var(--sm-accent)]">Today queue</p>
               <h2 className="mt-2 text-2xl font-bold text-white">What you can work right now</h2>
             </div>
-            <Link className="sm-link" to="/workspace">
+            <Link className="sm-link" to="/app/actions">
               Full board
             </Link>
           </div>
@@ -498,7 +498,7 @@ export function WorkbenchPage() {
               <p className="sm-kicker text-[var(--sm-accent)]">Fresh records</p>
               <h2 className="mt-2 text-2xl font-bold text-white">Latest metric inputs</h2>
             </div>
-            <Link className="sm-link" to="/ops-intake">
+            <Link className="sm-link" to="/app/intake">
               Add more
             </Link>
           </div>
