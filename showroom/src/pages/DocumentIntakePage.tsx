@@ -182,7 +182,7 @@ export function DocumentIntakePage() {
             This should feed directly into Action OS, Receiving Control, Cash Watch, and Quality Closeout so teams do not need to retype key facts after opening a file.
           </p>
           <div className="mt-5 flex flex-wrap gap-3">
-            <Link className="sm-button-primary" to="/workspace">
+            <Link className="sm-button-primary" to="/app/actions">
               Open Action OS
             </Link>
             <Link className="sm-button-secondary" to="/products">

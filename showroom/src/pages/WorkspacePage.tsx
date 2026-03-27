@@ -168,19 +168,19 @@ export function WorkspacePage() {
           </div>
 
           <div className="mt-6 flex flex-wrap gap-3">
-            <Link className="sm-button-primary" to="/workbench">
+            <Link className="sm-button-primary" to="/app">
               Open Workbench
             </Link>
-            <Link className="sm-button-secondary" to="/receiving-control">
+            <Link className="sm-button-secondary" to="/app/receiving">
               Open Receiving Control
             </Link>
-            <Link className="sm-button-secondary" to="/inventory-pulse">
+            <Link className="sm-button-secondary" to="/app/inventory">
               Open Inventory Pulse
             </Link>
-            <Link className="sm-button-secondary" to="/solution-architect">
+            <Link className="sm-button-secondary" to="/app/architect">
               Open Solution Architect
             </Link>
-            <Link className="sm-button-secondary" to="/ops-intake">
+            <Link className="sm-button-secondary" to="/app/intake">
               Open Ops Intake
             </Link>
           </div>
@@ -195,7 +195,7 @@ export function WorkspacePage() {
               {authenticated ? (
                 <div className="sm-chip text-white">Run `powershell -ExecutionPolicy Bypass -File .\tools\run_solution.ps1 -Config .\config.example.json -SkipRun -Serve`</div>
               ) : (
-                <Link className="sm-button-primary" to="/login?next=/workspace">
+                <Link className="sm-button-primary" to="/login?next=/app/actions">
                   Login to workspace
                 </Link>
               )}
@@ -258,7 +258,7 @@ export function WorkspacePage() {
               <p className="sm-kicker text-[var(--sm-accent)]">Today queue</p>
               <h2 className="mt-2 text-2xl font-bold text-white">What needs action now</h2>
             </div>
-            <Link className="sm-link" to="/action-board">Open Action Board</Link>
+            <Link className="sm-link" to="/app/action-board">Open Action Board</Link>
           </div>
 
           <div className="mt-5 space-y-3">

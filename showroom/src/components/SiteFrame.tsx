@@ -24,7 +24,7 @@ export function SiteFrame() {
             <span className="flex flex-col">
               <span className="sm-logo text-lg font-extrabold tracking-tight text-white">SuperMega</span>
               <span className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[var(--sm-muted)]">
-                Enterprise AI software
+                Action OS + AI workflows
               </span>
             </span>
           </NavLink>
@@ -49,7 +49,7 @@ export function SiteFrame() {
                 Book demo
               </a>
             ) : (
-              <NavLink className="sm-button-accent ml-2" to="/contact">
+              <NavLink className="sm-button-accent ml-2" to="/book">
                 Book demo
               </NavLink>
             )}
@@ -71,7 +71,7 @@ export function SiteFrame() {
                   Book demo
                 </a>
               ) : (
-                <NavLink className="sm-button-accent mt-1 text-center" onClick={() => setMenuOpen(false)} to="/contact">
+                <NavLink className="sm-button-accent mt-1 text-center" onClick={() => setMenuOpen(false)} to="/book">
                   Book demo
                 </NavLink>
               )}

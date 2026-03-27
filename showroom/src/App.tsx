@@ -1,8 +1,10 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 
+import { AppFrame } from './components/AppFrame'
 import { RouteEffects } from './components/RouteEffects'
 import { SiteFrame } from './components/SiteFrame'
 import { ActionBoardPage } from './pages/ActionBoardPage'
+import { BookPage } from './pages/BookPage'
 import { ContactPage } from './pages/ContactPage'
 import { DocumentIntakePage } from './pages/DocumentIntakePage'
 import { HomePage } from './pages/HomePage'
@@ -28,20 +30,11 @@ function App() {
         <Route element={<SiteFrame />} path="/">
           <Route element={<HomePage />} index />
           <Route element={<PlatformPage />} path="platform" />
-          <Route element={<WorkbenchPage />} path="app" />
-          <Route element={<WorkspacePage />} path="app/actions" />
-          <Route element={<LeadFinderPage />} path="app/leads" />
-          <Route element={<MetricIntakePage />} path="app/intake" />
-          <Route element={<ReceivingControlPage />} path="app/receiving" />
-          <Route element={<InventoryPulsePage />} path="app/inventory" />
-          <Route element={<NewsBriefPage />} path="app/news" />
-          <Route element={<ActionBoardPage />} path="app/action-board" />
-          <Route element={<DocumentIntakePage />} path="app/documents" />
-          <Route element={<SolutionArchitectPage />} path="app/architect" />
           <Route element={<ProductsPage />} path="products" />
           <Route element={<PackagesPage />} path="solutions" />
           <Route element={<LeadFinderPage />} path="lead-finder" />
           <Route element={<LoginPage />} path="login" />
+          <Route element={<BookPage />} path="book" />
           <Route element={<Navigate replace to="/app" />} path="workbench" />
           <Route element={<Navigate replace to="/app/actions" />} path="workspace" />
           <Route element={<Navigate replace to="/app/intake" />} path="ops-intake" />
@@ -59,9 +52,20 @@ function App() {
           <Route element={<Navigate replace to="/lead-finder" />} path="try" />
           <Route element={<PackagesPage />} path="packages" />
           <Route element={<ContactPage />} path="contact" />
-          <Route element={<ContactPage />} path="book" />
           <Route element={<Navigate replace to="/" />} path="home" />
           <Route element={<NotFoundPage />} path="*" />
+        </Route>
+        <Route element={<AppFrame />} path="/app">
+          <Route element={<WorkbenchPage />} index />
+          <Route element={<WorkspacePage />} path="actions" />
+          <Route element={<LeadFinderPage />} path="leads" />
+          <Route element={<MetricIntakePage />} path="intake" />
+          <Route element={<ReceivingControlPage />} path="receiving" />
+          <Route element={<InventoryPulsePage />} path="inventory" />
+          <Route element={<NewsBriefPage />} path="news" />
+          <Route element={<ActionBoardPage />} path="action-board" />
+          <Route element={<DocumentIntakePage />} path="documents" />
+          <Route element={<SolutionArchitectPage />} path="architect" />
         </Route>
       </Routes>
     </BrowserRouter>

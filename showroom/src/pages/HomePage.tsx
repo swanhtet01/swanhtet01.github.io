@@ -21,14 +21,11 @@ export function HomePage() {
             </p>
 
             <div className="mt-7 flex flex-wrap gap-3">
-              <Link className="sm-button-primary" to="/platform">
-                See Action OS
+              <Link className="sm-button-primary" to="/book">
+                Book demo
               </Link>
               <Link className="sm-button-secondary" to="/lead-finder">
                 Try Lead Finder
-              </Link>
-              <Link className="sm-button-accent" to="/contact">
-                Book demo
               </Link>
             </div>
           </div>
@@ -144,7 +141,7 @@ export function HomePage() {
             The best first move is usually one board, one queue, or one control loop. We make that work first, then expand.
           </p>
           <div className="mt-5 flex flex-wrap gap-3">
-            <Link className="sm-button-primary" to="/contact">
+            <Link className="sm-button-primary" to="/book">
               Book demo
             </Link>
             <Link className="sm-button-secondary" to="/solutions">

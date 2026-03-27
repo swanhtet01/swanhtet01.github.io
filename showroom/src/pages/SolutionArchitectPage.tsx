@@ -347,7 +347,7 @@ export function SolutionArchitectPage() {
           </div>
 
           <div className="mt-5 flex flex-wrap gap-3">
-            <Link className="sm-button-primary" to="/workspace">
+            <Link className="sm-button-primary" to="/app/actions">
               Open Action OS
             </Link>
             <Link className="sm-button-secondary" to="/contact?package=Action%20OS">
