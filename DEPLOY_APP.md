@@ -1,29 +1,78 @@
 # SuperMega App Deploy
 
-This deploy path serves the public website and the API from one app.
+This is the cleanest way to run SuperMega as one connected system:
 
-## What it gives you
+- public website shell
+- private app and login
+- API
+- saved state
+- supervisor loop
 
-- one URL for the site and the backend
-- saved data in the server-side state store
-- working free tools and workspace views from the same app
-- a cleaner production path than running the site and API separately
+## What is actually live in this setup
 
-## Local container run
+- `Lead Finder` with saved pipeline support
+- `Action OS` private workspace
+- `Ops Intake`
+- `Receiving Control`
+- `Inventory Pulse`
+- product feedback/workbench loop
+
+## Fastest local start
+
+### Option 1: Windows stack runner
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\tools\start_supermega_stack.ps1 -BuildShowroom
+```
+
+That will:
+
+- build the showroom
+- start the supervisor loop in the background
+- start the app server
+- open the login page
+
+Default app URL:
+
+- `http://localhost:8787/login/`
+
+### Default demo login
+
+- username: `owner`
+- password: `supermega-demo`
+
+Change those before sharing outside your own machine.
+
+## Docker run
 
 ```powershell
 docker compose -f .\docker-compose.app.yml up --build
 ```
 
-Then open:
+That now starts:
 
-- `http://localhost:8787`
+- `supermega-app`
+- `supermega-supervisor`
 
 Saved data is stored in the named Docker volume `supermega-app-data`.
 
+## Environment
+
+Use `.env.app.example` as the starting point for runtime settings.
+
+Main values:
+
+- `SUPERMEGA_AUTH_REQUIRED`
+- `SUPERMEGA_APP_USERNAME`
+- `SUPERMEGA_APP_PASSWORD`
+- `SUPERMEGA_APP_DISPLAY_NAME`
+- `SUPERMEGA_APP_ROLE`
+- `SUPERMEGA_CORS_ORIGINS`
+- `VITE_BOOKING_URL`
+
 ## Cloud Run deploy
 
-Use the workflow:
+Workflow:
 
 - `.github/workflows/supermega-app-cloud-run.yml`
 
@@ -31,11 +80,23 @@ Required secret:
 
 - `GCP_SA_KEY`
 
-Default runtime env:
+Current note:
 
-- `SUPERMEGA_SITE_ROOT=/app/showroom/dist`
-- `SUPERMEGA_PILOT_DATA=/app/pilot-data`
+- Cloud Run can host the app shell and API well
+- but SQLite is not durable there by itself
+- for a real customer deployment, move the state layer to Postgres or use a host with persistent disk
 
-## Current limitation
+## Current production gap
 
-Cloud Run alone does not give you durable SQLite storage. For real multi-user persistence you should move the state store to a managed database next, or mount persistent storage on a VM/container host instead of using purely ephemeral Cloud Run storage.
+This repo is now good enough for:
+
+- serious pilot
+- internal team use
+- one-client single-tenant app
+
+It is not yet full enterprise SaaS because it still needs:
+
+- Postgres
+- tenant/workspace separation
+- stronger audit and approval layers
+- public backend hosting fully verified
