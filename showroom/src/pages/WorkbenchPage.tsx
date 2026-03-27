@@ -85,6 +85,11 @@ type FeedbackForm = {
 
 const quickLaunches = [
   {
+    name: 'Exception Queue',
+    detail: 'See what is starting to break.',
+    to: '/app/exceptions',
+  },
+  {
     name: 'Action OS',
     detail: 'Run the live owner board.',
     to: '/app/actions',

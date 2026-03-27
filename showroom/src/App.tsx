@@ -7,6 +7,7 @@ import { ActionBoardPage } from './pages/ActionBoardPage'
 import { BookPage } from './pages/BookPage'
 import { ContactPage } from './pages/ContactPage'
 import { DocumentIntakePage } from './pages/DocumentIntakePage'
+import { ExceptionQueuePage } from './pages/ExceptionQueuePage'
 import { HomePage } from './pages/HomePage'
 import { InventoryPulsePage } from './pages/InventoryPulsePage'
 import { LeadFinderPage } from './pages/LeadFinderPage'
@@ -37,6 +38,7 @@ function App() {
           <Route element={<BookPage />} path="book" />
           <Route element={<Navigate replace to="/app" />} path="workbench" />
           <Route element={<Navigate replace to="/app/actions" />} path="workspace" />
+          <Route element={<Navigate replace to="/app/exceptions" />} path="exceptions" />
           <Route element={<Navigate replace to="/app/intake" />} path="ops-intake" />
           <Route element={<Navigate replace to="/app/intake" />} path="metric-intake" />
           <Route element={<Navigate replace to="/app/receiving" />} path="receiving-control" />
@@ -58,6 +60,7 @@ function App() {
         <Route element={<AppFrame />} path="/app">
           <Route element={<WorkbenchPage />} index />
           <Route element={<WorkspacePage />} path="actions" />
+          <Route element={<ExceptionQueuePage />} path="exceptions" />
           <Route element={<LeadFinderPage />} path="leads" />
           <Route element={<MetricIntakePage />} path="intake" />
           <Route element={<ReceivingControlPage />} path="receiving" />
