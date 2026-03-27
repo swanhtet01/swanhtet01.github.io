@@ -85,6 +85,11 @@ type FeedbackForm = {
 
 const quickLaunches = [
   {
+    name: 'Director Dashboard',
+    detail: 'See actions, exceptions, decisions, and leads.',
+    to: '/app/director',
+  },
+  {
     name: 'Decision Journal',
     detail: 'Save decisions, owners, and rationale.',
     to: '/app/decisions',

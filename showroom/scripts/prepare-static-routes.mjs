@@ -6,7 +6,10 @@ const indexFile = resolve(distDir, 'index.html')
 const routePaths = [
   'platform',
   'app',
+  'app/director',
   'app/actions',
+  'app/decisions',
+  'app/exceptions',
   'app/leads',
   'app/intake',
   'app/receiving',
