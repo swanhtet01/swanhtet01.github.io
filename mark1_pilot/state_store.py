@@ -126,6 +126,20 @@ def ensure_schema(db_path: Path) -> None:
                 note TEXT NOT NULL
             );
 
+            CREATE TABLE IF NOT EXISTS decision_journal (
+                decision_id TEXT PRIMARY KEY,
+                created_at TEXT NOT NULL,
+                source TEXT NOT NULL,
+                title TEXT NOT NULL,
+                context TEXT NOT NULL,
+                decision_text TEXT NOT NULL,
+                rationale TEXT NOT NULL,
+                owner TEXT NOT NULL,
+                status TEXT NOT NULL,
+                due TEXT NOT NULL,
+                related_route TEXT NOT NULL
+            );
+
             CREATE TABLE IF NOT EXISTS lead_pipeline (
                 lead_id TEXT PRIMARY KEY,
                 created_at TEXT NOT NULL,
@@ -1518,6 +1532,152 @@ def list_product_feedback(
         }
         for row in rows
     ]
+
+
+def add_decision_entry(
+    db_path: Path,
+    *,
+    title: str,
+    context: str,
+    decision_text: str,
+    rationale: str,
+    owner: str,
+    status: str,
+    due: str,
+    related_route: str,
+    source: str = "app:decision_journal",
+) -> dict[str, Any]:
+    ensure_schema(db_path)
+    created_at = datetime.now().astimezone().isoformat()
+    normalized_title = str(title or "").strip() or "Untitled decision"
+    normalized_context = str(context or "").strip()
+    normalized_decision = str(decision_text or "").strip()
+    normalized_rationale = str(rationale or "").strip()
+    normalized_owner = str(owner or "").strip() or "Management"
+    normalized_status = str(status or "").strip().lower() or "open"
+    normalized_due = str(due or "").strip()
+    normalized_route = str(related_route or "").strip()
+    decision_id = _stable_key(
+        "DEC",
+        f"{normalized_title}:{normalized_owner}:{normalized_status}:{normalized_due}:{created_at}",
+    )
+    with _connect(db_path) as connection:
+        connection.execute(
+            """
+            INSERT INTO decision_journal (
+                decision_id,
+                created_at,
+                source,
+                title,
+                context,
+                decision_text,
+                rationale,
+                owner,
+                status,
+                due,
+                related_route
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                decision_id,
+                created_at,
+                source,
+                normalized_title,
+                normalized_context,
+                normalized_decision,
+                normalized_rationale,
+                normalized_owner,
+                normalized_status,
+                normalized_due,
+                normalized_route,
+            ),
+        )
+        connection.commit()
+    return {
+        "decision_id": decision_id,
+        "created_at": created_at,
+        "source": source,
+        "title": normalized_title,
+        "context": normalized_context,
+        "decision_text": normalized_decision,
+        "rationale": normalized_rationale,
+        "owner": normalized_owner,
+        "status": normalized_status,
+        "due": normalized_due,
+        "related_route": normalized_route,
+    }
+
+
+def list_decision_entries(
+    db_path: Path,
+    *,
+    status: str | None = None,
+    owner: str | None = None,
+    limit: int = 50,
+) -> list[dict[str, Any]]:
+    ensure_schema(db_path)
+    query = """
+        SELECT
+            decision_id,
+            created_at,
+            source,
+            title,
+            context,
+            decision_text,
+            rationale,
+            owner,
+            status,
+            due,
+            related_route
+        FROM decision_journal
+    """
+    conditions: list[str] = []
+    params: list[Any] = []
+    if status:
+        conditions.append("status = ?")
+        params.append(status)
+    if owner:
+        conditions.append("owner = ?")
+        params.append(owner)
+    if conditions:
+        query += " WHERE " + " AND ".join(conditions)
+    query += " ORDER BY CASE status WHEN 'open' THEN 0 WHEN 'review' THEN 1 WHEN 'decided' THEN 2 ELSE 3 END, created_at DESC LIMIT ?"
+    params.append(max(1, int(limit)))
+    with _connect(db_path) as connection:
+        rows = connection.execute(query, params).fetchall()
+    return [
+        {
+            "decision_id": row["decision_id"],
+            "created_at": row["created_at"],
+            "source": row["source"],
+            "title": row["title"],
+            "context": row["context"],
+            "decision_text": row["decision_text"],
+            "rationale": row["rationale"],
+            "owner": row["owner"],
+            "status": row["status"],
+            "due": row["due"],
+            "related_route": row["related_route"],
+        }
+        for row in rows
+    ]
+
+
+def load_decision_summary(db_path: Path) -> dict[str, Any]:
+    ensure_schema(db_path)
+    with _connect(db_path) as connection:
+        total = int(connection.execute("SELECT COUNT(*) FROM decision_journal").fetchone()[0])
+        status_rows = connection.execute(
+            "SELECT status, COUNT(*) AS item_count FROM decision_journal GROUP BY status"
+        ).fetchall()
+        owner_rows = connection.execute(
+            "SELECT owner, COUNT(*) AS item_count FROM decision_journal GROUP BY owner ORDER BY item_count DESC, owner LIMIT 5"
+        ).fetchall()
+    return {
+        "decision_count": total,
+        "by_status": {str(row["status"]): int(row["item_count"]) for row in status_rows},
+        "top_owners": [{"owner": str(row["owner"]), "decision_count": int(row["item_count"])} for row in owner_rows],
+    }
 
 
 def add_attendance_event(

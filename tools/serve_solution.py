@@ -26,6 +26,7 @@ from mark1_pilot.state_store import (  # noqa: E402
     add_action_items,
     add_attendance_event,
     add_contact_submission,
+    add_decision_entry,
     add_metric_entries,
     add_metric_entry,
     add_inventory_record,
@@ -37,6 +38,7 @@ from mark1_pilot.state_store import (  # noqa: E402
     list_attendance_events,
     list_capa_actions,
     list_contact_submissions,
+    list_decision_entries,
     list_inventory_records,
     list_lead_pipeline as state_list_lead_pipeline,
     list_metric_entries,
@@ -47,6 +49,7 @@ from mark1_pilot.state_store import (  # noqa: E402
     list_supplier_risks,
     load_action_summary,
     load_agent_team_summary,
+    load_decision_summary,
     load_inventory_summary,
     load_metric_summary,
     load_product_feedback_summary,
@@ -208,6 +211,17 @@ class ProductFeedbackRequest(BaseModel):
     priority: str = "medium"
     status: str = "open"
     note: str
+
+
+class DecisionJournalRequest(BaseModel):
+    title: str
+    context: str = ""
+    decision_text: str
+    rationale: str = ""
+    owner: str = "Management"
+    status: str = "open"
+    due: str = ""
+    related_route: str = ""
 
 
 class LeadPipelineImportRequest(BaseModel):
@@ -1084,6 +1098,34 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             "row": row,
             "rows": list_product_feedback(state_db, limit=50),
             "summary": load_product_feedback_summary(state_db),
+        }
+
+    @app.get("/api/decisions")
+    def decision_entries(request: Request, status: str | None = None, owner: str | None = None, limit: int = 100) -> dict[str, Any]:
+        _require_session(request)
+        rows = list_decision_entries(state_db, status=status, owner=owner, limit=limit)
+        return {"status": "ready", "summary": load_decision_summary(state_db), "count": len(rows), "rows": rows}
+
+    @app.post("/api/decisions")
+    def create_decision_entry(request_http: Request, request: DecisionJournalRequest) -> dict[str, Any]:
+        _require_session(request_http)
+        row = add_decision_entry(
+            state_db,
+            title=request.title.strip(),
+            context=request.context.strip(),
+            decision_text=request.decision_text.strip(),
+            rationale=request.rationale.strip(),
+            owner=request.owner.strip(),
+            status=request.status.strip(),
+            due=request.due.strip(),
+            related_route=request.related_route.strip(),
+        )
+        return {
+            "status": "ready",
+            "message": "Decision saved.",
+            "row": row,
+            "rows": list_decision_entries(state_db, limit=50),
+            "summary": load_decision_summary(state_db),
         }
 
     @app.get("/api/supermega/operating-model")

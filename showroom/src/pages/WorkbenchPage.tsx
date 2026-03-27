@@ -85,6 +85,11 @@ type FeedbackForm = {
 
 const quickLaunches = [
   {
+    name: 'Decision Journal',
+    detail: 'Save decisions, owners, and rationale.',
+    to: '/app/decisions',
+  },
+  {
     name: 'Exception Queue',
     detail: 'See what is starting to break.',
     to: '/app/exceptions',
