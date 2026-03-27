@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 
 import { PageIntro } from '../components/PageIntro'
 import { checkWorkspaceHealth, getWorkspaceSession, workspaceFetch } from '../lib/workspaceApi'
@@ -133,6 +133,7 @@ function formatActivityTime(value: string) {
 }
 
 export function LeadFinderPage() {
+  const location = useLocation()
   const [apiReady, setApiReady] = useState(false)
   const [authLoading, setAuthLoading] = useState(true)
   const [authenticated, setAuthenticated] = useState(false)
@@ -255,6 +256,7 @@ export function LeadFinderPage() {
 
   const shortlistedRows = rows.filter((row) => shortlist.includes(row.name))
   const leadPackRows = shortlistedRows.length ? shortlistedRows : rows.slice(0, 3)
+  const isPrivateRoute = location.pathname.startsWith('/app')
 
   async function runSearch({ nextQuery = query, nextInput = manualInput }: { nextQuery?: string; nextInput?: string } = {}) {
     setBusy(true)
@@ -501,18 +503,22 @@ export function LeadFinderPage() {
   return (
     <div className="space-y-8">
       <PageIntro
-        eyebrow="Free tool"
-        title="Lead Finder"
-        description="Search for real businesses, shape the right SuperMega offer, and move the shortlist into a private sales pipeline with outreach history."
+        eyebrow={isPrivateRoute ? 'Private app' : 'Free tool'}
+        title={isPrivateRoute ? 'Lead pipeline' : 'Lead Finder'}
+        description={
+          isPrivateRoute
+            ? 'Run the private sales workflow: keep saved leads, outreach drafts, stage moves, and next steps in one place.'
+            : 'Search for real businesses, shape the right SuperMega offer, and only move the shortlist into the private pipeline once it is worth working.'
+        }
       />
 
       {!apiReady ? (
         <section className="sm-chip border-[rgba(255,122,24,0.22)] bg-[rgba(255,122,24,0.08)] text-[var(--sm-muted)]">
           This host is only the public shell. Live search, saved pipeline, and Workspace export work on the app host with the backend attached.
         </section>
-      ) : !authLoading && !authenticated ? (
+      ) : isPrivateRoute && !authLoading && !authenticated ? (
         <section className="sm-chip border-[rgba(37,208,255,0.2)] bg-[rgba(37,208,255,0.08)] text-[var(--sm-muted)]">
-          Search works here. Login is required to save the pipeline, keep an outreach history, and export the queue to Google Workspace.
+          Login is required to keep the private pipeline, outreach history, and Workspace export.
         </section>
       ) : null}
 
@@ -758,7 +764,8 @@ export function LeadFinderPage() {
         </article>
       </section>
 
-      <section className="space-y-4">
+      {isPrivateRoute ? (
+        <section className="space-y-4">
         <div className="flex items-center justify-between gap-4">
           <div>
             <p className="sm-kicker text-[var(--sm-accent)]">Saved pipeline</p>
@@ -1003,7 +1010,39 @@ export function LeadFinderPage() {
             </div>
           </article>
         </div>
-      </section>
+        </section>
+      ) : (
+        <section className="grid gap-5 lg:grid-cols-[0.9fr_1.1fr]">
+          <article className="sm-surface p-6">
+            <p className="sm-kicker text-[var(--sm-accent)]">What happens next</p>
+            <h2 className="mt-3 text-2xl font-bold text-white">Only move real prospects into the private pipeline.</h2>
+            <div className="mt-5 space-y-3 text-sm text-[var(--sm-muted)]">
+              <p>1. Search the market and shortlist the strongest results.</p>
+              <p>2. Build the SuperMega offer and pilot angle.</p>
+              <p>3. Login only when you want to save, track outreach, and push the queue into Google Workspace.</p>
+            </div>
+            <div className="mt-5 flex flex-wrap gap-3">
+              <Link className="sm-button-primary" to="/login?next=/app/leads">
+                Login to pipeline
+              </Link>
+              <Link className="sm-button-secondary" to="/contact">
+                Book demo
+              </Link>
+            </div>
+          </article>
+
+          <article className="sm-terminal p-6">
+            <p className="sm-kicker text-[var(--sm-accent-alt)]">Private app unlocks</p>
+            <div className="mt-5 grid gap-3">
+              {['Saved lead stages', 'Outreach history', 'Next-step notes', 'Workspace export'].map((item) => (
+                <div className="sm-chip text-white" key={item}>
+                  {item}
+                </div>
+              ))}
+            </div>
+          </article>
+        </section>
+      )}
     </div>
   )
 }
