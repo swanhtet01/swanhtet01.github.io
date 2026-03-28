@@ -41,6 +41,25 @@
       "problemMatcher": []
     },
     {
+      "label": "SuperMega: Start MCP Server",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}\\tools\\start_supermega_mcp.ps1"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      },
+      "problemMatcher": []
+    },
+    {
       "label": "SuperMega: Build Showroom",
       "type": "shell",
       "command": "npm",

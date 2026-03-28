@@ -1,262 +1,355 @@
 #!/usr/bin/env node
 
-/**
- * SuperMega Mark 1 — MCP Server
- * 
- * Exposes the Mark 1 workspace as MCP tools for:
- * - Claude Code (claude_desktop_config.json)
- * - Cline (VS Code extension settings)
- * - Cursor (cursor settings)
- * - Windsurf (windsurf settings)
- * 
- * Tools exposed:
- * - mark1_status: Get machine status and health
- * - mark1_chat: Talk to Mark 1 AI
- * - mark1_agents: List and manage agents
- * - mark1_tools: List available AI tools
- * - mark1_execute: Execute code in sandbox
- * - mark1_browse: Autonomous web browsing
- * - mark1_search: Search the web
- * - mark1_file: Read/write files
- */
-
-import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import {
-  CallToolRequestSchema,
-  ListToolsRequestSchema,
-} from '@modelcontextprotocol/sdk/types.js';
 import { execSync } from 'child_process';
-import { readFileSync, writeFileSync, existsSync } from 'fs';
+import { readdirSync, statSync } from 'fs';
+import { resolve } from 'path';
 
-// ─── Gemini API Helper ───────────────────────────────────────────────────────
-async function callGemini(prompt, systemPrompt = '') {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) return 'Error: GEMINI_API_KEY not set. Export it in your shell.';
+const BASE_URL = (process.env.SUPERMEGA_BASE_URL || 'http://127.0.0.1:8787').replace(/\/$/, '');
+const USERNAME = String(process.env.SUPERMEGA_APP_USERNAME || 'owner').trim();
+const PASSWORD = String(process.env.SUPERMEGA_APP_PASSWORD || 'supermega-demo').trim();
+const WORKSPACE = String(process.env.SUPERMEGA_WORKSPACE_SLUG || 'supermega-lab').trim();
+const REPO_ROOT = String(
+  process.env.SUPERMEGA_REPO_ROOT ||
+    'C:\\Users\\swann\\OneDrive - BDA\\swanhtet01.github.io.worktrees\\copilot-worktree-2026-03-04T08-10-33',
+).trim();
 
-  const fetch = (await import('node-fetch')).default;
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
-  
-  const contents = [];
-  if (systemPrompt) {
-    contents.push({ role: 'user', parts: [{ text: `System: ${systemPrompt}` }] });
-    contents.push({ role: 'model', parts: [{ text: 'Understood.' }] });
-  }
-  contents.push({ role: 'user', parts: [{ text: prompt }] });
+let cookieHeader = '';
+let initialized = false;
+let buffer = Buffer.alloc(0);
 
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ contents }),
-  });
-
-  const data = await res.json();
-  if (data.error) return `Error: ${data.error.message}`;
-  return data.candidates?.[0]?.content?.parts?.[0]?.text || 'No response';
+function writeMessage(payload) {
+  const body = Buffer.from(JSON.stringify(payload), 'utf8');
+  const header = Buffer.from(`Content-Length: ${body.length}\r\n\r\n`, 'ascii');
+  process.stdout.write(Buffer.concat([header, body]));
 }
 
-// ─── Machine Data ─────────────────────────────────────────────────────────────
-const MACHINE = {
-  name: 'SuperMega Mark 1',
-  version: '2.3.0',
-  status: 'INITIALIZING',
-  completion: 15,
-  agents: [
-    { id: 'coder', name: 'Coder Agent', framework: 'CrewAI + Gemini CLI', status: 'NOT_DEPLOYED' },
-    { id: 'data', name: 'Data Analyst', framework: 'LangGraph', status: 'NOT_DEPLOYED' },
-    { id: 'lead_gen', name: 'Lead Generation', framework: 'AutoGen', status: 'NOT_DEPLOYED' },
-    { id: 'content', name: 'Content Creator', framework: 'CrewAI', status: 'NOT_DEPLOYED' },
-    { id: 'devops', name: 'DevOps Agent', framework: 'Google ADK', status: 'NOT_DEPLOYED' },
-    { id: 'research', name: 'Research Agent', framework: 'LangGraph', status: 'NOT_DEPLOYED' },
-    { id: 'qa', name: 'QA Agent', framework: 'CrewAI', status: 'NOT_DEPLOYED' },
-    { id: 'meta', name: 'Meta Orchestrator', framework: 'Magentic-One', status: 'NOT_DEPLOYED' },
-  ],
-  infrastructure: {
-    gcp: 'NOT_PROVISIONED', github_pages: 'ACTIVE',
-    google_workspace: 'ACTIVE', n8n: 'NOT_PROVISIONED',
-    cloud_run: 'NOT_PROVISIONED', cloud_sql: 'NOT_PROVISIONED',
-  },
-};
+function toolText(text) {
+  return { content: [{ type: 'text', text }] };
+}
 
-// ─── MCP Server ───────────────────────────────────────────────────────────────
-const server = new Server(
-  { name: 'mark1-mcp', version: '1.0.0' },
-  { capabilities: { tools: {} } }
-);
+async function loginIfNeeded(force = false) {
+  if (cookieHeader && !force) {
+    return cookieHeader;
+  }
 
-// List tools
-server.setRequestHandler(ListToolsRequestSchema, async () => ({
-  tools: [
+  const response = await fetch(`${BASE_URL}/api/auth/login`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    },
+    body: JSON.stringify({
+      username: USERNAME,
+      password: PASSWORD,
+      workspace_slug: WORKSPACE,
+    }),
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`Login failed (${response.status}): ${body}`);
+  }
+
+  const cookie = response.headers.get('set-cookie') || '';
+  cookieHeader = cookie.split(';')[0];
+  return cookieHeader;
+}
+
+async function apiRequest(path, options = {}) {
+  const needsAuth = path !== '/api/health';
+  const headers = {
+    Accept: 'application/json',
+    ...(options.headers || {}),
+  };
+
+  if (needsAuth) {
+    await loginIfNeeded();
+    if (cookieHeader) {
+      headers.Cookie = cookieHeader;
+    }
+  }
+
+  let response = await fetch(`${BASE_URL}${path}`, {
+    ...options,
+    headers,
+  });
+
+  if (response.status === 401 && needsAuth) {
+    await loginIfNeeded(true);
+    if (cookieHeader) {
+      headers.Cookie = cookieHeader;
+    }
+    response = await fetch(`${BASE_URL}${path}`, {
+      ...options,
+      headers,
+    });
+  }
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`API request failed (${response.status}): ${body}`);
+  }
+
+  return response.json();
+}
+
+function listTopFiles(rootPath) {
+  return readdirSync(rootPath)
+    .map((name) => {
+      const fullPath = resolve(rootPath, name);
+      const stats = statSync(fullPath);
+      return {
+        name,
+        fullPath,
+        type: stats.isDirectory() ? 'dir' : 'file',
+      };
+    })
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .slice(0, 80);
+}
+
+function buildTools() {
+  return [
     {
       name: 'mark1_status',
-      description: 'Get the current status of the SuperMega Mark 1 Machine — agents, infrastructure, completion percentage, and health.',
+      description: 'Get health and summary from the live SuperMega app.',
       inputSchema: { type: 'object', properties: {}, required: [] },
     },
     {
-      name: 'mark1_chat',
-      description: 'Talk to the Mark 1 AI assistant. Ask about the workspace, get help with tasks, or request agent actions.',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          message: { type: 'string', description: 'Your message to Mark 1 AI' },
-          context: { type: 'string', description: 'Optional context (e.g., current file, project)' },
-        },
-        required: ['message'],
-      },
+      name: 'mark1_insights',
+      description: 'Get the current operating brief and recommended actions.',
+      inputSchema: { type: 'object', properties: {}, required: [] },
     },
     {
-      name: 'mark1_agents',
-      description: 'List all Mark 1 agents or get details about a specific agent.',
+      name: 'mark1_exceptions',
+      description: 'Get the live exception queue from the private app.',
       inputSchema: {
         type: 'object',
         properties: {
-          agent_id: { type: 'string', description: 'Optional agent ID to get details' },
+          limit: { type: 'number', description: 'Maximum rows to return' },
         },
         required: [],
       },
     },
     {
-      name: 'mark1_tools',
-      description: 'List available AI tools in the Mark 1 ecosystem with install commands.',
+      name: 'mark1_approvals',
+      description: 'List approvals or create a new approval item.',
       inputSchema: {
         type: 'object',
         properties: {
-          category: { type: 'string', description: 'Filter by category: Coding, Agents, Browser, Automation, Integration, Sandbox' },
+          action: { type: 'string', enum: ['list', 'create'], description: 'Approval action' },
+          limit: { type: 'number', description: 'Maximum rows to return for list' },
+          title: { type: 'string' },
+          summary: { type: 'string' },
+          approval_gate: { type: 'string' },
+          requested_by: { type: 'string' },
+          owner: { type: 'string' },
+          due: { type: 'string' },
+          related_route: { type: 'string' },
+          related_entity: { type: 'string' },
         },
-        required: [],
+        required: ['action'],
       },
+    },
+    {
+      name: 'mark1_leads',
+      description: 'List the saved lead pipeline from the live workspace.',
+      inputSchema: { type: 'object', properties: {}, required: [] },
+    },
+    {
+      name: 'mark1_files',
+      description: 'List top-level files and folders in the SuperMega repo root.',
+      inputSchema: { type: 'object', properties: {}, required: [] },
     },
     {
       name: 'mark1_execute',
-      description: 'Execute a shell command in the workspace. Use for running scripts, installing tools, or checking system state.',
+      description: 'Execute a local shell command against the SuperMega workspace.',
       inputSchema: {
         type: 'object',
         properties: {
-          command: { type: 'string', description: 'Shell command to execute' },
-          timeout: { type: 'number', description: 'Timeout in seconds (default 30)' },
+          command: { type: 'string', description: 'Command to run' },
+          timeout: { type: 'number', description: 'Timeout seconds' },
         },
         required: ['command'],
       },
     },
-    {
-      name: 'mark1_file',
-      description: 'Read or write files in the workspace.',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          action: { type: 'string', enum: ['read', 'write', 'list'], description: 'File operation' },
-          path: { type: 'string', description: 'File path' },
-          content: { type: 'string', description: 'Content to write (for write action)' },
-        },
-        required: ['action', 'path'],
-      },
-    },
-    {
-      name: 'mark1_search',
-      description: 'Search the web using Gemini to find information, documentation, or solutions.',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          query: { type: 'string', description: 'Search query' },
-        },
-        required: ['query'],
-      },
-    },
-  ],
-}));
-
-// Handle tool calls
-server.setRequestHandler(CallToolRequestSchema, async (request) => {
-  const { name, arguments: args } = request.params;
-
-  switch (name) {
-    case 'mark1_status':
-      return {
-        content: [{ type: 'text', text: JSON.stringify(MACHINE, null, 2) }],
-      };
-
-    case 'mark1_chat': {
-      const systemPrompt = `You are Mark 1, the SuperMega AI workspace assistant. You help Swan Htet manage his AI-native development workspace. Current status: ${MACHINE.status}, ${MACHINE.completion}% complete. ${args.context ? `Context: ${args.context}` : ''}`;
-      const response = await callGemini(args.message, systemPrompt);
-      return { content: [{ type: 'text', text: response }] };
-    }
-
-    case 'mark1_agents': {
-      if (args.agent_id) {
-        const agent = MACHINE.agents.find(a => a.id === args.agent_id);
-        return {
-          content: [{ type: 'text', text: agent ? JSON.stringify(agent, null, 2) : `Agent "${args.agent_id}" not found` }],
-        };
-      }
-      return { content: [{ type: 'text', text: JSON.stringify(MACHINE.agents, null, 2) }] };
-    }
-
-    case 'mark1_tools': {
-      const tools = [
-        { name: 'Gemini CLI', category: 'Coding', cmd: 'npm install -g @google/gemini-cli' },
-        { name: 'Claude Code', category: 'Coding', cmd: 'npm install -g @anthropic-ai/claude-code' },
-        { name: 'Aider', category: 'Coding', cmd: 'pip install aider-chat' },
-        { name: 'Codex CLI', category: 'Coding', cmd: 'npm install -g @openai/codex' },
-        { name: 'CrewAI', category: 'Agents', cmd: 'pip install crewai crewai-tools' },
-        { name: 'LangGraph', category: 'Agents', cmd: 'pip install langgraph langchain-google-genai' },
-        { name: 'Browser-Use', category: 'Browser', cmd: 'pip install browser-use' },
-        { name: 'Playwright', category: 'Browser', cmd: 'pip install playwright && playwright install' },
-        { name: 'n8n', category: 'Automation', cmd: 'npm install -g n8n' },
-        { name: 'Composio', category: 'Integration', cmd: 'pip install composio-core' },
-        { name: 'E2B', category: 'Sandbox', cmd: 'pip install e2b-code-interpreter' },
-      ];
-      const filtered = args.category ? tools.filter(t => t.category === args.category) : tools;
-      return { content: [{ type: 'text', text: JSON.stringify(filtered, null, 2) }] };
-    }
-
-    case 'mark1_execute': {
-      try {
-        const timeout = (args.timeout || 30) * 1000;
-        const output = execSync(args.command, { timeout, encoding: 'utf-8', maxBuffer: 1024 * 1024 });
-        return { content: [{ type: 'text', text: output }] };
-      } catch (err) {
-        return { content: [{ type: 'text', text: `Error: ${err.message}\n${err.stderr || ''}` }] };
-      }
-    }
-
-    case 'mark1_file': {
-      try {
-        if (args.action === 'read') {
-          const content = readFileSync(args.path, 'utf-8');
-          return { content: [{ type: 'text', text: content }] };
-        }
-        if (args.action === 'write') {
-          writeFileSync(args.path, args.content || '');
-          return { content: [{ type: 'text', text: `Written to ${args.path}` }] };
-        }
-        if (args.action === 'list') {
-          const output = execSync(`ls -la "${args.path}"`, { encoding: 'utf-8' });
-          return { content: [{ type: 'text', text: output }] };
-        }
-        return { content: [{ type: 'text', text: 'Invalid action. Use: read, write, list' }] };
-      } catch (err) {
-        return { content: [{ type: 'text', text: `Error: ${err.message}` }] };
-      }
-    }
-
-    case 'mark1_search': {
-      const response = await callGemini(
-        `Search the web and provide comprehensive, up-to-date information about: ${args.query}. Include URLs, code examples, and actionable details.`,
-        'You are a research assistant. Provide detailed, sourced information.'
-      );
-      return { content: [{ type: 'text', text: response }] };
-    }
-
-    default:
-      return { content: [{ type: 'text', text: `Unknown tool: ${name}` }] };
-  }
-});
-
-// Start server
-async function main() {
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
-  console.error('Mark 1 MCP Server running on stdio');
+  ];
 }
 
-main().catch(console.error);
+async function callTool(name, args = {}) {
+  switch (name) {
+    case 'mark1_status': {
+      const [health, summary] = await Promise.all([
+        apiRequest('/api/health'),
+        apiRequest('/api/summary'),
+      ]);
+      return toolText(JSON.stringify({ health, summary }, null, 2));
+    }
+    case 'mark1_insights': {
+      const payload = await apiRequest('/api/insights');
+      return toolText(JSON.stringify(payload, null, 2));
+    }
+    case 'mark1_exceptions': {
+      const limit = Math.max(1, Math.min(Number(args.limit || 10), 50));
+      const payload = await apiRequest(`/api/exceptions?limit=${limit}`);
+      return toolText(JSON.stringify(payload, null, 2));
+    }
+    case 'mark1_approvals': {
+      if (args.action === 'create') {
+        const payload = await apiRequest('/api/approvals', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            title: String(args.title || 'Untitled approval').trim(),
+            summary: String(args.summary || '').trim(),
+            approval_gate: String(args.approval_gate || 'general').trim(),
+            requested_by: String(args.requested_by || 'Codex MCP').trim(),
+            owner: String(args.owner || 'Management').trim(),
+            due: String(args.due || '').trim(),
+            related_route: String(args.related_route || '/app').trim(),
+            related_entity: String(args.related_entity || '').trim(),
+            status: 'pending',
+          }),
+        });
+        return toolText(JSON.stringify(payload, null, 2));
+      }
+      const limit = Math.max(1, Math.min(Number(args.limit || 10), 50));
+      const payload = await apiRequest(`/api/approvals?limit=${limit}`);
+      return toolText(JSON.stringify(payload, null, 2));
+    }
+    case 'mark1_leads': {
+      const payload = await apiRequest('/api/lead-pipeline');
+      return toolText(JSON.stringify(payload, null, 2));
+    }
+    case 'mark1_files': {
+      return toolText(JSON.stringify(listTopFiles(REPO_ROOT), null, 2));
+    }
+    case 'mark1_execute': {
+      const timeout = Math.max(5, Number(args.timeout || 30)) * 1000;
+      const output = execSync(String(args.command || ''), {
+        cwd: REPO_ROOT,
+        timeout,
+        encoding: 'utf-8',
+        maxBuffer: 1024 * 1024,
+      });
+      return toolText(output);
+    }
+    default:
+      throw new Error(`Unknown tool: ${name}`);
+  }
+}
+
+async function handleMessage(message) {
+  const { id, method, params = {} } = message;
+
+  if (method === 'initialize') {
+    initialized = true;
+    writeMessage({
+      jsonrpc: '2.0',
+      id,
+      result: {
+        protocolVersion: '2024-11-05',
+        capabilities: { tools: {} },
+        serverInfo: { name: 'supermega-mark1', version: '2.0.0' },
+      },
+    });
+    return;
+  }
+
+  if (method === 'notifications/initialized') {
+    return;
+  }
+
+  if (!initialized) {
+    writeMessage({
+      jsonrpc: '2.0',
+      id,
+      error: { code: -32002, message: 'Server not initialized' },
+    });
+    return;
+  }
+
+  if (method === 'tools/list') {
+    writeMessage({
+      jsonrpc: '2.0',
+      id,
+      result: { tools: buildTools() },
+    });
+    return;
+  }
+
+  if (method === 'tools/call') {
+    try {
+      const result = await callTool(params.name, params.arguments || {});
+      writeMessage({
+        jsonrpc: '2.0',
+        id,
+        result,
+      });
+    } catch (error) {
+      writeMessage({
+        jsonrpc: '2.0',
+        id,
+        error: {
+          code: -32000,
+          message: error instanceof Error ? error.message : String(error),
+        },
+      });
+    }
+    return;
+  }
+
+  writeMessage({
+    jsonrpc: '2.0',
+    id,
+    error: { code: -32601, message: `Method not found: ${method}` },
+  });
+}
+
+function processBuffer() {
+  while (true) {
+    const headerEnd = buffer.indexOf('\r\n\r\n');
+    if (headerEnd === -1) {
+      return;
+    }
+
+    const headerText = buffer.slice(0, headerEnd).toString('ascii');
+    const headers = Object.fromEntries(
+      headerText
+        .split('\r\n')
+        .map((line) => {
+          const [key, ...rest] = line.split(':');
+          return [key.toLowerCase(), rest.join(':').trim()];
+        }),
+    );
+    const contentLength = Number(headers['content-length'] || 0);
+    const totalLength = headerEnd + 4 + contentLength;
+    if (buffer.length < totalLength) {
+      return;
+    }
+
+    const body = buffer.slice(headerEnd + 4, totalLength).toString('utf8');
+    buffer = buffer.slice(totalLength);
+
+    let message;
+    try {
+      message = JSON.parse(body);
+    } catch (error) {
+      console.error('Failed to parse MCP message', error);
+      continue;
+    }
+
+    void handleMessage(message);
+  }
+}
+
+process.stdin.on('data', (chunk) => {
+  buffer = Buffer.concat([buffer, chunk]);
+  processBuffer();
+});
+
+process.stdin.on('end', () => {
+  process.exit(0);
+});
+
+console.error(`SuperMega MCP running against ${BASE_URL}`);
