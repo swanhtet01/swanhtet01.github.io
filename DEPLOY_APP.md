@@ -75,8 +75,24 @@ Main values:
 - `SUPERMEGA_APP_PASSWORD`
 - `SUPERMEGA_APP_DISPLAY_NAME`
 - `SUPERMEGA_APP_ROLE`
+- `SUPERMEGA_WORKSPACE_SLUG`
+- `SUPERMEGA_WORKSPACE_NAME`
+- `SUPERMEGA_WORKSPACE_PLAN`
+- `SUPERMEGA_DATABASE_URL`
 - `SUPERMEGA_CORS_ORIGINS`
 - `VITE_BOOKING_URL`
+
+## Workspace-aware app core
+
+The app now keeps the login/session path and lead pipeline in a separate workspace-aware enterprise store.
+
+That means:
+
+- one user can belong to multiple workspaces
+- each session is tied to a workspace
+- saved leads are scoped to the active workspace
+- the default local runtime still works on SQLite
+- a customer deployment can move that store to Postgres by setting `SUPERMEGA_DATABASE_URL`
 
 ## Cloud Run deploy
 
@@ -88,11 +104,27 @@ Required secret:
 
 - `GCP_SA_KEY`
 
+Recommended secrets and vars for a real app host:
+
+- secrets:
+  - `SUPERMEGA_APP_USERNAME`
+  - `SUPERMEGA_APP_PASSWORD`
+  - `SUPERMEGA_DATABASE_URL`
+- vars:
+  - `SUPERMEGA_APP_DISPLAY_NAME`
+  - `SUPERMEGA_APP_ROLE`
+  - `SUPERMEGA_WORKSPACE_SLUG`
+  - `SUPERMEGA_WORKSPACE_NAME`
+  - `SUPERMEGA_WORKSPACE_PLAN`
+  - `SUPERMEGA_SESSION_HOURS`
+  - `SUPERMEGA_CORS_ORIGINS`
+  - `VITE_BOOKING_URL`
+
 Current note:
 
 - Cloud Run can host the app shell and API well
 - but SQLite is not durable there by itself
-- for a real customer deployment, move the state layer to Postgres or use a host with persistent disk
+- for a real customer deployment, set `SUPERMEGA_DATABASE_URL` to Cloud SQL for PostgreSQL or use a host with persistent disk
 
 ## Current production gap
 

@@ -1,0 +1,19 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "SuperMega: Open Login",
+      "type": "pwa-msedge",
+      "request": "launch",
+      "url": "http://127.0.0.1:8787/login/",
+      "webRoot": "${workspaceFolder}\\showroom\\src"
+    },
+    {
+      "name": "SuperMega: Open Director",
+      "type": "pwa-msedge",
+      "request": "launch",
+      "url": "http://127.0.0.1:8787/app/director/",
+      "webRoot": "${workspaceFolder}\\showroom\\src"
+    }
+  ]
+}

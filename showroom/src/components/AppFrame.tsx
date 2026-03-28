@@ -12,9 +12,11 @@ type SessionState = {
 
 const appNavItems = [
   { label: 'Overview', to: '/app' },
+  { label: 'Insights', to: '/app/insights' },
   { label: 'Director', to: '/app/director' },
   { label: 'Actions', to: '/app/actions' },
   { label: 'Decisions', to: '/app/decisions' },
+  { label: 'Approvals', to: '/app/approvals' },
   { label: 'Exceptions', to: '/app/exceptions' },
   { label: 'Leads', to: '/app/leads' },
   { label: 'Intake', to: '/app/intake' },

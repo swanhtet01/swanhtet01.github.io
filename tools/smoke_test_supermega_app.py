@@ -67,6 +67,21 @@ def main() -> int:
     summary = request_json(opener, "GET", f"{args.base_url.rstrip('/')}/api/summary")
     director = request_json(opener, "GET", f"{args.base_url.rstrip('/')}/api/reports/role/director")
     exceptions = request_json(opener, "GET", f"{args.base_url.rstrip('/')}/api/exceptions?limit=5")
+    approval_create = request_json(
+        opener,
+        "POST",
+        f"{args.base_url.rstrip('/')}/api/approvals",
+        {
+            "title": "Smoke approval",
+            "summary": "Created by smoke test to verify approval queue.",
+            "approval_gate": "general",
+            "requested_by": "Smoke Test",
+            "owner": "Management",
+            "status": "pending",
+            "related_route": "/app/exceptions",
+        },
+    )
+    approvals = request_json(opener, "GET", f"{args.base_url.rstrip('/')}/api/approvals?limit=5")
     lead_finder = request_json(
         opener,
         "POST",
@@ -93,6 +108,8 @@ def main() -> int:
         "quality_incident_count": int(((summary.get("quality") or {}).get("incident_count") or 0)),
         "director_priority_count": int(director.get("count") or 0),
         "exception_count": int(exceptions.get("count") or 0),
+        "approval_count": int(approvals.get("count") or 0),
+        "approval_message": approval_create.get("message", ""),
         "lead_count": len(rows),
         "top_lead": rows[0].get("name", "") if rows else "",
         "provider": lead_finder.get("provider", ""),
@@ -113,6 +130,7 @@ def main() -> int:
     print(f"- Quality incidents: {report['quality_incident_count']}")
     print(f"- Director priorities: {report['director_priority_count']}")
     print(f"- Exceptions: {report['exception_count']}")
+    print(f"- Approvals: {report['approval_count']}")
     print(f"- Lead finder rows: {report['lead_count']}")
     print(f"- Top lead: {report['top_lead']}")
     print(f"- Provider: {report['provider']}")

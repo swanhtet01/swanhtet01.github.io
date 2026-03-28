@@ -6,6 +6,7 @@ import { checkWorkspaceHealth, getWorkspaceSession, workspaceFetch } from '../li
 
 type SummaryPayload = {
   actions?: { total_items?: number }
+  approvals?: { approval_count?: number }
   supplier_watch?: { risk_count?: number }
   quality?: { incident_count?: number }
   receiving?: { variance_count?: number; hold_count?: number }
@@ -130,6 +131,10 @@ export function DirectorDashboardPage() {
         <div className="sm-metric-card">
           <p className="sm-kicker text-[var(--sm-accent)]">Open actions</p>
           <p className="mt-3 text-3xl font-bold text-white">{summary?.actions?.total_items ?? 0}</p>
+        </div>
+        <div className="sm-metric-card">
+          <p className="sm-kicker text-[var(--sm-accent-alt)]">Approvals</p>
+          <p className="mt-3 text-3xl font-bold text-white">{summary?.approvals?.approval_count ?? 0}</p>
         </div>
         <div className="sm-metric-card">
           <p className="sm-kicker text-[var(--sm-accent-alt)]">Exceptions</p>
@@ -316,6 +321,9 @@ export function DirectorDashboardPage() {
           </div>
 
           <div className="mt-5 flex flex-wrap gap-3">
+            <Link className="sm-button-secondary" to="/app/approvals">
+              Open approvals
+            </Link>
             {summary?.workspace?.google_doc_link ? (
               <a className="sm-button-secondary" href={summary.workspace.google_doc_link} rel="noreferrer" target="_blank">
                 Open latest brief

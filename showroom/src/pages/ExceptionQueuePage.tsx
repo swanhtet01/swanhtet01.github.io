@@ -31,6 +31,8 @@ export function ExceptionQueuePage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [payload, setPayload] = useState<ExceptionPayload | null>(null)
+  const [message, setMessage] = useState<string | null>(null)
+  const [approvalBusyId, setApprovalBusyId] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -81,6 +83,34 @@ export function ExceptionQueuePage() {
 
   const rows = payload?.rows ?? []
 
+  async function sendToApprovals(row: ExceptionRow) {
+    setApprovalBusyId(row.exception_id)
+    setMessage(null)
+    setError(null)
+    try {
+      await workspaceFetch('/api/approvals', {
+        method: 'POST',
+        body: JSON.stringify({
+          title: row.title,
+          summary: row.summary,
+          approval_gate: row.source_type,
+          requested_by: row.owner || 'System',
+          owner: 'Management',
+          status: 'pending',
+          due: row.due,
+          related_route: row.route,
+          related_entity: row.entity,
+          payload: row,
+        }),
+      })
+      setMessage(`Sent "${row.title}" to approvals.`)
+    } catch {
+      setError('Could not send the item to approvals right now.')
+    } finally {
+      setApprovalBusyId(null)
+    }
+  }
+
   return (
     <div className="space-y-8">
       <PageIntro
@@ -111,6 +141,7 @@ export function ExceptionQueuePage() {
       </section>
 
       <section className="sm-surface p-6">
+        {message ? <p className="mb-4 text-sm text-[var(--sm-accent)]">{message}</p> : null}
         {loading ? (
           <p className="text-sm text-[var(--sm-muted)]">Loading exception queue...</p>
         ) : error ? (
@@ -176,6 +207,14 @@ export function ExceptionQueuePage() {
                     <span className="sm-kicker text-[var(--sm-accent)]">Next action</span>
                     <p className="mt-2 text-sm">{row.next_action || 'Review and assign next step.'}</p>
                   </div>
+                  <button
+                    className="sm-button-primary"
+                    disabled={approvalBusyId === row.exception_id}
+                    onClick={() => void sendToApprovals(row)}
+                    type="button"
+                  >
+                    {approvalBusyId === row.exception_id ? 'Sending...' : 'Send to approvals'}
+                  </button>
                   <Link className="sm-button-secondary" to={row.route}>
                     Open source screen
                   </Link>

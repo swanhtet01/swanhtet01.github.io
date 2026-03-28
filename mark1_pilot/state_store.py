@@ -140,6 +140,23 @@ def ensure_schema(db_path: Path) -> None:
                 related_route TEXT NOT NULL
             );
 
+            CREATE TABLE IF NOT EXISTS approval_queue (
+                approval_id TEXT PRIMARY KEY,
+                created_at TEXT NOT NULL,
+                source TEXT NOT NULL,
+                title TEXT NOT NULL,
+                summary TEXT NOT NULL,
+                approval_gate TEXT NOT NULL,
+                requested_by TEXT NOT NULL,
+                owner TEXT NOT NULL,
+                status TEXT NOT NULL,
+                due TEXT NOT NULL,
+                related_route TEXT NOT NULL,
+                related_entity TEXT NOT NULL,
+                evidence_link TEXT NOT NULL,
+                payload_json TEXT NOT NULL
+            );
+
             CREATE TABLE IF NOT EXISTS lead_pipeline (
                 lead_id TEXT PRIMARY KEY,
                 created_at TEXT NOT NULL,
@@ -1677,6 +1694,245 @@ def load_decision_summary(db_path: Path) -> dict[str, Any]:
         "decision_count": total,
         "by_status": {str(row["status"]): int(row["item_count"]) for row in status_rows},
         "top_owners": [{"owner": str(row["owner"]), "decision_count": int(row["item_count"])} for row in owner_rows],
+    }
+
+
+def add_approval_entry(
+    db_path: Path,
+    *,
+    title: str,
+    summary: str,
+    approval_gate: str,
+    requested_by: str,
+    owner: str,
+    status: str,
+    due: str,
+    related_route: str,
+    related_entity: str,
+    evidence_link: str,
+    payload: dict[str, Any] | None = None,
+    source: str = "app:approval_queue",
+) -> dict[str, Any]:
+    ensure_schema(db_path)
+    created_at = datetime.now().astimezone().isoformat()
+    normalized_title = str(title or "").strip() or "Untitled approval"
+    normalized_summary = str(summary or "").strip()
+    normalized_gate = str(approval_gate or "").strip().lower() or "general"
+    normalized_requested_by = str(requested_by or "").strip() or "System"
+    normalized_owner = str(owner or "").strip() or "Management"
+    normalized_status = str(status or "").strip().lower() or "pending"
+    normalized_due = str(due or "").strip()
+    normalized_route = str(related_route or "").strip() or "/app"
+    normalized_entity = str(related_entity or "").strip()
+    normalized_evidence = str(evidence_link or "").strip()
+    payload_json = json.dumps(payload or {}, ensure_ascii=False)
+    approval_id = _stable_key(
+        "APR",
+        f"{normalized_title}:{normalized_gate}:{normalized_requested_by}:{normalized_due}:{created_at}",
+    )
+    with _connect(db_path) as connection:
+        connection.execute(
+            """
+            INSERT INTO approval_queue (
+                approval_id,
+                created_at,
+                source,
+                title,
+                summary,
+                approval_gate,
+                requested_by,
+                owner,
+                status,
+                due,
+                related_route,
+                related_entity,
+                evidence_link,
+                payload_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                approval_id,
+                created_at,
+                source,
+                normalized_title,
+                normalized_summary,
+                normalized_gate,
+                normalized_requested_by,
+                normalized_owner,
+                normalized_status,
+                normalized_due,
+                normalized_route,
+                normalized_entity,
+                normalized_evidence,
+                payload_json,
+            ),
+        )
+        connection.commit()
+    return {
+        "approval_id": approval_id,
+        "created_at": created_at,
+        "source": source,
+        "title": normalized_title,
+        "summary": normalized_summary,
+        "approval_gate": normalized_gate,
+        "requested_by": normalized_requested_by,
+        "owner": normalized_owner,
+        "status": normalized_status,
+        "due": normalized_due,
+        "related_route": normalized_route,
+        "related_entity": normalized_entity,
+        "evidence_link": normalized_evidence,
+        "payload": payload or {},
+    }
+
+
+def update_approval_entry(
+    db_path: Path,
+    *,
+    approval_id: str,
+    status: str | None = None,
+    owner: str | None = None,
+    note: str | None = None,
+) -> dict[str, Any] | None:
+    ensure_schema(db_path)
+    normalized_id = str(approval_id or "").strip()
+    if not normalized_id:
+        return None
+    with _connect(db_path) as connection:
+        row = connection.execute(
+            """
+            SELECT
+                approval_id,
+                created_at,
+                source,
+                title,
+                summary,
+                approval_gate,
+                requested_by,
+                owner,
+                status,
+                due,
+                related_route,
+                related_entity,
+                evidence_link,
+                payload_json
+            FROM approval_queue
+            WHERE approval_id = ?
+            """,
+            (normalized_id,),
+        ).fetchone()
+        if not row:
+            return None
+        payload = json.loads(row["payload_json"]) if row["payload_json"] else {}
+        if note:
+            payload["note"] = str(note).strip()
+        next_status = str(status or row["status"]).strip().lower() or str(row["status"]).strip().lower()
+        next_owner = str(owner or row["owner"]).strip() or str(row["owner"]).strip()
+        connection.execute(
+            """
+            UPDATE approval_queue
+            SET status = ?, owner = ?, payload_json = ?
+            WHERE approval_id = ?
+            """,
+            (next_status, next_owner, json.dumps(payload, ensure_ascii=False), normalized_id),
+        )
+        connection.commit()
+        return {
+            "approval_id": row["approval_id"],
+            "created_at": row["created_at"],
+            "source": row["source"],
+            "title": row["title"],
+            "summary": row["summary"],
+            "approval_gate": row["approval_gate"],
+            "requested_by": row["requested_by"],
+            "owner": next_owner,
+            "status": next_status,
+            "due": row["due"],
+            "related_route": row["related_route"],
+            "related_entity": row["related_entity"],
+            "evidence_link": row["evidence_link"],
+            "payload": payload,
+        }
+
+
+def list_approval_entries(
+    db_path: Path,
+    *,
+    status: str | None = None,
+    owner: str | None = None,
+    limit: int = 50,
+) -> list[dict[str, Any]]:
+    ensure_schema(db_path)
+    query = """
+        SELECT
+            approval_id,
+            created_at,
+            source,
+            title,
+            summary,
+            approval_gate,
+            requested_by,
+            owner,
+            status,
+            due,
+            related_route,
+            related_entity,
+            evidence_link,
+            payload_json
+        FROM approval_queue
+    """
+    conditions: list[str] = []
+    params: list[Any] = []
+    if status:
+        conditions.append("status = ?")
+        params.append(status)
+    if owner:
+        conditions.append("owner = ?")
+        params.append(owner)
+    if conditions:
+        query += " WHERE " + " AND ".join(conditions)
+    query += " ORDER BY CASE status WHEN 'pending' THEN 0 WHEN 'review' THEN 1 WHEN 'approved' THEN 2 WHEN 'rejected' THEN 3 ELSE 4 END, due, created_at DESC LIMIT ?"
+    params.append(max(1, int(limit)))
+    with _connect(db_path) as connection:
+        rows = connection.execute(query, params).fetchall()
+    return [
+        {
+            "approval_id": row["approval_id"],
+            "created_at": row["created_at"],
+            "source": row["source"],
+            "title": row["title"],
+            "summary": row["summary"],
+            "approval_gate": row["approval_gate"],
+            "requested_by": row["requested_by"],
+            "owner": row["owner"],
+            "status": row["status"],
+            "due": row["due"],
+            "related_route": row["related_route"],
+            "related_entity": row["related_entity"],
+            "evidence_link": row["evidence_link"],
+            "payload": json.loads(row["payload_json"]) if row["payload_json"] else {},
+        }
+        for row in rows
+    ]
+
+
+def load_approval_summary(db_path: Path) -> dict[str, Any]:
+    ensure_schema(db_path)
+    with _connect(db_path) as connection:
+        total = int(connection.execute("SELECT COUNT(*) FROM approval_queue").fetchone()[0])
+        status_rows = connection.execute(
+            "SELECT status, COUNT(*) AS item_count FROM approval_queue GROUP BY status"
+        ).fetchall()
+        gate_rows = connection.execute(
+            "SELECT approval_gate, COUNT(*) AS item_count FROM approval_queue GROUP BY approval_gate ORDER BY item_count DESC, approval_gate LIMIT 5"
+        ).fetchall()
+    return {
+        "approval_count": total,
+        "by_status": {str(row["status"]): int(row["item_count"]) for row in status_rows},
+        "top_gates": [
+            {"approval_gate": str(row["approval_gate"]), "item_count": int(row["item_count"])}
+            for row in gate_rows
+        ],
     }
 
 

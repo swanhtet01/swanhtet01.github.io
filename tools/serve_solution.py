@@ -27,6 +27,7 @@ from mark1_pilot.state_store import (  # noqa: E402
     add_attendance_event,
     add_contact_submission,
     add_decision_entry,
+    add_approval_entry,
     add_metric_entries,
     add_metric_entry,
     add_inventory_record,
@@ -39,6 +40,7 @@ from mark1_pilot.state_store import (  # noqa: E402
     list_capa_actions,
     list_contact_submissions,
     list_decision_entries,
+    list_approval_entries,
     list_inventory_records,
     list_lead_pipeline as state_list_lead_pipeline,
     list_metric_entries,
@@ -50,6 +52,7 @@ from mark1_pilot.state_store import (  # noqa: E402
     load_action_summary,
     load_agent_team_summary,
     load_decision_summary,
+    load_approval_summary,
     load_inventory_summary,
     load_metric_summary,
     load_product_feedback_summary,
@@ -60,6 +63,7 @@ from mark1_pilot.state_store import (  # noqa: E402
     load_workspace_member_summary,
     resolve_state_db,
     sync_state_from_output_dir,
+    update_approval_entry,
 )
 from mark1_pilot.enterprise_store import (  # noqa: E402
     add_lead_activity as enterprise_add_lead_activity,
@@ -222,6 +226,26 @@ class DecisionJournalRequest(BaseModel):
     status: str = "open"
     due: str = ""
     related_route: str = ""
+
+
+class ApprovalQueueRequest(BaseModel):
+    title: str
+    summary: str = ""
+    approval_gate: str = "general"
+    requested_by: str = "System"
+    owner: str = "Management"
+    status: str = "pending"
+    due: str = ""
+    related_route: str = "/app"
+    related_entity: str = ""
+    evidence_link: str = ""
+    payload: dict[str, Any] = Field(default_factory=dict)
+
+
+class ApprovalQueueUpdateRequest(BaseModel):
+    status: str | None = None
+    owner: str | None = None
+    note: str | None = None
 
 
 class LeadPipelineImportRequest(BaseModel):
@@ -499,6 +523,147 @@ def _load_exception_rows(state_db: Path, *, limit: int = 50) -> list[dict[str, A
         )
     )
     return rows[: max(1, int(limit))]
+
+
+def _build_operating_insights(
+    state_db: Path,
+    *,
+    enterprise_db_url: str,
+    workspace_id: str,
+) -> dict[str, Any]:
+    action_summary = load_action_summary(state_db)
+    supplier_summary = load_supplier_risk_summary(state_db)
+    quality_summary = load_quality_summary(state_db)
+    receiving_summary = load_receiving_summary(state_db)
+    inventory_summary = load_inventory_summary(state_db)
+    approval_summary = load_approval_summary(state_db)
+    decision_summary = load_decision_summary(state_db)
+    lead_summary = enterprise_load_lead_summary(enterprise_db_url, workspace_id=workspace_id)
+    exception_rows = _load_exception_rows(state_db, limit=8)
+
+    insights: list[dict[str, Any]] = []
+    recommended_actions: list[str] = []
+
+    high_exceptions = [row for row in exception_rows if str(row.get("priority", "")).lower() == "high"]
+    if high_exceptions:
+        insights.append(
+            {
+                "key": "high_exceptions",
+                "title": f"{len(high_exceptions)} high-priority issues need a manager call.",
+                "summary": "The queue has live high-priority exceptions across supplier, quality, receiving, or inventory.",
+                "category": "exceptions",
+                "route": "/app/exceptions",
+            }
+        )
+        recommended_actions.append("Open Exception Queue and assign the top high-priority item now.")
+
+    pending_approvals = int((approval_summary.get("by_status", {}) or {}).get("pending", 0) or 0)
+    if pending_approvals:
+        insights.append(
+            {
+                "key": "pending_approvals",
+                "title": f"{pending_approvals} approvals are waiting on a decision.",
+                "summary": "Manager or director approvals are building up and can block action unless cleared.",
+                "category": "approvals",
+                "route": "/app/approvals",
+            }
+        )
+        recommended_actions.append("Clear pending approvals before they turn into blocked actions.")
+
+    receiving_holds = int(receiving_summary.get("hold_count", 0) or 0)
+    if receiving_holds:
+        insights.append(
+            {
+                "key": "receiving_holds",
+                "title": f"{receiving_holds} inbound receipts are on hold or review.",
+                "summary": "Receiving records show material that has not moved cleanly into stock.",
+                "category": "receiving",
+                "route": "/app/receiving",
+            }
+        )
+        recommended_actions.append("Review the receiving board and clear hold or variance cases.")
+
+    reorder_count = int(inventory_summary.get("reorder_count", 0) or 0)
+    if reorder_count:
+        insights.append(
+            {
+                "key": "inventory_reorder",
+                "title": f"{reorder_count} inventory items are at reorder level.",
+                "summary": "Stock position has reached reorder thresholds on live inventory records.",
+                "category": "inventory",
+                "route": "/app/inventory",
+            }
+        )
+        recommended_actions.append("Check reorder items and create or confirm next buying action.")
+
+    supplier_risk_count = int(supplier_summary.get("risk_count", 0) or 0)
+    if supplier_risk_count:
+        insights.append(
+            {
+                "key": "supplier_risk",
+                "title": f"{supplier_risk_count} supplier risk items are active.",
+                "summary": "Supplier watch has open exposure that can affect timing, quality, or delivery.",
+                "category": "supplier",
+                "route": "/app/actions",
+            }
+        )
+
+    incident_count = int(quality_summary.get("incident_count", 0) or 0)
+    if incident_count:
+        insights.append(
+            {
+                "key": "quality_incidents",
+                "title": f"{incident_count} quality incidents are live in the system.",
+                "summary": "Quality issues remain open or in triage and should be reviewed with CAPA status.",
+                "category": "quality",
+                "route": "/app/actions",
+            }
+        )
+
+    open_actions = int(action_summary.get("total_items", 0) or 0)
+    if open_actions:
+        recommended_actions.append("Trim the action board to the few items that truly need attention today.")
+
+    active_decisions = int((decision_summary.get("by_status", {}) or {}).get("open", 0) or 0)
+    if active_decisions:
+        recommended_actions.append("Close open decisions or promote them into explicit approvals.")
+
+    lead_count = int(lead_summary.get("lead_count", 0) or 0)
+    if lead_count:
+        by_stage = lead_summary.get("by_stage", {}) if isinstance(lead_summary, dict) else {}
+        contacted = int(by_stage.get("contacted", 0) or 0)
+        discovery = int(by_stage.get("discovery", 0) or 0)
+        insights.append(
+            {
+                "key": "lead_pipeline",
+                "title": f"{lead_count} leads are active in the pipeline.",
+                "summary": f"{contacted} contacted and {discovery} in discovery. Commercial flow is live, but it needs follow-through.",
+                "category": "growth",
+                "route": "/app/leads",
+            }
+        )
+        recommended_actions.append("Move one lead forward today instead of keeping the whole list warm.")
+
+    if not insights:
+        insights.append(
+            {
+                "key": "stable_system",
+                "title": "The system is quiet right now.",
+                "summary": "No major issues were detected in the current saved records.",
+                "category": "general",
+                "route": "/app",
+            }
+        )
+
+    if not recommended_actions:
+        recommended_actions.append("Keep the workbench open and capture the next meaningful action, not more notes.")
+
+    return {
+        "headline": insights[0]["title"],
+        "engine": "rules+live-state",
+        "insights": insights[:6],
+        "recommended_actions": recommended_actions[:6],
+    }
 
 
 def _build_action_rows(raw_text: str) -> list[dict[str, Any]]:
@@ -786,6 +951,7 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
         supplier_summary = load_supplier_risk_summary(state_db)
         receiving_summary = load_receiving_summary(state_db)
         inventory_summary = load_inventory_summary(state_db)
+        approval_summary = load_approval_summary(state_db)
         metric_summary = load_metric_summary(state_db)
         feedback_summary = load_product_feedback_summary(state_db)
         lead_pipeline_summary = enterprise_load_lead_summary(
@@ -816,6 +982,7 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             "lead_pipeline": lead_pipeline_summary,
             "receiving": receiving_summary,
             "inventory": inventory_summary,
+            "approvals": approval_summary,
             "metrics": metric_summary,
             "feedback": feedback_summary,
             "product_lab": {
@@ -847,6 +1014,16 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
         _require_session(request)
         items = list_actions(state_db, lane=lane, status=status, limit=limit)
         return {"status": "ready", "count": len(items), "items": items}
+
+    @app.get("/api/insights")
+    def insights(request: Request) -> dict[str, Any]:
+        session = _require_session(request)
+        payload = _build_operating_insights(
+            state_db,
+            enterprise_db_url=enterprise_db_url,
+            workspace_id=str(session.get("workspace_id", "")).strip(),
+        )
+        return {"status": "ready", **payload}
 
     @app.post("/api/tools/lead-finder")
     def tool_lead_finder(request: LeadFinderRequest) -> dict[str, Any]:
@@ -1126,6 +1303,57 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             "row": row,
             "rows": list_decision_entries(state_db, limit=50),
             "summary": load_decision_summary(state_db),
+        }
+
+    @app.get("/api/approvals")
+    def approval_entries(request: Request, status: str | None = None, owner: str | None = None, limit: int = 100) -> dict[str, Any]:
+        _require_session(request)
+        rows = list_approval_entries(state_db, status=status, owner=owner, limit=limit)
+        return {"status": "ready", "summary": load_approval_summary(state_db), "count": len(rows), "rows": rows}
+
+    @app.post("/api/approvals")
+    def create_approval_entry(request_http: Request, request: ApprovalQueueRequest) -> dict[str, Any]:
+        _require_session(request_http)
+        row = add_approval_entry(
+            state_db,
+            title=request.title.strip(),
+            summary=request.summary.strip(),
+            approval_gate=request.approval_gate.strip(),
+            requested_by=request.requested_by.strip(),
+            owner=request.owner.strip(),
+            status=request.status.strip(),
+            due=request.due.strip(),
+            related_route=request.related_route.strip(),
+            related_entity=request.related_entity.strip(),
+            evidence_link=request.evidence_link.strip(),
+            payload=request.payload,
+        )
+        return {
+            "status": "ready",
+            "message": "Approval saved.",
+            "row": row,
+            "rows": list_approval_entries(state_db, limit=50),
+            "summary": load_approval_summary(state_db),
+        }
+
+    @app.post("/api/approvals/{approval_id}/status")
+    def update_approval_status(request_http: Request, approval_id: str, request: ApprovalQueueUpdateRequest) -> dict[str, Any]:
+        _require_session(request_http)
+        row = update_approval_entry(
+            state_db,
+            approval_id=approval_id,
+            status=(request.status or "").strip() or None,
+            owner=(request.owner or "").strip() or None,
+            note=(request.note or "").strip() or None,
+        )
+        if not row:
+            raise HTTPException(status_code=404, detail="Approval not found.")
+        return {
+            "status": "ready",
+            "message": "Approval updated.",
+            "row": row,
+            "rows": list_approval_entries(state_db, limit=50),
+            "summary": load_approval_summary(state_db),
         }
 
     @app.get("/api/supermega/operating-model")
