@@ -125,6 +125,32 @@ type LeadHuntPayload = {
   export?: {
     web_view_link?: string
   } | null
+  hunt?: LeadHuntProfile | null
+}
+
+type LeadHuntProfile = {
+  hunt_id: string
+  name: string
+  owner: string
+  status: string
+  query: string
+  raw_text: string
+  keywords: string[]
+  sources: string[]
+  limit: number
+  campaign_goal: string
+  export_workspace: boolean
+  last_run_at: string
+  last_provider: string
+  last_engine: string
+  last_saved_count: number
+  last_summary: string
+}
+
+type LeadHuntProfileResponse = {
+  status: string
+  count: number
+  rows: LeadHuntProfile[]
 }
 
 const defaultActivityDraft = (message = ''): LeadActivityDraft => ({
@@ -176,6 +202,9 @@ export function LeadFinderPage() {
   const [leadPack, setLeadPack] = useState<LeadToPilotPayload | null>(null)
   const [leadHuntBusy, setLeadHuntBusy] = useState(false)
   const [leadHunt, setLeadHunt] = useState<LeadHuntPayload | null>(null)
+  const [huntName, setHuntName] = useState('Yangon spa hunt')
+  const [huntProfiles, setHuntProfiles] = useState<LeadHuntProfile[]>([])
+  const [huntProfilesBusy, setHuntProfilesBusy] = useState(false)
   const [pipelineBusy, setPipelineBusy] = useState(false)
   const [pipelineMessage, setPipelineMessage] = useState('')
   const [pipeline, setPipeline] = useState<LeadPipelineResponse | null>(null)
@@ -233,6 +262,19 @@ export function LeadFinderPage() {
     }
   }, [authenticated, loadActivitiesForLeadIds])
 
+  const loadHuntProfiles = useCallback(async () => {
+    if (!authenticated) {
+      setHuntProfiles([])
+      return
+    }
+    try {
+      const payload = await workspaceFetch<LeadHuntProfileResponse>('/api/lead-hunts')
+      setHuntProfiles(payload.rows ?? [])
+    } catch {
+      setHuntProfiles([])
+    }
+  }, [authenticated])
+
   useEffect(() => {
     let cancelled = false
 
@@ -260,7 +302,7 @@ export function LeadFinderPage() {
         setAuthenticated(false)
       }
       if (result.ready && canLoadPipeline && !cancelled) {
-        await loadPipeline()
+        await Promise.all([loadPipeline(), loadHuntProfiles()])
       }
       if (!cancelled) {
         setAuthLoading(false)
@@ -271,7 +313,7 @@ export function LeadFinderPage() {
     return () => {
       cancelled = true
     }
-  }, [loadPipeline])
+  }, [loadHuntProfiles, loadPipeline])
 
   const selectedSources = useMemo(
     () =>
@@ -442,9 +484,93 @@ export function LeadFinderPage() {
       } else {
         await loadPipeline()
       }
+      await loadHuntProfiles()
       setPipelineMessage(payload.export?.web_view_link ? `Hunt ran and exported. ${payload.export.web_view_link}` : 'Hunt ran and saved the pipeline.')
     } catch (error) {
       setPipelineMessage(error instanceof Error ? error.message : 'Could not run the autonomous hunt.')
+    } finally {
+      setLeadHuntBusy(false)
+    }
+  }
+
+  async function saveLeadHuntProfile() {
+    if (!apiReady || !authenticated) {
+      setPipelineMessage('Login is required before saving the hunt.')
+      return
+    }
+    setHuntProfilesBusy(true)
+    setPipelineMessage('')
+    try {
+      const payload = await workspaceFetch<LeadHuntProfileResponse & { profile: LeadHuntProfile }>('/api/lead-hunts', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: huntName,
+          query,
+          raw_text: manualInput,
+          keywords: keywords
+            .split(',')
+            .map((value) => value.trim())
+            .filter(Boolean),
+          sources: selectedSources,
+          limit,
+          campaign_goal: campaignGoal,
+          export_workspace: true,
+        }),
+      })
+      setHuntProfiles(payload.rows ?? [])
+      setPipelineMessage(`Saved hunt profile: ${payload.profile?.name || huntName}.`)
+    } catch (error) {
+      setPipelineMessage(error instanceof Error ? error.message : 'Could not save the hunt profile.')
+    } finally {
+      setHuntProfilesBusy(false)
+    }
+  }
+
+  function loadLeadHuntProfileIntoForm(hunt: LeadHuntProfile) {
+    setHuntName(hunt.name || huntName)
+    setQuery(hunt.query || '')
+    setManualInput(hunt.raw_text || '')
+    setKeywords((hunt.keywords || []).join(','))
+    setLimit(hunt.limit || 8)
+    setCampaignGoal(hunt.campaign_goal || campaignGoal)
+    setSources({
+      web: (hunt.sources || []).includes('web'),
+      social: (hunt.sources || []).includes('social'),
+      maps: (hunt.sources || []).includes('maps'),
+    })
+    setPipelineMessage(`Loaded hunt profile: ${hunt.name}.`)
+  }
+
+  async function runSavedLeadHunt(hunt: LeadHuntProfile) {
+    if (!apiReady || !authenticated) {
+      setPipelineMessage('Login is required before running the hunt.')
+      return
+    }
+    setLeadHuntBusy(true)
+    setPipelineMessage('')
+    try {
+      const payload = await workspaceFetch<LeadHuntPayload & { pipeline?: LeadPipelineResponse }>(
+        `/api/lead-hunts/${encodeURIComponent(hunt.hunt_id)}/run`,
+        {
+          method: 'POST',
+          body: JSON.stringify({}),
+        },
+      )
+      setLeadHunt(payload)
+      loadLeadHuntProfileIntoForm(hunt)
+      if (payload.pipeline) {
+        setPipeline({
+          summary: payload.pipeline.summary,
+          rows: payload.pipeline.rows,
+        })
+        await loadActivitiesForLeadIds((payload.pipeline.rows ?? []).map((row) => row.lead_id))
+      } else {
+        await loadPipeline()
+      }
+      await loadHuntProfiles()
+      setPipelineMessage(`Saved hunt ran: ${hunt.name}.`)
+    } catch (error) {
+      setPipelineMessage(error instanceof Error ? error.message : 'Could not run the saved hunt.')
     } finally {
       setLeadHuntBusy(false)
     }
@@ -796,6 +922,14 @@ export function LeadFinderPage() {
               <>
                 <button
                   className="sm-button-secondary"
+                  disabled={!apiReady || !authenticated || huntProfilesBusy || !query.trim()}
+                  onClick={() => void saveLeadHuntProfile()}
+                  type="button"
+                >
+                  {huntProfilesBusy ? 'Saving hunt...' : 'Save hunt'}
+                </button>
+                <button
+                  className="sm-button-secondary"
                   disabled={!apiReady || !authenticated || !leadPack?.opportunities.length || pipelineBusy}
                   onClick={() => void saveLeadPackToPipeline()}
                   type="button"
@@ -828,6 +962,18 @@ export function LeadFinderPage() {
                 <div className="sm-chip text-white">
                   <p className="text-sm font-semibold">{leadHunt.engine}</p>
                 </div>
+              </div>
+            </div>
+          ) : null}
+
+          {isPrivateApp ? (
+            <div className="mt-4 space-y-3">
+              <label className="grid gap-2 text-sm font-semibold text-[var(--sm-muted)]">
+                Saved hunt name
+                <input className="sm-input" onChange={(event) => setHuntName(event.target.value)} value={huntName} />
+              </label>
+              <div className="sm-chip text-[var(--sm-muted)]">
+                Save the search once, then rerun it as a repeatable lead-hunt profile inside the private app.
               </div>
             </div>
           ) : null}
@@ -929,6 +1075,44 @@ export function LeadFinderPage() {
             </div>
 
             <div className="mt-5 space-y-3">
+              <div className="sm-chip">
+                <p className="sm-kicker text-[var(--sm-accent)]">Saved hunts</p>
+                <div className="mt-3 space-y-3">
+                  {huntProfiles.length ? (
+                    huntProfiles.map((hunt) => (
+                      <div className="rounded-2xl border border-white/8 bg-[rgba(255,255,255,0.03)] px-4 py-3" key={hunt.hunt_id}>
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="font-semibold text-white">{hunt.name}</p>
+                            <p className="mt-1 text-xs text-[var(--sm-muted)]">
+                              {hunt.query || 'Manual list'} · {hunt.last_saved_count || 0} saved · {hunt.last_run_at ? formatActivityTime(hunt.last_run_at) : 'Not run yet'}
+                            </p>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            <button className="sm-button-secondary" onClick={() => loadLeadHuntProfileIntoForm(hunt)} type="button">
+                              Use
+                            </button>
+                            <button
+                              className="sm-button-secondary"
+                              disabled={leadHuntBusy}
+                              onClick={() => void runSavedLeadHunt(hunt)}
+                              type="button"
+                            >
+                              {leadHuntBusy ? 'Running...' : 'Run'}
+                            </button>
+                          </div>
+                        </div>
+                        {hunt.last_summary ? <p className="mt-2 text-sm text-[var(--sm-muted)]">{hunt.last_summary}</p> : null}
+                      </div>
+                    ))
+                  ) : (
+                    <div className="rounded-2xl border border-white/8 bg-[rgba(255,255,255,0.03)] px-4 py-3 text-sm text-[var(--sm-muted)]">
+                      Save one hunt profile to make lead generation repeatable.
+                    </div>
+                  )}
+                </div>
+              </div>
+
               <div className="sm-chip">
                 <p className="sm-kicker text-[var(--sm-accent)]">How to use it</p>
                 <ol className="mt-3 space-y-2 text-sm text-[var(--sm-muted)]">

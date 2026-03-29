@@ -74,13 +74,17 @@ from mark1_pilot.enterprise_store import (  # noqa: E402
     create_session as enterprise_create_session,
     ensure_user as enterprise_ensure_user,
     get_lead as enterprise_get_lead,
+    get_lead_hunt_profile as enterprise_get_lead_hunt_profile,
     get_session as enterprise_get_session,
     list_lead_activities as enterprise_list_lead_activities,
+    list_lead_hunt_profiles as enterprise_list_lead_hunt_profiles,
     list_leads as enterprise_list_leads,
     list_user_workspaces as enterprise_list_user_workspaces,
     load_lead_summary as enterprise_load_lead_summary,
     resolve_database_url as resolve_enterprise_database_url,
     revoke_session as enterprise_revoke_session,
+    save_lead_hunt_profile as enterprise_save_lead_hunt_profile,
+    record_lead_hunt_run as enterprise_record_lead_hunt_run,
     update_lead as enterprise_update_lead,
 )
 from mark1_pilot.lead_finder import run_lead_finder  # noqa: E402
@@ -279,6 +283,23 @@ class LeadHuntRequest(BaseModel):
     limit: int = Field(default=8, ge=1, le=20)
     campaign_goal: str = ""
     export_workspace: bool = False
+
+
+class LeadHuntProfileRequest(BaseModel):
+    name: str
+    query: str = ""
+    raw_text: str = ""
+    keywords: list[str] = Field(default_factory=list)
+    sources: list[str] = Field(default_factory=lambda: ["maps", "web"])
+    limit: int = Field(default=8, ge=1, le=20)
+    campaign_goal: str = ""
+    export_workspace: bool = True
+    owner: str = "Growth Studio"
+    status: str = "active"
+
+
+class LeadHuntProfileRunRequest(BaseModel):
+    export_workspace: bool | None = None
 
 
 class LeadActivityRequest(BaseModel):
@@ -1132,6 +1153,7 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
         *,
         workspace_id: str,
         workspace_name: str,
+        hunt_id: str = "",
         query: str,
         raw_text: str,
         keywords: list[str],
@@ -1188,6 +1210,18 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
                 workspace_name=workspace_name,
             )
 
+        profile_row = None
+        if str(hunt_id or "").strip():
+            profile_row = enterprise_record_lead_hunt_run(
+                enterprise_db_url,
+                workspace_id=workspace_id,
+                hunt_id=str(hunt_id).strip(),
+                provider=provider,
+                engine_name=str(lead_pack.get("engine", "rules")).strip(),
+                saved_count=int(save_result.get("saved_count", 0) or 0),
+                summary=str(lead_pack.get("summary", "")).strip(),
+            )
+
         return {
             "status": "ready",
             "provider": provider,
@@ -1202,6 +1236,7 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
                 "rows": save_result.get("rows", []),
             },
             "export": export_result,
+            "hunt": profile_row,
         }
 
     @app.get("/api/health")
@@ -1687,6 +1722,73 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             limit=int(request.limit or 8),
             campaign_goal=campaign_goal,
             export_workspace=bool(request.export_workspace),
+        )
+
+    @app.get("/api/lead-hunts")
+    def lead_hunt_profiles(request: Request, status: str | None = None, limit: int = 50) -> dict[str, Any]:
+        session = _require_session(request)
+        rows = enterprise_list_lead_hunt_profiles(
+            enterprise_db_url,
+            workspace_id=str(session.get("workspace_id", "")).strip(),
+            status=status,
+            limit=limit,
+        )
+        return {"status": "ready", "count": len(rows), "rows": rows}
+
+    @app.post("/api/lead-hunts")
+    def create_lead_hunt_profile(request_http: Request, request: LeadHuntProfileRequest) -> dict[str, Any]:
+        session = _require_session(request_http)
+        profile = enterprise_save_lead_hunt_profile(
+            enterprise_db_url,
+            workspace_id=str(session.get("workspace_id", "")).strip(),
+            name=request.name.strip(),
+            query=request.query.strip(),
+            raw_text=request.raw_text.strip(),
+            keywords=[str(item).strip() for item in request.keywords if str(item).strip()],
+            sources=[str(item).strip() for item in request.sources if str(item).strip()],
+            limit=int(request.limit or 8),
+            campaign_goal=request.campaign_goal.strip(),
+            export_workspace=bool(request.export_workspace),
+            owner=request.owner.strip(),
+            status=request.status.strip(),
+        )
+        return {
+            "status": "ready",
+            "profile": profile,
+            "rows": enterprise_list_lead_hunt_profiles(
+                enterprise_db_url,
+                workspace_id=str(session.get("workspace_id", "")).strip(),
+                limit=50,
+            ),
+        }
+
+    @app.post("/api/lead-hunts/{hunt_id}/run")
+    def run_lead_hunt_profile(hunt_id: str, request_http: Request, request: LeadHuntProfileRunRequest) -> dict[str, Any]:
+        session = _require_session(request_http)
+        workspace_id = str(session.get("workspace_id", "")).strip()
+        workspace_name = str(session.get("workspace_name", "")).strip()
+        hunt = enterprise_get_lead_hunt_profile(
+            enterprise_db_url,
+            workspace_id=workspace_id,
+            hunt_id=hunt_id,
+        )
+        if not hunt:
+            raise HTTPException(status_code=404, detail="Lead hunt profile not found.")
+        return _run_autonomous_lead_hunt(
+            workspace_id=workspace_id,
+            workspace_name=workspace_name,
+            hunt_id=str(hunt.get("hunt_id", "")).strip(),
+            query=str(hunt.get("query", "")).strip(),
+            raw_text=str(hunt.get("raw_text", "")).strip(),
+            keywords=[str(item).strip() for item in (hunt.get("keywords") or []) if str(item).strip()],
+            sources=[str(item).strip() for item in (hunt.get("sources") or []) if str(item).strip()],
+            limit=int(hunt.get("limit", 8) or 8),
+            campaign_goal=str(hunt.get("campaign_goal", "")).strip() or "Book one discovery call.",
+            export_workspace=bool(
+                request.export_workspace
+                if request.export_workspace is not None
+                else hunt.get("export_workspace", True)
+            ),
         )
 
     @app.post("/api/tools/action-board")

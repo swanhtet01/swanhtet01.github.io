@@ -122,6 +122,64 @@ class EnterpriseLeadActivity(SQLModel, table=True):
     next_step: str = ""
 
 
+class EnterpriseLeadHuntProfile(SQLModel, table=True):
+    __tablename__ = "enterprise_lead_hunt_profiles"
+
+    hunt_id: str = Field(primary_key=True)
+    workspace_id: str = Field(index=True, foreign_key="enterprise_workspaces.workspace_id")
+    created_at: str
+    updated_at: str
+    last_run_at: str = ""
+    name: str
+    owner: str = "Growth Studio"
+    status: str = "active"
+    query: str = ""
+    raw_text: str = ""
+    keywords_json: str = Field(default="[]", sa_column=Column(Text, nullable=False))
+    sources_json: str = Field(default="[]", sa_column=Column(Text, nullable=False))
+    limit: int = 8
+    campaign_goal: str = ""
+    export_workspace: bool = True
+    last_provider: str = ""
+    last_engine: str = ""
+    last_saved_count: int = 0
+    last_summary: str = ""
+
+
+def _json_list(value: str) -> list[str]:
+    try:
+        payload = json.loads(value or "[]")
+    except Exception:
+        return []
+    if not isinstance(payload, list):
+        return []
+    return [str(item).strip() for item in payload if str(item).strip()]
+
+
+def _hunt_profile_to_dict(row: EnterpriseLeadHuntProfile) -> dict[str, Any]:
+    return {
+        "hunt_id": row.hunt_id,
+        "workspace_id": row.workspace_id,
+        "created_at": row.created_at,
+        "updated_at": row.updated_at,
+        "last_run_at": row.last_run_at,
+        "name": row.name,
+        "owner": row.owner,
+        "status": row.status,
+        "query": row.query,
+        "raw_text": row.raw_text,
+        "keywords": _json_list(row.keywords_json),
+        "sources": _json_list(row.sources_json),
+        "limit": row.limit,
+        "campaign_goal": row.campaign_goal,
+        "export_workspace": row.export_workspace,
+        "last_provider": row.last_provider,
+        "last_engine": row.last_engine,
+        "last_saved_count": row.last_saved_count,
+        "last_summary": row.last_summary,
+    }
+
+
 def resolve_database_url(output_dir: Path) -> str:
     env_value = str(os.getenv("SUPERMEGA_DATABASE_URL", "")).strip()
     if env_value:
@@ -476,6 +534,16 @@ def list_leads(
     return [_lead_to_dict(row) for row in rows]
 
 
+def get_lead(database_url: str, *, workspace_id: str, lead_id: str) -> dict[str, Any] | None:
+    ensure_schema(database_url)
+    engine = get_engine(database_url)
+    with Session(engine) as session:
+        row = session.get(EnterpriseLead, str(lead_id))
+        if not row or row.workspace_id != str(workspace_id):
+            return None
+        return _lead_to_dict(row)
+
+
 def load_lead_summary(database_url: str, *, workspace_id: str) -> dict[str, Any]:
     rows = list_leads(database_url, workspace_id=workspace_id, limit=1000)
     by_stage: dict[str, int] = {}
@@ -494,6 +562,136 @@ def load_lead_summary(database_url: str, *, workspace_id: str) -> dict[str, Any]
         "by_status": by_status,
         "by_pack": by_pack,
     }
+
+
+def list_lead_hunt_profiles(
+    database_url: str,
+    *,
+    workspace_id: str,
+    status: str | None = None,
+    limit: int = 20,
+) -> list[dict[str, Any]]:
+    ensure_schema(database_url)
+    engine = get_engine(database_url)
+    statement = select(EnterpriseLeadHuntProfile).where(EnterpriseLeadHuntProfile.workspace_id == str(workspace_id))
+    if status:
+        statement = statement.where(EnterpriseLeadHuntProfile.status == str(status))
+    statement = statement.order_by(
+        EnterpriseLeadHuntProfile.updated_at.desc(),
+        EnterpriseLeadHuntProfile.created_at.desc(),
+    ).limit(max(1, int(limit)))
+    with Session(engine) as session:
+        rows = session.exec(statement).all()
+    return [_hunt_profile_to_dict(row) for row in rows]
+
+
+def get_lead_hunt_profile(
+    database_url: str,
+    *,
+    workspace_id: str,
+    hunt_id: str,
+) -> dict[str, Any] | None:
+    ensure_schema(database_url)
+    engine = get_engine(database_url)
+    with Session(engine) as session:
+        row = session.get(EnterpriseLeadHuntProfile, str(hunt_id))
+        if not row or row.workspace_id != str(workspace_id):
+            return None
+        return _hunt_profile_to_dict(row)
+
+
+def save_lead_hunt_profile(
+    database_url: str,
+    *,
+    workspace_id: str,
+    hunt_id: str | None = None,
+    name: str,
+    owner: str = "Growth Studio",
+    query: str = "",
+    raw_text: str = "",
+    keywords: list[str] | None = None,
+    sources: list[str] | None = None,
+    limit: int = 8,
+    campaign_goal: str = "",
+    export_workspace: bool = True,
+    status: str = "active",
+) -> dict[str, Any]:
+    ensure_schema(database_url)
+    now = _now()
+    keywords_payload = [str(item).strip() for item in (keywords or []) if str(item).strip()]
+    sources_payload = [str(item).strip() for item in (sources or []) if str(item).strip()]
+    normalized_name = str(name or "").strip() or "Untitled hunt"
+    normalized_owner = str(owner or "").strip() or "Growth Studio"
+    normalized_query = str(query or "").strip()
+    normalized_raw_text = str(raw_text or "").strip()
+    normalized_campaign_goal = str(campaign_goal or "").strip()
+    normalized_status = str(status or "").strip() or "active"
+    normalized_hunt_id = str(hunt_id or "").strip() or _stable_key(
+        "HUNT",
+        "|".join(
+            [
+                str(workspace_id),
+                normalized_name,
+                normalized_query,
+                normalized_campaign_goal,
+            ]
+        ),
+    )
+    engine = get_engine(database_url)
+    with Session(engine) as session:
+        profile = session.get(EnterpriseLeadHuntProfile, normalized_hunt_id)
+        if not profile:
+            profile = EnterpriseLeadHuntProfile(
+                hunt_id=normalized_hunt_id,
+                workspace_id=str(workspace_id),
+                created_at=now,
+                updated_at=now,
+                name=normalized_name,
+            )
+        profile.updated_at = now
+        profile.name = normalized_name
+        profile.owner = normalized_owner
+        profile.status = normalized_status
+        profile.query = normalized_query
+        profile.raw_text = normalized_raw_text
+        profile.keywords_json = json.dumps(keywords_payload, ensure_ascii=False)
+        profile.sources_json = json.dumps(sources_payload, ensure_ascii=False)
+        profile.limit = max(1, min(int(limit or 8), 20))
+        profile.campaign_goal = normalized_campaign_goal
+        profile.export_workspace = bool(export_workspace)
+        session.add(profile)
+        session.commit()
+        session.refresh(profile)
+        return _hunt_profile_to_dict(profile)
+
+
+def record_lead_hunt_run(
+    database_url: str,
+    *,
+    workspace_id: str,
+    hunt_id: str,
+    provider: str,
+    engine_name: str,
+    saved_count: int,
+    summary: str,
+) -> dict[str, Any] | None:
+    ensure_schema(database_url)
+    now = _now()
+    engine = get_engine(database_url)
+    with Session(engine) as session:
+        profile = session.get(EnterpriseLeadHuntProfile, str(hunt_id))
+        if not profile or profile.workspace_id != str(workspace_id):
+            return None
+        profile.updated_at = now
+        profile.last_run_at = now
+        profile.last_provider = str(provider or "").strip()
+        profile.last_engine = str(engine_name or "").strip()
+        profile.last_saved_count = max(0, int(saved_count or 0))
+        profile.last_summary = str(summary or "").strip()
+        session.add(profile)
+        session.commit()
+        session.refresh(profile)
+        return _hunt_profile_to_dict(profile)
 
 
 def add_leads(
@@ -554,6 +752,7 @@ def add_leads(
     return {
         "status": "ready",
         "saved_count": len(saved_ids),
+        "saved_lead_ids": saved_ids,
         "rows": list_leads(database_url, workspace_id=workspace_id, limit=100),
         "summary": load_lead_summary(database_url, workspace_id=workspace_id),
         "saved_at": now,
@@ -633,17 +832,7 @@ def add_lead_activity(
         stage_after=str(stage_after or "").strip(),
         next_step=str(next_step or "").strip(),
     )
-    with Session(engine) as session:
-        session.add(payload)
-        lead = session.get(EnterpriseLead, str(lead_id))
-        if lead and lead.workspace_id == str(workspace_id) and payload.stage_after:
-            lead.stage = payload.stage_after
-            lead.status = "active" if payload.stage_after in {"contacted", "discovery", "proposal"} else "open"
-            lead.notes = payload.next_step or payload.message
-            lead.synced_at = created_at
-            session.add(lead)
-        session.commit()
-    return {
+    response = {
         "activity_id": payload.activity_id,
         "lead_id": payload.lead_id,
         "workspace_id": payload.workspace_id,
@@ -656,6 +845,17 @@ def add_lead_activity(
         "stage_after": payload.stage_after,
         "next_step": payload.next_step,
     }
+    with Session(engine) as session:
+        session.add(payload)
+        lead = session.get(EnterpriseLead, str(lead_id))
+        if lead and lead.workspace_id == str(workspace_id) and payload.stage_after:
+            lead.stage = payload.stage_after
+            lead.status = "active" if payload.stage_after in {"contacted", "discovery", "proposal"} else "open"
+            lead.notes = payload.next_step or payload.message
+            lead.synced_at = created_at
+            session.add(lead)
+        session.commit()
+    return response
 
 
 def list_lead_activities(

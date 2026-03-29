@@ -150,6 +150,33 @@ def main() -> int:
         },
         timeout=60,
     )
+    hunt_profile = request_json(
+        opener,
+        "POST",
+        f"{args.base_url.rstrip('/')}/api/lead-hunts",
+        {
+            "name": "Smoke hunt",
+            "query": args.query,
+            "keywords": ["spa", "wellness", "massage", "yangon"],
+            "sources": ["maps"],
+            "limit": 3,
+            "campaign_goal": "Book one discovery call",
+            "export_workspace": False,
+        },
+    )
+    hunt_profile_rows = list(hunt_profile.get("rows") or [])
+    hunt_profile_row = (hunt_profile.get("profile") or hunt_profile.get("row") or {}) if isinstance(hunt_profile, dict) else {}
+    hunt_profile_run = (
+        request_json(
+            opener,
+            "POST",
+            f"{args.base_url.rstrip('/')}/api/lead-hunts/{hunt_profile_row.get('hunt_id', '')}/run",
+            {"export_workspace": False},
+            timeout=60,
+        )
+        if hunt_profile_row.get("hunt_id")
+        else {}
+    )
     pipeline_import = request_json(
         opener,
         "POST",
@@ -204,6 +231,8 @@ def main() -> int:
         "pipeline_lead_count": len(pipeline_rows),
         "lead_pack_engine": lead_to_pilot.get("engine", ""),
         "lead_hunt_saved_count": int(lead_hunt.get("saved_count", 0) or 0),
+        "hunt_profile_count": len(hunt_profile_rows),
+        "hunt_profile_run_saved_count": int(hunt_profile_run.get("saved_count", 0) or 0),
         "outreach_status": outreach.get("status", ""),
         "workspace_export_status": workspace_export.get("status", ""),
         "workspace_export_link": workspace_export.get("export", {}).get("web_view_link", ""),
@@ -233,6 +262,8 @@ def main() -> int:
     print(f"- Pipeline leads: {report['pipeline_lead_count']}")
     print(f"- Lead pack engine: {report['lead_pack_engine']}")
     print(f"- Lead hunt saved: {report['lead_hunt_saved_count']}")
+    print(f"- Hunt profiles: {report['hunt_profile_count']}")
+    print(f"- Hunt profile run saved: {report['hunt_profile_run_saved_count']}")
     print(f"- Outreach: {report['outreach_status']}")
     print(f"- Workspace export: {report['workspace_export_status']}")
     print()
