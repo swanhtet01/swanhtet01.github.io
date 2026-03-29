@@ -12,6 +12,7 @@ from urllib.parse import urlparse
 from urllib.request import Request as UrlRequest, urlopen
 
 import uvicorn
+from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -27,6 +28,7 @@ from mark1_pilot.state_store import (  # noqa: E402
     add_attendance_event,
     add_contact_submission,
     add_decision_entry,
+    add_approval_entry,
     add_metric_entries,
     add_metric_entry,
     add_inventory_record,
@@ -39,6 +41,7 @@ from mark1_pilot.state_store import (  # noqa: E402
     list_capa_actions,
     list_contact_submissions,
     list_decision_entries,
+    list_approval_entries,
     list_inventory_records,
     list_lead_pipeline as state_list_lead_pipeline,
     list_metric_entries,
@@ -50,6 +53,7 @@ from mark1_pilot.state_store import (  # noqa: E402
     load_action_summary,
     load_agent_team_summary,
     load_decision_summary,
+    load_approval_summary,
     load_inventory_summary,
     load_metric_summary,
     load_product_feedback_summary,
@@ -60,6 +64,7 @@ from mark1_pilot.state_store import (  # noqa: E402
     load_workspace_member_summary,
     resolve_state_db,
     sync_state_from_output_dir,
+    update_approval_entry,
 )
 from mark1_pilot.enterprise_store import (  # noqa: E402
     add_lead_activity as enterprise_add_lead_activity,
@@ -68,6 +73,7 @@ from mark1_pilot.enterprise_store import (  # noqa: E402
     bootstrap_workspace_leads,
     create_session as enterprise_create_session,
     ensure_user as enterprise_ensure_user,
+    get_lead as enterprise_get_lead,
     get_session as enterprise_get_session,
     list_lead_activities as enterprise_list_lead_activities,
     list_leads as enterprise_list_leads,
@@ -82,6 +88,9 @@ from mark1_pilot.lead_to_pilot import build_lead_to_pilot_pack  # noqa: E402
 from mark1_pilot.document_intake import analyze_document  # noqa: E402
 from mark1_pilot.metric_intake import extract_metric_candidates, summarize_metric_rows  # noqa: E402
 from mark1_pilot.solution_architect import build_solution_blueprint  # noqa: E402
+from mark1_pilot.anthropic_provider import AnthropicProvider  # noqa: E402
+from mark1_pilot.openai_provider import OpenAIProvider  # noqa: E402
+from mark1_pilot.connectors.gmail import GmailProbe  # noqa: E402
 from mark1_pilot.connectors.google_drive import GoogleDriveProbe  # noqa: E402
 
 
@@ -224,6 +233,26 @@ class DecisionJournalRequest(BaseModel):
     related_route: str = ""
 
 
+class ApprovalQueueRequest(BaseModel):
+    title: str
+    summary: str = ""
+    approval_gate: str = "general"
+    requested_by: str = "System"
+    owner: str = "Management"
+    status: str = "pending"
+    due: str = ""
+    related_route: str = "/app"
+    related_entity: str = ""
+    evidence_link: str = ""
+    payload: dict[str, Any] = Field(default_factory=dict)
+
+
+class ApprovalQueueUpdateRequest(BaseModel):
+    status: str | None = None
+    owner: str | None = None
+    note: str | None = None
+
+
 class LeadPipelineImportRequest(BaseModel):
     rows: list[dict[str, Any]] = Field(default_factory=list)
     campaign_goal: str = ""
@@ -242,6 +271,16 @@ class LeadPipelineExportRequest(BaseModel):
     sheet_name: str = "Leads"
 
 
+class LeadHuntRequest(BaseModel):
+    query: str = ""
+    raw_text: str = ""
+    keywords: list[str] = Field(default_factory=list)
+    sources: list[str] = Field(default_factory=lambda: ["maps", "web"])
+    limit: int = Field(default=8, ge=1, le=20)
+    campaign_goal: str = ""
+    export_workspace: bool = False
+
+
 class LeadActivityRequest(BaseModel):
     activity_type: str = "note"
     channel: str = "email"
@@ -251,10 +290,25 @@ class LeadActivityRequest(BaseModel):
     next_step: str = ""
 
 
+class LeadOutreachDraftRequest(BaseModel):
+    subject: str = ""
+    message: str = ""
+    create_gmail_draft: bool = False
+
+
 class LoginRequest(BaseModel):
     username: str
     password: str
     workspace_slug: str = ""
+
+
+class SignupRequest(BaseModel):
+    name: str
+    email: str
+    company: str
+    password: str = ""
+    workspace_slug: str = ""
+    goal: str = ""
 
 
 def _load_json(path: Path) -> dict[str, Any]:
@@ -276,6 +330,11 @@ def _unique_values(values: list[str]) -> list[str]:
             seen.add(cleaned)
             output.append(cleaned)
     return output
+
+
+def _slugify(value: str) -> str:
+    text = re.sub(r"[^a-z0-9]+", "-", str(value or "").strip().lower())
+    return text.strip("-")
 
 
 def _parse_leads(raw_text: str) -> list[dict[str, Any]]:
@@ -501,6 +560,259 @@ def _load_exception_rows(state_db: Path, *, limit: int = 50) -> list[dict[str, A
     return rows[: max(1, int(limit))]
 
 
+def _build_operating_insights(
+    state_db: Path,
+    *,
+    enterprise_db_url: str,
+    workspace_id: str,
+) -> dict[str, Any]:
+    action_summary = load_action_summary(state_db)
+    supplier_summary = load_supplier_risk_summary(state_db)
+    quality_summary = load_quality_summary(state_db)
+    receiving_summary = load_receiving_summary(state_db)
+    inventory_summary = load_inventory_summary(state_db)
+    approval_summary = load_approval_summary(state_db)
+    decision_summary = load_decision_summary(state_db)
+    lead_summary = enterprise_load_lead_summary(enterprise_db_url, workspace_id=workspace_id)
+    exception_rows = _load_exception_rows(state_db, limit=8)
+
+    insights: list[dict[str, Any]] = []
+    recommended_actions: list[str] = []
+
+    high_exceptions = [row for row in exception_rows if str(row.get("priority", "")).lower() == "high"]
+    if high_exceptions:
+        insights.append(
+            {
+                "key": "high_exceptions",
+                "title": f"{len(high_exceptions)} high-priority issues need a manager call.",
+                "summary": "The queue has live high-priority exceptions across supplier, quality, receiving, or inventory.",
+                "category": "exceptions",
+                "route": "/app/exceptions",
+            }
+        )
+        recommended_actions.append("Open Exception Queue and assign the top high-priority item now.")
+
+    pending_approvals = int((approval_summary.get("by_status", {}) or {}).get("pending", 0) or 0)
+    if pending_approvals:
+        insights.append(
+            {
+                "key": "pending_approvals",
+                "title": f"{pending_approvals} approvals are waiting on a decision.",
+                "summary": "Manager or director approvals are building up and can block action unless cleared.",
+                "category": "approvals",
+                "route": "/app/approvals",
+            }
+        )
+        recommended_actions.append("Clear pending approvals before they turn into blocked actions.")
+
+    receiving_holds = int(receiving_summary.get("hold_count", 0) or 0)
+    if receiving_holds:
+        insights.append(
+            {
+                "key": "receiving_holds",
+                "title": f"{receiving_holds} inbound receipts are on hold or review.",
+                "summary": "Receiving records show material that has not moved cleanly into stock.",
+                "category": "receiving",
+                "route": "/app/receiving",
+            }
+        )
+        recommended_actions.append("Review the receiving board and clear hold or variance cases.")
+
+    reorder_count = int(inventory_summary.get("reorder_count", 0) or 0)
+    if reorder_count:
+        insights.append(
+            {
+                "key": "inventory_reorder",
+                "title": f"{reorder_count} inventory items are at reorder level.",
+                "summary": "Stock position has reached reorder thresholds on live inventory records.",
+                "category": "inventory",
+                "route": "/app/inventory",
+            }
+        )
+        recommended_actions.append("Check reorder items and create or confirm next buying action.")
+
+    supplier_risk_count = int(supplier_summary.get("risk_count", 0) or 0)
+    if supplier_risk_count:
+        insights.append(
+            {
+                "key": "supplier_risk",
+                "title": f"{supplier_risk_count} supplier risk items are active.",
+                "summary": "Supplier watch has open exposure that can affect timing, quality, or delivery.",
+                "category": "supplier",
+                "route": "/app/actions",
+            }
+        )
+
+    incident_count = int(quality_summary.get("incident_count", 0) or 0)
+    if incident_count:
+        insights.append(
+            {
+                "key": "quality_incidents",
+                "title": f"{incident_count} quality incidents are live in the system.",
+                "summary": "Quality issues remain open or in triage and should be reviewed with CAPA status.",
+                "category": "quality",
+                "route": "/app/actions",
+            }
+        )
+
+    open_actions = int(action_summary.get("total_items", 0) or 0)
+    if open_actions:
+        recommended_actions.append("Trim the action board to the few items that truly need attention today.")
+
+    active_decisions = int((decision_summary.get("by_status", {}) or {}).get("open", 0) or 0)
+    if active_decisions:
+        recommended_actions.append("Close open decisions or promote them into explicit approvals.")
+
+    lead_count = int(lead_summary.get("lead_count", 0) or 0)
+    if lead_count:
+        by_stage = lead_summary.get("by_stage", {}) if isinstance(lead_summary, dict) else {}
+        contacted = int(by_stage.get("contacted", 0) or 0)
+        discovery = int(by_stage.get("discovery", 0) or 0)
+        insights.append(
+            {
+                "key": "lead_pipeline",
+                "title": f"{lead_count} leads are active in the pipeline.",
+                "summary": f"{contacted} contacted and {discovery} in discovery. Commercial flow is live, but it needs follow-through.",
+                "category": "growth",
+                "route": "/app/leads",
+            }
+        )
+        recommended_actions.append("Move one lead forward today instead of keeping the whole list warm.")
+
+    if not insights:
+        insights.append(
+            {
+                "key": "stable_system",
+                "title": "The system is quiet right now.",
+                "summary": "No major issues were detected in the current saved records.",
+                "category": "general",
+                "route": "/app",
+            }
+        )
+
+    if not recommended_actions:
+        recommended_actions.append("Keep the workbench open and capture the next meaningful action, not more notes.")
+
+    return {
+        "headline": insights[0]["title"],
+        "engine": "rules+live-state",
+        "insights": insights[:6],
+        "recommended_actions": recommended_actions[:6],
+    }
+
+
+def _maybe_ai_enrich_insights(payload: dict[str, Any]) -> dict[str, Any]:
+    system_prompt = (
+        "You are refining a short operating brief inside an enterprise operations app. "
+        "Keep it concise, practical, and direct. "
+        "Return JSON only with keys: headline, recommended_actions. "
+        "headline must be one short sentence. recommended_actions must be an array of up to 6 short actions."
+    )
+    user_prompt = json.dumps(
+        {
+            "headline": payload.get("headline", ""),
+            "insights": payload.get("insights", []),
+            "recommended_actions": payload.get("recommended_actions", []),
+        },
+        ensure_ascii=False,
+    )
+    result, engine = _run_ai_json(
+        system_prompt=system_prompt,
+        user_prompt=user_prompt,
+        schema_name="supermega_insights",
+        required_keys=["headline", "recommended_actions"],
+        max_tokens=900,
+    )
+    if result.get("status") != "ready":
+        return payload
+    data = result.get("json", {})
+    if not isinstance(data, dict):
+        return payload
+
+    enriched = dict(payload)
+    headline = str(data.get("headline", "")).strip()
+    actions = data.get("recommended_actions", [])
+    if headline:
+        enriched["headline"] = headline
+    if isinstance(actions, list):
+        next_actions = [str(item).strip() for item in actions if str(item).strip()]
+        if next_actions:
+            enriched["recommended_actions"] = next_actions[:6]
+    enriched["engine"] = engine
+    return enriched
+
+
+def _maybe_ai_enrich_lead_pack(payload: dict[str, Any], *, campaign_goal: str) -> dict[str, Any]:
+    opportunities = payload.get("opportunities", [])
+    if not isinstance(opportunities, list) or not opportunities:
+        return payload
+
+    compact = []
+    for item in opportunities[:5]:
+        if isinstance(item, dict):
+            compact.append(
+                {
+                    "name": item.get("name", ""),
+                    "archetype": item.get("archetype", ""),
+                    "service_pack": item.get("service_pack", ""),
+                    "wedge_product": item.get("wedge_product", ""),
+                    "pain_signals": item.get("pain_signals", []),
+                    "outreach_subject": item.get("outreach_subject", ""),
+                    "outreach_message": item.get("outreach_message", ""),
+                }
+            )
+
+    result, engine = _run_ai_json(
+        system_prompt=(
+            "You are refining sales outreach for an AI operations software company. "
+            "Keep copy short, specific, and commercially credible. "
+            "Return JSON only with keys: summary, opportunities. "
+            "opportunities must be an array of objects with keys: name, outreach_subject, outreach_message, why_now."
+        ),
+        user_prompt=json.dumps(
+            {
+                "campaign_goal": campaign_goal,
+                "summary": payload.get("summary", ""),
+                "opportunities": compact,
+            },
+            ensure_ascii=False,
+        ),
+        schema_name="supermega_lead_pack",
+        required_keys=["summary", "opportunities"],
+        max_tokens=1800,
+    )
+    if result.get("status") != "ready":
+        return payload
+    data = result.get("json", {})
+    if not isinstance(data, dict):
+        return payload
+
+    enriched = dict(payload)
+    summary = str(data.get("summary", "")).strip()
+    if summary:
+        enriched["summary"] = summary
+    patches: dict[str, dict[str, Any]] = {}
+    for item in data.get("opportunities", []):
+        if isinstance(item, dict):
+            patches[str(item.get("name", "")).strip()] = item
+
+    next_rows: list[dict[str, Any]] = []
+    for item in opportunities:
+        if not isinstance(item, dict):
+            continue
+        patch = patches.get(str(item.get("name", "")).strip(), {})
+        merged = dict(item)
+        for key in ("outreach_subject", "outreach_message", "why_now"):
+            value = str(patch.get(key, "")).strip()
+            if value:
+                merged[key] = value
+        next_rows.append(merged)
+    if next_rows:
+        enriched["opportunities"] = next_rows
+    enriched["engine"] = engine
+    return enriched
+
+
 def _build_action_rows(raw_text: str) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for line in [item.strip() for item in str(raw_text or "").splitlines() if item.strip()]:
@@ -548,6 +860,16 @@ def _drive_probe_from_config(config: dict[str, Any]) -> GoogleDriveProbe:
     folder_id = str(publish.get("drive_folder_id", "")).strip() or str(config.get("input_center", {}).get("drive_folder_id", "")).strip()
     service_account_path = Path(service_account_value).expanduser() if service_account_value else None
     return GoogleDriveProbe(service_account_path, folder_id)
+
+
+def _gmail_probe_from_config(config: dict[str, Any]) -> GmailProbe:
+    sources = config.get("sources", {}) if isinstance(config, dict) else {}
+    gmail = sources.get("gmail", {}) if isinstance(sources, dict) else {}
+    client_secret_value = str(gmail.get("client_secret_json", "")).strip() or os.getenv("GMAIL_OAUTH_CLIENT_JSON", "").strip()
+    token_value = str(gmail.get("token_json", "")).strip() or os.getenv("GMAIL_OAUTH_TOKEN_JSON", "").strip()
+    client_secret_path = Path(client_secret_value).expanduser() if client_secret_value else None
+    token_path = Path(token_value).expanduser() if token_value else None
+    return GmailProbe(client_secret_path, token_path)
 
 
 def _lead_pipeline_sheet_rows(rows: list[dict[str, Any]]) -> tuple[list[str], list[list[str]]]:
@@ -598,14 +920,72 @@ def _lead_pipeline_sheet_rows(rows: list[dict[str, Any]]) -> tuple[list[str], li
 SESSION_COOKIE_NAME = "supermega_session"
 
 
+def _load_local_env_files() -> None:
+    for candidate in (
+        REPO_ROOT / ".env.app.local",
+        REPO_ROOT / ".env.local",
+        Path.home() / "OneDrive - BDA" / ".env.app.local",
+    ):
+        if candidate.exists():
+            load_dotenv(candidate, override=False)
+
+
 def _env_truthy(name: str, default: bool) -> bool:
     raw = os.getenv(name, "1" if default else "0").strip().lower()
     return raw not in {"0", "false", "no", "off"}
 
 
+def _anthropic_provider() -> AnthropicProvider:
+    return AnthropicProvider()
+
+
+def _openai_provider() -> OpenAIProvider:
+    return OpenAIProvider()
+
+
+def _run_ai_json(
+    *,
+    system_prompt: str,
+    user_prompt: str,
+    schema_name: str,
+    required_keys: list[str],
+    max_tokens: int,
+) -> tuple[dict[str, Any], str]:
+    preferred = str(os.getenv("SUPERMEGA_LLM_PROVIDER", "openai")).strip().lower()
+    providers: list[tuple[str, Any]] = []
+    if preferred == "anthropic":
+        providers = [("anthropic+rules", _anthropic_provider()), ("openai+rules", _openai_provider())]
+    else:
+        providers = [("openai+rules", _openai_provider()), ("anthropic+rules", _anthropic_provider())]
+
+    for engine_name, provider in providers:
+        if not provider.available():
+            continue
+        if engine_name == "openai+rules":
+            result = provider.generate_json(
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                schema_name=schema_name,
+                required_keys=required_keys,
+                max_output_tokens=max_tokens,
+            )
+        else:
+            result = provider.generate_json(
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                max_tokens=max_tokens,
+                temperature=0.2,
+            )
+        if result.get("status") == "ready":
+            return result, engine_name
+
+    return {"status": "unavailable"}, "rules"
+
+
 def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
     site_root = site_root.expanduser().resolve()
     pilot_data = pilot_data.expanduser().resolve()
+    _load_local_env_files()
     state_db = resolve_state_db(pilot_data)
     enterprise_db_url = resolve_enterprise_database_url(pilot_data)
     sync_state_from_output_dir(pilot_data)
@@ -629,9 +1009,10 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
         workspace_plan=auth_workspace_plan,
     )
     default_workspace = default_user_payload.get("workspace", {}) if isinstance(default_user_payload, dict) else {}
+    default_workspace_id = str(default_workspace.get("workspace_id", "")).strip()
     bootstrap_workspace_leads(
         enterprise_db_url,
-        workspace_id=str(default_workspace.get("workspace_id", "")).strip(),
+        workspace_id=default_workspace_id,
         rows=state_list_lead_pipeline(state_db, limit=500),
     )
     uses_default_credentials = auth_username == "owner" and auth_password == "supermega-demo"
@@ -692,6 +1073,136 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             samesite="lax",
             secure=secure_cookie,
         )
+
+    def _export_lead_rows_to_workspace(
+        *,
+        rows: list[dict[str, Any]],
+        workspace_name: str,
+        export_request: LeadPipelineExportRequest | None = None,
+    ) -> dict[str, Any]:
+        config = _load_runtime_config()
+        probe = _drive_probe_from_config(config)
+        request_payload = export_request or LeadPipelineExportRequest()
+        headers, values = _lead_pipeline_sheet_rows(rows)
+        return probe.publish_rows_sheet(
+            spreadsheet_name=request_payload.spreadsheet_name.strip() or "SuperMega Lead Pipeline",
+            sheet_name=request_payload.sheet_name.strip() or "Leads",
+            workspace_folder_name=request_payload.workspace_folder_name.strip() or workspace_name or "SuperMega Sales",
+            headers=headers,
+            rows=values,
+            description="Lead pipeline generated by SuperMega Lead Finder and lead-to-pilot workflow.",
+        )
+
+    def _build_public_inbound_opportunity(payload: ContactSubmissionRequest) -> dict[str, Any]:
+        company_name = payload.company.strip() or payload.name.strip() or "Inbound request"
+        goal = payload.goal.strip()
+        workflow = payload.workflow.strip() or "Discovery request"
+        data_summary = payload.data.strip() or "Gmail + Drive + Sheets"
+        return {
+            "name": company_name,
+            "archetype": "inbound_request",
+            "stage": "offer_ready",
+            "status": "open",
+            "owner": "Growth Studio",
+            "service_pack": "Action OS",
+            "wedge_product": "Action OS",
+            "starter_modules": ["Action OS"],
+            "semi_products": ["Lead Finder"],
+            "outreach_subject": f"{company_name}: next step for Action OS",
+            "outreach_message": (
+                f"Hi {payload.name.strip() or company_name}, thanks for the request. "
+                f"We can start with {workflow.lower()} and shape the first Action OS board around {goal or 'your main blocker'}."
+            ),
+            "discovery_questions": [
+                "What is the one workflow that wastes the most time today?",
+                "Which inbox, sheet, or tracker should the first board connect to?",
+                "Who needs to see the first live board every day?",
+            ],
+            "source": "website_request",
+            "source_url": "",
+            "provider": "website",
+            "score": 9,
+            "email": payload.email.strip(),
+            "phone": "",
+            "website": "",
+            "notes": f"Workflow: {workflow}\nData: {data_summary}\nGoal: {goal}",
+        }
+
+    def _run_autonomous_lead_hunt(
+        *,
+        workspace_id: str,
+        workspace_name: str,
+        query: str,
+        raw_text: str,
+        keywords: list[str],
+        sources: list[str],
+        limit: int,
+        campaign_goal: str,
+        export_workspace: bool,
+    ) -> dict[str, Any]:
+        lead_result = run_lead_finder(raw_text=raw_text, query=query, keywords=keywords, sources=sources, limit=limit)
+        lead_rows = list(lead_result.get("rows") or [])
+        provider = str(lead_result.get("provider", "")).strip()
+        if not lead_rows:
+            return {
+                "status": "ready",
+                "provider": provider,
+                "engine": "rules",
+                "row_count": 0,
+                "saved_count": 0,
+                "summary": "No matching leads found for this hunt.",
+                "rows": [],
+                "opportunities": [],
+            }
+
+        lead_pack = build_lead_to_pilot_pack(
+            leads=lead_rows[: min(5, len(lead_rows))],
+            campaign_goal=campaign_goal,
+        )
+        lead_pack = _maybe_ai_enrich_lead_pack(lead_pack, campaign_goal=campaign_goal)
+        save_result = enterprise_add_leads(
+            enterprise_db_url,
+            workspace_id=workspace_id,
+            rows=lead_pack.get("opportunities", []),
+            campaign_goal=campaign_goal,
+            source="lead_hunt",
+        )
+        for lead_id in [str(item).strip() for item in (save_result.get("saved_lead_ids") or []) if str(item).strip()]:
+            enterprise_add_lead_activity(
+                enterprise_db_url,
+                workspace_id=workspace_id,
+                lead_id=lead_id,
+                actor="Lead Hunter Agent",
+                activity_type="hunt_run",
+                channel="workflow",
+                direction="internal",
+                message=f"Ran autonomous hunt for '{query or 'manual source'}' and generated an offer-ready lead pack.",
+                stage_after="offer_ready",
+                next_step="Review the top lead and send the first outreach.",
+            )
+
+        export_result: dict[str, Any] | None = None
+        if export_workspace:
+            export_result = _export_lead_rows_to_workspace(
+                rows=save_result.get("rows", []),
+                workspace_name=workspace_name,
+            )
+
+        return {
+            "status": "ready",
+            "provider": provider,
+            "engine": lead_pack.get("engine", "rules"),
+            "row_count": len(lead_rows),
+            "saved_count": int(save_result.get("saved_count", 0) or 0),
+            "summary": lead_pack.get("summary", ""),
+            "rows": lead_rows,
+            "opportunities": lead_pack.get("opportunities", []),
+            "pipeline": {
+                "summary": save_result.get("summary", {}),
+                "rows": save_result.get("rows", []),
+            },
+            "export": export_result,
+        }
 
     @app.get("/api/health")
     def health() -> dict[str, Any]:
@@ -764,6 +1275,57 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             "workspaces": enterprise_list_user_workspaces(enterprise_db_url, username=str(user.get("username", ""))),
         }
 
+    @app.post("/api/auth/signup")
+    def auth_signup(request: Request, response: Response, payload: SignupRequest) -> dict[str, Any]:
+        email = str(payload.email or "").strip().lower()
+        company = str(payload.company or "").strip()
+        name = str(payload.name or "").strip() or company or "Owner"
+        if not email or not company:
+            raise HTTPException(status_code=400, detail="Name, email, and company are required.")
+        password = str(payload.password or "").strip() or secrets.token_urlsafe(10)
+        base_slug = _slugify(payload.workspace_slug or company or email.split("@")[0])
+        workspace_slug = base_slug or "workspace"
+        if not str(payload.workspace_slug or "").strip():
+            workspace_slug = f"{workspace_slug}-{hashlib.sha1(email.encode('utf-8')).hexdigest()[:4]}"
+
+        created = enterprise_ensure_user(
+            enterprise_db_url,
+            username=email,
+            password=password,
+            display_name=name,
+            role="owner",
+            workspace_slug=workspace_slug,
+            workspace_name=company,
+            workspace_plan="starter",
+        )
+        user = enterprise_authenticate_user(enterprise_db_url, username=email, password=password)
+        if not user:
+            raise HTTPException(status_code=500, detail="Workspace signup failed.")
+        session = enterprise_create_session(
+            enterprise_db_url,
+            username=str(user.get("username", "")),
+            role=str(user.get("role", "")),
+            workspace_slug=workspace_slug,
+            ttl_hours=session_ttl_hours,
+        )
+        _set_session_cookie(response, request, str(session.get("session_id", "")))
+        return {
+            "status": "ready",
+            "authenticated": True,
+            "generated_password": "" if str(payload.password or "").strip() else password,
+            "session": {
+                "username": user.get("username", ""),
+                "display_name": user.get("display_name", ""),
+                "role": user.get("role", ""),
+                "workspace_id": session.get("workspace_id", ""),
+                "workspace_slug": session.get("workspace_slug", ""),
+                "workspace_name": session.get("workspace_name", ""),
+                "workspace_plan": session.get("workspace_plan", ""),
+            },
+            "workspaces": enterprise_list_user_workspaces(enterprise_db_url, username=str(user.get("username", ""))),
+            "created": created,
+        }
+
     @app.post("/api/auth/logout")
     def auth_logout(request: Request, response: Response) -> dict[str, Any]:
         session = _session_from_request(request)
@@ -786,6 +1348,7 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
         supplier_summary = load_supplier_risk_summary(state_db)
         receiving_summary = load_receiving_summary(state_db)
         inventory_summary = load_inventory_summary(state_db)
+        approval_summary = load_approval_summary(state_db)
         metric_summary = load_metric_summary(state_db)
         feedback_summary = load_product_feedback_summary(state_db)
         lead_pipeline_summary = enterprise_load_lead_summary(
@@ -816,6 +1379,7 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             "lead_pipeline": lead_pipeline_summary,
             "receiving": receiving_summary,
             "inventory": inventory_summary,
+            "approvals": approval_summary,
             "metrics": metric_summary,
             "feedback": feedback_summary,
             "product_lab": {
@@ -847,6 +1411,16 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
         _require_session(request)
         items = list_actions(state_db, lane=lane, status=status, limit=limit)
         return {"status": "ready", "count": len(items), "items": items}
+
+    @app.get("/api/insights")
+    def insights(request: Request) -> dict[str, Any]:
+        session = _require_session(request)
+        payload = _build_operating_insights(
+            state_db,
+            enterprise_db_url=enterprise_db_url,
+            workspace_id=str(session.get("workspace_id", "")).strip(),
+        )
+        return {"status": "ready", **_maybe_ai_enrich_insights(payload)}
 
     @app.post("/api/tools/lead-finder")
     def tool_lead_finder(request: LeadFinderRequest) -> dict[str, Any]:
@@ -889,7 +1463,8 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
 
     @app.post("/api/tools/lead-to-pilot")
     def tool_lead_to_pilot(request: LeadToPilotRequest) -> dict[str, Any]:
-        return build_lead_to_pilot_pack(leads=request.leads, campaign_goal=request.campaign_goal)
+        payload = build_lead_to_pilot_pack(leads=request.leads, campaign_goal=request.campaign_goal)
+        return _maybe_ai_enrich_lead_pack(payload, campaign_goal=request.campaign_goal)
 
     @app.get("/api/lead-pipeline")
     def lead_pipeline(request: Request, stage: str | None = None, status: str | None = None, limit: int = 100) -> dict[str, Any]:
@@ -992,24 +1567,96 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             ),
         }
 
+    @app.post("/api/lead-pipeline/{lead_id}/outreach/gmail")
+    def create_lead_pipeline_gmail_outreach(lead_id: str, request_http: Request, request: LeadOutreachDraftRequest) -> dict[str, Any]:
+        session = _require_session(request_http)
+        workspace_id = str(session.get("workspace_id", "")).strip()
+        lead = enterprise_get_lead(
+            enterprise_db_url,
+            workspace_id=workspace_id,
+            lead_id=lead_id,
+        )
+        if not lead:
+            raise HTTPException(status_code=404, detail=f"Lead not found: {lead_id}")
+
+        to_email = str(lead.get("contact_email", "")).strip()
+        if not to_email:
+            raise HTTPException(status_code=400, detail="Lead does not have a contact email.")
+
+        subject = str(request.subject or lead.get("outreach_subject", "")).strip()
+        message = str(request.message or lead.get("outreach_message", "")).strip()
+        if not subject and not message:
+            raise HTTPException(status_code=400, detail="Lead does not have outreach content yet.")
+
+        config = _load_runtime_config()
+        gmail = _gmail_probe_from_config(config)
+        compose_payload = {
+            "status": "ready",
+            "compose_url": gmail.build_compose_url(
+                to=to_email,
+                subject=subject,
+                body=message,
+            ),
+            "message": "Gmail compose link prepared.",
+        }
+        if request.create_gmail_draft:
+            compose_payload = gmail.create_draft(
+                to=to_email,
+                subject=subject,
+                body=message,
+            )
+
+        activity_message = f"Prepared Gmail outreach for {lead.get('company_name', 'lead')}: {subject or 'No subject'}"
+        if compose_payload.get("status") == "ready" and compose_payload.get("draft_id"):
+            activity_message = f"Created Gmail draft for {lead.get('company_name', 'lead')}: {subject or 'No subject'}"
+        elif compose_payload.get("status") == "reauth_required":
+            activity_message = f"Prepared Gmail compose link for {lead.get('company_name', 'lead')} (API draft needs compose scope): {subject or 'No subject'}"
+
+        activity = enterprise_add_lead_activity(
+            enterprise_db_url,
+            workspace_id=workspace_id,
+            lead_id=lead_id,
+            actor=str(session.get("display_name", session.get("username", "Owner"))),
+            activity_type="outreach_draft",
+            channel="gmail",
+            direction="outbound",
+            message=activity_message,
+            next_step="Send outreach from Gmail and log the reply.",
+        )
+        refreshed_lead = enterprise_get_lead(
+            enterprise_db_url,
+            workspace_id=workspace_id,
+            lead_id=lead_id,
+        )
+        return {
+            "status": compose_payload.get("status", "ready"),
+            "draft": compose_payload,
+            "lead": refreshed_lead,
+            "activity": activity,
+            "activities": enterprise_list_lead_activities(
+                enterprise_db_url,
+                workspace_id=workspace_id,
+                lead_id=lead_id,
+                limit=20,
+            ),
+            "summary": enterprise_load_lead_summary(
+                enterprise_db_url,
+                workspace_id=workspace_id,
+            ),
+        }
+
     @app.post("/api/lead-pipeline/export/workspace")
     def export_lead_pipeline_to_workspace(request_http: Request, request: LeadPipelineExportRequest) -> dict[str, Any]:
         session = _require_session(request_http)
-        config = _load_runtime_config()
-        probe = _drive_probe_from_config(config)
         rows = enterprise_list_leads(
             enterprise_db_url,
             workspace_id=str(session.get("workspace_id", "")).strip(),
             limit=500,
         )
-        headers, values = _lead_pipeline_sheet_rows(rows)
-        export_result = probe.publish_rows_sheet(
-            spreadsheet_name=request.spreadsheet_name.strip() or "SuperMega Lead Pipeline",
-            sheet_name=request.sheet_name.strip() or "Leads",
-            workspace_folder_name=request.workspace_folder_name.strip() or str(session.get("workspace_name", "")).strip() or "SuperMega Sales",
-            headers=headers,
-            rows=values,
-            description="Lead pipeline generated by SuperMega Lead Finder and lead-to-pilot workflow.",
+        export_result = _export_lead_rows_to_workspace(
+            rows=rows,
+            workspace_name=str(session.get("workspace_name", "")).strip() or "SuperMega Sales",
+            export_request=request,
         )
         return {
             "status": export_result.get("status", "ready"),
@@ -1024,6 +1671,23 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
     @app.post("/api/tools/solution-architect")
     def tool_solution_architect(request: SolutionArchitectRequest) -> dict[str, Any]:
         return {"status": "ready", "blueprint": build_solution_blueprint(request.model_dump())}
+
+    @app.post("/api/tools/lead-hunt")
+    def tool_lead_hunt(request_http: Request, request: LeadHuntRequest) -> dict[str, Any]:
+        session = _require_session(request_http)
+        keywords = [str(item).strip() for item in request.keywords if str(item).strip()]
+        campaign_goal = request.campaign_goal.strip() or "Book one discovery call."
+        return _run_autonomous_lead_hunt(
+            workspace_id=str(session.get("workspace_id", "")).strip(),
+            workspace_name=str(session.get("workspace_name", "")).strip(),
+            query=request.query.strip(),
+            raw_text=request.raw_text.strip(),
+            keywords=keywords,
+            sources=[str(item).strip() for item in request.sources if str(item).strip()],
+            limit=int(request.limit or 8),
+            campaign_goal=campaign_goal,
+            export_workspace=bool(request.export_workspace),
+        )
 
     @app.post("/api/tools/action-board")
     def tool_action_board(request: ActionBoardRequest) -> dict[str, Any]:
@@ -1126,6 +1790,57 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             "row": row,
             "rows": list_decision_entries(state_db, limit=50),
             "summary": load_decision_summary(state_db),
+        }
+
+    @app.get("/api/approvals")
+    def approval_entries(request: Request, status: str | None = None, owner: str | None = None, limit: int = 100) -> dict[str, Any]:
+        _require_session(request)
+        rows = list_approval_entries(state_db, status=status, owner=owner, limit=limit)
+        return {"status": "ready", "summary": load_approval_summary(state_db), "count": len(rows), "rows": rows}
+
+    @app.post("/api/approvals")
+    def create_approval_entry(request_http: Request, request: ApprovalQueueRequest) -> dict[str, Any]:
+        _require_session(request_http)
+        row = add_approval_entry(
+            state_db,
+            title=request.title.strip(),
+            summary=request.summary.strip(),
+            approval_gate=request.approval_gate.strip(),
+            requested_by=request.requested_by.strip(),
+            owner=request.owner.strip(),
+            status=request.status.strip(),
+            due=request.due.strip(),
+            related_route=request.related_route.strip(),
+            related_entity=request.related_entity.strip(),
+            evidence_link=request.evidence_link.strip(),
+            payload=request.payload,
+        )
+        return {
+            "status": "ready",
+            "message": "Approval saved.",
+            "row": row,
+            "rows": list_approval_entries(state_db, limit=50),
+            "summary": load_approval_summary(state_db),
+        }
+
+    @app.post("/api/approvals/{approval_id}/status")
+    def update_approval_status(request_http: Request, approval_id: str, request: ApprovalQueueUpdateRequest) -> dict[str, Any]:
+        _require_session(request_http)
+        row = update_approval_entry(
+            state_db,
+            approval_id=approval_id,
+            status=(request.status or "").strip() or None,
+            owner=(request.owner or "").strip() or None,
+            note=(request.note or "").strip() or None,
+        )
+        if not row:
+            raise HTTPException(status_code=404, detail="Approval not found.")
+        return {
+            "status": "ready",
+            "message": "Approval updated.",
+            "row": row,
+            "rows": list_approval_entries(state_db, limit=50),
+            "summary": load_approval_summary(state_db),
         }
 
     @app.get("/api/supermega/operating-model")
@@ -1320,7 +2035,38 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             data_summary=request.data.strip(),
             goal=request.goal.strip(),
         )
-        return {"status": "ready", "message": "Submission saved.", "submission": row}
+        pipeline_result: dict[str, Any] | None = None
+        if default_workspace_id:
+            inbound_row = _build_public_inbound_opportunity(request)
+            pipeline_result = enterprise_add_leads(
+                enterprise_db_url,
+                workspace_id=default_workspace_id,
+                rows=[inbound_row],
+                campaign_goal=request.goal.strip() or "Book one discovery call.",
+                source="website_request",
+            )
+            for lead_id in [str(item).strip() for item in (pipeline_result.get("saved_lead_ids") or []) if str(item).strip()]:
+                enterprise_add_lead_activity(
+                    enterprise_db_url,
+                    workspace_id=default_workspace_id,
+                    lead_id=lead_id,
+                    actor="Website",
+                    activity_type="inbound_request",
+                    channel="website",
+                    direction="inbound",
+                    message=f"Inbound request from {request.name.strip() or request.company.strip()}",
+                    stage_after="offer_ready",
+                    next_step="Review inbound request and send first response.",
+                )
+        return {
+            "status": "ready",
+            "message": "Submission saved.",
+            "submission": row,
+            "pipeline": {
+                "saved_count": int((pipeline_result or {}).get("saved_count", 0) or 0),
+                "summary": (pipeline_result or {}).get("summary", {}),
+            },
+        }
 
     @app.get("/api/contact-submissions")
     def contact_submissions(request: Request, limit: int = 50) -> dict[str, Any]:

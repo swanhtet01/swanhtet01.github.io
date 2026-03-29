@@ -32,9 +32,8 @@ export const bookingUrl = (import.meta.env.VITE_BOOKING_URL ?? '').trim()
 
 export const hero = {
   eyebrow: 'Main product',
-  title: 'Run work in one place.',
-  description:
-    'SuperMega turns Gmail, Drive, Sheets, and team updates into one live operating layer. Start with Action OS. Add deeper modules only when you need them.',
+  title: 'Action OS keeps work moving.',
+  description: 'Turn inboxes, sheets, and team updates into one clear board. Use Lead Finder as the proof tool.',
 }
 
 export const proofPoints: ProofPoint[] = [
@@ -44,35 +43,41 @@ export const proofPoints: ProofPoint[] = [
     detail: 'One board for owners, due dates, and blockers.',
   },
   {
-    label: 'Top of funnel',
+    label: 'Proof tool',
     value: 'Lead Finder',
-    detail: 'Find leads, shape the offer, and save them into the pipeline.',
+    detail: 'Find leads, shape the offer, and save them to the pipeline.',
   },
   {
     label: 'Private workspace',
     value: 'App + Workbench',
-    detail: 'The private app for saved boards, queues, and work notes.',
+    detail: 'Saved boards, queues, and notes.',
   },
 ]
 
 export const coreProduct = {
   name: 'Action OS',
-  tagline: 'Turn scattered updates into one board with owners, due dates, and exceptions.',
+  tagline: 'One board for owners, due dates, and blockers.',
   replaces: ['Manual chasing', 'Buried follow-up', 'Last-minute reporting'],
-  inputs: ['Gmail', 'Drive', 'Sheets', 'Daily updates'],
-  outputs: ['Action board', 'Exception queue', 'Director summary'],
+  inputs: ['Gmail', 'Drive', 'Sheets', 'Team updates'],
+  outputs: ['Action board', 'Exception queue', 'Summary'],
   rollout: [
-    'Connect one inbox, one sheet, or one update source.',
+    'Connect one inbox, sheet, or update source.',
     'Assign owners and due dates on one board.',
-    'Add deeper modules only after the first board is trusted.',
+    'Add more only after the first board is trusted.',
   ],
+}
+
+export const leadFinder = {
+  title: 'Lead Finder',
+  description: 'A simple proof tool inside the product. Find a lead, shape the offer, and save it for follow-up.',
+  steps: ['Find the lead', 'Shape the offer', 'Save it to the pipeline'],
 }
 
 export const useCases: UseCase[] = [
   {
     name: 'Operations',
     audience: 'GMs, operations leads, and owner-led teams',
-    promise: 'Get one board for follow-up, blockers, and today’s priorities.',
+    promise: "Get one board for follow-up, blockers, and today's priorities.",
     firstRollout: 'Action OS plus one team update source.',
     inputs: ['Daily updates', 'Meeting notes', 'Shared trackers'],
     outcomes: ['Clear ownership', 'Fewer missed follow-ups', 'Faster weekly review'],

@@ -6,11 +6,13 @@ import { SiteFrame } from './components/SiteFrame'
 import { ActionBoardPage } from './pages/ActionBoardPage'
 import { BookPage } from './pages/BookPage'
 import { ContactPage } from './pages/ContactPage'
+import { ApprovalQueuePage } from './pages/ApprovalQueuePage'
 import { DecisionJournalPage } from './pages/DecisionJournalPage'
 import { DirectorDashboardPage } from './pages/DirectorDashboardPage'
 import { DocumentIntakePage } from './pages/DocumentIntakePage'
 import { ExceptionQueuePage } from './pages/ExceptionQueuePage'
 import { HomePage } from './pages/HomePage'
+import { InsightsPage } from './pages/InsightsPage'
 import { InventoryPulsePage } from './pages/InventoryPulsePage'
 import { LeadFinderPage } from './pages/LeadFinderPage'
 import { LoginPage } from './pages/LoginPage'
@@ -21,6 +23,7 @@ import { PackagesPage } from './pages/PackagesPage'
 import { PlatformPage } from './pages/PlatformPage'
 import { ProductsPage } from './pages/ProductsPage'
 import { ReceivingControlPage } from './pages/ReceivingControlPage'
+import { SignupPage } from './pages/SignupPage'
 import { SolutionArchitectPage } from './pages/SolutionArchitectPage'
 import { WorkbenchPage } from './pages/WorkbenchPage'
 import { WorkspacePage } from './pages/WorkspacePage'
@@ -37,11 +40,14 @@ function App() {
           <Route element={<PackagesPage />} path="solutions" />
           <Route element={<LeadFinderPage />} path="lead-finder" />
           <Route element={<LoginPage />} path="login" />
+          <Route element={<SignupPage />} path="signup" />
           <Route element={<BookPage />} path="book" />
           <Route element={<Navigate replace to="/app" />} path="workbench" />
           <Route element={<Navigate replace to="/app/actions" />} path="workspace" />
           <Route element={<Navigate replace to="/app/director" />} path="director" />
+          <Route element={<Navigate replace to="/app/insights" />} path="insights" />
           <Route element={<Navigate replace to="/app/decisions" />} path="decisions" />
+          <Route element={<Navigate replace to="/app/approvals" />} path="approvals" />
           <Route element={<Navigate replace to="/app/exceptions" />} path="exceptions" />
           <Route element={<Navigate replace to="/app/intake" />} path="ops-intake" />
           <Route element={<Navigate replace to="/app/intake" />} path="metric-intake" />
@@ -63,9 +69,11 @@ function App() {
         </Route>
         <Route element={<AppFrame />} path="/app">
           <Route element={<WorkbenchPage />} index />
+          <Route element={<InsightsPage />} path="insights" />
           <Route element={<DirectorDashboardPage />} path="director" />
           <Route element={<WorkspacePage />} path="actions" />
           <Route element={<DecisionJournalPage />} path="decisions" />
+          <Route element={<ApprovalQueuePage />} path="approvals" />
           <Route element={<ExceptionQueuePage />} path="exceptions" />
           <Route element={<LeadFinderPage />} path="leads" />
           <Route element={<MetricIntakePage />} path="intake" />

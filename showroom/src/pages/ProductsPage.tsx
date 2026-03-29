@@ -1,78 +1,56 @@
 import { Link } from 'react-router-dom'
 
 import { PageIntro } from '../components/PageIntro'
-import { coreProduct, publicModules } from '../content'
+import { coreProduct, leadFinder } from '../content'
 
 export function ProductsPage() {
   return (
     <div className="space-y-8">
-      <PageIntro
-        eyebrow="Modules"
-        title="One core product. A small set of add-ons."
-        description="Start with Action OS. Add one module only when you need deeper control in that area."
-      />
+      <PageIntro eyebrow="Public products" title="Action OS" description="One product. One proof tool. One way in." />
 
-      <section className="sm-surface-deep p-6">
-        <p className="sm-kicker text-[var(--sm-accent)]">Core product</p>
-        <div className="grid gap-5 lg:grid-cols-[1fr_0.9fr]">
-          <div>
-            <h2 className="mt-3 text-4xl font-bold text-white">{coreProduct.name}</h2>
-            <p className="mt-4 text-sm leading-relaxed text-[var(--sm-muted)]">{coreProduct.tagline}</p>
-            <div className="mt-5 flex flex-wrap gap-3">
-              <Link className="sm-button-primary" to="/platform">
-                See Action OS
-              </Link>
-              <Link className="sm-button-secondary" to="/login?next=/app/actions">
-                Open app
-              </Link>
+      <section className="grid gap-5 lg:grid-cols-[1fr_0.95fr]">
+        <article className="sm-surface-deep p-6">
+          <p className="sm-kicker text-[var(--sm-accent)]">Action OS</p>
+          <h2 className="mt-3 text-4xl font-bold text-white">{coreProduct.tagline}</h2>
+          <div className="mt-5 grid gap-3 md:grid-cols-3">
+            <div className="sm-chip text-white">
+              <p className="text-sm font-semibold">{coreProduct.replaces[0]}</p>
+            </div>
+            <div className="sm-chip text-white">
+              <p className="text-sm font-semibold">{coreProduct.replaces[1]}</p>
+            </div>
+            <div className="sm-chip text-white">
+              <p className="text-sm font-semibold">{coreProduct.replaces[2]}</p>
             </div>
           </div>
-          <div className="grid gap-3">
-            {coreProduct.outputs.map((item) => (
-              <div className="sm-chip text-white" key={item}>
-                {item}
+        </article>
+
+        <article className="sm-terminal p-6">
+          <p className="sm-kicker text-[var(--sm-accent)]">{leadFinder.title}</p>
+          <h2 className="mt-3 text-3xl font-bold text-white">Proof in one tool.</h2>
+          <div className="mt-5 grid gap-3">
+            {leadFinder.steps.map((step) => (
+              <div className="sm-proof-card" key={step}>
+                <p className="text-sm text-white">{step}</p>
               </div>
             ))}
           </div>
-        </div>
+        </article>
       </section>
 
-      <section className="space-y-4">
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <p className="sm-kicker text-[var(--sm-accent)]">Add-on modules</p>
-              <h2 className="mt-2 text-2xl font-bold text-white">The next screens after Action OS.</h2>
-            </div>
-            <Link className="sm-link" to="/book">
-              Book demo
-          </Link>
-        </div>
-
-        <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
-          {publicModules.map((module) => (
-            <article className="sm-surface-soft p-6" key={module.name}>
-              <h3 className="text-2xl font-bold text-white">{module.name}</h3>
-              <p className="mt-3 text-sm text-[var(--sm-muted)]">{module.tagline}</p>
-              <p className="mt-4 text-xs uppercase tracking-[0.18em] text-[var(--sm-accent)]">{module.bestFor}</p>
-
-              <div className="mt-5 grid gap-2">
-                {module.outputs.map((item) => (
-                  <div className="sm-chip text-white" key={item}>
-                    {item}
-                  </div>
-                ))}
-              </div>
-
-              <div className="mt-5 flex flex-wrap gap-3">
-                <Link className="sm-button-secondary" to={module.path}>
-                  Open in app
-                </Link>
-                <Link className="sm-button-accent" to={`/contact?package=${encodeURIComponent(module.name)}`}>
-                  Use on my data
-                </Link>
-              </div>
-            </article>
-          ))}
+      <section className="sm-surface p-6">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <p className="text-sm leading-relaxed text-[var(--sm-muted)]">
+            Create a workspace to use Action OS. Lead Finder stays in the same flow.
+          </p>
+          <div className="flex flex-wrap gap-3">
+            <Link className="sm-button-primary" to="/signup">
+              Create workspace
+            </Link>
+            <Link className="sm-button-secondary" to="/login?next=/app">
+              Login
+            </Link>
+          </div>
         </div>
       </section>
     </div>

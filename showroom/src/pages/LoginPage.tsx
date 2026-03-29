@@ -76,28 +76,19 @@ export function LoginPage() {
     <div className="space-y-8">
       <PageIntro
         eyebrow="Client login"
-        title="Sign in to the live workspace."
-        description="The public site shows the product. The live app host is where saved data, queues, and internal modules actually run."
+        title="Sign in to the workspace."
+        description="Use login only for the saved app. If you are new, create a workspace first."
       />
 
-      <section className="grid gap-6 lg:grid-cols-[0.85fr_1.15fr]">
+      <section className="grid gap-6 lg:grid-cols-[0.7fr_1.3fr]">
         <aside className="sm-terminal p-6">
-          <p className="sm-kicker text-[var(--sm-accent)]">Use login for</p>
-          <div className="mt-5 grid gap-3">
-            {['Saved lead pipeline', 'Workspace records', 'Receiving and inventory boards', 'Director and manager views'].map((item) => (
-              <div className="sm-chip text-white" key={item}>
-                {item}
-              </div>
-            ))}
-          </div>
-
-          <div className="mt-6 sm-chip text-[var(--sm-muted)]">
-            {authRequired
-              ? 'If this host is the live app backend, sign in and go straight to the private workspace.'
-              : 'Auth is disabled on this host, so the app should open without a separate login.'}
+          <p className="sm-kicker text-[var(--sm-accent)]">Use this for</p>
+          <div className="mt-4 grid gap-3">
+            <div className="sm-chip text-white">Saved lead pipeline</div>
+            <div className="sm-chip text-white">Action board and exceptions</div>
+            <div className="sm-chip text-white">Director and manager views</div>
           </div>
         </aside>
-
         <form className="sm-surface p-6" onSubmit={handleSubmit}>
           <div className="grid gap-4">
             <label className="grid gap-2 text-sm font-semibold text-[var(--sm-muted)]">
@@ -123,11 +114,15 @@ export function LoginPage() {
             <button className="sm-button-primary" disabled={loading || submitting} type="submit">
               {submitting ? 'Signing in...' : 'Login'}
             </button>
+            <Link className="sm-button-accent" to="/signup">
+              Create workspace
+            </Link>
             <Link className="sm-button-secondary" to="/lead-finder">
-              Back to public tools
+              Try Lead Finder
             </Link>
           </div>
 
+          {!authRequired ? <div className="mt-4 sm-chip text-[var(--sm-muted)]">Auth is off on this host, so the app should open directly.</div> : null}
           {usesDefaultCredentials ? (
             <div className="mt-4 sm-chip text-[var(--sm-muted)]">
               This host is still using the default demo credentials. Change `SUPERMEGA_APP_USERNAME` and `SUPERMEGA_APP_PASSWORD` before sharing it widely.

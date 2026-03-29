@@ -9,7 +9,7 @@ export function BookPage() {
       <PageIntro
         eyebrow="Book demo"
         title="Book a 20-minute demo."
-        description="We will look at one workflow, one data source, and the fastest first rollout. Keep it simple."
+        description="We look at one workflow, one data source, and the fastest first rollout."
       />
 
       <section className="grid gap-6 lg:grid-cols-[0.88fr_1.12fr]">
@@ -27,9 +27,7 @@ export function BookPage() {
             ))}
           </div>
 
-          <p className="mt-6 text-sm text-[var(--sm-muted)]">
-            Best fit: owner-led teams, factories, distributors, and managers who want one working operating layer before any bigger rollout.
-          </p>
+          <p className="mt-6 text-sm text-[var(--sm-muted)]">Best fit: teams that want one working board before any bigger rollout.</p>
         </aside>
 
         <section className="sm-surface p-6">
@@ -53,14 +51,14 @@ export function BookPage() {
           ) : (
             <div className="space-y-5">
               <div className="sm-chip text-[var(--sm-muted)]">
-                Booking is not configured on this host yet. Set <code>VITE_BOOKING_URL</code> to your calendar link to make demo scheduling live.
+                No booking link is configured on this host yet.
               </div>
               <div className="flex flex-wrap gap-3">
-                <Link className="sm-button-primary" to="/contact">
-                  Request a demo manually
+                <Link className="sm-button-primary" to="/signup">
+                  Create workspace
                 </Link>
-                <Link className="sm-button-secondary" to="/lead-finder">
-                  Try Lead Finder first
+                <Link className="sm-button-secondary" to="/contact">
+                  Send request
                 </Link>
               </div>
             </div>

@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 
-import { coreProduct, hero, proofPoints, publicModules, useCases } from '../content'
+import { coreProduct, hero, leadFinder, proofPoints } from '../content'
 
 export function HomePage() {
   return (
@@ -16,22 +16,22 @@ export function HomePage() {
             <h1 className="mt-4 max-w-4xl text-4xl font-extrabold tracking-tight text-white lg:text-6xl">
               {hero.title}
             </h1>
-            <p className="mt-5 max-w-3xl text-base leading-relaxed text-[var(--sm-muted)] lg:text-lg">
+            <p className="mt-5 max-w-2xl text-base leading-relaxed text-[var(--sm-muted)] lg:text-lg">
               {hero.description}
             </p>
 
             <div className="mt-7 flex flex-wrap gap-3">
-              <Link className="sm-button-primary" to="/book">
-                Book demo
+              <Link className="sm-button-primary" to="/signup">
+                Create workspace
               </Link>
-              <Link className="sm-button-secondary" to="/lead-finder">
-                Try Lead Finder
+              <Link className="sm-button-secondary" to="/login?next=/app">
+                Login
               </Link>
             </div>
           </div>
 
           <div className="sm-terminal p-5">
-            <p className="sm-kicker text-[var(--sm-accent)]">What is live now</p>
+            <p className="sm-kicker text-[var(--sm-accent)]">Live now</p>
             <div className="mt-5 grid gap-3">
               {proofPoints.map((point) => (
                 <div className="sm-proof-card" key={point.label}>
@@ -45,110 +45,61 @@ export function HomePage() {
         </div>
       </section>
 
-      <section className="space-y-4">
-        <div>
-          <p className="sm-kicker text-[var(--sm-accent)]">Start here</p>
-          <h2 className="mt-2 text-2xl font-bold text-white">Three simple entry points.</h2>
-        </div>
-
-        <div className="grid gap-5 xl:grid-cols-3">
-          {useCases.map((pack) => (
-            <article className="sm-pack-card p-6" key={pack.name}>
-              <p className="sm-kicker text-[var(--sm-accent)]">{pack.audience}</p>
-              <h3 className="mt-3 text-2xl font-bold text-white">{pack.name}</h3>
-              <p className="mt-3 text-sm text-[var(--sm-muted)]">{pack.promise}</p>
-              <div className="mt-5 grid gap-3">
-                {pack.outcomes.slice(0, 3).map((item) => (
-                  <div className="sm-chip text-white" key={item}>
-                    {item}
-                  </div>
-                ))}
-              </div>
-            </article>
-          ))}
-        </div>
-      </section>
-
-      <section className="space-y-4">
-        <div className="flex items-center justify-between gap-4">
-          <div>
-            <p className="sm-kicker text-[var(--sm-accent)]">Action OS</p>
-            <h2 className="mt-2 text-2xl font-bold text-white">The first screen to trust.</h2>
-          </div>
-        </div>
-
-        <div className="grid gap-5 lg:grid-cols-[1.1fr_0.9fr]">
-          <article className="sm-surface-soft p-6">
-            <h3 className="text-3xl font-bold text-white">{coreProduct.name}</h3>
-            <p className="mt-3 text-sm text-[var(--sm-muted)]">{coreProduct.tagline}</p>
-            <div className="mt-5 grid gap-3 md:grid-cols-3">
-              <div className="sm-chip text-white">
-                <p className="sm-kicker text-[var(--sm-accent)]">Replaces</p>
-                <p className="mt-2 text-sm">{coreProduct.replaces.join(', ')}</p>
-              </div>
-              <div className="sm-chip text-white">
-                <p className="sm-kicker text-[var(--sm-accent-alt)]">Inputs</p>
-                <p className="mt-2 text-sm">{coreProduct.inputs.join(', ')}</p>
-              </div>
-              <div className="sm-chip text-white">
-                <p className="sm-kicker text-[var(--sm-accent)]">Outputs</p>
-                <p className="mt-2 text-sm">{coreProduct.outputs.join(', ')}</p>
-              </div>
-            </div>
-            <div className="mt-5 flex flex-wrap gap-3">
-              <Link className="sm-button-primary" to="/platform">
-                See Action OS
-              </Link>
-              <Link className="sm-button-secondary" to="/login?next=/app">
-                Login to app
-              </Link>
-            </div>
-          </article>
-
-          <article className="sm-terminal p-6">
-            <p className="sm-kicker text-[var(--sm-accent)]">First rollout</p>
-            <div className="mt-5 grid gap-3">
-              {coreProduct.rollout.map((step) => (
-                <div className="sm-proof-card" key={step}>
-                  <p className="text-sm text-white">{step}</p>
-                </div>
-              ))}
-            </div>
-          </article>
-        </div>
-      </section>
-
-      <section className="grid gap-5 lg:grid-cols-[1fr_1fr]">
+      <section className="grid gap-5 lg:grid-cols-[1.1fr_0.9fr]">
         <article className="sm-surface p-6">
-          <p className="sm-kicker text-[var(--sm-accent)]">Modules</p>
-          <h2 className="mt-3 text-2xl font-bold text-white">Add depth only where you need control.</h2>
+          <p className="sm-kicker text-[var(--sm-accent)]">Action OS</p>
+          <h2 className="mt-3 text-3xl font-bold text-white">{coreProduct.tagline}</h2>
+
+          <div className="mt-5 grid gap-3 md:grid-cols-3">
+            <div className="sm-chip text-white">
+              <p className="text-sm font-semibold">{coreProduct.replaces[0]}</p>
+            </div>
+            <div className="sm-chip text-white">
+              <p className="text-sm font-semibold">{coreProduct.replaces[1]}</p>
+            </div>
+            <div className="sm-chip text-white">
+              <p className="text-sm font-semibold">{coreProduct.replaces[2]}</p>
+            </div>
+          </div>
+        </article>
+
+        <article className="sm-terminal p-6">
+          <p className="sm-kicker text-[var(--sm-accent)]">First rollout</p>
           <div className="mt-5 grid gap-3">
-            {publicModules.map((module) => (
-              <div className="sm-command-row" key={module.name}>
-                <div>
-                  <p className="font-semibold text-white">{module.name}</p>
-                  <p className="mt-2 text-sm text-[var(--sm-muted)]">{module.tagline}</p>
-                </div>
+            {coreProduct.rollout.map((step) => (
+              <div className="sm-proof-card" key={step}>
+                <p className="text-sm text-white">{step}</p>
               </div>
             ))}
           </div>
         </article>
+      </section>
 
-        <article className="sm-surface p-6">
-          <p className="sm-kicker text-[var(--sm-accent-alt)]">Next step</p>
-          <h2 className="mt-3 text-2xl font-bold text-white">Book a demo or log into the app.</h2>
-          <p className="mt-3 text-sm text-[var(--sm-muted)]">
-            Keep the first rollout small: one workflow, one team, one live board.
-          </p>
-          <div className="mt-5 flex flex-wrap gap-3">
-            <Link className="sm-button-primary" to="/book">
-              Book demo
-            </Link>
-            <Link className="sm-button-secondary" to="/login?next=/app">
-              Login
-            </Link>
+      <section className="sm-surface-deep p-6">
+        <div className="grid gap-6 lg:grid-cols-[1.05fr_0.95fr] lg:items-start">
+          <div>
+            <p className="sm-kicker text-[var(--sm-accent)]">{leadFinder.title}</p>
+            <h2 className="mt-3 text-3xl font-bold text-white">One proof tool.</h2>
+            <p className="mt-3 max-w-2xl text-sm leading-relaxed text-[var(--sm-muted)]">{leadFinder.description}</p>
           </div>
-        </article>
+
+          <div className="grid gap-3">
+            {leadFinder.steps.map((step) => (
+              <div className="sm-proof-card" key={step}>
+                <p className="text-sm text-white">{step}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="mt-6 flex flex-wrap gap-3">
+          <Link className="sm-button-primary" to="/lead-finder">
+            Try Lead Finder
+          </Link>
+          <Link className="sm-button-secondary" to="/platform">
+            See Action OS
+          </Link>
+        </div>
       </section>
     </div>
   )
