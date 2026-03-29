@@ -177,6 +177,13 @@ def main() -> int:
         if hunt_profile_row.get("hunt_id")
         else {}
     )
+    run_all_hunts = request_json(
+        opener,
+        "POST",
+        f"{args.base_url.rstrip('/')}/api/lead-hunts/run-active",
+        {"export_workspace": False},
+        timeout=90,
+    )
     pipeline_import = request_json(
         opener,
         "POST",
@@ -233,6 +240,7 @@ def main() -> int:
         "lead_hunt_saved_count": int(lead_hunt.get("saved_count", 0) or 0),
         "hunt_profile_count": len(hunt_profile_rows),
         "hunt_profile_run_saved_count": int(hunt_profile_run.get("saved_count", 0) or 0),
+        "run_all_hunts_saved_count": int(run_all_hunts.get("saved_count", 0) or 0),
         "outreach_status": outreach.get("status", ""),
         "workspace_export_status": workspace_export.get("status", ""),
         "workspace_export_link": workspace_export.get("export", {}).get("web_view_link", ""),
@@ -264,6 +272,7 @@ def main() -> int:
     print(f"- Lead hunt saved: {report['lead_hunt_saved_count']}")
     print(f"- Hunt profiles: {report['hunt_profile_count']}")
     print(f"- Hunt profile run saved: {report['hunt_profile_run_saved_count']}")
+    print(f"- Run-all hunts saved: {report['run_all_hunts_saved_count']}")
     print(f"- Outreach: {report['outreach_status']}")
     print(f"- Workspace export: {report['workspace_export_status']}")
     print()

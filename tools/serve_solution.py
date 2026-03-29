@@ -302,6 +302,10 @@ class LeadHuntProfileRunRequest(BaseModel):
     export_workspace: bool | None = None
 
 
+class LeadHuntProfilesRunAllRequest(BaseModel):
+    export_workspace: bool | None = None
+
+
 class LeadActivityRequest(BaseModel):
     activity_type: str = "note"
     channel: str = "email"
@@ -1790,6 +1794,60 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
                 else hunt.get("export_workspace", True)
             ),
         )
+
+    @app.post("/api/lead-hunts/run-active")
+    def run_active_lead_hunts(request_http: Request, request: LeadHuntProfilesRunAllRequest) -> dict[str, Any]:
+        session = _require_session(request_http)
+        workspace_id = str(session.get("workspace_id", "")).strip()
+        workspace_name = str(session.get("workspace_name", "")).strip()
+        hunts = enterprise_list_lead_hunt_profiles(
+            enterprise_db_url,
+            workspace_id=workspace_id,
+            status="active",
+            limit=100,
+        )
+        results: list[dict[str, Any]] = []
+        total_saved = 0
+        for hunt in hunts:
+            result = _run_autonomous_lead_hunt(
+                workspace_id=workspace_id,
+                workspace_name=workspace_name,
+                hunt_id=str(hunt.get("hunt_id", "")).strip(),
+                query=str(hunt.get("query", "")).strip(),
+                raw_text=str(hunt.get("raw_text", "")).strip(),
+                keywords=[str(item).strip() for item in (hunt.get("keywords") or []) if str(item).strip()],
+                sources=[str(item).strip() for item in (hunt.get("sources") or []) if str(item).strip()],
+                limit=int(hunt.get("limit", 8) or 8),
+                campaign_goal=str(hunt.get("campaign_goal", "")).strip() or "Book one discovery call.",
+                export_workspace=bool(
+                    request.export_workspace
+                    if request.export_workspace is not None
+                    else hunt.get("export_workspace", True)
+                ),
+            )
+            saved_count = int(result.get("saved_count", 0) or 0)
+            total_saved += saved_count
+            results.append(
+                {
+                    "hunt_id": str(hunt.get("hunt_id", "")).strip(),
+                    "name": str(hunt.get("name", "")).strip(),
+                    "saved_count": saved_count,
+                    "provider": str(result.get("provider", "")).strip(),
+                    "engine": str(result.get("engine", "")).strip(),
+                    "summary": str(result.get("summary", "")).strip(),
+                }
+            )
+        return {
+            "status": "ready",
+            "count": len(results),
+            "saved_count": total_saved,
+            "results": results,
+            "rows": enterprise_list_lead_hunt_profiles(
+                enterprise_db_url,
+                workspace_id=workspace_id,
+                limit=100,
+            ),
+        }
 
     @app.post("/api/tools/action-board")
     def tool_action_board(request: ActionBoardRequest) -> dict[str, Any]:

@@ -205,6 +205,7 @@ export function LeadFinderPage() {
   const [huntName, setHuntName] = useState('Yangon spa hunt')
   const [huntProfiles, setHuntProfiles] = useState<LeadHuntProfile[]>([])
   const [huntProfilesBusy, setHuntProfilesBusy] = useState(false)
+  const [runAllBusy, setRunAllBusy] = useState(false)
   const [pipelineBusy, setPipelineBusy] = useState(false)
   const [pipelineMessage, setPipelineMessage] = useState('')
   const [pipeline, setPipeline] = useState<LeadPipelineResponse | null>(null)
@@ -573,6 +574,29 @@ export function LeadFinderPage() {
       setPipelineMessage(error instanceof Error ? error.message : 'Could not run the saved hunt.')
     } finally {
       setLeadHuntBusy(false)
+    }
+  }
+
+  async function runAllActiveHunts() {
+    if (!apiReady || !authenticated) {
+      setPipelineMessage('Login is required before running saved hunts.')
+      return
+    }
+    setRunAllBusy(true)
+    setPipelineMessage('')
+    try {
+      const payload = await workspaceFetch<{ count: number; saved_count: number; rows: LeadHuntProfile[] }>('/api/lead-hunts/run-active', {
+        method: 'POST',
+        body: JSON.stringify({}),
+      })
+      setHuntProfiles(payload.rows ?? [])
+      await loadPipeline()
+      await loadHuntProfiles()
+      setPipelineMessage(`Ran ${payload.count} active hunt${payload.count === 1 ? '' : 's'} and saved ${payload.saved_count} lead${payload.saved_count === 1 ? '' : 's'}.`)
+    } catch (error) {
+      setPipelineMessage(error instanceof Error ? error.message : 'Could not run the active hunts.')
+    } finally {
+      setRunAllBusy(false)
     }
   }
 
@@ -1111,6 +1135,13 @@ export function LeadFinderPage() {
                     </div>
                   )}
                 </div>
+                {huntProfiles.length ? (
+                  <div className="mt-3">
+                    <button className="sm-button-accent" disabled={runAllBusy || leadHuntBusy} onClick={() => void runAllActiveHunts()} type="button">
+                      {runAllBusy ? 'Running active hunts...' : 'Run all active hunts'}
+                    </button>
+                  </div>
+                ) : null}
               </div>
 
               <div className="sm-chip">
