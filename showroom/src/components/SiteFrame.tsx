@@ -42,10 +42,10 @@ export function SiteFrame() {
               </NavLink>
             ))}
             <NavLink className="sm-button-primary ml-2" to="/signup">
-              Create workspace
+              Start workspace
             </NavLink>
             <NavLink className="sm-button-secondary ml-2" to="/login?next=/app">
-              Login
+              Open app
             </NavLink>
           </div>
         </nav>
@@ -58,10 +58,10 @@ export function SiteFrame() {
                 </NavLink>
               ))}
               <NavLink className="sm-button-primary mt-1 text-center" onClick={() => setMenuOpen(false)} to="/signup">
-                Create workspace
+                Start workspace
               </NavLink>
               <NavLink className="sm-button-secondary mt-1 text-center" onClick={() => setMenuOpen(false)} to="/login?next=/app">
-                Login
+                Open app
               </NavLink>
             </div>
           </div>
@@ -74,7 +74,7 @@ export function SiteFrame() {
 
       <footer className="border-t border-white/8 bg-[rgba(4,10,22,0.78)]">
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 px-4 py-6 text-sm text-[var(--sm-muted)] lg:flex-row lg:items-center lg:justify-between lg:px-8">
-          <p>Action OS is the product. Lead Finder is the proof tool.</p>
+          <p>Action OS runs the work. Lead Finder fills the pipeline.</p>
         </div>
       </footer>
     </div>

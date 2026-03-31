@@ -747,29 +747,29 @@ export function LeadFinderPage() {
   return (
     <div className="space-y-8">
       <PageIntro
-        eyebrow={isPrivateApp ? 'Private app' : 'Proof tool'}
+        eyebrow={isPrivateApp ? 'Private app' : 'Live tool'}
         title="Lead Finder"
         description={
           isPrivateApp
             ? 'Search, shape the offer, and move leads through the live pipeline.'
-            : 'Search real businesses and let the agent turn them into an offer-ready shortlist.'
+            : 'Search real businesses and turn the shortlist into outreach.'
         }
       />
 
       {!apiReady && !isPrivateApp ? (
         <section className="sm-chip border-[rgba(255,122,24,0.22)] bg-[rgba(255,122,24,0.08)] text-[var(--sm-muted)]">
-          This host is only the public shell. Live search, saved pipeline, and Workspace export work on the app host with the backend attached.
+          This host is only the public shell. Use the app to search, save, and export.
         </section>
       ) : !authLoading && !authenticated && !isPrivateApp ? (
         <section className="sm-chip border-[rgba(37,208,255,0.2)] bg-[rgba(37,208,255,0.08)] text-[var(--sm-muted)]">
-          Search works here. Login is required to save the pipeline, keep an outreach history, and export the queue to Google Workspace.
+          Search works here. Login is only needed to save the pipeline and export it.
         </section>
       ) : null}
 
       <section className="grid gap-6 lg:grid-cols-[0.92fr_1.08fr]">
         <article className="sm-surface-deep p-6">
-          <p className="sm-kicker text-[var(--sm-accent)]">Search setup</p>
-          <h2 className="mt-3 text-3xl font-bold text-white">Tell it what to hunt.</h2>
+          <p className="sm-kicker text-[var(--sm-accent)]">Search</p>
+          <h2 className="mt-3 text-3xl font-bold text-white">Find a market.</h2>
 
           <div className="mt-6 grid gap-4">
             <label className="grid gap-2 text-sm font-semibold text-[var(--sm-muted)]">
@@ -878,7 +878,7 @@ export function LeadFinderPage() {
                       <div className="flex items-center gap-2">
                         <span className="sm-status-pill">Score {row.score}</span>
                         <button className={isSaved ? 'sm-button-accent' : 'sm-button-secondary'} onClick={() => toggleShortlist(row.name)} type="button">
-                          {isSaved ? 'Shortlisted' : 'Save'}
+                          {isSaved ? 'Shortlisted' : 'Keep'}
                         </button>
                       </div>
                     </div>
@@ -932,7 +932,7 @@ export function LeadFinderPage() {
 
           <div className="mt-5 flex flex-wrap gap-3">
             <button className="sm-button-primary" onClick={() => void buildLeadPack()} type="button">
-              {offerBusy ? 'Building...' : 'Build offer'}
+              {offerBusy ? 'Building...' : 'Build outreach'}
             </button>
             <button
               className="sm-button-accent"
@@ -940,7 +940,7 @@ export function LeadFinderPage() {
               onClick={() => void runLeadHunt()}
               type="button"
             >
-              {leadHuntBusy ? 'Running hunt...' : 'Run autopilot'}
+              {leadHuntBusy ? 'Running...' : 'Run for me'}
             </button>
             {isPrivateApp ? (
               <>
@@ -950,7 +950,7 @@ export function LeadFinderPage() {
                   onClick={() => void saveLeadHuntProfile()}
                   type="button"
                 >
-                  {huntProfilesBusy ? 'Saving hunt...' : 'Save hunt'}
+                  {huntProfilesBusy ? 'Saving...' : 'Save search'}
                 </button>
                 <button
                   className="sm-button-secondary"
@@ -966,7 +966,7 @@ export function LeadFinderPage() {
               </>
             ) : (
               <Link className="sm-button-secondary" to="/signup">
-                Create workspace
+                Start workspace
               </Link>
             )}
           </div>
@@ -997,15 +997,15 @@ export function LeadFinderPage() {
                 <input className="sm-input" onChange={(event) => setHuntName(event.target.value)} value={huntName} />
               </label>
               <div className="sm-chip text-[var(--sm-muted)]">
-                Save the search once, then rerun it as a repeatable lead-hunt profile inside the private app.
+                Save the search once, then rerun it later.
               </div>
             </div>
           ) : null}
         </article>
 
         <article className="sm-surface p-6">
-          <p className="sm-kicker text-[var(--sm-accent-alt)]">Lead to pilot</p>
-          <h2 className="mt-3 text-2xl font-bold text-white">What to sell this shortlist.</h2>
+          <p className="sm-kicker text-[var(--sm-accent-alt)]">Outreach</p>
+          <h2 className="mt-3 text-2xl font-bold text-white">Turn leads into outreach.</h2>
       {leadPack ? (
         <div className="mt-5 space-y-4">
           <div className="sm-proof-card">
@@ -1057,7 +1057,7 @@ export function LeadFinderPage() {
             </div>
           ) : (
             <div className="mt-5 sm-chip text-[var(--sm-muted)]">
-              Build the offer to get the wedge product, service pack, pilot scope, and outreach draft.
+              Build outreach to get the offer, scope, and message.
             </div>
           )}
         </article>
@@ -1114,7 +1114,7 @@ export function LeadFinderPage() {
                           </div>
                           <div className="flex flex-wrap gap-2">
                             <button className="sm-button-secondary" onClick={() => loadLeadHuntProfileIntoForm(hunt)} type="button">
-                              Use
+                              Load
                             </button>
                             <button
                               className="sm-button-secondary"
@@ -1131,24 +1131,24 @@ export function LeadFinderPage() {
                     ))
                   ) : (
                     <div className="rounded-2xl border border-white/8 bg-[rgba(255,255,255,0.03)] px-4 py-3 text-sm text-[var(--sm-muted)]">
-                      Save one hunt profile to make lead generation repeatable.
+                      Save one search to rerun it later.
                     </div>
                   )}
                 </div>
                 {huntProfiles.length ? (
                   <div className="mt-3">
                     <button className="sm-button-accent" disabled={runAllBusy || leadHuntBusy} onClick={() => void runAllActiveHunts()} type="button">
-                      {runAllBusy ? 'Running active hunts...' : 'Run all active hunts'}
+                      {runAllBusy ? 'Running saved searches...' : 'Run saved searches'}
                     </button>
                   </div>
                 ) : null}
               </div>
 
               <div className="sm-chip">
-                <p className="sm-kicker text-[var(--sm-accent)]">How to use it</p>
+                <p className="sm-kicker text-[var(--sm-accent)]">Next steps</p>
                 <ol className="mt-3 space-y-2 text-sm text-[var(--sm-muted)]">
                   <li>1. Search and shortlist leads.</li>
-                  <li>2. Build the offer and save the shortlist.</li>
+                  <li>2. Build outreach and save the shortlist.</li>
                   <li>3. Copy the outreach and log the send.</li>
                   <li>4. Move the lead to discovery once they reply.</li>
                 </ol>

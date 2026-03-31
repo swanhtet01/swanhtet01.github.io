@@ -24,32 +24,32 @@ export type PublicModule = {
 
 export const navItems = [
   { label: 'Home', to: '/' },
-  { label: 'Product', to: '/platform' },
+  { label: 'Action OS', to: '/platform' },
   { label: 'Lead Finder', to: '/lead-finder' },
 ] as const
 
 export const bookingUrl = (import.meta.env.VITE_BOOKING_URL ?? '').trim()
 
 export const hero = {
-  eyebrow: 'Main product',
-  title: 'Action OS keeps work moving.',
-  description: 'Turn inboxes, sheets, and team updates into one clear board. Use Lead Finder as the proof tool.',
+  eyebrow: 'AI-native operating software',
+  title: 'Run work in one place.',
+  description: 'Action OS keeps work, owners, and blockers on one board. Lead Finder fills the next pipeline.',
 }
 
 export const proofPoints: ProofPoint[] = [
   {
-    label: 'Core product',
+    label: 'Product',
     value: 'Action OS',
     detail: 'One board for owners, due dates, and blockers.',
   },
   {
-    label: 'Proof tool',
+    label: 'Tool',
     value: 'Lead Finder',
-    detail: 'Find leads, shape the offer, and save them to the pipeline.',
+    detail: 'Search, shortlist, and send outreach.',
   },
   {
-    label: 'Private workspace',
-    value: 'App + Workbench',
+    label: 'App',
+    value: 'Private workspace',
     detail: 'Saved boards, queues, and notes.',
   },
 ]
@@ -69,8 +69,8 @@ export const coreProduct = {
 
 export const leadFinder = {
   title: 'Lead Finder',
-  description: 'A simple proof tool inside the product. Find a lead, shape the offer, and save it for follow-up.',
-  steps: ['Find the lead', 'Shape the offer', 'Save it to the pipeline'],
+  description: 'Search a market, keep the good leads, and send outreach.',
+  steps: ['Search', 'Shortlist', 'Outreach'],
 }
 
 export const useCases: UseCase[] = [

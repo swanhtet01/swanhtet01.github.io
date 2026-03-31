@@ -19,9 +19,7 @@ import { LoginPage } from './pages/LoginPage'
 import { MetricIntakePage } from './pages/MetricIntakePage'
 import { NewsBriefPage } from './pages/NewsBriefPage'
 import { NotFoundPage } from './pages/NotFoundPage'
-import { PackagesPage } from './pages/PackagesPage'
 import { PlatformPage } from './pages/PlatformPage'
-import { ProductsPage } from './pages/ProductsPage'
 import { ReceivingControlPage } from './pages/ReceivingControlPage'
 import { SignupPage } from './pages/SignupPage'
 import { SolutionArchitectPage } from './pages/SolutionArchitectPage'
@@ -36,8 +34,8 @@ function App() {
         <Route element={<SiteFrame />} path="/">
           <Route element={<HomePage />} index />
           <Route element={<PlatformPage />} path="platform" />
-          <Route element={<ProductsPage />} path="products" />
-          <Route element={<PackagesPage />} path="solutions" />
+          <Route element={<Navigate replace to="/platform" />} path="products" />
+          <Route element={<Navigate replace to="/platform" />} path="solutions" />
           <Route element={<LeadFinderPage />} path="lead-finder" />
           <Route element={<LoginPage />} path="login" />
           <Route element={<SignupPage />} path="signup" />
@@ -62,7 +60,7 @@ function App() {
           <Route element={<Navigate replace to="/lead-finder" />} path="demos" />
           <Route element={<Navigate replace to="/lead-finder" />} path="prototypes" />
           <Route element={<Navigate replace to="/lead-finder" />} path="try" />
-          <Route element={<PackagesPage />} path="packages" />
+          <Route element={<Navigate replace to="/platform" />} path="packages" />
           <Route element={<ContactPage />} path="contact" />
           <Route element={<Navigate replace to="/" />} path="home" />
           <Route element={<NotFoundPage />} path="*" />
