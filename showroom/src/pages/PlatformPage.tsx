@@ -2,11 +2,12 @@ import { Link } from 'react-router-dom'
 
 import { PageIntro } from '../components/PageIntro'
 import { coreProduct, leadFinder } from '../content'
+import { appHref } from '../lib/workspaceApi'
 
 export function PlatformPage() {
   return (
     <div className="space-y-8">
-      <PageIntro eyebrow="Core product" title="Action OS" description="One board for work that needs an owner, a due date, or a decision." />
+      <PageIntro eyebrow="Action OS" title="One board for work." description="Owners, due dates, blockers, and approvals in one place." />
 
       <section className="grid gap-6 lg:grid-cols-[1.08fr_0.92fr]">
         <article className="sm-surface-deep p-6">
@@ -26,12 +27,12 @@ export function PlatformPage() {
           </div>
 
           <div className="mt-6 flex flex-wrap gap-3">
-            <Link className="sm-button-primary" to="/signup">
-              Create workspace
-            </Link>
-            <Link className="sm-button-secondary" to="/login?next=/app">
-              Login
-            </Link>
+            <a className="sm-button-primary" href={appHref('/signup/')}>
+              Start workspace
+            </a>
+            <a className="sm-button-secondary" href={appHref('/login/')}>
+              Open app
+            </a>
           </div>
         </article>
 
@@ -51,7 +52,7 @@ export function PlatformPage() {
         <div className="grid gap-6 lg:grid-cols-[1fr_0.95fr] lg:items-start">
           <div>
             <p className="sm-kicker text-[var(--sm-accent)]">{leadFinder.title}</p>
-            <h2 className="mt-3 text-3xl font-bold text-white">The proof tool.</h2>
+            <h2 className="mt-3 text-3xl font-bold text-white">The live front door.</h2>
             <p className="mt-3 max-w-2xl text-sm leading-relaxed text-[var(--sm-muted)]">{leadFinder.description}</p>
           </div>
 
@@ -66,7 +67,7 @@ export function PlatformPage() {
 
         <div className="mt-6 flex flex-wrap gap-3">
           <Link className="sm-button-primary" to="/lead-finder">
-            Try Lead Finder
+            Open Lead Finder
           </Link>
         </div>
       </section>

@@ -1,4 +1,5 @@
 const configuredBase = import.meta.env.VITE_WORKSPACE_API_BASE?.trim() ?? ''
+const configuredAppBase = import.meta.env.VITE_WORKSPACE_APP_BASE?.trim() ?? ''
 
 function inferApiBase() {
   if (configuredBase) {
@@ -21,7 +22,46 @@ function inferApiBase() {
   return ''
 }
 
+function inferAppBase() {
+  if (configuredAppBase) {
+    return configuredAppBase.replace(/\/$/, '')
+  }
+
+  if (typeof window === 'undefined') {
+    return ''
+  }
+
+  const { hostname, origin, port } = window.location
+  if (port === '8787') {
+    return origin
+  }
+
+  if (hostname === 'localhost' || hostname === '127.0.0.1') {
+    return `http://${hostname}:8787`
+  }
+
+  return 'http://127.0.0.1:8787'
+}
+
 export const workspaceApiBase = inferApiBase()
+export const workspaceAppBase = inferAppBase()
+
+export function appHref(path = '/') {
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`
+  return `${workspaceAppBase}${normalizedPath}`
+}
+
+export function needsLiveAppHandoff() {
+  if (typeof window === 'undefined') {
+    return false
+  }
+
+  if (!workspaceAppBase) {
+    return false
+  }
+
+  return workspaceAppBase !== window.location.origin
+}
 
 export async function workspaceFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const base = workspaceApiBase
@@ -61,10 +101,21 @@ export type WorkspaceSessionPayload = {
   auth_required?: boolean
   authenticated?: boolean
   uses_default_credentials?: boolean
+  workspaces?: Array<{
+    workspace_id?: string
+    slug?: string
+    name?: string
+    plan?: string
+    role?: string
+  }>
   session?: {
     username?: string
     display_name?: string
     role?: string
+    workspace_id?: string
+    workspace_slug?: string
+    workspace_name?: string
+    workspace_plan?: string
   } | null
 }
 
@@ -72,10 +123,10 @@ export async function getWorkspaceSession() {
   return workspaceFetch<WorkspaceSessionPayload>('/api/auth/session')
 }
 
-export async function loginWorkspace(username: string, password: string) {
+export async function loginWorkspace(username: string, password: string, workspaceSlug = '') {
   return workspaceFetch<WorkspaceSessionPayload>('/api/auth/login', {
     method: 'POST',
-    body: JSON.stringify({ username, password }),
+    body: JSON.stringify({ username, password, workspace_slug: workspaceSlug }),
   })
 }
 

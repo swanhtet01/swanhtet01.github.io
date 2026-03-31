@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 
 import { PageIntro } from '../components/PageIntro'
-import { workspaceFetch } from '../lib/workspaceApi'
+import { appHref, needsLiveAppHandoff, workspaceAppBase, workspaceFetch } from '../lib/workspaceApi'
 
 type SignupPayload = {
   name: string
@@ -24,6 +24,7 @@ export function SignupPage() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
+  const handoffToApp = needsLiveAppHandoff()
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -56,10 +57,41 @@ export function SignupPage() {
   return (
     <div className="space-y-8">
       <PageIntro
-        eyebrow="Start free"
-        title="Create your workspace."
-        description="One account. One workspace. Start with Action OS and Lead Finder."
+        eyebrow="Start"
+        title="Start the workspace."
+        description="Create one workspace and go straight into Action OS."
       />
+
+      {handoffToApp ? (
+        <section className="grid gap-6 lg:grid-cols-[0.76fr_1.24fr]">
+          <aside className="sm-terminal p-6">
+            <p className="sm-kicker text-[var(--sm-accent)]">What you get</p>
+            <div className="mt-5 grid gap-3">
+              {['Lead Finder pipeline', 'Action board', 'Exception queue', 'Director view'].map((item) => (
+                <div className="sm-chip text-white" key={item}>
+                  {item}
+                </div>
+              ))}
+            </div>
+          </aside>
+          <section className="sm-surface p-6">
+            <p className="text-sm leading-relaxed text-[var(--sm-muted)]">
+              Workspace signup is on the live app host, not this static site.
+            </p>
+            <div className="mt-5 flex flex-wrap gap-3">
+              <a className="sm-button-primary" href={appHref('/signup/')}>
+                Start workspace
+              </a>
+              <a className="sm-button-secondary" href={appHref('/login/')}>
+                Open app
+              </a>
+            </div>
+            <div className="mt-4 sm-chip text-[var(--sm-muted)]">
+              Live app host: {workspaceAppBase}
+            </div>
+          </section>
+        </section>
+      ) : (
 
       <section className="grid gap-6 lg:grid-cols-[0.82fr_1.18fr]">
         <aside className="sm-terminal p-6">
@@ -111,10 +143,10 @@ export function SignupPage() {
 
           <div className="mt-5 flex flex-wrap gap-3">
             <button className="sm-button-primary" disabled={busy} type="submit">
-              {busy ? 'Creating...' : 'Create workspace'}
+              {busy ? 'Creating...' : 'Start workspace'}
             </button>
             <Link className="sm-button-secondary" to="/login">
-              Login instead
+              Open app
             </Link>
           </div>
 
@@ -122,6 +154,7 @@ export function SignupPage() {
           {error ? <div className="mt-4 sm-chip text-white">{error}</div> : null}
         </form>
       </section>
+      )}
     </div>
   )
 }
