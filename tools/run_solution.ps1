@@ -234,13 +234,14 @@ try {
             $stdoutLog = Join-Path $logDir "serve_solution.stdout.log"
             $stderrLog = Join-Path $logDir "serve_solution.stderr.log"
             $serveArgs = @(
+                "-u",
                 ('"{0}"' -f $serveScript),
                 "--host", $BindHost,
-                "--port", $Port,
+                "--port", $Port.ToString(),
                 "--site-root", ('"{0}"' -f $siteRootPath),
                 "--pilot-data", ('"{0}"' -f $pilotDataPath)
             )
-            $serveProc = Start-Process -FilePath $pythonExe -PassThru -ArgumentList $serveArgs -RedirectStandardOutput $stdoutLog -RedirectStandardError $stderrLog
+            $serveProc = Start-Process -FilePath $pythonExe -WorkingDirectory $repoRoot -PassThru -ArgumentList $serveArgs -RedirectStandardOutput $stdoutLog -RedirectStandardError $stderrLog
 
             Start-Sleep -Seconds 1
             if ($serveProc.HasExited) {

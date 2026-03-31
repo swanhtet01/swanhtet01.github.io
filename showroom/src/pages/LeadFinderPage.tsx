@@ -39,6 +39,7 @@ type LeadOpportunity = {
 
 type LeadToPilotPayload = {
   summary: string
+  engine?: string
   dominant_archetype: string
   recommended_play: {
     wedge_product: string
@@ -103,6 +104,55 @@ type LeadActivityDraft = {
   next_step: string
 }
 
+type LeadOutreachResponse = {
+  status: string
+  draft?: {
+    status?: string
+    compose_url?: string
+    draft_id?: string
+    message?: string
+  }
+  activities?: LeadActivity[]
+}
+
+type LeadHuntPayload = {
+  status: string
+  provider: string
+  engine: string
+  row_count: number
+  saved_count: number
+  summary: string
+  export?: {
+    web_view_link?: string
+  } | null
+  hunt?: LeadHuntProfile | null
+}
+
+type LeadHuntProfile = {
+  hunt_id: string
+  name: string
+  owner: string
+  status: string
+  query: string
+  raw_text: string
+  keywords: string[]
+  sources: string[]
+  limit: number
+  campaign_goal: string
+  export_workspace: boolean
+  last_run_at: string
+  last_provider: string
+  last_engine: string
+  last_saved_count: number
+  last_summary: string
+}
+
+type LeadHuntProfileResponse = {
+  status: string
+  count: number
+  rows: LeadHuntProfile[]
+}
+
 const defaultActivityDraft = (message = ''): LeadActivityDraft => ({
   activity_type: 'note',
   channel: 'email',
@@ -134,6 +184,7 @@ function formatActivityTime(value: string) {
 
 export function LeadFinderPage() {
   const location = useLocation()
+  const isPrivateApp = location.pathname.startsWith('/app/')
   const [apiReady, setApiReady] = useState(false)
   const [authLoading, setAuthLoading] = useState(true)
   const [authenticated, setAuthenticated] = useState(false)
@@ -149,6 +200,12 @@ export function LeadFinderPage() {
   const [campaignGoal, setCampaignGoal] = useState('Book 3 discovery calls with companies still running on Gmail, Drive, Sheets, and manual follow-up.')
   const [offerBusy, setOfferBusy] = useState(false)
   const [leadPack, setLeadPack] = useState<LeadToPilotPayload | null>(null)
+  const [leadHuntBusy, setLeadHuntBusy] = useState(false)
+  const [leadHunt, setLeadHunt] = useState<LeadHuntPayload | null>(null)
+  const [huntName, setHuntName] = useState('Yangon spa hunt')
+  const [huntProfiles, setHuntProfiles] = useState<LeadHuntProfile[]>([])
+  const [huntProfilesBusy, setHuntProfilesBusy] = useState(false)
+  const [runAllBusy, setRunAllBusy] = useState(false)
   const [pipelineBusy, setPipelineBusy] = useState(false)
   const [pipelineMessage, setPipelineMessage] = useState('')
   const [pipeline, setPipeline] = useState<LeadPipelineResponse | null>(null)
@@ -206,6 +263,19 @@ export function LeadFinderPage() {
     }
   }, [authenticated, loadActivitiesForLeadIds])
 
+  const loadHuntProfiles = useCallback(async () => {
+    if (!authenticated) {
+      setHuntProfiles([])
+      return
+    }
+    try {
+      const payload = await workspaceFetch<LeadHuntProfileResponse>('/api/lead-hunts')
+      setHuntProfiles(payload.rows ?? [])
+    } catch {
+      setHuntProfiles([])
+    }
+  }, [authenticated])
+
   useEffect(() => {
     let cancelled = false
 
@@ -233,7 +303,7 @@ export function LeadFinderPage() {
         setAuthenticated(false)
       }
       if (result.ready && canLoadPipeline && !cancelled) {
-        await loadPipeline()
+        await Promise.all([loadPipeline(), loadHuntProfiles()])
       }
       if (!cancelled) {
         setAuthLoading(false)
@@ -244,7 +314,7 @@ export function LeadFinderPage() {
     return () => {
       cancelled = true
     }
-  }, [loadPipeline])
+  }, [loadHuntProfiles, loadPipeline])
 
   const selectedSources = useMemo(
     () =>
@@ -256,11 +326,11 @@ export function LeadFinderPage() {
 
   const shortlistedRows = rows.filter((row) => shortlist.includes(row.name))
   const leadPackRows = shortlistedRows.length ? shortlistedRows : rows.slice(0, 3)
-  const isPrivateRoute = location.pathname.startsWith('/app')
 
   async function runSearch({ nextQuery = query, nextInput = manualInput }: { nextQuery?: string; nextInput?: string } = {}) {
     setBusy(true)
     setLeadPack(null)
+    setLeadHunt(null)
     setPipelineMessage('')
     try {
       if (apiReady && (nextQuery.trim() || nextInput.trim())) {
@@ -382,6 +452,154 @@ export function LeadFinderPage() {
     }
   }
 
+  async function runLeadHunt() {
+    if (!apiReady || !authenticated) {
+      setPipelineMessage('Login is required before the agent can run the hunt for you.')
+      return
+    }
+    setLeadHuntBusy(true)
+    setPipelineMessage('')
+    try {
+      const payload = await workspaceFetch<LeadHuntPayload & { pipeline?: LeadPipelineResponse }>('/api/tools/lead-hunt', {
+        method: 'POST',
+        body: JSON.stringify({
+          query,
+          raw_text: manualInput,
+          keywords: keywords
+            .split(',')
+            .map((value) => value.trim())
+            .filter(Boolean),
+          sources: selectedSources,
+          limit,
+          campaign_goal: campaignGoal,
+          export_workspace: true,
+        }),
+      })
+      setLeadHunt(payload)
+      if (payload.pipeline) {
+        setPipeline({
+          summary: payload.pipeline.summary,
+          rows: payload.pipeline.rows,
+        })
+        await loadActivitiesForLeadIds((payload.pipeline.rows ?? []).map((row) => row.lead_id))
+      } else {
+        await loadPipeline()
+      }
+      await loadHuntProfiles()
+      setPipelineMessage(payload.export?.web_view_link ? `Hunt ran and exported. ${payload.export.web_view_link}` : 'Hunt ran and saved the pipeline.')
+    } catch (error) {
+      setPipelineMessage(error instanceof Error ? error.message : 'Could not run the autonomous hunt.')
+    } finally {
+      setLeadHuntBusy(false)
+    }
+  }
+
+  async function saveLeadHuntProfile() {
+    if (!apiReady || !authenticated) {
+      setPipelineMessage('Login is required before saving the hunt.')
+      return
+    }
+    setHuntProfilesBusy(true)
+    setPipelineMessage('')
+    try {
+      const payload = await workspaceFetch<LeadHuntProfileResponse & { profile: LeadHuntProfile }>('/api/lead-hunts', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: huntName,
+          query,
+          raw_text: manualInput,
+          keywords: keywords
+            .split(',')
+            .map((value) => value.trim())
+            .filter(Boolean),
+          sources: selectedSources,
+          limit,
+          campaign_goal: campaignGoal,
+          export_workspace: true,
+        }),
+      })
+      setHuntProfiles(payload.rows ?? [])
+      setPipelineMessage(`Saved hunt profile: ${payload.profile?.name || huntName}.`)
+    } catch (error) {
+      setPipelineMessage(error instanceof Error ? error.message : 'Could not save the hunt profile.')
+    } finally {
+      setHuntProfilesBusy(false)
+    }
+  }
+
+  function loadLeadHuntProfileIntoForm(hunt: LeadHuntProfile) {
+    setHuntName(hunt.name || huntName)
+    setQuery(hunt.query || '')
+    setManualInput(hunt.raw_text || '')
+    setKeywords((hunt.keywords || []).join(','))
+    setLimit(hunt.limit || 8)
+    setCampaignGoal(hunt.campaign_goal || campaignGoal)
+    setSources({
+      web: (hunt.sources || []).includes('web'),
+      social: (hunt.sources || []).includes('social'),
+      maps: (hunt.sources || []).includes('maps'),
+    })
+    setPipelineMessage(`Loaded hunt profile: ${hunt.name}.`)
+  }
+
+  async function runSavedLeadHunt(hunt: LeadHuntProfile) {
+    if (!apiReady || !authenticated) {
+      setPipelineMessage('Login is required before running the hunt.')
+      return
+    }
+    setLeadHuntBusy(true)
+    setPipelineMessage('')
+    try {
+      const payload = await workspaceFetch<LeadHuntPayload & { pipeline?: LeadPipelineResponse }>(
+        `/api/lead-hunts/${encodeURIComponent(hunt.hunt_id)}/run`,
+        {
+          method: 'POST',
+          body: JSON.stringify({}),
+        },
+      )
+      setLeadHunt(payload)
+      loadLeadHuntProfileIntoForm(hunt)
+      if (payload.pipeline) {
+        setPipeline({
+          summary: payload.pipeline.summary,
+          rows: payload.pipeline.rows,
+        })
+        await loadActivitiesForLeadIds((payload.pipeline.rows ?? []).map((row) => row.lead_id))
+      } else {
+        await loadPipeline()
+      }
+      await loadHuntProfiles()
+      setPipelineMessage(`Saved hunt ran: ${hunt.name}.`)
+    } catch (error) {
+      setPipelineMessage(error instanceof Error ? error.message : 'Could not run the saved hunt.')
+    } finally {
+      setLeadHuntBusy(false)
+    }
+  }
+
+  async function runAllActiveHunts() {
+    if (!apiReady || !authenticated) {
+      setPipelineMessage('Login is required before running saved hunts.')
+      return
+    }
+    setRunAllBusy(true)
+    setPipelineMessage('')
+    try {
+      const payload = await workspaceFetch<{ count: number; saved_count: number; rows: LeadHuntProfile[] }>('/api/lead-hunts/run-active', {
+        method: 'POST',
+        body: JSON.stringify({}),
+      })
+      setHuntProfiles(payload.rows ?? [])
+      await loadPipeline()
+      await loadHuntProfiles()
+      setPipelineMessage(`Ran ${payload.count} active hunt${payload.count === 1 ? '' : 's'} and saved ${payload.saved_count} lead${payload.saved_count === 1 ? '' : 's'}.`)
+    } catch (error) {
+      setPipelineMessage(error instanceof Error ? error.message : 'Could not run the active hunts.')
+    } finally {
+      setRunAllBusy(false)
+    }
+  }
+
   async function exportPipelineToWorkspace() {
     if (!apiReady) {
       return
@@ -500,32 +718,58 @@ export function LeadFinderPage() {
     }
   }
 
+  async function openGmailOutreach(leadId: string) {
+    if (!apiReady || !authenticated) {
+      setPipelineMessage('Login is required before opening Gmail outreach.')
+      return
+    }
+    setPipelineBusy(true)
+    setPipelineMessage('')
+    try {
+      const payload = await workspaceFetch<LeadOutreachResponse>(`/api/lead-pipeline/${encodeURIComponent(leadId)}/outreach/gmail`, {
+        method: 'POST',
+        body: JSON.stringify({ create_gmail_draft: false }),
+      })
+      const composeUrl = payload.draft?.compose_url?.trim()
+      if (composeUrl) {
+        window.open(composeUrl, '_blank', 'noopener,noreferrer')
+      }
+      setActivitiesByLead((current) => ({ ...current, [leadId]: payload.activities ?? current[leadId] ?? [] }))
+      setPipelineMessage(payload.draft?.message?.trim() || 'Opened Gmail compose for this lead.')
+      await loadPipeline()
+    } catch (error) {
+      setPipelineMessage(error instanceof Error ? error.message : 'Could not open Gmail outreach.')
+    } finally {
+      setPipelineBusy(false)
+    }
+  }
+
   return (
     <div className="space-y-8">
       <PageIntro
-        eyebrow={isPrivateRoute ? 'Private app' : 'Free tool'}
-        title={isPrivateRoute ? 'Lead pipeline' : 'Lead Finder'}
+        eyebrow={isPrivateApp ? 'Private app' : 'Live tool'}
+        title="Lead Finder"
         description={
-          isPrivateRoute
-            ? 'Run the private sales workflow: keep saved leads, outreach drafts, stage moves, and next steps in one place.'
-            : 'Search for real businesses, shape the right SuperMega offer, and only move the shortlist into the private pipeline once it is worth working.'
+          isPrivateApp
+            ? 'Search, shape the offer, and move leads through the live pipeline.'
+            : 'Search real businesses and turn the shortlist into outreach.'
         }
       />
 
-      {!apiReady ? (
+      {!apiReady && !isPrivateApp ? (
         <section className="sm-chip border-[rgba(255,122,24,0.22)] bg-[rgba(255,122,24,0.08)] text-[var(--sm-muted)]">
-          This host is only the public shell. Live search, saved pipeline, and Workspace export work on the app host with the backend attached.
+          This host is only the public shell. Use the app to search, save, and export.
         </section>
-      ) : isPrivateRoute && !authLoading && !authenticated ? (
+      ) : !authLoading && !authenticated && !isPrivateApp ? (
         <section className="sm-chip border-[rgba(37,208,255,0.2)] bg-[rgba(37,208,255,0.08)] text-[var(--sm-muted)]">
-          Login is required to keep the private pipeline, outreach history, and Workspace export.
+          Search works here. Login is only needed to save the pipeline and export it.
         </section>
       ) : null}
 
       <section className="grid gap-6 lg:grid-cols-[0.92fr_1.08fr]">
         <article className="sm-surface-deep p-6">
-          <p className="sm-kicker text-[var(--sm-accent)]">Search setup</p>
-          <h2 className="mt-3 text-3xl font-bold text-white">Tell it what to hunt.</h2>
+          <p className="sm-kicker text-[var(--sm-accent)]">Search</p>
+          <h2 className="mt-3 text-3xl font-bold text-white">Find a market.</h2>
 
           <div className="mt-6 grid gap-4">
             <label className="grid gap-2 text-sm font-semibold text-[var(--sm-muted)]">
@@ -617,10 +861,11 @@ export function LeadFinderPage() {
             </span>
           </div>
 
-          <div className="mt-5 space-y-3">
-            {rows.length === 0 ? (
-              <div className="sm-chip text-[var(--sm-muted)]">Run a search to see real leads, contact clues, and fit reasons.</div>
-            ) : (
+        <div className="mt-5 space-y-3">
+          {provider ? <div className="sm-chip text-[var(--sm-muted)]">Live search provider: {provider}</div> : null}
+          {rows.length === 0 ? (
+            <div className="sm-chip text-[var(--sm-muted)]">Run a search to see real leads, contact clues, and fit reasons.</div>
+          ) : (
               rows.map((row) => {
                 const isSaved = shortlist.includes(row.name)
                 return (
@@ -633,7 +878,7 @@ export function LeadFinderPage() {
                       <div className="flex items-center gap-2">
                         <span className="sm-status-pill">Score {row.score}</span>
                         <button className={isSaved ? 'sm-button-accent' : 'sm-button-secondary'} onClick={() => toggleShortlist(row.name)} type="button">
-                          {isSaved ? 'Shortlisted' : 'Save'}
+                          {isSaved ? 'Shortlisted' : 'Keep'}
                         </button>
                       </div>
                     </div>
@@ -687,32 +932,86 @@ export function LeadFinderPage() {
 
           <div className="mt-5 flex flex-wrap gap-3">
             <button className="sm-button-primary" onClick={() => void buildLeadPack()} type="button">
-              {offerBusy ? 'Building...' : 'Build offer'}
+              {offerBusy ? 'Building...' : 'Build outreach'}
             </button>
-            <button className="sm-button-secondary" disabled={!apiReady || !authenticated || !leadPack?.opportunities.length || pipelineBusy} onClick={() => void saveLeadPackToPipeline()} type="button">
-              {pipelineBusy ? 'Saving...' : 'Save to pipeline'}
+            <button
+              className="sm-button-accent"
+              disabled={!apiReady || !authenticated || leadHuntBusy}
+              onClick={() => void runLeadHunt()}
+              type="button"
+            >
+              {leadHuntBusy ? 'Running...' : 'Run for me'}
             </button>
-            <button className="sm-button-accent" disabled={!apiReady || !authenticated || pipelineBusy} onClick={() => void exportPipelineToWorkspace()} type="button">
-              Export to Workspace
-            </button>
-            {apiReady && !authenticated ? (
-              <Link className="sm-button-secondary" to="/login?next=/app/leads">
-                Login to save
+            {isPrivateApp ? (
+              <>
+                <button
+                  className="sm-button-secondary"
+                  disabled={!apiReady || !authenticated || huntProfilesBusy || !query.trim()}
+                  onClick={() => void saveLeadHuntProfile()}
+                  type="button"
+                >
+                  {huntProfilesBusy ? 'Saving...' : 'Save search'}
+                </button>
+                <button
+                  className="sm-button-secondary"
+                  disabled={!apiReady || !authenticated || !leadPack?.opportunities.length || pipelineBusy}
+                  onClick={() => void saveLeadPackToPipeline()}
+                  type="button"
+                >
+                  {pipelineBusy ? 'Saving...' : 'Save to pipeline'}
+                </button>
+                <button className="sm-button-accent" disabled={!apiReady || !authenticated || pipelineBusy} onClick={() => void exportPipelineToWorkspace()} type="button">
+                  Export to Workspace
+                </button>
+              </>
+            ) : (
+              <Link className="sm-button-secondary" to="/signup">
+                Start workspace
               </Link>
-            ) : null}
+            )}
           </div>
 
           {pipelineMessage ? <p className="mt-3 text-sm text-[var(--sm-muted)]">{pipelineMessage}</p> : null}
+          {leadHunt ? (
+            <div className="mt-4 sm-proof-card">
+              <p className="sm-kicker text-[var(--sm-accent)]">Autopilot result</p>
+              <p className="mt-2 text-sm text-[var(--sm-muted)]">{leadHunt.summary}</p>
+              <div className="mt-3 grid gap-3 md:grid-cols-3">
+                <div className="sm-chip text-white">
+                  <p className="text-sm font-semibold">{leadHunt.row_count} leads found</p>
+                </div>
+                <div className="sm-chip text-white">
+                  <p className="text-sm font-semibold">{leadHunt.saved_count} saved</p>
+                </div>
+                <div className="sm-chip text-white">
+                  <p className="text-sm font-semibold">{leadHunt.engine}</p>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          {isPrivateApp ? (
+            <div className="mt-4 space-y-3">
+              <label className="grid gap-2 text-sm font-semibold text-[var(--sm-muted)]">
+                Saved hunt name
+                <input className="sm-input" onChange={(event) => setHuntName(event.target.value)} value={huntName} />
+              </label>
+              <div className="sm-chip text-[var(--sm-muted)]">
+                Save the search once, then rerun it later.
+              </div>
+            </div>
+          ) : null}
         </article>
 
         <article className="sm-surface p-6">
-          <p className="sm-kicker text-[var(--sm-accent-alt)]">Lead to pilot</p>
-          <h2 className="mt-3 text-2xl font-bold text-white">What to sell this shortlist.</h2>
-          {leadPack ? (
-            <div className="mt-5 space-y-4">
-              <div className="sm-proof-card">
-                <p className="text-sm text-[var(--sm-muted)]">{leadPack.summary}</p>
-                <div className="mt-4 grid gap-3 md:grid-cols-2">
+          <p className="sm-kicker text-[var(--sm-accent-alt)]">Outreach</p>
+          <h2 className="mt-3 text-2xl font-bold text-white">Turn leads into outreach.</h2>
+      {leadPack ? (
+        <div className="mt-5 space-y-4">
+          <div className="sm-proof-card">
+            {leadPack.engine ? <p className="sm-kicker text-[var(--sm-accent)]">Offer engine: {leadPack.engine}</p> : null}
+            <p className="text-sm text-[var(--sm-muted)]">{leadPack.summary}</p>
+            <div className="mt-4 grid gap-3 md:grid-cols-2">
                   <div className="sm-chip text-white">
                     <p className="sm-kicker text-[var(--sm-accent)]">Wedge</p>
                     <p className="mt-2">{leadPack.recommended_play.wedge_product}</p>
@@ -758,14 +1057,14 @@ export function LeadFinderPage() {
             </div>
           ) : (
             <div className="mt-5 sm-chip text-[var(--sm-muted)]">
-              Build the offer to get the wedge product, service pack, pilot scope, and outreach draft.
+              Build outreach to get the offer, scope, and message.
             </div>
           )}
         </article>
       </section>
 
-      {isPrivateRoute ? (
-        <section className="space-y-4">
+      {isPrivateApp ? (
+      <section className="space-y-4">
         <div className="flex items-center justify-between gap-4">
           <div>
             <p className="sm-kicker text-[var(--sm-accent)]">Saved pipeline</p>
@@ -801,10 +1100,55 @@ export function LeadFinderPage() {
 
             <div className="mt-5 space-y-3">
               <div className="sm-chip">
-                <p className="sm-kicker text-[var(--sm-accent)]">How to use it</p>
+                <p className="sm-kicker text-[var(--sm-accent)]">Saved hunts</p>
+                <div className="mt-3 space-y-3">
+                  {huntProfiles.length ? (
+                    huntProfiles.map((hunt) => (
+                      <div className="rounded-2xl border border-white/8 bg-[rgba(255,255,255,0.03)] px-4 py-3" key={hunt.hunt_id}>
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="font-semibold text-white">{hunt.name}</p>
+                            <p className="mt-1 text-xs text-[var(--sm-muted)]">
+                              {hunt.query || 'Manual list'} · {hunt.last_saved_count || 0} saved · {hunt.last_run_at ? formatActivityTime(hunt.last_run_at) : 'Not run yet'}
+                            </p>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            <button className="sm-button-secondary" onClick={() => loadLeadHuntProfileIntoForm(hunt)} type="button">
+                              Load
+                            </button>
+                            <button
+                              className="sm-button-secondary"
+                              disabled={leadHuntBusy}
+                              onClick={() => void runSavedLeadHunt(hunt)}
+                              type="button"
+                            >
+                              {leadHuntBusy ? 'Running...' : 'Run'}
+                            </button>
+                          </div>
+                        </div>
+                        {hunt.last_summary ? <p className="mt-2 text-sm text-[var(--sm-muted)]">{hunt.last_summary}</p> : null}
+                      </div>
+                    ))
+                  ) : (
+                    <div className="rounded-2xl border border-white/8 bg-[rgba(255,255,255,0.03)] px-4 py-3 text-sm text-[var(--sm-muted)]">
+                      Save one search to rerun it later.
+                    </div>
+                  )}
+                </div>
+                {huntProfiles.length ? (
+                  <div className="mt-3">
+                    <button className="sm-button-accent" disabled={runAllBusy || leadHuntBusy} onClick={() => void runAllActiveHunts()} type="button">
+                      {runAllBusy ? 'Running saved searches...' : 'Run saved searches'}
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+
+              <div className="sm-chip">
+                <p className="sm-kicker text-[var(--sm-accent)]">Next steps</p>
                 <ol className="mt-3 space-y-2 text-sm text-[var(--sm-muted)]">
                   <li>1. Search and shortlist leads.</li>
-                  <li>2. Build the offer and save the shortlist.</li>
+                  <li>2. Build outreach and save the shortlist.</li>
                   <li>3. Copy the outreach and log the send.</li>
                   <li>4. Move the lead to discovery once they reply.</li>
                 </ol>
@@ -842,6 +1186,14 @@ export function LeadFinderPage() {
                       </div>
 
                       <div className="mt-4 flex flex-wrap gap-3">
+                        <button
+                          className="sm-button-primary"
+                          disabled={pipelineBusy || !row.contact_email}
+                          onClick={() => void openGmailOutreach(row.lead_id)}
+                          type="button"
+                        >
+                          Open in Gmail
+                        </button>
                         <button className="sm-button-secondary" onClick={() => void copyText(row.outreach_message, row.lead_id)} type="button">
                           Copy outreach
                         </button>
@@ -1010,39 +1362,8 @@ export function LeadFinderPage() {
             </div>
           </article>
         </div>
-        </section>
-      ) : (
-        <section className="grid gap-5 lg:grid-cols-[0.9fr_1.1fr]">
-          <article className="sm-surface p-6">
-            <p className="sm-kicker text-[var(--sm-accent)]">What happens next</p>
-            <h2 className="mt-3 text-2xl font-bold text-white">Only move real prospects into the private pipeline.</h2>
-            <div className="mt-5 space-y-3 text-sm text-[var(--sm-muted)]">
-              <p>1. Search the market and shortlist the strongest results.</p>
-              <p>2. Build the SuperMega offer and pilot angle.</p>
-              <p>3. Login only when you want to save, track outreach, and push the queue into Google Workspace.</p>
-            </div>
-            <div className="mt-5 flex flex-wrap gap-3">
-              <Link className="sm-button-primary" to="/login?next=/app/leads">
-                Login to pipeline
-              </Link>
-              <Link className="sm-button-secondary" to="/contact">
-                Book demo
-              </Link>
-            </div>
-          </article>
-
-          <article className="sm-terminal p-6">
-            <p className="sm-kicker text-[var(--sm-accent-alt)]">Private app unlocks</p>
-            <div className="mt-5 grid gap-3">
-              {['Saved lead stages', 'Outreach history', 'Next-step notes', 'Workspace export'].map((item) => (
-                <div className="sm-chip text-white" key={item}>
-                  {item}
-                </div>
-              ))}
-            </div>
-          </article>
-        </section>
-      )}
+      </section>
+      ) : null}
     </div>
   )
 }

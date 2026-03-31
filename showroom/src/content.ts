@@ -24,55 +24,60 @@ export type PublicModule = {
 
 export const navItems = [
   { label: 'Home', to: '/' },
-  { label: 'Product', to: '/platform' },
+  { label: 'Action OS', to: '/platform' },
   { label: 'Lead Finder', to: '/lead-finder' },
 ] as const
 
 export const bookingUrl = (import.meta.env.VITE_BOOKING_URL ?? '').trim()
 
 export const hero = {
-  eyebrow: 'Main product',
+  eyebrow: 'AI-native operating software',
   title: 'Run work in one place.',
-  description:
-    'SuperMega turns Gmail, Drive, Sheets, and team updates into one live operating layer. Start with Action OS. Add deeper modules only when you need them.',
+  description: 'Action OS keeps work, owners, and blockers on one board. Lead Finder fills the next pipeline.',
 }
 
 export const proofPoints: ProofPoint[] = [
   {
-    label: 'Core product',
+    label: 'Product',
     value: 'Action OS',
     detail: 'One board for owners, due dates, and blockers.',
   },
   {
-    label: 'Top of funnel',
+    label: 'Tool',
     value: 'Lead Finder',
-    detail: 'Find leads, shape the offer, and save them into the pipeline.',
+    detail: 'Search, shortlist, and send outreach.',
   },
   {
-    label: 'Private workspace',
-    value: 'App + Workbench',
-    detail: 'The private app for saved boards, queues, and work notes.',
+    label: 'App',
+    value: 'Private workspace',
+    detail: 'Saved boards, queues, and notes.',
   },
 ]
 
 export const coreProduct = {
   name: 'Action OS',
-  tagline: 'Turn scattered updates into one board with owners, due dates, and exceptions.',
+  tagline: 'One board for owners, due dates, and blockers.',
   replaces: ['Manual chasing', 'Buried follow-up', 'Last-minute reporting'],
-  inputs: ['Gmail', 'Drive', 'Sheets', 'Daily updates'],
-  outputs: ['Action board', 'Exception queue', 'Director summary'],
+  inputs: ['Gmail', 'Drive', 'Sheets', 'Team updates'],
+  outputs: ['Action board', 'Exception queue', 'Summary'],
   rollout: [
-    'Connect one inbox, one sheet, or one update source.',
+    'Connect one inbox, sheet, or update source.',
     'Assign owners and due dates on one board.',
-    'Add deeper modules only after the first board is trusted.',
+    'Add more only after the first board is trusted.',
   ],
+}
+
+export const leadFinder = {
+  title: 'Lead Finder',
+  description: 'Search a market, keep the good leads, and send outreach.',
+  steps: ['Search', 'Shortlist', 'Outreach'],
 }
 
 export const useCases: UseCase[] = [
   {
     name: 'Operations',
     audience: 'GMs, operations leads, and owner-led teams',
-    promise: 'Get one board for follow-up, blockers, and today’s priorities.',
+    promise: "Get one board for follow-up, blockers, and today's priorities.",
     firstRollout: 'Action OS plus one team update source.',
     inputs: ['Daily updates', 'Meeting notes', 'Shared trackers'],
     outcomes: ['Clear ownership', 'Fewer missed follow-ups', 'Faster weekly review'],

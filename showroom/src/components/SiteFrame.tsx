@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 
-import { bookingUrl, navItems } from '../content'
+import { navItems } from '../content'
 
 const navClassName = ({ isActive }: { isActive: boolean }) =>
   `rounded-full px-4 py-2 text-sm font-semibold transition ${
@@ -41,18 +41,12 @@ export function SiteFrame() {
                 {item.label}
               </NavLink>
             ))}
-            <NavLink className="sm-button-secondary ml-2" to="/login?next=/app">
-              Login
+            <NavLink className="sm-button-primary ml-2" to="/signup">
+              Start workspace
             </NavLink>
-            {bookingUrl ? (
-              <a className="sm-button-accent ml-2" href={bookingUrl} rel="noreferrer" target="_blank">
-                Book demo
-              </a>
-            ) : (
-              <NavLink className="sm-button-accent ml-2" to="/book">
-                Book demo
-              </NavLink>
-            )}
+            <NavLink className="sm-button-secondary ml-2" to="/login?next=/app">
+              Open app
+            </NavLink>
           </div>
         </nav>
         {menuOpen ? (
@@ -63,18 +57,12 @@ export function SiteFrame() {
                   {item.label}
                 </NavLink>
               ))}
-              <NavLink className="sm-button-secondary mt-1 text-center" onClick={() => setMenuOpen(false)} to="/login?next=/app">
-                Login
+              <NavLink className="sm-button-primary mt-1 text-center" onClick={() => setMenuOpen(false)} to="/signup">
+                Start workspace
               </NavLink>
-              {bookingUrl ? (
-                <a className="sm-button-accent mt-1 text-center" href={bookingUrl} rel="noreferrer" target="_blank">
-                  Book demo
-                </a>
-              ) : (
-                <NavLink className="sm-button-accent mt-1 text-center" onClick={() => setMenuOpen(false)} to="/book">
-                  Book demo
-                </NavLink>
-              )}
+              <NavLink className="sm-button-secondary mt-1 text-center" onClick={() => setMenuOpen(false)} to="/login?next=/app">
+                Open app
+              </NavLink>
             </div>
           </div>
         ) : null}
@@ -86,8 +74,7 @@ export function SiteFrame() {
 
       <footer className="border-t border-white/8 bg-[rgba(4,10,22,0.78)]">
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 px-4 py-6 text-sm text-[var(--sm-muted)] lg:flex-row lg:items-center lg:justify-between lg:px-8">
-          <p>One operating system for follow-up, risk, and execution.</p>
-          <p>Start with Action OS. Add modules only when you need them.</p>
+          <p>Action OS runs the work. Lead Finder fills the pipeline.</p>
         </div>
       </footer>
     </div>
