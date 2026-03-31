@@ -21,6 +21,7 @@ import { NewsBriefPage } from './pages/NewsBriefPage'
 import { NotFoundPage } from './pages/NotFoundPage'
 import { PlatformPage } from './pages/PlatformPage'
 import { ReceivingControlPage } from './pages/ReceivingControlPage'
+import { SignupPage } from './pages/SignupPage'
 import { SolutionArchitectPage } from './pages/SolutionArchitectPage'
 import { WorkbenchPage } from './pages/WorkbenchPage'
 import { WorkspacePage } from './pages/WorkspacePage'
@@ -37,6 +38,7 @@ function App() {
           <Route element={<Navigate replace to="/platform" />} path="solutions" />
           <Route element={<LeadFinderPage />} path="lead-finder" />
           <Route element={<LoginPage />} path="login" />
+          <Route element={<SignupPage />} path="signup" />
           <Route element={<BookPage />} path="book" />
           <Route element={<Navigate replace to="/app" />} path="workbench" />
           <Route element={<Navigate replace to="/app/actions" />} path="workspace" />

@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 
 import { PageIntro } from '../components/PageIntro'
-import { getWorkspaceSession, loginWorkspace } from '../lib/workspaceApi'
+import { appHref, getWorkspaceSession, loginWorkspace, needsLiveAppHandoff, workspaceAppBase } from '../lib/workspaceApi'
 
 export function LoginPage() {
   const navigate = useNavigate()
@@ -18,6 +18,7 @@ export function LoginPage() {
   const [authRequired, setAuthRequired] = useState(true)
   const [usesDefaultCredentials, setUsesDefaultCredentials] = useState(false)
   const [workspaceOptions, setWorkspaceOptions] = useState<Array<{ slug?: string; name?: string; role?: string }>>([])
+  const handoffToApp = needsLiveAppHandoff()
 
   useEffect(() => {
     let cancelled = false
@@ -76,28 +77,51 @@ export function LoginPage() {
     <div className="space-y-8">
       <PageIntro
         eyebrow="Client login"
-        title="Sign in to the live workspace."
-        description="The public site shows the product. The live app host is where saved data, queues, and internal modules actually run."
+        title="Sign in to the workspace."
+        description="Use this only for the saved app."
       />
 
-      <section className="grid gap-6 lg:grid-cols-[0.85fr_1.15fr]">
-        <aside className="sm-terminal p-6">
-          <p className="sm-kicker text-[var(--sm-accent)]">Use login for</p>
-          <div className="mt-5 grid gap-3">
-            {['Saved lead pipeline', 'Workspace records', 'Receiving and inventory boards', 'Director and manager views'].map((item) => (
-              <div className="sm-chip text-white" key={item}>
-                {item}
-              </div>
-            ))}
-          </div>
+      {handoffToApp ? (
+        <section className="grid gap-6 lg:grid-cols-[0.76fr_1.24fr]">
+          <aside className="sm-terminal p-6">
+            <p className="sm-kicker text-[var(--sm-accent)]">Use this for</p>
+            <div className="mt-4 grid gap-3">
+              <div className="sm-chip text-white">Saved lead pipeline</div>
+              <div className="sm-chip text-white">Action board and exceptions</div>
+              <div className="sm-chip text-white">Director and manager views</div>
+            </div>
+          </aside>
+          <section className="sm-surface p-6">
+            <p className="text-sm leading-relaxed text-[var(--sm-muted)]">
+              The saved app is not on this host. Open the live app directly.
+            </p>
+            <div className="mt-5 flex flex-wrap gap-3">
+              <a className="sm-button-primary" href={appHref('/login/')}>
+                Open app
+              </a>
+              <a className="sm-button-accent" href={appHref('/signup/')}>
+                Start workspace
+              </a>
+              <Link className="sm-button-secondary" to="/lead-finder">
+                Open Lead Finder
+              </Link>
+            </div>
+            <div className="mt-4 sm-chip text-[var(--sm-muted)]">
+              Live app host: {workspaceAppBase}
+            </div>
+          </section>
+        </section>
+      ) : (
 
-          <div className="mt-6 sm-chip text-[var(--sm-muted)]">
-            {authRequired
-              ? 'If this host is the live app backend, sign in and go straight to the private workspace.'
-              : 'Auth is disabled on this host, so the app should open without a separate login.'}
+      <section className="grid gap-6 lg:grid-cols-[0.7fr_1.3fr]">
+        <aside className="sm-terminal p-6">
+          <p className="sm-kicker text-[var(--sm-accent)]">Use this for</p>
+          <div className="mt-4 grid gap-3">
+            <div className="sm-chip text-white">Saved lead pipeline</div>
+            <div className="sm-chip text-white">Action board and exceptions</div>
+            <div className="sm-chip text-white">Director and manager views</div>
           </div>
         </aside>
-
         <form className="sm-surface p-6" onSubmit={handleSubmit}>
           <div className="grid gap-4">
             <label className="grid gap-2 text-sm font-semibold text-[var(--sm-muted)]">
@@ -121,13 +145,17 @@ export function LoginPage() {
 
           <div className="mt-5 flex flex-wrap gap-3">
             <button className="sm-button-primary" disabled={loading || submitting} type="submit">
-              {submitting ? 'Signing in...' : 'Login'}
+              {submitting ? 'Opening...' : 'Open app'}
             </button>
+            <Link className="sm-button-accent" to="/signup">
+              Start workspace
+            </Link>
             <Link className="sm-button-secondary" to="/lead-finder">
-              Back to public tools
+              Open Lead Finder
             </Link>
           </div>
 
+          {!authRequired ? <div className="mt-4 sm-chip text-[var(--sm-muted)]">Auth is off on this host, so the app should open directly.</div> : null}
           {usesDefaultCredentials ? (
             <div className="mt-4 sm-chip text-[var(--sm-muted)]">
               This host is still using the default demo credentials. Change `SUPERMEGA_APP_USERNAME` and `SUPERMEGA_APP_PASSWORD` before sharing it widely.
@@ -141,6 +169,7 @@ export function LoginPage() {
           {error ? <div className="mt-4 sm-chip text-white">{error}</div> : null}
         </form>
       </section>
+      )}
     </div>
   )
 }

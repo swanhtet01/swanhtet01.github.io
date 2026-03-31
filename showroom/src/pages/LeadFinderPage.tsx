@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 
 import { PageIntro } from '../components/PageIntro'
-import { checkWorkspaceHealth, getWorkspaceSession, workspaceFetch } from '../lib/workspaceApi'
+import { appHref, checkWorkspaceHealth, getWorkspaceSession, needsLiveAppHandoff, workspaceAppBase, workspaceFetch } from '../lib/workspaceApi'
 import { downloadLeadCsv, LEAD_SAMPLE_QUERY, LEAD_SAMPLE_TEXT, type LeadRow, type LeadSource, parseLeads } from '../lib/tooling'
 
 const sourceLabels: Array<{ key: LeadSource; label: string; hint: string }> = [
@@ -185,6 +185,7 @@ function formatActivityTime(value: string) {
 export function LeadFinderPage() {
   const location = useLocation()
   const isPrivateApp = location.pathname.startsWith('/app/')
+  const handoffToApp = !isPrivateApp && needsLiveAppHandoff()
   const [apiReady, setApiReady] = useState(false)
   const [authLoading, setAuthLoading] = useState(true)
   const [authenticated, setAuthenticated] = useState(false)
@@ -755,6 +756,43 @@ export function LeadFinderPage() {
             : 'Search real businesses and turn the shortlist into outreach.'
         }
       />
+
+      {handoffToApp ? (
+        <section className="grid gap-6 lg:grid-cols-[0.92fr_1.08fr]">
+          <article className="sm-surface-deep p-6">
+            <p className="sm-kicker text-[var(--sm-accent)]">Live app only</p>
+            <h2 className="mt-3 text-3xl font-bold text-white">Use the real Lead Finder.</h2>
+            <p className="mt-4 max-w-2xl text-sm leading-relaxed text-[var(--sm-muted)]">
+              Search, saved pipeline, Gmail outreach, and Workspace export only run on the live app host.
+            </p>
+            <div className="mt-6 flex flex-wrap gap-3">
+              <a className="sm-button-primary" href={appHref('/app/leads/')}>
+                Open live Lead Finder
+              </a>
+              <a className="sm-button-secondary" href={appHref('/signup/')}>
+                Start workspace
+              </a>
+            </div>
+            <div className="mt-4 sm-chip text-[var(--sm-muted)]">Live app host: {workspaceAppBase}</div>
+          </article>
+
+          <article className="sm-terminal p-6">
+            <p className="sm-kicker text-[var(--sm-accent)]">What it does</p>
+            <div className="mt-5 grid gap-3">
+              <div className="sm-proof-card">
+                <p className="text-sm text-white">Search a market and pull real business results.</p>
+              </div>
+              <div className="sm-proof-card">
+                <p className="text-sm text-white">Keep the shortlist and build the outreach.</p>
+              </div>
+              <div className="sm-proof-card">
+                <p className="text-sm text-white">Save the pipeline and export it to Google Workspace.</p>
+              </div>
+            </div>
+          </article>
+        </section>
+      ) : (
+      <>
 
       {!apiReady && !isPrivateApp ? (
         <section className="sm-chip border-[rgba(255,122,24,0.22)] bg-[rgba(255,122,24,0.08)] text-[var(--sm-muted)]">
@@ -1364,6 +1402,8 @@ export function LeadFinderPage() {
         </div>
       </section>
       ) : null}
+      </>
+      )}
     </div>
   )
 }
