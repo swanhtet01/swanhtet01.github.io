@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom'
 
 import { PageIntro } from '../components/PageIntro'
 import { bookingUrl } from '../content'
-import { checkWorkspaceHealth, workspaceFetch } from '../lib/workspaceApi'
+import { checkWorkspaceHealth, hasLiveWorkspaceApp, workspaceFetch } from '../lib/workspaceApi'
 
 type LeadFormState = {
   name: string
@@ -30,6 +30,7 @@ export function ContactPage() {
   const [form, setForm] = useState<LeadFormState>(initialFormFromQuery)
   const [status, setStatus] = useState<'idle' | 'saving' | 'saved' | 'saved_local' | 'error'>('idle')
   const [apiReady, setApiReady] = useState(false)
+  const liveAppAvailable = hasLiveWorkspaceApp()
 
   useEffect(() => {
     let cancelled = false
@@ -47,15 +48,15 @@ export function ContactPage() {
 
   const statusText = useMemo(() => {
     if (status === 'saved') {
-      return 'Your request was saved. We can now follow up from the app.'
+      return 'Your request was saved.'
     }
     if (status === 'saved_local') {
-      return 'The request was saved only in this browser because the public backend is not attached on this host yet.'
+      return 'Your request was saved in this browser.'
     }
     if (status === 'error') {
-      return 'The request could not be saved. Try the live app host or refresh and submit again.'
+      return 'The request could not be saved. Try again.'
     }
-    return 'Keep it short. One team and one workflow is enough to start.'
+    return 'Keep it short. One workflow is enough to start.'
   }, [status])
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -99,29 +100,22 @@ export function ContactPage() {
         <aside className="sm-terminal p-6">
           <p className="sm-kicker text-[var(--sm-accent)]">Best next step</p>
           <div className="mt-5 grid gap-3">
-            {[
-              'Book a 20-minute demo if you want to see the product live',
-              'Use this form if you want us to shape the first rollout first',
-              'Keep the first scope to one workflow and one team',
-            ].map((item) => (
-              <div className="sm-chip text-white" key={item}>
-                {item}
-              </div>
-            ))}
+            <div className="sm-chip text-white">Use this if you want us to scope the first rollout.</div>
+            <div className="sm-chip text-white">Use the calendar if you want a call first.</div>
           </div>
 
           <div className="mt-6 grid gap-3">
             {bookingUrl ? (
               <a className="sm-button-accent text-center" href={bookingUrl} rel="noreferrer" target="_blank">
-                Book demo now
+                Schedule call
               </a>
             ) : (
-              <div className="sm-chip text-[var(--sm-muted)]">
-                Add a booking link to enable direct calendar scheduling from the site.
-              </div>
+              <Link className="sm-button-accent text-center" to={liveAppAvailable ? '/signup' : '/book'}>
+                {liveAppAvailable ? 'Start workspace' : 'Book call'}
+              </Link>
             )}
             <Link className="sm-button-secondary text-center" to="/lead-finder">
-              Try Lead Finder first
+              Open Lead Finder
             </Link>
           </div>
         </aside>
@@ -187,7 +181,7 @@ export function ContactPage() {
             </button>
             {bookingUrl ? (
               <a className="sm-button-secondary" href={bookingUrl} rel="noreferrer" target="_blank">
-                Book demo instead
+                Schedule call instead
               </a>
             ) : null}
           </div>

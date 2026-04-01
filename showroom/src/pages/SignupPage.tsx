@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 
 import { PageIntro } from '../components/PageIntro'
-import { appHref, needsLiveAppHandoff, workspaceAppBase, workspaceFetch } from '../lib/workspaceApi'
+import { appHref, needsLiveAppHandoff, publicShellOnly, workspaceAppBase, workspaceFetch } from '../lib/workspaceApi'
 
 type SignupPayload = {
   name: string
@@ -25,6 +25,7 @@ export function SignupPage() {
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
   const handoffToApp = needsLiveAppHandoff()
+  const shellOnly = publicShellOnly()
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -62,7 +63,33 @@ export function SignupPage() {
         description="Create one workspace and go straight into Action OS."
       />
 
-      {handoffToApp ? (
+      {shellOnly ? (
+        <section className="grid gap-6 lg:grid-cols-[0.76fr_1.24fr]">
+          <aside className="sm-terminal p-6">
+            <p className="sm-kicker text-[var(--sm-accent)]">What you can do now</p>
+            <div className="mt-5 grid gap-3">
+              {['Search for leads', 'See Action OS', 'Book rollout call'].map((item) => (
+                <div className="sm-chip text-white" key={item}>
+                  {item}
+                </div>
+              ))}
+            </div>
+          </aside>
+          <section className="sm-surface p-6">
+            <p className="text-sm leading-relaxed text-[var(--sm-muted)]">
+              Workspace signup is not live on this host yet. Use the public Lead Finder now or book the first rollout call.
+            </p>
+            <div className="mt-5 flex flex-wrap gap-3">
+              <Link className="sm-button-primary" to="/lead-finder">
+                Open Lead Finder
+              </Link>
+              <Link className="sm-button-secondary" to="/book">
+                Book call
+              </Link>
+            </div>
+          </section>
+        </section>
+      ) : handoffToApp ? (
         <section className="grid gap-6 lg:grid-cols-[0.76fr_1.24fr]">
           <aside className="sm-terminal p-6">
             <p className="sm-kicker text-[var(--sm-accent)]">What you get</p>

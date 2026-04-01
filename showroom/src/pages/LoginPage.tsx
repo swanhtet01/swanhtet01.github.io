@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 
 import { PageIntro } from '../components/PageIntro'
-import { appHref, getWorkspaceSession, loginWorkspace, needsLiveAppHandoff, workspaceAppBase } from '../lib/workspaceApi'
+import { appHref, getWorkspaceSession, loginWorkspace, needsLiveAppHandoff, publicShellOnly, workspaceAppBase } from '../lib/workspaceApi'
 
 export function LoginPage() {
   const navigate = useNavigate()
@@ -19,6 +19,7 @@ export function LoginPage() {
   const [usesDefaultCredentials, setUsesDefaultCredentials] = useState(false)
   const [workspaceOptions, setWorkspaceOptions] = useState<Array<{ slug?: string; name?: string; role?: string }>>([])
   const handoffToApp = needsLiveAppHandoff()
+  const shellOnly = publicShellOnly()
 
   useEffect(() => {
     let cancelled = false
@@ -81,7 +82,31 @@ export function LoginPage() {
         description="Use this only for the saved app."
       />
 
-      {handoffToApp ? (
+      {shellOnly ? (
+        <section className="grid gap-6 lg:grid-cols-[0.76fr_1.24fr]">
+          <aside className="sm-terminal p-6">
+            <p className="sm-kicker text-[var(--sm-accent)]">What is live</p>
+            <div className="mt-4 grid gap-3">
+              <div className="sm-chip text-white">Public Lead Finder</div>
+              <div className="sm-chip text-white">Action OS overview</div>
+              <div className="sm-chip text-white">Call booking</div>
+            </div>
+          </aside>
+          <section className="sm-surface p-6">
+            <p className="text-sm leading-relaxed text-[var(--sm-muted)]">
+              This host is the public site only. The saved workspace app is not deployed on this domain yet.
+            </p>
+            <div className="mt-5 flex flex-wrap gap-3">
+              <Link className="sm-button-primary" to="/lead-finder">
+                Open Lead Finder
+              </Link>
+              <Link className="sm-button-secondary" to="/book">
+                Book call
+              </Link>
+            </div>
+          </section>
+        </section>
+      ) : handoffToApp ? (
         <section className="grid gap-6 lg:grid-cols-[0.76fr_1.24fr]">
           <aside className="sm-terminal p-6">
             <p className="sm-kicker text-[var(--sm-accent)]">Use this for</p>

@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 
 import { PageIntro } from '../components/PageIntro'
-import { appHref, checkWorkspaceHealth, getWorkspaceSession, needsLiveAppHandoff, workspaceAppBase, workspaceFetch } from '../lib/workspaceApi'
+import { checkWorkspaceHealth, getWorkspaceSession, hasLiveWorkspaceApp, workspaceFetch } from '../lib/workspaceApi'
+import { publicLeadFinderAvailable, searchPublicLeads } from '../lib/publicLeadFinder'
 import { downloadLeadCsv, LEAD_SAMPLE_QUERY, LEAD_SAMPLE_TEXT, type LeadRow, type LeadSource, parseLeads } from '../lib/tooling'
 
 const sourceLabels: Array<{ key: LeadSource; label: string; hint: string }> = [
@@ -185,7 +186,6 @@ function formatActivityTime(value: string) {
 export function LeadFinderPage() {
   const location = useLocation()
   const isPrivateApp = location.pathname.startsWith('/app/')
-  const handoffToApp = !isPrivateApp && needsLiveAppHandoff()
   const [apiReady, setApiReady] = useState(false)
   const [authLoading, setAuthLoading] = useState(true)
   const [authenticated, setAuthenticated] = useState(false)
@@ -212,6 +212,8 @@ export function LeadFinderPage() {
   const [pipeline, setPipeline] = useState<LeadPipelineResponse | null>(null)
   const [activitiesByLead, setActivitiesByLead] = useState<Record<string, LeadActivity[]>>({})
   const [activityDrafts, setActivityDrafts] = useState<Record<string, LeadActivityDraft>>({})
+  const liveAppAvailable = hasLiveWorkspaceApp()
+  const publicSearchReady = publicLeadFinderAvailable()
 
   const loadActivitiesForLeadIds = useCallback(
     async (leadIds: string[]) => {
@@ -353,8 +355,41 @@ export function LeadFinderPage() {
         return
       }
 
-      setRows(parseLeads(nextInput))
-      setProvider(nextInput.trim() ? 'Manual fallback' : 'Offline shell')
+      const mergedRows: LeadRow[] = []
+
+      if (nextQuery.trim() && publicSearchReady) {
+        const publicPayload = await searchPublicLeads({
+          query: nextQuery,
+          keywords: keywords
+            .split(',')
+            .map((value) => value.trim())
+            .filter(Boolean),
+          sources: selectedSources,
+          limit,
+        })
+        mergedRows.push(...publicPayload.rows)
+        setProvider(publicPayload.provider)
+      }
+
+      if (nextInput.trim()) {
+        mergedRows.push(...parseLeads(nextInput))
+      }
+
+      const dedupedRows = [...new Map(mergedRows.map((row) => [row.name, row])).values()]
+      setRows(dedupedRows)
+
+      if (!mergedRows.length) {
+        setProvider(publicSearchReady ? 'Google Places (browser)' : 'Manual fallback')
+        if (nextQuery.trim() && !publicSearchReady) {
+          setPipelineMessage('Public search is not configured on this host yet. Paste a lead list or use the private app.')
+        }
+      } else if (!publicSearchReady && nextInput.trim()) {
+        setProvider('Manual fallback')
+      }
+    } catch (error) {
+      setRows([])
+      setProvider('')
+      setPipelineMessage(error instanceof Error ? error.message : 'Search failed on this host.')
     } finally {
       setBusy(false)
     }
@@ -757,46 +792,13 @@ export function LeadFinderPage() {
         }
       />
 
-      {handoffToApp ? (
-        <section className="grid gap-6 lg:grid-cols-[0.92fr_1.08fr]">
-          <article className="sm-surface-deep p-6">
-            <p className="sm-kicker text-[var(--sm-accent)]">Live app only</p>
-            <h2 className="mt-3 text-3xl font-bold text-white">Use the real Lead Finder.</h2>
-            <p className="mt-4 max-w-2xl text-sm leading-relaxed text-[var(--sm-muted)]">
-              Search, saved pipeline, Gmail outreach, and Workspace export only run on the live app host.
-            </p>
-            <div className="mt-6 flex flex-wrap gap-3">
-              <a className="sm-button-primary" href={appHref('/app/leads/')}>
-                Open live Lead Finder
-              </a>
-              <a className="sm-button-secondary" href={appHref('/signup/')}>
-                Start workspace
-              </a>
-            </div>
-            <div className="mt-4 sm-chip text-[var(--sm-muted)]">Live app host: {workspaceAppBase}</div>
-          </article>
-
-          <article className="sm-terminal p-6">
-            <p className="sm-kicker text-[var(--sm-accent)]">What it does</p>
-            <div className="mt-5 grid gap-3">
-              <div className="sm-proof-card">
-                <p className="text-sm text-white">Search a market and pull real business results.</p>
-              </div>
-              <div className="sm-proof-card">
-                <p className="text-sm text-white">Keep the shortlist and build the outreach.</p>
-              </div>
-              <div className="sm-proof-card">
-                <p className="text-sm text-white">Save the pipeline and export it to Google Workspace.</p>
-              </div>
-            </div>
-          </article>
+      {!apiReady && !isPrivateApp && publicSearchReady ? (
+        <section className="sm-chip border-[rgba(37,208,255,0.2)] bg-[rgba(37,208,255,0.08)] text-[var(--sm-muted)]">
+          Search works on this page. Saved pipeline, Gmail outreach, and Workspace export stay in the private app.
         </section>
-      ) : (
-      <>
-
-      {!apiReady && !isPrivateApp ? (
+      ) : !apiReady && !isPrivateApp && !publicSearchReady ? (
         <section className="sm-chip border-[rgba(255,122,24,0.22)] bg-[rgba(255,122,24,0.08)] text-[var(--sm-muted)]">
-          This host is only the public shell. Use the app to search, save, and export.
+          Public search is not configured on this host yet. Paste a lead list here or use the private app.
         </section>
       ) : !authLoading && !authenticated && !isPrivateApp ? (
         <section className="sm-chip border-[rgba(37,208,255,0.2)] bg-[rgba(37,208,255,0.08)] text-[var(--sm-muted)]">
@@ -927,6 +929,16 @@ export function LeadFinderPage() {
                         <p className="mt-2">{row.email || 'No email found'}</p>
                         <p className="mt-1">{row.phone || 'No phone found'}</p>
                         <p className="mt-1 break-all">{row.website || 'No website found'}</p>
+                        {row.source_url ? (
+                          <a
+                            className="mt-3 inline-flex text-xs font-semibold text-[var(--sm-accent)] hover:text-white"
+                            href={row.source_url}
+                            rel="noreferrer"
+                            target="_blank"
+                          >
+                            Open source
+                          </a>
+                        ) : null}
                       </div>
                       <div className="sm-chip text-sm text-white">
                         <p className="sm-kicker text-[var(--sm-accent-alt)]">Why it matched</p>
@@ -972,16 +984,16 @@ export function LeadFinderPage() {
             <button className="sm-button-primary" onClick={() => void buildLeadPack()} type="button">
               {offerBusy ? 'Building...' : 'Build outreach'}
             </button>
-            <button
-              className="sm-button-accent"
-              disabled={!apiReady || !authenticated || leadHuntBusy}
-              onClick={() => void runLeadHunt()}
-              type="button"
-            >
-              {leadHuntBusy ? 'Running...' : 'Run for me'}
-            </button>
             {isPrivateApp ? (
               <>
+                <button
+                  className="sm-button-accent"
+                  disabled={!apiReady || !authenticated || leadHuntBusy}
+                  onClick={() => void runLeadHunt()}
+                  type="button"
+                >
+                  {leadHuntBusy ? 'Running...' : 'Run for me'}
+                </button>
                 <button
                   className="sm-button-secondary"
                   disabled={!apiReady || !authenticated || huntProfilesBusy || !query.trim()}
@@ -1002,9 +1014,13 @@ export function LeadFinderPage() {
                   Export to Workspace
                 </button>
               </>
+            ) : liveAppAvailable ? (
+              <Link className="sm-button-secondary" to="/login">
+                Open app
+              </Link>
             ) : (
-              <Link className="sm-button-secondary" to="/signup">
-                Start workspace
+              <Link className="sm-button-secondary" to="/book">
+                Book call
               </Link>
             )}
           </div>
@@ -1402,8 +1418,6 @@ export function LeadFinderPage() {
         </div>
       </section>
       ) : null}
-      </>
-      )}
     </div>
   )
 }
