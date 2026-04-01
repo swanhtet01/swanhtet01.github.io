@@ -65,6 +65,7 @@ def main() -> int:
         },
     )
     summary = request_json(opener, "GET", f"{args.base_url.rstrip('/')}/api/summary")
+    insights = request_json(opener, "GET", f"{args.base_url.rstrip('/')}/api/insights")
     director = request_json(opener, "GET", f"{args.base_url.rstrip('/')}/api/reports/role/director")
     exceptions = request_json(opener, "GET", f"{args.base_url.rstrip('/')}/api/exceptions?limit=5")
     approval_create = request_json(
@@ -87,16 +88,152 @@ def main() -> int:
         "POST",
         f"{args.base_url.rstrip('/')}/api/tools/lead-finder",
         {
-            "raw_text": SAMPLE_LEAD_TEXT,
             "query": args.query,
             "keywords": ["spa", "wellness", "massage", "yangon"],
-            "sources": [],
+            "sources": ["maps"],
             "limit": 4,
         },
-        timeout=20,
+        timeout=45,
+    )
+    rows = list(lead_finder.get("rows") or [])
+    if not rows:
+        lead_finder = request_json(
+            opener,
+            "POST",
+            f"{args.base_url.rstrip('/')}/api/tools/lead-finder",
+            {
+                "raw_text": SAMPLE_LEAD_TEXT,
+                "query": args.query,
+                "keywords": ["spa", "wellness", "massage", "yangon"],
+                "sources": [],
+                "limit": 4,
+            },
+            timeout=20,
+        )
+        rows = list(lead_finder.get("rows") or [])
+    outreach_rows = [row for row in rows if str((row or {}).get("email", "")).strip()]
+    if not outreach_rows:
+        manual_leads = request_json(
+            opener,
+            "POST",
+            f"{args.base_url.rstrip('/')}/api/tools/lead-finder",
+            {
+                "raw_text": SAMPLE_LEAD_TEXT,
+                "query": "",
+                "keywords": [],
+                "sources": [],
+                "limit": 4,
+            },
+            timeout=20,
+        )
+        outreach_rows = list(manual_leads.get("rows") or [])
+    lead_to_pilot = request_json(
+        opener,
+        "POST",
+        f"{args.base_url.rstrip('/')}/api/tools/lead-to-pilot",
+        {
+            "campaign_goal": "Book one discovery call",
+            "leads": outreach_rows[:1],
+        },
+    )
+    hunt_seed_rows = outreach_rows[: min(3, len(outreach_rows))] or rows[: min(3, len(rows))]
+    hunt_seed_text = "\n".join(
+        ", ".join(
+            part
+            for part in [
+                str((row or {}).get("name", "")).strip(),
+                str((row or {}).get("email", "")).strip(),
+                str((row or {}).get("phone", "")).strip(),
+                str((row or {}).get("website", "")).strip(),
+            ]
+            if part
+        )
+        for row in hunt_seed_rows
+    ).strip()
+    lead_hunt = request_json(
+        opener,
+        "POST",
+        f"{args.base_url.rstrip('/')}/api/tools/lead-hunt",
+        {
+            "query": "",
+            "raw_text": hunt_seed_text,
+            "keywords": [],
+            "sources": [],
+            "limit": 3,
+            "campaign_goal": "Book one discovery call",
+            "export_workspace": False,
+        },
+        timeout=60,
+    )
+    hunt_profile = request_json(
+        opener,
+        "POST",
+        f"{args.base_url.rstrip('/')}/api/lead-hunts",
+        {
+            "name": "Smoke hunt",
+            "query": "",
+            "raw_text": hunt_seed_text,
+            "keywords": [],
+            "sources": [],
+            "limit": 3,
+            "campaign_goal": "Book one discovery call",
+            "export_workspace": False,
+        },
+    )
+    hunt_profile_rows = list(hunt_profile.get("rows") or [])
+    hunt_profile_row = (hunt_profile.get("profile") or hunt_profile.get("row") or {}) if isinstance(hunt_profile, dict) else {}
+    hunt_profile_run = (
+        request_json(
+            opener,
+            "POST",
+            f"{args.base_url.rstrip('/')}/api/lead-hunts/{hunt_profile_row.get('hunt_id', '')}/run",
+            {"export_workspace": False},
+            timeout=60,
+        )
+        if hunt_profile_row.get("hunt_id")
+        else {}
+    )
+    run_all_hunts = request_json(
+        opener,
+        "POST",
+        f"{args.base_url.rstrip('/')}/api/lead-hunts/run-active",
+        {"export_workspace": False},
+        timeout=180,
+    )
+    pipeline_import = request_json(
+        opener,
+        "POST",
+        f"{args.base_url.rstrip('/')}/api/lead-pipeline/import",
+        {
+            "rows": lead_to_pilot.get("opportunities", []),
+            "campaign_goal": "Book one discovery call",
+        },
+    )
+    pipeline_rows = list((pipeline_import.get("rows") or []))
+    saved_ids = [str(item).strip() for item in (pipeline_import.get("saved_lead_ids") or []) if str(item).strip()]
+    outreach_lead_id = saved_ids[0] if saved_ids else (pipeline_rows[0]["lead_id"] if pipeline_rows else "")
+    outreach = (
+        request_json(
+            opener,
+            "POST",
+            f"{args.base_url.rstrip('/')}/api/lead-pipeline/{outreach_lead_id}/outreach/gmail",
+            {"create_gmail_draft": False},
+        )
+        if outreach_lead_id
+        else {}
+    )
+    workspace_export = request_json(
+        opener,
+        "POST",
+        f"{args.base_url.rstrip('/')}/api/lead-pipeline/export/workspace",
+        {
+            "workspace_folder_name": "SuperMega Sales",
+            "spreadsheet_name": "SuperMega Lead Pipeline",
+            "sheet_name": "Leads",
+        },
+        timeout=90,
     )
 
-    rows = list(lead_finder.get("rows") or [])
     report = {
         "base_url": args.base_url,
         "health_status": health.get("status", ""),
@@ -113,6 +250,17 @@ def main() -> int:
         "lead_count": len(rows),
         "top_lead": rows[0].get("name", "") if rows else "",
         "provider": lead_finder.get("provider", ""),
+        "insights_engine": insights.get("engine", ""),
+        "pipeline_lead_count": len(pipeline_rows),
+        "lead_pack_engine": lead_to_pilot.get("engine", ""),
+        "lead_hunt_saved_count": int(lead_hunt.get("saved_count", 0) or 0),
+        "hunt_profile_count": len(hunt_profile_rows),
+        "hunt_profile_run_saved_count": int(hunt_profile_run.get("saved_count", 0) or 0),
+        "run_all_hunts_saved_count": int(run_all_hunts.get("saved_count", 0) or 0),
+        "outreach_status": outreach.get("status", ""),
+        "workspace_export_status": workspace_export.get("status", ""),
+        "workspace_export_link": workspace_export.get("export", {}).get("web_view_link", ""),
+        "compose_url": ((outreach.get("draft") or {}).get("compose_url") or ""),
     }
 
     if args.as_json:
@@ -134,6 +282,15 @@ def main() -> int:
     print(f"- Lead finder rows: {report['lead_count']}")
     print(f"- Top lead: {report['top_lead']}")
     print(f"- Provider: {report['provider']}")
+    print(f"- Insights engine: {report['insights_engine']}")
+    print(f"- Pipeline leads: {report['pipeline_lead_count']}")
+    print(f"- Lead pack engine: {report['lead_pack_engine']}")
+    print(f"- Lead hunt saved: {report['lead_hunt_saved_count']}")
+    print(f"- Hunt profiles: {report['hunt_profile_count']}")
+    print(f"- Hunt profile run saved: {report['hunt_profile_run_saved_count']}")
+    print(f"- Run-all hunts saved: {report['run_all_hunts_saved_count']}")
+    print(f"- Outreach: {report['outreach_status']}")
+    print(f"- Workspace export: {report['workspace_export_status']}")
     print()
     return 0
 

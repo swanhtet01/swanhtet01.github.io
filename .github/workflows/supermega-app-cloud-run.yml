@@ -47,8 +47,17 @@ jobs:
       - name: Configure Docker auth
         run: gcloud auth configure-docker asia-southeast1-docker.pkg.dev --quiet
 
-      - name: Build and push image
-        run: gcloud builds submit --tag "$IMAGE" .
+      - name: Build image
+        run: |
+          docker build \
+            --build-arg VITE_GOOGLE_MAPS_API_KEY="${{ secrets.VITE_GOOGLE_MAPS_API_KEY }}" \
+            --build-arg VITE_BOOKING_URL="${{ vars.VITE_BOOKING_URL }}" \
+            --build-arg VITE_WORKSPACE_APP_BASE="${{ vars.VITE_WORKSPACE_APP_BASE }}" \
+            --build-arg VITE_WORKSPACE_API_BASE="${{ vars.VITE_WORKSPACE_API_BASE }}" \
+            -t "$IMAGE" .
+
+      - name: Push image
+        run: docker push "$IMAGE"
 
       - name: Deploy Cloud Run app
         run: |
@@ -58,7 +67,7 @@ jobs:
             --platform managed \
             --allow-unauthenticated \
             --port 8080 \
-            --set-env-vars "SUPERMEGA_SITE_ROOT=/app/showroom/dist,SUPERMEGA_PILOT_DATA=/app/pilot-data,SUPERMEGA_AUTH_REQUIRED=1,SUPERMEGA_APP_USERNAME=${{ secrets.SUPERMEGA_APP_USERNAME }},SUPERMEGA_APP_PASSWORD=${{ secrets.SUPERMEGA_APP_PASSWORD }},SUPERMEGA_APP_DISPLAY_NAME=${{ vars.SUPERMEGA_APP_DISPLAY_NAME }},SUPERMEGA_APP_ROLE=${{ vars.SUPERMEGA_APP_ROLE }},SUPERMEGA_WORKSPACE_SLUG=${{ vars.SUPERMEGA_WORKSPACE_SLUG }},SUPERMEGA_WORKSPACE_NAME=${{ vars.SUPERMEGA_WORKSPACE_NAME }},SUPERMEGA_WORKSPACE_PLAN=${{ vars.SUPERMEGA_WORKSPACE_PLAN }},SUPERMEGA_SESSION_HOURS=${{ vars.SUPERMEGA_SESSION_HOURS }},SUPERMEGA_DATABASE_URL=${{ secrets.SUPERMEGA_DATABASE_URL }},SUPERMEGA_CORS_ORIGINS=${{ vars.SUPERMEGA_CORS_ORIGINS }},VITE_BOOKING_URL=${{ vars.VITE_BOOKING_URL }}"
+            --set-env-vars "SUPERMEGA_SITE_ROOT=/app/showroom/dist,SUPERMEGA_PILOT_DATA=/app/pilot-data,SUPERMEGA_AUTH_REQUIRED=1,SUPERMEGA_APP_USERNAME=${{ secrets.SUPERMEGA_APP_USERNAME }},SUPERMEGA_APP_PASSWORD=${{ secrets.SUPERMEGA_APP_PASSWORD }},SUPERMEGA_APP_DISPLAY_NAME=${{ vars.SUPERMEGA_APP_DISPLAY_NAME }},SUPERMEGA_APP_ROLE=${{ vars.SUPERMEGA_APP_ROLE }},SUPERMEGA_WORKSPACE_SLUG=${{ vars.SUPERMEGA_WORKSPACE_SLUG }},SUPERMEGA_WORKSPACE_NAME=${{ vars.SUPERMEGA_WORKSPACE_NAME }},SUPERMEGA_WORKSPACE_PLAN=${{ vars.SUPERMEGA_WORKSPACE_PLAN }},SUPERMEGA_SESSION_HOURS=${{ vars.SUPERMEGA_SESSION_HOURS }},SUPERMEGA_DATABASE_URL=${{ secrets.SUPERMEGA_DATABASE_URL }},SUPERMEGA_CORS_ORIGINS=${{ vars.SUPERMEGA_CORS_ORIGINS }},VITE_BOOKING_URL=${{ vars.VITE_BOOKING_URL }},VITE_WORKSPACE_APP_BASE=${{ vars.VITE_WORKSPACE_APP_BASE }},VITE_WORKSPACE_API_BASE=${{ vars.VITE_WORKSPACE_API_BASE }}"
 
       - name: Print service URL
         run: |
