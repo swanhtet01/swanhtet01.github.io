@@ -99,7 +99,18 @@ export async function workspaceFetch<T>(path: string, init?: RequestInit): Promi
   })
 
   if (!response.ok) {
-    const error = new Error(`Workspace API request failed: ${response.status}`) as Error & { status?: number }
+    let detail = ''
+    try {
+      const payload = await response.json()
+      detail = String(payload?.detail || payload?.message || '').trim()
+    } catch {
+      try {
+        detail = (await response.text()).trim()
+      } catch {
+        detail = ''
+      }
+    }
+    const error = new Error(detail || `Workspace API request failed: ${response.status}`) as Error & { status?: number }
     error.status = response.status
     throw error
   }
@@ -158,5 +169,34 @@ export async function logoutWorkspace() {
   return workspaceFetch<{ status?: string; authenticated?: boolean }>('/api/auth/logout', {
     method: 'POST',
     body: JSON.stringify({}),
+  })
+}
+
+export async function bootstrapPublicWorkspace(payload?: {
+  name?: string
+  email?: string
+  company?: string
+  workspace_slug?: string
+  goal?: string
+}) {
+  return workspaceFetch<WorkspaceSessionPayload & { generated_password?: string; reused?: boolean }>('/api/public/workspace/bootstrap', {
+    method: 'POST',
+    body: JSON.stringify(payload ?? {}),
+  })
+}
+
+export async function importLeadPipeline(rows: Array<Record<string, unknown>>, campaignGoal = '') {
+  return workspaceFetch<{
+    status?: string
+    saved_count?: number
+    saved_lead_ids?: string[]
+    rows?: Array<Record<string, unknown>>
+    summary?: Record<string, unknown>
+  }>('/api/lead-pipeline/import', {
+    method: 'POST',
+    body: JSON.stringify({
+      rows,
+      campaign_goal: campaignGoal,
+    }),
   })
 }

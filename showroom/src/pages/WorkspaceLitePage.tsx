@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 
 import { PageIntro } from '../components/PageIntro'
 import {
@@ -13,6 +13,7 @@ import {
   type BrowserWorkspaceStage,
   updateBrowserWorkspaceLead,
 } from '../lib/browserWorkspace'
+import { bootstrapPublicWorkspace, getWorkspaceSession, hasLiveWorkspaceApi } from '../lib/workspaceApi'
 
 const stageOptions: BrowserWorkspaceStage[] = ['new', 'outreach', 'contacted', 'qualified']
 
@@ -30,8 +31,12 @@ function nextActionForLead(lead: BrowserWorkspaceLead) {
 }
 
 export function WorkspaceLitePage() {
+  const location = useLocation()
+  const navigate = useNavigate()
   const [rows, setRows] = useState(listBrowserWorkspaceLeads())
   const [message, setMessage] = useState('')
+  const [starting, setStarting] = useState(false)
+  const bootstrapAttempted = useRef(false)
 
   const summary = useMemo(() => browserWorkspaceSummary(rows), [rows])
   const openActionCount = listBrowserWorkspaceActions().filter((action) => action.status === 'open').length
@@ -72,12 +77,90 @@ export function WorkspaceLitePage() {
     setMessage('Exported the browser workspace as CSV.')
   }
 
+  useEffect(() => {
+    if (!hasLiveWorkspaceApi()) {
+      return
+    }
+
+    let cancelled = false
+    const shouldAutoStart = new URLSearchParams(location.search).get('start') === '1'
+
+    async function syncWorkspace() {
+      try {
+        const session = await getWorkspaceSession()
+        if (cancelled) {
+          return
+        }
+        if (session.authenticated) {
+          navigate('/app', { replace: true })
+          return
+        }
+        if (shouldAutoStart && !bootstrapAttempted.current) {
+          bootstrapAttempted.current = true
+          setStarting(true)
+          const created = await bootstrapPublicWorkspace({ company: 'My Workspace' })
+          if (cancelled) {
+            return
+          }
+          if (created.authenticated) {
+            navigate('/app', { replace: true })
+            return
+          }
+          setMessage('Could not start the live workspace on this host.')
+        }
+      } catch (error) {
+        if (!cancelled && shouldAutoStart) {
+          setMessage(`${error instanceof Error ? error.message : 'Live workspace is not available on this host yet.'} Using the browser workspace instead.`)
+        }
+      } finally {
+        if (!cancelled) {
+          setStarting(false)
+        }
+      }
+    }
+
+    void syncWorkspace()
+    return () => {
+      cancelled = true
+    }
+  }, [location.search, navigate])
+
+  async function startLiveWorkspace() {
+    if (!hasLiveWorkspaceApi()) {
+      setMessage('This host is using the browser workspace only.')
+      return
+    }
+
+    setStarting(true)
+    try {
+      const session = await getWorkspaceSession()
+      if (session.authenticated) {
+        navigate('/app', { replace: true })
+        return
+      }
+      const created = await bootstrapPublicWorkspace({ company: 'My Workspace' })
+      if (created.authenticated) {
+        navigate('/app', { replace: true })
+        return
+      }
+      setMessage('Could not start the live workspace on this host.')
+    } catch (error) {
+      setMessage(`${error instanceof Error ? error.message : 'Live workspace is not available on this host yet.'} Using the browser workspace instead.`)
+    } finally {
+      setStarting(false)
+    }
+  }
+
   return (
     <div className="space-y-8">
       <PageIntro
         eyebrow="Browser workspace"
         title="Run the shortlist."
-        description="Keep leads, notes, and follow-up actions in one working workspace on this device."
+        description={
+          hasLiveWorkspaceApi()
+            ? 'Start the real workspace on this host, or keep using the browser workspace on this device.'
+            : 'Keep leads, notes, and follow-up actions in one working workspace on this device.'
+        }
       />
 
       <section className="grid gap-6 lg:grid-cols-[0.86fr_1.14fr]">
@@ -107,6 +190,11 @@ export function WorkspaceLitePage() {
           </div>
 
           <div className="mt-5 flex flex-wrap gap-3">
+            {hasLiveWorkspaceApi() ? (
+              <button className="sm-button-primary" disabled={starting} onClick={() => void startLiveWorkspace()} type="button">
+                {starting ? 'Starting workspace...' : 'Start real workspace'}
+              </button>
+            ) : null}
             <Link className="sm-button-primary" to="/lead-finder">
               Find more leads
             </Link>
@@ -118,7 +206,12 @@ export function WorkspaceLitePage() {
             </button>
           </div>
 
-          {message ? <div className="mt-4 sm-chip text-[var(--sm-muted)]">{message}</div> : null}
+          <div className="mt-4 sm-chip text-[var(--sm-muted)]">
+            {hasLiveWorkspaceApi()
+              ? 'This host can start the real saved workspace.'
+              : 'This workspace is stored in this browser on this device.'}
+          </div>
+          {message ? <div className="mt-3 sm-chip text-[var(--sm-muted)]">{message}</div> : null}
         </article>
 
         <article className="sm-terminal p-6">

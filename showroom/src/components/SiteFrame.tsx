@@ -41,7 +41,7 @@ export function SiteFrame() {
                 {item.label}
               </NavLink>
             ))}
-            <NavLink className="sm-button-primary ml-2" to="/workspace">
+            <NavLink className="sm-button-primary ml-2" to="/workspace?start=1">
               Start workspace
             </NavLink>
           </div>
@@ -54,7 +54,7 @@ export function SiteFrame() {
                   {item.label}
                 </NavLink>
               ))}
-              <NavLink className="sm-button-primary mt-1 text-center" onClick={() => setMenuOpen(false)} to="/workspace">
+              <NavLink className="sm-button-primary mt-1 text-center" onClick={() => setMenuOpen(false)} to="/workspace?start=1">
                 Start workspace
               </NavLink>
             </div>

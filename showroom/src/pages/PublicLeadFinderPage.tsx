@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useLocation } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 
 import { PageIntro } from '../components/PageIntro'
 import { browserWorkspaceSummary, buildBrowserOutreach, saveBrowserWorkspaceLeads } from '../lib/browserWorkspace'
 import { publicLeadFinderAvailable, searchPublicLeads } from '../lib/publicLeadFinder'
+import { bootstrapPublicWorkspace, getWorkspaceSession, hasLiveWorkspaceApi, importLeadPipeline } from '../lib/workspaceApi'
 import { downloadLeadCsv, LEAD_SAMPLE_QUERY, LEAD_SAMPLE_TEXT, parseLeads, type LeadRow, type LeadSource } from '../lib/tooling'
 
 const sourceLabels: Array<{ key: LeadSource; label: string; hint: string }> = [
@@ -14,6 +15,7 @@ const sourceLabels: Array<{ key: LeadSource; label: string; hint: string }> = [
 
 export function PublicLeadFinderPage() {
   const location = useLocation()
+  const navigate = useNavigate()
   const [query, setQuery] = useState('')
   const [keywords, setKeywords] = useState('spa,wellness,massage,yangon')
   const [limit, setLimit] = useState(8)
@@ -119,11 +121,55 @@ export function PublicLeadFinderPage() {
     setShortlist((current) => (current.includes(name) ? current.filter((item) => item !== name) : [...current, name]))
   }
 
-  function saveToWorkspace() {
+  async function saveToWorkspace() {
     const candidates = shortlistRows.length ? shortlistRows : rows.slice(0, 5)
     if (!candidates.length) {
       setMessage('Search first, then save a shortlist.')
       return
+    }
+
+    if (hasLiveWorkspaceApi()) {
+      try {
+        const session = await getWorkspaceSession()
+        if (!session.authenticated) {
+          await bootstrapPublicWorkspace({
+            company: query.trim() || 'My Workspace',
+          })
+        }
+
+        const imported = await importLeadPipeline(
+          candidates.map((row) => {
+            const outreach = buildBrowserOutreach(row, query, searchKeywords)
+            return {
+              name: row.name,
+              stage: 'offer_ready',
+              status: 'open',
+              owner: 'Growth Studio',
+              service_pack: 'Action OS',
+              wedge_product: 'Lead Finder',
+              semi_products: ['Lead Finder'],
+              outreach_subject: outreach.subject,
+              outreach_message: outreach.message,
+              email: row.email,
+              phone: row.phone,
+              website: row.website,
+              source: 'public_lead_finder',
+              source_url: row.source_url,
+              provider: provider,
+              score: row.score,
+              notes: row.fit_reasons.join(', '),
+            }
+          }),
+          query.trim() || 'Book one discovery call.',
+        )
+
+        setMessage(`Saved ${imported.saved_count || candidates.length} lead${(imported.saved_count || candidates.length) === 1 ? '' : 's'} into the live workspace.`)
+        navigate('/app/leads', { replace: true })
+        return
+      } catch (error) {
+        setMessage(error instanceof Error ? error.message : 'Could not save to the live workspace on this host.')
+        return
+      }
     }
 
     const result = saveBrowserWorkspaceLeads(candidates, {
@@ -291,14 +337,18 @@ export function PublicLeadFinderPage() {
             </div>
           </div>
           <div className="mt-5 flex flex-wrap gap-3">
-            <button className="sm-button-primary" disabled={!rows.length} onClick={saveToWorkspace} type="button">
+            <button className="sm-button-primary" disabled={!rows.length} onClick={() => void saveToWorkspace()} type="button">
               Save shortlist
             </button>
             <Link className="sm-button-secondary" to="/workspace">
               Open workspace
             </Link>
           </div>
-          <div className="mt-4 sm-chip text-[var(--sm-muted)]">This workspace is browser-persisted on this device. No login required.</div>
+          <div className="mt-4 sm-chip text-[var(--sm-muted)]">
+            {hasLiveWorkspaceApi()
+              ? 'This host can save the shortlist into the real workspace.'
+              : 'This workspace is browser-persisted on this device. No login required.'}
+          </div>
         </article>
 
         <article className="sm-surface p-6">

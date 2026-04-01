@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
+import secrets
 import sys
+from datetime import datetime
 from html import unescape
 from pathlib import Path
 from typing import Any
@@ -332,6 +335,14 @@ class SignupRequest(BaseModel):
     email: str
     company: str
     password: str = ""
+    workspace_slug: str = ""
+    goal: str = ""
+
+
+class PublicWorkspaceBootstrapRequest(BaseModel):
+    name: str = ""
+    email: str = ""
+    company: str = ""
     workspace_slug: str = ""
     goal: str = ""
 
@@ -1372,6 +1383,78 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
                 "workspace_plan": session.get("workspace_plan", ""),
             },
             "workspaces": enterprise_list_user_workspaces(enterprise_db_url, username=str(user.get("username", ""))),
+            "created": created,
+        }
+
+    @app.post("/api/public/workspace/bootstrap")
+    def public_workspace_bootstrap(request: Request, response: Response, payload: PublicWorkspaceBootstrapRequest) -> dict[str, Any]:
+        existing_session = _session_from_request(request)
+        if existing_session:
+            return {
+                "status": "ready",
+                "authenticated": True,
+                "reused": True,
+                "session": {
+                    "username": existing_session.get("username", ""),
+                    "display_name": existing_session.get("display_name", ""),
+                    "role": existing_session.get("role", ""),
+                    "workspace_id": existing_session.get("workspace_id", ""),
+                    "workspace_slug": existing_session.get("workspace_slug", ""),
+                    "workspace_name": existing_session.get("workspace_name", ""),
+                    "workspace_plan": existing_session.get("workspace_plan", ""),
+                },
+            }
+
+        company = str(payload.company or "").strip() or "My Workspace"
+        name = str(payload.name or "").strip() or company or "Owner"
+        seed = "|".join(
+            [
+                company,
+                name,
+                str(payload.email or "").strip().lower(),
+                datetime.now().astimezone().isoformat(),
+            ]
+        )
+        email = str(payload.email or "").strip().lower() or f"guest-{hashlib.sha1(seed.encode('utf-8')).hexdigest()[:10]}@supermega.local"
+        password = secrets.token_urlsafe(10)
+        base_slug = _slugify(payload.workspace_slug or company or name or "workspace") or "workspace"
+        workspace_slug = f"{base_slug}-{hashlib.sha1(email.encode('utf-8')).hexdigest()[:4]}"
+
+        created = enterprise_ensure_user(
+            enterprise_db_url,
+            username=email,
+            password=password,
+            display_name=name,
+            role="owner",
+            workspace_slug=workspace_slug,
+            workspace_name=company,
+            workspace_plan="starter",
+        )
+        user = enterprise_authenticate_user(enterprise_db_url, username=email, password=password)
+        if not user:
+            raise HTTPException(status_code=500, detail="Public workspace bootstrap failed.")
+        session = enterprise_create_session(
+            enterprise_db_url,
+            username=str(user.get("username", "")),
+            role=str(user.get("role", "")),
+            workspace_slug=workspace_slug,
+            ttl_hours=session_ttl_hours,
+        )
+        _set_session_cookie(response, request, str(session.get("session_id", "")))
+        return {
+            "status": "ready",
+            "authenticated": True,
+            "reused": False,
+            "generated_password": password,
+            "session": {
+                "username": user.get("username", ""),
+                "display_name": user.get("display_name", ""),
+                "role": user.get("role", ""),
+                "workspace_id": session.get("workspace_id", ""),
+                "workspace_slug": session.get("workspace_slug", ""),
+                "workspace_name": session.get("workspace_name", ""),
+                "workspace_plan": session.get("workspace_plan", ""),
+            },
             "created": created,
         }
 
