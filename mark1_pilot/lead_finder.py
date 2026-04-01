@@ -31,7 +31,7 @@ STOP_WORDS = {
 }
 
 
-def _http_get(url: str, *, timeout: int = 20, limit_bytes: int = 250_000) -> str:
+def _http_get(url: str, *, timeout: int = 8, limit_bytes: int = 250_000) -> str:
     request = Request(
         url,
         headers={
@@ -214,7 +214,7 @@ def _google_places_results(query: str, limit: int) -> list[dict[str, Any]]:
         }
     )
     try:
-        payload = json.loads(_http_get(text_url, timeout=20))
+        payload = json.loads(_http_get(text_url, timeout=8))
     except Exception:
         return []
 
@@ -232,7 +232,7 @@ def _google_places_results(query: str, limit: int) -> list[dict[str, Any]]:
                 }
             )
             try:
-                detail_payload = json.loads(_http_get(detail_url, timeout=20))
+                detail_payload = json.loads(_http_get(detail_url, timeout=8))
                 details = detail_payload.get("result", {}) if isinstance(detail_payload, dict) else {}
             except Exception:
                 details = {}
@@ -361,14 +361,10 @@ def _search_queries(query: str, sources: list[str]) -> list[str]:
     queries: list[str] = []
     if "web" in active:
         queries.append(query)
-        queries.append(f'"{query}" contact')
     if "social" in active:
         queries.append(f'{query} site:facebook.com')
-        queries.append(f'{query} site:instagram.com')
-        queries.append(f'{query} site:linkedin.com')
     if "maps" in active:
         queries.append(f'{query} site:google.com/maps')
-        queries.append(f'{query} "Google Maps"')
     return _unique_values(queries)
 
 
@@ -426,7 +422,7 @@ def discover_leads(query: str, keywords: list[str] | None = None, sources: list[
             providers.append("Google Places")
             rows.extend(places_rows)
 
-    per_query_limit = max(3, min(5, limit))
+    per_query_limit = max(2, min(4, limit))
     for search_query in _search_queries(normalized_query, active_sources):
         try:
             candidates = _parse_duckduckgo_results(search_query, per_query_limit)

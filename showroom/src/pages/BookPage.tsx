@@ -2,17 +2,14 @@ import { Link } from 'react-router-dom'
 
 import { PageIntro } from '../components/PageIntro'
 import { bookingUrl } from '../content'
-import { hasLiveWorkspaceApp } from '../lib/workspaceApi'
 
 export function BookPage() {
-  const liveAppAvailable = hasLiveWorkspaceApp()
-
   return (
     <div className="space-y-8">
       <PageIntro
         eyebrow="Schedule"
         title="Book a short call."
-        description="We look at one workflow and the fastest first rollout."
+        description="Start with one workflow. Keep the first rollout small."
       />
 
       <section className="grid gap-6 lg:grid-cols-[0.88fr_1.12fr]">
@@ -20,9 +17,9 @@ export function BookPage() {
           <p className="sm-kicker text-[var(--sm-accent)]">What we cover</p>
           <div className="mt-5 grid gap-3">
             {[
-              'The one workflow that wastes the most time today',
-              'What data already exists in Gmail, Drive, or Sheets',
-              'The first live board or queue we would ship',
+              'One workflow to fix first',
+              'What data already exists',
+              'What the first board should be',
             ].map((item) => (
               <div className="sm-chip text-white" key={item}>
                 {item}
@@ -30,9 +27,7 @@ export function BookPage() {
             ))}
           </div>
 
-          <p className="mt-6 text-sm text-[var(--sm-muted)]">
-            Best fit: owner-led teams, factories, distributors, and managers who want one working operating layer before any bigger rollout.
-          </p>
+          <p className="mt-6 text-sm text-[var(--sm-muted)]">Best fit: teams that want one working board before a bigger rollout.</p>
         </aside>
 
         <section className="sm-surface p-6">
@@ -56,21 +51,15 @@ export function BookPage() {
           ) : (
             <div className="space-y-5">
               <div className="sm-chip text-[var(--sm-muted)]">
-                Use the request form if this host does not have a live calendar yet.
+                This host does not have a live calendar yet. Use the working product flow first, then book the rollout.
               </div>
               <div className="flex flex-wrap gap-3">
-                <Link className="sm-button-primary" to="/contact">
-                  Send request
+                <Link className="sm-button-primary" to="/workspace">
+                  Open workspace
                 </Link>
-                {liveAppAvailable ? (
-                  <Link className="sm-button-secondary" to="/signup">
-                    Start workspace
-                  </Link>
-                ) : (
-                  <Link className="sm-button-secondary" to="/lead-finder">
-                    Open Lead Finder
-                  </Link>
-                )}
+                <Link className="sm-button-secondary" to="/lead-finder">
+                  Open Lead Finder
+                </Link>
               </div>
             </div>
           )}

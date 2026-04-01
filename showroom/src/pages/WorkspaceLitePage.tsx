@@ -6,6 +6,7 @@ import {
   browserWorkspaceSummary,
   buildBrowserOutreach,
   exportBrowserWorkspaceLeads,
+  listBrowserWorkspaceActions,
   listBrowserWorkspaceLeads,
   removeBrowserWorkspaceLead,
   type BrowserWorkspaceLead,
@@ -33,6 +34,7 @@ export function WorkspaceLitePage() {
   const [message, setMessage] = useState('')
 
   const summary = useMemo(() => browserWorkspaceSummary(rows), [rows])
+  const openActionCount = listBrowserWorkspaceActions().filter((action) => action.status === 'open').length
   const topActions = useMemo(
     () =>
       rows.slice(0, 5).map((lead) => ({
@@ -75,7 +77,7 @@ export function WorkspaceLitePage() {
       <PageIntro
         eyebrow="Browser workspace"
         title="Run the shortlist."
-        description="Keep leads, notes, and stage changes in one working workspace on this device."
+        description="Keep leads, notes, and follow-up actions in one working workspace on this device."
       />
 
       <section className="grid gap-6 lg:grid-cols-[0.86fr_1.14fr]">
@@ -98,11 +100,18 @@ export function WorkspaceLitePage() {
               <p className="sm-kicker text-[var(--sm-accent-alt)]">Qualified</p>
               <p className="mt-2 text-3xl font-bold">{summary.qualifiedCount}</p>
             </div>
+            <div className="sm-chip text-white md:col-span-2">
+              <p className="sm-kicker text-[var(--sm-accent)]">Open actions</p>
+              <p className="mt-2 text-3xl font-bold">{openActionCount}</p>
+            </div>
           </div>
 
           <div className="mt-5 flex flex-wrap gap-3">
             <Link className="sm-button-primary" to="/lead-finder">
               Find more leads
+            </Link>
+            <Link className="sm-button-secondary" to="/action-os">
+              Open Action OS
             </Link>
             <button className="sm-button-secondary" disabled={!rows.length} onClick={exportWorkspace} type="button">
               Export workspace

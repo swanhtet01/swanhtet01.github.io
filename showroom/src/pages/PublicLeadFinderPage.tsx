@@ -131,7 +131,11 @@ export function PublicLeadFinderPage() {
       keywords: searchKeywords,
     })
     setSavedTotal(result.totalCount)
-    setMessage(`Saved ${candidates.length} lead${candidates.length === 1 ? '' : 's'} into the browser workspace.`)
+    setMessage(
+      `Saved ${candidates.length} lead${candidates.length === 1 ? '' : 's'} and ${result.actionCount} follow-up action${
+        result.actionCount === 1 ? '' : 's'
+      } into the browser workspace.`,
+    )
   }
 
   async function copyOutreach(row: LeadRow) {
