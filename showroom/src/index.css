@@ -12,6 +12,7 @@
   --sm-shadow: 0 28px 70px -38px rgba(0, 0, 0, 0.62);
   font-family: 'Manrope', 'Segoe UI', sans-serif;
   color: var(--sm-ink);
+  color-scheme: dark;
 }
 
 *,
@@ -221,6 +222,49 @@ a {
   border-color: rgba(37, 208, 255, 0.48);
   box-shadow: 0 0 0 3px rgba(37, 208, 255, 0.14);
   background: rgba(255, 255, 255, 0.06);
+}
+
+select.sm-input {
+  color-scheme: dark;
+}
+
+.sm-input option,
+.sm-input optgroup {
+  background: #081427;
+  color: var(--sm-ink);
+}
+
+.sm-details {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 1rem;
+}
+
+.sm-details > summary {
+  cursor: pointer;
+  list-style: none;
+  padding: 0.95rem 1rem;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--sm-ink);
+}
+
+.sm-details > summary::-webkit-details-marker {
+  display: none;
+}
+
+.sm-details > summary::after {
+  content: '+';
+  float: right;
+  color: var(--sm-muted);
+}
+
+.sm-details[open] > summary::after {
+  content: '−';
+}
+
+.sm-details-content {
+  padding: 0 1rem 1rem;
 }
 
 .sm-metric-card {

@@ -41,8 +41,8 @@ export function SiteFrame() {
                 {item.label}
               </NavLink>
             ))}
-            <NavLink className="sm-button-primary ml-2" to="/workspace?start=1">
-              Start workspace
+            <NavLink className="sm-button-primary ml-2" to="/workspace">
+              Open workspace
             </NavLink>
           </div>
         </nav>
@@ -54,8 +54,8 @@ export function SiteFrame() {
                   {item.label}
                 </NavLink>
               ))}
-              <NavLink className="sm-button-primary mt-1 text-center" onClick={() => setMenuOpen(false)} to="/workspace?start=1">
-                Start workspace
+              <NavLink className="sm-button-primary mt-1 text-center" onClick={() => setMenuOpen(false)} to="/workspace">
+                Open workspace
               </NavLink>
             </div>
           </div>
@@ -68,7 +68,7 @@ export function SiteFrame() {
 
       <footer className="border-t border-white/8 bg-[rgba(4,10,22,0.78)]">
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 px-4 py-6 text-sm text-[var(--sm-muted)] lg:flex-row lg:items-center lg:justify-between lg:px-8">
-          <p>Lead Finder fills the shortlist. The workspace runs the follow-up.</p>
+          <p>Lead Finder finds the shortlist. Workspace keeps the next step moving.</p>
         </div>
       </footer>
     </div>

@@ -11,17 +11,11 @@ type SessionState = {
 }
 
 const appNavItems = [
-  { label: 'Overview', to: '/app' },
-  { label: 'Insights', to: '/app/insights' },
-  { label: 'Director', to: '/app/director' },
-  { label: 'Actions', to: '/app/actions' },
-  { label: 'Decisions', to: '/app/decisions' },
-  { label: 'Approvals', to: '/app/approvals' },
-  { label: 'Exceptions', to: '/app/exceptions' },
+  { label: 'Queue', to: '/app/actions' },
   { label: 'Leads', to: '/app/leads' },
   { label: 'Intake', to: '/app/intake' },
   { label: 'Receiving', to: '/app/receiving' },
-  { label: 'Inventory', to: '/app/inventory' },
+  { label: 'Director', to: '/app/director' },
 ] as const
 
 const navClassName = ({ isActive }: { isActive: boolean }) =>
@@ -115,7 +109,7 @@ export function AppFrame() {
       <div className="border-b border-white/8 bg-[rgba(3,8,18,0.9)] backdrop-blur-xl">
         <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-4 lg:flex-row lg:items-center lg:justify-between lg:px-8">
           <div className="flex items-center gap-4">
-            <NavLink className="flex items-center gap-3" to="/app">
+            <NavLink className="flex items-center gap-3" to="/app/actions">
               <span className="flex h-11 w-11 items-center justify-center rounded-xl border border-[rgba(37,208,255,0.22)] bg-[rgba(37,208,255,0.08)] text-sm font-extrabold text-[var(--sm-accent)]">
                 SM
               </span>

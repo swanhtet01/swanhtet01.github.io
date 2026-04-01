@@ -24,114 +24,106 @@ export type PublicModule = {
 
 export const navItems = [
   { label: 'Home', to: '/' },
-  { label: 'Action OS', to: '/action-os' },
   { label: 'Lead Finder', to: '/lead-finder' },
   { label: 'Workspace', to: '/workspace' },
+  { label: 'Book', to: '/book' },
 ] as const
 
 export const bookingUrl = (import.meta.env.VITE_BOOKING_URL ?? '').trim()
 
 export const hero = {
-  eyebrow: 'AI-native operating software',
-  title: 'Run work in one place.',
-  description: 'Find leads, keep the shortlist, and run follow-up in one workspace.',
+  eyebrow: 'AI-native workflow software',
+  title: 'Find leads. Keep them moving.',
+  description: 'Lead Finder searches a market. Workspace keeps the shortlist, notes, and next actions in one place.',
 }
 
 export const proofPoints: ProofPoint[] = [
   {
-    label: 'Product',
-    value: 'Action OS',
-    detail: 'One board for owners, due dates, and blockers.',
-  },
-  {
-    label: 'Tool',
-    value: 'Lead Finder',
-    detail: 'Search a market and keep the right leads.',
+    label: 'Lead Finder',
+    value: 'Real search',
+    detail: 'Google Places first, public map search fallback.',
   },
   {
     label: 'Workspace',
-    value: 'Browser-ready',
-    detail: 'Saved leads, notes, stages, and export without login.',
+    value: 'Saved pipeline',
+    detail: 'Leads, notes, and stages stay on this device or in the live app.',
+  },
+  {
+    label: 'Action OS',
+    value: 'One queue',
+    detail: 'Follow-up actions and blockers in one simple board.',
   },
 ]
 
 export const coreProduct = {
   name: 'Action OS',
-  tagline: 'One board for owners, due dates, and blockers.',
-  replaces: ['Manual chasing', 'Buried follow-up', 'Last-minute reporting'],
-  inputs: ['Gmail', 'Drive', 'Sheets', 'Team updates'],
-  outputs: ['Action board', 'Exception queue', 'Summary'],
+  tagline: 'One simple queue for follow-up, owners, and blockers.',
+  replaces: ['Scattered notes', 'Missed follow-up', 'Manual chasing'],
+  inputs: ['Lead shortlist', 'Ops updates', 'Receiving issues'],
+  outputs: ['Action queue', 'Owner list', 'Next steps'],
   rollout: [
-    'Connect one inbox, sheet, or update source.',
-    'Assign owners and due dates on one board.',
-    'Add more only after the first board is trusted.',
+    'Start with one workspace.',
+    'Save the important leads or issues.',
+    'Run one queue every day.',
   ],
 }
 
 export const leadFinder = {
   title: 'Lead Finder',
-  description: 'Search a market, shortlist the right leads, and save them into the workspace.',
-  steps: ['Search', 'Save shortlist', 'Run outreach'],
+  description: 'Search by place or niche, keep the right results, and move them into the workspace.',
+  steps: ['Search a market', 'Keep the shortlist', 'Run follow-up'],
 }
 
 export const useCases: UseCase[] = [
   {
+    name: 'Outbound',
+    audience: 'Founders, operators, and sales teams',
+    promise: 'Find businesses, save the shortlist, and keep outreach moving.',
+    firstRollout: 'Lead Finder plus Workspace.',
+    inputs: ['Search query', 'Keywords', 'Saved notes'],
+    outcomes: ['Shortlist', 'Follow-up queue', 'Cleaner outreach'],
+  },
+  {
     name: 'Operations',
-    audience: 'GMs, operations leads, and owner-led teams',
-    promise: "Get one board for follow-up, blockers, and today's priorities.",
-    firstRollout: 'Action OS plus one team update source.',
-    inputs: ['Daily updates', 'Meeting notes', 'Shared trackers'],
-    outcomes: ['Clear ownership', 'Fewer missed follow-ups', 'Faster weekly review'],
+    audience: 'Owner-led teams and ops managers',
+    promise: 'Turn scattered updates into one queue with owners and due dates.',
+    firstRollout: 'Action OS on top of one team update flow.',
+    inputs: ['Meeting notes', 'Daily updates', 'Email follow-up'],
+    outcomes: ['One board', 'Fewer misses', 'Faster review'],
   },
   {
-    name: 'Procurement',
-    audience: 'Procurement leads, stores, and plant managers',
-    promise: 'Control supplier risk and inbound receipt before they turn into delays.',
-    firstRollout: 'Receiving Control or Supplier Watch on top of Action OS.',
-    inputs: ['Supplier emails', 'PO or ETA sheets', 'Receiving logs'],
-    outcomes: ['Supplier risk queue', 'Variance control', 'Cleaner inbound follow-up'],
-  },
-  {
-    name: 'Finance',
-    audience: 'Finance managers and commercial controllers',
-    promise: 'Turn invoices, collections, and payment proof into one control loop.',
-    firstRollout: 'Cash Watch on top of Action OS.',
-    inputs: ['Invoice register', 'Cash book', 'Reminder emails'],
-    outcomes: ['Overdue queue', 'Collections follow-up', 'Cleaner cash visibility'],
+    name: 'Receiving',
+    audience: 'Stores, procurement, and plant teams',
+    promise: 'Log inbound issues once and keep the next step visible.',
+    firstRollout: 'Receiving Control on top of Action OS.',
+    inputs: ['Inbound log', 'PO or PI', 'Batch or GRN'],
+    outcomes: ['Receiving queue', 'Variance visibility', 'Clear handoff'],
   },
 ]
 
 export const publicModules: PublicModule[] = [
   {
-    name: 'Supplier Watch',
-    tagline: 'See supplier delay, payment, and customs risk before it hits execution.',
-    bestFor: 'Procurement and supply chain teams.',
-    inputs: ['Supplier emails', 'ETA sheet', 'Payment status'],
-    outputs: ['Risk queue', 'Escalation owner', 'Follow-up actions'],
-    path: '/app/actions',
+    name: 'Lead Finder',
+    tagline: 'Search a market, keep the shortlist, and start outreach.',
+    bestFor: 'Prospecting, partnerships, and market mapping.',
+    inputs: ['Place or niche search', 'Fit keywords', 'Saved notes'],
+    outputs: ['Shortlist', 'Outreach draft', 'Workspace rows'],
+    path: '/lead-finder',
   },
   {
-    name: 'Receiving Control',
-    tagline: 'Log inbound material once and keep GRN, hold, and variance visible.',
-    bestFor: 'Stores, procurement, and plant teams.',
-    inputs: ['Receiving log', 'PO or PI', 'GRN or batch'],
-    outputs: ['Receiving board', 'Variance queue', 'Next action'],
-    path: '/app/receiving',
+    name: 'Workspace',
+    tagline: 'Keep saved leads, notes, stages, and next actions together.',
+    bestFor: 'Anyone running follow-up from a shortlist.',
+    inputs: ['Saved leads', 'Notes', 'Stage updates'],
+    outputs: ['Pipeline view', 'Today queue', 'CSV export'],
+    path: '/workspace',
   },
   {
-    name: 'Inventory Pulse',
-    tagline: 'Watch stock, available balance, and reorder pressure in one place.',
-    bestFor: 'Stores, operations, and finance teams.',
-    inputs: ['Stock sheet', 'Receiving records', 'Reorder point'],
-    outputs: ['Stock watch', 'Reorder queue', 'Warehouse action list'],
-    path: '/app/inventory',
-  },
-  {
-    name: 'Cash Watch',
-    tagline: 'Put collections and payment follow-up into one control view.',
-    bestFor: 'Finance and commercial control.',
-    inputs: ['Invoice register', 'Cash book', 'Reminder emails'],
-    outputs: ['Overdue queue', 'Collections list', 'Follow-up drafts'],
-    path: '/app/actions',
+    name: 'Action OS',
+    tagline: 'Run one clear queue with templates instead of a blank board.',
+    bestFor: 'Ops follow-up, sales follow-up, and receiving issues.',
+    inputs: ['Lead follow-up', 'Ops blocker', 'Receiving issue'],
+    outputs: ['Action rows', 'Owner list', 'Done/open queue'],
+    path: '/action-os',
   },
 ]

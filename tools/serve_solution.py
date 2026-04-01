@@ -782,9 +782,18 @@ def _maybe_ai_enrich_insights(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 def _maybe_ai_enrich_lead_pack(payload: dict[str, Any], *, campaign_goal: str) -> dict[str, Any]:
+    if not _env_flag("SUPERMEGA_ENABLE_AI_LEAD_PACK", default=False):
+        return {
+            **payload,
+            "engine": str(payload.get("engine", "rules")).strip() or "rules",
+        }
+
     opportunities = payload.get("opportunities", [])
     if not isinstance(opportunities, list) or not opportunities:
-        return payload
+        return {
+            **payload,
+            "engine": str(payload.get("engine", "rules")).strip() or "rules",
+        }
 
     compact = []
     for item in opportunities[:5]:
