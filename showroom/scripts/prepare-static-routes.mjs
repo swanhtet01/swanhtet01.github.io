@@ -4,6 +4,7 @@ import { resolve } from 'node:path'
 const distDir = resolve(process.cwd(), 'dist')
 const indexFile = resolve(distDir, 'index.html')
 const routePaths = [
+  'action-os',
   'platform',
   'app',
   'app/insights',

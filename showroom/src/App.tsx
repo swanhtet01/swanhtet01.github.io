@@ -14,6 +14,7 @@ import { HomePage } from './pages/HomePage'
 import { InsightsPage } from './pages/InsightsPage'
 import { InventoryPulsePage } from './pages/InventoryPulsePage'
 import { LeadFinderPage } from './pages/LeadFinderPage'
+import { LeadPipelinePage } from './pages/LeadPipelinePage'
 import { LoginPage } from './pages/LoginPage'
 import { MetricIntakePage } from './pages/MetricIntakePage'
 import { NewsBriefPage } from './pages/NewsBriefPage'
@@ -65,7 +66,8 @@ function App() {
           <Route element={<DecisionJournalPage />} path="decisions" />
           <Route element={<ApprovalQueuePage />} path="approvals" />
           <Route element={<ExceptionQueuePage />} path="exceptions" />
-          <Route element={<LeadFinderPage />} path="leads" />
+          <Route element={<LeadPipelinePage />} path="leads" />
+          <Route element={<LeadFinderPage />} path="leads/advanced" />
           <Route element={<MetricIntakePage />} path="intake" />
           <Route element={<ReceivingControlPage />} path="receiving" />
           <Route element={<InventoryPulsePage />} path="inventory" />
