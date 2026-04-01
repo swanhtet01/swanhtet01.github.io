@@ -2,7 +2,6 @@ import { useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 
 import { navItems } from '../content'
-import { appHref, hasLiveWorkspaceApp } from '../lib/workspaceApi'
 
 const navClassName = ({ isActive }: { isActive: boolean }) =>
   `rounded-full px-4 py-2 text-sm font-semibold transition ${
@@ -13,7 +12,6 @@ const navClassName = ({ isActive }: { isActive: boolean }) =>
 
 export function SiteFrame() {
   const [menuOpen, setMenuOpen] = useState(false)
-  const liveAppAvailable = hasLiveWorkspaceApp()
 
   return (
     <div className="min-h-screen text-[var(--sm-ink)]">
@@ -43,20 +41,9 @@ export function SiteFrame() {
                 {item.label}
               </NavLink>
             ))}
-            {liveAppAvailable ? (
-              <>
-                <a className="sm-button-primary ml-2" href={appHref('/signup/')}>
-                  Start workspace
-                </a>
-                <a className="sm-button-secondary ml-2" href={appHref('/login/')}>
-                  Open app
-                </a>
-              </>
-            ) : (
-              <NavLink className="sm-button-primary ml-2" to="/book">
-                Book call
-              </NavLink>
-            )}
+            <NavLink className="sm-button-primary ml-2" to="/book">
+              Book call
+            </NavLink>
           </div>
         </nav>
         {menuOpen ? (
@@ -67,20 +54,9 @@ export function SiteFrame() {
                   {item.label}
                 </NavLink>
               ))}
-              {liveAppAvailable ? (
-                <>
-                  <a className="sm-button-primary mt-1 text-center" href={appHref('/signup/')} onClick={() => setMenuOpen(false)}>
-                    Start workspace
-                  </a>
-                  <a className="sm-button-secondary mt-1 text-center" href={appHref('/login/')} onClick={() => setMenuOpen(false)}>
-                    Open app
-                  </a>
-                </>
-              ) : (
-                <NavLink className="sm-button-primary mt-1 text-center" onClick={() => setMenuOpen(false)} to="/book">
-                  Book call
-                </NavLink>
-              )}
+              <NavLink className="sm-button-primary mt-1 text-center" onClick={() => setMenuOpen(false)} to="/book">
+                Book call
+              </NavLink>
             </div>
           </div>
         ) : null}

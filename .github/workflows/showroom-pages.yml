@@ -39,6 +39,15 @@ jobs:
         working-directory: showroom
         run: npm ci
 
+      - name: Preflight public env
+        env:
+          VITE_GOOGLE_MAPS_API_KEY: ${{ secrets.VITE_GOOGLE_MAPS_API_KEY }}
+        run: |
+          if [ -z "$VITE_GOOGLE_MAPS_API_KEY" ]; then
+            echo "::error title=Missing public search key::Set VITE_GOOGLE_MAPS_API_KEY in GitHub Secrets so Lead Finder is not published as a dead shell."
+            exit 1
+          fi
+
       - name: Build showroom
         working-directory: showroom
         env:

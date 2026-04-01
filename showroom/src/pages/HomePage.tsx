@@ -1,11 +1,8 @@
 import { Link } from 'react-router-dom'
 
 import { coreProduct, hero, leadFinder, proofPoints } from '../content'
-import { appHref, hasLiveWorkspaceApp } from '../lib/workspaceApi'
 
 export function HomePage() {
-  const liveAppAvailable = hasLiveWorkspaceApp()
-
   return (
     <div className="space-y-8 pb-10">
       <section className="sm-surface-deep relative overflow-hidden p-6 lg:p-10">
@@ -27,15 +24,9 @@ export function HomePage() {
               <Link className="sm-button-primary" to="/lead-finder">
                 Open Lead Finder
               </Link>
-              {liveAppAvailable ? (
-                <a className="sm-button-secondary" href={appHref('/login/')}>
-                  Open app
-                </a>
-              ) : (
-                <Link className="sm-button-secondary" to="/book">
-                  Book call
-                </Link>
-              )}
+              <Link className="sm-button-secondary" to="/book">
+                Book call
+              </Link>
             </div>
           </div>
 
@@ -54,52 +45,42 @@ export function HomePage() {
         </div>
       </section>
 
-      <section className="grid gap-5 lg:grid-cols-[1.1fr_0.9fr]">
+      <section className="grid gap-5 lg:grid-cols-2">
         <article className="sm-surface p-6">
-          <p className="sm-kicker text-[var(--sm-accent)]">Action OS</p>
-          <h2 className="mt-3 text-3xl font-bold text-white">{coreProduct.tagline}</h2>
-          <p className="mt-4 max-w-2xl text-sm leading-relaxed text-[var(--sm-muted)]">
-            Pull work out of inboxes and sheets. Keep one live board for owners, due dates, and blockers.
+          <p className="sm-kicker text-[var(--sm-accent)]">Product</p>
+          <h2 className="mt-3 text-3xl font-bold text-white">{coreProduct.name}</h2>
+          <p className="mt-3 text-sm leading-relaxed text-[var(--sm-muted)]">
+            {coreProduct.tagline}
           </p>
-        </article>
-
-        <article className="sm-terminal p-6">
-          <p className="sm-kicker text-[var(--sm-accent)]">First rollout</p>
           <div className="mt-5 grid gap-3">
-            {coreProduct.rollout.map((step) => (
-              <div className="sm-proof-card" key={step}>
-                <p className="text-sm text-white">{step}</p>
-              </div>
-            ))}
+            <div className="sm-chip text-white">One board for owners</div>
+            <div className="sm-chip text-white">One queue for blockers</div>
+            <div className="sm-chip text-white">Start with one team first</div>
+          </div>
+          <div className="mt-5">
+            <Link className="sm-button-secondary" to="/action-os">
+              See Action OS
+            </Link>
           </div>
         </article>
-      </section>
 
-      <section className="sm-surface-deep p-6">
-        <div className="grid gap-6 lg:grid-cols-[1.05fr_0.95fr] lg:items-start">
-          <div>
-            <p className="sm-kicker text-[var(--sm-accent)]">{leadFinder.title}</p>
-            <h2 className="mt-3 text-3xl font-bold text-white">One live tool.</h2>
-            <p className="mt-3 max-w-2xl text-sm leading-relaxed text-[var(--sm-muted)]">{leadFinder.description}</p>
-          </div>
-
-          <div className="grid gap-3">
+        <article className="sm-surface p-6">
+          <p className="sm-kicker text-[var(--sm-accent)]">{leadFinder.title}</p>
+          <h2 className="mt-3 text-3xl font-bold text-white">One live tool.</h2>
+          <p className="mt-3 text-sm leading-relaxed text-[var(--sm-muted)]">{leadFinder.description}</p>
+          <div className="mt-5 grid gap-3">
             {leadFinder.steps.map((step) => (
-              <div className="sm-proof-card" key={step}>
-                <p className="text-sm text-white">{step}</p>
+              <div className="sm-chip text-white" key={step}>
+                {step}
               </div>
             ))}
           </div>
-        </div>
-
-        <div className="mt-6 flex flex-wrap gap-3">
-          <Link className="sm-button-primary" to="/lead-finder">
-            Open Lead Finder
-          </Link>
-          <Link className="sm-button-secondary" to="/platform">
-            See Action OS
-          </Link>
-        </div>
+          <div className="mt-5">
+            <Link className="sm-button-primary" to="/lead-finder">
+              Open Lead Finder
+            </Link>
+          </div>
+        </article>
       </section>
     </div>
   )

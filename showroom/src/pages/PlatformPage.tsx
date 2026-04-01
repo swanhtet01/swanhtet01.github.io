@@ -2,82 +2,46 @@ import { Link } from 'react-router-dom'
 
 import { PageIntro } from '../components/PageIntro'
 import { coreProduct, leadFinder } from '../content'
-import { appHref, hasLiveWorkspaceApp } from '../lib/workspaceApi'
 
 export function PlatformPage() {
-  const liveAppAvailable = hasLiveWorkspaceApp()
-
   return (
     <div className="space-y-8">
-      <PageIntro eyebrow="Action OS" title="One board for work." description="Owners, due dates, blockers, and approvals in one place." />
+      <PageIntro eyebrow="Action OS" title="One board for the work." description="Pull follow-up out of inboxes and sheets. Keep owners, due dates, blockers, and approvals in one place." />
 
-      <section className="grid gap-6 lg:grid-cols-[1.08fr_0.92fr]">
+      <section className="grid gap-6 lg:grid-cols-[1.05fr_0.95fr]">
         <article className="sm-surface-deep p-6">
-          <p className="sm-kicker text-[var(--sm-accent)]">What it does</p>
-          <h2 className="mt-3 text-4xl font-bold text-white">{coreProduct.tagline}</h2>
+          <h2 className="text-4xl font-bold text-white">{coreProduct.tagline}</h2>
 
-          <div className="mt-6 grid gap-3 md:grid-cols-3">
-            <div className="sm-chip text-white">
-              <p className="text-sm font-semibold">Owners</p>
-            </div>
-            <div className="sm-chip text-white">
-              <p className="text-sm font-semibold">Due dates</p>
-            </div>
-            <div className="sm-chip text-white">
-              <p className="text-sm font-semibold">Blockers</p>
-            </div>
+          <div className="mt-6 grid gap-3">
+            {coreProduct.rollout.map((step) => (
+              <div className="sm-chip text-white" key={step}>
+                {step}
+              </div>
+            ))}
           </div>
 
           <div className="mt-6 flex flex-wrap gap-3">
-            <Link className="sm-button-primary" to="/lead-finder">
+            <Link className="sm-button-primary" to="/book">
+              Book call
+            </Link>
+            <Link className="sm-button-secondary" to="/lead-finder">
               Open Lead Finder
             </Link>
-            {liveAppAvailable ? (
-              <a className="sm-button-secondary" href={appHref('/login/')}>
-                Open app
-              </a>
-            ) : (
-              <Link className="sm-button-secondary" to="/book">
-                Book call
-              </Link>
-            )}
           </div>
         </article>
 
-        <article className="sm-terminal p-6">
-          <p className="sm-kicker text-[var(--sm-accent)]">First rollout</p>
+        <article className="sm-surface p-6">
+          <p className="sm-kicker text-[var(--sm-accent)]">{leadFinder.title}</p>
+          <h2 className="mt-3 text-2xl font-bold text-white">Find the next company to sell into.</h2>
+          <p className="mt-3 text-sm leading-relaxed text-[var(--sm-muted)]">{leadFinder.description}</p>
           <div className="mt-5 grid gap-3">
-            {coreProduct.rollout.map((step) => (
-              <div className="sm-proof-card" key={step}>
-                <p className="text-sm text-white">{step}</p>
+            {leadFinder.steps.map((step) => (
+              <div className="sm-chip text-white" key={step}>
+                {step}
               </div>
             ))}
           </div>
         </article>
-      </section>
-
-      <section className="sm-surface p-6">
-        <div className="grid gap-6 lg:grid-cols-[1fr_0.95fr] lg:items-start">
-          <div>
-            <p className="sm-kicker text-[var(--sm-accent)]">{leadFinder.title}</p>
-            <h2 className="mt-3 text-3xl font-bold text-white">The live front door.</h2>
-            <p className="mt-3 max-w-2xl text-sm leading-relaxed text-[var(--sm-muted)]">{leadFinder.description}</p>
-          </div>
-
-          <div className="grid gap-3">
-            {leadFinder.steps.map((step) => (
-              <div className="sm-proof-card" key={step}>
-                <p className="text-sm text-white">{step}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="mt-6 flex flex-wrap gap-3">
-          <Link className="sm-button-primary" to="/lead-finder">
-            Open Lead Finder
-          </Link>
-        </div>
       </section>
     </div>
   )

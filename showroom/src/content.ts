@@ -24,7 +24,7 @@ export type PublicModule = {
 
 export const navItems = [
   { label: 'Home', to: '/' },
-  { label: 'Action OS', to: '/platform' },
+  { label: 'Action OS', to: '/action-os' },
   { label: 'Lead Finder', to: '/lead-finder' },
 ] as const
 
@@ -33,7 +33,7 @@ export const bookingUrl = (import.meta.env.VITE_BOOKING_URL ?? '').trim()
 export const hero = {
   eyebrow: 'AI-native operating software',
   title: 'Run work in one place.',
-  description: 'Action OS runs the work. Lead Finder finds the next customer.',
+  description: 'Find leads with Lead Finder. Run delivery with Action OS.',
 }
 
 export const proofPoints: ProofPoint[] = [
@@ -45,12 +45,12 @@ export const proofPoints: ProofPoint[] = [
   {
     label: 'Tool',
     value: 'Lead Finder',
-    detail: 'Search, shortlist, and send outreach.',
+    detail: 'Search a market and keep the right leads.',
   },
   {
-    label: 'App',
-    value: 'Private workspace',
-    detail: 'Saved boards, queues, and notes.',
+    label: 'Use it for',
+    value: 'Ops + sales',
+    detail: 'One workflow for delivery. One workflow for pipeline.',
   },
 ]
 
@@ -69,8 +69,8 @@ export const coreProduct = {
 
 export const leadFinder = {
   title: 'Lead Finder',
-  description: 'Search a market, keep the right leads, and build the outreach.',
-  steps: ['Search', 'Keep', 'Send'],
+  description: 'Search a market, shortlist the right leads, and build the first outreach.',
+  steps: ['Search', 'Shortlist', 'Write first message'],
 }
 
 export const useCases: UseCase[] = [
