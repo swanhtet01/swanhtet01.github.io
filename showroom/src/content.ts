@@ -33,7 +33,7 @@ export const bookingUrl = (import.meta.env.VITE_BOOKING_URL ?? '').trim()
 export const hero = {
   eyebrow: 'AI-native operating software',
   title: 'Run work in one place.',
-  description: 'Action OS keeps work, owners, and blockers on one board. Lead Finder fills the next pipeline.',
+  description: 'Action OS runs the work. Lead Finder finds the next customer.',
 }
 
 export const proofPoints: ProofPoint[] = [
@@ -69,8 +69,8 @@ export const coreProduct = {
 
 export const leadFinder = {
   title: 'Lead Finder',
-  description: 'Search a market, keep the good leads, and send outreach.',
-  steps: ['Search', 'Shortlist', 'Outreach'],
+  description: 'Search a market, keep the right leads, and build the outreach.',
+  steps: ['Search', 'Keep', 'Send'],
 }
 
 export const useCases: UseCase[] = [

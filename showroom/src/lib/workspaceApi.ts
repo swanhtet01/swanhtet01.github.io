@@ -1,6 +1,10 @@
 const configuredBase = import.meta.env.VITE_WORKSPACE_API_BASE?.trim() ?? ''
 const configuredAppBase = import.meta.env.VITE_WORKSPACE_APP_BASE?.trim() ?? ''
 
+function isLocalHost(hostname: string) {
+  return hostname === 'localhost' || hostname === '127.0.0.1'
+}
+
 function inferApiBase() {
   if (configuredBase) {
     return configuredBase.replace(/\/$/, '')
@@ -15,7 +19,7 @@ function inferApiBase() {
     return origin
   }
 
-  if (hostname === 'localhost' || hostname === '127.0.0.1') {
+  if (isLocalHost(hostname)) {
     return `${protocol}//${hostname}:8787`
   }
 
@@ -36,18 +40,38 @@ function inferAppBase() {
     return origin
   }
 
-  if (hostname === 'localhost' || hostname === '127.0.0.1') {
+  if (isLocalHost(hostname)) {
     return `http://${hostname}:8787`
   }
 
-  return 'http://127.0.0.1:8787'
+  return ''
 }
 
 export const workspaceApiBase = inferApiBase()
 export const workspaceAppBase = inferAppBase()
 
-export function appHref(path = '/') {
+export function hasLiveWorkspaceApi() {
+  return Boolean(workspaceApiBase)
+}
+
+export function hasLiveWorkspaceApp() {
+  return Boolean(workspaceAppBase)
+}
+
+export function publicShellOnly() {
+  if (typeof window === 'undefined') {
+    return false
+  }
+
+  const { hostname, port } = window.location
+  return !isLocalHost(hostname) && port !== '8787' && !hasLiveWorkspaceApi() && !hasLiveWorkspaceApp()
+}
+
+export function appHref(path = '/', fallback = '/book') {
   const normalizedPath = path.startsWith('/') ? path : `/${path}`
+  if (!workspaceAppBase) {
+    return fallback
+  }
   return `${workspaceAppBase}${normalizedPath}`
 }
 

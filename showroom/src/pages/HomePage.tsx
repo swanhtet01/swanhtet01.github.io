@@ -1,9 +1,11 @@
 import { Link } from 'react-router-dom'
 
 import { coreProduct, hero, leadFinder, proofPoints } from '../content'
-import { appHref } from '../lib/workspaceApi'
+import { appHref, hasLiveWorkspaceApp } from '../lib/workspaceApi'
 
 export function HomePage() {
+  const liveAppAvailable = hasLiveWorkspaceApp()
+
   return (
     <div className="space-y-8 pb-10">
       <section className="sm-surface-deep relative overflow-hidden p-6 lg:p-10">
@@ -22,12 +24,18 @@ export function HomePage() {
             </p>
 
             <div className="mt-7 flex flex-wrap gap-3">
-              <a className="sm-button-primary" href={appHref('/signup/')}>
-                Start workspace
-              </a>
-              <a className="sm-button-secondary" href={appHref('/login/')}>
-                Open app
-              </a>
+              <Link className="sm-button-primary" to="/lead-finder">
+                Open Lead Finder
+              </Link>
+              {liveAppAvailable ? (
+                <a className="sm-button-secondary" href={appHref('/login/')}>
+                  Open app
+                </a>
+              ) : (
+                <Link className="sm-button-secondary" to="/book">
+                  Book call
+                </Link>
+              )}
             </div>
           </div>
 

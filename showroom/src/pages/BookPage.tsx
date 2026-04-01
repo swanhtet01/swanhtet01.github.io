@@ -2,14 +2,17 @@ import { Link } from 'react-router-dom'
 
 import { PageIntro } from '../components/PageIntro'
 import { bookingUrl } from '../content'
+import { hasLiveWorkspaceApp } from '../lib/workspaceApi'
 
 export function BookPage() {
+  const liveAppAvailable = hasLiveWorkspaceApp()
+
   return (
     <div className="space-y-8">
       <PageIntro
-        eyebrow="Book demo"
-        title="Book a 20-minute demo."
-        description="We look at one workflow, one data source, and the fastest first rollout."
+        eyebrow="Schedule"
+        title="Book a short call."
+        description="We look at one workflow and the fastest first rollout."
       />
 
       <section className="grid gap-6 lg:grid-cols-[0.88fr_1.12fr]">
@@ -38,28 +41,34 @@ export function BookPage() {
               </div>
               <div className="flex flex-wrap gap-3">
                 <a className="sm-button-primary" href={bookingUrl} rel="noreferrer" target="_blank">
-                  Open booking calendar
+                  Open calendar
                 </a>
                 <Link className="sm-button-secondary" to="/lead-finder">
-                  Try Lead Finder first
+                  Open Lead Finder
                 </Link>
               </div>
               <div className="overflow-hidden rounded-3xl border border-white/8 bg-[rgba(255,255,255,0.02)]">
-                <iframe className="h-[720px] w-full bg-white" src={bookingUrl} title="Book a demo with SuperMega" />
+                <iframe className="h-[720px] w-full bg-white" src={bookingUrl} title="Schedule a call with SuperMega" />
               </div>
             </div>
           ) : (
             <div className="space-y-5">
               <div className="sm-chip text-[var(--sm-muted)]">
-                No booking link is configured on this host yet.
+                Use the request form if this host does not have a live calendar yet.
               </div>
               <div className="flex flex-wrap gap-3">
-                <Link className="sm-button-primary" to="/signup">
-                  Create workspace
-                </Link>
-                <Link className="sm-button-secondary" to="/contact">
+                <Link className="sm-button-primary" to="/contact">
                   Send request
                 </Link>
+                {liveAppAvailable ? (
+                  <Link className="sm-button-secondary" to="/signup">
+                    Start workspace
+                  </Link>
+                ) : (
+                  <Link className="sm-button-secondary" to="/lead-finder">
+                    Open Lead Finder
+                  </Link>
+                )}
               </div>
             </div>
           )}
