@@ -26,6 +26,7 @@ export const navItems = [
   { label: 'Home', to: '/' },
   { label: 'Action OS', to: '/action-os' },
   { label: 'Lead Finder', to: '/lead-finder' },
+  { label: 'Workspace', to: '/workspace' },
 ] as const
 
 export const bookingUrl = (import.meta.env.VITE_BOOKING_URL ?? '').trim()
@@ -33,7 +34,7 @@ export const bookingUrl = (import.meta.env.VITE_BOOKING_URL ?? '').trim()
 export const hero = {
   eyebrow: 'AI-native operating software',
   title: 'Run work in one place.',
-  description: 'Find leads with Lead Finder. Run delivery with Action OS.',
+  description: 'Find leads, keep the shortlist, and run follow-up in one workspace.',
 }
 
 export const proofPoints: ProofPoint[] = [
@@ -48,9 +49,9 @@ export const proofPoints: ProofPoint[] = [
     detail: 'Search a market and keep the right leads.',
   },
   {
-    label: 'Use it for',
-    value: 'Ops + sales',
-    detail: 'One workflow for delivery. One workflow for pipeline.',
+    label: 'Workspace',
+    value: 'Browser-ready',
+    detail: 'Saved leads, notes, stages, and export without login.',
   },
 ]
 
@@ -69,8 +70,8 @@ export const coreProduct = {
 
 export const leadFinder = {
   title: 'Lead Finder',
-  description: 'Search a market, shortlist the right leads, and build the first outreach.',
-  steps: ['Search', 'Shortlist', 'Write first message'],
+  description: 'Search a market, shortlist the right leads, and save them into the workspace.',
+  steps: ['Search', 'Save shortlist', 'Run outreach'],
 }
 
 export const useCases: UseCase[] = [

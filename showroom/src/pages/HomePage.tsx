@@ -21,11 +21,11 @@ export function HomePage() {
             </p>
 
             <div className="mt-7 flex flex-wrap gap-3">
-              <Link className="sm-button-primary" to="/lead-finder">
-                Open Lead Finder
+              <Link className="sm-button-primary" to="/workspace">
+                Start workspace
               </Link>
-              <Link className="sm-button-secondary" to="/book">
-                Book call
+              <Link className="sm-button-secondary" to="/lead-finder">
+                Open Lead Finder
               </Link>
             </div>
           </div>
@@ -76,8 +76,8 @@ export function HomePage() {
             ))}
           </div>
           <div className="mt-5">
-            <Link className="sm-button-primary" to="/lead-finder">
-              Open Lead Finder
+            <Link className="sm-button-primary" to="/workspace">
+              Start workspace
             </Link>
           </div>
         </article>

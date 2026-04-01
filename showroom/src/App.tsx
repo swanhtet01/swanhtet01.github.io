@@ -19,10 +19,12 @@ import { MetricIntakePage } from './pages/MetricIntakePage'
 import { NewsBriefPage } from './pages/NewsBriefPage'
 import { NotFoundPage } from './pages/NotFoundPage'
 import { PlatformPage } from './pages/PlatformPage'
+import { PublicLeadFinderPage } from './pages/PublicLeadFinderPage'
 import { ReceivingControlPage } from './pages/ReceivingControlPage'
 import { SignupPage } from './pages/SignupPage'
 import { SolutionArchitectPage } from './pages/SolutionArchitectPage'
 import { WorkbenchPage } from './pages/WorkbenchPage'
+import { WorkspaceLitePage } from './pages/WorkspaceLitePage'
 import { WorkspacePage } from './pages/WorkspacePage'
 import { hasLiveWorkspaceApp } from './lib/workspaceApi'
 
@@ -39,9 +41,10 @@ function App() {
           <Route element={<Navigate replace to="/action-os" />} path="platform" />
           <Route element={<Navigate replace to="/action-os" />} path="products" />
           <Route element={<Navigate replace to="/action-os" />} path="solutions" />
-          <Route element={<LeadFinderPage />} path="lead-finder" />
-          <Route element={liveAppAvailable ? <LoginPage /> : <Navigate replace to="/book" />} path="login" />
-          <Route element={liveAppAvailable ? <SignupPage /> : <Navigate replace to="/book" />} path="signup" />
+          <Route element={<PublicLeadFinderPage />} path="lead-finder" />
+          <Route element={<WorkspaceLitePage />} path="workspace" />
+          <Route element={liveAppAvailable ? <LoginPage /> : <Navigate replace to="/workspace" />} path="login" />
+          <Route element={liveAppAvailable ? <SignupPage /> : <Navigate replace to="/workspace" />} path="signup" />
           <Route element={<BookPage />} path="book" />
           <Route element={<Navigate replace to="/lead-finder" />} path="examples" />
           <Route element={<Navigate replace to="/lead-finder" />} path="tools" />
