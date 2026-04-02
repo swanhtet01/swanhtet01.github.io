@@ -46,6 +46,7 @@ export function WorkspaceLitePage() {
 
   const summary = useMemo(() => browserWorkspaceSummary(rows), [rows])
   const openActions = listBrowserWorkspaceActions().filter((action) => action.status === 'open')
+  const isEmptyWorkspace = rows.length === 0
 
   const groupedRows = useMemo(
     () => ({
@@ -164,14 +165,14 @@ export function WorkspaceLitePage() {
         title="Keep the shortlist moving."
         description={
           hasLiveWorkspaceApi()
-            ? 'Start the real workspace on this host, or keep working in the browser workspace on this device.'
+            ? 'Keep leads, notes, and next actions in one place. Open the saved app only when you need shared state.'
             : 'Keep saved leads, notes, and next actions together on this device.'
         }
       />
 
       <section className="grid gap-6 lg:grid-cols-[0.84fr_1.16fr]">
         <article className="sm-surface p-6">
-          <p className="sm-kicker text-[var(--sm-accent)]">Overview</p>
+          <p className="sm-kicker text-[var(--sm-accent)]">{isEmptyWorkspace ? 'Start here' : 'Overview'}</p>
           <div className="mt-5 grid gap-3 md:grid-cols-3">
             <div className="sm-chip text-white">
               <p className="sm-kicker text-[var(--sm-accent)]">Leads</p>
@@ -188,14 +189,14 @@ export function WorkspaceLitePage() {
           </div>
 
           <div className="mt-5 flex flex-wrap gap-3">
+            <Link className="sm-button-primary" to="/lead-finder">
+              Find leads
+            </Link>
             {hasLiveWorkspaceApi() ? (
               <button className="sm-button-primary" disabled={starting} onClick={() => void startLiveWorkspace()} type="button">
-                {starting ? 'Starting...' : 'Open live workspace'}
+                {starting ? 'Starting...' : 'Open saved app'}
               </button>
             ) : null}
-            <Link className="sm-button-primary" to="/lead-finder">
-              Find more leads
-            </Link>
             <Link className="sm-button-secondary" to="/action-os">
               Open Action OS
             </Link>
@@ -205,7 +206,7 @@ export function WorkspaceLitePage() {
           </div>
 
           <div className="mt-4 sm-chip text-[var(--sm-muted)]">
-            {hasLiveWorkspaceApi() ? 'This host can move you into the real saved app.' : 'This workspace is stored in this browser on this device.'}
+            {hasLiveWorkspaceApi() ? 'Use this page for quick local work. Open the saved app only when you need shared workspace state.' : 'This workspace is stored in this browser on this device.'}
           </div>
           {message ? <div className="mt-3 sm-chip text-[var(--sm-muted)]">{message}</div> : null}
         </article>
@@ -214,7 +215,9 @@ export function WorkspaceLitePage() {
           <div className="flex items-center justify-between gap-3">
             <div>
               <p className="sm-kicker text-[var(--sm-accent)]">Today</p>
-              <p className="mt-2 text-sm text-[var(--sm-muted)]">The next actions generated from saved leads.</p>
+              <p className="mt-2 text-sm text-[var(--sm-muted)]">
+                {isEmptyWorkspace ? 'Use the three-step loop below to get started.' : 'The next actions generated from saved leads.'}
+              </p>
             </div>
             <Link className="sm-link" to="/action-os">
               Open queue
@@ -222,7 +225,22 @@ export function WorkspaceLitePage() {
           </div>
 
           <div className="mt-5 space-y-3">
-            {openActions.length ? (
+            {isEmptyWorkspace ? (
+              <>
+                <div className="sm-proof-card">
+                  <p className="font-semibold text-white">1. Search a market</p>
+                  <p className="mt-2 text-sm text-[var(--sm-muted)]">Use Lead Finder to search by place or niche.</p>
+                </div>
+                <div className="sm-proof-card">
+                  <p className="font-semibold text-white">2. Keep the right leads</p>
+                  <p className="mt-2 text-sm text-[var(--sm-muted)]">Save the shortlist here with notes and stage changes.</p>
+                </div>
+                <div className="sm-proof-card">
+                  <p className="font-semibold text-white">3. Run follow-up</p>
+                  <p className="mt-2 text-sm text-[var(--sm-muted)]">Open Action OS to turn the shortlist into a daily queue.</p>
+                </div>
+              </>
+            ) : openActions.length ? (
               openActions.slice(0, 6).map((action) => (
                 <div className="sm-proof-card" key={action.action_id}>
                   <div className="flex items-start justify-between gap-3">
@@ -243,6 +261,7 @@ export function WorkspaceLitePage() {
         </article>
       </section>
 
+      {isEmptyWorkspace ? null : (
       <section className="grid gap-4 xl:grid-cols-3">
         {(['new', 'outreach', 'warm'] as const).map((group) => {
           const items = groupedRows[group]
@@ -317,6 +336,7 @@ export function WorkspaceLitePage() {
           )
         })}
       </section>
+      )}
     </div>
   )
 }

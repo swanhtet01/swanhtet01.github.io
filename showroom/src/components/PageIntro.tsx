@@ -12,10 +12,10 @@ export function PageIntro({ eyebrow, title, description }: PageIntroProps) {
       <div className="sm-status-bar">
         <span className="sm-status-pill">{eyebrow}</span>
       </div>
-      <h1 className="mt-3 max-w-4xl text-3xl font-extrabold tracking-tight lg:text-5xl">
+      <h1 className="mt-3 max-w-4xl text-3xl font-extrabold tracking-tight text-white lg:text-5xl">
         {title}
       </h1>
-      <p className="mt-4 max-w-3xl text-base leading-relaxed text-[var(--sm-muted)] lg:text-lg">{description}</p>
+      <p className="mt-4 max-w-3xl text-base leading-relaxed text-[rgba(232,243,255,0.78)] lg:text-lg">{description}</p>
     </section>
   )
 }

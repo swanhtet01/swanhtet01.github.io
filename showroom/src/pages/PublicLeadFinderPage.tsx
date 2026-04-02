@@ -207,7 +207,7 @@ export function PublicLeadFinderPage() {
                 Export CSV
               </button>
               <Link className="sm-button-secondary" to="/workspace">
-                Open workspace
+                Keep shortlist
               </Link>
             </div>
 
@@ -317,7 +317,9 @@ export function PublicLeadFinderPage() {
             ) : manualInput.trim() ? (
               <div className="sm-chip text-[var(--sm-muted)]">Manual fallback is filled. Run search to merge it with browser results.</div>
             ) : (
-              <div className="sm-chip text-[var(--sm-muted)]">Try a place or niche. Example: `spa in yangon`, `rubber supplier myanmar`, `warehouse yangon`.</div>
+              <div className="sm-chip text-[var(--sm-muted)]">
+                Try a place or niche, then keep the best 3 results. Examples: spa in Yangon, rubber supplier Myanmar, warehouse Yangon.
+              </div>
             )}
           </div>
         </article>
@@ -342,7 +344,7 @@ export function PublicLeadFinderPage() {
               Save to workspace
             </button>
             <Link className="sm-button-secondary" to="/workspace">
-              Open workspace
+              Open shortlist
             </Link>
           </div>
           <div className="mt-4 sm-chip text-[var(--sm-muted)]">
@@ -366,7 +368,7 @@ export function PublicLeadFinderPage() {
           </div>
           <div className="mt-5 flex flex-wrap gap-3">
             <Link className="sm-button-secondary" to="/workspace">
-              Open workspace
+              Open shortlist
             </Link>
             <Link className="sm-button-secondary" to="/action-os">
               Open Action OS

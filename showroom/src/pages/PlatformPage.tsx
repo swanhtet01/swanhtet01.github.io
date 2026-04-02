@@ -236,10 +236,10 @@ export function PlatformPage() {
               Save action
             </button>
             <button className="sm-button-secondary" onClick={seedFromLeads} type="button">
-              Pull in lead follow-ups
+              Pull from leads
             </button>
             <Link className="sm-button-secondary" to="/workspace">
-              Open workspace
+              Open shortlist
             </Link>
           </div>
 
@@ -310,7 +310,20 @@ export function PlatformPage() {
                 </div>
               ))
             ) : (
-              <div className="sm-chip text-[var(--sm-muted)]">No actions yet. Save one from a template or pull actions from the saved lead workspace.</div>
+              <>
+                <div className="sm-proof-card">
+                  <p className="font-semibold text-white">Lead follow-up</p>
+                  <p className="mt-2 text-sm text-[var(--sm-muted)]">Use this when a saved lead needs first outreach or a follow-up reply.</p>
+                </div>
+                <div className="sm-proof-card">
+                  <p className="font-semibold text-white">Ops blocker</p>
+                  <p className="mt-2 text-sm text-[var(--sm-muted)]">Use this when a team update needs an owner, a due date, and a visible next step.</p>
+                </div>
+                <div className="sm-proof-card">
+                  <p className="font-semibold text-white">Receiving issue</p>
+                  <p className="mt-2 text-sm text-[var(--sm-muted)]">Use this when a GRN, hold, or quantity issue needs follow-up.</p>
+                </div>
+              </>
             )}
           </div>
 
