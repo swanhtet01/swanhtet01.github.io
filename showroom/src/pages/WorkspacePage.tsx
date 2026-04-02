@@ -122,6 +122,7 @@ export function WorkspacePage() {
   return (
     <div className="space-y-8">
       <PageIntro
+        compact
         eyebrow="Action OS"
         title="Today queue."
         description="See what needs action, what is blocked, and what needs escalation."

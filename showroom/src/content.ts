@@ -33,8 +33,8 @@ export const bookingUrl = (import.meta.env.VITE_BOOKING_URL ?? '').trim()
 
 export const hero = {
   eyebrow: 'AI-native workflow software',
-  title: 'Find leads. Save them in Workspace. Run the next step.',
-  description: 'Lead Finder gets the right businesses. Workspace keeps the leads, notes, and queue together.',
+  title: 'Find leads. Save the right ones. Run the next step.',
+  description: 'Lead Finder finds real businesses. Workspace keeps the leads, notes, and queue together.',
 }
 
 export const proofPoints: ProofPoint[] = [
@@ -45,8 +45,8 @@ export const proofPoints: ProofPoint[] = [
   },
   {
     label: 'Workspace',
-    value: 'Saved leads and notes',
-    detail: 'Leads, notes, and stage changes stay in one place.',
+    value: 'Saved leads and queue',
+    detail: 'Keep leads, notes, and next actions in one place.',
   },
   {
     label: 'Queue',

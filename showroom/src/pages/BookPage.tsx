@@ -7,6 +7,7 @@ export function BookPage() {
   return (
     <div className="space-y-8">
       <PageIntro
+        compact
         eyebrow="Schedule"
         title="Book a short call."
         description="Start with one workflow. Keep the first rollout small."
@@ -51,15 +52,11 @@ export function BookPage() {
           ) : (
             <div className="space-y-5">
               <div className="sm-chip text-[var(--sm-muted)]">
-                This host does not have a live calendar yet. Use the working product flow first, then book the rollout.
+                Booking is not live on this host yet. Use Lead Finder and Workspace first, then book once the calendar is connected.
               </div>
               <div className="flex flex-wrap gap-3">
-                <Link className="sm-button-primary" to="/workspace">
-                  Open workspace
-                </Link>
-                <Link className="sm-button-secondary" to="/lead-finder">
-                  Open Lead Finder
-                </Link>
+                <Link className="sm-button-primary" to="/lead-finder">Find leads</Link>
+                <Link className="sm-button-secondary" to="/workspace">Open workspace</Link>
               </div>
             </div>
           )}

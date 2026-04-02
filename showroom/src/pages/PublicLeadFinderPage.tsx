@@ -224,6 +224,7 @@ export function PublicLeadFinderPage() {
   return (
     <div className="space-y-8">
       <PageIntro
+        compact
         eyebrow="Lead Finder"
         title="Find businesses worth contacting."
         description="Search by place or niche, save the right leads, and open Workspace."

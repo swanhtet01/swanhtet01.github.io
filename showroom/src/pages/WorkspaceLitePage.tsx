@@ -10,6 +10,7 @@ import {
   listBrowserWorkspaceLeads,
   removeBrowserWorkspaceAction,
   removeBrowserWorkspaceLead,
+  saveBrowserWorkspaceActions,
   seedBrowserWorkspaceActionsFromLeads,
   updateBrowserWorkspaceAction,
   updateBrowserWorkspaceLead,
@@ -19,8 +20,46 @@ import {
 import { bootstrapPublicWorkspace, getWorkspaceSession, hasLiveWorkspaceApi } from '../lib/workspaceApi'
 
 type WorkspaceView = 'leads' | 'queue'
+type QueueTemplateId = 'lead_follow_up' | 'ops_blocker' | 'receiving_issue'
 
 const stageOptions: BrowserWorkspaceStage[] = ['new', 'outreach', 'contacted', 'qualified']
+
+const queueTemplates: Record<
+  QueueTemplateId,
+  {
+    label: string
+    description: string
+    owner: string
+    priority: 'High' | 'Medium' | 'Low'
+    due: string
+    placeholder: string
+  }
+> = {
+  lead_follow_up: {
+    label: 'Lead follow-up',
+    description: 'For first outreach, reply chase, or booking follow-up.',
+    owner: 'Sales',
+    priority: 'High',
+    due: 'Today',
+    placeholder: 'Call Emerald Spa and send first note',
+  },
+  ops_blocker: {
+    label: 'Ops blocker',
+    description: 'For a missed update, owner gap, or daily issue.',
+    owner: 'Operations',
+    priority: 'Medium',
+    due: 'Today',
+    placeholder: 'Chase missing production update from Line 2',
+  },
+  receiving_issue: {
+    label: 'Receiving issue',
+    description: 'For GRN, hold, batch, or quantity variance follow-up.',
+    owner: 'Procurement',
+    priority: 'High',
+    due: 'Today',
+    placeholder: 'Check GRN variance on inbound rubber batch',
+  },
+}
 
 function viewHref(view: WorkspaceView) {
   return `/workspace?view=${view}`
@@ -50,6 +89,11 @@ export function WorkspaceLitePage() {
   const [actions, setActions] = useState(listBrowserWorkspaceActions())
   const [message, setMessage] = useState('')
   const [starting, setStarting] = useState(false)
+  const [queueTemplate, setQueueTemplate] = useState<QueueTemplateId>('lead_follow_up')
+  const [queueTitle, setQueueTitle] = useState('')
+  const [queueOwner, setQueueOwner] = useState(queueTemplates.lead_follow_up.owner)
+  const [queuePriority, setQueuePriority] = useState(queueTemplates.lead_follow_up.priority)
+  const [queueDue, setQueueDue] = useState(queueTemplates.lead_follow_up.due)
   const bootstrapAttempted = useRef(false)
 
   const requestedView = new URLSearchParams(location.search).get('view')
@@ -64,6 +108,14 @@ export function WorkspaceLitePage() {
 
   function refreshActions() {
     setActions(listBrowserWorkspaceActions())
+  }
+
+  function applyQueueTemplate(nextTemplate: QueueTemplateId) {
+    setQueueTemplate(nextTemplate)
+    setQueueOwner(queueTemplates[nextTemplate].owner)
+    setQueuePriority(queueTemplates[nextTemplate].priority)
+    setQueueDue(queueTemplates[nextTemplate].due)
+    setQueueTitle('')
   }
 
   async function copyOutreach(lead: BrowserWorkspaceLead) {
@@ -93,6 +145,27 @@ export function WorkspaceLitePage() {
   function seedQueue() {
     setActions(seedBrowserWorkspaceActionsFromLeads())
     setMessage('Created follow-up actions from saved leads.')
+    navigate(viewHref('queue'), { replace: true })
+  }
+
+  function saveQuickAction() {
+    if (!queueTitle.trim()) {
+      setMessage('Write the next action first.')
+      return
+    }
+
+    setActions(
+      saveBrowserWorkspaceActions([
+        {
+          title: queueTitle.trim(),
+          owner: queueOwner.trim() || queueTemplates[queueTemplate].owner,
+          priority: queuePriority,
+          due: queueDue.trim() || queueTemplates[queueTemplate].due,
+        },
+      ]),
+    )
+    setQueueTitle('')
+    setMessage(`Saved ${queueTemplates[queueTemplate].label.toLowerCase()} into the queue.`)
     navigate(viewHref('queue'), { replace: true })
   }
 
@@ -185,6 +258,7 @@ export function WorkspaceLitePage() {
   return (
     <div className="space-y-8">
       <PageIntro
+        compact
         eyebrow="Workspace"
         title="Saved leads and queue in one place."
         description="Use Workspace to review leads, notes, and the next actions."
@@ -194,15 +268,19 @@ export function WorkspaceLitePage() {
         <article className="sm-surface p-6">
           {isEmptyWorkspace ? (
             <>
-              <p className="sm-kicker text-[var(--sm-accent)]">Start here</p>
-              <h2 className="mt-3 text-3xl font-bold text-white">Save the first real leads.</h2>
+              <p className="sm-kicker text-[var(--sm-accent)]">{activeView === 'queue' ? 'Start queue' : 'Start here'}</p>
+              <h2 className="mt-3 text-3xl font-bold text-white">
+                {activeView === 'queue' ? 'Add the first real action.' : 'Save the first real leads.'}
+              </h2>
               <p className="mt-3 text-sm leading-relaxed text-[var(--sm-muted)]">
-                Use Lead Finder first. Workspace becomes useful after you save real leads and turn them into a queue.
+                {activeView === 'queue'
+                  ? 'Use one template to add the first action, blocker, or receiving issue. You can still pull actions from leads later.'
+                  : 'Use Lead Finder first. Workspace becomes useful after you save real leads and turn them into a queue.'}
               </p>
 
               <div className="mt-5 flex flex-wrap gap-3">
                 <Link className="sm-button-primary" to="/lead-finder">
-                  Find leads
+                  {activeView === 'queue' ? 'Find leads too' : 'Find leads'}
                 </Link>
                 {hasLiveWorkspaceApi() ? (
                   <button className="sm-button-secondary" disabled={starting} onClick={() => void startLiveWorkspace()} type="button">
@@ -270,6 +348,84 @@ export function WorkspaceLitePage() {
               </div>
             </>
           )}
+          {activeView === 'queue' ? (
+            <div className="mt-5 rounded-2xl border border-white/8 bg-white/3 p-4">
+              <p className="sm-kicker text-[var(--sm-accent)]">Quick add</p>
+              <p className="mt-2 text-sm text-[var(--sm-muted)]">Add one real action without building a board first.</p>
+
+              <div className="mt-4 grid gap-3 md:grid-cols-3">
+                {(Object.keys(queueTemplates) as QueueTemplateId[]).map((templateId) => {
+                  const template = queueTemplates[templateId]
+                  const active = queueTemplate === templateId
+                  return (
+                    <button
+                      className={`sm-chip text-left ${active ? 'border-[rgba(37,208,255,0.28)] text-white' : 'text-[var(--sm-muted)]'}`}
+                      key={templateId}
+                      onClick={() => applyQueueTemplate(templateId)}
+                      type="button"
+                    >
+                      <p className="font-semibold">{template.label}</p>
+                      <p className="mt-2 text-sm">{template.description}</p>
+                    </button>
+                  )
+                })}
+              </div>
+
+              <div className="mt-4 grid gap-3">
+                <label className="grid gap-2 text-sm font-semibold text-[var(--sm-muted)]">
+                  What needs to happen?
+                  <input
+                    className="sm-input"
+                    onChange={(event) => setQueueTitle(event.target.value)}
+                    placeholder={queueTemplates[queueTemplate].placeholder}
+                    value={queueTitle}
+                  />
+                </label>
+
+                <div className="grid gap-3 md:grid-cols-3">
+                  <label className="grid gap-2 text-sm font-semibold text-[var(--sm-muted)]">
+                    Owner
+                    <input className="sm-input" onChange={(event) => setQueueOwner(event.target.value)} value={queueOwner} />
+                  </label>
+                  <label className="grid gap-2 text-sm font-semibold text-[var(--sm-muted)]">
+                    Priority
+                    <select
+                      className="sm-input"
+                      onChange={(event) => setQueuePriority(event.target.value as 'High' | 'Medium' | 'Low')}
+                      value={queuePriority}
+                    >
+                      {['High', 'Medium', 'Low'].map((value) => (
+                        <option key={value} value={value}>
+                          {value}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="grid gap-2 text-sm font-semibold text-[var(--sm-muted)]">
+                    Due
+                    <select className="sm-input" onChange={(event) => setQueueDue(event.target.value)} value={queueDue}>
+                      {['Today', 'Tomorrow', 'This week', 'Next review'].map((value) => (
+                        <option key={value} value={value}>
+                          {value}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+              </div>
+
+              <div className="mt-4 flex flex-wrap gap-3">
+                <button className="sm-button-primary" onClick={saveQuickAction} type="button">
+                  Save to queue
+                </button>
+                {!openActions.length ? (
+                  <button className="sm-button-secondary" disabled={!rows.length} onClick={seedQueue} type="button">
+                    Pull from saved leads
+                  </button>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
           {message ? <div className="mt-3 sm-chip text-[var(--sm-muted)]">{message}</div> : null}
         </article>
 
@@ -333,10 +489,10 @@ export function WorkspaceLitePage() {
               ) : (
                 <div className="sm-proof-card">
                   <p className="font-semibold text-white">No queue yet</p>
-                  <p className="mt-2 text-sm text-[var(--sm-muted)]">Save some leads first, then create the queue from those leads.</p>
+                  <p className="mt-2 text-sm text-[var(--sm-muted)]">Use Quick add above, or pull follow-up actions from saved leads.</p>
                   <div className="mt-4">
                     <button className="sm-button-primary" disabled={!rows.length} onClick={seedQueue} type="button">
-                      Create queue from saved leads
+                      Pull from saved leads
                     </button>
                   </div>
                 </div>
