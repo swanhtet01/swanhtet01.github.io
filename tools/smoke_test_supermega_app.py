@@ -52,8 +52,19 @@ def main() -> int:
 
     cookie_jar = CookieJar()
     opener = build_opener(HTTPCookieProcessor(cookie_jar))
+    public_cookie_jar = CookieJar()
+    public_opener = build_opener(HTTPCookieProcessor(public_cookie_jar))
 
     health = wait_for_health(opener, args.base_url.rstrip("/"), args.timeout_seconds)
+    public_bootstrap = request_json(
+        public_opener,
+        "POST",
+        f"{args.base_url.rstrip('/')}/api/public/workspace/bootstrap",
+        {
+            "company": "Smoke Workspace",
+        },
+    )
+    public_session = request_json(public_opener, "GET", f"{args.base_url.rstrip('/')}/api/auth/session")
     login = request_json(
         opener,
         "POST",
@@ -222,6 +233,50 @@ def main() -> int:
         if outreach_lead_id
         else {}
     )
+    workspace_tasks_before = request_json(opener, "GET", f"{args.base_url.rstrip('/')}/api/workspace-tasks?limit=5")
+    workspace_task_create = request_json(
+        opener,
+        "POST",
+        f"{args.base_url.rstrip('/')}/api/workspace-tasks",
+        {
+            "rows": [
+                {
+                    "title": "Smoke queue item",
+                    "owner": "Sales",
+                    "priority": "High",
+                    "due": "Today",
+                    "status": "open",
+                    "notes": "Created by smoke test",
+                    "lead_id": outreach_lead_id,
+                    "template": "lead_follow_up",
+                }
+            ]
+        },
+    )
+    created_task_ids = [str(item).strip() for item in (workspace_task_create.get("saved_task_ids") or []) if str(item).strip()]
+    created_task_id = created_task_ids[0] if created_task_ids else ""
+    workspace_task_update = (
+        request_json(
+            opener,
+            "POST",
+            f"{args.base_url.rstrip('/')}/api/workspace-tasks/{created_task_id}",
+            {
+                "status": "done",
+                "notes": "Completed by smoke test",
+            },
+        )
+        if created_task_id
+        else {}
+    )
+    workspace_task_delete = (
+        request_json(
+            opener,
+            "DELETE",
+            f"{args.base_url.rstrip('/')}/api/workspace-tasks/{created_task_id}",
+        )
+        if created_task_id
+        else {}
+    )
     workspace_export = request_json(
         opener,
         "POST",
@@ -237,6 +292,9 @@ def main() -> int:
     report = {
         "base_url": args.base_url,
         "health_status": health.get("status", ""),
+        "public_bootstrap_status": public_bootstrap.get("status", ""),
+        "public_bootstrap_authenticated": bool(public_bootstrap.get("authenticated")),
+        "public_session_authenticated": bool(public_session.get("authenticated")),
         "login_status": login.get("status", ""),
         "authenticated": bool(login.get("authenticated")),
         "workspace_slug": ((login.get("session") or {}).get("workspace_slug", "")),
@@ -258,6 +316,10 @@ def main() -> int:
         "hunt_profile_run_saved_count": int(hunt_profile_run.get("saved_count", 0) or 0),
         "run_all_hunts_saved_count": int(run_all_hunts.get("saved_count", 0) or 0),
         "outreach_status": outreach.get("status", ""),
+        "workspace_tasks_before_count": int(workspace_tasks_before.get("count") or 0),
+        "workspace_task_create_status": workspace_task_create.get("status", ""),
+        "workspace_task_update_status": workspace_task_update.get("status", ""),
+        "workspace_task_delete_removed": bool(workspace_task_delete.get("removed")),
         "workspace_export_status": workspace_export.get("status", ""),
         "workspace_export_link": workspace_export.get("export", {}).get("web_view_link", ""),
         "compose_url": ((outreach.get("draft") or {}).get("compose_url") or ""),
@@ -271,6 +333,7 @@ def main() -> int:
     print("SuperMega app smoke test")
     print(f"- Base URL: {report['base_url']}")
     print(f"- Health: {report['health_status']}")
+    print(f"- Public bootstrap: {report['public_bootstrap_status']} / authenticated={report['public_session_authenticated']}")
     print(f"- Login: {report['login_status']} / authenticated={report['authenticated']}")
     print(f"- Workspace: {report['workspace_slug']}")
     print(f"- Actions: {report['action_count']}")
@@ -290,6 +353,10 @@ def main() -> int:
     print(f"- Hunt profile run saved: {report['hunt_profile_run_saved_count']}")
     print(f"- Run-all hunts saved: {report['run_all_hunts_saved_count']}")
     print(f"- Outreach: {report['outreach_status']}")
+    print(f"- Workspace tasks before: {report['workspace_tasks_before_count']}")
+    print(f"- Workspace task create: {report['workspace_task_create_status']}")
+    print(f"- Workspace task update: {report['workspace_task_update_status']}")
+    print(f"- Workspace task delete: {report['workspace_task_delete_removed']}")
     print(f"- Workspace export: {report['workspace_export_status']}")
     print()
     return 0

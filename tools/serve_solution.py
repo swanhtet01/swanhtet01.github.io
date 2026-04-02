@@ -72,6 +72,7 @@ from mark1_pilot.state_store import (  # noqa: E402
 from mark1_pilot.enterprise_store import (  # noqa: E402
     add_lead_activity as enterprise_add_lead_activity,
     add_leads as enterprise_add_leads,
+    add_workspace_tasks as enterprise_add_workspace_tasks,
     authenticate_user as enterprise_authenticate_user,
     bootstrap_workspace_leads,
     create_session as enterprise_create_session,
@@ -83,12 +84,15 @@ from mark1_pilot.enterprise_store import (  # noqa: E402
     list_lead_hunt_profiles as enterprise_list_lead_hunt_profiles,
     list_leads as enterprise_list_leads,
     list_user_workspaces as enterprise_list_user_workspaces,
+    list_workspace_tasks as enterprise_list_workspace_tasks,
     load_lead_summary as enterprise_load_lead_summary,
+    remove_workspace_task as enterprise_remove_workspace_task,
     resolve_database_url as resolve_enterprise_database_url,
     revoke_session as enterprise_revoke_session,
     save_lead_hunt_profile as enterprise_save_lead_hunt_profile,
     record_lead_hunt_run as enterprise_record_lead_hunt_run,
     update_lead as enterprise_update_lead,
+    update_workspace_task as enterprise_update_workspace_task,
 )
 from mark1_pilot.lead_finder import run_lead_finder  # noqa: E402
 from mark1_pilot.lead_to_pilot import build_lead_to_pilot_pack  # noqa: E402
@@ -276,6 +280,30 @@ class LeadPipelineExportRequest(BaseModel):
     workspace_folder_name: str = "SuperMega Sales"
     spreadsheet_name: str = "SuperMega Lead Pipeline"
     sheet_name: str = "Leads"
+
+
+class WorkspaceTaskRequest(BaseModel):
+    title: str
+    owner: str = "Owner"
+    priority: str = "Medium"
+    due: str = "This week"
+    status: str = "open"
+    notes: str = ""
+    lead_id: str = ""
+    template: str = "manual"
+
+
+class WorkspaceTaskBulkRequest(BaseModel):
+    rows: list[WorkspaceTaskRequest] = Field(default_factory=list)
+
+
+class WorkspaceTaskUpdateRequest(BaseModel):
+    status: str | None = None
+    owner: str | None = None
+    priority: str | None = None
+    due: str | None = None
+    title: str | None = None
+    notes: str | None = None
 
 
 class LeadHuntRequest(BaseModel):
@@ -1626,6 +1654,60 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             "count": len(rows),
             "rows": rows,
         }
+
+    @app.get("/api/workspace-tasks")
+    def workspace_tasks(request: Request, status: str | None = None, limit: int = 200) -> dict[str, Any]:
+        session = _require_session(request)
+        rows = enterprise_list_workspace_tasks(
+            enterprise_db_url,
+            workspace_id=str(session.get("workspace_id", "")).strip(),
+            status=status,
+            limit=limit,
+        )
+        return {
+            "status": "ready",
+            "count": len(rows),
+            "rows": rows,
+        }
+
+    @app.post("/api/workspace-tasks")
+    def create_workspace_tasks(request_http: Request, request: WorkspaceTaskBulkRequest) -> dict[str, Any]:
+        session = _require_session(request_http)
+        return enterprise_add_workspace_tasks(
+            enterprise_db_url,
+            workspace_id=str(session.get("workspace_id", "")).strip(),
+            rows=[row.model_dump() for row in request.rows],
+        )
+
+    @app.post("/api/workspace-tasks/{task_id}")
+    def update_workspace_tasks(task_id: str, request_http: Request, request: WorkspaceTaskUpdateRequest) -> dict[str, Any]:
+        session = _require_session(request_http)
+        row = enterprise_update_workspace_task(
+            enterprise_db_url,
+            workspace_id=str(session.get("workspace_id", "")).strip(),
+            task_id=task_id,
+            status=(request.status or "").strip() or None,
+            owner=(request.owner or "").strip() or None,
+            priority=(request.priority or "").strip() or None,
+            due=(request.due or "").strip() or None,
+            title=(request.title or "").strip() or None,
+            notes=request.notes,
+        )
+        if not row:
+            raise HTTPException(status_code=404, detail="Task not found.")
+        return {"status": "ready", "row": row}
+
+    @app.delete("/api/workspace-tasks/{task_id}")
+    def delete_workspace_task(task_id: str, request_http: Request) -> dict[str, Any]:
+        session = _require_session(request_http)
+        removed = enterprise_remove_workspace_task(
+            enterprise_db_url,
+            workspace_id=str(session.get("workspace_id", "")).strip(),
+            task_id=task_id,
+        )
+        if not removed:
+            raise HTTPException(status_code=404, detail="Task not found.")
+        return {"status": "ready", "removed": True}
 
     @app.post("/api/lead-pipeline/import")
     def import_lead_pipeline(request_http: Request, request: LeadPipelineImportRequest) -> dict[str, Any]:

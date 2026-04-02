@@ -4,7 +4,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { PageIntro } from '../components/PageIntro'
 import { browserWorkspaceSummary, buildBrowserOutreach, saveBrowserWorkspaceLeads } from '../lib/browserWorkspace'
 import { publicLeadFinderAvailable, searchPublicLeads } from '../lib/publicLeadFinder'
-import { bootstrapPublicWorkspace, getWorkspaceSession, hasLiveWorkspaceApi, importLeadPipeline } from '../lib/workspaceApi'
+import { bootstrapPublicWorkspace, getWorkspaceSession, hasLiveWorkspaceApi, importLeadPipeline, workspaceFetch } from '../lib/workspaceApi'
 import { downloadLeadCsv, parseLeads, type LeadRow } from '../lib/tooling'
 
 const quickSearches = [
@@ -172,7 +172,26 @@ export function PublicLeadFinderPage() {
           query.trim() || 'Run first outreach',
         )
 
-        setMessage(successMessage.replace('{count}', String(imported.saved_count || candidates.length)))
+        const savedLeadIds = (imported.saved_lead_ids ?? []).map((value) => String(value || '').trim()).filter(Boolean)
+        if (savedLeadIds.length) {
+          await workspaceFetch('/api/workspace-tasks', {
+            method: 'POST',
+            body: JSON.stringify({
+              rows: savedLeadIds.map((leadId, index) => ({
+                title: `Follow up ${candidates[index]?.name || 'saved lead'}`,
+                owner: 'Sales',
+                priority: 'High',
+                due: 'Today',
+                status: 'open',
+                notes: 'First outreach',
+                lead_id: leadId,
+                template: 'lead_follow_up',
+              })),
+            }),
+          })
+        }
+
+        setMessage(successMessage.replace('{count}', String(imported.saved_count || candidates.length)).replace('shared app', 'shared workspace'))
         return true
       } catch (error) {
         setMessage(error instanceof Error ? error.message : 'Could not save to the live workspace.')
@@ -196,10 +215,10 @@ export function PublicLeadFinderPage() {
       return
     }
 
-    const saved = await saveRowsToWorkspace([row], `Saved {count} lead into ${hasLiveWorkspaceApi() ? 'the shared app' : 'Workspace'} and created the next action.`)
+    const saved = await saveRowsToWorkspace([row], `Saved {count} lead into ${hasLiveWorkspaceApi() ? 'the shared workspace' : 'Workspace'} and created the next action.`)
     if (saved) {
       setSavedKeys((current) => (current.includes(key) ? current : [...current, key]))
-      navigate('/workspace')
+      navigate('/workspace?view=queue')
     }
   }
 
@@ -207,11 +226,11 @@ export function PublicLeadFinderPage() {
     const candidates = rows.slice(0, 3)
     const saved = await saveRowsToWorkspace(
       candidates,
-      `Saved {count} leads into ${hasLiveWorkspaceApi() ? 'the shared app' : 'Workspace'} and created the next actions.`,
+      `Saved {count} leads into ${hasLiveWorkspaceApi() ? 'the shared workspace' : 'Workspace'} and created the next actions.`,
     )
     if (saved) {
       setSavedKeys(candidates.map((row) => rowKey(row)))
-      navigate('/workspace')
+      navigate('/workspace?view=queue')
     }
   }
 
@@ -375,38 +394,41 @@ export function PublicLeadFinderPage() {
         </article>
       </section>
 
-      <section className="sm-surface p-6">
-        <p className="sm-kicker text-[var(--sm-accent)]">Next step</p>
-        <h2 className="mt-3 text-3xl font-bold text-white">Save the leads, then run follow-up.</h2>
-        <div className="mt-5 grid gap-3 md:grid-cols-3">
-          <div className="sm-chip text-white">
-            <p className="sm-kicker text-[var(--sm-accent)]">Saved already</p>
-            <p className="mt-2 text-3xl font-bold">{savedTotal}</p>
+      {(rows.length || savedTotal) ? (
+        <section className="sm-surface p-6">
+          <p className="sm-kicker text-[var(--sm-accent)]">Next step</p>
+          <h2 className="mt-3 text-3xl font-bold text-white">Save the leads, then run follow-up.</h2>
+          <div className="mt-5 grid gap-3 md:grid-cols-3">
+            <div className="sm-chip text-white">
+              <p className="sm-kicker text-[var(--sm-accent)]">Saved already</p>
+              <p className="mt-2 text-3xl font-bold">{savedTotal}</p>
+            </div>
+            <div className="sm-chip text-white">
+              <p className="sm-kicker text-[var(--sm-accent-alt)]">Search rule</p>
+              <p className="mt-2 text-sm">Save only the leads worth chasing first.</p>
+            </div>
+            <div className="sm-chip text-white">
+              <p className="sm-kicker text-[var(--sm-accent)]">After save</p>
+              <p className="mt-2 text-sm">Workspace stores the leads and creates the follow-up queue.</p>
+            </div>
           </div>
-          <div className="sm-chip text-white">
-            <p className="sm-kicker text-[var(--sm-accent-alt)]">Search rule</p>
-            <p className="mt-2 text-sm">Save only the leads worth chasing first.</p>
+          <div className="mt-5 flex flex-wrap gap-3">
+            {rows.length ? (
+              <button className="sm-button-primary" onClick={() => void saveTopResults()} type="button">
+                Save top 3
+              </button>
+            ) : null}
+            {savedTotal ? (
+              <Link className="sm-button-secondary" to="/workspace?view=queue">
+                Open workspace
+              </Link>
+            ) : null}
           </div>
-          <div className="sm-chip text-white">
-            <p className="sm-kicker text-[var(--sm-accent)]">After save</p>
-            <p className="mt-2 text-sm">Workspace stores the leads and creates the follow-up queue.</p>
+          <div className="mt-4 sm-chip text-[var(--sm-muted)]">
+            {hasLiveWorkspaceApi() ? 'This host can save into the shared workspace.' : 'This host saves into Workspace in this browser on this device.'}
           </div>
-        </div>
-        <div className="mt-5 flex flex-wrap gap-3">
-          <button className="sm-button-primary" disabled={!rows.length} onClick={() => void saveTopResults()} type="button">
-            Save top 3
-          </button>
-          <Link className="sm-button-secondary" to="/workspace">
-            Open workspace
-          </Link>
-          <Link className="sm-button-secondary" to="/action-os">
-            Open queue
-          </Link>
-        </div>
-        <div className="mt-4 sm-chip text-[var(--sm-muted)]">
-          {hasLiveWorkspaceApi() ? 'This host can save into the shared app.' : 'This host saves into Workspace in this browser on this device.'}
-        </div>
-      </section>
+        </section>
+      ) : null}
     </div>
   )
 }
