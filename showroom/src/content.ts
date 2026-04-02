@@ -33,45 +33,45 @@ export const bookingUrl = (import.meta.env.VITE_BOOKING_URL ?? '').trim()
 
 export const hero = {
   eyebrow: 'AI-native workflow software',
-  title: 'Find leads. Keep them moving.',
-  description: 'Lead Finder searches a market. Workspace keeps the shortlist, notes, and next actions in one place.',
+  title: 'Search leads. Keep the shortlist. Run the next step.',
+  description: 'Lead Finder finds businesses. Workspace keeps the shortlist and the follow-up queue in one place.',
 }
 
 export const proofPoints: ProofPoint[] = [
   {
-    label: 'Lead Finder',
-    value: 'Real search',
-    detail: 'Google Places first, public map search fallback.',
+    label: 'Search',
+    value: 'Real business results',
+    detail: 'Google Places first, with public map fallback.',
   },
   {
     label: 'Workspace',
-    value: 'Saved pipeline',
-    detail: 'Leads, notes, and stages stay on this device or in the live app.',
+    value: 'Saved shortlist',
+    detail: 'Leads, notes, and stage changes stay together.',
   },
   {
     label: 'Action OS',
     value: 'One queue',
-    detail: 'Follow-up actions and blockers in one simple board.',
+    detail: 'The follow-up queue lives inside Workspace.',
   },
 ]
 
 export const coreProduct = {
   name: 'Action OS',
-  tagline: 'One simple queue for follow-up, owners, and blockers.',
+  tagline: 'One simple queue inside Workspace for follow-up, owners, and blockers.',
   replaces: ['Scattered notes', 'Missed follow-up', 'Manual chasing'],
   inputs: ['Lead shortlist', 'Ops updates', 'Receiving issues'],
   outputs: ['Action queue', 'Owner list', 'Next steps'],
   rollout: [
-    'Start with one workspace.',
-    'Save the important leads or issues.',
-    'Run one queue every day.',
+    'Search and keep the right leads.',
+    'Save them into one workspace.',
+    'Run the queue every day.',
   ],
 }
 
 export const leadFinder = {
   title: 'Lead Finder',
   description: 'Search by place or niche, keep the right results, and move them into the workspace.',
-  steps: ['Search a market', 'Keep the shortlist', 'Run follow-up'],
+  steps: ['Search a market', 'Keep the best 3 leads', 'Run follow-up'],
 }
 
 export const useCases: UseCase[] = [
@@ -120,10 +120,10 @@ export const publicModules: PublicModule[] = [
   },
   {
     name: 'Action OS',
-    tagline: 'Run one clear queue with templates instead of a blank board.',
+    tagline: 'Run one clear queue inside the workspace.',
     bestFor: 'Ops follow-up, sales follow-up, and receiving issues.',
     inputs: ['Lead follow-up', 'Ops blocker', 'Receiving issue'],
     outputs: ['Action rows', 'Owner list', 'Done/open queue'],
-    path: '/action-os',
+    path: '/workspace?view=queue',
   },
 ]

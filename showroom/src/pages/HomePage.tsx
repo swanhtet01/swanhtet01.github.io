@@ -5,15 +5,15 @@ import { coreProduct, hero, leadFinder, proofPoints } from '../content'
 const steps = [
   {
     title: '1. Search',
-    detail: 'Find real businesses by place or niche.',
+    detail: 'Search by place or niche.',
   },
   {
     title: '2. Keep',
-    detail: 'Save the shortlist into one workspace.',
+    detail: 'Keep the best 3 leads.',
   },
   {
     title: '3. Run',
-    detail: 'Track follow-up and next actions in Action OS.',
+    detail: 'Work the follow-up queue from the workspace.',
   },
 ]
 
@@ -33,7 +33,7 @@ export function HomePage() {
 
             <div className="mt-7 flex flex-wrap gap-3">
               <Link className="sm-button-primary" to="/lead-finder">
-                Open Lead Finder
+                Start with Lead Finder
               </Link>
               <Link className="sm-button-secondary" to="/workspace">
                 Open workspace
@@ -68,7 +68,7 @@ export function HomePage() {
       <section className="grid gap-6 lg:grid-cols-2">
         <article className="sm-surface p-6">
           <p className="sm-kicker text-[var(--sm-accent)]">{leadFinder.title}</p>
-          <h2 className="mt-3 text-3xl font-bold text-white">One live front door.</h2>
+          <h2 className="mt-3 text-3xl font-bold text-white">Start here.</h2>
           <p className="mt-3 text-sm leading-relaxed text-[var(--sm-muted)]">{leadFinder.description}</p>
           <div className="mt-5 grid gap-3">
             {leadFinder.steps.map((step) => (
@@ -86,7 +86,7 @@ export function HomePage() {
 
         <article className="sm-surface p-6">
           <p className="sm-kicker text-[var(--sm-accent)]">{coreProduct.name}</p>
-          <h2 className="mt-3 text-3xl font-bold text-white">Run one simple queue.</h2>
+          <h2 className="mt-3 text-3xl font-bold text-white">Then keep the queue moving.</h2>
           <p className="mt-3 text-sm leading-relaxed text-[var(--sm-muted)]">{coreProduct.tagline}</p>
           <div className="mt-5 grid gap-3">
             {coreProduct.rollout.map((item) => (
@@ -96,8 +96,8 @@ export function HomePage() {
             ))}
           </div>
           <div className="mt-5 flex flex-wrap gap-3">
-            <Link className="sm-button-secondary" to="/action-os">
-              See Action OS
+            <Link className="sm-button-secondary" to="/workspace?view=queue">
+              Open queue
             </Link>
             <Link className="sm-button-secondary" to="/workspace">
               Open workspace

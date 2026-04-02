@@ -19,7 +19,6 @@ import { LoginPage } from './pages/LoginPage'
 import { MetricIntakePage } from './pages/MetricIntakePage'
 import { NewsBriefPage } from './pages/NewsBriefPage'
 import { NotFoundPage } from './pages/NotFoundPage'
-import { PlatformPage } from './pages/PlatformPage'
 import { PublicLeadFinderPage } from './pages/PublicLeadFinderPage'
 import { ReceivingControlPage } from './pages/ReceivingControlPage'
 import { SignupPage } from './pages/SignupPage'
@@ -38,10 +37,10 @@ function App() {
       <Routes>
         <Route element={<SiteFrame />} path="/">
           <Route element={<HomePage />} index />
-          <Route element={<PlatformPage />} path="action-os" />
-          <Route element={<Navigate replace to="/action-os" />} path="platform" />
-          <Route element={<Navigate replace to="/action-os" />} path="products" />
-          <Route element={<Navigate replace to="/action-os" />} path="solutions" />
+          <Route element={<Navigate replace to="/workspace?view=queue" />} path="action-os" />
+          <Route element={<Navigate replace to="/workspace?view=queue" />} path="platform" />
+          <Route element={<Navigate replace to="/workspace?view=queue" />} path="products" />
+          <Route element={<Navigate replace to="/workspace?view=queue" />} path="solutions" />
           <Route element={<PublicLeadFinderPage />} path="lead-finder" />
           <Route element={<WorkspaceLitePage />} path="workspace" />
           <Route element={liveAppAvailable ? <LoginPage /> : <Navigate replace to="/workspace" />} path="login" />

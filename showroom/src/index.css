@@ -226,12 +226,16 @@ a {
 
 select.sm-input {
   color-scheme: dark;
+  appearance: none;
+  background-color: #081427;
+  color: #f7fbff;
+  forced-color-adjust: none;
 }
 
 .sm-input option,
 .sm-input optgroup {
   background: #081427;
-  color: var(--sm-ink);
+  color: #f7fbff;
 }
 
 .sm-details {
@@ -260,7 +264,7 @@ select.sm-input {
 }
 
 .sm-details[open] > summary::after {
-  content: '−';
+  content: '-';
 }
 
 .sm-details-content {

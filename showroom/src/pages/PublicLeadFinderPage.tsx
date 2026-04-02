@@ -5,12 +5,12 @@ import { PageIntro } from '../components/PageIntro'
 import { browserWorkspaceSummary, buildBrowserOutreach, saveBrowserWorkspaceLeads } from '../lib/browserWorkspace'
 import { publicLeadFinderAvailable, searchPublicLeads } from '../lib/publicLeadFinder'
 import { bootstrapPublicWorkspace, getWorkspaceSession, hasLiveWorkspaceApi, importLeadPipeline } from '../lib/workspaceApi'
-import { downloadLeadCsv, parseLeads, type LeadRow, type LeadSource } from '../lib/tooling'
+import { downloadLeadCsv, parseLeads, type LeadRow } from '../lib/tooling'
 
-const sourceLabels: Array<{ key: LeadSource; label: string }> = [
-  { key: 'web', label: 'Web' },
-  { key: 'social', label: 'Social' },
-  { key: 'maps', label: 'Maps' },
+const quickSearches = [
+  { label: 'Spas in Yangon', query: 'spa in yangon', keywords: 'spa,wellness,massage,yangon' },
+  { label: 'Rubber suppliers in Myanmar', query: 'rubber supplier myanmar', keywords: 'rubber,supplier,industrial,myanmar' },
+  { label: 'Warehouses in Yangon', query: 'warehouse yangon', keywords: 'warehouse,logistics,storage,yangon' },
 ]
 
 function rowKey(row: LeadRow) {
@@ -32,9 +32,8 @@ export function PublicLeadFinderPage() {
   const [rows, setRows] = useState<LeadRow[]>([])
   const [provider, setProvider] = useState('')
   const [message, setMessage] = useState('')
-  const [shortlist, setShortlist] = useState<string[]>([])
+  const [savedKeys, setSavedKeys] = useState<string[]>([])
   const [savedTotal, setSavedTotal] = useState(browserWorkspaceSummary().total)
-  const [sources, setSources] = useState<Record<LeadSource, boolean>>({ web: true, social: false, maps: true })
   const bootstrapped = useRef(false)
 
   const searchKeywords = useMemo(
@@ -45,19 +44,6 @@ export function PublicLeadFinderPage() {
         .filter(Boolean),
     [keywords],
   )
-
-  const selectedSources = useMemo(
-    () =>
-      (Object.entries(sources) as Array<[LeadSource, boolean]>)
-        .filter(([, enabled]) => enabled)
-        .map(([source]) => source),
-    [sources],
-  )
-
-  const shortlistRows = useMemo(() => {
-    const wanted = new Set(shortlist)
-    return rows.filter((row) => wanted.has(rowKey(row)))
-  }, [rows, shortlist])
 
   useEffect(() => {
     if (bootstrapped.current) {
@@ -78,6 +64,14 @@ export function PublicLeadFinderPage() {
     bootstrapped.current = true
   }, [location.search])
 
+  function applyQuickSearch(nextQuery: string, nextKeywords: string) {
+    setQuery(nextQuery)
+    setKeywords(nextKeywords)
+    setRows([])
+    setSavedKeys([])
+    setMessage('')
+  }
+
   async function runSearch() {
     setBusy(true)
     setMessage('')
@@ -87,7 +81,7 @@ export function PublicLeadFinderPage() {
       const payload = await searchPublicLeads({
         query,
         keywords: searchKeywords,
-        sources: selectedSources.length ? selectedSources : ['web', 'maps'],
+        sources: ['web', 'maps'],
         limit,
       })
 
@@ -99,7 +93,7 @@ export function PublicLeadFinderPage() {
       const nextRows = [...new Map(mergedRows.map((row) => [rowKey(row), row])).values()]
       setRows(nextRows)
       setProvider(payload.provider)
-      setShortlist([])
+      setSavedKeys([])
 
       if (!nextRows.length) {
         setMessage('No results returned. Try a broader query or use the manual fallback.')
@@ -112,16 +106,10 @@ export function PublicLeadFinderPage() {
     }
   }
 
-  function toggleShortlist(row: LeadRow) {
-    const key = rowKey(row)
-    setShortlist((current) => (current.includes(key) ? current.filter((item) => item !== key) : [...current, key]))
-  }
-
-  async function saveToWorkspace() {
-    const candidates = shortlistRows.length ? shortlistRows : rows.slice(0, 5)
+  async function saveRowsToWorkspace(candidates: LeadRow[], successMessage: string) {
     if (!candidates.length) {
       setMessage('Search first, then keep at least one lead.')
-      return
+      return false
     }
 
     if (hasLiveWorkspaceApi()) {
@@ -157,12 +145,11 @@ export function PublicLeadFinderPage() {
           query.trim() || 'Run first outreach',
         )
 
-        setMessage(`Saved ${imported.saved_count || candidates.length} lead${(imported.saved_count || candidates.length) === 1 ? '' : 's'} into the live workspace.`)
-        navigate('/app/leads', { replace: true })
-        return
+        setMessage(successMessage.replace('{count}', String(imported.saved_count || candidates.length)))
+        return true
       } catch (error) {
         setMessage(error instanceof Error ? error.message : 'Could not save to the live workspace.')
-        return
+        return false
       }
     }
 
@@ -171,7 +158,34 @@ export function PublicLeadFinderPage() {
       keywords: searchKeywords,
     })
     setSavedTotal(result.totalCount)
-    setMessage(`Saved ${candidates.length} lead${candidates.length === 1 ? '' : 's'} and ${result.actionCount} follow-up action${result.actionCount === 1 ? '' : 's'} into the browser workspace.`)
+    setMessage(successMessage.replace('{count}', String(candidates.length)))
+    return true
+  }
+
+  async function saveLead(row: LeadRow) {
+    const key = rowKey(row)
+    if (savedKeys.includes(key)) {
+      setMessage(`${row.name} is already in the workspace.`)
+      return
+    }
+
+    const saved = await saveRowsToWorkspace([row], `Saved {count} lead into ${hasLiveWorkspaceApi() ? 'the live workspace' : 'workspace'} and created the next action.`)
+    if (saved) {
+      setSavedKeys((current) => (current.includes(key) ? current : [...current, key]))
+      navigate('/workspace')
+    }
+  }
+
+  async function saveTopResults() {
+    const candidates = rows.slice(0, 3)
+    const saved = await saveRowsToWorkspace(
+      candidates,
+      `Saved {count} leads into ${hasLiveWorkspaceApi() ? 'the live workspace' : 'workspace'} and created the next actions.`,
+    )
+    if (saved) {
+      setSavedKeys(candidates.map((row) => rowKey(row)))
+      navigate('/workspace')
+    }
   }
 
   async function copyOutreach(row: LeadRow) {
@@ -184,14 +198,14 @@ export function PublicLeadFinderPage() {
     <div className="space-y-8">
       <PageIntro
         eyebrow="Lead Finder"
-        title="Search a market."
-        description="Type a place or niche, keep the right leads, and move them into the workspace."
+        title="Find businesses worth contacting."
+        description="Search by place or niche, keep the best leads, and save them into the shortlist."
       />
 
       <section className="grid gap-6 lg:grid-cols-[0.82fr_1.18fr]">
         <article className="sm-surface p-6">
           <p className="sm-kicker text-[var(--sm-accent)]">Search</p>
-          <h2 className="mt-3 text-3xl font-bold text-white">Find real businesses.</h2>
+          <h2 className="mt-3 text-3xl font-bold text-white">Run one search.</h2>
 
           <div className="mt-5 grid gap-4">
             <label className="grid gap-2 text-sm font-semibold text-[var(--sm-muted)]">
@@ -203,12 +217,23 @@ export function PublicLeadFinderPage() {
               <button className="sm-button-primary" disabled={busy || !query.trim()} onClick={() => void runSearch()} type="button">
                 {busy ? 'Searching...' : 'Search'}
               </button>
-              <button className="sm-button-secondary" disabled={!rows.length} onClick={() => downloadLeadCsv(rows)} type="button">
-                Export CSV
+              <button className="sm-button-secondary" disabled={!rows.length} onClick={() => void saveTopResults()} type="button">
+                Keep top 3
               </button>
               <Link className="sm-button-secondary" to="/workspace">
-                Keep shortlist
+                Open shortlist
               </Link>
+            </div>
+
+            <div className="grid gap-2">
+              <p className="sm-kicker text-[var(--sm-accent)]">Try one</p>
+              <div className="flex flex-wrap gap-2">
+                {quickSearches.map((item) => (
+                  <button className="sm-button-secondary" key={item.label} onClick={() => applyQuickSearch(item.query, item.keywords)} type="button">
+                    {item.label}
+                  </button>
+                ))}
+              </div>
             </div>
 
             <details className="sm-details">
@@ -218,19 +243,6 @@ export function PublicLeadFinderPage() {
                   Fit keywords
                   <input className="sm-input" onChange={(event) => setKeywords(event.target.value)} value={keywords} />
                 </label>
-
-                <div className="grid gap-3 md:grid-cols-3">
-                  {sourceLabels.map((source) => (
-                    <button
-                      className={`sm-chip text-left ${sources[source.key] ? 'border-[rgba(37,208,255,0.28)] text-white' : 'text-[var(--sm-muted)]'}`}
-                      key={source.key}
-                      onClick={() => setSources((current) => ({ ...current, [source.key]: !current[source.key] }))}
-                      type="button"
-                    >
-                      {source.label}
-                    </button>
-                  ))}
-                </div>
 
                 <label className="grid gap-2 text-sm font-semibold text-[var(--sm-muted)]">
                   Result count
@@ -252,12 +264,18 @@ export function PublicLeadFinderPage() {
                     value={manualInput}
                   />
                 </label>
+
+                <div>
+                  <button className="sm-button-secondary" disabled={!rows.length} onClick={() => downloadLeadCsv(rows)} type="button">
+                    Export CSV
+                  </button>
+                </div>
               </div>
             </details>
           </div>
 
           <div className="mt-4 sm-chip text-[var(--sm-muted)]">
-            Provider: {provider || (publicLeadFinderAvailable() ? 'browser search ready' : 'manual mode')}
+            {provider ? `Search source: ${provider}` : publicLeadFinderAvailable() ? 'Browser search is ready on this host.' : 'Manual mode only on this host.'}
           </div>
           {message ? <div className="mt-3 sm-chip text-[var(--sm-muted)]">{message}</div> : null}
         </article>
@@ -267,7 +285,7 @@ export function PublicLeadFinderPage() {
             <div>
               <p className="sm-kicker text-[var(--sm-accent)]">Results</p>
               <p className="mt-2 text-sm text-[var(--sm-muted)]">
-                {rows.length ? `${rows.length} result${rows.length === 1 ? '' : 's'} returned` : 'Run a search to get leads.'}
+                {rows.length ? `${rows.length} result${rows.length === 1 ? '' : 's'} returned. Keep the best 3.` : 'Run a search to get leads.'}
               </p>
             </div>
             <span className="sm-status-pill">{busy ? 'SEARCHING' : 'READY'}</span>
@@ -276,7 +294,7 @@ export function PublicLeadFinderPage() {
           <div className="mt-5 space-y-4">
             {rows.length ? (
               rows.map((row) => {
-                const kept = shortlist.includes(rowKey(row))
+                const saved = savedKeys.includes(rowKey(row))
                 return (
                   <div className="sm-proof-card" key={rowKey(row)}>
                     <div className="flex flex-wrap items-start justify-between gap-3">
@@ -299,17 +317,17 @@ export function PublicLeadFinderPage() {
                     </div>
 
                     <div className="mt-4 flex flex-wrap gap-3">
-                      <button className="sm-button-primary" onClick={() => toggleShortlist(row)} type="button">
-                        {kept ? 'Remove' : 'Keep'}
-                      </button>
-                      <button className="sm-button-secondary" onClick={() => void copyOutreach(row)} type="button">
-                        Copy outreach
+                      <button className="sm-button-primary" onClick={() => void saveLead(row)} type="button">
+                        {saved ? 'Saved' : 'Keep'}
                       </button>
                       {row.source_url ? (
                         <a className="sm-button-secondary" href={row.source_url} rel="noreferrer" target="_blank">
                           Open source
                         </a>
                       ) : null}
+                      <button className="sm-button-secondary" onClick={() => void copyOutreach(row)} type="button">
+                        Copy outreach
+                      </button>
                     </div>
                   </div>
                 )
@@ -318,63 +336,44 @@ export function PublicLeadFinderPage() {
               <div className="sm-chip text-[var(--sm-muted)]">Manual fallback is filled. Run search to merge it with browser results.</div>
             ) : (
               <div className="sm-chip text-[var(--sm-muted)]">
-                Try a place or niche, then keep the best 3 results. Examples: spa in Yangon, rubber supplier Myanmar, warehouse Yangon.
+                Try one of the quick searches above, then keep the best 3 results.
               </div>
             )}
           </div>
         </article>
       </section>
 
-      <section className="grid gap-6 lg:grid-cols-[0.84fr_1.16fr]">
-        <article className="sm-surface p-6">
-          <p className="sm-kicker text-[var(--sm-accent)]">Workspace</p>
-          <h2 className="mt-3 text-3xl font-bold text-white">Keep the shortlist.</h2>
-          <div className="mt-5 grid gap-3 md:grid-cols-2">
-            <div className="sm-chip text-white">
-              <p className="sm-kicker text-[var(--sm-accent)]">Saved leads</p>
-              <p className="mt-2 text-3xl font-bold">{savedTotal}</p>
-            </div>
-            <div className="sm-chip text-white">
-              <p className="sm-kicker text-[var(--sm-accent-alt)]">Kept now</p>
-              <p className="mt-2 text-3xl font-bold">{shortlistRows.length || 0}</p>
-            </div>
+      <section className="sm-surface p-6">
+        <p className="sm-kicker text-[var(--sm-accent)]">Next step</p>
+        <h2 className="mt-3 text-3xl font-bold text-white">Keep the shortlist, then run follow-up.</h2>
+        <div className="mt-5 grid gap-3 md:grid-cols-3">
+          <div className="sm-chip text-white">
+            <p className="sm-kicker text-[var(--sm-accent)]">Saved already</p>
+            <p className="mt-2 text-3xl font-bold">{savedTotal}</p>
           </div>
-          <div className="mt-5 flex flex-wrap gap-3">
-            <button className="sm-button-primary" disabled={!rows.length} onClick={() => void saveToWorkspace()} type="button">
-              Save to workspace
-            </button>
-            <Link className="sm-button-secondary" to="/workspace">
-              Open shortlist
-            </Link>
+          <div className="sm-chip text-white">
+            <p className="sm-kicker text-[var(--sm-accent-alt)]">Search rule</p>
+            <p className="mt-2 text-sm">Keep only the 3 leads worth chasing first.</p>
           </div>
-          <div className="mt-4 sm-chip text-[var(--sm-muted)]">
-            {hasLiveWorkspaceApi()
-              ? 'This host can save into the live workspace.'
-              : 'This host saves into the browser workspace on this device.'}
+          <div className="sm-chip text-white">
+            <p className="sm-kicker text-[var(--sm-accent)]">After save</p>
+            <p className="mt-2 text-sm">Shortlist stores the leads and creates the follow-up queue.</p>
           </div>
-        </article>
-
-        <article className="sm-surface p-6">
-          <p className="sm-kicker text-[var(--sm-accent)]">What you get</p>
-          <div className="mt-4 grid gap-3 md:grid-cols-3">
-            <div className="sm-chip text-white">Shortlist</div>
-            <div className="sm-chip text-white">Copied outreach</div>
-            <div className="sm-chip text-white">Follow-up actions</div>
-          </div>
-          <div className="mt-5 grid gap-3">
-            <div className="sm-chip text-white">Search first.</div>
-            <div className="sm-chip text-white">Keep only the leads worth chasing.</div>
-            <div className="sm-chip text-white">Move the shortlist into Workspace or Action OS.</div>
-          </div>
-          <div className="mt-5 flex flex-wrap gap-3">
-            <Link className="sm-button-secondary" to="/workspace">
-              Open shortlist
-            </Link>
-            <Link className="sm-button-secondary" to="/action-os">
-              Open Action OS
-            </Link>
-          </div>
-        </article>
+        </div>
+        <div className="mt-5 flex flex-wrap gap-3">
+          <button className="sm-button-primary" disabled={!rows.length} onClick={() => void saveTopResults()} type="button">
+            Keep top 3
+          </button>
+          <Link className="sm-button-secondary" to="/workspace">
+            Open shortlist
+          </Link>
+          <Link className="sm-button-secondary" to="/action-os">
+            Open queue
+          </Link>
+        </div>
+        <div className="mt-4 sm-chip text-[var(--sm-muted)]">
+          {hasLiveWorkspaceApi() ? 'This host can save into the shared app.' : 'This host saves into the browser shortlist on this device.'}
+        </div>
       </section>
     </div>
   )
