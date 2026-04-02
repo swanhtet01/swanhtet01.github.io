@@ -8,12 +8,12 @@ const steps = [
     detail: 'Search by place or niche.',
   },
   {
-    title: '2. Keep',
-    detail: 'Keep the best 3 leads.',
+    title: '2. Save',
+    detail: 'Save the best 3 leads.',
   },
   {
     title: '3. Run',
-    detail: 'Work the follow-up queue from the workspace.',
+    detail: 'Open Workspace and run the next step.',
   },
 ]
 

@@ -234,8 +234,8 @@ select.sm-input {
 
 .sm-input option,
 .sm-input optgroup {
-  background: #081427;
-  color: #f7fbff;
+  background: #081427 !important;
+  color: #f7fbff !important;
 }
 
 .sm-details {

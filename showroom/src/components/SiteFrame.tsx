@@ -24,7 +24,7 @@ export function SiteFrame() {
             <span className="flex flex-col">
               <span className="sm-logo text-lg font-extrabold tracking-tight text-white">SuperMega</span>
               <span className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[var(--sm-muted)]">
-                Action OS
+                AI Workflow Software
               </span>
             </span>
           </NavLink>
@@ -41,9 +41,6 @@ export function SiteFrame() {
                 {item.label}
               </NavLink>
             ))}
-            <NavLink className="sm-button-primary ml-2" to="/workspace">
-              Open workspace
-            </NavLink>
           </div>
         </nav>
         {menuOpen ? (
@@ -54,9 +51,6 @@ export function SiteFrame() {
                   {item.label}
                 </NavLink>
               ))}
-              <NavLink className="sm-button-primary mt-1 text-center" onClick={() => setMenuOpen(false)} to="/workspace">
-                Open workspace
-              </NavLink>
             </div>
           </div>
         ) : null}
@@ -68,7 +62,7 @@ export function SiteFrame() {
 
       <footer className="border-t border-white/8 bg-[rgba(4,10,22,0.78)]">
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 px-4 py-6 text-sm text-[var(--sm-muted)] lg:flex-row lg:items-center lg:justify-between lg:px-8">
-          <p>Lead Finder finds the shortlist. Workspace keeps the next step moving.</p>
+          <p>Find leads. Save them in Workspace. Run the next step.</p>
         </div>
       </footer>
     </div>

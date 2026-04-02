@@ -33,8 +33,8 @@ export const bookingUrl = (import.meta.env.VITE_BOOKING_URL ?? '').trim()
 
 export const hero = {
   eyebrow: 'AI-native workflow software',
-  title: 'Search leads. Keep the shortlist. Run the next step.',
-  description: 'Lead Finder finds businesses. Workspace keeps the shortlist and the follow-up queue in one place.',
+  title: 'Find leads. Save them in Workspace. Run the next step.',
+  description: 'Lead Finder gets the right businesses. Workspace keeps the leads, notes, and queue together.',
 }
 
 export const proofPoints: ProofPoint[] = [
@@ -45,43 +45,43 @@ export const proofPoints: ProofPoint[] = [
   },
   {
     label: 'Workspace',
-    value: 'Saved shortlist',
-    detail: 'Leads, notes, and stage changes stay together.',
+    value: 'Saved leads and notes',
+    detail: 'Leads, notes, and stage changes stay in one place.',
   },
   {
-    label: 'Action OS',
-    value: 'One queue',
-    detail: 'The follow-up queue lives inside Workspace.',
+    label: 'Queue',
+    value: 'One place to run work',
+    detail: 'Action OS is the queue inside Workspace.',
   },
 ]
 
 export const coreProduct = {
   name: 'Action OS',
-  tagline: 'One simple queue inside Workspace for follow-up, owners, and blockers.',
+  tagline: 'One simple queue for follow-up, owners, and blockers.',
   replaces: ['Scattered notes', 'Missed follow-up', 'Manual chasing'],
-  inputs: ['Lead shortlist', 'Ops updates', 'Receiving issues'],
+  inputs: ['Saved leads', 'Ops updates', 'Receiving issues'],
   outputs: ['Action queue', 'Owner list', 'Next steps'],
   rollout: [
-    'Search and keep the right leads.',
-    'Save them into one workspace.',
+    'Search and save the right leads.',
+    'Keep them in one workspace.',
     'Run the queue every day.',
   ],
 }
 
 export const leadFinder = {
   title: 'Lead Finder',
-  description: 'Search by place or niche, keep the right results, and move them into the workspace.',
-  steps: ['Search a market', 'Keep the best 3 leads', 'Run follow-up'],
+  description: 'Search by place or niche, save the best results, and move them into Workspace.',
+  steps: ['Search a market', 'Save the best leads', 'Open Workspace'],
 }
 
 export const useCases: UseCase[] = [
   {
     name: 'Outbound',
     audience: 'Founders, operators, and sales teams',
-    promise: 'Find businesses, save the shortlist, and keep outreach moving.',
+    promise: 'Find businesses, save them in Workspace, and keep outreach moving.',
     firstRollout: 'Lead Finder plus Workspace.',
     inputs: ['Search query', 'Keywords', 'Saved notes'],
-    outcomes: ['Shortlist', 'Follow-up queue', 'Cleaner outreach'],
+    outcomes: ['Saved leads', 'Follow-up queue', 'Cleaner outreach'],
   },
   {
     name: 'Operations',
@@ -104,16 +104,16 @@ export const useCases: UseCase[] = [
 export const publicModules: PublicModule[] = [
   {
     name: 'Lead Finder',
-    tagline: 'Search a market, keep the shortlist, and start outreach.',
+    tagline: 'Search a market, save the right leads, and start outreach.',
     bestFor: 'Prospecting, partnerships, and market mapping.',
     inputs: ['Place or niche search', 'Fit keywords', 'Saved notes'],
-    outputs: ['Shortlist', 'Outreach draft', 'Workspace rows'],
+    outputs: ['Saved leads', 'Outreach draft', 'Workspace rows'],
     path: '/lead-finder',
   },
   {
     name: 'Workspace',
     tagline: 'Keep saved leads, notes, stages, and next actions together.',
-    bestFor: 'Anyone running follow-up from a shortlist.',
+    bestFor: 'Anyone running follow-up from saved leads.',
     inputs: ['Saved leads', 'Notes', 'Stage updates'],
     outputs: ['Pipeline view', 'Today queue', 'CSV export'],
     path: '/workspace',

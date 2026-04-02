@@ -18,7 +18,7 @@ import {
 } from '../lib/browserWorkspace'
 import { bootstrapPublicWorkspace, getWorkspaceSession, hasLiveWorkspaceApi } from '../lib/workspaceApi'
 
-type WorkspaceView = 'shortlist' | 'queue'
+type WorkspaceView = 'leads' | 'queue'
 
 const stageOptions: BrowserWorkspaceStage[] = ['new', 'outreach', 'contacted', 'qualified']
 
@@ -39,8 +39,8 @@ function nextActionForLead(lead: BrowserWorkspaceLead) {
   return 'Keep warm and hand it off'
 }
 
-function isQueueView(value: string | null): value is WorkspaceView {
-  return value === 'queue' || value === 'shortlist'
+function isWorkspaceView(value: string | null): value is WorkspaceView {
+  return value === 'queue' || value === 'leads'
 }
 
 export function WorkspaceLitePage() {
@@ -53,7 +53,7 @@ export function WorkspaceLitePage() {
   const bootstrapAttempted = useRef(false)
 
   const requestedView = new URLSearchParams(location.search).get('view')
-  const activeView: WorkspaceView = isQueueView(requestedView) ? requestedView : 'shortlist'
+  const activeView: WorkspaceView = requestedView === 'shortlist' ? 'leads' : isWorkspaceView(requestedView) ? requestedView : 'leads'
   const summary = useMemo(() => browserWorkspaceSummary(rows), [rows])
   const openActions = useMemo(() => actions.filter((action) => action.status === 'open'), [actions])
   const isEmptyWorkspace = rows.length === 0
@@ -186,63 +186,90 @@ export function WorkspaceLitePage() {
     <div className="space-y-8">
       <PageIntro
         eyebrow="Workspace"
-        title="Keep leads and next steps together."
-        description={
-          hasLiveWorkspaceApi()
-            ? 'Keep leads, notes, and next actions together. Open the shared app only if you need the same workspace across devices.'
-            : 'Keep leads, notes, and next actions together on this device.'
-        }
+        title="Saved leads and queue in one place."
+        description="Use Workspace to review leads, notes, and the next actions."
       />
 
       <section className="grid gap-6 lg:grid-cols-[0.8fr_1.2fr]">
         <article className="sm-surface p-6">
-          <p className="sm-kicker text-[var(--sm-accent)]">{isEmptyWorkspace ? 'Start here' : 'Workspace'}</p>
-          <div className="mt-5 grid gap-3 md:grid-cols-3">
-            <div className="sm-chip text-white">
-              <p className="sm-kicker text-[var(--sm-accent)]">Leads</p>
-              <p className="mt-2 text-3xl font-bold">{summary.total}</p>
-            </div>
-            <div className="sm-chip text-white">
-              <p className="sm-kicker text-[var(--sm-accent-alt)]">Open queue</p>
-              <p className="mt-2 text-3xl font-bold">{summary.openActionCount}</p>
-            </div>
-            <div className="sm-chip text-white">
-              <p className="sm-kicker text-[var(--sm-accent)]">Qualified</p>
-              <p className="mt-2 text-3xl font-bold">{summary.qualifiedCount}</p>
-            </div>
-          </div>
+          {isEmptyWorkspace ? (
+            <>
+              <p className="sm-kicker text-[var(--sm-accent)]">Start here</p>
+              <h2 className="mt-3 text-3xl font-bold text-white">Save the first real leads.</h2>
+              <p className="mt-3 text-sm leading-relaxed text-[var(--sm-muted)]">
+                Use Lead Finder first. Workspace becomes useful after you save real leads and turn them into a queue.
+              </p>
 
-          <div className="mt-5 flex flex-wrap gap-3">
-            <Link className="sm-button-primary" to="/lead-finder">
-              Find more leads
-            </Link>
-            <Link className={activeView === 'shortlist' ? 'sm-button-primary' : 'sm-button-secondary'} to={viewHref('shortlist')}>
-              Leads
-            </Link>
-            <Link className={activeView === 'queue' ? 'sm-button-primary' : 'sm-button-secondary'} to={viewHref('queue')}>
-              Queue
-            </Link>
-            {rows.length && !openActions.length ? (
-              <button className="sm-button-secondary" onClick={seedQueue} type="button">
-                Create queue
-              </button>
-            ) : null}
-          </div>
+              <div className="mt-5 flex flex-wrap gap-3">
+                <Link className="sm-button-primary" to="/lead-finder">
+                  Find leads
+                </Link>
+                {hasLiveWorkspaceApi() ? (
+                  <button className="sm-button-secondary" disabled={starting} onClick={() => void startLiveWorkspace()} type="button">
+                    {starting ? 'Starting...' : 'Open live app'}
+                  </button>
+                ) : null}
+              </div>
 
-          <div className="mt-4 flex flex-wrap gap-3">
-            <button className="sm-button-secondary" disabled={!rows.length} onClick={exportWorkspace} type="button">
-              Export CSV
-            </button>
-            {hasLiveWorkspaceApi() ? (
-              <button className="sm-button-secondary" disabled={starting} onClick={() => void startLiveWorkspace()} type="button">
-                {starting ? 'Starting...' : 'Open shared app'}
-              </button>
-            ) : null}
-          </div>
+              <div className="mt-4 sm-chip text-[var(--sm-muted)]">
+                {hasLiveWorkspaceApi()
+                  ? 'Use this page for quick work. Open the live app only when you need the same workspace across devices.'
+                  : 'This workspace is stored in this browser on this device.'}
+              </div>
+            </>
+          ) : (
+            <>
+              <p className="sm-kicker text-[var(--sm-accent)]">Workspace</p>
+              <div className="mt-5 grid gap-3 md:grid-cols-3">
+                <div className="sm-chip text-white">
+                  <p className="sm-kicker text-[var(--sm-accent)]">Leads</p>
+                  <p className="mt-2 text-3xl font-bold">{summary.total}</p>
+                </div>
+                <div className="sm-chip text-white">
+                  <p className="sm-kicker text-[var(--sm-accent-alt)]">Open queue</p>
+                  <p className="mt-2 text-3xl font-bold">{summary.openActionCount}</p>
+                </div>
+                <div className="sm-chip text-white">
+                  <p className="sm-kicker text-[var(--sm-accent)]">Qualified</p>
+                  <p className="mt-2 text-3xl font-bold">{summary.qualifiedCount}</p>
+                </div>
+              </div>
 
-          <div className="mt-4 sm-chip text-[var(--sm-muted)]">
-            {hasLiveWorkspaceApi() ? 'Use this page for quick work. Open the shared app only when you need the same workspace across devices.' : 'This shortlist is stored in this browser on this device.'}
-          </div>
+              <div className="mt-5 flex flex-wrap gap-3">
+                <Link className="sm-button-primary" to="/lead-finder">
+                  Find leads
+                </Link>
+                <Link className={activeView === 'leads' ? 'sm-button-primary' : 'sm-button-secondary'} to={viewHref('leads')}>
+                  Leads
+                </Link>
+                <Link className={activeView === 'queue' ? 'sm-button-primary' : 'sm-button-secondary'} to={viewHref('queue')}>
+                  Queue
+                </Link>
+                {!openActions.length ? (
+                  <button className="sm-button-secondary" onClick={seedQueue} type="button">
+                    Create follow-up queue
+                  </button>
+                ) : null}
+              </div>
+
+              <div className="mt-4 flex flex-wrap gap-3">
+                <button className="sm-button-secondary" disabled={!rows.length} onClick={exportWorkspace} type="button">
+                  Export CSV
+                </button>
+                {hasLiveWorkspaceApi() ? (
+                  <button className="sm-button-secondary" disabled={starting} onClick={() => void startLiveWorkspace()} type="button">
+                    {starting ? 'Starting...' : 'Open live app'}
+                  </button>
+                ) : null}
+              </div>
+
+              <div className="mt-4 sm-chip text-[var(--sm-muted)]">
+                {hasLiveWorkspaceApi()
+                  ? 'Use this page for quick work. Open the live app only when you need the same workspace across devices.'
+                  : 'This workspace is stored in this browser on this device.'}
+              </div>
+            </>
+          )}
           {message ? <div className="mt-3 sm-chip text-[var(--sm-muted)]">{message}</div> : null}
         </article>
 
@@ -253,7 +280,7 @@ export function WorkspaceLitePage() {
               <p className="mt-2 text-sm text-[var(--sm-muted)]">
                 {activeView === 'queue'
                   ? 'Run the next actions here.'
-                  : 'Keep only the leads worth chasing.'}
+                  : 'Review saved leads and move the right ones forward.'}
               </p>
             </div>
           </div>
@@ -266,7 +293,7 @@ export function WorkspaceLitePage() {
                   <p className="mt-2 text-sm text-[var(--sm-muted)]">Start in Lead Finder with a place or niche.</p>
                 </div>
                 <div className="sm-proof-card">
-                  <p className="font-semibold text-white">2. Keep the right leads</p>
+                  <p className="font-semibold text-white">2. Save the right leads</p>
                   <p className="mt-2 text-sm text-[var(--sm-muted)]">Save only the leads worth chasing first.</p>
                 </div>
                 <div className="sm-proof-card">
@@ -309,7 +336,7 @@ export function WorkspaceLitePage() {
                   <p className="mt-2 text-sm text-[var(--sm-muted)]">Save some leads first, then create the queue from those leads.</p>
                   <div className="mt-4">
                     <button className="sm-button-primary" disabled={!rows.length} onClick={seedQueue} type="button">
-                      Create queue from shortlist
+                      Create queue from saved leads
                     </button>
                   </div>
                 </div>
@@ -345,7 +372,7 @@ export function WorkspaceLitePage() {
         </article>
       </section>
 
-      {rows.length && activeView === 'shortlist' ? (
+      {rows.length && activeView === 'leads' ? (
         <section className="sm-surface p-6">
           <div className="flex items-center justify-between gap-3">
             <div>
