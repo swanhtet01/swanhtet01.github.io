@@ -185,6 +185,32 @@ export async function bootstrapPublicWorkspace(payload?: {
   })
 }
 
+export async function savePublicLeadsToWorkspace(payload: {
+  name?: string
+  email?: string
+  company?: string
+  workspace_slug?: string
+  goal?: string
+  campaign_goal?: string
+  rows: Array<Record<string, unknown>>
+}) {
+  return workspaceFetch<WorkspaceSessionPayload & {
+    generated_password?: string
+    reused?: boolean
+    saved_count?: number
+    saved_lead_ids?: string[]
+    saved_task_count?: number
+    saved_task_ids?: string[]
+    rows?: Array<Record<string, unknown>>
+    tasks?: Array<Record<string, unknown>>
+    summary?: Record<string, unknown>
+    saved_at?: string
+  }>('/api/public/workspace/save-leads', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
 export async function importLeadPipeline(rows: Array<Record<string, unknown>>, campaignGoal = '') {
   return workspaceFetch<{
     status?: string
@@ -198,5 +224,144 @@ export async function importLeadPipeline(rows: Array<Record<string, unknown>>, c
       rows,
       campaign_goal: campaignGoal,
     }),
+  })
+}
+
+export type WorkspaceLeadRow = {
+  lead_id: string
+  company_name: string
+  stage: string
+  status: string
+  owner: string
+  campaign_goal: string
+  service_pack: string
+  wedge_product: string
+  contact_email: string
+  contact_phone: string
+  website: string
+  source: string
+  source_url: string
+  provider: string
+  score: number
+  notes: string
+  outreach_subject: string
+  outreach_message: string
+  created_at: string
+  synced_at: string
+}
+
+export type WorkspaceTaskRow = {
+  task_id: string
+  workspace_id: string
+  lead_id: string
+  template: string
+  title: string
+  owner: string
+  priority: string
+  due: string
+  status: string
+  notes: string
+  created_at: string
+  updated_at: string
+}
+
+export async function listWorkspaceLeadPipeline(stage?: string, status?: string, limit = 200) {
+  const params = new URLSearchParams()
+  if (stage) {
+    params.set('stage', stage)
+  }
+  if (status) {
+    params.set('status', status)
+  }
+  params.set('limit', String(limit))
+  return workspaceFetch<{
+    status?: string
+    count?: number
+    summary?: Record<string, unknown>
+    rows?: WorkspaceLeadRow[]
+  }>(`/api/lead-pipeline?${params.toString()}`)
+}
+
+export async function updateWorkspaceLeadPipeline(
+  leadId: string,
+  payload: {
+    stage?: string
+    status?: string
+    owner?: string
+    notes?: string
+  },
+) {
+  return workspaceFetch<{
+    status?: string
+    row?: WorkspaceLeadRow
+    summary?: Record<string, unknown>
+  }>(`/api/lead-pipeline/${encodeURIComponent(leadId)}`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function listWorkspaceTasks(status?: string, limit = 200) {
+  const params = new URLSearchParams()
+  if (status) {
+    params.set('status', status)
+  }
+  params.set('limit', String(limit))
+  return workspaceFetch<{
+    status?: string
+    count?: number
+    rows?: WorkspaceTaskRow[]
+  }>(`/api/workspace-tasks?${params.toString()}`)
+}
+
+export async function createWorkspaceTasks(
+  rows: Array<{
+    title: string
+    owner?: string
+    priority?: string
+    due?: string
+    status?: string
+    notes?: string
+    lead_id?: string
+    template?: string
+  }>,
+) {
+  return workspaceFetch<{
+    status?: string
+    saved_count?: number
+    saved_task_ids?: string[]
+    rows?: WorkspaceTaskRow[]
+  }>('/api/workspace-tasks', {
+    method: 'POST',
+    body: JSON.stringify({ rows }),
+  })
+}
+
+export async function updateWorkspaceTask(
+  taskId: string,
+  payload: {
+    status?: string
+    owner?: string
+    priority?: string
+    due?: string
+    title?: string
+    notes?: string
+  },
+) {
+  return workspaceFetch<{
+    status?: string
+    row?: WorkspaceTaskRow
+  }>(`/api/workspace-tasks/${encodeURIComponent(taskId)}`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function removeWorkspaceTask(taskId: string) {
+  return workspaceFetch<{
+    status?: string
+    removed?: boolean
+  }>(`/api/workspace-tasks/${encodeURIComponent(taskId)}`, {
+    method: 'DELETE',
   })
 }

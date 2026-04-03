@@ -72,6 +72,7 @@ from mark1_pilot.state_store import (  # noqa: E402
 from mark1_pilot.enterprise_store import (  # noqa: E402
     add_lead_activity as enterprise_add_lead_activity,
     add_leads as enterprise_add_leads,
+    add_leads_with_tasks as enterprise_add_leads_with_tasks,
     add_workspace_tasks as enterprise_add_workspace_tasks,
     authenticate_user as enterprise_authenticate_user,
     bootstrap_workspace_leads,
@@ -373,6 +374,16 @@ class PublicWorkspaceBootstrapRequest(BaseModel):
     company: str = ""
     workspace_slug: str = ""
     goal: str = ""
+
+
+class PublicWorkspaceLeadSaveRequest(BaseModel):
+    name: str = ""
+    email: str = ""
+    company: str = ""
+    workspace_slug: str = ""
+    goal: str = ""
+    campaign_goal: str = ""
+    rows: list[dict[str, Any]] = Field(default_factory=list)
 
 
 def _load_json(path: Path) -> dict[str, Any]:
@@ -1157,6 +1168,82 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             secure=secure_cookie,
         )
 
+    def _session_payload(session: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "username": session.get("username", ""),
+            "display_name": session.get("display_name", ""),
+            "role": session.get("role", ""),
+            "workspace_id": session.get("workspace_id", ""),
+            "workspace_slug": session.get("workspace_slug", ""),
+            "workspace_name": session.get("workspace_name", ""),
+            "workspace_plan": session.get("workspace_plan", ""),
+        }
+
+    def _ensure_public_workspace_session(
+        request: Request,
+        response: Response,
+        payload: PublicWorkspaceBootstrapRequest,
+    ) -> dict[str, Any]:
+        existing_session = _session_from_request(request)
+        if existing_session:
+            return {
+                "authenticated": True,
+                "reused": True,
+                "session": _session_payload(existing_session),
+            }
+
+        company = str(payload.company or "").strip() or "My Workspace"
+        name = str(payload.name or "").strip() or company or "Owner"
+        seed = "|".join(
+            [
+                company,
+                name,
+                str(payload.email or "").strip().lower(),
+                datetime.now().astimezone().isoformat(),
+            ]
+        )
+        email = str(payload.email or "").strip().lower() or f"guest-{hashlib.sha1(seed.encode('utf-8')).hexdigest()[:10]}@supermega.local"
+        password = secrets.token_urlsafe(10)
+        base_slug = _slugify(payload.workspace_slug or company or name or "workspace") or "workspace"
+        workspace_slug = f"{base_slug}-{hashlib.sha1(email.encode('utf-8')).hexdigest()[:4]}"
+
+        created = enterprise_ensure_user(
+            enterprise_db_url,
+            username=email,
+            password=password,
+            display_name=name,
+            role="owner",
+            workspace_slug=workspace_slug,
+            workspace_name=company,
+            workspace_plan="starter",
+        )
+        user = enterprise_authenticate_user(enterprise_db_url, username=email, password=password)
+        if not user:
+            raise HTTPException(status_code=500, detail="Public workspace bootstrap failed.")
+        session = enterprise_create_session(
+            enterprise_db_url,
+            username=str(user.get("username", "")),
+            role=str(user.get("role", "")),
+            workspace_slug=workspace_slug,
+            ttl_hours=session_ttl_hours,
+        )
+        _set_session_cookie(response, request, str(session.get("session_id", "")))
+        return {
+            "authenticated": True,
+            "reused": False,
+            "generated_password": password,
+            "created": created,
+            "session": {
+                "username": user.get("username", ""),
+                "display_name": user.get("display_name", ""),
+                "role": user.get("role", ""),
+                "workspace_id": session.get("workspace_id", ""),
+                "workspace_slug": session.get("workspace_slug", ""),
+                "workspace_name": session.get("workspace_name", ""),
+                "workspace_plan": session.get("workspace_plan", ""),
+            },
+        }
+
     def _export_lead_rows_to_workspace(
         *,
         rows: list[dict[str, Any]],
@@ -1425,74 +1512,55 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
 
     @app.post("/api/public/workspace/bootstrap")
     def public_workspace_bootstrap(request: Request, response: Response, payload: PublicWorkspaceBootstrapRequest) -> dict[str, Any]:
-        existing_session = _session_from_request(request)
-        if existing_session:
-            return {
-                "status": "ready",
-                "authenticated": True,
-                "reused": True,
-                "session": {
-                    "username": existing_session.get("username", ""),
-                    "display_name": existing_session.get("display_name", ""),
-                    "role": existing_session.get("role", ""),
-                    "workspace_id": existing_session.get("workspace_id", ""),
-                    "workspace_slug": existing_session.get("workspace_slug", ""),
-                    "workspace_name": existing_session.get("workspace_name", ""),
-                    "workspace_plan": existing_session.get("workspace_plan", ""),
-                },
-            }
+        session_payload = _ensure_public_workspace_session(request, response, payload)
+        return {"status": "ready", **session_payload}
 
-        company = str(payload.company or "").strip() or "My Workspace"
-        name = str(payload.name or "").strip() or company or "Owner"
-        seed = "|".join(
-            [
-                company,
-                name,
-                str(payload.email or "").strip().lower(),
-                datetime.now().astimezone().isoformat(),
-            ]
+    @app.post("/api/public/workspace/save-leads")
+    def public_workspace_save_leads(
+        request: Request,
+        response: Response,
+        payload: PublicWorkspaceLeadSaveRequest,
+    ) -> dict[str, Any]:
+        session_payload = _ensure_public_workspace_session(
+            request,
+            response,
+            PublicWorkspaceBootstrapRequest(
+                name=payload.name,
+                email=payload.email,
+                company=payload.company,
+                workspace_slug=payload.workspace_slug,
+                goal=payload.goal,
+            ),
         )
-        email = str(payload.email or "").strip().lower() or f"guest-{hashlib.sha1(seed.encode('utf-8')).hexdigest()[:10]}@supermega.local"
-        password = secrets.token_urlsafe(10)
-        base_slug = _slugify(payload.workspace_slug or company or name or "workspace") or "workspace"
-        workspace_slug = f"{base_slug}-{hashlib.sha1(email.encode('utf-8')).hexdigest()[:4]}"
-
-        created = enterprise_ensure_user(
+        workspace_id = str((session_payload.get("session") or {}).get("workspace_id", "")).strip()
+        if not workspace_id:
+            raise HTTPException(status_code=500, detail="Workspace session is missing a workspace.")
+        saved = enterprise_add_leads_with_tasks(
             enterprise_db_url,
-            username=email,
-            password=password,
-            display_name=name,
-            role="owner",
-            workspace_slug=workspace_slug,
-            workspace_name=company,
-            workspace_plan="starter",
+            workspace_id=workspace_id,
+            rows=payload.rows,
+            campaign_goal=payload.campaign_goal,
+            source="public_lead_finder",
+            default_task_owner="Sales",
+            default_task_priority="High",
+            default_task_due="Today",
+            default_task_notes="First outreach",
         )
-        user = enterprise_authenticate_user(enterprise_db_url, username=email, password=password)
-        if not user:
-            raise HTTPException(status_code=500, detail="Public workspace bootstrap failed.")
-        session = enterprise_create_session(
-            enterprise_db_url,
-            username=str(user.get("username", "")),
-            role=str(user.get("role", "")),
-            workspace_slug=workspace_slug,
-            ttl_hours=session_ttl_hours,
-        )
-        _set_session_cookie(response, request, str(session.get("session_id", "")))
         return {
             "status": "ready",
             "authenticated": True,
-            "reused": False,
-            "generated_password": password,
-            "session": {
-                "username": user.get("username", ""),
-                "display_name": user.get("display_name", ""),
-                "role": user.get("role", ""),
-                "workspace_id": session.get("workspace_id", ""),
-                "workspace_slug": session.get("workspace_slug", ""),
-                "workspace_name": session.get("workspace_name", ""),
-                "workspace_plan": session.get("workspace_plan", ""),
-            },
-            "created": created,
+            "reused": bool(session_payload.get("reused")),
+            "session": session_payload.get("session", {}),
+            "created": session_payload.get("created", {}),
+            "generated_password": session_payload.get("generated_password", ""),
+            "saved_count": saved.get("saved_count", 0),
+            "saved_lead_ids": saved.get("saved_lead_ids", []),
+            "saved_task_count": saved.get("saved_task_count", 0),
+            "saved_task_ids": saved.get("saved_task_ids", []),
+            "rows": saved.get("rows", []),
+            "tasks": saved.get("tasks", []),
+            "summary": saved.get("summary", {}),
+            "saved_at": saved.get("saved_at", ""),
         }
 
     @app.post("/api/auth/logout")

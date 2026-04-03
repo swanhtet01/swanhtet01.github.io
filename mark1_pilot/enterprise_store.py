@@ -666,6 +666,106 @@ def add_workspace_tasks(
     }
 
 
+def add_leads_with_tasks(
+    database_url: str,
+    *,
+    workspace_id: str,
+    rows: list[dict[str, Any]],
+    campaign_goal: str = "",
+    source: str = "lead_to_pilot",
+    default_task_owner: str = "Sales",
+    default_task_priority: str = "High",
+    default_task_due: str = "Today",
+    default_task_notes: str = "First outreach",
+) -> dict[str, Any]:
+    ensure_schema(database_url)
+    now = _now()
+    engine = get_engine(database_url)
+    saved_lead_ids: list[str] = []
+    saved_task_ids: list[str] = []
+    with Session(engine) as session:
+        for row in rows:
+            company_name = str(row.get("name") or row.get("company_name") or "").strip()
+            if not company_name:
+                continue
+            source_url = str(row.get("source_url", "")).strip()
+            lead_id = _stable_key("LEAD", f"{workspace_id}:{company_name}:{source_url or source}:{campaign_goal}")
+            lead = session.get(EnterpriseLead, lead_id)
+            if not lead:
+                lead = EnterpriseLead(
+                    lead_id=lead_id,
+                    workspace_id=str(workspace_id),
+                    created_at=now,
+                    company_name=company_name,
+                    synced_at=now,
+                )
+            lead.archetype = str(row.get("archetype", "")).strip()
+            lead.stage = str(row.get("stage", "")).strip() or "offer_ready"
+            lead.status = str(row.get("status", "")).strip() or "open"
+            lead.owner = str(row.get("owner", "")).strip() or "Growth Studio"
+            lead.campaign_goal = str(campaign_goal or row.get("campaign_goal", "")).strip()
+            lead.service_pack = str(row.get("service_pack", "")).strip()
+            lead.wedge_product = str(row.get("wedge_product", "")).strip()
+            lead.starter_modules_json = json.dumps(row.get("starter_modules", []), ensure_ascii=False)
+            lead.semi_products_json = json.dumps(row.get("semi_products", []), ensure_ascii=False)
+            lead.outreach_subject = str(row.get("outreach_subject", "")).strip()
+            lead.outreach_message = str(row.get("outreach_message", "")).strip()
+            lead.discovery_questions_json = json.dumps(row.get("discovery_questions", []), ensure_ascii=False)
+            lead.contact_email = str(row.get("email") or row.get("contact_email") or "").strip()
+            lead.contact_phone = str(row.get("phone") or row.get("contact_phone") or "").strip()
+            lead.website = str(row.get("website", "")).strip()
+            lead.source = str(row.get("source", "")).strip() or str(source or "").strip()
+            lead.source_url = source_url
+            lead.provider = str(row.get("provider", "")).strip()
+            try:
+                lead.score = int(row.get("score", 0) or 0)
+            except Exception:
+                lead.score = 0
+            lead.notes = str(row.get("notes", "")).strip()
+            lead.synced_at = now
+            session.add(lead)
+            saved_lead_ids.append(lead_id)
+
+            title = str(row.get("task_title", "")).strip() or f"Follow up {company_name}"
+            template = str(row.get("task_template", "")).strip() or "lead_follow_up"
+            dedupe_seed = "|".join([str(workspace_id), template, lead_id, title.lower()])
+            task_id = _stable_key("TASK", dedupe_seed)
+            task = session.get(EnterpriseWorkspaceTask, task_id)
+            if not task:
+                task = EnterpriseWorkspaceTask(
+                    task_id=task_id,
+                    workspace_id=str(workspace_id),
+                    created_at=now,
+                    updated_at=now,
+                    title=title,
+                )
+            task.workspace_id = str(workspace_id)
+            task.lead_id = lead_id
+            task.template = template
+            task.title = title
+            task.owner = str(row.get("task_owner", "")).strip() or default_task_owner
+            task.priority = str(row.get("task_priority", "")).strip() or default_task_priority
+            task.due = str(row.get("task_due", "")).strip() or default_task_due
+            task.status = str(row.get("task_status", "")).strip() or "open"
+            task.notes = str(row.get("task_notes", "")).strip() or default_task_notes
+            task.updated_at = now
+            session.add(task)
+            saved_task_ids.append(task_id)
+        session.commit()
+
+    return {
+        "status": "ready",
+        "saved_count": len(saved_lead_ids),
+        "saved_lead_ids": saved_lead_ids,
+        "saved_task_count": len(saved_task_ids),
+        "saved_task_ids": saved_task_ids,
+        "rows": list_leads(database_url, workspace_id=workspace_id, limit=100),
+        "tasks": list_workspace_tasks(database_url, workspace_id=workspace_id, limit=200),
+        "summary": load_lead_summary(database_url, workspace_id=workspace_id),
+        "saved_at": now,
+    }
+
+
 def update_workspace_task(
     database_url: str,
     *,

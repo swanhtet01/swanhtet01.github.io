@@ -39,7 +39,7 @@ export const navItems = [
 export const hero = {
   eyebrow: 'AI-native workflow software',
   title: 'Find leads. Keep them. Run the next step.',
-  description: 'Lead Finder gives you real businesses. Workspace keeps the shortlist and the queue together.',
+  description: 'Lead Finder finds real businesses. Action OS Starter keeps the shortlist and the next action together.',
 }
 
 export const proofPoints: ProofPoint[] = [
@@ -61,8 +61,8 @@ export const proofPoints: ProofPoint[] = [
 ]
 
 export const coreProduct = {
-  name: 'Workspace',
-  tagline: 'One simple place for saved leads, notes, and the daily queue.',
+  name: 'Action OS Starter',
+  tagline: 'One saved workspace and one queue for leads, blockers, and the next step.',
   replaces: ['Scattered notes', 'Missed follow-up', 'Manual chasing'],
   inputs: ['Saved leads', 'Ops updates', 'Receiving issues'],
   outputs: ['Action queue', 'Owner list', 'Next steps'],

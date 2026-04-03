@@ -23,8 +23,8 @@ import {
   createWorkspaceTasks,
   getWorkspaceSession,
   hasLiveWorkspaceApi,
-  importLeadPipeline,
   listWorkspaceLeadPipeline,
+  savePublicLeadsToWorkspace,
   listWorkspaceTasks,
   removeWorkspaceTask,
   updateWorkspaceLeadPipeline,
@@ -243,8 +243,8 @@ export function WorkspaceLitePage() {
 
   const requestedView = new URLSearchParams(location.search).get('view')
   const shouldStartShared = new URLSearchParams(location.search).get('start') === '1'
-  const activeView: WorkspaceView = isWorkspaceView(requestedView) ? requestedView : 'leads'
   const openTasks = useMemo(() => tasks.filter((task) => task.status === 'open'), [tasks])
+  const activeView: WorkspaceView = isWorkspaceView(requestedView) ? requestedView : openTasks.length ? 'queue' : 'leads'
   const summary = useMemo(() => {
     if (mode === 'local') {
       return browserWorkspaceSummary(listBrowserWorkspaceLeads())
@@ -293,8 +293,10 @@ export function WorkspaceLitePage() {
       const localTasks = listBrowserWorkspaceActions()
       await bootstrapPublicWorkspace({ company: 'My Workspace' })
       if (localLeads.length) {
-        const imported = await importLeadPipeline(
-          localLeads.map((lead) => ({
+        const imported = await savePublicLeadsToWorkspace({
+          company: 'My Workspace',
+          campaign_goal: 'Migrate public workspace',
+          rows: localLeads.map((lead) => ({
             name: lead.name,
             stage: toSharedStage(lead.stage),
             status: 'open',
@@ -312,9 +314,15 @@ export function WorkspaceLitePage() {
             provider: lead.provider,
             score: lead.score,
             notes: lead.notes,
+            task_title: `Follow up ${lead.name}`,
+            task_owner: 'Sales',
+            task_priority: 'High',
+            task_due: 'Today',
+            task_status: 'open',
+            task_notes: 'Migrated from local workspace',
+            task_template: 'lead_follow_up',
           })),
-          'Migrate public workspace',
-        )
+        })
         const leadIdMap = new Map<string, string>()
         localLeads.forEach((lead, index) => {
           const savedLeadId = String(imported.saved_lead_ids?.[index] ?? '').trim()
@@ -322,9 +330,10 @@ export function WorkspaceLitePage() {
             leadIdMap.set(lead.lead_id, savedLeadId)
           }
         })
-        if (localTasks.length) {
+        const extraTasks = localTasks.filter((task) => task.source !== 'lead')
+        if (extraTasks.length) {
           await createWorkspaceTasks(
-            localTasks.map((task) => ({
+            extraTasks.map((task) => ({
               title: task.title,
               owner: task.owner,
               priority: task.priority,

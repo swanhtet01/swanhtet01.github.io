@@ -147,6 +147,32 @@ def main() -> int:
             "leads": outreach_rows[:1],
         },
     )
+    public_workspace_save = request_json(
+        public_opener,
+        "POST",
+        f"{args.base_url.rstrip('/')}/api/public/workspace/save-leads",
+        {
+            "company": "Smoke Workspace",
+            "campaign_goal": "Public save flow",
+            "rows": [
+                {
+                    "name": rows[0].get("name", "Smoke Lead") if rows else "Smoke Lead",
+                    "email": rows[0].get("email", "") if rows else "",
+                    "phone": rows[0].get("phone", "") if rows else "",
+                    "website": rows[0].get("website", "") if rows else "",
+                    "source_url": rows[0].get("source_url", "") if rows else "",
+                    "provider": lead_finder.get("provider", ""),
+                    "score": rows[0].get("score", 0) if rows else 0,
+                    "stage": "offer_ready",
+                    "status": "open",
+                    "service_pack": "Action OS",
+                    "wedge_product": "Lead Finder",
+                    "task_title": f"Follow up {rows[0].get('name', 'Smoke Lead')}" if rows else "Follow up Smoke Lead",
+                    "task_template": "lead_follow_up",
+                }
+            ],
+        },
+    )
     hunt_seed_rows = outreach_rows[: min(3, len(outreach_rows))] or rows[: min(3, len(rows))]
     hunt_seed_text = "\n".join(
         ", ".join(
@@ -308,6 +334,9 @@ def main() -> int:
         "lead_count": len(rows),
         "top_lead": rows[0].get("name", "") if rows else "",
         "provider": lead_finder.get("provider", ""),
+        "public_workspace_save_status": public_workspace_save.get("status", ""),
+        "public_workspace_save_count": int(public_workspace_save.get("saved_count", 0) or 0),
+        "public_workspace_task_count": int(public_workspace_save.get("saved_task_count", 0) or 0),
         "insights_engine": insights.get("engine", ""),
         "pipeline_lead_count": len(pipeline_rows),
         "lead_pack_engine": lead_to_pilot.get("engine", ""),
@@ -345,6 +374,8 @@ def main() -> int:
     print(f"- Lead finder rows: {report['lead_count']}")
     print(f"- Top lead: {report['top_lead']}")
     print(f"- Provider: {report['provider']}")
+    print(f"- Public workspace save: {report['public_workspace_save_status']}")
+    print(f"- Public workspace tasks: {report['public_workspace_task_count']}")
     print(f"- Insights engine: {report['insights_engine']}")
     print(f"- Pipeline leads: {report['pipeline_lead_count']}")
     print(f"- Lead pack engine: {report['lead_pack_engine']}")

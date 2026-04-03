@@ -4,7 +4,7 @@ import { Link, useLocation } from 'react-router-dom'
 import { PageIntro } from '../components/PageIntro'
 import { browserWorkspaceSummary, buildBrowserOutreach, saveBrowserWorkspaceLeads } from '../lib/browserWorkspace'
 import { publicLeadFinderAvailable, searchPublicLeads } from '../lib/publicLeadFinder'
-import { bootstrapPublicWorkspace, getWorkspaceSession, hasLiveWorkspaceApi, importLeadPipeline, workspaceFetch } from '../lib/workspaceApi'
+import { hasLiveWorkspaceApi, savePublicLeadsToWorkspace } from '../lib/workspaceApi'
 import { downloadLeadCsv, parseLeads, type LeadRow } from '../lib/tooling'
 
 const quickSearches = [
@@ -149,13 +149,10 @@ export function PublicLeadFinderPage() {
 
     if (hasLiveWorkspaceApi()) {
       try {
-        const session = await getWorkspaceSession()
-        if (!session.authenticated) {
-          await bootstrapPublicWorkspace({ company: query.trim() || 'My Workspace' })
-        }
-
-        const imported = await importLeadPipeline(
-          candidates.map((row) => {
+        const saved = await savePublicLeadsToWorkspace({
+          company: query.trim() || 'My Workspace',
+          campaign_goal: query.trim() || 'Run first outreach',
+          rows: candidates.map((row) => {
             const outreach = buildBrowserOutreach(row, query, searchKeywords)
             return {
               name: row.name,
@@ -170,37 +167,26 @@ export function PublicLeadFinderPage() {
               email: row.email,
               phone: row.phone,
               website: row.website,
-              source: 'public_lead_finder',
               source_url: row.source_url,
               provider,
               score: row.score,
               notes: row.fit_reasons.join(', '),
+              task_title: `Follow up ${row.name}`,
+              task_owner: 'Sales',
+              task_priority: 'High',
+              task_due: 'Today',
+              task_notes: 'First outreach',
+              task_template: 'lead_follow_up',
             }
           }),
-          query.trim() || 'Run first outreach',
+        })
+
+        setSavedTotal((current) => Math.max(current, saved.saved_count || candidates.length, current + candidates.length))
+        setMessage(
+          successMessage
+            .replace('{count}', String(saved.saved_count || candidates.length))
+            .replace('shared app', 'shared workspace'),
         )
-
-        const savedLeadIds = (imported.saved_lead_ids ?? []).map((value) => String(value || '').trim()).filter(Boolean)
-        if (savedLeadIds.length) {
-          await workspaceFetch('/api/workspace-tasks', {
-            method: 'POST',
-            body: JSON.stringify({
-              rows: savedLeadIds.map((leadId, index) => ({
-                title: `Follow up ${candidates[index]?.name || 'saved lead'}`,
-                owner: 'Sales',
-                priority: 'High',
-                due: 'Today',
-                status: 'open',
-                notes: 'First outreach',
-                lead_id: leadId,
-                template: 'lead_follow_up',
-              })),
-            }),
-          })
-        }
-
-        setSavedTotal((current) => Math.max(current, imported.saved_count || candidates.length, current + candidates.length))
-        setMessage(successMessage.replace('{count}', String(imported.saved_count || candidates.length)).replace('shared app', 'shared workspace'))
         return true
       } catch (error) {
         setMessage(error instanceof Error ? error.message : 'Could not save to the live workspace.')
@@ -224,7 +210,7 @@ export function PublicLeadFinderPage() {
       return
     }
 
-    const saved = await saveRowsToWorkspace([row], `Saved {count} lead into ${hasLiveWorkspaceApi() ? 'the shared workspace' : 'Workspace'} and created the next action.`)
+    const saved = await saveRowsToWorkspace([row], `Saved {count} lead into ${hasLiveWorkspaceApi() ? 'the shared workspace' : 'Workspace'} and created the first follow-up.`)
     if (saved) {
       setSavedKeys((current) => (current.includes(key) ? current : [...current, key]))
     }
@@ -234,7 +220,7 @@ export function PublicLeadFinderPage() {
     const candidates = rows.slice(0, 3)
     const saved = await saveRowsToWorkspace(
       candidates,
-      `Saved {count} leads into ${hasLiveWorkspaceApi() ? 'the shared workspace' : 'Workspace'} and created the next actions.`,
+      `Saved {count} leads into ${hasLiveWorkspaceApi() ? 'the shared workspace' : 'Workspace'} and created the first follow-ups.`,
     )
     if (saved) {
       setSavedKeys(candidates.map((row) => rowKey(row)))
@@ -277,8 +263,8 @@ export function PublicLeadFinderPage() {
                 </button>
               ) : null}
               {savedTotal ? (
-                <Link className="sm-button-secondary" to="/workspace">
-                  Open workspace
+                <Link className="sm-button-secondary" to="/workspace?view=queue">
+                  Open queue
                 </Link>
               ) : null}
             </div>
@@ -431,9 +417,9 @@ export function PublicLeadFinderPage() {
               </button>
             ) : null}
             {savedTotal ? (
-              <Link className="sm-button-secondary" to="/workspace?view=queue">
-                Open workspace
-              </Link>
+            <Link className="sm-button-secondary" to="/workspace?view=queue">
+              Open queue
+            </Link>
             ) : null}
           </div>
           <div className="mt-4 sm-chip text-[var(--sm-muted)]">
