@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
 
 import { hero, proofPoints } from '../content'
+import { LAB_TRACKS, PUBLIC_PRODUCTS } from '../lib/salesControl'
 
 const startCards = [
   {
@@ -27,6 +28,8 @@ const startCards = [
 ]
 
 export function HomePage() {
+  const liveProducts = PUBLIC_PRODUCTS.filter((product) => product.status === 'Live now')
+
   return (
     <div className="space-y-8 pb-10">
       <section className="sm-surface-deep relative overflow-hidden p-6 lg:p-10">
@@ -81,12 +84,42 @@ export function HomePage() {
       </section>
 
       <section className="sm-surface p-6">
-        <p className="sm-kicker text-[var(--sm-accent)]">Simple path</p>
-        <h2 className="mt-3 text-3xl font-bold text-white">Start with one thing you already have.</h2>
+        <p className="sm-kicker text-[var(--sm-accent)]">Sell now</p>
+        <h2 className="mt-3 text-3xl font-bold text-white">Specific products only.</h2>
+        <div className="mt-5 grid gap-4 lg:grid-cols-3">
+          {liveProducts.map((product) => (
+            <article className="sm-proof-card" key={product.id}>
+              <div className="flex items-start justify-between gap-3">
+                <h3 className="text-xl font-bold text-white">{product.name}</h3>
+                <span className="sm-status-pill">{product.status}</span>
+              </div>
+              <p className="mt-3 text-sm text-[var(--sm-muted)]">{product.promise}</p>
+              <p className="mt-3 text-sm text-[var(--sm-muted)]">{product.audience}</p>
+            </article>
+          ))}
+        </div>
+        <div className="mt-5">
+          <Link className="sm-button-secondary" to="/products">
+            See all products
+          </Link>
+        </div>
+      </section>
+
+      <section className="sm-surface p-6">
+        <p className="sm-kicker text-[var(--sm-accent-alt)]">R&D Lab</p>
+        <h2 className="mt-3 text-3xl font-bold text-white">Agent loops we are building next.</h2>
         <div className="mt-5 grid gap-3 md:grid-cols-3">
-          <div className="sm-chip text-white">Need net-new clients? Start with Lead Finder.</div>
-          <div className="sm-chip text-white">Already have a list? Paste it into Workspace.</div>
-          <div className="sm-chip text-white">Already have messy updates? Build the queue directly.</div>
+          {LAB_TRACKS.slice(0, 3).map((track) => (
+            <div className="sm-chip text-white" key={track.id}>
+              <p className="font-semibold">{track.name}</p>
+              <p className="mt-2 text-sm text-[var(--sm-muted)]">{track.loop}</p>
+            </div>
+          ))}
+        </div>
+        <div className="mt-5">
+          <Link className="sm-button-secondary" to="/lab">
+            Open R&D Lab
+          </Link>
         </div>
       </section>
     </div>

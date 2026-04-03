@@ -32,6 +32,8 @@ export const bookingUrl = (import.meta.env.VITE_BOOKING_URL ?? '').trim()
 export const navItems = [
   { label: 'Home', to: '/' },
   { label: 'Lead Finder', to: '/lead-finder' },
+  { label: 'Products', to: '/products' },
+  { label: 'R&D', to: '/lab' },
   { label: 'Start', to: '/workspace' },
   ...(bookingUrl ? [{ label: 'Book', to: '/book' }] : []),
 ] as const
