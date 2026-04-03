@@ -273,9 +273,9 @@ export function DirectorDashboardPage() {
               <p className="sm-kicker text-[var(--sm-accent)]">Pipeline</p>
               <h2 className="mt-2 text-2xl font-bold text-white">What is moving commercially</h2>
             </div>
-            <Link className="sm-link" to="/app/leads">
-              Open leads
-            </Link>
+          <Link className="sm-link" to="/app/sales">
+            Open sales
+          </Link>
           </div>
           <div className="mt-5 grid gap-3">
             {leads.length ? (

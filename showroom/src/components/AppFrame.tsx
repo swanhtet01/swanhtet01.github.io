@@ -12,10 +12,9 @@ type SessionState = {
 
 const appNavItems = [
   { label: 'Queue', to: '/app/actions' },
-  { label: 'Exceptions', to: '/app/exceptions' },
+  { label: 'Sales', to: '/app/sales' },
+  { label: 'Issues', to: '/app/exceptions' },
   { label: 'Approvals', to: '/app/approvals' },
-  { label: 'Pipeline', to: '/app/leads' },
-  { label: 'Receiving', to: '/app/receiving' },
   { label: 'Director', to: '/app/director' },
 ] as const
 
@@ -89,7 +88,7 @@ export function AppFrame() {
             <p className="sm-kicker text-[var(--sm-accent)]">Private app</p>
             <h1 className="mt-4 text-4xl font-extrabold text-white">Login to open the live workspace.</h1>
             <p className="mt-4 text-[var(--sm-muted)]">
-              The public site explains the product. The app is where saved leads, actions, receiving, and inventory records actually live.
+              The public site explains the product. The app is where the saved queue, leads, issues, and approvals actually live.
             </p>
             <div className="mt-8 flex flex-wrap justify-center gap-3">
               <NavLink className="sm-button-primary" to={`/login?next=${encodeURIComponent(location.pathname)}`}>
@@ -110,7 +109,7 @@ export function AppFrame() {
       <div className="border-b border-white/8 bg-[rgba(3,8,18,0.9)] backdrop-blur-xl">
         <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-4 lg:flex-row lg:items-center lg:justify-between lg:px-8">
           <div className="flex items-center gap-4">
-            <NavLink className="flex items-center gap-3" to="/app/actions">
+            <NavLink className="flex items-center gap-3" to="/app/sales">
               <span className="flex h-11 w-11 items-center justify-center rounded-xl border border-[rgba(37,208,255,0.22)] bg-[rgba(37,208,255,0.08)] text-sm font-extrabold text-[var(--sm-accent)]">
                 SM
               </span>

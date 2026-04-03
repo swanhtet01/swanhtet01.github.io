@@ -162,8 +162,8 @@ export function WorkspacePage() {
                 <h2 className="mt-2 text-2xl font-bold text-white">What needs action now</h2>
               </div>
               <div className="flex flex-wrap gap-3">
-                <Link className="sm-button-secondary" to="/app/leads">
-                  Leads
+                <Link className="sm-button-secondary" to="/app/sales">
+                  Sales
                 </Link>
                 <Link className="sm-button-secondary" to="/app/receiving">
                   Receiving

@@ -57,7 +57,7 @@ function App() {
           <Route element={<NotFoundPage />} path="*" />
         </Route>
         <Route element={<AppFrame />} path="/app">
-          <Route element={<Navigate replace to="actions" />} index />
+          <Route element={<Navigate replace to="sales" />} index />
           <Route element={<WorkbenchPage />} path="overview" />
           <Route element={<InsightsPage />} path="insights" />
           <Route element={<DirectorDashboardPage />} path="director" />
@@ -65,7 +65,8 @@ function App() {
           <Route element={<DecisionJournalPage />} path="decisions" />
           <Route element={<ApprovalQueuePage />} path="approvals" />
           <Route element={<ExceptionQueuePage />} path="exceptions" />
-          <Route element={<LeadPipelinePage />} path="leads" />
+          <Route element={<LeadPipelinePage />} path="sales" />
+          <Route element={<Navigate replace to="/app/sales" />} path="leads" />
           <Route element={<LeadFinderPage />} path="leads/advanced" />
           <Route element={<MetricIntakePage />} path="intake" />
           <Route element={<ReceivingControlPage />} path="receiving" />

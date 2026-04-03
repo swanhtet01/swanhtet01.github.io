@@ -122,7 +122,7 @@ const quickLaunches = [
   {
     name: 'Lead Finder',
     detail: 'Find leads and build offers.',
-    to: '/app/leads',
+    to: '/app/sales',
   },
   {
     name: 'News Brief',

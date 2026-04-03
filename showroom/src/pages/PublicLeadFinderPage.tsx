@@ -4,6 +4,7 @@ import { Link, useLocation } from 'react-router-dom'
 import { PageIntro } from '../components/PageIntro'
 import { browserWorkspaceSummary, buildBrowserOutreach, saveBrowserWorkspaceLeads } from '../lib/browserWorkspace'
 import { publicLeadFinderAvailable, searchPublicLeads } from '../lib/publicLeadFinder'
+import { CORE_SOLUTIONS } from '../lib/salesControl'
 import { hasLiveWorkspaceApi, savePublicLeadsToWorkspace } from '../lib/workspaceApi'
 import { downloadLeadCsv, parseLeads, type LeadRow } from '../lib/tooling'
 
@@ -32,6 +33,17 @@ function evidenceLine(row: LeadRow) {
   return evidence.length ? evidence.join(' | ') : 'public search match'
 }
 
+function recommendPlay(query: string, keywords: string[]) {
+  const text = [query, ...keywords].join(' ').toLowerCase()
+  if (/(factory|industrial|warehouse|supplier|rubber|stores|stock)/.test(text)) {
+    return CORE_SOLUTIONS.find((item) => item.id === 'factory-control') ?? CORE_SOLUTIONS[2]
+  }
+  if (/(distributor|wholesale|dealer|import|export|retail|cash|sales|parts)/.test(text)) {
+    return CORE_SOLUTIONS.find((item) => item.id === 'commercial-control') ?? CORE_SOLUTIONS[1]
+  }
+  return CORE_SOLUTIONS.find((item) => item.id === 'action-os-starter') ?? CORE_SOLUTIONS[0]
+}
+
 export function PublicLeadFinderPage() {
   const location = useLocation()
   const [query, setQuery] = useState('')
@@ -54,6 +66,8 @@ export function PublicLeadFinderPage() {
         .filter(Boolean),
     [keywords],
   )
+
+  const recommendedPlay = useMemo(() => recommendPlay(query, searchKeywords), [query, searchKeywords])
 
   function applyQuickSearch(nextQuery: string, nextKeywords: string) {
     setQuery(nextQuery)
@@ -253,24 +267,38 @@ export function PublicLeadFinderPage() {
               <input className="sm-input" onChange={(event) => setQuery(event.target.value)} placeholder="spa in yangon" value={query} />
             </label>
 
-            <div className="flex flex-wrap gap-3">
-              <button className="sm-button-primary" disabled={busy || !query.trim()} onClick={() => void runSearch()} type="button">
-                {busy ? 'Searching...' : 'Search now'}
-              </button>
+          <div className="flex flex-wrap gap-3">
+            <button className="sm-button-primary" disabled={busy || !query.trim()} onClick={() => void runSearch()} type="button">
+              {busy ? 'Searching...' : 'Search now'}
+            </button>
               {rows.length ? (
                 <button className="sm-button-secondary" onClick={() => void saveTopResults()} type="button">
                   Save top 3
                 </button>
               ) : null}
-              {savedTotal ? (
-                <Link className="sm-button-secondary" to="/workspace?view=queue">
-                  Open queue
-                </Link>
-              ) : null}
-            </div>
+            {savedTotal ? (
+              <Link className="sm-button-secondary" to="/workspace?view=queue">
+                Open queue
+              </Link>
+            ) : null}
+          </div>
 
-            <div className="grid gap-2">
-              <p className="sm-kicker text-[var(--sm-accent)]">Try one</p>
+          <div className="sm-proof-card">
+            <p className="sm-kicker text-[var(--sm-accent)]">Recommended SuperMega play</p>
+            <h3 className="mt-2 text-xl font-bold text-white">{recommendedPlay.name}</h3>
+            <p className="mt-2 text-sm text-[var(--sm-muted)]">{recommendedPlay.promise}</p>
+            <p className="mt-3 text-sm text-[var(--sm-muted)]">{recommendedPlay.pain}</p>
+            <div className="mt-4 flex flex-wrap gap-2">
+              {recommendedPlay.modules.map((module) => (
+                <span className="sm-status-pill" key={module}>
+                  {module}
+                </span>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid gap-2">
+            <p className="sm-kicker text-[var(--sm-accent)]">Try one</p>
               <div className="flex flex-wrap gap-2">
                 {quickSearches.map((item) => (
                   <button className="sm-button-secondary" key={item.label} onClick={() => applyQuickSearch(item.query, item.keywords)} type="button">
