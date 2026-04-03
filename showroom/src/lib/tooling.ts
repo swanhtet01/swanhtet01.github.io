@@ -28,11 +28,11 @@ export type ActionRow = {
   due: string
 }
 
-export const LEAD_SAMPLE_QUERY = 'spa in yangon'
-export const LEAD_SAMPLE_TEXT = `Shwe Auto House | www.shweautohouse.com | sales@shweautohouse.com | +95 9 777 111 222 | tyre distributor Yangon
-Mingalar Tyre Service, www.mingalartyreservice.com, contact@mingalartyreservice.com, +95 9 765 444 222, auto service and tyre retail
-Golden Highway Parts | www.goldenhighwayparts.com | +95 9 500 113 221 | truck and industrial tyre buyer
-Delta Auto Care | hello@deltaautocare.com | +95 9 330 888 999 | vehicle maintenance and tyres`
+export const LEAD_SAMPLE_QUERY = 'clinic in dubai'
+export const LEAD_SAMPLE_TEXT = `North Star Clinic | www.northstarclinic.com | hello@northstarclinic.com | +1 555 111 2222 | outpatient clinic
+Harbor Dental Studio | www.harbordentalstudio.com | care@harbordentalstudio.com | +1 555 333 4444 | dental practice
+Atlas Logistics Hub | www.atlaslogisticshub.com | contact@atlaslogisticshub.com | +1 555 777 8888 | warehouse and distribution
+Summit Industrial Supply | www.summitindustrialsupply.com | sales@summitindustrialsupply.com | +1 555 999 0000 | industrial supplier`
 
 export const MARKET_SAMPLE_TEXT = `Long queues form as vehicles line up for fuel in Yangon.
 MRPPA market note: RSS 1 at USD 1800 to 2200 per ton.
@@ -42,11 +42,11 @@ Distributor demand shifts toward truck tyres this week.`
 export const MARKET_SAMPLE_URLS = `https://www.gnlm.com.mm/
 https://elevenmyanmar.com/`
 
-export const ACTION_SAMPLE_TEXT = `Bead wire defect | KIIC | Quality Team
-Confirm customs docs | JUNKY | Procurement Team
-Demand shift toward truck tyres | Yangon distributors | Sales Team
-Power fluctuation at Plant A | Operations Team
-Overdue collection follow-up for two customers | Finance Team`
+export const ACTION_SAMPLE_TEXT = `Customer reply still waiting | Sales Team
+Missing production update from Shift B | Operations Team
+Confirm receiving variance on inbound batch | Procurement Team
+Follow up overdue invoice with two customers | Finance Team
+Check quality hold before dispatch | Quality Team`
 
 function uniqueValues(values: string[]) {
   return [...new Set(values.filter(Boolean))]

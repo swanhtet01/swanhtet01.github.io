@@ -32,31 +32,31 @@ export const bookingUrl = (import.meta.env.VITE_BOOKING_URL ?? '').trim()
 export const navItems = [
   { label: 'Home', to: '/' },
   { label: 'Lead Finder', to: '/lead-finder' },
-  { label: 'Workspace', to: '/workspace' },
+  { label: 'Start', to: '/workspace' },
   ...(bookingUrl ? [{ label: 'Book', to: '/book' }] : []),
 ] as const
 
 export const hero = {
   eyebrow: 'AI-native workflow software',
-  title: 'Find leads. Keep them. Run the next step.',
-  description: 'Lead Finder finds real businesses. Action OS Starter keeps the shortlist and the next action together.',
+  title: 'Start with leads, updates, or one ops issue.',
+  description: 'Use Lead Finder when you need clients. Use Workspace when you already have a list or messy updates and need the next step.',
 }
 
 export const proofPoints: ProofPoint[] = [
   {
     label: 'Search',
     value: 'Real business results',
-    detail: 'Google Places first, with public map fallback and visible source links.',
+    detail: 'Search public businesses, then keep only the ones worth chasing.',
   },
   {
     label: 'Workspace',
-    value: 'Saved leads and queue',
-    detail: 'Keep leads, notes, and next actions in one place.',
+    value: 'Bring your own data',
+    detail: 'Paste a lead list, team updates, or ops issues into one usable workspace.',
   },
   {
-    label: 'Follow-up',
-    value: 'One clear next step',
-    detail: 'Turn saved leads into simple follow-up actions.',
+    label: 'Queue',
+    value: 'One next-step list',
+    detail: 'Turn saved leads and messy notes into one clear action queue.',
   },
 ]
 
@@ -66,11 +66,7 @@ export const coreProduct = {
   replaces: ['Scattered notes', 'Missed follow-up', 'Manual chasing'],
   inputs: ['Saved leads', 'Ops updates', 'Receiving issues'],
   outputs: ['Action queue', 'Owner list', 'Next steps'],
-  rollout: [
-    'Search and save the right leads.',
-    'Keep them in one workspace.',
-    'Run the queue every day.',
-  ],
+  rollout: ['Search or import the right data.', 'Keep it in one workspace.', 'Run the queue every day.'],
 }
 
 export const leadFinder = {
@@ -92,15 +88,15 @@ export const useCases: UseCase[] = [
     name: 'Operations',
     audience: 'Owner-led teams and ops managers',
     promise: 'Turn scattered updates into one queue with owners and due dates.',
-    firstRollout: 'Action OS on top of one team update flow.',
+    firstRollout: 'Workspace queue on top of one team update flow.',
     inputs: ['Meeting notes', 'Daily updates', 'Email follow-up'],
-    outcomes: ['One board', 'Fewer misses', 'Faster review'],
+    outcomes: ['One queue', 'Fewer misses', 'Faster review'],
   },
   {
     name: 'Receiving',
     audience: 'Stores, procurement, and plant teams',
     promise: 'Log inbound issues once and keep the next step visible.',
-    firstRollout: 'Receiving Control on top of Action OS.',
+    firstRollout: 'Receiving issues inside the workspace queue.',
     inputs: ['Inbound log', 'PO or PI', 'Batch or GRN'],
     outcomes: ['Receiving queue', 'Variance visibility', 'Clear handoff'],
   },
@@ -118,18 +114,10 @@ export const publicModules: PublicModule[] = [
   {
     name: 'Workspace',
     tagline: 'Keep saved leads, notes, stages, and next actions together.',
-    bestFor: 'Anyone running follow-up from saved leads.',
-    inputs: ['Saved leads', 'Notes', 'Stage updates'],
+    bestFor: 'Anyone running follow-up from saved leads or pasted updates.',
+    inputs: ['Saved leads', 'Notes', 'Stage updates', 'Team updates'],
     outputs: ['Pipeline view', 'Today queue', 'CSV export'],
     path: '/workspace',
-  },
-  {
-    name: 'Queue',
-    tagline: 'Run one clear action queue inside the workspace.',
-    bestFor: 'Ops follow-up, sales follow-up, and receiving issues.',
-    inputs: ['Lead follow-up', 'Ops blocker', 'Receiving issue'],
-    outputs: ['Action rows', 'Owner list', 'Done/open queue'],
-    path: '/workspace?view=queue',
   },
 ]
 
@@ -140,7 +128,7 @@ export const starterTemplates: StarterTemplate[] = [
   },
   {
     name: 'Ops blocker',
-    detail: 'A simple queue for today’s blockers and owners.',
+    detail: "A simple queue for today's blockers and owners.",
   },
   {
     name: 'Receiving issue',

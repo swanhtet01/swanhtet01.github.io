@@ -1,19 +1,28 @@
 import { Link } from 'react-router-dom'
 
-import { coreProduct, hero, leadFinder, publicModules, starterTemplates } from '../content'
+import { hero, proofPoints } from '../content'
 
-const steps = [
+const startCards = [
   {
-    title: '1. Search',
-    detail: 'Search by place or niche.',
+    title: 'Find clients',
+    detail: 'Search a place or niche, keep the shortlist, and start outreach.',
+    to: '/lead-finder',
+    button: 'Open Lead Finder',
+    primary: true,
   },
   {
-    title: '2. Save',
-    detail: 'Save the best 3 leads.',
+    title: 'Bring your lead list',
+    detail: 'Paste names, sites, phones, or emails and turn them into saved leads.',
+    to: '/workspace?setup=leads',
+    button: 'Import lead list',
+    primary: false,
   },
   {
-    title: '3. Run',
-    detail: 'Open Workspace and run the next step.',
+    title: 'Paste messy updates',
+    detail: 'Paste team notes or ops blockers and turn them into a simple queue.',
+    to: '/workspace?setup=updates&view=queue',
+    button: 'Build queue',
+    primary: false,
   },
 ]
 
@@ -25,7 +34,7 @@ export function HomePage() {
         <div className="pointer-events-none absolute right-0 top-0 h-72 w-72 rounded-full bg-[radial-gradient(circle,_rgba(37,208,255,0.16),_transparent_72%)]" />
         <div className="pointer-events-none absolute -left-16 bottom-0 h-60 w-60 rounded-full bg-[radial-gradient(circle,_rgba(255,122,24,0.18),_transparent_74%)]" />
 
-        <div className="grid gap-8 lg:grid-cols-[1.1fr_0.9fr]">
+        <div className="grid gap-8 lg:grid-cols-[1.05fr_0.95fr]">
           <div>
             <p className="sm-kicker text-[var(--sm-accent)]">{hero.eyebrow}</p>
             <h1 className="mt-4 max-w-4xl text-4xl font-extrabold tracking-tight text-white lg:text-6xl">{hero.title}</h1>
@@ -33,21 +42,22 @@ export function HomePage() {
 
             <div className="mt-7 flex flex-wrap gap-3">
               <Link className="sm-button-primary" to="/lead-finder">
-                Start with Lead Finder
+                Open Lead Finder
               </Link>
-              <Link className="sm-button-secondary" to="/workspace">
-                See workspace
+              <Link className="sm-button-secondary" to="/workspace?setup=updates&view=queue">
+                Start with your own data
               </Link>
             </div>
           </div>
 
           <div className="sm-terminal p-5">
-            <p className="sm-kicker text-[var(--sm-accent)]">How it works</p>
+            <p className="sm-kicker text-[var(--sm-accent)]">What this does</p>
             <div className="mt-5 grid gap-3">
-              {steps.map((step) => (
-                <div className="sm-proof-card" key={step.title}>
-                  <p className="text-base font-bold text-white">{step.title}</p>
-                  <p className="mt-2 text-sm text-[var(--sm-muted)]">{step.detail}</p>
+              {proofPoints.map((item) => (
+                <div className="sm-proof-card" key={item.label}>
+                  <p className="sm-kicker text-[var(--sm-accent)]">{item.label}</p>
+                  <p className="mt-2 text-xl font-bold text-white">{item.value}</p>
+                  <p className="mt-2 text-sm text-[var(--sm-muted)]">{item.detail}</p>
                 </div>
               ))}
             </div>
@@ -56,57 +66,28 @@ export function HomePage() {
       </section>
 
       <section className="grid gap-5 lg:grid-cols-3">
-        {publicModules.map((module) => (
-          <article className="sm-surface p-6" key={module.name}>
-            <p className="sm-kicker text-[var(--sm-accent)]">{module.name}</p>
-            <h2 className="mt-3 text-2xl font-bold text-white">{module.tagline}</h2>
-            <p className="mt-3 text-sm leading-relaxed text-[var(--sm-muted)]">{module.bestFor}</p>
+        {startCards.map((card) => (
+          <article className="sm-surface p-6" key={card.title}>
+            <p className="sm-kicker text-[var(--sm-accent)]">Start here</p>
+            <h2 className="mt-3 text-2xl font-bold text-white">{card.title}</h2>
+            <p className="mt-3 text-sm leading-relaxed text-[var(--sm-muted)]">{card.detail}</p>
             <div className="mt-5">
-              <Link className={module.name === 'Lead Finder' ? 'sm-button-primary' : 'sm-button-secondary'} to={module.path}>
-                Open {module.name}
+              <Link className={card.primary ? 'sm-button-primary' : 'sm-button-secondary'} to={card.to}>
+                {card.button}
               </Link>
             </div>
           </article>
         ))}
       </section>
 
-      <section className="grid gap-6 lg:grid-cols-[0.95fr_1.05fr]">
-        <article className="sm-surface p-6">
-          <p className="sm-kicker text-[var(--sm-accent)]">{leadFinder.title}</p>
-          <h2 className="mt-3 text-3xl font-bold text-white">Why not just use Google?</h2>
-          <div className="mt-5 grid gap-3">
-            <div className="sm-chip text-white">Google shows pages.</div>
-            <div className="sm-chip text-white">Lead Finder keeps the shortlist.</div>
-            <div className="sm-chip text-white">Workspace turns it into the next action.</div>
-          </div>
-          <div className="mt-5">
-            <Link className="sm-button-primary" to="/lead-finder">
-              Start with Lead Finder
-            </Link>
-          </div>
-        </article>
-
-        <article className="sm-surface p-6">
-          <p className="sm-kicker text-[var(--sm-accent)]">{coreProduct.name}</p>
-          <h2 className="mt-3 text-3xl font-bold text-white">Use one queue, not ten trackers.</h2>
-          <p className="mt-3 text-sm leading-relaxed text-[var(--sm-muted)]">{coreProduct.tagline}</p>
-          <div className="mt-5 grid gap-3 md:grid-cols-3">
-            {starterTemplates.map((item) => (
-              <div className="sm-chip text-white" key={item.name}>
-                <p className="font-semibold">{item.name}</p>
-                <p className="mt-2 text-sm text-[var(--sm-muted)]">{item.detail}</p>
-              </div>
-            ))}
-          </div>
-          <div className="mt-5 flex flex-wrap gap-3">
-            <Link className="sm-button-secondary" to="/workspace?view=queue">
-              Open queue
-            </Link>
-            <Link className="sm-button-secondary" to="/workspace">
-              Open workspace
-            </Link>
-          </div>
-        </article>
+      <section className="sm-surface p-6">
+        <p className="sm-kicker text-[var(--sm-accent)]">Simple path</p>
+        <h2 className="mt-3 text-3xl font-bold text-white">Start with one thing you already have.</h2>
+        <div className="mt-5 grid gap-3 md:grid-cols-3">
+          <div className="sm-chip text-white">Need net-new clients? Start with Lead Finder.</div>
+          <div className="sm-chip text-white">Already have a list? Paste it into Workspace.</div>
+          <div className="sm-chip text-white">Already have messy updates? Build the queue directly.</div>
+        </div>
       </section>
     </div>
   )

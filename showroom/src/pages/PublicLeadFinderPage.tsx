@@ -9,12 +9,12 @@ import { hasLiveWorkspaceApi, savePublicLeadsToWorkspace } from '../lib/workspac
 import { downloadLeadCsv, parseLeads, type LeadRow } from '../lib/tooling'
 
 const quickSearches = [
-  { label: 'Spas in Yangon', query: 'spa in yangon', keywords: 'spa,wellness,massage,yangon' },
-  { label: 'Rubber suppliers in Myanmar', query: 'rubber supplier myanmar', keywords: 'rubber,supplier,industrial,myanmar' },
-  { label: 'Warehouses in Yangon', query: 'warehouse yangon', keywords: 'warehouse,logistics,storage,yangon' },
+  { label: 'Clinics in Dubai', query: 'clinic in dubai', keywords: 'clinic,healthcare,medical,dubai' },
+  { label: 'Rubber suppliers in Malaysia', query: 'rubber supplier malaysia', keywords: 'rubber,supplier,industrial,malaysia' },
+  { label: 'Warehouses in Jakarta', query: 'warehouse jakarta', keywords: 'warehouse,logistics,storage,jakarta' },
 ]
 
-const DEFAULT_PUBLIC_KEYWORDS = 'spa,wellness,massage,yangon'
+const DEFAULT_PUBLIC_KEYWORDS = 'clinic,healthcare,medical,dubai'
 
 function rowKey(row: LeadRow) {
   return [row.name, row.website, row.phone, row.source_url].filter(Boolean).join('|')
@@ -264,41 +264,11 @@ export function PublicLeadFinderPage() {
           <div className="mt-5 grid gap-4">
             <label className="grid gap-2 text-sm font-semibold text-[var(--sm-muted)]">
               What are you looking for?
-              <input className="sm-input" onChange={(event) => setQuery(event.target.value)} placeholder="spa in yangon" value={query} />
+              <input autoComplete="off" className="sm-input" onChange={(event) => setQuery(event.target.value)} placeholder="clinic in dubai" value={query} />
             </label>
 
-          <div className="flex flex-wrap gap-3">
-            <button className="sm-button-primary" disabled={busy || !query.trim()} onClick={() => void runSearch()} type="button">
-              {busy ? 'Searching...' : 'Search now'}
-            </button>
-              {rows.length ? (
-                <button className="sm-button-secondary" onClick={() => void saveTopResults()} type="button">
-                  Save top 3
-                </button>
-              ) : null}
-            {savedTotal ? (
-              <Link className="sm-button-secondary" to="/workspace?view=queue">
-                Open queue
-              </Link>
-            ) : null}
-          </div>
-
-          <div className="sm-proof-card">
-            <p className="sm-kicker text-[var(--sm-accent)]">Recommended SuperMega play</p>
-            <h3 className="mt-2 text-xl font-bold text-white">{recommendedPlay.name}</h3>
-            <p className="mt-2 text-sm text-[var(--sm-muted)]">{recommendedPlay.promise}</p>
-            <p className="mt-3 text-sm text-[var(--sm-muted)]">{recommendedPlay.pain}</p>
-            <div className="mt-4 flex flex-wrap gap-2">
-              {recommendedPlay.modules.map((module) => (
-                <span className="sm-status-pill" key={module}>
-                  {module}
-                </span>
-              ))}
-            </div>
-          </div>
-
-          <div className="grid gap-2">
-            <p className="sm-kicker text-[var(--sm-accent)]">Try one</p>
+            <div className="grid gap-2">
+              <p className="sm-kicker text-[var(--sm-accent)]">Try one</p>
               <div className="flex flex-wrap gap-2">
                 {quickSearches.map((item) => (
                   <button className="sm-button-secondary" key={item.label} onClick={() => applyQuickSearch(item.query, item.keywords)} type="button">
@@ -306,6 +276,22 @@ export function PublicLeadFinderPage() {
                   </button>
                 ))}
               </div>
+            </div>
+
+            <div className="flex flex-wrap gap-3">
+              <button className="sm-button-primary" disabled={busy || !query.trim()} onClick={() => void runSearch()} type="button">
+                {busy ? 'Searching...' : 'Search now'}
+              </button>
+              {rows.length ? (
+                <button className="sm-button-secondary" onClick={() => void saveTopResults()} type="button">
+                  Save top 3
+                </button>
+              ) : null}
+              {savedTotal ? (
+                <Link className="sm-button-secondary" to="/workspace?view=queue">
+                  Open workspace
+                </Link>
+              ) : null}
             </div>
 
             <details className="sm-details">
@@ -347,10 +333,7 @@ export function PublicLeadFinderPage() {
           </div>
 
           <div className="mt-4 sm-chip text-[var(--sm-muted)]">
-          {provider ? `Search source: ${provider}` : publicLeadFinderAvailable() ? 'Search is ready on this host.' : 'Use the manual list on this host.'}
-        </div>
-          <div className="mt-3 sm-chip text-[var(--sm-muted)]">
-            Google finds pages. Lead Finder keeps the shortlist, copies the outreach, and opens the queue.
+            {provider ? `Search source: ${provider}` : publicLeadFinderAvailable() ? 'Search is ready on this host.' : 'Use the manual list on this host.'}
           </div>
           {message ? <div className="mt-3 sm-chip text-[var(--sm-muted)]">{message}</div> : null}
         </article>
@@ -416,6 +399,22 @@ export function PublicLeadFinderPage() {
                 Try one of the quick searches above, then save the leads worth chasing.
               </div>
             )}
+
+            {rows.length ? (
+              <div className="sm-proof-card">
+                <p className="sm-kicker text-[var(--sm-accent)]">Recommended SuperMega play</p>
+                <h3 className="mt-2 text-xl font-bold text-white">{recommendedPlay.name}</h3>
+                <p className="mt-2 text-sm text-[var(--sm-muted)]">{recommendedPlay.promise}</p>
+                <p className="mt-3 text-sm text-[var(--sm-muted)]">{recommendedPlay.pain}</p>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {recommendedPlay.modules.map((module) => (
+                    <span className="sm-status-pill" key={module}>
+                      {module}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ) : null}
           </div>
         </article>
       </section>
