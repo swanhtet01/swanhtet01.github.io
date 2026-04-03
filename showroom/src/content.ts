@@ -22,26 +22,25 @@ export type PublicModule = {
   path: string
 }
 
+export const bookingUrl = (import.meta.env.VITE_BOOKING_URL ?? '').trim()
+
 export const navItems = [
   { label: 'Home', to: '/' },
   { label: 'Lead Finder', to: '/lead-finder' },
-  { label: 'Workspace', to: '/workspace' },
-  { label: 'Book', to: '/book' },
+  ...(bookingUrl ? [{ label: 'Book', to: '/book' }] : []),
 ] as const
-
-export const bookingUrl = (import.meta.env.VITE_BOOKING_URL ?? '').trim()
 
 export const hero = {
   eyebrow: 'AI-native workflow software',
-  title: 'Find leads. Save the right ones. Run the next step.',
-  description: 'Lead Finder finds real businesses. Workspace keeps the leads, notes, and queue together.',
+  title: 'Find leads and keep the next step clear.',
+  description: 'Search real businesses, save the right ones, and keep follow-up in one workspace.',
 }
 
 export const proofPoints: ProofPoint[] = [
   {
     label: 'Search',
     value: 'Real business results',
-    detail: 'Google Places first, with public map fallback.',
+    detail: 'Google Places first, with public map fallback and visible source links.',
   },
   {
     label: 'Workspace',
@@ -49,15 +48,15 @@ export const proofPoints: ProofPoint[] = [
     detail: 'Keep leads, notes, and next actions in one place.',
   },
   {
-    label: 'Queue',
-    value: 'One place to run work',
-    detail: 'Action OS is the queue inside Workspace.',
+    label: 'Follow-up',
+    value: 'One clear next step',
+    detail: 'Turn saved leads into simple follow-up actions.',
   },
 ]
 
 export const coreProduct = {
-  name: 'Action OS',
-  tagline: 'One simple queue for follow-up, owners, and blockers.',
+  name: 'Workspace',
+  tagline: 'One simple place for saved leads, notes, and follow-up.',
   replaces: ['Scattered notes', 'Missed follow-up', 'Manual chasing'],
   inputs: ['Saved leads', 'Ops updates', 'Receiving issues'],
   outputs: ['Action queue', 'Owner list', 'Next steps'],
@@ -70,7 +69,7 @@ export const coreProduct = {
 
 export const leadFinder = {
   title: 'Lead Finder',
-  description: 'Search by place or niche, save the best results, and move them into Workspace.',
+  description: 'Search by place or niche, keep the best results, and move them into Workspace.',
   steps: ['Search a market', 'Save the best leads', 'Open Workspace'],
 }
 

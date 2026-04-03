@@ -23,6 +23,15 @@ function contactLine(row: LeadRow) {
   return row.email || row.phone || row.website || 'No direct contact yet'
 }
 
+function evidenceLine(row: LeadRow) {
+  const evidence: string[] = []
+  if (row.website) evidence.push('website')
+  if (row.phone) evidence.push('phone')
+  if (row.email) evidence.push('email')
+  if (row.fit_reasons[0]) evidence.push(row.fit_reasons[0])
+  return evidence.length ? evidence.join(' | ') : 'public search match'
+}
+
 export function PublicLeadFinderPage() {
   const location = useLocation()
   const navigate = useNavigate()
@@ -326,7 +335,7 @@ export function PublicLeadFinderPage() {
           </div>
 
           <div className="mt-4 sm-chip text-[var(--sm-muted)]">
-            {provider ? `Search source: ${provider}` : publicLeadFinderAvailable() ? 'Browser search is ready on this host.' : 'Manual mode only on this host.'}
+            {provider ? `Search source: ${provider}` : publicLeadFinderAvailable() ? 'Browser search is ready.' : 'Manual mode only here.'}
           </div>
           {message ? <div className="mt-3 sm-chip text-[var(--sm-muted)]">{message}</div> : null}
         </article>
@@ -351,9 +360,9 @@ export function PublicLeadFinderPage() {
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div>
                         <p className="text-lg font-bold text-white">{row.name}</p>
-                        <p className="mt-1 text-sm text-[var(--sm-muted)]">{row.snippet || row.source || 'Public result'}</p>
+                        <p className="mt-1 text-sm text-[var(--sm-muted)]">{row.provider || row.source || 'Public result'}</p>
                       </div>
-                      <span className="sm-status-pill">Score {row.score}</span>
+                      <span className="sm-status-pill">{row.website || row.phone || row.email ? 'HAS CONTACT' : 'PUBLIC MATCH'}</span>
                     </div>
 
                     <div className="mt-4 grid gap-3 md:grid-cols-[0.68fr_0.32fr]">
@@ -362,10 +371,12 @@ export function PublicLeadFinderPage() {
                         <p className="mt-2 text-sm">{contactLine(row)}</p>
                       </div>
                       <div className="sm-chip text-white">
-                        <p className="sm-kicker text-[var(--sm-accent-alt)]">Match</p>
-                        <p className="mt-2 text-sm">{row.fit_reasons[0] || 'Public search match'}</p>
+                        <p className="sm-kicker text-[var(--sm-accent-alt)]">Why keep it</p>
+                        <p className="mt-2 text-sm">{evidenceLine(row)}</p>
                       </div>
                     </div>
+
+                    <div className="mt-4 sm-chip text-[var(--sm-muted)]">{row.snippet || row.source || 'Public result'}</div>
 
                     <div className="mt-4 flex flex-wrap gap-3">
                       <button className="sm-button-primary" onClick={() => void saveLead(row)} type="button">

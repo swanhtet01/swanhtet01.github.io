@@ -52,11 +52,11 @@ export function BookPage() {
           ) : (
             <div className="space-y-5">
               <div className="sm-chip text-[var(--sm-muted)]">
-                Booking is not live on this host yet. Use Lead Finder and Workspace first, then book once the calendar is connected.
+                Calendar booking is not live on this host yet. Start with Lead Finder and Workspace first.
               </div>
               <div className="flex flex-wrap gap-3">
                 <Link className="sm-button-primary" to="/lead-finder">Find leads</Link>
-                <Link className="sm-button-secondary" to="/workspace">Open workspace</Link>
+                <Link className="sm-button-secondary" to="/workspace?start=1">Start workspace</Link>
               </div>
             </div>
           )}

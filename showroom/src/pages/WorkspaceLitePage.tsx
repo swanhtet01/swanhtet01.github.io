@@ -271,7 +271,7 @@ export function WorkspaceLitePage() {
           await bootstrapPublicWorkspace({ company: 'My Workspace' })
           if (!cancelled) {
             await loadSharedState()
-            setMessage('Started a shared workspace on this host.')
+            setMessage('Started the shared workspace.')
           }
         } else {
           loadLocalState()
@@ -279,7 +279,7 @@ export function WorkspaceLitePage() {
       } catch (error) {
         if (!cancelled) {
           loadLocalState()
-          setMessage(error instanceof Error ? `${error.message} Using this browser workspace instead.` : 'Using this browser workspace instead.')
+          setMessage(error instanceof Error ? `${error.message} Using this device workspace instead.` : 'Using this device workspace instead.')
         }
       } finally {
         if (!cancelled) {
@@ -306,14 +306,14 @@ export function WorkspaceLitePage() {
 
   async function startSharedWorkspace() {
     if (!hasLiveWorkspaceApi()) {
-      setMessage('This host is using the browser workspace only.')
+      setMessage('The shared workspace is not available here yet.')
       return
     }
     setStarting(true)
     try {
       await bootstrapPublicWorkspace({ company: 'My Workspace' })
       await loadSharedState()
-      setMessage('Started a shared workspace on this host.')
+      setMessage('Started the shared workspace.')
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Could not start the shared workspace.')
     } finally {
@@ -461,12 +461,12 @@ export function WorkspaceLitePage() {
 
       <section className="grid gap-6 lg:grid-cols-[0.78fr_1.22fr]">
         <article className="sm-surface p-6">
-          <p className="sm-kicker text-[var(--sm-accent)]">{mode === 'shared' ? 'Shared workspace' : 'This browser only'}</p>
+          <p className="sm-kicker text-[var(--sm-accent)]">Workspace</p>
           <h2 className="mt-3 text-3xl font-bold text-white">{activeView === 'queue' ? 'Run the next actions.' : 'Work the shortlist.'}</h2>
           <p className="mt-3 text-sm leading-relaxed text-[var(--sm-muted)]">
             {mode === 'shared'
-              ? 'Saved leads and queue items are shared on this host.'
-              : 'This workspace is stored in this browser. Start the shared workspace only when you need the same data across devices.'}
+              ? 'Saved leads and queue items are shared in one workspace.'
+              : 'Saved leads and queue items stay on this device until you start the shared workspace.'}
           </p>
 
           <div className="mt-5 grid gap-3 md:grid-cols-3">
@@ -493,7 +493,7 @@ export function WorkspaceLitePage() {
             </Link>
             {!hasLiveWorkspaceApi() || mode === 'shared' ? null : (
               <button className="sm-button-secondary" disabled={starting} onClick={() => void startSharedWorkspace()} type="button">
-                {starting ? 'Starting...' : 'Use shared workspace'}
+                {starting ? 'Starting...' : 'Save across devices'}
               </button>
             )}
           </div>
@@ -579,7 +579,7 @@ export function WorkspaceLitePage() {
           {mode === 'shared' || hasWorkspaceContent ? (
             <div className="mt-4">
               <a className="text-sm font-semibold text-[var(--sm-accent)] transition hover:text-white" href={appHref('/app/actions', '/workspace?view=queue')}>
-                Open advanced app
+                Open live app
               </a>
             </div>
           ) : null}
@@ -594,7 +594,7 @@ export function WorkspaceLitePage() {
                 {activeView === 'queue' ? 'Keep the queue short. Start with the top open actions.' : 'Move the right leads forward and leave a clear next note.'}
               </p>
             </div>
-            <span className="sm-status-pill">{loading ? 'LOADING' : mode.toUpperCase()}</span>
+            <span className="sm-status-pill">{loading ? 'LOADING' : mode === 'shared' ? 'SHARED' : 'SAVED HERE'}</span>
           </div>
 
           <div className="mt-5 space-y-4">

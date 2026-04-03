@@ -35,8 +35,8 @@ export function HomePage() {
               <Link className="sm-button-primary" to="/lead-finder">
                 Start with Lead Finder
               </Link>
-              <Link className="sm-button-secondary" to="/workspace">
-                Open workspace
+              <Link className="sm-button-secondary" to="/workspace?start=1">
+                Start workspace
               </Link>
             </div>
           </div>
@@ -86,7 +86,7 @@ export function HomePage() {
 
         <article className="sm-surface p-6">
           <p className="sm-kicker text-[var(--sm-accent)]">{coreProduct.name}</p>
-          <h2 className="mt-3 text-3xl font-bold text-white">Then keep the queue moving.</h2>
+          <h2 className="mt-3 text-3xl font-bold text-white">Then keep follow-up in one place.</h2>
           <p className="mt-3 text-sm leading-relaxed text-[var(--sm-muted)]">{coreProduct.tagline}</p>
           <div className="mt-5 grid gap-3">
             {coreProduct.rollout.map((item) => (
@@ -96,11 +96,8 @@ export function HomePage() {
             ))}
           </div>
           <div className="mt-5 flex flex-wrap gap-3">
-            <Link className="sm-button-secondary" to="/workspace?view=queue">
-              Open queue
-            </Link>
-            <Link className="sm-button-secondary" to="/workspace">
-              Open workspace
+            <Link className="sm-button-secondary" to="/workspace?start=1">
+              Start workspace
             </Link>
           </div>
         </article>
