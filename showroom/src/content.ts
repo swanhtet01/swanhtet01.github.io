@@ -22,18 +22,24 @@ export type PublicModule = {
   path: string
 }
 
+export type StarterTemplate = {
+  name: string
+  detail: string
+}
+
 export const bookingUrl = (import.meta.env.VITE_BOOKING_URL ?? '').trim()
 
 export const navItems = [
   { label: 'Home', to: '/' },
   { label: 'Lead Finder', to: '/lead-finder' },
+  { label: 'Workspace', to: '/workspace' },
   ...(bookingUrl ? [{ label: 'Book', to: '/book' }] : []),
 ] as const
 
 export const hero = {
   eyebrow: 'AI-native workflow software',
-  title: 'Find leads and keep the next step clear.',
-  description: 'Search real businesses, save the right ones, and keep follow-up in one workspace.',
+  title: 'Find leads. Keep them. Run the next step.',
+  description: 'Lead Finder gives you real businesses. Workspace keeps the shortlist and the queue together.',
 }
 
 export const proofPoints: ProofPoint[] = [
@@ -56,7 +62,7 @@ export const proofPoints: ProofPoint[] = [
 
 export const coreProduct = {
   name: 'Workspace',
-  tagline: 'One simple place for saved leads, notes, and follow-up.',
+  tagline: 'One simple place for saved leads, notes, and the daily queue.',
   replaces: ['Scattered notes', 'Missed follow-up', 'Manual chasing'],
   inputs: ['Saved leads', 'Ops updates', 'Receiving issues'],
   outputs: ['Action queue', 'Owner list', 'Next steps'],
@@ -118,11 +124,26 @@ export const publicModules: PublicModule[] = [
     path: '/workspace',
   },
   {
-    name: 'Action OS',
-    tagline: 'Run one clear queue inside the workspace.',
+    name: 'Queue',
+    tagline: 'Run one clear action queue inside the workspace.',
     bestFor: 'Ops follow-up, sales follow-up, and receiving issues.',
     inputs: ['Lead follow-up', 'Ops blocker', 'Receiving issue'],
     outputs: ['Action rows', 'Owner list', 'Done/open queue'],
     path: '/workspace?view=queue',
+  },
+]
+
+export const starterTemplates: StarterTemplate[] = [
+  {
+    name: 'Sales follow-up',
+    detail: 'First outreach, reply chase, and booking follow-up.',
+  },
+  {
+    name: 'Ops blocker',
+    detail: 'A simple queue for today’s blockers and owners.',
+  },
+  {
+    name: 'Receiving issue',
+    detail: 'One next step for GRN, hold, or quantity variance.',
   },
 ]

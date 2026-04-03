@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 
 import { PageIntro } from '../components/PageIntro'
 import { browserWorkspaceSummary, buildBrowserOutreach, saveBrowserWorkspaceLeads } from '../lib/browserWorkspace'
@@ -34,7 +34,6 @@ function evidenceLine(row: LeadRow) {
 
 export function PublicLeadFinderPage() {
   const location = useLocation()
-  const navigate = useNavigate()
   const [query, setQuery] = useState('')
   const [keywords, setKeywords] = useState(DEFAULT_PUBLIC_KEYWORDS)
   const [limit, setLimit] = useState(8)
@@ -200,6 +199,7 @@ export function PublicLeadFinderPage() {
           })
         }
 
+        setSavedTotal((current) => Math.max(current, imported.saved_count || candidates.length, current + candidates.length))
         setMessage(successMessage.replace('{count}', String(imported.saved_count || candidates.length)).replace('shared app', 'shared workspace'))
         return true
       } catch (error) {
@@ -227,7 +227,6 @@ export function PublicLeadFinderPage() {
     const saved = await saveRowsToWorkspace([row], `Saved {count} lead into ${hasLiveWorkspaceApi() ? 'the shared workspace' : 'Workspace'} and created the next action.`)
     if (saved) {
       setSavedKeys((current) => (current.includes(key) ? current : [...current, key]))
-      navigate('/workspace?view=queue')
     }
   }
 
@@ -239,7 +238,6 @@ export function PublicLeadFinderPage() {
     )
     if (saved) {
       setSavedKeys(candidates.map((row) => rowKey(row)))
-      navigate('/workspace?view=queue')
     }
   }
 
@@ -335,7 +333,10 @@ export function PublicLeadFinderPage() {
           </div>
 
           <div className="mt-4 sm-chip text-[var(--sm-muted)]">
-            {provider ? `Search source: ${provider}` : publicLeadFinderAvailable() ? 'Browser search is ready.' : 'Manual mode only here.'}
+          {provider ? `Search source: ${provider}` : publicLeadFinderAvailable() ? 'Search is ready on this host.' : 'Use the manual list on this host.'}
+        </div>
+          <div className="mt-3 sm-chip text-[var(--sm-muted)]">
+            Google finds pages. Lead Finder keeps the shortlist, copies the outreach, and opens the queue.
           </div>
           {message ? <div className="mt-3 sm-chip text-[var(--sm-muted)]">{message}</div> : null}
         </article>
@@ -408,7 +409,7 @@ export function PublicLeadFinderPage() {
       {(rows.length || savedTotal) ? (
         <section className="sm-surface p-6">
           <p className="sm-kicker text-[var(--sm-accent)]">Next step</p>
-          <h2 className="mt-3 text-3xl font-bold text-white">Save the leads, then run follow-up.</h2>
+          <h2 className="mt-3 text-3xl font-bold text-white">Save the leads, then run the queue.</h2>
           <div className="mt-5 grid gap-3 md:grid-cols-3">
             <div className="sm-chip text-white">
               <p className="sm-kicker text-[var(--sm-accent)]">Saved already</p>

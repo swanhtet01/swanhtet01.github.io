@@ -19,11 +19,11 @@ import {
   type BrowserWorkspaceTask,
 } from '../lib/browserWorkspace'
 import {
-  appHref,
   bootstrapPublicWorkspace,
   createWorkspaceTasks,
   getWorkspaceSession,
   hasLiveWorkspaceApi,
+  importLeadPipeline,
   listWorkspaceLeadPipeline,
   listWorkspaceTasks,
   removeWorkspaceTask,
@@ -66,6 +66,19 @@ type WorkspaceTaskItem = {
 
 const localStageOptions: BrowserWorkspaceStage[] = ['new', 'outreach', 'contacted', 'qualified']
 const sharedStageOptions = ['offer_ready', 'contacted', 'discovery', 'qualified']
+const publicQueueTemplates: QueueTemplateId[] = ['lead_follow_up']
+const localStageLabels: Record<BrowserWorkspaceStage, string> = {
+  new: 'saved',
+  outreach: 'outreach sent',
+  contacted: 'reply or discovery',
+  qualified: 'qualified',
+}
+const sharedStageLabels: Record<string, string> = {
+  offer_ready: 'saved',
+  contacted: 'outreach sent',
+  discovery: 'reply or discovery',
+  qualified: 'qualified',
+}
 
 const queueTemplates: Record<
   QueueTemplateId,
@@ -201,6 +214,19 @@ function toCsvRow(lead: WorkspaceLeadItem): LeadRow {
   }
 }
 
+function toSharedStage(stage: string) {
+  if (stage === 'outreach') {
+    return 'contacted'
+  }
+  if (stage === 'contacted') {
+    return 'discovery'
+  }
+  if (stage === 'qualified') {
+    return 'qualified'
+  }
+  return 'offer_ready'
+}
+
 export function WorkspaceLitePage() {
   const location = useLocation()
   const [mode, setMode] = useState<WorkspaceMode>('local')
@@ -219,7 +245,6 @@ export function WorkspaceLitePage() {
   const shouldStartShared = new URLSearchParams(location.search).get('start') === '1'
   const activeView: WorkspaceView = isWorkspaceView(requestedView) ? requestedView : 'leads'
   const openTasks = useMemo(() => tasks.filter((task) => task.status === 'open'), [tasks])
-  const hasWorkspaceContent = leads.length > 0 || tasks.length > 0
   const summary = useMemo(() => {
     if (mode === 'local') {
       return browserWorkspaceSummary(listBrowserWorkspaceLeads())
@@ -248,6 +273,79 @@ export function WorkspaceLitePage() {
     setTasks((taskPayload.rows ?? []).map(normalizeSharedTask))
   }, [])
 
+  function applyQueueTemplate(templateId: QueueTemplateId) {
+    const template = queueTemplates[templateId]
+    setQueueTemplate(templateId)
+    setQueueOwner(template.owner)
+    setQueuePriority(template.priority)
+    setQueueDue(template.due)
+    setQueueTitle('')
+  }
+
+  const startSharedWorkspace = useCallback(async () => {
+    if (!hasLiveWorkspaceApi()) {
+      setMessage('The shared workspace is not available here yet.')
+      return
+    }
+    setStarting(true)
+    try {
+      const localLeads = listBrowserWorkspaceLeads()
+      const localTasks = listBrowserWorkspaceActions()
+      await bootstrapPublicWorkspace({ company: 'My Workspace' })
+      if (localLeads.length) {
+        const imported = await importLeadPipeline(
+          localLeads.map((lead) => ({
+            name: lead.name,
+            stage: toSharedStage(lead.stage),
+            status: 'open',
+            owner: 'Growth Studio',
+            service_pack: 'Workspace',
+            wedge_product: 'Lead Finder',
+            semi_products: ['Lead Finder'],
+            outreach_subject: lead.outreach_subject,
+            outreach_message: lead.outreach_message,
+            email: lead.email,
+            phone: lead.phone,
+            website: lead.website,
+            source: 'workspace_migration',
+            source_url: lead.source_url,
+            provider: lead.provider,
+            score: lead.score,
+            notes: lead.notes,
+          })),
+          'Migrate public workspace',
+        )
+        const leadIdMap = new Map<string, string>()
+        localLeads.forEach((lead, index) => {
+          const savedLeadId = String(imported.saved_lead_ids?.[index] ?? '').trim()
+          if (savedLeadId) {
+            leadIdMap.set(lead.lead_id, savedLeadId)
+          }
+        })
+        if (localTasks.length) {
+          await createWorkspaceTasks(
+            localTasks.map((task) => ({
+              title: task.title,
+              owner: task.owner,
+              priority: task.priority,
+              due: task.due,
+              status: task.status,
+              notes: task.source === 'lead' ? 'Migrated from local workspace' : '',
+              lead_id: leadIdMap.get(task.lead_id) ?? '',
+              template: task.source === 'lead' ? 'lead_follow_up' : 'manual',
+            })),
+          )
+        }
+      }
+      await loadSharedState()
+      setMessage(localLeads.length || localTasks.length ? 'Turned on cloud save and moved this workspace into it.' : 'Started the shared workspace.')
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not start the shared workspace.')
+    } finally {
+      setStarting(false)
+    }
+  }, [loadSharedState])
+
   useEffect(() => {
     let cancelled = false
 
@@ -267,12 +365,7 @@ export function WorkspaceLitePage() {
         if (session.authenticated) {
           await loadSharedState()
         } else if (shouldStartShared) {
-          setStarting(true)
-          await bootstrapPublicWorkspace({ company: 'My Workspace' })
-          if (!cancelled) {
-            await loadSharedState()
-            setMessage('Started the shared workspace.')
-          }
+          await startSharedWorkspace()
         } else {
           loadLocalState()
         }
@@ -293,33 +386,7 @@ export function WorkspaceLitePage() {
     return () => {
       cancelled = true
     }
-  }, [loadLocalState, loadSharedState, shouldStartShared])
-
-  function applyQueueTemplate(templateId: QueueTemplateId) {
-    const template = queueTemplates[templateId]
-    setQueueTemplate(templateId)
-    setQueueOwner(template.owner)
-    setQueuePriority(template.priority)
-    setQueueDue(template.due)
-    setQueueTitle('')
-  }
-
-  async function startSharedWorkspace() {
-    if (!hasLiveWorkspaceApi()) {
-      setMessage('The shared workspace is not available here yet.')
-      return
-    }
-    setStarting(true)
-    try {
-      await bootstrapPublicWorkspace({ company: 'My Workspace' })
-      await loadSharedState()
-      setMessage('Started the shared workspace.')
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Could not start the shared workspace.')
-    } finally {
-      setStarting(false)
-    }
-  }
+  }, [loadLocalState, loadSharedState, shouldStartShared, startSharedWorkspace])
 
   async function copyOutreach(lead: WorkspaceLeadItem) {
     const subject = lead.outreachSubject || `Quick intro from SuperMega for ${lead.name}`
@@ -453,8 +520,6 @@ export function WorkspaceLitePage() {
     setTasks(removeBrowserWorkspaceAction(taskId).map(normalizeBrowserTask))
   }
 
-  const stageOptions = mode === 'shared' ? sharedStageOptions : localStageOptions
-
   return (
     <div className="space-y-8">
       <PageIntro compact eyebrow="Workspace" title="Keep the shortlist and the queue together." description="One workspace for saved leads, notes, and the next actions." />
@@ -466,7 +531,7 @@ export function WorkspaceLitePage() {
           <p className="mt-3 text-sm leading-relaxed text-[var(--sm-muted)]">
             {mode === 'shared'
               ? 'Saved leads and queue items are shared in one workspace.'
-              : 'Saved leads and queue items stay on this device until you start the shared workspace.'}
+              : 'Saved leads and queue items stay on this device unless you turn on cloud save.'}
           </p>
 
           <div className="mt-5 grid gap-3 md:grid-cols-3">
@@ -493,72 +558,12 @@ export function WorkspaceLitePage() {
             </Link>
             {!hasLiveWorkspaceApi() || mode === 'shared' ? null : (
               <button className="sm-button-secondary" disabled={starting} onClick={() => void startSharedWorkspace()} type="button">
-                {starting ? 'Starting...' : 'Save across devices'}
+                {starting ? 'Starting...' : 'Turn on cloud save'}
               </button>
             )}
           </div>
 
-          {activeView === 'queue' ? (
-            <div className="mt-5 rounded-2xl border border-white/8 bg-white/3 p-4">
-              <p className="sm-kicker text-[var(--sm-accent)]">Quick add</p>
-              <div className="mt-4 grid gap-3 md:grid-cols-3">
-                {(Object.keys(queueTemplates) as QueueTemplateId[]).map((templateId) => {
-                  const template = queueTemplates[templateId]
-                  const active = queueTemplate === templateId
-                  return (
-                    <button className={`sm-chip text-left ${active ? 'border-[rgba(37,208,255,0.28)] text-white' : 'text-[var(--sm-muted)]'}`} key={templateId} onClick={() => applyQueueTemplate(templateId)} type="button">
-                      <p className="font-semibold">{template.label}</p>
-                      <p className="mt-2 text-sm">{template.description}</p>
-                    </button>
-                  )
-                })}
-              </div>
-
-              <div className="mt-4 grid gap-3">
-                <label className="grid gap-2 text-sm font-semibold text-[var(--sm-muted)]">
-                  What needs to happen?
-                  <input className="sm-input" onChange={(event) => setQueueTitle(event.target.value)} placeholder={queueTemplates[queueTemplate].placeholder} value={queueTitle} />
-                </label>
-                <div className="grid gap-3 md:grid-cols-3">
-                  <label className="grid gap-2 text-sm font-semibold text-[var(--sm-muted)]">
-                    Owner
-                    <input className="sm-input" onChange={(event) => setQueueOwner(event.target.value)} value={queueOwner} />
-                  </label>
-                  <label className="grid gap-2 text-sm font-semibold text-[var(--sm-muted)]">
-                    Priority
-                    <select className="sm-input" onChange={(event) => setQueuePriority(event.target.value as 'High' | 'Medium' | 'Low')} value={queuePriority}>
-                      {['High', 'Medium', 'Low'].map((value) => (
-                        <option key={value} value={value}>
-                          {value}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="grid gap-2 text-sm font-semibold text-[var(--sm-muted)]">
-                    Due
-                    <select className="sm-input" onChange={(event) => setQueueDue(event.target.value)} value={queueDue}>
-                      {['Today', 'Tomorrow', 'This week', 'Next review'].map((value) => (
-                        <option key={value} value={value}>
-                          {value}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                </div>
-              </div>
-
-              <div className="mt-4 flex flex-wrap gap-3">
-                <button className="sm-button-primary" onClick={() => void saveQuickAction()} type="button">
-                  Save to queue
-                </button>
-                {leads.length ? (
-                  <button className="sm-button-secondary" onClick={() => void seedQueue()} type="button">
-                    Pull from leads
-                  </button>
-                ) : null}
-              </div>
-            </div>
-          ) : (
+          {activeView === 'leads' ? (
             <div className="mt-5 flex flex-wrap gap-3">
               <Link className="sm-button-primary" to="/lead-finder">
                 Find leads
@@ -574,15 +579,8 @@ export function WorkspaceLitePage() {
                 </>
               ) : null}
             </div>
-          )}
-
-          {mode === 'shared' || hasWorkspaceContent ? (
-            <div className="mt-4">
-              <a className="text-sm font-semibold text-[var(--sm-accent)] transition hover:text-white" href={appHref('/app/actions', '/workspace?view=queue')}>
-                Open live app
-              </a>
-            </div>
           ) : null}
+
           {message ? <div className="mt-4 sm-chip text-[var(--sm-muted)]">{message}</div> : null}
         </article>
 
@@ -594,45 +592,107 @@ export function WorkspaceLitePage() {
                 {activeView === 'queue' ? 'Keep the queue short. Start with the top open actions.' : 'Move the right leads forward and leave a clear next note.'}
               </p>
             </div>
-            <span className="sm-status-pill">{loading ? 'LOADING' : mode === 'shared' ? 'SHARED' : 'SAVED HERE'}</span>
+            <span className="sm-status-pill">{loading ? 'LOADING' : mode === 'shared' ? 'CLOUD' : 'THIS DEVICE'}</span>
           </div>
 
           <div className="mt-5 space-y-4">
             {loading ? (
               <div className="sm-chip text-[var(--sm-muted)]">Loading workspace...</div>
             ) : activeView === 'queue' ? (
-              openTasks.length ? (
-                openTasks.slice(0, 8).map((task) => (
-                  <div className="sm-proof-card" key={task.id}>
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div>
-                        <p className="text-lg font-bold text-white">{task.title}</p>
-                        <p className="mt-2 text-sm text-[var(--sm-muted)]">
-                          {task.owner} | {task.priority} | {task.due}
-                        </p>
-                      </div>
-                      <span className="sm-status-pill">{task.status}</span>
-                    </div>
-                    {task.notes ? <div className="mt-4 sm-chip text-[var(--sm-muted)]">{task.notes}</div> : null}
-                    <div className="mt-4 flex flex-wrap gap-3">
-                      <button className="sm-button-primary" onClick={() => void markDone(task.id)} type="button">
-                        Mark done
-                      </button>
-                      <button className="sm-button-secondary" onClick={() => void reopen(task.id)} type="button">
-                        Reopen
-                      </button>
-                      <button className="sm-button-secondary" onClick={() => void removeAction(task.id)} type="button">
-                        Remove
-                      </button>
+              <>
+                <div className="sm-proof-card">
+                  <p className="sm-kicker text-[var(--sm-accent)]">Quick add</p>
+                  <div className="mt-4 grid gap-3 md:grid-cols-3">
+                    {publicQueueTemplates.map((templateId) => {
+                      const template = queueTemplates[templateId]
+                      const active = queueTemplate === templateId
+                      return (
+                        <button className={`sm-chip text-left ${active ? 'border-[rgba(37,208,255,0.28)] text-white' : 'text-[var(--sm-muted)]'}`} key={templateId} onClick={() => applyQueueTemplate(templateId)} type="button">
+                          <p className="font-semibold">{template.label}</p>
+                          <p className="mt-2 text-sm">{template.description}</p>
+                        </button>
+                      )
+                    })}
+                  </div>
+
+                  <div className="mt-4 grid gap-3">
+                    <label className="grid gap-2 text-sm font-semibold text-[var(--sm-muted)]">
+                      What needs to happen?
+                      <input className="sm-input" onChange={(event) => setQueueTitle(event.target.value)} placeholder={queueTemplates[queueTemplate].placeholder} value={queueTitle} />
+                    </label>
+                    <div className="grid gap-3 md:grid-cols-3">
+                      <label className="grid gap-2 text-sm font-semibold text-[var(--sm-muted)]">
+                        Owner
+                        <input className="sm-input" onChange={(event) => setQueueOwner(event.target.value)} value={queueOwner} />
+                      </label>
+                      <label className="grid gap-2 text-sm font-semibold text-[var(--sm-muted)]">
+                        Priority
+                        <select className="sm-input" onChange={(event) => setQueuePriority(event.target.value as 'High' | 'Medium' | 'Low')} value={queuePriority}>
+                          {['High', 'Medium', 'Low'].map((value) => (
+                            <option key={value} value={value}>
+                              {value}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="grid gap-2 text-sm font-semibold text-[var(--sm-muted)]">
+                        Due
+                        <select className="sm-input" onChange={(event) => setQueueDue(event.target.value)} value={queueDue}>
+                          {['Today', 'Tomorrow', 'This week', 'Next review'].map((value) => (
+                            <option key={value} value={value}>
+                              {value}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
                     </div>
                   </div>
-                ))
-              ) : (
-                <div className="sm-proof-card">
-                  <p className="font-semibold text-white">No queue yet</p>
-                  <p className="mt-2 text-sm text-[var(--sm-muted)]">Add one action above or pull follow-up actions from saved leads.</p>
+
+                  <div className="mt-4 flex flex-wrap gap-3">
+                    <button className="sm-button-primary" onClick={() => void saveQuickAction()} type="button">
+                      Save to queue
+                    </button>
+                    {leads.length ? (
+                      <button className="sm-button-secondary" onClick={() => void seedQueue()} type="button">
+                        Pull from leads
+                      </button>
+                    ) : null}
+                  </div>
                 </div>
-              )
+
+                {openTasks.length ? (
+                  openTasks.slice(0, 8).map((task) => (
+                    <div className="sm-proof-card" key={task.id}>
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <p className="text-lg font-bold text-white">{task.title}</p>
+                          <p className="mt-2 text-sm text-[var(--sm-muted)]">
+                            {task.owner} | {task.priority} | {task.due}
+                          </p>
+                        </div>
+                        <span className="sm-status-pill">{task.status}</span>
+                      </div>
+                      {task.notes ? <div className="mt-4 sm-chip text-[var(--sm-muted)]">{task.notes}</div> : null}
+                      <div className="mt-4 flex flex-wrap gap-3">
+                        <button className="sm-button-primary" onClick={() => void markDone(task.id)} type="button">
+                          Mark done
+                        </button>
+                        <button className="sm-button-secondary" onClick={() => void reopen(task.id)} type="button">
+                          Reopen
+                        </button>
+                        <button className="sm-button-secondary" onClick={() => void removeAction(task.id)} type="button">
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="sm-proof-card">
+                    <p className="font-semibold text-white">No queue yet</p>
+                    <p className="mt-2 text-sm text-[var(--sm-muted)]">Start with one action above or pull follow-up actions from saved leads.</p>
+                  </div>
+                )}
+              </>
             ) : leads.length ? (
               leads.slice(0, 8).map((lead) => (
                 <div className="sm-proof-card" key={lead.id}>
@@ -653,9 +713,9 @@ export function WorkspaceLitePage() {
                     <label className="grid gap-2 text-xs font-semibold text-[var(--sm-muted)]">
                       Stage
                       <select className="sm-input" onChange={(event) => void updateStage(lead.id, event.target.value)} value={lead.stage}>
-                        {stageOptions.map((stage) => (
+                        {(mode === 'shared' ? sharedStageOptions : localStageOptions).map((stage) => (
                           <option key={stage} value={stage}>
-                            {stage}
+                            {mode === 'shared' ? sharedStageLabels[stage] ?? stage : localStageLabels[stage as BrowserWorkspaceStage] ?? stage}
                           </option>
                         ))}
                       </select>
@@ -686,10 +746,13 @@ export function WorkspaceLitePage() {
             ) : (
               <div className="sm-proof-card">
                 <p className="font-semibold text-white">No saved leads yet</p>
-                <p className="mt-2 text-sm text-[var(--sm-muted)]">Use Lead Finder first, then save only the leads worth chasing.</p>
-                <div className="mt-4">
+                <p className="mt-2 text-sm text-[var(--sm-muted)]">Start with Lead Finder or switch to Queue if you already know the next action.</p>
+                <div className="mt-4 flex flex-wrap gap-3">
                   <Link className="sm-button-primary" to="/lead-finder">
                     Open Lead Finder
+                  </Link>
+                  <Link className="sm-button-secondary" to={viewHref('queue')}>
+                    Open queue
                   </Link>
                 </div>
               </div>

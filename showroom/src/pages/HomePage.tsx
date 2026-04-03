@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 
-import { coreProduct, hero, leadFinder, proofPoints } from '../content'
+import { coreProduct, hero, leadFinder, publicModules, starterTemplates } from '../content'
 
 const steps = [
   {
@@ -35,8 +35,8 @@ export function HomePage() {
               <Link className="sm-button-primary" to="/lead-finder">
                 Start with Lead Finder
               </Link>
-              <Link className="sm-button-secondary" to="/workspace?start=1">
-                Start workspace
+              <Link className="sm-button-secondary" to="/workspace">
+                See workspace
               </Link>
             </div>
           </div>
@@ -56,26 +56,28 @@ export function HomePage() {
       </section>
 
       <section className="grid gap-5 lg:grid-cols-3">
-        {proofPoints.map((point) => (
-          <article className="sm-surface p-6" key={point.label}>
-            <p className="sm-kicker text-[var(--sm-accent)]">{point.label}</p>
-            <h2 className="mt-3 text-2xl font-bold text-white">{point.value}</h2>
-            <p className="mt-3 text-sm leading-relaxed text-[var(--sm-muted)]">{point.detail}</p>
+        {publicModules.map((module) => (
+          <article className="sm-surface p-6" key={module.name}>
+            <p className="sm-kicker text-[var(--sm-accent)]">{module.name}</p>
+            <h2 className="mt-3 text-2xl font-bold text-white">{module.tagline}</h2>
+            <p className="mt-3 text-sm leading-relaxed text-[var(--sm-muted)]">{module.bestFor}</p>
+            <div className="mt-5">
+              <Link className={module.name === 'Lead Finder' ? 'sm-button-primary' : 'sm-button-secondary'} to={module.path}>
+                Open {module.name}
+              </Link>
+            </div>
           </article>
         ))}
       </section>
 
-      <section className="grid gap-6 lg:grid-cols-2">
+      <section className="grid gap-6 lg:grid-cols-[0.95fr_1.05fr]">
         <article className="sm-surface p-6">
           <p className="sm-kicker text-[var(--sm-accent)]">{leadFinder.title}</p>
-          <h2 className="mt-3 text-3xl font-bold text-white">Start here.</h2>
-          <p className="mt-3 text-sm leading-relaxed text-[var(--sm-muted)]">{leadFinder.description}</p>
+          <h2 className="mt-3 text-3xl font-bold text-white">Why not just use Google?</h2>
           <div className="mt-5 grid gap-3">
-            {leadFinder.steps.map((step) => (
-              <div className="sm-chip text-white" key={step}>
-                {step}
-              </div>
-            ))}
+            <div className="sm-chip text-white">Google shows pages.</div>
+            <div className="sm-chip text-white">Lead Finder keeps the shortlist.</div>
+            <div className="sm-chip text-white">Workspace turns it into the next action.</div>
           </div>
           <div className="mt-5">
             <Link className="sm-button-primary" to="/lead-finder">
@@ -86,18 +88,22 @@ export function HomePage() {
 
         <article className="sm-surface p-6">
           <p className="sm-kicker text-[var(--sm-accent)]">{coreProduct.name}</p>
-          <h2 className="mt-3 text-3xl font-bold text-white">Then keep follow-up in one place.</h2>
+          <h2 className="mt-3 text-3xl font-bold text-white">Use one queue, not ten trackers.</h2>
           <p className="mt-3 text-sm leading-relaxed text-[var(--sm-muted)]">{coreProduct.tagline}</p>
-          <div className="mt-5 grid gap-3">
-            {coreProduct.rollout.map((item) => (
-              <div className="sm-chip text-white" key={item}>
-                {item}
+          <div className="mt-5 grid gap-3 md:grid-cols-3">
+            {starterTemplates.map((item) => (
+              <div className="sm-chip text-white" key={item.name}>
+                <p className="font-semibold">{item.name}</p>
+                <p className="mt-2 text-sm text-[var(--sm-muted)]">{item.detail}</p>
               </div>
             ))}
           </div>
           <div className="mt-5 flex flex-wrap gap-3">
-            <Link className="sm-button-secondary" to="/workspace?start=1">
-              Start workspace
+            <Link className="sm-button-secondary" to="/workspace?view=queue">
+              Open queue
+            </Link>
+            <Link className="sm-button-secondary" to="/workspace">
+              Open workspace
             </Link>
           </div>
         </article>
