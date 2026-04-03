@@ -37,7 +37,7 @@ function App() {
       <Routes>
         <Route element={<SiteFrame />} path="/">
           <Route element={<HomePage />} index />
-          <Route element={<Navigate replace to="/workspace?view=queue" />} path="action-os" />
+          <Route element={<Navigate replace to="/workspace?setup=updates&view=queue" />} path="action-os" />
           <Route element={<Navigate replace to="/workspace" />} path="platform" />
           <Route element={<Navigate replace to="/workspace" />} path="products" />
           <Route element={<Navigate replace to="/workspace" />} path="solutions" />

@@ -32,33 +32,31 @@ export const bookingUrl = (import.meta.env.VITE_BOOKING_URL ?? '').trim()
 export const navItems = [
   { label: 'Home', to: '/' },
   { label: 'Lead Finder', to: '/lead-finder' },
-  { label: 'Products', to: '/products' },
-  { label: 'R&D', to: '/lab' },
-  { label: 'Start', to: '/workspace' },
+  { label: 'Action OS Starter', to: '/workspace?setup=updates&view=queue' },
   ...(bookingUrl ? [{ label: 'Book', to: '/book' }] : []),
 ] as const
 
 export const hero = {
-  eyebrow: 'AI-native workflow software',
-  title: 'Start with leads, updates, or one ops issue.',
-  description: 'Use Lead Finder when you need clients. Use Workspace when you already have a list or messy updates and need the next step.',
+  eyebrow: 'Lead workflow and action queue',
+  title: 'Find leads. Bring your updates. Run one queue.',
+  description: 'Lead Finder finds businesses worth contacting. Action OS Starter keeps saved leads, notes, and next actions in one place.',
 }
 
 export const proofPoints: ProofPoint[] = [
   {
-    label: 'Search',
+    label: 'Lead Finder',
     value: 'Real business results',
-    detail: 'Search public businesses, then keep only the ones worth chasing.',
+    detail: 'Search public businesses and keep only the ones worth chasing.',
   },
   {
-    label: 'Workspace',
+    label: 'Action OS Starter',
     value: 'Bring your own data',
-    detail: 'Paste a lead list, team updates, or ops issues into one usable workspace.',
+    detail: 'Paste a lead list or messy team updates into one usable queue.',
   },
   {
     label: 'Queue',
     value: 'One next-step list',
-    detail: 'Turn saved leads and messy notes into one clear action queue.',
+    detail: 'Turn saved leads and messy notes into one clear daily action queue.',
   },
 ]
 

@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import hashlib
+import io
 import json
 import os
 import re
@@ -11,7 +13,7 @@ from datetime import datetime
 from html import unescape
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import quote, urlparse
 from urllib.request import Request as UrlRequest, urlopen
 
 import uvicorn
@@ -1011,6 +1013,39 @@ def _lead_pipeline_sheet_rows(rows: list[dict[str, Any]]) -> tuple[list[str], li
     return headers, values
 
 
+def _build_csv_export_fallback(
+    *,
+    rows: list[dict[str, Any]],
+    workspace_name: str,
+    export_request: LeadPipelineExportRequest | None,
+    source_status: str,
+    source_message: str,
+) -> dict[str, Any]:
+    headers, values = _lead_pipeline_sheet_rows(rows)
+    buffer = io.StringIO(newline="")
+    writer = csv.writer(buffer)
+    writer.writerow(headers)
+    writer.writerows(values)
+    csv_text = buffer.getvalue()
+    requested_name = ""
+    if export_request is not None:
+        requested_name = str(export_request.spreadsheet_name or "").strip()
+    base_name = requested_name or workspace_name or "supermega-lead-pipeline"
+    safe_name = re.sub(r"[^A-Za-z0-9._-]+", "-", base_name).strip("-").lower() or "supermega-lead-pipeline"
+    if not safe_name.endswith(".csv"):
+        safe_name = f"{safe_name}.csv"
+    return {
+        "status": "ready",
+        "mode": "csv_fallback",
+        "web_view_link": f"data:text/csv;charset=utf-8,{quote(csv_text)}",
+        "download_name": safe_name,
+        "csv_text": csv_text,
+        "message": "Drive publishing is unavailable on this host. Returning a direct CSV export instead.",
+        "source_status": source_status,
+        "source_message": source_message,
+    }
+
+
 SESSION_COOKIE_NAME = "supermega_session"
 
 
@@ -1192,17 +1227,21 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
                 "session": _session_payload(existing_session),
             }
 
-        company = str(payload.company or "").strip() or "My Workspace"
+        company = str(payload.company or "").strip()
+        email = str(payload.email or "").strip().lower()
         name = str(payload.name or "").strip() or company or "Owner"
+        if not company or not email:
+            raise HTTPException(status_code=400, detail="Company and work email are required to start the shared workspace.")
+        if "@" not in email or "." not in email.split("@")[-1]:
+            raise HTTPException(status_code=400, detail="Enter a valid work email to start the shared workspace.")
         seed = "|".join(
             [
                 company,
                 name,
-                str(payload.email or "").strip().lower(),
+                email,
                 datetime.now().astimezone().isoformat(),
             ]
         )
-        email = str(payload.email or "").strip().lower() or f"guest-{hashlib.sha1(seed.encode('utf-8')).hexdigest()[:10]}@supermega.local"
         password = secrets.token_urlsafe(10)
         base_slug = _slugify(payload.workspace_slug or company or name or "workspace") or "workspace"
         workspace_slug = f"{base_slug}-{hashlib.sha1(email.encode('utf-8')).hexdigest()[:4]}"
@@ -1939,6 +1978,7 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
     @app.post("/api/lead-pipeline/export/workspace")
     def export_lead_pipeline_to_workspace(request_http: Request, request: LeadPipelineExportRequest) -> dict[str, Any]:
         session = _require_session(request_http)
+        workspace_name = str(session.get("workspace_name", "")).strip() or "SuperMega Sales"
         rows = enterprise_list_leads(
             enterprise_db_url,
             workspace_id=str(session.get("workspace_id", "")).strip(),
@@ -1946,9 +1986,17 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
         )
         export_result = _export_lead_rows_to_workspace(
             rows=rows,
-            workspace_name=str(session.get("workspace_name", "")).strip() or "SuperMega Sales",
+            workspace_name=workspace_name,
             export_request=request,
         )
+        if export_result.get("status") != "ready" or not str(export_result.get("web_view_link", "")).strip():
+            export_result = _build_csv_export_fallback(
+                rows=rows,
+                workspace_name=workspace_name,
+                export_request=request,
+                source_status=str(export_result.get("status", "error")).strip() or "error",
+                source_message=str(export_result.get("message", "")).strip(),
+            )
         return {
             "status": export_result.get("status", "ready"),
             "summary": enterprise_load_lead_summary(

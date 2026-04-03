@@ -4,8 +4,14 @@ import { Link, useLocation } from 'react-router-dom'
 import { PageIntro } from '../components/PageIntro'
 import { browserWorkspaceSummary, buildBrowserOutreach, saveBrowserWorkspaceLeads } from '../lib/browserWorkspace'
 import { publicLeadFinderAvailable, searchPublicLeads } from '../lib/publicLeadFinder'
-import { CORE_SOLUTIONS } from '../lib/salesControl'
-import { hasLiveWorkspaceApi, savePublicLeadsToWorkspace } from '../lib/workspaceApi'
+import {
+  hasLiveWorkspaceApi,
+  isPublicWorkspaceProfileReady,
+  loadPublicWorkspaceProfile,
+  savePublicLeadsToWorkspace,
+  savePublicWorkspaceProfile,
+  type PublicWorkspaceProfile,
+} from '../lib/workspaceApi'
 import { downloadLeadCsv, parseLeads, type LeadRow } from '../lib/tooling'
 
 const quickSearches = [
@@ -33,19 +39,10 @@ function evidenceLine(row: LeadRow) {
   return evidence.length ? evidence.join(' | ') : 'public search match'
 }
 
-function recommendPlay(query: string, keywords: string[]) {
-  const text = [query, ...keywords].join(' ').toLowerCase()
-  if (/(factory|industrial|warehouse|supplier|rubber|stores|stock)/.test(text)) {
-    return CORE_SOLUTIONS.find((item) => item.id === 'factory-control') ?? CORE_SOLUTIONS[2]
-  }
-  if (/(distributor|wholesale|dealer|import|export|retail|cash|sales|parts)/.test(text)) {
-    return CORE_SOLUTIONS.find((item) => item.id === 'commercial-control') ?? CORE_SOLUTIONS[1]
-  }
-  return CORE_SOLUTIONS.find((item) => item.id === 'action-os-starter') ?? CORE_SOLUTIONS[0]
-}
-
 export function PublicLeadFinderPage() {
   const location = useLocation()
+  const [profile, setProfile] = useState<PublicWorkspaceProfile>(() => loadPublicWorkspaceProfile())
+  const [showWorkspaceSetup, setShowWorkspaceSetup] = useState(false)
   const [query, setQuery] = useState('')
   const [keywords, setKeywords] = useState(DEFAULT_PUBLIC_KEYWORDS)
   const [limit, setLimit] = useState(8)
@@ -57,6 +54,7 @@ export function PublicLeadFinderPage() {
   const [savedKeys, setSavedKeys] = useState<string[]>([])
   const [savedTotal, setSavedTotal] = useState(browserWorkspaceSummary().total)
   const bootstrapped = useRef(false)
+  const hasSharedProfile = isPublicWorkspaceProfileReady(profile)
 
   const searchKeywords = useMemo(
     () =>
@@ -66,8 +64,6 @@ export function PublicLeadFinderPage() {
         .filter(Boolean),
     [keywords],
   )
-
-  const recommendedPlay = useMemo(() => recommendPlay(query, searchKeywords), [query, searchKeywords])
 
   function applyQuickSearch(nextQuery: string, nextKeywords: string) {
     setQuery(nextQuery)
@@ -82,6 +78,19 @@ export function PublicLeadFinderPage() {
         .map((value) => value.trim())
         .filter(Boolean),
     })
+  }
+
+  function updateProfileField(field: keyof PublicWorkspaceProfile, value: string) {
+    const nextProfile = savePublicWorkspaceProfile({
+      ...profile,
+      [field]: value,
+    })
+    setProfile(nextProfile)
+  }
+
+  function promptWorkspaceSetup(nextMessage: string) {
+    setShowWorkspaceSetup(true)
+    setMessage(nextMessage)
   }
 
   const runSearch = useCallback(async (overrides?: { query?: string; keywords?: string[] }) => {
@@ -162,9 +171,20 @@ export function PublicLeadFinderPage() {
     }
 
     if (hasLiveWorkspaceApi()) {
+      if (!hasSharedProfile) {
+        promptWorkspaceSetup('Enter your company and work email before saving to the shared workspace.')
+        return false
+      }
+
+      const nextProfile = savePublicWorkspaceProfile(profile)
+      setProfile(nextProfile)
+      setShowWorkspaceSetup(false)
       try {
         const saved = await savePublicLeadsToWorkspace({
-          company: query.trim() || 'My Workspace',
+          name: nextProfile.name,
+          email: nextProfile.email,
+          company: nextProfile.company,
+          goal: 'Save leads into Workspace',
           campaign_goal: query.trim() || 'Run first outreach',
           rows: candidates.map((row) => {
             const outreach = buildBrowserOutreach(row, query, searchKeywords)
@@ -253,7 +273,7 @@ export function PublicLeadFinderPage() {
         compact
         eyebrow="Lead Finder"
         title="Find businesses worth contacting."
-        description="Search by place or niche, save the right leads, and open Workspace."
+        description="Search by place or niche, then save only the leads worth chasing."
       />
 
       <section className="grid gap-6 lg:grid-cols-[0.82fr_1.18fr]">
@@ -278,10 +298,10 @@ export function PublicLeadFinderPage() {
               </div>
             </div>
 
-            <div className="flex flex-wrap gap-3">
-              <button className="sm-button-primary" disabled={busy || !query.trim()} onClick={() => void runSearch()} type="button">
-                {busy ? 'Searching...' : 'Search now'}
-              </button>
+          <div className="flex flex-wrap gap-3">
+            <button className="sm-button-primary" disabled={busy || !query.trim()} onClick={() => void runSearch()} type="button">
+              {busy ? 'Searching...' : 'Search now'}
+            </button>
               {rows.length ? (
                 <button className="sm-button-secondary" onClick={() => void saveTopResults()} type="button">
                   Save top 3
@@ -293,6 +313,37 @@ export function PublicLeadFinderPage() {
                 </Link>
               ) : null}
             </div>
+
+            {hasLiveWorkspaceApi() && showWorkspaceSetup ? (
+              <div className="sm-proof-card">
+                <p className="sm-kicker text-[var(--sm-accent)]">Shared workspace</p>
+                <p className="mt-2 text-sm text-[var(--sm-muted)]">
+                  Enter your company and work email once. After that, saved leads go into the same shared workspace.
+                </p>
+                <div className="mt-4 grid gap-3 md:grid-cols-3">
+                  <label className="grid gap-2 text-sm font-semibold text-[var(--sm-muted)]">
+                    Name
+                    <input className="sm-input" onChange={(event) => updateProfileField('name', event.target.value)} placeholder="Your name" value={profile.name} />
+                  </label>
+                  <label className="grid gap-2 text-sm font-semibold text-[var(--sm-muted)]">
+                    Work email
+                    <input className="sm-input" onChange={(event) => updateProfileField('email', event.target.value)} placeholder="you@company.com" value={profile.email} />
+                  </label>
+                  <label className="grid gap-2 text-sm font-semibold text-[var(--sm-muted)]">
+                    Company
+                    <input className="sm-input" onChange={(event) => updateProfileField('company', event.target.value)} placeholder="Company name" value={profile.company} />
+                  </label>
+                </div>
+                <div className="mt-3 sm-chip text-[var(--sm-muted)]">
+                  {hasSharedProfile ? `Ready to save into ${profile.company}.` : 'Company and work email are required before save.'}
+                </div>
+                <div className="mt-4 flex flex-wrap gap-3">
+                  <button className="sm-button-secondary" onClick={() => setShowWorkspaceSetup(false)} type="button">
+                    Hide setup
+                  </button>
+                </div>
+              </div>
+            ) : null}
 
             <details className="sm-details">
               <summary>Advanced</summary>
@@ -333,8 +384,28 @@ export function PublicLeadFinderPage() {
           </div>
 
           <div className="mt-4 sm-chip text-[var(--sm-muted)]">
-            {provider ? `Search source: ${provider}` : publicLeadFinderAvailable() ? 'Search is ready on this host.' : 'Use the manual list on this host.'}
+            {rows.length
+              ? 'Save only the leads worth chasing.'
+              : publicLeadFinderAvailable()
+                ? 'Search is ready on this host.'
+                : 'Use the manual list on this host.'}
           </div>
+          {hasLiveWorkspaceApi() && !hasSharedProfile && !showWorkspaceSetup ? (
+            <div className="mt-3 flex flex-wrap items-center gap-3">
+              <div className="sm-chip text-[var(--sm-muted)]">Set up cloud save only when you are ready to keep leads.</div>
+              <button className="sm-button-secondary" onClick={() => setShowWorkspaceSetup(true)} type="button">
+                Set up workspace
+              </button>
+            </div>
+          ) : null}
+          {hasLiveWorkspaceApi() && hasSharedProfile && !showWorkspaceSetup ? (
+            <div className="mt-3 flex flex-wrap items-center gap-3">
+              <div className="sm-chip text-[var(--sm-muted)]">Ready to save into {profile.company}.</div>
+              <button className="sm-button-secondary" onClick={() => setShowWorkspaceSetup(true)} type="button">
+                Edit workspace setup
+              </button>
+            </div>
+          ) : null}
           {message ? <div className="mt-3 sm-chip text-[var(--sm-muted)]">{message}</div> : null}
         </article>
 
@@ -400,21 +471,6 @@ export function PublicLeadFinderPage() {
               </div>
             )}
 
-            {rows.length ? (
-              <div className="sm-proof-card">
-                <p className="sm-kicker text-[var(--sm-accent)]">Recommended SuperMega play</p>
-                <h3 className="mt-2 text-xl font-bold text-white">{recommendedPlay.name}</h3>
-                <p className="mt-2 text-sm text-[var(--sm-muted)]">{recommendedPlay.promise}</p>
-                <p className="mt-3 text-sm text-[var(--sm-muted)]">{recommendedPlay.pain}</p>
-                <div className="mt-4 flex flex-wrap gap-2">
-                  {recommendedPlay.modules.map((module) => (
-                    <span className="sm-status-pill" key={module}>
-                      {module}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            ) : null}
           </div>
         </article>
       </section>
@@ -444,13 +500,17 @@ export function PublicLeadFinderPage() {
               </button>
             ) : null}
             {savedTotal ? (
-            <Link className="sm-button-secondary" to="/workspace?view=queue">
-              Open queue
-            </Link>
+              <Link className="sm-button-secondary" to="/workspace?view=queue">
+                Open workspace
+              </Link>
             ) : null}
           </div>
           <div className="mt-4 sm-chip text-[var(--sm-muted)]">
-            {hasLiveWorkspaceApi() ? 'This host can save into the shared workspace.' : 'This host saves into Workspace in this browser on this device.'}
+            {hasLiveWorkspaceApi()
+              ? hasSharedProfile
+                ? `Ready to save into ${profile.company}.`
+                : 'On this host, save will ask for company and work email once.'
+              : 'This host saves into Workspace in this browser on this device.'}
           </div>
         </section>
       ) : null}

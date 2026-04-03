@@ -1,18 +1,17 @@
 import { Link } from 'react-router-dom'
 
 import { hero, proofPoints } from '../content'
-import { LAB_TRACKS, PUBLIC_PRODUCTS } from '../lib/salesControl'
 
 const startCards = [
   {
     title: 'Find clients',
-    detail: 'Search a place or niche, keep the shortlist, and start outreach.',
+    detail: 'Search a place or niche, keep the shortlist, and create the first follow-up.',
     to: '/lead-finder',
     button: 'Open Lead Finder',
     primary: true,
   },
   {
-    title: 'Bring your lead list',
+    title: 'Bring a lead list',
     detail: 'Paste names, sites, phones, or emails and turn them into saved leads.',
     to: '/workspace?setup=leads',
     button: 'Import lead list',
@@ -20,16 +19,20 @@ const startCards = [
   },
   {
     title: 'Paste messy updates',
-    detail: 'Paste team notes or ops blockers and turn them into a simple queue.',
+    detail: 'Paste team notes or blockers and turn them into one clear queue.',
     to: '/workspace?setup=updates&view=queue',
-    button: 'Build queue',
+    button: 'Open Action OS Starter',
     primary: false,
   },
 ]
 
-export function HomePage() {
-  const liveProducts = PUBLIC_PRODUCTS.filter((product) => product.status === 'Live now')
+const howItWorks = [
+  'Search or import what you already have.',
+  'Save the right leads or updates into one workspace.',
+  'Run the queue every day.',
+]
 
+export function HomePage() {
   return (
     <div className="space-y-8 pb-10">
       <section className="sm-surface-deep relative overflow-hidden p-6 lg:p-10">
@@ -48,13 +51,13 @@ export function HomePage() {
                 Open Lead Finder
               </Link>
               <Link className="sm-button-secondary" to="/workspace?setup=updates&view=queue">
-                Start with your own data
+                Open Action OS Starter
               </Link>
             </div>
           </div>
 
           <div className="sm-terminal p-5">
-            <p className="sm-kicker text-[var(--sm-accent)]">What this does</p>
+            <p className="sm-kicker text-[var(--sm-accent)]">What you get</p>
             <div className="mt-5 grid gap-3">
               {proofPoints.map((item) => (
                 <div className="sm-proof-card" key={item.label}>
@@ -84,42 +87,14 @@ export function HomePage() {
       </section>
 
       <section className="sm-surface p-6">
-        <p className="sm-kicker text-[var(--sm-accent)]">Sell now</p>
-        <h2 className="mt-3 text-3xl font-bold text-white">Specific products only.</h2>
-        <div className="mt-5 grid gap-4 lg:grid-cols-3">
-          {liveProducts.map((product) => (
-            <article className="sm-proof-card" key={product.id}>
-              <div className="flex items-start justify-between gap-3">
-                <h3 className="text-xl font-bold text-white">{product.name}</h3>
-                <span className="sm-status-pill">{product.status}</span>
-              </div>
-              <p className="mt-3 text-sm text-[var(--sm-muted)]">{product.promise}</p>
-              <p className="mt-3 text-sm text-[var(--sm-muted)]">{product.audience}</p>
-            </article>
-          ))}
-        </div>
-        <div className="mt-5">
-          <Link className="sm-button-secondary" to="/products">
-            See all products
-          </Link>
-        </div>
-      </section>
-
-      <section className="sm-surface p-6">
-        <p className="sm-kicker text-[var(--sm-accent-alt)]">R&D Lab</p>
-        <h2 className="mt-3 text-3xl font-bold text-white">Agent loops we are building next.</h2>
+        <p className="sm-kicker text-[var(--sm-accent)]">How to use it</p>
+        <h2 className="mt-3 text-3xl font-bold text-white">One simple operating loop.</h2>
         <div className="mt-5 grid gap-3 md:grid-cols-3">
-          {LAB_TRACKS.slice(0, 3).map((track) => (
-            <div className="sm-chip text-white" key={track.id}>
-              <p className="font-semibold">{track.name}</p>
-              <p className="mt-2 text-sm text-[var(--sm-muted)]">{track.loop}</p>
+          {howItWorks.map((step) => (
+            <div className="sm-proof-card" key={step}>
+              <p className="text-base font-semibold text-white">{step}</p>
             </div>
           ))}
-        </div>
-        <div className="mt-5">
-          <Link className="sm-button-secondary" to="/lab">
-            Open R&D Lab
-          </Link>
         </div>
       </section>
     </div>

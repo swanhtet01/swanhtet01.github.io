@@ -61,6 +61,8 @@ def main() -> int:
         "POST",
         f"{args.base_url.rstrip('/')}/api/public/workspace/bootstrap",
         {
+            "name": "Smoke Owner",
+            "email": "smoke@supermega.test",
             "company": "Smoke Workspace",
         },
     )
@@ -152,6 +154,8 @@ def main() -> int:
         "POST",
         f"{args.base_url.rstrip('/')}/api/public/workspace/save-leads",
         {
+            "name": "Smoke Owner",
+            "email": "smoke@supermega.test",
             "company": "Smoke Workspace",
             "campaign_goal": "Public save flow",
             "rows": [

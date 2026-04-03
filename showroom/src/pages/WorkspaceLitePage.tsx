@@ -24,12 +24,16 @@ import {
   createWorkspaceTasks,
   getWorkspaceSession,
   hasLiveWorkspaceApi,
+  isPublicWorkspaceProfileReady,
   listWorkspaceLeadPipeline,
   listWorkspaceTasks,
+  loadPublicWorkspaceProfile,
   removeWorkspaceTask,
+  savePublicWorkspaceProfile,
   savePublicLeadsToWorkspace,
   updateWorkspaceLeadPipeline,
   updateWorkspaceTask,
+  type PublicWorkspaceProfile,
   type WorkspaceLeadRow,
   type WorkspaceTaskRow,
 } from '../lib/workspaceApi'
@@ -127,11 +131,6 @@ const setupOptions: Array<{
   detail: string
 }> = [
   {
-    id: 'find',
-    title: 'Find clients',
-    detail: 'Search a market with Lead Finder and keep the shortlist.',
-  },
-  {
     id: 'leads',
     title: 'Bring a lead list',
     detail: 'Paste names, sites, phones, or emails and turn them into saved leads.',
@@ -140,11 +139,6 @@ const setupOptions: Array<{
     id: 'updates',
     title: 'Paste team updates',
     detail: 'Paste messy notes and turn them into a queue with owners and due dates.',
-  },
-  {
-    id: 'receiving',
-    title: 'Log an ops issue',
-    detail: 'Start with receiving, quality, or procurement issues and run the next step.',
   },
 ]
 
@@ -290,7 +284,9 @@ export function WorkspaceLitePage() {
   const [mode, setMode] = useState<WorkspaceMode>('local')
   const [loading, setLoading] = useState(true)
   const [starting, setStarting] = useState(false)
+  const [showCloudSetup, setShowCloudSetup] = useState(false)
   const [message, setMessage] = useState('')
+  const [profile, setProfile] = useState<PublicWorkspaceProfile>(() => loadPublicWorkspaceProfile())
   const [leads, setLeads] = useState<WorkspaceLeadItem[]>([])
   const [tasks, setTasks] = useState<WorkspaceTaskItem[]>([])
   const [queueTemplate, setQueueTemplate] = useState<QueueTemplateId>('lead_follow_up')
@@ -314,6 +310,7 @@ export function WorkspaceLitePage() {
     : tasks.length || requestedSetup === 'updates' || requestedSetup === 'receiving'
       ? 'queue'
       : 'leads'
+  const hasSharedProfile = isPublicWorkspaceProfileReady(profile)
 
   const summary = useMemo(() => {
     if (mode === 'local') {
@@ -344,8 +341,12 @@ export function WorkspaceLitePage() {
   }, [])
 
   useEffect(() => {
-    setSetupFlow(isSetupFlow(requestedSetup) ? requestedSetup : 'pick')
-  }, [requestedSetup])
+    if (isSetupFlow(requestedSetup)) {
+      setSetupFlow(requestedSetup)
+      return
+    }
+    setSetupFlow(hasData ? 'pick' : 'updates')
+  }, [hasData, requestedSetup])
 
   function applyQueueTemplate(templateId: QueueTemplateId) {
     const template = queueTemplates[templateId]
@@ -356,9 +357,54 @@ export function WorkspaceLitePage() {
     setQueueTitle('')
   }
 
+  function updateProfileField(field: keyof PublicWorkspaceProfile, value: string) {
+    const nextProfile = savePublicWorkspaceProfile({
+      ...profile,
+      [field]: value,
+    })
+    setProfile(nextProfile)
+  }
+
+  function promptCloudSetup(nextMessage: string) {
+    setShowCloudSetup(true)
+    setMessage(nextMessage)
+  }
+
+  async function ensureSharedWorkspaceReady(actionLabel: string) {
+    if (!hasLiveWorkspaceApi()) {
+      return false
+    }
+
+    if (!hasSharedProfile) {
+      promptCloudSetup(`Enter your company and work email before ${actionLabel}.`)
+      return false
+    }
+
+    const nextProfile = savePublicWorkspaceProfile(profile)
+    setProfile(nextProfile)
+    setShowCloudSetup(false)
+
+    try {
+      await bootstrapPublicWorkspace({
+        name: nextProfile.name,
+        email: nextProfile.email,
+        company: nextProfile.company,
+        goal: 'Save and run the workspace',
+      })
+      return true
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not start cloud save for this workspace.')
+      return false
+    }
+  }
+
   const startSharedWorkspace = useCallback(async () => {
     if (!hasLiveWorkspaceApi()) {
       setMessage('Cloud save is not available on this host yet.')
+      return
+    }
+    if (!hasSharedProfile) {
+      promptCloudSetup('Enter your company and work email before turning on cloud save.')
       return
     }
 
@@ -366,11 +412,21 @@ export function WorkspaceLitePage() {
     try {
       const localLeads = listBrowserWorkspaceLeads()
       const localTasks = listBrowserWorkspaceActions()
-      await bootstrapPublicWorkspace({ company: 'My Workspace' })
+      const nextProfile = savePublicWorkspaceProfile(profile)
+      setProfile(nextProfile)
+      await bootstrapPublicWorkspace({
+        name: nextProfile.name,
+        email: nextProfile.email,
+        company: nextProfile.company,
+        goal: 'Move this workspace to cloud save',
+      })
 
       if (localLeads.length) {
         await savePublicLeadsToWorkspace({
-          company: 'My Workspace',
+          name: nextProfile.name,
+          email: nextProfile.email,
+          company: nextProfile.company,
+          goal: 'Move this workspace to cloud save',
           campaign_goal: 'Migrate workspace',
           rows: localLeads.map((lead) => ({
             ...buildSharedLeadRow(lead, 'Imported lead list'),
@@ -399,13 +455,14 @@ export function WorkspaceLitePage() {
       }
 
       await loadSharedState()
+      setShowCloudSetup(false)
       setMessage(localLeads.length || localTasks.length ? 'Turned on cloud save and moved this workspace into it.' : 'Started the shared workspace.')
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Could not start the shared workspace.')
     } finally {
       setStarting(false)
     }
-  }, [loadSharedState])
+  }, [hasSharedProfile, loadSharedState, profile])
 
   useEffect(() => {
     let cancelled = false
@@ -455,9 +512,18 @@ export function WorkspaceLitePage() {
       return
     }
 
-    if (mode === 'shared') {
+    if (mode === 'shared' || hasLiveWorkspaceApi()) {
+      if (mode !== 'shared') {
+        const ready = await ensureSharedWorkspaceReady('saving into Workspace')
+        if (!ready) {
+          return
+        }
+      }
       await savePublicLeadsToWorkspace({
-        company: 'My Workspace',
+        name: profile.name,
+        email: profile.email,
+        company: profile.company,
+        goal: 'Save lead list into Workspace',
         campaign_goal: 'Imported lead list',
         rows: rows.map((row) => buildSharedLeadRow(row, 'Imported lead list')),
       })
@@ -497,7 +563,13 @@ export function WorkspaceLitePage() {
       return
     }
 
-    if (mode === 'shared') {
+    if (mode === 'shared' || hasLiveWorkspaceApi()) {
+      if (mode !== 'shared') {
+        const ready = await ensureSharedWorkspaceReady('saving into the queue')
+        if (!ready) {
+          return
+        }
+      }
       await createWorkspaceTasks(
         rows.map((row) => ({
           title: row.title,
@@ -600,9 +672,18 @@ export function WorkspaceLitePage() {
   }
 
   async function seedQueue() {
-    if (mode === 'shared') {
-      const leadIdsWithTasks = new Set(tasks.filter((task) => task.leadId).map((task) => task.leadId))
-      const rows = leads
+    if (mode === 'shared' || hasLiveWorkspaceApi()) {
+      if (mode !== 'shared') {
+        const ready = await ensureSharedWorkspaceReady('pulling leads into the queue')
+        if (!ready) {
+          return
+        }
+      }
+      const [leadPayload, taskPayload] = await Promise.all([listWorkspaceLeadPipeline('', 'open', 200), listWorkspaceTasks('', 200)])
+      const sharedLeads = (leadPayload.rows ?? []).map(normalizeSharedLead)
+      const sharedTasks = (taskPayload.rows ?? []).map(normalizeSharedTask)
+      const leadIdsWithTasks = new Set(sharedTasks.filter((task) => task.leadId).map((task) => task.leadId))
+      const rows = sharedLeads
         .filter((lead) => !leadIdsWithTasks.has(lead.id))
         .map((lead) => ({
           title: `Follow up ${lead.name}`,
@@ -636,7 +717,13 @@ export function WorkspaceLitePage() {
       return
     }
 
-    if (mode === 'shared') {
+    if (mode === 'shared' || hasLiveWorkspaceApi()) {
+      if (mode !== 'shared') {
+        const ready = await ensureSharedWorkspaceReady('saving into the queue')
+        if (!ready) {
+          return
+        }
+      }
       await createWorkspaceTasks([
         {
           title: queueTitle.trim(),
@@ -781,23 +868,25 @@ export function WorkspaceLitePage() {
     <div className="space-y-8">
       <PageIntro
         compact
-        eyebrow="Workspace"
+        eyebrow="Action OS Starter"
         title={hasData ? 'Keep the leads and the queue in one place.' : 'Start with something you already have.'}
         description={
           hasData
             ? 'Use one workspace for saved leads, notes, and the next actions.'
-            : 'Paste a lead list, paste messy updates, or log one ops issue. Workspace will turn it into something usable.'
+            : 'Paste a lead list or messy updates. Action OS Starter will turn them into something usable.'
         }
       />
 
       <section className="grid gap-6 lg:grid-cols-[0.82fr_1.18fr]">
         <article className="sm-surface p-6">
           <p className="sm-kicker text-[var(--sm-accent)]">Start here</p>
-          <h2 className="mt-3 text-3xl font-bold text-white">{hasData ? 'Add more or work what you already saved.' : 'Choose one way to begin.'}</h2>
+          <h2 className="mt-3 text-3xl font-bold text-white">{hasData ? 'Add more or work what you already saved.' : 'Set up Action OS Starter.'}</h2>
           <p className="mt-3 text-sm leading-relaxed text-[var(--sm-muted)]">
             {mode === 'shared'
               ? 'This workspace is using shared cloud save.'
-              : 'This workspace works in this browser now. Turn on cloud save only when you need the shared version.'}
+              : hasLiveWorkspaceApi()
+                ? 'Start here with pasted data. Turn on cloud save later if you need it.'
+                : 'This workspace works in this browser now. Use it here when there is no live backend.'}
           </p>
 
           <div className="mt-5 grid gap-3 md:grid-cols-2">
@@ -817,34 +906,100 @@ export function WorkspaceLitePage() {
             })}
           </div>
 
-          <div className="mt-5 grid gap-3 md:grid-cols-3">
-            <div className="sm-chip text-white">
-              <p className="sm-kicker text-[var(--sm-accent)]">Leads</p>
-              <p className="mt-2 text-3xl font-bold">{summary.total}</p>
-            </div>
-            <div className="sm-chip text-white">
-              <p className="sm-kicker text-[var(--sm-accent-alt)]">Open queue</p>
-              <p className="mt-2 text-3xl font-bold">{summary.openActionCount}</p>
-            </div>
-            <div className="sm-chip text-white">
-              <p className="sm-kicker text-[var(--sm-accent)]">Mode</p>
-              <p className="mt-2 text-base font-bold">{mode === 'shared' ? 'Cloud save' : 'This device'}</p>
-            </div>
-          </div>
+          {hasData ? (
+            <>
+              <div className="mt-5 grid gap-3 md:grid-cols-3">
+                <div className="sm-chip text-white">
+                  <p className="sm-kicker text-[var(--sm-accent)]">Leads</p>
+                  <p className="mt-2 text-3xl font-bold">{summary.total}</p>
+                </div>
+                <div className="sm-chip text-white">
+                  <p className="sm-kicker text-[var(--sm-accent-alt)]">Open queue</p>
+                  <p className="mt-2 text-3xl font-bold">{summary.openActionCount}</p>
+                </div>
+                <div className="sm-chip text-white">
+                  <p className="sm-kicker text-[var(--sm-accent)]">Mode</p>
+                  <p className="mt-2 text-base font-bold">{mode === 'shared' ? 'Cloud save' : 'This device'}</p>
+                </div>
+              </div>
 
-          <div className="mt-5 flex flex-wrap gap-3">
-            <Link className={activeView === 'leads' ? 'sm-button-primary' : 'sm-button-secondary'} to={viewHref('leads')}>
-              Leads
-            </Link>
-            <Link className={activeView === 'queue' ? 'sm-button-primary' : 'sm-button-secondary'} to={viewHref('queue')}>
-              Queue
-            </Link>
-            {mode === 'local' && hasLiveWorkspaceApi() ? (
-              <button className="sm-button-secondary" disabled={starting} onClick={() => void startSharedWorkspace()} type="button">
-                {starting ? 'Starting...' : 'Turn on cloud save'}
-              </button>
-            ) : null}
-          </div>
+              <div className="mt-5 flex flex-wrap gap-3">
+                <Link className={activeView === 'leads' ? 'sm-button-primary' : 'sm-button-secondary'} to={viewHref('leads')}>
+                  Leads
+                </Link>
+                <Link className={activeView === 'queue' ? 'sm-button-primary' : 'sm-button-secondary'} to={viewHref('queue')}>
+                  Queue
+                </Link>
+              </div>
+            </>
+          ) : (
+            <div className="mt-5 sm-chip text-[var(--sm-muted)]">
+              {mode === 'shared' ? 'Shared workspace ready.' : 'Nothing saved yet. Start with one list or one update.'}
+            </div>
+          )}
+
+          {hasData && hasLiveWorkspaceApi() && mode === 'local' && !showCloudSetup && !hasSharedProfile ? (
+            <div className="mt-5 sm-proof-card">
+              <p className="sm-kicker text-[var(--sm-accent)]">Cloud save</p>
+              <p className="mt-2 text-sm text-[var(--sm-muted)]">
+                Start here in this browser first. Turn on cloud save when you want the same workspace to follow you.
+              </p>
+              <div className="mt-4 flex flex-wrap gap-3">
+                <button className="sm-button-secondary" onClick={() => setShowCloudSetup(true)} type="button">
+                  Turn on cloud save
+                </button>
+              </div>
+            </div>
+          ) : null}
+
+          {hasData && hasLiveWorkspaceApi() && mode === 'local' && hasSharedProfile && !showCloudSetup ? (
+            <div className="mt-5 sm-proof-card">
+              <p className="sm-kicker text-[var(--sm-accent)]">Cloud save</p>
+              <p className="mt-2 text-sm text-[var(--sm-muted)]">Ready to save into {profile.company}. Turn it on when you want this workspace to stay shared.</p>
+              <div className="mt-4 flex flex-wrap gap-3">
+                <button className="sm-button-secondary" disabled={starting} onClick={() => void startSharedWorkspace()} type="button">
+                  {starting ? 'Starting...' : hasData ? 'Move this workspace to cloud' : 'Start shared workspace'}
+                </button>
+                <button className="sm-button-secondary" onClick={() => setShowCloudSetup(true)} type="button">
+                  Edit setup
+                </button>
+              </div>
+            </div>
+          ) : null}
+
+          {hasLiveWorkspaceApi() && mode === 'local' && showCloudSetup ? (
+            <div className="mt-5 sm-proof-card">
+              <p className="sm-kicker text-[var(--sm-accent)]">Cloud save setup</p>
+              <p className="mt-2 text-sm text-[var(--sm-muted)]">
+                Use your company and work email once. After that, imported leads and queue items save into the same shared workspace.
+              </p>
+              <div className="mt-4 grid gap-3 md:grid-cols-3">
+                <label className="grid gap-2 text-sm font-semibold text-[var(--sm-muted)]">
+                  Name
+                  <input className="sm-input" onChange={(event) => updateProfileField('name', event.target.value)} placeholder="Your name" value={profile.name} />
+                </label>
+                <label className="grid gap-2 text-sm font-semibold text-[var(--sm-muted)]">
+                  Work email
+                  <input className="sm-input" onChange={(event) => updateProfileField('email', event.target.value)} placeholder="you@company.com" value={profile.email} />
+                </label>
+                <label className="grid gap-2 text-sm font-semibold text-[var(--sm-muted)]">
+                  Company
+                  <input className="sm-input" onChange={(event) => updateProfileField('company', event.target.value)} placeholder="Company name" value={profile.company} />
+                </label>
+              </div>
+              <div className="mt-4 flex flex-wrap gap-3">
+                <button className="sm-button-secondary" disabled={starting || !hasSharedProfile} onClick={() => void startSharedWorkspace()} type="button">
+                  {starting ? 'Starting...' : hasData ? 'Move this workspace to cloud' : 'Start shared workspace'}
+                </button>
+                <button className="sm-button-secondary" onClick={() => setShowCloudSetup(false)} type="button">
+                  Hide setup
+                </button>
+              </div>
+              <div className="mt-3 sm-chip text-[var(--sm-muted)]">
+                {hasSharedProfile ? `Ready to save into ${profile.company}.` : 'Company and work email are required for shared save.'}
+              </div>
+            </div>
+          ) : null}
 
           {message ? <div className="mt-4 sm-chip text-[var(--sm-muted)]">{message}</div> : null}
         </article>
@@ -854,7 +1009,7 @@ export function WorkspaceLitePage() {
             <div className="space-y-4">
               {setupPanel}
               <div className="sm-chip text-[var(--sm-muted)]">
-                Use Lead Finder for net-new clients. Use Workspace when you already have a list, updates, or issues.
+                Use Lead Finder for net-new clients. Use Action OS Starter when you already have a list or messy updates.
               </div>
             </div>
           ) : (
