@@ -172,7 +172,7 @@ export function PublicLeadFinderPage() {
 
     if (hasLiveWorkspaceApi()) {
       if (!hasSharedProfile) {
-        promptWorkspaceSetup('Enter your company and work email before saving to the shared workspace.')
+        promptWorkspaceSetup('Enter your company and work email before saving into Follow-Up List.')
         return false
       }
 
@@ -184,7 +184,7 @@ export function PublicLeadFinderPage() {
           name: nextProfile.name,
           email: nextProfile.email,
           company: nextProfile.company,
-          goal: 'Save leads into Workspace',
+          goal: 'Save leads into Follow-Up List',
           campaign_goal: query.trim() || 'Run first outreach',
           rows: candidates.map((row) => {
             const outreach = buildBrowserOutreach(row, query, searchKeywords)
@@ -193,7 +193,7 @@ export function PublicLeadFinderPage() {
               stage: 'offer_ready',
               status: 'open',
               owner: 'Growth Studio',
-              service_pack: 'Action OS',
+              service_pack: 'Sales Desk',
               wedge_product: 'Lead Finder',
               semi_products: ['Lead Finder'],
               outreach_subject: outreach.subject,
@@ -219,11 +219,11 @@ export function PublicLeadFinderPage() {
         setMessage(
           successMessage
             .replace('{count}', String(saved.saved_count || candidates.length))
-            .replace('shared app', 'shared workspace'),
+            .replace('shared app', 'Follow-Up List'),
         )
         return true
       } catch (error) {
-        setMessage(error instanceof Error ? error.message : 'Could not save to the live workspace.')
+        setMessage(error instanceof Error ? error.message : 'Could not save to Follow-Up List on this host.')
         return false
       }
     }
@@ -240,11 +240,11 @@ export function PublicLeadFinderPage() {
   async function saveLead(row: LeadRow) {
     const key = rowKey(row)
     if (savedKeys.includes(key)) {
-      setMessage(`${row.name} is already in Workspace.`)
+      setMessage(`${row.name} is already in Follow-Up List.`)
       return
     }
 
-    const saved = await saveRowsToWorkspace([row], `Saved {count} lead into ${hasLiveWorkspaceApi() ? 'the shared workspace' : 'Workspace'} and created the first follow-up.`)
+    const saved = await saveRowsToWorkspace([row], `Saved {count} lead into ${hasLiveWorkspaceApi() ? 'Follow-Up List' : 'Follow-Up List'} and created the first follow-up.`)
     if (saved) {
       setSavedKeys((current) => (current.includes(key) ? current : [...current, key]))
     }
@@ -254,7 +254,7 @@ export function PublicLeadFinderPage() {
     const candidates = rows.slice(0, 3)
     const saved = await saveRowsToWorkspace(
       candidates,
-      `Saved {count} leads into ${hasLiveWorkspaceApi() ? 'the shared workspace' : 'Workspace'} and created the first follow-ups.`,
+      `Saved {count} leads into Follow-Up List and created the first follow-ups.`,
     )
     if (saved) {
       setSavedKeys(candidates.map((row) => rowKey(row)))
@@ -308,17 +308,17 @@ export function PublicLeadFinderPage() {
                 </button>
               ) : null}
               {savedTotal ? (
-                <Link className="sm-button-secondary" to="/workspace?view=queue">
-                  Open workspace
+                <Link className="sm-button-secondary" to="/follow-up-list?setup=leads&view=leads">
+                  Open Follow-Up List
                 </Link>
               ) : null}
             </div>
 
             {hasLiveWorkspaceApi() && showWorkspaceSetup ? (
               <div className="sm-proof-card">
-                <p className="sm-kicker text-[var(--sm-accent)]">Shared workspace</p>
+                <p className="sm-kicker text-[var(--sm-accent)]">Follow-Up List setup</p>
                 <p className="mt-2 text-sm text-[var(--sm-muted)]">
-                  Enter your company and work email once. After that, saved leads go into the same shared workspace.
+                  Enter your company and work email once. After that, saved leads go into the same shared list.
                 </p>
                 <div className="mt-4 grid gap-3 md:grid-cols-3">
                   <label className="grid gap-2 text-sm font-semibold text-[var(--sm-muted)]">
@@ -392,9 +392,9 @@ export function PublicLeadFinderPage() {
           </div>
           {hasLiveWorkspaceApi() && !hasSharedProfile && !showWorkspaceSetup ? (
             <div className="mt-3 flex flex-wrap items-center gap-3">
-              <div className="sm-chip text-[var(--sm-muted)]">Set up cloud save only when you are ready to keep leads.</div>
+              <div className="sm-chip text-[var(--sm-muted)]">Set up shared save only when you are ready to keep leads.</div>
               <button className="sm-button-secondary" onClick={() => setShowWorkspaceSetup(true)} type="button">
-                Set up workspace
+                Set up Follow-Up List
               </button>
             </div>
           ) : null}
@@ -402,7 +402,7 @@ export function PublicLeadFinderPage() {
             <div className="mt-3 flex flex-wrap items-center gap-3">
               <div className="sm-chip text-[var(--sm-muted)]">Ready to save into {profile.company}.</div>
               <button className="sm-button-secondary" onClick={() => setShowWorkspaceSetup(true)} type="button">
-                Edit workspace setup
+                Edit Follow-Up List setup
               </button>
             </div>
           ) : null}
@@ -490,7 +490,7 @@ export function PublicLeadFinderPage() {
             </div>
             <div className="sm-chip text-white">
               <p className="sm-kicker text-[var(--sm-accent)]">After save</p>
-              <p className="mt-2 text-sm">Workspace stores the leads and creates the follow-up queue.</p>
+              <p className="mt-2 text-sm">Follow-Up List stores the leads and creates the follow-up queue.</p>
             </div>
           </div>
           <div className="mt-5 flex flex-wrap gap-3">
@@ -500,8 +500,8 @@ export function PublicLeadFinderPage() {
               </button>
             ) : null}
             {savedTotal ? (
-              <Link className="sm-button-secondary" to="/workspace?view=queue">
-                Open workspace
+              <Link className="sm-button-secondary" to="/follow-up-list?setup=leads&view=leads">
+                Open Follow-Up List
               </Link>
             ) : null}
           </div>
@@ -510,7 +510,7 @@ export function PublicLeadFinderPage() {
               ? hasSharedProfile
                 ? `Ready to save into ${profile.company}.`
                 : 'On this host, save will ask for company and work email once.'
-              : 'This host saves into Workspace in this browser on this device.'}
+              : 'This host saves into Follow-Up List in this browser on this device.'}
           </div>
         </section>
       ) : null}

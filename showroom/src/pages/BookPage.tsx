@@ -4,23 +4,52 @@ import { PageIntro } from '../components/PageIntro'
 import { bookingUrl } from '../content'
 
 export function BookPage() {
+  const offers = [
+    {
+      name: 'Lead Finder',
+      price: '$79/mo',
+      detail: 'Self-serve search, shortlist, and first outreach drafting.',
+    },
+    {
+      name: 'Sales Desk',
+      price: '$750 pilot',
+      detail: 'One lead flow, one queue, one weekly review. Pilot fee credits into month one.',
+    },
+    {
+      name: 'Ops Desk',
+      price: '$1,500 pilot',
+      detail: 'One ops flow such as daily blockers or receiving issues. Same 2-week pilot structure.',
+    },
+  ]
+
   return (
     <div className="space-y-8">
       <PageIntro
         compact
         eyebrow="Schedule"
-        title="Book a short call."
-        description="Start with one workflow. Keep the first rollout small."
+        title="Book one small rollout."
+        description="Start with one workflow, one queue, and one weekly review."
       />
 
       <section className="grid gap-6 lg:grid-cols-[0.88fr_1.12fr]">
         <aside className="sm-terminal p-6">
-          <p className="sm-kicker text-[var(--sm-accent)]">What we cover</p>
+          <p className="sm-kicker text-[var(--sm-accent)]">What we sell now</p>
+          <div className="mt-5 grid gap-3">
+            {offers.map((offer) => (
+              <div className="sm-proof-card" key={offer.name}>
+                <p className="sm-kicker text-[var(--sm-accent)]">{offer.name}</p>
+                <p className="mt-2 text-xl font-bold text-white">{offer.price}</p>
+                <p className="mt-2 text-sm text-[var(--sm-muted)]">{offer.detail}</p>
+              </div>
+            ))}
+          </div>
+
+          <p className="mt-6 sm-kicker text-[var(--sm-accent)]">What we cover on the call</p>
           <div className="mt-5 grid gap-3">
             {[
               'One workflow to fix first',
               'What data already exists',
-              'What the first board should be',
+              'What the first queue should be',
             ].map((item) => (
               <div className="sm-chip text-white" key={item}>
                 {item}
@@ -41,7 +70,7 @@ export function BookPage() {
                 <a className="sm-button-primary" href={bookingUrl} rel="noreferrer" target="_blank">
                   Open calendar
                 </a>
-                <Link className="sm-button-secondary" to="/lead-finder">
+                <Link className="sm-button-secondary" to="/find-leads">
                   Open Lead Finder
                 </Link>
               </div>
@@ -52,11 +81,11 @@ export function BookPage() {
           ) : (
             <div className="space-y-5">
               <div className="sm-chip text-[var(--sm-muted)]">
-                Calendar booking is not live on this host yet. Start with Lead Finder and Workspace first.
+                Calendar booking is not live on this host yet. Start with Find Leads or Follow-Up List first.
               </div>
               <div className="flex flex-wrap gap-3">
-                <Link className="sm-button-primary" to="/lead-finder">Find leads</Link>
-                <Link className="sm-button-secondary" to="/workspace?start=1">Start workspace</Link>
+                <Link className="sm-button-primary" to="/find-leads">Find leads</Link>
+                <Link className="sm-button-secondary" to="/follow-up-list?setup=updates&view=queue">Open Follow-Up List</Link>
               </div>
             </div>
           )}

@@ -24,7 +24,7 @@ export function SiteFrame() {
             <span className="flex flex-col">
               <span className="sm-logo text-lg font-extrabold tracking-tight text-white">SuperMega</span>
               <span className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[var(--sm-muted)]">
-                Lead And Action Software
+                AI Work Tools
               </span>
             </span>
           </NavLink>

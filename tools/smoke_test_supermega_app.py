@@ -27,6 +27,13 @@ def request_json(opener, method: str, url: str, payload: dict | None = None, tim
     return json.loads(raw or "{}")
 
 
+def request_status(opener, url: str, timeout: int = 15) -> int:
+    request = Request(url, headers={"Accept": "text/html"}, method="GET")
+    with opener.open(request, timeout=timeout) as response:
+        response.read(64)
+        return int(getattr(response, "status", 200) or 200)
+
+
 def wait_for_health(opener, base_url: str, timeout_seconds: int) -> dict:
     deadline = time.time() + timeout_seconds
     last_error: Exception | None = None
@@ -56,6 +63,12 @@ def main() -> int:
     public_opener = build_opener(HTTPCookieProcessor(public_cookie_jar))
 
     health = wait_for_health(opener, args.base_url.rstrip("/"), args.timeout_seconds)
+    public_route_statuses = {
+        "home": request_status(public_opener, f"{args.base_url.rstrip('/')}/"),
+        "find_leads": request_status(public_opener, f"{args.base_url.rstrip('/')}/find-leads/"),
+        "follow_up_list": request_status(public_opener, f"{args.base_url.rstrip('/')}/follow-up-list/"),
+        "book": request_status(public_opener, f"{args.base_url.rstrip('/')}/book/"),
+    }
     public_bootstrap = request_json(
         public_opener,
         "POST",
@@ -356,6 +369,7 @@ def main() -> int:
         "workspace_export_status": workspace_export.get("status", ""),
         "workspace_export_link": workspace_export.get("export", {}).get("web_view_link", ""),
         "compose_url": ((outreach.get("draft") or {}).get("compose_url") or ""),
+        "public_routes": public_route_statuses,
     }
 
     if args.as_json:
@@ -366,6 +380,10 @@ def main() -> int:
     print("SuperMega app smoke test")
     print(f"- Base URL: {report['base_url']}")
     print(f"- Health: {report['health_status']}")
+    print(f"- Public home: {report['public_routes']['home']}")
+    print(f"- Public find leads: {report['public_routes']['find_leads']}")
+    print(f"- Public follow-up list: {report['public_routes']['follow_up_list']}")
+    print(f"- Public book: {report['public_routes']['book']}")
     print(f"- Public bootstrap: {report['public_bootstrap_status']} / authenticated={report['public_session_authenticated']}")
     print(f"- Login: {report['login_status']} / authenticated={report['authenticated']}")
     print(f"- Workspace: {report['workspace_slug']}")

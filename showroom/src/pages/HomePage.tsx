@@ -6,30 +6,48 @@ const startCards = [
   {
     title: 'Find clients',
     detail: 'Search a place or niche, keep the shortlist, and create the first follow-up.',
-    to: '/lead-finder',
-    button: 'Open Lead Finder',
+    to: '/find-leads',
+    button: 'Open Find Leads',
     primary: true,
   },
   {
-    title: 'Bring a lead list',
-    detail: 'Paste names, sites, phones, or emails and turn them into saved leads.',
-    to: '/workspace?setup=leads',
-    button: 'Import lead list',
+    title: 'Run sales follow-up',
+    detail: 'Bring a lead list or saved leads and keep the pipeline plus next step in one place.',
+    to: '/follow-up-list?setup=leads&view=leads',
+    button: 'Open Follow-Up List',
     primary: false,
   },
   {
-    title: 'Paste messy updates',
-    detail: 'Paste team notes or blockers and turn them into one clear queue.',
-    to: '/workspace?setup=updates&view=queue',
-    button: 'Open Action OS Starter',
+    title: 'Run ops follow-up',
+    detail: 'Paste team notes or blockers and turn them into one clear queue with owners and due dates.',
+    to: '/follow-up-list?setup=updates&view=queue',
+    button: 'Open Follow-Up List',
     primary: false,
   },
 ]
 
 const howItWorks = [
   'Search or import what you already have.',
-  'Save the right leads or updates into one workspace.',
+  'Save the right leads or updates into one tool.',
   'Run the queue every day.',
+]
+
+const offers = [
+  {
+    name: 'Lead Finder',
+    price: '$79/mo',
+    detail: 'Self-serve market search, lead saving, and first outreach drafts.',
+  },
+  {
+    name: 'Sales Desk',
+    price: '$750 pilot',
+    detail: 'Managed setup for one lead flow, one queue, and one weekly review.',
+  },
+  {
+    name: 'Ops Desk',
+    price: '$1,500 pilot',
+    detail: 'Managed setup for one ops flow such as daily blockers or receiving issues.',
+  },
 ]
 
 export function HomePage() {
@@ -47,11 +65,11 @@ export function HomePage() {
             <p className="mt-5 max-w-2xl text-base leading-relaxed text-[var(--sm-muted)] lg:text-lg">{hero.description}</p>
 
             <div className="mt-7 flex flex-wrap gap-3">
-              <Link className="sm-button-primary" to="/lead-finder">
-                Open Lead Finder
+              <Link className="sm-button-primary" to="/find-leads">
+                Open Find Leads
               </Link>
-              <Link className="sm-button-secondary" to="/workspace?setup=updates&view=queue">
-                Open Action OS Starter
+              <Link className="sm-button-secondary" to="/follow-up-list?setup=updates&view=queue">
+                Open Follow-Up List
               </Link>
             </div>
           </div>
@@ -95,6 +113,25 @@ export function HomePage() {
               <p className="text-base font-semibold text-white">{step}</p>
             </div>
           ))}
+        </div>
+      </section>
+
+      <section className="sm-surface p-6">
+        <p className="sm-kicker text-[var(--sm-accent)]">What we sell now</p>
+        <h2 className="mt-3 text-3xl font-bold text-white">Three offers. Nothing else on the front door.</h2>
+        <div className="mt-5 grid gap-4 lg:grid-cols-3">
+          {offers.map((offer) => (
+            <div className="sm-proof-card" key={offer.name}>
+              <p className="sm-kicker text-[var(--sm-accent)]">{offer.name}</p>
+              <p className="mt-2 text-2xl font-bold text-white">{offer.price}</p>
+              <p className="mt-3 text-sm leading-relaxed text-[var(--sm-muted)]">{offer.detail}</p>
+            </div>
+          ))}
+        </div>
+        <div className="mt-5">
+          <Link className="sm-button-secondary" to="/book">
+            See rollout and book
+          </Link>
         </div>
       </section>
     </div>
