@@ -49,6 +49,21 @@ function inferAppBase() {
 
 export const workspaceApiBase = inferApiBase()
 export const workspaceAppBase = inferAppBase()
+const publicWorkspaceProfileKey = 'supermega.publicWorkspaceProfile.v1'
+
+export type PublicWorkspaceProfile = {
+  name: string
+  email: string
+  company: string
+}
+
+function normalizePublicWorkspaceProfile(profile?: Partial<PublicWorkspaceProfile> | null): PublicWorkspaceProfile {
+  return {
+    name: String(profile?.name ?? '').trim(),
+    email: String(profile?.email ?? '').trim().toLowerCase(),
+    company: String(profile?.company ?? '').trim(),
+  }
+}
 
 export function hasLiveWorkspaceApi() {
   return Boolean(workspaceApiBase)
@@ -85,6 +100,41 @@ export function needsLiveAppHandoff() {
   }
 
   return workspaceAppBase !== window.location.origin
+}
+
+export function loadPublicWorkspaceProfile(): PublicWorkspaceProfile {
+  if (typeof window === 'undefined') {
+    return normalizePublicWorkspaceProfile()
+  }
+
+  try {
+    const raw = window.localStorage.getItem(publicWorkspaceProfileKey)
+    if (!raw) {
+      return normalizePublicWorkspaceProfile()
+    }
+    return normalizePublicWorkspaceProfile(JSON.parse(raw) as Partial<PublicWorkspaceProfile>)
+  } catch {
+    return normalizePublicWorkspaceProfile()
+  }
+}
+
+export function savePublicWorkspaceProfile(profile: Partial<PublicWorkspaceProfile>) {
+  if (typeof window === 'undefined') {
+    return normalizePublicWorkspaceProfile(profile)
+  }
+
+  const normalized = normalizePublicWorkspaceProfile(profile)
+  try {
+    window.localStorage.setItem(publicWorkspaceProfileKey, JSON.stringify(normalized))
+  } catch {
+    // Ignore storage failures and keep using the in-memory value.
+  }
+  return normalized
+}
+
+export function isPublicWorkspaceProfileReady(profile?: Partial<PublicWorkspaceProfile> | null) {
+  const normalized = normalizePublicWorkspaceProfile(profile)
+  return Boolean(normalized.email && normalized.company)
 }
 
 export async function workspaceFetch<T>(path: string, init?: RequestInit): Promise<T> {
