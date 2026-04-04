@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { NavLink, Outlet } from 'react-router-dom'
+import { Link, NavLink, Outlet } from 'react-router-dom'
 
 import { navItems } from '../content'
 
@@ -33,12 +33,15 @@ export function SiteFrame() {
           >
             Menu
           </button>
-          <div className="hidden items-center gap-1 md:flex">
+          <div className="hidden items-center gap-2 md:flex">
             {navItems.map((item) => (
               <NavLink className={navClassName} key={item.to} to={item.to}>
                 {item.label}
               </NavLink>
             ))}
+            <Link className="sm-button-primary ml-2" to="/book">
+              Book demo
+            </Link>
           </div>
         </nav>
         {menuOpen ? (
@@ -49,6 +52,9 @@ export function SiteFrame() {
                   {item.label}
                 </NavLink>
               ))}
+              <Link className="sm-button-primary mt-2" onClick={() => setMenuOpen(false)} to="/book">
+                Book demo
+              </Link>
             </div>
           </div>
         ) : null}
@@ -61,6 +67,9 @@ export function SiteFrame() {
       <footer className="border-t border-white/8 bg-[rgba(4,10,22,0.78)]">
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 px-4 py-6 text-sm text-[var(--sm-muted)] lg:flex-row lg:items-center lg:justify-between lg:px-8">
           <p>Simple tools for company lists and task lists.</p>
+          <Link className="sm-link" to="/book">
+            Book a demo
+          </Link>
         </div>
       </footer>
     </div>
