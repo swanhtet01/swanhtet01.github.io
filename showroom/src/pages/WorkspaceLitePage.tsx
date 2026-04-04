@@ -132,13 +132,13 @@ const setupOptions: Array<{
 }> = [
   {
     id: 'leads',
-    title: 'Bring a lead list',
-    detail: 'Paste names, sites, phones, or emails and turn them into saved leads.',
+    title: 'Bring a company list',
+    detail: 'Paste names, sites, phones, or emails and turn them into saved companies.',
   },
   {
     id: 'updates',
     title: 'Paste team updates',
-    detail: 'Paste messy notes and turn them into a queue with owners and due dates.',
+    detail: 'Paste messy notes and turn them into a task list with owners and due dates.',
   },
 ]
 
@@ -150,8 +150,8 @@ function isSetupFlow(value: string | null): value is Exclude<SetupFlow, 'pick'> 
   return value === 'find' || value === 'leads' || value === 'updates' || value === 'receiving'
 }
 
-function viewHref(view: WorkspaceView) {
-  return `/follow-up-list?view=${view}`
+function viewHref(view: WorkspaceView, basePath = '/sales-follow-up') {
+  return `${basePath}?view=${view}`
 }
 
 function normalizeBrowserLead(row: BrowserWorkspaceLead): WorkspaceLeadItem {
@@ -233,12 +233,12 @@ function toCsvRow(lead: WorkspaceLeadItem): LeadRow {
     email: lead.email,
     phone: lead.phone,
     website: lead.website,
-    source: 'Follow-Up List',
+    source: 'Sales Follow-Up',
     source_url: lead.sourceUrl,
     snippet: '',
     social_profiles: [],
     fit_reasons: [],
-    provider: lead.provider || 'Follow-Up List',
+    provider: lead.provider || 'Sales Follow-Up',
     score: lead.score,
   }
 }
@@ -281,6 +281,7 @@ function buildSharedLeadRow(row: LeadRow, contextLabel: string) {
 export function WorkspaceLitePage() {
   const location = useLocation()
   const navigate = useNavigate()
+  const normalizedPathname = location.pathname.replace(/\/+$/, '') || '/'
   const [mode, setMode] = useState<WorkspaceMode>('local')
   const [loading, setLoading] = useState(true)
   const [starting, setStarting] = useState(false)
@@ -303,14 +304,20 @@ export function WorkspaceLitePage() {
   const requestedView = searchParams.get('view')
   const requestedSetup = searchParams.get('setup')
   const shouldStartShared = searchParams.get('start') === '1'
+  const publicSurface = normalizedPathname === '/team-updates' ? 'updates' : 'sales'
+  const publicBasePath = publicSurface === 'sales' ? '/sales-follow-up' : '/team-updates'
   const openTasks = useMemo(() => tasks.filter((task) => task.status === 'open'), [tasks])
   const hasData = leads.length > 0 || tasks.length > 0
   const activeView: WorkspaceView = isWorkspaceView(requestedView)
     ? requestedView
-    : tasks.length || requestedSetup === 'updates' || requestedSetup === 'receiving'
+    : publicSurface === 'updates' || tasks.length || requestedSetup === 'updates' || requestedSetup === 'receiving'
       ? 'queue'
       : 'leads'
   const hasSharedProfile = isPublicWorkspaceProfileReady(profile)
+  const pageEyebrow = publicSurface === 'sales' ? 'Sales Follow-Up' : 'Team Updates'
+  const listLabel = publicSurface === 'sales' ? 'Sales Follow-Up' : 'Team Updates'
+  const storageLabel = mode === 'shared' ? 'Save online' : 'This computer'
+  const visibleSetupOptions = publicSurface === 'sales' ? setupOptions.filter((option) => option.id === 'leads') : setupOptions.filter((option) => option.id === 'updates')
 
   const summary = useMemo(() => {
     if (mode === 'local') {
@@ -345,8 +352,8 @@ export function WorkspaceLitePage() {
       setSetupFlow(requestedSetup)
       return
     }
-    setSetupFlow(hasData ? 'pick' : 'updates')
-  }, [hasData, requestedSetup])
+    setSetupFlow(hasData ? 'pick' : publicSurface === 'sales' ? 'leads' : 'updates')
+  }, [hasData, publicSurface, requestedSetup])
 
   function applyQueueTemplate(templateId: QueueTemplateId) {
     const template = queueTemplates[templateId]
@@ -393,18 +400,18 @@ export function WorkspaceLitePage() {
       })
       return true
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Could not start cloud save for this desk.')
+      setMessage(error instanceof Error ? error.message : 'Could not start save online for this list.')
       return false
     }
   }
 
   const startSharedWorkspace = useCallback(async () => {
     if (!hasLiveWorkspaceApi()) {
-      setMessage('Cloud save is not available on this host yet.')
+      setMessage('Save online is not available on this host yet.')
       return
     }
     if (!hasSharedProfile) {
-      promptCloudSetup('Enter your company and work email before turning on cloud save.')
+      promptCloudSetup('Enter your company and work email before turning on save online.')
       return
     }
 
@@ -418,7 +425,7 @@ export function WorkspaceLitePage() {
         name: nextProfile.name,
         email: nextProfile.email,
         company: nextProfile.company,
-        goal: 'Move this desk to cloud save',
+        goal: 'Move this list to save online',
       })
 
       if (localLeads.length) {
@@ -426,7 +433,7 @@ export function WorkspaceLitePage() {
           name: nextProfile.name,
           email: nextProfile.email,
           company: nextProfile.company,
-          goal: 'Move this desk to cloud save',
+          goal: 'Move this list to save online',
           campaign_goal: 'Migrate desk',
           rows: localLeads.map((lead) => ({
             ...buildSharedLeadRow(lead, 'Imported lead list'),
@@ -456,9 +463,9 @@ export function WorkspaceLitePage() {
 
       await loadSharedState()
       setShowCloudSetup(false)
-      setMessage(localLeads.length || localTasks.length ? 'Turned on cloud save and moved this desk into it.' : 'Started the shared desk.')
+      setMessage(localLeads.length || localTasks.length ? 'Turned on save online and moved this list into it.' : 'Started the online list.')
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Could not start the shared desk.')
+      setMessage(error instanceof Error ? error.message : 'Could not start the online list.')
     } finally {
       setStarting(false)
     }
@@ -490,7 +497,7 @@ export function WorkspaceLitePage() {
       } catch (error) {
         if (!cancelled) {
           loadLocalState()
-          setMessage(error instanceof Error ? `${error.message} Using this device desk instead.` : 'Using this device desk instead.')
+          setMessage(error instanceof Error ? `${error.message} Using this computer instead.` : 'Using this computer instead.')
         }
       } finally {
         if (!cancelled) {
@@ -508,13 +515,13 @@ export function WorkspaceLitePage() {
 
   async function saveLeadRows(rows: LeadRow[], successMessage: string) {
     if (!rows.length) {
-      setMessage('Paste at least one lead first.')
+      setMessage('Paste at least one company first.')
       return
     }
 
     if (mode === 'shared' || hasLiveWorkspaceApi()) {
       if (mode !== 'shared') {
-        const ready = await ensureSharedWorkspaceReady('saving into Follow-Up List')
+        const ready = await ensureSharedWorkspaceReady('saving into Sales Follow-Up')
         if (!ready) {
           return
         }
@@ -523,7 +530,7 @@ export function WorkspaceLitePage() {
         name: profile.name,
         email: profile.email,
         company: profile.company,
-        goal: 'Save lead list into Follow-Up List',
+        goal: 'Save company list into Sales Follow-Up',
         campaign_goal: 'Imported lead list',
         rows: rows.map((row) => buildSharedLeadRow(row, 'Imported lead list')),
       })
@@ -539,12 +546,12 @@ export function WorkspaceLitePage() {
 
     setLeadImportText('')
     setMessage(successMessage)
-    navigate('/follow-up-list?view=leads', { replace: true })
+    navigate(`${publicBasePath}?view=leads`, { replace: true })
   }
 
   async function importLeadList() {
     const rows = parseLeads(leadImportText)
-    await saveLeadRows(rows, `Saved ${rows.length} lead${rows.length === 1 ? '' : 's'} and created the first follow-up.`)
+    await saveLeadRows(rows, `Saved ${rows.length} compan${rows.length === 1 ? 'y' : 'ies'} and created the first follow-up.`)
   }
 
   async function saveTaskRows(
@@ -565,7 +572,7 @@ export function WorkspaceLitePage() {
 
     if (mode === 'shared' || hasLiveWorkspaceApi()) {
       if (mode !== 'shared') {
-        const ready = await ensureSharedWorkspaceReady('saving into the queue')
+        const ready = await ensureSharedWorkspaceReady('saving into the task list')
         if (!ready) {
           return
         }
@@ -597,7 +604,7 @@ export function WorkspaceLitePage() {
     }
 
     setMessage(successMessage)
-    navigate('/follow-up-list?view=queue', { replace: true })
+    navigate(`${publicBasePath}?view=queue`, { replace: true })
   }
 
   async function importUpdates() {
@@ -605,7 +612,7 @@ export function WorkspaceLitePage() {
       ...row,
       template: 'ops_blocker' as const,
     }))
-    await saveTaskRows(rows, `Saved ${rows.length} queue item${rows.length === 1 ? '' : 's'} from the pasted updates.`)
+    await saveTaskRows(rows, `Saved ${rows.length} task${rows.length === 1 ? '' : 's'} from the pasted updates.`)
     setUpdateImportText('')
     applyQueueTemplate('ops_blocker')
   }
@@ -623,7 +630,7 @@ export function WorkspaceLitePage() {
         notes: 'Imported from receiving issues',
         template: 'receiving_issue' as const,
       }))
-    await saveTaskRows(rows, `Saved ${rows.length} receiving issue${rows.length === 1 ? '' : 's'} into the queue.`)
+    await saveTaskRows(rows, `Saved ${rows.length} receiving issue${rows.length === 1 ? '' : 's'} into the task list.`)
     setReceivingImportText('')
     applyQueueTemplate('receiving_issue')
   }
@@ -655,7 +662,7 @@ export function WorkspaceLitePage() {
 
   async function removeLead(leadId: string) {
     if (mode === 'shared') {
-      setMessage('Remove is only available in the private app for shared desks.')
+      setMessage('Remove is only available in the private app for online lists.')
       return
     }
     setLeads(removeBrowserWorkspaceLead(leadId).map(normalizeBrowserLead))
@@ -668,13 +675,13 @@ export function WorkspaceLitePage() {
     } else {
       downloadLeadCsv(leads.map(toCsvRow))
     }
-    setMessage('Exported desk leads as CSV.')
+    setMessage('Exported companies as CSV.')
   }
 
   async function seedQueue() {
     if (mode === 'shared' || hasLiveWorkspaceApi()) {
       if (mode !== 'shared') {
-        const ready = await ensureSharedWorkspaceReady('pulling leads into the queue')
+        const ready = await ensureSharedWorkspaceReady('pulling companies into the task list')
         if (!ready) {
           return
         }
@@ -703,12 +710,12 @@ export function WorkspaceLitePage() {
 
       await createWorkspaceTasks(rows)
       await loadSharedState()
-      setMessage(`Created ${rows.length} follow-up action${rows.length === 1 ? '' : 's'} from saved leads.`)
+      setMessage(`Created ${rows.length} follow-up task${rows.length === 1 ? '' : 's'} from saved companies.`)
       return
     }
 
     setTasks(seedBrowserWorkspaceActionsFromLeads().map(normalizeBrowserTask))
-    setMessage('Created follow-up actions from saved leads.')
+    setMessage('Created follow-up tasks from saved companies.')
   }
 
   async function saveQuickAction() {
@@ -719,7 +726,7 @@ export function WorkspaceLitePage() {
 
     if (mode === 'shared' || hasLiveWorkspaceApi()) {
       if (mode !== 'shared') {
-        const ready = await ensureSharedWorkspaceReady('saving into the queue')
+        const ready = await ensureSharedWorkspaceReady('saving into the task list')
         if (!ready) {
           return
         }
@@ -750,7 +757,7 @@ export function WorkspaceLitePage() {
     }
 
     setQueueTitle('')
-    setMessage(`Saved ${queueTemplates[queueTemplate].label.toLowerCase()} into the queue.`)
+    setMessage(`Saved ${queueTemplates[queueTemplate].label.toLowerCase()} into the task list.`)
   }
 
   async function markDone(taskId: string) {
@@ -783,11 +790,11 @@ export function WorkspaceLitePage() {
   const setupPanel =
     setupFlow === 'find' ? (
       <div className="sm-proof-card">
-        <p className="text-lg font-bold text-white">Use Find Leads when you need net-new clients.</p>
-        <p className="mt-2 text-sm text-[var(--sm-muted)]">Search a place or niche, keep the shortlist, then come back here to run the queue.</p>
+        <p className="text-lg font-bold text-white">Use Find Companies when you need net-new clients.</p>
+        <p className="mt-2 text-sm text-[var(--sm-muted)]">Search a place or niche, keep the shortlist, then come back here to run the task list.</p>
         <div className="mt-4 flex flex-wrap gap-3">
-          <Link className="sm-button-primary" to="/find-leads">
-            Open Find Leads
+          <Link className="sm-button-primary" to="/find-companies">
+            Open Find Companies
           </Link>
           <button className="sm-button-secondary" onClick={() => setSetupFlow('leads')} type="button">
             I already have a list
@@ -796,18 +803,18 @@ export function WorkspaceLitePage() {
       </div>
     ) : setupFlow === 'leads' ? (
       <div className="sm-proof-card">
-        <p className="text-lg font-bold text-white">Paste a lead list.</p>
-        <p className="mt-2 text-sm text-[var(--sm-muted)]">Names, websites, emails, and phones are enough. Follow-Up List will save the leads and create the first follow-up.</p>
+        <p className="text-lg font-bold text-white">Paste a company list.</p>
+        <p className="mt-2 text-sm text-[var(--sm-muted)]">Names, websites, emails, and phones are enough. Sales Follow-Up will save the companies and create the first follow-up.</p>
         <textarea
           className="sm-input mt-4 min-h-40"
           onChange={(event) => setLeadImportText(event.target.value)}
           placeholder="North Star Clinic | www.northstarclinic.com | hello@northstarclinic.com | +1 555 111 2222"
           value={leadImportText}
         />
-        <div className="mt-4 flex flex-wrap gap-3">
-          <button className="sm-button-primary" onClick={() => void importLeadList()} type="button">
-            Import lead list
-          </button>
+          <div className="mt-4 flex flex-wrap gap-3">
+            <button className="sm-button-primary" onClick={() => void importLeadList()} type="button">
+              Import company list
+            </button>
           <button className="sm-button-secondary" onClick={() => setLeadImportText(LEAD_SAMPLE_TEXT)} type="button">
             Load example
           </button>
@@ -816,17 +823,17 @@ export function WorkspaceLitePage() {
     ) : setupFlow === 'updates' ? (
       <div className="sm-proof-card">
         <p className="text-lg font-bold text-white">Paste messy team updates.</p>
-        <p className="mt-2 text-sm text-[var(--sm-muted)]">Follow-Up List will turn them into a simple queue with owner and due date suggestions.</p>
+        <p className="mt-2 text-sm text-[var(--sm-muted)]">Team Updates will turn them into a simple task list with owner and due date suggestions.</p>
         <textarea
           className="sm-input mt-4 min-h-40"
           onChange={(event) => setUpdateImportText(event.target.value)}
           placeholder="Power fluctuation at Plant A | Operations Team"
           value={updateImportText}
         />
-        <div className="mt-4 flex flex-wrap gap-3">
-          <button className="sm-button-primary" onClick={() => void importUpdates()} type="button">
-            Build queue
-          </button>
+          <div className="mt-4 flex flex-wrap gap-3">
+            <button className="sm-button-primary" onClick={() => void importUpdates()} type="button">
+              Build task list
+            </button>
           <button className="sm-button-secondary" onClick={() => setUpdateImportText(ACTION_SAMPLE_TEXT)} type="button">
             Load example
           </button>
@@ -835,7 +842,7 @@ export function WorkspaceLitePage() {
     ) : setupFlow === 'receiving' ? (
       <div className="sm-proof-card">
         <p className="text-lg font-bold text-white">Log receiving or procurement issues.</p>
-        <p className="mt-2 text-sm text-[var(--sm-muted)]">Paste one issue per line. Follow-Up List will put them straight into the queue.</p>
+        <p className="mt-2 text-sm text-[var(--sm-muted)]">Paste one issue per line. Team Updates will put them straight into the task list.</p>
         <textarea
           className="sm-input mt-4 min-h-40"
           onChange={(event) => setReceivingImportText(event.target.value)}
@@ -868,20 +875,20 @@ export function WorkspaceLitePage() {
     <div className="space-y-8">
       <PageIntro
         compact
-        eyebrow="Follow-Up List"
+        eyebrow={pageEyebrow}
         title={
-          activeView === 'leads' || setupFlow === 'leads'
+          publicSurface === 'sales'
             ? hasData
-              ? 'Keep leads and follow-up in one place.'
-              : 'Bring a lead list or save leads from Lead Finder.'
+              ? 'Keep companies and next steps in one place.'
+              : 'Bring a company list or save companies from Find Companies.'
             : hasData
-              ? 'Keep blockers and next steps in one queue.'
-              : 'Paste messy updates and turn them into one clear queue.'
+              ? 'Turn updates into one task list.'
+              : 'Paste team updates and build today’s task list.'
         }
         description={
-          activeView === 'leads' || setupFlow === 'leads'
-            ? 'Follow-Up List keeps saved leads, notes, stages, and the next sales action together.'
-            : 'Follow-Up List turns scattered team updates or receiving issues into one daily queue.'
+          publicSurface === 'sales'
+            ? 'Sales Follow-Up keeps saved companies, notes, stages, and the next sales task together.'
+            : 'Team Updates turns scattered notes or receiving issues into one short task list.'
         }
       />
 
@@ -889,18 +896,18 @@ export function WorkspaceLitePage() {
         <article className="sm-surface p-6">
           <p className="sm-kicker text-[var(--sm-accent)]">Start here</p>
           <h2 className="mt-3 text-3xl font-bold text-white">
-            {hasData ? 'Work inside Follow-Up List.' : 'Set up your follow-up list.'}
+            {hasData ? `Work inside ${listLabel}.` : `Set up ${listLabel}.`}
           </h2>
           <p className="mt-3 text-sm leading-relaxed text-[var(--sm-muted)]">
             {mode === 'shared'
-              ? 'This list is using shared cloud save.'
+              ? 'This list is saving online.'
               : hasLiveWorkspaceApi()
-                ? 'Start here with pasted data. Turn on cloud save later if you need it.'
-                : 'This tool works in this browser now. Use it here when there is no live backend.'}
+                ? 'Start here with pasted data. Turn on save online later if you need it.'
+                : 'This tool works in this browser now.'}
           </p>
 
           <div className="mt-5 grid gap-3 md:grid-cols-2">
-            {setupOptions.map((option) => {
+            {visibleSetupOptions.map((option) => {
               const active = setupFlow === option.id
               return (
                 <button
@@ -920,43 +927,43 @@ export function WorkspaceLitePage() {
             <>
               <div className="mt-5 grid gap-3 md:grid-cols-3">
                 <div className="sm-chip text-white">
-                  <p className="sm-kicker text-[var(--sm-accent)]">Leads</p>
+                  <p className="sm-kicker text-[var(--sm-accent)]">Companies</p>
                   <p className="mt-2 text-3xl font-bold">{summary.total}</p>
                 </div>
                 <div className="sm-chip text-white">
-                  <p className="sm-kicker text-[var(--sm-accent-alt)]">Open queue</p>
+                  <p className="sm-kicker text-[var(--sm-accent-alt)]">Open tasks</p>
                   <p className="mt-2 text-3xl font-bold">{summary.openActionCount}</p>
                 </div>
                 <div className="sm-chip text-white">
-                  <p className="sm-kicker text-[var(--sm-accent)]">Mode</p>
-                  <p className="mt-2 text-base font-bold">{mode === 'shared' ? 'Cloud save' : 'This device'}</p>
+                  <p className="sm-kicker text-[var(--sm-accent)]">Save</p>
+                  <p className="mt-2 text-base font-bold">{storageLabel}</p>
                 </div>
               </div>
 
               <div className="mt-5 flex flex-wrap gap-3">
-                <Link className={activeView === 'leads' ? 'sm-button-primary' : 'sm-button-secondary'} to={viewHref('leads')}>
-                  Leads
+                <Link className={activeView === 'leads' ? 'sm-button-primary' : 'sm-button-secondary'} to={viewHref('leads', publicBasePath)}>
+                  Companies
                 </Link>
-                <Link className={activeView === 'queue' ? 'sm-button-primary' : 'sm-button-secondary'} to={viewHref('queue')}>
-                  Queue
+                <Link className={activeView === 'queue' ? 'sm-button-primary' : 'sm-button-secondary'} to={viewHref('queue', publicBasePath)}>
+                  Tasks
                 </Link>
               </div>
             </>
           ) : (
             <div className="mt-5 sm-chip text-[var(--sm-muted)]">
-              {mode === 'shared' ? 'Shared list ready.' : 'Nothing saved yet. Start with one list or one update.'}
+              {mode === 'shared' ? 'Online list ready.' : `Nothing saved yet. Start with one ${publicSurface === 'sales' ? 'company list' : 'update list'}.`}
             </div>
           )}
 
           {hasData && hasLiveWorkspaceApi() && mode === 'local' && !showCloudSetup && !hasSharedProfile ? (
             <div className="mt-5 sm-proof-card">
-              <p className="sm-kicker text-[var(--sm-accent)]">Cloud save</p>
+              <p className="sm-kicker text-[var(--sm-accent)]">Save online</p>
               <p className="mt-2 text-sm text-[var(--sm-muted)]">
-                Start here in this browser first. Turn on cloud save when you want the same list to follow you.
+                Start here on this computer first. Turn on save online when you want the same list to follow you.
               </p>
               <div className="mt-4 flex flex-wrap gap-3">
                 <button className="sm-button-secondary" onClick={() => setShowCloudSetup(true)} type="button">
-                  Turn on cloud save
+                  Turn on save online
                 </button>
               </div>
             </div>
@@ -964,11 +971,11 @@ export function WorkspaceLitePage() {
 
           {hasData && hasLiveWorkspaceApi() && mode === 'local' && hasSharedProfile && !showCloudSetup ? (
             <div className="mt-5 sm-proof-card">
-              <p className="sm-kicker text-[var(--sm-accent)]">Cloud save</p>
-              <p className="mt-2 text-sm text-[var(--sm-muted)]">Ready to save into {profile.company}. Turn it on when you want this list to stay shared.</p>
+              <p className="sm-kicker text-[var(--sm-accent)]">Save online</p>
+              <p className="mt-2 text-sm text-[var(--sm-muted)]">Ready to save into {profile.company}. Turn it on when you want this list to stay online.</p>
               <div className="mt-4 flex flex-wrap gap-3">
                 <button className="sm-button-secondary" disabled={starting} onClick={() => void startSharedWorkspace()} type="button">
-                  {starting ? 'Starting...' : hasData ? 'Move this list to cloud' : 'Start shared list'}
+                  {starting ? 'Starting...' : hasData ? 'Move this list online' : 'Start online list'}
                 </button>
                 <button className="sm-button-secondary" onClick={() => setShowCloudSetup(true)} type="button">
                   Edit setup
@@ -979,9 +986,9 @@ export function WorkspaceLitePage() {
 
           {hasLiveWorkspaceApi() && mode === 'local' && showCloudSetup ? (
             <div className="mt-5 sm-proof-card">
-              <p className="sm-kicker text-[var(--sm-accent)]">Cloud save setup</p>
+              <p className="sm-kicker text-[var(--sm-accent)]">Save online setup</p>
               <p className="mt-2 text-sm text-[var(--sm-muted)]">
-                Use your company and work email once. After that, imported leads and queue items save into the same shared list.
+                Use your company and work email once. After that, imported companies and tasks save into the same online list.
               </p>
               <div className="mt-4 grid gap-3 md:grid-cols-3">
                 <label className="grid gap-2 text-sm font-semibold text-[var(--sm-muted)]">
@@ -999,14 +1006,14 @@ export function WorkspaceLitePage() {
               </div>
               <div className="mt-4 flex flex-wrap gap-3">
                 <button className="sm-button-secondary" disabled={starting || !hasSharedProfile} onClick={() => void startSharedWorkspace()} type="button">
-                  {starting ? 'Starting...' : hasData ? 'Move this list to cloud' : 'Start shared list'}
+                  {starting ? 'Starting...' : hasData ? 'Move this list online' : 'Start online list'}
                 </button>
                 <button className="sm-button-secondary" onClick={() => setShowCloudSetup(false)} type="button">
                   Hide setup
                 </button>
               </div>
               <div className="mt-3 sm-chip text-[var(--sm-muted)]">
-                {hasSharedProfile ? `Ready to save into ${profile.company}.` : 'Company and work email are required for shared save.'}
+                {hasSharedProfile ? `Ready to save into ${profile.company}.` : 'Company and work email are required for save online.'}
               </div>
             </div>
           ) : null}
@@ -1019,7 +1026,9 @@ export function WorkspaceLitePage() {
             <div className="space-y-4">
               {setupPanel}
               <div className="sm-chip text-[var(--sm-muted)]">
-                Use Find Leads for net-new clients. Use Follow-Up List when you already have a list or messy updates.
+                {publicSurface === 'sales'
+                  ? 'Use Find Companies for net-new prospects. Use Sales Follow-Up when you already have a list.'
+                  : 'Paste today’s notes and build the task list. Turn on save online later if you need it.'}
               </div>
             </div>
           ) : (
@@ -1037,14 +1046,14 @@ export function WorkspaceLitePage() {
                 <>
                   <div className="flex items-center justify-between gap-3">
                     <div>
-                      <p className="sm-kicker text-[var(--sm-accent)]">{activeView === 'queue' ? 'Queue' : 'Saved leads'}</p>
+                      <p className="sm-kicker text-[var(--sm-accent)]">{activeView === 'queue' ? 'Tasks' : 'Saved companies'}</p>
                       <p className="mt-2 text-sm text-[var(--sm-muted)]">
                         {activeView === 'queue'
-                          ? 'Keep the queue short. Start with the top open actions.'
-                          : 'Move the right leads forward and leave one clear next note.'}
+                          ? 'Keep the task list short. Start with the top open items.'
+                          : 'Move the right companies forward and leave one clear next note.'}
                       </p>
                     </div>
-                    <span className="sm-status-pill">{loading ? 'LOADING' : mode === 'shared' ? 'CLOUD' : 'THIS DEVICE'}</span>
+                    <span className="sm-status-pill">{loading ? 'LOADING' : mode === 'shared' ? 'ONLINE' : 'THIS COMPUTER'}</span>
                   </div>
 
                   {loading ? (
@@ -1111,11 +1120,11 @@ export function WorkspaceLitePage() {
 
                         <div className="mt-4 flex flex-wrap gap-3">
                           <button className="sm-button-primary" onClick={() => void saveQuickAction()} type="button">
-                            Save to queue
+                            Save task
                           </button>
                           {leads.length ? (
                             <button className="sm-button-secondary" onClick={() => void seedQueue()} type="button">
-                              Pull from leads
+                              Pull from companies
                             </button>
                           ) : null}
                         </div>
@@ -1149,16 +1158,16 @@ export function WorkspaceLitePage() {
                         ))
                       ) : (
                         <div className="sm-proof-card">
-                          <p className="font-semibold text-white">No queue yet</p>
-                          <p className="mt-2 text-sm text-[var(--sm-muted)]">Start with one action above, or import messy updates from the left.</p>
+                          <p className="font-semibold text-white">No tasks yet</p>
+                          <p className="mt-2 text-sm text-[var(--sm-muted)]">Start with one task above, or import messy updates from the left.</p>
                         </div>
                       )}
                     </>
                   ) : leads.length ? (
                     <>
                       <div className="flex flex-wrap gap-3">
-                        <Link className="sm-button-secondary" to="/find-leads">
-                          Find more leads
+                        <Link className="sm-button-secondary" to="/find-companies">
+                          Find more companies
                         </Link>
                         <button className="sm-button-secondary" onClick={exportWorkspace} type="button">
                           Export CSV
@@ -1220,17 +1229,17 @@ export function WorkspaceLitePage() {
                     </>
                   ) : (
                     <div className="sm-proof-card">
-                      <p className="font-semibold text-white">No saved leads yet</p>
-                      <p className="mt-2 text-sm text-[var(--sm-muted)]">Find clients with Lead Finder, paste a lead list, or switch to Queue if you already know the next action.</p>
+                      <p className="font-semibold text-white">No saved companies yet</p>
+                      <p className="mt-2 text-sm text-[var(--sm-muted)]">Find companies, paste a company list, or switch to Tasks if you already know the next step.</p>
                       <div className="mt-4 flex flex-wrap gap-3">
-                        <Link className="sm-button-primary" to="/find-leads">
-                          Open Find Leads
+                        <Link className="sm-button-primary" to="/find-companies">
+                          Open Find Companies
                         </Link>
                         <button className="sm-button-secondary" onClick={() => setSetupFlow('leads')} type="button">
-                          Import lead list
+                          Import company list
                         </button>
-                        <Link className="sm-button-secondary" to={viewHref('queue')}>
-                          Open queue
+                        <Link className="sm-button-secondary" to={viewHref('queue', publicBasePath)}>
+                          Open tasks
                         </Link>
                       </div>
                     </div>

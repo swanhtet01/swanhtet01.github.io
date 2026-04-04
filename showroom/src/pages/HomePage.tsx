@@ -4,44 +4,44 @@ import { hero, proofPoints } from '../content'
 
 const startCards = [
   {
-    title: 'Find clients',
+    title: 'Find companies',
     detail: 'Search a place or niche, keep the shortlist, and create the first follow-up.',
-    to: '/find-leads',
-    button: 'Open Find Leads',
+    to: '/find-companies',
+    button: 'Open Find Companies',
     primary: true,
   },
   {
     title: 'Run sales follow-up',
-    detail: 'Bring a lead list or saved leads and keep the pipeline plus next step in one place.',
-    to: '/follow-up-list?setup=leads&view=leads',
-    button: 'Open Follow-Up List',
+    detail: 'Bring a company list or saved companies and keep the next step in one place.',
+    to: '/sales-follow-up',
+    button: 'Open Sales Follow-Up',
     primary: false,
   },
   {
-    title: 'Run ops follow-up',
-    detail: 'Paste team notes or blockers and turn them into one clear queue with owners and due dates.',
-    to: '/follow-up-list?setup=updates&view=queue',
-    button: 'Open Follow-Up List',
+    title: 'Turn team updates into tasks',
+    detail: 'Paste team notes or blockers and turn them into one clear task list with owners and due dates.',
+    to: '/team-updates',
+    button: 'Open Team Updates',
     primary: false,
   },
 ]
 
 const howItWorks = [
   'Search or import what you already have.',
-  'Save the right leads or updates into one tool.',
-  'Run the queue every day.',
+  'Save the right companies or updates into one tool.',
+  'Run the task list every day.',
 ]
 
 const offers = [
   {
-    name: 'Lead Finder',
+    name: 'Find Companies',
     price: '$79/mo',
-    detail: 'Self-serve market search, lead saving, and first outreach drafts.',
+    detail: 'Self-serve market search, company saving, and first outreach drafts.',
   },
   {
     name: 'Sales Desk',
     price: '$750 pilot',
-    detail: 'Managed setup for one lead flow, one queue, and one weekly review.',
+    detail: 'Managed setup for one sales flow, one task list, and one weekly review.',
   },
   {
     name: 'Ops Desk',
@@ -65,11 +65,11 @@ export function HomePage() {
             <p className="mt-5 max-w-2xl text-base leading-relaxed text-[var(--sm-muted)] lg:text-lg">{hero.description}</p>
 
             <div className="mt-7 flex flex-wrap gap-3">
-              <Link className="sm-button-primary" to="/find-leads">
-                Open Find Leads
+              <Link className="sm-button-primary" to="/find-companies">
+                Open Find Companies
               </Link>
-              <Link className="sm-button-secondary" to="/follow-up-list?setup=updates&view=queue">
-                Open Follow-Up List
+              <Link className="sm-button-secondary" to="/team-updates">
+                Open Team Updates
               </Link>
             </div>
           </div>

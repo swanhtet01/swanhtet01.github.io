@@ -26,7 +26,7 @@ export function BookPage() {
     <div className="space-y-8">
       <PageIntro
         compact
-        eyebrow="Schedule"
+        eyebrow="Book Demo"
         title="Book one small rollout."
         description="Start with one workflow, one queue, and one weekly review."
       />
@@ -70,8 +70,8 @@ export function BookPage() {
                 <a className="sm-button-primary" href={bookingUrl} rel="noreferrer" target="_blank">
                   Open calendar
                 </a>
-                <Link className="sm-button-secondary" to="/find-leads">
-                  Open Lead Finder
+                <Link className="sm-button-secondary" to="/find-companies">
+                  Open Find Companies
                 </Link>
               </div>
               <div className="overflow-hidden rounded-3xl border border-white/8 bg-[rgba(255,255,255,0.02)]">
@@ -81,11 +81,11 @@ export function BookPage() {
           ) : (
             <div className="space-y-5">
               <div className="sm-chip text-[var(--sm-muted)]">
-                Calendar booking is not live on this host yet. Start with Find Leads or Follow-Up List first.
+                Calendar booking is not live on this host yet. Start with Find Companies or Sales Follow-Up first.
               </div>
               <div className="flex flex-wrap gap-3">
-                <Link className="sm-button-primary" to="/find-leads">Find leads</Link>
-                <Link className="sm-button-secondary" to="/follow-up-list?setup=updates&view=queue">Open Follow-Up List</Link>
+                <Link className="sm-button-primary" to="/find-companies">Find companies</Link>
+                <Link className="sm-button-secondary" to="/sales-follow-up">Open Sales Follow-Up</Link>
               </div>
             </div>
           )}

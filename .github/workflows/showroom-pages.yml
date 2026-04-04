@@ -56,6 +56,12 @@ jobs:
           VITE_WORKSPACE_API_BASE: ${{ vars.VITE_WORKSPACE_API_BASE }}
         run: npm run build
 
+      - name: Verify public routes
+        run: |
+          for route in find-companies sales-follow-up team-updates book; do
+            test -f "showroom/dist/$route/index.html"
+          done
+
       - name: Normalize CNAME encoding
         run: |
           python - <<'PY'

@@ -47,12 +47,18 @@ def wait_for_health(opener, base_url: str, timeout_seconds: int) -> dict:
 
 
 def main() -> int:
+    try:
+        sys.stdout.reconfigure(errors="replace")
+        sys.stderr.reconfigure(errors="replace")
+    except AttributeError:
+        pass
+
     parser = argparse.ArgumentParser(description="Smoke test the local SuperMega app.")
     parser.add_argument("--base-url", default="http://127.0.0.1:8787")
     parser.add_argument("--username", default="owner")
     parser.add_argument("--password", default="supermega-demo")
     parser.add_argument("--workspace", default="supermega-lab")
-    parser.add_argument("--query", default="spa in yangon")
+    parser.add_argument("--query", default="tyre shop in yangon")
     parser.add_argument("--timeout-seconds", type=int, default=30)
     parser.add_argument("--as-json", action="store_true")
     args = parser.parse_args()
@@ -65,8 +71,9 @@ def main() -> int:
     health = wait_for_health(opener, args.base_url.rstrip("/"), args.timeout_seconds)
     public_route_statuses = {
         "home": request_status(public_opener, f"{args.base_url.rstrip('/')}/"),
-        "find_leads": request_status(public_opener, f"{args.base_url.rstrip('/')}/find-leads/"),
-        "follow_up_list": request_status(public_opener, f"{args.base_url.rstrip('/')}/follow-up-list/"),
+        "find_companies": request_status(public_opener, f"{args.base_url.rstrip('/')}/find-companies/"),
+        "sales_follow_up": request_status(public_opener, f"{args.base_url.rstrip('/')}/sales-follow-up/"),
+        "team_updates": request_status(public_opener, f"{args.base_url.rstrip('/')}/team-updates/"),
         "book": request_status(public_opener, f"{args.base_url.rstrip('/')}/book/"),
     }
     public_bootstrap = request_json(
@@ -182,7 +189,7 @@ def main() -> int:
                     "score": rows[0].get("score", 0) if rows else 0,
                     "stage": "offer_ready",
                     "status": "open",
-                    "service_pack": "Action OS",
+                    "service_pack": "Sales Desk",
                     "wedge_product": "Lead Finder",
                     "task_title": f"Follow up {rows[0].get('name', 'Smoke Lead')}" if rows else "Follow up Smoke Lead",
                     "task_template": "lead_follow_up",
@@ -381,8 +388,9 @@ def main() -> int:
     print(f"- Base URL: {report['base_url']}")
     print(f"- Health: {report['health_status']}")
     print(f"- Public home: {report['public_routes']['home']}")
-    print(f"- Public find leads: {report['public_routes']['find_leads']}")
-    print(f"- Public follow-up list: {report['public_routes']['follow_up_list']}")
+    print(f"- Public find companies: {report['public_routes']['find_companies']}")
+    print(f"- Public sales follow-up: {report['public_routes']['sales_follow_up']}")
+    print(f"- Public team updates: {report['public_routes']['team_updates']}")
     print(f"- Public book: {report['public_routes']['book']}")
     print(f"- Public bootstrap: {report['public_bootstrap_status']} / authenticated={report['public_session_authenticated']}")
     print(f"- Login: {report['login_status']} / authenticated={report['authenticated']}")

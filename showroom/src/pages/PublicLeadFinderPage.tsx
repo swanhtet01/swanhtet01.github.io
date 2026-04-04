@@ -15,12 +15,12 @@ import {
 import { downloadLeadCsv, parseLeads, type LeadRow } from '../lib/tooling'
 
 const quickSearches = [
-  { label: 'Clinics in Dubai', query: 'clinic in dubai', keywords: 'clinic,healthcare,medical,dubai' },
-  { label: 'Rubber suppliers in Malaysia', query: 'rubber supplier malaysia', keywords: 'rubber,supplier,industrial,malaysia' },
-  { label: 'Warehouses in Jakarta', query: 'warehouse jakarta', keywords: 'warehouse,logistics,storage,jakarta' },
+  { label: 'Tyre shops in Yangon', query: 'tyre shop in yangon', keywords: 'tyre,auto,service,yangon' },
+  { label: 'Warehouses in Mandalay', query: 'warehouse in mandalay', keywords: 'warehouse,logistics,mandalay' },
+  { label: 'Rubber suppliers in Thailand', query: 'rubber supplier thailand', keywords: 'rubber,supplier,industrial,thailand' },
 ]
 
-const DEFAULT_PUBLIC_KEYWORDS = 'clinic,healthcare,medical,dubai'
+const DEFAULT_PUBLIC_KEYWORDS = 'tyre,auto,service,yangon'
 
 function rowKey(row: LeadRow) {
   return [row.name, row.website, row.phone, row.source_url].filter(Boolean).join('|')
@@ -166,13 +166,13 @@ export function PublicLeadFinderPage() {
 
   async function saveRowsToWorkspace(candidates: LeadRow[], successMessage: string) {
     if (!candidates.length) {
-      setMessage('Search first, then save at least one lead.')
+      setMessage('Search first, then save at least one company.')
       return false
     }
 
     if (hasLiveWorkspaceApi()) {
       if (!hasSharedProfile) {
-        promptWorkspaceSetup('Enter your company and work email before saving into Follow-Up List.')
+        promptWorkspaceSetup('Enter your company and work email before saving into Sales Follow-Up.')
         return false
       }
 
@@ -184,7 +184,7 @@ export function PublicLeadFinderPage() {
           name: nextProfile.name,
           email: nextProfile.email,
           company: nextProfile.company,
-          goal: 'Save leads into Follow-Up List',
+          goal: 'Save leads into Sales Follow-Up',
           campaign_goal: query.trim() || 'Run first outreach',
           rows: candidates.map((row) => {
             const outreach = buildBrowserOutreach(row, query, searchKeywords)
@@ -219,11 +219,11 @@ export function PublicLeadFinderPage() {
         setMessage(
           successMessage
             .replace('{count}', String(saved.saved_count || candidates.length))
-            .replace('shared app', 'Follow-Up List'),
+            .replace('shared app', 'Sales Follow-Up'),
         )
         return true
       } catch (error) {
-        setMessage(error instanceof Error ? error.message : 'Could not save to Follow-Up List on this host.')
+        setMessage(error instanceof Error ? error.message : 'Could not save to Sales Follow-Up on this host.')
         return false
       }
     }
@@ -240,11 +240,11 @@ export function PublicLeadFinderPage() {
   async function saveLead(row: LeadRow) {
     const key = rowKey(row)
     if (savedKeys.includes(key)) {
-      setMessage(`${row.name} is already in Follow-Up List.`)
+      setMessage(`${row.name} is already in Sales Follow-Up.`)
       return
     }
 
-    const saved = await saveRowsToWorkspace([row], `Saved {count} lead into ${hasLiveWorkspaceApi() ? 'Follow-Up List' : 'Follow-Up List'} and created the first follow-up.`)
+    const saved = await saveRowsToWorkspace([row], 'Saved {count} company into Sales Follow-Up and created the first follow-up.')
     if (saved) {
       setSavedKeys((current) => (current.includes(key) ? current : [...current, key]))
     }
@@ -254,7 +254,7 @@ export function PublicLeadFinderPage() {
     const candidates = rows.slice(0, 3)
     const saved = await saveRowsToWorkspace(
       candidates,
-      `Saved {count} leads into Follow-Up List and created the first follow-ups.`,
+      'Saved {count} companies into Sales Follow-Up and created the first follow-ups.',
     )
     if (saved) {
       setSavedKeys(candidates.map((row) => rowKey(row)))
@@ -271,9 +271,9 @@ export function PublicLeadFinderPage() {
     <div className="space-y-8">
       <PageIntro
         compact
-        eyebrow="Lead Finder"
-        title="Find businesses worth contacting."
-        description="Search by place or niche, then save only the leads worth chasing."
+        eyebrow="Find Companies"
+        title="Find companies to contact."
+        description="Search by place or niche, then save only the companies worth chasing."
       />
 
       <section className="grid gap-6 lg:grid-cols-[0.82fr_1.18fr]">
@@ -284,7 +284,7 @@ export function PublicLeadFinderPage() {
           <div className="mt-5 grid gap-4">
             <label className="grid gap-2 text-sm font-semibold text-[var(--sm-muted)]">
               What are you looking for?
-              <input autoComplete="off" className="sm-input" onChange={(event) => setQuery(event.target.value)} placeholder="clinic in dubai" value={query} />
+              <input autoComplete="off" className="sm-input" onChange={(event) => setQuery(event.target.value)} placeholder="tyre shop in Yangon" value={query} />
             </label>
 
             <div className="grid gap-2">
@@ -308,17 +308,17 @@ export function PublicLeadFinderPage() {
                 </button>
               ) : null}
               {savedTotal ? (
-                <Link className="sm-button-secondary" to="/follow-up-list?setup=leads&view=leads">
-                  Open Follow-Up List
+                <Link className="sm-button-secondary" to="/sales-follow-up">
+                  Open Sales Follow-Up
                 </Link>
               ) : null}
             </div>
 
             {hasLiveWorkspaceApi() && showWorkspaceSetup ? (
               <div className="sm-proof-card">
-                <p className="sm-kicker text-[var(--sm-accent)]">Follow-Up List setup</p>
+                <p className="sm-kicker text-[var(--sm-accent)]">Save online setup</p>
                 <p className="mt-2 text-sm text-[var(--sm-muted)]">
-                  Enter your company and work email once. After that, saved leads go into the same shared list.
+                  Enter your company and work email once. After that, saved companies go into the same online follow-up list.
                 </p>
                 <div className="mt-4 grid gap-3 md:grid-cols-3">
                   <label className="grid gap-2 text-sm font-semibold text-[var(--sm-muted)]">
@@ -385,16 +385,16 @@ export function PublicLeadFinderPage() {
 
           <div className="mt-4 sm-chip text-[var(--sm-muted)]">
             {rows.length
-              ? 'Save only the leads worth chasing.'
+              ? 'Save only the companies worth chasing.'
               : publicLeadFinderAvailable()
                 ? 'Search is ready on this host.'
                 : 'Use the manual list on this host.'}
           </div>
           {hasLiveWorkspaceApi() && !hasSharedProfile && !showWorkspaceSetup ? (
             <div className="mt-3 flex flex-wrap items-center gap-3">
-              <div className="sm-chip text-[var(--sm-muted)]">Set up shared save only when you are ready to keep leads.</div>
+              <div className="sm-chip text-[var(--sm-muted)]">Set up save online only when you are ready to keep companies.</div>
               <button className="sm-button-secondary" onClick={() => setShowWorkspaceSetup(true)} type="button">
-                Set up Follow-Up List
+                Set up save online
               </button>
             </div>
           ) : null}
@@ -402,7 +402,7 @@ export function PublicLeadFinderPage() {
             <div className="mt-3 flex flex-wrap items-center gap-3">
               <div className="sm-chip text-[var(--sm-muted)]">Ready to save into {profile.company}.</div>
               <button className="sm-button-secondary" onClick={() => setShowWorkspaceSetup(true)} type="button">
-                Edit Follow-Up List setup
+                Edit save setup
               </button>
             </div>
           ) : null}
@@ -414,7 +414,7 @@ export function PublicLeadFinderPage() {
             <div>
               <p className="sm-kicker text-[var(--sm-accent)]">Results</p>
               <p className="mt-2 text-sm text-[var(--sm-muted)]">
-                {rows.length ? `${rows.length} result${rows.length === 1 ? '' : 's'} returned. Save the ones worth chasing.` : 'Run a search to get leads.'}
+                {rows.length ? `${rows.length} result${rows.length === 1 ? '' : 's'} returned. Save the companies worth chasing.` : 'Run a search to get companies.'}
               </p>
             </div>
             <span className="sm-status-pill">{busy ? 'SEARCHING' : 'READY'}</span>
@@ -467,7 +467,7 @@ export function PublicLeadFinderPage() {
               <div className="sm-chip text-[var(--sm-muted)]">Manual fallback is filled. Run search to merge it with browser results.</div>
             ) : (
               <div className="sm-chip text-[var(--sm-muted)]">
-                Try one of the quick searches above, then save the leads worth chasing.
+                Try one of the quick searches above, then save the companies worth chasing.
               </div>
             )}
 
@@ -478,7 +478,7 @@ export function PublicLeadFinderPage() {
       {(rows.length || savedTotal) ? (
         <section className="sm-surface p-6">
           <p className="sm-kicker text-[var(--sm-accent)]">Next step</p>
-          <h2 className="mt-3 text-3xl font-bold text-white">Save the leads, then run the queue.</h2>
+          <h2 className="mt-3 text-3xl font-bold text-white">Save the best companies, then run sales follow-up.</h2>
           <div className="mt-5 grid gap-3 md:grid-cols-3">
             <div className="sm-chip text-white">
               <p className="sm-kicker text-[var(--sm-accent)]">Saved already</p>
@@ -486,11 +486,11 @@ export function PublicLeadFinderPage() {
             </div>
             <div className="sm-chip text-white">
               <p className="sm-kicker text-[var(--sm-accent-alt)]">Search rule</p>
-              <p className="mt-2 text-sm">Save only the leads worth chasing first.</p>
+              <p className="mt-2 text-sm">Save only the companies worth chasing first.</p>
             </div>
             <div className="sm-chip text-white">
               <p className="sm-kicker text-[var(--sm-accent)]">After save</p>
-              <p className="mt-2 text-sm">Follow-Up List stores the leads and creates the follow-up queue.</p>
+              <p className="mt-2 text-sm">Sales Follow-Up stores the companies and creates the next sales tasks.</p>
             </div>
           </div>
           <div className="mt-5 flex flex-wrap gap-3">
@@ -500,8 +500,8 @@ export function PublicLeadFinderPage() {
               </button>
             ) : null}
             {savedTotal ? (
-              <Link className="sm-button-secondary" to="/follow-up-list?setup=leads&view=leads">
-                Open Follow-Up List
+              <Link className="sm-button-secondary" to="/sales-follow-up">
+                Open Sales Follow-Up
               </Link>
             ) : null}
           </div>
@@ -510,7 +510,7 @@ export function PublicLeadFinderPage() {
               ? hasSharedProfile
                 ? `Ready to save into ${profile.company}.`
                 : 'On this host, save will ask for company and work email once.'
-              : 'This host saves into Follow-Up List in this browser on this device.'}
+              : 'This host saves into Sales Follow-Up in this browser on this computer.'}
           </div>
         </section>
       ) : null}

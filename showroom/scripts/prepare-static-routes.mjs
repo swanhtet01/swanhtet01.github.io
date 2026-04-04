@@ -5,8 +5,13 @@ const distDir = resolve(process.cwd(), 'dist')
 const indexFile = resolve(distDir, 'index.html')
 const routePaths = [
   'action-os',
+  'find-companies',
   'find-leads',
+  'sales-follow-up',
+  'team-updates',
   'follow-up-list',
+  'bring-a-list',
+  'paste-updates',
   'queue-builder',
   'sales-desk',
   'ops-desk',

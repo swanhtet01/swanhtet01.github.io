@@ -37,26 +37,31 @@ function App() {
       <Routes>
         <Route element={<SiteFrame />} path="/">
           <Route element={<HomePage />} index />
-          <Route element={<Navigate replace to="/ops-desk" />} path="action-os" />
+          <Route element={<Navigate replace to="/team-updates" />} path="action-os" />
           <Route element={<Navigate replace to="/book" />} path="platform" />
           <Route element={<Navigate replace to="/book" />} path="products" />
           <Route element={<Navigate replace to="/book" />} path="solutions" />
           <Route element={<Navigate replace to="/book" />} path="lab" />
-          <Route element={<PublicLeadFinderPage />} path="find-leads" />
-          <Route element={<Navigate replace to="/find-leads" />} path="lead-finder" />
-          <Route element={<WorkspaceLitePage />} path="follow-up-list" />
-          <Route element={<Navigate replace to="/follow-up-list" />} path="queue-builder" />
-          <Route element={<Navigate replace to="/follow-up-list" />} path="workspace" />
-          <Route element={<Navigate replace to="/follow-up-list?setup=leads&view=leads" />} path="sales-desk" />
-          <Route element={<Navigate replace to="/follow-up-list?setup=updates&view=queue" />} path="ops-desk" />
-          <Route element={liveAppAvailable ? <LoginPage /> : <Navigate replace to="/follow-up-list" />} path="login" />
-          <Route element={liveAppAvailable ? <SignupPage /> : <Navigate replace to="/follow-up-list" />} path="signup" />
+          <Route element={<PublicLeadFinderPage />} path="find-companies" />
+          <Route element={<Navigate replace to="/find-companies" />} path="find-leads" />
+          <Route element={<Navigate replace to="/find-companies" />} path="lead-finder" />
+          <Route element={<WorkspaceLitePage />} path="sales-follow-up" />
+          <Route element={<WorkspaceLitePage />} path="team-updates" />
+          <Route element={<Navigate replace to="/sales-follow-up" />} path="follow-up-list" />
+          <Route element={<Navigate replace to="/sales-follow-up" />} path="queue-builder" />
+          <Route element={<Navigate replace to="/sales-follow-up" />} path="workspace" />
+          <Route element={<Navigate replace to="/sales-follow-up?setup=leads&view=leads" />} path="bring-a-list" />
+          <Route element={<Navigate replace to="/team-updates?setup=updates&view=queue" />} path="paste-updates" />
+          <Route element={<Navigate replace to="/sales-follow-up?setup=leads&view=leads" />} path="sales-desk" />
+          <Route element={<Navigate replace to="/team-updates?setup=updates&view=queue" />} path="ops-desk" />
+          <Route element={liveAppAvailable ? <LoginPage /> : <Navigate replace to="/sales-follow-up" />} path="login" />
+          <Route element={liveAppAvailable ? <SignupPage /> : <Navigate replace to="/sales-follow-up" />} path="signup" />
           <Route element={<BookPage />} path="book" />
-          <Route element={<Navigate replace to="/follow-up-list" />} path="examples" />
-          <Route element={<Navigate replace to="/follow-up-list" />} path="tools" />
-          <Route element={<Navigate replace to="/follow-up-list" />} path="demos" />
-          <Route element={<Navigate replace to="/follow-up-list" />} path="prototypes" />
-          <Route element={<Navigate replace to="/follow-up-list" />} path="try" />
+          <Route element={<Navigate replace to="/sales-follow-up" />} path="examples" />
+          <Route element={<Navigate replace to="/sales-follow-up" />} path="tools" />
+          <Route element={<Navigate replace to="/sales-follow-up" />} path="demos" />
+          <Route element={<Navigate replace to="/sales-follow-up" />} path="prototypes" />
+          <Route element={<Navigate replace to="/sales-follow-up" />} path="try" />
           <Route element={<Navigate replace to="/book" />} path="packages" />
           <Route element={<Navigate replace to="/book" />} path="contact" />
           <Route element={<Navigate replace to="/" />} path="home" />
