@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 
-import { PageIntro } from '../components/PageIntro'
 import { browserWorkspaceSummary, buildBrowserOutreach, saveBrowserWorkspaceLeads } from '../lib/browserWorkspace'
 import { trackEvent } from '../lib/analytics'
 import { searchPublicLeads } from '../lib/publicLeadFinder'
@@ -295,18 +294,13 @@ export function PublicLeadFinderPage() {
   }
 
   return (
-    <div className="space-y-8">
-      <PageIntro
-        compact
-        eyebrow="Find Companies"
-        title="Search one market."
-        description="Type a place and business type, then keep the companies worth contacting."
-      />
-
-      <section className="space-y-6">
-        <article className="sm-surface p-6">
-          <p className="sm-kicker text-[var(--sm-accent)]">Search</p>
-          <h2 className="mt-3 text-3xl font-bold text-white">Run one search.</h2>
+    <div className="space-y-6">
+      <section className="sm-surface p-6 lg:p-8">
+        <p className="sm-kicker text-[var(--sm-accent)]">Find Companies</p>
+        <h1 className="mt-3 text-3xl font-bold text-white lg:text-4xl">Run one search.</h1>
+        <p className="mt-3 max-w-2xl text-sm leading-relaxed text-[var(--sm-muted)]">
+          Type a place and business type, then keep the companies worth contacting.
+        </p>
 
           <div className="mt-5 grid gap-4">
             <label className="grid gap-2 text-sm font-semibold text-[var(--sm-muted)]">
@@ -401,9 +395,9 @@ export function PublicLeadFinderPage() {
           </div>
 
           {message ? <div className="mt-3 sm-chip text-[var(--sm-muted)]">{message}</div> : null}
-        </article>
+      </section>
 
-        {rows.length || manualInput.trim() || message ? (
+      {rows.length || manualInput.trim() || message ? (
         <article className="sm-terminal p-6">
           <div>
             <div>
@@ -466,8 +460,7 @@ export function PublicLeadFinderPage() {
 
           </div>
         </article>
-        ) : null}
-      </section>
+      ) : null}
 
       {(rows.length || savedTotal) ? (
         <section className="sm-surface p-6">

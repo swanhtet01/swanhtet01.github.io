@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 
-import { PageIntro } from '../components/PageIntro'
 import { identifyUser, trackEvent } from '../lib/analytics'
 import {
   browserWorkspaceSummary,
@@ -834,8 +833,7 @@ export function WorkspaceLitePage() {
       </div>
     ) : setupFlow === 'leads' ? (
       <div className="sm-proof-card">
-        <p className="text-lg font-bold text-white">Paste a company list.</p>
-        <p className="mt-2 text-sm text-[var(--sm-muted)]">Names, websites, emails, and phones are enough. Company List will save the companies and create the first follow-up.</p>
+        <p className="text-sm text-[var(--sm-muted)]">Names, websites, emails, and phones are enough. The first follow-up task will be created automatically.</p>
         <textarea
           className="sm-input mt-4 min-h-40"
           onChange={(event) => setLeadImportText(event.target.value)}
@@ -866,8 +864,7 @@ export function WorkspaceLitePage() {
       </div>
     ) : setupFlow === 'updates' ? (
       <div className="sm-proof-card">
-        <p className="text-lg font-bold text-white">Paste messy team updates.</p>
-        <p className="mt-2 text-sm text-[var(--sm-muted)]">Task List will turn them into a simple task list with owner and due date suggestions.</p>
+        <p className="text-sm text-[var(--sm-muted)]">Paste messy notes, blockers, or receiving issues. They will be turned into a simple task list.</p>
         <textarea
           className="sm-input mt-4 min-h-40"
           onChange={(event) => setUpdateImportText(event.target.value)}
@@ -960,27 +957,26 @@ export function WorkspaceLitePage() {
 
   if (!hasData) {
     return (
-      <div className="space-y-8">
-        <PageIntro
-          compact
-          eyebrow={pageEyebrow}
-          title={publicSurface === 'sales' ? 'Bring a company list.' : 'Paste team updates.'}
-          description={
-            publicSurface === 'sales'
-              ? 'Paste names, sites, emails, or phones. If you need new companies first, use Find Companies.'
-              : 'Paste messy notes, blockers, or receiving issues and turn them into a short task list.'
-          }
-        />
-
+      <div className="space-y-6">
         <section className="sm-surface p-6 lg:p-8">
+          <p className="sm-kicker text-[var(--sm-accent)]">{pageEyebrow}</p>
+          <h1 className="mt-3 text-3xl font-bold text-white lg:text-4xl">
+            {publicSurface === 'sales' ? 'Bring a company list.' : 'Paste team updates.'}
+          </h1>
+          <p className="mt-3 max-w-2xl text-sm leading-relaxed text-[var(--sm-muted)]">
+            {publicSurface === 'sales'
+              ? 'Paste names, sites, emails, or phones. If you need new companies first, use Find Companies.'
+              : 'Paste messy notes, blockers, or receiving issues and turn them into a short task list.'}
+          </p>
           {setupPanel}
-          <div className="mt-5 flex flex-wrap gap-3">
-            {publicSurface === 'sales' ? (
-              <Link className="sm-button-secondary" to="/find-companies">
-                Need new companies? Find companies
+          {publicSurface === 'sales' ? (
+            <div className="mt-5 text-sm text-[var(--sm-muted)]">
+              Need new companies first?{' '}
+              <Link className="text-white underline underline-offset-4" to="/find-companies">
+                Find companies
               </Link>
-            ) : null}
-          </div>
+            </div>
+          ) : null}
           {cloudSavePanel ? <div className="mt-5">{cloudSavePanel}</div> : null}
           {message ? <div className="mt-4 sm-chip text-[var(--sm-muted)]">{message}</div> : null}
         </section>
@@ -989,26 +985,7 @@ export function WorkspaceLitePage() {
   }
 
   return (
-    <div className="space-y-8">
-      <PageIntro
-        compact
-        eyebrow={pageEyebrow}
-        title={
-          publicSurface === 'sales'
-            ? hasData
-              ? 'Keep companies and next steps in one place.'
-              : 'Bring a company list or save companies from Find Companies.'
-            : hasData
-              ? 'Turn updates into one task list.'
-              : "Paste team updates and build today's task list."
-        }
-        description={
-          publicSurface === 'sales'
-        ? 'Company List keeps saved companies, notes, and the next step together.'
-        : 'Task List turns scattered notes or receiving issues into one short task list.'
-        }
-      />
-
+    <div className="space-y-6">
       <section className="grid gap-6 lg:grid-cols-[0.82fr_1.18fr]">
         <article className="sm-surface p-6">
           <p className="sm-kicker text-[var(--sm-accent)]">{publicSurface === 'sales' ? 'Saved companies' : 'Task list'}</p>
