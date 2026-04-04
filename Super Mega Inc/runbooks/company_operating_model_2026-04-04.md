@@ -9,8 +9,8 @@ SuperMega should not present itself as a generic AI platform.
 SuperMega should be a small software-and-service company that sells a few AI-native work tools:
 
 1. `Find Companies`
-2. `Sales List`
-3. `Team Tasks`
+2. `Company List`
+3. `Task List`
 
 These three tools are enough to start revenue.
 
@@ -28,7 +28,7 @@ Why it matters:
 - Google and Facebook stop at discovery
 - Find Companies closes the first operating loop
 
-### 2. Sales List
+### 2. Company List
 
 Job:
 - import a company list
@@ -39,7 +39,7 @@ Price direction:
 - self-serve after the public shared backend is stable
 - managed setup before that
 
-### 3. Team Tasks
+### 3. Task List
 
 Job:
 - paste messy updates
@@ -87,24 +87,20 @@ Keep the internal agent team small and operational.
 - draft first outreach
 - create first follow-up tasks
 
-### Onboarding Builder
+### List Clerk
 - turn a client list or pasted updates into the first working list
-- create sample tasks
+- dedupe, tag, and score imported records
 - prepare the first weekly review
 
-### Queue Triage
+### Task Triage
 - clean incoming notes
 - merge duplicates
 - assign owner and due window
 
-### Director Brief
+### Founder Brief
 - summarize pipeline movement
 - summarize open tasks
 - highlight blockers, aging work, and money due
-
-### Product Triage
-- convert complaints into structured product changes
-- tag by route, friction, severity, and fix candidate
 
 ## What To Equip The Team With
 
@@ -183,7 +179,7 @@ Use AI only where it creates or speeds up a real row:
 - add daily director brief
 
 ### Week 4
-- run SuperMega itself from Find Companies + Sales List + Team Tasks
+- run SuperMega itself from Find Companies + Company List + Task List
 - close the first pilots from the same stack
 
 ## CEO Rule

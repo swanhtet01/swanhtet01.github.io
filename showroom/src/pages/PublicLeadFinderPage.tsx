@@ -3,6 +3,7 @@ import { Link, useLocation } from 'react-router-dom'
 
 import { PageIntro } from '../components/PageIntro'
 import { browserWorkspaceSummary, buildBrowserOutreach, saveBrowserWorkspaceLeads } from '../lib/browserWorkspace'
+import { trackEvent } from '../lib/analytics'
 import { publicLeadFinderAvailable, searchPublicLeads } from '../lib/publicLeadFinder'
 import {
   hasLiveWorkspaceApi,
@@ -123,6 +124,12 @@ export function PublicLeadFinderPage() {
       setRows(nextRows)
       setProvider(payload.provider)
       setSavedKeys([])
+      trackEvent('find_companies_search', {
+        query: nextQuery,
+        keywords: nextKeywords.join(','),
+        result_count: nextRows.length,
+        provider: payload.provider,
+      })
 
       if (!nextRows.length) {
         setMessage('No results returned. Try a broader query or use the manual fallback.')
@@ -172,7 +179,7 @@ export function PublicLeadFinderPage() {
 
     if (hasLiveWorkspaceApi()) {
       if (!hasSharedProfile) {
-        promptWorkspaceSetup('Enter your company and work email before saving into Sales List.')
+        promptWorkspaceSetup('Enter your company and work email before saving into Company List.')
         return false
       }
 
@@ -184,7 +191,7 @@ export function PublicLeadFinderPage() {
           name: nextProfile.name,
           email: nextProfile.email,
           company: nextProfile.company,
-          goal: 'Save leads into Sales List',
+          goal: 'Save leads into Company List',
           campaign_goal: query.trim() || 'Run first outreach',
           rows: candidates.map((row) => {
             const outreach = buildBrowserOutreach(row, query, searchKeywords)
@@ -217,11 +224,11 @@ export function PublicLeadFinderPage() {
 
         setSavedTotal((current) => Math.max(current, saved.saved_count || candidates.length, current + candidates.length))
         setMessage(
-          successMessage.replace('{count}', String(saved.saved_count || candidates.length)).replace('shared app', 'Sales List'),
+          successMessage.replace('{count}', String(saved.saved_count || candidates.length)).replace('shared app', 'Company List'),
         )
         return true
       } catch (error) {
-        setMessage(error instanceof Error ? error.message : 'Could not save to Sales List on this host.')
+        setMessage(error instanceof Error ? error.message : 'Could not save to Company List on this host.')
         return false
       }
     }
@@ -238,12 +245,17 @@ export function PublicLeadFinderPage() {
   async function saveLead(row: LeadRow) {
     const key = rowKey(row)
     if (savedKeys.includes(key)) {
-      setMessage(`${row.name} is already in Sales List.`)
+      setMessage(`${row.name} is already in Company List.`)
       return
     }
 
-    const saved = await saveRowsToWorkspace([row], 'Saved {count} company into Sales List and created the first follow-up.')
+    const saved = await saveRowsToWorkspace([row], 'Saved {count} company into Company List and created the first follow-up.')
     if (saved) {
+      trackEvent('company_kept', {
+        source: 'find_companies',
+        count: 1,
+        provider,
+      })
       setSavedKeys((current) => (current.includes(key) ? current : [...current, key]))
     }
   }
@@ -252,9 +264,14 @@ export function PublicLeadFinderPage() {
     const candidates = rows.slice(0, 3)
     const saved = await saveRowsToWorkspace(
       candidates,
-      'Saved {count} companies into Sales List and created the first follow-ups.',
+      'Saved {count} companies into Company List and created the first follow-ups.',
     )
     if (saved) {
+      trackEvent('company_kept', {
+        source: 'find_companies',
+        count: candidates.length,
+        provider,
+      })
       setSavedKeys(candidates.map((row) => rowKey(row)))
     }
   }
@@ -262,6 +279,10 @@ export function PublicLeadFinderPage() {
   async function copyOutreach(row: LeadRow) {
     const draft = buildBrowserOutreach(row, query, searchKeywords)
     await navigator.clipboard.writeText(`${draft.subject}\n\n${draft.message}`)
+    trackEvent('outreach_copied', {
+      source: 'find_companies',
+      company: row.name,
+    })
     setMessage(`Copied outreach for ${row.name}.`)
   }
 
@@ -271,7 +292,7 @@ export function PublicLeadFinderPage() {
         compact
         eyebrow="Find Companies"
         title="Find companies to contact."
-        description="Search by place or niche, then save only the companies worth chasing."
+        description="Search by place and business type, then keep only the companies worth chasing."
       />
 
       <section className="grid gap-6 lg:grid-cols-[0.82fr_1.18fr]">
@@ -285,6 +306,22 @@ export function PublicLeadFinderPage() {
               <input autoComplete="off" className="sm-input" onChange={(event) => setQuery(event.target.value)} placeholder="tyre shop in Yangon" value={query} />
             </label>
 
+            <div className="flex flex-wrap gap-3">
+              <button className="sm-button-primary" disabled={busy || !query.trim()} onClick={() => void runSearch()} type="button">
+                {busy ? 'Searching...' : 'Find companies'}
+              </button>
+              {rows.length ? (
+                <button className="sm-button-secondary" onClick={() => void saveTopResults()} type="button">
+                  Keep first 3
+                </button>
+              ) : null}
+              {savedTotal ? (
+                <Link className="sm-button-secondary" to="/company-list">
+                  Open Company List
+                </Link>
+              ) : null}
+            </div>
+
             <div className="grid gap-2">
               <p className="sm-kicker text-[var(--sm-accent)]">Try one</p>
               <div className="flex flex-wrap gap-2">
@@ -296,27 +333,11 @@ export function PublicLeadFinderPage() {
               </div>
             </div>
 
-          <div className="flex flex-wrap gap-3">
-            <button className="sm-button-primary" disabled={busy || !query.trim()} onClick={() => void runSearch()} type="button">
-              {busy ? 'Searching...' : 'Search now'}
-            </button>
-              {rows.length ? (
-                <button className="sm-button-secondary" onClick={() => void saveTopResults()} type="button">
-                  Save top 3
-                </button>
-              ) : null}
-              {savedTotal ? (
-                <Link className="sm-button-secondary" to="/sales-list">
-                  Open Sales List
-                </Link>
-              ) : null}
-            </div>
-
             {hasLiveWorkspaceApi() && showWorkspaceSetup ? (
               <div className="sm-proof-card">
                 <p className="sm-kicker text-[var(--sm-accent)]">Keep saved companies online</p>
                 <p className="mt-2 text-sm text-[var(--sm-muted)]">
-                  Enter your company and work email once. After that, saved companies can go into the same online sales list.
+                  Enter your company and work email once. After that, saved companies can go into the same online company list.
                 </p>
                 <div className="mt-4 grid gap-3 md:grid-cols-3">
                   <label className="grid gap-2 text-sm font-semibold text-[var(--sm-muted)]">
@@ -392,7 +413,7 @@ export function PublicLeadFinderPage() {
             <div className="mt-3 flex flex-wrap items-center gap-3">
               <div className="sm-chip text-[var(--sm-muted)]">Set this up only when you want to keep saved companies online.</div>
               <button className="sm-button-secondary" onClick={() => setShowWorkspaceSetup(true)} type="button">
-                Keep saved companies online
+                Keep companies online
               </button>
             </div>
           ) : null}
@@ -408,14 +429,13 @@ export function PublicLeadFinderPage() {
         </article>
 
         <article className="sm-terminal p-6">
-          <div className="flex items-center justify-between gap-3">
+          <div>
             <div>
               <p className="sm-kicker text-[var(--sm-accent)]">Results</p>
               <p className="mt-2 text-sm text-[var(--sm-muted)]">
-                {rows.length ? `${rows.length} result${rows.length === 1 ? '' : 's'} returned. Save the companies worth chasing.` : 'Run a search to get companies.'}
+                {rows.length ? `${rows.length} result${rows.length === 1 ? '' : 's'} returned. Keep the companies worth chasing.` : 'Run a search to get companies.'}
               </p>
             </div>
-            <span className="sm-status-pill">{busy ? 'SEARCHING' : 'READY'}</span>
           </div>
 
           <div className="mt-5 space-y-4">
@@ -447,7 +467,7 @@ export function PublicLeadFinderPage() {
 
                     <div className="mt-4 flex flex-wrap gap-3">
                       <button className="sm-button-primary" onClick={() => void saveLead(row)} type="button">
-                        {saved ? 'Saved' : 'Save'}
+                        {saved ? 'Kept' : 'Keep'}
                       </button>
                       {row.source_url ? (
                         <a className="sm-button-secondary" href={row.source_url} rel="noreferrer" target="_blank">
@@ -465,7 +485,7 @@ export function PublicLeadFinderPage() {
               <div className="sm-chip text-[var(--sm-muted)]">Manual fallback is filled. Run search to merge it with browser results.</div>
             ) : (
               <div className="sm-chip text-[var(--sm-muted)]">
-                Try one of the quick searches above, then save the companies worth chasing.
+                Try one of the quick searches above, then keep the companies worth chasing.
               </div>
             )}
 
@@ -476,7 +496,7 @@ export function PublicLeadFinderPage() {
       {(rows.length || savedTotal) ? (
         <section className="sm-surface p-6">
           <p className="sm-kicker text-[var(--sm-accent)]">Next step</p>
-          <h2 className="mt-3 text-3xl font-bold text-white">Save the best companies, then run the sales list.</h2>
+          <h2 className="mt-3 text-3xl font-bold text-white">Keep the best companies, then work the company list.</h2>
           <div className="mt-5 grid gap-3 md:grid-cols-3">
             <div className="sm-chip text-white">
               <p className="sm-kicker text-[var(--sm-accent)]">Saved already</p>
@@ -488,7 +508,7 @@ export function PublicLeadFinderPage() {
             </div>
             <div className="sm-chip text-white">
               <p className="sm-kicker text-[var(--sm-accent)]">After save</p>
-              <p className="mt-2 text-sm">Sales List stores the companies and creates the next sales tasks.</p>
+              <p className="mt-2 text-sm">Company List stores the companies and creates the next sales tasks.</p>
             </div>
           </div>
           <div className="mt-5 flex flex-wrap gap-3">
@@ -498,8 +518,8 @@ export function PublicLeadFinderPage() {
               </button>
             ) : null}
             {savedTotal ? (
-              <Link className="sm-button-secondary" to="/sales-list">
-                Open Sales List
+              <Link className="sm-button-secondary" to="/company-list">
+                Open Company List
               </Link>
             ) : null}
           </div>
@@ -508,7 +528,7 @@ export function PublicLeadFinderPage() {
               ? hasSharedProfile
                 ? `Ready to save into ${profile.company}.`
                 : 'On this host, save will ask for company and work email once.'
-              : 'This host saves into Sales List in this browser on this computer.'}
+              : 'This host saves into Company List in this browser on this computer.'}
           </div>
         </section>
       ) : null}

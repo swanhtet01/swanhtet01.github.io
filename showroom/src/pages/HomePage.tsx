@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
 
-import { hero, proofPoints } from '../content'
+import { hero } from '../content'
+import { trackEvent } from '../lib/analytics'
 
 const startCards = [
   {
@@ -11,25 +12,19 @@ const startCards = [
     primary: true,
   },
   {
-    title: 'Keep a sales list',
+    title: 'Keep a company list',
     detail: 'Bring a company list or saved companies and keep the next step in one place.',
-    to: '/sales-list',
+    to: '/company-list',
     button: 'Paste company list',
     primary: false,
   },
   {
     title: 'Turn updates into tasks',
     detail: 'Paste team notes or blockers and turn them into one clear task list with owners and due dates.',
-    to: '/team-tasks',
+    to: '/task-list',
     button: 'Build task list',
     primary: false,
   },
-]
-
-const howItWorks = [
-  'Search or import what you already have.',
-  'Save the right companies or updates into one tool.',
-  'Run the task list every day.',
 ]
 
 export function HomePage() {
@@ -40,35 +35,10 @@ export function HomePage() {
         <div className="pointer-events-none absolute right-0 top-0 h-72 w-72 rounded-full bg-[radial-gradient(circle,_rgba(37,208,255,0.16),_transparent_72%)]" />
         <div className="pointer-events-none absolute -left-16 bottom-0 h-60 w-60 rounded-full bg-[radial-gradient(circle,_rgba(255,122,24,0.18),_transparent_74%)]" />
 
-        <div className="grid gap-8 lg:grid-cols-[1.05fr_0.95fr]">
-          <div>
-            <p className="sm-kicker text-[var(--sm-accent)]">{hero.eyebrow}</p>
-            <h1 className="mt-4 max-w-4xl text-4xl font-extrabold tracking-tight text-white lg:text-6xl">{hero.title}</h1>
-            <p className="mt-5 max-w-2xl text-base leading-relaxed text-[var(--sm-muted)] lg:text-lg">{hero.description}</p>
-
-            <div className="mt-7 flex flex-wrap gap-3">
-              <Link className="sm-button-primary" to="/find-companies">
-                Search companies
-              </Link>
-              <Link className="sm-button-secondary" to="/team-tasks">
-                Build task list
-              </Link>
-            </div>
-          </div>
-
-          <div className="sm-terminal p-5">
-            <p className="sm-kicker text-[var(--sm-accent)]">What you get</p>
-            <div className="mt-5 grid gap-3">
-              {proofPoints.map((item) => (
-                <div className="sm-proof-card" key={item.label}>
-                  <p className="sm-kicker text-[var(--sm-accent)]">{item.label}</p>
-                  <p className="mt-2 text-xl font-bold text-white">{item.value}</p>
-                  <p className="mt-2 text-sm text-[var(--sm-muted)]">{item.detail}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
+        <p className="sm-kicker text-[var(--sm-accent)]">{hero.eyebrow}</p>
+        <h1 className="mt-4 max-w-4xl text-4xl font-extrabold tracking-tight text-white lg:text-6xl">{hero.title}</h1>
+        <p className="mt-5 max-w-2xl text-base leading-relaxed text-[var(--sm-muted)] lg:text-lg">{hero.description}</p>
+        <p className="mt-4 text-sm text-[var(--sm-muted)]">Example: tyre shop in Yangon, warehouse in Mandalay, daily ops updates</p>
       </section>
 
       <section className="grid gap-5 lg:grid-cols-3">
@@ -78,7 +48,11 @@ export function HomePage() {
             <h2 className="mt-3 text-2xl font-bold text-white">{card.title}</h2>
             <p className="mt-3 text-sm leading-relaxed text-[var(--sm-muted)]">{card.detail}</p>
             <div className="mt-5">
-              <Link className={card.primary ? 'sm-button-primary' : 'sm-button-secondary'} to={card.to}>
+              <Link
+                className={card.primary ? 'sm-button-primary' : 'sm-button-secondary'}
+                onClick={() => trackEvent('public_start_click', { tool: card.title })}
+                to={card.to}
+              >
                 {card.button}
               </Link>
             </div>
@@ -86,22 +60,12 @@ export function HomePage() {
         ))}
       </section>
 
-      <section className="sm-surface p-6">
-        <p className="sm-kicker text-[var(--sm-accent)]">How to use it</p>
-        <h2 className="mt-3 text-3xl font-bold text-white">One simple operating loop.</h2>
-        <div className="mt-5 grid gap-3 md:grid-cols-3">
-          {howItWorks.map((step) => (
-            <div className="sm-proof-card" key={step}>
-              <p className="text-base font-semibold text-white">{step}</p>
-            </div>
-          ))}
-        </div>
-        <div className="mt-5">
-          <Link className="sm-button-secondary" to="/book">
-            Book demo
-          </Link>
-        </div>
-      </section>
+      <div className="text-sm text-[var(--sm-muted)]">
+        Need help setting it up?{' '}
+        <Link className="text-white underline underline-offset-4" onClick={() => trackEvent('book_demo_click', { source: 'home' })} to="/book">
+          Book a demo
+        </Link>
+      </div>
     </div>
   )
 }

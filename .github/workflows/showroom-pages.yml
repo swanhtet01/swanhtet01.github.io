@@ -54,11 +54,13 @@ jobs:
           VITE_BOOKING_URL: ${{ vars.VITE_BOOKING_URL }}
           VITE_WORKSPACE_APP_BASE: ${{ vars.VITE_WORKSPACE_APP_BASE }}
           VITE_WORKSPACE_API_BASE: ${{ vars.VITE_WORKSPACE_API_BASE }}
+          VITE_POSTHOG_KEY: ${{ secrets.VITE_POSTHOG_KEY }}
+          VITE_POSTHOG_HOST: ${{ vars.VITE_POSTHOG_HOST }}
         run: npm run build
 
       - name: Verify public routes
         run: |
-          for route in find-companies sales-list team-tasks sales-follow-up team-updates book; do
+          for route in find-companies company-list task-list sales-list team-tasks book; do
             test -f "showroom/dist/$route/index.html"
           done
 

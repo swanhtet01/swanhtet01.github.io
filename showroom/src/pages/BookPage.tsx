@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom'
 
 import { PageIntro } from '../components/PageIntro'
 import { bookingUrl } from '../content'
+import { trackEvent } from '../lib/analytics'
 
 export function BookPage() {
   const offers = [
@@ -13,12 +14,12 @@ export function BookPage() {
     {
       name: 'Sales Setup',
       price: '$750 pilot',
-      detail: 'One sales flow, one task list, one weekly review. Pilot fee credits into month one.',
+      detail: 'Find Companies plus Company List for one real outreach workflow. Pilot fee credits into month one.',
     },
     {
       name: 'Operations Setup',
       price: '$1,500 pilot',
-      detail: 'One ops flow such as daily blockers or receiving issues. Same 2-week pilot structure.',
+      detail: 'Task List for one ops flow such as daily blockers or receiving issues. Same 2-week pilot structure.',
     },
   ]
 
@@ -67,7 +68,7 @@ export function BookPage() {
                 Scheduling is enabled. Use the booking link below to choose a slot.
               </div>
               <div className="flex flex-wrap gap-3">
-                <a className="sm-button-primary" href={bookingUrl} rel="noreferrer" target="_blank">
+                <a className="sm-button-primary" href={bookingUrl} onClick={() => trackEvent('book_demo_click', { source: 'book_page' })} rel="noreferrer" target="_blank">
                   Open calendar
                 </a>
                 <Link className="sm-button-secondary" to="/find-companies">
@@ -81,11 +82,11 @@ export function BookPage() {
           ) : (
             <div className="space-y-5">
               <div className="sm-chip text-[var(--sm-muted)]">
-                Calendar booking is not live on this host yet. Start with Find Companies or Sales List first.
+                Calendar booking is not live on this host yet. Start with Find Companies or Company List first.
               </div>
               <div className="flex flex-wrap gap-3">
-                <Link className="sm-button-primary" to="/find-companies">Find companies</Link>
-                <Link className="sm-button-secondary" to="/sales-list">Open Sales List</Link>
+                <Link className="sm-button-primary" onClick={() => trackEvent('book_page_start_click', { target: 'find_companies' })} to="/find-companies">Find companies</Link>
+                <Link className="sm-button-secondary" onClick={() => trackEvent('book_page_start_click', { target: 'company_list' })} to="/company-list">Open Company List</Link>
               </div>
             </div>
           )}

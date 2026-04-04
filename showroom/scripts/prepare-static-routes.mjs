@@ -7,6 +7,8 @@ const routePaths = [
   'action-os',
   'find-companies',
   'find-leads',
+  'company-list',
+  'task-list',
   'sales-list',
   'sales-follow-up',
   'team-tasks',

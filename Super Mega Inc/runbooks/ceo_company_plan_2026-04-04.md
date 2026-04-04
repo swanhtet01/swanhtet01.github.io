@@ -11,8 +11,8 @@ SuperMega is a workflow company that sells a small number of AI-native work tool
 Public tools:
 
 1. `Find Companies`
-2. `Sales List`
-3. `Team Tasks`
+2. `Company List`
+3. `Task List`
 
 Managed offers:
 
@@ -41,14 +41,14 @@ Why it beats plain search:
 - it creates the first follow-up task
 - it saves work into the operating list
 
-### Sales List
+### Company List
 
 Job:
 - import a company list
 - keep notes, stages, and next steps together
 - run one sales task list daily
 
-### Team Tasks
+### Task List
 
 Job:
 - paste messy updates
@@ -60,7 +60,7 @@ Job:
 ### Self-Serve
 
 - `Find Companies`
-  - target price: `$79/mo`
+  - target price: `$120` one-time sprint or tightly capped free demo
   - user: founders, operators, sales teams
   - promise: find companies and start follow-up faster
 
@@ -68,17 +68,17 @@ Job:
 
 - `Sales Setup`
   - target price: `$750 pilot`
-  - scope: one lead flow, one list, one weekly review
+  - scope: Find Companies plus Company List, one lead flow, one weekly review
 
 - `Operations Setup`
-  - target price: `$1,500 pilot`
-  - scope: one team update or ops issue flow, one task list, one weekly review
+  - target price: `$600` setup + `$250/month`
+  - scope: Task List for one team update or ops issue flow, one weekly review
 
 ## AI Agent Team
 
 Keep the internal agent team small and narrow.
 
-### Hunt Agent
+### Revenue Scout
 - rerun saved searches
 - dedupe accounts
 - score fit
@@ -88,33 +88,23 @@ Writes back:
 - saved companies
 - first follow-up task
 
-### Queue Builder Agent
+### List Clerk
+- turn imported company lists into a working company list
+- clean, score, and seed the first follow-up work
+
+Writes back:
+- saved companies
+- first tasks
+
+### Task Triage
 - turn pasted updates into tasks
 - assign owner, priority, due window
 
 Writes back:
 - task rows
 
-### Approval Packager Agent
-- turn blocked work into a clear approval request
-
-Writes back:
-- approval rows
-
-### Decision Scribe Agent
-- turn founder and manager calls into durable decisions
-
-Writes back:
-- decision rows
-
-### Product Feedback Triage Agent
-- normalize product complaints into actionable backlog items
-
-Writes back:
-- structured product feedback rows
-
-### Director Brief Agent
-- summarize live queue, issues, approvals, and lead movement
+### Founder Brief
+- summarize live queue, lead movement, aging work, and money due
 
 Writes back:
 - daily brief snapshots

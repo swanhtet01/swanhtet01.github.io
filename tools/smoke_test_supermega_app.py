@@ -83,8 +83,8 @@ def main() -> int:
     public_route_statuses = {
         "home": request_status(public_opener, f"{args.base_url.rstrip('/')}/"),
         "find_companies": request_status(public_opener, f"{args.base_url.rstrip('/')}/find-companies/"),
-        "sales_list": request_status(public_opener, f"{args.base_url.rstrip('/')}/sales-list/"),
-        "team_tasks": request_status(public_opener, f"{args.base_url.rstrip('/')}/team-tasks/"),
+        "company_list": request_status(public_opener, f"{args.base_url.rstrip('/')}/company-list/"),
+        "task_list": request_status(public_opener, f"{args.base_url.rstrip('/')}/task-list/"),
         "book": request_status(public_opener, f"{args.base_url.rstrip('/')}/book/"),
     }
     public_bootstrap = request_json(
@@ -400,8 +400,8 @@ def main() -> int:
     print(f"- Health: {report['health_status']}")
     print(f"- Public home: {report['public_routes']['home']}")
     print(f"- Public find companies: {report['public_routes']['find_companies']}")
-    print(f"- Public sales list: {report['public_routes']['sales_list']}")
-    print(f"- Public team tasks: {report['public_routes']['team_tasks']}")
+    print(f"- Public company list: {report['public_routes']['company_list']}")
+    print(f"- Public task list: {report['public_routes']['task_list']}")
     print(f"- Public book: {report['public_routes']['book']}")
     print(f"- Public bootstrap: {report['public_bootstrap_status']} / authenticated={report['public_session_authenticated']}")
     print(f"- Login: {report['login_status']} / authenticated={report['authenticated']}")
