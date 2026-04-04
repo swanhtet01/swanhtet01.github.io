@@ -6,17 +6,17 @@ import { bookingUrl } from '../content'
 export function BookPage() {
   const offers = [
     {
-      name: 'Lead Finder',
+      name: 'Find Companies',
       price: '$79/mo',
-      detail: 'Self-serve search, shortlist, and first outreach drafting.',
+      detail: 'Self-serve company search, shortlist, and first outreach drafting.',
     },
     {
-      name: 'Sales Desk',
+      name: 'Sales Setup',
       price: '$750 pilot',
-      detail: 'One lead flow, one queue, one weekly review. Pilot fee credits into month one.',
+      detail: 'One sales flow, one task list, one weekly review. Pilot fee credits into month one.',
     },
     {
-      name: 'Ops Desk',
+      name: 'Operations Setup',
       price: '$1,500 pilot',
       detail: 'One ops flow such as daily blockers or receiving issues. Same 2-week pilot structure.',
     },
@@ -27,8 +27,8 @@ export function BookPage() {
       <PageIntro
         compact
         eyebrow="Book Demo"
-        title="Book one small rollout."
-        description="Start with one workflow, one queue, and one weekly review."
+        title="Book one short demo."
+        description="Start with one workflow, one task list, and one weekly review."
       />
 
       <section className="grid gap-6 lg:grid-cols-[0.88fr_1.12fr]">
@@ -49,7 +49,7 @@ export function BookPage() {
             {[
               'One workflow to fix first',
               'What data already exists',
-              'What the first queue should be',
+              'What the first task list should be',
             ].map((item) => (
               <div className="sm-chip text-white" key={item}>
                 {item}
@@ -57,7 +57,7 @@ export function BookPage() {
             ))}
           </div>
 
-          <p className="mt-6 text-sm text-[var(--sm-muted)]">Best fit: teams that want one working board before a bigger rollout.</p>
+          <p className="mt-6 text-sm text-[var(--sm-muted)]">Best fit: teams that want one working list before a bigger rollout.</p>
         </aside>
 
         <section className="sm-surface p-6">
@@ -81,11 +81,11 @@ export function BookPage() {
           ) : (
             <div className="space-y-5">
               <div className="sm-chip text-[var(--sm-muted)]">
-                Calendar booking is not live on this host yet. Start with Find Companies or Sales Follow-Up first.
+                Calendar booking is not live on this host yet. Start with Find Companies or Sales List first.
               </div>
               <div className="flex flex-wrap gap-3">
                 <Link className="sm-button-primary" to="/find-companies">Find companies</Link>
-                <Link className="sm-button-secondary" to="/sales-follow-up">Open Sales Follow-Up</Link>
+                <Link className="sm-button-secondary" to="/sales-list">Open Sales List</Link>
               </div>
             </div>
           )}

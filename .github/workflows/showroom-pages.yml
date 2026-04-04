@@ -58,7 +58,7 @@ jobs:
 
       - name: Verify public routes
         run: |
-          for route in find-companies sales-follow-up team-updates book; do
+          for route in find-companies sales-list team-tasks sales-follow-up team-updates book; do
             test -f "showroom/dist/$route/index.html"
           done
 

@@ -2,19 +2,22 @@ import { useEffect } from 'react'
 import { useLocation } from 'react-router-dom'
 
 const titleMap: Record<string, string> = {
-  '/': 'SuperMega | AI work tools',
+  '/': 'SuperMega | Simple work tools',
   '/find-companies': 'Find Companies | SuperMega',
   '/find-leads': 'Find Companies | SuperMega',
   '/lead-finder': 'Find Companies | SuperMega',
-  '/sales-follow-up': 'Sales Follow-Up | SuperMega',
-  '/team-updates': 'Team Updates | SuperMega',
-  '/follow-up-list': 'Sales Follow-Up | SuperMega',
-  '/bring-a-list': 'Sales Follow-Up | SuperMega',
-  '/paste-updates': 'Team Updates | SuperMega',
-  '/queue-builder': 'Sales Follow-Up | SuperMega',
-  '/sales-desk': 'Sales Desk | SuperMega',
-  '/ops-desk': 'Ops Desk | SuperMega',
+  '/sales-list': 'Sales List | SuperMega',
+  '/sales-follow-up': 'Sales List | SuperMega',
+  '/team-tasks': 'Team Tasks | SuperMega',
+  '/team-updates': 'Team Tasks | SuperMega',
+  '/follow-up-list': 'Sales List | SuperMega',
+  '/bring-a-list': 'Sales List | SuperMega',
+  '/paste-updates': 'Team Tasks | SuperMega',
+  '/queue-builder': 'Sales List | SuperMega',
+  '/sales-desk': 'Sales Setup | SuperMega',
+  '/ops-desk': 'Operations Setup | SuperMega',
   '/book': 'Book Demo | SuperMega',
+  '/book-demo': 'Book Demo | SuperMega',
 }
 
 export function RouteEffects() {

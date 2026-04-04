@@ -7,21 +7,21 @@ const startCards = [
     title: 'Find companies',
     detail: 'Search a place or niche, keep the shortlist, and create the first follow-up.',
     to: '/find-companies',
-    button: 'Open Find Companies',
+    button: 'Search companies',
     primary: true,
   },
   {
-    title: 'Run sales follow-up',
+    title: 'Keep a sales list',
     detail: 'Bring a company list or saved companies and keep the next step in one place.',
-    to: '/sales-follow-up',
-    button: 'Open Sales Follow-Up',
+    to: '/sales-list',
+    button: 'Paste company list',
     primary: false,
   },
   {
-    title: 'Turn team updates into tasks',
+    title: 'Turn updates into tasks',
     detail: 'Paste team notes or blockers and turn them into one clear task list with owners and due dates.',
-    to: '/team-updates',
-    button: 'Open Team Updates',
+    to: '/team-tasks',
+    button: 'Build task list',
     primary: false,
   },
 ]
@@ -30,24 +30,6 @@ const howItWorks = [
   'Search or import what you already have.',
   'Save the right companies or updates into one tool.',
   'Run the task list every day.',
-]
-
-const offers = [
-  {
-    name: 'Find Companies',
-    price: '$79/mo',
-    detail: 'Self-serve market search, company saving, and first outreach drafts.',
-  },
-  {
-    name: 'Sales Desk',
-    price: '$750 pilot',
-    detail: 'Managed setup for one sales flow, one task list, and one weekly review.',
-  },
-  {
-    name: 'Ops Desk',
-    price: '$1,500 pilot',
-    detail: 'Managed setup for one ops flow such as daily blockers or receiving issues.',
-  },
 ]
 
 export function HomePage() {
@@ -66,10 +48,10 @@ export function HomePage() {
 
             <div className="mt-7 flex flex-wrap gap-3">
               <Link className="sm-button-primary" to="/find-companies">
-                Open Find Companies
+                Search companies
               </Link>
-              <Link className="sm-button-secondary" to="/team-updates">
-                Open Team Updates
+              <Link className="sm-button-secondary" to="/team-tasks">
+                Build task list
               </Link>
             </div>
           </div>
@@ -114,23 +96,9 @@ export function HomePage() {
             </div>
           ))}
         </div>
-      </section>
-
-      <section className="sm-surface p-6">
-        <p className="sm-kicker text-[var(--sm-accent)]">What we sell now</p>
-        <h2 className="mt-3 text-3xl font-bold text-white">Three offers. Nothing else on the front door.</h2>
-        <div className="mt-5 grid gap-4 lg:grid-cols-3">
-          {offers.map((offer) => (
-            <div className="sm-proof-card" key={offer.name}>
-              <p className="sm-kicker text-[var(--sm-accent)]">{offer.name}</p>
-              <p className="mt-2 text-2xl font-bold text-white">{offer.price}</p>
-              <p className="mt-3 text-sm leading-relaxed text-[var(--sm-muted)]">{offer.detail}</p>
-            </div>
-          ))}
-        </div>
         <div className="mt-5">
           <Link className="sm-button-secondary" to="/book">
-            See rollout and book
+            Book demo
           </Link>
         </div>
       </section>

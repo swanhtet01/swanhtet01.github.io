@@ -15,16 +15,27 @@ Golden Highway Parts | +95 9 500 113 221 | www.goldenhighwayparts.com | truck an
 """
 
 
-def request_json(opener, method: str, url: str, payload: dict | None = None, timeout: int = 15) -> dict:
+def request_json(opener, method: str, url: str, payload: dict | None = None, timeout: int = 15, attempts: int = 3) -> dict:
     body = None
     headers = {"Accept": "application/json"}
     if payload is not None:
         body = json.dumps(payload).encode("utf-8")
         headers["Content-Type"] = "application/json"
-    request = Request(url, data=body, headers=headers, method=method.upper())
-    with opener.open(request, timeout=timeout) as response:
-        raw = response.read().decode("utf-8")
-    return json.loads(raw or "{}")
+
+    last_error: Exception | None = None
+    for attempt in range(1, attempts + 1):
+        try:
+            request = Request(url, data=body, headers=headers, method=method.upper())
+            with opener.open(request, timeout=timeout) as response:
+                raw = response.read().decode("utf-8")
+            return json.loads(raw or "{}")
+        except (HTTPError, URLError, TimeoutError, ConnectionResetError, json.JSONDecodeError, OSError) as exc:
+            last_error = exc
+            if attempt == attempts:
+                raise
+            time.sleep(0.75 * attempt)
+
+    raise RuntimeError(f"Request failed after {attempts} attempts: {url} ({last_error})")
 
 
 def request_status(opener, url: str, timeout: int = 15) -> int:
@@ -72,8 +83,8 @@ def main() -> int:
     public_route_statuses = {
         "home": request_status(public_opener, f"{args.base_url.rstrip('/')}/"),
         "find_companies": request_status(public_opener, f"{args.base_url.rstrip('/')}/find-companies/"),
-        "sales_follow_up": request_status(public_opener, f"{args.base_url.rstrip('/')}/sales-follow-up/"),
-        "team_updates": request_status(public_opener, f"{args.base_url.rstrip('/')}/team-updates/"),
+        "sales_list": request_status(public_opener, f"{args.base_url.rstrip('/')}/sales-list/"),
+        "team_tasks": request_status(public_opener, f"{args.base_url.rstrip('/')}/team-tasks/"),
         "book": request_status(public_opener, f"{args.base_url.rstrip('/')}/book/"),
     }
     public_bootstrap = request_json(
@@ -389,8 +400,8 @@ def main() -> int:
     print(f"- Health: {report['health_status']}")
     print(f"- Public home: {report['public_routes']['home']}")
     print(f"- Public find companies: {report['public_routes']['find_companies']}")
-    print(f"- Public sales follow-up: {report['public_routes']['sales_follow_up']}")
-    print(f"- Public team updates: {report['public_routes']['team_updates']}")
+    print(f"- Public sales list: {report['public_routes']['sales_list']}")
+    print(f"- Public team tasks: {report['public_routes']['team_tasks']}")
     print(f"- Public book: {report['public_routes']['book']}")
     print(f"- Public bootstrap: {report['public_bootstrap_status']} / authenticated={report['public_session_authenticated']}")
     print(f"- Login: {report['login_status']} / authenticated={report['authenticated']}")

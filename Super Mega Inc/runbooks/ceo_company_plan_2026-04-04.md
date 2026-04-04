@@ -11,8 +11,8 @@ SuperMega is a workflow company that sells a small number of AI-native work tool
 Public tools:
 
 1. `Find Companies`
-2. `Sales Follow-Up`
-3. `Team Updates`
+2. `Sales List`
+3. `Team Tasks`
 
 Managed offers:
 
@@ -41,14 +41,14 @@ Why it beats plain search:
 - it creates the first follow-up task
 - it saves work into the operating list
 
-### Sales Follow-Up
+### Sales List
 
 Job:
 - import a company list
 - keep notes, stages, and next steps together
 - run one sales task list daily
 
-### Team Updates
+### Team Tasks
 
 Job:
 - paste messy updates
@@ -66,11 +66,11 @@ Job:
 
 ### Managed Pilots
 
-- `Sales Desk`
+- `Sales Setup`
   - target price: `$750 pilot`
   - scope: one lead flow, one list, one weekly review
 
-- `Ops Desk`
+- `Operations Setup`
   - target price: `$1,500 pilot`
   - scope: one team update or ops issue flow, one task list, one weekly review
 
