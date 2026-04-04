@@ -571,6 +571,20 @@ export function WorkspaceLitePage() {
     await saveLeadRows(rows, `Saved ${rows.length} compan${rows.length === 1 ? 'y' : 'ies'} and created the first follow-up.`)
   }
 
+  async function importLeadFile(file: File | null) {
+    if (!file) {
+      return
+    }
+    const text = await file.text()
+    setLeadImportText(text)
+    const rows = parseLeads(text)
+    if (!rows.length) {
+      setMessage('Could not find any companies in that file.')
+      return
+    }
+    await saveLeadRows(rows, `Saved ${rows.length} compan${rows.length === 1 ? 'y' : 'ies'} and created the first follow-up.`)
+  }
+
   async function saveTaskRows(
     rows: Array<{
       title: string
@@ -635,6 +649,25 @@ export function WorkspaceLitePage() {
       template: 'ops_blocker' as const,
     }))
     await saveTaskRows(rows, `Saved ${rows.length} task${rows.length === 1 ? '' : 's'} from the pasted updates.`)
+    setUpdateImportText('')
+    applyQueueTemplate('ops_blocker')
+  }
+
+  async function importTaskFile(file: File | null) {
+    if (!file) {
+      return
+    }
+    const text = await file.text()
+    setUpdateImportText(text)
+    const rows = buildActionBoard(text).map((row) => ({
+      ...row,
+      template: 'ops_blocker' as const,
+    }))
+    if (!rows.length) {
+      setMessage('Could not find any task lines in that file.')
+      return
+    }
+    await saveTaskRows(rows, `Saved ${rows.length} task${rows.length === 1 ? '' : 's'} from the uploaded file.`)
     setUpdateImportText('')
     applyQueueTemplate('ops_blocker')
   }
@@ -838,10 +871,23 @@ export function WorkspaceLitePage() {
           placeholder="North Star Clinic | www.northstarclinic.com | hello@northstarclinic.com | +1 555 111 2222"
           value={leadImportText}
         />
-          <div className="mt-4 flex flex-wrap gap-3">
+        <div className="mt-4 flex flex-wrap gap-3">
             <button className="sm-button-primary" onClick={() => void importLeadList()} type="button">
               Import company list
             </button>
+          <label className="sm-button-secondary cursor-pointer">
+            Upload file
+            <input
+              accept=".csv,.txt,.tsv"
+              className="hidden"
+              onChange={(event) => {
+                const file = event.target.files?.[0] ?? null
+                void importLeadFile(file)
+                event.currentTarget.value = ''
+              }}
+              type="file"
+            />
+          </label>
           <button className="sm-button-secondary" onClick={() => setLeadImportText(LEAD_SAMPLE_TEXT)} type="button">
             Load example
           </button>
@@ -857,10 +903,23 @@ export function WorkspaceLitePage() {
           placeholder="Power fluctuation at Plant A | Operations Team"
           value={updateImportText}
         />
-          <div className="mt-4 flex flex-wrap gap-3">
+        <div className="mt-4 flex flex-wrap gap-3">
             <button className="sm-button-primary" onClick={() => void importUpdates()} type="button">
               Build task list
             </button>
+          <label className="sm-button-secondary cursor-pointer">
+            Upload file
+            <input
+              accept=".csv,.txt,.tsv"
+              className="hidden"
+              onChange={(event) => {
+                const file = event.target.files?.[0] ?? null
+                void importTaskFile(file)
+                event.currentTarget.value = ''
+              }}
+              type="file"
+            />
+          </label>
           <button className="sm-button-secondary" onClick={() => setUpdateImportText(ACTION_SAMPLE_TEXT)} type="button">
             Load example
           </button>
@@ -897,6 +956,42 @@ export function WorkspaceLitePage() {
         <p className="mt-2 text-sm text-[var(--sm-muted)]">This tool works with anyone's data. Start with what you already have, not with a blank board.</p>
       </div>
     )
+
+  if (!hasData) {
+    return (
+      <div className="space-y-8">
+        <PageIntro
+          compact
+          eyebrow={pageEyebrow}
+          title={
+            publicSurface === 'sales'
+              ? 'Bring a company list or save companies from Find Companies.'
+              : "Paste team updates and build today's task list."
+          }
+          description={
+            publicSurface === 'sales'
+              ? 'Start with your own company list. If you need new prospects, use Find Companies first.'
+              : 'Paste messy updates, blockers, or receiving issues and turn them into one short task list.'
+          }
+        />
+
+        <section className="sm-surface p-6 lg:p-8">
+          {setupPanel}
+          <div className="mt-5 flex flex-wrap gap-3">
+            {publicSurface === 'sales' ? (
+              <Link className="sm-button-secondary" to="/find-companies">
+                Need new companies? Find companies
+              </Link>
+            ) : null}
+            <Link className="sm-button-secondary" to="/book">
+              Need help setting it up?
+            </Link>
+          </div>
+          {message ? <div className="mt-4 sm-chip text-[var(--sm-muted)]">{message}</div> : null}
+        </section>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-8">

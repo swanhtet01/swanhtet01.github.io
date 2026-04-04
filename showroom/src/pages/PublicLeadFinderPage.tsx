@@ -295,7 +295,7 @@ export function PublicLeadFinderPage() {
         description="Search by place and business type, then keep only the companies worth chasing."
       />
 
-      <section className="grid gap-6 lg:grid-cols-[0.82fr_1.18fr]">
+      <section className="space-y-6">
         <article className="sm-surface p-6">
           <p className="sm-kicker text-[var(--sm-accent)]">Search</p>
           <h2 className="mt-3 text-3xl font-bold text-white">Run one search.</h2>
@@ -303,7 +303,19 @@ export function PublicLeadFinderPage() {
           <div className="mt-5 grid gap-4">
             <label className="grid gap-2 text-sm font-semibold text-[var(--sm-muted)]">
               What are you looking for?
-              <input autoComplete="off" className="sm-input" onChange={(event) => setQuery(event.target.value)} placeholder="tyre shop in Yangon" value={query} />
+              <input
+                autoComplete="off"
+                className="sm-input"
+                onChange={(event) => setQuery(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault()
+                    void runSearch()
+                  }
+                }}
+                placeholder="tyre shop in Yangon"
+                value={query}
+              />
             </label>
 
             <div className="flex flex-wrap gap-3">
@@ -428,6 +440,7 @@ export function PublicLeadFinderPage() {
           {message ? <div className="mt-3 sm-chip text-[var(--sm-muted)]">{message}</div> : null}
         </article>
 
+        {rows.length || manualInput.trim() || message ? (
         <article className="sm-terminal p-6">
           <div>
             <div>
@@ -491,6 +504,7 @@ export function PublicLeadFinderPage() {
 
           </div>
         </article>
+        ) : null}
       </section>
 
       {(rows.length || savedTotal) ? (
@@ -514,7 +528,7 @@ export function PublicLeadFinderPage() {
           <div className="mt-5 flex flex-wrap gap-3">
             {rows.length ? (
               <button className="sm-button-primary" onClick={() => void saveTopResults()} type="button">
-                Save top 3
+                Keep first 3
               </button>
             ) : null}
             {savedTotal ? (
