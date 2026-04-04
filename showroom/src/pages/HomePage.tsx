@@ -3,27 +3,21 @@ import { Link } from 'react-router-dom'
 import { hero } from '../content'
 import { trackEvent } from '../lib/analytics'
 
-const startCards = [
+const steps = [
   {
+    number: '01',
     title: 'Find companies',
-    detail: 'Search a place or niche, keep the shortlist, and create the first follow-up.',
-    to: '/find-companies',
-    button: 'Search companies',
-    primary: true,
+    detail: 'Search a place or niche and keep the companies worth contacting.',
   },
   {
-    title: 'Keep a company list',
-    detail: 'Bring a company list or saved companies and keep the next step in one place.',
-    to: '/company-list',
-    button: 'Paste company list',
-    primary: false,
+    number: '02',
+    title: 'Keep your list clean',
+    detail: 'Paste your own company list or keep the results you want to work.',
   },
   {
-    title: 'Turn updates into tasks',
-    detail: 'Paste team notes or blockers and turn them into one clear task list with owners and due dates.',
-    to: '/task-list',
-    button: 'Build task list',
-    primary: false,
+    number: '03',
+    title: 'Run the next tasks',
+    detail: 'Turn follow-up notes or messy team updates into one short task list.',
   },
 ]
 
@@ -38,30 +32,29 @@ export function HomePage() {
         <p className="sm-kicker text-[var(--sm-accent)]">{hero.eyebrow}</p>
         <h1 className="mt-4 max-w-4xl text-4xl font-extrabold tracking-tight text-white lg:text-6xl">{hero.title}</h1>
         <p className="mt-5 max-w-2xl text-base leading-relaxed text-[var(--sm-muted)] lg:text-lg">{hero.description}</p>
-        <p className="mt-4 text-sm text-[var(--sm-muted)]">Example: tyre shop in Yangon, warehouse in Mandalay, daily ops updates</p>
+        <p className="mt-4 text-sm text-[var(--sm-muted)]">Use it when you need more customers or a cleaner daily follow-up list.</p>
+        <div className="mt-6 flex flex-wrap gap-3">
+          <Link className="sm-button-primary" onClick={() => trackEvent('public_start_click', { tool: 'Find Companies' })} to="/find-companies">
+            Find companies
+          </Link>
+          <Link className="sm-button-secondary" onClick={() => trackEvent('public_start_click', { tool: 'Task List' })} to="/task-list">
+            Open task list
+          </Link>
+        </div>
       </section>
 
       <section className="grid gap-5 lg:grid-cols-3">
-        {startCards.map((card) => (
-          <article className="sm-surface p-6" key={card.title}>
-            <p className="sm-kicker text-[var(--sm-accent)]">Start here</p>
-            <h2 className="mt-3 text-2xl font-bold text-white">{card.title}</h2>
-            <p className="mt-3 text-sm leading-relaxed text-[var(--sm-muted)]">{card.detail}</p>
-            <div className="mt-5">
-              <Link
-                className={card.primary ? 'sm-button-primary' : 'sm-button-secondary'}
-                onClick={() => trackEvent('public_start_click', { tool: card.title })}
-                to={card.to}
-              >
-                {card.button}
-              </Link>
-            </div>
+        {steps.map((step) => (
+          <article className="sm-surface p-6" key={step.number}>
+            <p className="sm-kicker text-[var(--sm-accent)]">{step.number}</p>
+            <h2 className="mt-3 text-2xl font-bold text-white">{step.title}</h2>
+            <p className="mt-3 text-sm leading-relaxed text-[var(--sm-muted)]">{step.detail}</p>
           </article>
         ))}
       </section>
 
       <div className="text-sm text-[var(--sm-muted)]">
-        Need help setting it up?{' '}
+        Need help with setup or rollout?{' '}
         <Link className="text-white underline underline-offset-4" onClick={() => trackEvent('book_demo_click', { source: 'home' })} to="/book">
           Book a demo
         </Link>

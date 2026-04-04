@@ -60,7 +60,7 @@ export function SiteFrame() {
 
       <footer className="border-t border-white/8 bg-[rgba(4,10,22,0.78)]">
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 px-4 py-6 text-sm text-[var(--sm-muted)] lg:flex-row lg:items-center lg:justify-between lg:px-8">
-          <p>Start with a company search, a company list, or pasted team updates.</p>
+          <p>Simple tools for company lists and task lists.</p>
         </div>
       </footer>
     </div>

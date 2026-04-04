@@ -33,13 +33,12 @@ export const navItems = [
   { label: 'Find Companies', to: '/find-companies' },
   { label: 'Company List', to: '/company-list' },
   { label: 'Task List', to: '/task-list' },
-  { label: 'Book Demo', to: '/book' },
 ] as const
 
 export const hero = {
-  eyebrow: 'Simple work tools',
-  title: 'Choose one job to fix today.',
-  description: 'Find companies, keep a clean company list, or turn messy updates into a short task list.',
+  eyebrow: 'SuperMega',
+  title: 'Find companies. Keep a list. Run tasks.',
+  description: 'Three simple tools for sales and operations.',
 }
 
 export const proofPoints: ProofPoint[] = [

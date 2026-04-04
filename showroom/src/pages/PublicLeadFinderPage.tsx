@@ -4,7 +4,7 @@ import { Link, useLocation } from 'react-router-dom'
 import { PageIntro } from '../components/PageIntro'
 import { browserWorkspaceSummary, buildBrowserOutreach, saveBrowserWorkspaceLeads } from '../lib/browserWorkspace'
 import { trackEvent } from '../lib/analytics'
-import { publicLeadFinderAvailable, searchPublicLeads } from '../lib/publicLeadFinder'
+import { searchPublicLeads } from '../lib/publicLeadFinder'
 import {
   hasLiveWorkspaceApi,
   isPublicWorkspaceProfileReady,
@@ -22,6 +22,15 @@ const quickSearches = [
 ]
 
 const DEFAULT_PUBLIC_KEYWORDS = 'tyre,auto,service,yangon'
+
+function keywordsFromQuery(value: string) {
+  return value
+    .split(/[\s,]+/)
+    .map((part) => part.trim().toLowerCase())
+    .filter((part) => part.length > 2)
+    .slice(0, 6)
+    .join(',')
+}
 
 function rowKey(row: LeadRow) {
   return [row.name, row.website, row.phone, row.source_url].filter(Boolean).join('|')
@@ -46,7 +55,6 @@ export function PublicLeadFinderPage() {
   const [showWorkspaceSetup, setShowWorkspaceSetup] = useState(false)
   const [query, setQuery] = useState('')
   const [keywords, setKeywords] = useState(DEFAULT_PUBLIC_KEYWORDS)
-  const [limit, setLimit] = useState(8)
   const [manualInput, setManualInput] = useState('')
   const [busy, setBusy] = useState(false)
   const [rows, setRows] = useState<LeadRow[]>([])
@@ -112,7 +120,7 @@ export function PublicLeadFinderPage() {
         query: nextQuery,
         keywords: nextKeywords,
         sources: ['web', 'maps'],
-        limit,
+        limit: 8,
       })
 
       mergedRows.push(...payload.rows)
@@ -140,7 +148,7 @@ export function PublicLeadFinderPage() {
     } finally {
       setBusy(false)
     }
-  }, [limit, manualInput, query, searchKeywords])
+  }, [manualInput, query, searchKeywords])
 
   useEffect(() => {
     if (bootstrapped.current) {
@@ -291,8 +299,8 @@ export function PublicLeadFinderPage() {
       <PageIntro
         compact
         eyebrow="Find Companies"
-        title="Find companies to contact."
-        description="Search by place and business type, then keep only the companies worth chasing."
+        title="Search one market."
+        description="Type a place and business type, then keep the companies worth contacting."
       />
 
       <section className="space-y-6">
@@ -302,11 +310,15 @@ export function PublicLeadFinderPage() {
 
           <div className="mt-5 grid gap-4">
             <label className="grid gap-2 text-sm font-semibold text-[var(--sm-muted)]">
-              What are you looking for?
+              Search
               <input
                 autoComplete="off"
                 className="sm-input"
-                onChange={(event) => setQuery(event.target.value)}
+                onChange={(event) => {
+                  const nextValue = event.target.value
+                  setQuery(nextValue)
+                  setKeywords(keywordsFromQuery(nextValue) || DEFAULT_PUBLIC_KEYWORDS)
+                }}
                 onKeyDown={(event) => {
                   if (event.key === 'Enter') {
                     event.preventDefault()
@@ -322,16 +334,6 @@ export function PublicLeadFinderPage() {
               <button className="sm-button-primary" disabled={busy || !query.trim()} onClick={() => void runSearch()} type="button">
                 {busy ? 'Searching...' : 'Find companies'}
               </button>
-              {rows.length ? (
-                <button className="sm-button-secondary" onClick={() => void saveTopResults()} type="button">
-                  Keep first 3
-                </button>
-              ) : null}
-              {savedTotal ? (
-                <Link className="sm-button-secondary" to="/company-list">
-                  Open Company List
-                </Link>
-              ) : null}
             </div>
 
             <div className="grid gap-2">
@@ -347,9 +349,9 @@ export function PublicLeadFinderPage() {
 
             {hasLiveWorkspaceApi() && showWorkspaceSetup ? (
               <div className="sm-proof-card">
-                <p className="sm-kicker text-[var(--sm-accent)]">Keep saved companies online</p>
+                <p className="sm-kicker text-[var(--sm-accent)]">Save online</p>
                 <p className="mt-2 text-sm text-[var(--sm-muted)]">
-                  Enter your company and work email once. After that, saved companies can go into the same online company list.
+                  Enter your company and work email once. After that, kept companies can go into the same saved company list.
                 </p>
                 <div className="mt-4 grid gap-3 md:grid-cols-3">
                   <label className="grid gap-2 text-sm font-semibold text-[var(--sm-muted)]">
@@ -370,31 +372,15 @@ export function PublicLeadFinderPage() {
                 </div>
                 <div className="mt-4 flex flex-wrap gap-3">
                   <button className="sm-button-secondary" onClick={() => setShowWorkspaceSetup(false)} type="button">
-                    Hide setup
+                    Hide
                   </button>
                 </div>
               </div>
             ) : null}
 
             <details className="sm-details">
-              <summary>Advanced</summary>
+              <summary>More options</summary>
               <div className="sm-details-content grid gap-4">
-                <label className="grid gap-2 text-sm font-semibold text-[var(--sm-muted)]">
-                  Fit keywords
-                  <input className="sm-input" onChange={(event) => setKeywords(event.target.value)} value={keywords} />
-                </label>
-
-                <label className="grid gap-2 text-sm font-semibold text-[var(--sm-muted)]">
-                  Result count
-                  <select className="sm-input" onChange={(event) => setLimit(Number(event.target.value) || 8)} value={limit}>
-                    {[6, 8, 10, 12].map((value) => (
-                      <option key={value} value={value}>
-                        {value}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
                 <label className="grid gap-2 text-sm font-semibold text-[var(--sm-muted)]">
                   Manual list fallback
                   <textarea
@@ -407,36 +393,13 @@ export function PublicLeadFinderPage() {
 
                 <div>
                   <button className="sm-button-secondary" disabled={!rows.length} onClick={() => downloadLeadCsv(rows)} type="button">
-                    Export CSV
+                    Export results
                   </button>
                 </div>
               </div>
             </details>
           </div>
 
-          <div className="mt-4 sm-chip text-[var(--sm-muted)]">
-            {rows.length
-              ? 'Save only the companies worth chasing.'
-              : publicLeadFinderAvailable()
-                ? 'Search is ready on this host.'
-                : 'Use the manual list on this host.'}
-          </div>
-          {hasLiveWorkspaceApi() && !hasSharedProfile && !showWorkspaceSetup ? (
-            <div className="mt-3 flex flex-wrap items-center gap-3">
-              <div className="sm-chip text-[var(--sm-muted)]">Set this up only when you want to keep saved companies online.</div>
-              <button className="sm-button-secondary" onClick={() => setShowWorkspaceSetup(true)} type="button">
-                Keep companies online
-              </button>
-            </div>
-          ) : null}
-          {hasLiveWorkspaceApi() && hasSharedProfile && !showWorkspaceSetup ? (
-            <div className="mt-3 flex flex-wrap items-center gap-3">
-              <div className="sm-chip text-[var(--sm-muted)]">Ready to keep saved companies online in {profile.company}.</div>
-              <button className="sm-button-secondary" onClick={() => setShowWorkspaceSetup(true)} type="button">
-                Edit save setup
-              </button>
-            </div>
-          ) : null}
           {message ? <div className="mt-3 sm-chip text-[var(--sm-muted)]">{message}</div> : null}
         </article>
 
@@ -462,7 +425,6 @@ export function PublicLeadFinderPage() {
                         <p className="text-lg font-bold text-white">{row.name}</p>
                         <p className="mt-1 text-sm text-[var(--sm-muted)]">{row.provider || row.source || 'Public result'}</p>
                       </div>
-                      <span className="sm-status-pill">{row.website || row.phone || row.email ? 'HAS CONTACT' : 'PUBLIC MATCH'}</span>
                     </div>
 
                     <div className="mt-4 grid gap-3 md:grid-cols-[0.68fr_0.32fr]">
@@ -482,14 +444,14 @@ export function PublicLeadFinderPage() {
                       <button className="sm-button-primary" onClick={() => void saveLead(row)} type="button">
                         {saved ? 'Kept' : 'Keep'}
                       </button>
-                      {row.source_url ? (
-                        <a className="sm-button-secondary" href={row.source_url} rel="noreferrer" target="_blank">
-                          Open source
-                        </a>
-                      ) : null}
                       <button className="sm-button-secondary" onClick={() => void copyOutreach(row)} type="button">
                         Copy outreach
                       </button>
+                      {row.source_url ? (
+                        <a className="sm-link self-center" href={row.source_url} rel="noreferrer" target="_blank">
+                          Open source
+                        </a>
+                      ) : null}
                     </div>
                   </div>
                 )
@@ -509,22 +471,8 @@ export function PublicLeadFinderPage() {
 
       {(rows.length || savedTotal) ? (
         <section className="sm-surface p-6">
-          <p className="sm-kicker text-[var(--sm-accent)]">Next step</p>
-          <h2 className="mt-3 text-3xl font-bold text-white">Keep the best companies, then work the company list.</h2>
-          <div className="mt-5 grid gap-3 md:grid-cols-3">
-            <div className="sm-chip text-white">
-              <p className="sm-kicker text-[var(--sm-accent)]">Saved already</p>
-              <p className="mt-2 text-3xl font-bold">{savedTotal}</p>
-            </div>
-            <div className="sm-chip text-white">
-              <p className="sm-kicker text-[var(--sm-accent-alt)]">Search rule</p>
-              <p className="mt-2 text-sm">Save only the companies worth chasing first.</p>
-            </div>
-            <div className="sm-chip text-white">
-              <p className="sm-kicker text-[var(--sm-accent)]">After save</p>
-              <p className="mt-2 text-sm">Company List stores the companies and creates the next sales tasks.</p>
-            </div>
-          </div>
+          <p className="sm-kicker text-[var(--sm-accent)]">Next</p>
+          <h2 className="mt-3 text-3xl font-bold text-white">Keep a few, then open Company List.</h2>
           <div className="mt-5 flex flex-wrap gap-3">
             {rows.length ? (
               <button className="sm-button-primary" onClick={() => void saveTopResults()} type="button">
@@ -535,6 +483,11 @@ export function PublicLeadFinderPage() {
               <Link className="sm-button-secondary" to="/company-list">
                 Open Company List
               </Link>
+            ) : null}
+            {hasLiveWorkspaceApi() ? (
+              <button className="sm-button-secondary" onClick={() => setShowWorkspaceSetup((current) => !current)} type="button">
+                {showWorkspaceSetup ? 'Hide online save' : 'Save online'}
+              </button>
             ) : null}
           </div>
           <div className="mt-4 sm-chip text-[var(--sm-muted)]">

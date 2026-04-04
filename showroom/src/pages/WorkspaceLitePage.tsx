@@ -126,23 +126,6 @@ const queueTemplates: Record<
   },
 }
 
-const setupOptions: Array<{
-  id: SetupFlow
-  title: string
-  detail: string
-}> = [
-  {
-    id: 'leads',
-    title: 'Bring a company list',
-    detail: 'Paste names, sites, phones, or emails and turn them into saved companies.',
-  },
-  {
-    id: 'updates',
-    title: 'Paste team updates',
-    detail: 'Paste messy notes and turn them into a task list with owners and due dates.',
-  },
-]
-
 function isWorkspaceView(value: string | null): value is WorkspaceView {
   return value === 'queue' || value === 'leads'
 }
@@ -319,9 +302,6 @@ export function WorkspaceLitePage() {
           : 'leads'
   const hasSharedProfile = isPublicWorkspaceProfileReady(profile)
   const pageEyebrow = publicSurface === 'sales' ? 'Company List' : 'Task List'
-  const listLabel = publicSurface === 'sales' ? 'Company List' : 'Task List'
-  const storageLabel = mode === 'shared' ? 'Saved online' : 'Saved on this device'
-  const visibleSetupOptions = publicSurface === 'sales' ? setupOptions.filter((option) => option.id === 'leads') : setupOptions.filter((option) => option.id === 'updates')
 
   const summary = useMemo(() => {
     if (mode === 'local') {
@@ -829,15 +809,6 @@ export function WorkspaceLitePage() {
     setTasks(updateBrowserWorkspaceAction(taskId, { status: 'done' }).map(normalizeBrowserTask))
   }
 
-  async function reopen(taskId: string) {
-    if (mode === 'shared') {
-      await updateWorkspaceTask(taskId, { status: 'open' })
-      await loadSharedState()
-      return
-    }
-    setTasks(updateBrowserWorkspaceAction(taskId, { status: 'open' }).map(normalizeBrowserTask))
-  }
-
   async function removeAction(taskId: string) {
     if (mode === 'shared') {
       await removeWorkspaceTask(taskId)
@@ -957,21 +928,47 @@ export function WorkspaceLitePage() {
       </div>
     )
 
+  const cloudSavePanel =
+    hasLiveWorkspaceApi() && mode === 'local' && showCloudSetup ? (
+      <div className="sm-proof-card">
+        <p className="sm-kicker text-[var(--sm-accent)]">Save online</p>
+        <p className="mt-2 text-sm text-[var(--sm-muted)]">Use your company and work email once. After that, this list can stay online.</p>
+        <div className="mt-4 grid gap-3 md:grid-cols-3">
+          <label className="grid gap-2 text-sm font-semibold text-[var(--sm-muted)]">
+            Name
+            <input className="sm-input" onChange={(event) => updateProfileField('name', event.target.value)} placeholder="Your name" value={profile.name} />
+          </label>
+          <label className="grid gap-2 text-sm font-semibold text-[var(--sm-muted)]">
+            Work email
+            <input className="sm-input" onChange={(event) => updateProfileField('email', event.target.value)} placeholder="you@company.com" value={profile.email} />
+          </label>
+          <label className="grid gap-2 text-sm font-semibold text-[var(--sm-muted)]">
+            Company
+            <input className="sm-input" onChange={(event) => updateProfileField('company', event.target.value)} placeholder="Company name" value={profile.company} />
+          </label>
+        </div>
+        <div className="mt-4 flex flex-wrap gap-3">
+          <button className="sm-button-secondary" disabled={starting || !hasSharedProfile} onClick={() => void startSharedWorkspace()} type="button">
+            {starting ? 'Starting...' : 'Save online'}
+          </button>
+          <button className="sm-button-secondary" onClick={() => setShowCloudSetup(false)} type="button">
+            Hide
+          </button>
+        </div>
+      </div>
+    ) : null
+
   if (!hasData) {
     return (
       <div className="space-y-8">
         <PageIntro
           compact
           eyebrow={pageEyebrow}
-          title={
-            publicSurface === 'sales'
-              ? 'Bring a company list or save companies from Find Companies.'
-              : "Paste team updates and build today's task list."
-          }
+          title={publicSurface === 'sales' ? 'Bring a company list.' : 'Paste team updates.'}
           description={
             publicSurface === 'sales'
-              ? 'Start with your own company list. If you need new prospects, use Find Companies first.'
-              : 'Paste messy updates, blockers, or receiving issues and turn them into one short task list.'
+              ? 'Paste names, sites, emails, or phones. If you need new companies first, use Find Companies.'
+              : 'Paste messy notes, blockers, or receiving issues and turn them into a short task list.'
           }
         />
 
@@ -983,10 +980,8 @@ export function WorkspaceLitePage() {
                 Need new companies? Find companies
               </Link>
             ) : null}
-            <Link className="sm-button-secondary" to="/book">
-              Need help setting it up?
-            </Link>
           </div>
+          {cloudSavePanel ? <div className="mt-5">{cloudSavePanel}</div> : null}
           {message ? <div className="mt-4 sm-chip text-[var(--sm-muted)]">{message}</div> : null}
         </section>
       </div>
@@ -1016,40 +1011,19 @@ export function WorkspaceLitePage() {
 
       <section className="grid gap-6 lg:grid-cols-[0.82fr_1.18fr]">
         <article className="sm-surface p-6">
-          <p className="sm-kicker text-[var(--sm-accent)]">Use this tool</p>
+          <p className="sm-kicker text-[var(--sm-accent)]">{publicSurface === 'sales' ? 'Saved companies' : 'Task list'}</p>
           <h2 className="mt-3 text-3xl font-bold text-white">
-            {hasData ? `Work inside ${listLabel}.` : `Set up ${listLabel}.`}
+            {publicSurface === 'sales' ? 'Keep the list short and usable.' : 'Keep only the next tasks.'}
           </h2>
           <p className="mt-3 text-sm leading-relaxed text-[var(--sm-muted)]">
-            {mode === 'shared'
-              ? 'This list is shared online.'
-              : hasLiveWorkspaceApi()
-                ? 'Start with pasted data. Share later if needed.'
-                : 'Start with pasted data on this device.'}
+            {publicSurface === 'sales'
+              ? 'Save companies, move the right ones forward, and open the task list when follow-up is due.'
+              : 'Add one task, finish it, then move to the next one.'}
           </p>
-
-          {visibleSetupOptions.length > 1 ? (
-            <div className="mt-5 grid gap-3 md:grid-cols-2">
-              {visibleSetupOptions.map((option) => {
-                const active = setupFlow === option.id
-                return (
-                  <button
-                    className={`sm-chip text-left transition ${active ? 'border-[rgba(37,208,255,0.28)] bg-[rgba(37,208,255,0.08)] text-white' : 'text-[var(--sm-muted)]'}`}
-                    key={option.id}
-                    onClick={() => setSetupFlow(option.id)}
-                    type="button"
-                  >
-                    <p className="font-semibold">{option.title}</p>
-                    <p className="mt-2 text-sm">{option.detail}</p>
-                  </button>
-                )
-              })}
-            </div>
-          ) : null}
 
           {hasData ? (
             <>
-              <div className={`mt-5 grid gap-3 ${publicSurface === 'sales' ? 'md:grid-cols-3' : 'md:grid-cols-2'}`}>
+              <div className={`mt-5 grid gap-3 ${publicSurface === 'sales' ? 'md:grid-cols-2' : 'md:grid-cols-1'}`}>
                 {publicSurface === 'sales' ? (
                   <div className="sm-chip text-white">
                     <p className="sm-kicker text-[var(--sm-accent)]">Companies</p>
@@ -1057,15 +1031,9 @@ export function WorkspaceLitePage() {
                   </div>
                 ) : null}
                 <div className="sm-chip text-white">
-                  <p className="sm-kicker text-[var(--sm-accent-alt)]">Today's next steps</p>
+                  <p className="sm-kicker text-[var(--sm-accent-alt)]">Open tasks</p>
                   <p className="mt-2 text-3xl font-bold">{summary.openActionCount}</p>
                 </div>
-                {publicSurface === 'sales' ? (
-                  <div className="sm-chip text-white">
-                    <p className="sm-kicker text-[var(--sm-accent)]">Saved</p>
-                    <p className="mt-2 text-base font-bold">{storageLabel}</p>
-                  </div>
-                ) : null}
               </div>
 
               {publicSurface === 'sales' ? (
@@ -1074,7 +1042,7 @@ export function WorkspaceLitePage() {
                     Companies
                   </Link>
                   <Link className={activeView === 'queue' ? 'sm-button-primary' : 'sm-button-secondary'} to={viewHref('queue', publicBasePath)}>
-                    Today's next steps
+                    Task list
                   </Link>
                 </div>
               ) : null}
@@ -1086,56 +1054,14 @@ export function WorkspaceLitePage() {
           )}
 
           {hasData && hasLiveWorkspaceApi() && mode === 'local' ? (
-            <div className="mt-5 sm-proof-card">
-              <p className="sm-kicker text-[var(--sm-accent)]">Keep this list online</p>
-              <p className="mt-2 text-sm text-[var(--sm-muted)]">
-                {hasSharedProfile && !showCloudSetup
-                  ? `Ready to keep this list online in ${profile.company}.`
-                  : 'Use your company and work email once. After that, this list can stay online.'}
-              </p>
-              {showCloudSetup || !hasSharedProfile ? (
-                <>
-                  <div className="mt-4 grid gap-3 md:grid-cols-3">
-                    <label className="grid gap-2 text-sm font-semibold text-[var(--sm-muted)]">
-                      Name
-                      <input className="sm-input" onChange={(event) => updateProfileField('name', event.target.value)} placeholder="Your name" value={profile.name} />
-                    </label>
-                    <label className="grid gap-2 text-sm font-semibold text-[var(--sm-muted)]">
-                      Work email
-                      <input className="sm-input" onChange={(event) => updateProfileField('email', event.target.value)} placeholder="you@company.com" value={profile.email} />
-                    </label>
-                    <label className="grid gap-2 text-sm font-semibold text-[var(--sm-muted)]">
-                      Company
-                      <input className="sm-input" onChange={(event) => updateProfileField('company', event.target.value)} placeholder="Company name" value={profile.company} />
-                    </label>
-                  </div>
-                  <div className="mt-4 flex flex-wrap gap-3">
-                    <button className="sm-button-secondary" disabled={starting || !hasSharedProfile} onClick={() => void startSharedWorkspace()} type="button">
-                      {starting ? 'Starting...' : 'Keep this list online'}
-                    </button>
-                    {hasSharedProfile ? (
-                      <button className="sm-button-secondary" onClick={() => setShowCloudSetup(false)} type="button">
-                        Hide setup
-                      </button>
-                    ) : null}
-                  </div>
-                  <div className="mt-3 sm-chip text-[var(--sm-muted)]">
-                    {hasSharedProfile ? `Ready to keep this list online in ${profile.company}.` : 'Company and work email are required.'}
-                  </div>
-                </>
-              ) : (
-                <div className="mt-4 flex flex-wrap gap-3">
-                  <button className="sm-button-secondary" disabled={starting} onClick={() => void startSharedWorkspace()} type="button">
-                    {starting ? 'Starting...' : 'Keep this list online'}
-                  </button>
-                  <button className="sm-button-secondary" onClick={() => setShowCloudSetup(true)} type="button">
-                    Edit setup
-                  </button>
-                </div>
-              )}
+            <div className="mt-5 flex flex-wrap gap-3">
+              <button className="sm-button-secondary" onClick={() => setShowCloudSetup((current) => !current)} type="button">
+                {showCloudSetup ? 'Hide online save' : 'Save online'}
+              </button>
             </div>
           ) : null}
 
+          {cloudSavePanel ? <div className="mt-5">{cloudSavePanel}</div> : null}
           {message ? <div className="mt-4 sm-chip text-[var(--sm-muted)]">{message}</div> : null}
         </article>
 
@@ -1178,28 +1104,20 @@ export function WorkspaceLitePage() {
                   ) : activeView === 'queue' ? (
                     <>
                       <div className="sm-proof-card">
-                        <p className="sm-kicker text-[var(--sm-accent)]">Add one next step</p>
-                        <div className="mt-4 grid gap-3 md:grid-cols-3">
-                          {publicQueueTemplates.map((templateId) => {
-                            const template = queueTemplates[templateId]
-                            const active = queueTemplate === templateId
-                            return (
-                              <button
-                                className={`sm-chip text-left ${active ? 'border-[rgba(37,208,255,0.28)] text-white' : 'text-[var(--sm-muted)]'}`}
-                                key={templateId}
-                                onClick={() => applyQueueTemplate(templateId)}
-                                type="button"
-                              >
-                                <p className="font-semibold">{template.label}</p>
-                                <p className="mt-2 text-sm">{template.description}</p>
-                              </button>
-                            )
-                          })}
-                        </div>
-
-                        <div className="mt-4 grid gap-3">
+                        <p className="sm-kicker text-[var(--sm-accent)]">Add one task</p>
+                        <div className="mt-4 grid gap-3 md:grid-cols-[0.28fr_0.72fr]">
                           <label className="grid gap-2 text-sm font-semibold text-[var(--sm-muted)]">
-                            What needs to happen?
+                            Type
+                            <select className="sm-input" onChange={(event) => applyQueueTemplate(event.target.value as QueueTemplateId)} value={queueTemplate}>
+                              {publicQueueTemplates.map((templateId) => (
+                                <option key={templateId} value={templateId}>
+                                  {queueTemplates[templateId].label}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          <label className="grid gap-2 text-sm font-semibold text-[var(--sm-muted)]">
+                            Task
                             <input
                               className="sm-input"
                               onChange={(event) => setQueueTitle(event.target.value)}
@@ -1207,36 +1125,10 @@ export function WorkspaceLitePage() {
                               value={queueTitle}
                             />
                           </label>
-                          <div className="grid gap-3 md:grid-cols-3">
-                            <label className="grid gap-2 text-sm font-semibold text-[var(--sm-muted)]">
-                              Owner
-                              <input className="sm-input" onChange={(event) => setQueueOwner(event.target.value)} value={queueOwner} />
-                            </label>
-                            <label className="grid gap-2 text-sm font-semibold text-[var(--sm-muted)]">
-                              Priority
-                              <select className="sm-input" onChange={(event) => setQueuePriority(event.target.value as 'High' | 'Medium' | 'Low')} value={queuePriority}>
-                                {['High', 'Medium', 'Low'].map((value) => (
-                                  <option key={value} value={value}>
-                                    {value}
-                                  </option>
-                                ))}
-                              </select>
-                            </label>
-                            <label className="grid gap-2 text-sm font-semibold text-[var(--sm-muted)]">
-                              Due
-                              <select className="sm-input" onChange={(event) => setQueueDue(event.target.value)} value={queueDue}>
-                                {['Today', 'Tomorrow', 'This week', 'Next review'].map((value) => (
-                                  <option key={value} value={value}>
-                                    {value}
-                                  </option>
-                                ))}
-                              </select>
-                            </label>
-                          </div>
                         </div>
 
                         <div className="mt-4 flex flex-wrap gap-3">
-                            <button className="sm-button-primary" onClick={() => void saveQuickAction()} type="button">
+                          <button className="sm-button-primary" onClick={() => void saveQuickAction()} type="button">
                             Add task
                           </button>
                           {leads.length ? (
@@ -1244,6 +1136,9 @@ export function WorkspaceLitePage() {
                               Pull from companies
                             </button>
                           ) : null}
+                        </div>
+                        <div className="mt-3 text-sm text-[var(--sm-muted)]">
+                          Default owner: {queueOwner}. Default due: {queueDue}. Priority: {queuePriority}.
                         </div>
                       </div>
 
@@ -1264,9 +1159,6 @@ export function WorkspaceLitePage() {
                               <button className="sm-button-primary" onClick={() => void markDone(task.id)} type="button">
                                 Mark done
                               </button>
-                              <button className="sm-button-secondary" onClick={() => void reopen(task.id)} type="button">
-                                Reopen
-                              </button>
                               <button className="sm-button-secondary" onClick={() => void removeAction(task.id)} type="button">
                                 Remove
                               </button>
@@ -1283,6 +1175,9 @@ export function WorkspaceLitePage() {
                   ) : leads.length ? (
                     <>
                       <div className="flex flex-wrap gap-3">
+                        <Link className="sm-button-primary" to={viewHref('queue', publicBasePath)}>
+                          Open task list
+                        </Link>
                         <Link className="sm-button-secondary" to="/find-companies">
                           Find more companies
                         </Link>
