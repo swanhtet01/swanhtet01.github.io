@@ -40,7 +40,7 @@ export function SiteFrame() {
               </NavLink>
             ))}
             <Link className="sm-button-primary ml-2" to="/book">
-              Book demo
+              Book setup call
             </Link>
           </div>
         </nav>
@@ -53,7 +53,7 @@ export function SiteFrame() {
                 </NavLink>
               ))}
               <Link className="sm-button-primary mt-2" onClick={() => setMenuOpen(false)} to="/book">
-                Book demo
+                Book setup call
               </Link>
             </div>
           </div>
@@ -68,7 +68,7 @@ export function SiteFrame() {
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 px-4 py-6 text-sm text-[var(--sm-muted)] lg:flex-row lg:items-center lg:justify-between lg:px-8">
           <p>Simple tools for company lists and task lists.</p>
           <Link className="sm-link" to="/book">
-            Book a demo
+            Book setup call
           </Link>
         </div>
       </footer>

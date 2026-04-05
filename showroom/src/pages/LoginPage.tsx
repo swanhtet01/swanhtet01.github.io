@@ -97,11 +97,11 @@ export function LoginPage() {
               This host is the public site only. The saved workspace app is not deployed on this domain yet.
             </p>
             <div className="mt-5 flex flex-wrap gap-3">
-              <Link className="sm-button-primary" to="/lead-finder">
-                Open Lead Finder
+              <Link className="sm-button-primary" to="/find-companies">
+                Open Find Companies
               </Link>
               <Link className="sm-button-secondary" to="/book">
-                Book call
+                Book setup call
               </Link>
             </div>
           </section>

@@ -38,29 +38,29 @@ export const navItems = [
 export const hero = {
   eyebrow: 'SuperMega',
   title: 'Find companies. Keep a list. Run tasks.',
-  description: 'Three simple tools for sales and operations.',
+  description: 'Simple tools for sales follow-up and daily operations.',
 }
 
 export const proofPoints: ProofPoint[] = [
   {
     label: 'Find Companies',
     value: 'Search real businesses',
-    detail: 'Search public businesses and keep only the ones worth chasing.',
+    detail: 'Search public businesses and keep only the ones worth contacting.',
   },
   {
     label: 'Company List',
-    value: 'Bring your own company list',
-    detail: 'Paste companies, notes, and stages into one clear company list.',
+    value: 'Keep one clean list',
+    detail: 'Paste companies, notes, and stages into one saved list.',
   },
   {
     label: 'Task List',
-    value: 'One task list',
+    value: 'One short task list',
     detail: 'Turn messy team notes and blockers into one daily task list.',
   },
 ]
 
 export const coreProduct = {
-  name: 'Company List',
+  name: 'Company List + Task List',
   tagline: 'One saved company list and one short task list for the next step.',
   replaces: ['Scattered notes', 'Missed follow-up', 'Manual chasing'],
   inputs: ['Saved companies', 'Team updates', 'Receiving issues'],

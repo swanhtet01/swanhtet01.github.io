@@ -80,11 +80,11 @@ export function SignupPage() {
               Workspace signup is not live on this host yet. Use the public Lead Finder now or book the first rollout call.
             </p>
             <div className="mt-5 flex flex-wrap gap-3">
-              <Link className="sm-button-primary" to="/lead-finder">
-                Open Lead Finder
+              <Link className="sm-button-primary" to="/find-companies">
+                Open Find Companies
               </Link>
               <Link className="sm-button-secondary" to="/book">
-                Book call
+                Book setup call
               </Link>
             </div>
           </section>

@@ -297,7 +297,7 @@ export function PublicLeadFinderPage() {
     <div className="space-y-6">
       <section className="sm-surface p-6 lg:p-8">
         <p className="sm-kicker text-[var(--sm-accent)]">Find Companies</p>
-        <h1 className="mt-3 text-3xl font-bold text-white lg:text-4xl">Run one search.</h1>
+        <h1 className="mt-3 text-3xl font-bold text-white lg:text-4xl">Find companies in one search.</h1>
         <p className="mt-3 max-w-2xl text-sm leading-relaxed text-[var(--sm-muted)]">
           Type a place and business type, then keep the companies worth contacting.
         </p>
@@ -343,9 +343,9 @@ export function PublicLeadFinderPage() {
 
             {hasLiveWorkspaceApi() && showWorkspaceSetup ? (
               <div className="sm-proof-card">
-                <p className="sm-kicker text-[var(--sm-accent)]">Save online</p>
+                <p className="sm-kicker text-[var(--sm-accent)]">Save to team workspace</p>
                 <p className="mt-2 text-sm text-[var(--sm-muted)]">
-                  Enter your company and work email once. After that, kept companies can go into the same saved company list.
+                  Enter your company and work email once. After that, kept companies can go into the same team workspace.
                 </p>
                 <div className="mt-4 grid gap-3 md:grid-cols-3">
                   <label className="grid gap-2 text-sm font-semibold text-[var(--sm-muted)]">
@@ -362,7 +362,7 @@ export function PublicLeadFinderPage() {
                   </label>
                 </div>
                 <div className="mt-3 sm-chip text-[var(--sm-muted)]">
-                  {hasSharedProfile ? `Ready to keep saved companies online in ${profile.company}.` : 'Company and work email are required before save.'}
+                  {hasSharedProfile ? `Ready to save into the team workspace for ${profile.company}.` : 'Company and work email are required before save.'}
                 </div>
                 <div className="mt-4 flex flex-wrap gap-3">
                   <button className="sm-button-secondary" onClick={() => setShowWorkspaceSetup(false)} type="button">
@@ -479,7 +479,7 @@ export function PublicLeadFinderPage() {
             ) : null}
             {hasLiveWorkspaceApi() ? (
               <button className="sm-button-secondary" onClick={() => setShowWorkspaceSetup((current) => !current)} type="button">
-                {showWorkspaceSetup ? 'Hide online save' : 'Save online'}
+                {showWorkspaceSetup ? 'Hide workspace setup' : 'Save to team workspace'}
               </button>
             ) : null}
           </div>
@@ -487,8 +487,8 @@ export function PublicLeadFinderPage() {
             {hasLiveWorkspaceApi()
               ? hasSharedProfile
                 ? `Ready to save into ${profile.company}.`
-                : 'On this host, save will ask for company and work email once.'
-              : 'This host saves into Company List in this browser on this computer.'}
+                : 'Save will ask for company and work email once.'
+              : 'On this host, kept companies stay in this browser on this computer.'}
           </div>
         </section>
       ) : null}

@@ -28,7 +28,7 @@ export function BookPage() {
         <div className="pointer-events-none absolute inset-x-6 top-5 h-px bg-gradient-to-r from-transparent via-[rgba(37,208,255,0.55)] to-transparent" />
         <div className="grid gap-8 lg:grid-cols-[minmax(0,0.95fr)_minmax(22rem,1.05fr)] lg:items-start">
           <div>
-            <p className="sm-kicker text-[var(--sm-accent)]">Start here</p>
+            <p className="sm-kicker text-[var(--sm-accent)]">Book setup call</p>
             <h1 className="mt-4 max-w-3xl text-4xl font-extrabold tracking-tight text-white lg:text-6xl">Start with one paid setup.</h1>
             <p className="mt-5 max-w-2xl text-base leading-relaxed text-[var(--sm-muted)] lg:text-lg">
               We set up one real workflow first. No big rollout, no fake platform demo.

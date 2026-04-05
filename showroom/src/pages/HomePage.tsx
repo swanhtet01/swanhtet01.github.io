@@ -16,7 +16,7 @@ const tools = [
   },
   {
     title: 'Task List',
-    detail: 'Turn follow-up notes or messy team updates into one short task list.',
+    detail: 'Turn messy team updates into one short daily task list.',
     to: '/task-list',
   },
 ]
@@ -31,11 +31,9 @@ export function HomePage() {
         <div className="grid gap-10 lg:grid-cols-[minmax(0,1.1fr)_minmax(20rem,0.9fr)] lg:items-end">
           <div>
             <p className="sm-kicker text-[var(--sm-accent)]">{hero.eyebrow}</p>
-            <h1 className="mt-4 max-w-4xl text-4xl font-extrabold tracking-tight text-white lg:text-7xl">
-              Find companies. Keep a list. Run the next tasks.
-            </h1>
+            <h1 className="mt-4 max-w-4xl text-4xl font-extrabold tracking-tight text-white lg:text-7xl">Find companies. Keep a list. Run tasks.</h1>
             <p className="mt-5 max-w-2xl text-base leading-relaxed text-[var(--sm-muted)] lg:text-lg">
-              SuperMega gives small teams a simple way to prospect, keep their list clean, and run daily follow-up.
+              Three small tools. Find companies, keep the ones that matter, and turn messy updates into the next tasks.
             </p>
             <div className="mt-7 flex flex-wrap gap-3">
               <Link className="sm-button-primary" onClick={() => trackEvent('public_start_click', { tool: 'Find Companies' })} to="/find-companies">
@@ -69,8 +67,8 @@ export function HomePage() {
       <section className="sm-surface p-6 lg:p-8">
         <div className="grid gap-6 lg:grid-cols-2 lg:items-start">
           <div>
-            <p className="sm-kicker text-[var(--sm-accent)]">Best first use</p>
-            <h2 className="mt-3 text-3xl font-bold text-white">Start with one simple workflow.</h2>
+            <p className="sm-kicker text-[var(--sm-accent)]">Start here</p>
+            <h2 className="mt-3 text-3xl font-bold text-white">Pick one simple workflow.</h2>
           </div>
           <div className="space-y-3">
             <div className="sm-command-row">
@@ -96,7 +94,7 @@ export function HomePage() {
             <p className="mt-1 text-sm text-[var(--sm-muted)]">We can set up the first workflow with your real data.</p>
           </div>
           <Link className="sm-button-secondary" onClick={() => trackEvent('book_demo_click', { source: 'home' })} to="/book">
-            Book a demo
+            Book setup call
           </Link>
         </div>
       </section>

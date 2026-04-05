@@ -13,17 +13,18 @@ Public conversion-oriented showroom for `supermega.dev`.
 ## Information Architecture
 
 - `/`
-- `/products`
-- `/examples`
-- `/packages`
-- `/contact`
+- `/find-companies`
+- `/company-list`
+- `/task-list`
+- `/book`
+- `/login`
+- `/app/*`
 
-Legacy redirects kept intentionally:
+Minimal redirects still supported:
 
-- `/demos`
-- `/prototypes`
-- `/try`
-- `/home`
+- `/lead-finder` -> `/find-companies`
+- `/workspace` -> `/company-list`
+- `/action-os` -> `/task-list`
 
 ## Local run
 
@@ -45,10 +46,11 @@ Build script also creates:
 - `dist/404.html`
 - route-level `index.html` files for static hosting route checks
 
-## Lead form behavior
+## Public tool behavior
 
-- If `VITE_LEAD_ENDPOINT` is configured, form posts JSON to endpoint.
-- If not configured, form still prepares a complete request packet and keeps email/copy/download actions available.
+- `Find Companies` searches public business sources and can save kept rows into `Company List`.
+- `Company List` stores saved companies and lead notes.
+- `Task List` turns messy updates into a short daily queue.
 
 ## Deployment
 
