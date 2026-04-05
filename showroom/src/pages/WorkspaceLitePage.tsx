@@ -953,7 +953,7 @@ export function WorkspaceLitePage() {
             {isReceivingDesk
               ? 'Paste GRN, hold, batch, customs, or quantity issues and turn them into one short follow-up list.'
               : publicSurface === 'sales'
-              ? 'Use this when you already have names from Google, Facebook, WhatsApp, Excel, or CRM. We turn them into one clean list with next steps.'
+              ? 'Use this when you already have names from Google, Facebook, Viber, WhatsApp, Excel, or CRM. We turn them into one clean list with next steps.'
               : 'Paste messy notes, blockers, or updates and turn them into a short task list.'}
           </p>
           {setupPanel}
@@ -1198,7 +1198,7 @@ export function WorkspaceLitePage() {
                   ) : (
                     <div className="sm-proof-card">
                       <p className="font-semibold text-white">No companies yet</p>
-                      <p className="mt-2 text-sm text-[var(--sm-muted)]">Paste your own list here. If you need net-new clients first, use Find clients.</p>
+                      <p className="mt-2 text-sm text-[var(--sm-muted)]">Paste your own list here from Google, Facebook, Viber, Excel, or CRM. If you need net-new clients first, use Find clients.</p>
                       <div className="mt-4 flex flex-wrap gap-3">
                         <Link className="sm-button-primary" to="/find-companies">
                           Find clients

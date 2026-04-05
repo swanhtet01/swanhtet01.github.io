@@ -297,7 +297,7 @@ export function PublicLeadFinderPage() {
         <p className="sm-kicker text-[var(--sm-accent)]">Find clients</p>
         <h1 className="mt-3 text-3xl font-bold text-white lg:text-4xl">Google gives links. This gives you a shortlist.</h1>
         <p className="mt-3 max-w-2xl text-sm leading-relaxed text-[var(--sm-muted)]">
-          Type a place and business type, then keep the companies worth contacting with fit reasons, contact clues, and first outreach ready.
+          Type a place and business type, then keep the companies worth contacting with fit reasons, contact clues, and first outreach ready. This is for teams who would otherwise search Google or Facebook and then manually copy results into chats or spreadsheets.
         </p>
 
         <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -305,7 +305,7 @@ export function PublicLeadFinderPage() {
             ['Shortlist', 'Keep only the few companies worth chasing.'],
             ['Fit reasons', 'See why each result matches the search.'],
             ['First outreach', 'Copy a ready first message, not just a URL.'],
-            ['Clean my list', 'Send saved companies into one working follow-up list.'],
+            ['Clean my list', 'Send saved companies into one working follow-up list for the team.'],
           ].map(([title, detail]) => (
             <div className="sm-chip text-white" key={title}>
               <p className="sm-kicker text-[var(--sm-accent)]">{title}</p>

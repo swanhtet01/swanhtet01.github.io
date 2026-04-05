@@ -90,6 +90,9 @@ export function BookPage() {
               </div>
             ))}
           </div>
+          <div className="mt-6 text-sm text-[var(--sm-muted)]">
+            Best for Myanmar owner-led distributors, importers, stores, and plant teams still running follow-up through Facebook pages, Viber or WhatsApp, Excel, and email.
+          </div>
           {!bookingUrl ? (
             <div className="mt-6 text-sm text-[var(--sm-muted)]">Calendar booking is not live on this host yet. Start with one of the public tools first.</div>
           ) : null}

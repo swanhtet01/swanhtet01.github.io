@@ -26,7 +26,7 @@ export function HomePage() {
             <p className="sm-kicker text-[var(--sm-accent)]">{hero.eyebrow}</p>
             <h1 className="mt-4 max-w-3xl text-5xl font-extrabold tracking-tight text-white lg:text-8xl">Turn messy business work into one clear next step.</h1>
             <p className="mt-5 max-w-2xl text-base leading-relaxed text-[var(--sm-muted)] lg:text-lg">
-              Google and Facebook show pages. SuperMega turns that into a shortlist, a clean list, and the next follow-up.
+              Built for teams working from Google results, Facebook pages, Viber or WhatsApp notes, and spreadsheets. Google and Facebook help you find names. SuperMega helps your team decide who to keep, what to say, and what to do next.
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
               <Link className="sm-button-primary" onClick={() => trackEvent('public_start_click', { offer: 'Find clients' })} to="/find-companies">
@@ -38,7 +38,7 @@ export function HomePage() {
             </div>
             <div className="mt-8 flex flex-wrap gap-3 text-sm text-[var(--sm-muted)]">
               <span className="sm-status-pill">Works with Google and Facebook results</span>
-              <span className="sm-status-pill">Works with WhatsApp notes</span>
+              <span className="sm-status-pill">Works with Viber and WhatsApp notes</span>
               <span className="sm-status-pill">Works with email</span>
             </div>
           </div>
