@@ -70,13 +70,41 @@ jobs:
           if [ -n "$CLOUDSQL_INSTANCE" ]; then
             EXTRA_ARGS="--add-cloudsql-instances $CLOUDSQL_INSTANCE"
           fi
+          cat > cloudrun-env.yaml <<EOF
+          SUPERMEGA_SITE_ROOT: /app/showroom/dist
+          SUPERMEGA_PILOT_DATA: /app/pilot-data
+          SUPERMEGA_ENV: production
+          SUPERMEGA_AUTH_REQUIRED: "1"
+          SUPERMEGA_APP_USERNAME: "${{ secrets.SUPERMEGA_APP_USERNAME }}"
+          SUPERMEGA_APP_PASSWORD: "${{ secrets.SUPERMEGA_APP_PASSWORD }}"
+          SUPERMEGA_APP_DISPLAY_NAME: "${{ vars.SUPERMEGA_APP_DISPLAY_NAME }}"
+          SUPERMEGA_APP_ROLE: "${{ vars.SUPERMEGA_APP_ROLE }}"
+          SUPERMEGA_WORKSPACE_SLUG: "${{ vars.SUPERMEGA_WORKSPACE_SLUG }}"
+          SUPERMEGA_WORKSPACE_NAME: "${{ vars.SUPERMEGA_WORKSPACE_NAME }}"
+          SUPERMEGA_WORKSPACE_PLAN: "${{ vars.SUPERMEGA_WORKSPACE_PLAN }}"
+          SUPERMEGA_SESSION_HOURS: "${{ vars.SUPERMEGA_SESSION_HOURS }}"
+          SUPERMEGA_DATABASE_URL: "${{ secrets.SUPERMEGA_DATABASE_URL }}"
+          SUPERMEGA_CORS_ORIGINS: "${{ vars.SUPERMEGA_CORS_ORIGINS }}"
+          SUPERMEGA_SENTRY_TRACES: "${{ vars.SUPERMEGA_SENTRY_TRACES }}"
+          SENTRY_DSN: "${{ secrets.SENTRY_DSN }}"
+          VITE_BOOKING_URL: "${{ vars.VITE_BOOKING_URL }}"
+          VITE_POSTHOG_KEY: "${{ secrets.VITE_POSTHOG_KEY }}"
+          VITE_POSTHOG_HOST: "${{ vars.VITE_POSTHOG_HOST }}"
+          VITE_SENTRY_DSN: "${{ vars.VITE_SENTRY_DSN }}"
+          VITE_WORKSPACE_APP_BASE: "${{ vars.VITE_WORKSPACE_APP_BASE }}"
+          VITE_WORKSPACE_API_BASE: "${{ vars.VITE_WORKSPACE_API_BASE }}"
+          OPENAI_API_KEY: "${{ secrets.OPENAI_API_KEY }}"
+          RESEND_API_KEY: "${{ secrets.RESEND_API_KEY }}"
+          STRIPE_SECRET_KEY: "${{ secrets.STRIPE_SECRET_KEY }}"
+          STRIPE_WEBHOOK_SECRET: "${{ secrets.STRIPE_WEBHOOK_SECRET }}"
+          EOF
           gcloud run deploy "$SERVICE" \
             --image "$IMAGE" \
             --region "$REGION" \
             --platform managed \
             --allow-unauthenticated \
             --port 8080 \
-            --set-env-vars "SUPERMEGA_SITE_ROOT=/app/showroom/dist,SUPERMEGA_PILOT_DATA=/app/pilot-data,SUPERMEGA_ENV=production,SUPERMEGA_AUTH_REQUIRED=1,SUPERMEGA_APP_USERNAME=${{ secrets.SUPERMEGA_APP_USERNAME }},SUPERMEGA_APP_PASSWORD=${{ secrets.SUPERMEGA_APP_PASSWORD }},SUPERMEGA_APP_DISPLAY_NAME=${{ vars.SUPERMEGA_APP_DISPLAY_NAME }},SUPERMEGA_APP_ROLE=${{ vars.SUPERMEGA_APP_ROLE }},SUPERMEGA_WORKSPACE_SLUG=${{ vars.SUPERMEGA_WORKSPACE_SLUG }},SUPERMEGA_WORKSPACE_NAME=${{ vars.SUPERMEGA_WORKSPACE_NAME }},SUPERMEGA_WORKSPACE_PLAN=${{ vars.SUPERMEGA_WORKSPACE_PLAN }},SUPERMEGA_SESSION_HOURS=${{ vars.SUPERMEGA_SESSION_HOURS }},SUPERMEGA_DATABASE_URL=${{ secrets.SUPERMEGA_DATABASE_URL }},SUPERMEGA_CORS_ORIGINS=${{ vars.SUPERMEGA_CORS_ORIGINS }},SUPERMEGA_SENTRY_TRACES=${{ vars.SUPERMEGA_SENTRY_TRACES }},SENTRY_DSN=${{ secrets.SENTRY_DSN }},VITE_BOOKING_URL=${{ vars.VITE_BOOKING_URL }},VITE_POSTHOG_KEY=${{ secrets.VITE_POSTHOG_KEY }},VITE_POSTHOG_HOST=${{ vars.VITE_POSTHOG_HOST }},VITE_SENTRY_DSN=${{ vars.VITE_SENTRY_DSN }},VITE_WORKSPACE_APP_BASE=${{ vars.VITE_WORKSPACE_APP_BASE }},VITE_WORKSPACE_API_BASE=${{ vars.VITE_WORKSPACE_API_BASE }},OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }},RESEND_API_KEY=${{ secrets.RESEND_API_KEY }},STRIPE_SECRET_KEY=${{ secrets.STRIPE_SECRET_KEY }},STRIPE_WEBHOOK_SECRET=${{ secrets.STRIPE_WEBHOOK_SECRET }}" \
+            --env-vars-file cloudrun-env.yaml \
             $EXTRA_ARGS
 
       - name: Print service URL
