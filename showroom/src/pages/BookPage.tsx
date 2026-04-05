@@ -6,19 +6,14 @@ import { trackEvent } from '../lib/analytics'
 export function BookPage() {
   const offers = [
     {
-      name: 'Find Companies',
-      price: '$79/mo',
-      detail: 'Self-serve company search, shortlist, and first outreach drafting.',
-    },
-    {
       name: 'Sales Setup',
       price: '$750 pilot',
-      detail: 'Find Companies plus Company List for one real outreach workflow. Pilot fee credits into month one.',
+      detail: 'Find Companies plus Saved Companies for one real outreach workflow. Pilot fee credits into month one.',
     },
     {
       name: 'Operations Setup',
       price: '$1,500 pilot',
-      detail: 'Task List for one ops flow such as daily blockers or receiving issues. Same 2-week pilot structure.',
+      detail: 'Daily Tasks for one ops flow such as daily blockers or receiving issues. Same 2-week pilot structure.',
     },
   ]
 
@@ -31,7 +26,7 @@ export function BookPage() {
             <p className="sm-kicker text-[var(--sm-accent)]">Book setup call</p>
             <h1 className="mt-4 max-w-3xl text-4xl font-extrabold tracking-tight text-white lg:text-6xl">Start with one paid setup.</h1>
             <p className="mt-5 max-w-2xl text-base leading-relaxed text-[var(--sm-muted)] lg:text-lg">
-              We set up one real workflow first. No big rollout, no fake platform demo.
+              We set up one real workflow first. Sales or operations. No big rollout.
             </p>
           </div>
 
@@ -94,8 +89,8 @@ export function BookPage() {
                 <Link className="sm-button-primary" onClick={() => trackEvent('book_page_start_click', { target: 'find_companies' })} to="/find-companies">
                   Find companies
                 </Link>
-                <Link className="sm-button-secondary" onClick={() => trackEvent('book_page_start_click', { target: 'company_list' })} to="/company-list">
-                  Bring a company list
+                <Link className="sm-button-secondary" onClick={() => trackEvent('book_page_start_click', { target: 'daily_tasks' })} to="/daily-tasks">
+                  Open daily tasks
                 </Link>
               </div>
             </div>

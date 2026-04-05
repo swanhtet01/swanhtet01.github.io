@@ -280,12 +280,12 @@ export function WorkspaceLitePage() {
   const shouldStartShared = searchParams.get('start') === '1'
   const publicSurface = normalizedPathname === '/team-updates' || normalizedPathname === '/team-tasks' || normalizedPathname === '/task-list' ? 'updates' : 'sales'
   const isReceivingDesk = requestedSetup === 'receiving' || normalizedPathname === '/receiving'
-  const publicBasePath = publicSurface === 'sales' ? '/company-list' : '/task-list'
+  const publicBasePath = publicSurface === 'sales' ? '/saved-companies' : '/daily-tasks'
   const openTasks = useMemo(() => tasks.filter((task) => task.status === 'open'), [tasks])
   const hasData = leads.length > 0 || tasks.length > 0
   const activeView: WorkspaceView = publicSurface === 'updates' ? 'queue' : 'leads'
   const hasSharedProfile = isPublicWorkspaceProfileReady(profile)
-  const pageEyebrow = isReceivingDesk ? 'Receiving' : publicSurface === 'sales' ? 'Company List' : 'Task List'
+  const pageEyebrow = isReceivingDesk ? 'Receiving' : publicSurface === 'sales' ? 'Saved Companies' : 'Daily Tasks'
 
   const summary = useMemo(() => {
     if (mode === 'local') {
@@ -498,7 +498,7 @@ export function WorkspaceLitePage() {
 
     if (mode === 'shared' || hasLiveWorkspaceApi()) {
       if (mode !== 'shared') {
-        const ready = await ensureSharedWorkspaceReady('saving into Company List')
+        const ready = await ensureSharedWorkspaceReady('saving into Saved Companies')
         if (!ready) {
           return
         }
@@ -507,7 +507,7 @@ export function WorkspaceLitePage() {
         name: profile.name,
         email: profile.email,
         company: profile.company,
-        goal: 'Save company list into Company List',
+        goal: 'Save company list into Saved Companies',
         campaign_goal: 'Imported lead list',
         rows: rows.map((row) => buildSharedLeadRow(row, 'Imported lead list')),
       })
@@ -913,7 +913,7 @@ export function WorkspaceLitePage() {
   const cloudSavePanel =
     hasLiveWorkspaceApi() && mode === 'local' && showCloudSetup ? (
       <div className="sm-proof-card">
-        <p className="sm-kicker text-[var(--sm-accent)]">Save to team workspace</p>
+              <p className="sm-kicker text-[var(--sm-accent)]">Save to team workspace</p>
         <p className="mt-2 text-sm text-[var(--sm-muted)]">Use your company and work email once. After that, this list can stay in the team workspace.</p>
         <div className="mt-4 grid gap-3 md:grid-cols-3">
           <label className="grid gap-2 text-sm font-semibold text-[var(--sm-muted)]">
@@ -975,7 +975,7 @@ export function WorkspaceLitePage() {
     <div className="space-y-6">
       <section className="grid gap-6 lg:grid-cols-[0.82fr_1.18fr]">
     <article className="sm-surface p-6">
-      <p className="sm-kicker text-[var(--sm-accent)]">{isReceivingDesk ? 'Receiving' : publicSurface === 'sales' ? 'Company List' : 'Task List'}</p>
+      <p className="sm-kicker text-[var(--sm-accent)]">{isReceivingDesk ? 'Receiving' : publicSurface === 'sales' ? 'Saved Companies' : 'Daily Tasks'}</p>
       <h2 className="mt-3 text-3xl font-bold text-white">
         {isReceivingDesk ? 'Keep only the receiving follow-up.' : publicSurface === 'sales' ? 'Keep the list short and usable.' : 'Keep only the next tasks.'}
       </h2>
@@ -1029,8 +1029,8 @@ export function WorkspaceLitePage() {
             {isReceivingDesk
               ? 'Paste receiving issues and build the follow-up list.'
               : publicSurface === 'sales'
-              ? 'Use Find Companies for net-new prospects. Use Company List when you already have a list.'
-              : "Paste today's notes and build the task list."}
+                      ? 'Use Find Companies for net-new prospects. Use Saved Companies when you already have a list.'
+                      : "Paste today's notes and build the daily task list."}
           </div>
             </div>
           ) : (
@@ -1133,9 +1133,9 @@ export function WorkspaceLitePage() {
                   ) : leads.length ? (
                     <>
                       <div className="flex flex-wrap gap-3">
-                        <Link className="sm-button-primary" to="/task-list">
-                          Open task list
-                        </Link>
+                <Link className="sm-button-primary" to="/daily-tasks">
+                  Open daily tasks
+                </Link>
                         <Link className="sm-button-secondary" to="/find-companies">
                           Find more companies
                         </Link>

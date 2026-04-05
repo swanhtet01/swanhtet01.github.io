@@ -186,7 +186,7 @@ export function PublicLeadFinderPage() {
 
     if (hasLiveWorkspaceApi()) {
       if (!hasSharedProfile) {
-        promptWorkspaceSetup('Enter your company and work email before saving into Company List.')
+        promptWorkspaceSetup('Enter your company and work email before saving into Saved Companies.')
         return false
       }
 
@@ -198,7 +198,7 @@ export function PublicLeadFinderPage() {
           name: nextProfile.name,
           email: nextProfile.email,
           company: nextProfile.company,
-          goal: 'Save leads into Company List',
+          goal: 'Save leads into Saved Companies',
           campaign_goal: query.trim() || 'Run first outreach',
           rows: candidates.map((row) => {
             const outreach = buildBrowserOutreach(row, query, searchKeywords)
@@ -231,11 +231,11 @@ export function PublicLeadFinderPage() {
 
         setSavedTotal((current) => Math.max(current, saved.saved_count || candidates.length, current + candidates.length))
         setMessage(
-          successMessage.replace('{count}', String(saved.saved_count || candidates.length)).replace('shared app', 'Company List'),
+          successMessage.replace('{count}', String(saved.saved_count || candidates.length)).replace('shared app', 'Saved Companies'),
         )
         return true
       } catch (error) {
-        setMessage(error instanceof Error ? error.message : 'Could not save to Company List on this host.')
+        setMessage(error instanceof Error ? error.message : 'Could not save to Saved Companies on this host.')
         return false
       }
     }
@@ -252,11 +252,11 @@ export function PublicLeadFinderPage() {
   async function saveLead(row: LeadRow) {
     const key = rowKey(row)
     if (savedKeys.includes(key)) {
-      setMessage(`${row.name} is already in Company List.`)
+      setMessage(`${row.name} is already in Saved Companies.`)
       return
     }
 
-    const saved = await saveRowsToWorkspace([row], 'Saved {count} company into Company List and created the first follow-up.')
+    const saved = await saveRowsToWorkspace([row], 'Saved {count} company into Saved Companies and created the first follow-up.')
     if (saved) {
       trackEvent('company_kept', {
         source: 'find_companies',
@@ -271,7 +271,7 @@ export function PublicLeadFinderPage() {
     const candidates = rows.slice(0, 3)
     const saved = await saveRowsToWorkspace(
       candidates,
-      'Saved {count} companies into Company List and created the first follow-ups.',
+      'Saved {count} companies into Saved Companies and created the first follow-ups.',
     )
     if (saved) {
       trackEvent('company_kept', {
@@ -465,7 +465,7 @@ export function PublicLeadFinderPage() {
       {(rows.length || savedTotal) ? (
         <section className="sm-surface p-6">
           <p className="sm-kicker text-[var(--sm-accent)]">Next</p>
-          <h2 className="mt-3 text-3xl font-bold text-white">Keep a few, then open Company List.</h2>
+            <h2 className="mt-3 text-3xl font-bold text-white">Keep a few, then open Saved Companies.</h2>
           <div className="mt-5 flex flex-wrap gap-3">
             {rows.length ? (
               <button className="sm-button-primary" onClick={() => void saveTopResults()} type="button">
@@ -473,9 +473,9 @@ export function PublicLeadFinderPage() {
               </button>
             ) : null}
             {savedTotal ? (
-              <Link className="sm-button-secondary" to="/company-list">
-                Open Company List
-              </Link>
+                <Link className="sm-button-secondary" to="/saved-companies">
+                  Open Saved Companies
+                </Link>
             ) : null}
             {hasLiveWorkspaceApi() ? (
               <button className="sm-button-secondary" onClick={() => setShowWorkspaceSetup((current) => !current)} type="button">
