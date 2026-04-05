@@ -38,12 +38,12 @@ export const bookingUrl = (import.meta.env.VITE_BOOKING_URL ?? '').trim()
 
 export const navItems = [
   { label: 'Find clients', to: '/find-companies' },
-  { label: 'Clean my list', to: '/company-list' },
+  { label: 'Clean a list', to: '/company-list' },
 ] as const
 
 export const hero = {
   eyebrow: 'SuperMega',
-  title: 'Turn raw search and messy lists into one clear worklist.',
+  title: 'Stop losing the next step.',
   description: 'Find new clients or clean the list you already have.',
 }
 
@@ -54,14 +54,14 @@ export const proofPoints: ProofPoint[] = [
     detail: 'Keep only the businesses worth contacting, with fit reasons and first outreach ready.',
   },
   {
-    label: 'Clean my list',
+    label: 'Clean a list',
     value: 'Use the names you already have',
     detail: 'Paste rows from Google, Facebook, WhatsApp, Excel, or CRM and turn them into one usable list.',
   },
 ]
 
 export const coreProduct = {
-  name: 'Find clients + clean my list',
+  name: 'Find clients + clean a list',
   tagline: 'One shortlist for new leads and one clean list for follow-up.',
   replaces: ['Raw search results', 'Messy spreadsheets', 'Missed follow-up'],
   inputs: ['Public search', 'Company lists', 'Notes from sales or WhatsApp'],
@@ -72,15 +72,15 @@ export const coreProduct = {
 export const leadFinder = {
   title: 'Find clients',
   description: 'Search by place or niche, keep the best results, and move them into a clean list with first outreach ready.',
-  steps: ['Search a market', 'Keep the right companies', 'Open Clean my list'],
+  steps: ['Search a market', 'Keep the right companies', 'Open Clean a list'],
 }
 
 export const useCases: UseCase[] = [
   {
     name: 'Sales Setup',
     audience: 'Founders, operators, and sales teams',
-    promise: 'Find businesses, save them in Clean My List, and keep outreach moving.',
-    firstRollout: 'Find clients plus Clean my list.',
+    promise: 'Find businesses, save them in Clean a list, and keep outreach moving.',
+    firstRollout: 'Find clients plus Clean a list.',
     inputs: ['Search query', 'Keywords', 'Saved notes'],
     outcomes: ['Company list', 'Follow-up tasks', 'Cleaner outreach'],
   },
@@ -112,7 +112,7 @@ export const publicModules: PublicModule[] = [
     path: '/find-companies',
   },
   {
-    name: 'Clean my list',
+    name: 'Clean a list',
     tagline: 'Bring your own rows and turn them into one usable company list.',
     bestFor: 'Anyone running follow-up from imported or hand-built company lists.',
     inputs: ['Company rows', 'Notes', 'Stage updates', 'Follow-up tasks'],
@@ -152,7 +152,7 @@ export const clientTemplates: ClientTemplate[] = [
     path: '/find-companies',
   },
   {
-    name: 'Company Cleanup',
+    name: 'Clean a list',
     audience: 'Anyone who already has names, sites, emails, or phones',
     outcome: 'Clean the list, move the right companies forward, and keep next steps visible.',
     path: '/company-list?setup=leads',

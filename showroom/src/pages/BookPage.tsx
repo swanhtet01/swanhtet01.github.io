@@ -8,17 +8,12 @@ export function BookPage() {
     {
       name: 'Sales Setup',
       price: '$750 pilot',
-      detail: 'Find clients plus Clean my list for one real outreach workflow.',
+      detail: 'Find clients plus Clean a list for one real outreach workflow.',
     },
     {
-      name: 'Company Cleanup',
+      name: 'Clean a list',
       price: '$500 setup',
       detail: 'Bring your spreadsheet or text list. We clean it, stage it, and create the first next-step tasks.',
-    },
-    {
-      name: 'Receiving Control',
-      price: '$1,500 pilot',
-      detail: 'Receiving Log for one inbound flow such as shortages, holds, GRN gaps, or customs blockers.',
     },
   ]
 
@@ -44,7 +39,7 @@ export function BookPage() {
                 </Link>
               )}
               <Link className="sm-button-secondary" to="/company-list?setup=leads">
-                Clean my list first
+                Clean a list first
               </Link>
             </div>
           </div>
@@ -64,7 +59,7 @@ export function BookPage() {
 
       <section className="grid gap-6 lg:grid-cols-[1.05fr_0.95fr]">
         <section className="sm-surface p-6 lg:p-8">
-          <p className="sm-kicker text-[var(--sm-accent)]">Typical starting points</p>
+          <p className="sm-kicker text-[var(--sm-accent)]">Most teams start here</p>
           <div className="mt-5 space-y-4">
             {offers.map((offer) => (
               <div className="border-b border-white/8 pb-4 last:border-b-0 last:pb-0" key={offer.name}>
@@ -93,6 +88,7 @@ export function BookPage() {
           <div className="mt-6 text-sm text-[var(--sm-muted)]">
             Best for Myanmar owner-led distributors, importers, stores, and plant teams still running follow-up through Facebook pages, Viber or WhatsApp, Excel, and email.
           </div>
+          <div className="mt-4 text-sm text-[var(--sm-muted)]">Need plant or inbound issue tracking instead? We also roll out a separate receiving-control workflow.</div>
           {!bookingUrl ? (
             <div className="mt-6 text-sm text-[var(--sm-muted)]">Calendar booking is not live on this host yet. Start with one of the public tools first.</div>
           ) : null}

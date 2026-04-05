@@ -10,7 +10,7 @@ const tools = [
     to: '/find-companies',
   },
   {
-    name: 'Clean my list',
+    name: 'Clean a list',
     detail: 'Bring the list you already have from Google, Facebook, WhatsApp, Excel, or CRM.',
     to: '/company-list?setup=leads',
   },
@@ -24,9 +24,9 @@ export function HomePage() {
         <div className="mx-auto grid min-h-[calc(100svh-7rem)] w-full max-w-6xl gap-10 px-4 pb-12 pt-14 lg:grid-cols-[minmax(0,0.95fr)_minmax(22rem,0.85fr)] lg:px-8 lg:pb-16 lg:pt-20">
           <div className="flex flex-col justify-end">
             <p className="sm-kicker text-[var(--sm-accent)]">{hero.eyebrow}</p>
-            <h1 className="mt-4 max-w-3xl text-5xl font-extrabold tracking-tight text-white lg:text-8xl">Turn messy business work into one clear next step.</h1>
+            <h1 className="mt-4 max-w-3xl text-5xl font-extrabold tracking-tight text-white lg:text-8xl">Stop losing the next step.</h1>
             <p className="mt-5 max-w-2xl text-base leading-relaxed text-[var(--sm-muted)] lg:text-lg">
-              Built for teams working from Google results, Facebook pages, Viber or WhatsApp notes, and spreadsheets. Google and Facebook help you find names. SuperMega helps your team decide who to keep, what to say, and what to do next.
+              Built for teams working from Google results, Facebook pages, Viber or WhatsApp notes, and spreadsheets. Use Find clients when you need new names. Use Clean a list when you already have names and need one clear follow-up list.
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
               <Link className="sm-button-primary" onClick={() => trackEvent('public_start_click', { offer: 'Find clients' })} to="/find-companies">
@@ -39,7 +39,7 @@ export function HomePage() {
             <div className="mt-8 flex flex-wrap gap-3 text-sm text-[var(--sm-muted)]">
               <span className="sm-status-pill">Works with Google and Facebook results</span>
               <span className="sm-status-pill">Works with Viber and WhatsApp notes</span>
-              <span className="sm-status-pill">Works with email</span>
+              <span className="sm-status-pill">Turns names into next steps</span>
             </div>
           </div>
 
@@ -67,13 +67,13 @@ export function HomePage() {
 
       <section className="grid gap-6 lg:grid-cols-[0.95fr_1.05fr]">
         <div className="sm-surface-soft p-6 lg:p-8">
-          <p className="sm-kicker text-[var(--sm-accent)]">How it works</p>
-          <h2 className="mt-3 text-3xl font-bold text-white">Two starts. One working list.</h2>
+          <p className="sm-kicker text-[var(--sm-accent)]">Pick the right start</p>
+          <h2 className="mt-3 text-3xl font-bold text-white">Two starts. One follow-up list.</h2>
           <div className="mt-6 space-y-3">
             {[
-              'Use Find clients if you need new companies.',
-              'Use Clean my list if you already have names.',
-              'If it helps, we roll it out for the team.',
+              'Need new names? Use Find clients.',
+              'Already have names? Use Clean a list.',
+              'Then follow up from one shared list.',
             ].map((item) => (
               <div className="border-b border-white/8 pb-3 text-base text-[var(--sm-muted)] last:border-b-0 last:pb-0" key={item}>
                 {item}
@@ -83,12 +83,12 @@ export function HomePage() {
         </div>
 
         <div className="sm-surface p-6 lg:p-8">
-          <p className="sm-kicker text-[var(--sm-accent-alt)]">Paid rollout</p>
+          <p className="sm-kicker text-[var(--sm-accent-alt)]">Why this beats raw search</p>
           <div className="mt-5 space-y-4">
             {[
-              ['Sales Setup', 'Find clients plus Clean my list for one outreach workflow.'],
-              ['Company Cleanup', 'Turn a messy spreadsheet into one working company list.'],
-              ['Receiving Control', 'For operations teams that need inbound issue follow-up.'],
+              ['Less noise', 'Keep only the few companies worth chasing, not a long page of links.'],
+              ['Clear reason', 'See fit clues and contact context instead of guessing from raw results.'],
+              ['Next step ready', 'Create the first follow-up instead of leaving the list inside chat or Excel.'],
             ].map(([title, detail]) => (
               <div className="border-b border-white/8 pb-4 last:border-b-0 last:pb-0" key={title}>
                 <p className="text-xl font-bold text-white">{title}</p>
@@ -103,7 +103,7 @@ export function HomePage() {
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <p className="text-2xl font-bold text-white">Share the card. Let them start with one real tool.</p>
-            <p className="mt-1 text-sm text-[var(--sm-muted)]">The goal is simple: one shortlist or one clean list, then one small rollout.</p>
+            <p className="mt-1 text-sm text-[var(--sm-muted)]">The goal is simple: start from search or from an existing list, then keep the next step visible.</p>
           </div>
           <Link className="sm-button-primary" onClick={() => trackEvent('book_demo_click', { source: 'home' })} to="/book">
             Book rollout call
