@@ -334,6 +334,17 @@ class AgentRunRequest(BaseModel):
     related_entity_id: str = ""
 
 
+class AgentBatchRunRequest(BaseModel):
+    job_types: list[str] = Field(default_factory=list)
+    source: str = "scheduler"
+
+
+class AgentRunDefaultsRequest(BaseModel):
+    workspace_slug: str = ""
+    source: str = "scheduler"
+    job_types: list[str] = Field(default_factory=list)
+
+
 class LeadHuntProfileRequest(BaseModel):
     name: str
     query: str = ""
@@ -956,6 +967,69 @@ def _group_agent_runs_by_job_type(rows: list[dict[str, Any]]) -> dict[str, dict[
     return grouped
 
 
+def _default_agent_job_types() -> list[str]:
+    return [str(item.get("job_type", "")).strip() for item in AGENT_JOB_TEMPLATES if str(item.get("job_type", "")).strip()]
+
+
+def _run_and_persist_agent_job(
+    *,
+    state_db: str,
+    enterprise_db_url: str,
+    workspace_id: str,
+    triggered_by: str,
+    job_type: str,
+    source: str = "manual",
+    payload: dict[str, Any] | None = None,
+    idempotency_key: str | None = None,
+    related_entity_type: str = "",
+    related_entity_id: str = "",
+) -> dict[str, Any]:
+    row = enterprise_create_agent_run(
+        enterprise_db_url,
+        workspace_id=workspace_id,
+        job_type=job_type,
+        source=source,
+        payload=payload,
+        idempotency_key=idempotency_key,
+        max_attempts=1,
+        triggered_by=triggered_by,
+        related_entity_type=related_entity_type,
+        related_entity_id=related_entity_id,
+    )
+    run_id = str(row.get("run_id", "")).strip()
+    enterprise_start_agent_run(
+        enterprise_db_url,
+        workspace_id=workspace_id,
+        run_id=run_id,
+    )
+    try:
+        result = _execute_agent_job(
+            state_db=state_db,
+            enterprise_db_url=enterprise_db_url,
+            workspace_id=workspace_id,
+            job_type=job_type,
+            payload=payload,
+        )
+        return enterprise_complete_agent_run(
+            enterprise_db_url,
+            workspace_id=workspace_id,
+            run_id=run_id,
+            status="ready",
+            summary=str(result.get("summary", "")).strip(),
+            result=result,
+        ) or row
+    except Exception as exc:
+        return enterprise_complete_agent_run(
+            enterprise_db_url,
+            workspace_id=workspace_id,
+            run_id=run_id,
+            status="error",
+            summary=f"{job_type} failed",
+            result={"job_type": job_type},
+            error_text=str(exc),
+        ) or row
+
+
 def _build_revenue_scout_result(*, enterprise_db_url: str, workspace_id: str) -> dict[str, Any]:
     leads = enterprise_list_leads(enterprise_db_url, workspace_id=workspace_id, limit=200)
     hunts = enterprise_list_lead_hunt_profiles(enterprise_db_url, workspace_id=workspace_id, limit=50)
@@ -1101,6 +1175,14 @@ def _execute_agent_job(
             workspace_id=workspace_id,
         )
     raise ValueError(f"Unsupported job type: {job_type}")
+
+
+def _normalized_agent_job_types(job_types: list[str] | None = None) -> list[str]:
+    allowed = [item["job_type"] for item in AGENT_JOB_TEMPLATES]
+    requested = [str(item).strip().lower() for item in (job_types or []) if str(item).strip()]
+    if not requested:
+        return allowed
+    return [item for item in requested if item in allowed]
 
 
 def _build_action_rows(raw_text: str) -> list[dict[str, Any]]:
@@ -1346,6 +1428,7 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
     auth_workspace_name = str(os.getenv("SUPERMEGA_WORKSPACE_NAME", "SuperMega Lab")).strip() or "SuperMega Lab"
     auth_workspace_plan = str(os.getenv("SUPERMEGA_WORKSPACE_PLAN", "pilot")).strip() or "pilot"
     session_ttl_hours = int(os.getenv("SUPERMEGA_SESSION_HOURS", str(24 * 14)) or (24 * 14))
+    internal_cron_token = str(os.getenv("SUPERMEGA_INTERNAL_CRON_TOKEN", "")).strip()
     default_user_payload = enterprise_ensure_user(
         enterprise_db_url,
         username=auth_username,
@@ -1399,6 +1482,94 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
         if not session:
             raise HTTPException(status_code=401, detail="Login required.")
         return session
+
+    def _require_internal_cron_token(request: Request) -> None:
+        if not internal_cron_token:
+            raise HTTPException(status_code=503, detail="Internal cron token is not configured.")
+        provided = str(request.headers.get("x-supermega-cron-token", "")).strip()
+        if not provided or provided != internal_cron_token:
+            raise HTTPException(status_code=401, detail="Invalid internal cron token.")
+
+    def _run_agent_job_batch(
+        *,
+        workspace_id: str,
+        triggered_by: str,
+        source: str,
+        job_types: list[str] | None = None,
+    ) -> dict[str, Any]:
+        normalized_job_types = _normalized_agent_job_types(job_types)
+        results: list[dict[str, Any]] = []
+        for job_type in normalized_job_types:
+            row = enterprise_create_agent_run(
+                enterprise_db_url,
+                workspace_id=workspace_id,
+                job_type=job_type,
+                source=source,
+                payload={},
+                max_attempts=1,
+                triggered_by=triggered_by,
+            )
+            run_id = str(row.get("run_id", "")).strip()
+            enterprise_start_agent_run(
+                enterprise_db_url,
+                workspace_id=workspace_id,
+                run_id=run_id,
+            )
+            try:
+                result = _execute_agent_job(
+                    state_db=state_db,
+                    enterprise_db_url=enterprise_db_url,
+                    workspace_id=workspace_id,
+                    job_type=job_type,
+                    payload={},
+                )
+                final_row = enterprise_complete_agent_run(
+                    enterprise_db_url,
+                    workspace_id=workspace_id,
+                    run_id=run_id,
+                    status="ready",
+                    summary=str(result.get("summary", "")).strip(),
+                    result=result,
+                )
+            except Exception as exc:
+                final_row = enterprise_complete_agent_run(
+                    enterprise_db_url,
+                    workspace_id=workspace_id,
+                    run_id=run_id,
+                    status="error",
+                    summary=f"{job_type} failed",
+                    result={"job_type": job_type},
+                    error_text=str(exc),
+                )
+            results.append(final_row or {"job_type": job_type, "status": "error"})
+        latest_runs = enterprise_list_agent_runs(
+            enterprise_db_url,
+            workspace_id=workspace_id,
+            limit=50,
+        )
+        latest_by_type = _group_agent_runs_by_job_type(latest_runs)
+        return {
+            "status": "ready",
+            "count": len(results),
+            "rows": results,
+            "jobs": [
+                {
+                    **template,
+                    "last_run": latest_by_type.get(template["job_type"], {}),
+                }
+                for template in AGENT_JOB_TEMPLATES
+            ],
+        }
+
+    def _require_internal_automation(request: Request) -> str:
+        cron_token = str(os.getenv("SUPERMEGA_INTERNAL_CRON_TOKEN", "")).strip()
+        header_token = str(request.headers.get("x-supermega-cron-token", "")).strip()
+        if cron_token and header_token and secrets.compare_digest(header_token, cron_token):
+            return "cron"
+        session = _session_from_request(request)
+        if session:
+            return str(session.get("display_name", session.get("username", "system"))).strip() or "system"
+        raise HTTPException(status_code=401, detail="Internal automation auth required.")
 
     def _set_session_cookie(response: Response, request: Request, session_id: str) -> None:
         secure_cookie = str(request.url.scheme).lower() == "https"
@@ -2058,6 +2229,55 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
                 for template in AGENT_JOB_TEMPLATES
             ],
         }
+
+    @app.post("/api/ops/agent-jobs/run-defaults")
+    def run_default_agent_jobs(request_http: Request, request: AgentRunDefaultsRequest) -> dict[str, Any]:
+        actor = _require_internal_automation(request_http)
+        workspace_slug = str(request.workspace_slug or auth_workspace_slug).strip() or auth_workspace_slug
+        workspace_name = auth_workspace_name
+        workspace = enterprise_ensure_user(
+            enterprise_db_url,
+            username=auth_username,
+            password=auth_password,
+            display_name=auth_display_name,
+            role=auth_role,
+            workspace_slug=workspace_slug,
+            workspace_name=workspace_name,
+            workspace_plan=auth_workspace_plan,
+        ).get("workspace", {})
+        workspace_id = str(workspace.get("workspace_id", "")).strip()
+        if not workspace_id:
+            raise HTTPException(status_code=500, detail="Workspace could not be resolved for default jobs.")
+        payload = _run_agent_job_batch(
+            workspace_id=workspace_id,
+            triggered_by=actor,
+            source=str(request.source or "").strip() or "scheduler",
+            job_types=request.job_types,
+        )
+        return {
+            **payload,
+            "workspace_slug": workspace_slug,
+        }
+
+    @app.post("/api/agent-runs/run-defaults")
+    def run_default_agent_runs(request_http: Request, request: AgentBatchRunRequest) -> dict[str, Any]:
+        session = _require_session(request_http)
+        return _run_agent_job_batch(
+            workspace_id=str(session.get("workspace_id", "")).strip(),
+            triggered_by=str(session.get("display_name", session.get("username", "system"))),
+            source=str(request.source or "").strip() or "manual_batch",
+            job_types=request.job_types,
+        )
+
+    @app.post("/api/internal/agent-runs/run-defaults")
+    def run_internal_default_agent_runs(request_http: Request, request: AgentBatchRunRequest) -> dict[str, Any]:
+        _require_internal_cron_token(request_http)
+        return _run_agent_job_batch(
+            workspace_id=default_workspace_id,
+            triggered_by="cloud_scheduler",
+            source=str(request.source or "").strip() or "scheduler",
+            job_types=request.job_types,
+        )
 
     @app.post("/api/tools/lead-finder")
     def tool_lead_finder(request: LeadFinderRequest) -> dict[str, Any]:

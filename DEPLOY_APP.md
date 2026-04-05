@@ -13,8 +13,9 @@ This is the cleanest way to run SuperMega as one connected system:
 - public website:
   - `/`
   - `/find-companies`
-  - `/saved-companies`
-  - `/daily-tasks`
+  - `/company-list`
+  - `/task-list`
+  - `/receiving-log`
   - `/book`
 - shared app host:
   - `/login`
@@ -80,6 +81,7 @@ Main values:
 - `SUPERMEGA_DATABASE_URL`
 - `SUPERMEGA_CORS_ORIGINS`
 - `SUPERMEGA_CLOUDSQL_INSTANCE`
+- `SUPERMEGA_INTERNAL_CRON_TOKEN`
 - `SUPERMEGA_ENV`
 - `SUPERMEGA_SENTRY_TRACES`
 - `SENTRY_DSN`
@@ -127,6 +129,7 @@ Recommended secrets and vars for a real app host:
   - `SUPERMEGA_APP_USERNAME`
   - `SUPERMEGA_APP_PASSWORD`
   - `SUPERMEGA_DATABASE_URL`
+  - `SUPERMEGA_INTERNAL_CRON_TOKEN`
   - `OPENAI_API_KEY`
   - `RESEND_API_KEY`
   - `STRIPE_SECRET_KEY`
@@ -149,6 +152,39 @@ Recommended secrets and vars for a real app host:
   - `VITE_SENTRY_DSN`
   - `VITE_WORKSPACE_APP_BASE`
   - `VITE_WORKSPACE_API_BASE`
+
+## Durable agent jobs
+
+The app now has durable shared agent runs persisted in the enterprise store:
+
+- `Revenue Scout`
+- `List Clerk`
+- `Task Triage`
+- `Founder Brief`
+
+Routes:
+
+- `GET /api/agent-runs`
+- `POST /api/agent-runs`
+- `POST /api/agent-runs/run-defaults`
+- `POST /api/ops/agent-jobs/run-defaults`
+- `POST /api/internal/agent-runs/run-defaults`
+
+The internal defaults endpoint is intended for Cloud Scheduler or an internal operator script.
+
+Auth for `POST /api/internal/agent-runs/run-defaults`:
+
+- `x-supermega-cron-token` header matching `SUPERMEGA_INTERNAL_CRON_TOKEN`
+
+Auth for `POST /api/agent-runs/run-defaults`:
+
+- authenticated app session
+
+Operator script:
+
+```powershell
+C:\Users\swann\OneDrive - BDA\.venv\Scripts\python.exe .\tools\run_supermega_agent_jobs.py --base-url https://supermega-app-kr5v7kj3xa-as.a.run.app
+```
 
 Current note:
 
@@ -186,9 +222,8 @@ As of April 5, 2026:
 
 Remaining custom-domain blocker:
 
-- `app.supermega.dev` is not mapped yet
-- Google Cloud Run domain mapping is blocked because the domain is not verified for the current GCP principal
-- after domain verification, map `app.supermega.dev` to the Cloud Run service and then update Squarespace DNS with the exact Google records
+- `app.supermega.dev` must finish DNS and SSL propagation
+- once Google marks the mapping ready, use `app.supermega.dev` as the main shared app host
 
 ## Current production gap
 

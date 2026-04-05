@@ -130,6 +130,16 @@ def main() -> int:
         },
         timeout=60,
     )
+    agent_batch_run = request_json(
+        opener,
+        "POST",
+        f"{args.base_url.rstrip('/')}/api/agent-runs/run-defaults",
+        {
+            "source": "smoke_test_batch",
+            "job_types": ["founder_brief", "task_triage"],
+        },
+        timeout=90,
+    )
     director = request_json(opener, "GET", f"{args.base_url.rstrip('/')}/api/reports/role/director")
     exceptions = request_json(opener, "GET", f"{args.base_url.rstrip('/')}/api/exceptions?limit=5")
     approval_create = request_json(
@@ -387,6 +397,8 @@ def main() -> int:
         "founder_brief_status": str((founder_brief_run.get("row") or {}).get("status", "")),
         "founder_brief_summary": str((founder_brief_run.get("row") or {}).get("summary", "")),
         "revenue_scout_status": str((revenue_scout_run.get("row") or {}).get("status", "")),
+        "agent_batch_status": str(agent_batch_run.get("status", "")),
+        "agent_batch_count": int(agent_batch_run.get("count") or 0),
         "exception_count": int(exceptions.get("count") or 0),
         "approval_count": int(approvals.get("count") or 0),
         "approval_message": approval_create.get("message", ""),
@@ -437,6 +449,7 @@ def main() -> int:
     print(f"- Agent runs: {report['agent_run_count']}")
     print(f"- Founder brief: {report['founder_brief_status']}")
     print(f"- Revenue scout: {report['revenue_scout_status']}")
+    print(f"- Agent batch: {report['agent_batch_status']} ({report['agent_batch_count']})")
     print(f"- Exceptions: {report['exception_count']}")
     print(f"- Approvals: {report['approval_count']}")
     print(f"- Lead finder rows: {report['lead_count']}")

@@ -103,7 +103,7 @@ jobs:
             --port 8080 \
             --service-account "$RUNTIME_SERVICE_ACCOUNT" \
             --env-vars-file cloudrun-env.yaml \
-            --set-secrets "SUPERMEGA_APP_USERNAME=supermega-app-username:latest,SUPERMEGA_APP_PASSWORD=supermega-app-password:latest,SUPERMEGA_DATABASE_URL=supermega-database-url:latest,OPENAI_API_KEY=supermega-openai-api-key:latest,GOOGLE_MAPS_API_KEY=supermega-google-maps-api-key:latest,GOOGLE_PLACES_API_KEY=supermega-google-places-api-key:latest,GOOGLE_SERVICE_ACCOUNT_JSON=supermega-google-service-account-json:latest" \
+            --set-secrets "SUPERMEGA_APP_USERNAME=supermega-app-username:latest,SUPERMEGA_APP_PASSWORD=supermega-app-password:latest,SUPERMEGA_DATABASE_URL=supermega-database-url:latest,SUPERMEGA_INTERNAL_CRON_TOKEN=supermega-internal-cron-token:latest,OPENAI_API_KEY=supermega-openai-api-key:latest,GOOGLE_MAPS_API_KEY=supermega-google-maps-api-key:latest,GOOGLE_PLACES_API_KEY=supermega-google-places-api-key:latest,GOOGLE_SERVICE_ACCOUNT_JSON=supermega-google-service-account-json:latest" \
             $EXTRA_ARGS
 
       - name: Print service URL
