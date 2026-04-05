@@ -3,17 +3,20 @@ import { Link, useLocation, useNavigate } from 'react-router-dom'
 
 import { PageIntro } from '../components/PageIntro'
 import { appHref, getWorkspaceSession, loginWorkspace, needsLiveAppHandoff, publicShellOnly, workspaceAppBase } from '../lib/workspaceApi'
+import { getTenantConfig } from '../lib/tenantConfig'
 
 export function LoginPage() {
   const navigate = useNavigate()
   const location = useLocation()
+  const tenant = getTenantConfig()
   const next = new URLSearchParams(location.search).get('next') || '/app/actions'
+  const isClientTenant = tenant.key !== 'default'
 
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [username, setUsername] = useState('owner')
   const [password, setPassword] = useState('')
-  const [workspaceSlug, setWorkspaceSlug] = useState('')
+  const [workspaceSlug, setWorkspaceSlug] = useState(tenant.defaultWorkspaceSlug ?? '')
   const [error, setError] = useState('')
   const [authRequired, setAuthRequired] = useState(true)
   const [usesDefaultCredentials, setUsesDefaultCredentials] = useState(false)
@@ -77,9 +80,9 @@ export function LoginPage() {
   return (
     <div className="space-y-8">
       <PageIntro
-        eyebrow="Client login"
-        title="Sign in to the workspace."
-        description="Use this only for the saved app."
+        eyebrow={isClientTenant ? tenant.brandName : 'Client login'}
+        title={isClientTenant ? 'Sign in to the Plant A desk.' : 'Sign in to the workspace.'}
+        description={isClientTenant ? 'Use this for the shared Plant A receiving and task desk.' : 'Use this only for the saved app.'}
       />
 
       {shellOnly ? (
@@ -98,10 +101,10 @@ export function LoginPage() {
             </p>
             <div className="mt-5 flex flex-wrap gap-3">
               <Link className="sm-button-primary" to="/find-companies">
-                Open Find Companies
+                {isClientTenant ? 'Open receiving' : 'Open Find Companies'}
               </Link>
               <Link className="sm-button-secondary" to="/book">
-                Book setup call
+                {tenant.bookCtaLabel}
               </Link>
             </div>
           </section>
@@ -122,13 +125,13 @@ export function LoginPage() {
             </p>
             <div className="mt-5 flex flex-wrap gap-3">
               <a className="sm-button-primary" href={appHref('/login/')}>
-                Open app
+                {isClientTenant ? 'Open Plant A desk' : 'Open app'}
               </a>
               <a className="sm-button-accent" href={appHref('/signup/')}>
-                Start workspace
+                {isClientTenant ? 'Start Plant A desk' : 'Start workspace'}
               </a>
-              <Link className="sm-button-secondary" to="/lead-finder">
-                Open Lead Finder
+              <Link className="sm-button-secondary" to={isClientTenant ? '/receiving' : '/find-companies'}>
+                {isClientTenant ? 'Open receiving' : 'Open Find Companies'}
               </Link>
             </div>
             <div className="mt-4 sm-chip text-[var(--sm-muted)]">
@@ -162,7 +165,13 @@ export function LoginPage() {
               <input
                 className="sm-input"
                 onChange={(event) => setWorkspaceSlug(event.target.value)}
-                placeholder={workspaceOptions[0]?.slug ? `Default: ${workspaceOptions[0].slug}` : 'Leave blank for default workspace'}
+                placeholder={
+                  workspaceOptions[0]?.slug
+                    ? `Default: ${workspaceOptions[0].slug}`
+                    : tenant.defaultWorkspaceSlug
+                      ? `Default: ${tenant.defaultWorkspaceSlug}`
+                      : 'Leave blank for default workspace'
+                }
                 value={workspaceSlug}
               />
             </label>
@@ -170,13 +179,13 @@ export function LoginPage() {
 
           <div className="mt-5 flex flex-wrap gap-3">
             <button className="sm-button-primary" disabled={loading || submitting} type="submit">
-              {submitting ? 'Opening...' : 'Open app'}
+              {submitting ? 'Opening...' : isClientTenant ? 'Open Plant A desk' : 'Open app'}
             </button>
             <Link className="sm-button-accent" to="/signup">
-              Start workspace
+              {isClientTenant ? 'Start Plant A desk' : 'Start workspace'}
             </Link>
-            <Link className="sm-button-secondary" to="/lead-finder">
-              Open Lead Finder
+            <Link className="sm-button-secondary" to={isClientTenant ? '/receiving' : '/find-companies'}>
+              {isClientTenant ? 'Open receiving' : 'Open Find Companies'}
             </Link>
           </div>
 

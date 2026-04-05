@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 
 import { PageIntro } from '../components/PageIntro'
 import { appHref, needsLiveAppHandoff, publicShellOnly, workspaceAppBase, workspaceFetch } from '../lib/workspaceApi'
+import { getTenantConfig } from '../lib/tenantConfig'
 
 type SignupPayload = {
   name: string
@@ -10,16 +11,20 @@ type SignupPayload = {
   company: string
   password: string
   goal: string
+  workspace_slug: string
 }
 
 export function SignupPage() {
   const navigate = useNavigate()
+  const tenant = getTenantConfig()
+  const isClientTenant = tenant.key !== 'default'
   const [form, setForm] = useState<SignupPayload>({
     name: '',
     email: '',
-    company: '',
+    company: tenant.defaultCompany ?? '',
     password: '',
     goal: '',
+    workspace_slug: tenant.defaultWorkspaceSlug ?? '',
   })
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -58,9 +63,9 @@ export function SignupPage() {
   return (
     <div className="space-y-8">
       <PageIntro
-        eyebrow="Start"
-        title="Start the workspace."
-        description="Create one workspace and go straight into Action OS."
+        eyebrow={isClientTenant ? tenant.brandName : 'Start'}
+        title={isClientTenant ? 'Start the Plant A desk.' : 'Start the workspace.'}
+        description={isClientTenant ? 'Create the shared Plant A desk and bring managers into the same workspace.' : 'Create one workspace and go straight into the saved app.'}
       />
 
       {shellOnly ? (
@@ -81,10 +86,10 @@ export function SignupPage() {
             </p>
             <div className="mt-5 flex flex-wrap gap-3">
               <Link className="sm-button-primary" to="/find-companies">
-                Open Find Companies
+                {isClientTenant ? 'Open receiving' : 'Open Find Companies'}
               </Link>
               <Link className="sm-button-secondary" to="/book">
-                Book setup call
+                {tenant.bookCtaLabel}
               </Link>
             </div>
           </section>
@@ -107,10 +112,10 @@ export function SignupPage() {
             </p>
             <div className="mt-5 flex flex-wrap gap-3">
               <a className="sm-button-primary" href={appHref('/signup/')}>
-                Start workspace
+                {isClientTenant ? 'Start Plant A desk' : 'Start workspace'}
               </a>
               <a className="sm-button-secondary" href={appHref('/login/')}>
-                Open app
+                {isClientTenant ? 'Open Plant A desk' : 'Open app'}
               </a>
             </div>
             <div className="mt-4 sm-chip text-[var(--sm-muted)]">
@@ -162,7 +167,7 @@ export function SignupPage() {
               <textarea
                 className="sm-input min-h-28"
                 onChange={(event) => setForm((prev) => ({ ...prev, goal: event.target.value }))}
-                placeholder="For example: supplier follow-up, receiving, or director updates."
+                placeholder={isClientTenant ? 'For example: receiving, GRN variance, or shift blockers.' : 'For example: supplier follow-up, receiving, or director updates.'}
                 value={form.goal}
               />
             </label>
@@ -170,10 +175,10 @@ export function SignupPage() {
 
           <div className="mt-5 flex flex-wrap gap-3">
             <button className="sm-button-primary" disabled={busy} type="submit">
-              {busy ? 'Creating...' : 'Start workspace'}
+              {busy ? 'Creating...' : isClientTenant ? 'Start Plant A desk' : 'Start workspace'}
             </button>
             <Link className="sm-button-secondary" to="/login">
-              Open app
+              {isClientTenant ? 'Open Plant A desk' : 'Open app'}
             </Link>
           </div>
 

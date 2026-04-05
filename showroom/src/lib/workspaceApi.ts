@@ -1,3 +1,5 @@
+import { getTenantConfig } from './tenantConfig'
+
 const configuredBase = import.meta.env.VITE_WORKSPACE_API_BASE?.trim() ?? ''
 const configuredAppBase = import.meta.env.VITE_WORKSPACE_APP_BASE?.trim() ?? ''
 
@@ -58,10 +60,23 @@ export type PublicWorkspaceProfile = {
 }
 
 function normalizePublicWorkspaceProfile(profile?: Partial<PublicWorkspaceProfile> | null): PublicWorkspaceProfile {
+  const tenant = getTenantConfig()
+  const tenantCompany = String(tenant.defaultCompany ?? '').trim()
   return {
     name: String(profile?.name ?? '').trim(),
     email: String(profile?.email ?? '').trim().toLowerCase(),
-    company: String(profile?.company ?? '').trim(),
+    company: String(profile?.company ?? tenantCompany).trim(),
+  }
+}
+
+function withTenantWorkspaceDefaults<T extends { company?: string; workspace_slug?: string }>(payload?: T): T {
+  const tenant = getTenantConfig()
+  const tenantCompany = String(tenant.defaultCompany ?? '').trim()
+  const tenantWorkspaceSlug = String(tenant.defaultWorkspaceSlug ?? '').trim()
+  return {
+    ...(payload ?? ({} as T)),
+    company: String(payload?.company ?? tenantCompany).trim() || tenantCompany,
+    workspace_slug: String(payload?.workspace_slug ?? tenantWorkspaceSlug).trim() || tenantWorkspaceSlug,
   }
 }
 
@@ -209,9 +224,11 @@ export async function getWorkspaceSession() {
 }
 
 export async function loginWorkspace(username: string, password: string, workspaceSlug = '') {
+  const tenant = getTenantConfig()
+  const defaultWorkspaceSlug = String(tenant.defaultWorkspaceSlug ?? '').trim()
   return workspaceFetch<WorkspaceSessionPayload>('/api/auth/login', {
     method: 'POST',
-    body: JSON.stringify({ username, password, workspace_slug: workspaceSlug }),
+    body: JSON.stringify({ username, password, workspace_slug: workspaceSlug || defaultWorkspaceSlug }),
   })
 }
 
@@ -229,9 +246,10 @@ export async function bootstrapPublicWorkspace(payload?: {
   workspace_slug?: string
   goal?: string
 }) {
+  const mergedPayload = withTenantWorkspaceDefaults(payload)
   return workspaceFetch<WorkspaceSessionPayload & { generated_password?: string; reused?: boolean }>('/api/public/workspace/bootstrap', {
     method: 'POST',
-    body: JSON.stringify(payload ?? {}),
+    body: JSON.stringify(mergedPayload),
   })
 }
 
@@ -244,6 +262,7 @@ export async function savePublicLeadsToWorkspace(payload: {
   campaign_goal?: string
   rows: Array<Record<string, unknown>>
 }) {
+  const mergedPayload = withTenantWorkspaceDefaults(payload)
   return workspaceFetch<WorkspaceSessionPayload & {
     generated_password?: string
     reused?: boolean
@@ -257,7 +276,7 @@ export async function savePublicLeadsToWorkspace(payload: {
     saved_at?: string
   }>('/api/public/workspace/save-leads', {
     method: 'POST',
-    body: JSON.stringify(payload),
+    body: JSON.stringify(mergedPayload),
   })
 }
 

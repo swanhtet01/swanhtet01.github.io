@@ -1203,6 +1203,26 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             secure=secure_cookie,
         )
 
+    def _request_hostname(request: Request) -> str:
+        forwarded_host = str(request.headers.get("x-forwarded-host", "")).strip().lower()
+        if forwarded_host:
+            return forwarded_host.split(",")[0].strip().split(":")[0]
+        host = str(request.headers.get("host", "")).strip().lower()
+        if host:
+            return host.split(":")[0]
+        return str(request.url.hostname or "").strip().lower()
+
+    def _public_tenant_defaults(request: Request) -> dict[str, str]:
+        tenant_param = str(request.query_params.get("tenant", "")).strip().lower()
+        hostname = _request_hostname(request)
+        if tenant_param in {"ytf", "ytf-plant-a"} or hostname in {"ytf.supermega.dev", "www.ytf.supermega.dev"}:
+            return {
+                "tenant_key": "ytf-plant-a",
+                "workspace_slug": "ytf-plant-a",
+                "company": "Yangon Tyre Plant A",
+            }
+        return {"tenant_key": "default", "workspace_slug": "", "company": ""}
+
     def _session_payload(session: dict[str, Any]) -> dict[str, Any]:
         return {
             "username": session.get("username", ""),
@@ -1227,7 +1247,10 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
                 "session": _session_payload(existing_session),
             }
 
-        company = str(payload.company or "").strip()
+        tenant_defaults = _public_tenant_defaults(request)
+        tenant_workspace_slug = str(tenant_defaults.get("workspace_slug", "")).strip()
+        tenant_company = str(tenant_defaults.get("company", "")).strip()
+        company = str(payload.company or tenant_company).strip()
         email = str(payload.email or "").strip().lower()
         name = str(payload.name or "").strip() or company or "Owner"
         if not company or not email:
@@ -1243,8 +1266,9 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             ]
         )
         password = secrets.token_urlsafe(10)
-        base_slug = _slugify(payload.workspace_slug or company or name or "workspace") or "workspace"
-        workspace_slug = f"{base_slug}-{hashlib.sha1(email.encode('utf-8')).hexdigest()[:4]}"
+        requested_slug = str(payload.workspace_slug or tenant_workspace_slug or "").strip()
+        base_slug = _slugify(requested_slug or company or name or "workspace") or "workspace"
+        workspace_slug = base_slug if requested_slug else f"{base_slug}-{hashlib.sha1(email.encode('utf-8')).hexdigest()[:4]}"
 
         created = enterprise_ensure_user(
             enterprise_db_url,
@@ -1471,6 +1495,7 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
 
     @app.post("/api/auth/login")
     def auth_login(request: Request, response: Response, payload: LoginRequest) -> dict[str, Any]:
+        tenant_defaults = _public_tenant_defaults(request)
         user = enterprise_authenticate_user(enterprise_db_url, username=payload.username, password=payload.password)
         if not user:
             raise HTTPException(status_code=401, detail="Invalid username or password.")
@@ -1478,7 +1503,7 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             enterprise_db_url,
             username=str(user.get("username", "")),
             role=str(user.get("role", "")),
-            workspace_slug=payload.workspace_slug,
+            workspace_slug=str(payload.workspace_slug or tenant_defaults.get("workspace_slug", "")).strip(),
             ttl_hours=session_ttl_hours,
         )
         _set_session_cookie(response, request, str(session.get("session_id", "")))
@@ -1500,15 +1525,17 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
 
     @app.post("/api/auth/signup")
     def auth_signup(request: Request, response: Response, payload: SignupRequest) -> dict[str, Any]:
+        tenant_defaults = _public_tenant_defaults(request)
         email = str(payload.email or "").strip().lower()
-        company = str(payload.company or "").strip()
+        company = str(payload.company or tenant_defaults.get("company", "")).strip()
         name = str(payload.name or "").strip() or company or "Owner"
         if not email or not company:
             raise HTTPException(status_code=400, detail="Name, email, and company are required.")
         password = str(payload.password or "").strip() or secrets.token_urlsafe(10)
-        base_slug = _slugify(payload.workspace_slug or company or email.split("@")[0])
+        requested_slug = str(payload.workspace_slug or tenant_defaults.get("workspace_slug", "")).strip()
+        base_slug = _slugify(requested_slug or company or email.split("@")[0])
         workspace_slug = base_slug or "workspace"
-        if not str(payload.workspace_slug or "").strip():
+        if not requested_slug:
             workspace_slug = f"{workspace_slug}-{hashlib.sha1(email.encode('utf-8')).hexdigest()[:4]}"
 
         created = enterprise_ensure_user(

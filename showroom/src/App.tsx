@@ -27,9 +27,13 @@ import { WorkbenchPage } from './pages/WorkbenchPage'
 import { WorkspaceLitePage } from './pages/WorkspaceLitePage'
 import { WorkspacePage } from './pages/WorkspacePage'
 import { hasLiveWorkspaceApp } from './lib/workspaceApi'
+import { getTenantConfig } from './lib/tenantConfig'
 
 function App() {
   const liveAppAvailable = hasLiveWorkspaceApp()
+  const tenant = getTenantConfig()
+  const publicWorkspaceFallback = tenant.key === 'ytf-plant-a' ? '/receiving' : '/company-list'
+  const bookFallback = tenant.showBookCta ? <BookPage /> : <Navigate replace to={publicWorkspaceFallback} />
 
   return (
     <BrowserRouter>
@@ -41,11 +45,12 @@ function App() {
           <Route element={<Navigate replace to="/find-companies" />} path="lead-finder" />
           <Route element={<WorkspaceLitePage />} path="company-list" />
           <Route element={<WorkspaceLitePage />} path="task-list" />
+          <Route element={<Navigate replace to="/task-list?setup=receiving" />} path="receiving" />
           <Route element={<Navigate replace to="/task-list" />} path="action-os" />
           <Route element={<Navigate replace to="/company-list" />} path="workspace" />
-          <Route element={liveAppAvailable ? <LoginPage /> : <Navigate replace to="/company-list" />} path="login" />
-          <Route element={liveAppAvailable ? <SignupPage /> : <Navigate replace to="/company-list" />} path="signup" />
-          <Route element={<BookPage />} path="book" />
+          <Route element={liveAppAvailable ? <LoginPage /> : <Navigate replace to={publicWorkspaceFallback} />} path="login" />
+          <Route element={liveAppAvailable ? <SignupPage /> : <Navigate replace to={publicWorkspaceFallback} />} path="signup" />
+          <Route element={bookFallback} path="book" />
           <Route element={<NotFoundPage />} path="*" />
         </Route>
         <Route element={<AppFrame />} path="/app">

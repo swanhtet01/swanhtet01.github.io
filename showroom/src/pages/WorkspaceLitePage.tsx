@@ -279,12 +279,13 @@ export function WorkspaceLitePage() {
   const requestedSetup = searchParams.get('setup')
   const shouldStartShared = searchParams.get('start') === '1'
   const publicSurface = normalizedPathname === '/team-updates' || normalizedPathname === '/team-tasks' || normalizedPathname === '/task-list' ? 'updates' : 'sales'
+  const isReceivingDesk = requestedSetup === 'receiving' || normalizedPathname === '/receiving'
   const publicBasePath = publicSurface === 'sales' ? '/company-list' : '/task-list'
   const openTasks = useMemo(() => tasks.filter((task) => task.status === 'open'), [tasks])
   const hasData = leads.length > 0 || tasks.length > 0
   const activeView: WorkspaceView = publicSurface === 'updates' ? 'queue' : 'leads'
   const hasSharedProfile = isPublicWorkspaceProfileReady(profile)
-  const pageEyebrow = publicSurface === 'sales' ? 'Company List' : 'Task List'
+  const pageEyebrow = isReceivingDesk ? 'Receiving' : publicSurface === 'sales' ? 'Company List' : 'Task List'
 
   const summary = useMemo(() => {
     if (mode === 'local') {
@@ -945,10 +946,12 @@ export function WorkspaceLitePage() {
         <section className="sm-surface p-6 lg:p-8">
           <p className="sm-kicker text-[var(--sm-accent)]">{pageEyebrow}</p>
           <h1 className="mt-3 text-3xl font-bold text-white lg:text-4xl">
-            {publicSurface === 'sales' ? 'Bring a company list.' : 'Paste team updates.'}
+            {isReceivingDesk ? 'Log receiving issues.' : publicSurface === 'sales' ? 'Bring a company list.' : 'Paste team updates.'}
           </h1>
           <p className="mt-3 max-w-2xl text-sm leading-relaxed text-[var(--sm-muted)]">
-            {publicSurface === 'sales'
+            {isReceivingDesk
+              ? 'Paste GRN, hold, batch, customs, or quantity issues and turn them into one short follow-up list.'
+              : publicSurface === 'sales'
               ? 'Paste names, sites, emails, or phones. If you need new companies first, use Find Companies.'
               : 'Paste messy notes, blockers, or receiving issues and turn them into a short task list.'}
           </p>
@@ -971,16 +974,18 @@ export function WorkspaceLitePage() {
   return (
     <div className="space-y-6">
       <section className="grid gap-6 lg:grid-cols-[0.82fr_1.18fr]">
-        <article className="sm-surface p-6">
-          <p className="sm-kicker text-[var(--sm-accent)]">{publicSurface === 'sales' ? 'Company List' : 'Task List'}</p>
-          <h2 className="mt-3 text-3xl font-bold text-white">
-            {publicSurface === 'sales' ? 'Keep the list short and usable.' : 'Keep only the next tasks.'}
-          </h2>
-          <p className="mt-3 text-sm leading-relaxed text-[var(--sm-muted)]">
-            {publicSurface === 'sales'
-              ? 'Save companies, move the right ones forward, and open the task list when follow-up is due.'
-              : 'Add one task, finish it, then move to the next one.'}
-          </p>
+    <article className="sm-surface p-6">
+      <p className="sm-kicker text-[var(--sm-accent)]">{isReceivingDesk ? 'Receiving' : publicSurface === 'sales' ? 'Company List' : 'Task List'}</p>
+      <h2 className="mt-3 text-3xl font-bold text-white">
+        {isReceivingDesk ? 'Keep only the receiving follow-up.' : publicSurface === 'sales' ? 'Keep the list short and usable.' : 'Keep only the next tasks.'}
+      </h2>
+      <p className="mt-3 text-sm leading-relaxed text-[var(--sm-muted)]">
+        {isReceivingDesk
+          ? 'Log one issue, assign the next step, and close it when the material is clear.'
+          : publicSurface === 'sales'
+          ? 'Save companies, move the right ones forward, and open the task list when follow-up is due.'
+          : 'Add one task, finish it, then move to the next one.'}
+      </p>
 
           {hasData ? (
             <>
@@ -999,10 +1004,10 @@ export function WorkspaceLitePage() {
 
             </>
           ) : (
-            <div className="mt-5 sm-chip text-[var(--sm-muted)]">
-              {mode === 'shared' ? 'Team workspace ready.' : `Nothing saved yet. Start with one ${publicSurface === 'sales' ? 'company list' : 'task list'}.`}
-            </div>
-          )}
+        <div className="mt-5 sm-chip text-[var(--sm-muted)]">
+          {mode === 'shared' ? 'Team workspace ready.' : `Nothing saved yet. Start with one ${isReceivingDesk ? 'receiving issue' : publicSurface === 'sales' ? 'company list' : 'task list'}.`}
+        </div>
+      )}
 
           {hasData && hasLiveWorkspaceApi() && mode === 'local' ? (
             <div className="mt-5 flex flex-wrap gap-3">
@@ -1020,11 +1025,13 @@ export function WorkspaceLitePage() {
           {!hasData ? (
             <div className="space-y-4">
               {setupPanel}
-              <div className="sm-chip text-[var(--sm-muted)]">
-                {publicSurface === 'sales'
-                  ? 'Use Find Companies for net-new prospects. Use Company List when you already have a list.'
-                  : "Paste today's notes and build the task list."}
-              </div>
+          <div className="sm-chip text-[var(--sm-muted)]">
+            {isReceivingDesk
+              ? 'Paste receiving issues and build the follow-up list.'
+              : publicSurface === 'sales'
+              ? 'Use Find Companies for net-new prospects. Use Company List when you already have a list.'
+              : "Paste today's notes and build the task list."}
+          </div>
             </div>
           ) : (
             <div className="space-y-5">
