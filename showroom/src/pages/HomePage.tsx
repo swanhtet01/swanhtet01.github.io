@@ -6,18 +6,13 @@ import { trackEvent } from '../lib/analytics'
 const tools = [
   {
     name: 'Find clients',
-    detail: 'Search a market and keep the few companies worth contacting.',
+    detail: 'Search a market and keep the few companies worth contacting today.',
     to: '/find-companies',
   },
   {
-    name: 'Clean list',
-    detail: 'Bring the list you already have and turn it into something usable.',
+    name: 'Clean my list',
+    detail: 'Bring the list you already have from Google, Facebook, WhatsApp, Excel, or CRM.',
     to: '/company-list?setup=leads',
-  },
-  {
-    name: 'Log receiving',
-    detail: 'Log shortages, holds, and missing documents in one short follow-up list.',
-    to: '/receiving-log',
   },
 ]
 
@@ -31,7 +26,7 @@ export function HomePage() {
             <p className="sm-kicker text-[var(--sm-accent)]">{hero.eyebrow}</p>
             <h1 className="mt-4 max-w-3xl text-5xl font-extrabold tracking-tight text-white lg:text-8xl">Turn messy business work into one clear next step.</h1>
             <p className="mt-5 max-w-2xl text-base leading-relaxed text-[var(--sm-muted)] lg:text-lg">
-              Find clients, clean a company list, or log receiving issues. Start with one small tool before any rollout.
+              Google and Facebook show pages. SuperMega turns that into a shortlist, a clean list, and the next follow-up.
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
               <Link className="sm-button-primary" onClick={() => trackEvent('public_start_click', { offer: 'Find clients' })} to="/find-companies">
@@ -42,7 +37,7 @@ export function HomePage() {
               </Link>
             </div>
             <div className="mt-8 flex flex-wrap gap-3 text-sm text-[var(--sm-muted)]">
-              <span className="sm-status-pill">Works with spreadsheets</span>
+              <span className="sm-status-pill">Works with Google and Facebook results</span>
               <span className="sm-status-pill">Works with WhatsApp notes</span>
               <span className="sm-status-pill">Works with email</span>
             </div>
@@ -73,11 +68,11 @@ export function HomePage() {
       <section className="grid gap-6 lg:grid-cols-[0.95fr_1.05fr]">
         <div className="sm-surface-soft p-6 lg:p-8">
           <p className="sm-kicker text-[var(--sm-accent)]">How it works</p>
-          <h2 className="mt-3 text-3xl font-bold text-white">Start with one tool. Keep one working list.</h2>
+          <h2 className="mt-3 text-3xl font-bold text-white">Two starts. One working list.</h2>
           <div className="mt-6 space-y-3">
             {[
-              'Try one tool first.',
-              'Keep the next step visible in one list.',
+              'Use Find clients if you need new companies.',
+              'Use Clean my list if you already have names.',
               'If it helps, we roll it out for the team.',
             ].map((item) => (
               <div className="border-b border-white/8 pb-3 text-base text-[var(--sm-muted)] last:border-b-0 last:pb-0" key={item}>
@@ -91,9 +86,9 @@ export function HomePage() {
           <p className="sm-kicker text-[var(--sm-accent-alt)]">Paid rollout</p>
           <div className="mt-5 space-y-4">
             {[
-              ['Sales Setup', 'Find clients plus Clean list for one outreach workflow.'],
+              ['Sales Setup', 'Find clients plus Clean my list for one outreach workflow.'],
               ['Company Cleanup', 'Turn a messy spreadsheet into one working company list.'],
-              ['Receiving Control', 'Turn receiving issues into one short follow-up queue.'],
+              ['Receiving Control', 'For operations teams that need inbound issue follow-up.'],
             ].map(([title, detail]) => (
               <div className="border-b border-white/8 pb-4 last:border-b-0 last:pb-0" key={title}>
                 <p className="text-xl font-bold text-white">{title}</p>
@@ -108,7 +103,7 @@ export function HomePage() {
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <p className="text-2xl font-bold text-white">Share the card. Let them start with one real tool.</p>
-            <p className="mt-1 text-sm text-[var(--sm-muted)]">If they need help, the next step is one small rollout, not a giant software project.</p>
+            <p className="mt-1 text-sm text-[var(--sm-muted)]">The goal is simple: one shortlist or one clean list, then one small rollout.</p>
           </div>
           <Link className="sm-button-primary" onClick={() => trackEvent('book_demo_click', { source: 'home' })} to="/book">
             Book rollout call

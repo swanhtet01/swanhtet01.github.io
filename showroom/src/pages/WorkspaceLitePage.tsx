@@ -286,7 +286,7 @@ export function WorkspaceLitePage() {
   const hasData = leads.length > 0 || tasks.length > 0
   const activeView: WorkspaceView = publicSurface === 'updates' ? 'queue' : 'leads'
   const hasSharedProfile = isPublicWorkspaceProfileReady(profile)
-  const pageEyebrow = isReceivingDesk ? 'Log receiving' : publicSurface === 'sales' ? 'Clean list' : 'Task list'
+  const pageEyebrow = isReceivingDesk ? 'Receiving control' : publicSurface === 'sales' ? 'Clean my list' : 'Task list'
 
   const summary = useMemo(() => {
     if (mode === 'local') {
@@ -828,7 +828,7 @@ export function WorkspaceLitePage() {
         />
         <div className="mt-4 flex flex-wrap gap-3">
           <button className="sm-button-primary" onClick={() => void importLeadList()} type="button">
-              Paste company list
+              Paste my list
             </button>
           <label className="sm-button-secondary cursor-pointer">
             Upload file
@@ -882,7 +882,7 @@ export function WorkspaceLitePage() {
     ) : setupFlow === 'receiving' ? (
       <div className="sm-proof-card">
         <p className="text-lg font-bold text-white">Log receiving or procurement issues.</p>
-        <p className="mt-2 text-sm text-[var(--sm-muted)]">Paste one issue per line. Receiving Log will put them straight into the follow-up list.</p>
+        <p className="mt-2 text-sm text-[var(--sm-muted)]">Paste one issue per line. This is for operations teams, not for sales prospecting.</p>
         <textarea
           className="sm-input mt-4 min-h-40"
           onChange={(event) => setReceivingImportText(event.target.value)}
@@ -947,19 +947,19 @@ export function WorkspaceLitePage() {
         <section className="sm-surface p-6 lg:p-8">
           <p className="sm-kicker text-[var(--sm-accent)]">{pageEyebrow}</p>
           <h1 className="mt-3 text-3xl font-bold text-white lg:text-4xl">
-            {isReceivingDesk ? 'Log receiving issues.' : publicSurface === 'sales' ? 'Clean a company list.' : 'Paste task notes.'}
+            {isReceivingDesk ? 'Log receiving issues.' : publicSurface === 'sales' ? 'Bring your own company list.' : 'Paste task notes.'}
           </h1>
           <p className="mt-3 max-w-2xl text-sm leading-relaxed text-[var(--sm-muted)]">
             {isReceivingDesk
               ? 'Paste GRN, hold, batch, customs, or quantity issues and turn them into one short follow-up list.'
               : publicSurface === 'sales'
-              ? 'Paste names, sites, emails, or phones. If you need new clients first, use Find clients.'
+              ? 'Use this when you already have names from Google, Facebook, WhatsApp, Excel, or CRM. We turn them into one clean list with next steps.'
               : 'Paste messy notes, blockers, or updates and turn them into a short task list.'}
           </p>
           {setupPanel}
           {publicSurface === 'sales' ? (
             <div className="mt-5 text-sm text-[var(--sm-muted)]">
-              Need new clients first?{' '}
+              Need net-new clients first?{' '}
               <Link className="text-white underline underline-offset-4" to="/find-companies">
                 Find clients
               </Link>
@@ -976,15 +976,15 @@ export function WorkspaceLitePage() {
     <div className="space-y-6">
       <section className="grid gap-6 lg:grid-cols-[0.82fr_1.18fr]">
     <article className="sm-surface p-6">
-      <p className="sm-kicker text-[var(--sm-accent)]">{isReceivingDesk ? 'Log receiving' : publicSurface === 'sales' ? 'Clean list' : 'Task list'}</p>
+      <p className="sm-kicker text-[var(--sm-accent)]">{isReceivingDesk ? 'Receiving control' : publicSurface === 'sales' ? 'Clean my list' : 'Task list'}</p>
       <h2 className="mt-3 text-3xl font-bold text-white">
-        {isReceivingDesk ? 'Keep only the receiving follow-up.' : publicSurface === 'sales' ? 'Keep the list short and usable.' : 'Keep only the next tasks.'}
+        {isReceivingDesk ? 'Keep only the receiving follow-up.' : publicSurface === 'sales' ? 'Turn raw names into one usable list.' : 'Keep only the next tasks.'}
       </h2>
       <p className="mt-3 text-sm leading-relaxed text-[var(--sm-muted)]">
         {isReceivingDesk
           ? 'Log one issue, assign the next step, and close it when the material is clear.'
           : publicSurface === 'sales'
-          ? 'Save companies, move the right ones forward, and open the task list when follow-up is due.'
+          ? 'This is for the names you already have. Clean them, stage them, and keep one clear next step.'
           : 'Add one task, finish it, then move to the next one.'}
       </p>
 
@@ -1030,7 +1030,7 @@ export function WorkspaceLitePage() {
             {isReceivingDesk
               ? 'Paste receiving issues and build the follow-up list.'
               : publicSurface === 'sales'
-                ? 'Use Find clients for net-new prospects. Use Clean list when you already have names.'
+                ? 'Use Find clients for net-new prospects. Use Clean my list when you already have names.'
                       : "Paste today's notes and build the task list."}
           </div>
             </div>
@@ -1198,13 +1198,13 @@ export function WorkspaceLitePage() {
                   ) : (
                     <div className="sm-proof-card">
                       <p className="font-semibold text-white">No companies yet</p>
-                      <p className="mt-2 text-sm text-[var(--sm-muted)]">Find clients, paste a company list, or start with one task.</p>
+                      <p className="mt-2 text-sm text-[var(--sm-muted)]">Paste your own list here. If you need net-new clients first, use Find clients.</p>
                       <div className="mt-4 flex flex-wrap gap-3">
                         <Link className="sm-button-primary" to="/find-companies">
                           Find clients
                         </Link>
                         <button className="sm-button-secondary" onClick={() => setSetupFlow('leads')} type="button">
-                          Paste company list
+                          Paste my list
                         </button>
                       </div>
                     </div>

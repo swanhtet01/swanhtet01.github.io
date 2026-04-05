@@ -8,7 +8,7 @@ export function BookPage() {
     {
       name: 'Sales Setup',
       price: '$750 pilot',
-      detail: 'Find Companies plus Company List for one real outreach workflow.',
+      detail: 'Find clients plus Clean my list for one real outreach workflow.',
     },
     {
       name: 'Company Cleanup',
@@ -44,7 +44,7 @@ export function BookPage() {
                 </Link>
               )}
               <Link className="sm-button-secondary" to="/company-list?setup=leads">
-                Clean a list first
+                Clean my list first
               </Link>
             </div>
           </div>

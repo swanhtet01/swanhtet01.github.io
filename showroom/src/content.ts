@@ -38,55 +38,49 @@ export const bookingUrl = (import.meta.env.VITE_BOOKING_URL ?? '').trim()
 
 export const navItems = [
   { label: 'Find clients', to: '/find-companies' },
-  { label: 'Clean list', to: '/company-list' },
-  { label: 'Log receiving', to: '/receiving-log' },
+  { label: 'Clean my list', to: '/company-list' },
 ] as const
 
 export const hero = {
   eyebrow: 'SuperMega',
-  title: 'Turn messy business work into one clear next-step list.',
-  description: 'Find clients, clean a company list, or log receiving issues.',
+  title: 'Turn raw search and messy lists into one clear worklist.',
+  description: 'Find new clients or clean the list you already have.',
 }
 
 export const proofPoints: ProofPoint[] = [
   {
     label: 'Find clients',
-    value: 'Search real businesses',
-    detail: 'Search public businesses and keep only the ones worth contacting.',
+    value: 'Better than plain search',
+    detail: 'Keep only the businesses worth contacting, with fit reasons and first outreach ready.',
   },
   {
-    label: 'Clean list',
-    value: 'Clean the list you already have',
-    detail: 'Paste names, sites, emails, and notes into one usable list.',
-  },
-  {
-    label: 'Log receiving',
-    value: 'Keep inbound issues visible',
-    detail: 'Turn shortages, holds, and missing docs into one short follow-up list.',
+    label: 'Clean my list',
+    value: 'Use the names you already have',
+    detail: 'Paste rows from Google, Facebook, WhatsApp, Excel, or CRM and turn them into one usable list.',
   },
 ]
 
 export const coreProduct = {
-  name: 'Clean list + receiving log',
-  tagline: 'One clean list for follow-up and one short log for inbound issues.',
-  replaces: ['Scattered notes', 'Missed follow-up', 'Manual chasing'],
-  inputs: ['Company lists', 'Team updates', 'Receiving issues'],
-  outputs: ['Company list', 'Issue log', 'Next steps'],
-  rollout: ['Search or import the right data.', 'Keep it in one list.', 'Run the short follow-up list every day.'],
+  name: 'Find clients + clean my list',
+  tagline: 'One shortlist for new leads and one clean list for follow-up.',
+  replaces: ['Raw search results', 'Messy spreadsheets', 'Missed follow-up'],
+  inputs: ['Public search', 'Company lists', 'Notes from sales or WhatsApp'],
+  outputs: ['Shortlist', 'Clean company list', 'Next steps'],
+  rollout: ['Find a few good targets.', 'Clean the list you already have.', 'Run the short follow-up list every day.'],
 }
 
 export const leadFinder = {
   title: 'Find clients',
-  description: 'Search by place or niche, keep the best results, and move them into a clean list.',
-  steps: ['Search a market', 'Keep the right companies', 'Open Clean list'],
+  description: 'Search by place or niche, keep the best results, and move them into a clean list with first outreach ready.',
+  steps: ['Search a market', 'Keep the right companies', 'Open Clean my list'],
 }
 
 export const useCases: UseCase[] = [
   {
     name: 'Sales Setup',
     audience: 'Founders, operators, and sales teams',
-    promise: 'Find businesses, save them in Company List, and keep outreach moving.',
-    firstRollout: 'Find Companies plus Company List.',
+    promise: 'Find businesses, save them in Clean My List, and keep outreach moving.',
+    firstRollout: 'Find clients plus Clean my list.',
     inputs: ['Search query', 'Keywords', 'Saved notes'],
     outcomes: ['Company list', 'Follow-up tasks', 'Cleaner outreach'],
   },
@@ -94,7 +88,7 @@ export const useCases: UseCase[] = [
     name: 'Company Cleanup',
     audience: 'Owner-led teams, sales coordinators, and operators',
     promise: 'Bring your own spreadsheet or text file and turn it into a usable company list.',
-    firstRollout: 'Company List on top of one imported sales list.',
+    firstRollout: 'Clean my list on top of one imported sales list.',
     inputs: ['CSV export', 'Scraped company list', 'CRM notes'],
     outcomes: ['One clean company list', 'Tagged rows', 'Next-step tasks'],
   },
@@ -111,15 +105,15 @@ export const useCases: UseCase[] = [
 export const publicModules: PublicModule[] = [
   {
     name: 'Find clients',
-    tagline: 'Search a market, save the right companies, and start outreach.',
+    tagline: 'Search a market, keep the right companies, and start outreach.',
     bestFor: 'Prospecting, partnerships, and market mapping.',
     inputs: ['Place or niche search', 'Fit keywords', 'Saved notes'],
-    outputs: ['Company list', 'Outreach draft', 'Company List rows'],
+    outputs: ['Shortlist', 'Outreach draft', 'Clean My List rows'],
     path: '/find-companies',
   },
   {
-    name: 'Clean list',
-    tagline: 'Keep companies, notes, stages, and next actions together.',
+    name: 'Clean my list',
+    tagline: 'Bring your own rows and turn them into one usable company list.',
     bestFor: 'Anyone running follow-up from imported or hand-built company lists.',
     inputs: ['Company rows', 'Notes', 'Stage updates', 'Follow-up tasks'],
     outputs: ['Pipeline view', 'Today tasks', 'CSV export'],

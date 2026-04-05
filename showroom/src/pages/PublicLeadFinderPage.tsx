@@ -295,10 +295,24 @@ export function PublicLeadFinderPage() {
     <div className="space-y-6">
       <section className="sm-surface p-6 lg:p-8">
         <p className="sm-kicker text-[var(--sm-accent)]">Find clients</p>
-        <h1 className="mt-3 text-3xl font-bold text-white lg:text-4xl">Find clients in one search.</h1>
+        <h1 className="mt-3 text-3xl font-bold text-white lg:text-4xl">Google gives links. This gives you a shortlist.</h1>
         <p className="mt-3 max-w-2xl text-sm leading-relaxed text-[var(--sm-muted)]">
-          Type a place and business type, then keep the companies worth contacting.
+          Type a place and business type, then keep the companies worth contacting with fit reasons, contact clues, and first outreach ready.
         </p>
+
+        <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          {[
+            ['Shortlist', 'Keep only the few companies worth chasing.'],
+            ['Fit reasons', 'See why each result matches the search.'],
+            ['First outreach', 'Copy a ready first message, not just a URL.'],
+            ['Clean my list', 'Send saved companies into one working follow-up list.'],
+          ].map(([title, detail]) => (
+            <div className="sm-chip text-white" key={title}>
+              <p className="sm-kicker text-[var(--sm-accent)]">{title}</p>
+              <p className="mt-2 text-sm text-[var(--sm-muted)]">{detail}</p>
+            </div>
+          ))}
+        </div>
 
           <div className="mt-5 grid gap-4">
             <label className="grid gap-2 text-sm font-semibold text-[var(--sm-muted)]">
@@ -343,7 +357,7 @@ export function PublicLeadFinderPage() {
               <div className="sm-proof-card">
                 <p className="sm-kicker text-[var(--sm-accent)]">Use with your team</p>
                 <p className="mt-2 text-sm text-[var(--sm-muted)]">
-                  Enter your company and work email once. After that, kept companies can go into the same team list.
+                  Enter your company and work email once. After that, kept companies can go into the same clean list for the team.
                 </p>
                 <div className="mt-4 grid gap-3 md:grid-cols-3">
                   <label className="grid gap-2 text-sm font-semibold text-[var(--sm-muted)]">
@@ -463,7 +477,7 @@ export function PublicLeadFinderPage() {
       {(rows.length || savedTotal) ? (
         <section className="sm-surface p-6">
           <p className="sm-kicker text-[var(--sm-accent)]">Next</p>
-          <h2 className="mt-3 text-3xl font-bold text-white">Keep a few, then open your list.</h2>
+          <h2 className="mt-3 text-3xl font-bold text-white">Keep a few, then open Clean my list.</h2>
           <div className="mt-5 flex flex-wrap gap-3">
             {rows.length ? (
               <button className="sm-button-primary" onClick={() => void saveTopResults()} type="button">
@@ -472,7 +486,7 @@ export function PublicLeadFinderPage() {
             ) : null}
             {savedTotal ? (
               <Link className="sm-button-secondary" to="/company-list">
-                Open your list
+                Open Clean my list
               </Link>
             ) : null}
             {hasLiveWorkspaceApi() ? (

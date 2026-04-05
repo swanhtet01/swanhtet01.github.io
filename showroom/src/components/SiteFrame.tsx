@@ -23,7 +23,7 @@ export function SiteFrame() {
             </span>
               <span className="flex flex-col">
                 <span className="sm-logo text-lg font-extrabold tracking-tight text-white">SuperMega</span>
-              <span className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[var(--sm-muted)]">Lists, logs, follow-up</span>
+              <span className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[var(--sm-muted)]">Find clients. Clean lists. Follow up.</span>
               </span>
             </NavLink>
           <button
@@ -66,7 +66,7 @@ export function SiteFrame() {
 
       <footer className="border-t border-white/8 bg-[rgba(4,10,22,0.78)]">
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 px-4 py-6 text-sm text-[var(--sm-muted)] lg:flex-row lg:items-center lg:justify-between lg:px-8">
-          <p>Find clients. Clean lists. Log receiving.</p>
+          <p>Find clients. Clean lists. Follow up.</p>
           <Link className="sm-link" to="/book">
             Book rollout call
           </Link>
