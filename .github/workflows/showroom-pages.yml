@@ -60,7 +60,7 @@ jobs:
 
       - name: Verify public routes
         run: |
-          for route in find-companies company-list task-list sales-list team-tasks book; do
+          for route in find-companies company-list task-list lead-finder workspace action-os book; do
             test -f "showroom/dist/$route/index.html"
           done
 
