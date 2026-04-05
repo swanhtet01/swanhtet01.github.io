@@ -3,12 +3,12 @@
   "status": "active",
   "summary": {
     "shared_core_team_count": 3,
-    "client_pod_team_count": 2,
-    "autonomy_score": 72,
+    "client_pod_team_count": 0,
+    "autonomy_score": 76,
     "autonomy_level": "operator-led"
   },
   "gaps": [
-    "Telemetry is not fully wired. PostHog and Sentry should become standard before scaling client pods.",
+    "Telemetry is not fully wired. PostHog and Sentry should become standard before scaling client templates.",
     "Recovery email and team invite flows still need Resend before wider rollout.",
     "Browser automation should stay sidecar-only until queue-backed browser jobs are retryable and observable."
   ],
@@ -35,18 +35,18 @@
   ],
   "teams": [
     {
-      "team_id": "leadership-core",
-      "name": "Leadership Core",
+      "team_id": "founder-desk",
+      "name": "Founder Desk",
       "status": "active",
       "scaling_tier": "shared-core",
-      "mission": "Run the company cadence, protect quality, and keep the product ladder coherent.",
+      "mission": "Run company cadence, guard releases, cut product drift, and evaluate new tools without letting experiments become the control plane.",
       "lead_agent": "Founder Brief",
       "cadence": "daily",
       "agents": [
         {
           "agent_id": "founder-brief",
           "name": "Founder Brief",
-          "role": "Summarize the company state and highlight what needs a human decision.",
+          "role": "Summarize company state and highlight what needs a human decision.",
           "mode": "scheduled",
           "output_schema": "brief",
           "write_scope": "agent runs, founder summary",
@@ -66,12 +66,22 @@
         {
           "agent_id": "product-triage",
           "name": "Product Triage",
-          "role": "Cut naming drift, remove dead surfaces, and keep the public story narrow.",
+          "role": "Remove naming drift, cut dead surfaces, and keep the public story narrow.",
           "mode": "operator-triggered",
           "output_schema": "decision_note",
           "write_scope": "runbooks, specs",
           "approval_gate": "founder",
           "focus": "product cuts, package discipline, clarity"
+        },
+        {
+          "agent_id": "tool-scout",
+          "name": "Tool Scout",
+          "role": "Review new frameworks and decide if they belong in the main stack, sidecar stack, or nowhere.",
+          "mode": "weekly",
+          "output_schema": "tool_review",
+          "write_scope": "runbooks only",
+          "approval_gate": "founder",
+          "focus": "OpenAI stack, Browser Use, PydanticAI, observability"
         }
       ]
     },
@@ -80,7 +90,7 @@
       "name": "Revenue Pod",
       "status": "active",
       "scaling_tier": "shared-core",
-      "mission": "Keep prospecting alive and turn market searches into saved companies and first outreach.",
+      "mission": "Find companies, clean company data, draft first outreach, and hand good leads into the shared queue.",
       "lead_agent": "Revenue Scout",
       "cadence": "every 2 hours",
       "agents": [
@@ -97,7 +107,7 @@
         {
           "agent_id": "list-clerk",
           "name": "List Clerk",
-          "role": "Normalize imported rows and keep lists usable.",
+          "role": "Normalize imported rows and keep company lists usable.",
           "mode": "scheduled",
           "output_schema": "clean_company_rows",
           "write_scope": "company rows, contact cleanup",
@@ -117,11 +127,11 @@
       ]
     },
     {
-      "team_id": "operations-pod",
-      "name": "Operations Pod",
+      "team_id": "delivery-pod",
+      "name": "Delivery Pod",
       "status": "active",
       "scaling_tier": "shared-core",
-      "mission": "Turn messy updates and inbound issues into one short next-step queue.",
+      "mission": "Turn messy updates, receiving issues, and rollout work into one visible execution queue.",
       "lead_agent": "Task Triage",
       "cadence": "every 2 hours",
       "agents": [
@@ -144,22 +154,11 @@
           "write_scope": "receiving records, queue",
           "approval_gate": "none",
           "focus": "inbound issues, document gaps, variance follow-up"
-        }
-      ]
-    },
-    {
-      "team_id": "client-rollout-pod",
-      "name": "Client Rollout Pod",
-      "status": "building",
-      "scaling_tier": "client-pod",
-      "mission": "Turn one client workflow into a working template rollout without platform sprawl.",
-      "lead_agent": "Rollout Architect",
-      "cadence": "per client",
-      "agents": [
+        },
         {
           "agent_id": "rollout-architect",
           "name": "Rollout Architect",
-          "role": "Map the client workflow to the smallest working SuperMega template.",
+          "role": "Map a client workflow to the smallest working SuperMega template.",
           "mode": "operator-triggered",
           "output_schema": "rollout_plan",
           "write_scope": "plans, onboarding notes",
@@ -175,27 +174,6 @@
           "write_scope": "workspace setup",
           "approval_gate": "founder",
           "focus": "seed data, tenant setup, first usable state"
-        }
-      ]
-    },
-    {
-      "team_id": "research-lab",
-      "name": "Research Lab",
-      "status": "sidecar",
-      "scaling_tier": "client-pod",
-      "mission": "Evaluate new AI-native tools without letting experiments become the control plane.",
-      "lead_agent": "Tool Scout",
-      "cadence": "weekly",
-      "agents": [
-        {
-          "agent_id": "tool-scout",
-          "name": "Tool Scout",
-          "role": "Review new frameworks and decide if they belong in the main stack, sidecar stack, or nowhere.",
-          "mode": "weekly",
-          "output_schema": "tool_review",
-          "write_scope": "runbooks only",
-          "approval_gate": "founder",
-          "focus": "OpenAI stack, Browser Use, LangGraph, PydanticAI, observability"
         },
         {
           "agent_id": "browser-sidecar",

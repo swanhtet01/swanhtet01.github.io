@@ -11,9 +11,9 @@ type SessionState = {
 }
 
 const appNavItems = [
-  { label: 'Tasks', to: '/app/actions' },
-  { label: 'Sales', to: '/app/sales' },
-  { label: 'Issues', to: '/app/exceptions' },
+  { label: 'My Queue', to: '/app/actions' },
+  { label: 'Companies', to: '/app/sales' },
+  { label: 'Receiving', to: '/app/receiving' },
   { label: 'Approvals', to: '/app/approvals' },
   { label: 'AI Team', to: '/app/teams' },
   { label: 'Director', to: '/app/director' },
@@ -110,12 +110,12 @@ export function AppFrame() {
       <div className="border-b border-white/8 bg-[rgba(3,8,18,0.9)] backdrop-blur-xl">
         <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-4 lg:flex-row lg:items-center lg:justify-between lg:px-8">
           <div className="flex items-center gap-4">
-            <NavLink className="flex items-center gap-3" to="/app/sales">
+            <NavLink className="flex items-center gap-3" to="/app/actions">
               <span className="flex h-11 w-11 items-center justify-center rounded-xl border border-[rgba(37,208,255,0.22)] bg-[rgba(37,208,255,0.08)] text-sm font-extrabold text-[var(--sm-accent)]">
                 SM
               </span>
               <div>
-                <p className="sm-logo text-lg font-extrabold tracking-tight text-white">SuperMega App</p>
+                <p className="sm-logo text-lg font-extrabold tracking-tight text-white">SuperMega Ops</p>
                 <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[var(--sm-muted)]">
                   {session?.workspace_name || 'Team workspace'}
                 </p>

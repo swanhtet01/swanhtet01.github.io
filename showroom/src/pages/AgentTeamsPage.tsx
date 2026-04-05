@@ -103,8 +103,8 @@ export function AgentTeamsPage() {
     <div className="space-y-8">
       <PageIntro
         eyebrow="AI Team"
-        title="See the agent org and the control loops."
-        description="This is the internal AI operating model: who runs what, what each loop writes, and what still needs a human decision."
+        title="Run the company with three agent loops."
+        description="This page shows what runs now, what each loop writes, and what still needs a human decision."
       />
 
       <section className="grid gap-4 md:grid-cols-4">
@@ -113,11 +113,11 @@ export function AgentTeamsPage() {
           <p className="mt-3 text-3xl font-bold text-white">{payload?.summary?.team_count ?? 0}</p>
         </div>
         <div className="sm-metric-card">
-          <p className="sm-kicker text-[var(--sm-accent-alt)]">Shared core</p>
+          <p className="sm-kicker text-[var(--sm-accent-alt)]">Core teams</p>
           <p className="mt-3 text-3xl font-bold text-white">{payload?.summary?.shared_core_team_count ?? 0}</p>
         </div>
         <div className="sm-metric-card">
-          <p className="sm-kicker text-[var(--sm-accent)]">Client pods</p>
+          <p className="sm-kicker text-[var(--sm-accent)]">Template pods</p>
           <p className="mt-3 text-3xl font-bold text-white">{payload?.summary?.client_pod_team_count ?? 0}</p>
         </div>
         <div className="sm-metric-card">
@@ -134,7 +134,7 @@ export function AgentTeamsPage() {
         <>
           <section className="grid gap-6 lg:grid-cols-[1.05fr_0.95fr]">
             <article className="sm-surface p-6">
-              <p className="sm-kicker text-[var(--sm-accent)]">Core loop</p>
+              <p className="sm-kicker text-[var(--sm-accent)]">What runs automatically</p>
               <div className="mt-4 space-y-3">
                 {(payload.scaling_model?.core_loop ?? []).map((item) => (
                   <div className="sm-chip text-white" key={item}>
@@ -146,7 +146,7 @@ export function AgentTeamsPage() {
                 ) : null}
               </div>
 
-              <p className="sm-kicker mt-6 text-[var(--sm-accent-alt)]">Founder focus</p>
+              <p className="sm-kicker mt-6 text-[var(--sm-accent-alt)]">Founder attention</p>
               <div className="mt-4 grid gap-2">
                 {(payload.scaling_model?.founder_focus ?? []).map((item) => (
                   <div className="sm-chip text-white" key={item}>
@@ -157,7 +157,7 @@ export function AgentTeamsPage() {
             </article>
 
             <article className="sm-surface p-6">
-              <p className="sm-kicker text-[var(--sm-accent-alt)]">Operating rules</p>
+              <p className="sm-kicker text-[var(--sm-accent-alt)]">Control rules</p>
               <div className="mt-4 space-y-3">
                 {(payload.scaling_model?.rules ?? []).map((item) => (
                   <div className="border-b border-white/8 pb-3 text-sm text-[var(--sm-muted)] last:border-b-0 last:pb-0" key={item}>
@@ -170,7 +170,7 @@ export function AgentTeamsPage() {
 
           <section className="grid gap-6 lg:grid-cols-[1.05fr_0.95fr]">
             <article className="sm-surface p-6">
-              <p className="sm-kicker text-[var(--sm-accent)]">Teams</p>
+              <p className="sm-kicker text-[var(--sm-accent)]">Operating loops</p>
               <div className="mt-5 space-y-4">
                 {(payload.teams ?? []).map((team) => (
                   <div className="sm-proof-card" key={team.team_id}>

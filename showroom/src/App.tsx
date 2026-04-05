@@ -58,7 +58,7 @@ function App() {
           <Route element={<NotFoundPage />} path="*" />
         </Route>
         <Route element={<AppFrame />} path="/app">
-          <Route element={<Navigate replace to="sales" />} index />
+          <Route element={<Navigate replace to="actions" />} index />
           <Route element={<WorkbenchPage />} path="overview" />
           <Route element={<InsightsPage />} path="insights" />
           <Route element={<DirectorDashboardPage />} path="director" />

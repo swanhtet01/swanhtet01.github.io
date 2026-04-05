@@ -73,6 +73,7 @@ def main() -> int:
     parser.add_argument("--timeout-seconds", type=int, default=30)
     parser.add_argument("--as-json", action="store_true")
     args = parser.parse_args()
+    run_tag = str(int(time.time() * 1000))
 
     cookie_jar = CookieJar()
     opener = build_opener(HTTPCookieProcessor(cookie_jar))
@@ -333,12 +334,12 @@ def main() -> int:
         {
             "rows": [
                 {
-                    "title": "Smoke queue item",
+                    "title": f"Smoke queue item {run_tag}",
                     "owner": "Sales",
                     "priority": "High",
                     "due": "Today",
                     "status": "open",
-                    "notes": "Created by smoke test",
+                    "notes": f"Created by smoke test {run_tag}",
                     "lead_id": outreach_lead_id,
                     "template": "lead_follow_up",
                 }
