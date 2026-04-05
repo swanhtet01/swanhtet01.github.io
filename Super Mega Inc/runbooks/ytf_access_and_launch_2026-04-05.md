@@ -56,6 +56,7 @@ Grant these roles at the project level for the fastest path:
 - `VITE_WORKSPACE_APP_BASE=https://ytf.supermega.dev`
 - `VITE_WORKSPACE_API_BASE=https://ytf.supermega.dev`
 - `VITE_BOOKING_URL=https://cal.com/...`
+- `SUPERMEGA_CLOUDSQL_INSTANCE=supermega-468612:asia-southeast1:ytf-app-db`
 - `SUPERMEGA_APP_DISPLAY_NAME=Yangon Tyre Plant A`
 - `SUPERMEGA_APP_ROLE=owner`
 - `SUPERMEGA_WORKSPACE_SLUG=ytf-plant-a`
@@ -97,6 +98,7 @@ Do not switch to live billing until the Cloud Run host, email recovery, and webh
 
 - Product name shown to users: `Yangon Tyre Plant A`
 - Shared workspace slug: `ytf-plant-a`
+- Database URL pattern: `postgresql+psycopg://USER:PASSWORD@/DBNAME?host=/cloudsql/supermega-468612:asia-southeast1:ytf-app-db`
 - Main public routes:
   - `/receiving`
   - `/task-list`

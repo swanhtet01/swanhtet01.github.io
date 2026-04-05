@@ -28,6 +28,7 @@ jobs:
       REGION: ${{ github.event.inputs.region }}
       SERVICE: ${{ github.event.inputs.service }}
       IMAGE: asia-southeast1-docker.pkg.dev/${{ github.event.inputs.project_id }}/cloud-run-source-deploy/${{ github.event.inputs.service }}:${{ github.sha }}
+      CLOUDSQL_INSTANCE: ${{ vars.SUPERMEGA_CLOUDSQL_INSTANCE }}
 
     steps:
       - name: Checkout
@@ -61,13 +62,18 @@ jobs:
 
       - name: Deploy Cloud Run app
         run: |
+          EXTRA_ARGS=""
+          if [ -n "$CLOUDSQL_INSTANCE" ]; then
+            EXTRA_ARGS="--add-cloudsql-instances $CLOUDSQL_INSTANCE"
+          fi
           gcloud run deploy "$SERVICE" \
             --image "$IMAGE" \
             --region "$REGION" \
             --platform managed \
             --allow-unauthenticated \
             --port 8080 \
-            --set-env-vars "SUPERMEGA_SITE_ROOT=/app/showroom/dist,SUPERMEGA_PILOT_DATA=/app/pilot-data,SUPERMEGA_AUTH_REQUIRED=1,SUPERMEGA_APP_USERNAME=${{ secrets.SUPERMEGA_APP_USERNAME }},SUPERMEGA_APP_PASSWORD=${{ secrets.SUPERMEGA_APP_PASSWORD }},SUPERMEGA_APP_DISPLAY_NAME=${{ vars.SUPERMEGA_APP_DISPLAY_NAME }},SUPERMEGA_APP_ROLE=${{ vars.SUPERMEGA_APP_ROLE }},SUPERMEGA_WORKSPACE_SLUG=${{ vars.SUPERMEGA_WORKSPACE_SLUG }},SUPERMEGA_WORKSPACE_NAME=${{ vars.SUPERMEGA_WORKSPACE_NAME }},SUPERMEGA_WORKSPACE_PLAN=${{ vars.SUPERMEGA_WORKSPACE_PLAN }},SUPERMEGA_SESSION_HOURS=${{ vars.SUPERMEGA_SESSION_HOURS }},SUPERMEGA_DATABASE_URL=${{ secrets.SUPERMEGA_DATABASE_URL }},SUPERMEGA_CORS_ORIGINS=${{ vars.SUPERMEGA_CORS_ORIGINS }},VITE_BOOKING_URL=${{ vars.VITE_BOOKING_URL }},VITE_WORKSPACE_APP_BASE=${{ vars.VITE_WORKSPACE_APP_BASE }},VITE_WORKSPACE_API_BASE=${{ vars.VITE_WORKSPACE_API_BASE }}"
+            --set-env-vars "SUPERMEGA_SITE_ROOT=/app/showroom/dist,SUPERMEGA_PILOT_DATA=/app/pilot-data,SUPERMEGA_AUTH_REQUIRED=1,SUPERMEGA_APP_USERNAME=${{ secrets.SUPERMEGA_APP_USERNAME }},SUPERMEGA_APP_PASSWORD=${{ secrets.SUPERMEGA_APP_PASSWORD }},SUPERMEGA_APP_DISPLAY_NAME=${{ vars.SUPERMEGA_APP_DISPLAY_NAME }},SUPERMEGA_APP_ROLE=${{ vars.SUPERMEGA_APP_ROLE }},SUPERMEGA_WORKSPACE_SLUG=${{ vars.SUPERMEGA_WORKSPACE_SLUG }},SUPERMEGA_WORKSPACE_NAME=${{ vars.SUPERMEGA_WORKSPACE_NAME }},SUPERMEGA_WORKSPACE_PLAN=${{ vars.SUPERMEGA_WORKSPACE_PLAN }},SUPERMEGA_SESSION_HOURS=${{ vars.SUPERMEGA_SESSION_HOURS }},SUPERMEGA_DATABASE_URL=${{ secrets.SUPERMEGA_DATABASE_URL }},SUPERMEGA_CORS_ORIGINS=${{ vars.SUPERMEGA_CORS_ORIGINS }},VITE_BOOKING_URL=${{ vars.VITE_BOOKING_URL }},VITE_WORKSPACE_APP_BASE=${{ vars.VITE_WORKSPACE_APP_BASE }},VITE_WORKSPACE_API_BASE=${{ vars.VITE_WORKSPACE_API_BASE }}" \
+            $EXTRA_ARGS
 
       - name: Print service URL
         run: |
