@@ -9,6 +9,7 @@ import os
 import re
 import secrets
 import sys
+import tempfile
 from datetime import datetime
 from html import unescape
 from pathlib import Path
@@ -946,6 +947,24 @@ def _load_runtime_config() -> dict[str, Any]:
     return _expand_env_tokens(payload)
 
 
+def _materialize_secret_path(raw_value: str, *, suffix: str) -> Path | None:
+    value = str(raw_value or "").strip()
+    if not value:
+        return None
+    candidate = Path(value).expanduser()
+    if candidate.exists():
+        return candidate
+    if value.startswith("{") or value.startswith("["):
+        cache_root = Path(tempfile.gettempdir()) / "supermega-runtime-secrets"
+        cache_root.mkdir(parents=True, exist_ok=True)
+        digest = hashlib.sha1(value.encode("utf-8")).hexdigest()[:16]
+        target = cache_root / f"{digest}{suffix}"
+        if not target.exists():
+            target.write_text(value, encoding="utf-8")
+        return target
+    return candidate
+
+
 def _drive_probe_from_config(config: dict[str, Any]) -> GoogleDriveProbe:
     sources = config.get("sources", {}) if isinstance(config, dict) else {}
     platform = config.get("platform", {}) if isinstance(config, dict) else {}
@@ -954,7 +973,7 @@ def _drive_probe_from_config(config: dict[str, Any]) -> GoogleDriveProbe:
 
     service_account_value = str(drive.get("service_account_json", "")).strip() or os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON", "").strip()
     folder_id = str(publish.get("drive_folder_id", "")).strip() or str(config.get("input_center", {}).get("drive_folder_id", "")).strip()
-    service_account_path = Path(service_account_value).expanduser() if service_account_value else None
+    service_account_path = _materialize_secret_path(service_account_value, suffix=".service-account.json")
     return GoogleDriveProbe(service_account_path, folder_id)
 
 
@@ -963,8 +982,8 @@ def _gmail_probe_from_config(config: dict[str, Any]) -> GmailProbe:
     gmail = sources.get("gmail", {}) if isinstance(sources, dict) else {}
     client_secret_value = str(gmail.get("client_secret_json", "")).strip() or os.getenv("GMAIL_OAUTH_CLIENT_JSON", "").strip()
     token_value = str(gmail.get("token_json", "")).strip() or os.getenv("GMAIL_OAUTH_TOKEN_JSON", "").strip()
-    client_secret_path = Path(client_secret_value).expanduser() if client_secret_value else None
-    token_path = Path(token_value).expanduser() if token_value else None
+    client_secret_path = _materialize_secret_path(client_secret_value, suffix=".gmail-client.json")
+    token_path = _materialize_secret_path(token_value, suffix=".gmail-token.json")
     return GmailProbe(client_secret_path, token_path)
 
 

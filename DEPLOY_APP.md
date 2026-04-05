@@ -113,6 +113,8 @@ That means:
 Workflow:
 
 - `.github/workflows/supermega-app-cloud-run.yml`
+- direct script:
+  - `powershell -ExecutionPolicy Bypass -File .\tools\deploy_supermega_gcp.ps1`
 
 Required secret:
 
@@ -154,6 +156,35 @@ Current note:
 - for a real customer deployment, set `SUPERMEGA_DATABASE_URL` to Cloud SQL for PostgreSQL or use a host with persistent disk
 - if `SUPERMEGA_CLOUDSQL_INSTANCE` is set, the Cloud Run workflow will mount the Cloud SQL instance during deploy
 - the Cloud Run workflow now also accepts PostHog and Sentry envs for frontend and backend visibility
+- the direct deploy script now provisions:
+  - Artifact Registry repository
+  - Cloud SQL instance
+  - app database and user
+  - Secret Manager values
+  - Cloud Run deploy inputs
+
+## Current infra status
+
+As of April 5, 2026:
+
+- Cloud SQL instance `supermega-app-db` exists
+- database `supermega` exists
+- app user `supermega_app` exists
+- Secret Manager has:
+  - `supermega-app-username`
+  - `supermega-app-password`
+  - `supermega-openai-api-key`
+  - `supermega-google-maps-api-key`
+  - `supermega-google-places-api-key`
+  - `supermega-database-url`
+
+Remaining blocker for direct deploy from the service account:
+
+- the deployment account can administer Cloud Run and Cloud SQL
+- but Cloud Build source upload is still blocked because the account cannot write to the Cloud Build staging bucket
+- the fix is one more IAM grant to `super-mega-dev-team@supermega-468612.iam.gserviceaccount.com`:
+  - `Storage Admin`
+  - or narrower bucket/object write access to the Cloud Build staging bucket
 
 ## Current production gap
 

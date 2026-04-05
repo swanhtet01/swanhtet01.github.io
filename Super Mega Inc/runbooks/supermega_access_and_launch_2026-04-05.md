@@ -15,6 +15,35 @@ Give the SuperMega dev/deploy loop enough control to operate as a real company:
 
 - GCP IAM for the deployment service account
 - core Google Cloud APIs
+- Cloud SQL instance:
+  - `supermega-app-db`
+- Cloud SQL database:
+  - `supermega`
+- Cloud SQL app user:
+  - `supermega_app`
+- Secret Manager values for:
+  - app username
+  - app password
+  - OpenAI key
+  - Google Maps key
+  - Google Places key
+  - database URL
+
+## Actual blocker now
+
+The service account can reach Cloud Run, Cloud SQL, Artifact Registry, and Secret Manager.
+
+The current hard blocker is Cloud Build source upload:
+
+- `gcloud builds submit` is failing because the service account cannot write to the Cloud Build staging bucket
+
+What to add to `super-mega-dev-team@supermega-468612.iam.gserviceaccount.com`:
+
+- `Storage Admin`
+
+If you want the narrower version instead:
+
+- grant object write access on the Cloud Build staging bucket that backs `supermega-468612_cloudbuild`
 
 ## What to set next in GitHub
 
