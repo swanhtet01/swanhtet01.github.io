@@ -51,6 +51,7 @@ jobs:
           VITE_WORKSPACE_API_BASE: ${{ vars.VITE_WORKSPACE_API_BASE }}
           VITE_POSTHOG_KEY: ${{ secrets.VITE_POSTHOG_KEY }}
           VITE_POSTHOG_HOST: ${{ vars.VITE_POSTHOG_HOST }}
+          VITE_SENTRY_DSN: ${{ vars.VITE_SENTRY_DSN }}
         run: npm run build
 
       - name: Verify public routes

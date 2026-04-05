@@ -81,9 +81,13 @@ Main values:
 - `SUPERMEGA_DATABASE_URL`
 - `SUPERMEGA_CORS_ORIGINS`
 - `SUPERMEGA_CLOUDSQL_INSTANCE`
+- `SUPERMEGA_ENV`
+- `SUPERMEGA_SENTRY_TRACES`
+- `SENTRY_DSN`
 - `VITE_BOOKING_URL`
 - `VITE_POSTHOG_KEY`
 - `VITE_POSTHOG_HOST`
+- `VITE_SENTRY_DSN`
 - `VITE_WORKSPACE_APP_BASE`
 - `VITE_WORKSPACE_API_BASE`
 - `OPENAI_API_KEY`
@@ -124,7 +128,9 @@ Recommended secrets and vars for a real app host:
   - `RESEND_API_KEY`
   - `STRIPE_SECRET_KEY`
   - `STRIPE_WEBHOOK_SECRET`
+  - `SENTRY_DSN`
   - `VITE_GOOGLE_MAPS_API_KEY`
+  - `VITE_POSTHOG_KEY`
 - vars:
   - `SUPERMEGA_APP_DISPLAY_NAME`
   - `SUPERMEGA_APP_ROLE`
@@ -134,9 +140,10 @@ Recommended secrets and vars for a real app host:
   - `SUPERMEGA_SESSION_HOURS`
   - `SUPERMEGA_CORS_ORIGINS`
   - `SUPERMEGA_CLOUDSQL_INSTANCE`
+  - `SUPERMEGA_SENTRY_TRACES`
   - `VITE_BOOKING_URL`
-  - `VITE_POSTHOG_KEY`
   - `VITE_POSTHOG_HOST`
+  - `VITE_SENTRY_DSN`
   - `VITE_WORKSPACE_APP_BASE`
   - `VITE_WORKSPACE_API_BASE`
 
@@ -146,6 +153,7 @@ Current note:
 - but SQLite is not durable there by itself
 - for a real customer deployment, set `SUPERMEGA_DATABASE_URL` to Cloud SQL for PostgreSQL or use a host with persistent disk
 - if `SUPERMEGA_CLOUDSQL_INSTANCE` is set, the Cloud Run workflow will mount the Cloud SQL instance during deploy
+- the Cloud Run workflow now also accepts PostHog and Sentry envs for frontend and backend visibility
 
 ## Current production gap
 

@@ -1,12 +1,16 @@
 beautifulsoup4
+duckdb
 fastapi
 google-api-python-client
 google-auth
 google-auth-oauthlib
 langgraph
 openpyxl
+polars
 pydantic
 pypdf
 python-dotenv
+sentry-sdk[fastapi]
 sqlmodel
 uvicorn
+psycopg[binary]
