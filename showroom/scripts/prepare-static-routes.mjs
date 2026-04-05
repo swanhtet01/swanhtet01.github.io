@@ -4,6 +4,8 @@ import { resolve } from 'node:path'
 const distDir = resolve(process.cwd(), 'dist')
 const indexFile = resolve(distDir, 'index.html')
 const routePaths = [
+  'systems',
+  'products',
   'find-companies',
   'saved-companies',
   'company-list',

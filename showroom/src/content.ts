@@ -34,17 +34,29 @@ export type ClientTemplate = {
   path: string
 }
 
+export type SystemOffer = {
+  name: string
+  audience: string
+  replaces: string
+  outcome: string
+}
+
+export type CustomBuild = {
+  name: string
+  detail: string
+}
+
 export const bookingUrl = (import.meta.env.VITE_BOOKING_URL ?? '').trim()
 
 export const navItems = [
-  { label: 'Find clients', to: '/find-companies' },
-  { label: 'Clean a list', to: '/company-list' },
+  { label: 'What we build', to: '/systems' },
+  { label: 'Free tools', to: '/find-companies' },
 ] as const
 
 export const hero = {
   eyebrow: 'SuperMega',
-  title: 'Stop losing the next step.',
-  description: 'Find new clients or clean the list you already have.',
+  title: 'AI-native systems for sales, operations, and management.',
+  description: 'We build custom internal software that replaces scattered tools, spreadsheets, and manual follow-up.',
 }
 
 export const proofPoints: ProofPoint[] = [
@@ -146,21 +158,50 @@ export const starterTemplates: StarterTemplate[] = [
 
 export const clientTemplates: ClientTemplate[] = [
   {
-    name: 'Sales Setup',
+    name: 'Sales Desk',
     audience: 'Founders, sales teams, and partnerships',
-    outcome: 'Find companies, keep the shortlist, and run first outreach.',
-    path: '/find-companies',
+    outcome: 'Find companies, clean the list, and run outreach from one working desk.',
+    path: '/systems',
   },
   {
-    name: 'Clean a list',
-    audience: 'Anyone who already has names, sites, emails, or phones',
-    outcome: 'Clean the list, move the right companies forward, and keep next steps visible.',
-    path: '/company-list?setup=leads',
+    name: 'Operations Desk',
+    audience: 'Managers and operators running daily follow-up',
+    outcome: 'Turn updates, blockers, and owner gaps into one clear queue.',
+    path: '/systems',
   },
   {
-    name: 'Receiving Control',
-    audience: 'Ops, receiving, stores, and plant teams',
-    outcome: 'Turn inbound issues into one short follow-up list.',
-    path: '/receiving-log',
+    name: 'Director Brief',
+    audience: 'Owners and senior managers',
+    outcome: 'Get one daily operating brief built from real queues and exceptions.',
+    path: '/systems',
   },
+]
+
+export const systemOffers: SystemOffer[] = [
+  {
+    name: 'Sales Desk',
+    audience: 'Founders, sales teams, and partnerships',
+    replaces: 'raw search, scattered spreadsheets, manual outreach tracking',
+    outcome: 'one shortlist, one follow-up list, one daily revenue queue',
+  },
+  {
+    name: 'Operations Desk',
+    audience: 'Ops leads, coordinators, and plant managers',
+    replaces: 'chat-based chasing, missed updates, generic task boards',
+    outcome: 'one owner list, one blocker queue, one visible next step',
+  },
+  {
+    name: 'Director Brief',
+    audience: 'Owners, GMs, and directors',
+    replaces: 'manual end-of-day summaries and status meetings with no signal',
+    outcome: 'one short daily brief built from the real work layer',
+  },
+]
+
+export const customBuilds: CustomBuild[] = [
+  { name: 'Client portal', detail: 'Give customers one clean place for status, files, and approvals.' },
+  { name: 'Learning platform', detail: 'Run internal training, onboarding, and SOP rollout with AI help.' },
+  { name: 'Ecommerce back office', detail: 'Manage orders, support, stock, and follow-up in one system.' },
+  { name: 'Receiving control', detail: 'Track inbound issues, GRN gaps, holds, and document blockers.' },
+  { name: 'Approval and document flow', detail: 'Move requests, files, and exceptions through one clear review path.' },
 ]

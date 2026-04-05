@@ -6,14 +6,19 @@ import { trackEvent } from '../lib/analytics'
 export function BookPage() {
   const offers = [
     {
-      name: 'Sales Setup',
+      name: 'Sales Desk',
       price: '$750 pilot',
-      detail: 'Find clients plus Clean a list for one real outreach workflow.',
+      detail: 'One AI-native sales system for client search, list cleanup, outreach, and follow-up.',
     },
     {
-      name: 'Clean a list',
-      price: '$500 setup',
-      detail: 'Bring your spreadsheet or text list. We clean it, stage it, and create the first next-step tasks.',
+      name: 'Operations Desk',
+      price: '$900 pilot',
+      detail: 'One operating system for daily updates, blockers, owner tracking, and next steps.',
+    },
+    {
+      name: 'Custom Build Sprint',
+      price: '$1,500+',
+      detail: 'A focused build for a client portal, learning platform, ecommerce back office, or another internal workflow.',
     },
   ]
 
@@ -24,9 +29,9 @@ export function BookPage() {
         <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(20rem,0.8fr)] lg:items-start">
           <div>
             <p className="sm-kicker text-[var(--sm-accent)]">Book rollout call</p>
-            <h1 className="mt-4 max-w-3xl text-4xl font-extrabold tracking-tight text-white lg:text-6xl">Start with one workflow, not a software project.</h1>
+            <h1 className="mt-4 max-w-3xl text-4xl font-extrabold tracking-tight text-white lg:text-6xl">Start with one system, not another software mess.</h1>
             <p className="mt-5 max-w-2xl text-base leading-relaxed text-[var(--sm-muted)] lg:text-lg">
-              We pick one list or issue flow, shape the first working version, and keep the rollout narrow.
+              We pick one real workflow, build the first working system around it, and keep the rollout narrow enough to go live fast.
             </p>
             <div className="mt-6 flex flex-wrap gap-3">
               {bookingUrl ? (
@@ -34,12 +39,12 @@ export function BookPage() {
                   Open calendar
                 </a>
               ) : (
-                <Link className="sm-button-primary" onClick={() => trackEvent('book_page_start_click', { target: 'find_companies' })} to="/find-companies">
-                  Try find clients
+                <Link className="sm-button-primary" onClick={() => trackEvent('offer_open_click', { offer: 'Systems' })} to="/systems">
+                  See what we build
                 </Link>
               )}
               <Link className="sm-button-secondary" to="/company-list?setup=leads">
-                Clean a list first
+                Try a free tool first
               </Link>
             </div>
           </div>
@@ -47,7 +52,7 @@ export function BookPage() {
           <div className="border-l border-white/10 pl-5 lg:pl-8">
             <p className="sm-kicker text-[var(--sm-accent-alt)]">Call outcome</p>
             <div className="mt-5 space-y-4">
-              {['Pick one workflow', 'Use the data they already have', 'Leave with the first working list'].map((item) => (
+              {['Pick one workflow', 'Use the data they already have', 'Leave with the first working system plan'].map((item) => (
                 <div className="border-b border-white/8 pb-3 text-base text-[var(--sm-muted)] last:border-b-0 last:pb-0" key={item}>
                   {item}
                 </div>
@@ -86,11 +91,11 @@ export function BookPage() {
             ))}
           </div>
           <div className="mt-6 text-sm text-[var(--sm-muted)]">
-            Best for Myanmar owner-led distributors, importers, stores, and plant teams still running follow-up through Facebook pages, Viber or WhatsApp, Excel, and email.
+            Best for Myanmar owner-led distributors, importers, stores, service teams, and plant teams still running work through Facebook pages, Viber or WhatsApp, email, spreadsheets, and disconnected SaaS.
           </div>
-          <div className="mt-4 text-sm text-[var(--sm-muted)]">Need plant or inbound issue tracking instead? We also roll out a separate receiving-control workflow.</div>
+          <div className="mt-4 text-sm text-[var(--sm-muted)]">Free tools are there to prove the approach. The main product is the system we build for your team.</div>
           {!bookingUrl ? (
-            <div className="mt-6 text-sm text-[var(--sm-muted)]">Calendar booking is not live on this host yet. Start with one of the public tools first.</div>
+            <div className="mt-6 text-sm text-[var(--sm-muted)]">Calendar booking is not live on this host yet. Start with the systems page or one of the free tools first.</div>
           ) : null}
         </aside>
       </section>
