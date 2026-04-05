@@ -10,6 +10,7 @@ const routePaths = [
   'daily-tasks',
   'task-list',
   'receiving',
+  'receiving-log',
   'lead-finder',
   'workspace',
   'action-os',
