@@ -32,7 +32,7 @@ import { getTenantConfig } from './lib/tenantConfig'
 function App() {
   const liveAppAvailable = hasLiveWorkspaceApp()
   const tenant = getTenantConfig()
-  const publicWorkspaceFallback = tenant.key === 'ytf-plant-a' ? '/receiving' : '/company-list'
+  const publicWorkspaceFallback = tenant.key === 'ytf-plant-a' ? '/receiving-log' : '/company-list'
   const bookFallback = tenant.showBookCta ? <BookPage /> : <Navigate replace to={publicWorkspaceFallback} />
 
   return (
@@ -43,13 +43,14 @@ function App() {
         <Route element={<HomePage />} index />
           <Route element={<PublicLeadFinderPage />} path="find-companies" />
           <Route element={<Navigate replace to="/find-companies" />} path="lead-finder" />
-          <Route element={<WorkspaceLitePage />} path="saved-companies" />
-          <Route element={<Navigate replace to="/saved-companies" />} path="company-list" />
-          <Route element={<WorkspaceLitePage />} path="daily-tasks" />
-          <Route element={<Navigate replace to="/daily-tasks" />} path="task-list" />
-          <Route element={<Navigate replace to="/daily-tasks?setup=receiving" />} path="receiving" />
-          <Route element={<Navigate replace to="/daily-tasks" />} path="action-os" />
-          <Route element={<Navigate replace to="/saved-companies" />} path="workspace" />
+          <Route element={<WorkspaceLitePage />} path="company-list" />
+          <Route element={<Navigate replace to="/company-list" />} path="saved-companies" />
+          <Route element={<WorkspaceLitePage />} path="task-list" />
+          <Route element={<Navigate replace to="/task-list" />} path="daily-tasks" />
+          <Route element={<WorkspaceLitePage />} path="receiving-log" />
+          <Route element={<Navigate replace to="/receiving-log" />} path="receiving" />
+          <Route element={<Navigate replace to="/task-list" />} path="action-os" />
+          <Route element={<Navigate replace to="/company-list" />} path="workspace" />
           <Route element={liveAppAvailable ? <LoginPage /> : <Navigate replace to={publicWorkspaceFallback} />} path="login" />
           <Route element={liveAppAvailable ? <SignupPage /> : <Navigate replace to={publicWorkspaceFallback} />} path="signup" />
           <Route element={bookFallback} path="book" />

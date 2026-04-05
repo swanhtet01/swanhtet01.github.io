@@ -8,12 +8,17 @@ export function BookPage() {
     {
       name: 'Sales Setup',
       price: '$750 pilot',
-      detail: 'Find Companies plus Saved Companies for one real outreach workflow. Pilot fee credits into month one.',
+      detail: 'Find Companies plus Company List for one real outreach workflow. Pilot fee credits into month one.',
     },
     {
-      name: 'Operations Setup',
+      name: 'Company Cleanup',
+      price: '$500 setup',
+      detail: 'Bring your spreadsheet or text list. We clean it, stage it, and create the first next-step tasks.',
+    },
+    {
+      name: 'Receiving Control',
       price: '$1,500 pilot',
-      detail: 'Daily Tasks for one ops flow such as daily blockers or receiving issues. Same 2-week pilot structure.',
+      detail: 'Receiving Log for one inbound flow such as shortages, holds, GRN gaps, or customs blockers.',
     },
   ]
 
@@ -26,7 +31,7 @@ export function BookPage() {
             <p className="sm-kicker text-[var(--sm-accent)]">Book setup call</p>
             <h1 className="mt-4 max-w-3xl text-4xl font-extrabold tracking-tight text-white lg:text-6xl">Start with one paid setup.</h1>
             <p className="mt-5 max-w-2xl text-base leading-relaxed text-[var(--sm-muted)] lg:text-lg">
-              We set up one real workflow first. Sales or operations. No big rollout.
+              We set up one real workflow first. Company search, company cleanup, or receiving control. No big rollout.
             </p>
           </div>
 
@@ -89,8 +94,8 @@ export function BookPage() {
                 <Link className="sm-button-primary" onClick={() => trackEvent('book_page_start_click', { target: 'find_companies' })} to="/find-companies">
                   Find companies
                 </Link>
-                <Link className="sm-button-secondary" onClick={() => trackEvent('book_page_start_click', { target: 'daily_tasks' })} to="/daily-tasks">
-                  Open daily tasks
+                <Link className="sm-button-secondary" onClick={() => trackEvent('book_page_start_click', { target: 'receiving_log' })} to="/receiving-log">
+                  Open receiving log
                 </Link>
               </div>
             </div>

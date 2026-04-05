@@ -5,16 +5,22 @@ import { trackEvent } from '../lib/analytics'
 
 const offers = [
   {
-    name: 'Sales Setup',
-    detail: 'Find companies, keep the right ones, and run first outreach.',
-    tools: 'Find Companies + Saved Companies',
+    name: 'Find Companies',
+    detail: 'Search a market and keep only the companies worth contacting.',
+    tools: 'Public search + first follow-up',
     to: '/find-companies',
   },
   {
-    name: 'Operations Setup',
-    detail: 'Turn messy updates or receiving issues into one short daily task list.',
-    tools: 'Daily Tasks',
-    to: '/daily-tasks',
+    name: 'Company List',
+    detail: 'Paste the list you already have and turn it into something usable.',
+    tools: 'CSV/text import + next steps',
+    to: '/company-list?setup=leads',
+  },
+  {
+    name: 'Receiving Log',
+    detail: 'Paste inbound issues and keep the next receiving follow-up visible.',
+    tools: 'Issue log + follow-up queue',
+    to: '/receiving-log',
   },
 ]
 
@@ -28,22 +34,22 @@ export function HomePage() {
 
         <div className="max-w-4xl">
           <p className="sm-kicker text-[var(--sm-accent)]">{hero.eyebrow}</p>
-          <h1 className="mt-4 text-4xl font-extrabold tracking-tight text-white lg:text-7xl">Two setups. Sales or operations.</h1>
+          <h1 className="mt-4 text-4xl font-extrabold tracking-tight text-white lg:text-7xl">Three tools. One clear next step.</h1>
           <p className="mt-5 max-w-2xl text-base leading-relaxed text-[var(--sm-muted)] lg:text-lg">
-            SuperMega should start with one real workflow, not a big rollout. Pick the sales flow or the operations flow.
+            Start with what you already have: a market to search, a company list to clean, or receiving issues to log.
           </p>
           <div className="mt-7 flex flex-wrap gap-3">
-            <Link className="sm-button-primary" onClick={() => trackEvent('public_start_click', { offer: 'Sales Setup' })} to="/find-companies">
-              Start sales setup
+            <Link className="sm-button-primary" onClick={() => trackEvent('public_start_click', { offer: 'Find Companies' })} to="/find-companies">
+              Find companies
             </Link>
-            <Link className="sm-button-secondary" onClick={() => trackEvent('public_start_click', { offer: 'Operations Setup' })} to="/daily-tasks">
-              Start operations setup
+            <Link className="sm-button-secondary" onClick={() => trackEvent('public_start_click', { offer: 'Company List' })} to="/company-list?setup=leads">
+              Clean my list
             </Link>
           </div>
         </div>
       </section>
 
-      <section className="grid gap-4 lg:grid-cols-2">
+      <section className="grid gap-4 lg:grid-cols-3">
         {offers.map((offer) => (
           <Link
             className="sm-surface p-6 transition hover:border-[rgba(37,208,255,0.24)] hover:bg-white/6"
@@ -63,7 +69,7 @@ export function HomePage() {
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <p className="text-xl font-bold text-white">Need help with the first rollout?</p>
-            <p className="mt-1 text-sm text-[var(--sm-muted)]">Book one setup call. We use your real data and keep the scope small.</p>
+            <p className="mt-1 text-sm text-[var(--sm-muted)]">Book one setup call. We start with one list or one issue flow and keep the scope small.</p>
           </div>
           <Link className="sm-button-secondary" onClick={() => trackEvent('book_demo_click', { source: 'home' })} to="/book">
             Book setup call

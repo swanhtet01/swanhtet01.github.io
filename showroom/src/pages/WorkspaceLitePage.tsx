@@ -278,14 +278,14 @@ export function WorkspaceLitePage() {
   const searchParams = new URLSearchParams(location.search)
   const requestedSetup = searchParams.get('setup')
   const shouldStartShared = searchParams.get('start') === '1'
-  const publicSurface = normalizedPathname === '/team-updates' || normalizedPathname === '/team-tasks' || normalizedPathname === '/task-list' ? 'updates' : 'sales'
-  const isReceivingDesk = requestedSetup === 'receiving' || normalizedPathname === '/receiving'
-  const publicBasePath = publicSurface === 'sales' ? '/saved-companies' : '/daily-tasks'
+  const isReceivingDesk = requestedSetup === 'receiving' || normalizedPathname === '/receiving' || normalizedPathname === '/receiving-log'
+  const publicSurface = isReceivingDesk || normalizedPathname === '/team-updates' || normalizedPathname === '/team-tasks' || normalizedPathname === '/task-list' ? 'updates' : 'sales'
+  const publicBasePath = isReceivingDesk ? '/receiving-log' : publicSurface === 'sales' ? '/company-list' : '/task-list'
   const openTasks = useMemo(() => tasks.filter((task) => task.status === 'open'), [tasks])
   const hasData = leads.length > 0 || tasks.length > 0
   const activeView: WorkspaceView = publicSurface === 'updates' ? 'queue' : 'leads'
   const hasSharedProfile = isPublicWorkspaceProfileReady(profile)
-  const pageEyebrow = isReceivingDesk ? 'Receiving' : publicSurface === 'sales' ? 'Saved Companies' : 'Daily Tasks'
+  const pageEyebrow = isReceivingDesk ? 'Receiving Log' : publicSurface === 'sales' ? 'Company List' : 'Task List'
 
   const summary = useMemo(() => {
     if (mode === 'local') {
@@ -320,8 +320,8 @@ export function WorkspaceLitePage() {
       setSetupFlow(requestedSetup)
       return
     }
-    setSetupFlow(hasData ? 'pick' : publicSurface === 'sales' ? 'leads' : 'updates')
-  }, [hasData, publicSurface, requestedSetup])
+    setSetupFlow(hasData ? 'pick' : isReceivingDesk ? 'receiving' : publicSurface === 'sales' ? 'leads' : 'updates')
+  }, [hasData, isReceivingDesk, publicSurface, requestedSetup])
 
   function applyQueueTemplate(templateId: QueueTemplateId) {
     const template = queueTemplates[templateId]
@@ -498,7 +498,7 @@ export function WorkspaceLitePage() {
 
     if (mode === 'shared' || hasLiveWorkspaceApi()) {
       if (mode !== 'shared') {
-        const ready = await ensureSharedWorkspaceReady('saving into Saved Companies')
+        const ready = await ensureSharedWorkspaceReady('saving into Company List')
         if (!ready) {
           return
         }
@@ -507,7 +507,7 @@ export function WorkspaceLitePage() {
         name: profile.name,
         email: profile.email,
         company: profile.company,
-        goal: 'Save company list into Saved Companies',
+        goal: 'Save company list into Company List',
         campaign_goal: 'Imported lead list',
         rows: rows.map((row) => buildSharedLeadRow(row, 'Imported lead list')),
       })
@@ -729,12 +729,12 @@ export function WorkspaceLitePage() {
 
       await createWorkspaceTasks(rows)
       await loadSharedState()
-      setMessage(`Created ${rows.length} follow-up task${rows.length === 1 ? '' : 's'} from saved companies.`)
+      setMessage(`Created ${rows.length} follow-up task${rows.length === 1 ? '' : 's'} from the company list.`)
       return
     }
 
     setTasks(seedBrowserWorkspaceActionsFromLeads().map(normalizeBrowserTask))
-    setMessage('Created follow-up tasks from saved companies.')
+    setMessage('Created follow-up tasks from the company list.')
   }
 
   async function saveQuickAction() {
@@ -881,7 +881,7 @@ export function WorkspaceLitePage() {
     ) : setupFlow === 'receiving' ? (
       <div className="sm-proof-card">
         <p className="text-lg font-bold text-white">Log receiving or procurement issues.</p>
-        <p className="mt-2 text-sm text-[var(--sm-muted)]">Paste one issue per line. Task List will put them straight into the task list.</p>
+        <p className="mt-2 text-sm text-[var(--sm-muted)]">Paste one issue per line. Receiving Log will put them straight into the follow-up list.</p>
         <textarea
           className="sm-input mt-4 min-h-40"
           onChange={(event) => setReceivingImportText(event.target.value)}
@@ -946,14 +946,14 @@ export function WorkspaceLitePage() {
         <section className="sm-surface p-6 lg:p-8">
           <p className="sm-kicker text-[var(--sm-accent)]">{pageEyebrow}</p>
           <h1 className="mt-3 text-3xl font-bold text-white lg:text-4xl">
-            {isReceivingDesk ? 'Log receiving issues.' : publicSurface === 'sales' ? 'Bring a company list.' : 'Paste team updates.'}
+            {isReceivingDesk ? 'Log receiving issues.' : publicSurface === 'sales' ? 'Bring a company list.' : 'Paste task notes.'}
           </h1>
           <p className="mt-3 max-w-2xl text-sm leading-relaxed text-[var(--sm-muted)]">
             {isReceivingDesk
               ? 'Paste GRN, hold, batch, customs, or quantity issues and turn them into one short follow-up list.'
               : publicSurface === 'sales'
               ? 'Paste names, sites, emails, or phones. If you need new companies first, use Find Companies.'
-              : 'Paste messy notes, blockers, or receiving issues and turn them into a short task list.'}
+              : 'Paste messy notes, blockers, or updates and turn them into a short task list.'}
           </p>
           {setupPanel}
           {publicSurface === 'sales' ? (
@@ -975,7 +975,7 @@ export function WorkspaceLitePage() {
     <div className="space-y-6">
       <section className="grid gap-6 lg:grid-cols-[0.82fr_1.18fr]">
     <article className="sm-surface p-6">
-      <p className="sm-kicker text-[var(--sm-accent)]">{isReceivingDesk ? 'Receiving' : publicSurface === 'sales' ? 'Saved Companies' : 'Daily Tasks'}</p>
+      <p className="sm-kicker text-[var(--sm-accent)]">{isReceivingDesk ? 'Receiving Log' : publicSurface === 'sales' ? 'Company List' : 'Task List'}</p>
       <h2 className="mt-3 text-3xl font-bold text-white">
         {isReceivingDesk ? 'Keep only the receiving follow-up.' : publicSurface === 'sales' ? 'Keep the list short and usable.' : 'Keep only the next tasks.'}
       </h2>
@@ -1029,8 +1029,8 @@ export function WorkspaceLitePage() {
             {isReceivingDesk
               ? 'Paste receiving issues and build the follow-up list.'
               : publicSurface === 'sales'
-                      ? 'Use Find Companies for net-new prospects. Use Saved Companies when you already have a list.'
-                      : "Paste today's notes and build the daily task list."}
+                      ? 'Use Find Companies for net-new prospects. Use Company List when you already have a list.'
+                      : "Paste today's notes and build the task list."}
           </div>
             </div>
           ) : (
@@ -1048,7 +1048,7 @@ export function WorkspaceLitePage() {
                 <>
                   <div className="flex items-center justify-between gap-3">
                     <div>
-                      <p className="sm-kicker text-[var(--sm-accent)]">{activeView === 'queue' ? "Today's next steps" : 'Saved companies'}</p>
+              <p className="sm-kicker text-[var(--sm-accent)]">{activeView === 'queue' ? "Today's next steps" : 'Company list'}</p>
                       <p className="mt-2 text-sm text-[var(--sm-muted)]">
                         {activeView === 'queue'
                           ? 'Keep the task list short. Start with the top open items.'
@@ -1133,8 +1133,8 @@ export function WorkspaceLitePage() {
                   ) : leads.length ? (
                     <>
                       <div className="flex flex-wrap gap-3">
-                <Link className="sm-button-primary" to="/daily-tasks">
-                  Open daily tasks
+                <Link className="sm-button-primary" to="/task-list">
+                  Open task list
                 </Link>
                         <Link className="sm-button-secondary" to="/find-companies">
                           Find more companies
@@ -1196,8 +1196,8 @@ export function WorkspaceLitePage() {
                     </>
                   ) : (
                     <div className="sm-proof-card">
-                      <p className="font-semibold text-white">No saved companies yet</p>
-                      <p className="mt-2 text-sm text-[var(--sm-muted)]">Find companies, paste a company list, or open today's next steps if you already know the work.</p>
+                      <p className="font-semibold text-white">No companies yet</p>
+                      <p className="mt-2 text-sm text-[var(--sm-muted)]">Find companies, paste a company list, or open the task list if you already know the work.</p>
                       <div className="mt-4 flex flex-wrap gap-3">
                         <Link className="sm-button-primary" to="/find-companies">
                           Find companies

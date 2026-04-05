@@ -66,7 +66,7 @@ export function SiteFrame() {
 
       <footer className="border-t border-white/8 bg-[rgba(4,10,22,0.78)]">
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 px-4 py-6 text-sm text-[var(--sm-muted)] lg:flex-row lg:items-center lg:justify-between lg:px-8">
-          <p>Simple tools for saved companies and daily tasks.</p>
+          <p>Three simple tools: find companies, clean company lists, and log receiving issues.</p>
           <Link className="sm-link" to="/book">
             Book setup call
           </Link>
