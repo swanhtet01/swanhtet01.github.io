@@ -67,12 +67,12 @@ export const proofPoints: ProofPoint[] = [
 ]
 
 export const coreProduct = {
-  name: 'Company List + Task List',
-  tagline: 'One clean list of companies and one short list of next steps.',
+  name: 'Company List + Receiving Log',
+  tagline: 'One clean list for follow-up and one short log for operational issues.',
   replaces: ['Scattered notes', 'Missed follow-up', 'Manual chasing'],
   inputs: ['Company lists', 'Team updates', 'Receiving issues'],
-  outputs: ['Task list', 'Owner list', 'Next steps'],
-  rollout: ['Search or import the right data.', 'Keep it in one list.', 'Run the task list every day.'],
+  outputs: ['Company list', 'Issue log', 'Next steps'],
+  rollout: ['Search or import the right data.', 'Keep it in one list.', 'Run the short follow-up list every day.'],
 }
 
 export const leadFinder = {
@@ -152,19 +152,19 @@ export const starterTemplates: StarterTemplate[] = [
 
 export const clientTemplates: ClientTemplate[] = [
   {
-    name: 'Sales follow-up',
+    name: 'Sales Setup',
     audience: 'Founders, sales teams, and partnerships',
     outcome: 'Find companies, keep the shortlist, and run first outreach.',
     path: '/find-companies',
   },
   {
-    name: 'Company list cleanup',
+    name: 'Company Cleanup',
     audience: 'Anyone who already has names, sites, emails, or phones',
     outcome: 'Clean the list, move the right companies forward, and keep next steps visible.',
     path: '/company-list?setup=leads',
   },
   {
-    name: 'Receiving log',
+    name: 'Receiving Control',
     audience: 'Ops, receiving, stores, and plant teams',
     outcome: 'Turn inbound issues into one short follow-up list.',
     path: '/receiving-log',

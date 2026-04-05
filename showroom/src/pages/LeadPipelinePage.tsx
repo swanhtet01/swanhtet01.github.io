@@ -4,9 +4,12 @@ import { Link } from 'react-router-dom'
 import { PageIntro } from '../components/PageIntro'
 import {
   CORE_SOLUTIONS,
+  defaultStarterModules,
   defaultHuntTemplate,
+  defaultWedgeProduct,
   FINDER_ADVANTAGES,
   HUNT_TEMPLATES,
+  normalizeSolutionPack,
   QUICK_WIN_PRODUCTS,
   type HuntTemplate,
 } from '../lib/salesControl'
@@ -125,7 +128,7 @@ function formatLastRun(value: string) {
 }
 
 function packLabel(value: string) {
-  return value || 'Action OS Starter'
+  return normalizeSolutionPack(value)
 }
 
 function loadTemplate(template: HuntTemplate) {
@@ -228,11 +231,25 @@ export function LeadPipelinePage() {
   )
 
   const packCounts = useMemo(
-    () => ({
-      actionOs: pipeline?.summary.by_pack['Owner / Director OS'] ?? 0,
-      commercial: pipeline?.summary.by_pack['Commercial Control'] ?? 0,
-      factory: pipeline?.summary.by_pack['Factory Control'] ?? 0,
-    }),
+    () =>
+      (pipeline?.rows ?? []).reduce(
+        (current, row) => {
+          const key = normalizeSolutionPack(row.service_pack)
+          if (key === 'Company Cleanup') {
+            current.companyCleanup += 1
+          } else if (key === 'Receiving Control') {
+            current.receivingControl += 1
+          } else {
+            current.salesSetup += 1
+          }
+          return current
+        },
+        {
+          salesSetup: 0,
+          companyCleanup: 0,
+          receivingControl: 0,
+        },
+      ),
     [pipeline],
   )
 
@@ -384,11 +401,12 @@ export function LeadPipelinePage() {
   }
 
   async function copyOfferBrief(row: LeadPipelineRow) {
+    const normalizedPack = packLabel(row.service_pack)
     const lines = [
       row.company_name,
-      `Best fit: ${packLabel(row.service_pack)}`,
-      `Wedge: ${row.wedge_product || 'Action OS Starter'}`,
-      `Starter modules: ${(row.starter_modules ?? []).join(', ') || 'Action OS Starter'}`,
+      `Best fit: ${normalizedPack}`,
+      `Wedge: ${row.wedge_product || defaultWedgeProduct(row.service_pack)}`,
+      `Starter tools: ${(row.starter_modules ?? []).join(', ') || defaultStarterModules(row.service_pack).join(', ')}`,
       '',
       'Questions to ask:',
       ...row.discovery_questions.slice(0, 3).map((question) => `- ${question}`),
@@ -417,8 +435,8 @@ export function LeadPipelinePage() {
     <div className="space-y-8">
       <PageIntro
         eyebrow="Sales control"
-        title="Sell what already works."
-        description="Run internal hunts, map each lead to the right SuperMega offer, and move the next step into the queue."
+        title="Sell one simple setup at a time."
+        description="Run saved hunts, sort leads into three repeatable offers, and push the next step into the queue."
       />
 
       <section className="grid gap-4 md:grid-cols-5">
@@ -505,8 +523,8 @@ export function LeadPipelinePage() {
         </article>
 
         <article className="sm-surface p-6">
-          <p className="sm-kicker text-[var(--sm-accent)]">Why use Lead Finder internally</p>
-          <h2 className="mt-2 text-2xl font-bold text-white">This is not just Google with prettier cards.</h2>
+          <p className="sm-kicker text-[var(--sm-accent)]">Why use Find Companies internally</p>
+          <h2 className="mt-2 text-2xl font-bold text-white">This closes the loop after search.</h2>
           <div className="mt-5 grid gap-3">
             {FINDER_ADVANTAGES.map((item) => (
               <div className="sm-chip text-[var(--sm-muted)]" key={item}>
@@ -540,16 +558,16 @@ export function LeadPipelinePage() {
 
           <div className="mt-6 grid gap-3 md:grid-cols-3">
             <div className="sm-chip text-white">
-              <p className="sm-kicker text-[var(--sm-accent)]">Action OS Starter</p>
-              <p className="mt-2 text-2xl font-bold">{packCounts.actionOs}</p>
+              <p className="sm-kicker text-[var(--sm-accent)]">Sales Setup</p>
+              <p className="mt-2 text-2xl font-bold">{packCounts.salesSetup}</p>
             </div>
             <div className="sm-chip text-white">
-              <p className="sm-kicker text-[var(--sm-accent-alt)]">Commercial Control</p>
-              <p className="mt-2 text-2xl font-bold">{packCounts.commercial}</p>
+              <p className="sm-kicker text-[var(--sm-accent-alt)]">Company Cleanup</p>
+              <p className="mt-2 text-2xl font-bold">{packCounts.companyCleanup}</p>
             </div>
             <div className="sm-chip text-white">
-              <p className="sm-kicker text-[var(--sm-accent)]">Factory Control</p>
-              <p className="mt-2 text-2xl font-bold">{packCounts.factory}</p>
+              <p className="sm-kicker text-[var(--sm-accent)]">Receiving Control</p>
+              <p className="mt-2 text-2xl font-bold">{packCounts.receivingControl}</p>
             </div>
           </div>
         </article>
@@ -662,12 +680,12 @@ export function LeadPipelinePage() {
                     <div className="sm-chip text-white">
                       <p className="sm-kicker text-[var(--sm-accent)]">Best fit</p>
                       <p className="mt-2 font-semibold">{packLabel(row.service_pack)}</p>
-                      <p className="mt-2 text-sm text-[var(--sm-muted)]">Wedge: {row.wedge_product || 'Action OS Starter'}</p>
+                      <p className="mt-2 text-sm text-[var(--sm-muted)]">Wedge: {row.wedge_product || defaultWedgeProduct(row.service_pack)}</p>
                     </div>
                     <div className="sm-chip text-white">
-                      <p className="sm-kicker text-[var(--sm-accent-alt)]">First modules</p>
+                      <p className="sm-kicker text-[var(--sm-accent-alt)]">First tools</p>
                       <div className="mt-2 flex flex-wrap gap-2">
-                        {(row.starter_modules?.length ? row.starter_modules : ['Action OS Starter']).map((module) => (
+                        {(row.starter_modules?.length ? row.starter_modules : defaultStarterModules(row.service_pack)).map((module) => (
                           <span className="sm-status-pill" key={module}>
                             {module}
                           </span>
@@ -749,7 +767,7 @@ export function LeadPipelinePage() {
                 </div>
               ))
             ) : (
-              <div className="sm-chip text-[var(--sm-muted)]">No saved leads yet. Run one hunt, save the right targets, and come back here to work the offers.</div>
+              <div className="sm-chip text-[var(--sm-muted)]">No saved leads yet. Run one hunt, save the right companies, and come back here to work one setup at a time.</div>
             )}
           </div>
         </article>
@@ -796,10 +814,10 @@ export function LeadPipelinePage() {
           <h2 className="mt-2 text-2xl font-bold text-white">How SuperMega should actually sell.</h2>
           <div className="mt-5 grid gap-3">
             {[
-              'Use Lead Finder to pull a real shortlist for one narrow market.',
-              'Map every saved lead to one core offer, not five products at once.',
+              'Start from one narrow market or one imported list, not a huge segment.',
+              'Map each lead to one setup offer only: Sales Setup, Company Cleanup, or Receiving Control.',
               'Open Gmail from the lead card, then move the stage the same day.',
-              'Put every next step into the queue so search and follow-up stay connected.',
+              'Keep every next step in the queue so search, list cleanup, and follow-up stay connected.',
             ].map((item) => (
               <div className="sm-chip text-[var(--sm-muted)]" key={item}>
                 {item}

@@ -227,14 +227,15 @@ function toSharedStage(stage: string) {
 
 function buildSharedLeadRow(row: LeadRow, contextLabel: string) {
   const outreach = buildBrowserOutreach(row, contextLabel, [])
+  const importedList = contextLabel.toLowerCase().includes('imported')
   return {
     name: row.name,
     stage: 'offer_ready',
     status: 'open',
     owner: 'Growth Studio',
-    service_pack: 'Sales Desk',
-    wedge_product: 'Lead Finder',
-    semi_products: ['Lead Finder'],
+    service_pack: importedList ? 'Company Cleanup' : 'Sales Setup',
+    wedge_product: importedList ? 'Company List' : 'Find Companies',
+    semi_products: importedList ? ['Company List', 'Task List'] : ['Find Companies', 'Company List'],
     outreach_subject: outreach.subject,
     outreach_message: outreach.message,
     email: row.email,

@@ -23,13 +23,13 @@ const defaultTenant: TenantConfig = {
   navItems: [
     { label: 'Find Companies', to: '/find-companies' },
     { label: 'Company List', to: '/company-list' },
-    { label: 'Task List', to: '/task-list' },
+    { label: 'Receiving Log', to: '/receiving-log' },
   ],
   showBookCta: true,
   bookCtaLabel: 'Book setup call',
   homeEyebrow: 'SuperMega',
-  homeTitle: 'Find companies. Keep a list. Run tasks.',
-  homeDescription: 'Three small tools. Find companies, keep the ones that matter, and turn messy updates into the next tasks.',
+  homeTitle: 'Find companies. Clean lists. Log receiving.',
+  homeDescription: 'Three small tools. Search companies, clean the list you already have, or log receiving issues.',
   homePrimaryCta: { label: 'Find companies', to: '/find-companies' },
   homeSecondaryCta: { label: 'Bring a company list', to: '/company-list' },
   toolCards: [
@@ -44,12 +44,12 @@ const defaultTenant: TenantConfig = {
       to: '/company-list',
     },
     {
-      title: 'Task List',
-      detail: 'Turn messy team updates into one short daily task list.',
-      to: '/task-list',
+      title: 'Receiving Log',
+      detail: 'Log shortages, holds, or missing documents and keep the next step visible.',
+      to: '/receiving-log',
     },
   ],
-  footerText: 'Simple tools for company lists and task lists.',
+  footerText: 'Simple tools for company lists and receiving issues.',
 }
 
 const ytfTenant: TenantConfig = {
