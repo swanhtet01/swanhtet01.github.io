@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 
-import { hero } from '../content'
+import { clientTemplates, hero } from '../content'
 import { trackEvent } from '../lib/analytics'
 
 const tools = [
@@ -84,6 +84,32 @@ export function HomePage() {
               </div>
             </div>
           </div>
+        </div>
+      </section>
+
+      <section className="sm-surface-soft p-6 lg:p-8">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <p className="sm-kicker text-[var(--sm-accent)]">Best fit</p>
+            <h2 className="mt-3 text-3xl font-bold text-white">Use one template, not a platform.</h2>
+          </div>
+          <p className="max-w-xl text-sm text-[var(--sm-muted)]">Each template starts with one real job and one tool. No big rollout first.</p>
+        </div>
+        <div className="mt-6 grid gap-4 lg:grid-cols-3">
+          {clientTemplates.map((template) => (
+            <Link
+              className="sm-command-row h-full items-start transition hover:border-[rgba(37,208,255,0.24)] hover:bg-white/6"
+              key={template.name}
+              onClick={() => trackEvent('template_open_click', { template: template.name })}
+              to={template.path}
+            >
+              <div>
+                <p className="text-lg font-bold text-white">{template.name}</p>
+                <p className="mt-1 text-sm text-[var(--sm-muted)]">{template.audience}</p>
+                <p className="mt-3 text-sm text-white/90">{template.outcome}</p>
+              </div>
+            </Link>
+          ))}
         </div>
       </section>
 

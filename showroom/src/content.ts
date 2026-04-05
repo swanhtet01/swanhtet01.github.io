@@ -27,6 +27,13 @@ export type StarterTemplate = {
   detail: string
 }
 
+export type ClientTemplate = {
+  name: string
+  audience: string
+  outcome: string
+  path: string
+}
+
 export const bookingUrl = (import.meta.env.VITE_BOOKING_URL ?? '').trim()
 
 export const navItems = [
@@ -132,5 +139,26 @@ export const starterTemplates: StarterTemplate[] = [
   {
     name: 'Receiving issue',
     detail: 'One next step for GRN, hold, or quantity variance.',
+  },
+]
+
+export const clientTemplates: ClientTemplate[] = [
+  {
+    name: 'Sales follow-up',
+    audience: 'Founders, sales teams, and partnerships',
+    outcome: 'Find companies, keep the shortlist, and run first outreach.',
+    path: '/find-companies',
+  },
+  {
+    name: 'Imported company list',
+    audience: 'Anyone who already has names, sites, emails, or phones',
+    outcome: 'Clean the list, move the right companies forward, and keep next steps visible.',
+    path: '/company-list?setup=leads',
+  },
+  {
+    name: 'Daily operations',
+    audience: 'Ops, receiving, stores, and plant teams',
+    outcome: 'Turn messy updates or receiving issues into one short task list.',
+    path: '/task-list?setup=updates',
   },
 ]

@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 
-import { bookingUrl } from '../content'
+import { bookingUrl, clientTemplates } from '../content'
 import { trackEvent } from '../lib/analytics'
 
 export function BookPage() {
@@ -61,7 +61,15 @@ export function BookPage() {
               </div>
             ))}
           </div>
-          <p className="mt-5 text-sm text-[var(--sm-muted)]">Best fit: owner-led teams that want one working system first.</p>
+          <div className="mt-5 space-y-3">
+            {clientTemplates.map((template) => (
+              <div className="sm-proof-card" key={template.name}>
+                <p className="font-semibold text-white">{template.name}</p>
+                <p className="mt-1 text-xs uppercase tracking-[0.18em] text-[var(--sm-accent)]">{template.audience}</p>
+                <p className="mt-2 text-sm text-[var(--sm-muted)]">{template.outcome}</p>
+              </div>
+            ))}
+          </div>
         </aside>
 
         <section className="sm-surface p-6">
