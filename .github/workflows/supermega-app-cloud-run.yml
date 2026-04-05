@@ -27,7 +27,8 @@ jobs:
       PROJECT_ID: ${{ github.event.inputs.project_id }}
       REGION: ${{ github.event.inputs.region }}
       SERVICE: ${{ github.event.inputs.service }}
-      IMAGE: asia-southeast1-docker.pkg.dev/${{ github.event.inputs.project_id }}/cloud-run-source-deploy/${{ github.event.inputs.service }}:${{ github.sha }}
+      ARTIFACT_REPOSITORY: supermega-containers
+      IMAGE: asia-southeast1-docker.pkg.dev/${{ github.event.inputs.project_id }}/supermega-containers/${{ github.event.inputs.service }}:${{ github.sha }}
       CLOUDSQL_INSTANCE: ${{ vars.SUPERMEGA_CLOUDSQL_INSTANCE }}
 
     steps:
