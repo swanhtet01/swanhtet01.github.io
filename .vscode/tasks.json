@@ -105,6 +105,25 @@
         "panel": "shared"
       },
       "problemMatcher": []
+    },
+    {
+      "label": "SuperMega: Founder Cycle",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}\\tools\\run_supermega_founder_cycle.ps1"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "problemMatcher": []
     }
   ]
 }

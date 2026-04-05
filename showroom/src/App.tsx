@@ -4,6 +4,7 @@ import { AppFrame } from './components/AppFrame'
 import { RouteEffects } from './components/RouteEffects'
 import { SiteFrame } from './components/SiteFrame'
 import { ActionBoardPage } from './pages/ActionBoardPage'
+import { AgentTeamsPage } from './pages/AgentTeamsPage'
 import { BookPage } from './pages/BookPage'
 import { ApprovalQueuePage } from './pages/ApprovalQueuePage'
 import { DecisionJournalPage } from './pages/DecisionJournalPage'
@@ -65,6 +66,7 @@ function App() {
           <Route element={<DecisionJournalPage />} path="decisions" />
           <Route element={<ApprovalQueuePage />} path="approvals" />
           <Route element={<ExceptionQueuePage />} path="exceptions" />
+          <Route element={<AgentTeamsPage />} path="teams" />
           <Route element={<LeadPipelinePage />} path="sales" />
           <Route element={<Navigate replace to="/app/sales" />} path="leads" />
           <Route element={<LeadFinderPage />} path="leads/advanced" />

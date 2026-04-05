@@ -110,6 +110,7 @@ def main() -> int:
     )
     summary = request_json(opener, "GET", f"{args.base_url.rstrip('/')}/api/summary")
     insights = request_json(opener, "GET", f"{args.base_url.rstrip('/')}/api/insights")
+    agent_teams = request_json(opener, "GET", f"{args.base_url.rstrip('/')}/api/agent-teams")
     agent_runs_before = request_json(opener, "GET", f"{args.base_url.rstrip('/')}/api/agent-runs?limit=10")
     founder_brief_run = request_json(
         opener,
@@ -393,6 +394,8 @@ def main() -> int:
         "supplier_risk_count": int(((summary.get("supplier_watch") or {}).get("risk_count") or 0)),
         "quality_incident_count": int(((summary.get("quality") or {}).get("incident_count") or 0)),
         "director_priority_count": int(director.get("count") or 0),
+        "agent_team_count": int(((agent_teams.get("summary") or {}).get("team_count") or 0)),
+        "agent_team_autonomy_score": int(((agent_teams.get("summary") or {}).get("autonomy_score") or 0)),
         "agent_run_count": int(agent_runs_before.get("count") or 0),
         "founder_brief_status": str((founder_brief_run.get("row") or {}).get("status", "")),
         "founder_brief_summary": str((founder_brief_run.get("row") or {}).get("summary", "")),

@@ -15,6 +15,7 @@ const appNavItems = [
   { label: 'Sales', to: '/app/sales' },
   { label: 'Issues', to: '/app/exceptions' },
   { label: 'Approvals', to: '/app/approvals' },
+  { label: 'AI Team', to: '/app/teams' },
   { label: 'Director', to: '/app/director' },
 ] as const
 

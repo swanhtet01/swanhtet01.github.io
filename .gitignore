@@ -4,7 +4,9 @@ apikeys.txt
 *credentials*
 hyper_unicorn/venv/
 .secrets/
-pilot-data/
+pilot-data/*
+!pilot-data/
+!pilot-data/agent_team_system.json
 *.oauth.json
 *.token.json
 *.service-account.json

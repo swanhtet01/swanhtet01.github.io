@@ -1,0 +1,213 @@
+{
+  "generated_at": "2026-04-06T00:00:00+06:30",
+  "status": "active",
+  "summary": {
+    "shared_core_team_count": 3,
+    "client_pod_team_count": 2,
+    "autonomy_score": 72,
+    "autonomy_level": "operator-led"
+  },
+  "gaps": [
+    "Telemetry is not fully wired. PostHog and Sentry should become standard before scaling client pods.",
+    "Recovery email and team invite flows still need Resend before wider rollout.",
+    "Browser automation should stay sidecar-only until queue-backed browser jobs are retryable and observable."
+  ],
+  "scaling_model": {
+    "core_loop": [
+      "public tool -> shared app -> paid rollout -> durable agent jobs"
+    ],
+    "founder_focus": [
+      "pick ICP",
+      "close pilots",
+      "approve product cuts",
+      "review founder brief"
+    ],
+    "rules": [
+      "Do not build a second control plane.",
+      "Every agent output must become a saved company, task, issue, approval, or brief.",
+      "Human approval stays with pricing, client commitments, and deploy decisions."
+    ]
+  },
+  "next_moves": [
+    "Wire PostHog, Sentry, and Resend so the AI team is observable and recoverable.",
+    "Add invite and team onboarding on app.supermega.dev.",
+    "Turn Distributor Sales Desk and Receiving Control Lite into the first resellable client templates."
+  ],
+  "teams": [
+    {
+      "team_id": "leadership-core",
+      "name": "Leadership Core",
+      "status": "active",
+      "scaling_tier": "shared-core",
+      "mission": "Run the company cadence, protect quality, and keep the product ladder coherent.",
+      "lead_agent": "Founder Brief",
+      "cadence": "daily",
+      "agents": [
+        {
+          "agent_id": "founder-brief",
+          "name": "Founder Brief",
+          "role": "Summarize the company state and highlight what needs a human decision.",
+          "mode": "scheduled",
+          "output_schema": "brief",
+          "write_scope": "agent runs, founder summary",
+          "approval_gate": "none",
+          "focus": "daily state, blockers, priorities"
+        },
+        {
+          "agent_id": "release-guard",
+          "name": "Release Guard",
+          "role": "Run build, lint, smoke, and live checks before changes are treated as real.",
+          "mode": "event-driven",
+          "output_schema": "release_report",
+          "write_scope": "reports only",
+          "approval_gate": "deploy",
+          "focus": "quality, stability, production drift"
+        },
+        {
+          "agent_id": "product-triage",
+          "name": "Product Triage",
+          "role": "Cut naming drift, remove dead surfaces, and keep the public story narrow.",
+          "mode": "operator-triggered",
+          "output_schema": "decision_note",
+          "write_scope": "runbooks, specs",
+          "approval_gate": "founder",
+          "focus": "product cuts, package discipline, clarity"
+        }
+      ]
+    },
+    {
+      "team_id": "revenue-pod",
+      "name": "Revenue Pod",
+      "status": "active",
+      "scaling_tier": "shared-core",
+      "mission": "Keep prospecting alive and turn market searches into saved companies and first outreach.",
+      "lead_agent": "Revenue Scout",
+      "cadence": "every 2 hours",
+      "agents": [
+        {
+          "agent_id": "revenue-scout",
+          "name": "Revenue Scout",
+          "role": "Run saved company hunts, qualify results, and keep the list fresh.",
+          "mode": "scheduled",
+          "output_schema": "saved_companies",
+          "write_scope": "lead pipeline, outreach drafts",
+          "approval_gate": "none",
+          "focus": "market search, fit, next best prospect"
+        },
+        {
+          "agent_id": "list-clerk",
+          "name": "List Clerk",
+          "role": "Normalize imported rows and keep lists usable.",
+          "mode": "scheduled",
+          "output_schema": "clean_company_rows",
+          "write_scope": "company rows, contact cleanup",
+          "approval_gate": "none",
+          "focus": "dedupe, formatting, contact hygiene"
+        },
+        {
+          "agent_id": "outreach-drafter",
+          "name": "Outreach Drafter",
+          "role": "Shape the first outreach and hand off only the best next message.",
+          "mode": "operator-triggered",
+          "output_schema": "outreach_draft",
+          "write_scope": "lead activity, draft text",
+          "approval_gate": "send",
+          "focus": "subject lines, first contact, call setup"
+        }
+      ]
+    },
+    {
+      "team_id": "operations-pod",
+      "name": "Operations Pod",
+      "status": "active",
+      "scaling_tier": "shared-core",
+      "mission": "Turn messy updates and inbound issues into one short next-step queue.",
+      "lead_agent": "Task Triage",
+      "cadence": "every 2 hours",
+      "agents": [
+        {
+          "agent_id": "task-triage",
+          "name": "Task Triage",
+          "role": "Convert messy notes into short next-step tasks with owner, due date, and type.",
+          "mode": "scheduled",
+          "output_schema": "task_list",
+          "write_scope": "workspace tasks",
+          "approval_gate": "none",
+          "focus": "task extraction, owner defaults, queue hygiene"
+        },
+        {
+          "agent_id": "receiving-clerk",
+          "name": "Receiving Clerk",
+          "role": "Keep receiving issues visible and route missing documents, GRN gaps, and variances.",
+          "mode": "operator-triggered",
+          "output_schema": "receiving_issue_log",
+          "write_scope": "receiving records, queue",
+          "approval_gate": "none",
+          "focus": "inbound issues, document gaps, variance follow-up"
+        }
+      ]
+    },
+    {
+      "team_id": "client-rollout-pod",
+      "name": "Client Rollout Pod",
+      "status": "building",
+      "scaling_tier": "client-pod",
+      "mission": "Turn one client workflow into a working template rollout without platform sprawl.",
+      "lead_agent": "Rollout Architect",
+      "cadence": "per client",
+      "agents": [
+        {
+          "agent_id": "rollout-architect",
+          "name": "Rollout Architect",
+          "role": "Map the client workflow to the smallest working SuperMega template.",
+          "mode": "operator-triggered",
+          "output_schema": "rollout_plan",
+          "write_scope": "plans, onboarding notes",
+          "approval_gate": "founder",
+          "focus": "scope, fit, rollout path"
+        },
+        {
+          "agent_id": "template-clerk",
+          "name": "Template Clerk",
+          "role": "Copy the template, seed the first data, and keep the rollout narrow.",
+          "mode": "operator-triggered",
+          "output_schema": "template_seed",
+          "write_scope": "workspace setup",
+          "approval_gate": "founder",
+          "focus": "seed data, tenant setup, first usable state"
+        }
+      ]
+    },
+    {
+      "team_id": "research-lab",
+      "name": "Research Lab",
+      "status": "sidecar",
+      "scaling_tier": "client-pod",
+      "mission": "Evaluate new AI-native tools without letting experiments become the control plane.",
+      "lead_agent": "Tool Scout",
+      "cadence": "weekly",
+      "agents": [
+        {
+          "agent_id": "tool-scout",
+          "name": "Tool Scout",
+          "role": "Review new frameworks and decide if they belong in the main stack, sidecar stack, or nowhere.",
+          "mode": "weekly",
+          "output_schema": "tool_review",
+          "write_scope": "runbooks only",
+          "approval_gate": "founder",
+          "focus": "OpenAI stack, Browser Use, LangGraph, PydanticAI, observability"
+        },
+        {
+          "agent_id": "browser-sidecar",
+          "name": "Browser Sidecar",
+          "role": "Handle narrow browser tasks where no API exists.",
+          "mode": "event-driven",
+          "output_schema": "browser_job_result",
+          "write_scope": "task notes, captured data",
+          "approval_gate": "task queue",
+          "focus": "vendor portals, verification, edge automation"
+        }
+      ]
+    }
+  ]
+}
