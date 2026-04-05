@@ -1,14 +1,17 @@
 from __future__ import annotations
 
+import base64
 import json
 import os
 from datetime import datetime
+from email.message import EmailMessage
 from pathlib import Path
 from typing import Any
-from urllib.parse import parse_qs, urlparse, urlunparse
+from urllib.parse import parse_qs, quote, urlparse, urlunparse
 
 
 GMAIL_READONLY_SCOPE = "https://www.googleapis.com/auth/gmail.readonly"
+GMAIL_COMPOSE_SCOPE = "https://www.googleapis.com/auth/gmail.compose"
 DEFAULT_GMAIL_AUTH_HOST = "127.0.0.1"
 DEFAULT_GMAIL_AUTH_PORT = 8765
 NON_FATAL_AUTH_ERROR_HINTS = (
@@ -598,6 +601,84 @@ class GmailProbe:
                 "status": "error",
                 "message": str(exc),
                 "query": query,
+            }
+
+    @staticmethod
+    def build_compose_url(*, to: str, subject: str, body: str) -> str:
+        params = []
+        if str(to or "").strip():
+            params.append(f"to={quote(str(to).strip())}")
+        if str(subject or "").strip():
+            params.append(f"su={quote(str(subject).strip())}")
+        if str(body or "").strip():
+            params.append(f"body={quote(str(body).strip())}")
+        query = "&".join(params)
+        return f"https://mail.google.com/mail/?view=cm&fs=1&tf=1&{query}" if query else "https://mail.google.com/mail/?view=cm&fs=1&tf=1"
+
+    def create_draft(self, *, to: str, subject: str, body: str) -> dict[str, Any]:
+        compose_url = self.build_compose_url(to=to, subject=subject, body=body)
+        if not self.token_json or not self.token_json.exists():
+            return {
+                "status": "missing_token_file",
+                "message": "Gmail OAuth token file does not exist.",
+                "compose_url": compose_url,
+            }
+
+        try:
+            from google.oauth2.credentials import Credentials
+            from google.auth.transport.requests import Request
+            from googleapiclient.discovery import build
+        except ImportError as exc:
+            return {
+                "status": "dependency_missing",
+                "message": f"Gmail API client libraries are not available: {exc}",
+                "compose_url": compose_url,
+            }
+
+        try:
+            scopes = [GMAIL_COMPOSE_SCOPE]
+            credentials = Credentials.from_authorized_user_file(
+                str(self.token_json),
+                scopes=scopes,
+            )
+            if credentials.expired and credentials.refresh_token:
+                credentials.refresh(Request())
+
+            service = build("gmail", "v1", credentials=credentials, cache_discovery=False)
+            message = EmailMessage()
+            if str(to or "").strip():
+                message["To"] = str(to).strip()
+            if str(subject or "").strip():
+                message["Subject"] = str(subject).strip()
+            message.set_content(str(body or "").strip())
+            encoded = base64.urlsafe_b64encode(message.as_bytes()).decode("utf-8")
+            draft = service.users().drafts().create(
+                userId="me",
+                body={"message": {"raw": encoded}},
+            ).execute()
+            return {
+                "status": "ready",
+                "message": "Gmail draft created.",
+                "compose_url": compose_url,
+                "draft_id": draft.get("id", ""),
+                "message_id": draft.get("message", {}).get("id", ""),
+            }
+        except Exception as exc:
+            message = str(exc)
+            if "insufficientpermissions" in message.lower() or "insufficient permission" in message.lower():
+                return {
+                    "status": "reauth_required",
+                    "message": (
+                        "Current Gmail token only has readonly access. Re-auth with compose scope to create API drafts. "
+                        "The Gmail compose link is still ready."
+                    ),
+                    "compose_url": compose_url,
+                    "raw_message": message,
+                }
+            return {
+                "status": "error",
+                "message": message,
+                "compose_url": compose_url,
             }
 
     @staticmethod
