@@ -63,29 +63,29 @@ def _pain_signals(archetype: str, searchable: str) -> list[str]:
 def _offer_for_archetype(archetype: str) -> dict[str, Any]:
     if archetype == "factory":
         return {
-            "service_pack": "Factory Control",
-            "wedge": "Action OS",
-            "starter_modules": ["Receiving Control", "Inventory Pulse", "Supplier Watch"],
-            "semi_products": ["Document Intake", "Director Flash", "Attendance Check-In"],
-            "pilot_scope": "Launch one manager board, one inbound receipt board, and one stock watch queue for a single site or function.",
-            "why_now": "This gives the team one operating layer first, then removes blind spots around incoming materials and execution risk.",
+            "service_pack": "Receiving Control",
+            "wedge": "Receiving Log",
+            "starter_modules": ["Receiving Log", "Task List"],
+            "semi_products": ["Founder Brief", "Document Intake", "Reply Draft"],
+            "pilot_scope": "Launch one receiving log and one short follow-up queue for a single site, lane, or warehouse.",
+            "why_now": "This gives the team one place to log shortages, holds, and missing documents before they become hidden delays.",
         }
     if archetype == "distribution":
         return {
-            "service_pack": "Commercial Control",
-            "wedge": "Action OS",
-            "starter_modules": ["Cash Watch", "Sales Signal", "Supplier Watch"],
-            "semi_products": ["Document Intake", "Reply Draft", "Director Flash"],
-            "pilot_scope": "Launch one action board, one overdue or follow-up queue, and one sales or supplier watch layer.",
-            "why_now": "This cuts manual chasing and makes commercial risk visible before it becomes a cash or supply problem.",
+            "service_pack": "Company Cleanup",
+            "wedge": "Company List",
+            "starter_modules": ["Company List", "Task List"],
+            "semi_products": ["Founder Brief", "Reply Draft", "Document Intake"],
+            "pilot_scope": "Launch one shared company list, one stage model, and one short next-step queue.",
+            "why_now": "This turns scattered spreadsheets and contact exports into one list the team can actually work from.",
         }
     return {
-        "service_pack": "Owner / Director OS",
-        "wedge": "Action OS",
-        "starter_modules": ["Cash Watch", "Sales Signal"],
-        "semi_products": ["Director Flash", "Document Intake", "Reply Draft"],
-        "pilot_scope": "Launch one action board, one director flash, and one targeted control module around the business bottleneck.",
-        "why_now": "This is the fastest path from owner-dependent follow-up to a repeatable operating rhythm.",
+        "service_pack": "Sales Setup",
+        "wedge": "Find Companies",
+        "starter_modules": ["Find Companies", "Company List"],
+        "semi_products": ["Founder Brief", "Reply Draft", "Document Intake"],
+        "pilot_scope": "Launch one saved market search, one shortlist, and one first-follow-up queue.",
+        "why_now": "This is the fastest path from ad hoc prospecting to a repeatable outbound loop.",
     }
 
 
@@ -122,10 +122,11 @@ def _discovery_questions(archetype: str) -> list[str]:
 def _outreach_message(name: str, offer: dict[str, Any], pain_signals: list[str]) -> str:
     top_signal = pain_signals[0] if pain_signals else "manual follow-up is eating time"
     return (
-        f"Hi {name} team, we build lightweight AI operating systems for companies still running on Gmail, Drive, "
-        f"Sheets, and manual follow-up. From your public profile, it looks like {top_signal.lower()} "
-        f"We would start with {offer['wedge']} and a short {offer['service_pack']} pilot so you get one live board first, "
-        f"then add {', '.join(offer['starter_modules'][:2])}. If useful, we can show a 14-day rollout plan on your current workflow."
+        f"Hi {name} team, we help companies turn messy lists, follow-up, and issue tracking into simple working tools. "
+        f"From your public profile, it looks like {top_signal.lower()} "
+        f"We would start with {offer['service_pack']} using {offer['wedge']} as the first working tool, "
+        f"then keep the next steps visible in {', '.join(offer['starter_modules'][:2])}. "
+        f"If useful, we can show a small rollout plan on your current workflow."
     )
 
 
@@ -181,7 +182,7 @@ def build_lead_to_pilot_pack(*, leads: list[dict[str, Any]], campaign_goal: str 
     summary = (
         f"SuperMega should approach this shortlist with {dominant_offer['wedge']} as the wedge and "
         f"{dominant_offer['service_pack']} as the commercial framing. "
-        f"Use the free proof tools to open the conversation, then sell one live board plus the first control module."
+        f"Use the free tools to open the conversation, then sell one small setup around the first working list."
     )
     if campaign_goal:
         summary = f"{summary} Campaign goal: {campaign_goal.strip()}."

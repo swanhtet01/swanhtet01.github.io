@@ -86,6 +86,25 @@
         "panel": "shared"
       },
       "problemMatcher": []
+    },
+    {
+      "label": "SuperMega: Production Check",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}\\tools\\run_supermega_operator_cycle.ps1"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "problemMatcher": []
     }
   ]
 }

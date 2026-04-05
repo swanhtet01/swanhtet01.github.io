@@ -1727,14 +1727,14 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             "stage": "offer_ready",
             "status": "open",
             "owner": "Growth Studio",
-            "service_pack": "Action OS",
-            "wedge_product": "Action OS",
-            "starter_modules": ["Action OS"],
-            "semi_products": ["Lead Finder"],
-            "outreach_subject": f"{company_name}: next step for Action OS",
+            "service_pack": "Company Cleanup",
+            "wedge_product": "Company List",
+            "starter_modules": ["Company List", "Task List"],
+            "semi_products": ["Founder Brief"],
+            "outreach_subject": f"{company_name}: next step for Company Cleanup",
             "outreach_message": (
                 f"Hi {payload.name.strip() or company_name}, thanks for the request. "
-                f"We can start with {workflow.lower()} and shape the first Action OS board around {goal or 'your main blocker'}."
+                f"We can start with {workflow.lower()} and shape the first working list around {goal or 'your main blocker'}."
             ),
             "discovery_questions": [
                 "What is the one workflow that wastes the most time today?",
