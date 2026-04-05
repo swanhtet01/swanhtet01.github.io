@@ -286,7 +286,7 @@ export function WorkspaceLitePage() {
   const hasData = leads.length > 0 || tasks.length > 0
   const activeView: WorkspaceView = publicSurface === 'updates' ? 'queue' : 'leads'
   const hasSharedProfile = isPublicWorkspaceProfileReady(profile)
-  const pageEyebrow = isReceivingDesk ? 'Receiving Log' : publicSurface === 'sales' ? 'Company List' : 'Task List'
+  const pageEyebrow = isReceivingDesk ? 'Log receiving' : publicSurface === 'sales' ? 'Clean list' : 'Task list'
 
   const summary = useMemo(() => {
     if (mode === 'local') {
@@ -806,11 +806,11 @@ export function WorkspaceLitePage() {
   const setupPanel =
     setupFlow === 'find' ? (
       <div className="sm-proof-card">
-        <p className="text-lg font-bold text-white">Use Find Companies when you need net-new clients.</p>
-        <p className="mt-2 text-sm text-[var(--sm-muted)]">Search a place or niche, keep the shortlist, then come back here to run the task list.</p>
+        <p className="text-lg font-bold text-white">Need new clients first?</p>
+        <p className="mt-2 text-sm text-[var(--sm-muted)]">Search a place or niche, keep the shortlist, then come back here to run the next steps.</p>
         <div className="mt-4 flex flex-wrap gap-3">
           <Link className="sm-button-primary" to="/find-companies">
-            Open Find Companies
+            Open Find clients
           </Link>
           <button className="sm-button-secondary" onClick={() => setSetupFlow('leads')} type="button">
             I already have a list
@@ -827,8 +827,8 @@ export function WorkspaceLitePage() {
           value={leadImportText}
         />
         <div className="mt-4 flex flex-wrap gap-3">
-            <button className="sm-button-primary" onClick={() => void importLeadList()} type="button">
-              Import company list
+          <button className="sm-button-primary" onClick={() => void importLeadList()} type="button">
+              Paste company list
             </button>
           <label className="sm-button-secondary cursor-pointer">
             Upload file
@@ -914,8 +914,8 @@ export function WorkspaceLitePage() {
   const cloudSavePanel =
     hasLiveWorkspaceApi() && mode === 'local' && showCloudSetup ? (
       <div className="sm-proof-card">
-              <p className="sm-kicker text-[var(--sm-accent)]">Save to team workspace</p>
-        <p className="mt-2 text-sm text-[var(--sm-muted)]">Use your company and work email once. After that, this list can stay in the team workspace.</p>
+        <p className="sm-kicker text-[var(--sm-accent)]">Use with your team</p>
+        <p className="mt-2 text-sm text-[var(--sm-muted)]">Use your company and work email once. After that, this list can stay in the shared team list.</p>
         <div className="mt-4 grid gap-3 md:grid-cols-3">
           <label className="grid gap-2 text-sm font-semibold text-[var(--sm-muted)]">
             Name
@@ -932,7 +932,7 @@ export function WorkspaceLitePage() {
         </div>
         <div className="mt-4 flex flex-wrap gap-3">
           <button className="sm-button-secondary" disabled={starting || !hasSharedProfile} onClick={() => void startSharedWorkspace()} type="button">
-            {starting ? 'Starting...' : 'Save to team workspace'}
+            {starting ? 'Starting...' : 'Use with your team'}
           </button>
           <button className="sm-button-secondary" onClick={() => setShowCloudSetup(false)} type="button">
             Hide
@@ -947,21 +947,21 @@ export function WorkspaceLitePage() {
         <section className="sm-surface p-6 lg:p-8">
           <p className="sm-kicker text-[var(--sm-accent)]">{pageEyebrow}</p>
           <h1 className="mt-3 text-3xl font-bold text-white lg:text-4xl">
-            {isReceivingDesk ? 'Log receiving issues.' : publicSurface === 'sales' ? 'Bring a company list.' : 'Paste task notes.'}
+            {isReceivingDesk ? 'Log receiving issues.' : publicSurface === 'sales' ? 'Clean a company list.' : 'Paste task notes.'}
           </h1>
           <p className="mt-3 max-w-2xl text-sm leading-relaxed text-[var(--sm-muted)]">
             {isReceivingDesk
               ? 'Paste GRN, hold, batch, customs, or quantity issues and turn them into one short follow-up list.'
               : publicSurface === 'sales'
-              ? 'Paste names, sites, emails, or phones. If you need new companies first, use Find Companies.'
+              ? 'Paste names, sites, emails, or phones. If you need new clients first, use Find clients.'
               : 'Paste messy notes, blockers, or updates and turn them into a short task list.'}
           </p>
           {setupPanel}
           {publicSurface === 'sales' ? (
             <div className="mt-5 text-sm text-[var(--sm-muted)]">
-              Need new companies first?{' '}
+              Need new clients first?{' '}
               <Link className="text-white underline underline-offset-4" to="/find-companies">
-                Find companies
+                Find clients
               </Link>
             </div>
           ) : null}
@@ -976,7 +976,7 @@ export function WorkspaceLitePage() {
     <div className="space-y-6">
       <section className="grid gap-6 lg:grid-cols-[0.82fr_1.18fr]">
     <article className="sm-surface p-6">
-      <p className="sm-kicker text-[var(--sm-accent)]">{isReceivingDesk ? 'Receiving Log' : publicSurface === 'sales' ? 'Company List' : 'Task List'}</p>
+      <p className="sm-kicker text-[var(--sm-accent)]">{isReceivingDesk ? 'Log receiving' : publicSurface === 'sales' ? 'Clean list' : 'Task list'}</p>
       <h2 className="mt-3 text-3xl font-bold text-white">
         {isReceivingDesk ? 'Keep only the receiving follow-up.' : publicSurface === 'sales' ? 'Keep the list short and usable.' : 'Keep only the next tasks.'}
       </h2>
@@ -1013,7 +1013,7 @@ export function WorkspaceLitePage() {
           {hasData && hasLiveWorkspaceApi() && mode === 'local' ? (
             <div className="mt-5 flex flex-wrap gap-3">
               <button className="sm-button-secondary" onClick={() => setShowCloudSetup((current) => !current)} type="button">
-                {showCloudSetup ? 'Hide workspace setup' : 'Save to team workspace'}
+                {showCloudSetup ? 'Hide team setup' : 'Use with your team'}
               </button>
             </div>
           ) : null}
@@ -1030,7 +1030,7 @@ export function WorkspaceLitePage() {
             {isReceivingDesk
               ? 'Paste receiving issues and build the follow-up list.'
               : publicSurface === 'sales'
-                      ? 'Use Find Companies for net-new prospects. Use Company List when you already have a list.'
+                ? 'Use Find clients for net-new prospects. Use Clean list when you already have names.'
                       : "Paste today's notes and build the task list."}
           </div>
             </div>
@@ -1049,7 +1049,7 @@ export function WorkspaceLitePage() {
                 <>
                   <div className="flex items-center justify-between gap-3">
                     <div>
-              <p className="sm-kicker text-[var(--sm-accent)]">{activeView === 'queue' ? "Today's next steps" : 'Company list'}</p>
+                      <p className="sm-kicker text-[var(--sm-accent)]">{activeView === 'queue' ? "Today's next steps" : 'Your list'}</p>
                       <p className="mt-2 text-sm text-[var(--sm-muted)]">
                         {activeView === 'queue'
                           ? 'Keep the task list short. Start with the top open items.'
@@ -1134,11 +1134,11 @@ export function WorkspaceLitePage() {
                   ) : leads.length ? (
                     <>
                       <div className="flex flex-wrap gap-3">
-                <Link className="sm-button-primary" to="/task-list">
-                  Open task list
-                </Link>
+                        <Link className="sm-button-primary" to="/task-list">
+                          Open task list
+                        </Link>
                         <Link className="sm-button-secondary" to="/find-companies">
-                          Find more companies
+                          Find more clients
                         </Link>
                         <button className="sm-button-secondary" onClick={exportWorkspace} type="button">
                           Export CSV
@@ -1198,10 +1198,10 @@ export function WorkspaceLitePage() {
                   ) : (
                     <div className="sm-proof-card">
                       <p className="font-semibold text-white">No companies yet</p>
-                      <p className="mt-2 text-sm text-[var(--sm-muted)]">Find companies, paste a company list, or open the task list if you already know the work.</p>
+                      <p className="mt-2 text-sm text-[var(--sm-muted)]">Find clients, paste a company list, or start with one task.</p>
                       <div className="mt-4 flex flex-wrap gap-3">
                         <Link className="sm-button-primary" to="/find-companies">
-                          Find companies
+                          Find clients
                         </Link>
                         <button className="sm-button-secondary" onClick={() => setSetupFlow('leads')} type="button">
                           Paste company list

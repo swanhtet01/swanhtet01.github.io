@@ -19,37 +19,37 @@ export type TenantConfig = {
 const defaultTenant: TenantConfig = {
   key: 'default',
   brandName: 'SuperMega',
-  brandTagline: 'Simple work tools',
+  brandTagline: 'Lists, logs, follow-up',
   navItems: [
-    { label: 'Find Companies', to: '/find-companies' },
-    { label: 'Company List', to: '/company-list' },
-    { label: 'Receiving Log', to: '/receiving-log' },
+    { label: 'Find clients', to: '/find-companies' },
+    { label: 'Clean list', to: '/company-list' },
+    { label: 'Log receiving', to: '/receiving-log' },
   ],
   showBookCta: true,
-  bookCtaLabel: 'Book setup call',
+  bookCtaLabel: 'Book rollout call',
   homeEyebrow: 'SuperMega',
-  homeTitle: 'Find companies. Clean lists. Log receiving.',
-  homeDescription: 'Three small tools. Search companies, clean the list you already have, or log receiving issues.',
-  homePrimaryCta: { label: 'Find companies', to: '/find-companies' },
-  homeSecondaryCta: { label: 'Bring a company list', to: '/company-list' },
+  homeTitle: 'Turn messy business work into one clear next-step list.',
+  homeDescription: 'Find clients, clean a company list, or log receiving issues. Start with one tool.',
+  homePrimaryCta: { label: 'Try find clients', to: '/find-companies' },
+  homeSecondaryCta: { label: 'Clean a list', to: '/company-list' },
   toolCards: [
     {
-      title: 'Find Companies',
+      title: 'Find clients',
       detail: 'Search a place or niche and keep the companies worth contacting.',
       to: '/find-companies',
     },
     {
-      title: 'Company List',
+      title: 'Clean list',
       detail: 'Paste your own company list or keep the results you want to work.',
       to: '/company-list',
     },
     {
-      title: 'Receiving Log',
+      title: 'Log receiving',
       detail: 'Log shortages, holds, or missing documents and keep the next step visible.',
       to: '/receiving-log',
     },
   ],
-  footerText: 'Simple tools for company lists and receiving issues.',
+  footerText: 'Find clients. Clean lists. Log receiving.',
 }
 
 const ytfTenant: TenantConfig = {

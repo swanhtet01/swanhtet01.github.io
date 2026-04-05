@@ -21,11 +21,11 @@ export function SiteFrame() {
             <span className="flex h-10 w-10 items-center justify-center rounded-xl border border-[rgba(37,208,255,0.22)] bg-[rgba(37,208,255,0.08)] text-sm font-extrabold text-[var(--sm-accent)]">
               SM
             </span>
-            <span className="flex flex-col">
-              <span className="sm-logo text-lg font-extrabold tracking-tight text-white">SuperMega</span>
-              <span className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[var(--sm-muted)]">Simple work tools</span>
-            </span>
-          </NavLink>
+              <span className="flex flex-col">
+                <span className="sm-logo text-lg font-extrabold tracking-tight text-white">SuperMega</span>
+              <span className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[var(--sm-muted)]">Lists, logs, follow-up</span>
+              </span>
+            </NavLink>
           <button
             className="rounded-md border border-white/10 bg-white/6 px-3 py-2 text-sm font-semibold text-white md:hidden"
             onClick={() => setMenuOpen((open) => !open)}
@@ -40,7 +40,7 @@ export function SiteFrame() {
               </NavLink>
             ))}
             <Link className="sm-button-primary ml-2" to="/book">
-              Book setup call
+              Book rollout call
             </Link>
           </div>
         </nav>
@@ -53,7 +53,7 @@ export function SiteFrame() {
                 </NavLink>
               ))}
               <Link className="sm-button-primary mt-2" onClick={() => setMenuOpen(false)} to="/book">
-                Book setup call
+                Book rollout call
               </Link>
             </div>
           </div>
@@ -66,9 +66,9 @@ export function SiteFrame() {
 
       <footer className="border-t border-white/8 bg-[rgba(4,10,22,0.78)]">
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 px-4 py-6 text-sm text-[var(--sm-muted)] lg:flex-row lg:items-center lg:justify-between lg:px-8">
-          <p>Three simple tools: find companies, clean company lists, and log receiving issues.</p>
+          <p>Find clients. Clean lists. Log receiving.</p>
           <Link className="sm-link" to="/book">
-            Book setup call
+            Book rollout call
           </Link>
         </div>
       </footer>

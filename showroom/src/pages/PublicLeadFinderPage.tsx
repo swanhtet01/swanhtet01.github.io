@@ -186,7 +186,7 @@ export function PublicLeadFinderPage() {
 
     if (hasLiveWorkspaceApi()) {
       if (!hasSharedProfile) {
-        promptWorkspaceSetup('Enter your company and work email before saving into Company List.')
+        promptWorkspaceSetup('Enter your company and work email before saving this company.')
         return false
       }
 
@@ -230,12 +230,10 @@ export function PublicLeadFinderPage() {
         })
 
         setSavedTotal((current) => Math.max(current, saved.saved_count || candidates.length, current + candidates.length))
-        setMessage(
-          successMessage.replace('{count}', String(saved.saved_count || candidates.length)).replace('shared app', 'Company List'),
-        )
+        setMessage(successMessage.replace('{count}', String(saved.saved_count || candidates.length)))
         return true
       } catch (error) {
-        setMessage(error instanceof Error ? error.message : 'Could not save to Company List on this host.')
+        setMessage(error instanceof Error ? error.message : 'Could not save to the team list on this host.')
         return false
       }
     }
@@ -252,11 +250,11 @@ export function PublicLeadFinderPage() {
   async function saveLead(row: LeadRow) {
     const key = rowKey(row)
     if (savedKeys.includes(key)) {
-      setMessage(`${row.name} is already in Company List.`)
+      setMessage(`${row.name} is already in your list.`)
       return
     }
 
-    const saved = await saveRowsToWorkspace([row], 'Saved {count} company into Company List and created the first follow-up.')
+    const saved = await saveRowsToWorkspace([row], 'Saved {count} company and created the first follow-up.')
     if (saved) {
       trackEvent('company_kept', {
         source: 'find_companies',
@@ -271,7 +269,7 @@ export function PublicLeadFinderPage() {
     const candidates = rows.slice(0, 3)
     const saved = await saveRowsToWorkspace(
       candidates,
-      'Saved {count} companies into Company List and created the first follow-ups.',
+      'Saved {count} companies and created the first follow-ups.',
     )
     if (saved) {
       trackEvent('company_kept', {
@@ -296,8 +294,8 @@ export function PublicLeadFinderPage() {
   return (
     <div className="space-y-6">
       <section className="sm-surface p-6 lg:p-8">
-        <p className="sm-kicker text-[var(--sm-accent)]">Find Companies</p>
-        <h1 className="mt-3 text-3xl font-bold text-white lg:text-4xl">Find companies in one search.</h1>
+        <p className="sm-kicker text-[var(--sm-accent)]">Find clients</p>
+        <h1 className="mt-3 text-3xl font-bold text-white lg:text-4xl">Find clients in one search.</h1>
         <p className="mt-3 max-w-2xl text-sm leading-relaxed text-[var(--sm-muted)]">
           Type a place and business type, then keep the companies worth contacting.
         </p>
@@ -326,7 +324,7 @@ export function PublicLeadFinderPage() {
 
             <div className="flex flex-wrap gap-3">
               <button className="sm-button-primary" disabled={busy || !query.trim()} onClick={() => void runSearch()} type="button">
-                {busy ? 'Searching...' : 'Find companies'}
+                {busy ? 'Searching...' : 'Find clients'}
               </button>
             </div>
 
@@ -343,9 +341,9 @@ export function PublicLeadFinderPage() {
 
             {hasLiveWorkspaceApi() && showWorkspaceSetup ? (
               <div className="sm-proof-card">
-                <p className="sm-kicker text-[var(--sm-accent)]">Save to team workspace</p>
+                <p className="sm-kicker text-[var(--sm-accent)]">Use with your team</p>
                 <p className="mt-2 text-sm text-[var(--sm-muted)]">
-                  Enter your company and work email once. After that, kept companies can go into the same team workspace.
+                  Enter your company and work email once. After that, kept companies can go into the same team list.
                 </p>
                 <div className="mt-4 grid gap-3 md:grid-cols-3">
                   <label className="grid gap-2 text-sm font-semibold text-[var(--sm-muted)]">
@@ -465,7 +463,7 @@ export function PublicLeadFinderPage() {
       {(rows.length || savedTotal) ? (
         <section className="sm-surface p-6">
           <p className="sm-kicker text-[var(--sm-accent)]">Next</p>
-              <h2 className="mt-3 text-3xl font-bold text-white">Keep a few, then open Company List.</h2>
+          <h2 className="mt-3 text-3xl font-bold text-white">Keep a few, then open your list.</h2>
           <div className="mt-5 flex flex-wrap gap-3">
             {rows.length ? (
               <button className="sm-button-primary" onClick={() => void saveTopResults()} type="button">
@@ -473,20 +471,20 @@ export function PublicLeadFinderPage() {
               </button>
             ) : null}
             {savedTotal ? (
-                <Link className="sm-button-secondary" to="/company-list">
-                  Open Company List
-                </Link>
+              <Link className="sm-button-secondary" to="/company-list">
+                Open your list
+              </Link>
             ) : null}
             {hasLiveWorkspaceApi() ? (
               <button className="sm-button-secondary" onClick={() => setShowWorkspaceSetup((current) => !current)} type="button">
-                {showWorkspaceSetup ? 'Hide workspace setup' : 'Save to team workspace'}
+                {showWorkspaceSetup ? 'Hide team setup' : 'Use with your team'}
               </button>
             ) : null}
           </div>
           <div className="mt-4 sm-chip text-[var(--sm-muted)]">
             {hasLiveWorkspaceApi()
               ? hasSharedProfile
-                ? `Ready to save into ${profile.company}.`
+                ? `Ready to save for ${profile.company}.`
                 : 'Save will ask for company and work email once.'
               : 'On this host, kept companies stay in this browser on this computer.'}
           </div>

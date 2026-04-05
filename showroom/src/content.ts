@@ -37,38 +37,38 @@ export type ClientTemplate = {
 export const bookingUrl = (import.meta.env.VITE_BOOKING_URL ?? '').trim()
 
 export const navItems = [
-  { label: 'Find Companies', to: '/find-companies' },
-  { label: 'Company List', to: '/company-list' },
-  { label: 'Receiving Log', to: '/receiving-log' },
+  { label: 'Find clients', to: '/find-companies' },
+  { label: 'Clean list', to: '/company-list' },
+  { label: 'Log receiving', to: '/receiving-log' },
 ] as const
 
 export const hero = {
   eyebrow: 'SuperMega',
-  title: 'Three simple tools for real work.',
-  description: 'Search companies, clean a company list, or log receiving issues.',
+  title: 'Turn messy business work into one clear next-step list.',
+  description: 'Find clients, clean a company list, or log receiving issues.',
 }
 
 export const proofPoints: ProofPoint[] = [
   {
-    label: 'Find Companies',
+    label: 'Find clients',
     value: 'Search real businesses',
     detail: 'Search public businesses and keep only the ones worth contacting.',
   },
   {
-    label: 'Company List',
+    label: 'Clean list',
     value: 'Clean the list you already have',
     detail: 'Paste names, sites, emails, and notes into one usable list.',
   },
   {
-    label: 'Receiving Log',
+    label: 'Log receiving',
     value: 'Keep inbound issues visible',
     detail: 'Turn shortages, holds, and missing docs into one short follow-up list.',
   },
 ]
 
 export const coreProduct = {
-  name: 'Company List + Receiving Log',
-  tagline: 'One clean list for follow-up and one short log for operational issues.',
+  name: 'Clean list + receiving log',
+  tagline: 'One clean list for follow-up and one short log for inbound issues.',
   replaces: ['Scattered notes', 'Missed follow-up', 'Manual chasing'],
   inputs: ['Company lists', 'Team updates', 'Receiving issues'],
   outputs: ['Company list', 'Issue log', 'Next steps'],
@@ -76,9 +76,9 @@ export const coreProduct = {
 }
 
 export const leadFinder = {
-  title: 'Find Companies',
-  description: 'Search by place or niche, keep the best results, and move them into Company List.',
-  steps: ['Search a market', 'Keep the best companies', 'Open Company List'],
+  title: 'Find clients',
+  description: 'Search by place or niche, keep the best results, and move them into a clean list.',
+  steps: ['Search a market', 'Keep the right companies', 'Open Clean list'],
 }
 
 export const useCases: UseCase[] = [
@@ -110,7 +110,7 @@ export const useCases: UseCase[] = [
 
 export const publicModules: PublicModule[] = [
   {
-    name: 'Find Companies',
+    name: 'Find clients',
     tagline: 'Search a market, save the right companies, and start outreach.',
     bestFor: 'Prospecting, partnerships, and market mapping.',
     inputs: ['Place or niche search', 'Fit keywords', 'Saved notes'],
@@ -118,7 +118,7 @@ export const publicModules: PublicModule[] = [
     path: '/find-companies',
   },
   {
-    name: 'Company List',
+    name: 'Clean list',
     tagline: 'Keep companies, notes, stages, and next actions together.',
     bestFor: 'Anyone running follow-up from imported or hand-built company lists.',
     inputs: ['Company rows', 'Notes', 'Stage updates', 'Follow-up tasks'],
@@ -126,7 +126,7 @@ export const publicModules: PublicModule[] = [
     path: '/company-list',
   },
   {
-    name: 'Receiving Log',
+    name: 'Log receiving',
     tagline: 'Log incoming issues and keep only the next receiving follow-up.',
     bestFor: 'Receiving, procurement, stores, and plant teams.',
     inputs: ['GRN gaps', 'Quantity variances', 'Damage reports', 'Customs or document blockers'],
