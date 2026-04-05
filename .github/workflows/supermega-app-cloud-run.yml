@@ -75,15 +75,12 @@ jobs:
           SUPERMEGA_PILOT_DATA: /app/pilot-data
           SUPERMEGA_ENV: production
           SUPERMEGA_AUTH_REQUIRED: "1"
-          SUPERMEGA_APP_USERNAME: "${{ secrets.SUPERMEGA_APP_USERNAME }}"
-          SUPERMEGA_APP_PASSWORD: "${{ secrets.SUPERMEGA_APP_PASSWORD }}"
           SUPERMEGA_APP_DISPLAY_NAME: "${{ vars.SUPERMEGA_APP_DISPLAY_NAME }}"
           SUPERMEGA_APP_ROLE: "${{ vars.SUPERMEGA_APP_ROLE }}"
           SUPERMEGA_WORKSPACE_SLUG: "${{ vars.SUPERMEGA_WORKSPACE_SLUG }}"
           SUPERMEGA_WORKSPACE_NAME: "${{ vars.SUPERMEGA_WORKSPACE_NAME }}"
           SUPERMEGA_WORKSPACE_PLAN: "${{ vars.SUPERMEGA_WORKSPACE_PLAN }}"
           SUPERMEGA_SESSION_HOURS: "${{ vars.SUPERMEGA_SESSION_HOURS }}"
-          SUPERMEGA_DATABASE_URL: "${{ secrets.SUPERMEGA_DATABASE_URL }}"
           SUPERMEGA_CORS_ORIGINS: "${{ vars.SUPERMEGA_CORS_ORIGINS }}"
           SUPERMEGA_SENTRY_TRACES: "${{ vars.SUPERMEGA_SENTRY_TRACES }}"
           SENTRY_DSN: "${{ secrets.SENTRY_DSN }}"
@@ -93,7 +90,6 @@ jobs:
           VITE_SENTRY_DSN: "${{ vars.VITE_SENTRY_DSN }}"
           VITE_WORKSPACE_APP_BASE: "${{ vars.VITE_WORKSPACE_APP_BASE }}"
           VITE_WORKSPACE_API_BASE: "${{ vars.VITE_WORKSPACE_API_BASE }}"
-          OPENAI_API_KEY: "${{ secrets.OPENAI_API_KEY }}"
           RESEND_API_KEY: "${{ secrets.RESEND_API_KEY }}"
           STRIPE_SECRET_KEY: "${{ secrets.STRIPE_SECRET_KEY }}"
           STRIPE_WEBHOOK_SECRET: "${{ secrets.STRIPE_WEBHOOK_SECRET }}"
@@ -105,6 +101,7 @@ jobs:
             --allow-unauthenticated \
             --port 8080 \
             --env-vars-file cloudrun-env.yaml \
+            --set-secrets "SUPERMEGA_APP_USERNAME=supermega-app-username:latest,SUPERMEGA_APP_PASSWORD=supermega-app-password:latest,SUPERMEGA_DATABASE_URL=supermega-database-url:latest,OPENAI_API_KEY=supermega-openai-api-key:latest,GOOGLE_MAPS_API_KEY=supermega-google-maps-api-key:latest,GOOGLE_PLACES_API_KEY=supermega-google-places-api-key:latest,GOOGLE_SERVICE_ACCOUNT_JSON=supermega-google-service-account-json:latest,GMAIL_OAUTH_CLIENT_JSON=supermega-gmail-oauth-client-json:latest" \
             $EXTRA_ARGS
 
       - name: Print service URL
