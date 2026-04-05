@@ -10,20 +10,19 @@ This is the cleanest way to run SuperMega as one connected system:
 
 ## What is actually live in this setup
 
-- public:
+- public website:
   - `/`
-  - `/platform`
-  - `/solutions`
-  - `/products`
-  - `/lead-finder`
-  - `/contact`
-- private:
+  - `/find-companies`
+  - `/saved-companies`
+  - `/daily-tasks`
+  - `/book`
+- shared app host:
   - `/login`
   - `/app`
+  - `/app/sales`
   - `/app/actions`
-  - `/app/intake`
-  - `/app/receiving`
-  - `/app/inventory`
+  - `/app/exceptions`
+  - `/app/approvals`
 
 ## Fastest local start
 
@@ -115,6 +114,8 @@ Workflow:
 - `.github/workflows/supermega-app-cloud-run.yml`
 - direct script:
   - `powershell -ExecutionPolicy Bypass -File .\tools\deploy_supermega_gcp.ps1`
+- repo/bootstrap sync:
+  - `powershell -ExecutionPolicy Bypass -File .\tools\bootstrap_supermega_ops.ps1 -UseLiveRunUrl -DeployApp -DeployWebsite`
 
 Required secret:
 
@@ -177,14 +178,17 @@ As of April 5, 2026:
   - `supermega-google-maps-api-key`
   - `supermega-google-places-api-key`
   - `supermega-database-url`
+- `supermega-google-service-account-json`
+- Cloud Run service is live:
+  - [supermega-app-kr5v7kj3xa-as.a.run.app](https://supermega-app-kr5v7kj3xa-as.a.run.app)
+- GitHub Actions app deploy is live and working
+- GitHub Pages is wired to the live app host via `VITE_WORKSPACE_APP_BASE` and `VITE_WORKSPACE_API_BASE`
 
-Remaining blocker for direct deploy from the service account:
+Remaining custom-domain blocker:
 
-- the deployment account can administer Cloud Run and Cloud SQL
-- but Cloud Build source upload is still blocked because the account cannot write to the Cloud Build staging bucket
-- the fix is one more IAM grant to `super-mega-dev-team@supermega-468612.iam.gserviceaccount.com`:
-  - `Storage Admin`
-  - or narrower bucket/object write access to the Cloud Build staging bucket
+- `app.supermega.dev` is not mapped yet
+- Google Cloud Run domain mapping is blocked because the domain is not verified for the current GCP principal
+- after domain verification, map `app.supermega.dev` to the Cloud Run service and then update Squarespace DNS with the exact Google records
 
 ## Current production gap
 
@@ -196,7 +200,9 @@ This repo is now good enough for:
 
 It is not yet full enterprise SaaS because it still needs:
 
-- Postgres
+- recoverable onboarding
+- billing
+- support and recovery email
+- telemetry keys
 - tenant/workspace separation
 - stronger audit and approval layers
-- public backend hosting fully verified

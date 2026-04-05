@@ -28,22 +28,22 @@ Give the SuperMega dev/deploy loop enough control to operate as a real company:
   - Google Maps key
   - Google Places key
   - database URL
+- GitHub Actions secrets and variables for the live app host
+- Cloud Run service deployment:
+  - `supermega-app`
+- live Cloud Run URL:
+  - `https://supermega-app-kr5v7kj3xa-as.a.run.app`
+- GitHub Pages build wired to the live app host
 
 ## Actual blocker now
 
-The service account can reach Cloud Run, Cloud SQL, Artifact Registry, and Secret Manager.
+The app itself is live.
 
-The current hard blocker is Cloud Build source upload:
+The current hard blocker is custom domain mapping for the shared app host:
 
-- `gcloud builds submit` is failing because the service account cannot write to the Cloud Build staging bucket
-
-What to add to `super-mega-dev-team@supermega-468612.iam.gserviceaccount.com`:
-
-- `Storage Admin`
-
-If you want the narrower version instead:
-
-- grant object write access on the Cloud Build staging bucket that backs `supermega-468612_cloudbuild`
+- `app.supermega.dev` is not mapped yet
+- Google Cloud Run domain mapping requires a verified domain for the active GCP principal
+- until that is done, the public site should keep using the live `run.app` host as the app base
 
 ## What to set next in GitHub
 
@@ -94,9 +94,8 @@ Connection string format:
 
 - control of `supermega.dev`
 - ability to add:
-  - `CNAME`
-  - `TXT`
-  - any Google verification records needed for custom domain mapping
+  - `TXT` verification records for Google domain verification
+  - `CNAME` or other records Google provides for Cloud Run custom domain mapping
 
 ### Suggested split
 
@@ -162,8 +161,8 @@ Use to measure:
 ### First public tools
 
 1. `Find Companies`
-2. `Company List`
-3. `Task List`
+2. `Saved Companies`
+3. `Daily Tasks`
 
 ### First paid offers
 
@@ -210,11 +209,10 @@ Drop 3-5 anonymized examples into:
 
 ## Immediate next sequence
 
-1. Add GitHub secrets and variables.
-2. Create Cloud SQL.
-3. Deploy Cloud Run app host.
-4. Map `app.supermega.dev`.
-5. Add booking URL.
-6. Add PostHog.
-7. Add Resend.
-8. Add Stripe.
+1. Verify `supermega.dev` in Google for the GCP account.
+2. Map `app.supermega.dev` to the live Cloud Run service.
+3. Add the Google-provided DNS records in Squarespace.
+4. Add a real booking URL.
+5. Add PostHog key and host.
+6. Add Resend.
+7. Add Stripe.
