@@ -76,6 +76,8 @@ from mark1_pilot.enterprise_store import (  # noqa: E402
     add_lead_activity as enterprise_add_lead_activity,
     add_leads as enterprise_add_leads,
     add_leads_with_tasks as enterprise_add_leads_with_tasks,
+    complete_agent_run as enterprise_complete_agent_run,
+    create_agent_run as enterprise_create_agent_run,
     add_workspace_tasks as enterprise_add_workspace_tasks,
     authenticate_user as enterprise_authenticate_user,
     bootstrap_workspace_leads,
@@ -84,6 +86,7 @@ from mark1_pilot.enterprise_store import (  # noqa: E402
     get_lead as enterprise_get_lead,
     get_lead_hunt_profile as enterprise_get_lead_hunt_profile,
     get_session as enterprise_get_session,
+    list_agent_runs as enterprise_list_agent_runs,
     list_lead_activities as enterprise_list_lead_activities,
     list_lead_hunt_profiles as enterprise_list_lead_hunt_profiles,
     list_leads as enterprise_list_leads,
@@ -95,6 +98,7 @@ from mark1_pilot.enterprise_store import (  # noqa: E402
     revoke_session as enterprise_revoke_session,
     save_lead_hunt_profile as enterprise_save_lead_hunt_profile,
     record_lead_hunt_run as enterprise_record_lead_hunt_run,
+    start_agent_run as enterprise_start_agent_run,
     update_lead as enterprise_update_lead,
     update_workspace_task as enterprise_update_workspace_task,
 )
@@ -318,6 +322,16 @@ class LeadHuntRequest(BaseModel):
     limit: int = Field(default=8, ge=1, le=20)
     campaign_goal: str = ""
     export_workspace: bool = False
+
+
+class AgentRunRequest(BaseModel):
+    job_type: str
+    payload: dict[str, Any] = Field(default_factory=dict)
+    source: str = "manual"
+    idempotency_key: str = ""
+    max_attempts: int = 1
+    related_entity_type: str = ""
+    related_entity_id: str = ""
 
 
 class LeadHuntProfileRequest(BaseModel):
@@ -901,6 +915,192 @@ def _maybe_ai_enrich_lead_pack(payload: dict[str, Any], *, campaign_goal: str) -
         enriched["opportunities"] = next_rows
     enriched["engine"] = engine
     return enriched
+
+
+AGENT_JOB_TEMPLATES: tuple[dict[str, str], ...] = (
+    {
+        "job_type": "revenue_scout",
+        "name": "Revenue Scout",
+        "cadence": "hourly",
+        "description": "Watch pipeline growth, hunt coverage, and next commercial actions.",
+    },
+    {
+        "job_type": "list_clerk",
+        "name": "List Clerk",
+        "cadence": "daily",
+        "description": "Audit saved company data quality and missing contact coverage.",
+    },
+    {
+        "job_type": "task_triage",
+        "name": "Task Triage",
+        "cadence": "hourly",
+        "description": "Surface open tasks, owner gaps, and priority pressure.",
+    },
+    {
+        "job_type": "founder_brief",
+        "name": "Founder Brief",
+        "cadence": "daily",
+        "description": "Produce a compact operating brief from leads, tasks, approvals, and ops queues.",
+    },
+)
+
+
+def _group_agent_runs_by_job_type(rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    grouped: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        job_type = str(row.get("job_type", "")).strip()
+        if job_type and job_type not in grouped:
+            grouped[job_type] = row
+    return grouped
+
+
+def _build_revenue_scout_result(*, enterprise_db_url: str, workspace_id: str) -> dict[str, Any]:
+    leads = enterprise_list_leads(enterprise_db_url, workspace_id=workspace_id, limit=200)
+    hunts = enterprise_list_lead_hunt_profiles(enterprise_db_url, workspace_id=workspace_id, limit=50)
+    tasks = enterprise_list_workspace_tasks(enterprise_db_url, workspace_id=workspace_id, limit=200)
+    open_tasks = [row for row in tasks if str(row.get("status", "")).strip() != "done"]
+    top_targets = [
+        {
+            "company_name": row.get("company_name", ""),
+            "stage": row.get("stage", ""),
+            "score": int(row.get("score", 0) or 0),
+            "service_pack": row.get("service_pack", ""),
+        }
+        for row in leads[:5]
+    ]
+    ready_count = sum(1 for row in leads if str(row.get("stage", "")).strip() == "offer_ready")
+    active_hunts = sum(1 for row in hunts if str(row.get("status", "")).strip() == "active")
+    summary = (
+        f"{len(leads)} companies saved, {ready_count} offer-ready, "
+        f"{active_hunts} active hunts, {len(open_tasks)} open follow-ups."
+    )
+    return {
+        "job_type": "revenue_scout",
+        "summary": summary,
+        "metrics": {
+            "lead_count": len(leads),
+            "offer_ready_count": ready_count,
+            "active_hunt_count": active_hunts,
+            "open_task_count": len(open_tasks),
+        },
+        "top_targets": top_targets,
+        "next_actions": [
+            "Run one active hunt if pipeline is stale.",
+            "Move one offer-ready lead into outreach today.",
+            "Close or reschedule old sales follow-ups.",
+        ],
+    }
+
+
+def _build_list_clerk_result(*, enterprise_db_url: str, workspace_id: str) -> dict[str, Any]:
+    leads = enterprise_list_leads(enterprise_db_url, workspace_id=workspace_id, limit=500)
+    missing_email = sum(1 for row in leads if not str(row.get("contact_email", "")).strip())
+    missing_phone = sum(1 for row in leads if not str(row.get("contact_phone", "")).strip())
+    missing_website = sum(1 for row in leads if not str(row.get("website", "")).strip())
+    duplicates = max(0, len(leads) - len({str(row.get("company_name", "")).strip().lower() for row in leads if str(row.get("company_name", "")).strip()}))
+    summary = (
+        f"{len(leads)} saved companies, {missing_email} missing email, "
+        f"{missing_website} missing website, {duplicates} duplicate names."
+    )
+    return {
+        "job_type": "list_clerk",
+        "summary": summary,
+        "metrics": {
+            "company_count": len(leads),
+            "missing_email_count": missing_email,
+            "missing_phone_count": missing_phone,
+            "missing_website_count": missing_website,
+            "duplicate_name_count": duplicates,
+        },
+        "next_actions": [
+            "Fill email gaps on the top five target companies.",
+            "Remove duplicate rows before the next outreach pass.",
+            "Add service-pack tags to unclassified companies.",
+        ],
+    }
+
+
+def _build_task_triage_result(*, enterprise_db_url: str, workspace_id: str) -> dict[str, Any]:
+    tasks = enterprise_list_workspace_tasks(enterprise_db_url, workspace_id=workspace_id, limit=500)
+    open_tasks = [row for row in tasks if str(row.get("status", "")).strip() != "done"]
+    high_priority = [row for row in open_tasks if str(row.get("priority", "")).strip().lower() == "high"]
+    unassigned = [row for row in open_tasks if not str(row.get("owner", "")).strip() or str(row.get("owner", "")).strip().lower() == "owner"]
+    by_owner: dict[str, int] = {}
+    for row in open_tasks:
+        owner = str(row.get("owner", "")).strip() or "Unassigned"
+        by_owner[owner] = by_owner.get(owner, 0) + 1
+    summary = f"{len(open_tasks)} open tasks, {len(high_priority)} high priority, {len(unassigned)} weakly assigned."
+    return {
+        "job_type": "task_triage",
+        "summary": summary,
+        "metrics": {
+            "open_task_count": len(open_tasks),
+            "high_priority_count": len(high_priority),
+            "weak_owner_count": len(unassigned),
+        },
+        "by_owner": by_owner,
+        "next_actions": [
+            "Assign every high-priority task to a named owner.",
+            "Close stale completed work instead of letting it sit open.",
+            "Reduce weakly owned tasks before adding more queue items.",
+        ],
+    }
+
+
+def _build_founder_brief_result(*, state_db: str, enterprise_db_url: str, workspace_id: str) -> dict[str, Any]:
+    lead_summary = enterprise_load_lead_summary(enterprise_db_url, workspace_id=workspace_id)
+    tasks = enterprise_list_workspace_tasks(enterprise_db_url, workspace_id=workspace_id, limit=500)
+    open_tasks = [row for row in tasks if str(row.get("status", "")).strip() != "done"]
+    approvals = load_approval_summary(state_db)
+    receiving = load_receiving_summary(state_db)
+    inventory = load_inventory_summary(state_db)
+    summary = (
+        f"Pipeline has {int(lead_summary.get('lead_count', 0) or 0)} companies, "
+        f"queue has {len(open_tasks)} open tasks, "
+        f"{int(approvals.get('pending_count', 0) or 0)} approvals are pending."
+    )
+    return {
+        "job_type": "founder_brief",
+        "summary": summary,
+        "metrics": {
+            "lead_count": int(lead_summary.get("lead_count", 0) or 0),
+            "open_task_count": len(open_tasks),
+            "pending_approval_count": int(approvals.get("pending_count", 0) or 0),
+            "receiving_review_count": int(receiving.get("review_count", 0) or 0),
+            "inventory_watch_count": int(inventory.get("watch_count", 0) or 0),
+        },
+        "next_actions": [
+            "Push one sales lead forward today.",
+            "Clear one pending approval blocking execution.",
+            "Review receiving and inventory watch items before end of day.",
+        ],
+    }
+
+
+def _execute_agent_job(
+    *,
+    state_db: str,
+    enterprise_db_url: str,
+    workspace_id: str,
+    job_type: str,
+    payload: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    normalized_type = str(job_type or "").strip().lower()
+    if normalized_type == "revenue_scout":
+        return _build_revenue_scout_result(enterprise_db_url=enterprise_db_url, workspace_id=workspace_id)
+    if normalized_type == "list_clerk":
+        return _build_list_clerk_result(enterprise_db_url=enterprise_db_url, workspace_id=workspace_id)
+    if normalized_type == "task_triage":
+        return _build_task_triage_result(enterprise_db_url=enterprise_db_url, workspace_id=workspace_id)
+    if normalized_type == "founder_brief":
+        return _build_founder_brief_result(
+            state_db=state_db,
+            enterprise_db_url=enterprise_db_url,
+            workspace_id=workspace_id,
+        )
+    raise ValueError(f"Unsupported job type: {job_type}")
 
 
 def _build_action_rows(raw_text: str) -> list[dict[str, Any]]:
@@ -1677,6 +1877,12 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             enterprise_db_url,
             workspace_id=str(session.get("workspace_id", "")).strip(),
         )
+        latest_agent_runs = enterprise_list_agent_runs(
+            enterprise_db_url,
+            workspace_id=str(session.get("workspace_id", "")).strip(),
+            limit=20,
+        )
+        latest_agent_runs_by_type = _group_agent_runs_by_job_type(latest_agent_runs)
         portfolio = load_snapshot(state_db, "solution_portfolio_manifest") or _load_json(
             REPO_ROOT / "Super Mega Inc" / "sales" / "solution_portfolio_manifest.json"
         )
@@ -1696,6 +1902,18 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             "coverage_score": int(coverage.get("readiness_score", 0) or 0),
             "actions": action_summary,
             "agent_system": agent_team_summary,
+            "agent_jobs": {
+                "count": len(latest_agent_runs),
+                "latest": [
+                    {
+                        "job_type": template["job_type"],
+                        "name": template["name"],
+                        "cadence": template["cadence"],
+                        "last_run": latest_agent_runs_by_type.get(template["job_type"], {}),
+                    }
+                    for template in AGENT_JOB_TEMPLATES
+                ],
+            },
             "quality": quality_summary,
             "supplier_watch": supplier_summary,
             "lead_pipeline": lead_pipeline_summary,
@@ -1743,6 +1961,103 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             workspace_id=str(session.get("workspace_id", "")).strip(),
         )
         return {"status": "ready", **_maybe_ai_enrich_insights(payload)}
+
+    @app.get("/api/agent-runs")
+    def agent_runs(request: Request, job_type: str | None = None, status: str | None = None, limit: int = 50) -> dict[str, Any]:
+        session = _require_session(request)
+        workspace_id = str(session.get("workspace_id", "")).strip()
+        rows = enterprise_list_agent_runs(
+            enterprise_db_url,
+            workspace_id=workspace_id,
+            job_type=job_type,
+            status=status,
+            limit=limit,
+        )
+        latest_by_type = _group_agent_runs_by_job_type(rows)
+        return {
+            "status": "ready",
+            "count": len(rows),
+            "rows": rows,
+            "jobs": [
+                {
+                    **template,
+                    "last_run": latest_by_type.get(template["job_type"], {}),
+                }
+                for template in AGENT_JOB_TEMPLATES
+            ],
+        }
+
+    @app.post("/api/agent-runs")
+    def create_agent_run(request_http: Request, request: AgentRunRequest) -> dict[str, Any]:
+        session = _require_session(request_http)
+        workspace_id = str(session.get("workspace_id", "")).strip()
+        job_type = str(request.job_type or "").strip().lower()
+        if job_type not in {item["job_type"] for item in AGENT_JOB_TEMPLATES}:
+            raise HTTPException(status_code=400, detail=f"Unsupported job type: {request.job_type}")
+
+        row = enterprise_create_agent_run(
+            enterprise_db_url,
+            workspace_id=workspace_id,
+            job_type=job_type,
+            source=str(request.source or "").strip() or "manual",
+            payload=request.payload,
+            idempotency_key=str(request.idempotency_key or "").strip() or None,
+            max_attempts=int(request.max_attempts or 1),
+            triggered_by=str(session.get("display_name", session.get("username", "system"))),
+            related_entity_type=str(request.related_entity_type or "").strip(),
+            related_entity_id=str(request.related_entity_id or "").strip(),
+        )
+        run_id = str(row.get("run_id", "")).strip()
+        enterprise_start_agent_run(
+            enterprise_db_url,
+            workspace_id=workspace_id,
+            run_id=run_id,
+        )
+        try:
+            result = _execute_agent_job(
+                state_db=state_db,
+                enterprise_db_url=enterprise_db_url,
+                workspace_id=workspace_id,
+                job_type=job_type,
+                payload=request.payload,
+            )
+            summary_text = str(result.get("summary", "")).strip()
+            final_row = enterprise_complete_agent_run(
+                enterprise_db_url,
+                workspace_id=workspace_id,
+                run_id=run_id,
+                status="ready",
+                summary=summary_text,
+                result=result,
+            )
+        except Exception as exc:
+            final_row = enterprise_complete_agent_run(
+                enterprise_db_url,
+                workspace_id=workspace_id,
+                run_id=run_id,
+                status="error",
+                summary=f"{job_type} failed",
+                result={"job_type": job_type},
+                error_text=str(exc),
+            )
+            raise HTTPException(status_code=500, detail=f"Agent run failed: {exc}") from exc
+        latest_runs = enterprise_list_agent_runs(
+            enterprise_db_url,
+            workspace_id=workspace_id,
+            limit=20,
+        )
+        latest_by_type = _group_agent_runs_by_job_type(latest_runs)
+        return {
+            "status": "ready",
+            "row": final_row,
+            "jobs": [
+                {
+                    **template,
+                    "last_run": latest_by_type.get(template["job_type"], {}),
+                }
+                for template in AGENT_JOB_TEMPLATES
+            ],
+        }
 
     @app.post("/api/tools/lead-finder")
     def tool_lead_finder(request: LeadFinderRequest) -> dict[str, Any]:

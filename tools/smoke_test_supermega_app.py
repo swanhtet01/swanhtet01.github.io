@@ -110,6 +110,26 @@ def main() -> int:
     )
     summary = request_json(opener, "GET", f"{args.base_url.rstrip('/')}/api/summary")
     insights = request_json(opener, "GET", f"{args.base_url.rstrip('/')}/api/insights")
+    agent_runs_before = request_json(opener, "GET", f"{args.base_url.rstrip('/')}/api/agent-runs?limit=10")
+    founder_brief_run = request_json(
+        opener,
+        "POST",
+        f"{args.base_url.rstrip('/')}/api/agent-runs",
+        {
+            "job_type": "founder_brief",
+            "source": "smoke_test",
+        },
+    )
+    revenue_scout_run = request_json(
+        opener,
+        "POST",
+        f"{args.base_url.rstrip('/')}/api/agent-runs",
+        {
+            "job_type": "revenue_scout",
+            "source": "smoke_test",
+        },
+        timeout=60,
+    )
     director = request_json(opener, "GET", f"{args.base_url.rstrip('/')}/api/reports/role/director")
     exceptions = request_json(opener, "GET", f"{args.base_url.rstrip('/')}/api/exceptions?limit=5")
     approval_create = request_json(
@@ -363,6 +383,10 @@ def main() -> int:
         "supplier_risk_count": int(((summary.get("supplier_watch") or {}).get("risk_count") or 0)),
         "quality_incident_count": int(((summary.get("quality") or {}).get("incident_count") or 0)),
         "director_priority_count": int(director.get("count") or 0),
+        "agent_run_count": int(agent_runs_before.get("count") or 0),
+        "founder_brief_status": str((founder_brief_run.get("row") or {}).get("status", "")),
+        "founder_brief_summary": str((founder_brief_run.get("row") or {}).get("summary", "")),
+        "revenue_scout_status": str((revenue_scout_run.get("row") or {}).get("status", "")),
         "exception_count": int(exceptions.get("count") or 0),
         "approval_count": int(approvals.get("count") or 0),
         "approval_message": approval_create.get("message", ""),
@@ -410,6 +434,9 @@ def main() -> int:
     print(f"- Supplier risks: {report['supplier_risk_count']}")
     print(f"- Quality incidents: {report['quality_incident_count']}")
     print(f"- Director priorities: {report['director_priority_count']}")
+    print(f"- Agent runs: {report['agent_run_count']}")
+    print(f"- Founder brief: {report['founder_brief_status']}")
+    print(f"- Revenue scout: {report['revenue_scout_status']}")
     print(f"- Exceptions: {report['exception_count']}")
     print(f"- Approvals: {report['approval_count']}")
     print(f"- Lead finder rows: {report['lead_count']}")

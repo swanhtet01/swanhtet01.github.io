@@ -163,6 +163,31 @@ class EnterpriseLeadHuntProfile(SQLModel, table=True):
     last_summary: str = ""
 
 
+class EnterpriseAgentRun(SQLModel, table=True):
+    __tablename__ = "enterprise_agent_runs"
+
+    run_id: str = Field(primary_key=True)
+    workspace_id: str = Field(index=True, foreign_key="enterprise_workspaces.workspace_id")
+    job_type: str = Field(index=True)
+    source: str = "manual"
+    idempotency_key: str | None = Field(default=None, sa_column=Column(String, unique=True, index=True, nullable=True))
+    started_at: str
+    finished_at: str = ""
+    status: str = Field(default="queued", index=True)
+    summary: str = ""
+    payload_json: str = Field(default="{}", sa_column=Column(Text, nullable=False))
+    result_json: str = Field(default="{}", sa_column=Column(Text, nullable=False))
+    error_text: str = ""
+    attempt_count: int = 0
+    max_attempts: int = 1
+    scheduled_for: str = ""
+    related_entity_type: str = ""
+    related_entity_id: str = ""
+    triggered_by: str = "system"
+    created_at: str
+    updated_at: str
+
+
 def _json_list(value: str) -> list[str]:
     try:
         payload = json.loads(value or "[]")
@@ -194,6 +219,39 @@ def _hunt_profile_to_dict(row: EnterpriseLeadHuntProfile) -> dict[str, Any]:
         "last_engine": row.last_engine,
         "last_saved_count": row.last_saved_count,
         "last_summary": row.last_summary,
+    }
+
+
+def _json_object(value: str) -> dict[str, Any]:
+    try:
+        payload = json.loads(value or "{}")
+    except Exception:
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _agent_run_to_dict(row: EnterpriseAgentRun) -> dict[str, Any]:
+    return {
+        "run_id": row.run_id,
+        "workspace_id": row.workspace_id,
+        "job_type": row.job_type,
+        "source": row.source,
+        "idempotency_key": row.idempotency_key,
+        "status": row.status,
+        "payload": _json_object(row.payload_json),
+        "result": _json_object(row.result_json),
+        "error_text": row.error_text,
+        "attempt_count": row.attempt_count,
+        "max_attempts": row.max_attempts,
+        "scheduled_for": row.scheduled_for,
+        "started_at": row.started_at,
+        "finished_at": row.finished_at,
+        "summary": row.summary,
+        "related_entity_type": row.related_entity_type,
+        "related_entity_id": row.related_entity_id,
+        "triggered_by": row.triggered_by,
+        "created_at": row.created_at,
+        "updated_at": row.updated_at,
     }
 
 
@@ -948,6 +1006,154 @@ def record_lead_hunt_run(
         session.commit()
         session.refresh(profile)
         return _hunt_profile_to_dict(profile)
+
+
+def create_agent_run(
+    database_url: str,
+    *,
+    workspace_id: str,
+    job_type: str,
+    source: str = "manual",
+    payload: dict[str, Any] | None = None,
+    idempotency_key: str | None = None,
+    max_attempts: int = 1,
+    scheduled_for: str = "",
+    triggered_by: str = "system",
+    related_entity_type: str = "",
+    related_entity_id: str = "",
+) -> dict[str, Any]:
+    ensure_schema(database_url)
+    normalized_key = str(idempotency_key or "").strip() or None
+    engine = get_engine(database_url)
+    with Session(engine) as session:
+        if normalized_key:
+            existing = session.exec(
+                select(EnterpriseAgentRun).where(
+                    EnterpriseAgentRun.workspace_id == str(workspace_id),
+                    EnterpriseAgentRun.idempotency_key == normalized_key,
+                )
+            ).first()
+            if existing:
+                return _agent_run_to_dict(existing)
+
+        now = _now()
+        row = EnterpriseAgentRun(
+            run_id=secrets.token_urlsafe(16),
+            workspace_id=str(workspace_id),
+            job_type=str(job_type or "").strip() or "unknown",
+            source=str(source or "").strip() or "manual",
+            idempotency_key=normalized_key,
+            status="queued",
+            payload_json=json.dumps(payload or {}, ensure_ascii=False),
+            result_json="{}",
+            error_text="",
+            attempt_count=0,
+            max_attempts=max(1, int(max_attempts or 1)),
+            scheduled_for=str(scheduled_for or "").strip(),
+            started_at="",
+            finished_at="",
+            summary="",
+            related_entity_type=str(related_entity_type or "").strip(),
+            related_entity_id=str(related_entity_id or "").strip(),
+            triggered_by=str(triggered_by or "").strip() or "system",
+            created_at=now,
+            updated_at=now,
+        )
+        session.add(row)
+        session.commit()
+        session.refresh(row)
+        return _agent_run_to_dict(row)
+
+
+def get_agent_run(
+    database_url: str,
+    *,
+    workspace_id: str,
+    run_id: str,
+) -> dict[str, Any] | None:
+    ensure_schema(database_url)
+    engine = get_engine(database_url)
+    with Session(engine) as session:
+        row = session.get(EnterpriseAgentRun, str(run_id))
+        if not row or row.workspace_id != str(workspace_id):
+            return None
+        return _agent_run_to_dict(row)
+
+
+def list_agent_runs(
+    database_url: str,
+    *,
+    workspace_id: str,
+    job_type: str | None = None,
+    status: str | None = None,
+    limit: int = 50,
+) -> list[dict[str, Any]]:
+    ensure_schema(database_url)
+    engine = get_engine(database_url)
+    statement = select(EnterpriseAgentRun).where(EnterpriseAgentRun.workspace_id == str(workspace_id))
+    if job_type:
+        statement = statement.where(EnterpriseAgentRun.job_type == str(job_type))
+    if status:
+        statement = statement.where(EnterpriseAgentRun.status == str(status))
+    statement = statement.order_by(EnterpriseAgentRun.created_at.desc()).limit(max(1, int(limit)))
+    with Session(engine) as session:
+        rows = session.exec(statement).all()
+    return [_agent_run_to_dict(row) for row in rows]
+
+
+def start_agent_run(
+    database_url: str,
+    *,
+    workspace_id: str,
+    run_id: str,
+) -> dict[str, Any] | None:
+    ensure_schema(database_url)
+    now = _now()
+    engine = get_engine(database_url)
+    with Session(engine) as session:
+        row = session.get(EnterpriseAgentRun, str(run_id))
+        if not row or row.workspace_id != str(workspace_id):
+            return None
+        row.status = "running"
+        row.started_at = now
+        row.finished_at = ""
+        row.error_text = ""
+        row.attempt_count = int(row.attempt_count or 0) + 1
+        row.updated_at = now
+        session.add(row)
+        session.commit()
+        session.refresh(row)
+        return _agent_run_to_dict(row)
+
+
+def complete_agent_run(
+    database_url: str,
+    *,
+    workspace_id: str,
+    run_id: str,
+    status: str,
+    summary: str = "",
+    result: dict[str, Any] | None = None,
+    error_text: str = "",
+) -> dict[str, Any] | None:
+    ensure_schema(database_url)
+    now = _now()
+    normalized_status = str(status or "").strip() or "ready"
+    engine = get_engine(database_url)
+    with Session(engine) as session:
+        row = session.get(EnterpriseAgentRun, str(run_id))
+        if not row or row.workspace_id != str(workspace_id):
+            return None
+        row.status = normalized_status
+        row.finished_at = now
+        row.summary = str(summary or "").strip()
+        row.result_json = json.dumps(result or {}, ensure_ascii=False)
+        row.error_text = str(error_text or "").strip()
+        row.updated_at = now
+        session.add(row)
+        session.commit()
+        session.refresh(row)
+        return _agent_run_to_dict(row)
 
 
 def add_leads(
