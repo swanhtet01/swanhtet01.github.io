@@ -80,7 +80,17 @@ Main values:
 - `SUPERMEGA_WORKSPACE_PLAN`
 - `SUPERMEGA_DATABASE_URL`
 - `SUPERMEGA_CORS_ORIGINS`
+- `SUPERMEGA_CLOUDSQL_INSTANCE`
 - `VITE_BOOKING_URL`
+- `VITE_POSTHOG_KEY`
+- `VITE_POSTHOG_HOST`
+- `VITE_WORKSPACE_APP_BASE`
+- `VITE_WORKSPACE_API_BASE`
+- `OPENAI_API_KEY`
+- `RESEND_API_KEY`
+- `STRIPE_SECRET_KEY`
+- `STRIPE_WEBHOOK_SECRET`
+- `VITE_GOOGLE_MAPS_API_KEY`
 
 ## Workspace-aware app core
 
@@ -110,6 +120,11 @@ Recommended secrets and vars for a real app host:
   - `SUPERMEGA_APP_USERNAME`
   - `SUPERMEGA_APP_PASSWORD`
   - `SUPERMEGA_DATABASE_URL`
+  - `OPENAI_API_KEY`
+  - `RESEND_API_KEY`
+  - `STRIPE_SECRET_KEY`
+  - `STRIPE_WEBHOOK_SECRET`
+  - `VITE_GOOGLE_MAPS_API_KEY`
 - vars:
   - `SUPERMEGA_APP_DISPLAY_NAME`
   - `SUPERMEGA_APP_ROLE`
@@ -118,13 +133,19 @@ Recommended secrets and vars for a real app host:
   - `SUPERMEGA_WORKSPACE_PLAN`
   - `SUPERMEGA_SESSION_HOURS`
   - `SUPERMEGA_CORS_ORIGINS`
+  - `SUPERMEGA_CLOUDSQL_INSTANCE`
   - `VITE_BOOKING_URL`
+  - `VITE_POSTHOG_KEY`
+  - `VITE_POSTHOG_HOST`
+  - `VITE_WORKSPACE_APP_BASE`
+  - `VITE_WORKSPACE_API_BASE`
 
 Current note:
 
 - Cloud Run can host the app shell and API well
 - but SQLite is not durable there by itself
 - for a real customer deployment, set `SUPERMEGA_DATABASE_URL` to Cloud SQL for PostgreSQL or use a host with persistent disk
+- if `SUPERMEGA_CLOUDSQL_INSTANCE` is set, the Cloud Run workflow will mount the Cloud SQL instance during deploy
 
 ## Current production gap
 
