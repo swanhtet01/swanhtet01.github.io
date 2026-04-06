@@ -5,6 +5,7 @@ const distDir = resolve(process.cwd(), 'dist')
 const indexFile = resolve(distDir, 'index.html')
 const routePaths = [
   'systems',
+  'templates',
   'products',
   'find-companies',
   'saved-companies',
@@ -31,6 +32,8 @@ const routePaths = [
   'app/action-board',
   'app/documents',
   'app/architect',
+  'systems',
+  'templates',
   'login',
   'contact',
   'book',
