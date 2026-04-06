@@ -1,7 +1,14 @@
-import { useEffect, useState } from 'react'
+import { type FormEvent, useEffect, useState } from 'react'
 
 import { PageIntro } from '../components/PageIntro'
-import { checkWorkspaceHealth, getWorkspaceSession, workspaceFetch } from '../lib/workspaceApi'
+import {
+  checkWorkspaceHealth,
+  getWorkspaceSession,
+  inviteTeamMember,
+  listTeamMembers,
+  workspaceFetch,
+  type TeamMemberRow,
+} from '../lib/workspaceApi'
 
 type AgentUnit = {
   unit_id: string
@@ -44,10 +51,21 @@ type AgentTeamPayload = {
   }
 }
 
+const roleOptions = ['member', 'operator', 'manager', 'owner'] as const
+
 export function AgentTeamsPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [payload, setPayload] = useState<AgentTeamPayload | null>(null)
+  const [agentPayload, setAgentPayload] = useState<AgentTeamPayload | null>(null)
+  const [members, setMembers] = useState<TeamMemberRow[]>([])
+  const [inviteBusy, setInviteBusy] = useState(false)
+  const [inviteMessage, setInviteMessage] = useState<string | null>(null)
+  const [inviteForm, setInviteForm] = useState({
+    name: '',
+    email: '',
+    role: 'member',
+    password: '',
+  })
 
   useEffect(() => {
     let cancelled = false
@@ -65,7 +83,7 @@ export function AgentTeamsPage() {
         const session = await getWorkspaceSession()
         if (cancelled) return
         if (!session.authenticated) {
-          setError('Login is required to open AI Team.')
+          setError('Login is required to open Team.')
           setLoading(false)
           return
         }
@@ -78,13 +96,18 @@ export function AgentTeamsPage() {
       }
 
       try {
-        const nextPayload = await workspaceFetch<AgentTeamPayload>('/api/agent-teams')
+        const [nextAgentPayload, nextMembersPayload] = await Promise.all([
+          workspaceFetch<AgentTeamPayload>('/api/agent-teams'),
+          listTeamMembers(),
+        ])
         if (!cancelled) {
-          setPayload(nextPayload)
+          setAgentPayload(nextAgentPayload)
+          setMembers(nextMembersPayload.rows ?? [])
+          setError(null)
         }
       } catch {
         if (!cancelled) {
-          setError('AI Team could not be loaded right now.')
+          setError('Team data could not be loaded right now.')
         }
       } finally {
         if (!cancelled) {
@@ -99,80 +122,185 @@ export function AgentTeamsPage() {
     }
   }, [])
 
+  async function handleInvite(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!inviteForm.email.trim()) {
+      setInviteMessage('Enter an email first.')
+      return
+    }
+
+    setInviteBusy(true)
+    setInviteMessage(null)
+    try {
+      const payload = await inviteTeamMember({
+        email: inviteForm.email,
+        name: inviteForm.name,
+        role: inviteForm.role,
+        password: inviteForm.password,
+      })
+      setMembers(payload.rows ?? [])
+      setInviteForm({
+        name: '',
+        email: '',
+        role: 'member',
+        password: '',
+      })
+      const temporaryPassword = String(payload.generated_password ?? '').trim()
+      if (temporaryPassword) {
+        setInviteMessage(`Member added. Share this initial password once: ${temporaryPassword}`)
+      } else if (payload.created) {
+        setInviteMessage('Member added.')
+      } else {
+        setInviteMessage('Member access updated.')
+      }
+    } catch (nextError) {
+      setInviteMessage(nextError instanceof Error ? nextError.message : 'Could not add this member right now.')
+    } finally {
+      setInviteBusy(false)
+    }
+  }
+
   return (
     <div className="space-y-8">
       <PageIntro
-        eyebrow="AI Team"
-        title="Run the company with three agent loops."
-        description="This page shows what runs now, what each loop writes, and what still needs a human decision."
+        eyebrow="Team"
+        title="Run the company with people and agent loops."
+        description="Invite managers, see who has access, and monitor the loops that keep sales and delivery moving."
       />
 
       <section className="grid gap-4 md:grid-cols-4">
         <div className="sm-metric-card">
-          <p className="sm-kicker text-[var(--sm-accent)]">Teams</p>
-          <p className="mt-3 text-3xl font-bold text-white">{payload?.summary?.team_count ?? 0}</p>
+          <p className="sm-kicker text-[var(--sm-accent)]">Members</p>
+          <p className="mt-3 text-3xl font-bold text-white">{members.length}</p>
         </div>
         <div className="sm-metric-card">
-          <p className="sm-kicker text-[var(--sm-accent-alt)]">Core teams</p>
-          <p className="mt-3 text-3xl font-bold text-white">{payload?.summary?.shared_core_team_count ?? 0}</p>
+          <p className="sm-kicker text-[var(--sm-accent-alt)]">Agent loops</p>
+          <p className="mt-3 text-3xl font-bold text-white">{agentPayload?.summary?.team_count ?? 0}</p>
         </div>
         <div className="sm-metric-card">
-          <p className="sm-kicker text-[var(--sm-accent)]">Template pods</p>
-          <p className="mt-3 text-3xl font-bold text-white">{payload?.summary?.client_pod_team_count ?? 0}</p>
+          <p className="sm-kicker text-[var(--sm-accent)]">Core loops</p>
+          <p className="mt-3 text-3xl font-bold text-white">{agentPayload?.summary?.shared_core_team_count ?? 0}</p>
         </div>
         <div className="sm-metric-card">
           <p className="sm-kicker text-[var(--sm-accent-alt)]">Autonomy</p>
-          <p className="mt-3 text-3xl font-bold text-white">{payload?.summary?.autonomy_score ?? 0}</p>
-          <p className="mt-1 text-sm text-[var(--sm-muted)]">{payload?.summary?.autonomy_level || 'unknown'}</p>
+          <p className="mt-3 text-3xl font-bold text-white">{agentPayload?.summary?.autonomy_score ?? 0}</p>
+          <p className="mt-1 text-sm text-[var(--sm-muted)]">{agentPayload?.summary?.autonomy_level || 'unknown'}</p>
         </div>
       </section>
 
-      {loading ? <div className="sm-chip text-[var(--sm-muted)]">Loading AI Team...</div> : null}
+      {loading ? <div className="sm-chip text-[var(--sm-muted)]">Loading Team...</div> : null}
       {error ? <div className="sm-chip text-[var(--sm-muted)]">{error}</div> : null}
 
-      {payload ? (
+      {!loading && !error ? (
         <>
-          <section className="grid gap-6 lg:grid-cols-[1.05fr_0.95fr]">
+          <section className="grid gap-6 lg:grid-cols-[1.02fr_0.98fr]">
             <article className="sm-surface p-6">
-              <p className="sm-kicker text-[var(--sm-accent)]">What runs automatically</p>
-              <div className="mt-4 space-y-3">
-                {(payload.scaling_model?.core_loop ?? []).map((item) => (
-                  <div className="sm-chip text-white" key={item}>
-                    {item}
-                  </div>
-                ))}
-                {!(payload.scaling_model?.core_loop ?? []).length ? (
-                  <div className="sm-chip text-[var(--sm-muted)]">No core loop loaded yet.</div>
-                ) : null}
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="sm-kicker text-[var(--sm-accent)]">People</p>
+                  <h2 className="mt-2 text-2xl font-bold text-white">Who is in the workspace</h2>
+                </div>
+                <span className="sm-status-pill">{members.length} active</span>
               </div>
 
-              <p className="sm-kicker mt-6 text-[var(--sm-accent-alt)]">Founder attention</p>
-              <div className="mt-4 grid gap-2">
-                {(payload.scaling_model?.founder_focus ?? []).map((item) => (
-                  <div className="sm-chip text-white" key={item}>
-                    {item}
-                  </div>
-                ))}
+              <div className="mt-5 space-y-3">
+                {members.length ? (
+                  members.map((member) => (
+                    <div className="sm-proof-card" key={member.membership_id}>
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <p className="text-lg font-bold text-white">{member.display_name || member.email}</p>
+                          <p className="mt-2 text-sm text-[var(--sm-muted)]">{member.email}</p>
+                        </div>
+                        <span className="sm-status-pill">
+                          {member.role} / {member.status}
+                        </span>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="sm-chip text-[var(--sm-muted)]">No team members added yet.</div>
+                )}
               </div>
             </article>
 
             <article className="sm-surface p-6">
-              <p className="sm-kicker text-[var(--sm-accent-alt)]">Control rules</p>
-              <div className="mt-4 space-y-3">
-                {(payload.scaling_model?.rules ?? []).map((item) => (
-                  <div className="border-b border-white/8 pb-3 text-sm text-[var(--sm-muted)] last:border-b-0 last:pb-0" key={item}>
-                    {item}
-                  </div>
-                ))}
-              </div>
+              <p className="sm-kicker text-[var(--sm-accent-alt)]">Invite</p>
+              <h2 className="mt-2 text-2xl font-bold text-white">Add a manager or operator</h2>
+              <p className="mt-3 text-sm text-[var(--sm-muted)]">
+                This creates or updates login access for the current workspace. If you leave password blank, a one-time password is generated.
+              </p>
+
+              <form className="mt-5 grid gap-4" onSubmit={(event) => void handleInvite(event)}>
+                <label className="grid gap-2 text-sm font-semibold text-[var(--sm-muted)]">
+                  Name
+                  <input
+                    className="sm-input"
+                    onChange={(event) => setInviteForm((current) => ({ ...current, name: event.target.value }))}
+                    placeholder="Plant manager"
+                    value={inviteForm.name}
+                  />
+                </label>
+                <label className="grid gap-2 text-sm font-semibold text-[var(--sm-muted)]">
+                  Email
+                  <input
+                    className="sm-input"
+                    onChange={(event) => setInviteForm((current) => ({ ...current, email: event.target.value }))}
+                    placeholder="manager@company.com"
+                    type="email"
+                    value={inviteForm.email}
+                  />
+                </label>
+                <label className="grid gap-2 text-sm font-semibold text-[var(--sm-muted)]">
+                  Role
+                  <select
+                    className="sm-input"
+                    onChange={(event) => setInviteForm((current) => ({ ...current, role: event.target.value }))}
+                    value={inviteForm.role}
+                  >
+                    {roleOptions.map((role) => (
+                      <option key={role} value={role}>
+                        {role}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="grid gap-2 text-sm font-semibold text-[var(--sm-muted)]">
+                  Password
+                  <input
+                    className="sm-input"
+                    onChange={(event) => setInviteForm((current) => ({ ...current, password: event.target.value }))}
+                    placeholder="Leave blank to auto-generate"
+                    value={inviteForm.password}
+                  />
+                </label>
+                <div className="flex flex-wrap gap-3">
+                  <button className="sm-button-primary" disabled={inviteBusy} type="submit">
+                    {inviteBusy ? 'Adding...' : 'Add member'}
+                  </button>
+                </div>
+              </form>
+
+              {inviteMessage ? <div className="sm-chip mt-4 text-[var(--sm-muted)]">{inviteMessage}</div> : null}
             </article>
           </section>
 
           <section className="grid gap-6 lg:grid-cols-[1.05fr_0.95fr]">
             <article className="sm-surface p-6">
-              <p className="sm-kicker text-[var(--sm-accent)]">Operating loops</p>
-              <div className="mt-5 space-y-4">
-                {(payload.teams ?? []).map((team) => (
+              <p className="sm-kicker text-[var(--sm-accent)]">Agent loops</p>
+              <div className="mt-4 space-y-3">
+                {(agentPayload?.scaling_model?.core_loop ?? []).map((item) => (
+                  <div className="sm-chip text-white" key={item}>
+                    {item}
+                  </div>
+                ))}
+                {!(agentPayload?.scaling_model?.core_loop ?? []).length ? (
+                  <div className="sm-chip text-[var(--sm-muted)]">No core loop loaded yet.</div>
+                ) : null}
+              </div>
+
+              <div className="mt-6 space-y-4">
+                {(agentPayload?.teams ?? []).map((team) => (
                   <div className="sm-proof-card" key={team.team_id}>
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div>
@@ -183,7 +311,6 @@ export function AgentTeamsPage() {
                         {team.status} / {team.scaling_tier}
                       </span>
                     </div>
-
                     <div className="mt-4 grid gap-3 md:grid-cols-2">
                       <div className="sm-chip text-white">
                         <p className="sm-kicker text-[var(--sm-accent)]">Lead agent</p>
@@ -194,35 +321,6 @@ export function AgentTeamsPage() {
                         <p className="mt-2 text-sm">{team.cadence}</p>
                       </div>
                     </div>
-
-                    <div className="mt-4 space-y-3">
-                      {team.agents.map((agent) => (
-                        <div className="sm-chip text-white" key={agent.unit_id}>
-                          <div className="flex flex-wrap items-start justify-between gap-3">
-                            <div>
-                              <p className="font-semibold text-white">{agent.name}</p>
-                              <p className="mt-1 text-sm text-[var(--sm-muted)]">{agent.role}</p>
-                            </div>
-                            <span className="sm-status-pill">{agent.mode}</span>
-                          </div>
-                          <div className="mt-3 grid gap-2 md:grid-cols-3">
-                            <div className="text-xs text-[var(--sm-muted)]">
-                              <span className="block font-semibold uppercase tracking-[0.18em] text-[var(--sm-accent)]">Writes</span>
-                              {agent.write_scope}
-                            </div>
-                            <div className="text-xs text-[var(--sm-muted)]">
-                              <span className="block font-semibold uppercase tracking-[0.18em] text-[var(--sm-accent-alt)]">Output</span>
-                              {agent.output_schema}
-                            </div>
-                            <div className="text-xs text-[var(--sm-muted)]">
-                              <span className="block font-semibold uppercase tracking-[0.18em] text-[var(--sm-accent)]">Approval</span>
-                              {agent.approval_gate}
-                            </div>
-                          </div>
-                          <div className="mt-3 text-sm text-[var(--sm-muted)]">{agent.focus}</div>
-                        </div>
-                      ))}
-                    </div>
                   </div>
                 ))}
               </div>
@@ -230,9 +328,9 @@ export function AgentTeamsPage() {
 
             <div className="space-y-6">
               <article className="sm-surface p-6">
-                <p className="sm-kicker text-[var(--sm-accent-alt)]">Gaps</p>
+                <p className="sm-kicker text-[var(--sm-accent-alt)]">Founder attention</p>
                 <div className="mt-4 space-y-3">
-                  {(payload.gaps ?? []).map((item) => (
+                  {(agentPayload?.scaling_model?.founder_focus ?? []).map((item) => (
                     <div className="border-b border-white/8 pb-3 text-sm text-[var(--sm-muted)] last:border-b-0 last:pb-0" key={item}>
                       {item}
                     </div>
@@ -241,9 +339,20 @@ export function AgentTeamsPage() {
               </article>
 
               <article className="sm-surface p-6">
-                <p className="sm-kicker text-[var(--sm-accent)]">Next moves</p>
+                <p className="sm-kicker text-[var(--sm-accent)]">Control rules</p>
                 <div className="mt-4 space-y-3">
-                  {(payload.next_moves ?? []).map((item) => (
+                  {(agentPayload?.scaling_model?.rules ?? []).map((item) => (
+                    <div className="border-b border-white/8 pb-3 text-sm text-[var(--sm-muted)] last:border-b-0 last:pb-0" key={item}>
+                      {item}
+                    </div>
+                  ))}
+                </div>
+              </article>
+
+              <article className="sm-surface p-6">
+                <p className="sm-kicker text-[var(--sm-accent-alt)]">Next moves</p>
+                <div className="mt-4 space-y-3">
+                  {(agentPayload?.next_moves ?? []).map((item) => (
                     <div className="sm-chip text-white" key={item}>
                       {item}
                     </div>

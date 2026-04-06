@@ -86,11 +86,13 @@ from mark1_pilot.enterprise_store import (  # noqa: E402
     get_lead as enterprise_get_lead,
     get_lead_hunt_profile as enterprise_get_lead_hunt_profile,
     get_session as enterprise_get_session,
+    invite_workspace_member as enterprise_invite_workspace_member,
     list_agent_runs as enterprise_list_agent_runs,
     list_lead_activities as enterprise_list_lead_activities,
     list_lead_hunt_profiles as enterprise_list_lead_hunt_profiles,
     list_leads as enterprise_list_leads,
     list_user_workspaces as enterprise_list_user_workspaces,
+    list_workspace_members as enterprise_list_workspace_members,
     list_workspace_tasks as enterprise_list_workspace_tasks,
     load_lead_summary as enterprise_load_lead_summary,
     remove_workspace_task as enterprise_remove_workspace_task,
@@ -412,6 +414,13 @@ class PublicWorkspaceLeadSaveRequest(BaseModel):
     goal: str = ""
     campaign_goal: str = ""
     rows: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class TeamMemberInviteRequest(BaseModel):
+    email: str
+    name: str = ""
+    role: str = "member"
+    password: str = ""
 
 
 def _load_json(path: Path) -> dict[str, Any]:
@@ -3017,6 +3026,45 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             "gaps": payload.get("gaps", []) if isinstance(payload, dict) else [],
             "scaling_model": payload.get("scaling_model", {}) if isinstance(payload, dict) else {},
             "next_moves": payload.get("next_moves", []) if isinstance(payload, dict) else [],
+        }
+
+    @app.get("/api/team/members")
+    def team_members(request: Request) -> dict[str, Any]:
+        session = _require_session(request)
+        rows = enterprise_list_workspace_members(
+            enterprise_db_url,
+            workspace_id=str(session.get("workspace_id", "")).strip(),
+        )
+        return {
+            "status": "ready",
+            "count": len(rows),
+            "rows": rows,
+        }
+
+    @app.post("/api/team/members")
+    def invite_team_member(request_http: Request, request: TeamMemberInviteRequest) -> dict[str, Any]:
+        session = _require_session(request_http)
+        result = enterprise_invite_workspace_member(
+            enterprise_db_url,
+            workspace_id=str(session.get("workspace_id", "")).strip(),
+            email=request.email,
+            display_name=request.name,
+            role=request.role,
+            password=request.password,
+        )
+        if result.get("status") != "ready":
+            raise HTTPException(status_code=400, detail="Could not add this team member.")
+        rows = enterprise_list_workspace_members(
+            enterprise_db_url,
+            workspace_id=str(session.get("workspace_id", "")).strip(),
+        )
+        return {
+            "status": "ready",
+            "created": bool(result.get("created")),
+            "generated_password": str(result.get("generated_password", "")).strip(),
+            "row": result.get("member"),
+            "count": len(rows),
+            "rows": rows,
         }
 
     @app.get("/api/snapshots/{snapshot_key}")

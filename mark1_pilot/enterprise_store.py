@@ -24,6 +24,25 @@ def _stable_key(prefix: str, seed: str) -> str:
     return f"{prefix}-{digest}"
 
 
+def _role_rank(role: str) -> int:
+    normalized = str(role or "").strip().lower()
+    if normalized == "owner":
+        return 4
+    if normalized == "manager":
+        return 3
+    if normalized in {"lead", "operator"}:
+        return 2
+    if normalized == "member":
+        return 1
+    return 0
+
+
+def _merge_user_role(current_role: str, next_role: str) -> str:
+    current = str(current_role or "").strip() or "member"
+    proposed = str(next_role or "").strip() or "member"
+    return current if _role_rank(current) >= _role_rank(proposed) else proposed
+
+
 def _hash_password(password: str) -> str:
     return hashlib.sha256(str(password or "").encode("utf-8")).hexdigest()
 
@@ -449,6 +468,143 @@ def list_user_workspaces(database_url: str, *, username: str) -> list[dict[str, 
     ]
 
 
+def list_workspace_members(database_url: str, *, workspace_id: str) -> list[dict[str, Any]]:
+    ensure_schema(database_url)
+    normalized_workspace_id = str(workspace_id or "").strip()
+    engine = get_engine(database_url)
+    with Session(engine) as session:
+        memberships = session.exec(
+            select(EnterpriseMembership).where(
+                EnterpriseMembership.workspace_id == normalized_workspace_id,
+                EnterpriseMembership.status == "active",
+            )
+        ).all()
+        usernames = [membership.username for membership in memberships]
+        users = (
+            session.exec(select(EnterpriseUser).where(EnterpriseUser.username.in_(usernames))).all()
+            if usernames
+            else []
+        )
+    by_username = {user.username: user for user in users}
+    rows = [
+        {
+            "membership_id": membership.membership_id,
+            "workspace_id": membership.workspace_id,
+            "username": membership.username,
+            "email": membership.username,
+            "display_name": (
+                by_username[membership.username].display_name
+                if membership.username in by_username
+                else membership.username
+            ),
+            "role": membership.role,
+            "status": membership.status,
+            "created_at": membership.created_at,
+            "updated_at": membership.updated_at,
+        }
+        for membership in memberships
+    ]
+    return sorted(
+        rows,
+        key=lambda row: (
+            -_role_rank(str(row.get("role", ""))),
+            str(row.get("display_name", "")).strip().lower(),
+            str(row.get("email", "")).strip().lower(),
+        ),
+    )
+
+
+def invite_workspace_member(
+    database_url: str,
+    *,
+    workspace_id: str,
+    email: str,
+    display_name: str = "",
+    role: str = "member",
+    password: str = "",
+) -> dict[str, Any]:
+    ensure_schema(database_url)
+    normalized_workspace_id = str(workspace_id or "").strip()
+    normalized_email = str(email or "").strip().lower()
+    normalized_role = str(role or "").strip().lower() or "member"
+    if normalized_role not in {"owner", "manager", "lead", "operator", "member"}:
+        normalized_role = "member"
+    if not normalized_workspace_id or not normalized_email:
+        return {"status": "skipped"}
+
+    now = _now()
+    engine = get_engine(database_url)
+    membership_id = _stable_key("MEM", f"{normalized_email}:{normalized_workspace_id}")
+    generated_password = ""
+    created = False
+    with Session(engine) as session:
+        workspace = session.get(EnterpriseWorkspace, normalized_workspace_id)
+        if not workspace:
+            return {"status": "missing_workspace"}
+
+        user = session.get(EnterpriseUser, normalized_email)
+        name_value = (
+            str(display_name or "").strip()
+            or (user.display_name if user else "")
+            or normalized_email.split("@")[0].replace(".", " ").replace("_", " ").title()
+        )
+        if user:
+            user.display_name = name_value
+            user.role = _merge_user_role(user.role, normalized_role)
+            user.status = "active"
+            user.updated_at = now
+            if str(password or "").strip():
+                generated_password = str(password).strip()
+                user.password_hash = _hash_password(generated_password)
+        else:
+            generated_password = str(password or "").strip() or secrets.token_urlsafe(10)
+            user = EnterpriseUser(
+                username=normalized_email,
+                display_name=name_value,
+                password_hash=_hash_password(generated_password),
+                role=normalized_role,
+                status="active",
+                created_at=now,
+                updated_at=now,
+            )
+            session.add(user)
+            created = True
+
+        membership = session.get(EnterpriseMembership, membership_id)
+        if membership:
+            membership.role = normalized_role
+            membership.status = "active"
+            membership.updated_at = now
+        else:
+            membership = EnterpriseMembership(
+                membership_id=membership_id,
+                username=normalized_email,
+                workspace_id=normalized_workspace_id,
+                role=normalized_role,
+                status="active",
+                created_at=now,
+                updated_at=now,
+            )
+            session.add(membership)
+            created = True
+        session.commit()
+
+    member = next(
+        (
+            row
+            for row in list_workspace_members(database_url, workspace_id=normalized_workspace_id)
+            if str(row.get("email", "")).strip().lower() == normalized_email
+        ),
+        None,
+    )
+    return {
+        "status": "ready",
+        "created": created,
+        "generated_password": generated_password,
+        "member": member,
+    }
+
+
 def create_session(
     database_url: str,
     *,
@@ -473,7 +629,7 @@ def create_session(
     workspace_id = str(workspace["workspace_id"])
     workspace_slug_value = str(workspace.get("slug", ""))
     workspace_name_value = str(workspace.get("name", ""))
-    role_value = str(role or workspace.get("role") or "owner")
+    role_value = str(workspace.get("role") or role or "owner")
     created_at_value = created_at.isoformat()
     expires_at_value = expires_at.isoformat()
     payload = EnterpriseSession(

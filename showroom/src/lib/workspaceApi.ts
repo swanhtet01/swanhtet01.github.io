@@ -223,6 +223,50 @@ export async function getWorkspaceSession() {
   return workspaceFetch<WorkspaceSessionPayload>('/api/auth/session')
 }
 
+export type TeamMemberRow = {
+  membership_id: string
+  workspace_id: string
+  username: string
+  email: string
+  display_name: string
+  role: string
+  status: string
+  created_at: string
+  updated_at: string
+}
+
+export async function listTeamMembers() {
+  return workspaceFetch<{
+    status?: string
+    count?: number
+    rows: TeamMemberRow[]
+  }>('/api/team/members')
+}
+
+export async function inviteTeamMember(payload: {
+  email: string
+  name?: string
+  role?: string
+  password?: string
+}) {
+  return workspaceFetch<{
+    status?: string
+    created?: boolean
+    generated_password?: string
+    row?: TeamMemberRow | null
+    count?: number
+    rows?: TeamMemberRow[]
+  }>('/api/team/members', {
+    method: 'POST',
+    body: JSON.stringify({
+      email: payload.email,
+      name: payload.name ?? '',
+      role: payload.role ?? 'member',
+      password: payload.password ?? '',
+    }),
+  })
+}
+
 export async function loginWorkspace(username: string, password: string, workspaceSlug = '') {
   const tenant = getTenantConfig()
   const defaultWorkspaceSlug = String(tenant.defaultWorkspaceSlug ?? '').trim()

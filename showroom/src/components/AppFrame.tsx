@@ -12,10 +12,10 @@ type SessionState = {
 
 const appNavItems = [
   { label: 'My Queue', to: '/app/actions' },
-  { label: 'Companies', to: '/app/sales' },
+  { label: 'Sales', to: '/app/sales' },
   { label: 'Receiving', to: '/app/receiving' },
   { label: 'Approvals', to: '/app/approvals' },
-  { label: 'AI Team', to: '/app/teams' },
+  { label: 'Team', to: '/app/teams' },
   { label: 'Director', to: '/app/director' },
 ] as const
 

@@ -7,9 +7,13 @@ export function ProductsPage() {
     <div className="space-y-8 pb-12">
       <section className="sm-surface-deep p-6 lg:p-10">
         <p className="sm-kicker text-[var(--sm-accent)]">What we build</p>
-        <h1 className="mt-4 max-w-4xl text-4xl font-extrabold tracking-tight text-white lg:text-6xl">AI-native systems that replace scattered software.</h1>
+        <h1 className="mt-4 max-w-4xl text-4xl font-extrabold tracking-tight text-white lg:text-6xl">
+          AI-native systems that replace scattered software.
+        </h1>
         <p className="mt-5 max-w-3xl text-base leading-relaxed text-[var(--sm-muted)] lg:text-lg">
-          We build custom software for sales, operations, and management teams. The point is not to add another app. The point is to replace manual chasing, fragmented SaaS, and copied updates with one system that fits how the company already works.
+          We build custom software for sales, operations, and management teams. The point is not to add another app.
+          The point is to replace manual chasing, fragmented SaaS, and copied updates with one system that fits how
+          the company already works.
         </p>
       </section>
 
@@ -38,7 +42,7 @@ export function ProductsPage() {
           <h2 className="mt-3 text-3xl font-bold text-white">Start from the real mess, not a clean demo.</h2>
           <div className="mt-5 space-y-3">
             {[
-              'Bring the company’s real inputs: Facebook pages, Viber or WhatsApp notes, email, Excel, PDFs, and messages.',
+              "Bring the company's real inputs: Facebook pages, Viber or WhatsApp notes, email, Excel, PDFs, and messages.",
               'We shape the first usable system around one actual workflow.',
               'AI handles sorting, drafting, triage, and summaries so the team can work from one operating layer.',
             ].map((item) => (
