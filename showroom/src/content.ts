@@ -48,17 +48,33 @@ export type CustomBuild = {
   detail: string
 }
 
+export type TemplatePack = {
+  name: string
+  category: string
+  audience: string
+  promise: string
+  inputs: string[]
+  outputs: string[]
+  route: string
+  live: boolean
+}
+
+export type OperatorAddOn = {
+  name: string
+  detail: string
+}
+
 export const bookingUrl = (import.meta.env.VITE_BOOKING_URL ?? '').trim()
 
 export const navItems = [
   { label: 'What we build', to: '/systems' },
-  { label: 'Free tools', to: '/find-companies' },
+  { label: 'Templates', to: '/templates' },
 ] as const
 
 export const hero = {
   eyebrow: 'SuperMega',
-  title: 'AI-native systems for sales, operations, and management.',
-  description: 'We build custom internal software that replaces scattered tools, spreadsheets, and manual follow-up.',
+  title: 'AI-native company systems that replace scattered SaaS.',
+  description: 'We build reusable internal systems and custom software for sales, operations, management, and client-facing workflows.',
 }
 
 export const proofPoints: ProofPoint[] = [
@@ -75,12 +91,12 @@ export const proofPoints: ProofPoint[] = [
 ]
 
 export const coreProduct = {
-  name: 'Find clients + clean a list',
-  tagline: 'One shortlist for new leads and one clean list for follow-up.',
-  replaces: ['Raw search results', 'Messy spreadsheets', 'Missed follow-up'],
-  inputs: ['Public search', 'Company lists', 'Notes from sales or WhatsApp'],
-  outputs: ['Shortlist', 'Clean company list', 'Next steps'],
-  rollout: ['Find a few good targets.', 'Clean the list you already have.', 'Run the short follow-up list every day.'],
+  name: 'Starter packs + custom systems',
+  tagline: 'Start from a reusable pack, then extend into the exact system the client needs.',
+  replaces: ['Disconnected SaaS', 'Spreadsheet operations', 'Manual chasing'],
+  inputs: ['Existing team data', 'Real workflows', 'Current blockers'],
+  outputs: ['Working queue', 'Agent loops', 'Role-based control'],
+  rollout: ['Pick one workflow.', 'Ship the first working pack.', 'Extend only after the team trusts it.'],
 }
 
 export const leadFinder = {
@@ -140,6 +156,108 @@ export const publicModules: PublicModule[] = [
     inputs: ['GRN gaps', 'Quantity variances', 'Damage reports', 'Customs or document blockers'],
     outputs: ['Receiving issue queue', 'Owner list', 'Open follow-ups'],
     path: '/receiving-log',
+  },
+]
+
+export const templatePacks: TemplatePack[] = [
+  {
+    name: 'Distributor Sales Desk',
+    category: 'Sales',
+    audience: 'Owner-led distributors, importers, and sales teams',
+    promise: 'Search markets, clean company lists, draft first outreach, and run one daily revenue queue.',
+    inputs: ['Search results', 'Existing lead list', 'Email and WhatsApp notes'],
+    outputs: ['Qualified shortlist', 'Clean company list', 'Follow-up queue'],
+    route: '/book',
+    live: true,
+  },
+  {
+    name: 'Founder Daily Brief',
+    category: 'Management',
+    audience: 'Owners, GMs, and directors',
+    promise: 'See one short daily review built from live leads, tasks, approvals, and exceptions.',
+    inputs: ['Queues', 'Approvals', 'Exception logs', 'Sales state'],
+    outputs: ['Daily brief', 'Priority list', 'Leadership review'],
+    route: '/book',
+    live: true,
+  },
+  {
+    name: 'Receiving Control Lite',
+    category: 'Operations',
+    audience: 'Plant, procurement, and receiving teams',
+    promise: 'Log inbound issues once, assign owners, and keep one short exception queue.',
+    inputs: ['Receiving notes', 'GRN gaps', 'Hold reports', 'Supplier issues'],
+    outputs: ['Issue log', 'Owner queue', 'Daily review'],
+    route: '/book',
+    live: true,
+  },
+  {
+    name: 'Approval Flow',
+    category: 'Management',
+    audience: 'Teams routing quotes, purchases, and internal approvals',
+    promise: 'Move approvals through one controlled queue with visible status and decision history.',
+    inputs: ['Requests', 'Quotes', 'Documents', 'Decision notes'],
+    outputs: ['Approval queue', 'Decision trail', 'Escalation view'],
+    route: '/book',
+    live: true,
+  },
+  {
+    name: 'Client Portal Starter',
+    category: 'Client-facing',
+    audience: 'Service firms, agencies, and B2B operators',
+    promise: 'Give clients one place for status, files, approvals, and follow-up instead of endless chats.',
+    inputs: ['Project status', 'Files', 'Approvals', 'Messages'],
+    outputs: ['Client portal', 'Status view', 'Approval flow'],
+    route: '/book',
+    live: false,
+  },
+  {
+    name: 'Learning Hub Starter',
+    category: 'Training',
+    audience: 'Teams rolling out onboarding, SOPs, and internal training',
+    promise: 'Turn onboarding and SOP material into one guided learning system with AI support.',
+    inputs: ['Docs', 'SOPs', 'Training notes', 'Videos'],
+    outputs: ['Learning path', 'Knowledge prompts', 'Completion view'],
+    route: '/book',
+    live: false,
+  },
+  {
+    name: 'Document Intake',
+    category: 'Operations',
+    audience: 'Teams receiving PDFs, forms, and mixed paperwork every day',
+    promise: 'Turn files into extracted actions, fields, and next-step tasks instead of manual retyping.',
+    inputs: ['PDFs', 'Forms', 'Emails', 'Scans'],
+    outputs: ['Structured fields', 'Task queue', 'Review exceptions'],
+    route: '/book',
+    live: false,
+  },
+  {
+    name: 'Commerce Back Office',
+    category: 'Commerce',
+    audience: 'Stores and ecommerce operators',
+    promise: 'Run orders, support, stock follow-up, and issue handling from one operating layer.',
+    inputs: ['Orders', 'Customer messages', 'Stock notes', 'Support backlog'],
+    outputs: ['Ops queue', 'Support flow', 'Stock follow-up'],
+    route: '/book',
+    live: false,
+  },
+]
+
+export const operatorAddOns: OperatorAddOn[] = [
+  {
+    name: 'Reply Draft',
+    detail: 'Draft repetitive supplier and customer replies with the right context attached.',
+  },
+  {
+    name: 'Document Intake',
+    detail: 'Extract fields and actions from uploaded files instead of retyping them manually.',
+  },
+  {
+    name: 'Founder Daily Brief',
+    detail: 'Summarize the company state automatically from live queues and exceptions.',
+  },
+  {
+    name: 'Browser Sidecar',
+    detail: 'Handle narrow browser tasks when there is no API, without making browser automation the core runtime.',
   },
 ]
 

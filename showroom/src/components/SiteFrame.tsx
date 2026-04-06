@@ -23,7 +23,7 @@ export function SiteFrame() {
             </span>
               <span className="flex flex-col">
                 <span className="sm-logo text-lg font-extrabold tracking-tight text-white">SuperMega</span>
-              <span className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[var(--sm-muted)]">AI-native systems for real work.</span>
+                <span className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[var(--sm-muted)]">AI-native systems company.</span>
               </span>
             </NavLink>
           <button
@@ -66,10 +66,18 @@ export function SiteFrame() {
 
       <footer className="border-t border-white/8 bg-[rgba(4,10,22,0.78)]">
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 px-4 py-6 text-sm text-[var(--sm-muted)] lg:flex-row lg:items-center lg:justify-between lg:px-8">
-          <p>AI-native systems for real work.</p>
-          <Link className="sm-link" to="/book">
-            Book rollout call
-          </Link>
+          <p>Starter packs, custom systems, and durable agent loops.</p>
+          <div className="flex flex-wrap gap-4">
+            <Link className="sm-link" to="/templates">
+              Templates
+            </Link>
+            <Link className="sm-link" to="/find-companies">
+              Proof tools
+            </Link>
+            <Link className="sm-link" to="/book">
+              Book rollout call
+            </Link>
+          </div>
         </div>
       </footer>
     </div>

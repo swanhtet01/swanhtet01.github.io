@@ -44,6 +44,7 @@ function App() {
         <Route element={<SiteFrame />} path="/">
         <Route element={<HomePage />} index />
           <Route element={<ProductsPage />} path="systems" />
+          <Route element={<ProductsPage />} path="templates" />
           <Route element={<Navigate replace to="/systems" />} path="products" />
           <Route element={<PublicLeadFinderPage />} path="find-companies" />
           <Route element={<Navigate replace to="/find-companies" />} path="lead-finder" />

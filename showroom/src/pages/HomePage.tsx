@@ -1,20 +1,7 @@
 import { Link } from 'react-router-dom'
 
-import { customBuilds, hero, systemOffers } from '../content'
+import { customBuilds, hero, publicModules, systemOffers, templatePacks } from '../content'
 import { trackEvent } from '../lib/analytics'
-
-const proofTools = [
-  {
-    name: 'Find clients',
-    detail: 'Search for new companies, keep the shortlist, and draft the first outreach.',
-    to: '/find-companies',
-  },
-  {
-    name: 'Clean a list',
-    detail: 'Paste the names you already have from Google, Facebook, Viber, WhatsApp, Excel, or CRM.',
-    to: '/company-list?setup=leads',
-  },
-]
 
 export function HomePage() {
   return (
@@ -26,20 +13,20 @@ export function HomePage() {
             <p className="sm-kicker text-[var(--sm-accent)]">{hero.eyebrow}</p>
             <h1 className="mt-4 max-w-4xl text-5xl font-extrabold tracking-tight text-white lg:text-8xl">{hero.title}</h1>
             <p className="mt-5 max-w-3xl text-base leading-relaxed text-[var(--sm-muted)] lg:text-lg">
-              Built for Myanmar teams still running work through Facebook pages, Viber or WhatsApp notes, email, spreadsheets, and old SaaS that never really fits. We build one working system around the real flow instead of asking the team to juggle five tools.
+              Built for Myanmar teams still running work through Facebook pages, Viber or WhatsApp notes, email, spreadsheets, and old SaaS that never really fits. We replace that mess with one AI-native operating layer, one starter pack at a time.
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
-              <Link className="sm-button-primary" onClick={() => trackEvent('offer_open_click', { offer: 'Systems' })} to="/systems">
-                See what we build
+              <Link className="sm-button-primary" onClick={() => trackEvent('offer_open_click', { offer: 'Templates' })} to="/templates">
+                See starter packs
               </Link>
-              <Link className="sm-button-secondary" onClick={() => trackEvent('public_start_click', { offer: 'Find clients' })} to="/find-companies">
-                Try a free tool
+              <Link className="sm-button-secondary" onClick={() => trackEvent('offer_open_click', { offer: 'Systems' })} to="/systems">
+                See what we build
               </Link>
             </div>
             <div className="mt-8 flex flex-wrap gap-3 text-sm text-[var(--sm-muted)]">
-              <span className="sm-status-pill">Sales desks</span>
-              <span className="sm-status-pill">Ops desks</span>
-              <span className="sm-status-pill">Director briefs</span>
+              <span className="sm-status-pill">Sales systems</span>
+              <span className="sm-status-pill">Ops systems</span>
+              <span className="sm-status-pill">Management systems</span>
             </div>
           </div>
 
@@ -66,9 +53,9 @@ export function HomePage() {
           <h2 className="mt-3 text-3xl font-bold text-white">Not another generic SaaS stack.</h2>
           <div className="mt-6 space-y-3">
             {[
-              'We start from the real data you already have, even if it is messy.',
-              'AI handles the cleanup, triage, drafting, and daily follow-up loops.',
-              'The team works from one clear queue instead of scattered apps and chats.',
+              'We start from the real workflow and data the team already has.',
+              'AI handles cleanup, triage, drafting, summarizing, and repeat follow-up loops.',
+              'The team works from one visible operating layer instead of scattered apps and chats.',
             ].map((item) => (
               <div className="border-b border-white/8 pb-3 text-base text-[var(--sm-muted)] last:border-b-0 last:pb-0" key={item}>
                 {item}
@@ -78,14 +65,19 @@ export function HomePage() {
         </div>
 
         <div className="sm-surface p-6 lg:p-8">
-          <p className="sm-kicker text-[var(--sm-accent-alt)]">Free proof tools</p>
-          <h2 className="mt-3 text-3xl font-bold text-white">Try the approach before a rollout.</h2>
+          <p className="sm-kicker text-[var(--sm-accent-alt)]">Start with one pack</p>
+          <h2 className="mt-3 text-3xl font-bold text-white">Reusable systems we can ship fast.</h2>
           <div className="mt-5 space-y-4">
-            {proofTools.map((tool) => (
-              <Link className="block border-b border-white/8 pb-4 last:border-b-0 last:pb-0" key={tool.name} to={tool.to}>
-                <p className="text-xl font-bold text-white">{tool.name}</p>
-                <p className="mt-1 text-sm leading-relaxed text-[var(--sm-muted)]">{tool.detail}</p>
-              </Link>
+            {templatePacks.slice(0, 4).map((pack) => (
+              <div className="border-b border-white/8 pb-4 last:border-b-0 last:pb-0" key={pack.name}>
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xl font-bold text-white">{pack.name}</p>
+                    <p className="mt-1 text-sm leading-relaxed text-[var(--sm-muted)]">{pack.promise}</p>
+                  </div>
+                  <span className="sm-status-pill">{pack.live ? 'Live pack' : 'Build pack'}</span>
+                </div>
+              </div>
             ))}
           </div>
         </div>
@@ -94,23 +86,51 @@ export function HomePage() {
       <section className="sm-surface p-6 lg:p-8">
         <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
           <div>
-            <p className="sm-kicker text-[var(--sm-accent)]">Custom builds</p>
-            <h2 className="mt-3 text-3xl font-bold text-white">We do not only ship list tools.</h2>
+            <p className="sm-kicker text-[var(--sm-accent)]">Template shelf</p>
+            <h2 className="mt-3 text-3xl font-bold text-white">More than one lead tool.</h2>
             <p className="mt-3 max-w-2xl text-sm leading-relaxed text-[var(--sm-muted)]">
-              We also build full AI-native internal systems for teams that need more than a proof tool.
+              These are the kinds of reusable systems SuperMega can turn into a rollout for a client.
             </p>
           </div>
-          <Link className="sm-button-primary" onClick={() => trackEvent('book_demo_click', { source: 'home_custom_builds' })} to="/book">
-            Book rollout call
+          <Link className="sm-button-primary" onClick={() => trackEvent('offer_open_click', { offer: 'Templates' })} to="/templates">
+            Open template shelf
           </Link>
         </div>
         <div className="mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {customBuilds.map((item) => (
+          {templatePacks.slice(4).map((item) => (
+            <div className="sm-chip text-white" key={item.name}>
+              <p className="font-semibold">{item.name}</p>
+              <p className="mt-2 text-sm text-[var(--sm-muted)]">{item.promise}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="grid gap-6 lg:grid-cols-[1fr_1fr]">
+        <div className="sm-surface p-6 lg:p-8">
+          <p className="sm-kicker text-[var(--sm-accent)]">Free proof tools</p>
+          <h2 className="mt-3 text-3xl font-bold text-white">Useful tools, not the main company story.</h2>
+          <div className="mt-5 grid gap-3">
+            {publicModules.map((tool) => (
+              <Link className="sm-chip text-white" key={tool.name} to={tool.path}>
+                <p className="font-semibold">{tool.name}</p>
+                <p className="mt-2 text-sm text-[var(--sm-muted)]">{tool.tagline}</p>
+              </Link>
+            ))}
+          </div>
+        </div>
+
+        <div className="sm-surface p-6 lg:p-8">
+          <p className="sm-kicker text-[var(--sm-accent-alt)]">Custom systems</p>
+          <h2 className="mt-3 text-3xl font-bold text-white">When a pack is not enough, we build the full thing.</h2>
+          <div className="mt-5 grid gap-3 md:grid-cols-2">
+            {customBuilds.map((item) => (
             <div className="sm-chip text-white" key={item.name}>
               <p className="font-semibold">{item.name}</p>
               <p className="mt-2 text-sm text-[var(--sm-muted)]">{item.detail}</p>
             </div>
-          ))}
+            ))}
+          </div>
         </div>
       </section>
     </div>
