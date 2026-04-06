@@ -19,35 +19,34 @@ Body:
 ```json
 {
   "source": "scheduler",
-  "job_types": ["revenue_scout", "list_clerk", "task_triage", "founder_brief"]
+  "job_types": ["revenue_scout", "list_clerk", "task_triage", "template_clerk"]
 }
 ```
 
-If `job_types` is omitted, the app runs all four default jobs.
+If `job_types` is omitted, the app runs every registered default job.
 
-## Recommended Cloud Scheduler setup
+## Current live scheduler split
 
-1. Create a random token and store it as `SUPERMEGA_INTERNAL_CRON_TOKEN` in Secret Manager / Cloud Run env.
-2. Create one Cloud Scheduler HTTP job.
-3. Target:
-   - `https://app.supermega.dev/api/internal/agent-runs/run-defaults`
-4. Method:
-   - `POST`
-5. Header:
-   - `x-supermega-cron-token: <token>`
-6. Body:
+Use:
 
-```json
-{
-  "source": "scheduler"
-}
-```
+`powershell -ExecutionPolicy Bypass -File .\tools\ensure_supermega_scheduler.ps1`
 
-## Default loop
+This script:
+
+- ensures `SUPERMEGA_INTERNAL_CRON_TOKEN` exists in Secret Manager
+- updates Cloud Run to consume that secret
+- creates or updates these Cloud Scheduler jobs:
+  - `supermega-default-agent-jobs` every 2 hours
+  - `supermega-ops-watch` every 15 minutes
+  - `supermega-founder-brief-daily` every day at 08:00 Asia/Yangon
+
+## Active loop set
 
 - `Revenue Scout`: monitor sales pipeline and hunt pressure
 - `List Clerk`: audit company data quality and gaps
+- `Template Clerk`: turn inbound requests into rollout-ready follow-up tasks
 - `Task Triage`: review queue pressure and weak ownership
+- `Ops Watch`: catch stale loops, runtime drift, and queue pressure
 - `Founder Brief`: summarize the operating state
 
 ## Next upgrade

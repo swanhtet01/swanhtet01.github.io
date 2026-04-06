@@ -957,6 +957,18 @@ AGENT_JOB_TEMPLATES: tuple[dict[str, str], ...] = (
         "description": "Surface open tasks, owner gaps, and priority pressure.",
     },
     {
+        "job_type": "template_clerk",
+        "name": "Template Clerk",
+        "cadence": "hourly",
+        "description": "Turn inbound requests into rollout-ready follow-up tasks and pack recommendations.",
+    },
+    {
+        "job_type": "ops_watch",
+        "name": "Ops Watch",
+        "cadence": "15m",
+        "description": "Watch agent runtime health, stale loops, and execution pressure.",
+    },
+    {
         "job_type": "founder_brief",
         "name": "Founder Brief",
         "cadence": "daily",
@@ -978,6 +990,27 @@ def _group_agent_runs_by_job_type(rows: list[dict[str, Any]]) -> dict[str, dict[
 
 def _default_agent_job_types() -> list[str]:
     return [str(item.get("job_type", "")).strip() for item in AGENT_JOB_TEMPLATES if str(item.get("job_type", "")).strip()]
+
+
+def _parse_iso_datetime(value: str) -> datetime | None:
+    raw = str(value or "").strip()
+    if not raw:
+        return None
+    try:
+        return datetime.fromisoformat(raw)
+    except ValueError:
+        return None
+
+
+def _cadence_threshold_hours(cadence: str) -> int:
+    normalized = str(cadence or "").strip().lower()
+    if normalized == "15m":
+        return 1
+    if normalized == "hourly":
+        return 4
+    if normalized == "daily":
+        return 30
+    return 24
 
 
 def _run_and_persist_agent_job(
@@ -1132,6 +1165,153 @@ def _build_task_triage_result(*, enterprise_db_url: str, workspace_id: str) -> d
     }
 
 
+def _build_template_clerk_result(*, state_db: str, enterprise_db_url: str, workspace_id: str) -> dict[str, Any]:
+    submissions = list_contact_submissions(state_db, limit=25)
+    recent = submissions[:10]
+    rows: list[dict[str, Any]] = []
+    for item in recent:
+        company = str(item.get("company", "")).strip() or str(item.get("name", "")).strip() or "Inbound request"
+        email = str(item.get("email", "")).strip()
+        workflow = str(item.get("workflow", "")).strip()
+        goal = str(item.get("goal", "")).strip()
+        data_summary = str(item.get("data_summary", "")).strip()
+        notes = "\n".join(
+            part
+            for part in [
+                f"Company: {company}",
+                f"Email: {email}" if email else "",
+                f"Workflow: {workflow}" if workflow else "",
+                f"Current tools: {data_summary}" if data_summary else "",
+                f"Goal: {goal}" if goal else "",
+            ]
+            if part
+        )
+        rows.append(
+            {
+                "title": f"Review inbound request: {company}",
+                "owner": "Revenue Pod",
+                "priority": "High",
+                "due": "Today",
+                "status": "open",
+                "notes": notes,
+                "template": "inbound_contact_request",
+            }
+        )
+
+    saved = enterprise_add_workspace_tasks(
+        enterprise_db_url,
+        workspace_id=workspace_id,
+        rows=rows,
+    ) if rows else {"saved_count": 0, "saved_task_ids": []}
+
+    top_requests = [
+        {
+            "company": str(item.get("company", "")).strip() or str(item.get("name", "")).strip(),
+            "goal": str(item.get("goal", "")).strip(),
+            "workflow": str(item.get("workflow", "")).strip(),
+        }
+        for item in recent[:5]
+    ]
+    summary = (
+        f"{len(recent)} inbound requests checked, "
+        f"{int(saved.get('saved_count', 0) or 0)} rollout follow-up tasks saved."
+    )
+    return {
+        "job_type": "template_clerk",
+        "summary": summary,
+        "metrics": {
+            "inbound_request_count": len(recent),
+            "saved_follow_up_count": int(saved.get("saved_count", 0) or 0),
+        },
+        "top_requests": top_requests,
+        "next_actions": [
+            "Reply to the newest inbound request first.",
+            "Map each inbound request to one starter pack only.",
+            "Keep rollout scoping inside the shared queue instead of email only.",
+        ],
+    }
+
+
+def _build_ops_watch_result(*, state_db: str, enterprise_db_url: str, workspace_id: str) -> dict[str, Any]:
+    latest_runs = enterprise_list_agent_runs(
+        enterprise_db_url,
+        workspace_id=workspace_id,
+        limit=80,
+    )
+    latest_by_type = _group_agent_runs_by_job_type(latest_runs)
+    now = datetime.now().astimezone()
+    stale_jobs: list[str] = []
+    errored_jobs: list[str] = []
+
+    for template in AGENT_JOB_TEMPLATES:
+        job_type = str(template.get("job_type", "")).strip()
+        row = latest_by_type.get(job_type, {})
+        status = str(row.get("status", "")).strip().lower()
+        if status == "error":
+            errored_jobs.append(job_type)
+        completed_at = _parse_iso_datetime(str(row.get("completed_at", "")).strip() or str(row.get("created_at", "")).strip())
+        threshold_hours = _cadence_threshold_hours(str(template.get("cadence", "")).strip())
+        if not completed_at or (now - completed_at).total_seconds() > threshold_hours * 3600:
+            stale_jobs.append(job_type)
+
+    approvals = load_approval_summary(state_db)
+    pending_approvals = int(approvals.get("pending_count", 0) or 0)
+    open_tasks = enterprise_list_workspace_tasks(enterprise_db_url, workspace_id=workspace_id, limit=500)
+    open_count = sum(1 for row in open_tasks if str(row.get("status", "")).strip().lower() != "done")
+
+    notes: list[str] = []
+    if stale_jobs:
+        notes.append(f"Stale loops: {', '.join(stale_jobs)}")
+    if errored_jobs:
+        notes.append(f"Errored loops: {', '.join(errored_jobs)}")
+    if pending_approvals:
+        notes.append(f"Pending approvals: {pending_approvals}")
+    if open_count > 30:
+        notes.append(f"Open task pressure: {open_count}")
+
+    saved = {"saved_count": 0}
+    if notes:
+        saved = enterprise_add_workspace_tasks(
+            enterprise_db_url,
+            workspace_id=workspace_id,
+            rows=[
+                {
+                    "title": "Review agent runtime health",
+                    "owner": "Founder Desk",
+                    "priority": "High",
+                    "due": "Today",
+                    "status": "open",
+                    "notes": " | ".join(notes),
+                    "template": "ops_watch",
+                }
+            ],
+        )
+
+    if not notes:
+        summary = "Agent runtime is healthy. Core loops are running on cadence."
+    else:
+        summary = "Agent runtime needs attention. " + " ".join(notes)
+
+    return {
+        "job_type": "ops_watch",
+        "summary": summary,
+        "metrics": {
+            "stale_job_count": len(stale_jobs),
+            "error_job_count": len(errored_jobs),
+            "pending_approval_count": pending_approvals,
+            "open_task_count": open_count,
+            "saved_watch_task_count": int(saved.get("saved_count", 0) or 0),
+        },
+        "stale_jobs": stale_jobs,
+        "errored_jobs": errored_jobs,
+        "next_actions": [
+            "Keep runtime drift visible before it becomes a delivery problem.",
+            "Review stale or failed loops first.",
+            "Do not add more automation until the queue is under control.",
+        ],
+    }
+
+
 def _build_founder_brief_result(*, state_db: str, enterprise_db_url: str, workspace_id: str) -> dict[str, Any]:
     lead_summary = enterprise_load_lead_summary(enterprise_db_url, workspace_id=workspace_id)
     tasks = enterprise_list_workspace_tasks(enterprise_db_url, workspace_id=workspace_id, limit=500)
@@ -1177,6 +1357,18 @@ def _execute_agent_job(
         return _build_list_clerk_result(enterprise_db_url=enterprise_db_url, workspace_id=workspace_id)
     if normalized_type == "task_triage":
         return _build_task_triage_result(enterprise_db_url=enterprise_db_url, workspace_id=workspace_id)
+    if normalized_type == "template_clerk":
+        return _build_template_clerk_result(
+            state_db=state_db,
+            enterprise_db_url=enterprise_db_url,
+            workspace_id=workspace_id,
+        )
+    if normalized_type == "ops_watch":
+        return _build_ops_watch_result(
+            state_db=state_db,
+            enterprise_db_url=enterprise_db_url,
+            workspace_id=workspace_id,
+        )
     if normalized_type == "founder_brief":
         return _build_founder_brief_result(
             state_db=state_db,

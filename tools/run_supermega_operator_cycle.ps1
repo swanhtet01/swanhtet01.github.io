@@ -46,10 +46,10 @@ $smoke = $smokeJson | Out-String | ConvertFrom-Json
 
 $publicRoutes = [ordered]@{
   home = Get-RouteStatus -Url "$PublicUrl/"
-  find_companies = Get-RouteStatus -Url "$PublicUrl/find-companies/"
-  company_list = Get-RouteStatus -Url "$PublicUrl/company-list/"
-  receiving_log = Get-RouteStatus -Url "$PublicUrl/receiving-log/"
-  book = Get-RouteStatus -Url "$PublicUrl/book/"
+  systems = Get-RouteStatus -Url "$PublicUrl/systems/"
+  templates = Get-RouteStatus -Url "$PublicUrl/templates/"
+  contact = Get-RouteStatus -Url "$PublicUrl/contact/"
+  app = Get-RouteStatus -Url "$BaseUrl/"
 }
 
 $deploy = $null

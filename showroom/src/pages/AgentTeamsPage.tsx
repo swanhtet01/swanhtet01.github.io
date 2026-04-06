@@ -57,7 +57,28 @@ type AgentTeamPayload = {
 }
 
 const roleOptions = ['member', 'operator', 'manager', 'owner'] as const
-const runnableJobTypes = ['revenue_scout', 'list_clerk', 'task_triage', 'founder_brief'] as const
+const runnableJobTypes = [
+  'revenue_scout',
+  'list_clerk',
+  'template_clerk',
+  'task_triage',
+  'ops_watch',
+  'founder_brief',
+] as const
+
+function cadenceThresholdMinutes(cadence: string) {
+  const normalized = String(cadence || '').trim().toLowerCase()
+  if (normalized === '15m') {
+    return 60
+  }
+  if (normalized === 'hourly') {
+    return 180
+  }
+  if (normalized === 'daily') {
+    return 36 * 60
+  }
+  return 6 * 60
+}
 
 function formatDateTime(value: string) {
   if (!value) {
@@ -128,7 +149,7 @@ export function AgentTeamsPage() {
         const session = await getWorkspaceSession()
         if (cancelled) return
         if (!session.authenticated) {
-          setError('Login is required to open Team.')
+          setError('Login is required to open Agent Ops.')
           setLoading(false)
           return
         }
@@ -233,12 +254,46 @@ export function AgentTeamsPage() {
     [agentJobs],
   )
 
+  const runtimeHealth = useMemo(() => {
+    const now = Date.now()
+    let staleCount = 0
+    let errorCount = 0
+
+    for (const job of activeJobs) {
+      const lastRun = job.last_run
+      const lastStatus = String(lastRun?.status || '').trim().toLowerCase()
+      if (lastStatus === 'error') {
+        errorCount += 1
+      }
+      const lastTimestamp = String(lastRun?.completed_at || lastRun?.created_at || '').trim()
+      const parsed = lastTimestamp ? new Date(lastTimestamp) : null
+      const thresholdMs = cadenceThresholdMinutes(job.cadence) * 60 * 1000
+      if (!parsed || Number.isNaN(parsed.getTime()) || now - parsed.getTime() > thresholdMs) {
+        staleCount += 1
+      }
+    }
+
+    const latestSchedulerRun = agentRuns.find((row) => String(row.source || '').trim().toLowerCase() === 'scheduler')
+    const latestBatchRun = agentRuns.find((row) => {
+      const source = String(row.source || '').trim().toLowerCase()
+      return source === 'scheduler' || source.includes('batch')
+    })
+
+    return {
+      staleCount,
+      errorCount,
+      jobsDueNow: staleCount,
+      lastSchedulerRun: latestSchedulerRun?.completed_at || latestSchedulerRun?.created_at || '',
+      lastBatchRun: latestBatchRun?.completed_at || latestBatchRun?.created_at || '',
+    }
+  }, [activeJobs, agentRuns])
+
   return (
     <div className="space-y-8">
       <PageIntro
         eyebrow="Agent Ops"
-        title="Run the company with people, loops, and approvals."
-        description="Invite managers, trigger the core loops, and see what the agent system actually did."
+        title="Keep the company running with people, loops, and escalation."
+        description="Scheduler keeps the base loops alive. Manual run is for operator checks, recovery, and urgent refresh."
       />
 
       <section className="grid gap-4 md:grid-cols-4">
@@ -261,20 +316,61 @@ export function AgentTeamsPage() {
         </div>
       </section>
 
+      <section className="grid gap-4 md:grid-cols-4">
+        <div className="sm-metric-card">
+          <p className="sm-kicker text-[var(--sm-accent)]">Stale loops</p>
+          <p className="mt-3 text-3xl font-bold text-white">{runtimeHealth.staleCount}</p>
+          <p className="mt-1 text-sm text-[var(--sm-muted)]">Jobs that are overdue for their cadence.</p>
+        </div>
+        <div className="sm-metric-card">
+          <p className="sm-kicker text-[var(--sm-accent-alt)]">Errored loops</p>
+          <p className="mt-3 text-3xl font-bold text-white">{runtimeHealth.errorCount}</p>
+          <p className="mt-1 text-sm text-[var(--sm-muted)]">Jobs whose last recorded run failed.</p>
+        </div>
+        <div className="sm-metric-card">
+          <p className="sm-kicker text-[var(--sm-accent)]">Last scheduler run</p>
+          <p className="mt-3 text-lg font-bold text-white">{formatDateTime(runtimeHealth.lastSchedulerRun)}</p>
+        </div>
+        <div className="sm-metric-card">
+          <p className="sm-kicker text-[var(--sm-accent-alt)]">Jobs due now</p>
+          <p className="mt-3 text-3xl font-bold text-white">{runtimeHealth.jobsDueNow}</p>
+          <p className="mt-1 text-sm text-[var(--sm-muted)]">
+            Last batch: {formatDateTime(runtimeHealth.lastBatchRun)}
+          </p>
+        </div>
+      </section>
+
       <section className="grid gap-6 lg:grid-cols-[1.05fr_0.95fr]">
         <article className="sm-surface p-6">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
-              <p className="sm-kicker text-[var(--sm-accent)]">Core agent army</p>
-              <h2 className="mt-2 text-2xl font-bold text-white">The loops that keep SuperMega moving.</h2>
-              <p className="mt-3 text-sm text-[var(--sm-muted)]">These are the real runnable jobs in production. Manual run is for operator checks. Scheduler keeps the base loop alive.</p>
+              <p className="sm-kicker text-[var(--sm-accent)]">Always-on loops</p>
+              <h2 className="mt-2 text-2xl font-bold text-white">The jobs that keep SuperMega moving.</h2>
+              <p className="mt-3 text-sm text-[var(--sm-muted)]">
+                Revenue, cleanup, inbound handling, queue control, runtime watch, and the founder brief now live in one operator surface.
+              </p>
             </div>
             <button className="sm-button-primary" disabled={jobBusy !== null} onClick={() => void handleRunCoreLoop()} type="button">
-              {jobBusy === 'batch' ? 'Running core loop...' : 'Run all core loops'}
+              {jobBusy === 'batch' ? 'Running operator loop...' : 'Run full operator loop'}
             </button>
           </div>
 
           {jobMessage ? <div className="sm-chip mt-4 text-[var(--sm-muted)]">{jobMessage}</div> : null}
+
+          <div className="mt-5 grid gap-3 md:grid-cols-3">
+            <div className="sm-chip text-white">
+              <p className="sm-kicker text-[var(--sm-accent)]">Always on</p>
+              <p className="mt-2 text-sm">Scheduler runs these loops even when nobody is in the app.</p>
+            </div>
+            <div className="sm-chip text-white">
+              <p className="sm-kicker text-[var(--sm-accent-alt)]">Run now</p>
+              <p className="mt-2 text-sm">Use manual run for checks, recovery, and urgent refresh.</p>
+            </div>
+            <div className="sm-chip text-white">
+              <p className="sm-kicker text-[var(--sm-accent)]">Escalation</p>
+              <p className="mt-2 text-sm">Ops Watch and Founder Brief raise drift before it becomes a delivery problem.</p>
+            </div>
+          </div>
 
           <div className="mt-5 space-y-4">
             {activeJobs.length ? (
@@ -345,7 +441,7 @@ export function AgentTeamsPage() {
         </article>
       </section>
 
-      {loading ? <div className="sm-chip text-[var(--sm-muted)]">Loading Team...</div> : null}
+      {loading ? <div className="sm-chip text-[var(--sm-muted)]">Loading Agent Ops...</div> : null}
       {error ? <div className="sm-chip text-[var(--sm-muted)]">{error}</div> : null}
 
       {!loading && !error ? (

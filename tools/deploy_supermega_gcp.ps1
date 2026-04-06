@@ -261,6 +261,17 @@ Ensure-SecretVersion -Name "supermega-app-password" -Value ([string]$envValues["
 Ensure-SecretVersion -Name "supermega-openai-api-key" -Value ([string]$envValues["OPENAI_API_KEY"])
 Ensure-SecretVersion -Name "supermega-google-maps-api-key" -Value ([string]$envValues["GOOGLE_MAPS_API_KEY"])
 Ensure-SecretVersion -Name "supermega-google-places-api-key" -Value ([string]$envValues["GOOGLE_PLACES_API_KEY"])
+$internalCronToken = ""
+try {
+    $internalCronToken = ((Run-GcloudCapture -CommandArgs @("secrets", "versions", "access", "latest", "--secret=supermega-internal-cron-token", "--project=$ProjectId")) -join "`n").Trim()
+}
+catch {
+    $internalCronToken = ""
+}
+if ([string]::IsNullOrWhiteSpace($internalCronToken)) {
+    $internalCronToken = ("{0}{1}" -f ([guid]::NewGuid().ToString("N")), ([guid]::NewGuid().ToString("N")))
+}
+Ensure-SecretVersion -Name "supermega-internal-cron-token" -Value $internalCronToken
 $serviceAccountJson = (Try-ReadText -PathValue $ServiceAccountKey).Trim()
 $googleOauthClientJson = (Try-ReadText -PathValue $GoogleOAuthClient).Trim()
 if ($serviceAccountJson) {
@@ -322,7 +333,7 @@ VITE_WORKSPACE_API_BASE: "https://$AppDomain"
             "--max-instances=1",
             "--add-cloudsql-instances=$cloudSqlConnection",
             "--env-vars-file=$envVarsFile",
-            "--set-secrets=SUPERMEGA_APP_USERNAME=supermega-app-username:latest,SUPERMEGA_APP_PASSWORD=supermega-app-password:latest,SUPERMEGA_DATABASE_URL=supermega-database-url:latest,OPENAI_API_KEY=supermega-openai-api-key:latest,GOOGLE_MAPS_API_KEY=supermega-google-maps-api-key:latest,GOOGLE_PLACES_API_KEY=supermega-google-places-api-key:latest"
+            "--set-secrets=SUPERMEGA_APP_USERNAME=supermega-app-username:latest,SUPERMEGA_APP_PASSWORD=supermega-app-password:latest,SUPERMEGA_DATABASE_URL=supermega-database-url:latest,OPENAI_API_KEY=supermega-openai-api-key:latest,GOOGLE_MAPS_API_KEY=supermega-google-maps-api-key:latest,GOOGLE_PLACES_API_KEY=supermega-google-places-api-key:latest,SUPERMEGA_INTERNAL_CRON_TOKEN=supermega-internal-cron-token:latest"
         ) | Out-Null
     }
     finally {

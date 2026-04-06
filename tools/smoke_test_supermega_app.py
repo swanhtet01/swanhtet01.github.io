@@ -138,7 +138,6 @@ def main() -> int:
         f"{args.base_url.rstrip('/')}/api/agent-runs/run-defaults",
         {
             "source": "smoke_test_batch",
-            "job_types": ["founder_brief", "task_triage"],
         },
         timeout=90,
     )
