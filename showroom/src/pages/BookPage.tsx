@@ -8,12 +8,10 @@ export function BookPage() {
   const offers = [
     ...CORE_SOLUTIONS.map((solution) => ({
       name: solution.name,
-      price: solution.price,
       detail: solution.promise,
     })),
     {
-      name: 'Custom Build Sprint',
-      price: '$1,500+',
+      name: 'Custom Build',
       detail: 'A focused build for a client portal, learning platform, ecommerce back office, or another internal workflow.',
     },
   ]
@@ -60,16 +58,13 @@ export function BookPage() {
 
       <section className="grid gap-6 lg:grid-cols-[1.05fr_0.95fr]">
         <section className="sm-surface p-6 lg:p-8">
-          <p className="sm-kicker text-[var(--sm-accent)]">Most teams start with one pack</p>
+          <p className="sm-kicker text-[var(--sm-accent)]">Most teams start with one system</p>
           <div className="mt-5 space-y-4">
             {offers.map((offer) => (
               <div className="border-b border-white/8 pb-4 last:border-b-0 last:pb-0" key={offer.name}>
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <p className="text-xl font-bold text-white">{offer.name}</p>
-                    <p className="mt-1 max-w-2xl text-sm leading-relaxed text-[var(--sm-muted)]">{offer.detail}</p>
-                  </div>
-                  <p className="shrink-0 text-sm font-semibold text-white">{offer.price}</p>
+                <div>
+                  <p className="text-xl font-bold text-white">{offer.name}</p>
+                  <p className="mt-1 max-w-2xl text-sm leading-relaxed text-[var(--sm-muted)]">{offer.detail}</p>
                 </div>
               </div>
             ))}

@@ -10,7 +10,7 @@ const startPoints = [
   },
   {
     name: 'Operations',
-    detail: 'Log receiving issues, blockers, and approvals without another heavy ERP rollout.',
+    detail: 'Run approvals, documents, exceptions, and daily tasks without another heavy ERP rollout.',
   },
   {
     name: 'Management',
@@ -58,9 +58,13 @@ export function HomePage() {
         </article>
 
         <article className="sm-surface-soft p-6 lg:p-8">
-          <p className="sm-kicker text-[var(--sm-accent-alt)]">How we start</p>
+          <p className="sm-kicker text-[var(--sm-accent-alt)]">Useful free tools</p>
           <div className="mt-5 space-y-4">
-            {['Pick one workflow.', 'Use the data and tools the team already has.', 'Ship one working system fast.'].map((item) => (
+            {[
+              'Find clients if you need new companies.',
+              'Clean my list if you already have names from Google, Facebook, WhatsApp, Excel, or CRM.',
+              'Then move into the right starter pack or custom system.',
+            ].map((item) => (
               <div className="border-b border-white/8 pb-3 text-base text-[var(--sm-muted)] last:border-b-0 last:pb-0" key={item}>
                 {item}
               </div>

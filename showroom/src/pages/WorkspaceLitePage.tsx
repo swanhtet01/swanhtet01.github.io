@@ -233,7 +233,7 @@ function buildSharedLeadRow(row: LeadRow, contextLabel: string) {
     stage: 'offer_ready',
     status: 'open',
     owner: 'Growth Studio',
-    service_pack: importedList ? 'Company Cleanup' : 'Sales Setup',
+    service_pack: importedList ? 'List Cleanup Desk' : 'Distributor Sales Desk',
     wedge_product: importedList ? 'Company List' : 'Find Companies',
     semi_products: importedList ? ['Company List', 'Task List'] : ['Find Companies', 'Company List'],
     outreach_subject: outreach.subject,
@@ -286,7 +286,7 @@ export function WorkspaceLitePage() {
   const hasData = leads.length > 0 || tasks.length > 0
   const activeView: WorkspaceView = publicSurface === 'updates' ? 'queue' : 'leads'
   const hasSharedProfile = isPublicWorkspaceProfileReady(profile)
-  const pageEyebrow = isReceivingDesk ? 'Receiving control' : publicSurface === 'sales' ? 'Clean a list' : 'Task list'
+  const pageEyebrow = isReceivingDesk ? 'Receiving control' : publicSurface === 'sales' ? 'Clean my list' : 'Task list'
 
   const summary = useMemo(() => {
     if (mode === 'local') {
@@ -953,7 +953,7 @@ export function WorkspaceLitePage() {
             {isReceivingDesk
               ? 'Paste GRN, hold, batch, customs, or quantity issues and turn them into one short follow-up list.'
               : publicSurface === 'sales'
-              ? 'Use this when you already have names from Google, Facebook, Viber, WhatsApp, Excel, or CRM. We turn them into one clean follow-up list with next steps.'
+              ? 'Use this when you already have names from Google, Facebook, Viber, WhatsApp, Excel, or CRM. We remove duplicates, keep the contact clues, and turn the list into clear next steps.'
               : 'Paste messy notes, blockers, or updates and turn them into a short task list.'}
           </p>
           {setupPanel}
@@ -976,7 +976,7 @@ export function WorkspaceLitePage() {
     <div className="space-y-6">
       <section className="grid gap-6 lg:grid-cols-[0.82fr_1.18fr]">
     <article className="sm-surface p-6">
-      <p className="sm-kicker text-[var(--sm-accent)]">{isReceivingDesk ? 'Receiving control' : publicSurface === 'sales' ? 'Clean a list' : 'Task list'}</p>
+      <p className="sm-kicker text-[var(--sm-accent)]">{isReceivingDesk ? 'Receiving control' : publicSurface === 'sales' ? 'Clean my list' : 'Task list'}</p>
       <h2 className="mt-3 text-3xl font-bold text-white">
         {isReceivingDesk ? 'Keep only the receiving follow-up.' : publicSurface === 'sales' ? 'Turn raw names into one follow-up list.' : 'Keep only the next tasks.'}
       </h2>
@@ -1030,7 +1030,7 @@ export function WorkspaceLitePage() {
             {isReceivingDesk
               ? 'Paste receiving issues and build the follow-up list.'
               : publicSurface === 'sales'
-                ? 'Use Find clients for new names. Use Clean a list when you already have names.'
+                ? 'Use Find clients for new names. Use Clean my list when you already have names.'
                       : "Paste today's notes and build the task list."}
           </div>
             </div>

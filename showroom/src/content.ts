@@ -84,9 +84,9 @@ export const proofPoints: ProofPoint[] = [
     detail: 'Keep only the businesses worth contacting, with fit reasons and first outreach ready.',
   },
   {
-    label: 'Clean a list',
+    label: 'Clean my list',
     value: 'Use the names you already have',
-    detail: 'Paste rows from Google, Facebook, WhatsApp, Excel, or CRM and turn them into one usable list.',
+    detail: 'Paste rows from Google, Facebook, WhatsApp, Excel, or CRM and turn them into one usable sales list.',
   },
 ]
 
@@ -101,21 +101,21 @@ export const coreProduct = {
 
 export const leadFinder = {
   title: 'Find clients',
-  description: 'Search by place or niche, keep the best results, and move them into a clean list with first outreach ready.',
-  steps: ['Search a market', 'Keep the right companies', 'Open Clean a list'],
+  description: 'Search by place or niche, keep the best results, and move them into a usable follow-up list with first outreach ready.',
+  steps: ['Search a market', 'Keep the right companies', 'Open Clean my list'],
 }
 
 export const useCases: UseCase[] = [
   {
-    name: 'Sales Setup',
+    name: 'Distributor Sales Desk',
     audience: 'Founders, operators, and sales teams',
-    promise: 'Find businesses, save them in Clean a list, and keep outreach moving.',
-    firstRollout: 'Find clients plus Clean a list.',
+    promise: 'Find businesses, save them in Clean my list, and keep outreach moving.',
+    firstRollout: 'Find clients plus Clean my list.',
     inputs: ['Search query', 'Keywords', 'Saved notes'],
     outcomes: ['Company list', 'Follow-up tasks', 'Cleaner outreach'],
   },
   {
-    name: 'Company Cleanup',
+    name: 'List Cleanup Desk',
     audience: 'Owner-led teams, sales coordinators, and operators',
     promise: 'Bring your own spreadsheet or text file and turn it into a usable company list.',
     firstRollout: 'Clean my list on top of one imported sales list.',
@@ -138,24 +138,16 @@ export const publicModules: PublicModule[] = [
     tagline: 'Search a market, keep the right companies, and start outreach.',
     bestFor: 'Prospecting, partnerships, and market mapping.',
     inputs: ['Place or niche search', 'Fit keywords', 'Saved notes'],
-    outputs: ['Shortlist', 'Outreach draft', 'Clean My List rows'],
+    outputs: ['Shortlist', 'Outreach draft', 'Clean my list rows'],
     path: '/find-companies',
   },
   {
-    name: 'Clean a list',
-    tagline: 'Bring your own rows and turn them into one usable company list.',
-    bestFor: 'Anyone running follow-up from imported or hand-built company lists.',
-    inputs: ['Company rows', 'Notes', 'Stage updates', 'Follow-up tasks'],
-    outputs: ['Pipeline view', 'Today tasks', 'CSV export'],
+    name: 'Clean my list',
+    tagline: 'Paste your existing names and turn them into one usable follow-up list.',
+    bestFor: 'Anyone already working from Google, Facebook, WhatsApp, Excel, or CRM exports.',
+    inputs: ['Company rows', 'Notes', 'Contact clues', 'Follow-up tasks'],
+    outputs: ['Clean list', 'Next steps', 'CSV export'],
     path: '/company-list',
-  },
-  {
-    name: 'Log receiving',
-    tagline: 'Log incoming issues and keep only the next receiving follow-up.',
-    bestFor: 'Receiving, procurement, stores, and plant teams.',
-    inputs: ['GRN gaps', 'Quantity variances', 'Damage reports', 'Customs or document blockers'],
-    outputs: ['Receiving issue queue', 'Owner list', 'Open follow-ups'],
-    path: '/receiving-log',
   },
 ]
 
@@ -164,7 +156,7 @@ export const templatePacks: TemplatePack[] = [
     name: 'Distributor Sales Desk',
     category: 'Sales',
     audience: 'Owner-led distributors, importers, and sales teams',
-    promise: 'Find companies, clean lists, draft first outreach, and run one daily sales queue.',
+    promise: 'Find companies, clean messy lists, draft first outreach, and run one daily sales queue.',
     inputs: ['Search results', 'Existing lead list', 'Email and WhatsApp notes'],
     outputs: ['Qualified shortlist', 'Clean company list', 'Follow-up queue'],
     route: '/contact',
@@ -269,10 +261,6 @@ export const starterTemplates: StarterTemplate[] = [
   {
     name: 'Ops blocker',
     detail: "A simple queue for today's blockers and owners.",
-  },
-  {
-    name: 'Receiving issue',
-    detail: 'One next step for GRN, hold, or quantity variance.',
   },
 ]
 

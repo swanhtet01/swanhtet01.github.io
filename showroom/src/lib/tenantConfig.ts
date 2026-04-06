@@ -28,10 +28,10 @@ const defaultTenant: TenantConfig = {
   showBookCta: true,
   bookCtaLabel: 'Contact us',
   homeEyebrow: 'SuperMega',
-  homeTitle: 'Turn messy business work into one clear next-step list.',
-  homeDescription: 'Find clients, clean a company list, or log receiving issues. Start with one tool.',
+  homeTitle: 'Custom AI systems for real company work.',
+  homeDescription: 'Start with one clear workflow. Find new clients, clean the list you already have, or roll out a starter pack.',
   homePrimaryCta: { label: 'Try find clients', to: '/find-companies' },
-  homeSecondaryCta: { label: 'Clean a list', to: '/company-list' },
+  homeSecondaryCta: { label: 'Clean my list', to: '/company-list' },
   toolCards: [
     {
       title: 'Find clients',
@@ -39,14 +39,9 @@ const defaultTenant: TenantConfig = {
       to: '/find-companies',
     },
     {
-      title: 'Clean list',
-      detail: 'Paste your own company list or keep the results you want to work.',
+      title: 'Clean my list',
+      detail: 'Paste your own company list and turn it into one usable follow-up list.',
       to: '/company-list',
-    },
-    {
-      title: 'Log receiving',
-      detail: 'Log shortages, holds, or missing documents and keep the next step visible.',
-      to: '/receiving-log',
     },
   ],
   footerText: 'Custom AI systems for sales, operations, and management.',

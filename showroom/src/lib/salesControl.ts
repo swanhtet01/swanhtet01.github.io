@@ -1,7 +1,6 @@
 export type SellableSolution = {
   id: string
   name: string
-  price: string
   buyer: string
   pain: string
   replaces: string
@@ -44,8 +43,7 @@ export type LabTrack = {
 export const CORE_SOLUTIONS: SellableSolution[] = [
   {
     id: 'sales-setup',
-    name: 'Sales Setup',
-    price: '$750 pilot',
+    name: 'Distributor Sales Desk',
     buyer: 'Owner-led teams that need net-new companies and a simple outreach list.',
     pain: 'Sell this when the team is still prospecting from Google, Facebook, or scattered notes.',
     replaces: 'raw search, scattered spreadsheets, and manual outreach tracking',
@@ -55,19 +53,17 @@ export const CORE_SOLUTIONS: SellableSolution[] = [
   },
   {
     id: 'company-cleanup',
-    name: 'Company Cleanup',
-    price: '$750 pilot',
+    name: 'List Cleanup Desk',
     buyer: 'Teams that already have spreadsheets, exports, or messy company lists.',
     pain: 'Sell this when the lead list exists but nobody trusts it enough to run outreach cleanly.',
     replaces: 'dirty exports, duplicated rows, and follow-up hidden inside spreadsheets',
-    promise: 'Clean the list, stage the rows, and keep the next step visible.',
+    promise: 'Clean the list, remove duplicates, and keep the next follow-up visible.',
     modules: ['Company List', 'Task List'],
     pilot: '1-week cleanup around one imported list and one shared task list.',
   },
   {
     id: 'receiving-control',
     name: 'Receiving Control',
-    price: '$900 pilot',
     buyer: 'Plants, stores, procurement, and operations teams.',
     pain: 'Sell this when GRN gaps, shortages, holds, and receiving blockers live in chats or paper notes.',
     replaces: 'paper receiving logs, chat chasing, and missed inbound exceptions',
@@ -98,7 +94,7 @@ export const QUICK_WIN_PRODUCTS: QuickWinProduct[] = [
 export const PUBLIC_PRODUCTS: PublicProduct[] = [
   {
     id: 'find-companies',
-    name: 'Find Companies',
+    name: 'Find clients',
     status: 'Live now',
     audience: 'Founders, operators, and sales teams that need net-new companies to contact.',
     promise: 'Search by place or niche, keep the shortlist, and create the first follow-up.',
@@ -106,19 +102,11 @@ export const PUBLIC_PRODUCTS: PublicProduct[] = [
   },
   {
     id: 'company-list',
-    name: 'Company List',
+    name: 'Clean my list',
     status: 'Live now',
     audience: 'Teams that already have a company list, scraped export, or CRM dump.',
-    promise: 'Clean the list and keep the right next step beside each company.',
+    promise: 'Paste names from Google, Facebook, WhatsApp, Excel, or CRM and turn them into one usable list.',
     route: '/company-list',
-  },
-  {
-    id: 'receiving-log',
-    name: 'Receiving Log',
-    status: 'Live now',
-    audience: 'Receiving, procurement, and plant teams with inbound issues to chase.',
-    promise: 'Turn receiving issues into one short follow-up list.',
-    route: '/receiving-log',
   },
   {
     id: 'reply-draft',
@@ -170,10 +158,10 @@ export const LAB_TRACKS: LabTrack[] = [
 ]
 
 export const FINDER_ADVANTAGES = [
-  'Google finds pages. Find Companies keeps the shortlist and saves it into a working list.',
-  'Facebook shows activity. Find Companies turns a saved company into a real follow-up task, not just a bookmark.',
+  'Google and Facebook give raw names. SuperMega gives a shortlist you can actually work.',
+  'Each kept company carries fit reasons, contact clues, and the first follow-up instead of becoming another bookmark.',
+  'Already have names? Clean my list turns messy rows into one usable company list without manual spreadsheet cleanup.',
   'Saved hunts rerun the same market search without starting from zero each time.',
-  'Each kept company is mapped to one clear setup offer instead of a vague platform pitch.',
 ]
 
 export const HUNT_TEMPLATES: HuntTemplate[] = [
@@ -206,21 +194,21 @@ export function defaultHuntTemplate() {
 
 export function normalizeSolutionPack(value: string | null | undefined) {
   const normalized = (value ?? '').trim().toLowerCase()
-  if (['sales setup', 'sales desk', 'action os starter', 'lead finder'].includes(normalized)) {
-    return 'Sales Setup'
+  if (['distributor sales desk', 'sales setup', 'sales desk', 'action os starter', 'lead finder'].includes(normalized)) {
+    return 'Distributor Sales Desk'
   }
-  if (['company cleanup', 'commercial control', 'workspace', 'company list'].includes(normalized)) {
-    return 'Company Cleanup'
+  if (['list cleanup desk', 'company cleanup', 'commercial control', 'workspace', 'company list'].includes(normalized)) {
+    return 'List Cleanup Desk'
   }
   if (['receiving control', 'receiving log', 'factory control'].includes(normalized)) {
     return 'Receiving Control'
   }
-  return 'Sales Setup'
+  return 'Distributor Sales Desk'
 }
 
 export function defaultWedgeProduct(pack: string | null | undefined) {
   const normalized = normalizeSolutionPack(pack)
-  if (normalized === 'Company Cleanup') {
+  if (normalized === 'List Cleanup Desk') {
     return 'Company List'
   }
   if (normalized === 'Receiving Control') {
@@ -231,7 +219,7 @@ export function defaultWedgeProduct(pack: string | null | undefined) {
 
 export function defaultStarterModules(pack: string | null | undefined) {
   const normalized = normalizeSolutionPack(pack)
-  if (normalized === 'Company Cleanup') {
+  if (normalized === 'List Cleanup Desk') {
     return ['Company List', 'Task List']
   }
   if (normalized === 'Receiving Control') {

@@ -326,7 +326,7 @@ export function LeadPipelinePage() {
       (pipeline?.rows ?? []).reduce(
         (current, row) => {
           const key = normalizeSolutionPack(row.service_pack)
-          if (key === 'Company Cleanup') {
+          if (key === 'List Cleanup Desk') {
             current.companyCleanup += 1
           } else if (key === 'Receiving Control') {
             current.receivingControl += 1
@@ -687,11 +687,11 @@ export function LeadPipelinePage() {
 
           <div className="mt-6 grid gap-3 md:grid-cols-3">
             <div className="sm-chip text-white">
-              <p className="sm-kicker text-[var(--sm-accent)]">Sales Setup</p>
+              <p className="sm-kicker text-[var(--sm-accent)]">Distributor Sales Desk</p>
               <p className="mt-2 text-2xl font-bold">{packCounts.salesSetup}</p>
             </div>
             <div className="sm-chip text-white">
-              <p className="sm-kicker text-[var(--sm-accent-alt)]">Company Cleanup</p>
+              <p className="sm-kicker text-[var(--sm-accent-alt)]">List Cleanup Desk</p>
               <p className="mt-2 text-2xl font-bold">{packCounts.companyCleanup}</p>
             </div>
             <div className="sm-chip text-white">
@@ -944,7 +944,7 @@ export function LeadPipelinePage() {
           <div className="mt-5 grid gap-3">
             {[
               'Start from one narrow market or one imported list, not a huge segment.',
-              'Map each lead to one setup offer only: Sales Setup, Company Cleanup, or Receiving Control.',
+              'Map each lead to one setup offer only: Distributor Sales Desk, List Cleanup Desk, or Receiving Control.',
               'Open Gmail from the lead card, then move the stage the same day.',
               'Keep every next step in the queue so search, list cleanup, and follow-up stay connected.',
             ].map((item) => (

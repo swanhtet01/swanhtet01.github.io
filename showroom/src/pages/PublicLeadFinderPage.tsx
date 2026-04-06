@@ -207,7 +207,7 @@ export function PublicLeadFinderPage() {
               stage: 'offer_ready',
               status: 'open',
               owner: 'Growth Studio',
-              service_pack: 'Sales Setup',
+              service_pack: 'Distributor Sales Desk',
               wedge_product: 'Find Companies',
               semi_products: ['Find Companies', 'Company List'],
               outreach_subject: outreach.subject,

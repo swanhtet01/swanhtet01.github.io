@@ -124,15 +124,18 @@ function TemplatesView() {
 
       <section className="grid gap-6 lg:grid-cols-[1fr_1fr]">
         <article className="sm-surface-soft p-6 lg:p-8">
-          <p className="sm-kicker text-[var(--sm-accent-alt)]">Free proof tools</p>
+          <p className="sm-kicker text-[var(--sm-accent-alt)]">Useful free tools</p>
           <div className="mt-5 space-y-4">
-            {publicModules.slice(0, 2).map((item) => (
+            {publicModules.map((item) => (
               <div className="border-b border-white/8 pb-4 last:border-b-0 last:pb-0" key={item.name}>
                 <p className="font-semibold text-white">{item.name}</p>
                 <p className="mt-2 text-sm text-[var(--sm-muted)]">{item.tagline}</p>
               </div>
             ))}
           </div>
+          <p className="mt-4 text-sm text-[var(--sm-muted)]">
+            Find clients is for new names. Clean my list is for the names you already have.
+          </p>
         </article>
 
         <article className="sm-surface p-6 lg:p-8">

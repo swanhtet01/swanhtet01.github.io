@@ -419,15 +419,15 @@ export function LeadFinderPage() {
         return
       }
 
-      setLeadPack({
-        summary: 'Live offer building needs the app backend. You can still shortlist leads here, but the proper sales pack is generated on the live app host.',
-        dominant_archetype: 'manual',
-        recommended_play: {
-          wedge_product: 'Find Companies',
-          service_pack: 'Sales Setup',
-          starter_modules: ['Find Companies', 'Company List'],
-          semi_products: ['Founder Brief'],
-        },
+        setLeadPack({
+          summary: 'Live offer building needs the app backend. You can still shortlist leads here, but the proper sales pack is generated on the live app host.',
+          dominant_archetype: 'manual',
+          recommended_play: {
+            wedge_product: 'Find Companies',
+            service_pack: 'Distributor Sales Desk',
+            starter_modules: ['Find Companies', 'Company List'],
+            semi_products: ['Founder Brief'],
+          },
         opportunity_count: leadPackRows.length,
         opportunities: leadPackRows.map((row) => ({
           name: row.name,
@@ -435,14 +435,14 @@ export function LeadFinderPage() {
           stage: 'offer_ready',
           status: 'open',
           owner: 'Growth Studio',
-          service_pack: 'Sales Setup',
+          service_pack: 'Distributor Sales Desk',
           wedge_product: 'Find Companies',
           starter_modules: ['Find Companies', 'Company List'],
           semi_products: ['Founder Brief'],
           pain_signals: ['Run the app backend to generate a real lead-specific offer.'],
           why_now: 'Start with one simple company search and first follow-up loop.',
           pilot_scope: 'Launch one saved search, one shortlist, and one first follow-up queue for the target lead.',
-          outreach_subject: `${row.name}: Sales Setup`,
+          outreach_subject: `${row.name}: Distributor Sales Desk`,
           outreach_message: `Hi ${row.name} team, we help companies turn messy prospecting and follow-up into one simple working list.`,
           discovery_questions: ['What still depends on manual chasing today?'],
           source_url: row.source_url,
