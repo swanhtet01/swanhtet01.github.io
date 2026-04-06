@@ -348,6 +348,46 @@ def main() -> int:
     )
     created_task_ids = [str(item).strip() for item in (workspace_task_create.get("saved_task_ids") or []) if str(item).strip()]
     created_task_id = created_task_ids[0] if created_task_ids else ""
+    starter_task_title = f"Starter pack smoke {run_tag}"
+    starter_task_create = request_json(
+        opener,
+        "POST",
+        f"{args.base_url.rstrip('/')}/api/workspace-tasks",
+        {
+            "rows": [
+                {
+                    "title": starter_task_title,
+                    "owner": "Revenue Pod",
+                    "priority": "high",
+                    "due": "Today",
+                    "status": "open",
+                    "notes": f"Starter pack smoke task {run_tag}",
+                    "template": "starter_sales_search",
+                }
+            ]
+        },
+    )
+    starter_task_repeat = request_json(
+        opener,
+        "POST",
+        f"{args.base_url.rstrip('/')}/api/workspace-tasks",
+        {
+            "rows": [
+                {
+                    "title": starter_task_title,
+                    "owner": "Revenue Pod",
+                    "priority": "high",
+                    "due": "Today",
+                    "status": "open",
+                    "notes": f"Starter pack smoke task {run_tag}",
+                    "template": "starter_sales_search",
+                }
+            ]
+        },
+    )
+    starter_task_ids = [str(item).strip() for item in (starter_task_create.get("saved_task_ids") or []) if str(item).strip()]
+    starter_task_repeat_ids = [str(item).strip() for item in (starter_task_repeat.get("saved_task_ids") or []) if str(item).strip()]
+    starter_task_id = starter_task_ids[0] if starter_task_ids else ""
     workspace_task_update = (
         request_json(
             opener,
@@ -368,6 +408,15 @@ def main() -> int:
             f"{args.base_url.rstrip('/')}/api/workspace-tasks/{created_task_id}",
         )
         if created_task_id
+        else {}
+    )
+    starter_task_delete = (
+        request_json(
+            opener,
+            "DELETE",
+            f"{args.base_url.rstrip('/')}/api/workspace-tasks/{starter_task_id}",
+        )
+        if starter_task_id
         else {}
     )
     team_members_before = request_json(opener, "GET", f"{args.base_url.rstrip('/')}/api/team/members")
@@ -435,8 +484,12 @@ def main() -> int:
         "outreach_status": outreach.get("status", ""),
         "workspace_tasks_before_count": int(workspace_tasks_before.get("count") or 0),
         "workspace_task_create_status": workspace_task_create.get("status", ""),
+        "starter_task_create_status": starter_task_create.get("status", ""),
+        "starter_task_repeat_status": starter_task_repeat.get("status", ""),
+        "starter_task_dedupe_ok": bool(starter_task_id and starter_task_repeat_ids and starter_task_id == starter_task_repeat_ids[0]),
         "workspace_task_update_status": workspace_task_update.get("status", ""),
         "workspace_task_delete_removed": bool(workspace_task_delete.get("removed")),
+        "starter_task_delete_removed": bool(starter_task_delete.get("removed")),
         "team_members_before_count": int(team_members_before.get("count") or 0),
         "team_member_invite_status": team_member_invite.get("status", ""),
         "team_member_invite_created": bool(team_member_invite.get("created")),
@@ -489,6 +542,7 @@ def main() -> int:
     print(f"- Outreach: {report['outreach_status']}")
     print(f"- Workspace tasks before: {report['workspace_tasks_before_count']}")
     print(f"- Workspace task create: {report['workspace_task_create_status']}")
+    print(f"- Starter task dedupe: {report['starter_task_dedupe_ok']}")
     print(f"- Workspace task update: {report['workspace_task_update_status']}")
     print(f"- Workspace task delete: {report['workspace_task_delete_removed']}")
     print(f"- Team members before: {report['team_members_before_count']}")

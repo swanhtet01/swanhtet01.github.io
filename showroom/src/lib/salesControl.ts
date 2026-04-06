@@ -1,8 +1,10 @@
 export type SellableSolution = {
   id: string
   name: string
+  price: string
   buyer: string
   pain: string
+  replaces: string
   promise: string
   modules: string[]
   pilot: string
@@ -43,8 +45,10 @@ export const CORE_SOLUTIONS: SellableSolution[] = [
   {
     id: 'sales-setup',
     name: 'Sales Setup',
+    price: '$750 pilot',
     buyer: 'Owner-led teams that need net-new companies and a simple outreach list.',
     pain: 'Sell this when the team is still prospecting from Google, Facebook, or scattered notes.',
+    replaces: 'raw search, scattered spreadsheets, and manual outreach tracking',
     promise: 'Search the market, keep the shortlist, and create the first follow-up automatically.',
     modules: ['Find Companies', 'Company List'],
     pilot: '1-week pilot with one market search, one shortlist, and one live follow-up queue.',
@@ -52,8 +56,10 @@ export const CORE_SOLUTIONS: SellableSolution[] = [
   {
     id: 'company-cleanup',
     name: 'Company Cleanup',
+    price: '$750 pilot',
     buyer: 'Teams that already have spreadsheets, exports, or messy company lists.',
     pain: 'Sell this when the lead list exists but nobody trusts it enough to run outreach cleanly.',
+    replaces: 'dirty exports, duplicated rows, and follow-up hidden inside spreadsheets',
     promise: 'Clean the list, stage the rows, and keep the next step visible.',
     modules: ['Company List', 'Task List'],
     pilot: '1-week cleanup around one imported list and one shared task list.',
@@ -61,8 +67,10 @@ export const CORE_SOLUTIONS: SellableSolution[] = [
   {
     id: 'receiving-control',
     name: 'Receiving Control',
+    price: '$900 pilot',
     buyer: 'Plants, stores, procurement, and operations teams.',
     pain: 'Sell this when GRN gaps, shortages, holds, and receiving blockers live in chats or paper notes.',
+    replaces: 'paper receiving logs, chat chasing, and missed inbound exceptions',
     promise: 'Log receiving issues once and keep the next action visible.',
     modules: ['Receiving Log', 'Task List'],
     pilot: '2-week pilot with one inbound lane, one owner map, and one short exception queue.',

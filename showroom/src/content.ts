@@ -1,3 +1,5 @@
+import { CORE_SOLUTIONS } from './lib/salesControl'
+
 export type ProofPoint = {
   label: string
   value: string
@@ -157,41 +159,29 @@ export const starterTemplates: StarterTemplate[] = [
 ]
 
 export const clientTemplates: ClientTemplate[] = [
-  {
-    name: 'Sales Desk',
-    audience: 'Founders, sales teams, and partnerships',
-    outcome: 'Find companies, clean the list, and run outreach from one working desk.',
+  ...CORE_SOLUTIONS.map((solution) => ({
+    name: solution.name,
+    audience: solution.buyer,
+    outcome: solution.promise,
     path: '/systems',
-  },
+  })),
   {
-    name: 'Operations Desk',
-    audience: 'Managers and operators running daily follow-up',
-    outcome: 'Turn updates, blockers, and owner gaps into one clear queue.',
-    path: '/systems',
-  },
-  {
-    name: 'Director Brief',
+    name: 'Founder Daily Brief',
     audience: 'Owners and senior managers',
-    outcome: 'Get one daily operating brief built from real queues and exceptions.',
+    outcome: 'Get one short daily review built from live queues, issues, and priorities.',
     path: '/systems',
   },
 ]
 
 export const systemOffers: SystemOffer[] = [
+  ...CORE_SOLUTIONS.map((solution) => ({
+    name: solution.name,
+    audience: solution.buyer,
+    replaces: solution.replaces,
+    outcome: solution.promise,
+  })),
   {
-    name: 'Sales Desk',
-    audience: 'Founders, sales teams, and partnerships',
-    replaces: 'raw search, scattered spreadsheets, manual outreach tracking',
-    outcome: 'one shortlist, one follow-up list, one daily revenue queue',
-  },
-  {
-    name: 'Operations Desk',
-    audience: 'Ops leads, coordinators, and plant managers',
-    replaces: 'chat-based chasing, missed updates, generic task boards',
-    outcome: 'one owner list, one blocker queue, one visible next step',
-  },
-  {
-    name: 'Director Brief',
+    name: 'Founder Daily Brief',
     audience: 'Owners, GMs, and directors',
     replaces: 'manual end-of-day summaries and status meetings with no signal',
     outcome: 'one short daily brief built from the real work layer',

@@ -847,7 +847,11 @@ def add_workspace_tasks(
                 continue
             lead_id = str(row.get("lead_id", "")).strip()
             template = str(row.get("template", "")).strip() or "manual"
-            dedupe_seed = "|".join([str(workspace_id), template, lead_id, title.lower()]) if lead_id else ""
+            dedupe_seed = (
+                "|".join([str(workspace_id), template, lead_id, title.lower()])
+                if lead_id or template != "manual"
+                else ""
+            )
             task_id = _stable_key("TASK", dedupe_seed) if dedupe_seed else secrets.token_urlsafe(16)
             task = session.get(EnterpriseWorkspaceTask, task_id)
             if not task:

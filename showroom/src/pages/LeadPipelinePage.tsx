@@ -13,7 +13,7 @@ import {
   QUICK_WIN_PRODUCTS,
   type HuntTemplate,
 } from '../lib/salesControl'
-import { checkWorkspaceHealth, getWorkspaceSession, workspaceFetch } from '../lib/workspaceApi'
+import { checkWorkspaceHealth, createWorkspaceTasks, getWorkspaceSession, workspaceFetch } from '../lib/workspaceApi'
 
 type LeadPipelineRow = {
   lead_id: string
@@ -137,6 +137,97 @@ function loadTemplate(template: HuntTemplate) {
     searchQuery: template.query,
     searchKeywords: template.keywords.join(','),
   }
+}
+
+const STARTER_PACK_TASKS: Record<
+  string,
+  Array<{
+    title: string
+    owner: string
+    priority: string
+    due: string
+    notes: string
+    template: string
+  }>
+> = {
+  'sales-setup': [
+    {
+      title: 'Run one narrow market search',
+      owner: 'Revenue Pod',
+      priority: 'high',
+      due: 'Today',
+      notes: 'Use Find Companies on one Myanmar market or one clear buyer type. Keep the shortlist narrow enough to act on today.',
+      template: 'starter_sales_search',
+    },
+    {
+      title: 'Keep 10 best-fit companies',
+      owner: 'Revenue Pod',
+      priority: 'high',
+      due: 'Today',
+      notes: 'Move only the strongest companies into the working list. Ignore the rest for now.',
+      template: 'starter_sales_shortlist',
+    },
+    {
+      title: 'Send first outreach and update stage',
+      owner: 'Founder Desk',
+      priority: 'medium',
+      due: 'Tomorrow',
+      notes: 'Open Gmail from each lead card, send the first message, and move the lead stage the same day.',
+      template: 'starter_sales_outreach',
+    },
+  ],
+  'company-cleanup': [
+    {
+      title: 'Import the raw company list',
+      owner: 'List Clerk',
+      priority: 'high',
+      due: 'Today',
+      notes: 'Paste or upload the current spreadsheet, export, or copied names. Start from the file the team already trusts most.',
+      template: 'starter_company_import',
+    },
+    {
+      title: 'Tag the rows that are ready to contact',
+      owner: 'List Clerk',
+      priority: 'high',
+      due: 'Today',
+      notes: 'Mark only rows with enough contact clues or clear fit. Do not try to clean the whole file at once.',
+      template: 'starter_company_tag',
+    },
+    {
+      title: 'Assign the next step for each kept company',
+      owner: 'Revenue Pod',
+      priority: 'medium',
+      due: 'Tomorrow',
+      notes: 'Create one follow-up action beside each kept row so the list becomes a working queue, not another spreadsheet.',
+      template: 'starter_company_followup',
+    },
+  ],
+  'receiving-control': [
+    {
+      title: 'Log one receiving lane or supplier issue',
+      owner: 'Delivery Pod',
+      priority: 'high',
+      due: 'Today',
+      notes: 'Start with one inbound lane, supplier, or recurring hold. Keep the first setup narrow.',
+      template: 'starter_receiving_log',
+    },
+    {
+      title: 'Assign one owner for each open issue',
+      owner: 'Delivery Pod',
+      priority: 'high',
+      due: 'Today',
+      notes: 'Every hold, shortage, or GRN gap should have one clear owner and one next step.',
+      template: 'starter_receiving_owner',
+    },
+    {
+      title: 'Review open holds in one short daily check',
+      owner: 'Founder Desk',
+      priority: 'medium',
+      due: 'Tomorrow',
+      notes: 'Use the task list as the daily review surface until the receiving flow is stable.',
+      template: 'starter_receiving_review',
+    },
+  ],
 }
 
 export function LeadPipelinePage() {
@@ -423,6 +514,37 @@ export function LeadPipelinePage() {
     setMessage(`Loaded search play: ${template.name}.`)
   }
 
+  async function applyStarterPack(solutionId: string) {
+    const solution = CORE_SOLUTIONS.find((item) => item.id === solutionId)
+    const tasksToCreate = STARTER_PACK_TASKS[solutionId] ?? []
+    if (!solution || !tasksToCreate.length) {
+      setMessage('This starter pack is not configured yet.')
+      return
+    }
+
+    setBusy(true)
+    setMessage('')
+    try {
+      await createWorkspaceTasks(tasksToCreate)
+      if (solutionId === 'sales-setup') {
+        const next = loadTemplate(defaultHuntTemplate())
+        setSearchName(next.searchName)
+        setSearchQuery(next.searchQuery)
+        setSearchKeywords(next.searchKeywords)
+      }
+      await loadData()
+      setMessage(
+        solutionId === 'sales-setup'
+          ? `Applied ${solution.name}. The first queue is ready and the recommended market search is loaded.`
+          : `Applied ${solution.name}. The first queue is ready for the team.`,
+      )
+    } catch (nextError) {
+      setMessage(nextError instanceof Error ? nextError.message : `Could not apply ${solution.name}.`)
+    } finally {
+      setBusy(false)
+    }
+  }
+
   if (loading) {
     return <section className="sm-surface p-6 text-sm text-[var(--sm-muted)]">Loading sales workspace...</section>
   }
@@ -468,6 +590,7 @@ export function LeadPipelinePage() {
             <div>
               <p className="sm-kicker text-[var(--sm-accent)]">What SuperMega sells</p>
               <h2 className="mt-2 text-2xl font-bold text-white">Three core offers only.</h2>
+              <p className="mt-2 text-sm text-[var(--sm-muted)]">Each pack should create the first queue immediately. No blank rollout.</p>
             </div>
             <Link className="sm-button-secondary" to="/app/director">
               Open director
@@ -504,6 +627,12 @@ export function LeadPipelinePage() {
                       {module}
                     </span>
                   ))}
+                </div>
+                <div className="mt-4 flex flex-wrap gap-3">
+                  <button className="sm-button-primary" disabled={busy} onClick={() => void applyStarterPack(solution.id)} type="button">
+                    Apply starter pack
+                  </button>
+                  <span className="self-center text-xs text-[var(--sm-muted)]">Creates the first owned tasks for this offer.</span>
                 </div>
               </article>
             ))}

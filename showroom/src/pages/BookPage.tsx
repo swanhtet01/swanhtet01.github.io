@@ -2,19 +2,15 @@ import { Link } from 'react-router-dom'
 
 import { bookingUrl, clientTemplates } from '../content'
 import { trackEvent } from '../lib/analytics'
+import { CORE_SOLUTIONS } from '../lib/salesControl'
 
 export function BookPage() {
   const offers = [
-    {
-      name: 'Sales Desk',
-      price: '$750 pilot',
-      detail: 'One AI-native sales system for client search, list cleanup, outreach, and follow-up.',
-    },
-    {
-      name: 'Operations Desk',
-      price: '$900 pilot',
-      detail: 'One operating system for daily updates, blockers, owner tracking, and next steps.',
-    },
+    ...CORE_SOLUTIONS.map((solution) => ({
+      name: solution.name,
+      price: solution.price,
+      detail: solution.promise,
+    })),
     {
       name: 'Custom Build Sprint',
       price: '$1,500+',
@@ -31,7 +27,7 @@ export function BookPage() {
             <p className="sm-kicker text-[var(--sm-accent)]">Book rollout call</p>
             <h1 className="mt-4 max-w-3xl text-4xl font-extrabold tracking-tight text-white lg:text-6xl">Start with one system, not another software mess.</h1>
             <p className="mt-5 max-w-2xl text-base leading-relaxed text-[var(--sm-muted)] lg:text-lg">
-              We pick one real workflow, build the first working system around it, and keep the rollout narrow enough to go live fast.
+              We start with one real workflow, turn it into a working system, and keep the rollout narrow enough to go live fast.
             </p>
             <div className="mt-6 flex flex-wrap gap-3">
               {bookingUrl ? (
@@ -40,7 +36,7 @@ export function BookPage() {
                 </a>
               ) : (
                 <Link className="sm-button-primary" onClick={() => trackEvent('offer_open_click', { offer: 'Systems' })} to="/systems">
-                  See what we build
+                  See starter packs
                 </Link>
               )}
               <Link className="sm-button-secondary" to="/company-list?setup=leads">
@@ -52,7 +48,7 @@ export function BookPage() {
           <div className="border-l border-white/10 pl-5 lg:pl-8">
             <p className="sm-kicker text-[var(--sm-accent-alt)]">Call outcome</p>
             <div className="mt-5 space-y-4">
-              {['Pick one workflow', 'Use the data they already have', 'Leave with the first working system plan'].map((item) => (
+              {['Pick one starter pack', 'Use the data they already have', 'Leave with the first working system plan'].map((item) => (
                 <div className="border-b border-white/8 pb-3 text-base text-[var(--sm-muted)] last:border-b-0 last:pb-0" key={item}>
                   {item}
                 </div>
@@ -64,7 +60,7 @@ export function BookPage() {
 
       <section className="grid gap-6 lg:grid-cols-[1.05fr_0.95fr]">
         <section className="sm-surface p-6 lg:p-8">
-          <p className="sm-kicker text-[var(--sm-accent)]">Most teams start here</p>
+          <p className="sm-kicker text-[var(--sm-accent)]">Most teams start with one pack</p>
           <div className="mt-5 space-y-4">
             {offers.map((offer) => (
               <div className="border-b border-white/8 pb-4 last:border-b-0 last:pb-0" key={offer.name}>
