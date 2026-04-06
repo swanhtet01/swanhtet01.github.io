@@ -191,19 +191,19 @@ steps:
     args:
       - build
       - --build-arg
-      - VITE_GOOGLE_MAPS_API_KEY=\${_VITE_GOOGLE_MAPS_API_KEY}
+      - VITE_GOOGLE_MAPS_API_KEY=`${_VITE_GOOGLE_MAPS_API_KEY}
       - --build-arg
-      - VITE_BOOKING_URL=\${_VITE_BOOKING_URL}
+      - VITE_BOOKING_URL=`${_VITE_BOOKING_URL}
       - --build-arg
-      - VITE_POSTHOG_KEY=\${_VITE_POSTHOG_KEY}
+      - VITE_POSTHOG_KEY=`${_VITE_POSTHOG_KEY}
       - --build-arg
-      - VITE_POSTHOG_HOST=\${_VITE_POSTHOG_HOST}
+      - VITE_POSTHOG_HOST=`${_VITE_POSTHOG_HOST}
       - --build-arg
-      - VITE_SENTRY_DSN=\${_VITE_SENTRY_DSN}
+      - VITE_SENTRY_DSN=`${_VITE_SENTRY_DSN}
       - --build-arg
-      - VITE_WORKSPACE_APP_BASE=\${_VITE_WORKSPACE_APP_BASE}
+      - VITE_WORKSPACE_APP_BASE=`${_VITE_WORKSPACE_APP_BASE}
       - --build-arg
-      - VITE_WORKSPACE_API_BASE=\${_VITE_WORKSPACE_API_BASE}
+      - VITE_WORKSPACE_API_BASE=`${_VITE_WORKSPACE_API_BASE}
       - -t
       - ${Image}
       - .
@@ -289,22 +289,45 @@ if (-not $SkipBuild) {
 if (-not $SkipDeploy) {
     $corsOrigins = "https://$PublicDomain,https://$AppDomain"
     $cloudSqlConnection = "${ProjectId}:${Region}:${SqlInstance}"
-    Run-GcloudCapture -CommandArgs @(
-        "run", "deploy", $Service,
-        "--project=$ProjectId",
-        "--image=$image",
-        "--region=$Region",
-        "--platform=managed",
-        "--allow-unauthenticated",
-        "--port=8080",
-        "--cpu=1",
-        "--memory=1Gi",
-        "--min-instances=1",
-        "--max-instances=1",
-        "--add-cloudsql-instances=$cloudSqlConnection",
-        "--set-env-vars=SUPERMEGA_SITE_ROOT=/app/showroom/dist,SUPERMEGA_PILOT_DATA=/app/pilot-data,SUPERMEGA_ENV=production,SUPERMEGA_AUTH_REQUIRED=1,SUPERMEGA_APP_DISPLAY_NAME=SuperMega,SUPERMEGA_APP_ROLE=owner,SUPERMEGA_WORKSPACE_SLUG=supermega-lab,SUPERMEGA_WORKSPACE_NAME=SuperMega Lab,SUPERMEGA_WORKSPACE_PLAN=pilot,SUPERMEGA_SESSION_HOURS=336,SUPERMEGA_CORS_ORIGINS=$corsOrigins,VITE_BOOKING_URL=$BookingUrl,VITE_WORKSPACE_APP_BASE=https://$AppDomain,VITE_WORKSPACE_API_BASE=https://$AppDomain",
-        "--set-secrets=SUPERMEGA_APP_USERNAME=supermega-app-username:latest,SUPERMEGA_APP_PASSWORD=supermega-app-password:latest,SUPERMEGA_DATABASE_URL=supermega-database-url:latest,OPENAI_API_KEY=supermega-openai-api-key:latest,GOOGLE_MAPS_API_KEY=supermega-google-maps-api-key:latest,GOOGLE_PLACES_API_KEY=supermega-google-places-api-key:latest"
-    ) | Out-Null
+    $envVarsFile = Join-Path $env:TEMP ("supermega-run-env-{0}.yaml" -f ([guid]::NewGuid().ToString("N")))
+    $envVarsContent = @"
+SUPERMEGA_SITE_ROOT: /app/showroom/dist
+SUPERMEGA_PILOT_DATA: /app/pilot-data
+SUPERMEGA_ENV: production
+SUPERMEGA_AUTH_REQUIRED: "1"
+SUPERMEGA_APP_DISPLAY_NAME: "SuperMega"
+SUPERMEGA_APP_ROLE: "owner"
+SUPERMEGA_WORKSPACE_SLUG: "supermega-lab"
+SUPERMEGA_WORKSPACE_NAME: "SuperMega Lab"
+SUPERMEGA_WORKSPACE_PLAN: "pilot"
+SUPERMEGA_SESSION_HOURS: "336"
+SUPERMEGA_CORS_ORIGINS: "$corsOrigins"
+VITE_BOOKING_URL: "$BookingUrl"
+VITE_WORKSPACE_APP_BASE: "https://$AppDomain"
+VITE_WORKSPACE_API_BASE: "https://$AppDomain"
+"@
+    [System.IO.File]::WriteAllText($envVarsFile, $envVarsContent)
+    try {
+        Run-GcloudCapture -CommandArgs @(
+            "run", "deploy", $Service,
+            "--project=$ProjectId",
+            "--image=$image",
+            "--region=$Region",
+            "--platform=managed",
+            "--allow-unauthenticated",
+            "--port=8080",
+            "--cpu=1",
+            "--memory=1Gi",
+            "--min-instances=1",
+            "--max-instances=1",
+            "--add-cloudsql-instances=$cloudSqlConnection",
+            "--env-vars-file=$envVarsFile",
+            "--set-secrets=SUPERMEGA_APP_USERNAME=supermega-app-username:latest,SUPERMEGA_APP_PASSWORD=supermega-app-password:latest,SUPERMEGA_DATABASE_URL=supermega-database-url:latest,OPENAI_API_KEY=supermega-openai-api-key:latest,GOOGLE_MAPS_API_KEY=supermega-google-maps-api-key:latest,GOOGLE_PLACES_API_KEY=supermega-google-places-api-key:latest"
+        ) | Out-Null
+    }
+    finally {
+        Remove-Item -LiteralPath $envVarsFile -Force -ErrorAction SilentlyContinue
+    }
 }
 
 $serviceUrl = ""
