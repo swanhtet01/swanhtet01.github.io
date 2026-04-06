@@ -1019,8 +1019,8 @@ export function LeadFinderPage() {
                 Open app
               </Link>
             ) : (
-              <Link className="sm-button-secondary" to="/book">
-                Book call
+              <Link className="sm-button-secondary" to="/contact">
+                Contact us
               </Link>
             )}
           </div>

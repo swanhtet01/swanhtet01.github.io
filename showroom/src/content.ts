@@ -68,13 +68,13 @@ export const bookingUrl = (import.meta.env.VITE_BOOKING_URL ?? '').trim()
 
 export const navItems = [
   { label: 'What we build', to: '/systems' },
-  { label: 'Templates', to: '/templates' },
+  { label: 'Starter packs', to: '/templates' },
 ] as const
 
 export const hero = {
   eyebrow: 'SuperMega',
-  title: 'AI-native company systems that replace scattered SaaS.',
-  description: 'We build reusable internal systems and custom software for sales, operations, management, and client-facing workflows.',
+  title: 'Custom AI systems for real company work.',
+  description: 'We build simple systems for sales, operations, management, and client-facing work. The goal is less software mess and clearer daily execution.',
 }
 
 export const proofPoints: ProofPoint[] = [
@@ -92,7 +92,7 @@ export const proofPoints: ProofPoint[] = [
 
 export const coreProduct = {
   name: 'Starter packs + custom systems',
-  tagline: 'Start from a reusable pack, then extend into the exact system the client needs.',
+  tagline: 'Start from one reusable pack, then extend only where the business needs it.',
   replaces: ['Disconnected SaaS', 'Spreadsheet operations', 'Manual chasing'],
   inputs: ['Existing team data', 'Real workflows', 'Current blockers'],
   outputs: ['Working queue', 'Agent loops', 'Role-based control'],
@@ -164,30 +164,30 @@ export const templatePacks: TemplatePack[] = [
     name: 'Distributor Sales Desk',
     category: 'Sales',
     audience: 'Owner-led distributors, importers, and sales teams',
-    promise: 'Search markets, clean company lists, draft first outreach, and run one daily revenue queue.',
+    promise: 'Find companies, clean lists, draft first outreach, and run one daily sales queue.',
     inputs: ['Search results', 'Existing lead list', 'Email and WhatsApp notes'],
     outputs: ['Qualified shortlist', 'Clean company list', 'Follow-up queue'],
-    route: '/book',
+    route: '/contact',
     live: true,
   },
   {
     name: 'Founder Daily Brief',
     category: 'Management',
     audience: 'Owners, GMs, and directors',
-    promise: 'See one short daily review built from live leads, tasks, approvals, and exceptions.',
+    promise: 'See one short daily review built from live queues, approvals, and exceptions.',
     inputs: ['Queues', 'Approvals', 'Exception logs', 'Sales state'],
     outputs: ['Daily brief', 'Priority list', 'Leadership review'],
-    route: '/book',
+    route: '/contact',
     live: true,
   },
   {
-    name: 'Receiving Control Lite',
+    name: 'Receiving Control',
     category: 'Operations',
     audience: 'Plant, procurement, and receiving teams',
-    promise: 'Log inbound issues once, assign owners, and keep one short exception queue.',
+    promise: 'Log inbound issues once, assign owners, and keep one short receiving queue.',
     inputs: ['Receiving notes', 'GRN gaps', 'Hold reports', 'Supplier issues'],
     outputs: ['Issue log', 'Owner queue', 'Daily review'],
-    route: '/book',
+    route: '/contact',
     live: true,
   },
   {
@@ -197,27 +197,27 @@ export const templatePacks: TemplatePack[] = [
     promise: 'Move approvals through one controlled queue with visible status and decision history.',
     inputs: ['Requests', 'Quotes', 'Documents', 'Decision notes'],
     outputs: ['Approval queue', 'Decision trail', 'Escalation view'],
-    route: '/book',
+    route: '/contact',
     live: true,
   },
   {
-    name: 'Client Portal Starter',
+    name: 'Client Portal',
     category: 'Client-facing',
     audience: 'Service firms, agencies, and B2B operators',
     promise: 'Give clients one place for status, files, approvals, and follow-up instead of endless chats.',
     inputs: ['Project status', 'Files', 'Approvals', 'Messages'],
     outputs: ['Client portal', 'Status view', 'Approval flow'],
-    route: '/book',
+    route: '/contact',
     live: false,
   },
   {
-    name: 'Learning Hub Starter',
+    name: 'Learning Hub',
     category: 'Training',
     audience: 'Teams rolling out onboarding, SOPs, and internal training',
     promise: 'Turn onboarding and SOP material into one guided learning system with AI support.',
     inputs: ['Docs', 'SOPs', 'Training notes', 'Videos'],
     outputs: ['Learning path', 'Knowledge prompts', 'Completion view'],
-    route: '/book',
+    route: '/contact',
     live: false,
   },
   {
@@ -227,17 +227,17 @@ export const templatePacks: TemplatePack[] = [
     promise: 'Turn files into extracted actions, fields, and next-step tasks instead of manual retyping.',
     inputs: ['PDFs', 'Forms', 'Emails', 'Scans'],
     outputs: ['Structured fields', 'Task queue', 'Review exceptions'],
-    route: '/book',
+    route: '/contact',
     live: false,
   },
   {
-    name: 'Commerce Back Office',
+    name: 'Commerce Desk',
     category: 'Commerce',
     audience: 'Stores and ecommerce operators',
     promise: 'Run orders, support, stock follow-up, and issue handling from one operating layer.',
     inputs: ['Orders', 'Customer messages', 'Stock notes', 'Support backlog'],
     outputs: ['Ops queue', 'Support flow', 'Stock follow-up'],
-    route: '/book',
+    route: '/contact',
     live: false,
   },
 ]

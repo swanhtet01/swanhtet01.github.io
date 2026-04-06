@@ -4,7 +4,8 @@ import { Link } from 'react-router-dom'
 
 import { PageIntro } from '../components/PageIntro'
 import { bookingUrl } from '../content'
-import { checkWorkspaceHealth, hasLiveWorkspaceApp, workspaceFetch } from '../lib/workspaceApi'
+import { trackEvent } from '../lib/analytics'
+import { checkWorkspaceHealth, createContactSubmission, hasLiveWorkspaceApp } from '../lib/workspaceApi'
 
 type LeadFormState = {
   name: string
@@ -48,7 +49,7 @@ export function ContactPage() {
 
   const statusText = useMemo(() => {
     if (status === 'saved') {
-      return 'Your request was saved.'
+      return 'Your request was saved. We can now follow it up inside the live app.'
     }
     if (status === 'saved_local') {
       return 'Your request was saved in this browser.'
@@ -65,13 +66,11 @@ export function ContactPage() {
 
     if (apiReady) {
       try {
-        await workspaceFetch('/api/contact-submissions', {
-          method: 'POST',
-          body: JSON.stringify({
-            ...form,
-            workflow: 'Discovery request',
-          }),
+        await createContactSubmission({
+          ...form,
+          workflow: 'Website contact',
         })
+        trackEvent('contact_submit', { source: 'contact_page', mode: 'api', company: form.company })
         setStatus('saved')
         return
       } catch {
@@ -82,6 +81,7 @@ export function ContactPage() {
 
     try {
       window.localStorage.setItem('supermega_contact_draft', JSON.stringify({ ...form, saved_at: new Date().toISOString() }))
+      trackEvent('contact_submit', { source: 'contact_page', mode: 'local' })
       setStatus('saved_local')
     } catch {
       setStatus('error')
@@ -92,30 +92,31 @@ export function ContactPage() {
     <div className="space-y-8">
       <PageIntro
         eyebrow="Contact"
-        title="Book a demo or send one short request."
-        description="If you are not ready to book yet, send the first workflow you want fixed and we will take it from there."
+        title="Tell us the first workflow you want fixed."
+        description="We build the system, not just another stack. Send one short request and we will reply with the right starter pack or custom build."
       />
 
       <section className="grid gap-6 lg:grid-cols-[0.88fr_1.12fr]">
         <aside className="sm-terminal p-6">
-          <p className="sm-kicker text-[var(--sm-accent)]">Best next step</p>
+          <p className="sm-kicker text-[var(--sm-accent)]">What happens next</p>
           <div className="mt-5 grid gap-3">
-            <div className="sm-chip text-white">Use this if you want us to scope the first rollout.</div>
-            <div className="sm-chip text-white">Use the calendar if you want a call first.</div>
+            <div className="sm-chip text-white">We review the workflow and the tools you already use.</div>
+            <div className="sm-chip text-white">We recommend the right starter pack or custom build.</div>
+            <div className="sm-chip text-white">We reply with the next rollout step.</div>
           </div>
 
           <div className="mt-6 grid gap-3">
             {bookingUrl ? (
-              <a className="sm-button-accent text-center" href={bookingUrl} rel="noreferrer" target="_blank">
-                Schedule call
+              <a className="sm-button-secondary text-center" href={bookingUrl} onClick={() => trackEvent('contact_calendar_click', { source: 'contact_page' })} rel="noreferrer" target="_blank">
+                Prefer a call
               </a>
             ) : (
-              <Link className="sm-button-accent text-center" to={liveAppAvailable ? '/signup' : '/book'}>
-                {liveAppAvailable ? 'Start workspace' : 'Book call'}
+              <Link className="sm-button-secondary text-center" to={liveAppAvailable ? '/signup' : '/systems'}>
+                {liveAppAvailable ? 'Open app' : 'See what we build'}
               </Link>
             )}
-            <Link className="sm-button-secondary text-center" to="/lead-finder">
-              Open Lead Finder
+            <Link className="sm-button-secondary text-center" to="/templates">
+              View starter packs
             </Link>
           </div>
         </aside>
@@ -153,11 +154,11 @@ export function ContactPage() {
               />
             </label>
             <label className="flex flex-col gap-2 text-sm font-semibold text-[var(--sm-muted)] md:col-span-2">
-              What data do you already have?
+              What are you using now?
               <input
                 className="rounded-xl border border-white/8 bg-white/4 px-3 py-2 text-sm font-normal text-white"
                 onChange={(event) => setForm((prev) => ({ ...prev, data: event.target.value }))}
-                placeholder="For example: Gmail + Drive + Sheets"
+                placeholder="For example: Gmail, Drive, Excel, Facebook page, Viber or WhatsApp"
                 required
                 type="text"
                 value={form.data}
@@ -177,11 +178,11 @@ export function ContactPage() {
 
           <div className="mt-5 flex flex-wrap gap-3">
             <button className="sm-button-accent" type="submit">
-              {status === 'saving' ? 'Saving...' : 'Send request'}
+              {status === 'saving' ? 'Sending...' : 'Contact us'}
             </button>
             {bookingUrl ? (
               <a className="sm-button-secondary" href={bookingUrl} rel="noreferrer" target="_blank">
-                Schedule call instead
+                Prefer a call
               </a>
             ) : null}
           </div>

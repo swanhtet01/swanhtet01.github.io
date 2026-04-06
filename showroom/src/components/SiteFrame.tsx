@@ -23,7 +23,7 @@ export function SiteFrame() {
             </span>
               <span className="flex flex-col">
                 <span className="sm-logo text-lg font-extrabold tracking-tight text-white">SuperMega</span>
-                <span className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[var(--sm-muted)]">AI-native systems company.</span>
+                <span className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[var(--sm-muted)]">Sales, operations, management.</span>
               </span>
             </NavLink>
           <button
@@ -39,8 +39,8 @@ export function SiteFrame() {
                 {item.label}
               </NavLink>
             ))}
-            <Link className="sm-button-primary ml-2" to="/book">
-              Book rollout call
+            <Link className="sm-button-primary ml-2" to="/contact">
+              Contact us
             </Link>
           </div>
         </nav>
@@ -52,8 +52,8 @@ export function SiteFrame() {
                   {item.label}
                 </NavLink>
               ))}
-              <Link className="sm-button-primary mt-2" onClick={() => setMenuOpen(false)} to="/book">
-                Book rollout call
+              <Link className="sm-button-primary mt-2" onClick={() => setMenuOpen(false)} to="/contact">
+                Contact us
               </Link>
             </div>
           </div>
@@ -66,16 +66,19 @@ export function SiteFrame() {
 
       <footer className="border-t border-white/8 bg-[rgba(4,10,22,0.78)]">
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 px-4 py-6 text-sm text-[var(--sm-muted)] lg:flex-row lg:items-center lg:justify-between lg:px-8">
-          <p>Starter packs, custom systems, and durable agent loops.</p>
+          <p>Custom AI systems for sales, operations, and management.</p>
           <div className="flex flex-wrap gap-4">
+            <Link className="sm-link" to="/systems">
+              What we build
+            </Link>
             <Link className="sm-link" to="/templates">
-              Templates
+              Starter packs
             </Link>
             <Link className="sm-link" to="/find-companies">
               Proof tools
             </Link>
-            <Link className="sm-link" to="/book">
-              Book rollout call
+            <Link className="sm-link" to="/contact">
+              Contact
             </Link>
           </div>
         </div>

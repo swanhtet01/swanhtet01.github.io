@@ -32,6 +32,7 @@ const routePaths = [
   'app/documents',
   'app/architect',
   'login',
+  'contact',
   'book',
   'signup',
 ]

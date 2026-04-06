@@ -10,6 +10,8 @@ export function RouteEffects() {
     const normalizedPath = location.pathname.replace(/\/+$/, '') || '/'
     const titleMap: Record<string, string> = {
       '/': `${tenant.brandName} | ${tenant.brandTagline}`,
+      '/systems': `What we build | ${tenant.brandName}`,
+      '/templates': `Starter packs | ${tenant.brandName}`,
       '/find-companies': `Find clients | ${tenant.brandName}`,
       '/lead-finder': `Find clients | ${tenant.brandName}`,
       '/company-list': `Clean list | ${tenant.brandName}`,
@@ -18,13 +20,14 @@ export function RouteEffects() {
       '/receiving': `Log receiving | ${tenant.brandName}`,
       '/action-os': `Task List | ${tenant.brandName}`,
       '/workspace': `Clean list | ${tenant.brandName}`,
-      '/book': `${tenant.bookCtaLabel} | ${tenant.brandName}`,
+      '/contact': `Contact | ${tenant.brandName}`,
+      '/book': `Contact | ${tenant.brandName}`,
       '/login': `Login | ${tenant.brandName}`,
       '/signup': `Use with your team | ${tenant.brandName}`,
     }
     window.scrollTo({ top: 0, behavior: 'auto' })
     document.title = titleMap[normalizedPath] ?? `${tenant.brandName} | ${tenant.brandTagline}`
-  }, [location.pathname, tenant.bookCtaLabel, tenant.brandName, tenant.brandTagline])
+  }, [location.pathname, tenant.brandName, tenant.brandTagline])
 
   return null
 }

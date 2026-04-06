@@ -97,7 +97,7 @@ export function publicShellOnly() {
   return !isLocalHost(hostname) && port !== '8787' && !hasLiveWorkspaceApi() && !hasLiveWorkspaceApp()
 }
 
-export function appHref(path = '/', fallback = '/book') {
+export function appHref(path = '/', fallback = '/contact') {
   const normalizedPath = path.startsWith('/') ? path : `/${path}`
   if (!workspaceAppBase) {
     return fallback
@@ -194,6 +194,27 @@ export async function checkWorkspaceHealth() {
   } catch {
     return { ready: false as const }
   }
+}
+
+export type ContactSubmissionPayload = {
+  name: string
+  email: string
+  company: string
+  workflow: string
+  data: string
+  goal: string
+}
+
+export async function createContactSubmission(payload: ContactSubmissionPayload) {
+  return workspaceFetch<{
+    status?: string
+    message?: string
+    request?: Record<string, unknown>
+    pipeline?: Record<string, unknown>
+  }>('/api/contact-submissions', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
 }
 
 export type WorkspaceSessionPayload = {

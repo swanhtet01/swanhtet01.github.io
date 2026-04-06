@@ -5,8 +5,8 @@ import { RouteEffects } from './components/RouteEffects'
 import { SiteFrame } from './components/SiteFrame'
 import { ActionBoardPage } from './pages/ActionBoardPage'
 import { AgentTeamsPage } from './pages/AgentTeamsPage'
-import { BookPage } from './pages/BookPage'
 import { ApprovalQueuePage } from './pages/ApprovalQueuePage'
+import { ContactPage } from './pages/ContactPage'
 import { DecisionJournalPage } from './pages/DecisionJournalPage'
 import { DirectorDashboardPage } from './pages/DirectorDashboardPage'
 import { DocumentIntakePage } from './pages/DocumentIntakePage'
@@ -35,7 +35,6 @@ function App() {
   const liveAppAvailable = hasLiveWorkspaceApp()
   const tenant = getTenantConfig()
   const publicWorkspaceFallback = tenant.key === 'ytf-plant-a' ? '/receiving-log' : '/company-list'
-  const bookFallback = tenant.showBookCta ? <BookPage /> : <Navigate replace to={publicWorkspaceFallback} />
 
   return (
     <BrowserRouter>
@@ -58,7 +57,8 @@ function App() {
           <Route element={<Navigate replace to="/company-list" />} path="workspace" />
           <Route element={liveAppAvailable ? <LoginPage /> : <Navigate replace to={publicWorkspaceFallback} />} path="login" />
           <Route element={liveAppAvailable ? <SignupPage /> : <Navigate replace to={publicWorkspaceFallback} />} path="signup" />
-          <Route element={bookFallback} path="book" />
+          <Route element={<ContactPage />} path="contact" />
+          <Route element={<Navigate replace to="/contact" />} path="book" />
           <Route element={<NotFoundPage />} path="*" />
         </Route>
         <Route element={<AppFrame />} path="/app">

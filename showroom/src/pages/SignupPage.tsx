@@ -73,7 +73,7 @@ export function SignupPage() {
           <aside className="sm-terminal p-6">
             <p className="sm-kicker text-[var(--sm-accent)]">What you can do now</p>
             <div className="mt-5 grid gap-3">
-              {['Search for leads', 'See Action OS', 'Book rollout call'].map((item) => (
+              {['See systems', 'Try a proof tool', 'Contact us'].map((item) => (
                 <div className="sm-chip text-white" key={item}>
                   {item}
                 </div>
@@ -82,14 +82,14 @@ export function SignupPage() {
           </aside>
           <section className="sm-surface p-6">
             <p className="text-sm leading-relaxed text-[var(--sm-muted)]">
-              Workspace signup is not live on this host yet. Use the public Lead Finder now or book the first rollout call.
+              Workspace signup is not live on this host yet. Use the public site now or contact us for the first rollout.
             </p>
             <div className="mt-5 flex flex-wrap gap-3">
               <Link className="sm-button-primary" to="/find-companies">
                 {isClientTenant ? 'Open receiving' : 'Open Find Companies'}
               </Link>
-              <Link className="sm-button-secondary" to="/book">
-                {tenant.bookCtaLabel}
+              <Link className="sm-button-secondary" to="/contact">
+                Contact us
               </Link>
             </div>
           </section>

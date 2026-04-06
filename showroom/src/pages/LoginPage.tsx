@@ -103,8 +103,8 @@ export function LoginPage() {
               <Link className="sm-button-primary" to="/find-companies">
                 {isClientTenant ? 'Open receiving' : 'Open Find Companies'}
               </Link>
-              <Link className="sm-button-secondary" to="/book">
-                {tenant.bookCtaLabel}
+              <Link className="sm-button-secondary" to="/contact">
+                Contact us
               </Link>
             </div>
           </section>

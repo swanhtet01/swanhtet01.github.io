@@ -19,14 +19,14 @@ export type TenantConfig = {
 const defaultTenant: TenantConfig = {
   key: 'default',
   brandName: 'SuperMega',
-  brandTagline: 'Lists, logs, follow-up',
+  brandTagline: 'AI systems for real company work',
   navItems: [
-    { label: 'Find clients', to: '/find-companies' },
-    { label: 'Clean list', to: '/company-list' },
-    { label: 'Log receiving', to: '/receiving-log' },
+    { label: 'What we build', to: '/systems' },
+    { label: 'Starter packs', to: '/templates' },
+    { label: 'Contact', to: '/contact' },
   ],
   showBookCta: true,
-  bookCtaLabel: 'Book rollout call',
+  bookCtaLabel: 'Contact us',
   homeEyebrow: 'SuperMega',
   homeTitle: 'Turn messy business work into one clear next-step list.',
   homeDescription: 'Find clients, clean a company list, or log receiving issues. Start with one tool.',
@@ -49,7 +49,7 @@ const defaultTenant: TenantConfig = {
       to: '/receiving-log',
     },
   ],
-  footerText: 'Find clients. Clean lists. Log receiving.',
+  footerText: 'Custom AI systems for sales, operations, and management.',
 }
 
 const ytfTenant: TenantConfig = {
