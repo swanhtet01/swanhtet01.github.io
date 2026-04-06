@@ -267,6 +267,82 @@ export async function inviteTeamMember(payload: {
   })
 }
 
+export type AgentRunRow = {
+  run_id: string
+  workspace_id: string
+  job_type: string
+  source: string
+  status: string
+  summary: string
+  triggered_by: string
+  created_at: string
+  started_at: string
+  completed_at: string
+  error_text: string
+  result?: Record<string, unknown>
+}
+
+export type AgentJobTemplate = {
+  job_type: string
+  name: string
+  cadence: string
+  description: string
+  last_run?: AgentRunRow | null
+}
+
+export async function listAgentRuns(limit = 20, jobType = '', status = '') {
+  const params = new URLSearchParams()
+  params.set('limit', String(limit))
+  if (jobType) {
+    params.set('job_type', jobType)
+  }
+  if (status) {
+    params.set('status', status)
+  }
+  return workspaceFetch<{
+    status?: string
+    count?: number
+    rows?: AgentRunRow[]
+    jobs?: AgentJobTemplate[]
+  }>(`/api/agent-runs?${params.toString()}`)
+}
+
+export async function runAgentJob(payload: {
+  job_type: string
+  source?: string
+  payload?: Record<string, unknown>
+  idempotency_key?: string
+}) {
+  return workspaceFetch<{
+    status?: string
+    row?: AgentRunRow
+    jobs?: AgentJobTemplate[]
+  }>('/api/agent-runs', {
+    method: 'POST',
+    body: JSON.stringify({
+      job_type: payload.job_type,
+      source: payload.source ?? 'manual',
+      payload: payload.payload ?? {},
+      idempotency_key: payload.idempotency_key ?? '',
+    }),
+  })
+}
+
+export async function runDefaultAgentJobs(jobTypes?: string[]) {
+  return workspaceFetch<{
+    status?: string
+    count?: number
+    rows?: AgentRunRow[]
+    jobs?: AgentJobTemplate[]
+  }>('/api/agent-runs/run-defaults', {
+    method: 'POST',
+    body: JSON.stringify({
+      source: 'manual_batch',
+      job_types: jobTypes ?? [],
+    }),
+  })
+}
+
 export async function loginWorkspace(username: string, password: string, workspaceSlug = '') {
   const tenant = getTenantConfig()
   const defaultWorkspaceSlug = String(tenant.defaultWorkspaceSlug ?? '').trim()

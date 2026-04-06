@@ -15,7 +15,7 @@ const appNavItems = [
   { label: 'Sales', to: '/app/sales' },
   { label: 'Receiving', to: '/app/receiving' },
   { label: 'Approvals', to: '/app/approvals' },
-  { label: 'Team', to: '/app/teams' },
+  { label: 'Agent Ops', to: '/app/teams' },
   { label: 'Director', to: '/app/director' },
 ] as const
 
@@ -75,7 +75,7 @@ export function AppFrame() {
     return (
       <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(37,208,255,0.12),_transparent_30%),linear-gradient(180deg,#020611_0%,#07111f_40%,#07111f_100%)] text-[var(--sm-ink)]">
         <div className="mx-auto flex min-h-screen max-w-6xl items-center justify-center px-4">
-          <div className="sm-chip text-white">Loading team workspace...</div>
+          <div className="sm-chip text-white">Loading SuperMega...</div>
         </div>
       </div>
     )
@@ -86,10 +86,10 @@ export function AppFrame() {
       <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(37,208,255,0.12),_transparent_30%),linear-gradient(180deg,#020611_0%,#07111f_40%,#07111f_100%)] text-[var(--sm-ink)]">
         <div className="mx-auto flex min-h-screen max-w-5xl items-center justify-center px-4 py-16">
           <div className="sm-surface-deep max-w-2xl p-8 text-center">
-            <p className="sm-kicker text-[var(--sm-accent)]">Team workspace</p>
-            <h1 className="mt-4 text-4xl font-extrabold text-white">Login to open the team workspace.</h1>
+            <p className="sm-kicker text-[var(--sm-accent)]">Shared app</p>
+            <h1 className="mt-4 text-4xl font-extrabold text-white">Login to open the shared app.</h1>
             <p className="mt-4 text-[var(--sm-muted)]">
-              The public site explains the tools. The app is where the saved queue, leads, issues, and approvals live for a team.
+              The public site explains the tools. The app is where the saved queue, sales list, agent loops, and approvals live for the team.
             </p>
             <div className="mt-8 flex flex-wrap justify-center gap-3">
               <NavLink className="sm-button-primary" to={`/login?next=${encodeURIComponent(location.pathname)}`}>
@@ -115,9 +115,9 @@ export function AppFrame() {
                 SM
               </span>
               <div>
-                <p className="sm-logo text-lg font-extrabold tracking-tight text-white">SuperMega Ops</p>
+                <p className="sm-logo text-lg font-extrabold tracking-tight text-white">SuperMega</p>
                 <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[var(--sm-muted)]">
-                  {session?.workspace_name || 'Team workspace'}
+                  {session?.workspace_name || 'Shared app'}
                 </p>
               </div>
             </NavLink>
