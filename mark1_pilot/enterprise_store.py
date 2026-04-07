@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import Column, String, Text
+from sqlalchemy import Column, String, Text, or_
 from sqlmodel import Field, SQLModel, Session, create_engine, select
 
 
@@ -1261,6 +1261,45 @@ def list_agent_runs(
     return [_agent_run_to_dict(row) for row in rows]
 
 
+def claim_agent_runs(
+    database_url: str,
+    *,
+    workspace_id: str,
+    job_types: list[str] | None = None,
+    limit: int = 1,
+) -> list[dict[str, Any]]:
+    ensure_schema(database_url)
+    now = _now()
+    normalized_job_types = [str(item or "").strip() for item in (job_types or []) if str(item or "").strip()]
+    engine = get_engine(database_url)
+    with Session(engine) as session:
+        statement = select(EnterpriseAgentRun).where(
+            EnterpriseAgentRun.workspace_id == str(workspace_id),
+            EnterpriseAgentRun.status == "queued",
+            or_(EnterpriseAgentRun.scheduled_for == "", EnterpriseAgentRun.scheduled_for <= now),
+        )
+        if normalized_job_types:
+            statement = statement.where(EnterpriseAgentRun.job_type.in_(normalized_job_types))
+        statement = statement.order_by(EnterpriseAgentRun.created_at.asc()).limit(max(1, int(limit or 1)))
+        if engine.dialect.name != "sqlite":
+            statement = statement.with_for_update(skip_locked=True)
+        rows = list(session.exec(statement).all())
+        if not rows:
+            return []
+        for row in rows:
+            row.status = "running"
+            row.started_at = now
+            row.finished_at = ""
+            row.error_text = ""
+            row.attempt_count = int(row.attempt_count or 0) + 1
+            row.updated_at = now
+            session.add(row)
+        session.commit()
+        for row in rows:
+            session.refresh(row)
+        return [_agent_run_to_dict(row) for row in rows]
+
+
 def start_agent_run(
     database_url: str,
     *,
@@ -1284,6 +1323,47 @@ def start_agent_run(
         session.commit()
         session.refresh(row)
         return _agent_run_to_dict(row)
+
+
+def claim_agent_runs(
+    database_url: str,
+    *,
+    workspace_id: str,
+    limit: int = 10,
+    job_types: list[str] | None = None,
+) -> list[dict[str, Any]]:
+    ensure_schema(database_url)
+    now = _now()
+    engine = get_engine(database_url)
+    normalized_job_types = [str(item or "").strip().lower() for item in (job_types or []) if str(item or "").strip()]
+    with Session(engine) as session:
+        statement = select(EnterpriseAgentRun).where(
+            EnterpriseAgentRun.workspace_id == str(workspace_id),
+            EnterpriseAgentRun.status == "queued",
+            or_(EnterpriseAgentRun.scheduled_for == "", EnterpriseAgentRun.scheduled_for <= now),
+        )
+        if normalized_job_types:
+            statement = statement.where(EnterpriseAgentRun.job_type.in_(normalized_job_types))
+        statement = statement.order_by(EnterpriseAgentRun.created_at.asc()).limit(max(1, int(limit or 1)))
+        bind = session.get_bind()
+        dialect_name = str(getattr(getattr(bind, "dialect", None), "name", "")).strip().lower()
+        if dialect_name == "postgresql":
+            statement = statement.with_for_update(skip_locked=True)
+        rows = list(session.exec(statement).all())
+        claimed: list[EnterpriseAgentRun] = []
+        for row in rows:
+            row.status = "running"
+            row.started_at = now
+            row.finished_at = ""
+            row.error_text = ""
+            row.attempt_count = int(row.attempt_count or 0) + 1
+            row.updated_at = now
+            session.add(row)
+            claimed.append(row)
+        session.commit()
+        for row in claimed:
+            session.refresh(row)
+        return [_agent_run_to_dict(row) for row in claimed]
 
 
 def complete_agent_run(

@@ -3,7 +3,8 @@ param(
     [string]$Region = "asia-southeast1",
     [string]$Service = "supermega-app",
     [string]$AppDomain = "app.supermega.dev",
-    [string]$TimeZone = "Asia/Yangon"
+    [string]$TimeZone = "Asia/Yangon",
+    [switch]$RotateCronToken
 )
 
 Set-StrictMode -Version Latest
@@ -59,6 +60,7 @@ function Ensure-SchedulerJob {
     param(
         [string]$Name,
         [string]$Schedule,
+        [string]$Uri,
         [string]$Body
     )
 
@@ -71,7 +73,7 @@ function Ensure-SchedulerJob {
             "--location=$Region",
             "--schedule=$Schedule",
             "--time-zone=$TimeZone",
-            "--uri=$schedulerUri",
+            "--uri=$Uri",
             "--http-method=POST",
             "--message-body-from-file=$bodyFile",
             "--attempt-deadline=180s"
@@ -80,11 +82,11 @@ function Ensure-SchedulerJob {
         try {
             Invoke-GcloudCapture -CommandArgs @("scheduler", "jobs", "describe", $Name, "--project=$ProjectId", "--location=$Region") | Out-Null
             $updateArgs = @("scheduler", "jobs", "update", "http") + $commonArgs + @("--update-headers=Content-Type=application/json,x-supermega-cron-token=$cronToken")
-            Invoke-Gcloud -CommandArgs $updateArgs
+            Invoke-Gcloud -CommandArgs $updateArgs | Out-Null
         }
         catch {
             $createArgs = @("scheduler", "jobs", "create", "http") + $commonArgs + @("--headers=Content-Type=application/json,x-supermega-cron-token=$cronToken")
-            Invoke-Gcloud -CommandArgs $createArgs
+            Invoke-Gcloud -CommandArgs $createArgs | Out-Null
         }
     }
     finally {
@@ -105,7 +107,8 @@ if ([string]::IsNullOrWhiteSpace($serviceUrl)) {
     throw "Could not resolve Cloud Run service URL for $Service."
 }
 
-$schedulerUri = "https://$AppDomain/api/internal/agent-runs/run-defaults"
+$enqueueUri = "https://$AppDomain/api/internal/agent-runs/enqueue-defaults"
+$workerUri = "https://$AppDomain/api/internal/agent-runs/process-queue"
 $cronToken = ""
 try {
     $cronToken = ((Invoke-GcloudCapture -CommandArgs @("secrets", "versions", "access", "latest", "--secret=supermega-internal-cron-token", "--project=$ProjectId")) -join "`n").Trim()
@@ -113,7 +116,7 @@ try {
 catch {
     $cronToken = ""
 }
-if ([string]::IsNullOrWhiteSpace($cronToken)) {
+if ($RotateCronToken -or [string]::IsNullOrWhiteSpace($cronToken)) {
     $cronToken = ("{0}{1}" -f ([guid]::NewGuid().ToString("N")), ([guid]::NewGuid().ToString("N")))
 }
 Ensure-SecretVersion -Name "supermega-internal-cron-token" -Value $cronToken
@@ -123,11 +126,12 @@ Invoke-Gcloud -CommandArgs @(
     "--project=$ProjectId",
     "--region=$Region",
     "--update-secrets=SUPERMEGA_INTERNAL_CRON_TOKEN=supermega-internal-cron-token:latest"
-)
+) | Out-Null
 
-Ensure-SchedulerJob -Name "supermega-default-agent-jobs" -Schedule "0 */2 * * *" -Body '{"source":"scheduler","job_types":["revenue_scout","list_clerk","task_triage","template_clerk"]}'
-Ensure-SchedulerJob -Name "supermega-ops-watch" -Schedule "*/15 * * * *" -Body '{"source":"scheduler","job_types":["ops_watch"]}'
-Ensure-SchedulerJob -Name "supermega-founder-brief-daily" -Schedule "0 8 * * *" -Body '{"source":"scheduler","job_types":["founder_brief"]}'
+Ensure-SchedulerJob -Name "supermega-default-agent-jobs" -Schedule "0 */2 * * *" -Uri $enqueueUri -Body '{"source":"scheduler","job_types":["revenue_scout","list_clerk","task_triage","template_clerk"]}'
+Ensure-SchedulerJob -Name "supermega-ops-watch" -Schedule "*/15 * * * *" -Uri $enqueueUri -Body '{"source":"scheduler","job_types":["ops_watch"]}'
+Ensure-SchedulerJob -Name "supermega-founder-brief-daily" -Schedule "0 8 * * *" -Uri $enqueueUri -Body '{"source":"scheduler","job_types":["founder_brief"]}'
+Ensure-SchedulerJob -Name "supermega-agent-worker" -Schedule "*/5 * * * *" -Uri $workerUri -Body '{"source":"worker","limit":12}'
 
 @{
     status = "ready"
@@ -135,10 +139,12 @@ Ensure-SchedulerJob -Name "supermega-founder-brief-daily" -Schedule "0 8 * * *" 
     region = $Region
     service = $Service
     service_url = $serviceUrl
-    scheduler_uri = $schedulerUri
+    enqueue_uri = $enqueueUri
+    worker_uri = $workerUri
     jobs = @(
-        [ordered]@{ name = "supermega-default-agent-jobs"; schedule = "0 */2 * * *" },
-        [ordered]@{ name = "supermega-ops-watch"; schedule = "*/15 * * * *" },
-        [ordered]@{ name = "supermega-founder-brief-daily"; schedule = "0 8 * * *" }
+        [ordered]@{ name = "supermega-default-agent-jobs"; schedule = "0 */2 * * *"; uri = $enqueueUri },
+        [ordered]@{ name = "supermega-ops-watch"; schedule = "*/15 * * * *"; uri = $enqueueUri },
+        [ordered]@{ name = "supermega-founder-brief-daily"; schedule = "0 8 * * *"; uri = $enqueueUri },
+        [ordered]@{ name = "supermega-agent-worker"; schedule = "*/5 * * * *"; uri = $workerUri }
     )
 } | ConvertTo-Json -Depth 5

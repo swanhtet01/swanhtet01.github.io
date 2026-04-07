@@ -56,13 +56,25 @@ def main() -> int:
     cron_token = str(args.cron_token or os.getenv("SUPERMEGA_INTERNAL_CRON_TOKEN", "")).strip()
 
     if cron_token:
-        payload = request_json(
+        enqueue_payload = request_json(
             opener,
             "POST",
-            f"{base_url}/api/internal/agent-runs/run-defaults",
+            f"{base_url}/api/internal/agent-runs/enqueue-defaults",
             {
                 "source": "ops_script",
                 "job_types": job_types,
+            },
+            timeout=60,
+            extra_headers={"x-supermega-cron-token": cron_token},
+        )
+        payload = request_json(
+            opener,
+            "POST",
+            f"{base_url}/api/internal/agent-runs/process-queue",
+            {
+                "source": "ops_worker",
+                "job_types": job_types,
+                "limit": max(len(job_types), 1),
             },
             timeout=120,
             extra_headers={"x-supermega-cron-token": cron_token},
@@ -81,8 +93,9 @@ def main() -> int:
             "base_url": base_url,
             "workspace": args.workspace,
             "count": len(results),
+            "queued_count": int(enqueue_payload.get("queued_count", 0) or 0),
             "results": results,
-            "source": "internal_cron",
+            "source": "internal_queue_worker",
         }
         if args.as_json:
             print(json.dumps(report, indent=2))
@@ -90,7 +103,8 @@ def main() -> int:
             print()
             print("SuperMega durable agent jobs")
             print(f"- Base URL: {base_url}")
-            print("- Source: internal_cron")
+            print("- Source: internal_queue_worker")
+            print(f"- Queued: {report['queued_count']}")
             for row in results:
                 print(f"- {row['job_type']}: {row['status']} :: {row['summary']}")
             print()

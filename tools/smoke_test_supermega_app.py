@@ -141,6 +141,27 @@ def main() -> int:
         },
         timeout=90,
     )
+    queued_template_clerk = request_json(
+        opener,
+        "POST",
+        f"{args.base_url.rstrip('/')}/api/agent-runs",
+        {
+            "job_type": "template_clerk",
+            "source": "smoke_test_queue",
+            "enqueue_only": True,
+        },
+    )
+    queue_worker_run = request_json(
+        opener,
+        "POST",
+        f"{args.base_url.rstrip('/')}/api/agent-runs/process-queue",
+        {
+            "source": "smoke_test_worker",
+            "job_types": ["template_clerk"],
+            "limit": 1,
+        },
+        timeout=60,
+    )
     director = request_json(opener, "GET", f"{args.base_url.rstrip('/')}/api/reports/role/director")
     exceptions = request_json(opener, "GET", f"{args.base_url.rstrip('/')}/api/exceptions?limit=5")
     approval_create = request_json(
@@ -464,6 +485,9 @@ def main() -> int:
         "revenue_scout_status": str((revenue_scout_run.get("row") or {}).get("status", "")),
         "agent_batch_status": str(agent_batch_run.get("status", "")),
         "agent_batch_count": int(agent_batch_run.get("count") or 0),
+        "queued_template_clerk_status": str((queued_template_clerk.get("row") or {}).get("status", "")),
+        "queue_worker_status": str(queue_worker_run.get("status", "")),
+        "queue_worker_count": int(queue_worker_run.get("processed_count") or 0),
         "exception_count": int(exceptions.get("count") or 0),
         "approval_count": int(approvals.get("count") or 0),
         "approval_message": approval_create.get("message", ""),
@@ -524,6 +548,8 @@ def main() -> int:
     print(f"- Founder brief: {report['founder_brief_status']}")
     print(f"- Revenue scout: {report['revenue_scout_status']}")
     print(f"- Agent batch: {report['agent_batch_status']} ({report['agent_batch_count']})")
+    print(f"- Queued template clerk: {report['queued_template_clerk_status']}")
+    print(f"- Queue worker: {report['queue_worker_status']} ({report['queue_worker_count']})")
     print(f"- Exceptions: {report['exception_count']}")
     print(f"- Approvals: {report['approval_count']}")
     print(f"- Lead finder rows: {report['lead_count']}")

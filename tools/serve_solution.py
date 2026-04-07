@@ -76,6 +76,7 @@ from mark1_pilot.enterprise_store import (  # noqa: E402
     add_lead_activity as enterprise_add_lead_activity,
     add_leads as enterprise_add_leads,
     add_leads_with_tasks as enterprise_add_leads_with_tasks,
+    claim_agent_runs as enterprise_claim_agent_runs,
     complete_agent_run as enterprise_complete_agent_run,
     create_agent_run as enterprise_create_agent_run,
     add_workspace_tasks as enterprise_add_workspace_tasks,
@@ -334,17 +335,27 @@ class AgentRunRequest(BaseModel):
     max_attempts: int = 1
     related_entity_type: str = ""
     related_entity_id: str = ""
+    enqueue_only: bool = False
 
 
 class AgentBatchRunRequest(BaseModel):
     job_types: list[str] = Field(default_factory=list)
     source: str = "scheduler"
+    enqueue_only: bool = False
+    process_limit: int = Field(default=10, ge=1, le=50)
+
+
+class AgentQueueProcessRequest(BaseModel):
+    job_types: list[str] = Field(default_factory=list)
+    source: str = "worker"
+    limit: int = Field(default=8, ge=1, le=50)
 
 
 class AgentRunDefaultsRequest(BaseModel):
     workspace_slug: str = ""
     source: str = "scheduler"
     job_types: list[str] = Field(default_factory=list)
+    enqueue_only: bool = False
 
 
 class LeadHuntProfileRequest(BaseModel):
@@ -1072,6 +1083,74 @@ def _run_and_persist_agent_job(
         ) or row
 
 
+def _complete_existing_agent_run(
+    *,
+    state_db: str,
+    enterprise_db_url: str,
+    workspace_id: str,
+    run_id: str,
+    job_type: str,
+    payload: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    try:
+        result = _execute_agent_job(
+            state_db=state_db,
+            enterprise_db_url=enterprise_db_url,
+            workspace_id=workspace_id,
+            job_type=job_type,
+            payload=payload,
+        )
+        return enterprise_complete_agent_run(
+            enterprise_db_url,
+            workspace_id=workspace_id,
+            run_id=run_id,
+            status="ready",
+            summary=str(result.get("summary", "")).strip(),
+            result=result,
+        ) or {"run_id": run_id, "job_type": job_type, "status": "ready"}
+    except Exception as exc:
+        return enterprise_complete_agent_run(
+            enterprise_db_url,
+            workspace_id=workspace_id,
+            run_id=run_id,
+            status="error",
+            summary=f"{job_type} failed",
+            result={"job_type": job_type},
+            error_text=str(exc),
+        ) or {"run_id": run_id, "job_type": job_type, "status": "error", "error_text": str(exc)}
+
+
+def _agent_jobs_payload(
+    *,
+    enterprise_db_url: str,
+    workspace_id: str,
+    rows: list[dict[str, Any]],
+    status: str = "ready",
+    extra: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    latest_runs = enterprise_list_agent_runs(
+        enterprise_db_url,
+        workspace_id=workspace_id,
+        limit=50,
+    )
+    latest_by_type = _group_agent_runs_by_job_type(latest_runs)
+    payload: dict[str, Any] = {
+        "status": status,
+        "count": len(rows),
+        "rows": rows,
+        "jobs": [
+            {
+                **template,
+                "last_run": latest_by_type.get(template["job_type"], {}),
+            }
+            for template in AGENT_JOB_TEMPLATES
+        ],
+    }
+    if extra:
+        payload.update(extra)
+    return payload
+
+
 def _build_revenue_scout_result(*, enterprise_db_url: str, workspace_id: str) -> dict[str, Any]:
     leads = enterprise_list_leads(enterprise_db_url, workspace_id=workspace_id, limit=200)
     hunts = enterprise_list_lead_hunt_profiles(enterprise_db_url, workspace_id=workspace_id, limit=50)
@@ -1701,7 +1780,29 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
         normalized_job_types = _normalized_agent_job_types(job_types)
         results: list[dict[str, Any]] = []
         for job_type in normalized_job_types:
-            row = enterprise_create_agent_run(
+            results.append(
+                _run_and_persist_agent_job(
+                    state_db=state_db,
+                    enterprise_db_url=enterprise_db_url,
+                    workspace_id=workspace_id,
+                    triggered_by=triggered_by,
+                    job_type=job_type,
+                    source=source,
+                    payload={},
+                )
+            )
+        return _agent_jobs_payload(enterprise_db_url=enterprise_db_url, workspace_id=workspace_id, rows=results)
+
+    def _enqueue_agent_job_batch(
+        *,
+        workspace_id: str,
+        triggered_by: str,
+        source: str,
+        job_types: list[str] | None = None,
+    ) -> dict[str, Any]:
+        normalized_job_types = _normalized_agent_job_types(job_types)
+        rows = [
+            enterprise_create_agent_run(
                 enterprise_db_url,
                 workspace_id=workspace_id,
                 job_type=job_type,
@@ -1710,57 +1811,50 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
                 max_attempts=1,
                 triggered_by=triggered_by,
             )
-            run_id = str(row.get("run_id", "")).strip()
-            enterprise_start_agent_run(
-                enterprise_db_url,
-                workspace_id=workspace_id,
-                run_id=run_id,
-            )
-            try:
-                result = _execute_agent_job(
-                    state_db=state_db,
-                    enterprise_db_url=enterprise_db_url,
-                    workspace_id=workspace_id,
-                    job_type=job_type,
-                    payload={},
-                )
-                final_row = enterprise_complete_agent_run(
-                    enterprise_db_url,
-                    workspace_id=workspace_id,
-                    run_id=run_id,
-                    status="ready",
-                    summary=str(result.get("summary", "")).strip(),
-                    result=result,
-                )
-            except Exception as exc:
-                final_row = enterprise_complete_agent_run(
-                    enterprise_db_url,
-                    workspace_id=workspace_id,
-                    run_id=run_id,
-                    status="error",
-                    summary=f"{job_type} failed",
-                    result={"job_type": job_type},
-                    error_text=str(exc),
-                )
-            results.append(final_row or {"job_type": job_type, "status": "error"})
-        latest_runs = enterprise_list_agent_runs(
+            for job_type in normalized_job_types
+        ]
+        return _agent_jobs_payload(
+            enterprise_db_url=enterprise_db_url,
+            workspace_id=workspace_id,
+            rows=rows,
+            extra={"queued_count": len(rows), "mode": "queued"},
+        )
+
+    def _process_agent_run_queue(
+        *,
+        workspace_id: str,
+        source: str,
+        job_types: list[str] | None = None,
+        limit: int = 8,
+    ) -> dict[str, Any]:
+        claimed_rows = enterprise_claim_agent_runs(
             enterprise_db_url,
             workspace_id=workspace_id,
-            limit=50,
+            job_types=_normalized_agent_job_types(job_types),
+            limit=limit,
         )
-        latest_by_type = _group_agent_runs_by_job_type(latest_runs)
-        return {
-            "status": "ready",
-            "count": len(results),
-            "rows": results,
-            "jobs": [
-                {
-                    **template,
-                    "last_run": latest_by_type.get(template["job_type"], {}),
-                }
-                for template in AGENT_JOB_TEMPLATES
-            ],
-        }
+        completed_rows = [
+            _complete_existing_agent_run(
+                state_db=state_db,
+                enterprise_db_url=enterprise_db_url,
+                workspace_id=workspace_id,
+                run_id=str(row.get("run_id", "")).strip(),
+                job_type=str(row.get("job_type", "")).strip(),
+                payload=row.get("payload", {}) if isinstance(row.get("payload", {}), dict) else {},
+            )
+            for row in claimed_rows
+            if str(row.get("run_id", "")).strip() and str(row.get("job_type", "")).strip()
+        ]
+        return _agent_jobs_payload(
+            enterprise_db_url=enterprise_db_url,
+            workspace_id=workspace_id,
+            rows=completed_rows,
+            extra={
+                "claimed_count": len(claimed_rows),
+                "processed_count": len(completed_rows),
+                "mode": source,
+            },
+        )
 
     def _require_internal_automation(request: Request) -> str:
         cron_token = str(os.getenv("SUPERMEGA_INTERNAL_CRON_TOKEN", "")).strip()
@@ -2367,69 +2461,58 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
         if job_type not in {item["job_type"] for item in AGENT_JOB_TEMPLATES}:
             raise HTTPException(status_code=400, detail=f"Unsupported job type: {request.job_type}")
 
-        row = enterprise_create_agent_run(
-            enterprise_db_url,
+        triggered_by = str(session.get("display_name", session.get("username", "system")))
+        if request.enqueue_only:
+            row = enterprise_create_agent_run(
+                enterprise_db_url,
+                workspace_id=workspace_id,
+                job_type=job_type,
+                source=str(request.source or "").strip() or "manual",
+                payload=request.payload,
+                idempotency_key=str(request.idempotency_key or "").strip() or None,
+                max_attempts=int(request.max_attempts or 1),
+                triggered_by=triggered_by,
+                related_entity_type=str(request.related_entity_type or "").strip(),
+                related_entity_id=str(request.related_entity_id or "").strip(),
+            )
+            payload = _agent_jobs_payload(
+                enterprise_db_url=enterprise_db_url,
+                workspace_id=workspace_id,
+                rows=[row],
+                extra={"mode": "queued", "queued_count": 1},
+            )
+            payload["row"] = row
+            return payload
+        final_row = _run_and_persist_agent_job(
+            state_db=state_db,
+            enterprise_db_url=enterprise_db_url,
             workspace_id=workspace_id,
+            triggered_by=triggered_by,
             job_type=job_type,
             source=str(request.source or "").strip() or "manual",
             payload=request.payload,
             idempotency_key=str(request.idempotency_key or "").strip() or None,
-            max_attempts=int(request.max_attempts or 1),
-            triggered_by=str(session.get("display_name", session.get("username", "system"))),
             related_entity_type=str(request.related_entity_type or "").strip(),
             related_entity_id=str(request.related_entity_id or "").strip(),
         )
-        run_id = str(row.get("run_id", "")).strip()
-        enterprise_start_agent_run(
-            enterprise_db_url,
-            workspace_id=workspace_id,
-            run_id=run_id,
+        if str((final_row or {}).get("status", "")).strip() == "error":
+            raise HTTPException(
+                status_code=500,
+                detail=f"Agent run failed: {str((final_row or {}).get('error_text', '')).strip() or job_type}",
+            )
+        payload = _agent_jobs_payload(enterprise_db_url=enterprise_db_url, workspace_id=workspace_id, rows=[final_row])
+        payload["row"] = final_row
+        return payload
+
+    @app.post("/api/agent-runs/process-queue")
+    def process_agent_run_queue(request_http: Request, request: AgentQueueProcessRequest) -> dict[str, Any]:
+        session = _require_session(request_http)
+        return _process_agent_run_queue(
+            workspace_id=str(session.get("workspace_id", "")).strip(),
+            source=str(request.source or "").strip() or "manual_worker",
+            job_types=request.job_types,
+            limit=int(request.limit or 8),
         )
-        try:
-            result = _execute_agent_job(
-                state_db=state_db,
-                enterprise_db_url=enterprise_db_url,
-                workspace_id=workspace_id,
-                job_type=job_type,
-                payload=request.payload,
-            )
-            summary_text = str(result.get("summary", "")).strip()
-            final_row = enterprise_complete_agent_run(
-                enterprise_db_url,
-                workspace_id=workspace_id,
-                run_id=run_id,
-                status="ready",
-                summary=summary_text,
-                result=result,
-            )
-        except Exception as exc:
-            final_row = enterprise_complete_agent_run(
-                enterprise_db_url,
-                workspace_id=workspace_id,
-                run_id=run_id,
-                status="error",
-                summary=f"{job_type} failed",
-                result={"job_type": job_type},
-                error_text=str(exc),
-            )
-            raise HTTPException(status_code=500, detail=f"Agent run failed: {exc}") from exc
-        latest_runs = enterprise_list_agent_runs(
-            enterprise_db_url,
-            workspace_id=workspace_id,
-            limit=20,
-        )
-        latest_by_type = _group_agent_runs_by_job_type(latest_runs)
-        return {
-            "status": "ready",
-            "row": final_row,
-            "jobs": [
-                {
-                    **template,
-                    "last_run": latest_by_type.get(template["job_type"], {}),
-                }
-                for template in AGENT_JOB_TEMPLATES
-            ],
-        }
 
     @app.post("/api/ops/agent-jobs/run-defaults")
     def run_default_agent_jobs(request_http: Request, request: AgentRunDefaultsRequest) -> dict[str, Any]:
@@ -2478,6 +2561,26 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             triggered_by="cloud_scheduler",
             source=str(request.source or "").strip() or "scheduler",
             job_types=request.job_types,
+        )
+
+    @app.post("/api/internal/agent-runs/enqueue-defaults")
+    def enqueue_internal_default_agent_runs(request_http: Request, request: AgentBatchRunRequest) -> dict[str, Any]:
+        _require_internal_cron_token(request_http)
+        return _enqueue_agent_job_batch(
+            workspace_id=default_workspace_id,
+            triggered_by="cloud_scheduler",
+            source=str(request.source or "").strip() or "scheduler",
+            job_types=request.job_types,
+        )
+
+    @app.post("/api/internal/agent-runs/process-queue")
+    def process_internal_agent_run_queue(request_http: Request, request: AgentQueueProcessRequest) -> dict[str, Any]:
+        _require_internal_cron_token(request_http)
+        return _process_agent_run_queue(
+            workspace_id=default_workspace_id,
+            source=str(request.source or "").strip() or "worker",
+            job_types=request.job_types,
+            limit=int(request.limit or 8),
         )
 
     @app.post("/api/tools/lead-finder")

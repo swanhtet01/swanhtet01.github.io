@@ -11,6 +11,7 @@ param(
     [string]$ServiceAccountKey = "C:\Users\swann\OneDrive - BDA\.credentials\service-account.json",
     [string]$GoogleOAuthClient = "C:\Users\swann\OneDrive - BDA\.credentials\google-oauth-client.json",
     [string]$EnvFile = "",
+    [string]$GcloudAccount = "",
     [string]$BookingUrl = "",
     [switch]$SkipSql,
     [switch]$SkipBuild,
@@ -28,6 +29,10 @@ function Require-Command {
 
 function Run-GcloudCapture {
     param([string[]]$CommandArgs)
+    $effectiveArgs = @($CommandArgs)
+    if ($GcloudAccount -and ($effectiveArgs.Count -lt 2 -or $effectiveArgs[0] -ne "auth")) {
+        $effectiveArgs += "--account=$GcloudAccount"
+    }
     $gcloudSource = (Get-Command gcloud -ErrorAction Stop).Source
     $gcloudCmd = Join-Path (Split-Path -Parent $gcloudSource) "gcloud.cmd"
     if (-not (Test-Path $gcloudCmd)) {
@@ -36,7 +41,7 @@ function Run-GcloudCapture {
     $stdoutPath = Join-Path $env:TEMP ("gcloud-stdout-{0}.log" -f ([guid]::NewGuid().ToString("N")))
     $stderrPath = Join-Path $env:TEMP ("gcloud-stderr-{0}.log" -f ([guid]::NewGuid().ToString("N")))
     try {
-        $process = Start-Process -FilePath $gcloudCmd -ArgumentList $CommandArgs -NoNewWindow -PassThru -Wait -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath
+        $process = Start-Process -FilePath $gcloudCmd -ArgumentList $effectiveArgs -NoNewWindow -PassThru -Wait -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath
         $stdout = if (Test-Path $stdoutPath) { Get-Content -LiteralPath $stdoutPath -ErrorAction SilentlyContinue } else { @() }
         $stderr = if (Test-Path $stderrPath) { Get-Content -LiteralPath $stderrPath -ErrorAction SilentlyContinue } else { @() }
         $output = @($stdout + $stderr | Where-Object { $_ -ne $null })
