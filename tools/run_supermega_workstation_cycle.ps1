@@ -39,6 +39,7 @@ $founderScript = Join-Path $PSScriptRoot "run_supermega_founder_cycle.ps1"
 $operatorScript = Join-Path $PSScriptRoot "run_supermega_operator_cycle.ps1"
 $agentRunner = Join-Path $PSScriptRoot "run_supermega_agent_jobs.py"
 $syncOpsScript = Join-Path $PSScriptRoot "sync_supermega_ops_from_reports.ps1"
+$renderOpsHubScript = Join-Path $PSScriptRoot "render_supermega_ops_hub.ps1"
 
 $operatorJson = & powershell -ExecutionPolicy Bypass -File $operatorScript -BaseUrl $BaseUrl -PublicUrl $PublicUrl
 $operatorPath = Join-Path $outputRoot "operator-cycle-latest.json"
@@ -89,6 +90,9 @@ $summary = [ordered]@{
 
 $opsSyncJson = & powershell -ExecutionPolicy Bypass -File $syncOpsScript -RepoRoot $repoRoot -ReportsDir $outputRoot
 $summary.ops_sync = $opsSyncJson | Out-String | ConvertFrom-Json
+
+$opsHubJson = & powershell -ExecutionPolicy Bypass -File $renderOpsHubScript -RepoRoot $repoRoot
+$summary.ops_hub = $opsHubJson | Out-String | ConvertFrom-Json
 
 $summary | ConvertTo-Json -Depth 5 | Out-File -LiteralPath (Join-Path $outputRoot "workstation-latest.json") -Encoding utf8
 $summary | ConvertTo-Json -Depth 5

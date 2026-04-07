@@ -8,6 +8,7 @@ Rule:
 - Agents and humans update these files first, then publish summaries elsewhere.
 
 Core files:
+- `index.html`
 - `00_company_scoreboard.md`
 - `01_daily_founder_brief.md`
 - `02_operator_report.md`
@@ -23,6 +24,7 @@ Core files:
 - `12_autonomy_requirements.md`
 - `13_myanmar_market_focus.md`
 - `14_updates_and_alerts.md`
+- `15_agent_architecture.md`
 
 Ownership:
 - Founder Desk: scoreboard, founder brief, roadmap, solution catalog
@@ -35,3 +37,4 @@ Cadence:
 - Weekly: company scoreboard, product roadmap, case-study program
 - Every release: release log
 - Every incident: incident log
+- Every workstation cycle: `index.html`
