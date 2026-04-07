@@ -1,6 +1,15 @@
 name: Deploy SuperMega App To Cloud Run
 
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/supermega-app-cloud-run.yml'
+      - 'Dockerfile'
+      - 'mark1_pilot/**'
+      - 'showroom/**'
+      - 'tools/**'
   workflow_dispatch:
     inputs:
       project_id:
@@ -24,11 +33,11 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     env:
-      PROJECT_ID: ${{ github.event.inputs.project_id }}
-      REGION: ${{ github.event.inputs.region }}
-      SERVICE: ${{ github.event.inputs.service }}
+      PROJECT_ID: ${{ github.event.inputs.project_id || 'supermega-468612' }}
+      REGION: ${{ github.event.inputs.region || 'asia-southeast1' }}
+      SERVICE: ${{ github.event.inputs.service || 'supermega-app' }}
       ARTIFACT_REPOSITORY: supermega-containers
-      IMAGE: asia-southeast1-docker.pkg.dev/${{ github.event.inputs.project_id }}/supermega-containers/${{ github.event.inputs.service }}:${{ github.sha }}
+      IMAGE: asia-southeast1-docker.pkg.dev/${{ github.event.inputs.project_id || 'supermega-468612' }}/supermega-containers/${{ github.event.inputs.service || 'supermega-app' }}:${{ github.sha }}
       CLOUDSQL_INSTANCE: ${{ vars.SUPERMEGA_CLOUDSQL_INSTANCE }}
       RUNTIME_SERVICE_ACCOUNT: super-mega-dev-team@supermega-468612.iam.gserviceaccount.com
 
