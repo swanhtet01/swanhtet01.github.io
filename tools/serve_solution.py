@@ -2141,13 +2141,15 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
         review = _load_json(pilot_data / "execution_review.json")
         autopilot = _load_json(pilot_data / "autopilot_status.json")
         coverage = _load_json(pilot_data / "data_coverage_report.json")
+        enterprise_db_scheme = str(enterprise_db_url or "").split(":", 1)[0].strip()
         return {
             "status": "ready",
             "service": "supermega-service",
-            "site_root": str(site_root),
-            "pilot_data": str(pilot_data),
-            "state_db": str(state_db),
-            "enterprise_db": enterprise_db_url,
+            "site_root_ready": bool(site_root.exists()),
+            "pilot_data_ready": bool(pilot_data.exists()),
+            "state_db_ready": bool(Path(state_db).exists()),
+            "enterprise_db_ready": bool(enterprise_db_url),
+            "enterprise_db_scheme": enterprise_db_scheme or "unknown",
             "review_status": review.get("status", "unknown"),
             "autopilot_status": autopilot.get("status", "unknown"),
             "coverage_score": int(coverage.get("readiness_score", 0) or 0),
