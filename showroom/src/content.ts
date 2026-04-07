@@ -67,6 +67,17 @@ export type SiteExample = {
   live: boolean
 }
 
+export type WorkExample = {
+  name: string
+  category: string
+  audience: string
+  title: string
+  summary: string
+  image: string
+  outcomes: string[]
+  disclosure: string
+}
+
 export type TemplatePack = {
   name: string
   category: string
@@ -86,26 +97,25 @@ export type OperatorAddOn = {
 export const bookingUrl = (import.meta.env.VITE_BOOKING_URL ?? '').trim()
 
 export const navItems = [
-  { label: 'Systems', to: '/systems' },
-  { label: 'Examples', to: '/templates' },
+  { label: 'Work', to: '/work' },
 ] as const
 
 export const hero = {
   eyebrow: 'SuperMega',
-  title: 'AI-native systems for companies that are done with software sprawl.',
-  description: 'We design the operating layer for sales, operations, management, and client-facing workflows so the team works from one system instead of five tools.',
+  title: 'Custom systems for sales, operations, and management.',
+  description: 'We replace scattered tools with one working layer and a small set of always-on agents.',
 }
 
 export const proofPoints: ProofPoint[] = [
   {
-    label: 'Find clients',
-    value: 'Better than plain search',
-    detail: 'Keep only the businesses worth contacting, with fit reasons and first outreach ready.',
+    label: 'One operating layer',
+    value: 'Less tool sprawl',
+    detail: 'Sales, operations, approvals, and management move in one shared system instead of chats, sheets, and scattered apps.',
   },
   {
-    label: 'Clean my list',
-    value: 'Use the names you already have',
-    detail: 'Paste rows from Google, Facebook, WhatsApp, Excel, or CRM and turn them into one usable sales list.',
+    label: 'Always-on agents',
+    value: 'Queues keep moving',
+    detail: 'The worker plane keeps triage, briefs, cleanup, and follow-up running outside this chat session.',
   },
 ]
 
@@ -196,6 +206,65 @@ export const siteExamples: SiteExample[] = [
     image: '/site/client-portal.svg',
     route: '/contact?package=Learning%20Hub',
     live: false,
+  },
+]
+
+export const workExamples: WorkExample[] = [
+  {
+    name: 'Distributor Sales Desk',
+    category: 'Sales',
+    audience: 'Owner-led importers, distributors, and commercial teams',
+    title: 'A sales system that turns scattered prospecting into one daily queue.',
+    summary: 'Built for teams that live in Facebook, Viber, WhatsApp, Gmail, and spreadsheets but still need one real sales operating layer.',
+    image: '/site/sales-desk.svg',
+    outcomes: [
+      'Turn raw company names and messages into one clean sales list with next actions.',
+      'Give the team one daily follow-up queue instead of scattered chats and sheets.',
+      'Give the owner one short daily brief on leads, replies, and blocked deals.',
+    ],
+    disclosure: 'Composite example based on common distributor workflows. Not presented as a live client deployment.',
+  },
+  {
+    name: 'Furniture Order Control',
+    category: 'Client-facing',
+    audience: 'Retail and project sales teams handling quotes, orders, and delivery updates',
+    title: 'A client-facing system for quotes, approvals, delivery status, and customer follow-up.',
+    summary: 'Built for teams that need to stop chasing order status across chat, screenshots, and ad hoc spreadsheets.',
+    image: '/site/client-portal.svg',
+    outcomes: [
+      'Keep quotes, approvals, and customer follow-up in one controlled queue.',
+      'Surface delayed orders and missing owner actions before the customer asks.',
+      'Replace manual status chasing with one operating view for sales and management.',
+    ],
+    disclosure: 'Composite example created to show a realistic rollout pattern. Not a named client case study.',
+  },
+  {
+    name: 'Electronics Receiving Control',
+    category: 'Operations',
+    audience: 'Warehouse, plant, and procurement teams receiving mixed shipments',
+    title: 'A receiving system for GRN gaps, holds, variances, and supplier follow-up.',
+    summary: 'Built for teams that need one visible exception queue instead of end-of-day reporting and scattered inbox threads.',
+    image: '/site/ops-desk.svg',
+    outcomes: [
+      'Log inbound issues once and keep every shortage, hold, or mismatch visible.',
+      'Assign one owner and one next step for each receiving exception.',
+      'Give management a live exception view instead of end-of-day reporting only.',
+    ],
+    disclosure: 'Composite example inspired by common warehouse and electronics receiving workflows. Not a published client engagement.',
+  },
+  {
+    name: 'Logistics Operations Desk',
+    category: 'Management',
+    audience: 'Operators, managers, and founders coordinating multiple teams every day',
+    title: 'An operations control room for tasks, approvals, exceptions, and daily management review.',
+    summary: 'Built for teams that need one place to see what is late, blocked, waiting for approval, or needs escalation today.',
+    image: '/site/control-room.svg',
+    outcomes: [
+      'Turn messy updates and blocker messages into one prioritized operations queue.',
+      'Route escalations and approvals without losing context between teams.',
+      'Give leadership one short daily view of late tasks, risks, and decisions.',
+    ],
+    disclosure: 'Composite example based on typical logistics control needs. Shared as a simulated rollout, not a real customer reference.',
   },
 ]
 
@@ -369,13 +438,13 @@ export const clientTemplates: ClientTemplate[] = [
     name: solution.name,
     audience: solution.buyer,
     outcome: solution.promise,
-    path: '/systems',
+    path: '/work',
   })),
   {
     name: 'Founder Daily Brief',
     audience: 'Owners and senior managers',
     outcome: 'Get one short daily review built from live queues, issues, and priorities.',
-    path: '/systems',
+    path: '/work',
   },
 ]
 

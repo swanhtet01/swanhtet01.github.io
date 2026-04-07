@@ -19,32 +19,31 @@ export type TenantConfig = {
 const defaultTenant: TenantConfig = {
   key: 'default',
   brandName: 'SuperMega',
-  brandTagline: 'AI systems for real company work',
+  brandTagline: 'Custom systems with always-on agents',
   navItems: [
-    { label: 'What we build', to: '/systems' },
-      { label: 'Examples', to: '/templates' },
+    { label: 'Work', to: '/work' },
     { label: 'Contact', to: '/contact' },
   ],
   showBookCta: true,
   bookCtaLabel: 'Contact us',
   homeEyebrow: 'SuperMega',
-  homeTitle: 'Custom AI systems for real company work.',
-    homeDescription: 'Start with one clear workflow. Find new clients, clean the list you already have, or roll out one working system.',
-  homePrimaryCta: { label: 'Try find clients', to: '/find-companies' },
-  homeSecondaryCta: { label: 'Clean my list', to: '/company-list' },
+  homeTitle: 'Custom systems for sales, operations, and management.',
+  homeDescription: 'Start with one workflow. Replace scattered tools with one working layer and a small set of always-on agents.',
+  homePrimaryCta: { label: 'See work', to: '/work' },
+  homeSecondaryCta: { label: 'Contact us', to: '/contact' },
   toolCards: [
     {
-      title: 'Find clients',
-      detail: 'Search a place or niche and keep the companies worth contacting.',
-      to: '/find-companies',
+      title: 'Distributor sales desk',
+      detail: 'Prospecting, cleanup, follow-up, and founder visibility in one sales system.',
+      to: '/work',
     },
     {
-      title: 'Clean my list',
-      detail: 'Paste your own company list and turn it into one usable follow-up list.',
-      to: '/company-list',
+      title: 'Receiving control',
+      detail: 'One visible exception queue for GRN gaps, holds, and supplier follow-up.',
+      to: '/work',
     },
   ],
-  footerText: 'Custom AI systems for sales, operations, and management.',
+  footerText: 'Custom systems for sales, operations, management, and client work.',
 }
 
 const ytfTenant: TenantConfig = {

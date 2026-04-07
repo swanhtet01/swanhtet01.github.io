@@ -1,0 +1,5 @@
+name,client_archetype,system,outcome_target,screenshot_status,copy_status,disclosure_status,publish_status,owner,notes
+Distributor Sales Desk,Owner-led importer or distributor,Sales queue + founder brief,Show sales-system rollout clearly,planned,planned,planned,draft,Revenue Pod,
+Furniture Order Control,Retail or project sales team,Order control + approvals + client portal,Show client-facing operating layer,planned,planned,planned,draft,Revenue Pod,
+Electronics Receiving Control,Warehouse or plant team,Receiving queue + supplier follow-up,Show operations control clearly,planned,planned,planned,draft,Delivery Pod,
+Logistics Operations Desk,Logistics or field operations team,Exceptions + approvals + founder brief,Show management control room clearly,planned,planned,planned,draft,Founder Desk,

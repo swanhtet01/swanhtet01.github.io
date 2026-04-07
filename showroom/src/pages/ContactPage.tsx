@@ -93,7 +93,7 @@ export function ContactPage() {
       <PageIntro
         eyebrow="Contact"
         title="Tell us the first workflow you want fixed."
-        description="We build the system, not just another stack. Send one short request and we will reply with the right rollout or custom build."
+        description="Send one short request. We will reply with the right system, rollout, or custom build."
       />
 
       <section className="grid gap-6 lg:grid-cols-[0.88fr_1.12fr]">
@@ -111,12 +111,12 @@ export function ContactPage() {
                 Prefer a call
               </a>
             ) : (
-              <Link className="sm-button-secondary text-center" to={liveAppAvailable ? '/signup' : '/systems'}>
-                {liveAppAvailable ? 'Open app' : 'See what we build'}
+              <Link className="sm-button-secondary text-center" to={liveAppAvailable ? '/signup' : '/work'}>
+                {liveAppAvailable ? 'Open app' : 'See work'}
               </Link>
             )}
-            <Link className="sm-button-secondary text-center" to="/templates">
-              View examples
+            <Link className="sm-button-secondary text-center" to="/work">
+              View work
             </Link>
           </div>
         </aside>

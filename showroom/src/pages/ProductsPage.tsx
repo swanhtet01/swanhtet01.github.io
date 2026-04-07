@@ -1,98 +1,57 @@
-import { Link, useLocation } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 
-import { publicModules, siteExamples, siteShowcases } from '../content'
+import { publicModules, workExamples } from '../content'
 
 function contactLink(name: string) {
   return `/contact?package=${encodeURIComponent(name)}`
 }
 
-function SystemsView() {
+export function ProductsPage() {
   return (
     <div className="space-y-10 pb-12">
       <section className="sm-site-panel">
-        <p className="sm-kicker text-[var(--sm-accent)]">Systems</p>
-        <h1 className="mt-4 max-w-4xl text-4xl font-extrabold tracking-tight text-white lg:text-6xl">
-          The operating layer we build for sales, operations, and management.
-        </h1>
-        <p className="mt-4 max-w-3xl text-base leading-relaxed text-[var(--sm-muted)] lg:text-lg">
-          Each system starts from a real workflow and ends in one queue, one source of truth, and one cleaner daily rhythm for the team.
-        </p>
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <p className="sm-kicker text-[var(--sm-accent)]">Work</p>
+            <h1 className="mt-4 max-w-4xl text-4xl font-extrabold tracking-tight text-white lg:text-6xl">
+              Composite rollout examples of the systems SuperMega can ship.
+            </h1>
+          </div>
+          <p className="max-w-2xl text-sm leading-relaxed text-[var(--sm-muted)] lg:text-base">
+            These are simulated client systems based on recurring workflows. They show the shape of the operating layer without pretending to be named client work.
+          </p>
+        </div>
       </section>
 
       <section className="space-y-8">
-        {siteShowcases.map((showcase, index) => (
-          <article className={`sm-site-case ${index % 2 === 1 ? 'sm-site-case-reverse' : ''}`} key={showcase.name}>
+        {workExamples.map((example, index) => (
+          <article className={`sm-site-case ${index % 2 === 1 ? 'sm-site-case-reverse' : ''}`} key={example.name}>
             <div className="sm-site-case-copy">
-              <p className="sm-kicker text-[var(--sm-accent)]">{showcase.eyebrow}</p>
-              <h2 className="mt-3 max-w-xl text-3xl font-bold text-white lg:text-4xl">{showcase.name}</h2>
-              <p className="mt-4 max-w-xl text-sm leading-relaxed text-[var(--sm-muted)] lg:text-base">{showcase.summary}</p>
+              <div className="flex flex-wrap items-center gap-3">
+                <p className="sm-kicker text-[var(--sm-accent)]">{example.category}</p>
+                <span className="sm-status-pill">Composite rollout</span>
+              </div>
+              <h2 className="mt-3 max-w-xl text-3xl font-bold text-white lg:text-5xl">{example.name}</h2>
+              <p className="mt-3 max-w-xl text-base font-semibold text-white/80">{example.audience}</p>
+              <p className="mt-4 max-w-xl text-sm leading-relaxed text-[var(--sm-muted)] lg:text-base">{example.summary}</p>
               <div className="mt-6 space-y-3">
-                {showcase.points.map((point) => (
+                {example.outcomes.map((point) => (
                   <div className="sm-site-point" key={point}>
                     <span className="sm-site-point-dot" />
                     <span>{point}</span>
                   </div>
                 ))}
               </div>
-              <div className="mt-7">
-                <Link className="sm-button-secondary" to={showcase.route}>
-                  Contact us about {showcase.name}
+              <p className="mt-5 max-w-xl text-xs leading-relaxed text-white/45">{example.disclosure}</p>
+              <div className="mt-7 flex flex-wrap gap-3">
+                <Link className="sm-button-primary" to={contactLink(example.name)}>
+                  Ask about this system
                 </Link>
               </div>
             </div>
+
             <div className="sm-site-case-visual">
-              <img alt={showcase.name} className="sm-site-case-image" src={showcase.image} />
-            </div>
-          </article>
-        ))}
-      </section>
-
-      <section className="sm-site-final">
-        <div>
-          <p className="text-xl font-semibold text-white">Need something outside the examples?</p>
-          <p className="mt-2 max-w-2xl text-sm text-[var(--sm-muted)]">
-            We also build client portals, learning hubs, approvals, document intake, and other internal systems when the workflow is clear.
-          </p>
-        </div>
-        <Link className="sm-button-primary" to="/contact">
-          Contact us
-        </Link>
-      </section>
-    </div>
-  )
-}
-
-function TemplatesView() {
-  return (
-    <div className="space-y-10 pb-12">
-      <section className="sm-site-panel">
-        <p className="sm-kicker text-[var(--sm-accent)]">Examples</p>
-        <h1 className="mt-4 max-w-4xl text-4xl font-extrabold tracking-tight text-white lg:text-6xl">
-          Example systems, rollout patterns, and proof tools.
-        </h1>
-        <p className="mt-4 max-w-3xl text-base leading-relaxed text-[var(--sm-muted)] lg:text-lg">
-          These are the fastest ways to see how we structure work. Some are ready to ship now. Others are the next builds on the same operating model.
-        </p>
-      </section>
-
-      <section className="grid gap-6 lg:grid-cols-2">
-        {siteExamples.map((example) => (
-          <article className="sm-example-card" key={example.name}>
-            <div className="sm-example-image-wrap">
-              <img alt={example.name} className="sm-example-image" src={example.image} />
-            </div>
-            <div className="sm-example-copy">
-              <div className="flex items-center justify-between gap-3">
-                <p className="sm-kicker text-[var(--sm-accent)]">{example.category}</p>
-                <span className="sm-status-pill">{example.live ? 'Ready now' : 'Next up'}</span>
-              </div>
-              <h2 className="mt-3 text-2xl font-bold text-white">{example.name}</h2>
-              <p className="mt-3 text-sm leading-relaxed text-[var(--sm-muted)]">{example.detail}</p>
-              <div className="mt-5">
-                <Link className="sm-button-secondary" to={contactLink(example.name)}>
-                  Ask about this build
-                </Link>
-              </div>
+              <img alt={example.name} className="sm-site-case-image" src={example.image} />
             </div>
           </article>
         ))}
@@ -103,10 +62,10 @@ function TemplatesView() {
           <div>
             <p className="sm-kicker text-[var(--sm-accent)]">Free proof tools</p>
             <p className="mt-3 max-w-2xl text-sm leading-relaxed text-[var(--sm-muted)]">
-              The tools below are not the whole company. They are just quick ways to test the workflow shape before a rollout.
+              These are small utilities, not the main offer. Use them if you want to test the workflow shape before a full rollout.
             </p>
           </div>
-          <Link className="sm-button-primary" to="/contact">
+          <Link className="sm-button-secondary" to="/contact">
             Contact us
           </Link>
         </div>
@@ -124,10 +83,4 @@ function TemplatesView() {
       </section>
     </div>
   )
-}
-
-export function ProductsPage() {
-  const location = useLocation()
-  const isTemplatePage = location.pathname.startsWith('/templates')
-  return isTemplatePage ? <TemplatesView /> : <SystemsView />
 }

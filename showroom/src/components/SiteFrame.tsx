@@ -23,7 +23,7 @@ export function SiteFrame() {
             </span>
               <span className="flex flex-col">
                 <span className="sm-logo text-lg font-extrabold tracking-tight text-white">SuperMega</span>
-                <span className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[var(--sm-muted)]">AI-native company systems.</span>
+                <span className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[var(--sm-muted)]">Custom systems. Always-on agents.</span>
               </span>
             </NavLink>
           <button
@@ -66,13 +66,16 @@ export function SiteFrame() {
 
       <footer className="border-t border-white/8 bg-[rgba(4,8,16,0.82)]">
         <div className="mx-auto flex w-full max-w-7xl flex-col gap-4 px-4 py-6 text-sm text-[var(--sm-muted)] lg:flex-row lg:items-center lg:justify-between lg:px-8">
-          <p>AI-native systems for sales, operations, management, and client work.</p>
+          <p>Custom systems for sales, operations, management, and client work.</p>
           <div className="flex flex-wrap gap-4">
-            <Link className="sm-link" to="/systems">
-              Systems
+            <Link className="sm-link" to="/work">
+              Work
             </Link>
-            <Link className="sm-link" to="/templates">
-              Examples
+            <Link className="sm-link" to="/find-companies">
+              Find clients
+            </Link>
+            <Link className="sm-link" to="/company-list">
+              Clean my list
             </Link>
             <Link className="sm-link" to="/contact">
               Contact

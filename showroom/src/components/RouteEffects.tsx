@@ -10,8 +10,9 @@ export function RouteEffects() {
     const normalizedPath = location.pathname.replace(/\/+$/, '') || '/'
     const titleMap: Record<string, string> = {
       '/': `${tenant.brandName} | ${tenant.brandTagline}`,
-      '/systems': `What we build | ${tenant.brandName}`,
-  '/templates': `Examples | ${tenant.brandName}`,
+      '/work': `Work | ${tenant.brandName}`,
+      '/systems': `Work | ${tenant.brandName}`,
+      '/templates': `Work | ${tenant.brandName}`,
       '/find-companies': `Find clients | ${tenant.brandName}`,
       '/lead-finder': `Find clients | ${tenant.brandName}`,
       '/company-list': `Clean my list | ${tenant.brandName}`,
