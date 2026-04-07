@@ -132,6 +132,17 @@ function Ensure-SecretVersion {
     }
 }
 
+function Ensure-SecretVersionIfPresent {
+    param(
+        [string]$Name,
+        [string]$Value
+    )
+    if ([string]::IsNullOrWhiteSpace($Value)) {
+        return
+    }
+    Ensure-SecretVersion -Name $Name -Value $Value
+}
+
 function Ensure-SqlInstance {
     try {
         Run-GcloudCapture -CommandArgs @("sql", "instances", "describe", $SqlInstance, "--project=$ProjectId") | Out-Null
@@ -268,11 +279,11 @@ if (-not $SkipSql) {
     Ensure-DatabaseAndUser
 }
 
-Ensure-SecretVersion -Name "supermega-app-username" -Value ([string]$envValues["SUPERMEGA_APP_USERNAME"])
-Ensure-SecretVersion -Name "supermega-app-password" -Value ([string]$envValues["SUPERMEGA_APP_PASSWORD"])
-Ensure-SecretVersion -Name "supermega-openai-api-key" -Value ([string]$envValues["OPENAI_API_KEY"])
-Ensure-SecretVersion -Name "supermega-google-maps-api-key" -Value ([string]$envValues["GOOGLE_MAPS_API_KEY"])
-Ensure-SecretVersion -Name "supermega-google-places-api-key" -Value ([string]$envValues["GOOGLE_PLACES_API_KEY"])
+Ensure-SecretVersionIfPresent -Name "supermega-app-username" -Value ([string]$envValues["SUPERMEGA_APP_USERNAME"])
+Ensure-SecretVersionIfPresent -Name "supermega-app-password" -Value ([string]$envValues["SUPERMEGA_APP_PASSWORD"])
+Ensure-SecretVersionIfPresent -Name "supermega-openai-api-key" -Value ([string]$envValues["OPENAI_API_KEY"])
+Ensure-SecretVersionIfPresent -Name "supermega-google-maps-api-key" -Value ([string]$envValues["GOOGLE_MAPS_API_KEY"])
+Ensure-SecretVersionIfPresent -Name "supermega-google-places-api-key" -Value ([string]$envValues["GOOGLE_PLACES_API_KEY"])
 $internalCronToken = ""
 try {
     $internalCronToken = ((Run-GcloudCapture -CommandArgs @("secrets", "versions", "access", "latest", "--secret=supermega-internal-cron-token", "--project=$ProjectId")) -join "`n").Trim()
@@ -297,11 +308,14 @@ if (-not $SkipBuild) {
     $cloudBuildConfig = Join-Path $env:TEMP "supermega-cloudbuild.yaml"
     New-CloudBuildConfig -PathValue $cloudBuildConfig -Image $image
     try {
+        $posthogKey = [string]$envValues["VITE_POSTHOG_KEY"]
+        $posthogHost = if ([string]::IsNullOrWhiteSpace([string]$envValues["VITE_POSTHOG_HOST"])) { "https://us.i.posthog.com" } else { [string]$envValues["VITE_POSTHOG_HOST"] }
+        $viteSentryDsn = [string]$envValues["VITE_SENTRY_DSN"]
         Run-GcloudCapture -CommandArgs @(
             "builds", "submit", $repoRoot,
             "--project=$ProjectId",
             "--config=$cloudBuildConfig",
-            "--substitutions=_VITE_GOOGLE_MAPS_API_KEY=$([string]$envValues['GOOGLE_MAPS_API_KEY']),_VITE_BOOKING_URL=$BookingUrl,_VITE_POSTHOG_KEY=,_VITE_POSTHOG_HOST=https://us.i.posthog.com,_VITE_SENTRY_DSN=,_VITE_WORKSPACE_APP_BASE=https://$AppDomain,_VITE_WORKSPACE_API_BASE=https://$AppDomain"
+            "--substitutions=_VITE_GOOGLE_MAPS_API_KEY=$([string]$envValues['GOOGLE_MAPS_API_KEY']),_VITE_BOOKING_URL=$BookingUrl,_VITE_POSTHOG_KEY=$posthogKey,_VITE_POSTHOG_HOST=$posthogHost,_VITE_SENTRY_DSN=$viteSentryDsn,_VITE_WORKSPACE_APP_BASE=https://$AppDomain,_VITE_WORKSPACE_API_BASE=https://$AppDomain"
         ) | Out-Null
     }
     finally {
