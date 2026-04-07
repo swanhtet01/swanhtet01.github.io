@@ -85,6 +85,10 @@ jobs:
           CLOUD_TASKS_QUEUE_BROWSER="${{ vars.SUPERMEGA_CLOUD_TASKS_QUEUE_BROWSER }}"
           CLOUD_TASKS_QUEUE_BRIEF="${{ vars.SUPERMEGA_CLOUD_TASKS_QUEUE_BRIEF }}"
           CLOUD_TASKS_WORKER_URL="${{ vars.SUPERMEGA_CLOUD_TASKS_WORKER_URL }}"
+          SUPERMEGA_RESEND_FROM="${{ vars.SUPERMEGA_RESEND_FROM }}"
+          SUPERMEGA_CONTACT_NOTIFY_EMAIL="${{ vars.SUPERMEGA_CONTACT_NOTIFY_EMAIL }}"
+          SUPERMEGA_SENTRY_TRACES="${{ vars.SUPERMEGA_SENTRY_TRACES }}"
+          VITE_SENTRY_DSN_VALUE="${{ vars.VITE_SENTRY_DSN }}"
           if [ -z "$CLOUD_TASKS_LOCATION" ]; then CLOUD_TASKS_LOCATION="$REGION"; fi
           if [ -z "$CLOUD_TASKS_QUEUE_DEFAULT" ]; then CLOUD_TASKS_QUEUE_DEFAULT="supermega-agent-default"; fi
           if [ -z "$CLOUD_TASKS_QUEUE_BROWSER" ]; then CLOUD_TASKS_QUEUE_BROWSER="supermega-agent-browser"; fi
@@ -92,6 +96,10 @@ jobs:
           if [ -z "$CLOUD_TASKS_WORKER_URL" ] && [ -n "${{ vars.VITE_WORKSPACE_API_BASE }}" ]; then
             CLOUD_TASKS_WORKER_URL="${{ vars.VITE_WORKSPACE_API_BASE }}/api/internal/agent-runs/process-queue"
           fi
+          if [ -z "$SUPERMEGA_RESEND_FROM" ]; then SUPERMEGA_RESEND_FROM="swanhtet@supermega.dev"; fi
+          if [ -z "$SUPERMEGA_CONTACT_NOTIFY_EMAIL" ]; then SUPERMEGA_CONTACT_NOTIFY_EMAIL="swanhtet@supermega.dev"; fi
+          if [ -z "$SUPERMEGA_SENTRY_TRACES" ]; then SUPERMEGA_SENTRY_TRACES="0.05"; fi
+          if [ -z "$VITE_SENTRY_DSN_VALUE" ]; then VITE_SENTRY_DSN_VALUE="https://491279c687eace24d032807ce6fbd49b@o4511177615671296.ingest.us.sentry.io/4511177622749184"; fi
           cat > cloudrun-env.yaml <<EOF
           SUPERMEGA_SITE_ROOT: /app/showroom/dist
           SUPERMEGA_PILOT_DATA: /app/pilot-data
@@ -110,17 +118,15 @@ jobs:
           SUPERMEGA_CLOUD_TASKS_QUEUE_BRIEF: "${CLOUD_TASKS_QUEUE_BRIEF}"
           SUPERMEGA_CLOUD_TASKS_WORKER_URL: "${CLOUD_TASKS_WORKER_URL}"
           SUPERMEGA_CORS_ORIGINS: "${{ vars.SUPERMEGA_CORS_ORIGINS }}"
-          SUPERMEGA_RESEND_FROM: "${{ vars.SUPERMEGA_RESEND_FROM }}"
-          SUPERMEGA_CONTACT_NOTIFY_EMAIL: "${{ vars.SUPERMEGA_CONTACT_NOTIFY_EMAIL }}"
-          SUPERMEGA_SENTRY_TRACES: "${{ vars.SUPERMEGA_SENTRY_TRACES }}"
-          SENTRY_DSN: "${{ secrets.SENTRY_DSN }}"
+          SUPERMEGA_RESEND_FROM: "${SUPERMEGA_RESEND_FROM}"
+          SUPERMEGA_CONTACT_NOTIFY_EMAIL: "${SUPERMEGA_CONTACT_NOTIFY_EMAIL}"
+          SUPERMEGA_SENTRY_TRACES: "${SUPERMEGA_SENTRY_TRACES}"
           VITE_BOOKING_URL: "${{ vars.VITE_BOOKING_URL }}"
           VITE_POSTHOG_KEY: "${{ secrets.VITE_POSTHOG_KEY }}"
           VITE_POSTHOG_HOST: "${{ vars.VITE_POSTHOG_HOST }}"
-          VITE_SENTRY_DSN: "${{ vars.VITE_SENTRY_DSN }}"
+          VITE_SENTRY_DSN: "${VITE_SENTRY_DSN_VALUE}"
           VITE_WORKSPACE_APP_BASE: "${{ vars.VITE_WORKSPACE_APP_BASE }}"
           VITE_WORKSPACE_API_BASE: "${{ vars.VITE_WORKSPACE_API_BASE }}"
-          RESEND_API_KEY: "${{ secrets.RESEND_API_KEY }}"
           STRIPE_SECRET_KEY: "${{ secrets.STRIPE_SECRET_KEY }}"
           STRIPE_WEBHOOK_SECRET: "${{ secrets.STRIPE_WEBHOOK_SECRET }}"
           EOF
@@ -132,7 +138,7 @@ jobs:
             --port 8080 \
             --service-account "$RUNTIME_SERVICE_ACCOUNT" \
             --env-vars-file cloudrun-env.yaml \
-            --set-secrets "SUPERMEGA_APP_USERNAME=supermega-app-username:latest,SUPERMEGA_APP_PASSWORD=supermega-app-password:latest,SUPERMEGA_DATABASE_URL=supermega-database-url:latest,SUPERMEGA_INTERNAL_CRON_TOKEN=supermega-internal-cron-token:latest,OPENAI_API_KEY=supermega-openai-api-key:latest,GOOGLE_MAPS_API_KEY=supermega-google-maps-api-key:latest,GOOGLE_PLACES_API_KEY=supermega-google-places-api-key:latest,GOOGLE_SERVICE_ACCOUNT_JSON=supermega-google-service-account-json:latest" \
+            --set-secrets "SUPERMEGA_APP_USERNAME=supermega-app-username:latest,SUPERMEGA_APP_PASSWORD=supermega-app-password:latest,SUPERMEGA_DATABASE_URL=supermega-database-url:latest,SUPERMEGA_INTERNAL_CRON_TOKEN=supermega-internal-cron-token:latest,OPENAI_API_KEY=supermega-openai-api-key:latest,GOOGLE_MAPS_API_KEY=supermega-google-maps-api-key:latest,GOOGLE_PLACES_API_KEY=supermega-google-places-api-key:latest,GOOGLE_SERVICE_ACCOUNT_JSON=supermega-google-service-account-json:latest,SENTRY_DSN=supermega-backend-sentry-dsn:latest,RESEND_API_KEY=supermega-resend-api-key:latest" \
             $EXTRA_ARGS
 
       - name: Print service URL
