@@ -157,8 +157,15 @@ try {
     Set-GitHubVariableValue -RepoName $Repo -Name "SUPERMEGA_WORKSPACE_PLAN" -Value "pilot"
     Set-GitHubVariableValue -RepoName $Repo -Name "SUPERMEGA_SESSION_HOURS" -Value "336"
     Set-GitHubVariableValue -RepoName $Repo -Name "SUPERMEGA_CLOUDSQL_INSTANCE" -Value "$ProjectId`:$Region`:supermega-app-db"
+    Set-GitHubVariableValue -RepoName $Repo -Name "SUPERMEGA_CLOUD_TASKS_LOCATION" -Value $Region
+    Set-GitHubVariableValue -RepoName $Repo -Name "SUPERMEGA_CLOUD_TASKS_QUEUE_DEFAULT" -Value "supermega-agent-default"
+    Set-GitHubVariableValue -RepoName $Repo -Name "SUPERMEGA_CLOUD_TASKS_QUEUE_BROWSER" -Value "supermega-agent-browser"
+    Set-GitHubVariableValue -RepoName $Repo -Name "SUPERMEGA_CLOUD_TASKS_QUEUE_BRIEF" -Value "supermega-founder-brief"
+    Set-GitHubVariableValue -RepoName $Repo -Name "SUPERMEGA_CLOUD_TASKS_WORKER_URL" -Value ($appBase.TrimEnd("/") + "/api/internal/agent-runs/process-queue")
     Set-GitHubVariableValue -RepoName $Repo -Name "SUPERMEGA_CORS_ORIGINS" -Value (($corsOrigins -join ","))
     Set-GitHubVariableValue -RepoName $Repo -Name "VITE_POSTHOG_HOST" -Value "https://us.i.posthog.com"
+    Set-GitHubVariableValue -RepoName $Repo -Name "SUPERMEGA_RESEND_FROM" -Value ($(if ($envMap.ContainsKey("SUPERMEGA_RESEND_FROM")) { [string]$envMap["SUPERMEGA_RESEND_FROM"] } else { "hello@supermega.dev" }))
+    Set-GitHubVariableValue -RepoName $Repo -Name "SUPERMEGA_CONTACT_NOTIFY_EMAIL" -Value ($(if ($envMap.ContainsKey("SUPERMEGA_CONTACT_NOTIFY_EMAIL")) { [string]$envMap["SUPERMEGA_CONTACT_NOTIFY_EMAIL"] } else { "hello@supermega.dev" }))
 
     if ($envMap.ContainsKey("VITE_BOOKING_URL")) {
         Set-GitHubVariableValue -RepoName $Repo -Name "VITE_BOOKING_URL" -Value ([string]$envMap["VITE_BOOKING_URL"])

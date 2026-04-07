@@ -236,6 +236,13 @@ if (-not (Test-Path $EnvFile)) {
 $envValues = Load-EnvFile -PathValue $EnvFile
 $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
 $image = "asia-southeast1-docker.pkg.dev/${ProjectId}/${ArtifactRepository}/${Service}:$timestamp"
+$taskLocation = if ([string]::IsNullOrWhiteSpace([string]$envValues["SUPERMEGA_CLOUD_TASKS_LOCATION"])) { $Region } else { [string]$envValues["SUPERMEGA_CLOUD_TASKS_LOCATION"] }
+$taskQueueDefault = if ([string]::IsNullOrWhiteSpace([string]$envValues["SUPERMEGA_CLOUD_TASKS_QUEUE_DEFAULT"])) { "supermega-agent-default" } else { [string]$envValues["SUPERMEGA_CLOUD_TASKS_QUEUE_DEFAULT"] }
+$taskQueueBrowser = if ([string]::IsNullOrWhiteSpace([string]$envValues["SUPERMEGA_CLOUD_TASKS_QUEUE_BROWSER"])) { "supermega-agent-browser" } else { [string]$envValues["SUPERMEGA_CLOUD_TASKS_QUEUE_BROWSER"] }
+$taskQueueBrief = if ([string]::IsNullOrWhiteSpace([string]$envValues["SUPERMEGA_CLOUD_TASKS_QUEUE_BRIEF"])) { "supermega-founder-brief" } else { [string]$envValues["SUPERMEGA_CLOUD_TASKS_QUEUE_BRIEF"] }
+$taskWorkerUrl = "https://$AppDomain/api/internal/agent-runs/process-queue"
+$resendFrom = if ([string]::IsNullOrWhiteSpace([string]$envValues["SUPERMEGA_RESEND_FROM"])) { "hello@supermega.dev" } else { [string]$envValues["SUPERMEGA_RESEND_FROM"] }
+$contactNotifyEmail = if ([string]::IsNullOrWhiteSpace([string]$envValues["SUPERMEGA_CONTACT_NOTIFY_EMAIL"])) { $resendFrom } else { [string]$envValues["SUPERMEGA_CONTACT_NOTIFY_EMAIL"] }
 $serviceAccountTemp = Join-Path $env:TEMP "supermega-service-account.json"
 if ((Test-Path $ServiceAccountKey) -and (Try-ReadText -PathValue $ServiceAccountKey)) {
     [System.IO.File]::WriteAllText($serviceAccountTemp, (Try-ReadText -PathValue $ServiceAccountKey))
@@ -311,14 +318,26 @@ SUPERMEGA_SITE_ROOT: /app/showroom/dist
 SUPERMEGA_PILOT_DATA: /app/pilot-data
 SUPERMEGA_ENV: production
 SUPERMEGA_AUTH_REQUIRED: "1"
+SUPERMEGA_GCP_PROJECT_ID: "$ProjectId"
 SUPERMEGA_APP_DISPLAY_NAME: "SuperMega"
 SUPERMEGA_APP_ROLE: "owner"
 SUPERMEGA_WORKSPACE_SLUG: "supermega-lab"
 SUPERMEGA_WORKSPACE_NAME: "SuperMega Lab"
 SUPERMEGA_WORKSPACE_PLAN: "pilot"
 SUPERMEGA_SESSION_HOURS: "336"
+SUPERMEGA_CLOUD_TASKS_LOCATION: "$taskLocation"
+SUPERMEGA_CLOUD_TASKS_QUEUE_DEFAULT: "$taskQueueDefault"
+SUPERMEGA_CLOUD_TASKS_QUEUE_BROWSER: "$taskQueueBrowser"
+SUPERMEGA_CLOUD_TASKS_QUEUE_BRIEF: "$taskQueueBrief"
+SUPERMEGA_CLOUD_TASKS_WORKER_URL: "$taskWorkerUrl"
 SUPERMEGA_CORS_ORIGINS: "$corsOrigins"
+SUPERMEGA_RESEND_FROM: "$resendFrom"
+SUPERMEGA_CONTACT_NOTIFY_EMAIL: "$contactNotifyEmail"
+SUPERMEGA_SENTRY_TRACES: "$([string]$envValues['SUPERMEGA_SENTRY_TRACES'])"
+SENTRY_DSN: "$([string]$envValues['SENTRY_DSN'])"
+RESEND_API_KEY: "$([string]$envValues['RESEND_API_KEY'])"
 VITE_BOOKING_URL: "$BookingUrl"
+VITE_SENTRY_DSN: "$([string]$envValues['VITE_SENTRY_DSN'])"
 VITE_WORKSPACE_APP_BASE: "https://$AppDomain"
 VITE_WORKSPACE_API_BASE: "https://$AppDomain"
 "@
