@@ -11,7 +11,7 @@ export function RouteEffects() {
     const titleMap: Record<string, string> = {
       '/': `${tenant.brandName} | ${tenant.brandTagline}`,
       '/systems': `What we build | ${tenant.brandName}`,
-      '/templates': `Starter packs | ${tenant.brandName}`,
+  '/templates': `Examples | ${tenant.brandName}`,
       '/find-companies': `Find clients | ${tenant.brandName}`,
       '/lead-finder': `Find clients | ${tenant.brandName}`,
       '/company-list': `Clean my list | ${tenant.brandName}`,

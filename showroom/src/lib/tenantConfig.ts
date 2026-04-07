@@ -22,14 +22,14 @@ const defaultTenant: TenantConfig = {
   brandTagline: 'AI systems for real company work',
   navItems: [
     { label: 'What we build', to: '/systems' },
-    { label: 'Starter packs', to: '/templates' },
+      { label: 'Examples', to: '/templates' },
     { label: 'Contact', to: '/contact' },
   ],
   showBookCta: true,
   bookCtaLabel: 'Contact us',
   homeEyebrow: 'SuperMega',
   homeTitle: 'Custom AI systems for real company work.',
-  homeDescription: 'Start with one clear workflow. Find new clients, clean the list you already have, or roll out a starter pack.',
+    homeDescription: 'Start with one clear workflow. Find new clients, clean the list you already have, or roll out one working system.',
   homePrimaryCta: { label: 'Try find clients', to: '/find-companies' },
   homeSecondaryCta: { label: 'Clean my list', to: '/company-list' },
   toolCards: [

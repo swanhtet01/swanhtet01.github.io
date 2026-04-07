@@ -48,6 +48,25 @@ export type CustomBuild = {
   detail: string
 }
 
+export type SiteShowcase = {
+  name: string
+  eyebrow: string
+  title: string
+  summary: string
+  image: string
+  points: string[]
+  route: string
+}
+
+export type SiteExample = {
+  name: string
+  category: string
+  detail: string
+  image: string
+  route: string
+  live: boolean
+}
+
 export type TemplatePack = {
   name: string
   category: string
@@ -67,14 +86,14 @@ export type OperatorAddOn = {
 export const bookingUrl = (import.meta.env.VITE_BOOKING_URL ?? '').trim()
 
 export const navItems = [
-  { label: 'What we build', to: '/systems' },
-  { label: 'Starter packs', to: '/templates' },
+  { label: 'Systems', to: '/systems' },
+  { label: 'Examples', to: '/templates' },
 ] as const
 
 export const hero = {
   eyebrow: 'SuperMega',
-  title: 'Custom AI systems for real company work.',
-  description: 'We build simple systems for sales, operations, management, and client-facing work. The goal is less software mess and clearer daily execution.',
+  title: 'AI-native systems for companies that are done with software sprawl.',
+  description: 'We design the operating layer for sales, operations, management, and client-facing workflows so the team works from one system instead of five tools.',
 }
 
 export const proofPoints: ProofPoint[] = [
@@ -91,13 +110,94 @@ export const proofPoints: ProofPoint[] = [
 ]
 
 export const coreProduct = {
-  name: 'Starter packs + custom systems',
+  name: 'Reusable systems + custom builds',
   tagline: 'Start from one reusable pack, then extend only where the business needs it.',
   replaces: ['Disconnected SaaS', 'Spreadsheet operations', 'Manual chasing'],
   inputs: ['Existing team data', 'Real workflows', 'Current blockers'],
   outputs: ['Working queue', 'Agent loops', 'Role-based control'],
   rollout: ['Pick one workflow.', 'Ship the first working pack.', 'Extend only after the team trusts it.'],
 }
+
+export const siteShowcases: SiteShowcase[] = [
+  {
+    name: 'Distributor Sales Desk',
+    eyebrow: 'Sales',
+    title: 'Prospecting, follow-up, and team handoff in one working system.',
+    summary: 'Search the market, clean inbound lists, and keep every next step visible instead of losing context across chat, sheets, and scattered notes.',
+    image: '/site/sales-desk.svg',
+    points: ['New accounts and existing lists in one queue', 'First follow-up ready without extra admin', 'Manager view of what moved and what stalled'],
+    route: '/contact?package=Distributor%20Sales%20Desk',
+  },
+  {
+    name: 'Operations Desk',
+    eyebrow: 'Operations',
+    title: 'Approvals, receiving, exceptions, and daily execution without a heavy ERP rollout.',
+    summary: 'Start from one operational bottleneck, turn it into one controlled queue, and let the team run the day from a shared operating layer.',
+    image: '/site/ops-desk.svg',
+    points: ['One queue for approvals and blockers', 'Receipts, exceptions, and owners in view', 'Daily review instead of ad hoc chasing'],
+    route: '/contact?package=Receiving%20Control',
+  },
+  {
+    name: 'Founder Daily Brief',
+    eyebrow: 'Management',
+    title: 'A short executive view built from the real work layer.',
+    summary: 'The founder or GM gets the few items that need attention today, not another dashboard full of dead metrics.',
+    image: '/site/founder-brief.svg',
+    points: ['Priority changes surfaced automatically', 'Queues and risk pulled into one brief', 'Built for owners, managers, and directors'],
+    route: '/contact?package=Founder%20Daily%20Brief',
+  },
+]
+
+export const siteExamples: SiteExample[] = [
+  {
+    name: 'Distributor Sales Desk',
+    category: 'Sales',
+    detail: 'For teams that need one system for prospecting, list cleanup, outreach, and follow-up.',
+    image: '/site/sales-desk.svg',
+    route: '/contact?package=Distributor%20Sales%20Desk',
+    live: true,
+  },
+  {
+    name: 'Founder Daily Brief',
+    category: 'Management',
+    detail: 'For owners and managers who need one short operating view every day.',
+    image: '/site/founder-brief.svg',
+    route: '/contact?package=Founder%20Daily%20Brief',
+    live: true,
+  },
+  {
+    name: 'Receiving Control',
+    category: 'Operations',
+    detail: 'For teams that need clean ownership on receiving problems, holds, and follow-up.',
+    image: '/site/ops-desk.svg',
+    route: '/contact?package=Receiving%20Control',
+    live: true,
+  },
+  {
+    name: 'Approval Flow',
+    category: 'Operations',
+    detail: 'For quotes, requests, and decisions that are still trapped in chat and inboxes.',
+    image: '/site/ops-desk.svg',
+    route: '/contact?package=Approval%20Flow',
+    live: true,
+  },
+  {
+    name: 'Client Portal Starter',
+    category: 'Client-facing',
+    detail: 'For agencies and service teams that need one clean place for status, files, and approvals.',
+    image: '/site/client-portal.svg',
+    route: '/contact?package=Client%20Portal',
+    live: false,
+  },
+  {
+    name: 'Learning Hub Starter',
+    category: 'Training',
+    detail: 'For onboarding, SOP rollout, and internal training with AI guidance.',
+    image: '/site/client-portal.svg',
+    route: '/contact?package=Learning%20Hub',
+    live: false,
+  },
+]
 
 export const leadFinder = {
   title: 'Find clients',

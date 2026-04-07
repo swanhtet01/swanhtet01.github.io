@@ -93,7 +93,7 @@ export function ContactPage() {
       <PageIntro
         eyebrow="Contact"
         title="Tell us the first workflow you want fixed."
-        description="We build the system, not just another stack. Send one short request and we will reply with the right starter pack or custom build."
+        description="We build the system, not just another stack. Send one short request and we will reply with the right rollout or custom build."
       />
 
       <section className="grid gap-6 lg:grid-cols-[0.88fr_1.12fr]">
@@ -101,7 +101,7 @@ export function ContactPage() {
           <p className="sm-kicker text-[var(--sm-accent)]">What happens next</p>
           <div className="mt-5 grid gap-3">
             <div className="sm-chip text-white">We review the workflow and the tools you already use.</div>
-            <div className="sm-chip text-white">We recommend the right starter pack or custom build.</div>
+            <div className="sm-chip text-white">We recommend the right system or custom build.</div>
             <div className="sm-chip text-white">We reply with the next rollout step.</div>
           </div>
 
@@ -116,7 +116,7 @@ export function ContactPage() {
               </Link>
             )}
             <Link className="sm-button-secondary text-center" to="/templates">
-              View starter packs
+              View examples
             </Link>
           </div>
         </aside>

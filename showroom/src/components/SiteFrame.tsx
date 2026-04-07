@@ -6,7 +6,7 @@ import { navItems } from '../content'
 const navClassName = ({ isActive }: { isActive: boolean }) =>
   `rounded-full px-4 py-2 text-sm font-semibold transition ${
     isActive
-      ? 'bg-[rgba(37,208,255,0.12)] text-white shadow-[0_0_24px_rgba(37,208,255,0.1)]'
+      ? 'bg-white/10 text-white'
       : 'text-[var(--sm-muted)] hover:bg-white/6 hover:text-white'
   }`
 
@@ -15,15 +15,15 @@ export function SiteFrame() {
 
   return (
     <div className="min-h-screen text-[var(--sm-ink)]">
-      <div className="fixed inset-x-0 top-0 z-40 border-b border-white/8 bg-[rgba(3,8,18,0.84)] backdrop-blur-xl">
-        <nav className="mx-auto flex w-full max-w-6xl items-center justify-between px-4 py-3 lg:px-8">
+      <div className="fixed inset-x-0 top-0 z-40 border-b border-white/8 bg-[rgba(4,8,16,0.72)] backdrop-blur-xl">
+        <nav className="mx-auto flex w-full max-w-7xl items-center justify-between px-4 py-3 lg:px-8">
           <NavLink className="flex items-center gap-3" to="/">
             <span className="flex h-10 w-10 items-center justify-center rounded-xl border border-[rgba(37,208,255,0.22)] bg-[rgba(37,208,255,0.08)] text-sm font-extrabold text-[var(--sm-accent)]">
               SM
             </span>
               <span className="flex flex-col">
                 <span className="sm-logo text-lg font-extrabold tracking-tight text-white">SuperMega</span>
-                <span className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[var(--sm-muted)]">Sales, operations, management.</span>
+                <span className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[var(--sm-muted)]">AI-native company systems.</span>
               </span>
             </NavLink>
           <button
@@ -60,26 +60,26 @@ export function SiteFrame() {
         ) : null}
       </div>
 
-      <main className="mx-auto w-full max-w-6xl px-4 pb-20 pt-28 lg:px-8">
+      <main className="mx-auto w-full max-w-7xl px-4 pb-20 pt-24 lg:px-8">
         <Outlet />
       </main>
 
-      <footer className="border-t border-white/8 bg-[rgba(4,10,22,0.78)]">
-        <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 px-4 py-6 text-sm text-[var(--sm-muted)] lg:flex-row lg:items-center lg:justify-between lg:px-8">
-          <p>Custom AI systems for sales, operations, and management.</p>
+      <footer className="border-t border-white/8 bg-[rgba(4,8,16,0.82)]">
+        <div className="mx-auto flex w-full max-w-7xl flex-col gap-4 px-4 py-6 text-sm text-[var(--sm-muted)] lg:flex-row lg:items-center lg:justify-between lg:px-8">
+          <p>AI-native systems for sales, operations, management, and client work.</p>
           <div className="flex flex-wrap gap-4">
             <Link className="sm-link" to="/systems">
-              What we build
+              Systems
             </Link>
             <Link className="sm-link" to="/templates">
-              Starter packs
-            </Link>
-            <Link className="sm-link" to="/find-companies">
-              Proof tools
+              Examples
             </Link>
             <Link className="sm-link" to="/contact">
               Contact
             </Link>
+            <a className="sm-link" href="https://app.supermega.dev" rel="noreferrer" target="_blank">
+              Team app
+            </a>
           </div>
         </div>
       </footer>
