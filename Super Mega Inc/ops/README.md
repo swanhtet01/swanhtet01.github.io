@@ -18,6 +18,9 @@ Core files:
 - `07_product_roadmap.md`
 - `08_case_study_program.csv`
 - `09_solution_catalog.md`
+- `10_team_map.md`
+- `11_client_setup_playbook.md`
+- `12_autonomy_requirements.md`
 
 Ownership:
 - Founder Desk: scoreboard, founder brief, roadmap, solution catalog

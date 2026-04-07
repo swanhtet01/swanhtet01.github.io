@@ -42,10 +42,10 @@ function App() {
       <Routes>
         <Route element={<SiteFrame />} path="/">
         <Route element={<HomePage />} index />
-          <Route element={<ProductsPage />} path="work" />
-          <Route element={<Navigate replace to="/work" />} path="systems" />
-          <Route element={<Navigate replace to="/work" />} path="templates" />
-          <Route element={<Navigate replace to="/work" />} path="products" />
+          <Route element={<ProductsPage />} path="products" />
+          <Route element={<Navigate replace to="/products" />} path="work" />
+          <Route element={<Navigate replace to="/products" />} path="systems" />
+          <Route element={<Navigate replace to="/products" />} path="templates" />
           <Route element={<PublicLeadFinderPage />} path="find-companies" />
           <Route element={<Navigate replace to="/find-companies" />} path="lead-finder" />
           <Route element={<WorkspaceLitePage />} path="company-list" />

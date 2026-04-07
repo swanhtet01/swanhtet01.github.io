@@ -21,7 +21,7 @@ const defaultTenant: TenantConfig = {
   brandName: 'SuperMega',
   brandTagline: 'Custom systems with always-on agents',
   navItems: [
-    { label: 'Work', to: '/work' },
+    { label: 'Products', to: '/products' },
     { label: 'Contact', to: '/contact' },
   ],
   showBookCta: true,
@@ -29,18 +29,18 @@ const defaultTenant: TenantConfig = {
   homeEyebrow: 'SuperMega',
   homeTitle: 'Custom systems for sales, operations, and management.',
   homeDescription: 'Start with one workflow. Replace scattered tools with one working layer and a small set of always-on agents.',
-  homePrimaryCta: { label: 'See work', to: '/work' },
+  homePrimaryCta: { label: 'See products', to: '/products' },
   homeSecondaryCta: { label: 'Contact us', to: '/contact' },
   toolCards: [
     {
       title: 'Distributor sales desk',
       detail: 'Prospecting, cleanup, follow-up, and founder visibility in one sales system.',
-      to: '/work',
+      to: '/products',
     },
     {
       title: 'Receiving control',
       detail: 'One visible exception queue for GRN gaps, holds, and supplier follow-up.',
-      to: '/work',
+      to: '/products',
     },
   ],
   footerText: 'Custom systems for sales, operations, management, and client work.',

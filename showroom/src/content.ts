@@ -97,7 +97,7 @@ export type OperatorAddOn = {
 export const bookingUrl = (import.meta.env.VITE_BOOKING_URL ?? '').trim()
 
 export const navItems = [
-  { label: 'Work', to: '/work' },
+  { label: 'Products', to: '/products' },
 ] as const
 
 export const hero = {
@@ -438,13 +438,13 @@ export const clientTemplates: ClientTemplate[] = [
     name: solution.name,
     audience: solution.buyer,
     outcome: solution.promise,
-    path: '/work',
+    path: '/products',
   })),
   {
     name: 'Founder Daily Brief',
     audience: 'Owners and senior managers',
     outcome: 'Get one short daily review built from live queues, issues, and priorities.',
-    path: '/work',
+    path: '/products',
   },
 ]
 

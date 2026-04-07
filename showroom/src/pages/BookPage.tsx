@@ -33,8 +33,8 @@ export function BookPage() {
                   Open calendar
                 </a>
               ) : (
-                <Link className="sm-button-primary" onClick={() => trackEvent('offer_open_click', { offer: 'Systems' })} to="/systems">
-                  See starter packs
+                <Link className="sm-button-primary" onClick={() => trackEvent('offer_open_click', { offer: 'Products' })} to="/products">
+                  See products
                 </Link>
               )}
               <Link className="sm-button-secondary" to="/company-list?setup=leads">
@@ -85,9 +85,7 @@ export function BookPage() {
             Best for Myanmar owner-led distributors, importers, stores, service teams, and plant teams still running work through Facebook pages, Viber or WhatsApp, email, spreadsheets, and disconnected SaaS.
           </div>
           <div className="mt-4 text-sm text-[var(--sm-muted)]">Free tools are there to prove the approach. The main product is the system we build for your team.</div>
-          {!bookingUrl ? (
-            <div className="mt-6 text-sm text-[var(--sm-muted)]">Calendar booking is not live on this host yet. Start with the systems page or one of the free tools first.</div>
-          ) : null}
+          {!bookingUrl ? <div className="mt-6 text-sm text-[var(--sm-muted)]">Calendar booking is not live on this host yet. Start with the products page or one of the free tools first.</div> : null}
         </aside>
       </section>
     </div>

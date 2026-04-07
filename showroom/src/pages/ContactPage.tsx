@@ -111,12 +111,12 @@ export function ContactPage() {
                 Prefer a call
               </a>
             ) : (
-              <Link className="sm-button-secondary text-center" to={liveAppAvailable ? '/signup' : '/work'}>
-                {liveAppAvailable ? 'Open app' : 'See work'}
+              <Link className="sm-button-secondary text-center" to={liveAppAvailable ? '/signup' : '/products'}>
+                {liveAppAvailable ? 'Open app' : 'See products'}
               </Link>
             )}
-            <Link className="sm-button-secondary text-center" to="/work">
-              View work
+            <Link className="sm-button-secondary text-center" to="/products">
+              View products
             </Link>
           </div>
         </aside>

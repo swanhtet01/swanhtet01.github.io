@@ -2,9 +2,11 @@ import { Link } from 'react-router-dom'
 
 import { hero, publicModules, workExamples } from '../content'
 import { trackEvent } from '../lib/analytics'
+import { CORE_SOLUTIONS } from '../lib/salesControl'
 
 export function HomePage() {
   const featuredExamples = workExamples.slice(0, 3)
+  const featuredProducts = CORE_SOLUTIONS
 
   return (
     <div className="pb-16">
@@ -18,8 +20,8 @@ export function HomePage() {
               <Link className="sm-button-primary" onClick={() => trackEvent('contact_open_click', { source: 'home_hero' })} to="/contact">
                 Contact us
               </Link>
-              <Link className="sm-button-secondary" onClick={() => trackEvent('offer_open_click', { offer: 'Work' })} to="/work">
-                See work
+              <Link className="sm-button-secondary" onClick={() => trackEvent('offer_open_click', { offer: 'Products' })} to="/products">
+                See products
               </Link>
             </div>
             <div className="mt-8 flex flex-wrap gap-6 text-sm text-[var(--sm-muted)]">
@@ -41,12 +43,21 @@ export function HomePage() {
       <section className="mt-12 sm-site-panel">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <p className="sm-kicker text-[var(--sm-accent)]">What we do</p>
-            <h2 className="mt-3 max-w-3xl text-3xl font-bold text-white lg:text-5xl">We build the working system behind the daily job.</h2>
+            <p className="sm-kicker text-[var(--sm-accent)]">Products</p>
+            <h2 className="mt-3 max-w-3xl text-3xl font-bold text-white lg:text-5xl">Three starter packs. One shared app. Always-on agent loops.</h2>
           </div>
           <p className="max-w-xl text-sm leading-relaxed text-[var(--sm-muted)] lg:text-base">
-            Start with one workflow. Keep ownership, next steps, and management visibility in one place. Let the agent layer keep triage and reporting moving.
+            Start with the pack that matches the job. Then expand into add-ons, client portals, approvals, or management views only if the team actually needs them.
           </p>
+        </div>
+        <div className="mt-6 grid gap-4 lg:grid-cols-3">
+          {featuredProducts.map((product) => (
+            <article className="sm-chip text-white" key={product.id}>
+              <p className="font-semibold">{product.name}</p>
+              <p className="mt-2 text-sm text-[var(--sm-muted)]">{product.promise}</p>
+              <p className="mt-4 text-xs uppercase tracking-[0.18em] text-white/45">Start with {product.modules.join(' + ')}</p>
+            </article>
+          ))}
         </div>
       </section>
 
@@ -114,8 +125,8 @@ export function HomePage() {
           <Link className="sm-button-primary" to="/contact">
             Contact us
           </Link>
-          <Link className="sm-button-secondary" to="/work">
-            View work
+          <Link className="sm-button-secondary" to="/products">
+            View products
           </Link>
         </div>
       </section>

@@ -68,8 +68,8 @@ export function SiteFrame() {
         <div className="mx-auto flex w-full max-w-7xl flex-col gap-4 px-4 py-6 text-sm text-[var(--sm-muted)] lg:flex-row lg:items-center lg:justify-between lg:px-8">
           <p>Custom systems for sales, operations, management, and client work.</p>
           <div className="flex flex-wrap gap-4">
-            <Link className="sm-link" to="/work">
-              Work
+            <Link className="sm-link" to="/products">
+              Products
             </Link>
             <Link className="sm-link" to="/find-companies">
               Find clients
