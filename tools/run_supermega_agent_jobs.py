@@ -17,6 +17,7 @@ DEFAULT_JOB_TYPES = [
     "ops_watch",
     "founder_brief",
 ]
+DEFAULT_BASE_URL = os.getenv("SUPERMEGA_RUNTIME_BASE_URL", "https://supermega-app-453184845544.asia-southeast1.run.app").strip() or "https://supermega-app-453184845544.asia-southeast1.run.app"
 
 
 def request_json(
@@ -41,7 +42,7 @@ def request_json(
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run the current durable SuperMega agent jobs.")
-    parser.add_argument("--base-url", default="https://app.supermega.dev")
+    parser.add_argument("--base-url", default=DEFAULT_BASE_URL)
     parser.add_argument("--username", default="owner")
     parser.add_argument("--password", default="supermega-demo")
     parser.add_argument("--workspace", default="supermega-lab")

@@ -1,5 +1,5 @@
 param(
-  [string]$BaseUrl = "https://app.supermega.dev",
+  [string]$BaseUrl = "https://supermega-app-453184845544.asia-southeast1.run.app",
   [string]$PublicUrl = "https://supermega.dev",
   [string]$RunId = "",
   [string]$PythonPath = ""
