@@ -25,6 +25,7 @@ export function HomePage() {
               </Link>
             </div>
             <div className="mt-8 flex flex-wrap gap-6 text-sm text-[var(--sm-muted)]">
+              <span>Myanmar-first</span>
               <span>Sales systems</span>
               <span>Operations control</span>
               <span>Founder brief</span>
@@ -59,6 +60,9 @@ export function HomePage() {
             </article>
           ))}
         </div>
+        <p className="mt-6 max-w-2xl text-sm leading-relaxed text-[var(--sm-muted)]">
+          Best fit first: Myanmar distributors, importers, warehouses, factories, and service teams still running work through Facebook, Viber, WhatsApp, Gmail, and spreadsheets.
+        </p>
       </section>
 
       <section className="mt-12 space-y-8">

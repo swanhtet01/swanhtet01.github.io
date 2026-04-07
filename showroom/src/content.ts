@@ -103,7 +103,7 @@ export const navItems = [
 export const hero = {
   eyebrow: 'SuperMega',
   title: 'Custom systems for sales, operations, and management.',
-  description: 'We replace scattered tools with one working layer and a small set of always-on agents.',
+  description: 'We replace scattered tools with one working layer and a small set of always-on agents, starting with Myanmar owner-led teams.',
 }
 
 export const proofPoints: ProofPoint[] = [

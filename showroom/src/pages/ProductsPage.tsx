@@ -28,6 +28,9 @@ export function ProductsPage() {
             The strategy is simple: start with a working starter pack, connect it to the shared app, then let the agent loops keep the queue, list, and brief moving.
           </p>
         </div>
+        <p className="mt-5 max-w-2xl text-sm leading-relaxed text-[var(--sm-muted)]">
+          We are targeting Myanmar first: owner-led distributors, importers, warehouses, factories, and service operators with messy day-to-day work and too many disconnected tools.
+        </p>
       </section>
 
       <section className="sm-site-panel">

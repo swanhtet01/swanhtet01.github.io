@@ -46,8 +46,8 @@ $smoke = $smokeJson | Out-String | ConvertFrom-Json
 
 $publicRoutes = [ordered]@{
   home = Get-RouteStatus -Url "$PublicUrl/"
-  systems = Get-RouteStatus -Url "$PublicUrl/systems/"
-  templates = Get-RouteStatus -Url "$PublicUrl/templates/"
+  products = Get-RouteStatus -Url "$PublicUrl/products/"
+  work = Get-RouteStatus -Url "$PublicUrl/work/"
   contact = Get-RouteStatus -Url "$PublicUrl/contact/"
   app = Get-RouteStatus -Url "$BaseUrl/"
 }
