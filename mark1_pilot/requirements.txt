@@ -1,6 +1,7 @@
 beautifulsoup4
 duckdb
 fastapi
+google-cloud-tasks
 google-api-python-client
 google-auth
 google-auth-oauthlib

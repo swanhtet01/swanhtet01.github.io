@@ -80,18 +80,38 @@ jobs:
           if [ -n "$CLOUDSQL_INSTANCE" ]; then
             EXTRA_ARGS="--add-cloudsql-instances $CLOUDSQL_INSTANCE"
           fi
+          CLOUD_TASKS_LOCATION="${{ vars.SUPERMEGA_CLOUD_TASKS_LOCATION }}"
+          CLOUD_TASKS_QUEUE_DEFAULT="${{ vars.SUPERMEGA_CLOUD_TASKS_QUEUE_DEFAULT }}"
+          CLOUD_TASKS_QUEUE_BROWSER="${{ vars.SUPERMEGA_CLOUD_TASKS_QUEUE_BROWSER }}"
+          CLOUD_TASKS_QUEUE_BRIEF="${{ vars.SUPERMEGA_CLOUD_TASKS_QUEUE_BRIEF }}"
+          CLOUD_TASKS_WORKER_URL="${{ vars.SUPERMEGA_CLOUD_TASKS_WORKER_URL }}"
+          if [ -z "$CLOUD_TASKS_LOCATION" ]; then CLOUD_TASKS_LOCATION="$REGION"; fi
+          if [ -z "$CLOUD_TASKS_QUEUE_DEFAULT" ]; then CLOUD_TASKS_QUEUE_DEFAULT="supermega-agent-default"; fi
+          if [ -z "$CLOUD_TASKS_QUEUE_BROWSER" ]; then CLOUD_TASKS_QUEUE_BROWSER="supermega-agent-browser"; fi
+          if [ -z "$CLOUD_TASKS_QUEUE_BRIEF" ]; then CLOUD_TASKS_QUEUE_BRIEF="supermega-founder-brief"; fi
+          if [ -z "$CLOUD_TASKS_WORKER_URL" ] && [ -n "${{ vars.VITE_WORKSPACE_API_BASE }}" ]; then
+            CLOUD_TASKS_WORKER_URL="${{ vars.VITE_WORKSPACE_API_BASE }}/api/internal/agent-runs/process-queue"
+          fi
           cat > cloudrun-env.yaml <<EOF
           SUPERMEGA_SITE_ROOT: /app/showroom/dist
           SUPERMEGA_PILOT_DATA: /app/pilot-data
           SUPERMEGA_ENV: production
           SUPERMEGA_AUTH_REQUIRED: "1"
+          SUPERMEGA_GCP_PROJECT_ID: "${{ env.PROJECT_ID }}"
           SUPERMEGA_APP_DISPLAY_NAME: "${{ vars.SUPERMEGA_APP_DISPLAY_NAME }}"
           SUPERMEGA_APP_ROLE: "${{ vars.SUPERMEGA_APP_ROLE }}"
           SUPERMEGA_WORKSPACE_SLUG: "${{ vars.SUPERMEGA_WORKSPACE_SLUG }}"
           SUPERMEGA_WORKSPACE_NAME: "${{ vars.SUPERMEGA_WORKSPACE_NAME }}"
           SUPERMEGA_WORKSPACE_PLAN: "${{ vars.SUPERMEGA_WORKSPACE_PLAN }}"
           SUPERMEGA_SESSION_HOURS: "${{ vars.SUPERMEGA_SESSION_HOURS }}"
+          SUPERMEGA_CLOUD_TASKS_LOCATION: "${CLOUD_TASKS_LOCATION}"
+          SUPERMEGA_CLOUD_TASKS_QUEUE_DEFAULT: "${CLOUD_TASKS_QUEUE_DEFAULT}"
+          SUPERMEGA_CLOUD_TASKS_QUEUE_BROWSER: "${CLOUD_TASKS_QUEUE_BROWSER}"
+          SUPERMEGA_CLOUD_TASKS_QUEUE_BRIEF: "${CLOUD_TASKS_QUEUE_BRIEF}"
+          SUPERMEGA_CLOUD_TASKS_WORKER_URL: "${CLOUD_TASKS_WORKER_URL}"
           SUPERMEGA_CORS_ORIGINS: "${{ vars.SUPERMEGA_CORS_ORIGINS }}"
+          SUPERMEGA_RESEND_FROM: "${{ vars.SUPERMEGA_RESEND_FROM }}"
+          SUPERMEGA_CONTACT_NOTIFY_EMAIL: "${{ vars.SUPERMEGA_CONTACT_NOTIFY_EMAIL }}"
           SUPERMEGA_SENTRY_TRACES: "${{ vars.SUPERMEGA_SENTRY_TRACES }}"
           SENTRY_DSN: "${{ secrets.SENTRY_DSN }}"
           VITE_BOOKING_URL: "${{ vars.VITE_BOOKING_URL }}"

@@ -10,11 +10,13 @@ import re
 import secrets
 import sys
 import tempfile
+from datetime import timedelta
 from datetime import datetime
-from html import unescape
+from html import escape, unescape
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote, urlparse
+from urllib.error import HTTPError, URLError
 from urllib.request import Request as UrlRequest, urlopen
 
 import uvicorn
@@ -22,7 +24,11 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from google.cloud import tasks_v2
+from google.protobuf import timestamp_pb2
 from pydantic import BaseModel, Field
+import sentry_sdk
+from sentry_sdk.integrations.fastapi import FastApiIntegration
 
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -1628,6 +1634,7 @@ def _build_csv_export_fallback(
 
 
 SESSION_COOKIE_NAME = "supermega_session"
+_SENTRY_READY = False
 
 
 def _load_local_env_files() -> None:
@@ -1643,6 +1650,94 @@ def _load_local_env_files() -> None:
 def _env_truthy(name: str, default: bool) -> bool:
     raw = os.getenv(name, "1" if default else "0").strip().lower()
     return raw not in {"0", "false", "no", "off"}
+
+
+def _init_sentry_runtime() -> None:
+    global _SENTRY_READY
+    if _SENTRY_READY:
+        return
+    dsn = str(os.getenv("SENTRY_DSN", "")).strip()
+    if not dsn:
+        return
+    traces_sample_rate = 0.05
+    try:
+        traces_sample_rate = float(str(os.getenv("SUPERMEGA_SENTRY_TRACES", "0.05")).strip() or "0.05")
+    except ValueError:
+        traces_sample_rate = 0.05
+    sentry_sdk.init(
+        dsn=dsn,
+        environment=str(os.getenv("SUPERMEGA_ENV", "production")).strip() or "production",
+        integrations=[FastApiIntegration()],
+        traces_sample_rate=max(0.0, min(traces_sample_rate, 1.0)),
+        send_default_pii=False,
+    )
+    _SENTRY_READY = True
+
+
+def _resend_api_key() -> str:
+    return str(os.getenv("RESEND_API_KEY", "")).strip()
+
+
+def _resend_from_email() -> str:
+    return str(os.getenv("SUPERMEGA_RESEND_FROM", "")).strip() or "hello@supermega.dev"
+
+
+def _contact_notify_email() -> str:
+    return str(os.getenv("SUPERMEGA_CONTACT_NOTIFY_EMAIL", "")).strip() or _resend_from_email()
+
+
+def _send_resend_email(
+    *,
+    to_email: str,
+    subject: str,
+    html_body: str,
+    reply_to: list[str] | None = None,
+) -> dict[str, Any]:
+    api_key = _resend_api_key()
+    normalized_to = str(to_email or "").strip()
+    if not api_key:
+        return {"status": "skipped", "reason": "resend_not_configured"}
+    if not normalized_to:
+        return {"status": "skipped", "reason": "missing_to_email"}
+
+    payload: dict[str, Any] = {
+        "from": _resend_from_email(),
+        "to": [normalized_to],
+        "subject": str(subject or "").strip() or "SuperMega update",
+        "html": html_body,
+    }
+    normalized_reply_to = [str(item).strip() for item in (reply_to or []) if str(item).strip()]
+    if normalized_reply_to:
+        payload["reply_to"] = normalized_reply_to
+
+    raw_request = UrlRequest(
+        "https://api.resend.com/emails",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {api_key}",
+        },
+        method="POST",
+    )
+    try:
+        with urlopen(raw_request, timeout=15) as response:
+            raw = response.read().decode("utf-8")
+        parsed = json.loads(raw or "{}")
+        return {
+            "status": "ready",
+            "email_id": str(parsed.get("id", "")).strip(),
+            "to": normalized_to,
+            "subject": payload["subject"],
+        }
+    except (HTTPError, URLError, TimeoutError, json.JSONDecodeError, OSError) as exc:
+        if _SENTRY_READY:
+            sentry_sdk.capture_exception(exc)
+        return {
+            "status": "error",
+            "reason": str(exc),
+            "to": normalized_to,
+            "subject": payload["subject"],
+        }
 
 
 def _anthropic_provider() -> AnthropicProvider:
@@ -1696,6 +1791,7 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
     site_root = site_root.expanduser().resolve()
     pilot_data = pilot_data.expanduser().resolve()
     _load_local_env_files()
+    _init_sentry_runtime()
     state_db = resolve_state_db(pilot_data)
     enterprise_db_url = resolve_enterprise_database_url(pilot_data)
     sync_state_from_output_dir(pilot_data)
@@ -1709,6 +1805,21 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
     auth_workspace_plan = str(os.getenv("SUPERMEGA_WORKSPACE_PLAN", "pilot")).strip() or "pilot"
     session_ttl_hours = int(os.getenv("SUPERMEGA_SESSION_HOURS", str(24 * 14)) or (24 * 14))
     internal_cron_token = str(os.getenv("SUPERMEGA_INTERNAL_CRON_TOKEN", "")).strip()
+    app_base_url = str(os.getenv("VITE_WORKSPACE_APP_BASE", "")).strip()
+    gcp_project_id = str(os.getenv("SUPERMEGA_GCP_PROJECT_ID", os.getenv("GOOGLE_CLOUD_PROJECT", "supermega-468612"))).strip() or "supermega-468612"
+    cloud_tasks_location = str(os.getenv("SUPERMEGA_CLOUD_TASKS_LOCATION", "")).strip() or "asia-southeast1"
+    cloud_tasks_queue_default = str(os.getenv("SUPERMEGA_CLOUD_TASKS_QUEUE_DEFAULT", "")).strip()
+    cloud_tasks_queue_browser = str(os.getenv("SUPERMEGA_CLOUD_TASKS_QUEUE_BROWSER", "")).strip()
+    cloud_tasks_queue_brief = str(os.getenv("SUPERMEGA_CLOUD_TASKS_QUEUE_BRIEF", "")).strip()
+    cloud_tasks_worker_url = str(os.getenv("SUPERMEGA_CLOUD_TASKS_WORKER_URL", "")).strip()
+    cloud_tasks_enabled = bool(
+        internal_cron_token
+        and gcp_project_id
+        and cloud_tasks_location
+        and cloud_tasks_queue_default
+        and cloud_tasks_worker_url
+    )
+    cloud_tasks_client = tasks_v2.CloudTasksClient() if cloud_tasks_enabled else None
     default_user_payload = enterprise_ensure_user(
         enterprise_db_url,
         username=auth_username,
@@ -1770,6 +1881,57 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
         if not provided or provided != internal_cron_token:
             raise HTTPException(status_code=401, detail="Invalid internal cron token.")
 
+    def _agent_queue_name(job_types: list[str]) -> str:
+        normalized = _normalized_agent_job_types(job_types)
+        if normalized == ["founder_brief"] and cloud_tasks_queue_brief:
+            return cloud_tasks_queue_brief
+        browser_job_types = {"browser_clerk"}
+        if any(item in browser_job_types for item in normalized) and cloud_tasks_queue_browser:
+            return cloud_tasks_queue_browser
+        return cloud_tasks_queue_default
+
+    def _enqueue_agent_worker_task(
+        *,
+        workspace_id: str,
+        source: str,
+        job_types: list[str],
+        limit: int,
+    ) -> dict[str, Any]:
+        if not cloud_tasks_enabled or cloud_tasks_client is None:
+            return {"status": "disabled", "reason": "cloud_tasks_not_configured"}
+        queue_name = _agent_queue_name(job_types)
+        if not queue_name:
+            return {"status": "disabled", "reason": "queue_name_missing"}
+        parent = cloud_tasks_client.queue_path(gcp_project_id, cloud_tasks_location, queue_name)
+        body = json.dumps(
+            {
+                "source": source,
+                "job_types": _normalized_agent_job_types(job_types),
+                "limit": max(1, int(limit or 1)),
+            }
+        ).encode("utf-8")
+        schedule_time = timestamp_pb2.Timestamp()
+        schedule_time.FromDatetime(datetime.utcnow() + timedelta(seconds=2))
+        task = {
+            "http_request": {
+                "http_method": tasks_v2.HttpMethod.POST,
+                "url": cloud_tasks_worker_url,
+                "headers": {
+                    "Content-Type": "application/json",
+                    "x-supermega-cron-token": internal_cron_token,
+                },
+                "body": body,
+            },
+            "schedule_time": schedule_time,
+        }
+        created = cloud_tasks_client.create_task(parent=parent, task=task)
+        return {
+            "status": "ready",
+            "queue_name": queue_name,
+            "task_name": str(getattr(created, "name", "")).strip(),
+            "workspace_id": workspace_id,
+        }
+
     def _run_agent_job_batch(
         *,
         workspace_id: str,
@@ -1813,11 +1975,21 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             )
             for job_type in normalized_job_types
         ]
+        queue_result = _enqueue_agent_worker_task(
+            workspace_id=workspace_id,
+            source="cloud_tasks_worker",
+            job_types=normalized_job_types,
+            limit=len(rows) or 1,
+        )
         return _agent_jobs_payload(
             enterprise_db_url=enterprise_db_url,
             workspace_id=workspace_id,
             rows=rows,
-            extra={"queued_count": len(rows), "mode": "queued"},
+            extra={
+                "queued_count": len(rows),
+                "mode": "queued",
+                "dispatch": queue_result,
+            },
         )
 
     def _process_agent_run_queue(
@@ -1886,6 +2058,72 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             httponly=True,
             samesite="lax",
             secure=secure_cookie,
+        )
+
+    def _send_contact_submission_notification(
+        *,
+        name: str,
+        email: str,
+        company: str,
+        workflow: str,
+        data_summary: str,
+        goal: str,
+    ) -> dict[str, Any]:
+        notify_email = _contact_notify_email()
+        subject_company = company or name or "New request"
+        html_body = (
+            "<div style='font-family:Arial,sans-serif;line-height:1.55;color:#0f172a'>"
+            f"<h2 style='margin:0 0 16px'>New SuperMega contact: {escape(subject_company)}</h2>"
+            "<p style='margin:0 0 12px'>A new contact request was submitted on supermega.dev.</p>"
+            "<table style='border-collapse:collapse'>"
+            f"<tr><td style='padding:4px 12px 4px 0'><strong>Name</strong></td><td>{escape(name)}</td></tr>"
+            f"<tr><td style='padding:4px 12px 4px 0'><strong>Email</strong></td><td>{escape(email)}</td></tr>"
+            f"<tr><td style='padding:4px 12px 4px 0'><strong>Company</strong></td><td>{escape(company)}</td></tr>"
+            f"<tr><td style='padding:4px 12px 4px 0'><strong>Workflow</strong></td><td>{escape(workflow)}</td></tr>"
+            f"<tr><td style='padding:4px 12px 4px 0'><strong>Current tools</strong></td><td>{escape(data_summary)}</td></tr>"
+            f"<tr><td style='padding:4px 12px 4px 0;vertical-align:top'><strong>Goal</strong></td><td>{escape(goal)}</td></tr>"
+            "</table>"
+            f"<p style='margin:16px 0 0'>Open the app: <a href='{escape(app_base_url or '')}'>{escape(app_base_url or 'app.supermega.dev')}</a></p>"
+            "</div>"
+        )
+        reply_to = [email] if "@" in email else []
+        return _send_resend_email(
+            to_email=notify_email,
+            subject=f"New SuperMega contact: {subject_company}",
+            html_body=html_body,
+            reply_to=reply_to,
+        )
+
+    def _send_team_invite_email(
+        *,
+        to_email: str,
+        display_name: str,
+        workspace_name: str,
+        role: str,
+        invited_by: str,
+        password: str,
+    ) -> dict[str, Any]:
+        login_link = f"{app_base_url.rstrip('/')}/login" if app_base_url else "https://app.supermega.dev/login"
+        safe_name = display_name or to_email.split("@")[0]
+        password_block = (
+            f"<p style='margin:0 0 12px'><strong>Temporary password:</strong> {escape(password)}</p>"
+            if password
+            else ""
+        )
+        html_body = (
+            "<div style='font-family:Arial,sans-serif;line-height:1.55;color:#0f172a'>"
+            f"<h2 style='margin:0 0 16px'>You were invited to {escape(workspace_name or 'SuperMega')}</h2>"
+            f"<p style='margin:0 0 12px'>Hi {escape(safe_name)},</p>"
+            f"<p style='margin:0 0 12px'>{escape(invited_by or 'The SuperMega team')} added you as {escape(role or 'member')}.</p>"
+            f"{password_block}"
+            f"<p style='margin:0 0 12px'>Open the app here: <a href='{escape(login_link)}'>{escape(login_link)}</a></p>"
+            "<p style='margin:0'>Use your email as the username.</p>"
+            "</div>"
+        )
+        return _send_resend_email(
+            to_email=to_email,
+            subject=f"Your SuperMega invite for {workspace_name or 'SuperMega'}",
+            html_body=html_body,
         )
 
     def _request_hostname(request: Request) -> str:
@@ -3355,6 +3593,14 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             enterprise_db_url,
             workspace_id=str(session.get("workspace_id", "")).strip(),
         )
+        email_delivery = _send_team_invite_email(
+            to_email=request.email,
+            display_name=request.name or str((result.get("member") or {}).get("display_name", "")).strip(),
+            workspace_name=str(session.get("workspace_name", auth_workspace_name)).strip() or auth_workspace_name,
+            role=request.role or "member",
+            invited_by=str(session.get("display_name", session.get("username", "SuperMega"))).strip() or "SuperMega",
+            password=str(result.get("generated_password", "")).strip(),
+        )
         return {
             "status": "ready",
             "created": bool(result.get("created")),
@@ -3362,6 +3608,7 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             "row": result.get("member"),
             "count": len(rows),
             "rows": rows,
+            "email_delivery": email_delivery,
         }
 
     @app.get("/api/snapshots/{snapshot_key}")
@@ -3444,10 +3691,19 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
                     stage_after="offer_ready",
                     next_step="Review inbound request and send first response.",
                 )
+        delivery = _send_contact_submission_notification(
+            name=request.name.strip(),
+            email=request.email.strip(),
+            company=request.company.strip(),
+            workflow=request.workflow.strip(),
+            data_summary=request.data.strip(),
+            goal=request.goal.strip(),
+        )
         return {
             "status": "ready",
             "message": "Submission saved.",
             "submission": row,
+            "delivery": delivery,
             "pipeline": {
                 "saved_count": int((pipeline_result or {}).get("saved_count", 0) or 0),
                 "summary": (pipeline_result or {}).get("summary", {}),
