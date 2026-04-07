@@ -21,6 +21,7 @@ import { MetricIntakePage } from './pages/MetricIntakePage'
 import { NewsBriefPage } from './pages/NewsBriefPage'
 import { NotFoundPage } from './pages/NotFoundPage'
 import { ProductsPage } from './pages/ProductsPage'
+import { ProductDetailPage } from './pages/ProductDetailPage'
 import { PublicLeadFinderPage } from './pages/PublicLeadFinderPage'
 import { ReceivingControlPage } from './pages/ReceivingControlPage'
 import { SignupPage } from './pages/SignupPage'
@@ -43,6 +44,7 @@ function App() {
         <Route element={<SiteFrame />} path="/">
         <Route element={<HomePage />} index />
           <Route element={<ProductsPage />} path="products" />
+          <Route element={<ProductDetailPage />} path="products/:productId" />
           <Route element={<Navigate replace to="/products" />} path="work" />
           <Route element={<Navigate replace to="/products" />} path="systems" />
           <Route element={<Navigate replace to="/products" />} path="templates" />

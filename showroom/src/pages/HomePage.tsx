@@ -1,12 +1,11 @@
 import { Link } from 'react-router-dom'
 
-import { hero, publicModules, workExamples } from '../content'
+import { hero, publicModules } from '../content'
 import { trackEvent } from '../lib/analytics'
-import { CORE_SOLUTIONS } from '../lib/salesControl'
+import { STARTER_PACK_DETAILS } from '../lib/salesControl'
 
 export function HomePage() {
-  const featuredExamples = workExamples.slice(0, 3)
-  const featuredProducts = CORE_SOLUTIONS
+  const featuredProducts = STARTER_PACK_DETAILS
 
   return (
     <div className="pb-16">
@@ -45,55 +44,28 @@ export function HomePage() {
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <p className="sm-kicker text-[var(--sm-accent)]">Products</p>
-            <h2 className="mt-3 max-w-3xl text-3xl font-bold text-white lg:text-5xl">Three starter packs. One shared app. Always-on agent loops.</h2>
+            <h2 className="mt-3 max-w-3xl text-3xl font-bold text-white lg:text-5xl">Three starter packs for sales, cleanup, and receiving.</h2>
           </div>
           <p className="max-w-xl text-sm leading-relaxed text-[var(--sm-muted)] lg:text-base">
-            Start with the pack that matches the job. Then expand into add-ons, client portals, approvals, or management views only if the team actually needs them.
+            Start with one product. Keep one queue moving. Add the agent loops after the team trusts the base workflow.
           </p>
         </div>
         <div className="mt-6 grid gap-4 lg:grid-cols-3">
           {featuredProducts.map((product) => (
-            <article className="sm-chip text-white" key={product.id}>
-              <p className="font-semibold">{product.name}</p>
+            <article className="sm-pack-card overflow-hidden p-4 text-white" key={product.id}>
+              <img alt={product.name} className="w-full rounded-2xl border border-white/10 bg-[#020612]" src={product.image} />
+              <p className="mt-4 font-semibold">{product.name}</p>
               <p className="mt-2 text-sm text-[var(--sm-muted)]">{product.promise}</p>
-              <p className="mt-4 text-xs uppercase tracking-[0.18em] text-white/45">Start with {product.modules.join(' + ')}</p>
+              <p className="mt-4 text-xs uppercase tracking-[0.18em] text-white/45">Start with {product.starterModules.join(' + ')}</p>
+              <Link className="mt-4 inline-flex text-sm font-semibold text-[var(--sm-accent)]" to={`/products/${product.slug}`}>
+                View product
+              </Link>
             </article>
           ))}
         </div>
         <p className="mt-6 max-w-2xl text-sm leading-relaxed text-[var(--sm-muted)]">
           Best fit first: Myanmar distributors, importers, warehouses, factories, and service teams still running work through Facebook, Viber, WhatsApp, Gmail, and spreadsheets.
         </p>
-      </section>
-
-      <section className="mt-12 space-y-8">
-        {featuredExamples.map((example, index) => (
-          <article className={`sm-site-case ${index % 2 === 1 ? 'sm-site-case-reverse' : ''}`} key={example.name}>
-            <div className="sm-site-case-copy">
-              <p className="sm-kicker text-[var(--sm-accent)]">{example.category}</p>
-              <h2 className="mt-3 max-w-xl text-3xl font-bold text-white lg:text-5xl">{example.title}</h2>
-              <p className="mt-3 max-w-xl text-sm font-semibold text-white/80 lg:text-base">{example.name}</p>
-              <p className="mt-4 max-w-xl text-sm leading-relaxed text-[var(--sm-muted)] lg:text-base">{example.summary}</p>
-              <div className="mt-6 space-y-3">
-                {example.outcomes.slice(0, 2).map((point) => (
-                  <div className="sm-site-point" key={point}>
-                    <span className="sm-site-point-dot" />
-                    <span>{point}</span>
-                  </div>
-                ))}
-              </div>
-              <p className="mt-5 max-w-xl text-xs leading-relaxed text-white/45">{example.disclosure}</p>
-              <div className="mt-7 flex flex-wrap gap-3">
-                <Link className="sm-button-secondary" to={`/contact?package=${encodeURIComponent(example.name)}`}>
-                  Ask about this system
-                </Link>
-              </div>
-            </div>
-
-            <div className="sm-site-case-visual">
-              <img alt={example.name} className="sm-site-case-image" src={example.image} />
-            </div>
-          </article>
-        ))}
       </section>
 
       <section className="mt-16 sm-site-panel">
@@ -103,7 +75,7 @@ export function HomePage() {
             <h2 className="mt-3 text-2xl font-bold text-white lg:text-4xl">Use a small tool first if you want to test the shape.</h2>
           </div>
           <p className="max-w-xl text-sm leading-relaxed text-[var(--sm-muted)]">
-            These are utilities, not the whole company. They are just a fast way to test list cleanup or market search before a full rollout.
+            These are support tools. The real products are the starter packs above.
           </p>
         </div>
         <div className="mt-6 grid gap-4 lg:grid-cols-2">

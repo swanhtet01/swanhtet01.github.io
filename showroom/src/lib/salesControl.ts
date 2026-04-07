@@ -15,6 +15,24 @@ export type QuickWinProduct = {
   useCase: string
 }
 
+export type StarterPackDetail = {
+  id: string
+  slug: string
+  name: string
+  eyebrow: string
+  audience: string
+  promise: string
+  replaces: string
+  image: string
+  starterModules: string[]
+  usedFor: string[]
+  proofTool: { label: string; route: string }
+  setupPath: string[]
+  dailyUsers: string[]
+  expandsTo: string[]
+  otherUses: string[]
+}
+
 export type HuntTemplate = {
   id: string
   name: string
@@ -156,6 +174,85 @@ export const LAB_TRACKS: LabTrack[] = [
     graduation: 'Needs delivery rules, approvals, and better eval coverage.',
   },
 ]
+
+export const STARTER_PACK_DETAILS: StarterPackDetail[] = [
+  {
+    id: 'sales-setup',
+    slug: 'distributor-sales-desk',
+    name: 'Distributor Sales Desk',
+    eyebrow: 'Starter pack',
+    audience: 'Owner-led importers, distributors, and commercial teams',
+    promise: 'Keep prospecting, shortlist, outreach, and follow-up in one working sales system.',
+    replaces: 'raw search, scattered spreadsheets, and manual outreach tracking',
+    image: '/site/sales-desk.svg',
+    starterModules: ['Find Companies', 'Company List'],
+    usedFor: ['new distributor outreach', 'dealer mapping', 'commercial follow-up'],
+    proofTool: { label: 'Find clients', route: '/find-companies' },
+    setupPath: [
+      'Run one narrow market search.',
+      'Keep the best-fit companies in the shared list.',
+      'Create the first follow-up tasks.',
+      'Let Revenue Scout and Founder Brief keep it moving.',
+    ],
+    dailyUsers: ['founder', 'sales operator', 'sales manager'],
+    expandsTo: ['Reply Draft', 'Founder Brief', 'Client Portal'],
+    otherUses: ['territory build-out', 'new channel launch', 'export market prospecting'],
+  },
+  {
+    id: 'company-cleanup',
+    slug: 'list-cleanup-desk',
+    name: 'List Cleanup Desk',
+    eyebrow: 'Starter pack',
+    audience: 'Teams that already have a spreadsheet, export, or messy company list',
+    promise: 'Turn dirty company rows into one clean list with visible next steps.',
+    replaces: 'dirty exports, duplicated rows, and follow-up hidden inside spreadsheets',
+    image: '/site/client-portal.svg',
+    starterModules: ['Company List', 'Task List'],
+    usedFor: ['CRM cleanup', 'event lead cleanup', 'customer list rebuild'],
+    proofTool: { label: 'Clean my list', route: '/company-list' },
+    setupPath: [
+      'Import the list the team already uses.',
+      'Clean and tag the rows that are ready to work.',
+      'Assign one next step beside each kept company.',
+      'Let List Clerk and Task Triage keep the list usable.',
+    ],
+    dailyUsers: ['founder', 'sales coordinator', 'list clerk'],
+    expandsTo: ['Reply Draft', 'Founder Brief', 'Approval Flow'],
+    otherUses: ['partner database cleanup', 'supplier master rebuild', 'sales handover preparation'],
+  },
+  {
+    id: 'receiving-control',
+    slug: 'receiving-control',
+    name: 'Receiving Control',
+    eyebrow: 'Starter pack',
+    audience: 'Plants, warehouses, procurement teams, and receiving teams',
+    promise: 'Keep shortages, holds, GRN gaps, and next actions visible in one queue.',
+    replaces: 'paper receiving logs, chat chasing, and missed inbound exceptions',
+    image: '/site/ops-desk.svg',
+    starterModules: ['Receiving Log', 'Task List'],
+    usedFor: ['warehouse receiving', 'plant inbound checks', 'supplier exception control'],
+    proofTool: { label: 'Receiving log', route: '/receiving-log' },
+    setupPath: [
+      'Start with one inbound lane or one supplier problem.',
+      'Log each issue once and assign one owner.',
+      'Review open holds in one short daily check.',
+      'Let Task Triage and Ops Watch keep exceptions visible.',
+    ],
+    dailyUsers: ['receiving clerk', 'procurement lead', 'manager'],
+    expandsTo: ['Founder Brief', 'Approval Flow', 'Document Intake'],
+    otherUses: ['store delivery intake', 'procurement issue control', 'goods hold escalation'],
+  },
+]
+
+export function getStarterPackDetail(productIdOrSlug: string | null | undefined) {
+  const normalized = String(productIdOrSlug || '')
+    .trim()
+    .toLowerCase()
+  return (
+    STARTER_PACK_DETAILS.find((pack) => pack.slug === normalized || pack.id === normalized || pack.name.toLowerCase() === normalized) ??
+    null
+  )
+}
 
 export const FINDER_ADVANTAGES = [
   'Google and Facebook give raw names. SuperMega gives a shortlist you can actually work.',
