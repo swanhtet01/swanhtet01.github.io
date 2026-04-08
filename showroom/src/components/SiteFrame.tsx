@@ -11,6 +11,7 @@ const navClassName = ({ isActive }: { isActive: boolean }) =>
 const publicNavItems = [
   { label: 'Systems', to: '/products' },
   { label: 'Examples', to: '/demos' },
+  { label: 'Contact', to: '/contact' },
 ]
 
 export function SiteFrame() {
@@ -26,9 +27,12 @@ export function SiteFrame() {
             </span>
             <span className="flex flex-col">
               <span className="sm-logo text-lg font-extrabold tracking-tight text-white">SuperMega</span>
-              <span className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[var(--sm-muted)]">Public site. Real systems.</span>
+              <span className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[var(--sm-muted)]">
+                Shared systems for real teams
+              </span>
             </span>
           </NavLink>
+
           <button
             className="rounded-md border border-white/10 bg-white/6 px-3 py-2 text-sm font-semibold text-white md:hidden"
             onClick={() => setMenuOpen((open) => !open)}
@@ -36,20 +40,19 @@ export function SiteFrame() {
           >
             Menu
           </button>
+
           <div className="hidden items-center gap-2 md:flex">
             {publicNavItems.map((item) => (
               <NavLink className={navClassName} key={item.to} to={item.to}>
                 {item.label}
               </NavLink>
             ))}
-            <a className="sm-button-secondary ml-2" href="https://app.supermega.dev" rel="noreferrer" target="_blank">
-              Team app
+            <a className="sm-link ml-3" href="https://app.supermega.dev" rel="noreferrer" target="_blank">
+              Open app
             </a>
-            <Link className="sm-button-primary" to="/contact">
-              Contact us
-            </Link>
           </div>
         </nav>
+
         {menuOpen ? (
           <div className="border-t border-white/8 bg-[rgba(4,10,22,0.92)] px-4 py-3 backdrop-blur-xl md:hidden">
             <div className="flex flex-col gap-2">
@@ -59,11 +62,8 @@ export function SiteFrame() {
                 </NavLink>
               ))}
               <a className="sm-button-secondary mt-2" href="https://app.supermega.dev" rel="noreferrer" target="_blank">
-                Team app
+                Open app
               </a>
-              <Link className="sm-button-primary mt-2" onClick={() => setMenuOpen(false)} to="/contact">
-                Contact us
-              </Link>
             </div>
           </div>
         ) : null}
@@ -75,7 +75,7 @@ export function SiteFrame() {
 
       <footer className="border-t border-white/8 bg-[rgba(4,8,16,0.82)]">
         <div className="mx-auto flex w-full max-w-7xl flex-col gap-4 px-4 py-6 text-sm text-[var(--sm-muted)] lg:flex-row lg:items-center lg:justify-between lg:px-8">
-          <p>Company site here. Working surface in the team app.</p>
+          <p>SuperMega builds shared systems for sales, operations, approvals, and client work.</p>
           <div className="flex flex-wrap gap-4">
             <Link className="sm-link" to="/products">
               Systems
@@ -87,7 +87,7 @@ export function SiteFrame() {
               Contact
             </Link>
             <a className="sm-link" href="https://app.supermega.dev" rel="noreferrer" target="_blank">
-              Team app
+              Open app
             </a>
           </div>
         </div>

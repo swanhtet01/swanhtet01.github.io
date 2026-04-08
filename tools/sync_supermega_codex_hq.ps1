@@ -70,6 +70,12 @@ $summary = [ordered]@{
   synced_at = (Get-Date).ToString("s")
   repo_root = $RepoRoot
   target_root = $TargetRoot
+  entry_points = [ordered]@{
+    ops_hub = (Join-Path $targetOpsDir "index.html")
+    founder_runbook = (Join-Path $targetOpsDir "30_founder_local_access_runbook.md")
+    platform_architecture = (Join-Path $targetOpsDir "27_supermega_platform_architecture.md")
+    tenant_defaults = (Join-Path $targetOpsDir "28_tenant_identity_and_defaults.md")
+  }
   copied = [ordered]@{
     ops = @(
       Get-ChildItem -LiteralPath $targetOpsDir -File | Sort-Object Name | Select-Object -ExpandProperty Name

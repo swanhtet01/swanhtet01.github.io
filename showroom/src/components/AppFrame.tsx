@@ -11,6 +11,7 @@ type SessionState = {
 }
 
 const appNavItems = [
+  { label: 'Dev Desk', to: '/app/dev-desk' },
   { label: 'HQ', to: '/app/hq' },
   { label: 'Deals', to: '/app/deals' },
   { label: 'Workflows', to: '/app/workflows' },
@@ -85,10 +86,10 @@ export function AppFrame() {
       <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(37,208,255,0.12),_transparent_30%),linear-gradient(180deg,#020611_0%,#07111f_40%,#07111f_100%)] text-[var(--sm-ink)]">
         <div className="mx-auto flex min-h-screen max-w-5xl items-center justify-center px-4 py-16">
           <div className="sm-surface-deep max-w-2xl p-8 text-center">
-            <p className="sm-kicker text-[var(--sm-accent)]">Internal HQ</p>
-            <h1 className="mt-4 text-4xl font-extrabold text-white">Login to open the company control plane.</h1>
+            <p className="sm-kicker text-[var(--sm-accent)]">SuperMega Control</p>
+            <h1 className="mt-4 text-4xl font-extrabold text-white">Login to open the founder control plane.</h1>
             <p className="mt-4 text-[var(--sm-muted)]">
-              The public site explains the systems. The app is where deals, workflows, agents, approvals, and company state actually get managed.
+              The public site explains the systems. The app runs the company state, deals, workflows, agents, tenants, and runtime.
             </p>
             <div className="mt-8 flex flex-wrap justify-center gap-3">
               <NavLink className="sm-button-primary" to={`/login?next=${encodeURIComponent(location.pathname)}`}>
@@ -109,20 +110,23 @@ export function AppFrame() {
       <div className="border-b border-white/8 bg-[rgba(3,8,18,0.9)] backdrop-blur-xl">
         <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-4 lg:flex-row lg:items-center lg:justify-between lg:px-8">
           <div className="flex items-center gap-4">
-            <NavLink className="flex items-center gap-3" to="/app/hq">
+            <NavLink className="flex items-center gap-3" to="/app/dev-desk">
               <span className="flex h-11 w-11 items-center justify-center rounded-xl border border-[rgba(37,208,255,0.22)] bg-[rgba(37,208,255,0.08)] text-sm font-extrabold text-[var(--sm-accent)]">
                 SM
               </span>
               <div>
-                <p className="sm-logo text-lg font-extrabold tracking-tight text-white">SuperMega HQ</p>
+                <p className="sm-logo text-lg font-extrabold tracking-tight text-white">SuperMega Control</p>
                 <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[var(--sm-muted)]">
                   {session?.workspace_name || 'Founder control plane'}
                 </p>
               </div>
             </NavLink>
-            <span className="sm-status-pill hidden lg:inline-flex">
-              {session?.display_name || 'User'} / {session?.role || 'member'}
-            </span>
+            <div className="hidden flex-wrap gap-2 lg:flex">
+              <span className="sm-status-pill">
+                {session?.display_name || 'User'} / {session?.role || 'member'}
+              </span>
+              <span className="sm-status-pill">{session?.workspace_slug || 'default-workspace'}</span>
+            </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">

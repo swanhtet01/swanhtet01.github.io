@@ -558,7 +558,7 @@ export function LeadPipelinePage() {
       <PageIntro
         eyebrow="Deals"
         title="Run revenue from one surface."
-        description="Search, qualify, apply packs, and keep the next step moving in one place."
+        description="Offers, sourcing, follow-up, and queue ownership in one place."
       />
 
       <section className="grid gap-4 md:grid-cols-5">
@@ -592,8 +592,8 @@ export function LeadPipelinePage() {
               <h2 className="mt-2 text-2xl font-bold text-white">Start from the few systems we can actually deliver.</h2>
               <p className="mt-2 text-sm text-[var(--sm-muted)]">Each pack should create the first owned queue immediately. No blank rollout.</p>
             </div>
-            <Link className="sm-button-secondary" to="/app/hq">
-              Open HQ
+            <Link className="sm-button-secondary" to="/app/dev-desk">
+              Open Dev Desk
             </Link>
           </div>
 

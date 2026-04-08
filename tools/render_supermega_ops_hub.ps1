@@ -12,6 +12,44 @@ if ([string]::IsNullOrWhiteSpace($RepoRoot)) {
 $opsDir = Join-Path $RepoRoot "Super Mega Inc\ops"
 $reportsDir = Join-Path $RepoRoot "pilot-data\ops"
 $outputPath = Join-Path $opsDir "index.html"
+$mirrorRoot = "C:\Users\swann\OneDrive - BDA\Super Mega Inc\codex_hq"
+$mirrorOpsDir = Join-Path $mirrorRoot "ops"
+$mirrorReportsDir = Join-Path $mirrorRoot "reports"
+$envFiles = @(
+  (Join-Path $RepoRoot ".env.app.example"),
+  (Join-Path $RepoRoot ".env.app.local")
+)
+
+function Read-EnvDefaults {
+  param([string[]]$Paths)
+
+  $values = @{}
+  foreach ($path in $Paths) {
+    if (-not (Test-Path -LiteralPath $path)) {
+      continue
+    }
+
+    foreach ($line in Get-Content -LiteralPath $path -Encoding UTF8) {
+      if ([string]::IsNullOrWhiteSpace($line) -or $line.TrimStart().StartsWith("#")) {
+        continue
+      }
+
+      if ($line -match '^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$') {
+        $key = $matches[1]
+        $value = $matches[2].Trim()
+        if (
+          ($value.StartsWith('"') -and $value.EndsWith('"')) -or
+          ($value.StartsWith("'") -and $value.EndsWith("'"))
+        ) {
+          $value = $value.Substring(1, $value.Length - 2)
+        }
+        $values[$key] = $value
+      }
+    }
+  }
+
+  return $values
+}
 
 function Read-JsonFile {
   param([string]$Path)
@@ -40,6 +78,48 @@ function Coalesce {
   return $Value
 }
 
+function Get-OptionalValue {
+  param(
+    $InputObject,
+    [string[]]$Path,
+    $Fallback = $null
+  )
+
+  $current = $InputObject
+  foreach ($segment in $Path) {
+    if ($null -eq $current) {
+      return $Fallback
+    }
+
+    if ($current -is [System.Collections.IDictionary]) {
+      if (-not $current.Contains($segment)) {
+        return $Fallback
+      }
+      $current = $current[$segment]
+      continue
+    }
+
+    $property = $current.PSObject.Properties[$segment]
+    if ($null -eq $property) {
+      return $Fallback
+    }
+
+    $current = $property.Value
+  }
+
+  return Coalesce -Value $current -Fallback $Fallback
+}
+
+function Ensure-Array {
+  param($Value)
+
+  if ($null -eq $Value) {
+    return @()
+  }
+
+  return @($Value)
+}
+
 function Render-ListItems {
   param([object[]]$Values)
   if (-not $Values -or $Values.Count -eq 0) {
@@ -52,16 +132,40 @@ $workstation = Read-JsonFile -Path (Join-Path $reportsDir "workstation-latest.js
 $founder = Read-JsonFile -Path (Join-Path $reportsDir "founder-cycle-latest.json")
 $operator = Read-JsonFile -Path (Join-Path $reportsDir "operator-cycle-latest.json")
 $agent = Read-JsonFile -Path (Join-Path $reportsDir "agent-cycle-latest.json")
+$envDefaults = Read-EnvDefaults -Paths $envFiles
 
-$checkedAt = Escape-Html (Coalesce $workstation.checked_at (Get-Date).ToString("s"))
-$baseUrl = Escape-Html (Coalesce $workstation.base_url "")
-$publicUrl = Escape-Html (Coalesce $workstation.public_url "")
-$liveApp = $operator.live_app
-$agentTeam = $founder.agent_team
-$agentJobs = @($agent.results)
-$teamNames = @($agentTeam.team_names)
-$nextMoves = @($agentTeam.next_moves)
-$gaps = @($agentTeam.gaps)
+$checkedAt = Escape-Html (Get-OptionalValue -InputObject $workstation -Path @("checked_at") -Fallback (Get-Date).ToString("s"))
+$baseUrl = Escape-Html (Get-OptionalValue -InputObject $workstation -Path @("base_url") -Fallback "")
+$publicUrl = Escape-Html (Get-OptionalValue -InputObject $workstation -Path @("public_url") -Fallback "")
+$mirrorIndexPath = Escape-Html (Join-Path $mirrorOpsDir "index.html")
+$runbookPath = Escape-Html (Join-Path $mirrorOpsDir "30_founder_local_access_runbook.md")
+$scoreboardPath = Escape-Html (Join-Path $mirrorOpsDir "00_company_scoreboard.md")
+$founderBriefPath = Escape-Html (Join-Path $mirrorOpsDir "01_daily_founder_brief.md")
+$operatorReportPath = Escape-Html (Join-Path $mirrorOpsDir "02_operator_report.md")
+$architecturePath = Escape-Html (Join-Path $mirrorOpsDir "27_supermega_platform_architecture.md")
+$defaultsPath = Escape-Html (Join-Path $mirrorOpsDir "28_tenant_identity_and_defaults.md")
+$reportsPath = Escape-Html (Join-Path $mirrorReportsDir "workstation-latest.json")
+$openWorkspaceScript = Escape-Html (Join-Path $RepoRoot "tools\open_supermega_founder_workspace.ps1")
+$authRequired = Escape-Html (Coalesce -Value $envDefaults["SUPERMEGA_AUTH_REQUIRED"] -Fallback "1")
+$appUsername = Escape-Html (Coalesce -Value $envDefaults["SUPERMEGA_APP_USERNAME"] -Fallback "owner")
+$appPassword = Escape-Html (Coalesce -Value $envDefaults["SUPERMEGA_APP_PASSWORD"] -Fallback "supermega-demo")
+$appDisplayName = Escape-Html (Coalesce -Value $envDefaults["SUPERMEGA_APP_DISPLAY_NAME"] -Fallback "Owner")
+$workspaceSlug = Escape-Html (Coalesce -Value $envDefaults["SUPERMEGA_WORKSPACE_SLUG"] -Fallback "supermega-lab")
+$liveApp = Get-OptionalValue -InputObject $operator -Path @("live_app") -Fallback $null
+$agentTeam = Get-OptionalValue -InputObject $founder -Path @("agent_team") -Fallback $null
+$agentJobs = Ensure-Array (Get-OptionalValue -InputObject $agent -Path @("results") -Fallback @())
+$teamNames = Ensure-Array (Get-OptionalValue -InputObject $agentTeam -Path @("team_names") -Fallback @())
+$nextMoves = Ensure-Array (Get-OptionalValue -InputObject $agentTeam -Path @("next_moves") -Fallback @())
+$gaps = Ensure-Array (Get-OptionalValue -InputObject $agentTeam -Path @("gaps") -Fallback @())
+$autonomyScore = Escape-Html (Get-OptionalValue -InputObject $agentTeam -Path @("summary", "autonomy_score") -Fallback "0")
+$teamCount = Escape-Html (Get-OptionalValue -InputObject $agentTeam -Path @("summary", "team_count") -Fallback "0")
+$loopCount = Escape-Html (Get-OptionalValue -InputObject $agent -Path @("count") -Fallback "0")
+$runtimeStatus = Escape-Html (Get-OptionalValue -InputObject $liveApp -Path @("health_status") -Fallback "unknown")
+$pipelineLeadCount = Escape-Html (Get-OptionalValue -InputObject $liveApp -Path @("pipeline_lead_count") -Fallback "0")
+$triageRun = $agentJobs | Where-Object {
+  (Get-OptionalValue -InputObject $_ -Path @("job_type") -Fallback "") -eq 'task_triage'
+} | Select-Object -First 1
+$triageSummary = Escape-Html (Get-OptionalValue -InputObject $triageRun -Path @("summary") -Fallback "No triage summary yet")
 
 $jobCards = if ($agentJobs.Count -gt 0) {
   ($agentJobs | ForEach-Object {
@@ -69,10 +173,10 @@ $jobCards = if ($agentJobs.Count -gt 0) {
     <article class="card">
       <div class="meta-row">
         <span class="label">Loop</span>
-        <span class="pill">$(Escape-Html $_.status)</span>
+        <span class="pill">$(Escape-Html (Get-OptionalValue -InputObject $_ -Path @("status") -Fallback "unknown"))</span>
       </div>
-      <h3>$(Escape-Html $_.job_type)</h3>
-      <p>$(Escape-Html $_.summary)</p>
+      <h3>$(Escape-Html (Get-OptionalValue -InputObject $_ -Path @("job_type") -Fallback "Unknown loop"))</h3>
+      <p>$(Escape-Html (Get-OptionalValue -InputObject $_ -Path @("summary") -Fallback "No summary saved."))</p>
     </article>
 "@
   }) -join "`n"
@@ -194,9 +298,9 @@ $html = @"
       </div>
       <div class="meta-row">
         <span class="pill">Updated $checkedAt</span>
-        <span class="pill">Autonomy $(Escape-Html (Coalesce $agentTeam.summary.autonomy_score "0"))</span>
-        <span class="pill">Teams $(Escape-Html (Coalesce $agentTeam.summary.team_count "0"))</span>
-        <span class="pill">Loops $(Escape-Html (Coalesce $agent.count "0"))</span>
+        <span class="pill">Autonomy $autonomyScore</span>
+        <span class="pill">Teams $teamCount</span>
+        <span class="pill">Loops $loopCount</span>
       </div>
       <div class="links">
         <a class="link-chip" href="$(Escape-Html $publicUrl)" target="_blank" rel="noreferrer">Public site</a>
@@ -209,17 +313,17 @@ $html = @"
     <section class="grid metrics">
       <article class="panel">
         <p class="kicker">Runtime</p>
-        <div class="metric-value">$(Escape-Html (Coalesce $liveApp.health_status "unknown"))</div>
+        <div class="metric-value">$runtimeStatus</div>
         <p>Stable runtime: <span class="mono">$baseUrl</span></p>
       </article>
       <article class="panel">
         <p class="kicker">Pipeline</p>
-        <div class="metric-value">$(Escape-Html (Coalesce $liveApp.pipeline_lead_count "0"))</div>
+        <div class="metric-value">$pipelineLeadCount</div>
         <p>Companies currently in the working pipeline.</p>
       </article>
       <article class="panel">
         <p class="kicker">Open tasks</p>
-        <div class="metric-value">$(Escape-Html ($agentJobs | Where-Object { $_.job_type -eq 'task_triage' } | Select-Object -ExpandProperty summary -First 1))</div>
+        <div class="metric-value">$triageSummary</div>
         <p>Current triage summary from the queue worker.</p>
       </article>
       <article class="panel">
@@ -261,26 +365,30 @@ $html = @"
 
     <section class="grid cols section-gap">
       <article class="panel">
-        <p class="kicker">How to inspect</p>
-        <h2>Where to look outside Codex</h2>
+        <p class="kicker">Stable BDA mirror</p>
+        <h2>Where updates and architecture land</h2>
         <ul>
-          <li><span class="mono">Super Mega Inc\ops\00_company_scoreboard.md</span> for the current company summary.</li>
-          <li><span class="mono">Super Mega Inc\ops\01_daily_founder_brief.md</span> for founder-level priorities.</li>
-          <li><span class="mono">Super Mega Inc\ops\02_operator_report.md</span> for runtime and ops state.</li>
-          <li><span class="mono">pilot-data\ops\workstation-latest.json</span> for the latest local cycle result.</li>
-          <li><span class="mono">app.supermega.dev/app/teams</span> for Agent Ops and manual loop runs.</li>
+          <li><span class="mono">$mirrorIndexPath</span> is the first screen in the stable mirror.</li>
+          <li><span class="mono">$scoreboardPath</span> is the current company summary.</li>
+          <li><span class="mono">$founderBriefPath</span> is the founder brief.</li>
+          <li><span class="mono">$operatorReportPath</span> is the operator and runtime report.</li>
+          <li><span class="mono">$architecturePath</span> and <span class="mono">$defaultsPath</span> hold the architecture and tenant defaults.</li>
+          <li><span class="mono">$runbookPath</span> is the concise local access runbook.</li>
         </ul>
+        <p class="section-gap">Latest workstation report: <span class="mono">$reportsPath</span></p>
+        <p class="section-gap">Open locally by double-clicking <span class="mono">$mirrorIndexPath</span> or running <span class="mono">powershell -ExecutionPolicy Bypass -File $openWorkspaceScript</span>.</p>
       </article>
       <article class="panel">
-        <p class="kicker">Current company shape</p>
-        <h2>SuperMega architecture</h2>
+        <p class="kicker">Current app defaults</p>
+        <h2>What belongs in the app vs Codex</h2>
         <ul>
-          <li>Public site for proof and contact.</li>
-          <li>Shared app for sales, delivery, founder review, and agent ops.</li>
-          <li>Cloud Scheduler plus Cloud Tasks for durable queued execution.</li>
-          <li>Local workstation as mirror, report writer, and future browser sidecar.</li>
+          <li>Current repo-side app default login: <span class="mono">$appUsername / $appPassword</span>.</li>
+          <li>Auth required: <span class="mono">$authRequired</span>; display name: <span class="mono">$appDisplayName</span>; workspace: <span class="mono">$workspaceSlug</span>.</li>
+          <li>Use <span class="mono">app.supermega.dev</span> for founder review, sales state, approvals, and Agent Ops.</li>
+          <li>Use the stable mirror for reading synced updates and architecture outside the temp worktree.</li>
+          <li>Use Codex for code changes, release work, infra changes, schema changes, and deep debugging.</li>
         </ul>
-        <p class="section-gap">Architecture doc: <a href="15_agent_architecture.md">15_agent_architecture.md</a></p>
+        <p class="section-gap">Live deployment can override the default login with environment variables. The mirror is for visibility, not credential authority.</p>
       </article>
     </section>
   </div>

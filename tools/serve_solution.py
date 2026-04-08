@@ -2205,6 +2205,123 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             }
         return {"tenant_key": "default", "workspace_slug": "", "company": ""}
 
+    def _tenant_platform_catalog() -> list[dict[str, Any]]:
+        return [
+            {
+                "key": "default",
+                "kind": "general-platform",
+                "brand_name": "SuperMega",
+                "workspace_slug": auth_workspace_slug,
+                "workspace_name": auth_workspace_name,
+                "workspace_plan": auth_workspace_plan,
+                "logo_status": "general-brand-live",
+                "modules": [
+                    "sales-system",
+                    "operations-inbox",
+                    "founder-brief",
+                    "client-portal",
+                    "kpi-review",
+                    "approvals",
+                ],
+                "google_data_surface": {
+                    "drive": "shared-platform",
+                    "gmail": "shared-platform",
+                    "knowledge_graph": "platform-graph",
+                    "kpi_flow": "shared-scorecards",
+                },
+            },
+            {
+                "key": "ytf-plant-a",
+                "kind": "tenant-vertical",
+                "brand_name": "Yangon Tyre Plant A",
+                "workspace_slug": "ytf-plant-a",
+                "workspace_name": "Yangon Tyre Plant A",
+                "workspace_plan": "plant",
+                "logo_status": "ytf-logo-not-wired-yet",
+                "modules": [
+                    "receiving",
+                    "task-list",
+                    "founder-brief",
+                    "kpi-review",
+                    "approvals",
+                ],
+                "google_data_surface": {
+                    "drive": "tenant-drive",
+                    "gmail": "tenant-mailbox",
+                    "knowledge_graph": "platform-graph",
+                    "kpi_flow": "tenant-scorecards",
+                },
+            },
+        ]
+
+    def _tenant_architecture_payload(request: Request) -> dict[str, Any]:
+        runtime_config = _load_runtime_config()
+        drive_probe = _drive_probe_from_config(runtime_config)
+        gmail_probe = _gmail_probe_from_config(runtime_config)
+        tenant_defaults = _public_tenant_defaults(request)
+
+        drive_configured = bool(drive_probe.service_account_json and drive_probe.service_account_json.exists())
+        gmail_client_configured = bool(gmail_probe.client_secret_json and gmail_probe.client_secret_json.exists())
+        gmail_token_configured = bool(gmail_probe.token_json and gmail_probe.token_json.exists())
+
+        return {
+            "status": "ready",
+            "resolved_tenant": tenant_defaults.get("tenant_key", "default") or "default",
+            "auth": {
+                "auth_required": auth_required,
+                "uses_default_credentials": uses_default_credentials,
+                "default_username": auth_username,
+                "default_workspace_slug": auth_workspace_slug,
+                "default_workspace_name": auth_workspace_name,
+                "default_workspace_plan": auth_workspace_plan,
+                "session_ttl_hours": session_ttl_hours,
+            },
+            "google_auth": {
+                "enabled": google_auth_enabled,
+                "auto_provision": google_auth_auto_provision,
+                "client_json_configured": bool(google_auth_client_path and google_auth_client_path.exists()),
+                "client_id_configured": bool(google_auth_client_id),
+                "client_secret_configured": bool(google_auth_client_secret),
+                "redirect_uri_configured": bool(google_auth_redirect_uri_config),
+                "allowed_domains": google_auth_allowed_domains,
+            },
+            "data_scaffold": {
+                "google_drive": {
+                    "configured": drive_configured,
+                    "folder_id": str(drive_probe.folder_id or "").strip(),
+                    "mode": "shared-platform first, tenant-drive later where needed",
+                },
+                "gmail": {
+                    "client_configured": gmail_client_configured,
+                    "token_configured": gmail_token_configured,
+                    "mode": "founder/shared mailbox first, tenant mailbox later where needed",
+                },
+                "knowledge_graph": {
+                    "status": "scaffolded",
+                    "mode": "postgres plus explicit relationship records",
+                    "entities": ["company", "contact", "deal", "task", "approval", "document", "kpi", "decision"],
+                },
+                "kpi_flow": {
+                    "status": "scaffolded",
+                    "inputs": ["direct app entry", "manager updates", "google sheets import later"],
+                    "outputs": ["founder brief", "manager review", "risk flags"],
+                },
+            },
+            "tenants": _tenant_platform_catalog(),
+            "roadmap": {
+                "next_general": [
+                    "Keep SuperMega as the default platform identity and workspace.",
+                    "Keep Google Drive and Gmail ingestion shared at the platform layer first.",
+                    "Strengthen reusable scorecards, approvals, and founder review across tenants.",
+                ],
+                "next_ytf": [
+                    "Wire a YTF-specific logo and app header.",
+                    "Promote receiving, KPI review, approvals, and founder brief to YTF-first modules.",
+                    "Map YTF Drive folders, Gmail threads, and KPI rules into the shared platform graph.",
+                ],
+            },
+        }
+
     def _request_origin(request: Request) -> str:
         forwarded_proto = str(request.headers.get("x-forwarded-proto", "")).strip().lower()
         scheme = forwarded_proto.split(",")[0].strip() if forwarded_proto else str(request.url.scheme).strip().lower()
@@ -2772,6 +2889,11 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             "workspaces": enterprise_list_user_workspaces(enterprise_db_url, username=str(session.get("username", auth_username) if session else auth_username)),
             "google_auth": _google_auth_public_config(request),
         }
+
+    @app.get("/api/platform/tenant-architecture")
+    def platform_tenant_architecture(request: Request) -> dict[str, Any]:
+        _require_session(request)
+        return _tenant_architecture_payload(request)
 
     @app.post("/api/auth/login")
     def auth_login(request: Request, response: Response, payload: LoginRequest) -> dict[str, Any]:

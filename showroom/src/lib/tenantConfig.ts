@@ -1,5 +1,23 @@
+export type TenantModule =
+  | 'sales-system'
+  | 'operations-inbox'
+  | 'founder-brief'
+  | 'client-portal'
+  | 'receiving'
+  | 'task-list'
+  | 'kpi-review'
+  | 'approvals'
+
+export type TenantDataSurface = {
+  googleDrive: 'shared-platform' | 'tenant-drive'
+  gmail: 'shared-platform' | 'tenant-mailbox'
+  knowledgeGraph: 'platform-graph'
+  kpiFlow: 'shared-scorecards' | 'tenant-scorecards'
+}
+
 export type TenantConfig = {
   key: 'default' | 'ytf-plant-a'
+  kind: 'general-platform' | 'tenant-vertical'
   brandName: string
   brandTagline: string
   navItems: Array<{ label: string; to: string }>
@@ -14,10 +32,15 @@ export type TenantConfig = {
   footerText: string
   defaultWorkspaceSlug?: string
   defaultCompany?: string
+  logoAsset?: string
+  modules: TenantModule[]
+  dataSurface: TenantDataSurface
+  roadmap: string[]
 }
 
 const defaultTenant: TenantConfig = {
   key: 'default',
+  kind: 'general-platform',
   brandName: 'SuperMega',
   brandTagline: 'Custom systems with always-on agents',
   navItems: [
@@ -44,10 +67,24 @@ const defaultTenant: TenantConfig = {
     },
   ],
   footerText: 'Custom systems for sales, operations, management, and client work.',
+  logoAsset: '/brand/supermega-site-qr.svg',
+  modules: ['sales-system', 'operations-inbox', 'founder-brief', 'client-portal', 'kpi-review', 'approvals'],
+  dataSurface: {
+    googleDrive: 'shared-platform',
+    gmail: 'shared-platform',
+    knowledgeGraph: 'platform-graph',
+    kpiFlow: 'shared-scorecards',
+  },
+  roadmap: [
+    'Strengthen general team roles and tenant-aware permissions.',
+    'Keep Google Drive and Gmail ingestion shared at the platform layer first.',
+    'Expand reusable scorecards, approvals, and founder review across tenants.',
+  ],
 }
 
 const ytfTenant: TenantConfig = {
   key: 'ytf-plant-a',
+  kind: 'tenant-vertical',
   brandName: 'Yangon Tyre Plant A',
   brandTagline: 'Plant A control desk',
   navItems: [
@@ -82,6 +119,24 @@ const ytfTenant: TenantConfig = {
   footerText: 'Plant A control desk for receiving and daily follow-up.',
   defaultWorkspaceSlug: 'ytf-plant-a',
   defaultCompany: 'Yangon Tyre Plant A',
+  logoAsset: '',
+  modules: ['receiving', 'task-list', 'founder-brief', 'kpi-review', 'approvals'],
+  dataSurface: {
+    googleDrive: 'tenant-drive',
+    gmail: 'tenant-mailbox',
+    knowledgeGraph: 'platform-graph',
+    kpiFlow: 'tenant-scorecards',
+  },
+  roadmap: [
+    'Replace generic SuperMega brand marks with a Plant A-specific logo and app header.',
+    'Turn Plant A receiving, KPI review, approvals, and founder brief into tenant-first modules.',
+    'Map Plant A Google Drive, Gmail, and KPI rules into the shared platform graph without forking the app.',
+  ],
+}
+
+export const TENANT_CONFIGS: Record<TenantConfig['key'], TenantConfig> = {
+  default: defaultTenant,
+  'ytf-plant-a': ytfTenant,
 }
 
 function inferTenantKey(): TenantConfig['key'] {
@@ -103,7 +158,14 @@ function inferTenantKey(): TenantConfig['key'] {
   return 'default'
 }
 
+export function getTenantConfigByKey(key: TenantConfig['key']) {
+  return TENANT_CONFIGS[key]
+}
+
+export function listTenantConfigs() {
+  return Object.values(TENANT_CONFIGS)
+}
+
 export function getTenantConfig(): TenantConfig {
-  const key = inferTenantKey()
-  return key === 'ytf-plant-a' ? ytfTenant : defaultTenant
+  return getTenantConfigByKey(inferTenantKey())
 }

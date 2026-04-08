@@ -13,8 +13,6 @@ const systemScreens: Record<string, string> = {
 export function HomePage() {
   const [activeSystemId, setActiveSystemId] = useState(SITE_SYSTEMS[0].id)
   const activeSystem = SITE_SYSTEMS.find((item) => item.id === activeSystemId) ?? SITE_SYSTEMS[0]
-  const flagshipSystems = SITE_SYSTEMS.filter((item) => item.id !== 'portal')
-  const portalSystem = SITE_SYSTEMS.find((item) => item.id === 'portal') ?? SITE_SYSTEMS[SITE_SYSTEMS.length - 1]
 
   useEffect(() => {
     const ids = SITE_SYSTEMS.map((item) => item.id)
@@ -32,49 +30,36 @@ export function HomePage() {
     <div className="pb-16">
       <section className="sm-site-bleed sm-site-hero sm-site-hero-reset">
         <div className="sm-site-reset-grid">
-          <div className="sm-site-hero-copy">
-            <div className="sm-home-site-marker">
-              <span>Public site</span>
-              <span>Live examples</span>
-              <span>Team app separate</span>
-            </div>
+          <div className="sm-site-hero-copy sm-site-hero-copy-tight">
             <p className="sm-kicker text-[var(--sm-accent)]">SuperMega</p>
             <h1 className="mt-4 max-w-5xl text-5xl font-extrabold tracking-tight text-white lg:text-8xl">
-              Systems that turn messy company work into one clean surface.
+              Shared software for sales, operations, approvals, and client work.
             </h1>
             <p className="mt-5 max-w-2xl text-base leading-relaxed text-[var(--sm-muted)] lg:text-lg">
-              Sales, operations, client work, and founder review.
+              Real product screens from the current branch. Start with one module. Add more only when the team is using it.
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
-              <Link className="sm-button-primary" to={`/demos/${activeSystem.slug}`}>
-                Open live example
+              <Link className="sm-button-primary" to="/products">
+                View systems
               </Link>
               <Link className="sm-button-secondary" to="/contact">
                 Contact
               </Link>
             </div>
-            <div className="mt-10 sm-home-proof-bar">
-              <div className="sm-home-proof-item">
-                <span className="sm-home-proof-label">Website</span>
-                <strong>Shows systems and examples</strong>
-              </div>
-              <div className="sm-home-proof-item">
-                <span className="sm-home-proof-label">App</span>
-                <strong>Runs the real team workflow</strong>
-              </div>
-              <div className="sm-home-proof-item">
-                <span className="sm-home-proof-label">Agents</span>
-                <strong>Keep queues and briefs moving</strong>
-              </div>
+            <div className="mt-10 sm-home-quick-list">
+              <span>Sales workspace</span>
+              <span>Ops queue</span>
+              <span>Daily brief</span>
+              <span>Client portal</span>
             </div>
           </div>
 
-          <div className="sm-hero-demo-block sm-hero-demo-block-live">
+          <div className="sm-hero-demo-block sm-hero-demo-block-live sm-site-hero-stage">
             <div className="sm-home-demo-head">
               <div className="sm-home-demo-copy">
-                <span className="sm-home-demo-label">Live example</span>
+                <span className="sm-home-demo-label">Current branch screen</span>
                 <strong>{activeSystem.name}</strong>
-                <span>{activeSystem.replaces[0]}</span>
+                <span>{activeSystem.tagline}</span>
               </div>
               <div className="sm-demo-switcher">
                 {SITE_SYSTEMS.map((item) => (
@@ -89,6 +74,7 @@ export function HomePage() {
                 ))}
               </div>
             </div>
+
             <div className="sm-home-proof-shot-frame">
               <img
                 alt={`${activeSystem.name} screenshot`}
@@ -96,11 +82,17 @@ export function HomePage() {
                 src={systemScreens[activeSystem.id]}
               />
             </div>
+
             <div className="sm-home-demo-note">
-              <span>{activeSystem.audience}</span>
-              <Link className="sm-link" to={`/products/${activeSystem.slug}`}>
-                View system
-              </Link>
+              <span>{activeSystem.summary}</span>
+              <div className="flex flex-wrap gap-3">
+                <Link className="sm-link" to={`/products/${activeSystem.slug}`}>
+                  View system
+                </Link>
+                <Link className="sm-link" to={`/demos/${activeSystem.slug}`}>
+                  Open example
+                </Link>
+              </div>
             </div>
           </div>
         </div>
@@ -109,39 +101,42 @@ export function HomePage() {
       <section className="mt-12 sm-site-panel">
         <div className="sm-home-section-head">
           <div>
-            <p className="sm-kicker text-[var(--sm-accent)]">Flagship systems</p>
-            <h2 className="mt-3 max-w-4xl text-3xl font-bold text-white lg:text-5xl">Start with the surface people will actually open every day.</h2>
+            <p className="sm-kicker text-[var(--sm-accent)]">Core systems</p>
+            <h2 className="mt-3 max-w-4xl text-3xl font-bold text-white lg:text-5xl">
+              Pick the screen that matches the work you already need to run.
+            </h2>
           </div>
           <Link className="sm-link" to="/products">
             All systems
           </Link>
         </div>
-        <div className="mt-10">
-          {flagshipSystems.map((system, index) => (
-            <article className={`sm-home-system-row ${index % 2 === 1 ? 'sm-home-system-row-reverse' : ''}`} key={system.id}>
-              <div className="sm-home-system-copy">
-                <p className="sm-kicker text-[var(--sm-accent)]">{system.category}</p>
-                <h3 className="mt-3 text-3xl font-bold text-white lg:text-4xl">{system.name}</h3>
-                <p className="mt-4 max-w-xl text-base leading-relaxed text-[var(--sm-muted)]">{system.summary}</p>
-                <div className="mt-6 flex flex-wrap gap-3">
+
+        <div className="mt-10 grid gap-6 lg:grid-cols-2">
+          {SITE_SYSTEMS.map((system) => (
+            <article className="sm-site-module-card" key={system.id}>
+              <div className="sm-site-module-image-wrap">
+                <img alt={`${system.name} screenshot`} className="sm-site-module-image" src={systemScreens[system.id]} />
+              </div>
+              <div className="sm-site-module-body">
+                <div className="sm-site-module-head">
+                  <p className="sm-kicker text-[var(--sm-accent)]">{system.category}</p>
+                  <h3 className="mt-2 text-2xl font-bold text-white lg:text-3xl">{system.name}</h3>
+                </div>
+                <p className="mt-3 max-w-xl text-sm leading-relaxed text-[var(--sm-muted)] lg:text-base">{system.summary}</p>
+                <div className="mt-4 flex flex-wrap gap-2">
                   {system.replaces.slice(0, 2).map((item) => (
                     <span className="sm-home-tag sm-home-tag-muted" key={item}>
-                      Replaces {item}
+                      {item}
                     </span>
                   ))}
                 </div>
-                <div className="mt-8 flex flex-wrap gap-3">
-                  <Link className="sm-button-primary" to={`/demos/${system.slug}`}>
-                    Open demo
-                  </Link>
-                  <Link className="sm-button-secondary" to={`/products/${system.slug}`}>
+                <div className="mt-6 flex flex-wrap gap-3">
+                  <Link className="sm-button-primary" to={`/products/${system.slug}`}>
                     View system
                   </Link>
-                </div>
-              </div>
-              <div className="sm-home-system-visual">
-                <div className="sm-home-proof-shot-frame sm-home-proof-shot-frame-row">
-                  <img alt={`${system.name} screenshot`} className="sm-home-proof-shot" src={systemScreens[system.id]} />
+                  <Link className="sm-button-secondary" to={`/demos/${system.slug}`}>
+                    Open example
+                  </Link>
                 </div>
               </div>
             </article>
@@ -150,24 +145,26 @@ export function HomePage() {
       </section>
 
       <section className="mt-16 sm-site-panel">
-        <div className="sm-home-custom-shell">
+        <div className="sm-home-process-strip">
           <div>
-            <p className="sm-kicker text-[var(--sm-accent)]">Custom builds</p>
-            <h2 className="mt-3 max-w-3xl text-3xl font-bold text-white lg:text-5xl">Need a portal or back-office flow instead?</h2>
+            <p className="sm-kicker text-[var(--sm-accent)]">How it expands</p>
+            <h2 className="mt-3 max-w-3xl text-3xl font-bold text-white lg:text-5xl">Ship one working module first.</h2>
             <p className="mt-4 max-w-2xl text-base leading-relaxed text-[var(--sm-muted)]">
-              We use the same operating model for client portals, onboarding hubs, approval flows, and internal back-office systems.
+              Start with the queue, review, or portal the team will actually open. Then extend the same base instead of starting over.
             </p>
-            <div className="mt-6 flex flex-wrap gap-3">
-              {['Client portal', 'Learning hub', 'Approval flow', 'Commerce back office'].map((item) => (
-                <span className="sm-home-tag" key={item}>
-                  {item}
-                </span>
-              ))}
-            </div>
           </div>
-          <div className="sm-home-system-visual">
-            <div className="sm-home-proof-shot-frame sm-home-proof-shot-frame-row">
-              <img alt={`${portalSystem.name} screenshot`} className="sm-home-proof-shot" src={systemScreens.portal} />
+          <div className="sm-home-process-grid">
+            <div className="sm-demo-mini">
+              <strong>1</strong>
+              <span>Pick one module</span>
+            </div>
+            <div className="sm-demo-mini">
+              <strong>2</strong>
+              <span>Use the live screen</span>
+            </div>
+            <div className="sm-demo-mini">
+              <strong>3</strong>
+              <span>Add the next module later</span>
             </div>
           </div>
         </div>
@@ -177,9 +174,9 @@ export function HomePage() {
         <div className="sm-site-final">
           <div>
             <p className="sm-kicker text-[var(--sm-accent)]">Contact</p>
-            <h2 className="mt-3 text-3xl font-bold text-white lg:text-5xl">Tell us which workflow still feels broken.</h2>
+            <h2 className="mt-3 text-3xl font-bold text-white lg:text-5xl">Tell us which workflow still feels fragmented.</h2>
             <p className="mt-4 max-w-2xl text-base leading-relaxed text-[var(--sm-muted)]">
-              The website shows the shape. The app runs the work.
+              We&apos;ll point you to the closest module or shape a new one from the same base.
             </p>
           </div>
           <div className="flex flex-wrap gap-3">
@@ -187,7 +184,7 @@ export function HomePage() {
               Contact
             </Link>
             <a className="sm-button-secondary" href="https://app.supermega.dev" rel="noreferrer" target="_blank">
-              Open team app
+              Open app
             </a>
           </div>
         </div>

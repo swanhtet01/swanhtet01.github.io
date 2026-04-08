@@ -1,4 +1,5 @@
 import { type FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 
 import { PageIntro } from '../components/PageIntro'
 import {
@@ -292,9 +293,43 @@ export function AgentTeamsPage() {
     <div className="space-y-8">
       <PageIntro
         eyebrow="Agents"
-        title="Run the loops behind the company."
-        description="Scheduler keeps the core jobs moving. Manual run is for checks, recovery, and urgent refresh."
+        title="Run and recover the company loops."
+        description="Scheduler, queue health, and manual intervention in one surface."
       />
+
+      <section className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
+        <article className="sm-surface p-6">
+          <p className="sm-kicker text-[var(--sm-accent)]">Loop control</p>
+          <h2 className="mt-2 text-2xl font-bold text-white">This page is for execution, not explanation.</h2>
+          <div className="mt-5 flex flex-wrap gap-3">
+            <button className="sm-button-primary" disabled={jobBusy !== null} onClick={() => void handleRunCoreLoop()} type="button">
+              {jobBusy === 'batch' ? 'Running core loops...' : 'Run all core loops'}
+            </button>
+            <Link className="sm-button-secondary" to="/app/dev-desk">
+              Open Dev Desk
+            </Link>
+            <Link className="sm-button-secondary" to="/app/hq">
+              Open HQ
+            </Link>
+          </div>
+          {jobMessage ? <div className="sm-chip mt-4 text-[var(--sm-muted)]">{jobMessage}</div> : null}
+        </article>
+
+        <article className="sm-surface p-6">
+          <p className="sm-kicker text-[var(--sm-accent-alt)]">Scheduler</p>
+          <h2 className="mt-2 text-2xl font-bold text-white">Current runtime pressure</h2>
+          <div className="mt-5 grid gap-3 md:grid-cols-2">
+            <div className="sm-chip text-white">
+              <p className="sm-kicker text-[var(--sm-accent)]">Last scheduler</p>
+              <p className="mt-2 text-sm">{formatDateTime(runtimeHealth.lastSchedulerRun)}</p>
+            </div>
+            <div className="sm-chip text-white">
+              <p className="sm-kicker text-[var(--sm-accent-alt)]">Jobs due now</p>
+              <p className="mt-2 text-sm">{runtimeHealth.jobsDueNow}</p>
+            </div>
+          </div>
+        </article>
+      </section>
 
       <section className="grid gap-4 md:grid-cols-4">
         <div className="sm-metric-card">
@@ -354,8 +389,6 @@ export function AgentTeamsPage() {
               {jobBusy === 'batch' ? 'Running core loops...' : 'Run all core loops'}
             </button>
           </div>
-
-          {jobMessage ? <div className="sm-chip mt-4 text-[var(--sm-muted)]">{jobMessage}</div> : null}
 
           <div className="mt-5 grid gap-3 md:grid-cols-3">
             <div className="sm-chip text-white">

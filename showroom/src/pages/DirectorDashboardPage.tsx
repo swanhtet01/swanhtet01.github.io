@@ -123,9 +123,44 @@ export function DirectorDashboardPage() {
     <div className="space-y-8">
       <PageIntro
         eyebrow="HQ"
-        title="Run the company from one surface."
-        description="Deals, workflows, approvals, risk, and decisions in one founder view."
+        title="Company state at a glance."
+        description="What is moving, what is blocked, and what needs a founder decision."
       />
+
+      <section className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
+        <article className="sm-surface p-6">
+          <p className="sm-kicker text-[var(--sm-accent)]">Founder strip</p>
+          <h2 className="mt-2 text-2xl font-bold text-white">Move between state, loops, and decisions fast.</h2>
+          <div className="mt-5 flex flex-wrap gap-3">
+            <Link className="sm-button-primary" to="/app/dev-desk">
+              Open Dev Desk
+            </Link>
+            <Link className="sm-button-secondary" to="/app/agents">
+              Open Agents
+            </Link>
+            <Link className="sm-button-secondary" to="/app/company">
+              Open company log
+            </Link>
+          </div>
+        </article>
+
+        <article className="sm-surface p-6">
+          <p className="sm-kicker text-[var(--sm-accent-alt)]">Runtime</p>
+          <h2 className="mt-2 text-2xl font-bold text-white">System rhythm</h2>
+          <div className="mt-5 grid gap-3 md:grid-cols-2">
+            <div className="sm-chip text-white">
+              <p className="sm-kicker text-[var(--sm-accent)]">Supervisor</p>
+              <p className="mt-2 text-sm">{summary?.supervisor?.status ?? 'manual'}</p>
+            </div>
+            <div className="sm-chip text-white">
+              <p className="sm-kicker text-[var(--sm-accent-alt)]">Cycle</p>
+              <p className="mt-2 text-sm">
+                {summary?.supervisor?.interval_minutes ? `${summary.supervisor.interval_minutes} minute loop` : 'No fixed cycle'}
+              </p>
+            </div>
+          </div>
+        </article>
+      </section>
 
       <section className="grid gap-4 md:grid-cols-5">
         <div className="sm-metric-card">

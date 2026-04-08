@@ -13,6 +13,7 @@ import { DemosPage } from './pages/DemosPage'
 import { DirectorDashboardPage } from './pages/DirectorDashboardPage'
 import { DocumentIntakePage } from './pages/DocumentIntakePage'
 import { ExceptionQueuePage } from './pages/ExceptionQueuePage'
+import { FounderControlPlanePage } from './pages/FounderControlPlanePage'
 import { HomePage } from './pages/HomePage'
 import { InsightsPage } from './pages/InsightsPage'
 import { InventoryPulsePage } from './pages/InventoryPulsePage'
@@ -72,12 +73,15 @@ function App() {
           <Route element={<NotFoundPage />} path="*" />
         </Route>
         <Route element={<AppFrame />} path="/app">
-          <Route element={<Navigate replace to="hq" />} index />
+          <Route element={<Navigate replace to="dev-desk" />} index />
+          <Route element={<FounderControlPlanePage />} path="dev-desk" />
           <Route element={<DirectorDashboardPage />} path="hq" />
           <Route element={<LeadPipelinePage />} path="deals" />
           <Route element={<WorkspacePage />} path="workflows" />
           <Route element={<AgentTeamsPage />} path="agents" />
           <Route element={<DecisionJournalPage />} path="company" />
+          <Route element={<Navigate replace to="/app/dev-desk" />} path="control" />
+          <Route element={<Navigate replace to="/app/dev-desk" />} path="meta" />
           <Route element={<Navigate replace to="/app/hq" />} path="overview" />
           <Route element={<InsightsPage />} path="insights" />
           <Route element={<Navigate replace to="/app/hq" />} path="director" />
