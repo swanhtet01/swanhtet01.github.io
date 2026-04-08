@@ -1,0 +1,40 @@
+<svg width="1050" height="600" viewBox="0 0 1050 600" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="90" y1="40" x2="980" y2="560" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#07101C"/>
+      <stop offset="1" stop-color="#020817"/>
+    </linearGradient>
+    <radialGradient id="glowA" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(930 88) rotate(140.561) scale(302.507 184.927)">
+      <stop stop-color="#25D0FF" stop-opacity="0.28"/>
+      <stop offset="1" stop-color="#25D0FF" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glowB" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(116 520) rotate(-26.137) scale(322.186 170.455)">
+      <stop stop-color="#FF7A18" stop-opacity="0.18"/>
+      <stop offset="1" stop-color="#FF7A18" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="1050" height="600" rx="42" fill="url(#bg)"/>
+  <rect width="1050" height="600" rx="42" fill="url(#glowA)"/>
+  <rect width="1050" height="600" rx="42" fill="url(#glowB)"/>
+  <path d="M0 120H1050" stroke="white" stroke-opacity="0.06"/>
+  <path d="M0 430H1050" stroke="white" stroke-opacity="0.06"/>
+  <path d="M706 0V600" stroke="white" stroke-opacity="0.04"/>
+
+  <rect x="88" y="82" width="92" height="92" rx="24" fill="#081427" stroke="#25D0FF" stroke-opacity="0.28"/>
+  <text x="134" y="139" fill="#25D0FF" font-size="36" font-weight="800" text-anchor="middle" font-family="Arial, sans-serif">SM</text>
+
+  <text x="214" y="122" fill="white" font-size="50" font-weight="800" font-family="Arial, sans-serif">SuperMega</text>
+  <text x="214" y="162" fill="#92A9C4" font-size="20" font-weight="700" letter-spacing="6" font-family="Arial, sans-serif">REAL SYSTEMS. LIVE DEMOS.</text>
+
+  <text x="88" y="328" fill="white" font-size="62" font-weight="800" font-family="Arial, sans-serif">Swan Htet</text>
+  <text x="88" y="372" fill="#25D0FF" font-size="24" font-weight="700" letter-spacing="5" font-family="Arial, sans-serif">FOUNDER</text>
+  <text x="88" y="454" fill="#DCE8F5" font-size="24" font-weight="600" font-family="Arial, sans-serif">swanhtet@supermega.dev</text>
+  <text x="88" y="492" fill="#DCE8F5" font-size="24" font-weight="600" font-family="Arial, sans-serif">supermega.dev</text>
+  <text x="88" y="530" fill="#92A9C4" font-size="22" font-weight="600" font-family="Arial, sans-serif">Yangon, Myanmar</text>
+
+  <text x="756" y="270" fill="#92A9C4" font-size="20" font-weight="700" letter-spacing="5" font-family="Arial, sans-serif">WHAT WE BUILD</text>
+  <text x="756" y="326" fill="white" font-size="32" font-weight="700" font-family="Arial, sans-serif">Sales systems</text>
+  <text x="756" y="376" fill="white" font-size="32" font-weight="700" font-family="Arial, sans-serif">Operations inboxes</text>
+  <text x="756" y="426" fill="white" font-size="32" font-weight="700" font-family="Arial, sans-serif">Founder briefs</text>
+  <text x="756" y="476" fill="white" font-size="32" font-weight="700" font-family="Arial, sans-serif">Client portals</text>
+</svg>

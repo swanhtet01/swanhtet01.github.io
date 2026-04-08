@@ -1,0 +1,36 @@
+<svg width="1050" height="600" viewBox="0 0 1050 600" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="32" y1="38" x2="1010" y2="554" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#020817"/>
+      <stop offset="1" stop-color="#081427"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(920 512) rotate(-160.008) scale(352.703 220.133)">
+      <stop stop-color="#25D0FF" stop-opacity="0.2"/>
+      <stop offset="1" stop-color="#25D0FF" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="1050" height="600" rx="42" fill="url(#bg)"/>
+  <rect width="1050" height="600" rx="42" fill="url(#glow)"/>
+
+  <rect x="90" y="92" width="870" height="416" rx="28" fill="#081427" fill-opacity="0.76" stroke="white" stroke-opacity="0.08"/>
+
+  <text x="140" y="160" fill="#25D0FF" font-size="22" font-weight="800" letter-spacing="6" font-family="Arial, sans-serif">SUPERMEGA</text>
+  <text x="140" y="236" fill="white" font-size="72" font-weight="800" font-family="Arial, sans-serif">Fix the workflow.</text>
+  <text x="140" y="292" fill="white" font-size="72" font-weight="800" font-family="Arial, sans-serif">Keep the next step visible.</text>
+
+  <text x="140" y="370" fill="#DCE8F5" font-size="28" font-weight="600" font-family="Arial, sans-serif">Sales. Orders. Approvals. Receiving. Client updates.</text>
+  <text x="140" y="414" fill="#92A9C4" font-size="24" font-weight="600" font-family="Arial, sans-serif">Start with one system. Expand only when the team trusts it.</text>
+
+  <rect x="140" y="458" width="228" height="56" rx="28" fill="#25D0FF"/>
+  <text x="254" y="494" fill="#04111F" font-size="24" font-weight="800" text-anchor="middle" font-family="Arial, sans-serif">supermega.dev</text>
+
+  <rect x="744" y="132" width="140" height="140" rx="24" fill="#081427" stroke="#25D0FF" stroke-opacity="0.24"/>
+  <path d="M780 172H848V240H780Z" stroke="#25D0FF" stroke-width="10"/>
+  <path d="M804 132V172" stroke="#25D0FF" stroke-width="10"/>
+  <path d="M744 204H780" stroke="#25D0FF" stroke-width="10"/>
+  <path d="M848 204H884" stroke="#25D0FF" stroke-width="10"/>
+  <path d="M814 240V304" stroke="#25D0FF" stroke-width="10"/>
+  <path d="M770 286H858" stroke="#25D0FF" stroke-width="10"/>
+  <text x="814" y="350" fill="#DCE8F5" font-size="20" font-weight="700" text-anchor="middle" font-family="Arial, sans-serif">Scan or visit</text>
+  <text x="814" y="382" fill="#92A9C4" font-size="18" font-weight="600" text-anchor="middle" font-family="Arial, sans-serif">supermega.dev</text>
+</svg>
