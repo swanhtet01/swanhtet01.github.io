@@ -18,6 +18,11 @@
 - `Super Mega Inc/ops/01_daily_founder_brief.md`
 - `Super Mega Inc/ops/02_operator_report.md`
 
+### Fastest local view
+- `Super Mega Inc/ops/index.html`
+- open with:
+  - `powershell -ExecutionPolicy Bypass -File "C:\Users\swann\AppData\Local\Temp\supermega-promote-20260404-1\tools\open_supermega_ops_hub.ps1"`
+
 ## Current alert path
 - local workstation cycle updates reports and ops files
 - cloud scheduler and cloud tasks keep jobs running

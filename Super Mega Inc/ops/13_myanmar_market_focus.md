@@ -26,6 +26,16 @@
 - use for: owner or GM daily control
 - outcome: one short daily view of what needs attention
 
+## The next 2 offers
+
+### Approval Flow
+- use for: purchase approvals, exception sign-off, expense review
+- outcome: one approval queue, one decision trail, less verbal confusion
+
+### Order Inbox Desk
+- use for: inbound orders from Facebook, Viber, WhatsApp, phone, and counter staff
+- outcome: one order queue, one owner, one visible next action
+
 ## Wording rule
 
 Use:
@@ -42,3 +52,9 @@ Avoid:
 - SaaS replacement
 - digital transformation
 - AI-native platform
+
+## What to sell later
+- Dispatch / Delivery Desk
+- Service Job Desk
+- QR Ordering Desk
+- Commerce Back Office

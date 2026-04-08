@@ -25,6 +25,7 @@ Core files:
 - `13_myanmar_market_focus.md`
 - `14_updates_and_alerts.md`
 - `15_agent_architecture.md`
+- `16_next_gen_company_stack.md`
 
 Ownership:
 - Founder Desk: scoreboard, founder brief, roadmap, solution catalog
@@ -38,3 +39,6 @@ Cadence:
 - Every release: release log
 - Every incident: incident log
 - Every workstation cycle: `index.html`
+
+Open the local ops hub with:
+- `powershell -ExecutionPolicy Bypass -File "C:\Users\swann\AppData\Local\Temp\supermega-promote-20260404-1\tools\open_supermega_ops_hub.ps1"`
