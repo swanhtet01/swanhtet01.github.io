@@ -67,6 +67,45 @@ const runnableJobTypes = [
   'founder_brief',
 ] as const
 
+const orgPods = [
+  {
+    name: 'Revenue Pod',
+    surface: '/app/deals',
+    mission: 'Find, qualify, and move deals to the next action.',
+    resources: 'Revenue Scout, list cleanup, outreach drafts, contact queue',
+  },
+  {
+    name: 'Delivery Pod',
+    surface: '/app/workflows',
+    mission: 'Turn a client workflow into a usable live system.',
+    resources: 'Template Clerk, task queue, approval queue, exception queue',
+  },
+  {
+    name: 'Design + R&D Pod',
+    surface: '/app/portal-studio',
+    mission: 'Design new modules, portal patterns, and reusable product surfaces.',
+    resources: 'Portal Studio, demo systems, module library, design backlog',
+  },
+  {
+    name: 'Runtime Pod',
+    surface: '/app/agents',
+    mission: 'Keep loops, queues, schedulers, and recoveries healthy.',
+    resources: 'Ops Watch, core loop runner, queue processor, release guard',
+  },
+  {
+    name: 'Knowledge Pod',
+    surface: '/app/data',
+    mission: 'Turn files, updates, and exports into usable company state.',
+    resources: 'Data linkage, memory layers, KPI inputs, document intake',
+  },
+  {
+    name: 'Founder Control',
+    surface: '/app/control-plane',
+    mission: 'Set priorities, approve releases, and steer the company.',
+    resources: 'Control Plane, HQ review, company log, daily brief',
+  },
+] as const
+
 function cadenceThresholdMinutes(cadence: string) {
   const normalized = String(cadence || '').trim().toLowerCase()
   if (normalized === '15m') {
@@ -293,14 +332,14 @@ export function AgentTeamsPage() {
     <div className="space-y-8">
       <PageIntro
         eyebrow="Agents"
-        title="Run and recover the company loops."
-        description="Scheduler, queue health, and manual intervention in one surface."
+        title="Run the runtime pod."
+        description="Loops, pod coverage, queue drift, and manual recovery."
       />
 
       <section className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
         <article className="sm-surface p-6">
-          <p className="sm-kicker text-[var(--sm-accent)]">Loop control</p>
-          <h2 className="mt-2 text-2xl font-bold text-white">This page is for execution, not explanation.</h2>
+          <p className="sm-kicker text-[var(--sm-accent)]">Runtime pod</p>
+          <h2 className="mt-2 text-2xl font-bold text-white">Run, recover, and inspect the live loops.</h2>
           <div className="mt-5 flex flex-wrap gap-3">
             <button className="sm-button-primary" disabled={jobBusy !== null} onClick={() => void handleRunCoreLoop()} type="button">
               {jobBusy === 'batch' ? 'Running core loops...' : 'Run all core loops'}
@@ -317,7 +356,7 @@ export function AgentTeamsPage() {
 
         <article className="sm-surface p-6">
           <p className="sm-kicker text-[var(--sm-accent-alt)]">Scheduler</p>
-          <h2 className="mt-2 text-2xl font-bold text-white">Current runtime pressure</h2>
+          <h2 className="mt-2 text-2xl font-bold text-white">Current pressure</h2>
           <div className="mt-5 grid gap-3 md:grid-cols-2">
             <div className="sm-chip text-white">
               <p className="sm-kicker text-[var(--sm-accent)]">Last scheduler</p>
@@ -337,15 +376,15 @@ export function AgentTeamsPage() {
           <p className="mt-3 text-3xl font-bold text-white">{members.length}</p>
         </div>
         <div className="sm-metric-card">
-          <p className="sm-kicker text-[var(--sm-accent-alt)]">Active loops</p>
+          <p className="sm-kicker text-[var(--sm-accent-alt)]">Pods</p>
           <p className="mt-3 text-3xl font-bold text-white">{agentPayload?.summary?.team_count ?? 0}</p>
         </div>
         <div className="sm-metric-card">
-          <p className="sm-kicker text-[var(--sm-accent)]">Scheduler loops</p>
+          <p className="sm-kicker text-[var(--sm-accent)]">Core loops</p>
           <p className="mt-3 text-3xl font-bold text-white">{agentPayload?.summary?.shared_core_team_count ?? 0}</p>
         </div>
         <div className="sm-metric-card">
-          <p className="sm-kicker text-[var(--sm-accent-alt)]">Autonomy</p>
+          <p className="sm-kicker text-[var(--sm-accent-alt)]">Automation</p>
           <p className="mt-3 text-3xl font-bold text-white">{agentPayload?.summary?.autonomy_score ?? 0}</p>
           <p className="mt-1 text-sm text-[var(--sm-muted)]">{agentPayload?.summary?.autonomy_level || 'unknown'}</p>
         </div>
@@ -375,14 +414,46 @@ export function AgentTeamsPage() {
         </div>
       </section>
 
+      <section className="sm-surface p-6">
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <p className="sm-kicker text-[var(--sm-accent)]">Operating pods</p>
+            <h2 className="mt-2 text-2xl font-bold text-white">The AI company is split into specific pods with specific surfaces.</h2>
+            <p className="mt-3 max-w-3xl text-sm text-[var(--sm-muted)]">
+              Every pod needs one queue, one mission, and one equipped surface. The runtime should move work between pods instead of leaving it in chat.
+            </p>
+          </div>
+          <Link className="sm-button-secondary" to="/app/control-plane">
+            Open control plane
+          </Link>
+        </div>
+
+        <div className="mt-6 grid gap-4 lg:grid-cols-3">
+          {orgPods.map((pod) => (
+            <article className="sm-proof-card" key={pod.name}>
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-xl font-bold text-white">{pod.name}</p>
+                  <p className="mt-2 text-sm text-[var(--sm-muted)]">{pod.mission}</p>
+                </div>
+                <Link className="sm-status-pill" to={pod.surface}>
+                  Open
+                </Link>
+              </div>
+              <div className="mt-4 sm-chip text-[var(--sm-muted)]">{pod.resources}</div>
+            </article>
+          ))}
+        </div>
+      </section>
+
       <section className="grid gap-6 lg:grid-cols-[1.05fr_0.95fr]">
         <article className="sm-surface p-6">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
               <p className="sm-kicker text-[var(--sm-accent)]">Core loops</p>
-              <h2 className="mt-2 text-2xl font-bold text-white">The jobs that keep the company moving.</h2>
+              <h2 className="mt-2 text-2xl font-bold text-white">The jobs that keep the pods moving.</h2>
               <p className="mt-3 text-sm text-[var(--sm-muted)]">
-                Revenue, cleanup, inbound handling, queue control, runtime watch, and the founder brief now live in one operator surface.
+                Revenue, cleanup, provisioning, queue control, runtime watch, and the founder brief live here.
               </p>
             </div>
             <button className="sm-button-primary" disabled={jobBusy !== null} onClick={() => void handleRunCoreLoop()} type="button">
@@ -393,15 +464,15 @@ export function AgentTeamsPage() {
           <div className="mt-5 grid gap-3 md:grid-cols-3">
             <div className="sm-chip text-white">
               <p className="sm-kicker text-[var(--sm-accent)]">Always on</p>
-              <p className="mt-2 text-sm">Scheduler runs these loops even when nobody is in the app.</p>
+              <p className="mt-2 text-sm">Scheduler keeps these loops alive when nobody is in the app.</p>
             </div>
             <div className="sm-chip text-white">
               <p className="sm-kicker text-[var(--sm-accent-alt)]">Run now</p>
-              <p className="mt-2 text-sm">Use manual run for checks, recovery, and urgent refresh.</p>
+              <p className="mt-2 text-sm">Use manual run for checks, recovery, or urgent refresh.</p>
             </div>
             <div className="sm-chip text-white">
               <p className="sm-kicker text-[var(--sm-accent)]">Escalation</p>
-              <p className="mt-2 text-sm">Ops Watch and Founder Brief raise drift before it becomes a delivery problem.</p>
+              <p className="mt-2 text-sm">Runtime should raise drift before it becomes a founder or delivery problem.</p>
             </div>
           </div>
 
@@ -483,8 +554,8 @@ export function AgentTeamsPage() {
             <article className="sm-surface p-6">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <p className="sm-kicker text-[var(--sm-accent)]">Operator access</p>
-                  <h2 className="mt-2 text-2xl font-bold text-white">Who can run HQ</h2>
+                  <p className="sm-kicker text-[var(--sm-accent)]">People and roles</p>
+                  <h2 className="mt-2 text-2xl font-bold text-white">Who can operate the company</h2>
                 </div>
                 <span className="sm-status-pill">{members.length} active</span>
               </div>
@@ -512,9 +583,9 @@ export function AgentTeamsPage() {
 
             <article className="sm-surface p-6">
               <p className="sm-kicker text-[var(--sm-accent-alt)]">Add access</p>
-              <h2 className="mt-2 text-2xl font-bold text-white">Add a manager or operator</h2>
+              <h2 className="mt-2 text-2xl font-bold text-white">Add an operator</h2>
               <p className="mt-3 text-sm text-[var(--sm-muted)]">
-                This creates or updates login access for the current workspace. If you leave password blank, a one-time password is generated.
+                Create or update login access for the current workspace. Leave password blank to auto-generate one.
               </p>
 
               <form className="mt-5 grid gap-4" onSubmit={(event) => void handleInvite(event)}>
@@ -573,7 +644,7 @@ export function AgentTeamsPage() {
 
           <section className="grid gap-6 lg:grid-cols-[1.05fr_0.95fr]">
             <article className="sm-surface p-6">
-              <p className="sm-kicker text-[var(--sm-accent)]">Operating model</p>
+              <p className="sm-kicker text-[var(--sm-accent)]">Functional pods</p>
               <div className="mt-4 space-y-3">
                 {(agentPayload?.scaling_model?.core_loop ?? []).map((item) => (
                   <div className="sm-chip text-white" key={item}>

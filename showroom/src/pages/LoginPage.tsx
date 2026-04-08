@@ -114,31 +114,35 @@ export function LoginPage() {
   return (
     <div className="space-y-8">
       <PageIntro
-        eyebrow={isClientTenant ? tenant.brandName : 'Client login'}
-        title={isClientTenant ? 'Sign in to the Plant A desk.' : 'Sign in to the workspace.'}
-        description={isClientTenant ? 'Use this for the shared Plant A receiving and task desk.' : 'Use this only for the saved app.'}
+        eyebrow={isClientTenant ? tenant.brandName : 'Internal HQ'}
+        title={isClientTenant ? 'Open the Plant A workspace.' : 'Open the internal workspace.'}
+        description={
+          isClientTenant
+            ? 'Use this for the shared Plant A operating workspace.'
+            : 'Use this for founder review, team queues, data linkage, and agent control.'
+        }
       />
 
       {shellOnly ? (
         <section className="grid gap-6 lg:grid-cols-[0.76fr_1.24fr]">
           <aside className="sm-terminal p-6">
-            <p className="sm-kicker text-[var(--sm-accent)]">What is live</p>
+            <p className="sm-kicker text-[var(--sm-accent)]">This host</p>
             <div className="mt-4 grid gap-3">
-              <div className="sm-chip text-white">Public Lead Finder</div>
-              <div className="sm-chip text-white">Action OS overview</div>
-              <div className="sm-chip text-white">Call booking</div>
+              <div className="sm-chip text-white">Public company site</div>
+              <div className="sm-chip text-white">System examples</div>
+              <div className="sm-chip text-white">Contact intake</div>
             </div>
           </aside>
           <section className="sm-surface p-6">
             <p className="text-sm leading-relaxed text-[var(--sm-muted)]">
-              This host is the public site only. The saved workspace app is not deployed on this domain yet.
+              This host is the public site only. The private workspace is not deployed on this domain.
             </p>
             <div className="mt-5 flex flex-wrap gap-3">
               <Link className="sm-button-primary" to="/find-companies">
-                {isClientTenant ? 'Open receiving' : 'Open Find Companies'}
+                {isClientTenant ? 'Open receiving log' : 'Open public examples'}
               </Link>
               <Link className="sm-button-secondary" to="/contact">
-                Contact us
+                Contact
               </Link>
             </div>
           </section>
@@ -146,31 +150,31 @@ export function LoginPage() {
       ) : handoffToApp ? (
         <section className="grid gap-6 lg:grid-cols-[0.76fr_1.24fr]">
           <aside className="sm-terminal p-6">
-            <p className="sm-kicker text-[var(--sm-accent)]">Use this for</p>
+            <p className="sm-kicker text-[var(--sm-accent)]">Workspace includes</p>
             <div className="mt-4 grid gap-3">
-              <div className="sm-chip text-white">Saved lead pipeline</div>
-              <div className="sm-chip text-white">Action board and exceptions</div>
-              <div className="sm-chip text-white">Director and manager views</div>
+              <div className="sm-chip text-white">Founder daily review</div>
+              <div className="sm-chip text-white">Team queues and workflows</div>
+              <div className="sm-chip text-white">Data linkage and agent ops</div>
             </div>
           </aside>
           <section className="sm-surface p-6">
             <p className="text-sm leading-relaxed text-[var(--sm-muted)]">
-              The saved app is not on this host. Open the live app directly.
+              The private workspace lives on the app host. Open it directly.
             </p>
             <div className="mt-5 flex flex-wrap gap-3">
               <a className="sm-button-primary" href={appHref('/login/')}>
-                {isClientTenant ? 'Open Plant A desk' : 'Open app'}
+                {isClientTenant ? 'Open Plant A workspace' : 'Open internal HQ'}
               </a>
               <a className="sm-button-accent" href={appHref('/signup/')}>
-                {isClientTenant ? 'Start Plant A desk' : 'Start workspace'}
+                {isClientTenant ? 'Create Plant A workspace' : 'Create workspace'}
               </a>
               {googleAuthEnabled ? (
                 <a className="sm-button-secondary" href={googleLoginHref}>
                   Continue with Google
                 </a>
-              ) : null}
+                ) : null}
               <Link className="sm-button-secondary" to={isClientTenant ? '/receiving' : '/find-companies'}>
-                {isClientTenant ? 'Open receiving' : 'Open Find Companies'}
+                {isClientTenant ? 'Open receiving log' : 'Back to public site'}
               </Link>
             </div>
             <div className="mt-4 sm-chip text-[var(--sm-muted)]">
@@ -182,11 +186,12 @@ export function LoginPage() {
 
       <section className="grid gap-6 lg:grid-cols-[0.7fr_1.3fr]">
         <aside className="sm-terminal p-6">
-          <p className="sm-kicker text-[var(--sm-accent)]">Use this for</p>
+          <p className="sm-kicker text-[var(--sm-accent)]">Workspace includes</p>
           <div className="mt-4 grid gap-3">
-            <div className="sm-chip text-white">Saved lead pipeline</div>
-            <div className="sm-chip text-white">Action board and exceptions</div>
-            <div className="sm-chip text-white">Director and manager views</div>
+            <div className="sm-chip text-white">Founder daily review</div>
+            <div className="sm-chip text-white">Team queues and workflows</div>
+            <div className="sm-chip text-white">Data linkage and exports</div>
+            <div className="sm-chip text-white">Agent loops and schedules</div>
           </div>
         </aside>
         <form className="sm-surface p-6" onSubmit={handleSubmit}>
@@ -201,7 +206,7 @@ export function LoginPage() {
 
           <div className="grid gap-4">
             <label className="grid gap-2 text-sm font-semibold text-[var(--sm-muted)]">
-              Username
+              Email or username
               <input className="sm-input" onChange={(event) => setUsername(event.target.value)} value={username} />
             </label>
             <label className="grid gap-2 text-sm font-semibold text-[var(--sm-muted)]">
@@ -209,7 +214,7 @@ export function LoginPage() {
               <input className="sm-input" onChange={(event) => setPassword(event.target.value)} type="password" value={password} />
             </label>
             <label className="grid gap-2 text-sm font-semibold text-[var(--sm-muted)]">
-              Workspace
+              Workspace slug
               <input
                 className="sm-input"
                 onChange={(event) => setWorkspaceSlug(event.target.value)}
@@ -225,15 +230,19 @@ export function LoginPage() {
             </label>
           </div>
 
+          <div className="mt-4 text-sm text-[var(--sm-muted)]">
+            Use the workspace slug only if you have more than one workspace. Otherwise leave it blank and the default workspace will open.
+          </div>
+
           <div className="mt-5 flex flex-wrap gap-3">
             <button className="sm-button-primary" disabled={loading || submitting} type="submit">
-              {submitting ? 'Opening...' : isClientTenant ? 'Open Plant A desk' : 'Open app'}
+              {submitting ? 'Opening...' : isClientTenant ? 'Open Plant A workspace' : 'Open internal HQ'}
             </button>
             <Link className="sm-button-accent" to="/signup">
-              {isClientTenant ? 'Start Plant A desk' : 'Start workspace'}
+              {isClientTenant ? 'Create Plant A workspace' : 'Create workspace'}
             </Link>
             <Link className="sm-button-secondary" to={isClientTenant ? '/receiving' : '/find-companies'}>
-              {isClientTenant ? 'Open receiving' : 'Open Find Companies'}
+              {isClientTenant ? 'Open receiving log' : 'Back to public site'}
             </Link>
           </div>
 

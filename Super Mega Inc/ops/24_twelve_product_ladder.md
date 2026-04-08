@@ -1,153 +1,117 @@
-# Twelve Product Ladder
+# Four Flagships And Twelve Modules
 
-This is the practical SuperMega product ladder.
+This is the public product model for SuperMega.
 
 Rule:
-- keep products focused
-- keep buyers clear
-- keep setup paths short
-- group products simply
+- keep the public surface simple
+- keep the delivery model broader
+- sell flagship systems
+- build from focused modules
 
-## Group 1: Sales
+## 1. Flagship systems
 
-### 1. Sales OS
-- For: distributors, importers, commercial teams
-- Job: keep prospecting, follow-up, and deal movement in one system
-- Core surfaces:
-  - leads
-  - deals
-  - next actions
-  - founder review
+These are the four public flagships:
 
-### 2. List Cleanup
-- For: sales coordinators, admins, founders
-- Job: turn raw company lists into one usable working list
-- Core surfaces:
-  - imports
-  - normalization
-  - assignment
-  - follow-up queue
+### 1. Sales System
+- for: founders, commercial teams, coordinators
+- job: find companies, clean lists, and keep next actions moving
 
-### 3. Contact Intake
-- For: any team taking inbound inquiries
-- Job: turn contact submissions into tracked deals or tasks
-- Core surfaces:
-  - contact queue
-  - qualification
-  - owner assignment
-  - first response
+### 2. Operations Inbox
+- for: ops leads, warehouse teams, admin teams, service teams
+- job: turn requests, issues, approvals, and documents into one owned queue
 
-## Group 2: Operations
+### 3. Founder Brief
+- for: founders, GMs, directors
+- job: show what needs attention today without manual status chasing
 
-### 4. Operations OS
-- For: owner-led operators, warehouse teams, plant teams
-- Job: run daily operations from one controlled queue
-- Core surfaces:
-  - tasks
-  - blockers
-  - approvals
-  - exceptions
+### 4. Client Portal
+- for: service teams, agencies, account managers, implementation teams
+- job: give customers one clean place for status, approvals, files, and onboarding
 
-### 5. Receiving Control
-- For: warehouses, factories, restaurant back-of-house teams
-- Job: log receiving issues once and keep the next owner visible
-- Core surfaces:
-  - receiving queue
-  - issue reasons
-  - shortage and variance tracking
-  - supplier follow-up
+## 2. Module library
 
-### 6. Approval Flow
-- For: procurement, finance, ops managers
-- Job: move requests and decisions out of chat and into one approval path
-- Core surfaces:
-  - pending approvals
-  - decision history
-  - owner
-  - escalation
+The flagships are built from these twelve modules.
 
-### 7. Document Intake
-- For: procurement, finance, admin, back office
-- Job: collect inbound documents and assign the next action
-- Core surfaces:
-  - intake inbox
-  - classification
-  - owner assignment
-  - status tracking
+### Revenue
+1. Lead Finder
+2. List Cleaner
+3. Follow-up Queue
+4. Quote Tracker
 
-## Group 3: Management
+### Operations
+5. Ops Inbox
+6. Approval Flow
+7. Receiving Log
+8. Document Intake
 
-### 8. Founder Brief
-- For: founders, GMs, directors
-- Job: show the few items that actually need attention today
-- Core surfaces:
-  - priorities
-  - overdue work
-  - risks
-  - approvals
+### Management
+9. Founder Brief
+10. KPI Watch
 
-### 9. KPI Review
-- For: founders, managers, controllers
-- Job: turn scattered KPI updates into one review layer
-- Core surfaces:
-  - KPI inputs
-  - targets
-  - trend checks
-  - daily and weekly review
+### Client
+11. Client Portal
+12. Learning Hub
 
-### 10. Decision Journal
-- For: founders, managers, operators
-- Job: keep major decisions visible instead of losing them in chat
-- Core surfaces:
-  - decisions
-  - owners
-  - due follow-up
-  - review log
+The public site should still emphasize four flagships.
+The delivery team should think in modules.
 
-## Group 4: Client-facing
+## 3. Which modules belong to which flagship
 
-### 11. Client Portal
-- For: agencies, service teams, B2B operators
-- Job: give clients one clean place for status, files, and approvals
-- Core surfaces:
-  - status
-  - documents
-  - approvals
-  - open actions
+### Sales System
+- Lead Finder
+- List Cleaner
+- Follow-up Queue
+- Quote Tracker
 
-### 12. Learning Hub
-- For: onboarding, SOP rollout, internal training
-- Job: turn training and SOP delivery into a trackable system
-- Core surfaces:
-  - learning modules
-  - completion
-  - checkpoints
-  - manager review
+### Operations Inbox
+- Ops Inbox
+- Approval Flow
+- Receiving Log
+- Document Intake
 
-## Recommended first ladder
+### Founder Brief
+- Founder Brief
+- KPI Watch
 
-Sell first:
-1. Sales OS
-2. Receiving Control
-3. Founder Brief
+### Client Portal
+- Client Portal
+- Learning Hub
 
-Add next:
-4. Approval Flow
-5. Client Portal
-6. KPI Review
+## 4. Free proof vs paid rollout
 
-Build later:
-7. Learning Hub
-8. Decision Journal
-9. broader Operations OS rollout
+### Free proofs
+- Find clients
+- Clean a list
+- Sort updates
 
-## Rule for every product
+These are not the main products.
+They are small proofs of the module logic.
 
-Every product needs:
-- a named buyer
-- a daily owner
-- a setup path
-- a queue
-- a founder review path
+### Paid rollout
+- Sales System
+- Operations Inbox
+- Founder Brief
+- Client Portal
 
-If it does not have those, it is not a real product yet.
+## 5. Follow-on builds
+
+After the base flagship is working, extend with:
+- QR Ordering
+- Commerce Back Office
+- Supplier Portal
+- Support Desk
+- Knowledge Base
+- custom approval rules
+
+These should stay as follow-on builds, not front-door headline products.
+
+## 6. Operating rule
+
+Every module must answer:
+- what is it
+- who uses it
+- what screen do they open
+- how is it set up for another company
+- what does it expand into
+
+If a module cannot answer those quickly, it is still vague.

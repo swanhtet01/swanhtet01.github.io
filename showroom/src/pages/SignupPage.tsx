@@ -110,17 +110,21 @@ export function SignupPage() {
   return (
     <div className="space-y-8">
       <PageIntro
-        eyebrow={isClientTenant ? tenant.brandName : 'Start'}
-        title={isClientTenant ? 'Start the Plant A desk.' : 'Start the workspace.'}
-        description={isClientTenant ? 'Create the shared Plant A desk and bring managers into the same workspace.' : 'Create one workspace and go straight into the saved app.'}
+        eyebrow={isClientTenant ? tenant.brandName : 'Internal HQ'}
+        title={isClientTenant ? 'Create the Plant A workspace.' : 'Create the internal workspace.'}
+        description={
+          isClientTenant
+            ? 'Create the shared Plant A workspace and bring managers into the same operating surface.'
+            : 'Create one founder-and-team workspace for queues, data linkage, and automation control.'
+        }
       />
 
       {shellOnly ? (
         <section className="grid gap-6 lg:grid-cols-[0.76fr_1.24fr]">
           <aside className="sm-terminal p-6">
-            <p className="sm-kicker text-[var(--sm-accent)]">What you can do now</p>
+            <p className="sm-kicker text-[var(--sm-accent)]">This host</p>
             <div className="mt-5 grid gap-3">
-              {['See systems', 'Try a proof tool', 'Contact us'].map((item) => (
+              {['Public company site', 'System examples', 'Contact intake'].map((item) => (
                 <div className="sm-chip text-white" key={item}>
                   {item}
                 </div>
@@ -129,14 +133,14 @@ export function SignupPage() {
           </aside>
           <section className="sm-surface p-6">
             <p className="text-sm leading-relaxed text-[var(--sm-muted)]">
-              Workspace signup is not live on this host yet. Use the public site now or contact us for the first rollout.
+              Workspace signup is not live on this host. Use the public site now or contact us to start the first rollout.
             </p>
             <div className="mt-5 flex flex-wrap gap-3">
               <Link className="sm-button-primary" to="/find-companies">
-                {isClientTenant ? 'Open receiving' : 'Open Find Companies'}
+                {isClientTenant ? 'Open receiving log' : 'Open public site'}
               </Link>
               <Link className="sm-button-secondary" to="/contact">
-                Contact us
+                Contact
               </Link>
             </div>
           </section>
@@ -144,9 +148,9 @@ export function SignupPage() {
       ) : handoffToApp ? (
         <section className="grid gap-6 lg:grid-cols-[0.76fr_1.24fr]">
           <aside className="sm-terminal p-6">
-            <p className="sm-kicker text-[var(--sm-accent)]">What you get</p>
+            <p className="sm-kicker text-[var(--sm-accent)]">Workspace includes</p>
             <div className="mt-5 grid gap-3">
-              {['Lead Finder pipeline', 'Action board', 'Exception queue', 'Director view'].map((item) => (
+              {['Founder daily review', 'Team queues and workflows', 'Data linkage', 'Agent ops'].map((item) => (
                 <div className="sm-chip text-white" key={item}>
                   {item}
                 </div>
@@ -155,14 +159,14 @@ export function SignupPage() {
           </aside>
           <section className="sm-surface p-6">
             <p className="text-sm leading-relaxed text-[var(--sm-muted)]">
-              Workspace signup is on the live app host, not this static site.
+              Workspace signup runs on the live app host, not this public site.
             </p>
             <div className="mt-5 flex flex-wrap gap-3">
               <a className="sm-button-primary" href={appHref('/signup/')}>
-                {isClientTenant ? 'Start Plant A desk' : 'Start workspace'}
+                {isClientTenant ? 'Create Plant A workspace' : 'Create workspace'}
               </a>
               <a className="sm-button-secondary" href={appHref('/login/')}>
-                {isClientTenant ? 'Open Plant A desk' : 'Open app'}
+                {isClientTenant ? 'Open Plant A workspace' : 'Open internal HQ'}
               </a>
               {googleAuthEnabled ? (
                 <a className="sm-button-secondary" href={googleSignupHref}>
@@ -179,15 +183,15 @@ export function SignupPage() {
 
       <section className="grid gap-6 lg:grid-cols-[0.82fr_1.18fr]">
         <aside className="sm-terminal p-6">
-          <p className="sm-kicker text-[var(--sm-accent)]">What you get</p>
+          <p className="sm-kicker text-[var(--sm-accent)]">Workspace includes</p>
           <div className="mt-5 grid gap-3">
-            {['Lead Finder pipeline', 'Action board', 'Exception queue', 'Director view'].map((item) => (
+            {['Founder daily review', 'Team queues and workflows', 'Data linkage and exports', 'Agent ops'].map((item) => (
               <div className="sm-chip text-white" key={item}>
                 {item}
               </div>
             ))}
           </div>
-          <p className="mt-6 text-sm text-[var(--sm-muted)]">Keep the first rollout simple. One team and one workflow is enough.</p>
+          <p className="mt-6 text-sm text-[var(--sm-muted)]">Keep the first rollout simple. One team and one working queue is enough.</p>
         </aside>
 
         <form className="sm-surface p-6" onSubmit={handleSubmit}>
@@ -204,7 +208,7 @@ export function SignupPage() {
 
           <div className="grid gap-4">
             <label className="grid gap-2 text-sm font-semibold text-[var(--sm-muted)]">
-              Name
+              Founder or admin name
               <input className="sm-input" onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))} required value={form.name} />
             </label>
             <label className="grid gap-2 text-sm font-semibold text-[var(--sm-muted)]">
@@ -212,7 +216,7 @@ export function SignupPage() {
               <input className="sm-input" onChange={(event) => setForm((prev) => ({ ...prev, email: event.target.value }))} required type="email" value={form.email} />
             </label>
             <label className="grid gap-2 text-sm font-semibold text-[var(--sm-muted)]">
-              Company
+              Company or workspace name
               <input className="sm-input" onChange={(event) => setForm((prev) => ({ ...prev, company: event.target.value }))} required value={form.company} />
             </label>
             <label className="grid gap-2 text-sm font-semibold text-[var(--sm-muted)]">
@@ -226,22 +230,26 @@ export function SignupPage() {
               />
             </label>
             <label className="grid gap-2 text-sm font-semibold text-[var(--sm-muted)]">
-              First workflow
+              First team or workflow
               <textarea
                 className="sm-input min-h-28"
                 onChange={(event) => setForm((prev) => ({ ...prev, goal: event.target.value }))}
-                placeholder={isClientTenant ? 'For example: receiving, GRN variance, or shift blockers.' : 'For example: supplier follow-up, receiving, or director updates.'}
+                placeholder={isClientTenant ? 'For example: receiving, GRN variance, or shift blockers.' : 'For example: sales follow-up, approvals, receiving, or founder review.'}
                 value={form.goal}
               />
             </label>
           </div>
 
+          <div className="mt-4 text-sm text-[var(--sm-muted)]">
+            Start with the first team that needs a shared queue. More modules can be added after the workspace is live.
+          </div>
+
           <div className="mt-5 flex flex-wrap gap-3">
             <button className="sm-button-primary" disabled={busy} type="submit">
-              {busy ? 'Creating...' : isClientTenant ? 'Start Plant A desk' : 'Start workspace'}
+              {busy ? 'Creating...' : isClientTenant ? 'Create Plant A workspace' : 'Create workspace'}
             </button>
             <Link className="sm-button-secondary" to="/login">
-              {isClientTenant ? 'Open Plant A desk' : 'Open app'}
+              {isClientTenant ? 'Open Plant A workspace' : 'Open internal HQ'}
             </Link>
           </div>
 

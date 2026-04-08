@@ -101,9 +101,9 @@ export function DataVisibilityPage() {
   return (
     <div className="space-y-8">
       <PageIntro
-        eyebrow="Data"
-        title="See where company state comes from."
-        description="Read-only map of sources, connectors, memory, and KPI visibility across the live workspace."
+        eyebrow="Data linkage"
+        title="See what the workspace is actually reading."
+        description="Use this screen to verify source connections, exports, memory, and KPI visibility before trusting the automations."
       />
 
       <section className="grid gap-4 md:grid-cols-6">
@@ -133,7 +133,7 @@ export function DataVisibilityPage() {
         </div>
       </section>
 
-      {loading ? <div className="sm-chip text-[var(--sm-muted)]">Loading data visibility...</div> : null}
+      {loading ? <div className="sm-chip text-[var(--sm-muted)]">Loading data linkage...</div> : null}
 
       {error ? (
         <section className="sm-surface p-6">
@@ -153,8 +153,8 @@ export function DataVisibilityPage() {
         <>
           <section className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
             <article className="sm-surface p-6">
-              <p className="sm-kicker text-[var(--sm-accent)]">Transparency</p>
-              <h2 className="mt-2 text-2xl font-bold text-white">This is not just manual entry.</h2>
+              <p className="sm-kicker text-[var(--sm-accent)]">Overview</p>
+              <h2 className="mt-2 text-2xl font-bold text-white">Check what the HQ is actually connected to.</h2>
               <p className="mt-4 text-base leading-relaxed text-[var(--sm-muted)]">{payload.statement}</p>
               <p className="mt-4 text-sm leading-relaxed text-[var(--sm-muted)]">{payload.manual_entry_note}</p>
 
@@ -168,11 +168,11 @@ export function DataVisibilityPage() {
                   <p className="mt-2 text-sm">{formatDateTime(payload.summary?.last_sync_at || payload.workspace?.last_sync_at)}</p>
                 </div>
                 <div className="sm-chip text-white">
-                  <p className="sm-kicker text-[var(--sm-accent)]">Workspaces</p>
+                  <p className="sm-kicker text-[var(--sm-accent)]">Linked workspaces</p>
                   <p className="mt-2 text-sm">{payload.workspace?.workspace_count ?? 0} live workspaces</p>
                 </div>
                 <div className="sm-chip text-white">
-                  <p className="sm-kicker text-[var(--sm-accent-alt)]">Agent runs</p>
+                  <p className="sm-kicker text-[var(--sm-accent-alt)]">Recent automations</p>
                   <p className="mt-2 text-sm">{payload.summary?.agent_run_count ?? 0} recent runs</p>
                 </div>
               </div>
@@ -182,10 +182,10 @@ export function DataVisibilityPage() {
                   Open deals
                 </Link>
                 <Link className="sm-button-secondary" to="/app/workflows">
-                  Open workflows
+                  Open workflow queue
                 </Link>
-                <Link className="sm-button-secondary" to="/app/dev-desk">
-                  Open Dev Desk
+                <Link className="sm-button-secondary" to="/app/control-plane">
+                  Open control plane
                 </Link>
                 {payload.links?.workspace_export ? (
                   <a className="sm-button-secondary" href={payload.links.workspace_export} rel="noreferrer" target="_blank">
@@ -207,7 +207,7 @@ export function DataVisibilityPage() {
 
             <article className="sm-surface p-6">
               <p className="sm-kicker text-[var(--sm-accent-alt)]">Linkage</p>
-              <h2 className="mt-2 text-2xl font-bold text-white">What is connected to what.</h2>
+              <h2 className="mt-2 text-2xl font-bold text-white">Source to memory to surface.</h2>
               <div className="mt-5 space-y-3">
                 {(payload.linkage ?? []).map((item) => (
                   <article className="sm-proof-card" key={item.key}>
@@ -230,7 +230,7 @@ export function DataVisibilityPage() {
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <p className="sm-kicker text-[var(--sm-accent)]">Connectors</p>
-                  <h2 className="mt-2 text-2xl font-bold text-white">How data enters the platform.</h2>
+                  <h2 className="mt-2 text-2xl font-bold text-white">How data enters the workspace.</h2>
                 </div>
                 <span className="sm-status-pill">{payload.summary?.connected_source_count ?? 0} live sources</span>
               </div>
@@ -278,7 +278,7 @@ export function DataVisibilityPage() {
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <p className="sm-kicker text-[var(--sm-accent-alt)]">Memory</p>
-                  <h2 className="mt-2 text-2xl font-bold text-white">Where state is stored and reused.</h2>
+                  <h2 className="mt-2 text-2xl font-bold text-white">Where shared state is stored and reused.</h2>
                 </div>
                 <span className="sm-status-pill">{payload.summary?.memory_surface_count ?? 0} layers</span>
               </div>
@@ -320,7 +320,7 @@ export function DataVisibilityPage() {
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <p className="sm-kicker text-[var(--sm-accent)]">KPI visibility</p>
-                  <h2 className="mt-2 text-2xl font-bold text-white">Which surfaces already show live metrics.</h2>
+                  <h2 className="mt-2 text-2xl font-bold text-white">Which screens already show live metrics.</h2>
                 </div>
                 <span className="sm-status-pill">{payload.summary?.kpi_surface_count ?? 0} views</span>
               </div>
@@ -351,7 +351,7 @@ export function DataVisibilityPage() {
 
             <article className="sm-surface p-6">
               <p className="sm-kicker text-[var(--sm-accent-alt)]">Still needs wiring</p>
-              <h2 className="mt-2 text-2xl font-bold text-white">What is partial versus already live.</h2>
+              <h2 className="mt-2 text-2xl font-bold text-white">What is partial versus already trusted.</h2>
 
               <div className="mt-5 space-y-3">
                 {(payload.next_steps ?? []).map((item) => (

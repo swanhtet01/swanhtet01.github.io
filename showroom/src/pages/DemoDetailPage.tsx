@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link, Navigate, useParams } from 'react-router-dom'
 
 import { SystemDemoCanvas } from '../components/SystemDemoCanvas'
-import { getSiteSystem } from '../lib/siteSystems'
+import { getSiteSystem, getSystemModules } from '../lib/siteSystems'
 
 export function DemoDetailPage() {
   const { demoId } = useParams()
@@ -14,23 +14,21 @@ export function DemoDetailPage() {
   }
 
   const activeScenario = system.scenarios.find((item) => item.id === activeScenarioId) ?? system.scenarios[0]
+  const modules = getSystemModules(system.id)
 
   return (
     <div className="space-y-10 pb-12">
       <section className="sm-site-panel">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <p className="sm-kicker text-[var(--sm-accent)]">Live Demo</p>
+            <p className="sm-kicker text-[var(--sm-accent)]">Live demo</p>
             <h1 className="mt-4 text-4xl font-extrabold tracking-tight text-white lg:text-6xl">{system.name}</h1>
             <p className="mt-4 max-w-3xl text-base leading-relaxed text-[var(--sm-muted)] lg:text-lg">{system.tagline}</p>
-            <p className="mt-4 text-sm font-medium text-white/88">Used by: {system.audience}</p>
-            <p className="mt-3 max-w-3xl text-sm leading-relaxed text-[var(--sm-muted)]">
-              This public demo shows the module shape. A real rollout keeps the same structure and swaps stages, fields, owners, and rules for the company.
-            </p>
+            <p className="mt-3 text-sm font-medium text-white/88">Synthetic sample data. Same screen shape, different fields and rules for each rollout.</p>
           </div>
           <div className="flex flex-wrap gap-3">
             <Link className="sm-button-secondary" to={`/products/${system.slug}`}>
-              See module
+              See system
             </Link>
             {system.freeToolLabel && system.freeToolRoute ? (
               <Link className="sm-button-secondary" to={system.freeToolRoute}>
@@ -62,7 +60,7 @@ export function DemoDetailPage() {
 
       <section className="grid gap-6 xl:grid-cols-[0.92fr_1.08fr]">
         <article className="sm-site-panel">
-          <p className="sm-kicker text-[var(--sm-accent)]">What this module is</p>
+          <p className="sm-kicker text-[var(--sm-accent)]">What this demo proves</p>
           <p className="mt-4 text-sm leading-relaxed text-[var(--sm-muted)]">{system.summary}</p>
           <div className="mt-5 grid gap-3">
             {system.audience.split(', ').map((item) => (
@@ -74,11 +72,12 @@ export function DemoDetailPage() {
         </article>
 
         <article className="sm-site-panel">
-          <p className="sm-kicker text-[var(--sm-accent)]">What the module has</p>
+          <p className="sm-kicker text-[var(--sm-accent)]">Core modules in this demo</p>
           <div className="mt-5 grid gap-3">
-            {system.surface.map((item) => (
-              <div className="sm-demo-mini" key={item}>
-                {item}
+            {modules.map((module) => (
+              <div className="sm-demo-mini" key={module.id}>
+                <strong>{module.name}</strong>
+                <span>{module.purpose}</span>
               </div>
             ))}
           </div>
@@ -112,7 +111,7 @@ export function DemoDetailPage() {
         </article>
 
         <article className="sm-site-panel">
-          <p className="sm-kicker text-[var(--sm-accent)]">Next modules</p>
+          <p className="sm-kicker text-[var(--sm-accent)]">Expand later</p>
           <div className="mt-5 grid gap-3">
             {system.nextBuilds.map((item) => (
               <div className="sm-demo-mini" key={item}>

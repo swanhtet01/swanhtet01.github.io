@@ -24,26 +24,26 @@ type AppNavGroup = {
 
 const appNavGroups: AppNavGroup[] = [
   {
-    label: 'Control',
+    label: 'HQ',
     items: [
-      { label: 'Founder', note: 'Runtime and tenants', short: 'FD', to: '/app/dev-desk' },
-      { label: 'Portal Studio', note: 'Portal blueprints and module packs', short: 'PS', to: '/app/portal-studio' },
-      { label: 'HQ', note: 'Daily review', short: 'HQ', to: '/app/hq' },
+      { label: 'HQ Review', note: 'Founder daily view', short: 'HQ', to: '/app/hq' },
+      { label: 'Control Plane', note: 'Runtime, workspaces, and automations', short: 'CP', to: '/app/control-plane' },
+      { label: 'Data Linkage', note: 'Sources, exports, and visibility', short: 'DT', to: '/app/data' },
     ],
   },
   {
-    label: 'Revenue',
+    label: 'Teams',
     items: [
-      { label: 'Deals', note: 'Pipeline and contact flow', short: 'DL', to: '/app/deals' },
-      { label: 'Workflows', note: 'Queue and approvals', short: 'WF', to: '/app/workflows' },
+      { label: 'Deals', note: 'Revenue workspace', short: 'DL', to: '/app/deals' },
+      { label: 'Workflow Queue', note: 'Tasks, approvals, and exceptions', short: 'WQ', to: '/app/workflows' },
+      { label: 'Portal Studio', note: 'Portal and rollout planning', short: 'PS', to: '/app/portal-studio' },
     ],
   },
   {
     label: 'Runtime',
     items: [
-      { label: 'Data', note: 'Sources, memory, and KPI provenance', short: 'DT', to: '/app/data' },
-      { label: 'Agents', note: 'Loops and control', short: 'AG', to: '/app/agents' },
-      { label: 'Company', note: 'Journal and system log', short: 'CO', to: '/app/company' },
+      { label: 'Agent Ops', note: 'Loops, schedules, and runs', short: 'AG', to: '/app/agents' },
+      { label: 'Company Log', note: 'Decisions and change record', short: 'CL', to: '/app/company' },
     ],
   },
 ] 
@@ -66,8 +66,8 @@ function LoadingState() {
       <div className="mx-auto flex min-h-screen max-w-6xl items-center justify-center px-4">
         <div className="sm-app-loading-card">
           <p className="sm-kicker text-[var(--sm-accent)]">SUPERMEGA.dev</p>
-          <h1 className="mt-3 text-3xl font-bold text-white">Opening internal HQ.</h1>
-          <p className="mt-3 text-sm text-[var(--sm-muted)]">Loading the current workspace and control rail.</p>
+          <h1 className="mt-3 text-3xl font-bold text-white">Opening HQ workspace.</h1>
+          <p className="mt-3 text-sm text-[var(--sm-muted)]">Loading the current team workspace, control plane, and queues.</p>
         </div>
       </div>
     </div>
@@ -80,9 +80,9 @@ function SignInState({ pathname }: { pathname: string }) {
       <div className="mx-auto flex min-h-screen max-w-5xl items-center justify-center px-4 py-16">
         <div className="sm-app-loading-card max-w-2xl">
           <p className="sm-kicker text-[var(--sm-accent)]">Internal HQ</p>
-          <h1 className="mt-3 text-4xl font-bold text-white">Login to open the company console.</h1>
+          <h1 className="mt-3 text-4xl font-bold text-white">Login to open the internal workspace.</h1>
           <p className="mt-4 text-[var(--sm-muted)]">
-            The public site explains the company. The app runs the queues, agents, workspaces, and founder review.
+            This is the private workspace for the founder and team. Use it for daily review, queues, data linkage, and automation control.
           </p>
           <div className="mt-7 flex flex-wrap gap-3">
             <NavLink className="sm-button-primary" to={`/login?next=${encodeURIComponent(pathname)}`}>
@@ -157,11 +157,11 @@ export function AppFrame() {
     <div className="sm-app-shell">
       <aside className="sm-app-rail">
         <div className="sm-app-rail-head">
-          <NavLink className="sm-app-brand" to="/app/dev-desk">
+          <NavLink className="sm-app-brand" to="/app/hq">
             <span className="sm-app-brand-mark">SM</span>
             <div className="min-w-0">
               <p className="sm-app-brand-title">SUPERMEGA.dev</p>
-              <p className="sm-app-brand-subtitle">Internal HQ</p>
+              <p className="sm-app-brand-subtitle">Founder + team workspace</p>
             </div>
           </NavLink>
 
@@ -171,7 +171,7 @@ export function AppFrame() {
               <strong>{session?.workspace_name || 'SuperMega Lab'}</strong>
             </div>
             <div className="sm-app-rail-status-item">
-              <span>Session</span>
+              <span>User</span>
               <strong>{session?.display_name || 'User'}</strong>
             </div>
             <div className="sm-app-rail-status-item">
@@ -204,10 +204,10 @@ export function AppFrame() {
           <div className="sm-app-rail-foot-meta">
             <span className="sm-status-pill">{session?.workspace_slug || 'default-workspace'}</span>
           </div>
-          <div className="grid gap-2">
-            <NavLink className="sm-button-secondary w-full" to="/">
-              Public site
-            </NavLink>
+            <div className="grid gap-2">
+              <NavLink className="sm-button-secondary w-full" to="/">
+                Public site
+              </NavLink>
             <button className="sm-button-accent w-full" onClick={() => void handleLogout()} type="button">
               Logout
             </button>
@@ -219,7 +219,7 @@ export function AppFrame() {
         <header className="sm-app-topbar">
           <div className="sm-app-topbar-inner">
             <div className="sm-app-topbar-context">
-              <p className="sm-kicker text-[var(--sm-accent)]">Internal software shell</p>
+              <p className="sm-kicker text-[var(--sm-accent)]">Internal HQ workspace</p>
               <h1>{currentNav.label}</h1>
               <p>{currentNav.note}</p>
             </div>

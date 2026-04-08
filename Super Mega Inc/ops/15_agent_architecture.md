@@ -1,188 +1,172 @@
 # SuperMega Agent Architecture
 
-This file defines the live agent system for SuperMega outside Codex.
+This is the live AI company architecture.
 
-## Purpose
-
-SuperMega runs as:
-- one public company site
-- one shared operating app
-- one queue-backed worker plane
-- one founder workstation mirror
-
-Codex is part of engineering. It is not the runtime.
+Codex is engineering support. It is not the runtime.
 
 ## Runtime layers
 
 ### 1. Public layer
 
 Purpose:
-- explain what SuperMega builds
-- collect inbound contact
-- show examples and proof
+- explain what SuperMega does
+- collect inbound requests
+- show proof
 
 Surface:
 - `supermega.dev`
-
-Owner:
-- Revenue Pod
 
 ### 2. Control layer
 
 Purpose:
 - hold live company state
-- give humans and agents one shared operating surface
+- give the founder and operators one control plane
 
 Surface:
 - `app.supermega.dev`
 
-Primary surfaces:
-- Sales
-- Actions
-- Approvals
-- Exceptions
-- Director
-- Agent Ops
-
-Owner:
-- Founder Desk + Delivery Pod
+Core modules:
+- `Dev Desk`
+- `HQ`
+- `Deals`
+- `Workflows`
+- `Agents`
+- `Company`
 
 ### 3. Worker layer
 
 Purpose:
-- execute durable jobs
-- drain queues
+- run durable loops
+- process queue-backed jobs
 - retry safely
-- keep loops moving 24/7
 
 Runtime:
 - Cloud Run
-- Cloud Tasks
 - Cloud Scheduler
+- queue processor now, Cloud Tasks next
 - Cloud SQL
 
-Owner:
-- Agent Ops
-
-### 4. Workstation mirror
+### 4. Local mirror
 
 Purpose:
-- keep a local mirror of company state
-- generate local reports
-- support browser-heavy sidecar tasks
-- let the founder inspect the company without opening Codex
+- keep founder-readable and machine-readable outputs outside the app
+- preserve visibility when the browser is closed
 
 Artifacts:
 - `pilot-data/ops/*.json`
 - `Super Mega Inc/ops/*.md`
-- local ops hub
 
-Owner:
-- Founder Desk
+## Functional pods and loops
 
-## Agent teams
+### Founder Control
 
-### Founder Desk
+Loops:
+- `Founder Brief`
+- founder decision review
+- strategic priority setting
 
-Owns:
-- priorities
-- roadmap direction
-- release approval
-- founder brief review
-
-Core loops:
-- Founder Brief
-- Ops Watch
-
-Human:
-- founder
+Writes:
+- brief rows
+- decisions
+- release approval state
 
 ### Revenue Pod
 
-Owns:
-- inbound contact
-- outbound pipeline
-- list cleanup
-- deal hygiene
+Loops:
+- `Revenue Scout`
+- `List Clerk`
+- outreach and deal movement
 
-Core loops:
-- Revenue Scout
-- List Clerk
-- Deals Clerk
-
-Human:
-- founder or sales operator
+Writes:
+- prospects
+- deals
+- follow-up tasks
 
 ### Delivery Pod
 
-Owns:
-- starter pack rollout
-- implementation queue
-- approvals and exceptions
-- client delivery state
+Loops:
+- `Template Clerk`
+- `Task Triage`
+- rollout follow-up
 
-Core loops:
-- Template Clerk
-- Task Triage
-- Delivery Watch
+Writes:
+- implementation tasks
+- approvals
+- exceptions
 
-Human:
-- operator or manager
+### Runtime Pod
 
-### Agent Ops
+Loops:
+- `Ops Watch`
+- queue processing
+- release and health checks
 
-Owns:
-- queue health
-- worker health
-- release safety
-- incident visibility
+Writes:
+- incidents
+- loop status
+- runtime alerts
 
-Core loops:
-- Ops Watch
-- Release Guard
-- Browser Clerk
+### Knowledge Pod
 
-Human:
-- founder or platform operator
+Loops:
+- document and update ingestion
+- template improvement inputs
+- KPI and brief inputs
 
-## Live loops
+Writes:
+- structured records
+- reusable template changes
+- founder brief inputs
 
-Running now:
-- Revenue Scout
-- List Clerk
-- Template Clerk
-- Task Triage
-- Ops Watch
-- Founder Brief
+## Equipped resources
 
-Queued next:
-- Deals Clerk
-- Delivery Watch
-- Release Guard
-- Browser Clerk
+Every pod should have:
+- one app surface
+- one state model
+- one queue
+- one loop set
+- one escalation path
 
-## 24/7 rule
+### Founder Control resources
+- Dev Desk
+- HQ
+- decision log
+- release and tenant view
 
-If a loop matters, it must run through:
-- Cloud Scheduler trigger
-- Cloud Tasks queue
-- Cloud Run execution
-- app-visible status
-- local report output
+### Revenue Pod resources
+- Deals
+- contact intake
+- search/list cleanup tools
+- Gmail draft flow
 
-If it only runs from a shell by hand, it is not yet operational.
+### Delivery Pod resources
+- workflow queue
+- approvals
+- exceptions
+- template provisioning
+
+### Runtime Pod resources
+- Agents surface
+- scheduler status
+- queue processor
+- health checks
+
+### Knowledge Pod resources
+- documents
+- notes and updates
+- brief inputs
+- template library
 
 ## Output contract
 
-Every agent loop must produce one or more of:
-- lead
+Every loop must produce one or more of:
 - deal
 - task
 - approval
 - exception
-- founder brief
+- decision
+- brief
 - incident
-- release check
 
 Free-form text alone is not enough.
 
@@ -192,38 +176,20 @@ Browser automation is sidecar-only.
 
 Use it for:
 - screenshots
-- preview capture
-- browser-only internal flows
-- regression checks where no API exists
+- preview verification
+- browser-only admin flows
+- regression checks where there is no API
 
 Do not use it as:
-- the primary system of record
-- the main worker runtime
-- the only way to understand company state
+- the system of record
+- the main company runtime
+- the only path for critical work
 
-## Manual vs automatic
+## Operational standard
 
-Automatic now:
-- scheduled worker runs
-- queue draining
-- local founder/operator/agent report generation
-- public contact capture
-- live app health and smoke checks
-
-Still manual:
-- product direction changes
-- release approval
-- client pricing and proposals
-- final rollout signoff
-- incident judgment when business context is unclear
-
-## Architecture standard
-
-The company is healthy when:
-- public proof is clear
-- app state is live
-- worker loops are draining
-- local ops files are current
-- founder can see what matters in under five minutes
-
-If one of those is missing, the architecture is incomplete.
+The architecture is healthy when:
+- the founder can understand company state in under five minutes
+- pods hand off through durable records
+- loops continue without Codex
+- runtime failures are visible
+- tenant identity and auth mode are visible in-app

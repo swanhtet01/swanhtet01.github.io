@@ -1,132 +1,138 @@
 # AI Company Execution Model
 
-This is the practical execution model for SuperMega.
+This is the execution model for SuperMega as an AI-native software company.
 
-## The model
+## Core rule
 
-SuperMega is not a chat-first company.
+The company runs through pods, queues, and loops.
 
-It should run on:
-- one public site
-- one internal app
-- one worker runtime
-- one local founder mirror
-- one release workflow
+Not through:
+- loose chat
+- disconnected notes
+- manual shell rituals
+- one giant agent
 
-## Where work happens
+## Surfaces
 
 ### Public site
 - `supermega.dev`
-- shows the company
-- collects contact
-- proves product shape
+- explains the company
+- captures inbound
+- shows proof
 
-### Internal app
+### Internal control plane
 - `app.supermega.dev`
-- this should become the main control plane
-- holds live operating state
+- main operating surface
+- founder and pod control
 
 ### Worker runtime
-- Cloud Scheduler
-- Cloud Tasks
-- Cloud Run workers
-- this keeps loops running 24/7
+- scheduled and queued execution
+- keeps loops moving 24/7
 
-### Local founder mirror
-- `C:\Users\swann\OneDrive - BDA\Super Mega Inc\codex_hq`
-- this keeps a durable local copy of the human-facing outputs
+### Local mirror
+- founder-readable outputs outside the browser
+- machine-readable ops snapshots
 
-## What the app can do now
+## Company motion
 
-The app can already do:
-- show director/founder state
-- show agent/loop state
-- show sales state
-- hold queue-backed operational state
-- reflect live worker activity
+The company should cycle through five steps:
 
-That makes it the right place for daily operating visibility.
+1. Capture
+- inbound requests
+- research
+- lists
+- updates
+- documents
 
-## What the app still does not replace
+2. Decide
+- founder sets direction
+- pod chooses next action
+- approvals gate risky work
 
-The app does not yet fully replace:
-- engineering work
-- release hardening
-- deep incident debugging
-- large product changes
-- schema or infrastructure changes
+3. Execute
+- loops run
+- queues drain
+- operators intervene only where needed
 
-That is still Codex plus the repo workflow.
+4. Verify
+- runtime health
+- release health
+- queue freshness
+- customer-visible output
 
-## Team model
+5. Learn
+- improve templates
+- update offers
+- update guardrails
 
-### Founder Desk
-- priorities
-- approvals
-- final judgment
+## Pod execution model
+
+### Founder Control
+- decides direction
+- approves releases and promises
+- reviews the brief
 
 ### Revenue Pod
-- contact
-- pipeline
-- follow-up
+- turns inbound and search into deals
+- keeps next steps moving
 
 ### Delivery Pod
-- rollout
-- implementation
-- blockers
+- provisions and maintains client systems
+- keeps blockers visible
 
-### Agent Ops
-- worker health
-- scheduler health
-- queue health
-- release safety
+### Runtime Pod
+- keeps the company stack healthy
+- detects and recovers drift
 
-## Agent rule
+### Knowledge Pod
+- turns messy inputs into reusable operating state
 
-Agents should create durable state:
-- leads
+## What agents must do
+
+Agents must create durable state:
 - deals
 - tasks
 - approvals
-- incidents
+- exceptions
+- decisions
 - briefs
+- incidents
 
-Agents should not create the company as loose chat output.
+If the output cannot be acted on in the app, it is incomplete.
 
-## Human rule
+## What humans still own
 
 Humans still own:
 - product direction
 - pricing
 - customer promises
 - release approval
-- ambiguous business decisions
+- ambiguous business judgment
 
-## Anywhere access
+## Phone vs desktop
 
 ### Phone
 Use for:
-- quick status
+- brief review
 - approvals
-- queue check
-- founder brief
+- queue health
+- incident awareness
 
 ### Desktop
 Use for:
-- full operating review
-- BDA HQ review
+- founder control
+- rollout review
 - release review
-- product and delivery decisions
+- product and tenant decisions
 
-## Replacement path
+## Codex replacement boundary
 
-To replace Codex as the control plane:
-1. keep founder visibility in the app
-2. keep local visibility in BDA HQ
-3. move preview/release checks to a self-hosted runner
-4. move browser-only tasks to a browser worker
-5. leave Codex only for engineering and exceptional investigation
+The app should replace chat as the control plane.
 
-## Blunt rule
+Codex should remain for:
+- engineering changes
+- infrastructure restructuring
+- one-off debugging
+- deep investigations
 
-If the founder needs chat to know whether the company is healthy, the execution model is not finished yet.
+If the founder needs Codex to know whether the company is healthy, the model is still incomplete.
