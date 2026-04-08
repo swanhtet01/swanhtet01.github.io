@@ -99,9 +99,9 @@ from mark1_pilot.enterprise_store import (  # noqa: E402
     get_session as enterprise_get_session,
     invite_workspace_member as enterprise_invite_workspace_member,
     list_agent_runs as enterprise_list_agent_runs,
+    list_leads as enterprise_list_leads,
     list_lead_activities as enterprise_list_lead_activities,
     list_lead_hunt_profiles as enterprise_list_lead_hunt_profiles,
-    list_leads as enterprise_list_leads,
     list_user_workspaces as enterprise_list_user_workspaces,
     list_workspace_members as enterprise_list_workspace_members,
     list_workspace_tasks as enterprise_list_workspace_tasks,
@@ -111,6 +111,7 @@ from mark1_pilot.enterprise_store import (  # noqa: E402
     revoke_session as enterprise_revoke_session,
     save_lead_hunt_profile as enterprise_save_lead_hunt_profile,
     record_lead_hunt_run as enterprise_record_lead_hunt_run,
+    sync_workspace_graph as enterprise_sync_workspace_graph,
     start_agent_run as enterprise_start_agent_run,
     update_lead as enterprise_update_lead,
     update_workspace_task as enterprise_update_workspace_task,
@@ -2338,6 +2339,7 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
 
         workspaces = enterprise_list_user_workspaces(enterprise_db_url, username=username)
         team_members = enterprise_list_workspace_members(enterprise_db_url, workspace_id=workspace_id)
+        workspace_leads = enterprise_list_leads(enterprise_db_url, workspace_id=workspace_id, limit=250)
         workspace_tasks = enterprise_list_workspace_tasks(enterprise_db_url, workspace_id=workspace_id, limit=250)
         agent_runs = enterprise_list_agent_runs(enterprise_db_url, workspace_id=workspace_id, limit=12)
         lead_summary = enterprise_load_lead_summary(enterprise_db_url, workspace_id=workspace_id)
@@ -2434,6 +2436,40 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
         publication_status = "active" if workspace_export_link or founder_brief_link or published_template_count else "scaffolded"
         graph_status = str(graph_scaffold.get("status", "")).strip() or "scaffolded"
         kpi_status = "active" if metric_count or founder_checked_at else str(kpi_scaffold.get("status", "")).strip() or "scaffolded"
+
+        graph_summary = enterprise_sync_workspace_graph(
+            enterprise_db_url,
+            workspace_id=workspace_id,
+            workspace_slug=workspace_slug,
+            workspace_name=workspace_name,
+            team_members=team_members,
+            leads=workspace_leads,
+            tasks=workspace_tasks,
+            agent_runs=agent_runs,
+            drive_context={
+                "status": drive_status,
+                "configured": drive_configured,
+                "folder_id": str(drive_probe.folder_id or "").strip(),
+                "workspace_export_link": workspace_export_link,
+                "founder_brief_link": founder_brief_link,
+            },
+            gmail_context={
+                "status": gmail_status,
+                "compose_url": gmail_compose_url,
+                "client_configured": gmail_client_configured,
+                "token_configured": gmail_token_configured,
+            },
+            state_counts={
+                "approvals": approval_count,
+                "actions": action_count,
+                "metrics": metric_count,
+                "receiving": receiving_count,
+                "inventory": inventory_count,
+                "contacts": contact_count,
+                "decisions": decision_count,
+            },
+        )
+        graph_status = str(graph_summary.get("status", graph_status)).strip() or graph_status
 
         connectors = [
             {
@@ -2568,16 +2604,16 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             },
             {
                 "key": "platform-graph",
-                "label": "Connector scaffold",
+                "label": "Platform graph",
                 "kind": "platform-graph",
                 "status": graph_status,
                 "evidence": (
-                    f"{len(graph_scaffold.get('entities', [])) if isinstance(graph_scaffold.get('entities'), list) else 0} entity types"
+                    f"{int(graph_summary.get('entity_count', 0) or 0)} entities / {int(graph_summary.get('edge_count', 0) or 0)} edges"
                     f" / {len(role_views)} role views"
                 ),
-                "updated_at": founder_checked_at or last_agent_run_at,
+                "updated_at": str(graph_summary.get("last_sync_at", "")).strip() or founder_checked_at or last_agent_run_at,
                 "connected_surfaces": ["Data page", "Tenant architecture", "Role views"],
-                "next_step": "Turn provenance from scaffold to default annotation on role views and KPI tiles.",
+                "next_step": "Keep graph entities tied to source references so future Drive and Gmail syncs reuse the same IDs.",
             },
         ]
 
@@ -2725,12 +2761,15 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
                 "manual_surface_count": manual_surface_count,
                 "agent_run_count": agent_run_count,
                 "unresolved_gap_count": unresolved_gap_count,
+                "graph_entity_count": int(graph_summary.get("entity_count", 0) or 0),
+                "graph_edge_count": int(graph_summary.get("edge_count", 0) or 0),
                 "last_sync_at": last_sync_at,
             },
             "connectors": connectors,
             "memory": memory,
             "linkage": linkage,
             "kpi_surfaces": kpi_surfaces,
+            "graph": graph_summary,
             "next_steps": next_steps[:4],
         }
 

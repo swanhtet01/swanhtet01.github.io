@@ -40,18 +40,6 @@ function statusClassName(value?: string) {
   return 'rounded-full border border-white/10 bg-white/6 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--sm-muted)]'
 }
 
-const graphEntities = ['Company', 'Contact', 'Deal', 'Task', 'Approval', 'Document', 'KPI', 'Decision', 'Shipment', 'Receiving issue']
-const graphEdges = [
-  'Company -> Contact',
-  'Contact -> Deal',
-  'Deal -> Task',
-  'Document -> Approval',
-  'Approval -> Decision',
-  'KPI -> Owner',
-  'KPI -> Founder Brief',
-  'Shipment -> Receiving issue',
-  'Receiving issue -> Task',
-]
 const graphBuildOrder = [
   'Ingest Drive files, Docs, and Sheets as source-linked records.',
   'Ingest Gmail threads and classify them into leads, tasks, approvals, or incidents.',
@@ -341,7 +329,9 @@ export function DataVisibilityPage() {
                   <p className="sm-kicker text-[var(--sm-accent)]">Knowledge graph</p>
                   <h2 className="mt-2 text-2xl font-bold text-white">Drive and Gmail should become shared company memory.</h2>
                 </div>
-                <span className="sm-status-pill">Postgres first</span>
+                <span className="sm-status-pill">
+                  {(payload.graph?.entity_count ?? 0).toString()} entities / {(payload.graph?.edge_count ?? 0).toString()} edges
+                </span>
               </div>
 
               <p className="mt-4 text-sm leading-relaxed text-[var(--sm-muted)]">
@@ -352,22 +342,42 @@ export function DataVisibilityPage() {
                 <div className="sm-proof-card">
                   <p className="sm-kicker text-[var(--sm-accent)]">Entities</p>
                   <div className="mt-4 flex flex-wrap gap-2">
-                    {graphEntities.map((item) => (
-                      <span className="sm-status-pill" key={item}>
-                        {item}
+                    {(payload.graph?.entity_types?.length ? payload.graph.entity_types : []).map((item) => (
+                      <span className="sm-status-pill" key={item.type}>
+                        {item.type.replace(/[_-]+/g, ' ')} · {item.count}
                       </span>
                     ))}
+                    {!payload.graph?.entity_types?.length ? <span className="text-sm text-[var(--sm-muted)]">No graph entities have been written yet.</span> : null}
                   </div>
                 </div>
                 <div className="sm-proof-card">
                   <p className="sm-kicker text-[var(--sm-accent-alt)]">Edges</p>
                   <div className="mt-4 grid gap-2">
-                    {graphEdges.map((item) => (
-                      <div className="sm-chip text-[var(--sm-muted)]" key={item}>
-                        {item}
+                    {(payload.graph?.relation_types?.length ? payload.graph.relation_types : []).map((item) => (
+                      <div className="sm-chip text-[var(--sm-muted)]" key={item.type}>
+                        {item.type.replace(/[_-]+/g, ' ')} · {item.count}
                       </div>
                     ))}
+                    {!payload.graph?.relation_types?.length ? <div className="text-sm text-[var(--sm-muted)]">No graph relationships have been written yet.</div> : null}
                   </div>
+                </div>
+              </div>
+
+              <div className="mt-5 sm-proof-card">
+                <p className="sm-kicker text-[var(--sm-accent)]">Recent entities</p>
+                <div className="mt-4 grid gap-2">
+                  {(payload.graph?.recent_entities ?? []).slice(0, 6).map((item) => (
+                    <div className="flex items-center justify-between gap-3 rounded-2xl border border-white/8 bg-white/4 px-4 py-3" key={item.entity_id}>
+                      <div>
+                        <p className="text-sm font-semibold text-white">{item.label}</p>
+                        <p className="mt-1 text-xs uppercase tracking-[0.16em] text-[var(--sm-muted)]">
+                          {String(item.entity_type || '').replace(/[_-]+/g, ' ')} · {String(item.source_system || 'workspace').replace(/[_-]+/g, ' ')}
+                        </p>
+                      </div>
+                      <span className={statusClassName(item.status)}>{formatStatus(item.status)}</span>
+                    </div>
+                  ))}
+                  {!(payload.graph?.recent_entities ?? []).length ? <div className="text-sm text-[var(--sm-muted)]">Recent graph entities will appear here once the workspace sync writes them.</div> : null}
                 </div>
               </div>
             </article>

@@ -671,6 +671,31 @@ export type DataVisibilityKpiSurface = {
   next_step?: string
 }
 
+export type DataVisibilityGraphBucket = {
+  type: string
+  count: number
+}
+
+export type DataVisibilityGraphEntity = {
+  entity_id: string
+  entity_type: string
+  label: string
+  status: string
+  source_system?: string
+  source_ref?: string
+  updated_at?: string
+}
+
+export type DataVisibilityGraphSummary = {
+  status?: string
+  entity_count?: number
+  edge_count?: number
+  entity_types?: DataVisibilityGraphBucket[]
+  relation_types?: DataVisibilityGraphBucket[]
+  recent_entities?: DataVisibilityGraphEntity[]
+  last_sync_at?: string
+}
+
 export type DataVisibilityPayload = {
   status?: string
   statement?: string
@@ -696,12 +721,15 @@ export type DataVisibilityPayload = {
     manual_surface_count?: number
     agent_run_count?: number
     unresolved_gap_count?: number
+    graph_entity_count?: number
+    graph_edge_count?: number
     last_sync_at?: string
   }
   connectors?: DataVisibilityConnector[]
   memory?: DataVisibilityMemoryStore[]
   linkage?: DataVisibilityLinkage[]
   kpi_surfaces?: DataVisibilityKpiSurface[]
+  graph?: DataVisibilityGraphSummary
   next_steps?: string[]
 }
 

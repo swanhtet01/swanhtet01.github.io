@@ -207,6 +207,37 @@ class EnterpriseAgentRun(SQLModel, table=True):
     updated_at: str
 
 
+class EnterpriseGraphEntity(SQLModel, table=True):
+    __tablename__ = "enterprise_graph_entities"
+
+    entity_id: str = Field(primary_key=True)
+    workspace_id: str = Field(index=True, foreign_key="enterprise_workspaces.workspace_id")
+    entity_type: str = Field(index=True)
+    label: str
+    status: str = Field(default="active", index=True)
+    source_system: str = ""
+    source_ref: str = Field(default="", index=True)
+    metadata_json: str = Field(default="{}", sa_column=Column(Text, nullable=False))
+    created_at: str
+    updated_at: str
+    last_seen_at: str
+
+
+class EnterpriseGraphEdge(SQLModel, table=True):
+    __tablename__ = "enterprise_graph_edges"
+
+    edge_id: str = Field(primary_key=True)
+    workspace_id: str = Field(index=True, foreign_key="enterprise_workspaces.workspace_id")
+    from_entity_id: str = Field(index=True)
+    to_entity_id: str = Field(index=True)
+    relation_type: str = Field(index=True)
+    status: str = Field(default="active", index=True)
+    metadata_json: str = Field(default="{}", sa_column=Column(Text, nullable=False))
+    created_at: str
+    updated_at: str
+    last_seen_at: str
+
+
 def _json_list(value: str) -> list[str]:
     try:
         payload = json.loads(value or "[]")
@@ -272,6 +303,155 @@ def _agent_run_to_dict(row: EnterpriseAgentRun) -> dict[str, Any]:
         "created_at": row.created_at,
         "updated_at": row.updated_at,
     }
+
+
+def _graph_entity_to_dict(row: EnterpriseGraphEntity) -> dict[str, Any]:
+    return {
+        "entity_id": row.entity_id,
+        "workspace_id": row.workspace_id,
+        "entity_type": row.entity_type,
+        "label": row.label,
+        "status": row.status,
+        "source_system": row.source_system,
+        "source_ref": row.source_ref,
+        "metadata": _json_object(row.metadata_json),
+        "created_at": row.created_at,
+        "updated_at": row.updated_at,
+        "last_seen_at": row.last_seen_at,
+    }
+
+
+def _graph_edge_to_dict(row: EnterpriseGraphEdge) -> dict[str, Any]:
+    return {
+        "edge_id": row.edge_id,
+        "workspace_id": row.workspace_id,
+        "from_entity_id": row.from_entity_id,
+        "to_entity_id": row.to_entity_id,
+        "relation_type": row.relation_type,
+        "status": row.status,
+        "metadata": _json_object(row.metadata_json),
+        "created_at": row.created_at,
+        "updated_at": row.updated_at,
+        "last_seen_at": row.last_seen_at,
+    }
+
+
+def _graph_entity_seed(
+    workspace_id: str,
+    entity_type: str,
+    source_system: str,
+    source_ref: str,
+    label: str,
+) -> str:
+    return "|".join(
+        [
+            str(workspace_id or "").strip(),
+            str(entity_type or "").strip().lower(),
+            str(source_system or "").strip().lower(),
+            str(source_ref or "").strip().lower(),
+            str(label or "").strip().lower(),
+        ]
+    )
+
+
+def _upsert_graph_entity(
+    session: Session,
+    *,
+    workspace_id: str,
+    entity_type: str,
+    label: str,
+    source_system: str = "",
+    source_ref: str = "",
+    status: str = "active",
+    metadata: dict[str, Any] | None = None,
+) -> EnterpriseGraphEntity:
+    now = _now()
+    entity_id = _stable_key(
+        "GE",
+        _graph_entity_seed(
+            workspace_id,
+            entity_type,
+            source_system,
+            source_ref,
+            label,
+        ),
+    )
+    row = session.get(EnterpriseGraphEntity, entity_id)
+    if not row:
+        row = EnterpriseGraphEntity(
+            entity_id=entity_id,
+            workspace_id=str(workspace_id),
+            entity_type=str(entity_type or "").strip() or "unknown",
+            label=str(label or "").strip() or "Untitled",
+            status=str(status or "").strip() or "active",
+            source_system=str(source_system or "").strip(),
+            source_ref=str(source_ref or "").strip(),
+            metadata_json=json.dumps(metadata or {}, ensure_ascii=False),
+            created_at=now,
+            updated_at=now,
+            last_seen_at=now,
+        )
+    else:
+        row.workspace_id = str(workspace_id)
+        row.entity_type = str(entity_type or row.entity_type or "").strip() or "unknown"
+        row.label = str(label or row.label or "").strip() or "Untitled"
+        row.status = str(status or row.status or "").strip() or "active"
+        row.source_system = str(source_system or row.source_system or "").strip()
+        row.source_ref = str(source_ref or row.source_ref or "").strip()
+        row.metadata_json = json.dumps(metadata or {}, ensure_ascii=False)
+        row.updated_at = now
+        row.last_seen_at = now
+    session.add(row)
+    return row
+
+
+def _upsert_graph_edge(
+    session: Session,
+    *,
+    workspace_id: str,
+    from_entity_id: str,
+    to_entity_id: str,
+    relation_type: str,
+    status: str = "active",
+    metadata: dict[str, Any] | None = None,
+) -> EnterpriseGraphEdge:
+    now = _now()
+    edge_id = _stable_key(
+        "GEDGE",
+        "|".join(
+            [
+                str(workspace_id or "").strip(),
+                str(from_entity_id or "").strip(),
+                str(relation_type or "").strip().lower(),
+                str(to_entity_id or "").strip(),
+            ]
+        ),
+    )
+    row = session.get(EnterpriseGraphEdge, edge_id)
+    if not row:
+        row = EnterpriseGraphEdge(
+            edge_id=edge_id,
+            workspace_id=str(workspace_id),
+            from_entity_id=str(from_entity_id or "").strip(),
+            to_entity_id=str(to_entity_id or "").strip(),
+            relation_type=str(relation_type or "").strip() or "related_to",
+            status=str(status or "").strip() or "active",
+            metadata_json=json.dumps(metadata or {}, ensure_ascii=False),
+            created_at=now,
+            updated_at=now,
+            last_seen_at=now,
+        )
+    else:
+        row.workspace_id = str(workspace_id)
+        row.from_entity_id = str(from_entity_id or row.from_entity_id or "").strip()
+        row.to_entity_id = str(to_entity_id or row.to_entity_id or "").strip()
+        row.relation_type = str(relation_type or row.relation_type or "").strip() or "related_to"
+        row.status = str(status or row.status or "").strip() or "active"
+        row.metadata_json = json.dumps(metadata or {}, ensure_ascii=False)
+        row.updated_at = now
+        row.last_seen_at = now
+    session.add(row)
+    return row
 
 
 def resolve_database_url(output_dir: Path) -> str:
@@ -810,6 +990,352 @@ def load_lead_summary(database_url: str, *, workspace_id: str) -> dict[str, Any]
         "by_status": by_status,
         "by_pack": by_pack,
     }
+
+
+def list_graph_entities(
+    database_url: str,
+    *,
+    workspace_id: str,
+    entity_type: str | None = None,
+    limit: int = 250,
+) -> list[dict[str, Any]]:
+    ensure_schema(database_url)
+    engine = get_engine(database_url)
+    statement = select(EnterpriseGraphEntity).where(EnterpriseGraphEntity.workspace_id == str(workspace_id))
+    if entity_type:
+        statement = statement.where(EnterpriseGraphEntity.entity_type == str(entity_type))
+    statement = statement.order_by(EnterpriseGraphEntity.updated_at.desc(), EnterpriseGraphEntity.created_at.desc()).limit(
+        max(1, int(limit))
+    )
+    with Session(engine) as session:
+        rows = session.exec(statement).all()
+    return [_graph_entity_to_dict(row) for row in rows]
+
+
+def list_graph_edges(
+    database_url: str,
+    *,
+    workspace_id: str,
+    relation_type: str | None = None,
+    limit: int = 500,
+) -> list[dict[str, Any]]:
+    ensure_schema(database_url)
+    engine = get_engine(database_url)
+    statement = select(EnterpriseGraphEdge).where(EnterpriseGraphEdge.workspace_id == str(workspace_id))
+    if relation_type:
+        statement = statement.where(EnterpriseGraphEdge.relation_type == str(relation_type))
+    statement = statement.order_by(EnterpriseGraphEdge.updated_at.desc(), EnterpriseGraphEdge.created_at.desc()).limit(
+        max(1, int(limit))
+    )
+    with Session(engine) as session:
+        rows = session.exec(statement).all()
+    return [_graph_edge_to_dict(row) for row in rows]
+
+
+def load_graph_summary(
+    database_url: str,
+    *,
+    workspace_id: str,
+    recent_limit: int = 8,
+) -> dict[str, Any]:
+    entities = list_graph_entities(database_url, workspace_id=workspace_id, limit=1000)
+    edges = list_graph_edges(database_url, workspace_id=workspace_id, limit=2000)
+    by_type: dict[str, int] = {}
+    by_relation: dict[str, int] = {}
+    for row in entities:
+        entity_type = str(row.get("entity_type", "")).strip() or "unknown"
+        by_type[entity_type] = by_type.get(entity_type, 0) + 1
+    for row in edges:
+        relation_type = str(row.get("relation_type", "")).strip() or "related_to"
+        by_relation[relation_type] = by_relation.get(relation_type, 0) + 1
+    last_sync_at = ""
+    if entities:
+        last_sync_at = str(entities[0].get("updated_at", "")).strip()
+    elif edges:
+        last_sync_at = str(edges[0].get("updated_at", "")).strip()
+    return {
+        "status": "active" if entities or edges else "scaffolded",
+        "entity_count": len(entities),
+        "edge_count": len(edges),
+        "entity_types": [
+            {"type": key, "count": value}
+            for key, value in sorted(by_type.items(), key=lambda item: (-item[1], item[0]))
+        ],
+        "relation_types": [
+            {"type": key, "count": value}
+            for key, value in sorted(by_relation.items(), key=lambda item: (-item[1], item[0]))
+        ],
+        "recent_entities": entities[: max(1, int(recent_limit or 8))],
+        "recent_edges": edges[: max(1, int(recent_limit or 8))],
+        "last_sync_at": last_sync_at,
+    }
+
+
+def sync_workspace_graph(
+    database_url: str,
+    *,
+    workspace_id: str,
+    workspace_slug: str = "",
+    workspace_name: str = "",
+    team_members: list[dict[str, Any]] | None = None,
+    leads: list[dict[str, Any]] | None = None,
+    tasks: list[dict[str, Any]] | None = None,
+    agent_runs: list[dict[str, Any]] | None = None,
+    drive_context: dict[str, Any] | None = None,
+    gmail_context: dict[str, Any] | None = None,
+    state_counts: dict[str, int] | None = None,
+) -> dict[str, Any]:
+    ensure_schema(database_url)
+    engine = get_engine(database_url)
+    normalized_workspace_id = str(workspace_id or "").strip()
+    if not normalized_workspace_id:
+        return load_graph_summary(database_url, workspace_id=normalized_workspace_id)
+
+    now = _now()
+    drive_context = drive_context or {}
+    gmail_context = gmail_context or {}
+    state_counts = state_counts or {}
+    with Session(engine) as session:
+        workspace_entity = _upsert_graph_entity(
+            session,
+            workspace_id=normalized_workspace_id,
+            entity_type="workspace",
+            label=str(workspace_name or workspace_slug or "Workspace").strip() or "Workspace",
+            source_system="platform",
+            source_ref=str(workspace_slug or normalized_workspace_id).strip() or normalized_workspace_id,
+            metadata={
+                "workspace_slug": str(workspace_slug or "").strip(),
+                "workspace_name": str(workspace_name or "").strip(),
+                "synced_at": now,
+            },
+        )
+
+        lead_entity_ids: dict[str, str] = {}
+        for row in team_members or []:
+            email = str(row.get("email", row.get("username", ""))).strip().lower()
+            label = str(row.get("display_name", "")).strip() or email or "Workspace member"
+            member_entity = _upsert_graph_entity(
+                session,
+                workspace_id=normalized_workspace_id,
+                entity_type="member",
+                label=label,
+                source_system="workspace",
+                source_ref=email or str(row.get("membership_id", "")).strip(),
+                metadata={
+                    "email": email,
+                    "role": str(row.get("role", "")).strip(),
+                    "status": str(row.get("status", "")).strip(),
+                },
+            )
+            _upsert_graph_edge(
+                session,
+                workspace_id=normalized_workspace_id,
+                from_entity_id=workspace_entity.entity_id,
+                to_entity_id=member_entity.entity_id,
+                relation_type="has_member",
+                metadata={"role": str(row.get("role", "")).strip()},
+            )
+
+        for row in leads or []:
+            lead_id = str(row.get("lead_id", "")).strip()
+            label = str(row.get("company_name", "")).strip() or lead_id or "Lead"
+            lead_entity = _upsert_graph_entity(
+                session,
+                workspace_id=normalized_workspace_id,
+                entity_type="lead",
+                label=label,
+                source_system=str(row.get("source", "")).strip() or "workspace",
+                source_ref=lead_id or label,
+                metadata={
+                    "stage": str(row.get("stage", "")).strip(),
+                    "status": str(row.get("status", "")).strip(),
+                    "service_pack": str(row.get("service_pack", "")).strip(),
+                    "contact_email": str(row.get("contact_email", "")).strip(),
+                    "website": str(row.get("website", "")).strip(),
+                    "score": int(row.get("score", 0) or 0),
+                },
+            )
+            lead_entity_ids[lead_id] = lead_entity.entity_id
+            _upsert_graph_edge(
+                session,
+                workspace_id=normalized_workspace_id,
+                from_entity_id=workspace_entity.entity_id,
+                to_entity_id=lead_entity.entity_id,
+                relation_type="tracks_lead",
+                metadata={
+                    "stage": str(row.get("stage", "")).strip(),
+                    "status": str(row.get("status", "")).strip(),
+                },
+            )
+
+        for row in tasks or []:
+            task_id = str(row.get("task_id", "")).strip()
+            label = str(row.get("title", "")).strip() or task_id or "Task"
+            task_entity = _upsert_graph_entity(
+                session,
+                workspace_id=normalized_workspace_id,
+                entity_type="task",
+                label=label,
+                source_system="workspace",
+                source_ref=task_id or label,
+                metadata={
+                    "status": str(row.get("status", "")).strip(),
+                    "owner": str(row.get("owner", "")).strip(),
+                    "priority": str(row.get("priority", "")).strip(),
+                    "due": str(row.get("due", "")).strip(),
+                },
+            )
+            _upsert_graph_edge(
+                session,
+                workspace_id=normalized_workspace_id,
+                from_entity_id=workspace_entity.entity_id,
+                to_entity_id=task_entity.entity_id,
+                relation_type="tracks_task",
+                metadata={"status": str(row.get("status", "")).strip()},
+            )
+            lead_id = str(row.get("lead_id", "")).strip()
+            if lead_id and lead_id in lead_entity_ids:
+                _upsert_graph_edge(
+                    session,
+                    workspace_id=normalized_workspace_id,
+                    from_entity_id=lead_entity_ids[lead_id],
+                    to_entity_id=task_entity.entity_id,
+                    relation_type="next_step",
+                    metadata={"template": str(row.get("template", "")).strip()},
+                )
+
+        for row in (agent_runs or [])[:50]:
+            run_id = str(row.get("run_id", "")).strip()
+            job_type = str(row.get("job_type", "")).strip() or "agent-run"
+            run_entity = _upsert_graph_entity(
+                session,
+                workspace_id=normalized_workspace_id,
+                entity_type="agent_run",
+                label=job_type.replace("-", " "),
+                source_system="runtime",
+                source_ref=run_id or job_type,
+                metadata={
+                    "status": str(row.get("status", "")).strip(),
+                    "source": str(row.get("source", "")).strip(),
+                    "completed_at": str(row.get("completed_at", row.get("finished_at", ""))).strip(),
+                },
+            )
+            _upsert_graph_edge(
+                session,
+                workspace_id=normalized_workspace_id,
+                from_entity_id=workspace_entity.entity_id,
+                to_entity_id=run_entity.entity_id,
+                relation_type="triggered_run",
+                metadata={"job_type": job_type},
+            )
+
+        drive_entity = _upsert_graph_entity(
+            session,
+            workspace_id=normalized_workspace_id,
+            entity_type="connector",
+            label="Google Drive",
+            source_system="google_drive",
+            source_ref=str(drive_context.get("folder_id", "")).strip() or "google-drive",
+            status=str(drive_context.get("status", "")).strip() or "scaffolded",
+            metadata={
+                "folder_id": str(drive_context.get("folder_id", "")).strip(),
+                "workspace_export_link": str(drive_context.get("workspace_export_link", "")).strip(),
+                "founder_brief_link": str(drive_context.get("founder_brief_link", "")).strip(),
+                "configured": bool(drive_context.get("configured", False)),
+            },
+        )
+        _upsert_graph_edge(
+            session,
+            workspace_id=normalized_workspace_id,
+            from_entity_id=workspace_entity.entity_id,
+            to_entity_id=drive_entity.entity_id,
+            relation_type="uses_source",
+        )
+
+        gmail_entity = _upsert_graph_entity(
+            session,
+            workspace_id=normalized_workspace_id,
+            entity_type="connector",
+            label="Gmail",
+            source_system="gmail",
+            source_ref="gmail",
+            status=str(gmail_context.get("status", "")).strip() or "scaffolded",
+            metadata={
+                "compose_url": str(gmail_context.get("compose_url", "")).strip(),
+                "client_configured": bool(gmail_context.get("client_configured", False)),
+                "token_configured": bool(gmail_context.get("token_configured", False)),
+            },
+        )
+        _upsert_graph_edge(
+            session,
+            workspace_id=normalized_workspace_id,
+            from_entity_id=workspace_entity.entity_id,
+            to_entity_id=gmail_entity.entity_id,
+            relation_type="uses_source",
+        )
+
+        for artifact_type, artifact_label, artifact_link in [
+            ("document", "Workspace export", str(drive_context.get("workspace_export_link", "")).strip()),
+            ("document", "Founder brief", str(drive_context.get("founder_brief_link", "")).strip()),
+        ]:
+            if not artifact_link:
+                continue
+            artifact_entity = _upsert_graph_entity(
+                session,
+                workspace_id=normalized_workspace_id,
+                entity_type=artifact_type,
+                label=artifact_label,
+                source_system="google_drive",
+                source_ref=artifact_link,
+                metadata={"link": artifact_link},
+            )
+            _upsert_graph_edge(
+                session,
+                workspace_id=normalized_workspace_id,
+                from_entity_id=drive_entity.entity_id,
+                to_entity_id=artifact_entity.entity_id,
+                relation_type="publishes_document",
+            )
+            _upsert_graph_edge(
+                session,
+                workspace_id=normalized_workspace_id,
+                from_entity_id=workspace_entity.entity_id,
+                to_entity_id=artifact_entity.entity_id,
+                relation_type="has_artifact",
+            )
+
+        for lane_key, lane_label in [
+            ("approvals", "Approvals"),
+            ("actions", "Action queue"),
+            ("metrics", "KPI lane"),
+            ("receiving", "Receiving lane"),
+            ("inventory", "Inventory lane"),
+            ("contacts", "Inbound contacts"),
+            ("decisions", "Decision journal"),
+        ]:
+            count = int(state_counts.get(lane_key, 0) or 0)
+            if count <= 0:
+                continue
+            lane_entity = _upsert_graph_entity(
+                session,
+                workspace_id=normalized_workspace_id,
+                entity_type="state_lane",
+                label=lane_label,
+                source_system="state",
+                source_ref=lane_key,
+                metadata={"count": count},
+            )
+            _upsert_graph_edge(
+                session,
+                workspace_id=normalized_workspace_id,
+                from_entity_id=workspace_entity.entity_id,
+                to_entity_id=lane_entity.entity_id,
+                relation_type="tracks_lane",
+                metadata={"count": count},
+            )
+
+        session.commit()
+    return load_graph_summary(database_url, workspace_id=normalized_workspace_id)
 
 
 def list_workspace_tasks(
