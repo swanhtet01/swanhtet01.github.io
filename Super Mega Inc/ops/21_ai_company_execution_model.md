@@ -4,7 +4,7 @@ This is the execution model for SuperMega as an AI-native software company.
 
 ## Core rule
 
-The company runs through pods, queues, and loops.
+The company runs through pods, queues, loops, and one control layer.
 
 Not through:
 - loose chat
@@ -24,6 +24,11 @@ Not through:
 - `app.supermega.dev`
 - main operating surface
 - founder and pod control
+
+Primary split:
+- `Dev Desk` = founder control, runtime, tenant, auth, inbound, and release state
+- `HQ` = company state and priorities
+- pod pages = focused operating surfaces for revenue, delivery, and runtime
 
 ### Worker runtime
 - scheduled and queued execution
@@ -67,7 +72,8 @@ The company should cycle through five steps:
 
 ## Pod execution model
 
-### Founder Control
+### Founder Control Pod
+- runs `Dev Desk`
 - decides direction
 - approves releases and promises
 - reviews the brief
@@ -125,9 +131,17 @@ Use for:
 - release review
 - product and tenant decisions
 
-## Codex replacement boundary
+## Dev Desk / Codex replacement boundary
 
-The app should replace chat as the control plane.
+The app should replace chat as the control plane for daily company operation.
+
+`Dev Desk` should become the default place to answer:
+- What is live right now?
+- Which tenant is active?
+- Are demo credentials still active?
+- Is Google auth ready?
+- Which loops are drifting?
+- What changed since the last founder check?
 
 Codex should remain for:
 - engineering changes

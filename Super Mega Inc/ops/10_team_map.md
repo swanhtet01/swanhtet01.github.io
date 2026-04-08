@@ -1,8 +1,8 @@
 # Team Map
 
-SuperMega runs through functional pods, not vague personas.
+SuperMega runs through role-based pods. Each pod has one job, one surface, and one handoff model.
 
-## 1. Founder Control
+## 1. Founder Control Pod
 
 Purpose:
 - set direction
@@ -26,6 +26,7 @@ Equipped resources:
 - runtime and tenant view
 - decision journal
 - release and incident visibility
+- final approval authority
 
 Human seat:
 - Swan
@@ -52,6 +53,7 @@ Equipped resources:
 - Gmail outreach draft flow
 - contact submissions
 - deal queue
+- starter-pack mapping
 
 Human seat:
 - founder or sales operator
@@ -78,6 +80,7 @@ Equipped resources:
 - task queue
 - approval queue
 - exception queue
+- rollout state
 
 Human seat:
 - operator or delivery manager
@@ -104,6 +107,7 @@ Equipped resources:
 - scheduler state
 - health checks
 - release guard workflow
+- runtime recovery actions
 
 Human seat:
 - founder or platform operator
@@ -128,6 +132,7 @@ Equipped resources:
 - research synthesis
 - KPI and brief inputs
 - template library
+- structured memory inputs
 
 Human seat:
 - founder plus delivery support
@@ -135,7 +140,8 @@ Human seat:
 ## Pod rules
 
 - Every pod writes durable state, not loose chat.
-- Every queue item has one owner and one next step.
+- Every queue item has one owner, one status, and one next step.
 - Cross-pod handoff happens through deals, tasks, approvals, incidents, briefs, or decisions.
 - Founder Control is the only approval authority for pricing, releases, and major customer promises.
+- `Dev Desk` is the founder control layer. Other pages are pod-specific operating views.
 - If work exists only in chat, it does not exist.

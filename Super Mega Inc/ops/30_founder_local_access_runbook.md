@@ -1,5 +1,7 @@
 # Founder Local Access Runbook
 
+This runbook is for opening the company control layer without starting in Codex.
+
 ## Stable mirror
 Stable mirror root:
 - `C:\Users\swann\OneDrive - BDA\Super Mega Inc\codex_hq`
@@ -15,7 +17,7 @@ Updates and architecture land here:
 ## How Swan opens it locally
 Use one of these modes:
 
-### 1. Live company HQ
+### 1. Live company control plane
 Use this when you want the current deployed app:
 
 `powershell -ExecutionPolicy Bypass -File C:\Users\swann\AppData\Local\Temp\supermega-promote-20260404-1\tools\open_supermega_founder_workspace.ps1 -Mode live`
@@ -25,7 +27,12 @@ This opens:
 - the local ops hub
 - live app surfaces on `https://app.supermega.dev`
 
-### 2. Local branch HQ
+What to open first:
+- `/app/dev-desk`
+- `/app/hq`
+- `/app/agents`
+
+### 2. Local branch control plane
 Use this when you want the newer branch features on your PC:
 
 `powershell -ExecutionPolicy Bypass -File C:\Users\swann\AppData\Local\Temp\supermega-promote-20260404-1\tools\open_supermega_founder_workspace.ps1 -Mode local -BuildShowroom`
@@ -63,12 +70,14 @@ Important:
 - the mirror is for visibility, not final credential authority
 
 ## What still depends on Codex vs the app
+
 Use the app for:
 - founder review
+- runtime and tenant checks
 - sales state
 - approvals
-- Agent Ops and loop visibility
-- data and portal planning on the branch
+- agent and loop visibility
+- daily company operation
 
 Use the stable mirror for:
 - reading synced founder updates
@@ -80,4 +89,14 @@ Use Codex for:
 - infrastructure changes
 - schema changes
 - deep debugging
-- branch-level product development until `Dev Desk` is finished
+- branch-level product development
+
+## Founder rule
+
+Start in `Dev Desk`.
+
+Open Codex only when:
+- the app cannot answer the operational question
+- code must change
+- infrastructure must change
+- a release or incident needs engineering work

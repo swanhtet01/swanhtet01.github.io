@@ -24,11 +24,17 @@ type AppNavGroup = {
 
 const appNavGroups: AppNavGroup[] = [
   {
+    label: 'Dev Desk',
+    items: [
+      { label: 'Dev Desk', note: 'Runtime, workspaces, and automations', short: 'DD', to: '/app/dev-desk' },
+      { label: 'Data Linkage', note: 'Sources, exports, and visibility', short: 'DT', to: '/app/data' },
+      { label: 'Portal Studio', note: 'Portal and rollout planning', short: 'PS', to: '/app/portal-studio' },
+    ],
+  },
+  {
     label: 'HQ',
     items: [
       { label: 'HQ Review', note: 'Founder daily view', short: 'HQ', to: '/app/hq' },
-      { label: 'Control Plane', note: 'Runtime, workspaces, and automations', short: 'CP', to: '/app/control-plane' },
-      { label: 'Data Linkage', note: 'Sources, exports, and visibility', short: 'DT', to: '/app/data' },
     ],
   },
   {
@@ -36,7 +42,6 @@ const appNavGroups: AppNavGroup[] = [
     items: [
       { label: 'Deals', note: 'Revenue workspace', short: 'DL', to: '/app/deals' },
       { label: 'Workflow Queue', note: 'Tasks, approvals, and exceptions', short: 'WQ', to: '/app/workflows' },
-      { label: 'Portal Studio', note: 'Portal and rollout planning', short: 'PS', to: '/app/portal-studio' },
     ],
   },
   {
@@ -157,7 +162,7 @@ export function AppFrame() {
     <div className="sm-app-shell">
       <aside className="sm-app-rail">
         <div className="sm-app-rail-head">
-          <NavLink className="sm-app-brand" to="/app/hq">
+          <NavLink className="sm-app-brand" to="/app/dev-desk">
             <span className="sm-app-brand-mark">SM</span>
             <div className="min-w-0">
               <p className="sm-app-brand-title">SUPERMEGA.dev</p>
@@ -204,10 +209,10 @@ export function AppFrame() {
           <div className="sm-app-rail-foot-meta">
             <span className="sm-status-pill">{session?.workspace_slug || 'default-workspace'}</span>
           </div>
-            <div className="grid gap-2">
-              <NavLink className="sm-button-secondary w-full" to="/">
-                Public site
-              </NavLink>
+          <div className="grid gap-2">
+            <NavLink className="sm-button-secondary w-full" to="/">
+              Public site
+            </NavLink>
             <button className="sm-button-accent w-full" onClick={() => void handleLogout()} type="button">
               Logout
             </button>

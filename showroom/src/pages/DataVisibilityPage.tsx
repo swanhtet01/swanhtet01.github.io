@@ -40,6 +40,25 @@ function statusClassName(value?: string) {
   return 'rounded-full border border-white/10 bg-white/6 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--sm-muted)]'
 }
 
+const graphEntities = ['Company', 'Contact', 'Deal', 'Task', 'Approval', 'Document', 'KPI', 'Decision', 'Shipment', 'Receiving issue']
+const graphEdges = [
+  'Company -> Contact',
+  'Contact -> Deal',
+  'Deal -> Task',
+  'Document -> Approval',
+  'Approval -> Decision',
+  'KPI -> Owner',
+  'KPI -> Founder Brief',
+  'Shipment -> Receiving issue',
+  'Receiving issue -> Task',
+]
+const graphBuildOrder = [
+  'Ingest Drive files, Docs, and Sheets as source-linked records.',
+  'Ingest Gmail threads and classify them into leads, tasks, approvals, or incidents.',
+  'Write explicit relationships in Postgres instead of starting with a separate graph database.',
+  'Feed KPI review, founder brief, portal views, and tenant-specific rules from the same graph.',
+]
+
 export function DataVisibilityPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -311,6 +330,79 @@ export function DataVisibilityPage() {
                     </div>
                   </article>
                 ))}
+              </div>
+            </article>
+          </section>
+
+          <section className="grid gap-6 xl:grid-cols-[1fr_1fr]">
+            <article className="sm-surface p-6">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="sm-kicker text-[var(--sm-accent)]">Knowledge graph</p>
+                  <h2 className="mt-2 text-2xl font-bold text-white">Drive and Gmail should become shared company memory.</h2>
+                </div>
+                <span className="sm-status-pill">Postgres first</span>
+              </div>
+
+              <p className="mt-4 text-sm leading-relaxed text-[var(--sm-muted)]">
+                The target is not a separate graph database on day one. The target is graph behavior: explicit entities, explicit relationships, and source links back to Drive, Gmail, and live queues.
+              </p>
+
+              <div className="mt-5 grid gap-3 md:grid-cols-2">
+                <div className="sm-proof-card">
+                  <p className="sm-kicker text-[var(--sm-accent)]">Entities</p>
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    {graphEntities.map((item) => (
+                      <span className="sm-status-pill" key={item}>
+                        {item}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+                <div className="sm-proof-card">
+                  <p className="sm-kicker text-[var(--sm-accent-alt)]">Edges</p>
+                  <div className="mt-4 grid gap-2">
+                    {graphEdges.map((item) => (
+                      <div className="sm-chip text-[var(--sm-muted)]" key={item}>
+                        {item}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </article>
+
+            <article className="sm-surface p-6">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="sm-kicker text-[var(--sm-accent-alt)]">Build order</p>
+                  <h2 className="mt-2 text-2xl font-bold text-white">How Drive and Gmail become usable intelligence.</h2>
+                </div>
+                <Link className="sm-button-secondary" to="/app/portal-studio">
+                  Open portal studio
+                </Link>
+              </div>
+
+              <div className="mt-5 space-y-3">
+                {graphBuildOrder.map((item, index) => (
+                  <div className="sm-proof-card" key={item}>
+                    <div className="flex items-start gap-3">
+                      <span className="sm-status-pill">{index + 1}</span>
+                      <p className="text-sm text-[var(--sm-muted)]">{item}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-5 grid gap-3 md:grid-cols-2">
+                <div className="sm-chip text-white">
+                  <p className="sm-kicker text-[var(--sm-accent)]">General SuperMega</p>
+                  <p className="mt-2 text-sm">Shared Drive + shared Gmail + shared graph + shared KPI scorecards first.</p>
+                </div>
+                <div className="sm-chip text-white">
+                  <p className="sm-kicker text-[var(--sm-accent-alt)]">Then YTF</p>
+                  <p className="mt-2 text-sm">Map YTF folders, threads, KPIs, and receiving rules onto the same platform graph.</p>
+                </div>
               </div>
             </article>
           </section>

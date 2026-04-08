@@ -8,6 +8,7 @@ One control plane.
 One state layer.
 Multiple pods.
 Durable loops.
+No second founder dashboard.
 
 ## Founder-facing stack
 
@@ -18,6 +19,10 @@ Purpose:
 - auth mode
 - loop control
 - inbound and operator visibility
+- release readiness
+
+Rule:
+- the founder should be able to inspect company health here without opening Codex
 
 ### HQ
 Purpose:
@@ -96,6 +101,9 @@ Needs:
 - queued processing
 - worker actions that write durable state
 
+Execution rule:
+- if a loop matters, it must be visible from `Dev Desk`
+
 ### Secrets
 - Secret Manager
 
@@ -110,6 +118,7 @@ Required:
 - app-visible auth and tenant mode
 - app-visible queue drift
 - app-visible approvals and blockers
+- app-visible pod ownership
 
 Next:
 - Sentry
@@ -153,3 +162,4 @@ The stack is good enough when:
 - loops keep moving without Codex
 - tenant and auth state are visible
 - releases and incidents are visible
+- pod ownership is visible

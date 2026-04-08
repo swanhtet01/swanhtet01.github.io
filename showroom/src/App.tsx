@@ -75,8 +75,8 @@ function App() {
           <Route element={<NotFoundPage />} path="*" />
         </Route>
         <Route element={<AppFrame />} path="/app">
-          <Route element={<Navigate replace to="hq" />} index />
-          <Route element={<FounderControlPlanePage />} path="control-plane" />
+          <Route element={<Navigate replace to="dev-desk" />} index />
+          <Route element={<FounderControlPlanePage />} path="dev-desk" />
           <Route element={<PortalStudioPage />} path="portal-studio" />
           <Route element={<DirectorDashboardPage />} path="hq" />
           <Route element={<LeadPipelinePage />} path="deals" />
@@ -86,9 +86,9 @@ function App() {
           <Route element={<DecisionJournalPage />} path="company" />
           <Route element={<Navigate replace to="/app/portal-studio" />} path="portals" />
           <Route element={<Navigate replace to="/app/portal-studio" />} path="portal-builder" />
-          <Route element={<Navigate replace to="/app/control-plane" />} path="dev-desk" />
-          <Route element={<Navigate replace to="/app/control-plane" />} path="control" />
-          <Route element={<Navigate replace to="/app/control-plane" />} path="meta" />
+          <Route element={<Navigate replace to="/app/dev-desk" />} path="control-plane" />
+          <Route element={<Navigate replace to="/app/dev-desk" />} path="control" />
+          <Route element={<Navigate replace to="/app/dev-desk" />} path="meta" />
           <Route element={<Navigate replace to="/app/hq" />} path="overview" />
           <Route element={<InsightsPage />} path="insights" />
           <Route element={<Navigate replace to="/app/hq" />} path="director" />
