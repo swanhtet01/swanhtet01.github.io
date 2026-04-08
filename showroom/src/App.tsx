@@ -8,6 +8,8 @@ import { AgentTeamsPage } from './pages/AgentTeamsPage'
 import { ApprovalQueuePage } from './pages/ApprovalQueuePage'
 import { ContactPage } from './pages/ContactPage'
 import { DecisionJournalPage } from './pages/DecisionJournalPage'
+import { DemoDetailPage } from './pages/DemoDetailPage'
+import { DemosPage } from './pages/DemosPage'
 import { DirectorDashboardPage } from './pages/DirectorDashboardPage'
 import { DocumentIntakePage } from './pages/DocumentIntakePage'
 import { ExceptionQueuePage } from './pages/ExceptionQueuePage'
@@ -42,17 +44,23 @@ function App() {
       <RouteEffects />
       <Routes>
         <Route element={<SiteFrame />} path="/">
-        <Route element={<HomePage />} index />
-          <Route element={<ProductsPage />} path="products" />
-          <Route element={<ProductDetailPage />} path="products/:productId" />
-          <Route element={<Navigate replace to="/products" />} path="work" />
+          <Route element={<HomePage />} index />
           <Route element={<Navigate replace to="/products" />} path="systems" />
+          <Route element={<ProductsPage />} path="products" />
+          <Route element={<Navigate replace to="/products/sales-system" />} path="products/distributor-sales-desk" />
+          <Route element={<Navigate replace to="/products/operations-inbox" />} path="products/list-cleanup-desk" />
+          <Route element={<Navigate replace to="/products/operations-inbox" />} path="products/receiving-control" />
+          <Route element={<ProductDetailPage />} path="products/:productId" />
+          <Route element={<DemosPage />} path="demos" />
+          <Route element={<DemoDetailPage />} path="demos/:demoId" />
+          <Route element={<Navigate replace to="/products" />} path="work" />
           <Route element={<Navigate replace to="/products" />} path="templates" />
           <Route element={<PublicLeadFinderPage />} path="find-companies" />
           <Route element={<Navigate replace to="/find-companies" />} path="lead-finder" />
           <Route element={<WorkspaceLitePage />} path="company-list" />
           <Route element={<Navigate replace to="/company-list" />} path="saved-companies" />
           <Route element={<WorkspaceLitePage />} path="task-list" />
+          <Route element={<Navigate replace to="/task-list" />} path="sort-updates" />
           <Route element={<Navigate replace to="/task-list" />} path="daily-tasks" />
           <Route element={<WorkspaceLitePage />} path="receiving-log" />
           <Route element={<Navigate replace to="/receiving-log" />} path="receiving" />

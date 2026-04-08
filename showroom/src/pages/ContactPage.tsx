@@ -93,7 +93,7 @@ export function ContactPage() {
       <PageIntro
         eyebrow="Contact"
         title="Tell us the first workflow you want fixed."
-        description="Send one short request. We will reply with the starter pack or next rollout step that fits."
+        description="Keep it simple. Sales, orders, client updates, approvals, receiving, or management review is enough."
       />
 
       <section className="grid gap-6 lg:grid-cols-[0.88fr_1.12fr]">
@@ -101,7 +101,7 @@ export function ContactPage() {
           <p className="sm-kicker text-[var(--sm-accent)]">What happens next</p>
           <div className="mt-5 grid gap-3">
             <div className="sm-chip text-white">We review the workflow and the tools you already use.</div>
-            <div className="sm-chip text-white">We match it to the right starter pack.</div>
+            <div className="sm-chip text-white">We map it to the smallest system that will actually help.</div>
             <div className="sm-chip text-white">We reply with the next rollout step.</div>
           </div>
 

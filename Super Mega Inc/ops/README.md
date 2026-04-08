@@ -26,6 +26,8 @@ Core files:
 - `14_updates_and_alerts.md`
 - `15_agent_architecture.md`
 - `16_next_gen_company_stack.md`
+- `17_release_workflow.md`
+- `18_self_hosted_company_loop.md`
 
 Ownership:
 - Founder Desk: scoreboard, founder brief, roadmap, solution catalog
@@ -42,3 +44,6 @@ Cadence:
 
 Open the local ops hub with:
 - `powershell -ExecutionPolicy Bypass -File "C:\Users\swann\AppData\Local\Temp\supermega-promote-20260404-1\tools\open_supermega_ops_hub.ps1"`
+
+Open the founder workspace with:
+- `powershell -ExecutionPolicy Bypass -File "C:\Users\swann\AppData\Local\Temp\supermega-promote-20260404-1\tools\open_supermega_founder_workspace.ps1"`

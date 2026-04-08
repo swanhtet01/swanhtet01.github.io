@@ -1,10 +1,7 @@
 import { Link } from 'react-router-dom'
 
-import { QUICK_WIN_PRODUCTS, STARTER_PACK_DETAILS } from '../lib/salesControl'
-
-function contactLink(name: string) {
-  return `/contact?package=${encodeURIComponent(name)}`
-}
+import { SystemDemoCanvas } from '../components/SystemDemoCanvas'
+import { CUSTOM_BUILD_EXAMPLES, SITE_SYSTEMS } from '../lib/siteSystems'
 
 export function ProductsPage() {
   return (
@@ -12,71 +9,74 @@ export function ProductsPage() {
       <section className="sm-site-panel">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <p className="sm-kicker text-[var(--sm-accent)]">Products</p>
-            <h1 className="mt-4 max-w-4xl text-4xl font-extrabold tracking-tight text-white lg:text-6xl">
-              Three starter packs for real company work.
-            </h1>
+            <p className="sm-kicker text-[var(--sm-accent)]">Systems</p>
+            <h1 className="mt-4 max-w-4xl text-4xl font-extrabold tracking-tight text-white lg:text-6xl">These are the systems we actually sell.</h1>
           </div>
           <p className="max-w-2xl text-sm leading-relaxed text-[var(--sm-muted)] lg:text-base">
-            Start with one pack. Load the data the team already has. Run one shared queue. Turn on the agent loops only after the base workflow is clear.
+            Open the demos. See what the working surface looks like. Then decide whether one of these fits your workflow.
           </p>
         </div>
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-3">
-        {STARTER_PACK_DETAILS.map((product) => (
-          <article className="sm-pack-card overflow-hidden p-4 text-white" key={product.id}>
-            <img alt={product.name} className="w-full rounded-2xl border border-white/10 bg-[#020612]" src={product.image} />
-            <div className="mt-4 flex items-center justify-between gap-3">
-              <p className="sm-kicker text-[var(--sm-accent)]">{product.eyebrow}</p>
-              <span className="sm-status-pill">Main product</span>
+      <section className="space-y-8">
+        {SITE_SYSTEMS.map((system, index) => (
+          <article className="sm-product-row" key={system.id}>
+            <div className={index % 2 === 0 ? 'order-2 lg:order-1' : 'order-2'}>
+              <div className="sm-product-copy">
+                <p className="sm-kicker text-[var(--sm-accent)]">{system.category}</p>
+                <h2 className="mt-3 text-3xl font-bold text-white lg:text-5xl">{system.name}</h2>
+                <p className="mt-4 max-w-2xl text-sm leading-relaxed text-[var(--sm-muted)] lg:text-base">{system.summary}</p>
+                <div className="mt-6 grid gap-3 md:grid-cols-3">
+                  <div className="sm-demo-mini">
+                    <strong>Replaces</strong>
+                    <span>{system.replaces.join(', ')}</span>
+                  </div>
+                  <div className="sm-demo-mini">
+                    <strong>Daily use</strong>
+                    <span>{system.dailyUse.join(', ')}</span>
+                  </div>
+                  <div className="sm-demo-mini">
+                    <strong>Next</strong>
+                    <span>{system.nextBuilds.join(', ')}</span>
+                  </div>
+                </div>
+                <div className="mt-6 flex flex-wrap gap-3">
+                  <Link className="sm-button-primary" to={`/products/${system.slug}`}>
+                    View system
+                  </Link>
+                  <Link className="sm-button-secondary" to={`/demos/${system.slug}`}>
+                    Open demo
+                  </Link>
+                  <Link className="sm-button-secondary" to={`/contact?package=${encodeURIComponent(system.name)}`}>
+                    Contact
+                  </Link>
+                </div>
+              </div>
             </div>
-            <h2 className="mt-4 text-2xl font-bold">{product.name}</h2>
-            <p className="mt-3 text-sm leading-relaxed text-[var(--sm-muted)]">{product.promise}</p>
-            <p className="mt-4 text-xs uppercase tracking-[0.18em] text-white/45">For {product.audience}</p>
-            <div className="mt-6 flex flex-wrap gap-3">
-              <Link className="sm-button-secondary" to={`/products/${product.slug}`}>
-                View product
-              </Link>
-              <Link className="sm-button-primary" to={contactLink(product.name)}>
-                Contact us
-              </Link>
+            <div className={index % 2 === 0 ? 'order-1 lg:order-2' : 'order-1'}>
+              <SystemDemoCanvas scenario={system.scenarios[0]} />
             </div>
           </article>
         ))}
       </section>
 
-      <section className="grid gap-6 lg:grid-cols-[0.92fr_1.08fr]">
-        <article className="sm-site-panel">
-          <p className="sm-kicker text-[var(--sm-accent)]">How rollout starts</p>
-          <h2 className="mt-3 text-3xl font-bold text-white lg:text-4xl">Short rollout. Real data. Small team.</h2>
-          <div className="mt-6 space-y-3">
-            {[
-              'Pick the one pack that matches the actual bottleneck.',
-              'Import the spreadsheet, notes, inbox, or issue log the team already uses.',
-              'Give the working team one shared queue and one short review habit.',
-              'Turn on cleanup, triage, and daily brief loops after the workflow is trusted.',
-            ].map((item, index) => (
-              <div className="sm-site-point" key={item}>
-                <span className="sm-site-point-dot" />
-                <span>{index + 1}. {item}</span>
-              </div>
-            ))}
+      <section className="sm-site-panel">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <p className="sm-kicker text-[var(--sm-accent)]">Also build</p>
+            <h2 className="mt-3 text-3xl font-bold text-white lg:text-4xl">When the workflow is clear, we extend from the same base.</h2>
           </div>
-        </article>
-
-        <article className="sm-site-panel">
-          <p className="sm-kicker text-[var(--sm-accent)]">Add after the base pack works</p>
-          <h2 className="mt-3 text-3xl font-bold text-white lg:text-4xl">These extend the same system.</h2>
-          <div className="mt-6 grid gap-4 md:grid-cols-3">
-            {QUICK_WIN_PRODUCTS.map((item) => (
-              <article className="sm-chip text-white" key={item.id}>
-                <p className="font-semibold">{item.name}</p>
-                <p className="mt-2 text-sm text-[var(--sm-muted)]">{item.useCase}</p>
-              </article>
-            ))}
-          </div>
-        </article>
+          <Link className="sm-button-secondary" to="/contact">
+            Contact
+          </Link>
+        </div>
+        <div className="mt-6 grid gap-3 md:grid-cols-3">
+          {CUSTOM_BUILD_EXAMPLES.map((item) => (
+            <div className="sm-demo-mini" key={item}>
+              {item}
+            </div>
+          ))}
+        </div>
       </section>
     </div>
   )

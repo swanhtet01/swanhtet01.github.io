@@ -97,13 +97,14 @@ export type OperatorAddOn = {
 export const bookingUrl = (import.meta.env.VITE_BOOKING_URL ?? '').trim()
 
 export const navItems = [
-  { label: 'Products', to: '/products' },
+  { label: 'Systems', to: '/products' },
+  { label: 'Demos', to: '/demos' },
 ] as const
 
 export const hero = {
   eyebrow: 'SuperMega',
-  title: 'Custom systems for sales, operations, and management.',
-  description: 'We replace scattered tools with one working layer and a small set of always-on agents, starting with Myanmar owner-led teams.',
+  title: 'Real business systems. Live demos.',
+  description: 'SuperMega builds simple systems for sales, operations, management, and client work.',
 }
 
 export const proofPoints: ProofPoint[] = [
@@ -317,6 +318,14 @@ export const publicModules: PublicModule[] = [
     inputs: ['Company rows', 'Notes', 'Contact clues', 'Follow-up tasks'],
     outputs: ['Clean list', 'Next steps', 'CSV export'],
     path: '/company-list',
+  },
+  {
+    name: 'Sort updates',
+    tagline: 'Paste messy updates and turn them into clear next actions.',
+    bestFor: 'Teams reporting work in chat, notes, and screenshots.',
+    inputs: ['Team updates', 'Issue notes', 'Status text'],
+    outputs: ['Task list', 'Owners', 'Next steps'],
+    path: '/sort-updates',
   },
 ]
 
