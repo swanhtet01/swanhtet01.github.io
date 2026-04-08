@@ -29,6 +29,11 @@ Core files:
 - `17_release_workflow.md`
 - `18_self_hosted_company_loop.md`
 
+Revenue sprint pack:
+- `33_daily_sales_sprint_runbook.md`
+- `34_daily_sales_sprint_today.csv`
+- `35_daily_sales_sprint_follow_up.csv`
+
 Ownership:
 - Founder Desk: scoreboard, founder brief, roadmap, solution catalog
 - Revenue Pod: sales pipeline, case-study program
@@ -37,6 +42,7 @@ Ownership:
 
 Cadence:
 - Daily: founder brief, operator report, sales pipeline, delivery tracker
+- Daily sales sprint: fill `34_daily_sales_sprint_today.csv`, update `35_daily_sales_sprint_follow_up.csv`, then land qualified rows in `03_sales_pipeline.csv`
 - Weekly: company scoreboard, product roadmap, case-study program
 - Every release: release log
 - Every incident: incident log
@@ -47,3 +53,6 @@ Open the local ops hub with:
 
 Open the founder workspace with:
 - `powershell -ExecutionPolicy Bypass -File "C:\Users\swann\AppData\Local\Temp\supermega-promote-20260404-1\tools\open_supermega_founder_workspace.ps1"`
+
+Open the sales sprint pack with:
+- `powershell -ExecutionPolicy Bypass -File "C:\Users\swann\AppData\Local\Temp\supermega-promote-20260404-1\tools\open_supermega_sales_sprint.ps1"`
