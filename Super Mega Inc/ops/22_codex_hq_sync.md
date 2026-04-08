@@ -1,68 +1,66 @@
 # Codex HQ Sync
 
-This sync keeps a durable founder mirror outside the temp worktree.
+This file explains the local founder mirror.
 
-## BDA HQ location
+## What it is
 
-The target folder is:
+Codex HQ is the durable local folder at:
 - `C:\Users\swann\OneDrive - BDA\Super Mega Inc\codex_hq`
 
-This is the founder-facing mirror.
-It is meant to survive temp worktree cleanup.
+It exists so the founder has a stable place to inspect the company outside the temp worktree and outside Codex.
 
-## What gets published
-
-### Ops docs
-- `Super Mega Inc/ops/*.md`
-- `Super Mega Inc/ops/*.csv`
-- `Super Mega Inc/ops/index.html`
-
-### Machine-readable reports
-- `pilot-data/ops/*-latest.json`
-
-### Public-site evidence
-- `showroom/public/site/*-screen.png`
-- `showroom/public/brand/*.svg`
-- `showroom/public/brand/*.html`
-
-## Purpose of each folder
+## What it should contain
 
 ### `ops`
-- founder-readable state
+- founder-readable docs
+- scoreboards
+- briefs
 - release and incident logs
-- daily brief and operator report
 
 ### `reports`
-- machine-readable outputs from local cycles
-
-### `site`
-- the current rendered evidence for public systems and demos
+- latest machine-readable cycle outputs
+- workstation
+- founder
+- operator
+- agent
 
 ### `brand`
-- reusable brand and exported public assets
+- business card assets
+- QR assets
+- founder-facing brand outputs
 
-## Rule
+## What it is not
 
-Codex HQ is not the source of truth.
+Codex HQ is not:
+- the source of truth for code
+- the source of truth for runtime state
+- a replacement for the app
 
-Source of truth remains:
-- repo code
-- live runtime
-- repo ops files
-- latest local report outputs
+It is a durable founder mirror.
 
-Codex HQ is the durable local mirror for the founder.
+## What should use it
 
-## Run
+Use Codex HQ for:
+- local founder review
+- quick daily checks
+- durable handoff outside the temp worktree
+- archived human-facing outputs
 
-```powershell
-powershell -ExecutionPolicy Bypass -File "C:\Users\swann\AppData\Local\Temp\supermega-promote-20260404-1\tools\sync_supermega_codex_hq.ps1"
-```
+Do not use Codex HQ for:
+- making code changes
+- editing production state
+- deciding whether the runtime itself is healthy without checking the app
 
-## Expected result
+## Current role in the control plane
 
-After sync, the founder should be able to open one local folder and see:
-- what the agents just did
-- whether the runtime is healthy
-- what the public site currently shows
-- what still needs attention
+The current control plane split should be:
+- public site: `supermega.dev`
+- live operating app: `app.supermega.dev`
+- local founder mirror: `codex_hq`
+- engineering and deep changes: Codex + repo
+
+## Next improvement
+
+Codex HQ should keep getting better, but it should stay a mirror.
+
+The app should become the main live control plane.

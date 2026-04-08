@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import csv
 import hashlib
 import io
@@ -15,15 +16,18 @@ from datetime import datetime
 from html import escape, unescape
 from pathlib import Path
 from typing import Any
-from urllib.parse import quote, urlparse
+from urllib.parse import quote, urlencode, urlparse
 from urllib.error import HTTPError, URLError
 from urllib.request import Request as UrlRequest, urlopen
 
 import uvicorn
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi.responses import RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from google.auth.transport.requests import Request as GoogleAuthRequest
+from google.oauth2 import id_token as google_id_token
 from google.cloud import tasks_v2
 from google.protobuf import timestamp_pb2
 from pydantic import BaseModel, Field
@@ -1634,6 +1638,7 @@ def _build_csv_export_fallback(
 
 
 SESSION_COOKIE_NAME = "supermega_session"
+GOOGLE_OAUTH_COOKIE_NAME = "supermega_google_oauth"
 _SENTRY_READY = False
 
 
@@ -1650,6 +1655,23 @@ def _load_local_env_files() -> None:
 def _env_truthy(name: str, default: bool) -> bool:
     raw = os.getenv(name, "1" if default else "0").strip().lower()
     return raw not in {"0", "false", "no", "off"}
+
+
+def _urlsafe_json_encode(payload: dict[str, Any]) -> str:
+    raw = json.dumps(payload, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    return base64.urlsafe_b64encode(raw).decode("ascii")
+
+
+def _urlsafe_json_decode(raw_value: str) -> dict[str, Any]:
+    value = str(raw_value or "").strip()
+    if not value:
+        return {}
+    try:
+        decoded = base64.urlsafe_b64decode(value.encode("ascii"))
+        parsed = json.loads(decoded.decode("utf-8"))
+    except Exception:
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
 
 
 def _init_sentry_runtime() -> None:
@@ -1806,6 +1828,17 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
     session_ttl_hours = int(os.getenv("SUPERMEGA_SESSION_HOURS", str(24 * 14)) or (24 * 14))
     internal_cron_token = str(os.getenv("SUPERMEGA_INTERNAL_CRON_TOKEN", "")).strip()
     app_base_url = str(os.getenv("VITE_WORKSPACE_APP_BASE", "")).strip()
+    google_auth_enabled = _env_truthy("SUPERMEGA_GOOGLE_AUTH_ENABLED", True)
+    google_auth_client_json_value = str(os.getenv("GOOGLE_OAUTH_CLIENT_JSON", "")).strip()
+    google_auth_client_id = str(os.getenv("GOOGLE_OAUTH_CLIENT_ID", "")).strip()
+    google_auth_client_secret = str(os.getenv("GOOGLE_OAUTH_CLIENT_SECRET", "")).strip()
+    google_auth_redirect_uri_config = str(os.getenv("GOOGLE_OAUTH_REDIRECT_URI", "")).strip()
+    google_auth_allowed_domains = [
+        item.strip().lower()
+        for item in str(os.getenv("GOOGLE_OAUTH_ALLOWED_DOMAINS", "")).split(",")
+        if item.strip()
+    ]
+    google_auth_auto_provision = _env_truthy("SUPERMEGA_GOOGLE_AUTH_ALLOW_AUTO_PROVISION", True)
     gcp_project_id = str(os.getenv("SUPERMEGA_GCP_PROJECT_ID", os.getenv("GOOGLE_CLOUD_PROJECT", "supermega-468612"))).strip() or "supermega-468612"
     cloud_tasks_location = str(os.getenv("SUPERMEGA_CLOUD_TASKS_LOCATION", "")).strip() or "asia-southeast1"
     cloud_tasks_queue_default = str(os.getenv("SUPERMEGA_CLOUD_TASKS_QUEUE_DEFAULT", "")).strip()
@@ -1838,6 +1871,32 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
         rows=state_list_lead_pipeline(state_db, limit=500),
     )
     uses_default_credentials = auth_username == "owner" and auth_password == "supermega-demo"
+
+    google_auth_client_path = _materialize_secret_path(google_auth_client_json_value, suffix=".google-oauth.json")
+    if google_auth_client_path and google_auth_client_path.exists():
+        try:
+            google_auth_client_payload = json.loads(google_auth_client_path.read_text(encoding="utf-8"))
+        except Exception:
+            google_auth_client_payload = {}
+        google_auth_client_block = (
+            google_auth_client_payload.get("web")
+            or google_auth_client_payload.get("installed")
+            or {}
+        )
+        if not google_auth_client_id:
+            google_auth_client_id = str(google_auth_client_block.get("client_id", "")).strip()
+        if not google_auth_client_secret:
+            google_auth_client_secret = str(google_auth_client_block.get("client_secret", "")).strip()
+        if not google_auth_redirect_uri_config:
+            redirect_candidates = google_auth_client_block.get("redirect_uris", [])
+            if isinstance(redirect_candidates, list):
+                google_auth_redirect_uri_config = str(redirect_candidates[0] if redirect_candidates else "").strip()
+
+    google_auth_ready = bool(
+        google_auth_enabled
+        and google_auth_client_id
+        and google_auth_client_secret
+    )
 
     app = FastAPI(title="SuperMega Service", version="0.2.0")
     cors_origins = [origin.strip() for origin in os.getenv("SUPERMEGA_CORS_ORIGINS", "*").split(",") if origin.strip()]
@@ -2146,6 +2205,180 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             }
         return {"tenant_key": "default", "workspace_slug": "", "company": ""}
 
+    def _request_origin(request: Request) -> str:
+        forwarded_proto = str(request.headers.get("x-forwarded-proto", "")).strip().lower()
+        scheme = forwarded_proto.split(",")[0].strip() if forwarded_proto else str(request.url.scheme).strip().lower()
+        host = _request_hostname(request)
+        if not host:
+            return ""
+        return f"{scheme or 'https'}://{host}"
+
+    def _google_auth_redirect_uri(request: Request) -> str:
+        configured = str(google_auth_redirect_uri_config or "").strip()
+        if configured:
+            return configured
+        base = str(app_base_url or "").strip() or _request_origin(request)
+        return f"{base.rstrip('/')}/api/auth/google/callback" if base else ""
+
+    def _google_auth_public_config(request: Request, *, next_path: str = "/app/hq") -> dict[str, Any]:
+        enabled = bool(google_auth_ready and _google_auth_redirect_uri(request))
+        start_base = f"{(_request_origin(request) or '').rstrip('/')}/api/auth/google/start"
+        params = urlencode({"mode": "login", "next": next_path})
+        return {
+            "enabled": enabled,
+            "redirect_uri": _google_auth_redirect_uri(request) if enabled else "",
+            "allowed_domains": google_auth_allowed_domains,
+            "auto_provision": google_auth_auto_provision,
+            "start_url": f"{start_base}?{params}" if enabled and start_base else "",
+        }
+
+    def _set_google_oauth_cookie(response: Response, request: Request, payload: dict[str, Any]) -> None:
+        secure_cookie = str(request.url.scheme).lower() == "https"
+        response.set_cookie(
+            key=GOOGLE_OAUTH_COOKIE_NAME,
+            value=_urlsafe_json_encode(payload),
+            max_age=10 * 60,
+            httponly=True,
+            samesite="lax",
+            secure=secure_cookie,
+            path="/",
+        )
+
+    def _load_google_oauth_cookie(request: Request) -> dict[str, Any]:
+        return _urlsafe_json_decode(str(request.cookies.get(GOOGLE_OAUTH_COOKIE_NAME, "")).strip())
+
+    def _clear_google_oauth_cookie(response: Response, request: Request) -> None:
+        secure_cookie = str(request.url.scheme).lower() == "https"
+        response.delete_cookie(
+            key=GOOGLE_OAUTH_COOKIE_NAME,
+            path="/",
+            httponly=True,
+            samesite="lax",
+            secure=secure_cookie,
+        )
+
+    def _google_error_redirect(request: Request, code: str, *, mode: str = "login") -> RedirectResponse:
+        route = "/signup" if str(mode or "").strip().lower() == "signup" else "/login"
+        destination = f"{(_request_origin(request) or '').rstrip('/')}{route}?google_error={quote(code)}"
+        response = RedirectResponse(url=destination, status_code=302)
+        _clear_google_oauth_cookie(response, request)
+        return response
+
+    def _build_google_auth_url(
+        request: Request,
+        *,
+        state: str,
+        nonce: str,
+        mode: str,
+        next_path: str,
+        login_hint: str = "",
+    ) -> str:
+        params = {
+            "client_id": google_auth_client_id,
+            "redirect_uri": _google_auth_redirect_uri(request),
+            "response_type": "code",
+            "scope": "openid email profile",
+            "state": state,
+            "nonce": nonce,
+            "prompt": "select_account",
+            "include_granted_scopes": "true",
+        }
+        if login_hint:
+            params["login_hint"] = login_hint
+        if google_auth_allowed_domains and len(google_auth_allowed_domains) == 1:
+            params["hd"] = google_auth_allowed_domains[0]
+        return f"https://accounts.google.com/o/oauth2/v2/auth?{urlencode(params)}"
+
+    def _exchange_google_auth_code(request: Request, code: str) -> dict[str, Any]:
+        token_request = UrlRequest(
+            "https://oauth2.googleapis.com/token",
+            data=urlencode(
+                {
+                    "code": code,
+                    "client_id": google_auth_client_id,
+                    "client_secret": google_auth_client_secret,
+                    "redirect_uri": _google_auth_redirect_uri(request),
+                    "grant_type": "authorization_code",
+                }
+            ).encode("utf-8"),
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+        )
+        with urlopen(token_request, timeout=20) as response:
+            raw = response.read().decode("utf-8")
+        parsed = json.loads(raw or "{}")
+        if not isinstance(parsed, dict):
+            raise HTTPException(status_code=502, detail="Google token exchange returned an invalid payload.")
+        return parsed
+
+    def _verify_google_id_token_payload(id_token_value: str) -> dict[str, Any]:
+        try:
+            payload = google_id_token.verify_oauth2_token(
+                id_token_value,
+                GoogleAuthRequest(),
+                google_auth_client_id,
+            )
+        except Exception as exc:
+            raise HTTPException(status_code=401, detail="Google sign-in could not be verified.") from exc
+        return payload if isinstance(payload, dict) else {}
+
+    def _company_from_google_identity(email: str, fallback: str = "") -> str:
+        normalized_email = str(email or "").strip().lower()
+        fallback_value = str(fallback or "").strip()
+        if fallback_value:
+            return fallback_value
+        if "@" in normalized_email:
+            domain = normalized_email.split("@", 1)[1].strip().lower()
+            if domain and "." in domain:
+                stem = domain.split(".", 1)[0].replace("-", " ").replace("_", " ").strip()
+                if stem:
+                    return " ".join(part.capitalize() for part in stem.split())
+        return "SuperMega Workspace"
+
+    def _google_identity_session(
+        *,
+        email: str,
+        display_name: str,
+        workspace_slug: str,
+        company: str,
+        mode: str,
+    ) -> dict[str, Any]:
+        normalized_email = str(email or "").strip().lower()
+        workspaces = enterprise_list_user_workspaces(enterprise_db_url, username=normalized_email)
+        requested_slug = str(workspace_slug or "").strip().lower()
+        selected_workspace = next((item for item in workspaces if str(item.get("slug", "")).strip().lower() == requested_slug), None) if requested_slug else None
+        if not selected_workspace and workspaces:
+            selected_workspace = workspaces[0]
+
+        if not selected_workspace:
+            if str(mode).strip().lower() != "signup" and not google_auth_auto_provision:
+                raise HTTPException(status_code=401, detail="No workspace account exists for this Google user yet.")
+            base_slug = _slugify(requested_slug or company or normalized_email.split("@")[0]) or "workspace"
+            new_workspace_slug = requested_slug or f"{base_slug}-{hashlib.sha1(normalized_email.encode('utf-8')).hexdigest()[:4]}"
+            enterprise_ensure_user(
+                enterprise_db_url,
+                username=normalized_email,
+                password=secrets.token_urlsafe(32),
+                display_name=display_name or normalized_email,
+                role="owner",
+                workspace_slug=new_workspace_slug,
+                workspace_name=company,
+                workspace_plan="starter",
+            )
+            workspaces = enterprise_list_user_workspaces(enterprise_db_url, username=normalized_email)
+            selected_workspace = next((item for item in workspaces if str(item.get("slug", "")).strip().lower() == new_workspace_slug), None) if workspaces else None
+
+        if not selected_workspace:
+            raise HTTPException(status_code=500, detail="Google sign-in could not resolve a workspace.")
+
+        session = enterprise_create_session(
+            enterprise_db_url,
+            username=normalized_email,
+            role=str(selected_workspace.get("role", "member")).strip() or "member",
+            workspace_slug=str(selected_workspace.get("slug", "")).strip(),
+            ttl_hours=session_ttl_hours,
+        )
+        return session
+
     def _session_payload(session: dict[str, Any]) -> dict[str, Any]:
         return {
             "username": session.get("username", ""),
@@ -2393,6 +2626,127 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             "coverage_score": int(coverage.get("readiness_score", 0) or 0),
         }
 
+    @app.get("/api/auth/google/start")
+    def auth_google_start(
+        request: Request,
+        mode: str = "login",
+        next: str = "/app/hq",
+        workspace_slug: str = "",
+        company: str = "",
+        name: str = "",
+        email: str = "",
+    ) -> Response:
+        if not google_auth_ready:
+            raise HTTPException(status_code=503, detail="Google sign-in is not configured on this host.")
+        normalized_mode = "signup" if str(mode or "").strip().lower() == "signup" else "login"
+        next_path = str(next or "/app/hq").strip()
+        if not next_path.startswith("/"):
+            next_path = "/app/hq"
+        state_token = secrets.token_urlsafe(24)
+        nonce = secrets.token_urlsafe(24)
+        response = RedirectResponse(
+            url=_build_google_auth_url(
+                request,
+                state=state_token,
+                nonce=nonce,
+                mode=normalized_mode,
+                next_path=next_path,
+                login_hint=str(email or "").strip(),
+            ),
+            status_code=302,
+        )
+        _set_google_oauth_cookie(
+            response,
+            request,
+            {
+                "state": state_token,
+                "nonce": nonce,
+                "mode": normalized_mode,
+                "next": next_path,
+                "workspace_slug": str(workspace_slug or "").strip(),
+                "company": str(company or "").strip(),
+                "name": str(name or "").strip(),
+            },
+        )
+        return response
+
+    @app.get("/api/auth/google/callback")
+    def auth_google_callback(
+        request: Request,
+        response: Response,
+        code: str = "",
+        state: str = "",
+        error: str = "",
+    ) -> Response:
+        oauth_state = _load_google_oauth_cookie(request)
+        mode = str(oauth_state.get("mode", "login")).strip().lower() or "login"
+        if error:
+            return _google_error_redirect(request, str(error or "google_denied").strip().lower(), mode=mode)
+        if not google_auth_ready:
+            return _google_error_redirect(request, "google_not_configured", mode=mode)
+        if not code or not state:
+            return _google_error_redirect(request, "google_missing_code", mode=mode)
+        if not oauth_state or str(oauth_state.get("state", "")).strip() != str(state).strip():
+            return _google_error_redirect(request, "google_state_mismatch", mode=mode)
+
+        try:
+            token_payload = _exchange_google_auth_code(request, code)
+        except Exception:
+            return _google_error_redirect(request, "google_token_exchange_failed", mode=mode)
+        id_token_value = str(token_payload.get("id_token", "")).strip()
+        if not id_token_value:
+            return _google_error_redirect(request, "google_missing_token", mode=mode)
+        try:
+            google_identity = _verify_google_id_token_payload(id_token_value)
+        except Exception:
+            return _google_error_redirect(request, "google_token_invalid", mode=mode)
+        email = str(google_identity.get("email", "")).strip().lower()
+        if not email or not bool(google_identity.get("email_verified")):
+            return _google_error_redirect(request, "google_email_not_verified", mode=mode)
+
+        if google_auth_allowed_domains:
+            email_domain = email.split("@", 1)[1].strip().lower() if "@" in email else ""
+            if email_domain not in google_auth_allowed_domains:
+                return _google_error_redirect(request, "google_domain_not_allowed", mode=mode)
+
+        nonce_expected = str(oauth_state.get("nonce", "")).strip()
+        nonce_seen = str(google_identity.get("nonce", "")).strip()
+        if nonce_expected and nonce_seen and nonce_expected != nonce_seen:
+            return _google_error_redirect(request, "google_nonce_mismatch", mode=mode)
+
+        display_name = (
+            str(oauth_state.get("name", "")).strip()
+            or str(google_identity.get("name", "")).strip()
+            or email.split("@", 1)[0]
+        )
+        company = _company_from_google_identity(
+            email,
+            fallback=str(oauth_state.get("company", "")).strip(),
+        )
+        requested_workspace_slug = str(oauth_state.get("workspace_slug", "")).strip()
+        try:
+            session = _google_identity_session(
+                email=email,
+                display_name=display_name,
+                workspace_slug=requested_workspace_slug,
+                company=company,
+                mode=mode,
+            )
+        except HTTPException as exc:
+            detail = str(exc.detail or "").strip().lower()
+            if "no workspace account exists" in detail:
+                return _google_error_redirect(request, "google_account_not_provisioned", mode=mode)
+            return _google_error_redirect(request, "google_session_failed", mode=mode)
+
+        destination_path = str(oauth_state.get("next", "/app/hq")).strip() or "/app/hq"
+        if not destination_path.startswith("/"):
+            destination_path = "/app/hq"
+        destination = f"{(_request_origin(request) or '').rstrip('/')}{destination_path}"
+        redirect = RedirectResponse(url=destination, status_code=302)
+        _set_session_cookie(redirect, request, str(session.get("session_id", "")))
+        _clear_google_oauth_cookie(redirect, request)
+        return redirect
+
     @app.get("/api/auth/session")
     def auth_session(request: Request) -> dict[str, Any]:
         session = _session_from_request(request)
@@ -2416,6 +2770,7 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             ),
             "uses_default_credentials": uses_default_credentials,
             "workspaces": enterprise_list_user_workspaces(enterprise_db_url, username=str(session.get("username", auth_username) if session else auth_username)),
+            "google_auth": _google_auth_public_config(request),
         }
 
     @app.post("/api/auth/login")

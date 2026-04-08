@@ -1,8 +1,16 @@
-import { useState, type FormEvent } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useEffect, useState, type FormEvent } from 'react'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 
 import { PageIntro } from '../components/PageIntro'
-import { appHref, needsLiveAppHandoff, publicShellOnly, workspaceAppBase, workspaceFetch } from '../lib/workspaceApi'
+import {
+  appHref,
+  getWorkspaceSession,
+  googleAuthHref,
+  needsLiveAppHandoff,
+  publicShellOnly,
+  workspaceAppBase,
+  workspaceFetch,
+} from '../lib/workspaceApi'
 import { getTenantConfig } from '../lib/tenantConfig'
 
 type SignupPayload = {
@@ -16,8 +24,10 @@ type SignupPayload = {
 
 export function SignupPage() {
   const navigate = useNavigate()
+  const location = useLocation()
   const tenant = getTenantConfig()
   const isClientTenant = tenant.key !== 'default'
+  const searchParams = new URLSearchParams(location.search)
   const [form, setForm] = useState<SignupPayload>({
     name: '',
     email: '',
@@ -27,10 +37,38 @@ export function SignupPage() {
     workspace_slug: tenant.defaultWorkspaceSlug ?? '',
   })
   const [busy, setBusy] = useState(false)
+  const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
+  const [googleAuthEnabled, setGoogleAuthEnabled] = useState(false)
   const handoffToApp = needsLiveAppHandoff()
   const shellOnly = publicShellOnly()
+  const googleError = searchParams.get('google_error') || ''
+
+  useEffect(() => {
+    let cancelled = false
+    async function load() {
+      try {
+        const session = await getWorkspaceSession()
+        if (!cancelled) {
+          setGoogleAuthEnabled(Boolean(session.google_auth?.enabled))
+        }
+      } catch {
+        if (!cancelled) {
+          setGoogleAuthEnabled(false)
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false)
+        }
+      }
+    }
+
+    void load()
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -59,6 +97,15 @@ export function SignupPage() {
       setBusy(false)
     }
   }
+
+  const googleSignupHref = googleAuthHref('signup', {
+    next: '/app/hq',
+    workspaceSlug: form.workspace_slug,
+    company: form.company,
+    name: form.name,
+    email: form.email,
+  })
+  const googleErrorMessage = googleError ? 'Google sign-in could not finish. Start again from this page.' : ''
 
   return (
     <div className="space-y-8">
@@ -117,6 +164,11 @@ export function SignupPage() {
               <a className="sm-button-secondary" href={appHref('/login/')}>
                 {isClientTenant ? 'Open Plant A desk' : 'Open app'}
               </a>
+              {googleAuthEnabled ? (
+                <a className="sm-button-secondary" href={googleSignupHref}>
+                  Continue with Google
+                </a>
+              ) : null}
             </div>
             <div className="mt-4 sm-chip text-[var(--sm-muted)]">
               Live app host: {workspaceAppBase}
@@ -139,6 +191,17 @@ export function SignupPage() {
         </aside>
 
         <form className="sm-surface p-6" onSubmit={handleSubmit}>
+          {googleAuthEnabled ? (
+            <div className="mb-5 flex flex-wrap gap-3">
+              <a className="sm-button-secondary" href={googleSignupHref}>
+                Continue with Google
+              </a>
+              <span className="self-center text-xs text-[var(--sm-muted)]">
+                {loading ? 'Checking Google sign-in...' : 'Create the workspace after Google verifies your email.'}
+              </span>
+            </div>
+          ) : null}
+
           <div className="grid gap-4">
             <label className="grid gap-2 text-sm font-semibold text-[var(--sm-muted)]">
               Name
@@ -183,6 +246,7 @@ export function SignupPage() {
           </div>
 
           {message ? <div className="mt-4 sm-chip text-white">{message}</div> : null}
+          {googleErrorMessage ? <div className="mt-4 sm-chip text-white">{googleErrorMessage}</div> : null}
           {error ? <div className="mt-4 sm-chip text-white">{error}</div> : null}
         </form>
       </section>

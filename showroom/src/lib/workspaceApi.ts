@@ -53,6 +53,14 @@ export const workspaceApiBase = inferApiBase()
 export const workspaceAppBase = inferAppBase()
 const publicWorkspaceProfileKey = 'supermega.publicWorkspaceProfile.v1'
 
+export type GoogleAuthConfig = {
+  enabled?: boolean
+  redirect_uri?: string
+  allowed_domains?: string[]
+  auto_provision?: boolean
+  start_url?: string
+}
+
 export type PublicWorkspaceProfile = {
   name: string
   email: string
@@ -222,6 +230,7 @@ export type WorkspaceSessionPayload = {
   auth_required?: boolean
   authenticated?: boolean
   uses_default_credentials?: boolean
+  google_auth?: GoogleAuthConfig
   workspaces?: Array<{
     workspace_id?: string
     slug?: string
@@ -242,6 +251,51 @@ export type WorkspaceSessionPayload = {
 
 export async function getWorkspaceSession() {
   return workspaceFetch<WorkspaceSessionPayload>('/api/auth/session')
+}
+
+function workspaceAuthBase() {
+  if (workspaceApiBase) {
+    return workspaceApiBase
+  }
+  if (workspaceAppBase) {
+    return workspaceAppBase
+  }
+  if (typeof window !== 'undefined') {
+    return window.location.origin
+  }
+  return ''
+}
+
+export function googleAuthHref(
+  mode: 'login' | 'signup',
+  options?: {
+    next?: string
+    workspaceSlug?: string
+    company?: string
+    name?: string
+    email?: string
+  },
+) {
+  const base = workspaceAuthBase().replace(/\/$/, '')
+  if (!base) {
+    return '/login'
+  }
+  const params = new URLSearchParams()
+  params.set('mode', mode)
+  params.set('next', options?.next || '/app/hq')
+  if (options?.workspaceSlug?.trim()) {
+    params.set('workspace_slug', options.workspaceSlug.trim())
+  }
+  if (options?.company?.trim()) {
+    params.set('company', options.company.trim())
+  }
+  if (options?.name?.trim()) {
+    params.set('name', options.name.trim())
+  }
+  if (options?.email?.trim()) {
+    params.set('email', options.email.trim())
+  }
+  return `${base}/api/auth/google/start?${params.toString()}`
 }
 
 export type TeamMemberRow = {

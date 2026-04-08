@@ -1,132 +1,132 @@
 # AI Company Execution Model
 
-This is the execution model for SuperMega as an AI-native company.
+This is the practical execution model for SuperMega.
 
-## Core model
+## The model
 
-Do not think in terms of one super-agent.
+SuperMega is not a chat-first company.
 
-SuperMega runs on:
-- one shared control plane
+It should run on:
+- one public site
+- one internal app
+- one worker runtime
 - one local founder mirror
-- queue-backed worker loops
-- a small number of named pods
-- explicit human approvals
+- one release workflow
 
-## Pods
+## Where work happens
+
+### Public site
+- `supermega.dev`
+- shows the company
+- collects contact
+- proves product shape
+
+### Internal app
+- `app.supermega.dev`
+- this should become the main control plane
+- holds live operating state
+
+### Worker runtime
+- Cloud Scheduler
+- Cloud Tasks
+- Cloud Run workers
+- this keeps loops running 24/7
+
+### Local founder mirror
+- `C:\Users\swann\OneDrive - BDA\Super Mega Inc\codex_hq`
+- this keeps a durable local copy of the human-facing outputs
+
+## What the app can do now
+
+The app can already do:
+- show director/founder state
+- show agent/loop state
+- show sales state
+- hold queue-backed operational state
+- reflect live worker activity
+
+That makes it the right place for daily operating visibility.
+
+## What the app still does not replace
+
+The app does not yet fully replace:
+- engineering work
+- release hardening
+- deep incident debugging
+- large product changes
+- schema or infrastructure changes
+
+That is still Codex plus the repo workflow.
+
+## Team model
 
 ### Founder Desk
-Owns:
 - priorities
-- release approval
-- scope approval
-- escalation judgment
-
-Main surfaces:
-- `app.supermega.dev/app/director`
-- local BDA HQ `ops`
+- approvals
+- final judgment
 
 ### Revenue Pod
-Owns:
-- inbound contact handling
-- prospecting and follow-up
-- deal movement
-
-Main surfaces:
-- `app.supermega.dev/app/sales`
-- `app.supermega.dev/app/teams`
+- contact
+- pipeline
+- follow-up
 
 ### Delivery Pod
-Owns:
-- starter pack rollout
-- implementation status
-- blockers and handoffs
-
-Main surfaces:
-- shared app queues
-- local reports
+- rollout
+- implementation
+- blockers
 
 ### Agent Ops
-Owns:
-- queue health
+- worker health
 - scheduler health
-- worker execution
-- incident visibility
+- queue health
+- release safety
 
-Main surfaces:
-- `app.supermega.dev/app/teams`
-- local BDA HQ `reports`
+## Agent rule
 
-## Runtime layers
-
-### Cloud
-- Cloud Scheduler enqueues recurring work
-- Cloud Tasks stores queued work
-- Cloud Run workers drain queues
-- Cloud Run web serves app and APIs
-- Cloud SQL stores operating state
-
-### Local founder layer
-- BDA HQ mirror
-- founder workspace launcher
-- workstation cycle
-- report refresh
-
-## What agents do
-
-Agents should create durable operating state:
+Agents should create durable state:
 - leads
+- deals
 - tasks
-- incidents
 - approvals
+- incidents
 - briefs
 
-Agents should not produce loose chat output as the main artifact.
+Agents should not create the company as loose chat output.
 
-## What remains human
+## Human rule
 
-Keep these manual:
+Humans still own:
 - product direction
-- customer promises
 - pricing
+- customer promises
 - release approval
-- ambiguous business judgment
+- ambiguous business decisions
 
-## How the founder inspects the company
+## Anywhere access
 
-### On desktop
-- open BDA HQ
-- open Director
-- open Agent Ops
-- review Sales only when revenue needs action
+### Phone
+Use for:
+- quick status
+- approvals
+- queue check
+- founder brief
 
-### On phone
-- use Director for a short status view
-- use Agent Ops for queue and loop health
+### Desktop
+Use for:
+- full operating review
+- BDA HQ review
+- release review
+- product and delivery decisions
 
-The phone path is for monitoring.
-The desktop path is for operating decisions.
+## Replacement path
 
-## What counts as autonomous
+To replace Codex as the control plane:
+1. keep founder visibility in the app
+2. keep local visibility in BDA HQ
+3. move preview/release checks to a self-hosted runner
+4. move browser-only tasks to a browser worker
+5. leave Codex only for engineering and exceptional investigation
 
-Autonomous means:
-- queues continue without Codex
-- reports refresh without Codex
-- founder can inspect status locally
-- incidents are visible
-- the next action is visible
+## Blunt rule
 
-Autonomous does not mean:
-- no human judgment
-- no approvals
-- no release gate
-
-## Scaling rule
-
-Scale by:
-- separating web and worker execution
-- increasing queue-backed work
-- structuring outputs
-- tightening operating surfaces
-
-Do not scale by inventing more vague agent roles.
+If the founder needs chat to know whether the company is healthy, the execution model is not finished yet.

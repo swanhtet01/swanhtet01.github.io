@@ -2,15 +2,40 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 
 import { PageIntro } from '../components/PageIntro'
-import { appHref, getWorkspaceSession, loginWorkspace, needsLiveAppHandoff, publicShellOnly, workspaceAppBase } from '../lib/workspaceApi'
+import {
+  appHref,
+  getWorkspaceSession,
+  googleAuthHref,
+  loginWorkspace,
+  needsLiveAppHandoff,
+  publicShellOnly,
+  workspaceAppBase,
+} from '../lib/workspaceApi'
 import { getTenantConfig } from '../lib/tenantConfig'
+
+const googleErrorLabels: Record<string, string> = {
+  google_not_configured: 'Google sign-in is not configured on this host yet.',
+  google_missing_code: 'Google sign-in did not return a valid code.',
+  google_state_mismatch: 'Google sign-in state expired. Start again.',
+  google_missing_token: 'Google sign-in did not return a token.',
+  google_token_exchange_failed: 'Google sign-in could not be completed. Try again.',
+  google_token_invalid: 'Google sign-in verification failed. Try again.',
+  google_email_not_verified: 'Use a Google account with a verified email.',
+  google_domain_not_allowed: 'This Google account domain is not allowed on this host.',
+  google_account_not_provisioned: 'This Google account does not have workspace access yet.',
+  google_session_failed: 'Google sign-in could not open the workspace session.',
+  google_nonce_mismatch: 'Google sign-in verification failed. Start again.',
+  google_denied: 'Google sign-in was cancelled.',
+}
 
 export function LoginPage() {
   const navigate = useNavigate()
   const location = useLocation()
   const tenant = getTenantConfig()
-  const next = new URLSearchParams(location.search).get('next') || '/app/actions'
+  const searchParams = new URLSearchParams(location.search)
+  const next = searchParams.get('next') || '/app/hq'
   const isClientTenant = tenant.key !== 'default'
+  const googleError = searchParams.get('google_error') || ''
 
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
@@ -20,6 +45,7 @@ export function LoginPage() {
   const [error, setError] = useState('')
   const [authRequired, setAuthRequired] = useState(true)
   const [usesDefaultCredentials, setUsesDefaultCredentials] = useState(false)
+  const [googleAuthEnabled, setGoogleAuthEnabled] = useState(false)
   const [workspaceOptions, setWorkspaceOptions] = useState<Array<{ slug?: string; name?: string; role?: string }>>([])
   const handoffToApp = needsLiveAppHandoff()
   const shellOnly = publicShellOnly()
@@ -34,6 +60,7 @@ export function LoginPage() {
         }
         setAuthRequired(session.auth_required !== false)
         setUsesDefaultCredentials(Boolean(session.uses_default_credentials))
+        setGoogleAuthEnabled(Boolean(session.google_auth?.enabled))
         setWorkspaceOptions(session.workspaces ?? [])
         if (!workspaceSlug && session.workspaces?.length === 1) {
           setWorkspaceSlug(session.workspaces[0].slug ?? '')
@@ -76,6 +103,13 @@ export function LoginPage() {
       setSubmitting(false)
     }
   }
+
+  const googleLoginHref = googleAuthHref('login', {
+    next,
+    workspaceSlug,
+    email: username.includes('@') ? username : '',
+  })
+  const googleErrorMessage = googleError ? googleErrorLabels[googleError] || 'Google sign-in could not be completed.' : ''
 
   return (
     <div className="space-y-8">
@@ -130,6 +164,11 @@ export function LoginPage() {
               <a className="sm-button-accent" href={appHref('/signup/')}>
                 {isClientTenant ? 'Start Plant A desk' : 'Start workspace'}
               </a>
+              {googleAuthEnabled ? (
+                <a className="sm-button-secondary" href={googleLoginHref}>
+                  Continue with Google
+                </a>
+              ) : null}
               <Link className="sm-button-secondary" to={isClientTenant ? '/receiving' : '/find-companies'}>
                 {isClientTenant ? 'Open receiving' : 'Open Find Companies'}
               </Link>
@@ -151,6 +190,15 @@ export function LoginPage() {
           </div>
         </aside>
         <form className="sm-surface p-6" onSubmit={handleSubmit}>
+          {googleAuthEnabled ? (
+            <div className="mb-5 flex flex-wrap gap-3">
+              <a className="sm-button-secondary" href={googleLoginHref}>
+                Continue with Google
+              </a>
+              <span className="self-center text-xs text-[var(--sm-muted)]">Phone-friendly sign-in for the live app.</span>
+            </div>
+          ) : null}
+
           <div className="grid gap-4">
             <label className="grid gap-2 text-sm font-semibold text-[var(--sm-muted)]">
               Username
@@ -200,6 +248,7 @@ export function LoginPage() {
               Available workspaces: {workspaceOptions.map((item) => `${item.name || item.slug} (${item.role || 'member'})`).join(' / ')}
             </div>
           ) : null}
+          {googleErrorMessage ? <div className="mt-4 sm-chip text-white">{googleErrorMessage}</div> : null}
           {error ? <div className="mt-4 sm-chip text-white">{error}</div> : null}
         </form>
       </section>
