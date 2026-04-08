@@ -326,6 +326,62 @@ export function DataVisibilityPage() {
             <article className="sm-surface p-6">
               <div className="flex items-center justify-between gap-3">
                 <div>
+                  <p className="sm-kicker text-[var(--sm-accent)]">Drive probe</p>
+                  <h2 className="mt-2 text-2xl font-bold text-white">What the Drive connector can actually see.</h2>
+                </div>
+                <span className={statusClassName(payload.connector_details?.google_drive?.status)}>{formatStatus(payload.connector_details?.google_drive?.status)}</span>
+              </div>
+
+              <div className="mt-5 grid gap-3 md:grid-cols-2">
+                <div className="sm-chip text-white">
+                  <p className="sm-kicker text-[var(--sm-accent)]">Service account</p>
+                  <p className="mt-2 text-sm">{payload.connector_details?.google_drive?.service_account_email || 'Not available'}</p>
+                </div>
+                <div className="sm-chip text-white">
+                  <p className="sm-kicker text-[var(--sm-accent-alt)]">Folder</p>
+                  <p className="mt-2 text-sm">{payload.connector_details?.google_drive?.folder_name || payload.connector_details?.google_drive?.folder_id || 'No folder configured'}</p>
+                </div>
+                <div className="sm-chip text-white">
+                  <p className="sm-kicker text-[var(--sm-accent)]">Drive user</p>
+                  <p className="mt-2 text-sm">{payload.connector_details?.google_drive?.drive_user || 'Not available'}</p>
+                </div>
+                <div className="sm-chip text-white">
+                  <p className="sm-kicker text-[var(--sm-accent-alt)]">Sampled children</p>
+                  <p className="mt-2 text-sm">{payload.connector_details?.google_drive?.children_count_sampled ?? 0}</p>
+                </div>
+              </div>
+
+              {payload.connector_details?.google_drive?.message ? <p className="mt-5 text-sm text-[var(--sm-muted)]">{payload.connector_details.google_drive.message}</p> : null}
+            </article>
+
+            <article className="sm-surface p-6">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="sm-kicker text-[var(--sm-accent-alt)]">Gmail probe</p>
+                  <h2 className="mt-2 text-2xl font-bold text-white">What the Gmail connector can actually see.</h2>
+                </div>
+                <span className={statusClassName(payload.connector_details?.gmail?.status)}>{formatStatus(payload.connector_details?.gmail?.status)}</span>
+              </div>
+
+              <div className="mt-5 grid gap-3 md:grid-cols-2">
+                <div className="sm-chip text-white">
+                  <p className="sm-kicker text-[var(--sm-accent)]">Mailbox</p>
+                  <p className="mt-2 text-sm">{payload.connector_details?.gmail?.email_address || 'Not available'}</p>
+                </div>
+                <div className="sm-chip text-white">
+                  <p className="sm-kicker text-[var(--sm-accent-alt)]">Messages</p>
+                  <p className="mt-2 text-sm">{payload.connector_details?.gmail?.messages_total ?? 0}</p>
+                </div>
+              </div>
+
+              {payload.connector_details?.gmail?.message ? <p className="mt-5 text-sm text-[var(--sm-muted)]">{payload.connector_details.gmail.message}</p> : null}
+            </article>
+          </section>
+
+          <section className="grid gap-6 xl:grid-cols-[1fr_1fr]">
+            <article className="sm-surface p-6">
+              <div className="flex items-center justify-between gap-3">
+                <div>
                   <p className="sm-kicker text-[var(--sm-accent)]">Knowledge graph</p>
                   <h2 className="mt-2 text-2xl font-bold text-white">Drive and Gmail should become shared company memory.</h2>
                 </div>

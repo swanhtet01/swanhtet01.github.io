@@ -2421,6 +2421,8 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
         drive_probe = _drive_probe_from_config(runtime_config)
         gmail_probe = _gmail_probe_from_config(runtime_config)
         tenant_payload = _tenant_architecture_payload(request)
+        drive_probe_payload = drive_probe.probe()
+        gmail_probe_payload = gmail_probe.probe()
 
         workspace_id = str(session.get("workspace_id", "")).strip()
         workspace_slug = str(session.get("workspace_slug", auth_workspace_slug)).strip() or auth_workspace_slug
@@ -2860,6 +2862,23 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             "linkage": linkage,
             "kpi_surfaces": kpi_surfaces,
             "graph": graph_summary,
+            "connector_details": {
+                "google_drive": {
+                    "status": str(drive_probe_payload.get("status", "")).strip(),
+                    "message": str(drive_probe_payload.get("message", "")).strip(),
+                    "service_account_email": str(drive_probe_payload.get("service_account_email", "")).strip(),
+                    "folder_id": str(drive_probe.folder_id or "").strip(),
+                    "folder_name": str(as_dict(drive_probe_payload.get("folder")).get("name", "")).strip(),
+                    "drive_user": str(drive_probe_payload.get("drive_user", "")).strip(),
+                    "children_count_sampled": int(drive_probe_payload.get("children_count_sampled", 0) or 0),
+                },
+                "gmail": {
+                    "status": str(gmail_probe_payload.get("status", "")).strip(),
+                    "message": str(gmail_probe_payload.get("message", "")).strip(),
+                    "email_address": str(gmail_probe_payload.get("email_address", "")).strip(),
+                    "messages_total": int(gmail_probe_payload.get("messages_total", 0) or 0),
+                },
+            },
             "next_steps": next_steps[:4],
         }
 

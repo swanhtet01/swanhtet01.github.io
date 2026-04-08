@@ -726,6 +726,23 @@ export type DataVisibilityPayload = {
     last_sync_at?: string
   }
   connectors?: DataVisibilityConnector[]
+  connector_details?: {
+    google_drive?: {
+      status?: string
+      message?: string
+      service_account_email?: string
+      folder_id?: string
+      folder_name?: string
+      drive_user?: string
+      children_count_sampled?: number
+    }
+    gmail?: {
+      status?: string
+      message?: string
+      email_address?: string
+      messages_total?: number
+    }
+  }
   memory?: DataVisibilityMemoryStore[]
   linkage?: DataVisibilityLinkage[]
   kpi_surfaces?: DataVisibilityKpiSurface[]
