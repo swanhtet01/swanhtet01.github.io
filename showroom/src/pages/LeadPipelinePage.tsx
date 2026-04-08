@@ -7,8 +7,6 @@ import {
   defaultStarterModules,
   defaultHuntTemplate,
   defaultWedgeProduct,
-  FINDER_ADVANTAGES,
-  HUNT_TEMPLATES,
   normalizeSolutionPack,
   QUICK_WIN_PRODUCTS,
   type HuntTemplate,
@@ -139,6 +137,17 @@ function loadTemplate(template: HuntTemplate) {
   }
 }
 
+type ContactSubmissionRow = {
+  submission_id?: number
+  created_at?: string
+  source?: string
+  name?: string
+  email?: string
+  company?: string
+  workflow?: string
+  goal?: string
+}
+
 const STARTER_PACK_TASKS: Record<
   string,
   Array<{
@@ -239,6 +248,7 @@ export function LeadPipelinePage() {
   const [pipeline, setPipeline] = useState<LeadPipelineResponse | null>(null)
   const [hunts, setHunts] = useState<LeadHuntProfile[]>([])
   const [tasks, setTasks] = useState<WorkspaceTaskRow[]>([])
+  const [contacts, setContacts] = useState<ContactSubmissionRow[]>([])
   const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({})
   const [searchName, setSearchName] = useState(templateDefaults.searchName)
   const [searchQuery, setSearchQuery] = useState(templateDefaults.searchQuery)
@@ -256,10 +266,11 @@ export function LeadPipelinePage() {
       throw new Error('Login is required to open Deals.')
     }
 
-    const [pipelinePayload, huntPayload, taskPayload] = await Promise.all([
+    const [pipelinePayload, huntPayload, taskPayload, contactPayload] = await Promise.all([
       workspaceFetch<LeadPipelineResponse & { status: string; count: number }>('/api/lead-pipeline'),
       workspaceFetch<{ status: string; count: number; rows: LeadHuntProfile[] }>('/api/lead-hunts'),
       workspaceFetch<{ status: string; count: number; rows: WorkspaceTaskRow[] }>('/api/workspace-tasks?status=open&limit=50'),
+      workspaceFetch<{ status?: string; rows?: ContactSubmissionRow[] }>('/api/contact-submissions?limit=8'),
     ])
 
     setPipeline({
@@ -268,6 +279,7 @@ export function LeadPipelinePage() {
     })
     setHunts(huntPayload.rows ?? [])
     setTasks(taskPayload.rows ?? [])
+    setContacts(contactPayload.rows ?? [])
     setNoteDrafts(
       Object.fromEntries(
         (pipelinePayload.rows ?? []).map((row) => [row.lead_id, row.notes || '']),
@@ -317,32 +329,12 @@ export function LeadPipelinePage() {
       discovery: pipeline?.summary.by_stage.discovery ?? 0,
       activeSearches: hunts.filter((hunt) => hunt.status === 'active').length,
       openTasks: tasks.length,
+      inboundRequests: contacts.length,
     }),
-    [hunts, pipeline, tasks],
+    [contacts, hunts, pipeline, tasks],
   )
 
-  const packCounts = useMemo(
-    () =>
-      (pipeline?.rows ?? []).reduce(
-        (current, row) => {
-          const key = normalizeSolutionPack(row.service_pack)
-          if (key === 'List Cleanup Desk') {
-            current.companyCleanup += 1
-          } else if (key === 'Receiving Control') {
-            current.receivingControl += 1
-          } else {
-            current.salesSetup += 1
-          }
-          return current
-        },
-        {
-          salesSetup: 0,
-          companyCleanup: 0,
-          receivingControl: 0,
-        },
-      ),
-    [pipeline],
-  )
+  const activeDeals = useMemo(() => (pipeline?.rows ?? []).slice(0, 8), [pipeline])
 
   async function saveSearchProfile() {
     if (!searchName.trim() || !searchQuery.trim()) {
@@ -506,14 +498,6 @@ export function LeadPipelinePage() {
     setMessage(`Copied offer brief for ${row.company_name}.`)
   }
 
-  function applyTemplate(template: HuntTemplate) {
-    const next = loadTemplate(template)
-    setSearchName(next.searchName)
-    setSearchQuery(next.searchQuery)
-    setSearchKeywords(next.searchKeywords)
-    setMessage(`Loaded search play: ${template.name}.`)
-  }
-
   async function applyStarterPack(solutionId: string) {
     const solution = CORE_SOLUTIONS.find((item) => item.id === solutionId)
     const tasksToCreate = STARTER_PACK_TASKS[solutionId] ?? []
@@ -557,11 +541,11 @@ export function LeadPipelinePage() {
     <div className="space-y-8">
       <PageIntro
         eyebrow="Deals"
-        title="Run revenue from one surface."
-        description="Offers, sourcing, follow-up, and queue ownership in one place."
+        title="Run one sales sprint from one surface."
+        description="Inbound requests, active deals, outreach, and the next queue in one place."
       />
 
-      <section className="grid gap-4 md:grid-cols-5">
+      <section className="grid gap-4 md:grid-cols-6">
         <div className="sm-chip text-white">
           <p className="sm-kicker text-[var(--sm-accent)]">Total leads</p>
           <p className="mt-2 text-3xl font-bold">{stageCounts.total}</p>
@@ -582,60 +566,115 @@ export function LeadPipelinePage() {
           <p className="sm-kicker text-[var(--sm-accent)]">Open tasks</p>
           <p className="mt-2 text-3xl font-bold">{stageCounts.openTasks}</p>
         </div>
+        <div className="sm-chip text-white">
+          <p className="sm-kicker text-[var(--sm-accent-alt)]">Inbound requests</p>
+          <p className="mt-2 text-3xl font-bold">{stageCounts.inboundRequests}</p>
+        </div>
       </section>
 
       <section className="grid gap-6 lg:grid-cols-[1.05fr_0.95fr]">
         <article className="sm-surface p-6">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <p className="sm-kicker text-[var(--sm-accent)]">Live offers</p>
-              <h2 className="mt-2 text-2xl font-bold text-white">Start from the few systems we can actually deliver.</h2>
-              <p className="mt-2 text-sm text-[var(--sm-muted)]">Each pack should create the first owned queue immediately. No blank rollout.</p>
+              <p className="sm-kicker text-[var(--sm-accent)]">Daily sales sprint</p>
+              <h2 className="mt-2 text-2xl font-bold text-white">Work one cohort, one problem, one clear offer.</h2>
+              <p className="mt-2 text-sm text-[var(--sm-muted)]">This is the founder loop: review inbound, choose a cohort, run one search, send outreach, then update the queue the same day.</p>
             </div>
             <Link className="sm-button-secondary" to="/app/dev-desk">
               Open Dev Desk
             </Link>
           </div>
 
-          <div className="mt-5 space-y-4">
-            {CORE_SOLUTIONS.map((solution) => (
-              <article className="sm-proof-card" key={solution.id}>
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <p className="text-lg font-bold text-white">{solution.name}</p>
-                    <p className="mt-2 text-sm text-[var(--sm-muted)]">{solution.promise}</p>
-                  </div>
-                  <span className="sm-status-pill">{solution.modules[0]}</span>
+          <div className="mt-5 grid gap-3 md:grid-cols-2">
+            {[
+              'Pick one cohort only.',
+              'Choose one workflow problem they already feel every day.',
+              'Map that problem to one offer and one demo angle.',
+              'Send outreach and update the stage the same day.',
+            ].map((item, index) => (
+              <div className="sm-proof-card" key={item}>
+                <div className="flex items-start gap-3">
+                  <span className="sm-status-pill">{index + 1}</span>
+                  <p className="text-sm text-[var(--sm-muted)]">{item}</p>
                 </div>
-                <div className="mt-4 grid gap-3 md:grid-cols-3">
-                  <div className="sm-chip text-white">
-                    <p className="sm-kicker text-[var(--sm-accent)]">Best buyer</p>
-                    <p className="mt-2 text-sm">{solution.buyer}</p>
-                  </div>
-                  <div className="sm-chip text-white">
-                    <p className="sm-kicker text-[var(--sm-accent-alt)]">When to sell</p>
-                    <p className="mt-2 text-sm">{solution.pain}</p>
-                  </div>
-                  <div className="sm-chip text-white">
-                    <p className="sm-kicker text-[var(--sm-accent)]">Pilot shape</p>
-                    <p className="mt-2 text-sm">{solution.pilot}</p>
-                  </div>
-                </div>
-                <div className="mt-4 flex flex-wrap gap-2">
-                  {solution.modules.map((module) => (
-                    <span className="sm-status-pill" key={module}>
-                      {module}
-                    </span>
-                  ))}
-                </div>
-                <div className="mt-4 flex flex-wrap gap-3">
-                  <button className="sm-button-primary" disabled={busy} onClick={() => void applyStarterPack(solution.id)} type="button">
-                    Apply starter pack
-                  </button>
-                  <span className="self-center text-xs text-[var(--sm-muted)]">Creates the first owned tasks for this offer.</span>
-                </div>
-              </article>
+              </div>
             ))}
+          </div>
+
+          <div className="mt-6 grid gap-3 md:grid-cols-3">
+            <button className="sm-button-primary" disabled={busy || !hunts.length} onClick={() => void runAllSearches()} type="button">
+              {busy ? 'Running...' : 'Run saved searches'}
+            </button>
+            <Link className="sm-button-secondary text-center" to="/app/workflows">
+              Open workflow queue
+            </Link>
+            <Link className="sm-button-secondary text-center" to="/app/data">
+              Open data plane
+            </Link>
+          </div>
+        </article>
+
+        <article className="sm-surface p-6">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="sm-kicker text-[var(--sm-accent-alt)]">Inbound requests</p>
+              <h2 className="mt-2 text-2xl font-bold text-white">Start with people already raising their hand.</h2>
+              <p className="mt-2 text-sm text-[var(--sm-muted)]">Website requests already land in the workspace. Work these before opening broader prospecting loops.</p>
+            </div>
+            <span className="sm-status-pill">{contacts.length} recent</span>
+          </div>
+
+          <div className="mt-5 space-y-3">
+            {contacts.length ? (
+              contacts.map((row, index) => (
+                <article className="sm-proof-card" key={`${row.submission_id ?? index}-${row.email ?? ''}`}>
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="text-lg font-bold text-white">{row.company || row.name || 'Inbound request'}</p>
+                      <p className="mt-2 text-sm text-[var(--sm-muted)]">{row.workflow || 'General request'}</p>
+                    </div>
+                    <span className="sm-status-pill">{row.email || 'No email'}</span>
+                  </div>
+                  {row.goal ? <p className="mt-4 text-sm text-[var(--sm-muted)]">{row.goal}</p> : null}
+                  <p className="mt-4 text-xs uppercase tracking-[0.14em] text-[var(--sm-muted)]">{formatLastRun(row.created_at || '')}</p>
+                </article>
+              ))
+            ) : (
+              <div className="sm-chip text-[var(--sm-muted)]">No inbound requests yet. The contact form is live, but you still need outbound to create pipeline volume.</div>
+            )}
+          </div>
+
+          <div className="mt-6">
+            <p className="sm-kicker text-[var(--sm-accent)]">What to sell</p>
+            <div className="mt-3 space-y-4">
+              {CORE_SOLUTIONS.map((solution) => (
+                <article className="sm-proof-card" key={solution.id}>
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="text-lg font-bold text-white">{solution.name}</p>
+                      <p className="mt-2 text-sm text-[var(--sm-muted)]">{solution.promise}</p>
+                    </div>
+                    <span className="sm-status-pill">{solution.modules[0]}</span>
+                  </div>
+                  <div className="mt-4 grid gap-3 md:grid-cols-2">
+                    <div className="sm-chip text-white">
+                      <p className="sm-kicker text-[var(--sm-accent)]">Best buyer</p>
+                      <p className="mt-2 text-sm">{solution.buyer}</p>
+                    </div>
+                    <div className="sm-chip text-white">
+                      <p className="sm-kicker text-[var(--sm-accent-alt)]">Pilot</p>
+                      <p className="mt-2 text-sm">{solution.pilot}</p>
+                    </div>
+                  </div>
+                  <div className="mt-4 flex flex-wrap gap-3">
+                    <button className="sm-button-primary" disabled={busy} onClick={() => void applyStarterPack(solution.id)} type="button">
+                      Apply starter pack
+                    </button>
+                    <span className="self-center text-xs text-[var(--sm-muted)]">Creates the first owned tasks for this offer.</span>
+                  </div>
+                </article>
+              ))}
+            </div>
           </div>
 
           <div className="mt-6">
@@ -650,64 +689,14 @@ export function LeadPipelinePage() {
             </div>
           </div>
         </article>
-
-        <article className="sm-surface p-6">
-          <p className="sm-kicker text-[var(--sm-accent)]">Deal sourcing</p>
-          <h2 className="mt-2 text-2xl font-bold text-white">Search is just the intake layer.</h2>
-          <div className="mt-5 grid gap-3">
-            {FINDER_ADVANTAGES.map((item) => (
-              <div className="sm-chip text-[var(--sm-muted)]" key={item}>
-                {item}
-              </div>
-            ))}
-          </div>
-
-          <div className="mt-6">
-            <p className="sm-kicker text-[var(--sm-accent-alt)]">Search plays</p>
-            <div className="mt-3 space-y-3">
-              {HUNT_TEMPLATES.map((template) => (
-                <button
-                  className="sm-proof-card w-full text-left"
-                  key={template.id}
-                  onClick={() => applyTemplate(template)}
-                  type="button"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="font-semibold text-white">{template.name}</p>
-                      <p className="mt-2 text-sm text-[var(--sm-muted)]">{template.why}</p>
-                    </div>
-                    <span className="sm-status-pill">Load</span>
-                  </div>
-                  <p className="mt-3 text-xs text-[var(--sm-muted)]">{template.query}</p>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="mt-6 grid gap-3 md:grid-cols-3">
-            <div className="sm-chip text-white">
-              <p className="sm-kicker text-[var(--sm-accent)]">Distributor Sales Desk</p>
-              <p className="mt-2 text-2xl font-bold">{packCounts.salesSetup}</p>
-            </div>
-            <div className="sm-chip text-white">
-              <p className="sm-kicker text-[var(--sm-accent-alt)]">List Cleanup Desk</p>
-              <p className="mt-2 text-2xl font-bold">{packCounts.companyCleanup}</p>
-            </div>
-            <div className="sm-chip text-white">
-              <p className="sm-kicker text-[var(--sm-accent)]">Receiving Control</p>
-              <p className="mt-2 text-2xl font-bold">{packCounts.receivingControl}</p>
-            </div>
-          </div>
-        </article>
       </section>
 
       <section className="grid gap-6 lg:grid-cols-[0.8fr_1.2fr]">
         <article className="sm-surface p-6">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <p className="sm-kicker text-[var(--sm-accent)]">New search</p>
-              <h2 className="mt-2 text-2xl font-bold text-white">Run or save a market search.</h2>
+              <p className="sm-kicker text-[var(--sm-accent)]">Research engine</p>
+              <h2 className="mt-2 text-2xl font-bold text-white">Prospecting is a support layer, not the whole system.</h2>
             </div>
             <Link className="sm-button-secondary" to="/app/leads/advanced">
               Advanced view
@@ -783,7 +772,7 @@ export function LeadPipelinePage() {
           <div className="flex items-center justify-between gap-3">
             <div>
               <p className="sm-kicker text-[var(--sm-accent)]">Active deals</p>
-              <h2 className="mt-2 text-2xl font-bold text-white">Work the right companies.</h2>
+              <h2 className="mt-2 text-2xl font-bold text-white">Work the companies already in motion.</h2>
             </div>
             <Link className="sm-button-secondary" to="/app/workflows">
               Open workflows
@@ -791,8 +780,8 @@ export function LeadPipelinePage() {
           </div>
 
           <div className="mt-5 space-y-4">
-            {pipeline?.rows?.length ? (
-              pipeline.rows.map((row) => (
+            {activeDeals.length ? (
+              activeDeals.map((row) => (
                 <div className="sm-proof-card" key={row.lead_id}>
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
@@ -944,7 +933,7 @@ export function LeadPipelinePage() {
           <div className="mt-5 grid gap-3">
             {[
               'Start from one narrow market or one imported list, not a huge segment.',
-              'Map each lead to one setup offer only: Distributor Sales Desk, List Cleanup Desk, or Receiving Control.',
+              'Map each lead to one setup offer only. One company does not need the whole platform on day one.',
               'Open Gmail from the lead card, then move the stage the same day.',
               'Keep every next step in the queue so search, list cleanup, and follow-up stay connected.',
             ].map((item) => (

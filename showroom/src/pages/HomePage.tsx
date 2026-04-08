@@ -33,10 +33,10 @@ export function HomePage() {
           <div className="sm-site-hero-copy sm-site-hero-copy-tight">
             <p className="sm-kicker text-[var(--sm-accent)]">SuperMega</p>
             <h1 className="mt-4 max-w-5xl text-5xl font-extrabold tracking-tight text-white lg:text-8xl">
-              Shared software for sales, operations, approvals, and client work.
+              Custom software that replaces scattered tools.
             </h1>
             <p className="mt-5 max-w-2xl text-base leading-relaxed text-[var(--sm-muted)] lg:text-lg">
-              Real product screens from the current branch. Start with one module. Add more only when the team is using it.
+              Start with sales, operations, approvals, or a client portal. Add more only when the team is already using the first screen.
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
               <Link className="sm-button-primary" to="/products">
@@ -47,8 +47,8 @@ export function HomePage() {
               </Link>
             </div>
             <div className="mt-10 sm-home-quick-list">
-              <span>Sales workspace</span>
-              <span>Ops queue</span>
+              <span>Sales system</span>
+              <span>Operations inbox</span>
               <span>Daily brief</span>
               <span>Client portal</span>
             </div>
@@ -103,7 +103,7 @@ export function HomePage() {
           <div>
             <p className="sm-kicker text-[var(--sm-accent)]">Core systems</p>
             <h2 className="mt-3 max-w-4xl text-3xl font-bold text-white lg:text-5xl">
-              Pick the screen that matches the work you already need to run.
+              Pick the first system your team would actually open.
             </h2>
           </div>
           <Link className="sm-link" to="/products">
@@ -176,15 +176,15 @@ export function HomePage() {
             <p className="sm-kicker text-[var(--sm-accent)]">Contact</p>
             <h2 className="mt-3 text-3xl font-bold text-white lg:text-5xl">Tell us which workflow still feels fragmented.</h2>
             <p className="mt-4 max-w-2xl text-base leading-relaxed text-[var(--sm-muted)]">
-              We&apos;ll point you to the closest module or shape a new one from the same base.
+              We&apos;ll point you to the closest starting system or shape a new one from the same base.
             </p>
           </div>
           <div className="flex flex-wrap gap-3">
             <Link className="sm-button-primary" to="/contact">
               Contact
             </Link>
-            <a className="sm-button-secondary" href="https://app.supermega.dev" rel="noreferrer" target="_blank">
-              Open app
+            <a className="sm-button-secondary" href="https://app.supermega.dev/login" rel="noreferrer" target="_blank">
+              Client sign in
             </a>
           </div>
         </div>

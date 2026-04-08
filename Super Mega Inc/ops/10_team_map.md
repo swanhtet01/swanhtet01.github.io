@@ -137,6 +137,60 @@ Equipped resources:
 Human seat:
 - founder plus delivery support
 
+## 6. Design + R&D Pod
+
+Purpose:
+- design new system modules
+- turn repeated client problems into reusable products
+- keep demos, proof screens, and portal patterns current
+
+Primary surfaces:
+- `/app/portal-studio`
+- `/app/data`
+- preview environments as they mature
+
+Owns:
+- product experiments
+- module library
+- design backlog
+- open starter templates
+
+Equipped resources:
+- system screenshot library
+- portal blueprints
+- data visibility surface
+- tenant graph context
+- branch review environments when available
+
+Human seat:
+- founder plus design/product support
+
+## 7. Browser Sidecar Pod
+
+Purpose:
+- handle browser-only work that cannot be done through direct APIs
+- capture screenshots
+- verify flows
+- operate admin surfaces when needed
+
+Primary surfaces:
+- browser-worker runtime as it matures
+- `/app/dev-desk`
+
+Owns:
+- browser job queue
+- verification captures
+- browser-only run logs
+
+Equipped resources:
+- dedicated browser worker machine or VM
+- isolated browser credentials
+- queued browser actions
+- screenshot and evidence capture
+
+Human seat:
+- founder or runtime operator
+
 ## Pod rules
 
 - Every pod writes durable state, not loose chat.

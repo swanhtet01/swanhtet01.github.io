@@ -10,7 +10,6 @@ const navClassName = ({ isActive }: { isActive: boolean }) =>
 
 const publicNavItems = [
   { label: 'Systems', to: '/products' },
-  { label: 'Examples', to: '/demos' },
   { label: 'Contact', to: '/contact' },
 ]
 
@@ -47,8 +46,8 @@ export function SiteFrame() {
                 {item.label}
               </NavLink>
             ))}
-            <a className="sm-link ml-3" href="https://app.supermega.dev" rel="noreferrer" target="_blank">
-              Open app
+            <a className="sm-link ml-3" href="https://app.supermega.dev/login" rel="noreferrer" target="_blank">
+              Client sign in
             </a>
           </div>
         </nav>
@@ -61,8 +60,8 @@ export function SiteFrame() {
                   {item.label}
                 </NavLink>
               ))}
-              <a className="sm-button-secondary mt-2" href="https://app.supermega.dev" rel="noreferrer" target="_blank">
-                Open app
+              <a className="sm-button-secondary mt-2" href="https://app.supermega.dev/login" rel="noreferrer" target="_blank">
+                Client sign in
               </a>
             </div>
           </div>
@@ -75,19 +74,16 @@ export function SiteFrame() {
 
       <footer className="border-t border-white/8 bg-[rgba(4,8,16,0.82)]">
         <div className="mx-auto flex w-full max-w-7xl flex-col gap-4 px-4 py-6 text-sm text-[var(--sm-muted)] lg:flex-row lg:items-center lg:justify-between lg:px-8">
-          <p>SuperMega builds shared systems for sales, operations, approvals, and client work.</p>
+          <p>SuperMega builds shared software for sales, operations, approvals, and client work.</p>
           <div className="flex flex-wrap gap-4">
             <Link className="sm-link" to="/products">
               Systems
             </Link>
-            <Link className="sm-link" to="/demos">
-              Examples
-            </Link>
             <Link className="sm-link" to="/contact">
               Contact
             </Link>
-            <a className="sm-link" href="https://app.supermega.dev" rel="noreferrer" target="_blank">
-              Open app
+            <a className="sm-link" href="https://app.supermega.dev/login" rel="noreferrer" target="_blank">
+              Client sign in
             </a>
           </div>
         </div>

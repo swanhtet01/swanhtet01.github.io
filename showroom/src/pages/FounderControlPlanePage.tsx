@@ -234,6 +234,56 @@ export function FounderControlPlanePage() {
           tenantArchitecture?.google_auth?.redirect_uri_configured)),
   )
 
+  const founderAttention = useMemo(
+    () => [
+      {
+        title: 'Revenue',
+        value: `${contacts.length} inbound`,
+        detail: contacts.length
+          ? 'New requests are waiting in Deals.'
+          : 'No fresh inbound right now. Outbound sprint still matters.',
+        href: '/app/deals',
+        action: 'Open Deals',
+        tone: contacts.length ? 'text-[var(--sm-accent)]' : 'text-[var(--sm-muted)]',
+      },
+      {
+        title: 'Runtime',
+        value: runtimeHealth.staleCount ? `${runtimeHealth.staleCount} loops drifting` : 'Loops on cadence',
+        detail: runtimeHealth.errorCount
+          ? `${runtimeHealth.errorCount} loop errors need review.`
+          : 'Core loops are finishing without fresh errors.',
+        href: '/app/agents',
+        action: 'Open Agent Ops',
+        tone: runtimeHealth.staleCount || runtimeHealth.errorCount ? 'text-[var(--sm-accent-alt)]' : 'text-[var(--sm-accent)]',
+      },
+      {
+        title: 'Approvals',
+        value: `${summary?.approvals?.approval_count ?? 0} open`,
+        detail:
+          (summary?.approvals?.approval_count ?? 0) > 0
+            ? 'Open approvals are still blocking delivery.'
+            : 'No approval backlog is visible right now.',
+        href: '/app/workflows',
+        action: 'Open workflows',
+        tone: (summary?.approvals?.approval_count ?? 0) > 0 ? 'text-[var(--sm-accent-alt)]' : 'text-[var(--sm-muted)]',
+      },
+      {
+        title: 'Engineering',
+        value: devStatus?.repo?.dirty_count ? `${devStatus.repo.dirty_count} local changes` : 'Repo clean',
+        detail: devStatus?.local_runner?.local_hq_ready
+          ? 'Local HQ can run on this machine.'
+          : 'Local HQ is still blocked until Python is on PATH.',
+        href: '/app/dev-desk',
+        action: 'Open Dev Desk',
+        tone:
+          (devStatus?.repo?.dirty_count ?? 0) > 0 || !devStatus?.local_runner?.local_hq_ready
+            ? 'text-[var(--sm-accent-alt)]'
+            : 'text-[var(--sm-accent)]',
+      },
+    ],
+    [contacts.length, devStatus?.local_runner?.local_hq_ready, devStatus?.repo?.dirty_count, runtimeHealth.errorCount, runtimeHealth.staleCount, summary?.approvals?.approval_count],
+  )
+
   return (
     <div className="sm-app-page">
       <section className="sm-app-panel">
@@ -261,6 +311,21 @@ export function FounderControlPlanePage() {
         </div>
 
         {message ? <div className="sm-app-note mt-4">{message}</div> : null}
+      </section>
+
+      <section className="grid gap-4 lg:grid-cols-4">
+        {founderAttention.map((item) => (
+          <article className="sm-metric-card" key={item.title}>
+            <p className="sm-kicker text-[var(--sm-muted)]">{item.title}</p>
+            <p className={`mt-3 text-2xl font-bold ${item.tone}`}>{item.value}</p>
+            <p className="mt-3 text-sm text-[var(--sm-muted)]">{item.detail}</p>
+            <div className="mt-4">
+              <Link className="sm-link" to={item.href}>
+                {item.action}
+              </Link>
+            </div>
+          </article>
+        ))}
       </section>
 
       <section className="sm-app-kpi-strip">

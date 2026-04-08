@@ -14,6 +14,19 @@ Updates and architecture land here:
 - `C:\Users\swann\OneDrive - BDA\Super Mega Inc\codex_hq\ops\27_supermega_platform_architecture.md`
 - `C:\Users\swann\OneDrive - BDA\Super Mega Inc\codex_hq\ops\28_tenant_identity_and_defaults.md`
 
+## What works today
+
+Use `live` mode if the goal is to operate the company right now.
+
+That path already gives you:
+- the deployed app on `https://app.supermega.dev`
+- the synced BDA mirror
+- founder reports
+- agent/runtime visibility
+
+Use `local` mode only if you want branch-only features that are not deployed yet.
+That path currently depends on a real Python install being available on Windows `PATH`.
+
 ## How Swan opens it locally
 Use one of these modes:
 
@@ -46,6 +59,9 @@ This starts the local stack and opens:
 - `http://localhost:8787/app/agents`
 - `http://localhost:8787/app/deals`
 
+If `python` is missing, this mode will not start.
+That is a local workstation requirement, not an app failure.
+
 ### 3. Mirror only
 Use this when you only want the synced control files and no browser pages:
 
@@ -68,6 +84,21 @@ Current repo-side defaults:
 Important:
 - live deployment can override these with environment variables
 - the mirror is for visibility, not final credential authority
+- these are still demo defaults and should not remain the long-term production access model
+
+## What Swan should open first
+
+If you are checking the company in under five minutes:
+1. `C:\Users\swann\OneDrive - BDA\Super Mega Inc\codex_hq\ops\index.html`
+2. `https://app.supermega.dev/app/dev-desk`
+3. `https://app.supermega.dev/app/deals`
+4. `https://app.supermega.dev/app/agents`
+
+If you are checking whether the company is actually running:
+1. open the local ops hub
+2. confirm the founder brief and operator report updated recently
+3. confirm `Dev Desk` shows runtime health and current repo state
+4. confirm `Deals` shows inbound and active companies
 
 ## What still depends on Codex vs the app
 
