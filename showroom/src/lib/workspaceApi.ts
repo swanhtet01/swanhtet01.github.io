@@ -629,3 +629,82 @@ export async function removeWorkspaceTask(taskId: string) {
     method: 'DELETE',
   })
 }
+
+export type DataVisibilityConnector = {
+  key: string
+  label: string
+  category: string
+  status: string
+  mode: string
+  evidence: string
+  updated_at?: string
+  destinations?: string[]
+  next_step?: string
+}
+
+export type DataVisibilityMemoryStore = {
+  key: string
+  label: string
+  kind: string
+  status: string
+  evidence: string
+  updated_at?: string
+  connected_surfaces?: string[]
+  next_step?: string
+}
+
+export type DataVisibilityLinkage = {
+  key: string
+  source: string
+  memory: string
+  surfaces: string[]
+  note?: string
+}
+
+export type DataVisibilityKpiSurface = {
+  key: string
+  label: string
+  status: string
+  source: string
+  metrics: string[]
+  evidence: string
+  next_step?: string
+}
+
+export type DataVisibilityPayload = {
+  status?: string
+  statement?: string
+  manual_entry_note?: string
+  workspace?: {
+    workspace_id?: string
+    workspace_slug?: string
+    workspace_name?: string
+    workspace_count?: number
+    team_member_count?: number
+    last_sync_at?: string
+  }
+  links?: {
+    workspace_export?: string
+    founder_brief?: string
+    gmail_compose?: string
+  }
+  summary?: {
+    connector_count?: number
+    connected_source_count?: number
+    memory_surface_count?: number
+    kpi_surface_count?: number
+    manual_surface_count?: number
+    agent_run_count?: number
+    unresolved_gap_count?: number
+    last_sync_at?: string
+  }
+  connectors?: DataVisibilityConnector[]
+  memory?: DataVisibilityMemoryStore[]
+  linkage?: DataVisibilityLinkage[]
+  kpi_surfaces?: DataVisibilityKpiSurface[]
+  next_steps?: string[]
+}
+
+export async function getDataVisibility() {
+  return workspaceFetch<DataVisibilityPayload>('/api/platform/data-visibility')
+}

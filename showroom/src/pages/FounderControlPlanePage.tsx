@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 
-import { PageIntro } from '../components/PageIntro'
 import {
   checkWorkspaceHealth,
   getWorkspaceSession,
@@ -167,10 +166,18 @@ export function FounderControlPlanePage() {
 
     const sessionPayload = await getWorkspaceSession()
     if (!sessionPayload.authenticated) {
-      throw new Error('Login is required to open Dev Desk.')
+      throw new Error('Login is required to open Founder.')
     }
 
-    const [summaryPayload, agentTeamPayload, memberPayload, agentRunPayload, contactPayload, workspacePayload, tenantPayload] = await Promise.all([
+    const [
+      summaryPayload,
+      agentTeamPayload,
+      memberPayload,
+      agentRunPayload,
+      contactPayload,
+      workspacePayload,
+      tenantPayload,
+    ] = await Promise.all([
       workspaceFetch<SummaryPayload>('/api/summary'),
       workspaceFetch<AgentTeamPayload>('/api/agent-teams'),
       listTeamMembers(),
@@ -200,7 +207,7 @@ export function FounderControlPlanePage() {
         await loadData()
       } catch (nextError) {
         if (!cancelled) {
-          setError(nextError instanceof Error ? nextError.message : 'Dev Desk could not be loaded right now.')
+          setError(nextError instanceof Error ? nextError.message : 'Founder console could not be loaded.')
         }
       } finally {
         if (!cancelled) {
@@ -221,7 +228,7 @@ export function FounderControlPlanePage() {
     try {
       const payload = await runDefaultAgentJobs()
       await loadData()
-      setMessage(`Ran ${payload.count ?? 0} default loop${payload.count === 1 ? '' : 's'}.`)
+      setMessage(`Ran ${payload.count ?? 0} core loop${payload.count === 1 ? '' : 's'}.`)
     } catch (nextError) {
       setMessage(nextError instanceof Error ? nextError.message : 'Could not run the core loops.')
     } finally {
@@ -292,321 +299,338 @@ export function FounderControlPlanePage() {
 
   const googleAuthReady = Boolean(
     tenantArchitecture?.google_auth?.enabled &&
-      (
-        tenantArchitecture?.google_auth?.client_json_configured ||
+      (tenantArchitecture?.google_auth?.client_json_configured ||
         (tenantArchitecture?.google_auth?.client_id_configured &&
           tenantArchitecture?.google_auth?.client_secret_configured &&
-          tenantArchitecture?.google_auth?.redirect_uri_configured)
-      ),
+          tenantArchitecture?.google_auth?.redirect_uri_configured)),
   )
 
   return (
-    <div className="space-y-8">
-      <PageIntro
-        eyebrow="Dev Desk"
-        title="Control runtime, tenants, and releases."
-        description="Founder surface for app health, workspaces, inbound, loops, and rollout state."
-      />
+    <div className="sm-app-page">
+      <section className="sm-app-panel">
+        <div className="sm-app-header">
+          <div className="sm-app-header-copy">
+            <p className="sm-kicker text-[var(--sm-accent)]">Founder</p>
+            <h2>Control runtime and tenants.</h2>
+            <p>Use this screen to run the company stack, check drift, and move between workspaces fast.</p>
+          </div>
 
-      <section className="grid gap-4 md:grid-cols-6">
-        <div className="sm-metric-card">
-          <p className="sm-kicker text-[var(--sm-accent)]">Runtime</p>
-          <p className="mt-3 text-3xl font-bold text-white">{error ? 'Issue' : 'Ready'}</p>
+          <div className="sm-app-actions">
+            <button className="sm-button-primary" disabled={busy !== null} onClick={() => void handleRunDefaults()} type="button">
+              {busy === 'defaults' ? 'Running…' : 'Run core loops'}
+            </button>
+            <button className="sm-button-secondary" disabled={busy !== null} onClick={() => void handleProcessQueue()} type="button">
+              {busy === 'queue' ? 'Processing…' : 'Process queue'}
+            </button>
+            <Link className="sm-button-secondary" to="/app/agents">
+              Open agents
+            </Link>
+            <Link className="sm-button-secondary" to="/app/company">
+              Company log
+            </Link>
+          </div>
         </div>
-        <div className="sm-metric-card">
-          <p className="sm-kicker text-[var(--sm-accent-alt)]">Workspace</p>
-          <p className="mt-3 text-xl font-bold text-white">{workspaces?.active_workspace?.workspace_slug || session?.workspace_slug || 'none'}</p>
-        </div>
-        <div className="sm-metric-card">
-          <p className="sm-kicker text-[var(--sm-accent)]">Tenants</p>
-          <p className="mt-3 text-3xl font-bold text-white">{workspaces?.app_workspaces?.length ?? 0}</p>
-        </div>
-        <div className="sm-metric-card">
-          <p className="sm-kicker text-[var(--sm-accent-alt)]">Inbound</p>
-          <p className="mt-3 text-3xl font-bold text-white">{contacts.length}</p>
-        </div>
-        <div className="sm-metric-card">
-          <p className="sm-kicker text-[var(--sm-accent)]">Loop drift</p>
-          <p className="mt-3 text-3xl font-bold text-white">{runtimeHealth.staleCount}</p>
-        </div>
-        <div className="sm-metric-card">
-          <p className="sm-kicker text-[var(--sm-accent-alt)]">Autonomy</p>
-          <p className="mt-3 text-3xl font-bold text-white">{agentPayload?.summary?.autonomy_score ?? 0}</p>
-        </div>
+
+        {message ? <div className="sm-app-note mt-4">{message}</div> : null}
       </section>
 
-      {loading ? <div className="sm-chip text-[var(--sm-muted)]">Loading Dev Desk...</div> : null}
-      {error ? <div className="sm-chip text-[var(--sm-muted)]">{error}</div> : null}
+      <section className="sm-app-kpi-strip">
+        <article className="sm-app-kpi">
+          <p className="sm-app-label">Runtime</p>
+          <strong>{error ? 'Issue' : 'Ready'}</strong>
+        </article>
+        <article className="sm-app-kpi">
+          <p className="sm-app-label">Workspace</p>
+          <strong>{workspaces?.active_workspace?.workspace_slug || session?.workspace_slug || 'none'}</strong>
+        </article>
+        <article className="sm-app-kpi">
+          <p className="sm-app-label">Tenants</p>
+          <strong>{workspaces?.app_workspaces?.length ?? 0}</strong>
+        </article>
+        <article className="sm-app-kpi">
+          <p className="sm-app-label">Inbound</p>
+          <strong>{contacts.length}</strong>
+        </article>
+        <article className="sm-app-kpi">
+          <p className="sm-app-label">Loop drift</p>
+          <strong>{runtimeHealth.staleCount}</strong>
+        </article>
+        <article className="sm-app-kpi">
+          <p className="sm-app-label">Autonomy</p>
+          <strong>{agentPayload?.summary?.autonomy_score ?? 0}</strong>
+        </article>
+      </section>
+
+      {loading ? <div className="sm-app-note">Loading founder console…</div> : null}
+      {error ? <div className="sm-app-note">{error}</div> : null}
 
       {!loading && !error ? (
         <>
-          <section className="grid gap-6 xl:grid-cols-[1.08fr_0.92fr]">
-            <article className="sm-surface p-6">
-              <div className="flex flex-wrap items-start justify-between gap-4">
+          <section className="sm-app-grid-split">
+            <article className="sm-app-panel">
+              <div className="sm-app-panel-head">
                 <div>
-                  <p className="sm-kicker text-[var(--sm-accent)]">Runtime</p>
-                  <h2 className="mt-2 text-2xl font-bold text-white">What is live right now.</h2>
+                  <p className="sm-kicker text-[var(--sm-accent)]">Live stack</p>
+                  <h2>Runtime</h2>
                 </div>
-                <div className="flex flex-wrap gap-3">
-                  <button className="sm-button-primary" disabled={busy !== null} onClick={() => void handleRunDefaults()} type="button">
-                    {busy === 'defaults' ? 'Running...' : 'Run core loops'}
-                  </button>
-                  <button className="sm-button-secondary" disabled={busy !== null} onClick={() => void handleProcessQueue()} type="button">
-                    {busy === 'queue' ? 'Processing...' : 'Process queue'}
-                  </button>
-                </div>
+                <span className="sm-status-pill">{summary?.supervisor?.status || 'manual'}</span>
               </div>
 
-              {message ? <div className="sm-chip mt-4 text-[var(--sm-muted)]">{message}</div> : null}
-
-              <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                <div className="sm-chip text-white">
-                  <p className="sm-kicker text-[var(--sm-accent)]">Public site</p>
-                  <p className="mt-2 text-sm">{formatHost('https://supermega.dev')}</p>
+              <div className="sm-app-mini-grid">
+                <div className="sm-app-mini-card">
+                  <p className="sm-app-label">Public site</p>
+                  <strong>{formatHost('https://supermega.dev')}</strong>
                 </div>
-                <div className="sm-chip text-white">
-                  <p className="sm-kicker text-[var(--sm-accent-alt)]">App host</p>
-                  <p className="mt-2 text-sm">{formatHost(workspaceAppBase || currentOrigin)}</p>
+                <div className="sm-app-mini-card">
+                  <p className="sm-app-label">App host</p>
+                  <strong>{formatHost(workspaceAppBase || currentOrigin)}</strong>
                 </div>
-                <div className="sm-chip text-white">
-                  <p className="sm-kicker text-[var(--sm-accent)]">API host</p>
-                  <p className="mt-2 text-sm">{formatHost(workspaceApiBase || currentOrigin)}</p>
+                <div className="sm-app-mini-card">
+                  <p className="sm-app-label">API host</p>
+                  <strong>{formatHost(workspaceApiBase || currentOrigin)}</strong>
                 </div>
-                <div className="sm-chip text-white">
-                  <p className="sm-kicker text-[var(--sm-accent-alt)]">Supervisor</p>
-                  <p className="mt-2 text-sm">
-                    {summary?.supervisor?.status || 'manual'}
-                    {summary?.supervisor?.interval_minutes ? ` / ${summary.supervisor.interval_minutes}m` : ''}
-                  </p>
+                <div className="sm-app-mini-card">
+                  <p className="sm-app-label">Cycle</p>
+                  <strong>{summary?.supervisor?.interval_minutes ? `${summary.supervisor.interval_minutes}m` : 'Manual'}</strong>
                 </div>
-                <div className="sm-chip text-white">
-                  <p className="sm-kicker text-[var(--sm-accent)]">Last scheduler</p>
-                  <p className="mt-2 text-sm">{formatDateTime(runtimeHealth.lastSchedulerRun)}</p>
+                <div className="sm-app-mini-card">
+                  <p className="sm-app-label">Last scheduler</p>
+                  <strong>{formatDateTime(runtimeHealth.lastSchedulerRun)}</strong>
                 </div>
-                <div className="sm-chip text-white">
-                  <p className="sm-kicker text-[var(--sm-accent-alt)]">Current tenant</p>
-                  <p className="mt-2 text-sm">
-                    {workspaces?.active_workspace?.workspace_name || session?.workspace_name || 'SuperMega'}
-                  </p>
+                <div className="sm-app-mini-card">
+                  <p className="sm-app-label">Current tenant</p>
+                  <strong>{workspaces?.active_workspace?.workspace_name || session?.workspace_name || 'SuperMega'}</strong>
                 </div>
-              </div>
-
-              <div className="mt-5 flex flex-wrap gap-3">
-                <Link className="sm-button-secondary" to="/app/hq">
-                  Open HQ
-                </Link>
-                <Link className="sm-button-secondary" to="/app/agents">
-                  Open Agents
-                </Link>
-                <Link className="sm-button-secondary" to="/app/company">
-                  Open company log
-                </Link>
-                <Link className="sm-button-secondary" to="/">
-                  Open public site
-                </Link>
-                {summary?.workspace?.google_doc_link ? (
-                  <a className="sm-button-secondary" href={summary.workspace.google_doc_link} rel="noreferrer" target="_blank">
-                    Open latest brief
-                  </a>
-                ) : null}
               </div>
             </article>
 
-            <article className="sm-surface p-6">
-              <p className="sm-kicker text-[var(--sm-accent-alt)]">Identity</p>
-              <h2 className="mt-2 text-2xl font-bold text-white">Auth and tenant mode</h2>
-              <div className="mt-5 grid gap-3 md:grid-cols-2">
-                <div className="sm-chip text-white">
-                  <p className="sm-kicker text-[var(--sm-accent)]">Tenant</p>
-                  <p className="mt-2 text-sm">{tenantModeLabel}</p>
+            <article className="sm-app-panel-muted">
+              <div className="sm-app-panel-head">
+                <div>
+                  <p className="sm-kicker text-[var(--sm-accent-alt)]">Identity</p>
+                  <h2>Auth and tenant mode</h2>
                 </div>
-                <div className="sm-chip text-white">
-                  <p className="sm-kicker text-[var(--sm-accent-alt)]">Auth mode</p>
-                  <p className="mt-2 text-sm">
-                    {tenantArchitecture?.auth?.auth_required ? 'Protected' : 'Open'}
-                    {tenantArchitecture?.auth?.session_ttl_hours ? ` / ${tenantArchitecture.auth.session_ttl_hours}h session` : ''}
-                  </p>
-                </div>
-                <div className="sm-chip text-white">
-                  <p className="sm-kicker text-[var(--sm-accent)]">Demo credentials</p>
-                  <p className="mt-2 text-sm">{tenantArchitecture?.auth?.uses_default_credentials ? 'Active' : 'Off'}</p>
-                </div>
-                <div className="sm-chip text-white">
-                  <p className="sm-kicker text-[var(--sm-accent-alt)]">Google auth</p>
-                  <p className="mt-2 text-sm">{googleAuthReady ? 'Ready' : tenantArchitecture?.google_auth?.enabled ? 'Partial' : 'Off'}</p>
-                </div>
+                <span className="sm-status-pill">{tenantModeLabel}</span>
               </div>
 
-              <div className="mt-5 grid gap-3">
-                <div className="sm-chip text-white">
-                  <p className="sm-kicker text-[var(--sm-accent)]">Default identity</p>
-                  <p className="mt-2 text-sm">
-                    {tenantArchitecture?.auth?.default_username || 'Not set'}
-                    {tenantArchitecture?.auth?.default_workspace_slug ? ` / ${tenantArchitecture.auth.default_workspace_slug}` : ''}
-                  </p>
+              <div className="sm-app-mini-grid">
+                <div className="sm-app-mini-card">
+                  <p className="sm-app-label">Auth mode</p>
+                  <strong>
+                    {tenantArchitecture?.auth?.auth_required ? 'Protected' : 'Open'}
+                    {tenantArchitecture?.auth?.session_ttl_hours ? ` / ${tenantArchitecture.auth.session_ttl_hours}h` : ''}
+                  </strong>
                 </div>
-                <div className="sm-chip text-white">
-                  <p className="sm-kicker text-[var(--sm-accent-alt)]">Google domains</p>
-                  <p className="mt-2 text-sm">
+                <div className="sm-app-mini-card">
+                  <p className="sm-app-label">Demo credentials</p>
+                  <strong>{tenantArchitecture?.auth?.uses_default_credentials ? 'Active' : 'Off'}</strong>
+                </div>
+                <div className="sm-app-mini-card">
+                  <p className="sm-app-label">Google auth</p>
+                  <strong>{googleAuthReady ? 'Ready' : tenantArchitecture?.google_auth?.enabled ? 'Partial' : 'Off'}</strong>
+                </div>
+                <div className="sm-app-mini-card">
+                  <p className="sm-app-label">Allowed domains</p>
+                  <strong>
                     {(tenantArchitecture?.google_auth?.allowed_domains ?? []).length
                       ? tenantArchitecture?.google_auth?.allowed_domains?.join(', ')
-                      : 'Any domain'}
-                  </p>
+                      : 'Any'}
+                  </strong>
                 </div>
               </div>
             </article>
           </section>
 
-          <section className="grid gap-6 xl:grid-cols-[1.08fr_0.92fr]">
-            <article className="sm-surface p-6">
-              <p className="sm-kicker text-[var(--sm-accent-alt)]">Tenants</p>
-              <h2 className="mt-2 text-2xl font-bold text-white">Where the company is currently deployed.</h2>
-              <div className="mt-5 space-y-3">
-                {(workspaces?.app_workspaces ?? []).length ? (
-                  workspaces?.app_workspaces?.map((workspace) => (
-                    <div className="sm-proof-card" key={workspace.workspace_id || workspace.slug || workspace.name}>
-                      <div className="flex flex-wrap items-start justify-between gap-3">
-                        <div>
-                          <p className="text-lg font-bold text-white">{workspace.name || workspace.slug || 'Workspace'}</p>
-                          <p className="mt-2 text-sm text-[var(--sm-muted)]">{workspace.slug || 'No slug'}</p>
-                        </div>
-                        <span className="sm-status-pill">
-                          {workspace.plan || 'plan'} / {workspace.role || 'role'}
-                        </span>
-                      </div>
-                    </div>
-                  ))
-                ) : (
-                  <div className="sm-chip text-[var(--sm-muted)]">No additional workspaces are registered yet.</div>
-                )}
-              </div>
+          <section className="sm-app-grid-main">
+            <div className="sm-app-stack">
+              <article className="sm-app-panel">
+                <div className="sm-app-panel-head">
+                  <div>
+                    <p className="sm-kicker text-[var(--sm-accent)]">Execution</p>
+                    <h2>Recent runs</h2>
+                  </div>
+                  <span className="sm-status-pill">{runtimeHealth.errorCount} errors</span>
+                </div>
 
-              <div className="mt-5 grid gap-3 md:grid-cols-2">
-                <div className="sm-chip text-white">
-                  <p className="sm-kicker text-[var(--sm-accent)]">Published workspace</p>
-                  {workspaces?.published_workspace ? (
-                    <a className="mt-2 block text-sm text-white underline underline-offset-4" href={workspaces.published_workspace} rel="noreferrer" target="_blank">
-                      Open published sheet
-                    </a>
+                <div className="sm-app-list">
+                  {agentRuns.length ? (
+                    agentRuns.slice(0, 8).map((run) => (
+                      <article className="sm-app-list-row" key={run.run_id}>
+                        <div className="sm-app-list-row-head">
+                          <div>
+                            <div className="sm-app-list-row-title">{run.job_type}</div>
+                            <div className="sm-app-list-row-copy">{run.summary || run.error_text || 'No summary captured.'}</div>
+                          </div>
+                          <span className="sm-status-pill">{run.status}</span>
+                        </div>
+                        <div className="sm-app-meta-row">
+                          <span>{run.source || 'manual'}</span>
+                          <span>{run.triggered_by || 'system'}</span>
+                          <span>{formatDateTime(run.completed_at || run.created_at)}</span>
+                        </div>
+                      </article>
+                    ))
                   ) : (
-                    <p className="mt-2 text-sm text-[var(--sm-muted)]">Not linked</p>
+                    <div className="sm-app-empty">No recent runs are visible yet.</div>
                   )}
                 </div>
-                <div className="sm-chip text-white">
-                  <p className="sm-kicker text-[var(--sm-accent-alt)]">Templates</p>
-                  <p className="mt-2 text-2xl font-bold">{workspaces?.templates?.length ?? 0}</p>
-                </div>
-              </div>
-            </article>
-          </section>
+              </article>
 
-          <section className="grid gap-6 xl:grid-cols-[0.92fr_1.08fr]">
-            <article className="sm-surface p-6">
-              <p className="sm-kicker text-[var(--sm-accent)]">Inbound</p>
-              <h2 className="mt-2 text-2xl font-bold text-white">What prospects asked for.</h2>
-              <div className="mt-5 space-y-3">
-                {contacts.length ? (
-                  contacts.map((row) => (
-                    <div className="sm-proof-card" key={`${row.submission_id ?? row.created_at ?? row.email}`}>
-                      <div className="flex flex-wrap items-start justify-between gap-3">
-                        <div>
-                          <p className="font-semibold text-white">{row.company || row.name || 'Inbound request'}</p>
-                          <p className="mt-2 text-sm text-[var(--sm-muted)]">{row.workflow || row.goal || 'No workflow captured.'}</p>
-                        </div>
-                        <span className="sm-status-pill">{formatDateTime(row.created_at)}</span>
-                      </div>
-                      {row.goal ? <p className="mt-3 text-sm text-[var(--sm-muted)]">{row.goal}</p> : null}
-                    </div>
-                  ))
-                ) : (
-                  <div className="sm-chip text-[var(--sm-muted)]">No inbound requests have been captured yet.</div>
-                )}
-              </div>
-            </article>
-
-            <article className="sm-surface p-6">
-              <p className="sm-kicker text-[var(--sm-accent-alt)]">Execution</p>
-              <h2 className="mt-2 text-2xl font-bold text-white">What the system just did.</h2>
-              <div className="mt-5 space-y-3">
-                {agentRuns.length ? (
-                  agentRuns.slice(0, 8).map((run) => (
-                    <div className="sm-chip" key={run.run_id}>
-                      <div className="flex flex-wrap items-start justify-between gap-3">
-                        <div>
-                          <p className="font-semibold text-white">{run.job_type}</p>
-                          <p className="mt-2 text-sm text-[var(--sm-muted)]">{run.summary || run.error_text || 'No summary captured.'}</p>
-                        </div>
-                        <span className="sm-status-pill">{run.status}</span>
-                      </div>
-                      <div className="mt-3 flex flex-wrap gap-3 text-xs text-[var(--sm-muted)]">
-                        <span>{run.source || 'manual'}</span>
-                        <span>{run.triggered_by || 'system'}</span>
-                        <span>{formatDateTime(run.completed_at || run.created_at)}</span>
-                      </div>
-                    </div>
-                  ))
-                ) : (
-                  <div className="sm-chip text-[var(--sm-muted)]">No recent runs are visible yet.</div>
-                )}
-              </div>
-            </article>
-          </section>
-
-          <section className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
-            <article className="sm-surface p-6">
-              <p className="sm-kicker text-[var(--sm-accent)]">Operators</p>
-              <h2 className="mt-2 text-2xl font-bold text-white">Who can act inside the company.</h2>
-              <div className="mt-5 grid gap-3 md:grid-cols-2">
-                {members.length ? (
-                  members.slice(0, 8).map((member) => (
-                    <div className="sm-chip text-white" key={member.membership_id}>
-                      <p className="font-semibold">{member.display_name || member.email}</p>
-                      <p className="mt-2 text-sm text-[var(--sm-muted)]">{member.email}</p>
-                      <p className="mt-2 text-xs text-[var(--sm-muted)]">
-                        {member.role} / {member.status}
-                      </p>
-                    </div>
-                  ))
-                ) : (
-                  <div className="sm-chip text-[var(--sm-muted)]">No team members loaded.</div>
-                )}
-              </div>
-            </article>
-
-            <article className="sm-surface p-6">
-              <p className="sm-kicker text-[var(--sm-accent-alt)]">Control notes</p>
-              <div className="mt-4 space-y-3">
-                <div className="sm-chip text-white">
-                  <p className="sm-kicker text-[var(--sm-accent)]">Approvals</p>
-                  <p className="mt-2 text-2xl font-bold">{summary?.approvals?.approval_count ?? 0}</p>
-                </div>
-                <div className="sm-chip text-white">
-                  <p className="sm-kicker text-[var(--sm-accent-alt)]">Open workflows</p>
-                  <p className="mt-2 text-2xl font-bold">{summary?.actions?.total_items ?? 0}</p>
-                </div>
-                <div className="sm-chip text-white">
-                  <p className="sm-kicker text-[var(--sm-accent)]">Deals tracked</p>
-                  <p className="mt-2 text-2xl font-bold">{summary?.lead_pipeline?.lead_count ?? 0}</p>
-                </div>
-                <div className="sm-chip text-white">
-                  <p className="sm-kicker text-[var(--sm-accent-alt)]">Product lab</p>
-                  <p className="mt-2 text-sm">
-                    {summary?.product_lab?.flagship_status || 'No flagship status'}
-                    {summary?.product_lab?.live_demo_count ? ` / ${summary.product_lab.live_demo_count} live demos` : ''}
-                  </p>
-                </div>
-                {(agentPayload?.gaps ?? []).slice(0, 2).map((item) => (
-                  <div className="sm-chip text-[var(--sm-muted)]" key={item}>
-                    {item}
+              <article className="sm-app-panel">
+                <div className="sm-app-panel-head">
+                  <div>
+                    <p className="sm-kicker text-[var(--sm-accent-alt)]">Inbound</p>
+                    <h2>Recent requests</h2>
                   </div>
-                ))}
-                {(agentPayload?.next_moves ?? []).slice(0, 2).map((item) => (
-                  <div className="sm-chip text-[var(--sm-muted)]" key={item}>
-                    {item}
+                  <span className="sm-status-pill">{contacts.length} items</span>
+                </div>
+
+                <div className="sm-app-list">
+                  {contacts.length ? (
+                    contacts.map((row) => (
+                      <article className="sm-app-list-row" key={`${row.submission_id ?? row.created_at ?? row.email}`}>
+                        <div className="sm-app-list-row-head">
+                          <div>
+                            <div className="sm-app-list-row-title">{row.company || row.name || 'Inbound request'}</div>
+                            <div className="sm-app-list-row-copy">{row.workflow || row.goal || 'No workflow captured.'}</div>
+                          </div>
+                          <span className="sm-status-pill">{row.source || 'site'}</span>
+                        </div>
+                        <div className="sm-app-meta-row">
+                          <span>{row.email || 'No email'}</span>
+                          <span>{formatDateTime(row.created_at)}</span>
+                        </div>
+                      </article>
+                    ))
+                  ) : (
+                    <div className="sm-app-empty">No inbound requests have been captured yet.</div>
+                  )}
+                </div>
+              </article>
+            </div>
+
+            <div className="sm-app-stack">
+              <article className="sm-app-panel-muted">
+                <div className="sm-app-panel-head">
+                  <div>
+                    <p className="sm-kicker text-[var(--sm-accent)]">Tenants</p>
+                    <h2>Workspace coverage</h2>
                   </div>
-                ))}
-              </div>
-            </article>
+                  <span className="sm-status-pill">{workspaces?.templates?.length ?? 0} templates</span>
+                </div>
+
+                <div className="sm-app-list">
+                  {(workspaces?.app_workspaces ?? []).length ? (
+                    workspaces?.app_workspaces?.map((workspace) => (
+                      <article className="sm-app-list-row" key={workspace.workspace_id || workspace.slug || workspace.name}>
+                        <div className="sm-app-list-row-head">
+                          <div>
+                            <div className="sm-app-list-row-title">{workspace.name || workspace.slug || 'Workspace'}</div>
+                            <div className="sm-app-list-row-copy">{workspace.slug || 'No slug'}</div>
+                          </div>
+                          <span className="sm-status-pill">{workspace.plan || 'plan'}</span>
+                        </div>
+                        <div className="sm-app-meta-row">
+                          <span>{workspace.role || 'role'}</span>
+                        </div>
+                      </article>
+                    ))
+                  ) : (
+                    <div className="sm-app-empty">No additional workspaces are registered yet.</div>
+                  )}
+                </div>
+
+                <div className="sm-app-note-list">
+                  <div>
+                    Published workspace:{' '}
+                    {workspaces?.published_workspace ? (
+                      <a href={workspaces.published_workspace} rel="noreferrer" target="_blank">
+                        Open sheet
+                      </a>
+                    ) : (
+                      'Not linked'
+                    )}
+                  </div>
+                  <div>
+                    Latest brief:{' '}
+                    {summary?.workspace?.google_doc_link ? (
+                      <a href={summary.workspace.google_doc_link} rel="noreferrer" target="_blank">
+                        Open doc
+                      </a>
+                    ) : (
+                      'Not linked'
+                    )}
+                  </div>
+                </div>
+              </article>
+
+              <article className="sm-app-panel">
+                <div className="sm-app-panel-head">
+                  <div>
+                    <p className="sm-kicker text-[var(--sm-accent-alt)]">Operators</p>
+                    <h2>People with access</h2>
+                  </div>
+                  <span className="sm-status-pill">{members.length} users</span>
+                </div>
+
+                <div className="sm-app-list">
+                  {members.length ? (
+                    members.slice(0, 8).map((member) => (
+                      <article className="sm-app-list-row" key={member.membership_id}>
+                        <div className="sm-app-list-row-title">{member.display_name || member.email}</div>
+                        <div className="sm-app-list-row-copy">{member.email}</div>
+                        <div className="sm-app-meta-row">
+                          <span>{member.role}</span>
+                          <span>{member.status}</span>
+                        </div>
+                      </article>
+                    ))
+                  ) : (
+                    <div className="sm-app-empty">No team members loaded.</div>
+                  )}
+                </div>
+              </article>
+
+              <article className="sm-app-panel">
+                <div className="sm-app-panel-head">
+                  <div>
+                    <p className="sm-kicker text-[var(--sm-accent)]">Control notes</p>
+                    <h2>Short founder view</h2>
+                  </div>
+                </div>
+
+                <div className="sm-app-mini-grid">
+                  <div className="sm-app-mini-card">
+                    <p className="sm-app-label">Approvals</p>
+                    <strong>{summary?.approvals?.approval_count ?? 0}</strong>
+                  </div>
+                  <div className="sm-app-mini-card">
+                    <p className="sm-app-label">Open workflows</p>
+                    <strong>{summary?.actions?.total_items ?? 0}</strong>
+                  </div>
+                  <div className="sm-app-mini-card">
+                    <p className="sm-app-label">Deals tracked</p>
+                    <strong>{summary?.lead_pipeline?.lead_count ?? 0}</strong>
+                  </div>
+                  <div className="sm-app-mini-card">
+                    <p className="sm-app-label">Product lab</p>
+                    <strong>
+                      {summary?.product_lab?.flagship_status || 'No flagship'}
+                      {summary?.product_lab?.live_demo_count ? ` / ${summary.product_lab.live_demo_count} live` : ''}
+                    </strong>
+                  </div>
+                </div>
+
+                <div className="sm-app-note-list">
+                  {(agentPayload?.gaps ?? []).slice(0, 2).map((item) => (
+                    <div key={item}>{item}</div>
+                  ))}
+                  {(agentPayload?.next_moves ?? []).slice(0, 2).map((item) => (
+                    <div key={item}>{item}</div>
+                  ))}
+                </div>
+              </article>
+            </div>
           </section>
         </>
       ) : null}

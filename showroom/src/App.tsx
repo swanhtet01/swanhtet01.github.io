@@ -7,6 +7,7 @@ import { ActionBoardPage } from './pages/ActionBoardPage'
 import { AgentTeamsPage } from './pages/AgentTeamsPage'
 import { ApprovalQueuePage } from './pages/ApprovalQueuePage'
 import { ContactPage } from './pages/ContactPage'
+import { DataVisibilityPage } from './pages/DataVisibilityPage'
 import { DecisionJournalPage } from './pages/DecisionJournalPage'
 import { DemoDetailPage } from './pages/DemoDetailPage'
 import { DemosPage } from './pages/DemosPage'
@@ -26,6 +27,7 @@ import { NotFoundPage } from './pages/NotFoundPage'
 import { ProductsPage } from './pages/ProductsPage'
 import { ProductDetailPage } from './pages/ProductDetailPage'
 import { PublicLeadFinderPage } from './pages/PublicLeadFinderPage'
+import { PortalStudioPage } from './pages/PortalStudioPage'
 import { ReceivingControlPage } from './pages/ReceivingControlPage'
 import { SignupPage } from './pages/SignupPage'
 import { SolutionArchitectPage } from './pages/SolutionArchitectPage'
@@ -75,17 +77,24 @@ function App() {
         <Route element={<AppFrame />} path="/app">
           <Route element={<Navigate replace to="dev-desk" />} index />
           <Route element={<FounderControlPlanePage />} path="dev-desk" />
+          <Route element={<PortalStudioPage />} path="portal-studio" />
           <Route element={<DirectorDashboardPage />} path="hq" />
           <Route element={<LeadPipelinePage />} path="deals" />
           <Route element={<WorkspacePage />} path="workflows" />
+          <Route element={<DataVisibilityPage />} path="data" />
           <Route element={<AgentTeamsPage />} path="agents" />
           <Route element={<DecisionJournalPage />} path="company" />
+          <Route element={<Navigate replace to="/app/portal-studio" />} path="portals" />
+          <Route element={<Navigate replace to="/app/portal-studio" />} path="portal-builder" />
           <Route element={<Navigate replace to="/app/dev-desk" />} path="control" />
           <Route element={<Navigate replace to="/app/dev-desk" />} path="meta" />
           <Route element={<Navigate replace to="/app/hq" />} path="overview" />
           <Route element={<InsightsPage />} path="insights" />
           <Route element={<Navigate replace to="/app/hq" />} path="director" />
           <Route element={<Navigate replace to="/app/workflows" />} path="actions" />
+          <Route element={<Navigate replace to="/app/data" />} path="connectors" />
+          <Route element={<Navigate replace to="/app/data" />} path="memory" />
+          <Route element={<Navigate replace to="/app/data" />} path="sources" />
           <Route element={<Navigate replace to="/app/company" />} path="decisions" />
           <Route element={<ApprovalQueuePage />} path="approvals" />
           <Route element={<ExceptionQueuePage />} path="exceptions" />

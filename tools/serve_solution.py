@@ -2322,6 +2322,418 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             },
         }
 
+    def _data_visibility_payload(request: Request, session: dict[str, Any]) -> dict[str, Any]:
+        def as_dict(value: Any) -> dict[str, Any]:
+            return value if isinstance(value, dict) else {}
+
+        runtime_config = _load_runtime_config()
+        drive_probe = _drive_probe_from_config(runtime_config)
+        gmail_probe = _gmail_probe_from_config(runtime_config)
+        tenant_payload = _tenant_architecture_payload(request)
+
+        workspace_id = str(session.get("workspace_id", "")).strip()
+        workspace_slug = str(session.get("workspace_slug", auth_workspace_slug)).strip() or auth_workspace_slug
+        workspace_name = str(session.get("workspace_name", auth_workspace_name)).strip() or auth_workspace_name
+        username = str(session.get("username", auth_username)).strip().lower() or auth_username
+
+        workspaces = enterprise_list_user_workspaces(enterprise_db_url, username=username)
+        team_members = enterprise_list_workspace_members(enterprise_db_url, workspace_id=workspace_id)
+        workspace_tasks = enterprise_list_workspace_tasks(enterprise_db_url, workspace_id=workspace_id, limit=250)
+        agent_runs = enterprise_list_agent_runs(enterprise_db_url, workspace_id=workspace_id, limit=12)
+        lead_summary = enterprise_load_lead_summary(enterprise_db_url, workspace_id=workspace_id)
+
+        decision_summary = load_decision_summary(state_db)
+        action_summary = load_action_summary(state_db)
+        approval_summary = load_approval_summary(state_db)
+        metric_summary = load_metric_summary(state_db)
+        receiving_summary = load_receiving_summary(state_db)
+        inventory_summary = load_inventory_summary(state_db)
+        quality_summary = load_quality_summary(state_db)
+        supplier_summary = load_supplier_risk_summary(state_db)
+        contact_rows = list_contact_submissions(state_db, limit=25)
+
+        publish = _load_json(pilot_data / "platform_publish.json")
+        registry = _load_json(pilot_data / "input_center_registry.json")
+        supervisor = _load_json(pilot_data / "supervisor_status.json")
+        platform_digest = load_snapshot(state_db, "platform_digest") or _load_json(pilot_data / "platform_digest.json")
+        founder_cycle = _load_json(pilot_data / "ops" / "founder-cycle-latest.json")
+        operator_cycle = _load_json(pilot_data / "ops" / "operator-cycle-latest.json")
+        workstation = _load_json(pilot_data / "ops" / "workstation-latest.json")
+
+        founder_operator = as_dict(founder_cycle.get("operator"))
+        founder_live_app = as_dict(founder_operator.get("live_app"))
+        data_scaffold = as_dict(tenant_payload.get("data_scaffold"))
+        drive_scaffold = as_dict(data_scaffold.get("google_drive"))
+        gmail_scaffold = as_dict(data_scaffold.get("gmail"))
+        graph_scaffold = as_dict(data_scaffold.get("knowledge_graph"))
+        kpi_scaffold = as_dict(data_scaffold.get("kpi_flow"))
+        role_views = as_dict(platform_digest.get("role_views"))
+
+        drive_configured = bool(drive_probe.service_account_json and drive_probe.service_account_json.exists())
+        gmail_client_configured = bool(gmail_probe.client_secret_json and gmail_probe.client_secret_json.exists())
+        gmail_token_configured = bool(gmail_probe.token_json and gmail_probe.token_json.exists())
+
+        lead_count = int(lead_summary.get("lead_count", 0) or 0)
+        task_count = len(workspace_tasks)
+        open_task_count = len(
+            [
+                row
+                for row in workspace_tasks
+                if str(row.get("status", "")).strip().lower() not in {"done", "closed", "complete"}
+            ]
+        )
+        team_member_count = len(team_members)
+        agent_run_count = len(agent_runs)
+        decision_count = int(decision_summary.get("decision_count", 0) or 0)
+        action_count = int(action_summary.get("total_items", 0) or 0)
+        approval_count = int(approval_summary.get("approval_count", 0) or 0)
+        metric_count = int(metric_summary.get("metric_count", 0) or 0)
+        receiving_count = int(receiving_summary.get("receiving_count", 0) or 0)
+        inventory_count = int(inventory_summary.get("inventory_count", 0) or 0)
+        contact_count = len(contact_rows)
+        hunt_profile_count = int(founder_live_app.get("hunt_profile_count", 0) or 0)
+        hunt_saved_count = int(
+            founder_live_app.get("lead_hunt_saved_count", founder_live_app.get("run_all_hunts_saved_count", 0)) or 0
+        )
+        public_workspace_save_count = int(founder_live_app.get("public_workspace_save_count", 0) or 0)
+        published_template_count = len(registry.get("templates", [])) if isinstance(registry.get("templates"), list) else 0
+
+        workspace_export_link = str(founder_live_app.get("workspace_export_link", "")).strip() or str(publish.get("workspace_link", "")).strip()
+        founder_brief_link = str(publish.get("google_doc_link", "")).strip()
+        gmail_compose_url = str(founder_live_app.get("compose_url", "")).strip()
+        provider = str(founder_live_app.get("provider", "")).strip() or "Google Places + DuckDuckGo"
+
+        founder_checked_at = str(founder_cycle.get("checked_at", "")).strip()
+        operator_checked_at = str(operator_cycle.get("checked_at", "")).strip()
+        workstation_checked_at = str(workstation.get("checked_at", "")).strip()
+        supervisor_finished_at = str(supervisor.get("last_finished_at", "")).strip()
+        last_agent_run_at = ""
+        if agent_runs:
+            latest_agent_run = agent_runs[0]
+            last_agent_run_at = str(latest_agent_run.get("completed_at") or latest_agent_run.get("created_at", "")).strip()
+        last_sync_at = founder_checked_at or operator_checked_at or workstation_checked_at or last_agent_run_at or supervisor_finished_at
+
+        drive_status = "active" if workspace_export_link else "ready" if drive_configured else "scaffolded"
+        if gmail_compose_url:
+            gmail_status = "active"
+        elif gmail_client_configured and gmail_token_configured:
+            gmail_status = "ready"
+        elif gmail_client_configured or gmail_token_configured:
+            gmail_status = "partial"
+        else:
+            gmail_status = "scaffolded"
+
+        inbound_status = "active" if contact_count or public_workspace_save_count else "ready"
+        research_status = "active" if lead_count or hunt_saved_count or hunt_profile_count else "ready"
+        runtime_status = "active" if agent_run_count else "ready" if str(supervisor.get("status", "")).strip() else "manual"
+        manual_capture_status = (
+            "active"
+            if action_count or approval_count or metric_count or receiving_count or inventory_count or decision_count
+            else "manual"
+        )
+        publication_status = "active" if workspace_export_link or founder_brief_link or published_template_count else "scaffolded"
+        graph_status = str(graph_scaffold.get("status", "")).strip() or "scaffolded"
+        kpi_status = "active" if metric_count or founder_checked_at else str(kpi_scaffold.get("status", "")).strip() or "scaffolded"
+
+        connectors = [
+            {
+                "key": "public-intake",
+                "label": "Public intake and workspace bootstrap",
+                "category": "inbound",
+                "status": inbound_status,
+                "mode": "public site -> workspace session",
+                "evidence": f"{contact_count} submissions / {public_workspace_save_count} workspace saves",
+                "updated_at": founder_checked_at or operator_checked_at,
+                "destinations": ["Deals", "Workflows", "HQ"],
+                "next_step": "Keep intake mapped into workspace records and follow-up tasks.",
+            },
+            {
+                "key": "lead-research",
+                "label": "Lead research and company import",
+                "category": "prospecting",
+                "status": research_status,
+                "mode": provider,
+                "evidence": f"{lead_count} leads in workspace / {hunt_saved_count} latest hunt saves / {hunt_profile_count} hunt profiles",
+                "updated_at": founder_checked_at or last_agent_run_at,
+                "destinations": ["Deals", "Founder brief", "Workflows"],
+                "next_step": "Add more provider or domain rules only when coverage needs to expand.",
+            },
+            {
+                "key": "google-drive",
+                "label": "Google Drive and sheet export",
+                "category": "evidence",
+                "status": drive_status,
+                "mode": str(drive_scaffold.get("mode", "")).strip() or "shared-platform first",
+                "evidence": (
+                    f"{'export linked' if workspace_export_link else 'no export link yet'}"
+                    f" / folder {'set' if str(drive_probe.folder_id or '').strip() else 'unset'}"
+                    f" / {published_template_count} templates"
+                ),
+                "updated_at": founder_checked_at or workstation_checked_at,
+                "destinations": ["Workspace export", "Founder brief", "Published artifacts"],
+                "next_step": "Keep shared publishing first and split by tenant only where isolation matters.",
+            },
+            {
+                "key": "gmail",
+                "label": "Gmail outreach and reply path",
+                "category": "communications",
+                "status": gmail_status,
+                "mode": str(gmail_scaffold.get("mode", "")).strip() or "shared mailbox first",
+                "evidence": (
+                    f"{'compose link ready' if gmail_compose_url else 'compose link not observed'}"
+                    f" / client {'set' if gmail_client_configured else 'unset'}"
+                    f" / token {'set' if gmail_token_configured else 'unset'}"
+                ),
+                "updated_at": founder_checked_at or last_agent_run_at,
+                "destinations": ["Deals", "Activities", "Next steps"],
+                "next_step": "Move from compose-only into authenticated thread sync only when reply visibility is needed.",
+            },
+            {
+                "key": "runtime",
+                "label": "Agent runtime and queue",
+                "category": "automation",
+                "status": runtime_status,
+                "mode": str(supervisor.get("status", "")).strip() or "manual",
+                "evidence": f"{agent_run_count} recent runs / {open_task_count} open tasks / {approval_count} approvals",
+                "updated_at": last_agent_run_at or supervisor_finished_at,
+                "destinations": ["Dev Desk", "HQ", "Founder brief"],
+                "next_step": "Keep this page read-only and push execution into the queue-backed surfaces.",
+            },
+            {
+                "key": "operator-capture",
+                "label": "Operator capture lanes",
+                "category": "manual + assisted",
+                "status": manual_capture_status,
+                "mode": "explicit entry backed by state tables",
+                "evidence": (
+                    f"{action_count} actions / {approval_count} approvals / {metric_count} metrics"
+                    f" / {receiving_count} receiving / {inventory_count} inventory"
+                ),
+                "updated_at": supervisor_finished_at or founder_checked_at,
+                "destinations": ["HQ", "Approvals", "Inventory", "Company"],
+                "next_step": "Manual capture stays explicit, but the downstream state and KPIs remain connected.",
+            },
+        ]
+
+        memory = [
+            {
+                "key": "workspace-graph",
+                "label": "Workspace graph",
+                "kind": "enterprise-db",
+                "status": "active" if workspace_id else "ready",
+                "evidence": f"{len(workspaces)} workspaces / {lead_count} leads / {task_count} tasks / {team_member_count} team members",
+                "updated_at": last_agent_run_at or founder_checked_at,
+                "connected_surfaces": ["Deals", "Workflows", "Agents"],
+                "next_step": "Keep stable IDs across imports so provenance survives template rollout.",
+            },
+            {
+                "key": "operating-state",
+                "label": "Operating state store",
+                "kind": "state-db",
+                "status": "active" if action_count or approval_count or decision_count or metric_count else "ready",
+                "evidence": (
+                    f"{action_count} actions / {approval_count} approvals / {decision_count} decisions"
+                    f" / {metric_count} metrics / {receiving_count} receiving"
+                ),
+                "updated_at": supervisor_finished_at or founder_checked_at,
+                "connected_surfaces": ["HQ", "Company", "Approvals", "Inventory"],
+                "next_step": "Keep manual changes auditable and route derived KPIs out of this state, not separate notes.",
+            },
+            {
+                "key": "ops-snapshots",
+                "label": "Ops snapshots and mirror files",
+                "kind": "ops-output",
+                "status": "active" if founder_checked_at or workstation_checked_at else "ready",
+                "evidence": (
+                    f"founder {founder_checked_at or 'missing'} / operator {operator_checked_at or 'missing'}"
+                    f" / workstation {workstation_checked_at or 'missing'}"
+                ),
+                "updated_at": founder_checked_at or workstation_checked_at,
+                "connected_surfaces": ["Founder brief", "Mirror", "Runtime audit"],
+                "next_step": "Use these files as the stable audit trail, not as the primary control surface.",
+            },
+            {
+                "key": "published-artifacts",
+                "label": "Published artifacts",
+                "kind": "drive-docs",
+                "status": publication_status,
+                "evidence": (
+                    f"{'workspace export linked' if workspace_export_link else 'workspace export pending'}"
+                    f" / {'brief linked' if founder_brief_link else 'brief pending'}"
+                    f" / {published_template_count} templates"
+                ),
+                "updated_at": founder_checked_at or workstation_checked_at,
+                "connected_surfaces": ["Shareable exports", "Founder brief", "Client handoff"],
+                "next_step": "Expose publish links here, but keep authoring and sync flows inside the runtime.",
+            },
+            {
+                "key": "platform-graph",
+                "label": "Connector scaffold",
+                "kind": "platform-graph",
+                "status": graph_status,
+                "evidence": (
+                    f"{len(graph_scaffold.get('entities', [])) if isinstance(graph_scaffold.get('entities'), list) else 0} entity types"
+                    f" / {len(role_views)} role views"
+                ),
+                "updated_at": founder_checked_at or last_agent_run_at,
+                "connected_surfaces": ["Data page", "Tenant architecture", "Role views"],
+                "next_step": "Turn provenance from scaffold to default annotation on role views and KPI tiles.",
+            },
+        ]
+
+        linkage = [
+            {
+                "key": "lead-to-workspace",
+                "source": "Public intake + lead research",
+                "memory": "Workspace graph",
+                "surfaces": ["Deals", "Workflows", "HQ"],
+                "note": "Company records, tasks, and outreach drafts land in the active workspace instead of a separate spreadsheet silo.",
+            },
+            {
+                "key": "runtime-to-brief",
+                "source": "Agent runtime + queue",
+                "memory": "Agent runs + operating state",
+                "surfaces": ["Dev Desk", "HQ", "Founder brief"],
+                "note": "Recent runs summarize the current queue, lead pipeline, approvals, and ops watch counts.",
+            },
+            {
+                "key": "ops-to-kpi",
+                "source": "Receiving, inventory, approvals, decisions",
+                "memory": "Operating state store",
+                "surfaces": ["HQ", "Approvals", "Company", "Inventory"],
+                "note": "Manual capture is explicit, but the resulting state is connected and reused across views.",
+            },
+            {
+                "key": "publish-to-share",
+                "source": "Drive, Docs, and exports",
+                "memory": "Published artifacts",
+                "surfaces": ["Founder brief", "Workspace export", "Client handoff"],
+                "note": "Shareable outputs stay linked to the same live workspace and runtime context.",
+            },
+        ]
+
+        founder_brief_summary = str(founder_live_app.get("founder_brief_summary", "")).strip()
+        kpi_surfaces = [
+            {
+                "key": "founder-brief",
+                "label": "Founder brief",
+                "status": "active" if founder_checked_at or agent_run_count else "ready",
+                "source": "Lead pipeline + workspace tasks + approvals + receiving + inventory",
+                "metrics": ["Pipeline leads", "Open tasks", "Pending approvals", "Receiving review", "Inventory watch"],
+                "evidence": founder_brief_summary or f"{lead_count} leads / {open_task_count} open tasks / {approval_count} approvals",
+                "next_step": "Keep KPI notes tied to the same IDs used by the underlying queue and workspace rows.",
+            },
+            {
+                "key": "hq",
+                "label": "HQ dashboard",
+                "status": "active",
+                "source": "Actions + approvals + decisions + lead summary",
+                "metrics": ["Open workflows", "Approvals", "Decisions", "Lead count"],
+                "evidence": f"{action_count} workflows / {approval_count} approvals / {decision_count} decisions / {lead_count} leads",
+                "next_step": "Add provenance labels to each metric tile so operators can jump straight to the source queue.",
+            },
+            {
+                "key": "deals",
+                "label": "Deals and outreach",
+                "status": "active" if lead_count else "ready",
+                "source": "Lead research + workspace graph + Gmail draft path",
+                "metrics": ["Lead count", "Stage mix", "Provider", "Outreach readiness"],
+                "evidence": f"{lead_count} leads / provider {provider} / Gmail {gmail_status}",
+                "next_step": "Keep read-only provenance here and handle edits inside the pipeline surface.",
+            },
+            {
+                "key": "operations",
+                "label": "Ops control surfaces",
+                "status": "active" if receiving_count or inventory_count or approval_count else kpi_status,
+                "source": "State tables + runtime queue",
+                "metrics": ["Receiving review", "Inventory watch", "Approvals", "Runtime queue"],
+                "evidence": (
+                    f"{receiving_summary.get('hold_count', 0)} holds / {inventory_summary.get('watch_count', 0)} watch"
+                    f" / {approval_count} approvals / {agent_run_count} recent runs"
+                ),
+                "next_step": "Promote manager KPI imports so these views are not limited to direct app capture.",
+            },
+        ]
+
+        manual_surface_count = len(
+            [
+                value
+                for value in [
+                    action_count,
+                    approval_count,
+                    decision_count,
+                    metric_count,
+                    receiving_count,
+                    inventory_count,
+                    int(quality_summary.get("incident_count", 0) or 0),
+                    int(supplier_summary.get("risk_count", 0) or 0),
+                ]
+                if value > 0
+            ]
+        )
+
+        next_steps: list[str] = []
+        if not workspace_export_link:
+            next_steps.append("Connect Google Drive publishing so exported workspaces and briefs remain one click away.")
+        if gmail_status in {"partial", "scaffolded"}:
+            next_steps.append("Finish Gmail auth so outreach can move from compose links into authenticated mailbox actions when needed.")
+        if not metric_count:
+            next_steps.append("Add manager or sheet-fed KPI imports so the KPI layer is not limited to direct app capture.")
+        if not role_views:
+            next_steps.append("Attach provenance notes to role views so each KPI can point back to its source queue or snapshot.")
+        if not next_steps:
+            next_steps.extend(
+                [
+                    "Keep this surface read-only and push edits into the source workflows.",
+                    "Add provenance labels to more KPI tiles as new role views ship.",
+                ]
+            )
+
+        unresolved_gap_count = len(
+            [item for item in connectors if str(item.get("status", "")).strip().lower() in {"partial", "scaffolded"}]
+        ) + len(next_steps)
+
+        return {
+            "status": "ready",
+            "statement": "The platform is not just manual entry. It combines live intake, connector scaffolds, runtime memory, and explicit operator capture.",
+            "manual_entry_note": "Manual capture still matters for approvals, KPI intake, receiving, inventory, and decisions, but those records flow into shared state and downstream views.",
+            "workspace": {
+                "workspace_id": workspace_id,
+                "workspace_slug": workspace_slug,
+                "workspace_name": workspace_name,
+                "workspace_count": len(workspaces),
+                "team_member_count": team_member_count,
+                "last_sync_at": last_sync_at,
+            },
+            "links": {
+                "workspace_export": workspace_export_link,
+                "founder_brief": founder_brief_link,
+                "gmail_compose": gmail_compose_url,
+            },
+            "summary": {
+                "connector_count": len(connectors),
+                "connected_source_count": len(
+                    [
+                        item
+                        for item in connectors
+                        if str(item.get("key", "")).strip() != "operator-capture"
+                        and str(item.get("status", "")).strip().lower() in {"active", "ready", "partial"}
+                    ]
+                ),
+                "memory_surface_count": len(memory),
+                "kpi_surface_count": len(kpi_surfaces),
+                "manual_surface_count": manual_surface_count,
+                "agent_run_count": agent_run_count,
+                "unresolved_gap_count": unresolved_gap_count,
+                "last_sync_at": last_sync_at,
+            },
+            "connectors": connectors,
+            "memory": memory,
+            "linkage": linkage,
+            "kpi_surfaces": kpi_surfaces,
+            "next_steps": next_steps[:4],
+        }
+
     def _request_origin(request: Request) -> str:
         forwarded_proto = str(request.headers.get("x-forwarded-proto", "")).strip().lower()
         scheme = forwarded_proto.split(",")[0].strip() if forwarded_proto else str(request.url.scheme).strip().lower()
@@ -2894,6 +3306,11 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
     def platform_tenant_architecture(request: Request) -> dict[str, Any]:
         _require_session(request)
         return _tenant_architecture_payload(request)
+
+    @app.get("/api/platform/data-visibility")
+    def platform_data_visibility(request: Request) -> dict[str, Any]:
+        session = _require_session(request)
+        return _data_visibility_payload(request, session)
 
     @app.post("/api/auth/login")
     def auth_login(request: Request, response: Response, payload: LoginRequest) -> dict[str, Any]:
