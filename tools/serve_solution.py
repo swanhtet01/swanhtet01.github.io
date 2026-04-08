@@ -9,6 +9,8 @@ import json
 import os
 import re
 import secrets
+import shutil
+import subprocess
 import sys
 import tempfile
 from datetime import timedelta
@@ -464,6 +466,17 @@ def _unique_values(values: list[str]) -> list[str]:
             seen.add(cleaned)
             output.append(cleaned)
     return output
+
+
+def _run_git_command(repo_root: Path, args: list[str]) -> str:
+    completed = subprocess.run(
+        ["git", *args],
+        cwd=str(repo_root),
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return completed.stdout.strip()
 
 
 def _slugify(value: str) -> str:
@@ -2195,6 +2208,83 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             return host.split(":")[0]
         return str(request.url.hostname or "").strip().lower()
 
+    def _dev_status_payload() -> dict[str, Any]:
+        repo_marker = REPO_ROOT / ".git"
+        python_path = shutil.which("python") or shutil.which("py") or shutil.which("python3") or ""
+        npm_path = shutil.which("npm") or ""
+        if not repo_marker.exists():
+            return {
+                "status": "unavailable",
+                "mode": "cloud-or-export",
+                "reason": "No git metadata is available in this runtime.",
+                "repo": {
+                    "root": str(REPO_ROOT),
+                    "git_present": False,
+                },
+                "local_runner": {
+                    "python_on_path": bool(python_path),
+                    "npm_on_path": bool(npm_path),
+                },
+            }
+
+        try:
+            branch = _run_git_command(REPO_ROOT, ["rev-parse", "--abbrev-ref", "HEAD"])
+            commit = _run_git_command(REPO_ROOT, ["rev-parse", "--short", "HEAD"])
+            status_lines = _run_git_command(REPO_ROOT, ["status", "--short"]).splitlines()
+            dirty_files = [line.strip() for line in status_lines if line.strip()]
+            recent_commits = _run_git_command(
+                REPO_ROOT,
+                ["log", "--pretty=format:%h|%ad|%s", "-5", "--date=iso"],
+            ).splitlines()
+            ahead_behind = ""
+            try:
+                ahead_behind = _run_git_command(REPO_ROOT, ["status", "--short", "--branch"]).splitlines()[0]
+            except Exception:
+                ahead_behind = ""
+            return {
+                "status": "ready",
+                "mode": "local-repo",
+                "repo": {
+                    "root": str(REPO_ROOT),
+                    "git_present": True,
+                    "branch": branch,
+                    "commit": commit,
+                    "dirty_count": len(dirty_files),
+                    "dirty_files": dirty_files[:20],
+                    "tracking": ahead_behind,
+                    "recent_commits": [
+                        {
+                            "commit": parts[0] if len(parts) > 0 else "",
+                            "date": parts[1] if len(parts) > 1 else "",
+                            "subject": parts[2] if len(parts) > 2 else line,
+                        }
+                        for line in recent_commits
+                        for parts in [line.split("|", 2)]
+                    ],
+                },
+                "local_runner": {
+                    "python_on_path": bool(python_path),
+                    "npm_on_path": bool(npm_path),
+                    "python_path": python_path,
+                    "npm_path": npm_path,
+                    "local_hq_ready": bool(python_path and npm_path),
+                },
+            }
+        except Exception as exc:
+            return {
+                "status": "error",
+                "mode": "local-repo",
+                "reason": str(exc),
+                "repo": {
+                    "root": str(REPO_ROOT),
+                    "git_present": True,
+                },
+                "local_runner": {
+                    "python_on_path": bool(python_path),
+                    "npm_on_path": bool(npm_path),
+                },
+            }
+
     def _public_tenant_defaults(request: Request) -> dict[str, str]:
         tenant_param = str(request.query_params.get("tenant", "")).strip().lower()
         hostname = _request_hostname(request)
@@ -3350,6 +3440,11 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
     def platform_data_visibility(request: Request) -> dict[str, Any]:
         session = _require_session(request)
         return _data_visibility_payload(request, session)
+
+    @app.get("/api/dev/status")
+    def dev_status(request: Request) -> dict[str, Any]:
+        _require_session(request)
+        return _dev_status_payload()
 
     @app.post("/api/auth/login")
     def auth_login(request: Request, response: Response, payload: LoginRequest) -> dict[str, Any]:

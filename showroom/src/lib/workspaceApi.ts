@@ -736,3 +736,34 @@ export type DataVisibilityPayload = {
 export async function getDataVisibility() {
   return workspaceFetch<DataVisibilityPayload>('/api/platform/data-visibility')
 }
+
+export type DevStatusPayload = {
+  status?: string
+  mode?: string
+  reason?: string
+  repo?: {
+    root?: string
+    git_present?: boolean
+    branch?: string
+    commit?: string
+    dirty_count?: number
+    dirty_files?: string[]
+    tracking?: string
+    recent_commits?: Array<{
+      commit?: string
+      date?: string
+      subject?: string
+    }>
+  }
+  local_runner?: {
+    python_on_path?: boolean
+    npm_on_path?: boolean
+    python_path?: string
+    npm_path?: string
+    local_hq_ready?: boolean
+  }
+}
+
+export async function getDevStatus() {
+  return workspaceFetch<DevStatusPayload>('/api/dev/status')
+}

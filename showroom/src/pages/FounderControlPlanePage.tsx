@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 
 import {
   checkWorkspaceHealth,
+  getDevStatus,
   getWorkspaceSession,
   listAgentRuns,
   listTeamMembers,
@@ -78,6 +79,8 @@ type TenantArchitecturePayload = {
   }
 }
 
+type DevStatusPayload = Awaited<ReturnType<typeof getDevStatus>>
+
 function formatDateTime(value?: string) {
   if (!value) {
     return 'Never'
@@ -121,6 +124,7 @@ export function FounderControlPlanePage() {
   const [contacts, setContacts] = useState<ContactSubmissionRow[]>([])
   const [workspaces, setWorkspaces] = useState<WorkspacesPayload | null>(null)
   const [tenantArchitecture, setTenantArchitecture] = useState<TenantArchitecturePayload | null>(null)
+  const [devStatus, setDevStatus] = useState<DevStatusPayload | null>(null)
 
   const loadData = useCallback(async () => {
     const health = await checkWorkspaceHealth()
@@ -133,13 +137,14 @@ export function FounderControlPlanePage() {
       throw new Error('Login is required to open the control plane.')
     }
 
-    const [summaryPayload, memberPayload, agentRunPayload, contactPayload, workspacePayload, tenantPayload] = await Promise.all([
+    const [summaryPayload, memberPayload, agentRunPayload, contactPayload, workspacePayload, tenantPayload, devPayload] = await Promise.all([
       workspaceFetch<SummaryPayload>('/api/summary'),
       listTeamMembers(),
       listAgentRuns(16),
       workspaceFetch<{ rows?: ContactSubmissionRow[] }>('/api/contact-submissions?limit=8'),
       workspaceFetch<WorkspacesPayload>('/api/workspaces'),
       workspaceFetch<TenantArchitecturePayload>('/api/platform/tenant-architecture'),
+      getDevStatus(),
     ])
 
     setSession(sessionPayload.session ?? null)
@@ -150,6 +155,7 @@ export function FounderControlPlanePage() {
     setContacts(contactPayload.rows ?? [])
     setWorkspaces(workspacePayload)
     setTenantArchitecture(tenantPayload)
+    setDevStatus(devPayload)
     setError(null)
   }, [])
 
@@ -282,6 +288,14 @@ export function FounderControlPlanePage() {
           <p className="sm-app-label">Approvals</p>
           <strong>{summary?.approvals?.approval_count ?? 0}</strong>
         </article>
+        <article className="sm-app-kpi">
+          <p className="sm-app-label">Repo drift</p>
+          <strong>{devStatus?.repo?.dirty_count ?? 0}</strong>
+        </article>
+        <article className="sm-app-kpi">
+          <p className="sm-app-label">Local HQ</p>
+          <strong>{devStatus?.local_runner?.local_hq_ready ? 'Ready' : 'Blocked'}</strong>
+        </article>
       </section>
 
       <section className="grid gap-4 lg:grid-cols-4">
@@ -399,6 +413,75 @@ export function FounderControlPlanePage() {
                       : 'Any'}
                   </strong>
                 </div>
+              </div>
+            </article>
+          </section>
+
+          <section className="sm-app-grid-split">
+            <article className="sm-app-panel">
+              <div className="sm-app-panel-head">
+                <div>
+                  <p className="sm-kicker text-[var(--sm-accent)]">Dev Desk</p>
+                  <h2>Repo and local runner state</h2>
+                </div>
+                <span className="sm-status-pill">{devStatus?.mode || 'unknown'}</span>
+              </div>
+
+              <div className="sm-app-mini-grid">
+                <div className="sm-app-mini-card">
+                  <p className="sm-app-label">Branch</p>
+                  <strong>{devStatus?.repo?.branch || 'Unavailable'}</strong>
+                </div>
+                <div className="sm-app-mini-card">
+                  <p className="sm-app-label">Commit</p>
+                  <strong>{devStatus?.repo?.commit || 'Unavailable'}</strong>
+                </div>
+                <div className="sm-app-mini-card">
+                  <p className="sm-app-label">Dirty files</p>
+                  <strong>{devStatus?.repo?.dirty_count ?? 0}</strong>
+                </div>
+                <div className="sm-app-mini-card">
+                  <p className="sm-app-label">Local HQ ready</p>
+                  <strong>{devStatus?.local_runner?.local_hq_ready ? 'Yes' : 'No'}</strong>
+                </div>
+                <div className="sm-app-mini-card">
+                  <p className="sm-app-label">Python</p>
+                  <strong>{devStatus?.local_runner?.python_on_path ? 'On PATH' : 'Missing on PATH'}</strong>
+                </div>
+                <div className="sm-app-mini-card">
+                  <p className="sm-app-label">NPM</p>
+                  <strong>{devStatus?.local_runner?.npm_on_path ? 'On PATH' : 'Missing on PATH'}</strong>
+                </div>
+              </div>
+
+              {devStatus?.reason ? <div className="sm-app-note mt-4">{devStatus.reason}</div> : null}
+              {devStatus?.repo?.tracking ? <div className="sm-app-note mt-4">{devStatus.repo.tracking}</div> : null}
+            </article>
+
+            <article className="sm-app-panel-muted">
+              <div className="sm-app-panel-head">
+                <div>
+                  <p className="sm-kicker text-[var(--sm-accent-alt)]">Recent engineering activity</p>
+                  <h2>Latest repo changes</h2>
+                </div>
+                <span className="sm-status-pill">{devStatus?.repo?.recent_commits?.length ?? 0} recent</span>
+              </div>
+
+              <div className="sm-app-list">
+                {(devStatus?.repo?.recent_commits ?? []).length ? (
+                  devStatus?.repo?.recent_commits?.map((item) => (
+                    <article className="sm-app-list-row" key={`${item.commit}-${item.date}`}>
+                      <div>
+                        <p className="text-sm font-semibold text-white">{item.subject || 'Commit'}</p>
+                        <p className="mt-1 text-xs uppercase tracking-[0.14em] text-[var(--sm-muted)]">
+                          {item.commit || 'unknown'} · {formatDateTime(item.date)}
+                        </p>
+                      </div>
+                    </article>
+                  ))
+                ) : (
+                  <div className="sm-app-note">Recent commit history is only available when the app is running against a local git checkout.</div>
+                )}
               </div>
             </article>
           </section>
