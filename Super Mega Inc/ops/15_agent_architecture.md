@@ -1,196 +1,229 @@
 # SuperMega Agent Architecture
 
-This is the operating architecture for SuperMega as an AI-native software company.
+This file defines the live agent system for SuperMega outside Codex.
 
-## Goal
+## Purpose
 
-Run a small company with:
-- one public proof layer
+SuperMega runs as:
+- one public company site
 - one shared operating app
-- one durable worker layer
-- one local workstation mirror
+- one queue-backed worker plane
+- one founder workstation mirror
 
-The target is not a chat demo. The target is a company that keeps moving when this Codex session is closed.
+Codex is part of engineering. It is not the runtime.
 
-## Layers
+## Runtime layers
 
-### 1. Public Layer
+### 1. Public layer
 
 Purpose:
-- show products
-- prove the system shape
+- explain what SuperMega builds
 - collect inbound contact
+- show examples and proof
 
 Surface:
 - `supermega.dev`
 
-Public story:
-- three starter packs
-- one short contact path
-- proof tools are secondary
+Owner:
+- Revenue Pod
 
-### 2. Control Layer
+### 2. Control layer
 
 Purpose:
-- give humans and agents one operating surface
-- hold lists, queues, approvals, delivery state, and founder review
+- hold live company state
+- give humans and agents one shared operating surface
 
 Surface:
 - `app.supermega.dev`
 
-Main working views:
+Primary surfaces:
 - Sales
-- Director
-- Agent Ops
 - Actions
 - Approvals
 - Exceptions
+- Director
+- Agent Ops
 
-### 3. Worker Layer
+Owner:
+- Founder Desk + Delivery Pod
+
+### 3. Worker layer
 
 Purpose:
-- run durable jobs outside user requests
+- execute durable jobs
+- drain queues
 - retry safely
-- keep loops moving on schedule
+- keep loops moving 24/7
 
-Infrastructure:
-- Cloud Scheduler
+Runtime:
+- Cloud Run
 - Cloud Tasks
-- Cloud Run worker execution
+- Cloud Scheduler
+- Cloud SQL
 
-Current loops:
-- Revenue Scout
-- List Clerk
-- Template Clerk
-- Task Triage
-- Ops Watch
-- Founder Brief
+Owner:
+- Agent Ops
 
-Next loops:
-- Release Guard
-- Deals Clerk
-- Delivery Watch
-- Browser Clerk
-
-### 4. Local Workstation Mirror
+### 4. Workstation mirror
 
 Purpose:
-- keep a human-readable mirror on the founder machine
-- store latest reports locally
-- allow future browser-heavy sidecar work without making browser automation the core runtime
+- keep a local mirror of company state
+- generate local reports
+- support browser-heavy sidecar tasks
+- let the founder inspect the company without opening Codex
 
-Current behavior:
-- scheduled workstation cycle
-- founder report
-- operator report
-- agent run report
-- ops sync into `Super Mega Inc\ops`
-- local HTML ops hub
+Artifacts:
+- `pilot-data/ops/*.json`
+- `Super Mega Inc/ops/*.md`
+- local ops hub
 
-## Teams
+Owner:
+- Founder Desk
+
+## Agent teams
 
 ### Founder Desk
 
 Owns:
-- company priorities
-- product direction
-- market focus
-- founder brief
+- priorities
+- roadmap direction
+- release approval
+- founder brief review
 
-Human role:
-- founder
-
-Agent support:
+Core loops:
 - Founder Brief
 - Ops Watch
+
+Human:
+- founder
 
 ### Revenue Pod
 
 Owns:
-- prospecting
-- contact intake
-- pipeline cleanliness
-- next follow-up
+- inbound contact
+- outbound pipeline
+- list cleanup
+- deal hygiene
 
-Human role:
-- founder or sales operator
-
-Agent support:
+Core loops:
 - Revenue Scout
 - List Clerk
 - Deals Clerk
+
+Human:
+- founder or sales operator
 
 ### Delivery Pod
 
 Owns:
 - starter pack rollout
-- task ownership
-- live client queue state
-- issue and approval control
+- implementation queue
+- approvals and exceptions
+- client delivery state
 
-Human role:
-- operator / manager
-
-Agent support:
+Core loops:
 - Template Clerk
 - Task Triage
 - Delivery Watch
 
+Human:
+- operator or manager
+
 ### Agent Ops
 
 Owns:
-- runtime health
 - queue health
-- failed jobs
+- worker health
 - release safety
+- incident visibility
 
-Human role:
-- operator / founder
-
-Agent support:
+Core loops:
 - Ops Watch
 - Release Guard
+- Browser Clerk
 
-## Rules
+Human:
+- founder or platform operator
 
-1. A new feature is not a product until it has:
-- a named buyer
-- a starter workflow
-- a setup path
-- a queue owner
+## Live loops
 
-2. Browser automation is sidecar-only.
-- Use it when there is no API.
-- Do not make it the system of record.
+Running now:
+- Revenue Scout
+- List Clerk
+- Template Clerk
+- Task Triage
+- Ops Watch
+- Founder Brief
 
-3. Public tools are proof, not the company.
-- The company sells starter packs and working systems.
+Queued next:
+- Deals Clerk
+- Delivery Watch
+- Release Guard
+- Browser Clerk
 
-4. Every agent output must become one of:
+## 24/7 rule
+
+If a loop matters, it must run through:
+- Cloud Scheduler trigger
+- Cloud Tasks queue
+- Cloud Run execution
+- app-visible status
+- local report output
+
+If it only runs from a shell by hand, it is not yet operational.
+
+## Output contract
+
+Every agent loop must produce one or more of:
 - lead
+- deal
 - task
 - approval
 - exception
 - founder brief
+- incident
+- release check
 
-5. The company should be inspectable from one local folder.
-- `Super Mega Inc\ops`
+Free-form text alone is not enough.
 
-## What “Autonomous” Means Here
+## Browser automation rule
 
-It does not mean one giant agent doing everything.
+Browser automation is sidecar-only.
 
-It means:
-- schedules keep running
-- queues keep draining
-- summaries keep updating
-- failures surface visibly
-- humans intervene only on priority, approvals, and ambiguous delivery work
+Use it for:
+- screenshots
+- preview capture
+- browser-only internal flows
+- regression checks where no API exists
 
-## Immediate Next Steps
+Do not use it as:
+- the primary system of record
+- the main worker runtime
+- the only way to understand company state
 
-1. Add a dedicated revenue view inside the app.
-2. Route contact submissions directly into tracked deals.
-3. Finish email delivery so briefs and alerts leave the system.
-4. Add Release Guard and Deals Clerk.
-5. Keep tightening the public site around products, not capability claims.
+## Manual vs automatic
+
+Automatic now:
+- scheduled worker runs
+- queue draining
+- local founder/operator/agent report generation
+- public contact capture
+- live app health and smoke checks
+
+Still manual:
+- product direction changes
+- release approval
+- client pricing and proposals
+- final rollout signoff
+- incident judgment when business context is unclear
+
+## Architecture standard
+
+The company is healthy when:
+- public proof is clear
+- app state is live
+- worker loops are draining
+- local ops files are current
+- founder can see what matters in under five minutes
+
+If one of those is missing, the architecture is incomplete.

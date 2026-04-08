@@ -7,14 +7,30 @@ export function DemosPage() {
   return (
     <div className="space-y-10 pb-12">
       <section className="sm-site-panel">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div className="grid gap-8 xl:grid-cols-[0.95fr_1.05fr] xl:items-end">
           <div>
             <p className="sm-kicker text-[var(--sm-accent)]">Demos</p>
-            <h1 className="mt-4 max-w-4xl text-4xl font-extrabold tracking-tight text-white lg:text-6xl">Open the systems and see how they work.</h1>
+            <h1 className="mt-4 max-w-4xl text-4xl font-extrabold tracking-tight text-white lg:text-6xl">
+              Working demos of the systems we actually roll out.
+            </h1>
+            <p className="mt-4 max-w-2xl text-sm leading-relaxed text-[var(--sm-muted)] lg:text-base">
+              Same surface, different labels, owners, and rules per company. Open the workflow you want to replace and inspect the screen.
+            </p>
           </div>
-          <p className="max-w-2xl text-sm leading-relaxed text-[var(--sm-muted)] lg:text-base">
-            These are public demo surfaces. They show the actual working shape. The team app is still separate on app.supermega.dev.
-          </p>
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div className="sm-demo-mini">
+              <strong>Concrete</strong>
+              <span>Board, inbox, brief, or portal.</span>
+            </div>
+            <div className="sm-demo-mini">
+              <strong>Reusable</strong>
+              <span>Swap fields, owners, and statuses for another company.</span>
+            </div>
+            <div className="sm-demo-mini">
+              <strong>Expandable</strong>
+              <span>Start narrow, then add approvals, ordering, or back office.</span>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -26,13 +42,26 @@ export function DemosPage() {
                 <p className="sm-kicker text-[var(--sm-accent)]">{system.category}</p>
                 <h2 className="mt-3 text-3xl font-bold text-white">{system.name}</h2>
                 <p className="mt-3 text-sm leading-relaxed text-[var(--sm-muted)]">{system.tagline}</p>
+                <p className="mt-3 text-sm leading-relaxed text-white/88">{system.summary}</p>
+                <p className="mt-3 text-sm font-medium text-white/88">Used by: {system.audience}</p>
+                <p className="mt-2 text-sm leading-relaxed text-[var(--sm-muted)]">Replaces: {system.replaces.join(', ')}.</p>
+                <div className="mt-4 grid gap-3 md:grid-cols-2">
+                  <div className="sm-demo-mini">
+                    <strong>Screen</strong>
+                    <span>{system.surface[0]}</span>
+                  </div>
+                  <div className="sm-demo-mini">
+                    <strong>Rollout</strong>
+                    <span>{system.setup[0]}</span>
+                  </div>
+                </div>
               </div>
               <div className="flex flex-wrap gap-3">
                 <Link className="sm-button-primary" to={`/demos/${system.slug}`}>
                   Open demo
                 </Link>
                 <Link className="sm-button-secondary" to={`/products/${system.slug}`}>
-                  View system
+                  See system
                 </Link>
               </div>
             </div>
@@ -44,8 +73,11 @@ export function DemosPage() {
       <section className="sm-site-panel">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <p className="sm-kicker text-[var(--sm-accent)]">Free tools</p>
-            <h2 className="mt-3 text-3xl font-bold text-white lg:text-4xl">Smaller public tools if you want to test one action first.</h2>
+            <p className="sm-kicker text-[var(--sm-accent)]">Free proofs</p>
+            <h2 className="mt-3 text-3xl font-bold text-white lg:text-4xl">Need to test the front end of the system first?</h2>
+            <p className="mt-3 max-w-2xl text-sm leading-relaxed text-[var(--sm-muted)]">
+              These are narrow public proofs of a larger system, not standalone brochure tools.
+            </p>
           </div>
         </div>
         <div className="mt-6 grid gap-3 md:grid-cols-3">

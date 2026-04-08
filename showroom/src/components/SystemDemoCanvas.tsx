@@ -14,6 +14,14 @@ function toneClass(tone: DemoCardItem['tone']) {
 export function SystemDemoCanvas({ scenario, compact = false }: Props) {
   return (
     <div className={`sm-demo-frame ${compact ? 'sm-demo-frame-compact' : ''}`}>
+      <div className="sm-demo-windowbar">
+        <div className="sm-demo-windowdots" aria-hidden="true">
+          <span />
+          <span />
+          <span />
+        </div>
+        <div className="sm-demo-windowpill">{compact ? scenario.label : 'Live example'}</div>
+      </div>
       <div className="sm-demo-topbar">
         <div>
           <p className="sm-demo-context">{scenario.label}</p>

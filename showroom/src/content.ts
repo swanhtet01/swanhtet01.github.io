@@ -97,33 +97,33 @@ export type OperatorAddOn = {
 export const bookingUrl = (import.meta.env.VITE_BOOKING_URL ?? '').trim()
 
 export const navItems = [
-  { label: 'Systems', to: '/products' },
-  { label: 'Demos', to: '/demos' },
+  { label: 'What we build', to: '/products' },
+  { label: 'Free demos', to: '/demos' },
 ] as const
 
 export const hero = {
   eyebrow: 'SuperMega',
-  title: 'Real business systems. Live demos.',
-  description: 'SuperMega builds simple systems for sales, operations, management, and client work.',
+  title: 'Simple AI software for real company work.',
+  description: 'We build clear systems for sales, operations, management, and client-facing workflows. Try the free demos or talk to us about a custom build.',
 }
 
 export const proofPoints: ProofPoint[] = [
   {
-    label: 'One operating layer',
+    label: 'Clear systems',
     value: 'Less tool sprawl',
-    detail: 'Sales, operations, approvals, and management move in one shared system instead of chats, sheets, and scattered apps.',
+    detail: 'Sales, operations, approvals, and management move in one shared system instead of chats, spreadsheets, and scattered apps.',
   },
   {
-    label: 'Always-on agents',
-    value: 'Queues keep moving',
-    detail: 'The worker plane keeps triage, briefs, cleanup, and follow-up running outside this chat session.',
+    label: 'Always-on automation',
+    value: 'Work keeps moving',
+    detail: 'Background workers keep triage, briefs, cleanup, and follow-up running without constant manual chasing.',
   },
 ]
 
 export const coreProduct = {
-  name: 'Reusable systems + custom builds',
-  tagline: 'Start from one reusable pack, then extend only where the business needs it.',
-  replaces: ['Disconnected SaaS', 'Spreadsheet operations', 'Manual chasing'],
+  name: 'Reusable systems and custom builds',
+  tagline: 'Start from one working system, then extend it only where the business needs more.',
+  replaces: ['Disconnected software', 'Spreadsheet operations', 'Manual chasing'],
   inputs: ['Existing team data', 'Real workflows', 'Current blockers'],
   outputs: ['Working queue', 'Agent loops', 'Role-based control'],
   rollout: ['Pick one workflow.', 'Ship the first working pack.', 'Extend only after the team trusts it.'],
@@ -131,57 +131,57 @@ export const coreProduct = {
 
 export const siteShowcases: SiteShowcase[] = [
   {
-    name: 'Distributor Sales Desk',
+    name: 'Sales Desk',
     eyebrow: 'Sales',
-    title: 'Prospecting, follow-up, and team handoff in one working system.',
-    summary: 'Search the market, clean inbound lists, and keep every next step visible instead of losing context across chat, sheets, and scattered notes.',
+    title: 'Prospecting, follow-up, and handoff in one working system.',
+    summary: 'Search for companies, clean inbound lists, and keep every next step visible instead of losing context across chat, spreadsheets, and notes.',
     image: '/site/sales-desk.svg',
     points: ['New accounts and existing lists in one queue', 'First follow-up ready without extra admin', 'Manager view of what moved and what stalled'],
-    route: '/contact?package=Distributor%20Sales%20Desk',
+    route: '/contact?package=Sales%20Desk',
   },
   {
-    name: 'Operations Desk',
+    name: 'Ops Queue',
     eyebrow: 'Operations',
-    title: 'Approvals, receiving, exceptions, and daily execution without a heavy ERP rollout.',
+    title: 'Approvals, issues, and daily execution without a heavy rollout.',
     summary: 'Start from one operational bottleneck, turn it into one controlled queue, and let the team run the day from a shared operating layer.',
     image: '/site/ops-desk.svg',
     points: ['One queue for approvals and blockers', 'Receipts, exceptions, and owners in view', 'Daily review instead of ad hoc chasing'],
-    route: '/contact?package=Receiving%20Control',
+    route: '/contact?package=Ops%20Queue',
   },
   {
-    name: 'Founder Daily Brief',
+    name: 'Daily Brief',
     eyebrow: 'Management',
     title: 'A short executive view built from the real work layer.',
     summary: 'The founder or GM gets the few items that need attention today, not another dashboard full of dead metrics.',
     image: '/site/founder-brief.svg',
     points: ['Priority changes surfaced automatically', 'Queues and risk pulled into one brief', 'Built for owners, managers, and directors'],
-    route: '/contact?package=Founder%20Daily%20Brief',
+    route: '/contact?package=Daily%20Brief',
   },
 ]
 
 export const siteExamples: SiteExample[] = [
   {
-    name: 'Distributor Sales Desk',
+    name: 'Sales Desk',
     category: 'Sales',
     detail: 'For teams that need one system for prospecting, list cleanup, outreach, and follow-up.',
     image: '/site/sales-desk.svg',
-    route: '/contact?package=Distributor%20Sales%20Desk',
+    route: '/contact?package=Sales%20Desk',
     live: true,
   },
   {
-    name: 'Founder Daily Brief',
+    name: 'Daily Brief',
     category: 'Management',
     detail: 'For owners and managers who need one short operating view every day.',
     image: '/site/founder-brief.svg',
-    route: '/contact?package=Founder%20Daily%20Brief',
+    route: '/contact?package=Daily%20Brief',
     live: true,
   },
   {
-    name: 'Receiving Control',
+    name: 'Ops Queue',
     category: 'Operations',
-    detail: 'For teams that need clean ownership on receiving problems, holds, and follow-up.',
+    detail: 'For teams that need clean ownership on issues, approvals, and follow-up.',
     image: '/site/ops-desk.svg',
-    route: '/contact?package=Receiving%20Control',
+    route: '/contact?package=Ops%20Queue',
     live: true,
   },
   {
@@ -212,18 +212,18 @@ export const siteExamples: SiteExample[] = [
 
 export const workExamples: WorkExample[] = [
   {
-    name: 'Distributor Sales Desk',
+    name: 'Sales Desk',
     category: 'Sales',
-    audience: 'Owner-led importers, distributors, and commercial teams',
+    audience: 'Owner-led teams, commercial teams, and operators',
     title: 'A sales system that turns scattered prospecting into one daily queue.',
-    summary: 'Built for teams that live in Facebook, Viber, WhatsApp, Gmail, and spreadsheets but still need one real sales operating layer.',
+    summary: 'Built for teams that live in email, chat, spreadsheets, and ad hoc notes but still need one real sales operating layer.',
     image: '/site/sales-desk.svg',
     outcomes: [
       'Turn raw company names and messages into one clean sales list with next actions.',
       'Give the team one daily follow-up queue instead of scattered chats and sheets.',
       'Give the owner one short daily brief on leads, replies, and blocked deals.',
     ],
-    disclosure: 'Composite example based on common distributor workflows. Not presented as a live client deployment.',
+    disclosure: 'Composite example based on common sales workflows. Not presented as a live client deployment.',
   },
   {
     name: 'Furniture Order Control',
@@ -270,58 +270,58 @@ export const workExamples: WorkExample[] = [
 ]
 
 export const leadFinder = {
-  title: 'Find clients',
-  description: 'Search by place or niche, keep the best results, and move them into a usable follow-up list with first outreach ready.',
-  steps: ['Search a market', 'Keep the right companies', 'Open Clean my list'],
+  title: 'Find clients demo',
+  description: 'Use the free demo to search by place or niche, keep the best results, and move them into a usable follow-up list.',
+  steps: ['Search', 'Keep a few', 'Open Clean a list'],
 }
 
 export const useCases: UseCase[] = [
   {
-    name: 'Distributor Sales Desk',
+    name: 'Sales Desk',
     audience: 'Founders, operators, and sales teams',
     promise: 'Find businesses, save them in Clean my list, and keep outreach moving.',
-    firstRollout: 'Find clients plus Clean my list.',
+    firstRollout: 'Find clients plus Clean a list.',
     inputs: ['Search query', 'Keywords', 'Saved notes'],
     outcomes: ['Company list', 'Follow-up tasks', 'Cleaner outreach'],
   },
   {
-    name: 'List Cleanup Desk',
+    name: 'Clean a list',
     audience: 'Owner-led teams, sales coordinators, and operators',
     promise: 'Bring your own spreadsheet or text file and turn it into a usable company list.',
-    firstRollout: 'Clean my list on top of one imported sales list.',
+    firstRollout: 'Clean a list on top of one imported sales list.',
     inputs: ['CSV export', 'Scraped company list', 'CRM notes'],
     outcomes: ['One clean company list', 'Tagged rows', 'Next-step tasks'],
   },
   {
-    name: 'Receiving Control',
-    audience: 'Stores, procurement, and plant teams',
-    promise: 'Log inbound issues once and keep the next step visible.',
-    firstRollout: 'Receiving Log for one site, store, or plant team.',
-    inputs: ['Inbound log', 'PO or PI', 'Batch or GRN'],
-    outcomes: ['Receiving task list', 'Variance visibility', 'Clear handoff'],
+    name: 'Daily Brief',
+    audience: 'Founders, GMs, and team leads',
+    promise: 'See one short summary of what needs attention today.',
+    firstRollout: 'Daily Brief on top of the main working queue.',
+    inputs: ['Open queues', 'Approvals', 'Issues'],
+    outcomes: ['Priority list', 'Leadership review', 'Faster decisions'],
   },
 ]
 
 export const publicModules: PublicModule[] = [
   {
     name: 'Find clients',
-    tagline: 'Search a market, keep the right companies, and start outreach.',
+    tagline: 'Free demo: search a market, keep the right companies, and start outreach.',
     bestFor: 'Prospecting, partnerships, and market mapping.',
     inputs: ['Place or niche search', 'Fit keywords', 'Saved notes'],
-    outputs: ['Shortlist', 'Outreach draft', 'Clean my list rows'],
+    outputs: ['Shortlist', 'Outreach draft', 'Clean a list rows'],
     path: '/find-companies',
   },
   {
-    name: 'Clean my list',
-    tagline: 'Paste your existing names and turn them into one usable follow-up list.',
-    bestFor: 'Anyone already working from Google, Facebook, WhatsApp, Excel, or CRM exports.',
+    name: 'Clean a list',
+    tagline: 'Free demo: paste your existing names and turn them into one usable follow-up list.',
+    bestFor: 'Anyone already working from spreadsheets, CRM exports, search results, or notes.',
     inputs: ['Company rows', 'Notes', 'Contact clues', 'Follow-up tasks'],
     outputs: ['Clean list', 'Next steps', 'CSV export'],
     path: '/company-list',
   },
   {
     name: 'Sort updates',
-    tagline: 'Paste messy updates and turn them into clear next actions.',
+    tagline: 'Free demo: paste messy updates and turn them into clear next actions.',
     bestFor: 'Teams reporting work in chat, notes, and screenshots.',
     inputs: ['Team updates', 'Issue notes', 'Status text'],
     outputs: ['Task list', 'Owners', 'Next steps'],
@@ -331,9 +331,9 @@ export const publicModules: PublicModule[] = [
 
 export const templatePacks: TemplatePack[] = [
   {
-    name: 'Distributor Sales Desk',
+    name: 'Sales Desk',
     category: 'Sales',
-    audience: 'Owner-led distributors, importers, and sales teams',
+    audience: 'Sales teams, founders, and operators',
     promise: 'Find companies, clean messy lists, draft first outreach, and run one daily sales queue.',
     inputs: ['Search results', 'Existing lead list', 'Email and WhatsApp notes'],
     outputs: ['Qualified shortlist', 'Clean company list', 'Follow-up queue'],
@@ -341,7 +341,7 @@ export const templatePacks: TemplatePack[] = [
     live: true,
   },
   {
-    name: 'Founder Daily Brief',
+    name: 'Daily Brief',
     category: 'Management',
     audience: 'Owners, GMs, and directors',
     promise: 'See one short daily review built from live queues, approvals, and exceptions.',
@@ -351,11 +351,11 @@ export const templatePacks: TemplatePack[] = [
     live: true,
   },
   {
-    name: 'Receiving Control',
+    name: 'Ops Queue',
     category: 'Operations',
-    audience: 'Plant, procurement, and receiving teams',
-    promise: 'Log inbound issues once, assign owners, and keep one short receiving queue.',
-    inputs: ['Receiving notes', 'GRN gaps', 'Hold reports', 'Supplier issues'],
+    audience: 'Operations teams, service teams, and managers',
+    promise: 'Turn messy updates and issues into one short working queue.',
+    inputs: ['Issue notes', 'Approvals', 'Status updates', 'Exceptions'],
     outputs: ['Issue log', 'Owner queue', 'Daily review'],
     route: '/contact',
     live: true,
@@ -450,7 +450,7 @@ export const clientTemplates: ClientTemplate[] = [
     path: '/products',
   })),
   {
-    name: 'Founder Daily Brief',
+    name: 'Daily Brief',
     audience: 'Owners and senior managers',
     outcome: 'Get one short daily review built from live queues, issues, and priorities.',
     path: '/products',
@@ -465,7 +465,7 @@ export const systemOffers: SystemOffer[] = [
     outcome: solution.promise,
   })),
   {
-    name: 'Founder Daily Brief',
+    name: 'Daily Brief',
     audience: 'Owners, GMs, and directors',
     replaces: 'manual end-of-day summaries and status meetings with no signal',
     outcome: 'one short daily brief built from the real work layer',

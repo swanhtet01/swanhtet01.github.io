@@ -66,6 +66,10 @@ export type SiteSystem = {
   tagline: string
   audience: string
   summary: string
+  previewImage: string
+  previewAlt: string
+  previewNote: string
+  surface: string[]
   replaces: string[]
   dailyUse: string[]
   setup: string[]
@@ -88,23 +92,31 @@ export const SITE_SYSTEMS: SiteSystem[] = [
     slug: 'sales-system',
     name: 'Sales System',
     shortName: 'Sales',
-    category: 'Revenue',
-    tagline: 'Find companies, qualify them, and keep follow-up moving from one queue.',
-    audience: 'Distributors, importers, commercial teams, founders',
-    summary: 'Use this when sales work is scattered across search, chat, spreadsheets, and memory.',
-    replaces: ['manual prospecting', 'spreadsheet follow-up', 'lost callbacks'],
-    dailyUse: ['search new companies', 'keep the shortlist', 'assign the next follow-up'],
-    setup: ['import the current list', 'keep one live queue', 'turn on daily brief'],
-    nextBuilds: ['quote follow-up', 'dealer mapping', 'customer intake'],
-    demoCta: 'Open sales demo',
-    freeToolLabel: 'Find clients',
+    category: 'Sales',
+    tagline: 'Prospecting, follow-up, and handoff in one working sales queue.',
+    audience: 'Founders, sales leads, coordinators, B2B teams',
+    summary: 'A shared sales workspace for target accounts, next actions, replies, and manager review.',
+    previewImage: '/site/sales-system-screen.png',
+    previewAlt: 'Sales System screenshot showing new accounts, follow-up today, and reply-ready sales lanes.',
+    previewNote: 'Actual branch screenshot of the current Sales System surface.',
+    surface: [
+      'A board for new accounts, follow-ups, and reply-ready deals',
+      'Each company has an owner, a next step, and deal context',
+      'Managers can spot stalled deals and overdue follow-ups in one pass',
+    ],
+    replaces: ['manual prospecting', 'spreadsheet follow-up', 'missed next steps'],
+    dailyUse: ['research and save target accounts', "assign today's follow-ups and replies", 'review stalled deals before they go cold'],
+    setup: ['import the current lead sheet or CRM export', 'map owners, stages, and required next actions', 'turn on a daily founder or sales brief'],
+    nextBuilds: ['quote follow-up', 'territory or dealer mapping', 'customer intake and handoff'],
+    demoCta: 'Open Sales System demo',
+    freeToolLabel: 'Find clients demo',
     freeToolRoute: '/find-companies',
     scenarios: [
       {
         id: 'distributor',
-        label: 'Distributor',
+        label: 'Distributor sales',
         kind: 'sales',
-        context: 'Owner-led importer building a Yangon dealer list.',
+        context: "A distributor building a dealer list and tracking today's callbacks in one place.",
         metrics: [
           { label: 'Active leads', value: '18' },
           { label: 'Follow-ups today', value: '7' },
@@ -112,21 +124,21 @@ export const SITE_SYSTEMS: SiteSystem[] = [
         ],
         columns: [
           {
-            name: 'New',
+            name: 'New accounts',
             items: [
               { title: 'Apex Bearings', subtitle: 'Industrial importer', meta: 'Call after 3 PM', tone: 'neutral' },
               { title: 'Shwe Power Tools', subtitle: 'Wholesale hardware', meta: 'FB page active', tone: 'accent' },
             ],
           },
           {
-            name: 'Follow up',
+            name: 'Follow-up today',
             items: [
               { title: 'Golden Fasteners', subtitle: 'Quote sent yesterday', meta: 'Owner: Min Thu', tone: 'warn' },
               { title: 'MKT Steel Supply', subtitle: 'Need buyer contact', meta: 'Owner: Swan', tone: 'neutral' },
             ],
           },
           {
-            name: 'Reply',
+            name: 'Reply ready',
             items: [
               { title: 'Kabar Trading', subtitle: 'Asked for product sheet', meta: 'Draft reply ready', tone: 'accent' },
             ],
@@ -135,9 +147,9 @@ export const SITE_SYSTEMS: SiteSystem[] = [
       },
       {
         id: 'service',
-        label: 'Service',
+        label: 'Service sales',
         kind: 'sales',
-        context: 'B2B service operator following up on inbound referrals.',
+        context: 'A B2B service team moving referrals from first contact to booked call.',
         metrics: [
           { label: 'Open conversations', value: '9' },
           { label: 'Next actions', value: '5' },
@@ -145,20 +157,20 @@ export const SITE_SYSTEMS: SiteSystem[] = [
         ],
         columns: [
           {
-            name: 'New',
+            name: 'New accounts',
             items: [
               { title: 'Lotus Logistics', subtitle: 'Referred by supplier', meta: 'Need intro message', tone: 'accent' },
               { title: 'North Wharf', subtitle: 'Operations manager lead', meta: 'Seen on Viber', tone: 'neutral' },
             ],
           },
           {
-            name: 'Follow up',
+            name: 'Follow-up today',
             items: [
               { title: 'Prime Maritime', subtitle: 'Proposal requested', meta: 'Follow up Friday', tone: 'warn' },
             ],
           },
           {
-            name: 'Reply',
+            name: 'Reply ready',
             items: [
               { title: 'Eastline Transport', subtitle: 'Asked about pricing', meta: 'Reply draft ready', tone: 'accent' },
             ],
@@ -171,24 +183,32 @@ export const SITE_SYSTEMS: SiteSystem[] = [
     id: 'operations',
     slug: 'operations-inbox',
     name: 'Operations Inbox',
-    shortName: 'Operations',
+    shortName: 'Ops',
     category: 'Operations',
-    tagline: 'Capture orders, issues, approvals, and updates in one working queue.',
-    audience: 'Warehouses, restaurants, procurement teams, service operators',
-    summary: 'Use this when the team is still running work from Viber, WhatsApp, paper notes, and inbox threads.',
+    tagline: 'One inbox for orders, exceptions, approvals, and daily operator work.',
+    audience: 'Operations leads, service teams, warehouse teams, shift managers',
+    summary: 'A shared operating queue where new work lands, owners are assigned, and exceptions stay visible until cleared.',
+    previewImage: '/site/ops-inbox-screen.png',
+    previewAlt: 'Operations Inbox screenshot showing the inbox and approvals side by side.',
+    previewNote: 'Actual branch screenshot of the current Operations Inbox surface.',
+    surface: [
+      'New work enters one inbox instead of chat threads',
+      'Approvals and exceptions sit beside the working queue',
+      'Late items, blockers, and owners are visible to the shift lead',
+    ],
     replaces: ['chat-based operations', 'paper logs', 'missing ownership'],
-    dailyUse: ['capture inbound work', 'assign an owner', 'clear blockers fast'],
-    setup: ['pick one workflow', 'define statuses', 'review one queue each day'],
-    nextBuilds: ['receiving', 'approvals', 'dispatch', 'QR ordering'],
-    demoCta: 'Open operations demo',
-    freeToolLabel: 'Sort updates',
+    dailyUse: ['capture orders, requests, or receiving issues', 'assign an owner and clear the next blocker', 'review late items and approvals once per shift'],
+    setup: ['pick one live workflow such as receiving, service, or store orders', 'define statuses, owner rules, and escalation timers', 'connect the intake channel and start with one queue'],
+    nextBuilds: ['receiving control', 'approval flow', 'QR ordering', 'commerce back office'],
+    demoCta: 'Open Operations Inbox demo',
+    freeToolLabel: 'Sort updates demo',
     freeToolRoute: '/sort-updates',
     scenarios: [
       {
         id: 'restaurant',
-        label: 'Restaurant',
+        label: 'QR ordering',
         kind: 'operations',
-        context: 'QR and chat orders collected into one service queue.',
+        context: 'A restaurant routing QR, counter, and chat orders through one service inbox.',
         metrics: [
           { label: 'Open orders', value: '14' },
           { label: 'Late tickets', value: '2' },
@@ -206,9 +226,9 @@ export const SITE_SYSTEMS: SiteSystem[] = [
       },
       {
         id: 'warehouse',
-        label: 'Warehouse',
+        label: 'Receiving',
         kind: 'operations',
-        context: 'Receiving issues and supplier follow-up in one inbox.',
+        context: 'A warehouse logging shortages, holds, and supplier follow-up in one receiving inbox.',
         metrics: [
           { label: 'Open issues', value: '6' },
           { label: 'Supplier holds', value: '2' },
@@ -232,20 +252,28 @@ export const SITE_SYSTEMS: SiteSystem[] = [
     name: 'Founder Brief',
     shortName: 'Brief',
     category: 'Management',
-    tagline: 'See what needs attention today without opening ten chats and five spreadsheets.',
-    audience: 'Founder, GM, directors, managers',
-    summary: 'Use this when leadership still gets updates by asking people one by one.',
-    replaces: ['manual status chasing', 'dead dashboards', 'late escalations'],
-    dailyUse: ['review top risks', 'approve blocked work', 'see what moved'],
-    setup: ['connect queues', 'define thresholds', 'schedule the brief'],
-    nextBuilds: ['revenue review', 'release guard', 'incident digest'],
-    demoCta: 'Open founder brief demo',
+    tagline: 'A short leadership brief built from live queues, approvals, and exceptions.',
+    audience: 'Founders, GMs, directors, multi-site operators',
+    summary: 'A daily leadership surface that shows only what needs a decision, escalation, or follow-up today.',
+    previewImage: '/site/founder-brief-screen.png',
+    previewAlt: 'Founder Brief screenshot showing priority items, watch items, and wins.',
+    previewNote: 'Actual branch screenshot of the current Founder Brief surface.',
+    surface: [
+      'Priority items grouped by business function',
+      'Approvals, risks, and stalled work surfaced automatically',
+      'Movement and wins pulled from the live systems, not manual reporting',
+    ],
+    replaces: ['manual status chasing', 'stale dashboards', 'late escalations'],
+    dailyUse: ['review top risks and overdue items', 'approve blocked work in minutes', 'see where sales or operations need intervention'],
+    setup: ['connect the sales and operations systems', 'define thresholds for escalations and stale work', 'schedule the brief for the founder or GM each morning'],
+    nextBuilds: ['revenue review', 'incident digest', 'board or investor packet'],
+    demoCta: 'Open Founder Brief demo',
     scenarios: [
       {
         id: 'founder',
         label: 'Founder',
         kind: 'brief',
-        context: 'Daily brief for an owner running sales and operations together.',
+        context: 'A founder checking the company state before sales calls and operations review.',
         metrics: [
           { label: 'Needs review', value: '3' },
           { label: 'Open queues', value: '4' },
@@ -256,8 +284,8 @@ export const SITE_SYSTEMS: SiteSystem[] = [
           { title: '7 sales follow-ups due today', subtitle: 'Revenue queue', meta: 'Owner: Sales pod', tone: 'accent' },
         ],
         watch: [
-          { title: 'App email delivery blocked', subtitle: 'Resend DNS still pending', meta: 'Agent Ops', tone: 'warn' },
-          { title: 'One approval waiting', subtitle: 'Partial receive sign-off', meta: 'Operations', tone: 'neutral' },
+          { title: 'One approval waiting', subtitle: 'Partial receive sign-off', meta: 'Operations', tone: 'warn' },
+          { title: 'One deal stalled 6 days', subtitle: 'Needs owner nudge', meta: 'Sales', tone: 'neutral' },
         ],
         wins: [
           { title: '4 new companies replied', subtitle: 'This week', meta: 'Revenue', tone: 'accent' },
@@ -268,7 +296,7 @@ export const SITE_SYSTEMS: SiteSystem[] = [
         id: 'gm',
         label: 'GM',
         kind: 'brief',
-        context: 'GM view across teams with one short morning review.',
+        context: 'A GM review across stores, delivery, and sales with only the items that need action today.',
         metrics: [
           { label: 'Priority items', value: '5' },
           { label: 'Approvals due', value: '2' },
@@ -294,20 +322,28 @@ export const SITE_SYSTEMS: SiteSystem[] = [
     name: 'Client Portal',
     shortName: 'Portal',
     category: 'Client-facing',
-    tagline: 'Give customers one place for status, files, approvals, and the next step.',
-    audience: 'Agencies, service teams, project teams, B2B operators',
-    summary: 'Use this when status updates, files, and approvals still live in email threads and chat messages.',
+    tagline: 'One client-facing workspace for status, files, approvals, and next steps.',
+    audience: 'Agencies, service firms, implementation teams, account managers',
+    summary: 'A shared client portal that keeps delivery status, files, approvals, and requests visible without email chasing.',
+    previewImage: '/site/client-portal-screen.png',
+    previewAlt: 'Client Portal screenshot showing status, approvals, and files in one client-facing workspace.',
+    previewNote: 'Actual branch screenshot of the current Client Portal surface.',
+    surface: [
+      'Live status by project, order, or account',
+      'Approvals and requests with full history',
+      'Files, notes, and next actions in the same client view',
+    ],
     replaces: ['email chasing', 'scattered files', 'manual status updates'],
-    dailyUse: ['share status', 'collect approvals', 'keep client requests visible'],
-    setup: ['define the client view', 'connect the task queue', 'invite the working team'],
-    nextBuilds: ['billing status', 'ticketing', 'learning hub'],
-    demoCta: 'Open portal demo',
+    dailyUse: ['share status without manual update emails', 'collect client approvals and requests', 'keep delivery and account teams aligned'],
+    setup: ['define the client-facing milestones and views', 'connect the delivery queue, files, and approval steps', 'invite the internal team first, then roll out to clients'],
+    nextBuilds: ['approval flow', 'billing status', 'support desk', 'learning hub'],
+    demoCta: 'Open Client Portal demo',
     scenarios: [
       {
         id: 'agency',
         label: 'Agency',
         kind: 'portal',
-        context: 'A delivery portal for campaign, design, or implementation work.',
+        context: 'A client portal for campaign, design, or implementation work with visible approvals.',
         metrics: [
           { label: 'Open deliverables', value: '8' },
           { label: 'Waiting on client', value: '2' },
@@ -336,33 +372,33 @@ export const SITE_SYSTEMS: SiteSystem[] = [
         ],
       },
       {
-        id: 'training',
-        label: 'Training',
+        id: 'orders',
+        label: 'Order status',
         kind: 'portal',
-        context: 'A learning or onboarding portal with tasks and checkpoints.',
+        context: 'A client portal for quotes, delivery updates, files, and approval history.',
         metrics: [
-          { label: 'Modules live', value: '6' },
-          { label: 'Completions', value: '24' },
-          { label: 'Needs review', value: '3' },
+          { label: 'Open orders', value: '12' },
+          { label: 'Waiting on client', value: '3' },
+          { label: 'Updates today', value: '5' },
         ],
         sections: [
           {
-            name: 'Modules',
+            name: 'Status',
             items: [
-              { title: 'Receiving SOP', subtitle: '92% complete', meta: 'Warehouse team', tone: 'accent' },
-              { title: 'Escalation path', subtitle: 'Needs revision', meta: 'Ops lead', tone: 'warn' },
+              { title: 'Order 24018', subtitle: 'Cabinet install on site', meta: 'Crew booked Friday', tone: 'accent' },
+              { title: 'Order 24022', subtitle: 'Two items on supplier hold', meta: 'Account team following up', tone: 'warn' },
             ],
           },
           {
-            name: 'Reviews',
+            name: 'Approvals',
             items: [
-              { title: 'Quiz review', subtitle: '3 failed attempts', meta: 'Manager check', tone: 'neutral' },
+              { title: 'Approve revised stone sample', subtitle: 'Client sign-off required', meta: '1 pending', tone: 'neutral' },
             ],
           },
           {
-            name: 'Resources',
+            name: 'Files',
             items: [
-              { title: 'Packing SOP.pdf', subtitle: 'Latest version', meta: 'Shared with team', tone: 'neutral' },
+              { title: 'delivery-pack-24018.pdf', subtitle: 'Uploaded 09:10', meta: 'Account team', tone: 'neutral' },
             ],
           },
         ],
@@ -372,12 +408,19 @@ export const SITE_SYSTEMS: SiteSystem[] = [
 ]
 
 export const FREE_TOOLS: FreeTool[] = [
-  { name: 'Find clients', tagline: 'Search for new companies and keep a shortlist.', route: '/find-companies' },
-  { name: 'Fix my list', tagline: 'Paste a messy list and turn it into a usable working list.', route: '/company-list' },
-  { name: 'Sort updates', tagline: 'Paste messy updates and turn them into clear next actions.', route: '/sort-updates' },
+  { name: 'Find clients', tagline: 'Front-end proof for the Sales System: search and save target accounts.', route: '/find-companies' },
+  { name: 'Clean a list', tagline: 'Lead cleanup proof: turn a rough company list into a usable sales queue.', route: '/company-list' },
+  { name: 'Sort updates', tagline: 'Ops intake proof: turn messy team updates into one working inbox.', route: '/sort-updates' },
 ]
 
-export const CUSTOM_BUILD_EXAMPLES = ['QR ordering menu', 'commerce back office', 'approval flow', 'learning portal', 'supplier portal', 'field service board']
+export const CUSTOM_BUILD_EXAMPLES = [
+  'Approval Flow',
+  'QR Ordering',
+  'Commerce Back Office',
+  'Document Intake',
+  'Supplier Portal',
+  'Internal Learning Hub',
+]
 
 export function getSiteSystem(systemIdOrSlug: string | null | undefined) {
   const normalized = String(systemIdOrSlug || '')

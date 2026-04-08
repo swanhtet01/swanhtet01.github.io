@@ -1,36 +1,34 @@
 <svg width="1050" height="600" viewBox="0 0 1050 600" fill="none" xmlns="http://www.w3.org/2000/svg">
   <defs>
-    <linearGradient id="bg" x1="32" y1="38" x2="1010" y2="554" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#020817"/>
-      <stop offset="1" stop-color="#081427"/>
+    <linearGradient id="backBg" x1="80" y1="52" x2="992" y2="558" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#07111D"/>
+      <stop offset="1" stop-color="#040A14"/>
     </linearGradient>
-    <radialGradient id="glow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(920 512) rotate(-160.008) scale(352.703 220.133)">
+    <radialGradient id="backGlow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(876 116) rotate(143) scale(286 176)">
       <stop stop-color="#25D0FF" stop-opacity="0.2"/>
       <stop offset="1" stop-color="#25D0FF" stop-opacity="0"/>
     </radialGradient>
   </defs>
-  <rect width="1050" height="600" rx="42" fill="url(#bg)"/>
-  <rect width="1050" height="600" rx="42" fill="url(#glow)"/>
 
-  <rect x="90" y="92" width="870" height="416" rx="28" fill="#081427" fill-opacity="0.76" stroke="white" stroke-opacity="0.08"/>
+  <rect width="1050" height="600" rx="42" fill="url(#backBg)"/>
+  <rect width="1050" height="600" rx="42" fill="url(#backGlow)"/>
+  <rect x="64" y="64" width="922" height="472" rx="28" stroke="white" stroke-opacity="0.08"/>
 
-  <text x="140" y="160" fill="#25D0FF" font-size="22" font-weight="800" letter-spacing="6" font-family="Arial, sans-serif">SUPERMEGA</text>
-  <text x="140" y="236" fill="white" font-size="72" font-weight="800" font-family="Arial, sans-serif">Fix the workflow.</text>
-  <text x="140" y="292" fill="white" font-size="72" font-weight="800" font-family="Arial, sans-serif">Keep the next step visible.</text>
+  <text x="112" y="128" fill="#25D0FF" font-size="16" font-weight="800" letter-spacing="4" font-family="Arial, Helvetica, sans-serif">SUPERMEGA</text>
+  <text x="112" y="226" fill="white" font-size="74" font-weight="800" font-family="Arial, Helvetica, sans-serif">Scan to open</text>
+  <text x="112" y="292" fill="white" font-size="74" font-weight="800" font-family="Arial, Helvetica, sans-serif">the company site.</text>
 
-  <text x="140" y="370" fill="#DCE8F5" font-size="28" font-weight="600" font-family="Arial, sans-serif">Sales. Orders. Approvals. Receiving. Client updates.</text>
-  <text x="140" y="414" fill="#92A9C4" font-size="24" font-weight="600" font-family="Arial, sans-serif">Start with one system. Expand only when the team trusts it.</text>
+  <text x="112" y="388" fill="#D7E4F0" font-size="26" font-weight="600" font-family="Arial, Helvetica, sans-serif">Live examples first.</text>
+  <text x="112" y="426" fill="#D7E4F0" font-size="26" font-weight="600" font-family="Arial, Helvetica, sans-serif">Contact if the pattern fits.</text>
 
-  <rect x="140" y="458" width="228" height="56" rx="28" fill="#25D0FF"/>
-  <text x="254" y="494" fill="#04111F" font-size="24" font-weight="800" text-anchor="middle" font-family="Arial, sans-serif">supermega.dev</text>
+  <text x="112" y="508" fill="#8FA5BC" font-size="22" font-weight="700" font-family="Arial, Helvetica, sans-serif">supermega.dev</text>
 
-  <rect x="744" y="132" width="140" height="140" rx="24" fill="#081427" stroke="#25D0FF" stroke-opacity="0.24"/>
-  <path d="M780 172H848V240H780Z" stroke="#25D0FF" stroke-width="10"/>
-  <path d="M804 132V172" stroke="#25D0FF" stroke-width="10"/>
-  <path d="M744 204H780" stroke="#25D0FF" stroke-width="10"/>
-  <path d="M848 204H884" stroke="#25D0FF" stroke-width="10"/>
-  <path d="M814 240V304" stroke="#25D0FF" stroke-width="10"/>
-  <path d="M770 286H858" stroke="#25D0FF" stroke-width="10"/>
-  <text x="814" y="350" fill="#DCE8F5" font-size="20" font-weight="700" text-anchor="middle" font-family="Arial, sans-serif">Scan or visit</text>
-  <text x="814" y="382" fill="#92A9C4" font-size="18" font-weight="600" text-anchor="middle" font-family="Arial, sans-serif">supermega.dev</text>
+  <rect x="722" y="132" width="216" height="216" rx="28" fill="white"/>
+  <image href="supermega-site-qr.svg" x="740" y="150" width="180" height="180" preserveAspectRatio="xMidYMid meet"/>
+
+  <text x="830" y="390" fill="white" font-size="22" font-weight="700" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">https://supermega.dev</text>
+  <text x="830" y="426" fill="#8FA5BC" font-size="18" font-weight="600" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">Examples, systems, contact</text>
+
+  <rect x="722" y="456" width="216" height="50" rx="25" fill="#25D0FF"/>
+  <text x="830" y="488" fill="#03111F" font-size="22" font-weight="800" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">Start at the site</text>
 </svg>

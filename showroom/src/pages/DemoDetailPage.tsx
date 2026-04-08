@@ -20,16 +20,25 @@ export function DemoDetailPage() {
       <section className="sm-site-panel">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <p className="sm-kicker text-[var(--sm-accent)]">Live demo</p>
+            <p className="sm-kicker text-[var(--sm-accent)]">Demo</p>
             <h1 className="mt-4 text-4xl font-extrabold tracking-tight text-white lg:text-6xl">{system.name}</h1>
             <p className="mt-4 max-w-3xl text-base leading-relaxed text-[var(--sm-muted)] lg:text-lg">{system.tagline}</p>
+            <p className="mt-4 text-sm font-medium text-white/88">Used by: {system.audience}</p>
+            <p className="mt-3 max-w-3xl text-sm leading-relaxed text-[var(--sm-muted)]">
+              This public demo shows the working surface. A real rollout keeps the same shape and swaps stages, fields, and owners for the company.
+            </p>
           </div>
           <div className="flex flex-wrap gap-3">
             <Link className="sm-button-secondary" to={`/products/${system.slug}`}>
-              View system
+              See system
             </Link>
+            {system.freeToolLabel && system.freeToolRoute ? (
+              <Link className="sm-button-secondary" to={system.freeToolRoute}>
+                {system.freeToolLabel}
+              </Link>
+            ) : null}
             <Link className="sm-button-primary" to={`/contact?package=${encodeURIComponent(system.name)}`}>
-              Contact
+              Contact us
             </Link>
           </div>
         </div>
@@ -51,9 +60,34 @@ export function DemoDetailPage() {
         <SystemDemoCanvas scenario={activeScenario} />
       </section>
 
-      <section className="grid gap-6 lg:grid-cols-[1fr_1fr]">
+      <section className="grid gap-6 xl:grid-cols-[0.92fr_1.08fr]">
         <article className="sm-site-panel">
-          <p className="sm-kicker text-[var(--sm-accent)]">What this replaces</p>
+          <p className="sm-kicker text-[var(--sm-accent)]">What this demo is</p>
+          <p className="mt-4 text-sm leading-relaxed text-[var(--sm-muted)]">{system.summary}</p>
+          <div className="mt-5 grid gap-3">
+            {system.audience.split(', ').map((item) => (
+              <div className="sm-demo-mini" key={item}>
+                {item}
+              </div>
+            ))}
+          </div>
+        </article>
+
+        <article className="sm-site-panel">
+          <p className="sm-kicker text-[var(--sm-accent)]">What the screen has</p>
+          <div className="mt-5 grid gap-3">
+            {system.surface.map((item) => (
+              <div className="sm-demo-mini" key={item}>
+                {item}
+              </div>
+            ))}
+          </div>
+        </article>
+      </section>
+
+      <section className="grid gap-6 lg:grid-cols-3">
+        <article className="sm-site-panel">
+          <p className="sm-kicker text-[var(--sm-accent)]">What it replaces</p>
           <div className="mt-5 grid gap-3">
             {system.replaces.map((item) => (
               <div className="sm-demo-mini" key={item}>
@@ -62,8 +96,9 @@ export function DemoDetailPage() {
             ))}
           </div>
         </article>
+
         <article className="sm-site-panel">
-          <p className="sm-kicker text-[var(--sm-accent)]">Typical setup</p>
+          <p className="sm-kicker text-[var(--sm-accent)]">Set it up for another company</p>
           <div className="mt-5 space-y-3">
             {system.setup.map((step, index) => (
               <div className="sm-site-point" key={step}>
@@ -71,6 +106,17 @@ export function DemoDetailPage() {
                 <span>
                   {index + 1}. {step}
                 </span>
+              </div>
+            ))}
+          </div>
+        </article>
+
+        <article className="sm-site-panel">
+          <p className="sm-kicker text-[var(--sm-accent)]">Expand it into</p>
+          <div className="mt-5 grid gap-3">
+            {system.nextBuilds.map((item) => (
+              <div className="sm-demo-mini" key={item}>
+                {item}
               </div>
             ))}
           </div>
