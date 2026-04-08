@@ -7,7 +7,7 @@
   --sm-ink: #f7fbff;
   --sm-muted: #92a9c4;
   --sm-accent: #25d0ff;
-  --sm-accent-alt: #ff7a18;
+  --sm-accent-alt: #0ea5c9;
   --sm-line: rgba(147, 177, 210, 0.2);
   --sm-shadow: 0 28px 70px -38px rgba(0, 0, 0, 0.62);
   font-family: 'Manrope', 'Segoe UI', sans-serif;
@@ -30,7 +30,7 @@ body {
   min-width: 320px;
   background:
     radial-gradient(circle at 16% 14%, rgba(37, 208, 255, 0.09), transparent 24%),
-    radial-gradient(circle at 84% 10%, rgba(255, 122, 24, 0.06), transparent 18%),
+    radial-gradient(circle at 84% 10%, rgba(14, 165, 201, 0.05), transparent 18%),
     linear-gradient(180deg, #04070f 0%, #07111a 42%, #09131d 100%);
   color: var(--sm-ink);
   background-attachment: fixed;
@@ -166,13 +166,13 @@ a {
 }
 
 .sm-button-accent {
-  background: linear-gradient(135deg, #ff8a2b, #ff6b10);
-  color: white;
-  box-shadow: 0 0 24px rgba(255, 122, 24, 0.2);
+  background: linear-gradient(135deg, #16c5ee, #0e8fb7);
+  color: #03111f;
+  box-shadow: 0 0 24px rgba(14, 165, 201, 0.22);
 }
 
 .sm-button-accent:hover {
-  box-shadow: 0 0 34px rgba(255, 122, 24, 0.28);
+  box-shadow: 0 0 34px rgba(14, 165, 201, 0.3);
 }
 
 .sm-button-dark {
@@ -291,7 +291,7 @@ select.sm-input {
   border: 1px solid rgba(92, 132, 174, 0.22);
   background:
     radial-gradient(circle at top right, rgba(37, 208, 255, 0.14), transparent 28%),
-    radial-gradient(circle at bottom left, rgba(255, 122, 24, 0.12), transparent 24%),
+    radial-gradient(circle at bottom left, rgba(14, 165, 201, 0.1), transparent 24%),
     linear-gradient(180deg, rgba(6, 13, 26, 0.96), rgba(4, 10, 22, 0.92));
   box-shadow: 0 32px 80px -48px rgba(0, 0, 0, 0.8);
   backdrop-filter: blur(22px);
@@ -465,7 +465,7 @@ select.sm-input {
   width: 0.55rem;
   flex: 0 0 auto;
   border-radius: 999px;
-  background: linear-gradient(135deg, #25d0ff, #7cecb0);
+  background: linear-gradient(135deg, #25d0ff, #8deaff);
   box-shadow: 0 0 16px rgba(37, 208, 255, 0.3);
 }
 

@@ -14,7 +14,7 @@
   <rect width="1050" height="600" rx="42" fill="url(#backGlow)"/>
   <rect x="64" y="64" width="922" height="472" rx="28" stroke="white" stroke-opacity="0.08"/>
 
-  <text x="112" y="128" fill="#25D0FF" font-size="16" font-weight="800" letter-spacing="4" font-family="Arial, Helvetica, sans-serif">SUPERMEGA</text>
+  <text x="112" y="128" fill="#25D0FF" font-size="16" font-weight="800" letter-spacing="4" font-family="Arial, Helvetica, sans-serif">SUPERMEGA.dev</text>
   <text x="112" y="226" fill="white" font-size="74" font-weight="800" font-family="Arial, Helvetica, sans-serif">Scan to open</text>
   <text x="112" y="292" fill="white" font-size="74" font-weight="800" font-family="Arial, Helvetica, sans-serif">the company site.</text>
 
@@ -26,7 +26,7 @@
   <rect x="722" y="132" width="216" height="216" rx="28" fill="white"/>
   <image href="supermega-site-qr.svg" x="740" y="150" width="180" height="180" preserveAspectRatio="xMidYMid meet"/>
 
-  <text x="830" y="390" fill="white" font-size="22" font-weight="700" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">https://supermega.dev</text>
+  <text x="830" y="390" fill="white" font-size="22" font-weight="700" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">SUPERMEGA.dev</text>
   <text x="830" y="426" fill="#8FA5BC" font-size="18" font-weight="600" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">Examples, systems, contact</text>
 
   <rect x="722" y="456" width="216" height="50" rx="25" fill="#25D0FF"/>

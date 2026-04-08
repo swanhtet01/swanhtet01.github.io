@@ -12,10 +12,12 @@ if ([string]::IsNullOrWhiteSpace($RepoRoot)) {
 
 $opsDir = Join-Path $RepoRoot "Super Mega Inc\ops"
 $reportsDir = Join-Path $RepoRoot "pilot-data\ops"
+$siteDir = Join-Path $RepoRoot "showroom\public\site"
 $brandDir = Join-Path $RepoRoot "showroom\public\brand"
 
 $targetOpsDir = Join-Path $TargetRoot "ops"
 $targetReportsDir = Join-Path $TargetRoot "reports"
+$targetSiteDir = Join-Path $TargetRoot "site"
 $targetBrandDir = Join-Path $TargetRoot "brand"
 
 $syncOpsScript = Join-Path $PSScriptRoot "sync_supermega_ops_from_reports.ps1"
@@ -55,9 +57,11 @@ if (-not (Test-Path -LiteralPath $renderOpsHubScript)) {
 Ensure-Dir -Path $TargetRoot
 Ensure-Dir -Path $targetOpsDir
 Ensure-Dir -Path $targetReportsDir
+Ensure-Dir -Path $targetSiteDir
 Ensure-Dir -Path $targetBrandDir
 
 Copy-DirectoryContents -Source $opsDir -Destination $targetOpsDir -IncludePatterns @("*.md", "*.csv", "*.html")
+Copy-DirectoryContents -Source $siteDir -Destination $targetSiteDir -IncludePatterns @("*.png")
 Copy-DirectoryContents -Source $brandDir -Destination $targetBrandDir -IncludePatterns @("*.svg", "*.html")
 Copy-DirectoryContents -Source $reportsDir -Destination $targetReportsDir -IncludePatterns @("*-latest.json")
 
@@ -72,6 +76,9 @@ $summary = [ordered]@{
     )
     reports = @(
       Get-ChildItem -LiteralPath $targetReportsDir -File | Sort-Object Name | Select-Object -ExpandProperty Name
+    )
+    site = @(
+      Get-ChildItem -LiteralPath $targetSiteDir -File | Sort-Object Name | Select-Object -ExpandProperty Name
     )
     brand = @(
       Get-ChildItem -LiteralPath $targetBrandDir -File | Sort-Object Name | Select-Object -ExpandProperty Name

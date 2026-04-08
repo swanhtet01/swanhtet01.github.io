@@ -78,7 +78,7 @@ export function DirectorDashboardPage() {
         const session = await getWorkspaceSession()
         if (cancelled) return
         if (!session.authenticated) {
-          setError('Login is required to open the director dashboard.')
+          setError('Login is required to open HQ.')
           setLoading(false)
           return
         }
@@ -105,7 +105,7 @@ export function DirectorDashboardPage() {
         setRoleRows((rolePayload.rows ?? []).slice(0, 6))
       } catch {
         if (cancelled) return
-        setError('Director dashboard could not be loaded right now.')
+        setError('HQ could not be loaded right now.')
       } finally {
         if (!cancelled) {
           setLoading(false)
@@ -122,14 +122,14 @@ export function DirectorDashboardPage() {
   return (
     <div className="space-y-8">
       <PageIntro
-        eyebrow="Director"
-        title="See what matters today."
-        description="This is the simplest leadership view: actions, exceptions, decisions, and pipeline in one screen."
+        eyebrow="HQ"
+        title="Run the company from one surface."
+        description="Deals, workflows, approvals, risk, and decisions in one founder view."
       />
 
-      <section className="grid gap-4 md:grid-cols-4">
+      <section className="grid gap-4 md:grid-cols-5">
         <div className="sm-metric-card">
-          <p className="sm-kicker text-[var(--sm-accent)]">Open actions</p>
+          <p className="sm-kicker text-[var(--sm-accent)]">Open workflows</p>
           <p className="mt-3 text-3xl font-bold text-white">{summary?.actions?.total_items ?? 0}</p>
         </div>
         <div className="sm-metric-card">
@@ -154,11 +154,11 @@ export function DirectorDashboardPage() {
         <article className="sm-surface p-6">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <p className="sm-kicker text-[var(--sm-accent)]">Top priorities</p>
-              <h2 className="mt-2 text-2xl font-bold text-white">What needs leadership attention</h2>
+              <p className="sm-kicker text-[var(--sm-accent)]">Founder priorities</p>
+              <h2 className="mt-2 text-2xl font-bold text-white">What needs attention now</h2>
             </div>
-            <Link className="sm-link" to="/app/actions">
-              Open Action OS
+            <Link className="sm-link" to="/app/workflows">
+              Open workflows
             </Link>
           </div>
 
@@ -168,7 +168,7 @@ export function DirectorDashboardPage() {
             ) : error ? (
               <div className="space-y-4">
                 <p className="text-sm text-[var(--sm-muted)]">{error}</p>
-                <Link className="sm-button-primary" to="/login?next=/app/director">
+                <Link className="sm-button-primary" to="/login?next=/app/hq">
                   Login
                 </Link>
               </div>
@@ -199,7 +199,7 @@ export function DirectorDashboardPage() {
                 </article>
               ))
             ) : (
-              <div className="sm-chip text-[var(--sm-muted)]">No director rows available yet.</div>
+              <div className="sm-chip text-[var(--sm-muted)]">No founder-priority rows available yet.</div>
             )}
           </div>
         </article>
@@ -208,7 +208,7 @@ export function DirectorDashboardPage() {
           <div className="sm-surface p-6">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <p className="sm-kicker text-[var(--sm-accent-alt)]">Exception queue</p>
+                <p className="sm-kicker text-[var(--sm-accent-alt)]">Operational risk</p>
                 <h2 className="mt-2 text-2xl font-bold text-white">What is starting to break</h2>
               </div>
               <Link className="sm-link" to="/app/exceptions">
@@ -238,10 +238,10 @@ export function DirectorDashboardPage() {
           <div className="sm-surface p-6">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <p className="sm-kicker text-[var(--sm-accent)]">Decision journal</p>
-                <h2 className="mt-2 text-2xl font-bold text-white">Recent decisions</h2>
+                <p className="sm-kicker text-[var(--sm-accent)]">Company decisions</p>
+                <h2 className="mt-2 text-2xl font-bold text-white">Recent calls and commitments</h2>
               </div>
-              <Link className="sm-link" to="/app/decisions">
+              <Link className="sm-link" to="/app/company">
                 Open journal
               </Link>
             </div>
@@ -269,13 +269,13 @@ export function DirectorDashboardPage() {
       <section className="grid gap-6 lg:grid-cols-[1fr_1fr]">
         <article className="sm-surface p-6">
           <div className="flex items-center justify-between gap-3">
-            <div>
-              <p className="sm-kicker text-[var(--sm-accent)]">Pipeline</p>
-              <h2 className="mt-2 text-2xl font-bold text-white">What is moving commercially</h2>
-            </div>
-          <Link className="sm-link" to="/app/sales">
-            Open sales
-          </Link>
+              <div>
+                <p className="sm-kicker text-[var(--sm-accent)]">Deals</p>
+                <h2 className="mt-2 text-2xl font-bold text-white">What is moving commercially</h2>
+              </div>
+            <Link className="sm-link" to="/app/deals">
+              Open deals
+            </Link>
           </div>
           <div className="mt-5 grid gap-3">
             {leads.length ? (
@@ -299,7 +299,7 @@ export function DirectorDashboardPage() {
         </article>
 
         <article className="sm-surface p-6">
-          <p className="sm-kicker text-[var(--sm-accent-alt)]">System pulse</p>
+          <p className="sm-kicker text-[var(--sm-accent-alt)]">Company state</p>
           <h2 className="mt-2 text-2xl font-bold text-white">Key system signals</h2>
           <div className="mt-5 grid gap-3 md:grid-cols-2">
             <div className="sm-chip text-white">
@@ -334,8 +334,8 @@ export function DirectorDashboardPage() {
                 Open workspace folder
               </a>
             ) : null}
-            <Link className="sm-button-primary" to="/app">
-              Open workbench
+            <Link className="sm-button-primary" to="/app/workflows">
+              Open workflows
             </Link>
           </div>
 

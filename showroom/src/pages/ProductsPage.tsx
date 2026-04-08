@@ -6,7 +6,7 @@ const categoryLabels = [
   { id: 'sales', label: 'Sales' },
   { id: 'operations', label: 'Operations' },
   { id: 'management', label: 'Founder' },
-  { id: 'client-facing', label: 'Client-facing' },
+  { id: 'client-facing', label: 'Client' },
 ] as const
 
 export function ProductsPage() {
@@ -15,12 +15,12 @@ export function ProductsPage() {
       <section className="sm-site-panel">
         <div className="grid gap-8 xl:grid-cols-[0.95fr_1.05fr] xl:items-end">
           <div>
-            <p className="sm-kicker text-[var(--sm-accent)]">Systems</p>
+            <p className="sm-kicker text-[var(--sm-accent)]">Modules</p>
             <h1 className="mt-4 max-w-4xl text-4xl font-extrabold tracking-tight text-white lg:text-6xl">
-              Real systems for sales, operations, founder review, and client work.
+              Public modules for sales, operations, founder review, and client work.
             </h1>
             <p className="mt-4 max-w-2xl text-sm leading-relaxed text-[var(--sm-muted)] lg:text-base">
-              Each one has a concrete operating surface, a rollout pattern, and room to expand into a larger company system.
+              Start with the module that matches the work you want to replace. Then extend only after the team is using it.
             </p>
             <div className="mt-6 flex flex-wrap gap-2">
               {categoryLabels.map((item) => (
@@ -36,12 +36,12 @@ export function ProductsPage() {
               <span>See the actual branch screenshot before reading further.</span>
             </div>
             <div className="sm-demo-mini">
-              <strong>Roll out one workflow</strong>
-              <span>Start with the current queue, not a big software project.</span>
+              <strong>Pick one module</strong>
+              <span>Sales OS, Operations OS, Founder Brief, or Client Portal.</span>
             </div>
             <div className="sm-demo-mini">
               <strong>Expand from the base</strong>
-              <span>Add approvals, ordering, portals, or back office later.</span>
+              <span>Add Approval Flow, QR Ordering, or Commerce Back Office later.</span>
             </div>
           </div>
         </div>
@@ -79,7 +79,7 @@ export function ProductsPage() {
                     Open demo
                   </Link>
                   <Link className="sm-button-secondary" to={`/products/${system.slug}`}>
-                    See details
+                    See module
                   </Link>
                   <Link className="sm-button-secondary" to={`/contact?package=${encodeURIComponent(system.name)}`}>
                     Contact us
@@ -117,7 +117,7 @@ export function ProductsPage() {
             <p className="sm-kicker text-[var(--sm-accent)]">Custom builds</p>
             <h2 className="mt-3 text-3xl font-bold text-white lg:text-4xl">Need the next layer after the core systems?</h2>
             <p className="mt-3 max-w-2xl text-sm leading-relaxed text-[var(--sm-muted)]">
-              Common extensions are approval routing, QR ordering, commerce operations, document intake, and supplier-facing portals.
+              Common next modules are Approval Flow, QR Ordering, Commerce Back Office, Supplier Portal, and Learning Hub.
             </p>
           </div>
           <Link className="sm-button-secondary" to="/contact">

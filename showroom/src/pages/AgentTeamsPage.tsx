@@ -117,7 +117,7 @@ export function AgentTeamsPage() {
 
     const session = await getWorkspaceSession()
     if (!session.authenticated) {
-      throw new Error('Login is required to open Agent Ops.')
+      throw new Error('Login is required to open Agents.')
     }
 
     const [nextAgentPayload, nextMembersPayload, nextRunsPayload] = await Promise.all([
@@ -149,7 +149,7 @@ export function AgentTeamsPage() {
         const session = await getWorkspaceSession()
         if (cancelled) return
         if (!session.authenticated) {
-          setError('Login is required to open Agent Ops.')
+          setError('Login is required to open Agents.')
           setLoading(false)
           return
         }
@@ -291,9 +291,9 @@ export function AgentTeamsPage() {
   return (
     <div className="space-y-8">
       <PageIntro
-        eyebrow="Agent Ops"
-        title="Keep the company running with people, loops, and escalation."
-        description="Scheduler keeps the base loops alive. Manual run is for operator checks, recovery, and urgent refresh."
+        eyebrow="Agents"
+        title="Run the loops behind the company."
+        description="Scheduler keeps the core jobs moving. Manual run is for checks, recovery, and urgent refresh."
       />
 
       <section className="grid gap-4 md:grid-cols-4">
@@ -302,11 +302,11 @@ export function AgentTeamsPage() {
           <p className="mt-3 text-3xl font-bold text-white">{members.length}</p>
         </div>
         <div className="sm-metric-card">
-          <p className="sm-kicker text-[var(--sm-accent-alt)]">Agent loops</p>
+          <p className="sm-kicker text-[var(--sm-accent-alt)]">Active loops</p>
           <p className="mt-3 text-3xl font-bold text-white">{agentPayload?.summary?.team_count ?? 0}</p>
         </div>
         <div className="sm-metric-card">
-          <p className="sm-kicker text-[var(--sm-accent)]">Core loops</p>
+          <p className="sm-kicker text-[var(--sm-accent)]">Scheduler loops</p>
           <p className="mt-3 text-3xl font-bold text-white">{agentPayload?.summary?.shared_core_team_count ?? 0}</p>
         </div>
         <div className="sm-metric-card">
@@ -344,14 +344,14 @@ export function AgentTeamsPage() {
         <article className="sm-surface p-6">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
-              <p className="sm-kicker text-[var(--sm-accent)]">Always-on loops</p>
-              <h2 className="mt-2 text-2xl font-bold text-white">The jobs that keep SuperMega moving.</h2>
+              <p className="sm-kicker text-[var(--sm-accent)]">Core loops</p>
+              <h2 className="mt-2 text-2xl font-bold text-white">The jobs that keep the company moving.</h2>
               <p className="mt-3 text-sm text-[var(--sm-muted)]">
                 Revenue, cleanup, inbound handling, queue control, runtime watch, and the founder brief now live in one operator surface.
               </p>
             </div>
             <button className="sm-button-primary" disabled={jobBusy !== null} onClick={() => void handleRunCoreLoop()} type="button">
-              {jobBusy === 'batch' ? 'Running operator loop...' : 'Run full operator loop'}
+              {jobBusy === 'batch' ? 'Running core loops...' : 'Run all core loops'}
             </button>
           </div>
 
@@ -414,8 +414,8 @@ export function AgentTeamsPage() {
         </article>
 
         <article className="sm-surface p-6">
-          <p className="sm-kicker text-[var(--sm-accent-alt)]">Recent outcomes</p>
-          <h2 className="mt-2 text-2xl font-bold text-white">What the agents just did.</h2>
+          <p className="sm-kicker text-[var(--sm-accent-alt)]">Recent runs</p>
+          <h2 className="mt-2 text-2xl font-bold text-white">What the loops just changed.</h2>
           <div className="mt-5 space-y-3">
             {agentRuns.length ? (
               agentRuns.slice(0, 8).map((run) => (
@@ -441,7 +441,7 @@ export function AgentTeamsPage() {
         </article>
       </section>
 
-      {loading ? <div className="sm-chip text-[var(--sm-muted)]">Loading Agent Ops...</div> : null}
+      {loading ? <div className="sm-chip text-[var(--sm-muted)]">Loading agents...</div> : null}
       {error ? <div className="sm-chip text-[var(--sm-muted)]">{error}</div> : null}
 
       {!loading && !error ? (
@@ -450,8 +450,8 @@ export function AgentTeamsPage() {
             <article className="sm-surface p-6">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <p className="sm-kicker text-[var(--sm-accent)]">People</p>
-                  <h2 className="mt-2 text-2xl font-bold text-white">Who can operate this company</h2>
+                  <p className="sm-kicker text-[var(--sm-accent)]">Operator access</p>
+                  <h2 className="mt-2 text-2xl font-bold text-white">Who can run HQ</h2>
                 </div>
                 <span className="sm-status-pill">{members.length} active</span>
               </div>
@@ -478,7 +478,7 @@ export function AgentTeamsPage() {
             </article>
 
             <article className="sm-surface p-6">
-              <p className="sm-kicker text-[var(--sm-accent-alt)]">Invite</p>
+              <p className="sm-kicker text-[var(--sm-accent-alt)]">Add access</p>
               <h2 className="mt-2 text-2xl font-bold text-white">Add a manager or operator</h2>
               <p className="mt-3 text-sm text-[var(--sm-muted)]">
                 This creates or updates login access for the current workspace. If you leave password blank, a one-time password is generated.
@@ -540,7 +540,7 @@ export function AgentTeamsPage() {
 
           <section className="grid gap-6 lg:grid-cols-[1.05fr_0.95fr]">
             <article className="sm-surface p-6">
-              <p className="sm-kicker text-[var(--sm-accent)]">Scaling model</p>
+              <p className="sm-kicker text-[var(--sm-accent)]">Operating model</p>
               <div className="mt-4 space-y-3">
                 {(agentPayload?.scaling_model?.core_loop ?? []).map((item) => (
                   <div className="sm-chip text-white" key={item}>
@@ -588,7 +588,7 @@ export function AgentTeamsPage() {
 
             <div className="space-y-6">
               <article className="sm-surface p-6">
-                <p className="sm-kicker text-[var(--sm-accent-alt)]">Founder attention</p>
+                <p className="sm-kicker text-[var(--sm-accent-alt)]">Escalations</p>
                 <div className="mt-4 space-y-3">
                   {(agentPayload?.scaling_model?.founder_focus ?? []).map((item) => (
                     <div className="border-b border-white/8 pb-3 text-sm text-[var(--sm-muted)] last:border-b-0 last:pb-0" key={item}>
@@ -599,7 +599,7 @@ export function AgentTeamsPage() {
               </article>
 
               <article className="sm-surface p-6">
-                <p className="sm-kicker text-[var(--sm-accent)]">Control rules</p>
+                <p className="sm-kicker text-[var(--sm-accent)]">Guardrails</p>
                 <div className="mt-4 space-y-3">
                   {(agentPayload?.scaling_model?.rules ?? []).map((item) => (
                     <div className="border-b border-white/8 pb-3 text-sm text-[var(--sm-muted)] last:border-b-0 last:pb-0" key={item}>

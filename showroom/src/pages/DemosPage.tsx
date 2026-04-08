@@ -1,6 +1,5 @@
 import { Link } from 'react-router-dom'
 
-import { SystemDemoCanvas } from '../components/SystemDemoCanvas'
 import { FREE_TOOLS, SITE_SYSTEMS } from '../lib/siteSystems'
 
 export function DemosPage() {
@@ -11,24 +10,24 @@ export function DemosPage() {
           <div>
             <p className="sm-kicker text-[var(--sm-accent)]">Demos</p>
             <h1 className="mt-4 max-w-4xl text-4xl font-extrabold tracking-tight text-white lg:text-6xl">
-              Working demos of the systems we actually roll out.
+              Live demos for the modules we actually roll out.
             </h1>
             <p className="mt-4 max-w-2xl text-sm leading-relaxed text-[var(--sm-muted)] lg:text-base">
-              Same surface, different labels, owners, and rules per company. Open the workflow you want to replace and inspect the screen.
+              Start with the module that matches the queue or review you want to replace. Open the demo and inspect the screen.
             </p>
           </div>
           <div className="grid gap-3 sm:grid-cols-3">
             <div className="sm-demo-mini">
-              <strong>Concrete</strong>
-              <span>Board, inbox, brief, or portal.</span>
+              <strong>Module first</strong>
+              <span>Sales OS, Operations OS, Founder Brief, or Client Portal.</span>
             </div>
             <div className="sm-demo-mini">
-              <strong>Reusable</strong>
-              <span>Swap fields, owners, and statuses for another company.</span>
+              <strong>Rollout ready</strong>
+              <span>Swap owners, fields, and rules for another company.</span>
             </div>
             <div className="sm-demo-mini">
-              <strong>Expandable</strong>
-              <span>Start narrow, then add approvals, ordering, or back office.</span>
+              <strong>Extend later</strong>
+              <span>Add Approval Flow, QR Ordering, or Commerce Back Office later.</span>
             </div>
           </div>
         </div>
@@ -61,11 +60,17 @@ export function DemosPage() {
                   Open demo
                 </Link>
                 <Link className="sm-button-secondary" to={`/products/${system.slug}`}>
-                  See system
+                  See module
                 </Link>
               </div>
             </div>
-            <SystemDemoCanvas compact scenario={system.scenarios[0]} />
+            <figure className="overflow-hidden rounded-[1.25rem] border border-white/10 bg-[rgba(6,11,22,0.92)]">
+              <div className="flex items-center justify-between border-b border-white/8 px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.2em] text-[var(--sm-muted)]">
+                <span>Current branch screen</span>
+                <span>{system.name}</span>
+              </div>
+              <img alt={system.previewAlt} className="block w-full bg-[rgba(4,8,16,0.92)]" loading="lazy" src={system.previewImage} />
+            </figure>
           </article>
         ))}
       </section>
@@ -74,9 +79,9 @@ export function DemosPage() {
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <p className="sm-kicker text-[var(--sm-accent)]">Free proofs</p>
-            <h2 className="mt-3 text-3xl font-bold text-white lg:text-4xl">Need to test the front end of the system first?</h2>
+            <h2 className="mt-3 text-3xl font-bold text-white lg:text-4xl">Need a smaller proof before the module?</h2>
             <p className="mt-3 max-w-2xl text-sm leading-relaxed text-[var(--sm-muted)]">
-              These are narrow public proofs of a larger system, not standalone brochure tools.
+              These are small public proofs of Sales OS or Operations OS, not standalone products.
             </p>
           </div>
         </div>

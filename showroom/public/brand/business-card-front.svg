@@ -21,8 +21,8 @@
   <rect x="96" y="96" width="74" height="74" rx="22" fill="#071523" stroke="#25D0FF" stroke-opacity="0.32"/>
   <text x="133" y="143" fill="#25D0FF" font-size="30" font-weight="800" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">SM</text>
 
-  <text x="200" y="124" fill="white" font-size="42" font-weight="800" font-family="Arial, Helvetica, sans-serif">SuperMega</text>
-  <text x="200" y="156" fill="#8FA5BC" font-size="15" font-weight="700" letter-spacing="4" font-family="Arial, Helvetica, sans-serif">AI SYSTEMS COMPANY</text>
+  <text x="200" y="124" fill="white" font-size="38" font-weight="800" font-family="Arial, Helvetica, sans-serif">SUPERMEGA.dev</text>
+  <text x="200" y="156" fill="#8FA5BC" font-size="15" font-weight="700" letter-spacing="4" font-family="Arial, Helvetica, sans-serif">CUSTOM AI SYSTEMS</text>
 
   <text x="96" y="292" fill="white" font-size="62" font-weight="800" font-family="Arial, Helvetica, sans-serif">Swan Htet</text>
   <text x="96" y="336" fill="#25D0FF" font-size="22" font-weight="700" letter-spacing="4" font-family="Arial, Helvetica, sans-serif">FOUNDER</text>
@@ -35,8 +35,8 @@
   <text x="768" y="250" fill="#8FA5BC" font-size="15" font-weight="700" letter-spacing="4" font-family="Arial, Helvetica, sans-serif">CONTACT</text>
   <text x="768" y="312" fill="white" font-size="28" font-weight="700" font-family="Arial, Helvetica, sans-serif">swanhtet@supermega.dev</text>
   <text x="768" y="358" fill="#AFC1D3" font-size="24" font-weight="600" font-family="Arial, Helvetica, sans-serif">supermega.dev</text>
-  <text x="768" y="404" fill="#AFC1D3" font-size="24" font-weight="600" font-family="Arial, Helvetica, sans-serif">app.supermega.dev</text>
+  <text x="768" y="404" fill="#AFC1D3" font-size="24" font-weight="600" font-family="Arial, Helvetica, sans-serif">SUPERMEGA.dev</text>
 
   <text x="768" y="488" fill="#8FA5BC" font-size="15" font-weight="700" letter-spacing="4" font-family="Arial, Helvetica, sans-serif">USE THIS CARD TO</text>
-  <text x="768" y="526" fill="white" font-size="24" font-weight="700" font-family="Arial, Helvetica, sans-serif">Open the site, then the app.</text>
+  <text x="768" y="526" fill="white" font-size="24" font-weight="700" font-family="Arial, Helvetica, sans-serif">Start with the site.</text>
 </svg>

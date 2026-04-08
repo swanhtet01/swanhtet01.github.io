@@ -7,10 +7,13 @@ import { bookingUrl } from '../content'
 import { trackEvent } from '../lib/analytics'
 import { checkWorkspaceHealth, createContactSubmission, hasLiveWorkspaceApp } from '../lib/workspaceApi'
 
+const moduleOptions = ['Sales OS', 'Operations OS', 'Founder Brief', 'Client Portal', 'Approval Flow', 'Commerce Back Office', 'QR Ordering'] as const
+
 type LeadFormState = {
   name: string
   email: string
   company: string
+  module: string
   data: string
   goal: string
 }
@@ -22,8 +25,9 @@ function initialFormFromQuery(): LeadFormState {
     name: '',
     email: '',
     company: '',
+    module: requestedPackage || 'Sales OS',
     data: 'Gmail + Drive + Sheets',
-    goal: requestedPackage ? `I want to start with ${requestedPackage}.` : '',
+    goal: requestedPackage ? `We want to start with ${requestedPackage}.` : '',
   }
 }
 
@@ -57,7 +61,7 @@ export function ContactPage() {
     if (status === 'error') {
       return 'The request could not be saved. Try again.'
     }
-    return 'Keep it short. One workflow is enough to start.'
+    return 'Keep it short. One module is enough to start.'
   }, [status])
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -68,9 +72,9 @@ export function ContactPage() {
       try {
         await createContactSubmission({
           ...form,
-          workflow: 'Website contact',
+          workflow: form.module,
         })
-        trackEvent('contact_submit', { source: 'contact_page', mode: 'api', company: form.company })
+        trackEvent('contact_submit', { source: 'contact_page', mode: 'api', company: form.company, module: form.module })
         setStatus('saved')
         return
       } catch {
@@ -81,7 +85,7 @@ export function ContactPage() {
 
     try {
       window.localStorage.setItem('supermega_contact_draft', JSON.stringify({ ...form, saved_at: new Date().toISOString() }))
-      trackEvent('contact_submit', { source: 'contact_page', mode: 'local' })
+      trackEvent('contact_submit', { source: 'contact_page', mode: 'local', module: form.module })
       setStatus('saved_local')
     } catch {
       setStatus('error')
@@ -92,17 +96,17 @@ export function ContactPage() {
     <div className="space-y-8">
       <PageIntro
         eyebrow="Contact"
-        title="Tell us the first workflow you want fixed."
-        description="Keep it simple. Sales, orders, client updates, approvals, receiving, or management review is enough."
+        title="Tell us which module you want first."
+        description="Pick the closest module and tell us what tools you use now. Sales OS, Operations OS, Founder Brief, Client Portal, Approval Flow, or Commerce Back Office is enough."
       />
 
       <section className="grid gap-6 lg:grid-cols-[0.88fr_1.12fr]">
         <aside className="sm-terminal p-6">
           <p className="sm-kicker text-[var(--sm-accent)]">What happens next</p>
           <div className="mt-5 grid gap-3">
-            <div className="sm-chip text-white">We review the workflow and the tools you already use.</div>
-            <div className="sm-chip text-white">We map it to the smallest system that will actually help.</div>
-            <div className="sm-chip text-white">We reply with the next rollout step.</div>
+            <div className="sm-chip text-white">We review the module you picked and the tools you already use.</div>
+            <div className="sm-chip text-white">We map it to the first rollout that will actually help.</div>
+            <div className="sm-chip text-white">We reply with the next module or setup step.</div>
           </div>
 
           <div className="mt-6 grid gap-3">
@@ -154,6 +158,21 @@ export function ContactPage() {
               />
             </label>
             <label className="flex flex-col gap-2 text-sm font-semibold text-[var(--sm-muted)] md:col-span-2">
+              Which module do you want first?
+              <select
+                className="rounded-xl border border-white/8 bg-white/4 px-3 py-2 text-sm font-normal text-white"
+                onChange={(event) => setForm((prev) => ({ ...prev, module: event.target.value }))}
+                required
+                value={form.module}
+              >
+                {moduleOptions.map((item) => (
+                  <option className="bg-[var(--sm-bg)] text-white" key={item} value={item}>
+                    {item}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex flex-col gap-2 text-sm font-semibold text-[var(--sm-muted)] md:col-span-2">
               What are you using now?
               <input
                 className="rounded-xl border border-white/8 bg-white/4 px-3 py-2 text-sm font-normal text-white"
@@ -169,7 +188,7 @@ export function ContactPage() {
               <textarea
                 className="min-h-48 rounded-xl border border-white/8 bg-white/4 px-3 py-3 text-sm font-normal text-white"
                 onChange={(event) => setForm((prev) => ({ ...prev, goal: event.target.value }))}
-                placeholder="For example: supplier follow-up is scattered, receiving is messy, or directors have no clean board."
+                placeholder="For example: follow-up is scattered, approvals are slow, or clients have no clean status view."
                 required
                 value={form.goal}
               />
@@ -178,7 +197,7 @@ export function ContactPage() {
 
           <div className="mt-5 flex flex-wrap gap-3">
             <button className="sm-button-accent" type="submit">
-              {status === 'saving' ? 'Sending...' : 'Contact us'}
+              {status === 'saving' ? 'Sending...' : 'Send request'}
             </button>
             {bookingUrl ? (
               <a className="sm-button-secondary" href={bookingUrl} rel="noreferrer" target="_blank">

@@ -1,194 +1,132 @@
 # AI Company Execution Model
 
-This file defines how SuperMega executes work as an AI-native software company outside Codex.
+This is the execution model for SuperMega as an AI-native company.
 
-## Core principle
+## Core model
 
-SuperMega does not run on one giant agent.
+Do not think in terms of one super-agent.
 
-It runs on:
-- a small number of named teams
-- a queue-backed runtime
-- one shared app
+SuperMega runs on:
+- one shared control plane
 - one local founder mirror
-- one release flow
+- queue-backed worker loops
+- a small number of named pods
+- explicit human approvals
 
-## Teams and responsibilities
+## Pods
 
 ### Founder Desk
+Owns:
+- priorities
+- release approval
+- scope approval
+- escalation judgment
 
-Mission:
-- decide priorities
-- approve releases
-- review revenue and delivery
-- keep the company focused
-
-Primary inputs:
-- founder brief
-- scoreboard
-- release status
-- delivery blockers
-
-Primary outputs:
-- top priorities
-- approvals
-- direction changes
+Main surfaces:
+- `app.supermega.dev/app/director`
+- local BDA HQ `ops`
 
 ### Revenue Pod
+Owns:
+- inbound contact handling
+- prospecting and follow-up
+- deal movement
 
-Mission:
-- create and clean pipeline
-- convert inbound interest into tracked work
-- keep next follow-up visible
-
-Primary inputs:
-- contact submissions
-- market search
-- imported lists
-- existing pipeline
-
-Primary outputs:
-- leads
-- deals
-- follow-up tasks
+Main surfaces:
+- `app.supermega.dev/app/sales`
+- `app.supermega.dev/app/teams`
 
 ### Delivery Pod
+Owns:
+- starter pack rollout
+- implementation status
+- blockers and handoffs
 
-Mission:
-- provision starter packs
-- keep rollout state current
-- prevent work from stalling after sale
-
-Primary inputs:
-- sold pack
-- client setup data
-- implementation tasks
-- approvals and exceptions
-
-Primary outputs:
-- active delivery queue
-- rollout status
-- blocked-item escalation
+Main surfaces:
+- shared app queues
+- local reports
 
 ### Agent Ops
+Owns:
+- queue health
+- scheduler health
+- worker execution
+- incident visibility
 
-Mission:
-- keep the runtime alive
-- keep queues draining
-- keep releases safe
+Main surfaces:
+- `app.supermega.dev/app/teams`
+- local BDA HQ `reports`
 
-Primary inputs:
-- task queues
-- scheduler runs
-- smoke results
+## Runtime layers
+
+### Cloud
+- Cloud Scheduler enqueues recurring work
+- Cloud Tasks stores queued work
+- Cloud Run workers drain queues
+- Cloud Run web serves app and APIs
+- Cloud SQL stores operating state
+
+### Local founder layer
+- BDA HQ mirror
+- founder workspace launcher
+- workstation cycle
+- report refresh
+
+## What agents do
+
+Agents should create durable operating state:
+- leads
+- tasks
 - incidents
-
-Primary outputs:
-- worker status
-- incident records
-- release go/no-go
-
-## Execution surfaces
-
-### Public site
-- `supermega.dev`
-- company story
-- examples
-- contact
-
-### Shared app
-- `app.supermega.dev`
-- sales
-- actions
 - approvals
-- exceptions
-- agent ops
-- director
+- briefs
 
-### Local ops folder
-- `Super Mega Inc/ops`
-- founder-readable operating state
+Agents should not produce loose chat output as the main artifact.
 
-### Local report mirror
-- `pilot-data/ops`
-- machine-readable report outputs
+## What remains human
 
-## Run loop
-
-### Continuous
-- Cloud Scheduler triggers work
-- Cloud Tasks queues jobs
-- Cloud Run workers execute jobs
-- app state updates
-- local workstation mirror refreshes on cadence
-
-### Daily
-- founder brief refresh
-- delivery and operator state refresh
-- release and incident review
-
-### Per release
-- preview
-- smoke
-- review
-- release
-- log update
-
-## Automatic file updates
-
-These should update without chat:
-
-### Local machine-readable files
-- `pilot-data/ops/workstation-latest.json`
-- `pilot-data/ops/operator-cycle-latest.json`
-- `pilot-data/ops/founder-cycle-latest.json`
-- `pilot-data/ops/agent-cycle-latest.json`
-
-### Local operating docs
-- `Super Mega Inc/ops/00_company_scoreboard.md`
-- `Super Mega Inc/ops/01_daily_founder_brief.md`
-- `Super Mega Inc/ops/02_operator_report.md`
-- `Super Mega Inc/ops/06_release_log.csv`
-- `Super Mega Inc/ops/05_incident_log.csv`
-
-## What must stay manual
-
-These are founder or operator decisions:
-- final product direction
+Keep these manual:
+- product direction
+- customer promises
 - pricing
 - release approval
-- scope changes
-- customer promises
-- ambiguous incident judgment
+- ambiguous business judgment
 
-## What should move out of Codex first
+## How the founder inspects the company
 
-Priority order:
-1. release checks
-2. founder brief delivery
-3. deal creation from inbound contact
-4. delivery watch
-5. incident escalation
+### On desktop
+- open BDA HQ
+- open Director
+- open Agent Ops
+- review Sales only when revenue needs action
 
-## What scaling looks like
+### On phone
+- use Director for a short status view
+- use Agent Ops for queue and loop health
 
-Do not scale by adding random agent roles.
+The phone path is for monitoring.
+The desktop path is for operating decisions.
+
+## What counts as autonomous
+
+Autonomous means:
+- queues continue without Codex
+- reports refresh without Codex
+- founder can inspect status locally
+- incidents are visible
+- the next action is visible
+
+Autonomous does not mean:
+- no human judgment
+- no approvals
+- no release gate
+
+## Scaling rule
 
 Scale by:
-- separating web and worker services
-- adding queues, not more chat loops
-- making outputs structured
-- making review and release gates explicit
-- keeping one clean control plane
+- separating web and worker execution
+- increasing queue-backed work
+- structuring outputs
+- tightening operating surfaces
 
-## Definition of operational
-
-SuperMega is operational when:
-- cloud workers run without this session
-- the founder can inspect the company locally
-- the app reflects live state
-- releases are gated
-- incidents are visible
-- contact can become deal, task, and rollout without manual copy/paste
-
-If one of those is missing, the company is still partly manual.
+Do not scale by inventing more vague agent roles.

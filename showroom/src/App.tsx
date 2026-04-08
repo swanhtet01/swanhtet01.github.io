@@ -28,7 +28,6 @@ import { PublicLeadFinderPage } from './pages/PublicLeadFinderPage'
 import { ReceivingControlPage } from './pages/ReceivingControlPage'
 import { SignupPage } from './pages/SignupPage'
 import { SolutionArchitectPage } from './pages/SolutionArchitectPage'
-import { WorkbenchPage } from './pages/WorkbenchPage'
 import { WorkspaceLitePage } from './pages/WorkspaceLitePage'
 import { WorkspacePage } from './pages/WorkspacePage'
 import { hasLiveWorkspaceApp } from './lib/workspaceApi'
@@ -73,17 +72,22 @@ function App() {
           <Route element={<NotFoundPage />} path="*" />
         </Route>
         <Route element={<AppFrame />} path="/app">
-          <Route element={<Navigate replace to="actions" />} index />
-          <Route element={<WorkbenchPage />} path="overview" />
+          <Route element={<Navigate replace to="hq" />} index />
+          <Route element={<DirectorDashboardPage />} path="hq" />
+          <Route element={<LeadPipelinePage />} path="deals" />
+          <Route element={<WorkspacePage />} path="workflows" />
+          <Route element={<AgentTeamsPage />} path="agents" />
+          <Route element={<DecisionJournalPage />} path="company" />
+          <Route element={<Navigate replace to="/app/hq" />} path="overview" />
           <Route element={<InsightsPage />} path="insights" />
-          <Route element={<DirectorDashboardPage />} path="director" />
-          <Route element={<WorkspacePage />} path="actions" />
-          <Route element={<DecisionJournalPage />} path="decisions" />
+          <Route element={<Navigate replace to="/app/hq" />} path="director" />
+          <Route element={<Navigate replace to="/app/workflows" />} path="actions" />
+          <Route element={<Navigate replace to="/app/company" />} path="decisions" />
           <Route element={<ApprovalQueuePage />} path="approvals" />
           <Route element={<ExceptionQueuePage />} path="exceptions" />
-          <Route element={<AgentTeamsPage />} path="teams" />
-          <Route element={<LeadPipelinePage />} path="sales" />
-          <Route element={<Navigate replace to="/app/sales" />} path="leads" />
+          <Route element={<Navigate replace to="/app/agents" />} path="teams" />
+          <Route element={<Navigate replace to="/app/deals" />} path="sales" />
+          <Route element={<Navigate replace to="/app/deals" />} path="leads" />
           <Route element={<LeadFinderPage />} path="leads/advanced" />
           <Route element={<MetricIntakePage />} path="intake" />
           <Route element={<ReceivingControlPage />} path="receiving" />

@@ -20,17 +20,17 @@ export function DemoDetailPage() {
       <section className="sm-site-panel">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <p className="sm-kicker text-[var(--sm-accent)]">Demo</p>
+            <p className="sm-kicker text-[var(--sm-accent)]">Live Demo</p>
             <h1 className="mt-4 text-4xl font-extrabold tracking-tight text-white lg:text-6xl">{system.name}</h1>
             <p className="mt-4 max-w-3xl text-base leading-relaxed text-[var(--sm-muted)] lg:text-lg">{system.tagline}</p>
             <p className="mt-4 text-sm font-medium text-white/88">Used by: {system.audience}</p>
             <p className="mt-3 max-w-3xl text-sm leading-relaxed text-[var(--sm-muted)]">
-              This public demo shows the working surface. A real rollout keeps the same shape and swaps stages, fields, and owners for the company.
+              This public demo shows the module shape. A real rollout keeps the same structure and swaps stages, fields, owners, and rules for the company.
             </p>
           </div>
           <div className="flex flex-wrap gap-3">
             <Link className="sm-button-secondary" to={`/products/${system.slug}`}>
-              See system
+              See module
             </Link>
             {system.freeToolLabel && system.freeToolRoute ? (
               <Link className="sm-button-secondary" to={system.freeToolRoute}>
@@ -62,7 +62,7 @@ export function DemoDetailPage() {
 
       <section className="grid gap-6 xl:grid-cols-[0.92fr_1.08fr]">
         <article className="sm-site-panel">
-          <p className="sm-kicker text-[var(--sm-accent)]">What this demo is</p>
+          <p className="sm-kicker text-[var(--sm-accent)]">What this module is</p>
           <p className="mt-4 text-sm leading-relaxed text-[var(--sm-muted)]">{system.summary}</p>
           <div className="mt-5 grid gap-3">
             {system.audience.split(', ').map((item) => (
@@ -74,7 +74,7 @@ export function DemoDetailPage() {
         </article>
 
         <article className="sm-site-panel">
-          <p className="sm-kicker text-[var(--sm-accent)]">What the screen has</p>
+          <p className="sm-kicker text-[var(--sm-accent)]">What the module has</p>
           <div className="mt-5 grid gap-3">
             {system.surface.map((item) => (
               <div className="sm-demo-mini" key={item}>
@@ -112,7 +112,7 @@ export function DemoDetailPage() {
         </article>
 
         <article className="sm-site-panel">
-          <p className="sm-kicker text-[var(--sm-accent)]">Expand it into</p>
+          <p className="sm-kicker text-[var(--sm-accent)]">Next modules</p>
           <div className="mt-5 grid gap-3">
             {system.nextBuilds.map((item) => (
               <div className="sm-demo-mini" key={item}>

@@ -1,20 +1,15 @@
-import { useState } from 'react'
 import { Link, Navigate, useParams } from 'react-router-dom'
 
-import { SystemDemoCanvas } from '../components/SystemDemoCanvas'
 import { getSiteSystem, SITE_SYSTEMS } from '../lib/siteSystems'
 
 export function ProductDetailPage() {
   const { productId } = useParams()
   const system = getSiteSystem(productId)
-  const [activeScenarioId, setActiveScenarioId] = useState(system?.scenarios[0]?.id ?? '')
 
   if (!system) {
     return <Navigate replace to="/products" />
   }
 
-  const activeScenario =
-    system.scenarios.find((item) => item.id === activeScenarioId) ?? system.scenarios[0]
   const siblingSystems = SITE_SYSTEMS.filter((item) => item.id !== system.id)
 
   return (
@@ -45,24 +40,24 @@ export function ProductDetailPage() {
 
       <section className="grid gap-6 xl:grid-cols-[1.12fr_0.88fr]">
         <article className="sm-site-panel">
-          <div className="sm-demo-switcher mb-5">
-            {system.scenarios.map((item) => (
-              <button
-                className={`sm-demo-switch ${item.id === activeScenario.id ? 'sm-demo-switch-active' : ''}`}
-                key={item.id}
-                onClick={() => setActiveScenarioId(item.id)}
-                type="button"
-              >
-                {item.label}
-              </button>
-            ))}
-          </div>
-          <SystemDemoCanvas scenario={activeScenario} />
+          <figure className="overflow-hidden rounded-[1.25rem] border border-white/10 bg-[rgba(6,11,22,0.92)]">
+            <div className="flex items-center justify-between border-b border-white/8 px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.2em] text-[var(--sm-muted)]">
+              <span>Current branch screen</span>
+              <span>{system.name}</span>
+            </div>
+            <img alt={system.previewAlt} className="block w-full bg-[rgba(4,8,16,0.92)]" src={system.previewImage} />
+            <figcaption className="flex flex-col gap-3 px-4 py-4 text-sm text-[var(--sm-muted)] md:flex-row md:items-center md:justify-between">
+              <span>{system.previewNote}</span>
+              <Link className="sm-link" to={`/demos/${system.slug}`}>
+                Open live demo
+              </Link>
+            </figcaption>
+          </figure>
         </article>
 
         <div className="space-y-6">
           <article className="sm-site-panel">
-            <p className="sm-kicker text-[var(--sm-accent)]">What it is</p>
+            <p className="sm-kicker text-[var(--sm-accent)]">Module</p>
             <p className="mt-4 text-sm leading-relaxed text-[var(--sm-muted)]">{system.summary}</p>
           </article>
 
@@ -78,7 +73,7 @@ export function ProductDetailPage() {
           </article>
 
           <article className="sm-site-panel">
-            <p className="sm-kicker text-[var(--sm-accent)]">What the screen has</p>
+            <p className="sm-kicker text-[var(--sm-accent)]">What the module has</p>
             <div className="mt-5 grid gap-3">
               {system.surface.map((item) => (
                 <div className="sm-demo-mini" key={item}>
@@ -89,7 +84,7 @@ export function ProductDetailPage() {
           </article>
 
           <article className="sm-site-panel">
-            <p className="sm-kicker text-[var(--sm-accent)]">Start simple</p>
+            <p className="sm-kicker text-[var(--sm-accent)]">First rollout</p>
             <div className="mt-5 space-y-3">
               {system.setup.map((step, index) => (
                 <div className="sm-site-point" key={step}>
@@ -131,7 +126,7 @@ export function ProductDetailPage() {
         </article>
 
         <article className="sm-site-panel">
-          <p className="sm-kicker text-[var(--sm-accent)]">Expand it into</p>
+          <p className="sm-kicker text-[var(--sm-accent)]">Next modules</p>
           <div className="mt-5 grid gap-3">
             {system.nextBuilds.map((item) => (
               <div className="sm-demo-mini" key={item}>
@@ -145,8 +140,8 @@ export function ProductDetailPage() {
       <section className="sm-site-panel">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <p className="sm-kicker text-[var(--sm-accent)]">Other systems</p>
-            <h2 className="mt-3 text-3xl font-bold text-white lg:text-4xl">Same company base. Different working surface.</h2>
+            <p className="sm-kicker text-[var(--sm-accent)]">Other modules</p>
+            <h2 className="mt-3 text-3xl font-bold text-white lg:text-4xl">Same company base. Different module.</h2>
           </div>
           <Link className="sm-button-secondary" to="/products">
             View all systems
@@ -162,7 +157,7 @@ export function ProductDetailPage() {
                   Demo
                 </Link>
                 <Link className="sm-link" to={`/products/${item.slug}`}>
-                  Details
+                  Module
                 </Link>
               </div>
             </article>

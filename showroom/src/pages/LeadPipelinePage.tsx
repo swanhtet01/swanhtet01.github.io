@@ -253,7 +253,7 @@ export function LeadPipelinePage() {
 
     const session = await getWorkspaceSession()
     if (!session.authenticated) {
-      throw new Error('Login is required to open the sales workspace.')
+      throw new Error('Login is required to open Deals.')
     }
 
     const [pipelinePayload, huntPayload, taskPayload] = await Promise.all([
@@ -286,7 +286,7 @@ export function LeadPipelinePage() {
         }
       } catch (nextError) {
         if (!cancelled) {
-          setError(nextError instanceof Error ? nextError.message : 'Could not load the sales workspace.')
+          setError(nextError instanceof Error ? nextError.message : 'Could not load Deals right now.')
         }
       } finally {
         if (!cancelled) {
@@ -546,7 +546,7 @@ export function LeadPipelinePage() {
   }
 
   if (loading) {
-    return <section className="sm-surface p-6 text-sm text-[var(--sm-muted)]">Loading sales workspace...</section>
+    return <section className="sm-surface p-6 text-sm text-[var(--sm-muted)]">Loading deals...</section>
   }
 
   if (error) {
@@ -556,9 +556,9 @@ export function LeadPipelinePage() {
   return (
     <div className="space-y-8">
       <PageIntro
-        eyebrow="Sales control"
-        title="Sell one simple setup at a time."
-        description="Run saved hunts, sort leads into three repeatable offers, and push the next step into the queue."
+        eyebrow="Deals"
+        title="Run revenue from one surface."
+        description="Search, qualify, apply packs, and keep the next step moving in one place."
       />
 
       <section className="grid gap-4 md:grid-cols-5">
@@ -588,12 +588,12 @@ export function LeadPipelinePage() {
         <article className="sm-surface p-6">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <p className="sm-kicker text-[var(--sm-accent)]">What SuperMega sells</p>
-              <h2 className="mt-2 text-2xl font-bold text-white">Three core offers only.</h2>
-              <p className="mt-2 text-sm text-[var(--sm-muted)]">Each pack should create the first queue immediately. No blank rollout.</p>
+              <p className="sm-kicker text-[var(--sm-accent)]">Live offers</p>
+              <h2 className="mt-2 text-2xl font-bold text-white">Start from the few systems we can actually deliver.</h2>
+              <p className="mt-2 text-sm text-[var(--sm-muted)]">Each pack should create the first owned queue immediately. No blank rollout.</p>
             </div>
-            <Link className="sm-button-secondary" to="/app/director">
-              Open director
+            <Link className="sm-button-secondary" to="/app/hq">
+              Open HQ
             </Link>
           </div>
 
@@ -652,8 +652,8 @@ export function LeadPipelinePage() {
         </article>
 
         <article className="sm-surface p-6">
-          <p className="sm-kicker text-[var(--sm-accent)]">Why use Find Companies internally</p>
-          <h2 className="mt-2 text-2xl font-bold text-white">This closes the loop after search.</h2>
+          <p className="sm-kicker text-[var(--sm-accent)]">Deal sourcing</p>
+          <h2 className="mt-2 text-2xl font-bold text-white">Search is just the intake layer.</h2>
           <div className="mt-5 grid gap-3">
             {FINDER_ADVANTAGES.map((item) => (
               <div className="sm-chip text-[var(--sm-muted)]" key={item}>
@@ -706,7 +706,7 @@ export function LeadPipelinePage() {
         <article className="sm-surface p-6">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <p className="sm-kicker text-[var(--sm-accent)]">Internal hunt</p>
+              <p className="sm-kicker text-[var(--sm-accent)]">New search</p>
               <h2 className="mt-2 text-2xl font-bold text-white">Run or save a market search.</h2>
             </div>
             <Link className="sm-button-secondary" to="/app/leads/advanced">
@@ -782,11 +782,11 @@ export function LeadPipelinePage() {
         <article className="sm-terminal p-6">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <p className="sm-kicker text-[var(--sm-accent)]">Pipeline today</p>
-              <h2 className="mt-2 text-2xl font-bold text-white">Work the right leads.</h2>
+              <p className="sm-kicker text-[var(--sm-accent)]">Active deals</p>
+              <h2 className="mt-2 text-2xl font-bold text-white">Work the right companies.</h2>
             </div>
-            <Link className="sm-button-secondary" to="/app/actions">
-              Open queue
+            <Link className="sm-button-secondary" to="/app/workflows">
+              Open workflows
             </Link>
           </div>
 
@@ -906,11 +906,11 @@ export function LeadPipelinePage() {
         <article className="sm-surface p-6">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <p className="sm-kicker text-[var(--sm-accent)]">Next actions</p>
+              <p className="sm-kicker text-[var(--sm-accent)]">Deal actions</p>
               <h2 className="mt-2 text-2xl font-bold text-white">What the team should do next.</h2>
             </div>
-            <Link className="sm-button-secondary" to="/app/actions">
-              Open queue
+            <Link className="sm-button-secondary" to="/app/workflows">
+              Open workflows
             </Link>
           </div>
 
@@ -939,8 +939,8 @@ export function LeadPipelinePage() {
         </article>
 
         <article className="sm-surface p-6">
-          <p className="sm-kicker text-[var(--sm-accent-alt)]">Operating rule</p>
-          <h2 className="mt-2 text-2xl font-bold text-white">How SuperMega should actually sell.</h2>
+          <p className="sm-kicker text-[var(--sm-accent-alt)]">Founder rule</p>
+          <h2 className="mt-2 text-2xl font-bold text-white">How Deals should actually run.</h2>
           <div className="mt-5 grid gap-3">
             {[
               'Start from one narrow market or one imported list, not a huge segment.',

@@ -1,150 +1,115 @@
 # Self-Hosted Company Loop
 
-This is the practical loop that lets SuperMega keep operating when Codex is closed.
+This is the operating path when Codex is closed.
 
-## Source of truth
+## Founder control points
 
-### Code
-- Git branches
-- GitHub repo
+The founder should only need four surfaces:
 
-### Runtime
-- Cloud Run
-- Cloud Tasks
-- Cloud Scheduler
-- Cloud SQL
+### 1. Public company site
+- `https://supermega.dev`
+- what prospects and clients see
 
-### Operating state
-- `app.supermega.dev`
-- `pilot-data/ops/*.json`
-- `Super Mega Inc/ops/*.md`
+### 2. Shared control plane
+- `https://app.supermega.dev/app/director`
+- `https://app.supermega.dev/app/teams`
+- `https://app.supermega.dev/app/sales`
+- live queues, agent status, approvals, revenue state
 
-If something exists only in chat, it is not operational enough yet.
+### 3. Local BDA HQ
+- `C:\Users\swann\OneDrive - BDA\Super Mega Inc\codex_hq`
+- durable local mirror of ops docs, reports, and site evidence
 
-## Branch model
+### 4. Repo ops folder
+- `Super Mega Inc/ops`
+- editable operating docs inside the active worktree
 
-Use the branch rules from `17_release_workflow.md`.
+If something is only visible in chat, it is not part of the company loop yet.
 
-Working branches:
-- `codex/<task>`
-- `develop`
-- `release/<date-or-version>`
-- `main`
+## What runs without Codex
 
-Rule:
-- `main` is production only
-- all product and infra work starts on `codex/*`
-- release hardening happens on `release/*`
-
-## Preview and release flow
-
-### Default path
-1. build on `codex/<task>`
-2. run local verification
-3. generate preview evidence
-4. merge into `develop`
-5. cut `release/*`
-6. run final smoke and release checks
-7. merge to `main`
-8. update local ops files
-
-### Minimum preview evidence
-- build passes
-- lint passes
-- smoke passes
-- screenshots or demo proof for user-facing changes
-
-### Release gate
-
-Do not release if any of these fail:
-- app health
-- queue worker
-- critical public routes
-- founder/operator report generation
-- contact flow
-
-## What runs in the cloud
-
-24/7 cloud runtime:
-- web app on Cloud Run
-- worker execution on Cloud Run
+Cloud runtime:
+- Cloud Run web service
+- Cloud Run worker execution
 - Cloud Tasks queues
 - Cloud Scheduler triggers
-- live app surfaces
+- Cloud SQL state
+- `app.supermega.dev`
 
-This is the real runtime.
+Founder workstation runtime:
+- `run_supermega_workstation_cycle.ps1`
+- `run_supermega_founder_cycle.ps1`
+- `run_supermega_operator_cycle.ps1`
+- `sync_supermega_codex_hq.ps1`
 
-## What runs on the founder machine
+These are the real runtime layers.
 
-Local workstation runtime:
-- workstation cycle
-- founder cycle
-- operator cycle
-- local ops hub refresh
-- browser sidecar tasks later when needed
+## What still depends on Codex
 
-This machine is the mirror and oversight layer, not the primary production system.
+Codex is still used for:
+- product and infra changes
+- release hardening
+- schema and workflow changes
+- UI rewrites
+- one-off incident investigation when the current loops are not enough
 
-## What runs every cycle
+Codex is not required for:
+- scheduled agent runs
+- queue draining
+- founder brief refresh
+- local BDA HQ sync
+- opening the founder control surfaces
 
-Every workstation cycle should refresh:
-- `pilot-data/ops/workstation-latest.json`
-- `pilot-data/ops/operator-cycle-latest.json`
-- `pilot-data/ops/founder-cycle-latest.json`
-- `pilot-data/ops/agent-cycle-latest.json`
+## Daily operating path
 
-Every cloud cycle should keep moving:
-- queue depth
-- loop execution
-- app health
-- incident visibility
+### Desktop
+1. Run `open_supermega_founder_workspace.ps1`
+2. Review local BDA HQ
+3. Review Director
+4. Review Agent Ops
+5. Review Sales only if revenue needs direct attention
 
-## What is automatic now
+### Phone
+Bookmark:
+- `https://app.supermega.dev/app/director`
+- `https://app.supermega.dev/app/teams`
 
-- scheduled cloud triggers
-- queued worker execution
-- local report refresh
-- app-visible agent status
-- contact submission capture
-- production smoke support
+Phone is for monitoring, approvals, and escalation review.
+Desktop is for release decisions and operating changes.
 
-## What is still manual
+## Local BDA HQ
 
-- deciding which product gets built next
-- approving releases
-- approving pricing and proposals
-- final client delivery signoff
-- incident judgment when business context is missing
-
-## What gets promoted out of Codex next
-
-The following should live in the company loop, not in chat:
-- release checks
-- deal updates
-- delivery watch
-- founder summaries
-- incident tracking
-- browser capture jobs
-
-## Self-hosted runner model
-
-SuperMega should use one self-hosted runner or dedicated build machine for:
-- preview build
-- smoke
-- screenshot capture
-- release verification
-
-That runner should not hold production truth. It should only build, verify, and report.
-
-## Local folder rule
-
-The founder should be able to inspect the company from:
-- `Super Mega Inc/ops`
-
-That folder should answer:
-- what changed
+The BDA HQ mirror should answer:
+- is the runtime healthy
+- what changed today
 - what is blocked
-- what is due today
-- whether the runtime is healthy
+- what the agents just did
+- what the public site currently looks like
 
-If it cannot answer those questions, the loop is incomplete.
+Expected subfolders:
+- `ops`
+- `reports`
+- `site`
+
+If BDA HQ cannot answer those questions, the sync path is incomplete.
+
+## Release path
+
+1. build on `codex/<task>`
+2. verify locally
+3. publish proof
+4. merge toward release
+5. release to `main`
+6. refresh BDA HQ
+
+`main` is production only.
+
+## Rule
+
+The founder should be able to close Codex and still:
+- inspect the company
+- see agent progress
+- review runtime health
+- decide what gets approved next
+
+That is the standard for a self-hosted company loop.
