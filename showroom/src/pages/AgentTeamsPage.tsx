@@ -4,11 +4,13 @@ import { PageIntro } from '../components/PageIntro'
 import {
   listAgentRuns,
   checkWorkspaceHealth,
+  getCapabilityProfileForRole,
   getWorkspaceSession,
   inviteTeamMember,
   listTeamMembers,
   runAgentJob,
   runDefaultAgentJobs,
+  sessionHasCapability,
   workspaceFetch,
   type AgentJobTemplate,
   type AgentRunRow,
@@ -119,6 +121,10 @@ export function AgentTeamsPage() {
     if (!session.authenticated) {
       throw new Error('Login is required to open Agent Ops.')
     }
+    if (!sessionHasCapability(session.session, 'agent_ops.view') && !sessionHasCapability(session.session, 'tenant_admin.view')) {
+      const profile = getCapabilityProfileForRole(session.session?.role)
+      throw new Error(`Agent Ops requires an operator, manager, or tenant-admin role. Current role: ${profile.label}.`)
+    }
 
     const [nextAgentPayload, nextMembersPayload, nextRunsPayload] = await Promise.all([
       workspaceFetch<AgentTeamPayload>('/api/agent-teams'),
@@ -150,6 +156,11 @@ export function AgentTeamsPage() {
         if (cancelled) return
         if (!session.authenticated) {
           setError('Login is required to open Agent Ops.')
+          setLoading(false)
+          return
+        }
+        if (!sessionHasCapability(session.session, 'agent_ops.view') && !sessionHasCapability(session.session, 'tenant_admin.view')) {
+          setError(`Agent Ops requires operator or tenant-admin access. Current role: ${getCapabilityProfileForRole(session.session?.role).label}.`)
           setLoading(false)
           return
         }
@@ -345,7 +356,7 @@ export function AgentTeamsPage() {
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
               <p className="sm-kicker text-[var(--sm-accent)]">Always-on loops</p>
-              <h2 className="mt-2 text-2xl font-bold text-white">The jobs that keep SuperMega moving.</h2>
+              <h2 className="mt-2 text-2xl font-bold text-white">The jobs that keep SUPERMEGA.dev moving.</h2>
               <p className="mt-3 text-sm text-[var(--sm-muted)]">
                 Revenue, cleanup, inbound handling, queue control, runtime watch, and the founder brief now live in one operator surface.
               </p>

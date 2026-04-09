@@ -6,6 +6,28 @@ export type ProofPoint = {
   detail: string
 }
 
+export type EnterpriseSignal = {
+  name: string
+  detail: string
+}
+
+export type MetaTool = {
+  name: string
+  detail: string
+}
+
+export type TenantBlueprint = {
+  name: string
+  domain: string
+  summary: string
+  modules: string[]
+  roles: string[]
+  dataSources: string[]
+  controls: string[]
+  agentTeams: string[]
+  outcomes: string[]
+}
+
 export type UseCase = {
   name: string
   audience: string
@@ -98,29 +120,98 @@ export const bookingUrl = (import.meta.env.VITE_BOOKING_URL ?? '').trim()
 
 export const navItems = [
   { label: 'Products', to: '/products' },
+  { label: 'Portfolio', to: '/portfolio' },
   { label: 'Agents', to: '/agents' },
-  { label: 'How It Works', to: '/platform' },
+  { label: 'Enterprise', to: '/platform' },
+  { label: 'Build', to: '/factory' },
 ] as const
 
 export const hero = {
-  eyebrow: 'SuperMega',
-  title: 'Connected software for your team, your clients, and your own workspace.',
+  eyebrow: 'SUPERMEGA.dev',
+  title: 'Live company software that replaces tool sprawl.',
   description:
-    'Start with a real product like Find Clients, Company List, or Receiving Control. Connect Gmail, Google Drive, Sheets, CSVs, APIs, and your existing workflow on one shared system.',
+    'Start with Find Clients, Company List, or Receiving Control. Then add roles, approvals, audit history, tenant workspaces, and AI agents on the same system.',
 }
 
 export const proofPoints: ProofPoint[] = [
   {
-    label: 'One connected system',
-    value: 'Less tool sprawl',
-    detail: 'Sales, operations, approvals, and management move in one shared system instead of chats, sheets, and scattered apps.',
+    label: 'One system',
+    value: 'Fewer moving parts',
+    detail: 'Sales, operations, approvals, and management run in one shared system instead of scattered chats, sheets, and SaaS tabs.',
   },
   {
-    label: 'Built-in automation',
+    label: 'Built-in agents',
     value: 'Work keeps moving',
     detail: 'Cleanup, summaries, alerts, and follow-up can run in the background without creating another disconnected tool.',
   },
 ]
+
+export const enterpriseSignals: EnterpriseSignal[] = [
+  {
+    name: 'Role-based access',
+    detail: 'Operators, managers, directors, suppliers, and clients get the right view and the right write scope.',
+  },
+  {
+    name: 'Audit history',
+    detail: 'Imports, edits, approvals, and agent actions stay attached to the record that changed.',
+  },
+  {
+    name: 'Tenant workspaces',
+    detail: 'Each company or site keeps its own users, files, connectors, and workflow state.',
+  },
+  {
+    name: 'Connector health',
+    detail: 'Gmail, Drive, Sheets, ERP, CSV, and API sync failures surface in one queue instead of failing silently.',
+  },
+  {
+    name: 'Approval gates',
+    detail: 'Agents can prepare work automatically, while higher-risk writes wait for human approval.',
+  },
+  {
+    name: 'Short rollout path',
+    detail: 'Start with one queue and one team, then add more modules without rebuilding the stack.',
+  },
+]
+
+export const metaTools: MetaTool[] = [
+  {
+    name: 'Platform Admin',
+    detail: 'Review tenant roles, connector posture, knowledge layers, and rollout gaps from one control plane.',
+  },
+  {
+    name: 'Build Studio',
+    detail: 'Track product builds, rollout stages, launch readiness, and platform priorities from one workspace.',
+  },
+  {
+    name: 'Solution Architect',
+    detail: 'Map a client or internal team into modules, data sources, roles, and rollout order.',
+  },
+  {
+    name: 'Agent Teams',
+    detail: 'Assign agent teams by workspace, write scope, schedule, and approval rule.',
+  },
+  {
+    name: 'Decision Journal',
+    detail: 'Keep leadership decisions, exceptions, and approval context attached to live work.',
+  },
+  {
+    name: 'Director Dashboard',
+    detail: 'Review risks, blocked work, approvals, and cross-team drift in one place.',
+  },
+]
+
+export const ytfDeployment: TenantBlueprint = {
+  name: 'Yangon Tyre',
+  domain: 'ytf.supermega.dev',
+  summary:
+    'A tenant deployment for plant operations, supplier recovery, quality closeout, inventory watch, commercial CRM, and management review. The same base handles Gmail, Drive, ERP exports, markdown notes, and structured human entry without splitting the company across separate tools.',
+  modules: ['Receiving Control', 'Plant Action Board', 'Supplier Control', 'Quality Closeout', 'Inventory Pulse', 'Sales CRM', 'Director Command Center'],
+  roles: ['Tenant admin', 'Receiving clerk', 'Procurement lead', 'Plant manager', 'Quality manager', 'Finance controller', 'Sales lead', 'Director'],
+  dataSources: ['Gmail sales and procurement threads', 'Google Drive folders', 'Sheets trackers', 'ERP, GRN, and stock exports', 'Obsidian or markdown notes', 'Structured human entry screens'],
+  controls: ['Tenant-scoped access', 'Role-based queues', 'Approval gates for supplier, quality, and finance writes', 'Audit history on issues, files, and agent actions'],
+  agentTeams: ['Intake Router pod', 'Supplier Recovery pod', 'Quality Watch pod', 'Commercial Memory pod', 'Director Brief pod'],
+  outcomes: ['One live exception board for Plant A', 'Cleaner supplier follow-up', 'Stronger director review', 'Human data entry aligned with quality and operations'],
+}
 
 export const coreProduct = {
   name: 'Products plus custom rollout',
@@ -133,97 +224,73 @@ export const coreProduct = {
 
 export const siteShowcases: SiteShowcase[] = [
   {
-    name: 'Distributor Sales Desk',
+    name: 'Find Clients',
     eyebrow: 'Sales',
-    title: 'Prospecting, follow-up, and team handoff in one working system.',
-    summary: 'Search the market, clean inbound lists, and keep every next step visible instead of losing context across chat, sheets, and scattered notes.',
-    image: '/site/sales-desk.svg',
-    points: ['New accounts and existing lists in one queue', 'First follow-up ready without extra admin', 'Manager view of what moved and what stalled'],
-    route: '/contact?package=Distributor%20Sales%20Desk',
+    title: 'Search a market and open the next sales conversation faster.',
+    summary: 'Search by place or niche, keep the right companies, and move them into a usable follow-up queue instead of starting from raw search pages every day.',
+    image: '/site/find-clients-live.png',
+    points: ['Search and shortlist in one place', 'Carry the best rows straight into follow-up', 'Keep the next outreach step visible'],
+    route: '/contact?package=Find%20Clients',
   },
   {
-    name: 'Operations Desk',
+    name: 'Company List',
+    eyebrow: 'Data',
+    title: 'Turn copied rows, CSV files, and notes into one trusted company list.',
+    summary: 'Import what the team already has, clean the fields, merge duplicates, and keep the next step attached to the right company record.',
+    image: '/site/company-list-live.png',
+    points: ['Messy rows cleaned into one list', 'Duplicates and gaps surfaced fast', 'Sales and management work from the same list'],
+    route: '/contact?package=Company%20List',
+  },
+  {
+    name: 'Receiving Control',
     eyebrow: 'Operations',
-    title: 'Approvals, receiving, exceptions, and daily execution without a heavy ERP rollout.',
-    summary: 'Start from one operational bottleneck, turn it into one controlled queue, and let the team run the day from a shared operating layer.',
-    image: '/site/ops-desk.svg',
-    points: ['One queue for approvals and blockers', 'Receipts, exceptions, and owners in view', 'Daily review instead of ad hoc chasing'],
+    title: 'Log the issue once and keep the next step visible.',
+    summary: 'Shortages, holds, GRN gaps, and supplier follow-up stay in one queue instead of disappearing into chat, inboxes, and end-of-day reporting.',
+    image: '/site/receiving-control-live.png',
+    points: ['One queue for receiving exceptions', 'Clear owner and next step on each issue', 'Daily review for plant, warehouse, or procurement teams'],
     route: '/contact?package=Receiving%20Control',
-  },
-  {
-    name: 'Founder Daily Brief',
-    eyebrow: 'Management',
-    title: 'A short executive view built from the real work layer.',
-    summary: 'The founder or GM gets the few items that need attention today, not another dashboard full of dead metrics.',
-    image: '/site/founder-brief.svg',
-    points: ['Priority changes surfaced automatically', 'Queues and risk pulled into one brief', 'Built for owners, managers, and directors'],
-    route: '/contact?package=Founder%20Daily%20Brief',
   },
 ]
 
 export const siteExamples: SiteExample[] = [
   {
-    name: 'Distributor Sales Desk',
+    name: 'Find Clients',
     category: 'Sales',
-    detail: 'For teams that need one system for prospecting, list cleanup, outreach, and follow-up.',
-    image: '/site/sales-desk.svg',
-    route: '/contact?package=Distributor%20Sales%20Desk',
+    detail: 'Search the market, shortlist the right companies, and move straight into follow-up.',
+    image: '/site/find-clients-live.png',
+    route: '/contact?package=Find%20Clients',
     live: true,
   },
   {
-    name: 'Founder Daily Brief',
-    category: 'Management',
-    detail: 'For owners and managers who need one short operating view every day.',
-    image: '/site/founder-brief.svg',
-    route: '/contact?package=Founder%20Daily%20Brief',
+    name: 'Company List',
+    category: 'Data',
+    detail: 'Clean and structure existing company rows into one trusted list.',
+    image: '/site/company-list-live.png',
+    route: '/contact?package=Company%20List',
     live: true,
   },
   {
     name: 'Receiving Control',
     category: 'Operations',
-    detail: 'For teams that need clean ownership on receiving problems, holds, and follow-up.',
-    image: '/site/ops-desk.svg',
+    detail: 'Track holds, shortages, and supplier follow-up in one operating queue.',
+    image: '/site/receiving-control-live.png',
     route: '/contact?package=Receiving%20Control',
     live: true,
-  },
-  {
-    name: 'Approval Flow',
-    category: 'Operations',
-    detail: 'For quotes, requests, and decisions that are still trapped in chat and inboxes.',
-    image: '/site/ops-desk.svg',
-    route: '/contact?package=Approval%20Flow',
-    live: true,
-  },
-  {
-    name: 'Client Portal Starter',
-    category: 'Client-facing',
-    detail: 'For agencies and service teams that need one clean place for status, files, and approvals.',
-    image: '/site/client-portal.svg',
-    route: '/contact?package=Client%20Portal',
-    live: false,
-  },
-  {
-    name: 'Learning Hub Starter',
-    category: 'Training',
-    detail: 'For onboarding, SOP rollout, and internal training with AI guidance.',
-    image: '/site/client-portal.svg',
-    route: '/contact?package=Learning%20Hub',
-    live: false,
   },
 ]
 
 export const workExamples: WorkExample[] = [
   {
-    name: 'Distributor Sales Desk',
+    name: 'Find Clients',
     category: 'Sales',
     audience: 'Owner-led importers, distributors, and commercial teams',
-    title: 'A sales system that turns scattered prospecting into one daily queue.',
-    summary: 'Built for teams that live in Facebook, Viber, WhatsApp, Gmail, and spreadsheets but still need one real sales operating layer.',
-    image: '/site/sales-desk.svg',
+    title: 'A sales workflow that turns scattered prospecting into one daily queue.',
+    summary: 'Built for teams that live in inboxes, spreadsheets, and copied lists but still need one real place to search, shortlist, and follow up.',
+    image: '/site/find-clients-live.png',
     outcomes: [
-      'Turn raw company names and messages into one clean sales list with next actions.',
-      'Give the team one daily follow-up queue instead of scattered chats and sheets.',
-      'Give the owner one short daily brief on leads, replies, and blocked deals.',
+      'Turn raw company names into a shortlist with clear fit signals.',
+      'Move saved companies into one working list with the next step attached.',
+      'Give the team one daily follow-up queue instead of scattered notes and sheets.',
     ],
     disclosure: 'Composite example based on common distributor workflows. Not presented as a live client deployment.',
   },
@@ -307,37 +374,37 @@ export const useCases: UseCase[] = [
 export const publicModules: PublicModule[] = [
   {
     name: 'Find Clients',
-    tagline: 'Search a market, keep the right companies, and start outreach.',
+    tagline: 'Search a market, keep the right companies, and start follow-up.',
     bestFor: 'Prospecting, partnerships, and market mapping.',
-    inputs: ['Place or niche search', 'Fit keywords', 'Saved notes'],
-    outputs: ['Shortlist', 'Outreach draft', 'Company List rows'],
+    inputs: ['Place or niche search', 'Fit keywords', 'Saved notes', 'Contact clues'],
+    outputs: ['Shortlist', 'Outreach draft', 'Company List rows', 'Owned next step'],
     path: '/find-companies',
   },
   {
     name: 'Company List',
-    tagline: 'Paste your existing names and turn them into one usable follow-up list.',
-    bestFor: 'Anyone already working from Google, Facebook, WhatsApp, Excel, or CRM exports.',
+    tagline: 'Paste your existing names and turn them into one clean working list.',
+    bestFor: 'Teams already working from spreadsheets, copied lists, shared docs, or CRM exports.',
     inputs: ['Company rows', 'Notes', 'Contact clues', 'Follow-up tasks'],
-    outputs: ['Clean list', 'Next steps', 'CSV export'],
+    outputs: ['Clean list', 'Next steps', 'Import history', 'CSV export'],
     path: '/company-list',
   },
   {
-    name: 'Receiving log',
+    name: 'Receiving Control',
     tagline: 'Log shortages, holds, GRN gaps, and supplier issues in one queue.',
     bestFor: 'Procurement, warehouse, plant, and receiving teams.',
-    inputs: ['Receiving notes', 'GRN gaps', 'PO or PI', 'Owner follow-up'],
-    outputs: ['Issue queue', 'Owner assignments', 'Daily review'],
+    inputs: ['Receiving notes', 'GRN gaps', 'PO or PI', 'Files', 'Owner follow-up'],
+    outputs: ['Issue queue', 'Owner assignments', 'Daily review', 'Audit trail'],
     path: '/receiving-log',
   },
 ]
 
 export const templatePacks: TemplatePack[] = [
   {
-    name: 'Distributor Sales Desk',
+    name: 'Find Clients',
     category: 'Sales',
     audience: 'Owner-led distributors, importers, and sales teams',
-    promise: 'Find companies, clean messy lists, draft first outreach, and run one daily sales queue.',
-    inputs: ['Search results', 'Existing lead list', 'Email and WhatsApp notes'],
+    promise: 'Search the market, clean imported company rows, draft first outreach, and run one daily sales queue.',
+    inputs: ['Search results', 'Existing lead list', 'Email and chat notes'],
     outputs: ['Qualified shortlist', 'Clean company list', 'Follow-up queue'],
     route: '/contact',
     live: true,

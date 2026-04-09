@@ -125,6 +125,16 @@ const quickLaunches = [
     to: '/app/sales',
   },
   {
+    name: 'Platform Admin',
+    detail: 'Review tenant roles, connectors, knowledge layers, and rollout gaps.',
+    to: '/app/platform-admin',
+  },
+  {
+    name: 'Build Studio',
+    detail: 'Run R&D, release gates, module programs, and tenant launch work.',
+    to: '/app/factory',
+  },
+  {
     name: 'News Brief',
     detail: 'Turn signals into one short brief.',
     to: '/app/news',

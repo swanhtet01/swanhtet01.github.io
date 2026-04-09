@@ -1,7 +1,9 @@
 import { useState } from 'react'
 import { Link, NavLink, Outlet } from 'react-router-dom'
 
-import { navItems } from '../content'
+import { navItems as defaultNavItems } from '../content'
+import { getTenantBrandLabel, getTenantConfig } from '../lib/tenantConfig'
+import { BrandMark, BrandWordmark } from './Brand'
 
 const navClassName = ({ isActive }: { isActive: boolean }) =>
   `rounded-full px-4 py-2 text-sm font-semibold transition ${
@@ -12,18 +14,20 @@ const navClassName = ({ isActive }: { isActive: boolean }) =>
 
 export function SiteFrame() {
   const [menuOpen, setMenuOpen] = useState(false)
+  const tenant = getTenantConfig()
+  const activeNavItems = tenant.key === 'default' ? [...defaultNavItems] : tenant.navItems
+  const primaryCta = tenant.showBookCta ? { label: tenant.bookCtaLabel, to: '/contact' } : tenant.homePrimaryCta
+  const footerLink = tenant.key === 'default' ? { label: 'Team app', to: 'https://app.supermega.dev', external: true } : { label: 'Team login', to: '/login', external: false }
 
   return (
     <div className="min-h-screen text-[var(--sm-ink)]">
       <div className="fixed inset-x-0 top-0 z-40 border-b border-white/8 bg-[rgba(4,8,16,0.72)] backdrop-blur-xl">
         <nav className="mx-auto flex w-full max-w-7xl items-center justify-between px-4 py-3 lg:px-8">
           <NavLink className="flex items-center gap-3" to="/">
-            <span className="flex h-10 w-10 items-center justify-center rounded-xl border border-[rgba(37,208,255,0.22)] bg-[rgba(37,208,255,0.08)] text-sm font-extrabold text-[var(--sm-accent)]">
-              SM
-            </span>
+            <BrandMark className="h-10 w-10" />
             <span className="flex flex-col">
-              <span className="sm-logo text-lg font-extrabold tracking-tight text-white">SuperMega</span>
-              <span className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[var(--sm-muted)]">Connected products for work.</span>
+              <BrandWordmark className="text-lg text-white" />
+              <span className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[var(--sm-muted)]">{getTenantBrandLabel(tenant)}</span>
             </span>
           </NavLink>
           <button
@@ -34,26 +38,26 @@ export function SiteFrame() {
             Menu
           </button>
           <div className="hidden items-center gap-2 md:flex">
-            {navItems.map((item) => (
+            {activeNavItems.map((item) => (
               <NavLink className={navClassName} key={item.to} to={item.to}>
                 {item.label}
               </NavLink>
             ))}
-            <Link className="sm-button-primary ml-2" to="/contact">
-              Start onboarding
+            <Link className="sm-button-primary ml-2" to={primaryCta.to}>
+              {primaryCta.label}
             </Link>
           </div>
         </nav>
         {menuOpen ? (
           <div className="border-t border-white/8 bg-[rgba(4,10,22,0.92)] px-4 py-3 backdrop-blur-xl md:hidden">
             <div className="flex flex-col gap-2">
-              {navItems.map((item) => (
+              {activeNavItems.map((item) => (
                 <NavLink className={navClassName} key={item.to} onClick={() => setMenuOpen(false)} to={item.to}>
                   {item.label}
                 </NavLink>
               ))}
-              <Link className="sm-button-primary mt-2" onClick={() => setMenuOpen(false)} to="/contact">
-                Start onboarding
+              <Link className="sm-button-primary mt-2" onClick={() => setMenuOpen(false)} to={primaryCta.to}>
+                {primaryCta.label}
               </Link>
             </div>
           </div>
@@ -66,23 +70,25 @@ export function SiteFrame() {
 
       <footer className="border-t border-white/8 bg-[rgba(4,8,16,0.82)]">
         <div className="mx-auto flex w-full max-w-7xl flex-col gap-4 px-4 py-6 text-sm text-[var(--sm-muted)] lg:flex-row lg:items-center lg:justify-between lg:px-8">
-          <p>Real products on one connected system for internal tools, client work, and your own workspace.</p>
+          <p>{tenant.footerText}</p>
           <div className="flex flex-wrap gap-4">
-            <Link className="sm-link" to="/platform">
-              How it works
+            {activeNavItems.map((item) => (
+              <Link className="sm-link" key={item.to} to={item.to}>
+                {item.label}
+              </Link>
+            ))}
+            <Link className="sm-link" to={primaryCta.to}>
+              {primaryCta.label}
             </Link>
-            <Link className="sm-link" to="/agents">
-              Agents
-            </Link>
-            <Link className="sm-link" to="/products">
-              Products
-            </Link>
-            <Link className="sm-link" to="/contact">
-              Start onboarding
-            </Link>
-            <a className="sm-link" href="https://app.supermega.dev" rel="noreferrer" target="_blank">
-              Team app
-            </a>
+            {footerLink.external ? (
+              <a className="sm-link" href={footerLink.to} rel="noreferrer" target="_blank">
+                {footerLink.label}
+              </a>
+            ) : (
+              <Link className="sm-link" to={footerLink.to}>
+                {footerLink.label}
+              </Link>
+            )}
           </div>
         </div>
       </footer>

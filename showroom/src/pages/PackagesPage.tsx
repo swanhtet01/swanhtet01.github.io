@@ -9,7 +9,7 @@ export function PackagesPage() {
       <PageIntro
         eyebrow="Use cases"
         title="Start with the function that hurts first."
-        description="SuperMega is easiest to adopt when it begins with one real workflow the team already feels every day."
+        description="SUPERMEGA.dev works best when it starts with one real workflow the team already feels every day."
       />
 
       <section className="grid gap-5 lg:grid-cols-3">
@@ -35,7 +35,7 @@ export function PackagesPage() {
             </div>
 
             <Link className="sm-button-accent mt-5" to={`/contact?package=${encodeURIComponent(useCase.name)}`}>
-              Book demo
+              Start rollout
             </Link>
           </article>
         ))}

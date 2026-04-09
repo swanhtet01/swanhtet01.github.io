@@ -21,14 +21,14 @@ const dataSourceOptions = ['gmail', 'drive', 'sheets', 'whatsapp_exports', 'loca
 const toolOptions = ['gmail', 'drive', 'sheets', 'whatsapp', 'manual_trackers', 'existing_erp']
 
 const initialRequest: SolutionArchitectRequest = {
-  company_name: 'SuperMega target client',
-  sector: 'mixed',
-  team_size: 35,
+  company_name: 'Yangon Tyre',
+  sector: 'factory',
+  team_size: 120,
   site_count: 1,
-  priorities: ['actions', 'supplier', 'quality'],
-  current_tools: ['gmail', 'drive', 'sheets', 'whatsapp'],
-  data_sources: ['gmail', 'drive', 'sheets'],
-  pain_points: 'Managers chase updates manually and supplier, quality, and stock issues are noticed too late.',
+  priorities: ['actions', 'supplier', 'receiving', 'quality', 'director_visibility'],
+  current_tools: ['gmail', 'drive', 'sheets', 'existing_erp'],
+  data_sources: ['gmail', 'drive', 'sheets', 'erp_extracts'],
+  pain_points: 'Receiving variances, supplier files, and quality incidents are spread across Gmail, Drive, Sheets, and ERP exports, so managers see problems too late.',
 }
 
 function toggleString(values: string[], value: string) {
@@ -84,17 +84,17 @@ export function SolutionArchitectPage() {
   return (
     <div className="space-y-8">
       <PageIntro
-        eyebrow="SuperMega tool"
+        eyebrow="SUPERMEGA.dev tool"
         title="Solution Architect"
-        description="Turn one company profile into a recommended SuperMega stack: wedge product, modules, agent teams, rollout order, and the next tooling layer."
+        description="Turn one company profile into a recommended SUPERMEGA.dev stack: wedge product, modules, agent teams, roles, rollout order, and the next infrastructure layer."
       />
 
       <section className="grid gap-6 lg:grid-cols-[0.92fr_1.08fr]">
         <article className="sm-surface-deep p-6">
           <p className="sm-kicker text-[var(--sm-accent)]">Build a blueprint</p>
-          <h2 className="mt-3 text-3xl font-bold text-white">Design the client pod before we sell or build it.</h2>
+          <h2 className="mt-3 text-3xl font-bold text-white">Design the tenant rollout before we sell or build it.</h2>
           <p className="mt-3 text-sm text-[var(--sm-muted)]">
-            This is the bridge between a messy business profile and a reusable SuperMega rollout. It helps us decide the wedge product, the first modules, the team structure, and the next stack.
+            This is the bridge between a messy business profile and a reusable SUPERMEGA.dev rollout. It helps us decide the wedge product, the first modules, the team structure, and the next stack.
           </p>
 
           <div className="mt-6 grid gap-4">
@@ -218,7 +218,7 @@ export function SolutionArchitectPage() {
                 }}
                 type="button"
               >
-                Load SuperMega sample
+                Load Yangon Tyre sample
               </button>
             </div>
           </div>
@@ -228,7 +228,7 @@ export function SolutionArchitectPage() {
           <div className="flex items-center justify-between gap-3 border-b border-white/8 pb-4">
             <div>
               <p className="sm-kicker text-[var(--sm-accent)]">Blueprint</p>
-              <h2 className="mt-2 text-2xl font-bold text-white">Recommended SuperMega rollout</h2>
+              <h2 className="mt-2 text-2xl font-bold text-white">Recommended tenant rollout</h2>
             </div>
             <span className="sm-status-pill">
               <span className={`sm-led ${blueprint ? 'bg-emerald-400' : 'bg-slate-500'}`} />

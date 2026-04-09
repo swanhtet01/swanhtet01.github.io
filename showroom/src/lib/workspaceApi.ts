@@ -233,6 +233,7 @@ export type WorkspaceSessionPayload = {
     username?: string
     display_name?: string
     role?: string
+    capabilities?: string[]
     workspace_id?: string
     workspace_slug?: string
     workspace_name?: string
@@ -242,6 +243,153 @@ export type WorkspaceSessionPayload = {
 
 export async function getWorkspaceSession() {
   return workspaceFetch<WorkspaceSessionPayload>('/api/auth/session')
+}
+
+export type WorkspaceCapability =
+  | 'actions.view'
+  | 'sales.view'
+  | 'receiving.view'
+  | 'approvals.view'
+  | 'agent_ops.view'
+  | 'director.view'
+  | 'architect.view'
+  | 'documents.view'
+  | 'tenant_admin.view'
+  | 'platform_admin.view'
+  | 'connector_admin.view'
+  | 'knowledge_admin.view'
+  | 'security_admin.view'
+
+export type CapabilityProfile = {
+  roleKey: string
+  label: string
+  summary: string
+  capabilities: WorkspaceCapability[]
+}
+
+const MEMBER_CAPABILITIES: WorkspaceCapability[] = ['actions.view']
+const OPERATOR_CAPABILITIES: WorkspaceCapability[] = ['actions.view', 'sales.view', 'receiving.view', 'approvals.view', 'documents.view']
+const MANAGER_CAPABILITIES: WorkspaceCapability[] = [
+  ...OPERATOR_CAPABILITIES,
+  'agent_ops.view',
+  'director.view',
+  'architect.view',
+]
+const OWNER_CAPABILITIES: WorkspaceCapability[] = [
+  ...MANAGER_CAPABILITIES,
+  'tenant_admin.view',
+  'connector_admin.view',
+  'knowledge_admin.view',
+  'security_admin.view',
+]
+const PLATFORM_ADMIN_CAPABILITIES: WorkspaceCapability[] = [...OWNER_CAPABILITIES, 'platform_admin.view']
+
+const ROLE_CAPABILITY_PROFILES: Record<string, Omit<CapabilityProfile, 'roleKey'>> = {
+  member: {
+    label: 'Member',
+    summary: 'Works assigned queues and sees the shared task layer.',
+    capabilities: MEMBER_CAPABILITIES,
+  },
+  operator: {
+    label: 'Operator',
+    summary: 'Runs sales, receiving, approvals, and document workflows.',
+    capabilities: OPERATOR_CAPABILITIES,
+  },
+  manager: {
+    label: 'Manager',
+    summary: 'Runs teams, reviews approvals, and sees command surfaces.',
+    capabilities: MANAGER_CAPABILITIES,
+  },
+  owner: {
+    label: 'Owner',
+    summary: 'Owns tenant posture, rollout, and security-sensitive controls.',
+    capabilities: OWNER_CAPABILITIES,
+  },
+  tenant_admin: {
+    label: 'Tenant Admin',
+    summary: 'Owns module access, connector scope, and tenant control-plane work.',
+    capabilities: OWNER_CAPABILITIES,
+  },
+  platform_admin: {
+    label: 'Platform Admin',
+    summary: 'Owns cross-tenant provisioning, security, and platform-wide governance.',
+    capabilities: PLATFORM_ADMIN_CAPABILITIES,
+  },
+  product_owner: {
+    label: 'Product Owner',
+    summary: 'Owns product direction, module graduation, and rollout packaging across the platform.',
+    capabilities: ['actions.view', 'approvals.view', 'agent_ops.view', 'architect.view', 'tenant_admin.view', 'knowledge_admin.view'],
+  },
+  implementation_lead: {
+    label: 'Implementation Lead',
+    summary: 'Maps clients into modules, connectors, roles, and rollout order.',
+    capabilities: ['actions.view', 'approvals.view', 'agent_ops.view', 'architect.view', 'tenant_admin.view', 'knowledge_admin.view'],
+  },
+  tenant_operator: {
+    label: 'Tenant Operator',
+    summary: 'Monitors tenant runtime health, approvals, and daily operational flow.',
+    capabilities: ['actions.view', 'approvals.view', 'agent_ops.view', 'documents.view'],
+  },
+  director: {
+    label: 'Director',
+    summary: 'Reviews risk, revenue, and approval posture from the command layer.',
+    capabilities: ['director.view', 'sales.view', 'approvals.view', 'actions.view'],
+  },
+  plant_manager: {
+    label: 'Plant Manager',
+    summary: 'Runs plant queues, receiving issues, and daily operational follow-up.',
+    capabilities: ['actions.view', 'receiving.view', 'approvals.view', 'documents.view'],
+  },
+  procurement_lead: {
+    label: 'Procurement Lead',
+    summary: 'Owns supplier follow-up, evidence chase, and inbound discrepancy flow.',
+    capabilities: ['receiving.view', 'approvals.view', 'documents.view', 'actions.view'],
+  },
+  receiving_clerk: {
+    label: 'Receiving Clerk',
+    summary: 'Captures inbound issues and keeps the next action visible.',
+    capabilities: ['receiving.view', 'actions.view', 'documents.view'],
+  },
+  quality_manager: {
+    label: 'Quality Manager',
+    summary: 'Runs quality incidents, CAPA, and controlled closeout.',
+    capabilities: ['actions.view', 'approvals.view', 'documents.view', 'knowledge_admin.view'],
+  },
+  finance_controller: {
+    label: 'Finance Controller',
+    summary: 'Reviews supplier exposure, approvals, and financial risk.',
+    capabilities: ['approvals.view', 'director.view', 'sales.view', 'documents.view'],
+  },
+  sales_lead: {
+    label: 'Sales Lead',
+    summary: 'Owns account follow-up, pipeline risk, and commercial review.',
+    capabilities: ['sales.view', 'actions.view', 'director.view'],
+  },
+}
+
+export function normalizeWorkspaceRole(role?: string | null) {
+  return String(role ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '_')
+}
+
+export function getCapabilityProfileForRole(role?: string | null): CapabilityProfile {
+  const roleKey = normalizeWorkspaceRole(role) || 'member'
+  const profile = ROLE_CAPABILITY_PROFILES[roleKey] ?? ROLE_CAPABILITY_PROFILES.member
+  return {
+    roleKey,
+    ...profile,
+  }
+}
+
+export function roleHasCapability(role: string | null | undefined, capability: WorkspaceCapability) {
+  return getCapabilityProfileForRole(role).capabilities.includes(capability)
+}
+
+export function sessionHasCapability(session: WorkspaceSessionPayload['session'] | null | undefined, capability: WorkspaceCapability) {
+  const declaredCapabilities = (session?.capabilities ?? []).map((item) => String(item).trim()) as WorkspaceCapability[]
+  return declaredCapabilities.includes(capability) || roleHasCapability(session?.role, capability)
 }
 
 export type TeamMemberRow = {

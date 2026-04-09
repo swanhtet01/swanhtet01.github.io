@@ -77,7 +77,7 @@ export function DocumentIntakePage() {
           <p className="sm-kicker text-[var(--sm-accent)]">Upload a file</p>
           <h2 className="mt-3 text-3xl font-bold text-white">Use actual documents, not just pasted text.</h2>
           <p className="mt-3 text-sm text-[var(--sm-muted)]">
-            This intake layer reads supported PDFs, spreadsheets, text files, CSV, and JSON, then suggests the right SuperMega module to route it into.
+            This intake layer reads supported PDFs, spreadsheets, text files, CSV, and JSON, then suggests the right SUPERMEGA.dev module to route it into.
           </p>
 
           <div className="mt-6 grid gap-3">

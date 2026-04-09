@@ -174,7 +174,7 @@ export function buildLocalSolutionBlueprint(request: SolutionArchitectRequest): 
     service_packs: servicePacks,
     primary_pack: servicePacks[0],
     wedge_product: 'Action OS',
-    flagship: 'SuperMega OS',
+    flagship: 'SUPERMEGA.dev tenant stack',
     recommended_modules: recommendedModules.map((name) => ({ name, reason: MODULE_REASONS[name] || 'Recommended based on the operating profile.' })),
     semi_products: semiProducts,
     free_tools: freeTools,
@@ -201,7 +201,7 @@ export function buildLocalSolutionBlueprint(request: SolutionArchitectRequest): 
     risks: [
       'Do not oversell full ERP replacement before the first action and control layers are stable.',
       'Keep browser-side automation as a sidecar, not the source of truth.',
-      'Add approvals before enabling deeper autonomous writes.',
+      'Add approvals before enabling deeper autonomous writes or ERP write-back.',
     ],
   }
 }

@@ -34,13 +34,13 @@ Harbor Dental Studio | www.harbordentalstudio.com | care@harbordentalstudio.com 
 Atlas Logistics Hub | www.atlaslogisticshub.com | contact@atlaslogisticshub.com | +1 555 777 8888 | warehouse and distribution
 Summit Industrial Supply | www.summitindustrialsupply.com | sales@summitindustrialsupply.com | +1 555 999 0000 | industrial supplier`
 
-export const MARKET_SAMPLE_TEXT = `Long queues form as vehicles line up for fuel in Yangon.
-MRPPA market note: RSS 1 at USD 1800 to 2200 per ton.
+export const MARKET_SAMPLE_TEXT = `Fuel costs increased across several shipping lanes this week.
+RSS 1 pricing moved to USD 1,800 to 2,200 per ton in the latest commodity note.
 Customs clearance delay reported on one inbound industrial shipment.
-Distributor demand shifts toward truck tyres this week.`
+Distributor demand shifted toward truck tyres and industrial buyers this week.`
 
-export const MARKET_SAMPLE_URLS = `https://www.gnlm.com.mm/
-https://elevenmyanmar.com/`
+export const MARKET_SAMPLE_URLS = `https://www.reuters.com/markets/commodities/
+https://www.spglobal.com/commodityinsights/en`
 
 export const ACTION_SAMPLE_TEXT = `Customer reply still waiting | Sales Team
 Missing production update from Shift B | Operations Team

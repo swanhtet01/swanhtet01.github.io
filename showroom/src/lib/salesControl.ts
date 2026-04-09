@@ -27,6 +27,9 @@ export type StarterPackDetail = {
   starterModules: string[]
   knowledgeModules: string[]
   infrastructureModules: string[]
+  problemsSolved: string[]
+  integrations: string[]
+  controls: string[]
   agentLoops: string[]
   usedFor: string[]
   proofTool: { label: string; route: string }
@@ -125,22 +128,22 @@ export const PLATFORM_LAYER_DETAILS: PlatformLayerDetail[] = [
     id: 'application-layer',
     name: 'Products',
     layer: 'Application',
-    detail: 'The screens teams actually open every day.',
+    detail: 'The live screens teams actually open every day.',
     modules: ['Find Clients', 'Company List', 'Receiving Log', 'Task List', 'Client Portal', 'Daily Summary'],
   },
   {
     id: 'knowledge-layer',
     name: 'Shared data',
     layer: 'Knowledge',
-    detail: 'The shared records, notes, files, and decisions behind every product.',
+    detail: 'The shared records, notes, files, and decisions behind every product and every tenant.',
     modules: ['Company Records', 'Decision Log', 'Document Intake', 'Knowledge Base'],
   },
   {
     id: 'infrastructure-layer',
     name: 'Connections and automation',
     layer: 'Infrastructure',
-    detail: 'The connections, rules, permissions, and background jobs that keep the system moving.',
-    modules: ['Connectors', 'Workflow Rules', 'Automation Jobs', 'Permissions', 'Health Checks'],
+    detail: 'The connections, rules, permissions, audit, and background jobs that keep the system moving.',
+    modules: ['Connectors', 'Workflow Rules', 'Automation Jobs', 'Permissions', 'Audit Trail', 'Health Checks'],
   },
 ]
 
@@ -223,6 +226,13 @@ export const STARTER_PACK_DETAILS: StarterPackDetail[] = [
     starterModules: ['Find Clients', 'Company List'],
     knowledgeModules: ['Company Records', 'Notes and decisions'],
     infrastructureModules: ['Connectors', 'Automation rules', 'Permissions and history'],
+    problemsSolved: [
+      'Build a clean shortlist of distributors, dealers, or partners in a new market.',
+      'Turn raw search results into owned follow-up instead of bookmarks and open tabs.',
+      'Keep first outreach, notes, and next step together for the team.',
+    ],
+    integrations: ['Gmail', 'Google Sheets', 'Google Drive', 'CSV', 'API'],
+    controls: ['Search history', 'Row ownership', 'Notes history', 'Role-based edits'],
     agentLoops: ['New company watch', 'List cleanup', 'Daily summary'],
     usedFor: ['new prospecting', 'channel mapping', 'partner outreach'],
     proofTool: { label: 'Find Clients', route: '/find-companies' },
@@ -248,6 +258,13 @@ export const STARTER_PACK_DETAILS: StarterPackDetail[] = [
     starterModules: ['Company List', 'Task List'],
     knowledgeModules: ['Company Records', 'Imported notes'],
     infrastructureModules: ['File imports', 'Automation rules', 'Permissions and history'],
+    problemsSolved: [
+      'Clean a CRM export before the team starts calling from it.',
+      'Merge sheet rows, scraped lists, and inbox notes into one working list.',
+      'Assign owners and next steps to each kept company.',
+    ],
+    integrations: ['CSV', 'Google Sheets', 'Google Drive', 'Gmail', 'CRM export'],
+    controls: ['Dedupe review', 'Import history', 'Role-based edits', 'Audit trail'],
     agentLoops: ['List cleanup', 'Task triage', 'Daily summary'],
     usedFor: ['CRM cleanup', 'event lead cleanup', 'customer list rebuild'],
     proofTool: { label: 'Company List', route: '/company-list' },
@@ -273,6 +290,13 @@ export const STARTER_PACK_DETAILS: StarterPackDetail[] = [
     starterModules: ['Receiving Log', 'Task List'],
     knowledgeModules: ['Attached documents', 'Issue notes'],
     infrastructureModules: ['Workflow rules', 'Alerts', 'Permissions and history'],
+    problemsSolved: [
+      'Track shortages, holds, and missing GRN evidence in one queue.',
+      'Route supplier follow-up without losing files, notes, or decision history.',
+      'Give plant and procurement managers the same live exception view.',
+    ],
+    integrations: ['Gmail', 'Google Drive', 'Google Sheets', 'ERP extracts', 'Uploaded documents'],
+    controls: ['Role-based queues', 'Approval gates', 'Attachment history', 'Exception audit'],
     agentLoops: ['Task triage', 'Exception watch', 'Daily summary'],
     usedFor: ['warehouse receiving', 'plant inbound checks', 'supplier exception control'],
     proofTool: { label: 'Receiving Log', route: '/receiving-log' },
@@ -307,7 +331,7 @@ export function getStarterPackDetail(productIdOrSlug: string | null | undefined)
 }
 
 export const FINDER_ADVANTAGES = [
-  'Search gives raw names. SuperMega gives you a shortlist you can actually work from.',
+  'Search gives raw names. SUPERMEGA.dev gives you a shortlist you can actually work from.',
   'Each kept company carries fit reasons, contact clues, and the first follow-up instead of becoming another bookmark.',
   'Already have names? Company List turns messy rows into one usable list without manual cleanup.',
   'Saved searches rerun the same market search without starting from zero each time.',

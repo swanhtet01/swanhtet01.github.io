@@ -1,23 +1,31 @@
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 
-import { getWorkspaceSession, logoutWorkspace } from '../lib/workspaceApi'
+import { getCapabilityProfileForRole, getWorkspaceSession, logoutWorkspace, type WorkspaceCapability } from '../lib/workspaceApi'
+import { BrandMark, BrandWordmark } from './Brand'
 
 type SessionState = {
   display_name?: string
   role?: string
+  capabilities?: string[]
   workspace_name?: string
   workspace_slug?: string
 }
 
-const appNavItems = [
-  { label: 'My Queue', to: '/app/actions' },
-  { label: 'Sales', to: '/app/sales' },
-  { label: 'Receiving', to: '/app/receiving' },
-  { label: 'Approvals', to: '/app/approvals' },
-  { label: 'Agent Ops', to: '/app/teams' },
-  { label: 'Director', to: '/app/director' },
-] as const
+const appNavItems: Array<{ label: string; to: string; requires: WorkspaceCapability[] }> = [
+  { label: 'My Queue', to: '/app/actions', requires: ['actions.view'] },
+  { label: 'Sales', to: '/app/sales', requires: ['sales.view'] },
+  { label: 'Receiving', to: '/app/receiving', requires: ['receiving.view'] },
+  { label: 'Approvals', to: '/app/approvals', requires: ['approvals.view'] },
+  { label: 'Agent Ops', to: '/app/teams', requires: ['agent_ops.view', 'tenant_admin.view', 'platform_admin.view'] },
+  { label: 'Director', to: '/app/director', requires: ['director.view'] },
+  { label: 'Architect', to: '/app/architect', requires: ['architect.view', 'tenant_admin.view', 'platform_admin.view'] },
+  { label: 'Factory', to: '/app/factory', requires: ['agent_ops.view', 'architect.view', 'tenant_admin.view', 'platform_admin.view'] },
+  { label: 'Connectors', to: '/app/connectors', requires: ['connector_admin.view', 'tenant_admin.view', 'platform_admin.view'] },
+  { label: 'Knowledge', to: '/app/knowledge', requires: ['knowledge_admin.view', 'tenant_admin.view', 'platform_admin.view'] },
+  { label: 'Policies', to: '/app/policies', requires: ['security_admin.view', 'tenant_admin.view', 'platform_admin.view'] },
+  { label: 'Platform Admin', to: '/app/platform-admin', requires: ['tenant_admin.view', 'platform_admin.view'] },
+]
 
 const navClassName = ({ isActive }: { isActive: boolean }) =>
   `rounded-xl px-3 py-2 text-sm font-semibold transition ${
@@ -75,7 +83,7 @@ export function AppFrame() {
     return (
       <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(37,208,255,0.12),_transparent_30%),linear-gradient(180deg,#020611_0%,#07111f_40%,#07111f_100%)] text-[var(--sm-ink)]">
         <div className="mx-auto flex min-h-screen max-w-6xl items-center justify-center px-4">
-          <div className="sm-chip text-white">Loading SuperMega...</div>
+          <div className="sm-chip text-white">Loading SUPERMEGA.dev...</div>
         </div>
       </div>
     )
@@ -105,29 +113,35 @@ export function AppFrame() {
     )
   }
 
+  const capabilityProfile = getCapabilityProfileForRole(session?.role)
+  const declaredCapabilities = (session?.capabilities ?? []) as WorkspaceCapability[]
+  const capabilitySet = new Set<WorkspaceCapability>([...capabilityProfile.capabilities, ...declaredCapabilities])
+  const visibleNavItems = appNavItems.filter((item) => item.requires.some((capability) => capabilitySet.has(capability)))
+
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(37,208,255,0.1),_transparent_30%),linear-gradient(180deg,#020611_0%,#07111f_40%,#07111f_100%)] text-[var(--sm-ink)]">
       <div className="border-b border-white/8 bg-[rgba(3,8,18,0.9)] backdrop-blur-xl">
         <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-4 lg:flex-row lg:items-center lg:justify-between lg:px-8">
           <div className="flex items-center gap-4">
             <NavLink className="flex items-center gap-3" to="/app/actions">
-              <span className="flex h-11 w-11 items-center justify-center rounded-xl border border-[rgba(37,208,255,0.22)] bg-[rgba(37,208,255,0.08)] text-sm font-extrabold text-[var(--sm-accent)]">
-                SM
-              </span>
+              <BrandMark className="h-11 w-11" />
               <div>
-                <p className="sm-logo text-lg font-extrabold tracking-tight text-white">SuperMega Control Room</p>
+                <BrandWordmark className="text-lg text-white" />
                 <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[var(--sm-muted)]">
-                  {session?.workspace_name || 'Shared operator surface'}
+                  {session?.workspace_name || 'Tenant workspace'}
                 </p>
               </div>
             </NavLink>
             <span className="sm-status-pill hidden lg:inline-flex">
-              {session?.display_name || 'User'} / {session?.role || 'member'}
+              {session?.display_name || 'User'} / {capabilityProfile.label}
+            </span>
+            <span className="sm-status-pill hidden xl:inline-flex">
+              {capabilityProfile.summary}
             </span>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            {appNavItems.map((item) => (
+            {visibleNavItems.map((item) => (
               <NavLink className={navClassName} key={item.to} to={item.to}>
                 {item.label}
               </NavLink>

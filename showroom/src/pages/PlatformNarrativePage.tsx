@@ -1,127 +1,49 @@
 import { Link } from 'react-router-dom'
 
+import { enterpriseSignals, metaTools, ytfDeployment } from '../content'
 import { PageIntro } from '../components/PageIntro'
+import { BUILD_TEAMS, MODULE_FACTORY_STAGES, RESEARCH_PRIORITIES } from '../lib/companyBuildingModel'
 import { PLATFORM_LAYER_DETAILS, STARTER_PACK_DETAILS } from '../lib/salesControl'
 
-type StackModule = {
-  id: string
-  name: string
-  purpose: string
-  looksLike: string
-}
-
 const disruptionPoints = [
-  'You stop buying separate tools for CRM, approvals, portals, reporting, cleanup, and operational follow-up.',
-  'The same company context stops getting retyped into chats, sheets, inboxes, dashboards, and disconnected apps.',
-  'Automation handles repetitive prep work so the product can stay smaller, clearer, and easier to trust.',
+  'Replace CRM + spreadsheet + chat handoff with one owned queue per job.',
+  'Keep files, approvals, decisions, and follow-up attached to the same record.',
+  'Let agents prepare work, while humans keep approval over the risky writes.',
 ]
 
-const knowledgePrinciples = [
-  'Every account, request, approval, file, and decision should live in shared data.',
-  'Documents, chats, inboxes, and exports should become reusable records instead of dead attachments.',
-  'The same records should power queues, client views, leadership review, and background jobs.',
+const memoryPrinciples = [
+  'Company memory should store accounts, files, tasks, decisions, and workflow state together.',
+  'Uploads, Drive files, inbox threads, and notes should become reusable records instead of dead attachments.',
+  'The same records should power operator queues, management review, and agent jobs.',
 ]
 
-const infrastructurePrinciples = [
-  'One connection layer for Gmail, Drive, Sheets, ERP extracts, uploads, APIs, and operational feeds.',
-  'One workflow layer for statuses, owners, timers, escalations, approvals, and handoffs.',
-  'One automation layer for watchers, triage, summaries, follow-up, and recovery loops.',
-  'One permissions layer for access, tenants, audit, and role-specific views.',
+const runtimePrinciples = [
+  'Use one connector layer for Gmail, Drive, Sheets, CSV, ERP exports, uploads, and APIs.',
+  'Use one workflow layer for ownership, timers, approvals, escalations, and handoffs.',
+  'Use one agent layer for cleanup, triage, monitoring, summaries, and follow-up.',
+  'Use one control layer for tenant access, roles, audit, and health checks.',
 ]
 
-const knowledgeModules: StackModule[] = [
-  {
-    id: 'company-memory',
-    name: 'Company Memory',
-    purpose: 'Keep accounts, approvals, notes, files, and workflow state in one reusable company context.',
-    looksLike: 'Entities, timelines, summaries, linked records',
-  },
-  {
-    id: 'decision-journal',
-    name: 'Decision Journal',
-    purpose: 'Track approvals, escalations, and directional decisions in one searchable reasoning trail.',
-    looksLike: 'Decision log, evidence, approver, outcome',
-  },
-  {
-    id: 'document-intelligence',
-    name: 'Document Intelligence',
-    purpose: 'Read inbound files, classify them, extract useful fields, and route them into owned work.',
-    looksLike: 'Ingest, classify, extract, route',
-  },
-  {
-    id: 'knowledge-base',
-    name: 'Knowledge Base',
-    purpose: 'Publish internal and client-facing SOPs, playbooks, onboarding modules, and controlled answers.',
-    looksLike: 'Articles, playbooks, permissions, versioned content',
-  },
+const currentGaps = [
+  'Deeper tenant isolation is still needed across every operational table, not only workspace members, tasks, and agent runs.',
+  'RBAC is still coarse. Module-level policy, row-level access, SSO, and MFA are the next enterprise layer.',
+  'Google connectors are live for draft, export, link, and import workflows, but not yet full bidirectional sync everywhere.',
+  'Company memory is real today. A deeper knowledge-graph layer is still roadmap, not shipped.',
 ]
-
-const infrastructureModules: StackModule[] = [
-  {
-    id: 'connector-hub',
-    name: 'Connector Hub',
-    purpose: 'Bring Gmail, Drive, Sheets, ERP extracts, uploads, and operational exports into one ingest layer.',
-    looksLike: 'Connectors, sync state, source map, error queue',
-  },
-  {
-    id: 'workflow-runtime',
-    name: 'Workflow Runtime',
-    purpose: 'Power statuses, owners, timers, escalations, approvals, and handoffs across all modules.',
-    looksLike: 'States, rules, timers, transitions',
-  },
-  {
-    id: 'agent-runtime',
-    name: 'Agent Runtime',
-    purpose: 'Run triage, cleanup, watcher, summary, follow-up, and recovery loops against live company state.',
-    looksLike: 'Job types, runs, schedules, retries, approval gates',
-  },
-  {
-    id: 'identity-governance',
-    name: 'Identity and Governance',
-    purpose: 'Manage tenant access, user roles, external portal permissions, and audit across the platform.',
-    looksLike: 'Roles, tenants, scopes, audit trail',
-  },
-  {
-    id: 'observability',
-    name: 'Observability',
-    purpose: 'Track queue health, connector failures, stale data, and agent drift before operators lose trust.',
-    looksLike: 'Health board, alerts, failure lanes, stale-run signals',
-  },
-]
-
-const usageModes = [
-  {
-    name: 'For your team',
-    detail: 'Use SuperMega as the operating layer for your own queues, approvals, documents, and automations.',
-  },
-  {
-    name: 'For your own workspace',
-    detail: 'Use the same system as a personal workspace for briefs, tasks, decisions, notes, and follow-up.',
-  },
-  {
-    name: 'For clients',
-    detail: 'Deploy branded external systems for customers, suppliers, partners, and managed-service operations on top of the same base.',
-  },
-  {
-    name: 'For self-hosted builds',
-    detail: 'Reuse shared code while tenant-specific workflows, data, and private products stay separate.',
-  },
-] as const
 
 const openBuildPrinciples = [
-  'Shared runtime pieces can be open while private tenant workflows stay private.',
-  'Your own workspace can run first before the same system is sold outward to clients.',
-  'Internal tools and client products should share data and automation instead of becoming two separate products.',
-  'Open modules should make the platform easier to trust, extend, and self-host when needed.',
-] as const
+  'Shared runtime pieces can be opened without exposing tenant workflows or customer data.',
+  'Internal tools, client workspaces, and operator modules should keep sharing the same platform base.',
+  'The clean split is reusable framework in public code and tenant-specific models, workflows, and connectors in private deployments.',
+]
 
 export function PlatformNarrativePage() {
   return (
     <div className="space-y-10 pb-12">
       <PageIntro
-        eyebrow="How it works"
-        title="One system for products, internal tools, and your own workspace."
-        description="Start with one product. Keep data, permissions, connections, and automation connected behind it. Use the same base for your own team, your own workspace, or client setups."
+        eyebrow="Enterprise setup"
+        title="One system for live products, tenant workspaces, and internal operations."
+        description="Start with one live product. Keep roles, approvals, audit, connectors, and agent jobs on the same base. Use that base for your own company, your internal tools, and named client tenants."
       />
 
       <section className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
@@ -129,8 +51,8 @@ export function PlatformNarrativePage() {
           <p className="sm-kicker text-[var(--sm-accent)]">Why this matters</p>
           <h2 className="mt-3 max-w-3xl text-3xl font-bold text-white lg:text-5xl">The goal is to replace tool sprawl, not decorate it.</h2>
           <p className="mt-4 max-w-2xl text-base leading-relaxed text-[var(--sm-muted)]">
-            Traditional stacks stretch one workflow across CRM, ticketing, portals, spreadsheets, approvals, dashboards, storage, and chat.
-            SuperMega keeps that work in one connected system shaped around the company itself.
+            Most teams still split one process across CRM, sheets, inboxes, shared drives, chat approvals, and status meetings. SUPERMEGA.dev keeps the
+            work in one operating layer shaped around the company itself.
           </p>
 
           <div className="mt-6 space-y-3">
@@ -145,8 +67,8 @@ export function PlatformNarrativePage() {
 
         <article className="sm-site-proof-panel">
           <div className="sm-site-proof-head">
-            <span>Software stack</span>
-            <span>Business modules + knowledge + runtime</span>
+            <span>Platform layers</span>
+            <span>Products + shared records + controls</span>
           </div>
           <div className="grid gap-4 p-5 md:grid-cols-3">
             {PLATFORM_LAYER_DETAILS.map((item) => (
@@ -157,7 +79,7 @@ export function PlatformNarrativePage() {
             ))}
           </div>
           <div className="sm-site-proof-foot">
-            <span>Start from one working product. Expand through the same base instead of buying another category product.</span>
+            <span>Start from one live product, then expand through the same base instead of buying another SaaS category.</span>
             <div className="flex flex-wrap gap-4">
               <Link className="sm-link" to="/products">
                 Explore products
@@ -170,30 +92,11 @@ export function PlatformNarrativePage() {
       <section className="sm-site-panel">
         <div className="sm-site-proof-strip">
           <div>
-            <p className="sm-kicker text-[var(--sm-accent)]">Usage modes</p>
-            <h2 className="mt-3 max-w-3xl text-3xl font-bold text-white lg:text-4xl">This is not only for clients. It is also for your own tools and workspace.</h2>
+            <p className="sm-kicker text-[var(--sm-accent)]">What is already real</p>
+            <h2 className="mt-3 max-w-3xl text-3xl font-bold text-white lg:text-4xl">The app already has live modules, tenant detection, roles, and agent operations.</h2>
             <p className="mt-3 max-w-2xl text-sm leading-relaxed text-[var(--sm-muted)] lg:text-base">
-              The same platform can start as your internal operating stack, become your own workspace, and later expand into client systems or self-hosted builds.
-            </p>
-          </div>
-          <div className="grid gap-4 md:grid-cols-2">
-            {usageModes.map((item) => (
-              <article className="sm-demo-link sm-demo-link-card" key={item.name}>
-                <strong>{item.name}</strong>
-                <span>{item.detail}</span>
-              </article>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <section className="sm-site-panel">
-        <div className="sm-site-proof-strip">
-          <div>
-            <p className="sm-kicker text-[var(--sm-accent)]">Application layer</p>
-            <h2 className="mt-3 max-w-3xl text-3xl font-bold text-white lg:text-4xl">Business modules teams can adopt immediately.</h2>
-            <p className="mt-3 max-w-2xl text-sm leading-relaxed text-[var(--sm-muted)] lg:text-base">
-              These are the entry points into the wider platform. Each one starts with a narrow workflow and expands into a company system later.
+              The strongest live entry points today are the public products plus the internal app surfaces for approvals, decisions, receiving, metrics,
+              documents, director review, and agent teams.
             </p>
           </div>
           <div className="grid gap-4 md:grid-cols-3">
@@ -211,51 +114,126 @@ export function PlatformNarrativePage() {
       <section className="grid gap-6 xl:grid-cols-[1fr_1fr]">
         <article className="sm-site-panel">
           <div>
-            <p className="sm-kicker text-[var(--sm-accent)]">Shared data</p>
-            <h2 className="mt-3 max-w-3xl text-3xl font-bold text-white lg:text-4xl">Shared records are part of the product, not a side feature.</h2>
+            <p className="sm-kicker text-[var(--sm-accent)]">Company memory</p>
+            <h2 className="mt-3 max-w-3xl text-3xl font-bold text-white lg:text-4xl">Shared records first, deeper knowledge layer second.</h2>
+            <p className="mt-4 max-w-2xl text-sm leading-relaxed text-[var(--sm-muted)]">
+              Today the honest claim is structured company memory: records, files, notes, decisions, and workflow state in one system. That is enough to
+              power queues, briefs, and agent jobs now. A deeper knowledge graph can come later.
+            </p>
           </div>
 
           <div className="mt-6 space-y-3">
-            {knowledgePrinciples.map((item) => (
+            {memoryPrinciples.map((item) => (
               <div className="sm-site-point" key={item}>
                 <span className="sm-site-point-dot" />
                 <span>{item}</span>
               </div>
-            ))}
-          </div>
-
-          <div className="mt-6 grid gap-3">
-            {knowledgeModules.map((module) => (
-              <article className="sm-demo-link sm-demo-link-card" key={module.id}>
-                <strong>{module.name}</strong>
-                <span>{module.purpose}</span>
-                <small className="text-[var(--sm-muted)]">Looks like: {module.looksLike}</small>
-              </article>
             ))}
           </div>
         </article>
 
         <article className="sm-site-panel">
           <div>
-            <p className="sm-kicker text-[var(--sm-accent)]">Connections and automation</p>
-            <h2 className="mt-3 max-w-3xl text-3xl font-bold text-white lg:text-4xl">Connections, workflow rules, permissions, and automation under every module.</h2>
+            <p className="sm-kicker text-[var(--sm-accent)]">Connectors and runtime</p>
+            <h2 className="mt-3 max-w-3xl text-3xl font-bold text-white lg:text-4xl">Connect real company inputs without pretending the stack is magic.</h2>
+            <p className="mt-4 max-w-2xl text-sm leading-relaxed text-[var(--sm-muted)]">
+              The current system is strongest at imports, exports, file intake, app state, Gmail draft workflows, Drive links, and API-backed queues. It
+              is not yet full bidirectional sync for every source, and the site should stay honest about that.
+            </p>
           </div>
 
           <div className="mt-6 space-y-3">
-            {infrastructurePrinciples.map((item) => (
+            {runtimePrinciples.map((item) => (
               <div className="sm-site-point" key={item}>
                 <span className="sm-site-point-dot" />
                 <span>{item}</span>
               </div>
             ))}
           </div>
+        </article>
+      </section>
 
-          <div className="mt-6 grid gap-3">
-            {infrastructureModules.map((module) => (
-              <article className="sm-demo-link sm-demo-link-card" key={module.id}>
-                <strong>{module.name}</strong>
-                <span>{module.purpose}</span>
-                <small className="text-[var(--sm-muted)]">Looks like: {module.looksLike}</small>
+      <section className="sm-site-panel">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <p className="sm-kicker text-[var(--sm-accent)]">Enterprise controls</p>
+            <h2 className="mt-3 max-w-3xl text-3xl font-bold text-white lg:text-4xl">This is the control layer under the products.</h2>
+          </div>
+          <p className="max-w-2xl text-sm leading-relaxed text-[var(--sm-muted)] lg:text-base">
+            Roles, approvals, audit, connector health, and tenant workspaces are part of the platform model, not optional extras.
+          </p>
+        </div>
+        <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {enterpriseSignals.map((item) => (
+            <article className="sm-demo-link sm-demo-link-card" key={item.name}>
+              <strong>{item.name}</strong>
+              <span>{item.detail}</span>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section className="sm-site-panel">
+        <div className="sm-site-proof-strip">
+          <div>
+            <p className="sm-kicker text-[var(--sm-accent)]">Internal meta tools</p>
+            <h2 className="mt-3 max-w-3xl text-3xl font-bold text-white lg:text-4xl">The internal control layer is also part of the product strategy.</h2>
+            <p className="mt-3 max-w-2xl text-sm leading-relaxed text-[var(--sm-muted)] lg:text-base">
+              The rollout tools, agent controls, and director views should live in the same app so implementation work and customer work do not drift
+              apart.
+            </p>
+          </div>
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            {metaTools.map((item) => (
+              <article className="sm-demo-link sm-demo-link-card" key={item.name}>
+                <strong>{item.name}</strong>
+                <span>{item.detail}</span>
+              </article>
+            ))}
+          </div>
+          <div className="flex flex-wrap gap-3">
+            <Link className="sm-button-primary" to="/app/platform-admin">
+              Open platform admin
+            </Link>
+            <Link className="sm-button-secondary" to="/factory">
+              Open build studio
+            </Link>
+            <Link className="sm-button-secondary" to="/app/architect">
+              Open architect
+            </Link>
+          </div>
+        </div>
+      </section>
+
+      <section className="grid gap-6 xl:grid-cols-[0.94fr_1.06fr]">
+        <article className="sm-site-panel">
+          <p className="sm-kicker text-[var(--sm-accent)]">Efficient build order</p>
+          <h2 className="mt-3 max-w-3xl text-3xl font-bold text-white lg:text-4xl">Do not build everything at once. Graduate one workflow at a time.</h2>
+          <div className="mt-6 space-y-3">
+            {MODULE_FACTORY_STAGES.map((stage, index) => (
+              <article className="sm-proof-card" key={stage.id}>
+                <div className="flex items-center justify-between gap-3">
+                  <p className="font-semibold text-white">
+                    {index + 1}. {stage.name}
+                  </p>
+                  <span className="sm-status-pill">{stage.artifacts.join(' / ')}</span>
+                </div>
+                <p className="mt-3 text-sm text-[var(--sm-muted)]">{stage.detail}</p>
+              </article>
+            ))}
+          </div>
+        </article>
+
+        <article className="sm-site-panel">
+          <p className="sm-kicker text-[var(--sm-accent-alt)]">Execution teams</p>
+          <h2 className="mt-3 max-w-3xl text-3xl font-bold text-white lg:text-4xl">Keep the teams narrow so the platform compounds instead of fragmenting.</h2>
+          <div className="mt-6 grid gap-4 md:grid-cols-2">
+            {BUILD_TEAMS.map((team) => (
+              <article className="sm-demo-mini" key={team.id}>
+                <strong>{team.name}</strong>
+                <span>{team.mission}</span>
+                <small className="text-[var(--sm-muted)]">Owns: {team.ownership.join(', ')}</small>
+                <small className="text-[var(--sm-muted)]">Success: {team.metric}</small>
               </article>
             ))}
           </div>
@@ -265,10 +243,89 @@ export function PlatformNarrativePage() {
       <section className="sm-site-panel">
         <div className="sm-site-proof-strip">
           <div>
+            <p className="sm-kicker text-[var(--sm-accent)]">Named tenant example</p>
+            <h2 className="mt-3 max-w-3xl text-3xl font-bold text-white lg:text-4xl">{ytfDeployment.domain}</h2>
+            <p className="mt-3 max-w-2xl text-sm leading-relaxed text-[var(--sm-muted)] lg:text-base">{ytfDeployment.summary}</p>
+            <div className="mt-6 flex flex-wrap gap-3">
+              <Link className="sm-button-primary" to="/clients/yangon-tyre">
+                Open tenant blueprint
+              </Link>
+              <Link className="sm-button-secondary" to="/login">
+                Open tenant workspace
+              </Link>
+            </div>
+          </div>
+          <div className="grid gap-4 md:grid-cols-2">
+            <article className="sm-demo-mini">
+              <strong>Modules</strong>
+              <span>{ytfDeployment.modules.join(', ')}</span>
+            </article>
+            <article className="sm-demo-mini">
+              <strong>Roles</strong>
+              <span>{ytfDeployment.roles.join(', ')}</span>
+            </article>
+            <article className="sm-demo-mini">
+              <strong>Data sources</strong>
+              <span>{ytfDeployment.dataSources.join(', ')}</span>
+            </article>
+            <article className="sm-demo-mini">
+              <strong>Agent teams</strong>
+              <span>{ytfDeployment.agentTeams.join(', ')}</span>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section className="sm-site-panel">
+        <div className="sm-home-process-strip">
+          <div>
+            <p className="sm-kicker text-[var(--sm-accent)]">What grows next</p>
+            <h2 className="mt-3 max-w-3xl text-3xl font-bold text-white lg:text-5xl">The next enterprise layer is clear.</h2>
+            <p className="mt-4 max-w-2xl text-base leading-relaxed text-[var(--sm-muted)]">
+              The current stack is real enough to show as a branded pilot deployment. The next work is deeper isolation, stronger policy, and more
+              durable connector and memory layers.
+            </p>
+          </div>
+          <div className="grid gap-3 md:grid-cols-2">
+            {currentGaps.map((item) => (
+              <div className="sm-demo-mini" key={item}>
+                <strong>Next gap</strong>
+                <span>{item}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="sm-site-panel">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <p className="sm-kicker text-[var(--sm-accent)]">Highest-value next work</p>
+            <h2 className="mt-3 max-w-3xl text-3xl font-bold text-white lg:text-4xl">The next platform work should deepen the runtime, not add more marketing pages.</h2>
+          </div>
+          <p className="max-w-2xl text-sm leading-relaxed text-[var(--sm-muted)] lg:text-base">
+            The fastest path to more value is connector depth, stronger governance, and better agent reliability around the modules that already exist.
+          </p>
+        </div>
+        <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          {RESEARCH_PRIORITIES.map((priority) => (
+            <article className="sm-demo-link sm-demo-link-card" key={priority.id}>
+              <strong>{priority.name}</strong>
+              <span>{priority.thesis}</span>
+              <small className="text-[var(--sm-muted)]">Done when: {priority.graduation}</small>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section className="sm-site-panel">
+        <div className="sm-site-proof-strip">
+          <div>
             <p className="sm-kicker text-[var(--sm-accent)]">Open build model</p>
-            <h2 className="mt-3 max-w-3xl text-3xl font-bold text-white lg:text-4xl">Shared code and private products can coexist in one strategy.</h2>
+            <h2 className="mt-3 max-w-3xl text-3xl font-bold text-white lg:text-4xl">Open runtime and private tenants can coexist.</h2>
             <p className="mt-3 max-w-2xl text-sm leading-relaxed text-[var(--sm-muted)] lg:text-base">
-              If you want SuperMega to support open-source work as well, the clean path is to expose reusable layers while keeping tenant-specific workflows, data, and commercial products private where needed.
+              If the strategy includes open-source work, the right split is reusable runtime in public and tenant-specific workflows, connectors, and data
+              in private deployments.
             </p>
           </div>
           <div className="space-y-3">
@@ -283,50 +340,23 @@ export function PlatformNarrativePage() {
       </section>
 
       <section className="sm-site-panel">
-        <div className="sm-home-process-strip">
-          <div>
-            <p className="sm-kicker text-[var(--sm-accent)]">Rollout logic</p>
-            <h2 className="mt-3 max-w-3xl text-3xl font-bold text-white lg:text-5xl">Start small. Keep the system connected.</h2>
-            <p className="mt-4 max-w-2xl text-base leading-relaxed text-[var(--sm-muted)]">
-              The product becomes more valuable when a narrow daily workflow lands first, then the company grows into the same shared data and automation base instead of adding more fragmented tools.
-            </p>
-          </div>
-          <div className="grid gap-3 md:grid-cols-2">
-            <div className="sm-demo-mini">
-              <strong>01 Pick the bottleneck</strong>
-              <span>Start with the queue, workflow, or status view that already hurts every day.</span>
-            </div>
-            <div className="sm-demo-mini">
-              <strong>02 Launch one product</strong>
-              <span>Use the real data and habits the team already has instead of forcing a giant migration.</span>
-            </div>
-            <div className="sm-demo-mini">
-              <strong>03 Turn on agent loops</strong>
-              <span>Add cleanup, triage, summaries, and follow-up after the human workflow is trusted.</span>
-            </div>
-            <div className="sm-demo-mini">
-              <strong>04 Expand the platform</strong>
-              <span>Add knowledge and infrastructure modules that make the whole company smarter over time.</span>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section className="sm-site-panel">
         <div className="sm-site-final">
           <div>
             <p className="sm-kicker text-[var(--sm-accent)]">Next step</p>
-            <h2 className="mt-3 text-3xl font-bold text-white lg:text-5xl">Choose the first workflow, infrastructure layer, or workspace that should become software.</h2>
+            <h2 className="mt-3 text-3xl font-bold text-white lg:text-5xl">Choose the first workflow or tenant that should become software.</h2>
             <p className="mt-4 max-w-2xl text-base leading-relaxed text-[var(--sm-muted)]">
-              We can shape the first product, the supporting shared data, the connections behind it, and the split between private and open layers.
+              Bring the process, the files, and the people involved. We will map the first live module, the roles, the controls, and the rollout order.
             </p>
           </div>
           <div className="flex flex-wrap gap-3">
             <Link className="sm-button-primary" to="/contact">
-              Start the software map
+              Start rollout
+            </Link>
+            <Link className="sm-button-secondary" to="/factory">
+              See build studio
             </Link>
             <Link className="sm-button-secondary" to="/products">
-              Explore products
+              See live products
             </Link>
           </div>
         </div>

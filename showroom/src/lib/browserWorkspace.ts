@@ -85,12 +85,12 @@ function slugify(value: string) {
 
 export function buildBrowserOutreach(row: LeadRow, query: string, keywords: string[]) {
   const topic = query.trim() || keywords.join(', ') || 'your workflow'
-  const subject = `${row.name}: quick intro from SuperMega`
+  const subject = `${row.name}: quick intro from SUPERMEGA.dev`
   const message = [
     `Hi ${row.name} team,`,
     '',
     `I found you while researching ${topic}.`,
-    'SuperMega helps teams run follow-up, owners, and blockers in one workspace instead of scattered inboxes and sheets.',
+    'SUPERMEGA.dev helps teams run follow-up, owners, and blockers in one workspace instead of scattered inboxes and sheets.',
     '',
     'Would a short call next week be useful?',
   ].join('\n')

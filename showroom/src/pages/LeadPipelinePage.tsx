@@ -156,7 +156,7 @@ const STARTER_PACK_TASKS: Record<
       owner: 'Revenue Pod',
       priority: 'high',
       due: 'Today',
-      notes: 'Use Find Companies on one Myanmar market or one clear buyer type. Keep the shortlist narrow enough to act on today.',
+      notes: 'Use Find Clients on one clear market or one buyer type. Keep the shortlist narrow enough to act on today.',
       template: 'starter_sales_search',
     },
     {
@@ -362,7 +362,7 @@ export function LeadPipelinePage() {
           keywords: keywordList,
           sources: ['maps', 'web'],
           limit: searchLimit,
-          campaign_goal: 'Open one SuperMega pilot conversation.',
+          campaign_goal: 'Open one SUPERMEGA.dev rollout conversation.',
           export_workspace: true,
           owner: 'Growth Studio',
           status: 'active',
@@ -394,7 +394,7 @@ export function LeadPipelinePage() {
           keywords: keywordList,
           sources: ['maps', 'web'],
           limit: searchLimit,
-          campaign_goal: 'Open one SuperMega pilot conversation.',
+          campaign_goal: 'Open one SUPERMEGA.dev rollout conversation.',
           export_workspace: true,
         }),
       })
@@ -588,7 +588,7 @@ export function LeadPipelinePage() {
         <article className="sm-surface p-6">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <p className="sm-kicker text-[var(--sm-accent)]">What SuperMega sells</p>
+              <p className="sm-kicker text-[var(--sm-accent)]">What SUPERMEGA.dev sells</p>
               <h2 className="mt-2 text-2xl font-bold text-white">Three core offers only.</h2>
               <p className="mt-2 text-sm text-[var(--sm-muted)]">Each pack should create the first queue immediately. No blank rollout.</p>
             </div>
@@ -652,7 +652,7 @@ export function LeadPipelinePage() {
         </article>
 
         <article className="sm-surface p-6">
-          <p className="sm-kicker text-[var(--sm-accent)]">Why use Find Companies internally</p>
+          <p className="sm-kicker text-[var(--sm-accent)]">Why use Find Clients internally</p>
           <h2 className="mt-2 text-2xl font-bold text-white">This closes the loop after search.</h2>
           <div className="mt-5 grid gap-3">
             {FINDER_ADVANTAGES.map((item) => (
@@ -687,11 +687,11 @@ export function LeadPipelinePage() {
 
           <div className="mt-6 grid gap-3 md:grid-cols-3">
             <div className="sm-chip text-white">
-              <p className="sm-kicker text-[var(--sm-accent)]">Distributor Sales Desk</p>
+              <p className="sm-kicker text-[var(--sm-accent)]">Find Clients</p>
               <p className="mt-2 text-2xl font-bold">{packCounts.salesSetup}</p>
             </div>
             <div className="sm-chip text-white">
-              <p className="sm-kicker text-[var(--sm-accent-alt)]">List Cleanup Desk</p>
+              <p className="sm-kicker text-[var(--sm-accent-alt)]">Company List</p>
               <p className="mt-2 text-2xl font-bold">{packCounts.companyCleanup}</p>
             </div>
             <div className="sm-chip text-white">
@@ -940,11 +940,11 @@ export function LeadPipelinePage() {
 
         <article className="sm-surface p-6">
           <p className="sm-kicker text-[var(--sm-accent-alt)]">Operating rule</p>
-          <h2 className="mt-2 text-2xl font-bold text-white">How SuperMega should actually sell.</h2>
+          <h2 className="mt-2 text-2xl font-bold text-white">How SUPERMEGA.dev should actually sell.</h2>
           <div className="mt-5 grid gap-3">
             {[
               'Start from one narrow market or one imported list, not a huge segment.',
-              'Map each lead to one setup offer only: Distributor Sales Desk, List Cleanup Desk, or Receiving Control.',
+              'Map each lead to one setup offer only: Find Clients, Company List, or Receiving Control.',
               'Open Gmail from the lead card, then move the stage the same day.',
               'Keep every next step in the queue so search, list cleanup, and follow-up stay connected.',
             ].map((item) => (

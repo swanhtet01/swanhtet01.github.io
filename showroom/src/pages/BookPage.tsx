@@ -30,15 +30,15 @@ export function BookPage() {
             <div className="mt-6 flex flex-wrap gap-3">
               {bookingUrl ? (
                 <a className="sm-button-primary" href={bookingUrl} onClick={() => trackEvent('book_demo_click', { source: 'book_page' })} rel="noreferrer" target="_blank">
-                  Open calendar
+                  Book rollout call
                 </a>
               ) : (
                 <Link className="sm-button-primary" onClick={() => trackEvent('offer_open_click', { offer: 'Products' })} to="/products">
-                  See products
+                  See live products
                 </Link>
               )}
               <Link className="sm-button-secondary" to="/company-list?setup=leads">
-                Try a free tool first
+                Try a live product
               </Link>
             </div>
           </div>
@@ -46,7 +46,7 @@ export function BookPage() {
           <div className="border-l border-white/10 pl-5 lg:pl-8">
             <p className="sm-kicker text-[var(--sm-accent-alt)]">Call outcome</p>
             <div className="mt-5 space-y-4">
-              {['Pick one starter pack', 'Use the data they already have', 'Leave with the first working system plan'].map((item) => (
+              {['Pick one starting product', 'Use the data the team already has', 'Leave with a live rollout plan'].map((item) => (
                 <div className="border-b border-white/8 pb-3 text-base text-[var(--sm-muted)] last:border-b-0 last:pb-0" key={item}>
                   {item}
                 </div>
@@ -82,10 +82,10 @@ export function BookPage() {
             ))}
           </div>
           <div className="mt-6 text-sm text-[var(--sm-muted)]">
-            Best for Myanmar owner-led distributors, importers, stores, service teams, and plant teams still running work through Facebook pages, Viber or WhatsApp, email, spreadsheets, and disconnected SaaS.
+            Best for owner-led and operations-heavy teams still running work through chat, email, spreadsheets, exports, and disconnected SaaS.
           </div>
           <div className="mt-4 text-sm text-[var(--sm-muted)]">Free tools are there to prove the approach. The main product is the system we build for your team.</div>
-          {!bookingUrl ? <div className="mt-6 text-sm text-[var(--sm-muted)]">Calendar booking is not live on this host yet. Start with the products page or one of the free tools first.</div> : null}
+          {!bookingUrl ? <div className="mt-6 text-sm text-[var(--sm-muted)]">Calendar booking is not live on this host yet. Start with the products page or open a live product first.</div> : null}
         </aside>
       </section>
     </div>

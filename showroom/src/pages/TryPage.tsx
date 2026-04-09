@@ -42,7 +42,7 @@ const toolCards = [
     kind: 'Planning tool',
     name: 'Solution Architect',
     path: '/solution-architect',
-    tagline: 'Design the right SuperMega rollout before selling or building it.',
+    tagline: 'Design the right SUPERMEGA.dev rollout before selling or building it.',
     bullets: ['Choose the wedge product', 'See the first module stack', 'Get the next tooling layer'],
   },
 ]

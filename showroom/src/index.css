@@ -664,6 +664,36 @@ select.sm-input {
   letter-spacing: -0.04em;
 }
 
+.sm-brand-mark {
+  display: inline-flex;
+  flex: 0 0 auto;
+  overflow: hidden;
+  border-radius: 1rem;
+  box-shadow: 0 18px 44px -28px rgba(0, 0, 0, 0.82);
+}
+
+.sm-brand-mark svg {
+  display: block;
+  height: 100%;
+  width: 100%;
+}
+
+.sm-brand-wordmark {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.08em;
+  font-family: 'Bahnschrift', 'Aptos', 'Segoe UI', sans-serif;
+  font-weight: 800;
+  letter-spacing: -0.06em;
+  text-transform: uppercase;
+}
+
+.sm-brand-wordmark-dot {
+  color: var(--sm-accent);
+  letter-spacing: -0.04em;
+  text-transform: none;
+}
+
 .animate-rise {
   animation: rise-in 360ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }

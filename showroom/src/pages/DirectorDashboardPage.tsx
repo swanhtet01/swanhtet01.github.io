@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import { PageIntro } from '../components/PageIntro'
-import { checkWorkspaceHealth, getWorkspaceSession, workspaceFetch } from '../lib/workspaceApi'
+import { checkWorkspaceHealth, getCapabilityProfileForRole, getWorkspaceSession, sessionHasCapability, workspaceFetch } from '../lib/workspaceApi'
 
 type SummaryPayload = {
   actions?: { total_items?: number }
@@ -79,6 +79,11 @@ export function DirectorDashboardPage() {
         if (cancelled) return
         if (!session.authenticated) {
           setError('Login is required to open the director dashboard.')
+          setLoading(false)
+          return
+        }
+        if (!sessionHasCapability(session.session, 'director.view')) {
+          setError(`Director access is required for this dashboard. Current role: ${getCapabilityProfileForRole(session.session?.role).label}.`)
           setLoading(false)
           return
         }

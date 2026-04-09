@@ -656,7 +656,7 @@ export function WorkspaceLitePage() {
   }
 
   async function copyOutreach(lead: WorkspaceLeadItem) {
-    const subject = lead.outreachSubject || `Quick intro from SuperMega for ${lead.name}`
+    const subject = lead.outreachSubject || `Quick intro from SUPERMEGA.dev for ${lead.name}`
     const messageText = lead.outreachMessage || buildBrowserOutreach(toCsvRow(lead), lead.name, []).message
     await navigator.clipboard.writeText(`${subject}\n\n${messageText}`)
     setMessage(`Copied outreach for ${lead.name}.`)
