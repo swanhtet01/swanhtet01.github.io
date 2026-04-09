@@ -326,7 +326,7 @@ export function LeadPipelinePage() {
       (pipeline?.rows ?? []).reduce(
         (current, row) => {
           const key = normalizeSolutionPack(row.service_pack)
-          if (key === 'List Cleanup Desk') {
+          if (key === 'Company List') {
             current.companyCleanup += 1
           } else if (key === 'Receiving Control') {
             current.receivingControl += 1
