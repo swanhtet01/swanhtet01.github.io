@@ -14,7 +14,7 @@ export function ProductDetailPage() {
     return <Navigate replace to="/products" />
   }
 
-  const siblingProducts = STARTER_PACK_DETAILS.filter((pack) => pack.id !== product.id)
+  const siblingProducts = STARTER_PACK_DETAILS.filter((item) => item.id !== product.id)
 
   return (
     <div className="space-y-10 pb-12">
@@ -25,29 +25,42 @@ export function ProductDetailPage() {
             <h1 className="mt-4 max-w-4xl text-4xl font-extrabold tracking-tight text-white lg:text-6xl">{product.name}</h1>
             <p className="mt-4 max-w-3xl text-base leading-relaxed text-[var(--sm-muted)] lg:text-lg">{product.promise}</p>
             <div className="mt-6 flex flex-wrap gap-3 text-sm text-[var(--sm-muted)]">
-              <span className="sm-status-pill">Myanmar-first</span>
+              <span className="sm-status-pill">Live product</span>
               <span className="sm-status-pill">{product.audience}</span>
             </div>
             <div className="mt-8 flex flex-wrap gap-3">
               <Link className="sm-button-primary" to={contactLink(product.name)}>
-                Contact us
+                Start onboarding
               </Link>
               <Link className="sm-button-secondary" to={product.proofTool.route}>
-                Try {product.proofTool.label}
+                Open {product.proofTool.label}
               </Link>
             </div>
           </div>
 
           <div className="sm-pack-card overflow-hidden p-4">
-            <img alt={product.name} className="w-full rounded-2xl border border-white/10 bg-[#020612]" src={product.image} />
+            <img
+              alt={`${product.name} live screenshot`}
+              className="aspect-[16/10] w-full rounded-2xl border border-white/10 bg-[#020612] object-cover object-top"
+              loading="lazy"
+              src={product.image}
+            />
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
               <div className="sm-chip">
-                <p className="sm-kicker text-[var(--sm-accent)]">Start with</p>
+                <p className="sm-kicker text-[var(--sm-accent)]">Product</p>
                 <p className="mt-3 text-sm font-semibold text-white">{product.starterModules.join(' + ')}</p>
               </div>
               <div className="sm-chip">
                 <p className="sm-kicker text-[var(--sm-accent)]">Replaces</p>
                 <p className="mt-3 text-sm text-[var(--sm-muted)]">{product.replaces}</p>
+              </div>
+              <div className="sm-chip">
+                <p className="sm-kicker text-[var(--sm-accent)]">Shared data</p>
+                <p className="mt-3 text-sm text-[var(--sm-muted)]">{product.knowledgeModules.join(', ')}</p>
+              </div>
+              <div className="sm-chip">
+                <p className="sm-kicker text-[var(--sm-accent)]">Connections</p>
+                <p className="mt-3 text-sm text-[var(--sm-muted)]">{product.infrastructureModules.join(', ')}</p>
               </div>
             </div>
           </div>
@@ -66,7 +79,7 @@ export function ProductDetailPage() {
             ))}
           </div>
           <p className="mt-6 text-sm leading-relaxed text-[var(--sm-muted)]">
-            This is not one narrow demo. It is the same system shape adapted to one team’s actual workflow and data.
+            This is not a mockup. It is the same connected system shaped around one real workflow and real team data.
           </p>
         </article>
 
@@ -115,6 +128,36 @@ export function ProductDetailPage() {
         </article>
 
         <article className="sm-site-panel">
+          <p className="sm-kicker text-[var(--sm-accent)]">Automation and AI</p>
+          <div className="mt-5 space-y-3">
+            {product.agentLoops.map((item) => (
+              <div className="sm-chip text-white" key={item}>
+                <p className="font-semibold">{item}</p>
+              </div>
+            ))}
+          </div>
+        </article>
+      </section>
+
+      <section className="grid gap-6 lg:grid-cols-[0.92fr_1.08fr]">
+        <article className="sm-site-panel">
+          <p className="sm-kicker text-[var(--sm-accent)]">Behind the product</p>
+          <h2 className="mt-3 text-3xl font-bold text-white lg:text-4xl">Shared data, permissions, and automation are built in.</h2>
+          <div className="mt-6 grid gap-3 md:grid-cols-2">
+            {product.knowledgeModules.map((item) => (
+              <article className="sm-chip text-white" key={item}>
+                <p className="font-semibold">{item}</p>
+              </article>
+            ))}
+            {product.infrastructureModules.map((item) => (
+              <article className="sm-chip text-white" key={item}>
+                <p className="font-semibold">{item}</p>
+              </article>
+            ))}
+          </div>
+        </article>
+
+        <article className="sm-site-panel">
           <p className="sm-kicker text-[var(--sm-accent)]">Also works for</p>
           <div className="mt-5 space-y-3">
             {product.otherUses.map((item) => (
@@ -139,13 +182,21 @@ export function ProductDetailPage() {
         <div className="mt-6 grid gap-4 lg:grid-cols-2">
           {siblingProducts.map((item) => (
             <article className="sm-pack-card overflow-hidden p-4 text-white" key={item.id}>
-              <img alt={item.name} className="w-full rounded-2xl border border-white/10 bg-[#020612]" src={item.image} />
+              <img
+                alt={`${item.name} live screenshot`}
+                className="aspect-[16/10] w-full rounded-2xl border border-white/10 bg-[#020612] object-cover object-top"
+                loading="lazy"
+                src={item.image}
+              />
               <div className="mt-4 flex items-center justify-between gap-3">
                 <p className="font-semibold">{item.name}</p>
-                <span className="sm-status-pill">Starter pack</span>
+                <span className="sm-status-pill">Live product</span>
               </div>
               <p className="mt-2 text-sm text-[var(--sm-muted)]">{item.promise}</p>
               <div className="mt-5 flex flex-wrap gap-3">
+                <Link className="sm-button-primary" to={contactLink(item.name)}>
+                  Start onboarding
+                </Link>
                 <Link className="sm-button-secondary" to={`/products/${item.slug}`}>
                   View product
                 </Link>

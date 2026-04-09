@@ -98,34 +98,37 @@ export const bookingUrl = (import.meta.env.VITE_BOOKING_URL ?? '').trim()
 
 export const navItems = [
   { label: 'Products', to: '/products' },
+  { label: 'Agents', to: '/agents' },
+  { label: 'How It Works', to: '/platform' },
 ] as const
 
 export const hero = {
   eyebrow: 'SuperMega',
-  title: 'Custom systems for sales, operations, and management.',
-  description: 'We replace scattered tools with one working layer and a small set of always-on agents, starting with Myanmar owner-led teams.',
+  title: 'Connected software for your team, your clients, and your own workspace.',
+  description:
+    'Start with a real product like Find Clients, Company List, or Receiving Control. Connect Gmail, Google Drive, Sheets, CSVs, APIs, and your existing workflow on one shared system.',
 }
 
 export const proofPoints: ProofPoint[] = [
   {
-    label: 'One operating layer',
+    label: 'One connected system',
     value: 'Less tool sprawl',
     detail: 'Sales, operations, approvals, and management move in one shared system instead of chats, sheets, and scattered apps.',
   },
   {
-    label: 'Always-on agents',
-    value: 'Queues keep moving',
-    detail: 'The worker plane keeps triage, briefs, cleanup, and follow-up running outside this chat session.',
+    label: 'Built-in automation',
+    value: 'Work keeps moving',
+    detail: 'Cleanup, summaries, alerts, and follow-up can run in the background without creating another disconnected tool.',
   },
 ]
 
 export const coreProduct = {
-  name: 'Reusable systems + custom builds',
-  tagline: 'Start from one reusable pack, then extend only where the business needs it.',
+  name: 'Products plus custom rollout',
+  tagline: 'Start with one product, then extend only where the business needs it.',
   replaces: ['Disconnected SaaS', 'Spreadsheet operations', 'Manual chasing'],
   inputs: ['Existing team data', 'Real workflows', 'Current blockers'],
-  outputs: ['Working queue', 'Agent loops', 'Role-based control'],
-  rollout: ['Pick one workflow.', 'Ship the first working pack.', 'Extend only after the team trusts it.'],
+  outputs: ['Working queue', 'Connected automations', 'Role-based control'],
+  rollout: ['Pick one workflow.', 'Ship the first working product.', 'Extend only after the team trusts it.'],
 }
 
 export const siteShowcases: SiteShowcase[] = [
@@ -269,25 +272,25 @@ export const workExamples: WorkExample[] = [
 ]
 
 export const leadFinder = {
-  title: 'Find clients',
+  title: 'Find Clients',
   description: 'Search by place or niche, keep the best results, and move them into a usable follow-up list with first outreach ready.',
-  steps: ['Search a market', 'Keep the right companies', 'Open Clean my list'],
+  steps: ['Search a market', 'Keep the right companies', 'Open Company List'],
 }
 
 export const useCases: UseCase[] = [
   {
-    name: 'Distributor Sales Desk',
+    name: 'Find Clients',
     audience: 'Founders, operators, and sales teams',
-    promise: 'Find businesses, save them in Clean my list, and keep outreach moving.',
-    firstRollout: 'Find clients plus Clean my list.',
+    promise: 'Find businesses, save them in Company List, and keep outreach moving.',
+    firstRollout: 'Find Clients plus Company List.',
     inputs: ['Search query', 'Keywords', 'Saved notes'],
     outcomes: ['Company list', 'Follow-up tasks', 'Cleaner outreach'],
   },
   {
-    name: 'List Cleanup Desk',
+    name: 'Company List',
     audience: 'Owner-led teams, sales coordinators, and operators',
     promise: 'Bring your own spreadsheet or text file and turn it into a usable company list.',
-    firstRollout: 'Clean my list on top of one imported sales list.',
+    firstRollout: 'Company List on top of one imported sales list.',
     inputs: ['CSV export', 'Scraped company list', 'CRM notes'],
     outcomes: ['One clean company list', 'Tagged rows', 'Next-step tasks'],
   },
@@ -303,20 +306,28 @@ export const useCases: UseCase[] = [
 
 export const publicModules: PublicModule[] = [
   {
-    name: 'Find clients',
+    name: 'Find Clients',
     tagline: 'Search a market, keep the right companies, and start outreach.',
     bestFor: 'Prospecting, partnerships, and market mapping.',
     inputs: ['Place or niche search', 'Fit keywords', 'Saved notes'],
-    outputs: ['Shortlist', 'Outreach draft', 'Clean my list rows'],
+    outputs: ['Shortlist', 'Outreach draft', 'Company List rows'],
     path: '/find-companies',
   },
   {
-    name: 'Clean my list',
+    name: 'Company List',
     tagline: 'Paste your existing names and turn them into one usable follow-up list.',
     bestFor: 'Anyone already working from Google, Facebook, WhatsApp, Excel, or CRM exports.',
     inputs: ['Company rows', 'Notes', 'Contact clues', 'Follow-up tasks'],
     outputs: ['Clean list', 'Next steps', 'CSV export'],
     path: '/company-list',
+  },
+  {
+    name: 'Receiving log',
+    tagline: 'Log shortages, holds, GRN gaps, and supplier issues in one queue.',
+    bestFor: 'Procurement, warehouse, plant, and receiving teams.',
+    inputs: ['Receiving notes', 'GRN gaps', 'PO or PI', 'Owner follow-up'],
+    outputs: ['Issue queue', 'Owner assignments', 'Daily review'],
+    path: '/receiving-log',
   },
 ]
 

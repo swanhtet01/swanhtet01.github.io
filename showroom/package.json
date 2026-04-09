@@ -4,10 +4,10 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc -b && vite build && node ./scripts/prepare-static-routes.mjs",
+    "dev": "vite --configLoader runner",
+    "build": "tsc -b && vite build --configLoader runner && node ./scripts/prepare-static-routes.mjs",
     "lint": "eslint src scripts eslint.config.js",
-    "preview": "vite preview"
+    "preview": "vite preview --configLoader runner"
   },
   "dependencies": {
     "@sentry/react": "^10.47.0",

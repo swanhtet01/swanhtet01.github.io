@@ -6,6 +6,9 @@ const indexFile = resolve(distDir, 'index.html')
 const routePaths = [
   'work',
   'systems',
+  'solutions',
+  'platform',
+  'how-it-works',
   'templates',
   'products',
   'products/distributor-sales-desk',

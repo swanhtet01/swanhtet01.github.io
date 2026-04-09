@@ -21,11 +21,11 @@ export function SiteFrame() {
             <span className="flex h-10 w-10 items-center justify-center rounded-xl border border-[rgba(37,208,255,0.22)] bg-[rgba(37,208,255,0.08)] text-sm font-extrabold text-[var(--sm-accent)]">
               SM
             </span>
-              <span className="flex flex-col">
-                <span className="sm-logo text-lg font-extrabold tracking-tight text-white">SuperMega</span>
-                <span className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[var(--sm-muted)]">Custom systems. Always-on agents.</span>
-              </span>
-            </NavLink>
+            <span className="flex flex-col">
+              <span className="sm-logo text-lg font-extrabold tracking-tight text-white">SuperMega</span>
+              <span className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[var(--sm-muted)]">Connected products for work.</span>
+            </span>
+          </NavLink>
           <button
             className="rounded-md border border-white/10 bg-white/6 px-3 py-2 text-sm font-semibold text-white md:hidden"
             onClick={() => setMenuOpen((open) => !open)}
@@ -40,7 +40,7 @@ export function SiteFrame() {
               </NavLink>
             ))}
             <Link className="sm-button-primary ml-2" to="/contact">
-              Contact us
+              Start onboarding
             </Link>
           </div>
         </nav>
@@ -53,7 +53,7 @@ export function SiteFrame() {
                 </NavLink>
               ))}
               <Link className="sm-button-primary mt-2" onClick={() => setMenuOpen(false)} to="/contact">
-                Contact us
+                Start onboarding
               </Link>
             </div>
           </div>
@@ -66,13 +66,19 @@ export function SiteFrame() {
 
       <footer className="border-t border-white/8 bg-[rgba(4,8,16,0.82)]">
         <div className="mx-auto flex w-full max-w-7xl flex-col gap-4 px-4 py-6 text-sm text-[var(--sm-muted)] lg:flex-row lg:items-center lg:justify-between lg:px-8">
-          <p>Starter packs and shared systems for sales, cleanup, receiving, and daily control.</p>
+          <p>Real products on one connected system for internal tools, client work, and your own workspace.</p>
           <div className="flex flex-wrap gap-4">
+            <Link className="sm-link" to="/platform">
+              How it works
+            </Link>
+            <Link className="sm-link" to="/agents">
+              Agents
+            </Link>
             <Link className="sm-link" to="/products">
               Products
             </Link>
             <Link className="sm-link" to="/contact">
-              Contact
+              Start onboarding
             </Link>
             <a className="sm-link" href="https://app.supermega.dev" rel="noreferrer" target="_blank">
               Team app

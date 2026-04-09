@@ -233,9 +233,9 @@ function buildSharedLeadRow(row: LeadRow, contextLabel: string) {
     stage: 'offer_ready',
     status: 'open',
     owner: 'Growth Studio',
-    service_pack: importedList ? 'List Cleanup Desk' : 'Distributor Sales Desk',
-    wedge_product: importedList ? 'Company List' : 'Find Companies',
-    semi_products: importedList ? ['Company List', 'Task List'] : ['Find Companies', 'Company List'],
+    service_pack: importedList ? 'Company List' : 'Find Clients',
+    wedge_product: importedList ? 'Company List' : 'Find Clients',
+    semi_products: importedList ? ['Company List', 'Task List'] : ['Find Clients', 'Company List'],
     outreach_subject: outreach.subject,
     outreach_message: outreach.message,
     email: row.email,
@@ -286,7 +286,7 @@ export function WorkspaceLitePage() {
   const hasData = leads.length > 0 || tasks.length > 0
   const activeView: WorkspaceView = publicSurface === 'updates' ? 'queue' : 'leads'
   const hasSharedProfile = isPublicWorkspaceProfileReady(profile)
-  const pageEyebrow = isReceivingDesk ? 'Receiving control' : publicSurface === 'sales' ? 'Clean my list' : 'Task list'
+  const pageEyebrow = isReceivingDesk ? 'Receiving control' : publicSurface === 'sales' ? 'Company List' : 'Task list'
 
   const summary = useMemo(() => {
     if (mode === 'local') {
@@ -810,7 +810,7 @@ export function WorkspaceLitePage() {
         <p className="mt-2 text-sm text-[var(--sm-muted)]">Search a place or niche, keep the shortlist, then come back here to run the next steps.</p>
         <div className="mt-4 flex flex-wrap gap-3">
           <Link className="sm-button-primary" to="/find-companies">
-            Open Find clients
+            Open Find Clients
           </Link>
           <button className="sm-button-secondary" onClick={() => setSetupFlow('leads')} type="button">
             I already have a list
@@ -947,13 +947,13 @@ export function WorkspaceLitePage() {
         <section className="sm-surface p-6 lg:p-8">
           <p className="sm-kicker text-[var(--sm-accent)]">{pageEyebrow}</p>
           <h1 className="mt-3 text-3xl font-bold text-white lg:text-4xl">
-            {isReceivingDesk ? 'Log receiving issues.' : publicSurface === 'sales' ? 'Already have names? Clean them here.' : 'Paste task notes.'}
+            {isReceivingDesk ? 'Log receiving issues.' : publicSurface === 'sales' ? 'Already have names? Organize them here.' : 'Paste task notes.'}
           </h1>
           <p className="mt-3 max-w-2xl text-sm leading-relaxed text-[var(--sm-muted)]">
             {isReceivingDesk
               ? 'Paste GRN, hold, batch, customs, or quantity issues and turn them into one short follow-up list.'
               : publicSurface === 'sales'
-              ? 'Use this when you already have names from Google, Facebook, Viber, WhatsApp, Excel, or CRM. We remove duplicates, keep the contact clues, and turn the list into clear next steps.'
+              ? 'Use this when you already have names from Google, Facebook, WhatsApp, Excel, or CRM. We remove duplicates, keep the contact clues, and turn the list into clear next steps.'
               : 'Paste messy notes, blockers, or updates and turn them into a short task list.'}
           </p>
           {setupPanel}
@@ -961,7 +961,7 @@ export function WorkspaceLitePage() {
             <div className="mt-5 text-sm text-[var(--sm-muted)]">
               Need new names first?{' '}
               <Link className="text-white underline underline-offset-4" to="/find-companies">
-                Find clients
+                Find Clients
               </Link>
             </div>
           ) : null}
@@ -976,7 +976,7 @@ export function WorkspaceLitePage() {
     <div className="space-y-6">
       <section className="grid gap-6 lg:grid-cols-[0.82fr_1.18fr]">
     <article className="sm-surface p-6">
-      <p className="sm-kicker text-[var(--sm-accent)]">{isReceivingDesk ? 'Receiving control' : publicSurface === 'sales' ? 'Clean my list' : 'Task list'}</p>
+      <p className="sm-kicker text-[var(--sm-accent)]">{isReceivingDesk ? 'Receiving control' : publicSurface === 'sales' ? 'Company List' : 'Task list'}</p>
       <h2 className="mt-3 text-3xl font-bold text-white">
         {isReceivingDesk ? 'Keep only the receiving follow-up.' : publicSurface === 'sales' ? 'Turn raw names into one follow-up list.' : 'Keep only the next tasks.'}
       </h2>
@@ -1030,7 +1030,7 @@ export function WorkspaceLitePage() {
             {isReceivingDesk
               ? 'Paste receiving issues and build the follow-up list.'
               : publicSurface === 'sales'
-                ? 'Use Find clients for new names. Use Clean my list when you already have names.'
+                ? 'Use Find Clients for new names. Use Company List when you already have names.'
                       : "Paste today's notes and build the task list."}
           </div>
             </div>
@@ -1198,10 +1198,10 @@ export function WorkspaceLitePage() {
                   ) : (
                     <div className="sm-proof-card">
                       <p className="font-semibold text-white">No companies yet</p>
-                      <p className="mt-2 text-sm text-[var(--sm-muted)]">Paste your own list here from Google, Facebook, Viber, Excel, or CRM. If you need new names first, use Find clients.</p>
+                      <p className="mt-2 text-sm text-[var(--sm-muted)]">Paste your own list here from Google, Facebook, Excel, or CRM. If you need new names first, use Find Clients.</p>
                       <div className="mt-4 flex flex-wrap gap-3">
                         <Link className="sm-button-primary" to="/find-companies">
-                          Find clients
+                          Find Clients
                         </Link>
                         <button className="sm-button-secondary" onClick={() => setSetupFlow('leads')} type="button">
                           Paste my list

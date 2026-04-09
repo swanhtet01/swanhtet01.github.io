@@ -15,12 +15,12 @@ import {
 import { downloadLeadCsv, parseLeads, type LeadRow } from '../lib/tooling'
 
 const quickSearches = [
-  { label: 'Tyre shops in Yangon', query: 'tyre shop in yangon', keywords: 'tyre,auto,service,yangon' },
-  { label: 'Warehouses in Mandalay', query: 'warehouse in mandalay', keywords: 'warehouse,logistics,mandalay' },
-  { label: 'Rubber suppliers in Thailand', query: 'rubber supplier thailand', keywords: 'rubber,supplier,industrial,thailand' },
+  { label: 'Local service businesses', query: 'local service business', keywords: 'service,local,business' },
+  { label: 'Regional distributors', query: 'regional distributor', keywords: 'distributor,regional,wholesale' },
+  { label: 'Industrial suppliers', query: 'industrial supplier', keywords: 'industrial,supplier,factory' },
 ]
 
-const DEFAULT_PUBLIC_KEYWORDS = 'tyre,auto,service,yangon'
+const DEFAULT_PUBLIC_KEYWORDS = 'service,local,business'
 
 function keywordsFromQuery(value: string) {
   return value
@@ -106,7 +106,7 @@ export function PublicLeadFinderPage() {
     const nextKeywords = overrides?.keywords ?? searchKeywords
 
     if (!nextQuery) {
-      setMessage('Enter a place or niche first.')
+      setMessage('Enter a business type, niche, or place first.')
       return
     }
 
@@ -207,9 +207,9 @@ export function PublicLeadFinderPage() {
               stage: 'offer_ready',
               status: 'open',
               owner: 'Growth Studio',
-              service_pack: 'Distributor Sales Desk',
-              wedge_product: 'Find Companies',
-              semi_products: ['Find Companies', 'Company List'],
+              service_pack: 'Find Clients',
+              wedge_product: 'Find Clients',
+              semi_products: ['Find Clients', 'Company List'],
               outreach_subject: outreach.subject,
               outreach_message: outreach.message,
               email: row.email,
@@ -294,10 +294,10 @@ export function PublicLeadFinderPage() {
   return (
     <div className="space-y-6">
       <section className="sm-surface p-6 lg:p-8">
-        <p className="sm-kicker text-[var(--sm-accent)]">Find clients</p>
-        <h1 className="mt-3 text-3xl font-bold text-white lg:text-4xl">Google gives links. This gives you a shortlist.</h1>
+        <p className="sm-kicker text-[var(--sm-accent)]">Find Clients</p>
+        <h1 className="mt-3 text-3xl font-bold text-white lg:text-4xl">Search public sources and build a shortlist.</h1>
         <p className="mt-3 max-w-2xl text-sm leading-relaxed text-[var(--sm-muted)]">
-          Use this when you need new names. Type a place and business type, then keep the companies worth contacting with fit reasons, contact clues, and first outreach ready. This is for teams who would otherwise search Google or Facebook and then manually copy results into chats or spreadsheets.
+          Use this when you need new names. Type a business type, niche, or place, then keep the companies worth contacting with fit reasons, contact clues, and first outreach ready.
         </p>
 
         <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -305,7 +305,7 @@ export function PublicLeadFinderPage() {
             ['Shortlist', 'Keep only the few companies worth chasing.'],
             ['Fit reasons', 'See why each result matches the search.'],
             ['First outreach', 'Copy a ready first message, not just a URL.'],
-            ['Clean my list', 'Send saved companies into one working follow-up list for the team.'],
+            ['Company List', 'Send saved companies into one working follow-up list for the team.'],
           ].map(([title, detail]) => (
             <div className="sm-chip text-white" key={title}>
               <p className="sm-kicker text-[var(--sm-accent)]">{title}</p>
@@ -314,7 +314,7 @@ export function PublicLeadFinderPage() {
           ))}
         </div>
 
-          <div className="mt-5 grid gap-4">
+        <div className="mt-5 grid gap-4">
             <label className="grid gap-2 text-sm font-semibold text-[var(--sm-muted)]">
               Search
               <input
@@ -331,14 +331,14 @@ export function PublicLeadFinderPage() {
                     void runSearch()
                   }
                 }}
-                placeholder="tyre shop in Yangon"
+                placeholder="industrial supplier"
                 value={query}
               />
             </label>
 
             <div className="flex flex-wrap gap-3">
               <button className="sm-button-primary" disabled={busy || !query.trim()} onClick={() => void runSearch()} type="button">
-                {busy ? 'Searching...' : 'Find clients'}
+                {busy ? 'Searching...' : 'Find Clients'}
               </button>
             </div>
 
@@ -357,7 +357,7 @@ export function PublicLeadFinderPage() {
               <div className="sm-proof-card">
                 <p className="sm-kicker text-[var(--sm-accent)]">Use with your team</p>
                 <p className="mt-2 text-sm text-[var(--sm-muted)]">
-                  Enter your company and work email once. After that, kept companies can go into the same clean list for the team.
+                  Enter your company and work email once. After that, kept companies can go into the same shared list for the team.
                 </p>
                 <div className="mt-4 grid gap-3 md:grid-cols-3">
                   <label className="grid gap-2 text-sm font-semibold text-[var(--sm-muted)]">
@@ -404,9 +404,9 @@ export function PublicLeadFinderPage() {
                 </div>
               </div>
             </details>
-          </div>
+        </div>
 
-          {message ? <div className="mt-3 sm-chip text-[var(--sm-muted)]">{message}</div> : null}
+        {message ? <div className="mt-3 sm-chip text-[var(--sm-muted)]">{message}</div> : null}
       </section>
 
       {rows.length || manualInput.trim() || message ? (
@@ -477,7 +477,7 @@ export function PublicLeadFinderPage() {
       {(rows.length || savedTotal) ? (
         <section className="sm-surface p-6">
           <p className="sm-kicker text-[var(--sm-accent)]">Next</p>
-          <h2 className="mt-3 text-3xl font-bold text-white">Keep a few, then open Clean my list.</h2>
+          <h2 className="mt-3 text-3xl font-bold text-white">Keep a few, then open Company List.</h2>
           <div className="mt-5 flex flex-wrap gap-3">
             {rows.length ? (
               <button className="sm-button-primary" onClick={() => void saveTopResults()} type="button">
@@ -486,7 +486,7 @@ export function PublicLeadFinderPage() {
             ) : null}
             {savedTotal ? (
               <Link className="sm-button-secondary" to="/company-list">
-                Open Clean my list
+                Open Company List
               </Link>
             ) : null}
             {hasLiveWorkspaceApi() ? (

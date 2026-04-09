@@ -25,12 +25,23 @@ export type StarterPackDetail = {
   replaces: string
   image: string
   starterModules: string[]
+  knowledgeModules: string[]
+  infrastructureModules: string[]
+  agentLoops: string[]
   usedFor: string[]
   proofTool: { label: string; route: string }
   setupPath: string[]
   dailyUsers: string[]
   expandsTo: string[]
   otherUses: string[]
+}
+
+export type PlatformLayerDetail = {
+  id: string
+  name: string
+  layer: 'Application' | 'Knowledge' | 'Infrastructure'
+  detail: string
+  modules: string[]
 }
 
 export type HuntTemplate = {
@@ -61,21 +72,21 @@ export type LabTrack = {
 export const CORE_SOLUTIONS: SellableSolution[] = [
   {
     id: 'sales-setup',
-    name: 'Distributor Sales Desk',
-    buyer: 'Owner-led teams that need net-new companies and a simple outreach list.',
-    pain: 'Sell this when the team is still prospecting from Google, Facebook, or scattered notes.',
-    replaces: 'raw search, scattered spreadsheets, and manual outreach tracking',
-    promise: 'Search the market, keep the shortlist, and create the first follow-up automatically.',
-    modules: ['Find Companies', 'Company List'],
-    pilot: '1-week pilot with one market search, one shortlist, and one live follow-up queue.',
+    name: 'Find Clients',
+    buyer: 'Sales teams, founders, and operators that need new companies to contact.',
+    pain: 'Use this when prospecting still happens across search, tabs, chats, and loose notes.',
+    replaces: 'manual prospecting, copied links, and scattered lead lists',
+    promise: 'Search for companies, keep the right ones, and move them into one shared follow-up list.',
+    modules: ['Find Clients', 'Company List'],
+    pilot: '1-week pilot with one market search, one shortlist, and one live follow-up list.',
   },
   {
     id: 'company-cleanup',
-    name: 'List Cleanup Desk',
+    name: 'Company List',
     buyer: 'Teams that already have spreadsheets, exports, or messy company lists.',
-    pain: 'Sell this when the lead list exists but nobody trusts it enough to run outreach cleanly.',
+    pain: 'Use this when the company list exists but nobody trusts it enough to work from it.',
     replaces: 'dirty exports, duplicated rows, and follow-up hidden inside spreadsheets',
-    promise: 'Clean the list, remove duplicates, and keep the next follow-up visible.',
+    promise: 'Clean the list, remove duplicates, and keep the next step visible.',
     modules: ['Company List', 'Task List'],
     pilot: '1-week cleanup around one imported list and one shared task list.',
   },
@@ -94,25 +105,49 @@ export const CORE_SOLUTIONS: SellableSolution[] = [
 export const QUICK_WIN_PRODUCTS: QuickWinProduct[] = [
   {
     id: 'founder-brief',
-    name: 'Founder Brief',
-    useCase: 'Add this when the owner wants one short daily summary instead of chasing updates manually.',
+    name: 'Daily Summary',
+    useCase: 'Add this when the owner wants one short review instead of chasing updates manually.',
   },
   {
     id: 'reply-draft',
     name: 'Reply Draft',
-    useCase: 'Add this when the same supplier or customer replies are written over and over again.',
+    useCase: 'Add this when the same supplier or customer replies are written again and again.',
   },
   {
     id: 'receiving-watch',
-    name: 'Receiving Watch',
-    useCase: 'Add this when repeat receiving issues should create escalations automatically.',
+    name: 'Exception Watch',
+    useCase: 'Add this when repeat receiving issues should create alerts automatically.',
+  },
+]
+
+export const PLATFORM_LAYER_DETAILS: PlatformLayerDetail[] = [
+  {
+    id: 'application-layer',
+    name: 'Products',
+    layer: 'Application',
+    detail: 'The screens teams actually open every day.',
+    modules: ['Find Clients', 'Company List', 'Receiving Log', 'Task List', 'Client Portal', 'Daily Summary'],
+  },
+  {
+    id: 'knowledge-layer',
+    name: 'Shared data',
+    layer: 'Knowledge',
+    detail: 'The shared records, notes, files, and decisions behind every product.',
+    modules: ['Company Records', 'Decision Log', 'Document Intake', 'Knowledge Base'],
+  },
+  {
+    id: 'infrastructure-layer',
+    name: 'Connections and automation',
+    layer: 'Infrastructure',
+    detail: 'The connections, rules, permissions, and background jobs that keep the system moving.',
+    modules: ['Connectors', 'Workflow Rules', 'Automation Jobs', 'Permissions', 'Health Checks'],
   },
 ]
 
 export const PUBLIC_PRODUCTS: PublicProduct[] = [
   {
     id: 'find-companies',
-    name: 'Find clients',
+    name: 'Find Clients',
     status: 'Live now',
     audience: 'Founders, operators, and sales teams that need net-new companies to contact.',
     promise: 'Search by place or niche, keep the shortlist, and create the first follow-up.',
@@ -120,7 +155,7 @@ export const PUBLIC_PRODUCTS: PublicProduct[] = [
   },
   {
     id: 'company-list',
-    name: 'Clean my list',
+    name: 'Company List',
     status: 'Live now',
     audience: 'Teams that already have a company list, scraped export, or CRM dump.',
     promise: 'Paste names from Google, Facebook, WhatsApp, Excel, or CRM and turn them into one usable list.',
@@ -147,28 +182,28 @@ export const PUBLIC_PRODUCTS: PublicProduct[] = [
 export const LAB_TRACKS: LabTrack[] = [
   {
     id: 'revenue-scout',
-    name: 'Revenue Scout',
+    name: 'New company watch',
     loop: 'Reruns saved company searches and pushes new candidates into the shared list.',
-    why: 'Turns Find Companies from a one-shot search into a recurring revenue loop.',
+    why: 'Turns Find Clients from a one-shot search into a recurring revenue loop.',
     graduation: 'Needs better ranking, dedupe, and recovery email.',
   },
   {
     id: 'list-clerk',
-    name: 'List Clerk',
+    name: 'List cleanup',
     loop: 'Cleans imported rows, normalizes contacts, and keeps the company list usable.',
     why: 'Stops every new client setup from turning into manual spreadsheet cleanup.',
     graduation: 'Needs stronger field validation and merge controls.',
   },
   {
     id: 'task-triage',
-    name: 'Task Triage',
+    name: 'Task triage',
     loop: 'Turns messy updates and receiving notes into short, owned next steps.',
     why: 'Moves teams from reporting work to acting on the next issue fast.',
     graduation: 'Needs richer templates and approval rules for edits.',
   },
   {
     id: 'founder-brief',
-    name: 'Founder Brief',
+    name: 'Daily summary',
     loop: 'Generates the daily brief from live leads, tasks, and issue state.',
     why: 'Gives owners one review surface instead of scattered chats and spreadsheets.',
     graduation: 'Needs delivery rules, approvals, and better eval coverage.',
@@ -178,68 +213,77 @@ export const LAB_TRACKS: LabTrack[] = [
 export const STARTER_PACK_DETAILS: StarterPackDetail[] = [
   {
     id: 'sales-setup',
-    slug: 'distributor-sales-desk',
-    name: 'Distributor Sales Desk',
-    eyebrow: 'Starter pack',
-    audience: 'Owner-led importers, distributors, and commercial teams',
-    promise: 'Keep prospecting, shortlist, outreach, and follow-up in one working sales system.',
-    replaces: 'raw search, scattered spreadsheets, and manual outreach tracking',
-    image: '/site/sales-desk.svg',
-    starterModules: ['Find Companies', 'Company List'],
-    usedFor: ['new distributor outreach', 'dealer mapping', 'commercial follow-up'],
-    proofTool: { label: 'Find clients', route: '/find-companies' },
+    slug: 'find-clients',
+    name: 'Find Clients',
+    eyebrow: 'Live product',
+    audience: 'Founders, operators, and sales teams',
+    promise: 'Search for companies, keep the right ones, and move them into one shared follow-up list.',
+    replaces: 'manual prospecting, copied links, and scattered lead lists',
+    image: '/site/find-clients-live.png',
+    starterModules: ['Find Clients', 'Company List'],
+    knowledgeModules: ['Company Records', 'Notes and decisions'],
+    infrastructureModules: ['Connectors', 'Automation rules', 'Permissions and history'],
+    agentLoops: ['New company watch', 'List cleanup', 'Daily summary'],
+    usedFor: ['new prospecting', 'channel mapping', 'partner outreach'],
+    proofTool: { label: 'Find Clients', route: '/find-companies' },
     setupPath: [
-      'Run one narrow market search.',
+      'Run one focused market search.',
       'Keep the best-fit companies in the shared list.',
       'Create the first follow-up tasks.',
-      'Let Revenue Scout and Founder Brief keep it moving.',
+      'Let the background automations keep it moving.',
     ],
     dailyUsers: ['founder', 'sales operator', 'sales manager'],
-    expandsTo: ['Reply Draft', 'Founder Brief', 'Client Portal'],
-    otherUses: ['territory build-out', 'new channel launch', 'export market prospecting'],
+    expandsTo: ['Reply Draft', 'Daily Summary', 'Client Portal'],
+    otherUses: ['territory build-out', 'new channel launch', 'partnership outreach'],
   },
   {
     id: 'company-cleanup',
-    slug: 'list-cleanup-desk',
-    name: 'List Cleanup Desk',
-    eyebrow: 'Starter pack',
-    audience: 'Teams that already have a spreadsheet, export, or messy company list',
-    promise: 'Turn dirty company rows into one clean list with visible next steps.',
+    slug: 'company-list',
+    name: 'Company List',
+    eyebrow: 'Live product',
+    audience: 'Teams working from exports, spreadsheets, or CRM dumps',
+    promise: 'Turn a messy list into one clean company list with owners and next steps.',
     replaces: 'dirty exports, duplicated rows, and follow-up hidden inside spreadsheets',
-    image: '/site/client-portal.svg',
+    image: '/site/company-list-live.png',
     starterModules: ['Company List', 'Task List'],
+    knowledgeModules: ['Company Records', 'Imported notes'],
+    infrastructureModules: ['File imports', 'Automation rules', 'Permissions and history'],
+    agentLoops: ['List cleanup', 'Task triage', 'Daily summary'],
     usedFor: ['CRM cleanup', 'event lead cleanup', 'customer list rebuild'],
-    proofTool: { label: 'Clean my list', route: '/company-list' },
+    proofTool: { label: 'Company List', route: '/company-list' },
     setupPath: [
       'Import the list the team already uses.',
       'Clean and tag the rows that are ready to work.',
       'Assign one next step beside each kept company.',
-      'Let List Clerk and Task Triage keep the list usable.',
+      'Let the cleanup and task rules keep the list usable.',
     ],
     dailyUsers: ['founder', 'sales coordinator', 'list clerk'],
-    expandsTo: ['Reply Draft', 'Founder Brief', 'Approval Flow'],
+    expandsTo: ['Reply Draft', 'Daily Summary', 'Approval Flow'],
     otherUses: ['partner database cleanup', 'supplier master rebuild', 'sales handover preparation'],
   },
   {
     id: 'receiving-control',
     slug: 'receiving-control',
     name: 'Receiving Control',
-    eyebrow: 'Starter pack',
-    audience: 'Plants, warehouses, procurement teams, and receiving teams',
-    promise: 'Keep shortages, holds, GRN gaps, and next actions visible in one queue.',
-    replaces: 'paper receiving logs, chat chasing, and missed inbound exceptions',
-    image: '/site/ops-desk.svg',
+    eyebrow: 'Live product',
+    audience: 'Warehouses, plants, procurement teams, and receiving teams',
+    promise: 'Track shortages, holds, GRN gaps, and next actions in one shared queue.',
+    replaces: 'paper receiving logs, chat follow-up, and missed inbound exceptions',
+    image: '/site/receiving-control-live.png',
     starterModules: ['Receiving Log', 'Task List'],
+    knowledgeModules: ['Attached documents', 'Issue notes'],
+    infrastructureModules: ['Workflow rules', 'Alerts', 'Permissions and history'],
+    agentLoops: ['Task triage', 'Exception watch', 'Daily summary'],
     usedFor: ['warehouse receiving', 'plant inbound checks', 'supplier exception control'],
-    proofTool: { label: 'Receiving log', route: '/receiving-log' },
+    proofTool: { label: 'Receiving Log', route: '/receiving-log' },
     setupPath: [
       'Start with one inbound lane or one supplier problem.',
       'Log each issue once and assign one owner.',
       'Review open holds in one short daily check.',
-      'Let Task Triage and Ops Watch keep exceptions visible.',
+      'Let the automation keep exceptions visible.',
     ],
     dailyUsers: ['receiving clerk', 'procurement lead', 'manager'],
-    expandsTo: ['Founder Brief', 'Approval Flow', 'Document Intake'],
+    expandsTo: ['Daily Summary', 'Approval Flow', 'Document Intake'],
     otherUses: ['store delivery intake', 'procurement issue control', 'goods hold escalation'],
   },
 ]
@@ -248,39 +292,47 @@ export function getStarterPackDetail(productIdOrSlug: string | null | undefined)
   const normalized = String(productIdOrSlug || '')
     .trim()
     .toLowerCase()
+  const aliases: Record<string, string> = {
+    'distributor-sales-desk': 'sales-setup',
+    'list-cleanup-desk': 'company-cleanup',
+    'find-companies': 'sales-setup',
+    'find clients': 'sales-setup',
+    'company list': 'company-cleanup',
+  }
+  const resolved = aliases[normalized] ?? normalized
   return (
-    STARTER_PACK_DETAILS.find((pack) => pack.slug === normalized || pack.id === normalized || pack.name.toLowerCase() === normalized) ??
+    STARTER_PACK_DETAILS.find((pack) => pack.slug === resolved || pack.id === resolved || pack.name.toLowerCase() === resolved) ??
     null
   )
 }
 
 export const FINDER_ADVANTAGES = [
-  'Google and Facebook give raw names. SuperMega gives a shortlist you can actually work.',
+  'Search gives raw names. SuperMega gives you a shortlist you can actually work from.',
   'Each kept company carries fit reasons, contact clues, and the first follow-up instead of becoming another bookmark.',
-  'Already have names? Clean my list turns messy rows into one usable company list without manual spreadsheet cleanup.',
-  'Saved hunts rerun the same market search without starting from zero each time.',
+  'Already have names? Company List turns messy rows into one usable list without manual cleanup.',
+  'Saved searches rerun the same market search without starting from zero each time.',
 ]
 
 export const HUNT_TEMPLATES: HuntTemplate[] = [
   {
-    id: 'myanmar-importers',
-    name: 'Myanmar importers',
-    query: 'importer in yangon',
-    keywords: ['importer', 'distributor', 'yangon', 'myanmar'],
-    why: 'Use this when targeting owner-led import and distribution teams that still run sales from inboxes and sheets.',
+    id: 'local-services',
+    name: 'Local service businesses',
+    query: 'local service business',
+    keywords: ['service', 'local', 'business'],
+    why: 'Use this when targeting local businesses that still manage outreach from inboxes and spreadsheets.',
   },
   {
     id: 'commercial-distributors',
     name: 'Regional distributors',
-    query: 'industrial distributor in bangkok',
-    keywords: ['distributor', 'wholesale', 'industrial', 'bangkok'],
+    query: 'regional distributor',
+    keywords: ['distributor', 'wholesale', 'regional'],
     why: 'Use this when targeting trading and distribution teams that need cleaner company lists and follow-up.',
   },
   {
-    id: 'plant-supply',
-    name: 'Plant suppliers',
-    query: 'industrial supplier in yangon',
-    keywords: ['industrial', 'supplier', 'factory', 'yangon'],
+    id: 'industrial-suppliers',
+    name: 'Industrial suppliers',
+    query: 'industrial supplier',
+    keywords: ['industrial', 'supplier', 'factory'],
     why: 'Use this when looking for plants, warehouses, or suppliers that need receiving control.',
   },
 ]
@@ -291,36 +343,36 @@ export function defaultHuntTemplate() {
 
 export function normalizeSolutionPack(value: string | null | undefined) {
   const normalized = (value ?? '').trim().toLowerCase()
-  if (['distributor sales desk', 'sales setup', 'sales desk', 'action os starter', 'lead finder'].includes(normalized)) {
-    return 'Distributor Sales Desk'
+  if (['distributor sales desk', 'sales setup', 'sales desk', 'action os starter', 'lead finder', 'find clients', 'find companies'].includes(normalized)) {
+    return 'Find Clients'
   }
-  if (['list cleanup desk', 'company cleanup', 'commercial control', 'workspace', 'company list'].includes(normalized)) {
-    return 'List Cleanup Desk'
+  if (['list cleanup desk', 'company cleanup', 'commercial control', 'workspace', 'company list', 'clean my list'].includes(normalized)) {
+    return 'Company List'
   }
   if (['receiving control', 'receiving log', 'factory control'].includes(normalized)) {
     return 'Receiving Control'
   }
-  return 'Distributor Sales Desk'
+  return 'Find Clients'
 }
 
 export function defaultWedgeProduct(pack: string | null | undefined) {
   const normalized = normalizeSolutionPack(pack)
-  if (normalized === 'List Cleanup Desk') {
+  if (normalized === 'Company List') {
     return 'Company List'
   }
   if (normalized === 'Receiving Control') {
     return 'Receiving Log'
   }
-  return 'Find Companies'
+  return 'Find Clients'
 }
 
 export function defaultStarterModules(pack: string | null | undefined) {
   const normalized = normalizeSolutionPack(pack)
-  if (normalized === 'List Cleanup Desk') {
+  if (normalized === 'Company List') {
     return ['Company List', 'Task List']
   }
   if (normalized === 'Receiving Control') {
     return ['Receiving Log', 'Task List']
   }
-  return ['Find Companies', 'Company List']
+  return ['Find Clients', 'Company List']
 }

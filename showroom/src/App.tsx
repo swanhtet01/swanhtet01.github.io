@@ -20,6 +20,7 @@ import { LoginPage } from './pages/LoginPage'
 import { MetricIntakePage } from './pages/MetricIntakePage'
 import { NewsBriefPage } from './pages/NewsBriefPage'
 import { NotFoundPage } from './pages/NotFoundPage'
+import { PlatformNarrativePage } from './pages/PlatformNarrativePage'
 import { ProductsPage } from './pages/ProductsPage'
 import { ProductDetailPage } from './pages/ProductDetailPage'
 import { PublicLeadFinderPage } from './pages/PublicLeadFinderPage'
@@ -42,8 +43,12 @@ function App() {
       <RouteEffects />
       <Routes>
         <Route element={<SiteFrame />} path="/">
-        <Route element={<HomePage />} index />
+          <Route element={<HomePage />} index />
+          <Route element={<PlatformNarrativePage />} path="platform" />
+          <Route element={<Navigate replace to="/platform" />} path="agents" />
           <Route element={<ProductsPage />} path="products" />
+          <Route element={<Navigate replace to="/products" />} path="software" />
+          <Route element={<Navigate replace to="/platform" />} path="how-it-works" />
           <Route element={<ProductDetailPage />} path="products/:productId" />
           <Route element={<Navigate replace to="/products" />} path="work" />
           <Route element={<Navigate replace to="/products" />} path="systems" />
