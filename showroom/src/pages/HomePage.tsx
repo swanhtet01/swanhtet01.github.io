@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 
-import { enterpriseSignals, hero, publicModules, ytfDeployment } from '../content'
+import { enterpriseSignals, hero, ytfDeployment } from '../content'
 import { trackEvent } from '../lib/analytics'
 import { BUILD_TEAMS, MODULE_PROGRAMS } from '../lib/companyBuildingModel'
 import { STARTER_PACK_DETAILS } from '../lib/salesControl'
@@ -25,6 +25,30 @@ const usageModes = [
   },
 ] as const
 
+const heroSignals = [
+  {
+    label: 'Live Products',
+    value: '3 working modules shipping now',
+  },
+  {
+    label: 'Connected Inputs',
+    value: 'Gmail, Drive, Sheets, CSV, and API feeds',
+  },
+  {
+    label: 'Controls',
+    value: 'Roles, approvals, history, and tenant scope',
+  },
+  {
+    label: 'Deployment',
+    value: 'Internal teams, client workspaces, and operators',
+  },
+] as const
+
+const screenshotSize = {
+  width: 1440,
+  height: 1024,
+} as const
+
 function contactLink(name: string) {
   return `/contact?package=${encodeURIComponent(name)}`
 }
@@ -32,6 +56,8 @@ function contactLink(name: string) {
 export function HomePage() {
   const tenant = getTenantConfig()
   const featuredProducts = STARTER_PACK_DETAILS
+  const featuredPrograms = MODULE_PROGRAMS.slice(0, 3)
+  const featuredBuildTeams = BUILD_TEAMS.slice(0, 4)
 
   if (tenant.key !== 'default') {
     return (
@@ -129,7 +155,7 @@ export function HomePage() {
     <div className="pb-16">
       <section className="sm-site-bleed sm-site-hero">
         <div className="sm-site-hero-grid">
-          <div className="sm-site-hero-copy">
+          <div className="sm-site-hero-copy animate-rise">
             <p className="sm-kicker text-[var(--sm-accent)]">{hero.eyebrow}</p>
             <h1 className="mt-4 max-w-3xl text-5xl font-extrabold tracking-tight text-white lg:text-8xl">{hero.title}</h1>
             <p className="mt-5 max-w-2xl text-base leading-relaxed text-[var(--sm-muted)] lg:text-lg">{hero.description}</p>
@@ -141,20 +167,42 @@ export function HomePage() {
                 Start rollout
               </Link>
             </div>
-            <div className="mt-8 flex flex-wrap gap-6 text-sm text-[var(--sm-muted)]">
-              <span>Live now: Find Clients</span>
-              <span>Company List</span>
-              <span>Receiving Control</span>
-              <span>Gmail, Drive, Sheets, CSV, API</span>
-              <span>Roles + audit</span>
-              <span>Tenant workspaces</span>
+            <div className="sm-hero-signal-grid">
+              {heroSignals.map((item) => (
+                <article className="sm-hero-signal" key={item.label}>
+                  <span className="sm-hero-signal-label">{item.label}</span>
+                  <span className="sm-hero-signal-value">{item.value}</span>
+                </article>
+              ))}
             </div>
           </div>
 
-          <div className="sm-site-stage" aria-label="SUPERMEGA.dev live products">
-            <img alt="SUPERMEGA.dev company list module" className="sm-site-shot sm-site-shot-main object-cover object-top" src="/site/company-list-live.png" />
-            <img alt="SUPERMEGA.dev find clients module" className="sm-site-shot sm-site-shot-top object-cover object-top" src="/site/find-clients-live.png" />
-            <img alt="SUPERMEGA.dev receiving control module" className="sm-site-shot sm-site-shot-bottom object-cover object-top" src="/site/receiving-control-live.png" />
+          <div className="sm-site-stage animate-rise-delayed" aria-label="SUPERMEGA.dev live products">
+            <img
+              alt="SUPERMEGA.dev company list module"
+              className="sm-site-shot sm-site-shot-main object-cover object-top"
+              decoding="async"
+              fetchPriority="high"
+              height={screenshotSize.height}
+              src="/site/company-list-live.png"
+              width={screenshotSize.width}
+            />
+            <img
+              alt="SUPERMEGA.dev find clients module"
+              className="sm-site-shot sm-site-shot-top object-cover object-top"
+              decoding="async"
+              height={screenshotSize.height}
+              src="/site/find-clients-live.png"
+              width={screenshotSize.width}
+            />
+            <img
+              alt="SUPERMEGA.dev receiving control module"
+              className="sm-site-shot sm-site-shot-bottom object-cover object-top"
+              decoding="async"
+              height={screenshotSize.height}
+              src="/site/receiving-control-live.png"
+              width={screenshotSize.width}
+            />
           </div>
         </div>
       </section>
@@ -170,41 +218,70 @@ export function HomePage() {
             roles, and automation later.
           </p>
         </div>
-        <div className="mt-6 grid gap-4 lg:grid-cols-3">
-          {featuredProducts.map((product) => (
-            <article className="sm-pack-card overflow-hidden p-4 text-white" key={product.id}>
-              <img
-                alt={`${product.name} live screenshot`}
-                className="aspect-[16/10] w-full rounded-2xl border border-white/10 bg-[#020612] object-cover object-top"
-                loading="lazy"
-                src={product.image}
-              />
-              <div className="mt-4 flex items-center justify-between gap-3">
-                <p className="font-semibold">{product.name}</p>
-                <span className="sm-status-pill">Live now</span>
+        <div className="mt-8">
+          {featuredProducts.map((product, index) => (
+            <article className={`sm-site-case ${index % 2 === 1 ? 'sm-site-case-reverse' : ''}`} key={product.id}>
+              <div className="sm-site-case-copy">
+                <p className="sm-kicker text-[var(--sm-accent)]">{product.eyebrow}</p>
+                <h3 className="mt-3 text-3xl font-bold text-white lg:text-4xl">{product.name}</h3>
+                <p className="mt-4 max-w-xl text-base leading-relaxed text-[var(--sm-muted)]">{product.promise}</p>
+                <div className="mt-5 space-y-2">
+                  {product.problemsSolved.map((item) => (
+                    <div className="sm-site-point text-sm" key={item}>
+                      <span className="sm-site-point-dot" />
+                      <span>{item}</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-6 grid gap-3 sm:grid-cols-2">
+                  <article className="sm-chip text-white">
+                    <p className="sm-kicker text-[var(--sm-accent)]">Starts with</p>
+                    <p className="mt-2 text-sm">{product.starterModules.join(' + ')}</p>
+                  </article>
+                  <article className="sm-chip text-white">
+                    <p className="sm-kicker text-[var(--sm-accent-alt)]">Agent loops</p>
+                    <p className="mt-2 text-sm text-[var(--sm-muted)]">{product.agentLoops.join(', ')}</p>
+                  </article>
+                </div>
+                <div className="mt-4 flex flex-wrap gap-2 text-xs uppercase tracking-[0.16em] text-white/45">
+                  <span>Integrations: {product.integrations.join(', ')}</span>
+                  <span>Controls: {product.controls.join(', ')}</span>
+                </div>
+                <div className="mt-6 flex flex-wrap gap-3">
+                  <Link className="sm-button-primary" to={product.proofTool.route}>
+                    Open {product.proofTool.label}
+                  </Link>
+                  <Link className="sm-button-secondary" to={contactLink(product.name)}>
+                    Start rollout
+                  </Link>
+                  <Link className="sm-link" to={`/products/${product.slug}`}>
+                    See full setup
+                  </Link>
+                </div>
               </div>
-              <p className="mt-2 text-sm text-[var(--sm-muted)]">{product.promise}</p>
-              <div className="mt-4 space-y-2">
-                {product.problemsSolved.slice(0, 2).map((item) => (
-                  <div className="sm-site-point text-sm" key={item}>
-                    <span className="sm-site-point-dot" />
-                    <span>{item}</span>
+              <div className="sm-site-case-visual">
+                <div className="sm-product-showcase-visual">
+                  <img
+                    alt={`${product.name} live screenshot`}
+                    className="sm-product-showcase-image object-cover object-top"
+                    decoding="async"
+                    height={screenshotSize.height}
+                    loading="lazy"
+                    src={product.image}
+                    width={screenshotSize.width}
+                  />
+                  <div className="sm-product-showcase-meta">
+                    <article className="sm-chip text-white">
+                      <p className="sm-kicker text-[var(--sm-accent)]">Shared data</p>
+                      <p className="mt-2 text-sm text-[var(--sm-muted)]">{product.knowledgeModules.join(', ')}</p>
+                    </article>
+                    <article className="sm-chip text-white">
+                      <p className="sm-kicker text-[var(--sm-accent-alt)]">Used for</p>
+                      <p className="mt-2 text-sm text-[var(--sm-muted)]">{product.usedFor.join(', ')}</p>
+                    </article>
                   </div>
-                ))}
+                </div>
               </div>
-              <p className="mt-4 text-xs uppercase tracking-[0.18em] text-white/45">Integrations: {product.integrations.join(', ')}</p>
-              <p className="mt-2 text-xs uppercase tracking-[0.18em] text-white/45">Controls: {product.controls.join(', ')}</p>
-              <div className="mt-4 flex flex-wrap gap-3">
-                <Link className="sm-button-primary" to={product.proofTool.route}>
-                  Open {product.proofTool.label}
-                </Link>
-                <Link className="sm-button-secondary" to={contactLink(product.name)}>
-                  Start rollout
-                </Link>
-              </div>
-              <Link className="mt-4 inline-flex text-sm font-semibold text-[var(--sm-accent)]" to={`/products/${product.slug}`}>
-                See full setup
-              </Link>
             </article>
           ))}
         </div>
@@ -237,8 +314,8 @@ export function HomePage() {
           <Link className="sm-button-primary" to="/clients/yangon-tyre">
             View Yangon Tyre system
           </Link>
-          <Link className="sm-button-secondary" to="/app/teams">
-            See agent ops
+          <Link className="sm-button-secondary" to="/agents">
+            See Agent Teams
           </Link>
           <Link className="sm-button-secondary" to="/factory">
             See how it is built
@@ -247,101 +324,70 @@ export function HomePage() {
       </section>
 
       <section className="mt-16 sm-site-panel">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div className="sm-site-proof-strip">
           <div>
-            <p className="sm-kicker text-[var(--sm-accent)]">How products grow</p>
-            <h2 className="mt-3 text-3xl font-bold text-white lg:text-4xl">Each product has a clear owner and a clear next step.</h2>
+            <p className="sm-kicker text-[var(--sm-accent)]">How It Scales</p>
+            <h2 className="mt-3 max-w-3xl text-3xl font-bold text-white lg:text-4xl">
+              A live module becomes a wider system through product programs and shared build teams.
+            </h2>
+            <p className="mt-4 max-w-2xl text-sm leading-relaxed text-[var(--sm-muted)] lg:text-base">
+              The same company model keeps product work, rollout planning, tenant delivery, and internal tools moving in one direction.
+            </p>
+            <div className="mt-6 flex flex-wrap gap-3">
+              <Link className="sm-button-primary" to="/portfolio">
+                Open Portfolio
+              </Link>
+              <Link className="sm-button-secondary" to="/factory">
+                See Build
+              </Link>
+            </div>
           </div>
-          <div className="flex flex-wrap gap-3">
-            <Link className="sm-button-secondary" to="/portfolio">
-              Open portfolio
-            </Link>
-            <Link className="sm-button-secondary" to="/factory">
-              See Build
-            </Link>
+          <div className="grid gap-4">
+            <div className="grid gap-3">
+              {featuredPrograms.map((program) => (
+                <article className="sm-proof-card" key={program.id}>
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="sm-home-proof-label">{program.stage}</span>
+                    <span className="sm-status-pill">{program.releaseTrain}</span>
+                  </div>
+                  <p className="mt-3 font-semibold text-white">{program.name}</p>
+                  <p className="mt-2 text-sm text-[var(--sm-muted)]">{program.target}</p>
+                  <p className="mt-2 text-sm text-white/80">Starts with: {program.starterWedge}</p>
+                  <p className="mt-2 text-sm text-white/80">Next: {program.nextMove}</p>
+                </article>
+              ))}
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {featuredBuildTeams.map((team) => (
+                <article className="sm-chip text-white" key={team.id}>
+                  <p className="font-semibold">{team.name}</p>
+                  <p className="mt-2 text-sm text-[var(--sm-muted)]">{team.mission}</p>
+                  <p className="mt-2 text-xs uppercase tracking-[0.16em] text-white/45">Owns {team.ownership.join(', ')}</p>
+                </article>
+              ))}
+            </div>
           </div>
-        </div>
-        <div className="mt-6 grid gap-4 lg:grid-cols-3">
-          {MODULE_PROGRAMS.slice(0, 3).map((program) => (
-            <article className="sm-demo-link sm-demo-link-card" key={program.id}>
-              <div className="flex items-center justify-between gap-3">
-                <span className="sm-home-proof-label">{program.stage}</span>
-                <span className="sm-status-pill">{program.owner}</span>
-              </div>
-              <strong>{program.name}</strong>
-              <span>{program.target}</span>
-              <p className="mt-2 text-sm text-white/80">{program.commercialStory}</p>
-              <p className="mt-2 text-sm text-[var(--sm-muted)]">Market: {program.market}</p>
-              <p className="mt-2 text-sm text-white/80">Starts with: {program.starterWedge}</p>
-              <p className="mt-2 text-sm text-white/80">Release train: {program.releaseTrain}</p>
-              <p className="mt-2 text-sm text-[var(--sm-muted)]">Live example: {program.tenantProof}</p>
-              <p className="mt-2 text-sm text-white/80">Internal crews: {program.agentCrews.join(', ')}</p>
-              <p className="mt-2 text-sm text-white/80">Adds next: {program.nextReleases.join(', ')}</p>
-              <div className="mt-3 flex flex-wrap gap-3">
-                <Link className="sm-link" to={program.route}>
-                  Open program
-                </Link>
-              </div>
-            </article>
-          ))}
-        </div>
-        <p className="mt-6 text-sm leading-relaxed text-[var(--sm-muted)]">
-          These products are reviewed by the same build teams that handle rollout, connectors, and controls, so each release stays tied to real operating work.
-        </p>
-      </section>
-
-      <section className="mt-16 sm-site-panel">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <p className="sm-kicker text-[var(--sm-accent)]">Build</p>
-            <h2 className="mt-3 text-2xl font-bold text-white lg:text-4xl">The same system sold to clients also runs the internal build work.</h2>
-          </div>
-          <p className="max-w-xl text-sm leading-relaxed text-[var(--sm-muted)]">
-            SUPERMEGA.dev is not shipping isolated tools. The same base runs product build, rollout planning, tenant delivery, and internal operations.
-          </p>
-        </div>
-        <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          {BUILD_TEAMS.slice(0, 4).map((team) => (
-            <article className="sm-demo-link sm-demo-link-card" key={team.id}>
-              <strong>{team.name}</strong>
-              <span>{team.mission}</span>
-              <small className="text-[var(--sm-muted)]">Workspace: {team.workspace}</small>
-              <small className="text-[var(--sm-muted)]">Owns: {team.ownership.join(', ')}</small>
-              <small className="text-[var(--sm-muted)]">Agent crews: {team.agentPods.join(', ')}</small>
-            </article>
-          ))}
-        </div>
-        <div className="mt-6 flex flex-wrap gap-3">
-          <Link className="sm-button-primary" to="/factory">
-            See how products are built
-          </Link>
-          <Link className="sm-button-secondary" to="/portfolio">
-            View product portfolio
-          </Link>
-          <Link className="sm-button-secondary" to="/products">
-            See all products
-          </Link>
         </div>
       </section>
 
       <section className="mt-16 sm-site-panel">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div className="sm-site-proof-strip">
           <div>
             <p className="sm-kicker text-[var(--sm-accent)]">Ways to use it</p>
-            <h2 className="mt-3 text-2xl font-bold text-white lg:text-4xl">Run the same base for your company, tenants, and internal tools.</h2>
+            <h2 className="mt-3 max-w-3xl text-3xl font-bold text-white lg:text-4xl">Run the same base for your company, tenants, and internal tools.</h2>
+            <p className="mt-4 max-w-2xl text-sm leading-relaxed text-[var(--sm-muted)] lg:text-base">
+              SUPERMEGA.dev can stay public-facing at the product layer while running private delivery, internal operations, and founder review behind the same stack.
+            </p>
           </div>
-          <p className="max-w-xl text-sm leading-relaxed text-[var(--sm-muted)]">
-            SUPERMEGA.dev is not only a public site. The same base can run internal operations, client workspaces, and the meta tools used to manage
-            rollouts.
-          </p>
-        </div>
-        <div className="mt-6 grid gap-4 lg:grid-cols-2">
-          {usageModes.map((item) => (
-            <article className="sm-demo-link sm-demo-link-card" key={item.name}>
-              <strong>{item.name}</strong>
-              <span>{item.detail}</span>
-            </article>
-          ))}
+          <div className="grid gap-3 sm:grid-cols-2">
+            {usageModes.map((item, index) => (
+              <article className="sm-chip text-white" key={item.name}>
+                <p className="sm-kicker text-[var(--sm-accent)]">{`0${index + 1}`}</p>
+                <p className="mt-2 font-semibold text-white">{item.name}</p>
+                <p className="mt-2 text-sm text-[var(--sm-muted)]">{item.detail}</p>
+              </article>
+            ))}
+          </div>
         </div>
       </section>
 
@@ -358,8 +404,8 @@ export function HomePage() {
               <Link className="sm-button-secondary" to="/factory">
                 Open Build
               </Link>
-              <Link className="sm-button-secondary" to="/app/platform-admin">
-                Open Platform Admin
+              <Link className="sm-button-secondary" to="/platform">
+                See Enterprise Setup
               </Link>
             </div>
           </div>
@@ -432,37 +478,6 @@ export function HomePage() {
               Common starting inputs: Gmail, Google Drive, Sheets, CSV exports, ERP exports, uploaded files, APIs, and internal task updates.
             </p>
           </article>
-        </div>
-      </section>
-
-      <section className="mt-16 sm-site-panel">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <p className="sm-kicker text-[var(--sm-accent)]">Live modules</p>
-            <h2 className="mt-3 text-2xl font-bold text-white lg:text-4xl">Open the live products now, then connect them into a full system.</h2>
-          </div>
-          <p className="max-w-xl text-sm leading-relaxed text-[var(--sm-muted)]">These are working entry points, not concept cards.</p>
-        </div>
-        <div className="mt-6 grid gap-4 lg:grid-cols-3">
-          {publicModules.map((item) => (
-            <article className="sm-chip text-white" key={item.name}>
-              <div className="flex items-center justify-between gap-3">
-                <p className="font-semibold">{item.name}</p>
-                <span className="sm-status-pill">Live now</span>
-              </div>
-              <p className="mt-2 text-sm text-[var(--sm-muted)]">{item.tagline}</p>
-              <p className="mt-4 text-xs uppercase tracking-[0.18em] text-white/45">Best for {item.bestFor}</p>
-              <p className="mt-3 text-sm text-[var(--sm-muted)]">Outputs: {item.outputs.join(', ')}</p>
-              <div className="mt-4 flex flex-wrap gap-3">
-                <Link className="sm-button-primary" to={item.path}>
-                  Open {item.name}
-                </Link>
-                <Link className="sm-button-secondary" to={contactLink(item.name)}>
-                  Start rollout
-                </Link>
-              </div>
-            </article>
-          ))}
         </div>
       </section>
 

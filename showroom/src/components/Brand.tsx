@@ -24,7 +24,7 @@ export function BrandMark({ className = '' }: BrandMarkProps) {
 
 export function BrandWordmark({ className = '' }: BrandWordmarkProps) {
   return (
-    <span className={`sm-brand-wordmark ${className}`.trim()}>
+    <span className={`sm-brand-wordmark ${className}`.trim()} translate="no">
       <span>SUPERMEGA</span>
       <span className="sm-brand-wordmark-dot">.dev</span>
     </span>

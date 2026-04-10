@@ -21,6 +21,9 @@ export function SiteFrame() {
 
   return (
     <div className="min-h-screen text-[var(--sm-ink)]">
+      <a className="sm-skip-link" href="#main-content">
+        Skip to content
+      </a>
       <div className="fixed inset-x-0 top-0 z-40 border-b border-white/8 bg-[rgba(4,8,16,0.72)] backdrop-blur-xl">
         <nav className="mx-auto flex w-full max-w-7xl items-center justify-between px-4 py-3 lg:px-8">
           <NavLink className="flex items-center gap-3" to="/">
@@ -31,6 +34,9 @@ export function SiteFrame() {
             </span>
           </NavLink>
           <button
+            aria-controls="site-menu"
+            aria-expanded={menuOpen}
+            aria-label={menuOpen ? 'Close site menu' : 'Open site menu'}
             className="rounded-md border border-white/10 bg-white/6 px-3 py-2 text-sm font-semibold text-white md:hidden"
             onClick={() => setMenuOpen((open) => !open)}
             type="button"
@@ -49,7 +55,7 @@ export function SiteFrame() {
           </div>
         </nav>
         {menuOpen ? (
-          <div className="border-t border-white/8 bg-[rgba(4,10,22,0.92)] px-4 py-3 backdrop-blur-xl md:hidden">
+          <div className="border-t border-white/8 bg-[rgba(4,10,22,0.92)] px-4 py-3 backdrop-blur-xl md:hidden" id="site-menu">
             <div className="flex flex-col gap-2">
               {activeNavItems.map((item) => (
                 <NavLink className={navClassName} key={item.to} onClick={() => setMenuOpen(false)} to={item.to}>
@@ -64,7 +70,7 @@ export function SiteFrame() {
         ) : null}
       </div>
 
-      <main className="mx-auto w-full max-w-7xl px-4 pb-20 pt-24 lg:px-8">
+      <main className="mx-auto w-full max-w-7xl px-4 pb-20 pt-24 lg:px-8" id="main-content" tabIndex={-1}>
         <Outlet />
       </main>
 

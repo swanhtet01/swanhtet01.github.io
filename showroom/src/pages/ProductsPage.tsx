@@ -28,6 +28,11 @@ const packagingModes = [
   },
 ] as const
 
+const screenshotSize = {
+  width: 1440,
+  height: 1024,
+} as const
+
 export function ProductsPage() {
   return (
     <div className="space-y-10 pb-12">
@@ -142,8 +147,11 @@ export function ProductsPage() {
             <img
               alt={`${product.name} live screenshot`}
               className="aspect-[16/10] w-full rounded-2xl border border-white/10 bg-[#020612] object-cover object-top"
+              decoding="async"
+              height={screenshotSize.height}
               loading="lazy"
               src={product.image}
+              width={screenshotSize.width}
             />
             <div className="mt-4 flex items-center justify-between gap-3">
               <p className="sm-kicker text-[var(--sm-accent)]">{product.eyebrow}</p>
@@ -365,8 +373,8 @@ export function ProductsPage() {
             <Link className="sm-button-secondary" to="/factory">
               See Build
             </Link>
-            <Link className="sm-button-secondary" to="/app/platform-admin">
-              Open Platform Admin
+            <Link className="sm-button-secondary" to="/platform">
+              See Enterprise Setup
             </Link>
           </div>
         </div>
@@ -385,8 +393,8 @@ export function ProductsPage() {
           <Link className="sm-button-secondary" to="/factory">
             See Build
           </Link>
-          <Link className="sm-button-secondary" to="/app/teams">
-            Open Agent Ops
+          <Link className="sm-button-secondary" to="/agents">
+            See Agent Teams
           </Link>
         </div>
       </section>

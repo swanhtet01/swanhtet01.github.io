@@ -175,8 +175,8 @@ export function ProductPortfolioPage() {
               <Link className="sm-button-primary" to="/factory">
                 Open Build
               </Link>
-              <Link className="sm-button-secondary" to="/app/platform-admin">
-                Open Platform Admin
+              <Link className="sm-button-secondary" to="/platform">
+                See Enterprise Setup
               </Link>
             </div>
           </article>

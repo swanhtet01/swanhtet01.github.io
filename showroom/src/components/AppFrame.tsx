@@ -22,6 +22,7 @@ const appNavItems: Array<{ label: string; to: string; requires: WorkspaceCapabil
   { label: 'Director', to: '/app/director', requires: ['director.view'] },
   { label: 'Architect', to: '/app/architect', requires: ['architect.view', 'tenant_admin.view', 'platform_admin.view'] },
   { label: 'Build', to: '/app/factory', requires: ['agent_ops.view', 'architect.view', 'tenant_admin.view', 'platform_admin.view'] },
+  { label: 'Runtime', to: '/app/runtime', requires: ['agent_ops.view', 'tenant_admin.view', 'platform_admin.view'] },
   { label: 'Product Ops', to: '/app/product-ops', requires: ['agent_ops.view', 'architect.view', 'tenant_admin.view', 'platform_admin.view'] },
   { label: 'Connectors', to: '/app/connectors', requires: ['connector_admin.view', 'tenant_admin.view', 'platform_admin.view'] },
   { label: 'Knowledge', to: '/app/knowledge', requires: ['knowledge_admin.view', 'tenant_admin.view', 'platform_admin.view'] },
@@ -123,6 +124,9 @@ export function AppFrame() {
 
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(37,208,255,0.1),_transparent_30%),linear-gradient(180deg,#020611_0%,#07111f_40%,#07111f_100%)] text-[var(--sm-ink)]">
+      <a className="sm-skip-link" href="#app-main-content">
+        Skip to content
+      </a>
       <div className="border-b border-white/8 bg-[rgba(3,8,18,0.9)] backdrop-blur-xl">
         <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-4 lg:flex-row lg:items-center lg:justify-between lg:px-8">
           <div className="flex items-center gap-4">
@@ -159,7 +163,7 @@ export function AppFrame() {
         </div>
       </div>
 
-      <main className="mx-auto w-full max-w-7xl px-4 pb-16 pt-8 lg:px-8">
+      <main className="mx-auto w-full max-w-7xl px-4 pb-16 pt-8 lg:px-8" id="app-main-content" tabIndex={-1}>
         <Outlet />
       </main>
     </div>

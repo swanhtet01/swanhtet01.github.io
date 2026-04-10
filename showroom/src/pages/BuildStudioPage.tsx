@@ -317,8 +317,8 @@ export function BuildStudioPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-3">
-          <Link className="sm-button-primary" to="/app/runtime">
-            Open Runtime
+          <Link className="sm-button-primary" to="/agents">
+            See Agent Teams
           </Link>
           <Link className="sm-button-secondary" to="/portfolio">
             View portfolio
@@ -326,8 +326,8 @@ export function BuildStudioPage() {
           <Link className="sm-button-secondary" to="/contact">
             Start rollout
           </Link>
-          <Link className="sm-button-secondary" to="/app/platform-admin">
-            Open Platform Admin
+          <Link className="sm-button-secondary" to="/platform">
+            See Enterprise Setup
           </Link>
           <Link className="sm-button-secondary" to="/clients/yangon-tyre">
             Open tenant example
