@@ -132,6 +132,9 @@ export function ContactPage() {
               <Link className="sm-button-secondary text-center" to="/find-companies">
                 Open Find Clients
               </Link>
+              <Link className="sm-button-secondary text-center" to="/platform">
+                See enterprise setup
+              </Link>
             </div>
           </div>
 
@@ -158,6 +161,11 @@ export function ContactPage() {
             <h2 className="mt-3 text-2xl font-bold text-white">{ytfDeployment.domain}</h2>
             <p className="mt-3 text-sm leading-relaxed text-[var(--sm-muted)]">{ytfDeployment.summary}</p>
             <p className="mt-4 text-sm text-[var(--sm-muted)]">Modules: {ytfDeployment.modules.join(', ')}</p>
+            <div className="mt-5 flex flex-wrap gap-3">
+              <Link className="sm-link" to="/platform">
+                Review enterprise setup
+              </Link>
+            </div>
           </div>
         </aside>
 

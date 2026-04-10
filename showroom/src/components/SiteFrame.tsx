@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { Link, NavLink, Outlet } from 'react-router-dom'
 
-import { navItems as defaultNavItems } from '../content'
 import { getTenantBrandLabel, getTenantConfig } from '../lib/tenantConfig'
 import { BrandMark, BrandWordmark } from './Brand'
 
@@ -15,9 +14,10 @@ const navClassName = ({ isActive }: { isActive: boolean }) =>
 export function SiteFrame() {
   const [menuOpen, setMenuOpen] = useState(false)
   const tenant = getTenantConfig()
-  const activeNavItems = tenant.key === 'default' ? [...defaultNavItems] : tenant.navItems
+  const activeNavItems = tenant.navItems
   const primaryCta = tenant.showBookCta ? { label: tenant.bookCtaLabel, to: '/contact' } : tenant.homePrimaryCta
   const footerLink = tenant.key === 'default' ? { label: 'Team app', to: 'https://app.supermega.dev', external: true } : { label: 'Team login', to: '/login', external: false }
+  const brandLabel = tenant.key === 'default' ? '' : getTenantBrandLabel(tenant)
 
   return (
     <div className="min-h-screen text-[var(--sm-ink)]">
@@ -30,7 +30,7 @@ export function SiteFrame() {
             <BrandMark className="h-10 w-10" />
             <span className="flex flex-col">
               <BrandWordmark className="text-lg text-white" />
-              <span className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[var(--sm-muted)]">{getTenantBrandLabel(tenant)}</span>
+              {brandLabel ? <span className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[var(--sm-muted)]">{brandLabel}</span> : null}
             </span>
           </NavLink>
           <button

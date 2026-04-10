@@ -120,15 +120,13 @@ export const bookingUrl = (import.meta.env.VITE_BOOKING_URL ?? '').trim()
 
 export const navItems = [
   { label: 'Products', to: '/products' },
-  { label: 'Portfolio', to: '/portfolio' },
-  { label: 'Agents', to: '/agents' },
   { label: 'Enterprise', to: '/platform' },
-  { label: 'Build', to: '/factory' },
+  { label: 'Contact', to: '/contact' },
 ] as const
 
 export const hero = {
   eyebrow: 'SUPERMEGA.dev',
-  title: 'Live company software that replaces tool sprawl.',
+  title: 'One working system for sales and operations.',
   description:
     'Start with Find Clients, Company List, or Receiving Control. Then add roles, approvals, audit history, tenant workspaces, and AI agents on the same system.',
 }
