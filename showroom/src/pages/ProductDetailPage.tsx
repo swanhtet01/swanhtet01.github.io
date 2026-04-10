@@ -22,8 +22,14 @@ export function ProductDetailPage() {
   }
 
   if (softwareModule) {
-    const relatedTeams = getAgentTeamDetails(softwareModule.agentTeams)
+    const automationSupport = getAgentTeamDetails(softwareModule.agentTeams)
     const siblingModules: SoftwareModuleDetail[] = SOFTWARE_MODULE_DETAILS.filter((item: SoftwareModuleDetail) => item.id !== softwareModule.id).slice(0, 3)
+    const rolloutPath = [
+      `Start with ${softwareModule.surfaces[0]}.`,
+      'Connect the current data and files first.',
+      'Set the right roles, approvals, and history around the workflow.',
+      'Add more templates only after the team trusts the first one.',
+    ] as const
 
     return (
       <div className="space-y-10 pb-12">
@@ -67,7 +73,7 @@ export function ProductDetailPage() {
         <section className="grid gap-6 lg:grid-cols-[1fr_1fr]">
           <article className="sm-site-panel">
             <p className="sm-kicker text-[var(--sm-accent)]">What ships</p>
-            <h2 className="mt-3 text-3xl font-bold text-white lg:text-4xl">A reusable template, not a one-off build.</h2>
+            <h2 className="mt-3 text-3xl font-bold text-white lg:text-4xl">A reusable template with a clear job.</h2>
             <p className="mt-4 text-sm leading-relaxed text-[var(--sm-muted)]">{softwareModule.summary}</p>
             <div className="mt-6 grid gap-3">
               {softwareModule.surfaces.map((surface) => (
@@ -79,8 +85,8 @@ export function ProductDetailPage() {
           </article>
 
           <article className="sm-site-panel">
-            <p className="sm-kicker text-[var(--sm-accent-alt)]">Built in</p>
-            <h2 className="mt-3 text-3xl font-bold text-white lg:text-4xl">Shared data, controls, and agent support.</h2>
+            <p className="sm-kicker text-[var(--sm-accent-alt)]">Included in rollout</p>
+            <h2 className="mt-3 text-3xl font-bold text-white lg:text-4xl">Shared data, controls, and AI support.</h2>
             <div className="mt-6 grid gap-3">
               {softwareModule.knowledgeModules.map((item: string) => (
                 <article className="sm-chip text-white" key={`knowledge-${item}`}>
@@ -92,7 +98,7 @@ export function ProductDetailPage() {
                   <p className="font-semibold">{item}</p>
                 </article>
               ))}
-              {relatedTeams.map((team) => (
+              {automationSupport.map((team) => (
                 <article className="sm-chip text-white" key={team.id}>
                   <p className="font-semibold">{team.name}</p>
                 </article>
@@ -101,11 +107,45 @@ export function ProductDetailPage() {
           </article>
         </section>
 
+        <section className="grid gap-6 lg:grid-cols-[1fr_1fr]">
+          <article className="sm-site-panel">
+            <p className="sm-kicker text-[var(--sm-accent)]">Rollout path</p>
+            <h2 className="mt-3 text-3xl font-bold text-white lg:text-4xl">How clients usually start.</h2>
+            <div className="mt-6 space-y-3">
+              {rolloutPath.map((step, index) => (
+                <div className="sm-site-point" key={step}>
+                  <span className="sm-site-point-dot" />
+                  <span>{index + 1}. {step}</span>
+                </div>
+              ))}
+            </div>
+          </article>
+
+          <article className="sm-site-panel">
+            <p className="sm-kicker text-[var(--sm-accent-alt)]">Enterprise basics</p>
+            <h2 className="mt-3 text-3xl font-bold text-white lg:text-4xl">Ready for branded customer rollout.</h2>
+            <div className="mt-6 grid gap-3">
+              <article className="sm-chip text-white">
+                <p className="font-semibold">Roles and permissions</p>
+              </article>
+              <article className="sm-chip text-white">
+                <p className="font-semibold">Approval steps</p>
+              </article>
+              <article className="sm-chip text-white">
+                <p className="font-semibold">Audit history</p>
+              </article>
+              <article className="sm-chip text-white">
+                <p className="font-semibold">Customer-specific workspace</p>
+              </article>
+            </div>
+          </article>
+        </section>
+
         <section className="sm-site-panel">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div>
               <p className="sm-kicker text-[var(--sm-accent)]">Use with</p>
-              <h2 className="mt-3 text-3xl font-bold text-white lg:text-4xl">Expand without changing stacks.</h2>
+              <h2 className="mt-3 text-3xl font-bold text-white lg:text-4xl">Expand with more templates later.</h2>
             </div>
             <Link className="sm-button-secondary" to="/products">
               View all products

@@ -34,8 +34,8 @@ const caseStudyLanes = [
     detail: 'Receiving, supplier issues, quality, maintenance, and inventory in one queue.',
   },
   {
-    name: 'CEO and admin workspace',
-    detail: 'Decision review, approvals, connector posture, and tenant setup in one control layer.',
+    name: 'Management workspace',
+    detail: 'Decision review, approvals, and company-wide oversight in one place.',
   },
 ] as const
 

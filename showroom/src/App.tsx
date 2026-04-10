@@ -8,7 +8,6 @@ import { hasLiveWorkspaceApp } from './lib/workspaceApi'
 import { getTenantConfig } from './lib/tenantConfig'
 
 const ActionBoardPage = lazy(() => import('./pages/ActionBoardPage').then((module) => ({ default: module.ActionBoardPage })))
-const AgentsPage = lazy(() => import('./pages/AgentsPage').then((module) => ({ default: module.AgentsPage })))
 const AgentTeamsPage = lazy(() => import('./pages/AgentTeamsPage').then((module) => ({ default: module.AgentTeamsPage })))
 const ApprovalQueuePage = lazy(() => import('./pages/ApprovalQueuePage').then((module) => ({ default: module.ApprovalQueuePage })))
 const BuildStudioPage = lazy(() => import('./pages/BuildStudioPage').then((module) => ({ default: module.BuildStudioPage })))
@@ -43,7 +42,6 @@ const WorkbenchPage = lazy(() => import('./pages/WorkbenchPage').then((module) =
 const WorkspaceLitePage = lazy(() => import('./pages/WorkspaceLitePage').then((module) => ({ default: module.WorkspaceLitePage })))
 const WorkspacePage = lazy(() => import('./pages/WorkspacePage').then((module) => ({ default: module.WorkspacePage })))
 const YangonTyrePage = lazy(() => import('./pages/YangonTyrePage').then((module) => ({ default: module.YangonTyrePage })))
-const ProductPortfolioPage = lazy(() => import('./pages/ProductPortfolioPage').then((module) => ({ default: module.ProductPortfolioPage })))
 const SecurityControlPage = lazy(() => import('./pages/SecurityControlPage').then((module) => ({ default: module.SecurityControlPage })))
 
 function routeElement(element: ReactNode) {
@@ -63,10 +61,12 @@ function App() {
         <Route element={<SiteFrame />} path="/">
           <Route element={homeElement} index />
           <Route element={routeElement(<PlatformNarrativePage />)} path="platform" />
-          <Route element={routeElement(<ProductPortfolioPage />)} path="portfolio" />
+          <Route element={<Navigate replace to="/products" />} path="proof" />
+          <Route element={<Navigate replace to="/products" />} path="demo-center" />
+          <Route element={<Navigate replace to="/products" />} path="portfolio" />
           <Route element={<Navigate replace to="/platform" />} path="solutions" />
-          <Route element={routeElement(<AgentsPage />)} path="agents" />
-          <Route element={routeElement(<BuildStudioPage />)} path="factory" />
+          <Route element={<Navigate replace to="/platform" />} path="agents" />
+          <Route element={<Navigate replace to="/platform" />} path="factory" />
           <Route element={routeElement(<YangonTyrePage />)} path="clients/yangon-tyre" />
           <Route element={<Navigate replace to="/clients/yangon-tyre" />} path="ytf" />
           <Route element={routeElement(<ProductsPage />)} path="products" />

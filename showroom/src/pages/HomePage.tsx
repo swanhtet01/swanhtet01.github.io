@@ -23,7 +23,7 @@ const templateHighlights = [
   },
   {
     name: 'Client portal',
-    detail: 'Package the same system into one branded workspace for a client, site, or internal team.',
+    detail: 'Package the same system into one branded workspace for a client, site, or business unit.',
     to: '/products/client-portal',
   },
 ] as const

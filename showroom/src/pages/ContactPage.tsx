@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
-import { Link } from 'react-router-dom'
 
 import { PageIntro } from '../components/PageIntro'
-import { bookingUrl, ytfDeployment } from '../content'
+import { bookingUrl } from '../content'
 import { trackEvent } from '../lib/analytics'
-import { checkWorkspaceHealth, createContactSubmission, hasLiveWorkspaceApp } from '../lib/workspaceApi'
+import { checkWorkspaceHealth, createContactSubmission } from '../lib/workspaceApi'
+
+const rolloutIncludes = ['One working screen', 'Imported current data', 'Role-based access', 'History and approvals'] as const
+const bringToStart = ['One painful workflow', 'One real user group', 'One messy file or data source'] as const
+const whatHappensNext = ['We review the workflow', 'We map the right product', 'We scope the first rollout'] as const
 
 type LeadFormState = {
   name: string
@@ -34,7 +37,6 @@ export function ContactPage() {
   const [form, setForm] = useState<LeadFormState>(initialFormFromQuery)
   const [status, setStatus] = useState<'idle' | 'saving' | 'saved' | 'saved_local' | 'error'>('idle')
   const [apiReady, setApiReady] = useState(false)
-  const liveAppAvailable = hasLiveWorkspaceApp()
   const requestedPackage = requestedPackageFromQuery()
 
   useEffect(() => {
@@ -56,12 +58,12 @@ export function ContactPage() {
       return 'Your rollout request was saved. We can now follow it up inside the live app.'
     }
     if (status === 'saved_local') {
-      return 'Your rollout request was saved in this browser.'
+      return 'Your rollout request was saved in this browser. Book a rollout call if you want immediate follow-up.'
     }
     if (status === 'error') {
       return 'The rollout request could not be saved. Try again.'
     }
-    return 'One workflow, one team, and one messy file is enough to start.'
+    return 'Tell us the first workflow, the current tools, and who needs the first live screen.'
   }, [status])
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -95,81 +97,53 @@ export function ContactPage() {
   return (
     <div className="space-y-8">
       <PageIntro
+        compact
         eyebrow="Start rollout"
-        title="Bring us the first workflow to fix."
-        description="Tell us the process, the current tools, and who needs the first live screen. We will map the right product, the controls, and the rollout path."
+        title="Tell us the first workflow to fix."
+        description="Use this page to start a customer rollout. We use it to scope the right product, connect the current data, and set up the first live screen."
       />
 
-      <section className="grid gap-6 lg:grid-cols-[0.88fr_1.12fr]">
-        <aside className="space-y-6">
-          <div className="sm-terminal p-6">
-            <p className="sm-kicker text-[var(--sm-accent)]">What we map first</p>
-            <div className="mt-5 grid gap-3">
-              <div className="sm-chip text-white">The first workflow and the people who touch it every day.</div>
-              <div className="sm-chip text-white">The right live product and the first owner queue.</div>
-              <div className="sm-chip text-white">The roles, approvals, and review habit around that queue.</div>
-              <div className="sm-chip text-white">The current files, inboxes, exports, and APIs to connect first.</div>
-            </div>
-
-            {requestedPackage ? (
-              <div className="mt-6 sm-chip text-white">
-                <p className="sm-kicker text-[var(--sm-accent)]">Requested product</p>
-                <p className="mt-2 text-lg font-semibold">{requestedPackage}</p>
-                <p className="mt-2 text-sm text-[var(--sm-muted)]">We will map the live module, imports, roles, and the first automation around this starting point.</p>
-              </div>
-            ) : null}
-
-            <div className="mt-6 grid gap-3">
-              {bookingUrl ? (
-                <a className="sm-button-secondary text-center" href={bookingUrl} onClick={() => trackEvent('contact_calendar_click', { source: 'contact_page' })} rel="noreferrer" target="_blank">
-                  Book rollout call
-                </a>
-              ) : (
-                <Link className="sm-button-secondary text-center" to={liveAppAvailable ? '/signup' : '/products'}>
-                  {liveAppAvailable ? 'Open app' : 'See live products'}
-                </Link>
-              )}
-              <Link className="sm-button-secondary text-center" to="/find-companies">
-                Open Find Clients
-              </Link>
-              <Link className="sm-button-secondary text-center" to="/platform">
-                See enterprise setup
-              </Link>
-            </div>
+      <section className="grid gap-4 md:grid-cols-3">
+        <article className="sm-proof-card">
+          <p className="sm-kicker text-[var(--sm-accent)]">First rollout includes</p>
+          <div className="mt-4 space-y-2">
+            {rolloutIncludes.map((item) => (
+              <p className="text-sm text-white" key={item}>
+                {item}
+              </p>
+            ))}
           </div>
-
-          <div className="sm-surface p-6">
-            <p className="sm-kicker text-[var(--sm-accent)]">What we can connect first</p>
-            <div className="mt-5 grid gap-3">
-              <div className="sm-demo-mini">
-                <strong>Gmail + Drive + Sheets</strong>
-                <span>Draft workflows, imports, exports, links, and shared file context around the product.</span>
-              </div>
-              <div className="sm-demo-mini">
-                <strong>CSV + uploads + ERP exports</strong>
-                <span>Bring the current rows, files, and reports in before deeper write-back automation.</span>
-              </div>
-              <div className="sm-demo-mini">
-                <strong>API-backed app state</strong>
-                <span>Keep the queue, history, approvals, and agent jobs inside one saved workspace.</span>
-              </div>
-            </div>
+        </article>
+        <article className="sm-proof-card">
+          <p className="sm-kicker text-[var(--sm-accent)]">Bring to start</p>
+          <div className="mt-4 space-y-2">
+            {bringToStart.map((item) => (
+              <p className="text-sm text-white" key={item}>
+                {item}
+              </p>
+            ))}
           </div>
-
-          <div className="sm-surface p-6">
-            <p className="sm-kicker text-[var(--sm-accent)]">Named tenant example</p>
-            <h2 className="mt-3 text-2xl font-bold text-white">{ytfDeployment.domain}</h2>
-            <p className="mt-3 text-sm leading-relaxed text-[var(--sm-muted)]">{ytfDeployment.summary}</p>
-            <p className="mt-4 text-sm text-[var(--sm-muted)]">Modules: {ytfDeployment.modules.join(', ')}</p>
-            <div className="mt-5 flex flex-wrap gap-3">
-              <Link className="sm-link" to="/platform">
-                Review enterprise setup
-              </Link>
-            </div>
+        </article>
+        <article className="sm-proof-card">
+          <p className="sm-kicker text-[var(--sm-accent-alt)]">What happens next</p>
+          <div className="mt-4 space-y-2">
+            {whatHappensNext.map((item) => (
+              <p className="text-sm text-white" key={item}>
+                {item}
+              </p>
+            ))}
           </div>
-        </aside>
+        </article>
+      </section>
 
-        <form className="sm-surface p-6" onSubmit={handleSubmit}>
+      <section>
+        <form className="sm-surface p-6 lg:p-8" onSubmit={handleSubmit}>
+          {requestedPackage ? (
+            <div className="mb-5 sm-chip text-white">
+              <p className="sm-kicker text-[var(--sm-accent)]">Requested product</p>
+              <p className="mt-2 text-lg font-semibold">{requestedPackage}</p>
+            </div>
+          ) : null}
           <div className="grid gap-4 md:grid-cols-2">
             <label className="flex flex-col gap-2 text-sm font-semibold text-[var(--sm-muted)]">
               Name
@@ -229,7 +203,13 @@ export function ContactPage() {
               {status === 'saving' ? 'Sending...' : 'Send rollout request'}
             </button>
             {bookingUrl ? (
-              <a className="sm-button-secondary" href={bookingUrl} rel="noreferrer" target="_blank">
+              <a
+                className="sm-button-secondary"
+                href={bookingUrl}
+                onClick={() => trackEvent('contact_calendar_click', { source: 'contact_page' })}
+                rel="noreferrer"
+                target="_blank"
+              >
                 Book rollout call
               </a>
             ) : null}
