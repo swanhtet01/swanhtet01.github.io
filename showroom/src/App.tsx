@@ -31,6 +31,8 @@ const NotFoundPage = lazy(() => import('./pages/NotFoundPage').then((module) => 
 const PlatformNarrativePage = lazy(() => import('./pages/PlatformNarrativePage').then((module) => ({ default: module.PlatformNarrativePage })))
 const PlatformAdminPage = lazy(() => import('./pages/PlatformAdminPage').then((module) => ({ default: module.PlatformAdminPage })))
 const PolicyControlPage = lazy(() => import('./pages/PolicyControlPage').then((module) => ({ default: module.PolicyControlPage })))
+const ProductOperationsPage = lazy(() => import('./pages/ProductOperationsPage').then((module) => ({ default: module.ProductOperationsPage })))
+const RuntimeOverviewPage = lazy(() => import('./pages/RuntimeOverviewPage').then((module) => ({ default: module.RuntimeOverviewPage })))
 const ProductsPage = lazy(() => import('./pages/ProductsPage').then((module) => ({ default: module.ProductsPage })))
 const ProductDetailPage = lazy(() => import('./pages/ProductDetailPage').then((module) => ({ default: module.ProductDetailPage })))
 const PublicLeadFinderPage = lazy(() => import('./pages/PublicLeadFinderPage').then((module) => ({ default: module.PublicLeadFinderPage })))
@@ -42,6 +44,7 @@ const WorkspaceLitePage = lazy(() => import('./pages/WorkspaceLitePage').then((m
 const WorkspacePage = lazy(() => import('./pages/WorkspacePage').then((module) => ({ default: module.WorkspacePage })))
 const YangonTyrePage = lazy(() => import('./pages/YangonTyrePage').then((module) => ({ default: module.YangonTyrePage })))
 const ProductPortfolioPage = lazy(() => import('./pages/ProductPortfolioPage').then((module) => ({ default: module.ProductPortfolioPage })))
+const SecurityControlPage = lazy(() => import('./pages/SecurityControlPage').then((module) => ({ default: module.SecurityControlPage })))
 
 function routeElement(element: ReactNode) {
   return <Suspense fallback={<div className="sm-chip text-white">Loading page...</div>}>{element}</Suspense>
@@ -106,13 +109,15 @@ function App() {
           <Route element={routeElement(<ReceivingControlPage />)} path="receiving" />
           <Route element={routeElement(<InventoryPulsePage />)} path="inventory" />
           <Route element={routeElement(<NewsBriefPage />)} path="news" />
+          <Route element={routeElement(<RuntimeOverviewPage />)} path="runtime" />
           <Route element={routeElement(<ActionBoardPage />)} path="action-board" />
           <Route element={routeElement(<DocumentIntakePage />)} path="documents" />
           <Route element={routeElement(<SolutionArchitectPage />)} path="architect" />
           <Route element={routeElement(<BuildStudioPage />)} path="factory" />
+          <Route element={routeElement(<ProductOperationsPage />)} path="product-ops" />
           <Route element={routeElement(<PlatformAdminPage />)} path="platform-admin" />
           <Route element={<Navigate replace to="/app/platform-admin" />} path="tenant-admin" />
-          <Route element={routeElement(<PolicyControlPage />)} path="security" />
+          <Route element={routeElement(<SecurityControlPage />)} path="security" />
           <Route element={routeElement(<ConnectorOpsPage />)} path="connectors" />
           <Route element={routeElement(<KnowledgeControlPage />)} path="knowledge" />
           <Route element={routeElement(<PolicyControlPage />)} path="policies" />

@@ -317,8 +317,8 @@ export function BuildStudioPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-3">
-          <Link className="sm-button-primary" to="/app/factory">
-            Open build system
+          <Link className="sm-button-primary" to="/app/runtime">
+            Open Runtime
           </Link>
           <Link className="sm-button-secondary" to="/portfolio">
             View portfolio
@@ -327,7 +327,7 @@ export function BuildStudioPage() {
             Start rollout
           </Link>
           <Link className="sm-button-secondary" to="/app/platform-admin">
-            Open control plane
+            Open Platform Admin
           </Link>
           <Link className="sm-button-secondary" to="/clients/yangon-tyre">
             Open tenant example

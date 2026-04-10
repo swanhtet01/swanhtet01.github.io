@@ -257,7 +257,7 @@ export function HomePage() {
               Open portfolio
             </Link>
             <Link className="sm-button-secondary" to="/factory">
-              See build system
+              See Build
             </Link>
           </div>
         </div>
@@ -356,10 +356,10 @@ export function HomePage() {
                 Open tenant blueprint
               </Link>
               <Link className="sm-button-secondary" to="/factory">
-                Open build system
+                Open Build
               </Link>
               <Link className="sm-button-secondary" to="/app/platform-admin">
-                Open platform admin
+                Open Platform Admin
               </Link>
             </div>
           </div>

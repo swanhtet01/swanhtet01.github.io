@@ -52,7 +52,7 @@ export function ProductPortfolioPage() {
               View live modules
             </Link>
             <Link className="sm-button-secondary" to="/factory">
-              See build system
+              See Build
             </Link>
           </div>
         </div>
@@ -173,10 +173,10 @@ export function ProductPortfolioPage() {
             </div>
             <div className="mt-6 flex flex-wrap gap-3">
               <Link className="sm-button-primary" to="/factory">
-                Open build system
+                Open Build
               </Link>
               <Link className="sm-button-secondary" to="/app/platform-admin">
-                Open control plane
+                Open Platform Admin
               </Link>
             </div>
           </article>

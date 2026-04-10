@@ -45,6 +45,22 @@ export type PolicyGuardrail = {
   failureMode: string
 }
 
+export type AutonomyRuntimeLoop = {
+  id: string
+  name: string
+  tenant: 'core' | 'yangon-tyre'
+  status: RuntimeHealthStatus
+  owner: string
+  workspace: string
+  surface: string
+  cadence: string
+  automation: string
+  approvalGate: string
+  backlog: string
+  nextMove: string
+  risks: string[]
+}
+
 export const RUNTIME_CONNECTOR_FEEDS: RuntimeConnectorFeed[] = [
   {
     id: 'ytf-sales-gmail',
@@ -210,10 +226,10 @@ export const KNOWLEDGE_COLLECTIONS: KnowledgeCollection[] = [
     status: 'Healthy',
     owner: 'Knowledge Systems',
     purpose: 'Keep product lines, release trains, implementation notes, and competitor teardowns reusable across build teams.',
-    sources: ['build studio notes', 'GitHub release feed', 'tenant rollout notes', 'research backlog'],
+    sources: ['build notes', 'GitHub release feed', 'tenant rollout notes', 'research backlog'],
     canonicalRecords: ['product line', 'release train', 'tenant proof', 'competitive front'],
     relations: ['product line -> release train', 'tenant proof -> product line', 'competitive front -> product line'],
-    consumers: ['build studio', 'platform admin', 'product portfolio'],
+    consumers: ['build', 'platform admin', 'product portfolio'],
     qualityChecks: ['program ownership completeness', 'release-train freshness', 'tenant-proof evidence links'],
     nextMove: 'Attach real GitHub delivery state and rollout milestones to every product program card.',
   },
@@ -296,10 +312,92 @@ export const POLICY_GUARDRAILS: PolicyGuardrail[] = [
   },
 ]
 
+export const AUTONOMY_RUNTIME_LOOPS: AutonomyRuntimeLoop[] = [
+  {
+    id: 'ytf-commercial-memory-loop',
+    name: 'YTF commercial memory loop',
+    tenant: 'yangon-tyre',
+    status: 'Warning',
+    owner: 'Commercial Memory Pod',
+    workspace: 'ytf/commercial-memory',
+    surface: 'Sales System',
+    cadence: 'Every 30 minutes',
+    automation: 'Promote Gmail and company-list changes into account memory and prepare next-step drafts.',
+    approvalGate: 'Sales lead review for customer-facing drafts',
+    backlog: '17 accounts still need quote-stage normalization and owner confirmation.',
+    nextMove: 'Bind company-list changes, quote files, and Gmail threads into one account timeline.',
+    risks: ['Duplicate accounts still appear across inbox aliases', 'Quote attachments are not always tied to the same account record'],
+  },
+  {
+    id: 'ytf-supplier-recovery-loop',
+    name: 'YTF supplier recovery loop',
+    tenant: 'yangon-tyre',
+    status: 'Degraded',
+    owner: 'Supplier Recovery Pod',
+    workspace: 'ytf/supplier-recovery',
+    surface: 'Operations Inbox',
+    cadence: 'Twice daily',
+    automation: 'Cluster procurement threads, receiving holds, and ERP deltas into one recovery queue.',
+    approvalGate: 'Procurement lead review for claim and supplier-escalation writes',
+    backlog: '11 unresolved supplier claims lack a confirmed GRN or shipment link.',
+    nextMove: 'Open and close supplier recovery work automatically when GRN, document, or claim state changes.',
+    risks: ['Supplier names drift across inboxes and exports', 'Claims can stay open after the document trail changes'],
+  },
+  {
+    id: 'ytf-quality-watch-loop',
+    name: 'YTF quality watch loop',
+    tenant: 'yangon-tyre',
+    status: 'Warning',
+    owner: 'Quality Watch Pod',
+    workspace: 'ytf/plant-quality',
+    surface: 'Receiving Control',
+    cadence: 'Hourly',
+    automation: 'Watch inspection files, receiving issues, and closeout notes for new quality risk or stale evidence.',
+    approvalGate: 'Quality manager review for closeout and supplier-impact writes',
+    backlog: '9 quality issues still depend on manual photo and batch reconciliation.',
+    nextMove: 'Attach Drive revisions and closeout approvals to the same canonical quality issue lifecycle.',
+    risks: ['Photo evidence still arrives without batch references', 'Closeout notes can diverge from the receiving queue'],
+  },
+  {
+    id: 'core-release-watch-loop',
+    name: 'Core release watch loop',
+    tenant: 'core',
+    status: 'Healthy',
+    owner: 'Release Watch Pod',
+    workspace: 'core/build',
+    surface: 'Build',
+    cadence: 'Every 15 minutes',
+    automation: 'Watch GitHub release state, product-line proofs, and unresolved blockers before a module is promoted.',
+    approvalGate: 'Build and Platform Admin review for portfolio or tenant-promotion claims',
+    backlog: 'Low; main remaining work is fuller issue-to-program attribution.',
+    nextMove: 'Attach PR readiness and rollout milestone state directly to each product program.',
+    risks: ['A few tickets still miss product-line labels'],
+  },
+  {
+    id: 'core-runtime-governance-loop',
+    name: 'Core runtime governance loop',
+    tenant: 'core',
+    status: 'Needs wiring',
+    owner: 'Governance Runtime',
+    workspace: 'core/runtime-governance',
+    surface: 'Runtime',
+    cadence: 'Daily',
+    automation: 'Compare connector, canon, and guardrail posture before new autonomy is allowed to write back.',
+    approvalGate: 'Platform Admin approval for any new medium-risk autonomous write path',
+    backlog: 'Policy and runtime summaries exist, but the cross-surface promotion gate is still manual.',
+    nextMove: 'Join connector lag, knowledge confidence, and policy health into one promotion gate.',
+    risks: ['Autonomy can expand faster than the shared runtime evidence', 'No single runtime desk yet blocks unsafe promotion automatically'],
+  },
+]
+
 export function getRuntimeConnectorFeedsForTenant(tenant: RuntimeConnectorFeed['tenant']) {
   return RUNTIME_CONNECTOR_FEEDS.filter((feed) => feed.tenant === tenant)
 }
 
 export function getKnowledgeCollectionsForTenant(tenant: KnowledgeCollection['tenant']) {
   return KNOWLEDGE_COLLECTIONS.filter((collection) => collection.tenant === tenant)
+}
+
+export function getAutonomyRuntimeLoopsForTenant(tenant: AutonomyRuntimeLoop['tenant']) {
+  return AUTONOMY_RUNTIME_LOOPS.filter((loop) => loop.tenant === tenant)
 }

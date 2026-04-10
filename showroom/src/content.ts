@@ -179,7 +179,15 @@ export const metaTools: MetaTool[] = [
     detail: 'Review tenant roles, connector posture, knowledge layers, and rollout gaps from one control plane.',
   },
   {
-    name: 'Build Studio',
+    name: 'Runtime Control',
+    detail: 'Watch connector freshness, canon health, agent loops, and guardrail issues from one runtime desk.',
+  },
+  {
+    name: 'Product Ops',
+    detail: 'Run release trains, research cells, module graduation, and crew accountability from one desk.',
+  },
+  {
+    name: 'Build',
     detail: 'Track product builds, rollout stages, launch readiness, and platform priorities from one workspace.',
   },
   {

@@ -122,7 +122,7 @@ export function PlatformAdminPage() {
       <PageIntro
         eyebrow="Platform admin"
         title={`${currentModel.publicLabel} control plane`}
-        description={`${currentModel.thesis} This surface turns the tenant model, build studio, connector posture, role system, and scaling gaps into one operator-facing control layer.`}
+        description={`${currentModel.thesis} This surface turns the tenant model, build posture, connector posture, role system, and scaling gaps into one operator-facing control layer.`}
       />
 
       {access.error ? (
@@ -177,11 +177,20 @@ export function PlatformAdminPage() {
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <p className="sm-kicker text-[var(--sm-accent)]">Control shortcuts</p>
-            <h2 className="mt-3 text-2xl font-bold text-white lg:text-3xl">Jump into the main control-plane and factory areas.</h2>
+            <h2 className="mt-3 text-2xl font-bold text-white lg:text-3xl">Jump into the main runtime, build, and control areas.</h2>
           </div>
           <div className="flex flex-wrap gap-3">
-            <Link className="sm-button-primary" to="/app/factory">
-              Build Studio
+            <Link className="sm-button-primary" to="/app/runtime">
+              Runtime
+            </Link>
+            <Link className="sm-button-secondary" to="/app/factory">
+              Build
+            </Link>
+            <Link className="sm-button-secondary" to="/app/product-ops">
+              Product Ops
+            </Link>
+            <Link className="sm-button-secondary" to="/app/teams">
+              Agent Ops
             </Link>
             <Link className="sm-button-secondary" to="/app/security">
               Security
@@ -385,9 +394,14 @@ export function PlatformAdminPage() {
             <p className="sm-kicker text-[var(--sm-accent)]">Product program health</p>
             <h2 className="mt-3 text-3xl font-bold text-white">Treat product lines like real releases.</h2>
           </div>
-          <Link className="sm-button-secondary" to="/factory">
-            Open build studio
-          </Link>
+          <div className="flex flex-wrap gap-3">
+            <Link className="sm-button-primary" to="/app/runtime">
+              Open Runtime
+            </Link>
+            <Link className="sm-button-secondary" to="/factory">
+              Open Build
+            </Link>
+          </div>
         </div>
         <div className="mt-6 grid gap-4 xl:grid-cols-3">
           {MODULE_PROGRAMS.map((program) => (
@@ -546,8 +560,11 @@ export function PlatformAdminPage() {
             ))}
           </div>
           <div className="mt-6 flex flex-wrap gap-3">
-            <Link className="sm-button-primary" to="/app/factory">
-              Open build studio
+            <Link className="sm-button-primary" to="/app/runtime">
+              Open Runtime
+            </Link>
+            <Link className="sm-button-secondary" to="/app/factory">
+              Open Build
             </Link>
             <Link className="sm-button-secondary" to="/app/architect">
               Open architect

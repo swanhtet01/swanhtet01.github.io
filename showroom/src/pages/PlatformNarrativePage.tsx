@@ -81,6 +81,9 @@ export function PlatformNarrativePage() {
           <div className="sm-site-proof-foot">
             <span>Start from one live product, then expand through the same base instead of buying another SaaS category.</span>
             <div className="flex flex-wrap gap-4">
+              <Link className="sm-link" to="/app/runtime">
+                Open Runtime
+              </Link>
               <Link className="sm-link" to="/products">
                 Explore products
               </Link>
@@ -192,11 +195,14 @@ export function PlatformNarrativePage() {
             ))}
           </div>
           <div className="flex flex-wrap gap-3">
-            <Link className="sm-button-primary" to="/app/platform-admin">
-              Open platform admin
+            <Link className="sm-button-primary" to="/app/runtime">
+              Open Runtime
+            </Link>
+            <Link className="sm-button-secondary" to="/app/platform-admin">
+              Open Platform Admin
             </Link>
             <Link className="sm-button-secondary" to="/factory">
-              Open build studio
+              Open Build
             </Link>
             <Link className="sm-button-secondary" to="/app/architect">
               Open architect
@@ -353,7 +359,10 @@ export function PlatformNarrativePage() {
               Start rollout
             </Link>
             <Link className="sm-button-secondary" to="/factory">
-              See build studio
+              See Build
+            </Link>
+            <Link className="sm-button-secondary" to="/app/runtime">
+              See Runtime
             </Link>
             <Link className="sm-button-secondary" to="/products">
               See live products

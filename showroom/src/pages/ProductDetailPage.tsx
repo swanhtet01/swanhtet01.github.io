@@ -117,7 +117,7 @@ export function ProductDetailPage() {
                 <h2 className="mt-3 text-3xl font-bold text-white lg:text-4xl">This module is part of a broader product roadmap.</h2>
               </div>
               <Link className="sm-button-secondary" to="/factory">
-                See build system
+                See Build
               </Link>
             </div>
             <div className="mt-6 grid gap-4 xl:grid-cols-2">
@@ -206,7 +206,7 @@ export function ProductDetailPage() {
                 <h2 className="mt-3 text-3xl font-bold text-white lg:text-4xl">Named internal crews keep this module improving between releases.</h2>
               </div>
               <Link className="sm-button-secondary" to="/factory">
-                See build system
+                See Build
               </Link>
             </div>
             <div className="mt-6 grid gap-4 xl:grid-cols-3">
@@ -432,7 +432,7 @@ export function ProductDetailPage() {
             </div>
             <div className="mt-6 flex flex-wrap gap-3">
               <Link className="sm-button-primary" to="/factory">
-                See build system
+                See Build
               </Link>
               <Link className="sm-button-secondary" to={starterProgram.route}>
                 See broader system

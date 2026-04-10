@@ -130,9 +130,34 @@ const quickLaunches = [
     to: '/app/platform-admin',
   },
   {
-    name: 'Build Studio',
+    name: 'Build',
     detail: 'Run R&D, release gates, module programs, and tenant launch work.',
     to: '/app/factory',
+  },
+  {
+    name: 'Product Ops',
+    detail: 'Track release trains, research cells, crews, and module readiness.',
+    to: '/app/product-ops',
+  },
+  {
+    name: 'Connectors',
+    detail: 'Check sync freshness, backlog, source maps, and next automation.',
+    to: '/app/connectors',
+  },
+  {
+    name: 'Knowledge',
+    detail: 'Review canon quality, relation coverage, and promotion queues.',
+    to: '/app/knowledge',
+  },
+  {
+    name: 'Security',
+    detail: 'Inspect trust boundaries, sensitive-field posture, and audit coverage.',
+    to: '/app/security',
+  },
+  {
+    name: 'Policies',
+    detail: 'Check release, autonomy, knowledge, and connector guardrails.',
+    to: '/app/policies',
   },
   {
     name: 'News Brief',

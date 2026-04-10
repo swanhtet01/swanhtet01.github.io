@@ -102,7 +102,7 @@ export function ProductsPage() {
               Open portfolio
             </Link>
             <Link className="sm-button-secondary" to="/factory">
-              See build system
+              See Build
             </Link>
           </div>
         </div>
@@ -236,7 +236,7 @@ export function ProductsPage() {
               Open portfolio
             </Link>
             <Link className="sm-button-secondary" to="/factory">
-              See build system
+              See Build
             </Link>
           </div>
         </div>
@@ -363,10 +363,10 @@ export function ProductsPage() {
           </div>
           <div className="flex flex-wrap gap-3">
             <Link className="sm-button-secondary" to="/factory">
-              See build system
+              See Build
             </Link>
             <Link className="sm-button-secondary" to="/app/platform-admin">
-              Open platform admin
+              Open Platform Admin
             </Link>
           </div>
         </div>
@@ -383,10 +383,10 @@ export function ProductsPage() {
             View Yangon Tyre rollout
           </Link>
           <Link className="sm-button-secondary" to="/factory">
-            See build system
+            See Build
           </Link>
           <Link className="sm-button-secondary" to="/app/teams">
-            Open agent ops
+            Open Agent Ops
           </Link>
         </div>
       </section>
