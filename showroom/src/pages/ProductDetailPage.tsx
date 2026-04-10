@@ -1,7 +1,7 @@
 import { Link, Navigate, useParams } from 'react-router-dom'
 
-import { getStarterPackDetail, STARTER_PACK_DETAILS } from '../lib/salesControl'
-import { getAgentTeamDetails, getSoftwareModuleDetail, SOFTWARE_MODULE_DETAILS } from '../lib/softwareCatalog'
+import { getStarterPackDetail, STARTER_PACK_DETAILS, type StarterPackDetail } from '../lib/salesControl'
+import { getAgentTeamDetails, getSoftwareModuleDetail, SOFTWARE_MODULE_DETAILS, type SoftwareModuleDetail } from '../lib/softwareCatalog'
 
 function contactLink(name: string) {
   return `/contact?package=${encodeURIComponent(name)}`
@@ -23,7 +23,7 @@ export function ProductDetailPage() {
 
   if (softwareModule) {
     const relatedTeams = getAgentTeamDetails(softwareModule.agentTeams)
-    const siblingModules = SOFTWARE_MODULE_DETAILS.filter((item) => item.id !== softwareModule.id).slice(0, 3)
+    const siblingModules: SoftwareModuleDetail[] = SOFTWARE_MODULE_DETAILS.filter((item: SoftwareModuleDetail) => item.id !== softwareModule.id).slice(0, 3)
 
     return (
       <div className="space-y-10 pb-12">
@@ -82,12 +82,12 @@ export function ProductDetailPage() {
             <p className="sm-kicker text-[var(--sm-accent-alt)]">Built in</p>
             <h2 className="mt-3 text-3xl font-bold text-white lg:text-4xl">Shared data, controls, and agent support.</h2>
             <div className="mt-6 grid gap-3">
-              {softwareModule.knowledgeModules.map((item) => (
+              {softwareModule.knowledgeModules.map((item: string) => (
                 <article className="sm-chip text-white" key={`knowledge-${item}`}>
                   <p className="font-semibold">{item}</p>
                 </article>
               ))}
-              {softwareModule.infrastructureModules.map((item) => (
+              {softwareModule.infrastructureModules.map((item: string) => (
                 <article className="sm-chip text-white" key={`infra-${item}`}>
                   <p className="font-semibold">{item}</p>
                 </article>
@@ -112,7 +112,7 @@ export function ProductDetailPage() {
             </Link>
           </div>
           <div className="mt-6 grid gap-4 lg:grid-cols-3">
-            {siblingModules.map((item) => (
+            {siblingModules.map((item: SoftwareModuleDetail) => (
               <article className="sm-proof-card" key={item.id}>
                 <p className="font-semibold text-white">{item.name}</p>
                 <p className="mt-3 text-sm leading-relaxed text-[var(--sm-muted)]">{item.summary}</p>
@@ -130,7 +130,7 @@ export function ProductDetailPage() {
   }
 
   const product = starterProduct!
-  const siblingProducts = STARTER_PACK_DETAILS.filter((item) => item.id !== product.id)
+  const siblingProducts: StarterPackDetail[] = STARTER_PACK_DETAILS.filter((item: StarterPackDetail) => item.id !== product.id)
 
   return (
     <div className="space-y-10 pb-12">
@@ -142,7 +142,7 @@ export function ProductDetailPage() {
             <p className="mt-4 max-w-3xl text-base leading-relaxed text-[var(--sm-muted)] lg:text-lg">{product.promise}</p>
             <div className="mt-6 flex flex-wrap gap-3 text-sm text-[var(--sm-muted)]">
               <span className="sm-status-pill">Live product</span>
-              <span className="sm-status-pill">{product.launchWindow}</span>
+              <span className="sm-status-pill">Open now</span>
             </div>
             <div className="mt-8 flex flex-wrap gap-3">
               <Link className="sm-button-primary" to={product.proofTool.route}>
@@ -183,7 +183,7 @@ export function ProductDetailPage() {
           <p className="sm-kicker text-[var(--sm-accent)]">What it solves</p>
           <h2 className="mt-3 text-3xl font-bold text-white lg:text-4xl">One job, clearly done.</h2>
           <div className="mt-6 space-y-3">
-            {product.problemsSolved.map((item) => (
+            {product.problemsSolved.map((item: string) => (
               <div className="sm-site-point" key={item}>
                 <span className="sm-site-point-dot" />
                 <span>{item}</span>
@@ -196,7 +196,7 @@ export function ProductDetailPage() {
           <p className="sm-kicker text-[var(--sm-accent-alt)]">What ships first</p>
           <h2 className="mt-3 text-3xl font-bold text-white lg:text-4xl">The first useful setup.</h2>
           <div className="mt-6 grid gap-3">
-            {product.launchDeliverables.map((item) => (
+            {product.setupPath.map((item: string) => (
               <article className="sm-chip text-white" key={item}>
                 <p className="font-semibold">{item}</p>
               </article>
@@ -209,7 +209,7 @@ export function ProductDetailPage() {
         <article className="sm-site-panel">
           <p className="sm-kicker text-[var(--sm-accent)]">Inputs</p>
           <div className="mt-5 space-y-3">
-            {product.integrations.map((item) => (
+            {product.integrations.map((item: string) => (
               <div className="sm-chip text-white" key={item}>
                 <p className="font-semibold">{item}</p>
               </div>
@@ -220,7 +220,7 @@ export function ProductDetailPage() {
         <article className="sm-site-panel">
           <p className="sm-kicker text-[var(--sm-accent)]">Built in</p>
           <div className="mt-5 space-y-3">
-            {product.controls.map((item) => (
+            {product.controls.map((item: string) => (
               <div className="sm-chip text-white" key={item}>
                 <p className="font-semibold">{item}</p>
               </div>
@@ -231,7 +231,7 @@ export function ProductDetailPage() {
         <article className="sm-site-panel">
           <p className="sm-kicker text-[var(--sm-accent)]">Grows into</p>
           <div className="mt-5 space-y-3">
-            {product.expandsTo.map((item) => (
+            {product.expandsTo.map((item: string) => (
               <div className="sm-chip text-white" key={item}>
                 <p className="font-semibold">{item}</p>
               </div>
@@ -251,7 +251,7 @@ export function ProductDetailPage() {
           </Link>
         </div>
         <div className="mt-6 grid gap-4 lg:grid-cols-2">
-          {siblingProducts.map((item) => (
+          {siblingProducts.map((item: StarterPackDetail) => (
             <article className="sm-pack-card overflow-hidden p-4 text-white" key={item.id}>
               <img
                 alt={`${item.name} live screenshot`}

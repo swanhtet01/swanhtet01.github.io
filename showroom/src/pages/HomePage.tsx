@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom'
 
 import { hero } from '../content'
 import { trackEvent } from '../lib/analytics'
-import { STARTER_PACK_DETAILS } from '../lib/salesControl'
+import { STARTER_PACK_DETAILS, type StarterPackDetail } from '../lib/salesControl'
 import { getTenantConfig } from '../lib/tenantConfig'
 
 const screenshotSize = {
@@ -154,7 +154,7 @@ export function HomePage() {
           </p>
         </div>
         <div className="mt-8 grid gap-6 xl:grid-cols-3">
-          {STARTER_PACK_DETAILS.map((product) => (
+          {STARTER_PACK_DETAILS.map((product: StarterPackDetail) => (
             <article className="sm-pack-card overflow-hidden p-4 text-white" key={product.id}>
               <img
                 alt={`${product.name} live screenshot`}
@@ -167,7 +167,7 @@ export function HomePage() {
               />
               <div className="mt-4 flex items-center justify-between gap-3">
                 <p className="sm-kicker text-[var(--sm-accent)]">Live product</p>
-                <span className="sm-status-pill">{product.launchWindow}</span>
+                <span className="sm-status-pill">Open now</span>
               </div>
               <h3 className="mt-4 text-2xl font-bold">{product.name}</h3>
               <p className="mt-3 text-sm leading-relaxed text-[var(--sm-muted)]">{product.promise}</p>

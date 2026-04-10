@@ -1,8 +1,8 @@
 import { Link } from 'react-router-dom'
 
 import { PageIntro } from '../components/PageIntro'
-import { STARTER_PACK_DETAILS } from '../lib/salesControl'
-import { SOFTWARE_MODULE_DETAILS } from '../lib/softwareCatalog'
+import { STARTER_PACK_DETAILS, type StarterPackDetail } from '../lib/salesControl'
+import { SOFTWARE_MODULE_DETAILS, type SoftwareModuleDetail } from '../lib/softwareCatalog'
 import { YANGON_TYRE_MODEL } from '../lib/tenantOperatingModel'
 
 function contactLink(name: string) {
@@ -15,10 +15,14 @@ const screenshotSize = {
 } as const
 
 const featuredTemplateIds = ['sales-system', 'operations-inbox', 'client-portal', 'supplier-portal'] as const
-const featuredTemplates = SOFTWARE_MODULE_DETAILS.filter((item) => featuredTemplateIds.includes(item.id as (typeof featuredTemplateIds)[number]))
+const featuredTemplates: SoftwareModuleDetail[] = SOFTWARE_MODULE_DETAILS.filter((item: SoftwareModuleDetail) =>
+  featuredTemplateIds.includes(item.id as (typeof featuredTemplateIds)[number]),
+)
 
 const builtInLayerIds = ['decision-journal', 'document-intelligence', 'approval-policy-engine'] as const
-const builtInLayers = SOFTWARE_MODULE_DETAILS.filter((item) => builtInLayerIds.includes(item.id as (typeof builtInLayerIds)[number]))
+const builtInLayers: SoftwareModuleDetail[] = SOFTWARE_MODULE_DETAILS.filter((item: SoftwareModuleDetail) =>
+  builtInLayerIds.includes(item.id as (typeof builtInLayerIds)[number]),
+)
 
 const caseStudyLanes = [
   {
@@ -56,7 +60,7 @@ export function ProductsPage() {
         </div>
 
         <div className="grid gap-6 xl:grid-cols-3">
-          {STARTER_PACK_DETAILS.map((product) => (
+          {STARTER_PACK_DETAILS.map((product: StarterPackDetail) => (
             <article className="sm-pack-card overflow-hidden p-4 text-white" key={product.id}>
               <img
                 alt={`${product.name} live screenshot`}
@@ -99,7 +103,7 @@ export function ProductsPage() {
         </div>
 
         <div className="mt-6 grid gap-4 xl:grid-cols-2">
-          {featuredTemplates.map((module) => (
+          {featuredTemplates.map((module: SoftwareModuleDetail) => (
             <article className="sm-proof-card" key={module.id}>
               <div className="flex items-center justify-between gap-3">
                 <span className="sm-home-proof-label">{module.category}</span>
@@ -153,7 +157,7 @@ export function ProductsPage() {
           <p className="sm-kicker text-[var(--sm-accent-alt)]">Built in</p>
           <h2 className="mt-3 text-3xl font-bold text-white lg:text-4xl">These layers come with the system.</h2>
           <div className="mt-6 grid gap-3">
-            {builtInLayers.map((module) => (
+            {builtInLayers.map((module: SoftwareModuleDetail) => (
               <article className="sm-chip text-white" key={module.id}>
                 <p className="font-semibold">{module.name}</p>
                 <p className="mt-2 text-sm text-[var(--sm-muted)]">{module.summary}</p>
