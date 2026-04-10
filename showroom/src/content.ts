@@ -1,4 +1,5 @@
 import { CORE_SOLUTIONS } from './lib/salesControl'
+import { YANGON_TYRE_MODEL } from './lib/tenantOperatingModel'
 
 export type ProofPoint = {
   label: string
@@ -127,8 +128,7 @@ export const navItems = [
 export const hero = {
   eyebrow: 'SUPERMEGA.dev',
   title: 'One working system for sales and operations.',
-  description:
-    'Start with Find Clients, Company List, or Receiving Control. Then add roles, approvals, audit history, tenant workspaces, and AI agents on the same system.',
+  description: 'Start with one live product. Expand only after the first workflow works.',
 }
 
 export const proofPoints: ProofPoint[] = [
@@ -207,16 +207,26 @@ export const metaTools: MetaTool[] = [
 ]
 
 export const ytfDeployment: TenantBlueprint = {
-  name: 'Yangon Tyre',
-  domain: 'ytf.supermega.dev',
+  name: YANGON_TYRE_MODEL.publicLabel,
+  domain: YANGON_TYRE_MODEL.domain,
   summary:
-    'A tenant deployment for plant operations, supplier recovery, quality closeout, inventory watch, commercial CRM, and management review. The same base handles Gmail, Drive, ERP exports, markdown notes, and structured human entry without splitting the company across separate tools.',
-  modules: ['Receiving Control', 'Plant Action Board', 'Supplier Control', 'Quality Closeout', 'Inventory Pulse', 'Sales CRM', 'Director Command Center'],
-  roles: ['Tenant admin', 'Receiving clerk', 'Procurement lead', 'Plant manager', 'Quality manager', 'Finance controller', 'Sales lead', 'Director'],
-  dataSources: ['Gmail sales and procurement threads', 'Google Drive folders', 'Sheets trackers', 'ERP, GRN, and stock exports', 'Obsidian or markdown notes', 'Structured human entry screens'],
-  controls: ['Tenant-scoped access', 'Role-based queues', 'Approval gates for supplier, quality, and finance writes', 'Audit history on issues, files, and agent actions'],
-  agentTeams: ['Intake Router pod', 'Supplier Recovery pod', 'Quality Watch pod', 'Commercial Memory pod', 'Director Brief pod'],
-  outcomes: ['One live exception board for Plant A', 'Cleaner supplier follow-up', 'Stronger director review', 'Human data entry aligned with quality and operations'],
+    'A live tenant workspace for Yangon Tyre where sales, operations, maintenance, quality, CEO review, and admin control work from one connected system.',
+  modules: YANGON_TYRE_MODEL.modules.map((module) => module.name),
+  roles: YANGON_TYRE_MODEL.roles.map((role) => role.name),
+  dataSources: YANGON_TYRE_MODEL.connectors.map((connector) => connector.name),
+  controls: [
+    'Tenant-scoped access',
+    'Role-based workspaces',
+    'Approval gates on sensitive writes',
+    'Audit history on files, records, decisions, and agent actions',
+  ],
+  agentTeams: YANGON_TYRE_MODEL.agentPods.map((pod) => pod.name),
+  outcomes: [
+    'One tenant portal for Plant A',
+    'Cleaner operational records and commercial follow-up',
+    'Stronger CEO and admin review',
+    'Human entry aligned with quality, operations, maintenance, and data science',
+  ],
 }
 
 export const coreProduct = {

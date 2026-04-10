@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { PageIntro } from '../components/PageIntro'
 import { STARTER_PACK_DETAILS } from '../lib/salesControl'
 import { SOFTWARE_MODULE_DETAILS } from '../lib/softwareCatalog'
+import { YANGON_TYRE_MODEL } from '../lib/tenantOperatingModel'
 
 function contactLink(name: string) {
   return `/contact?package=${encodeURIComponent(name)}`
@@ -21,6 +22,21 @@ const rolloutIncludes = [
   'Current data imported',
   'Roles, approvals, and history',
   'One live team screen',
+] as const
+
+const ytfPortalLanes = [
+  {
+    name: 'Sales workspace',
+    detail: 'Dealer accounts, visit plans, follow-up, and commercial history in one CRM.',
+  },
+  {
+    name: 'Operations workspace',
+    detail: 'Receiving, supplier recovery, inventory pressure, quality, and maintenance in one operating lane.',
+  },
+  {
+    name: 'CEO and admin workspace',
+    detail: 'Decision review, connector posture, policies, and tenant setup in one control layer.',
+  },
 ] as const
 
 export function ProductsPage() {
@@ -128,6 +144,37 @@ export function ProductsPage() {
               </div>
             </article>
           ))}
+        </div>
+      </section>
+
+      <section className="sm-site-panel">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <p className="sm-kicker text-[var(--sm-accent)]">Named client portal</p>
+            <h2 className="mt-3 text-3xl font-bold text-white lg:text-4xl">Yangon Tyre shows how the products become one full tenant system.</h2>
+          </div>
+          <p className="max-w-xl text-sm leading-relaxed text-[var(--sm-muted)] lg:text-base">
+            The first real client rollout combines {YANGON_TYRE_MODEL.modules.length} modules, {YANGON_TYRE_MODEL.roles.length} roles, and{' '}
+            {YANGON_TYRE_MODEL.connectors.length} connectors on one portal.
+          </p>
+        </div>
+
+        <div className="mt-6 grid gap-4 xl:grid-cols-3">
+          {ytfPortalLanes.map((lane) => (
+            <article className="sm-proof-card" key={lane.name}>
+              <p className="font-semibold text-white">{lane.name}</p>
+              <p className="mt-3 text-sm leading-relaxed text-[var(--sm-muted)]">{lane.detail}</p>
+            </article>
+          ))}
+        </div>
+
+        <div className="mt-6 flex flex-wrap gap-3">
+          <Link className="sm-button-primary" to="/clients/yangon-tyre">
+            Open Yangon Tyre portal
+          </Link>
+          <Link className="sm-button-secondary" to="/app/platform-admin">
+            Open tenant admin
+          </Link>
         </div>
       </section>
 
