@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useLocation } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 
 import { browserWorkspaceSummary, buildBrowserOutreach, saveBrowserWorkspaceLeads } from '../lib/browserWorkspace'
 import { trackEvent } from '../lib/analytics'
@@ -50,6 +50,7 @@ function evidenceLine(row: LeadRow) {
 
 export function PublicLeadFinderPage() {
   const location = useLocation()
+  const navigate = useNavigate()
   const [profile, setProfile] = useState<PublicWorkspaceProfile>(() => loadPublicWorkspaceProfile())
   const [showWorkspaceSetup, setShowWorkspaceSetup] = useState(false)
   const [query, setQuery] = useState('')
@@ -181,13 +182,13 @@ export function PublicLeadFinderPage() {
   async function saveRowsToWorkspace(candidates: LeadRow[], successMessage: string) {
     if (!candidates.length) {
       setMessage('Search first, then save at least one company.')
-      return false
+      return 0
     }
 
     if (hasLiveWorkspaceApi()) {
       if (!hasSharedProfile) {
         promptWorkspaceSetup('Enter your company and work email before saving this company.')
-        return false
+        return 0
       }
 
       const nextProfile = savePublicWorkspaceProfile(profile)
@@ -229,12 +230,13 @@ export function PublicLeadFinderPage() {
           }),
         })
 
-        setSavedTotal((current) => Math.max(current, saved.saved_count || candidates.length, current + candidates.length))
-        setMessage(successMessage.replace('{count}', String(saved.saved_count || candidates.length)))
-        return true
+        const savedCount = saved.saved_count || candidates.length
+        setSavedTotal((current) => Math.max(current, savedCount, current + savedCount))
+        setMessage(successMessage.replace('{count}', String(savedCount)))
+        return savedCount
       } catch (error) {
         setMessage(error instanceof Error ? error.message : 'Could not save to the team list on this host.')
-        return false
+        return 0
       }
     }
 
@@ -244,7 +246,7 @@ export function PublicLeadFinderPage() {
     })
     setSavedTotal(result.totalCount)
     setMessage(successMessage.replace('{count}', String(candidates.length)))
-    return true
+    return candidates.length
   }
 
   async function saveLead(row: LeadRow) {
@@ -254,30 +256,31 @@ export function PublicLeadFinderPage() {
       return
     }
 
-    const saved = await saveRowsToWorkspace([row], 'Saved {count} company and created the first follow-up.')
-    if (saved) {
+    const savedCount = await saveRowsToWorkspace([row], 'Saved {count} company and created the first follow-up.')
+    if (savedCount) {
       trackEvent('company_kept', {
         source: 'find_companies',
-        count: 1,
+        count: savedCount,
         provider,
       })
       setSavedKeys((current) => (current.includes(key) ? current : [...current, key]))
     }
   }
 
-  async function saveTopResults() {
+  async function saveTopResultsAndContinue() {
     const candidates = rows.slice(0, 3)
-    const saved = await saveRowsToWorkspace(
+    const savedCount = await saveRowsToWorkspace(
       candidates,
       'Saved {count} companies and created the first follow-ups.',
     )
-    if (saved) {
+    if (savedCount) {
       trackEvent('company_kept', {
         source: 'find_companies',
-        count: candidates.length,
+        count: savedCount,
         provider,
       })
       setSavedKeys(candidates.map((row) => rowKey(row)))
+      navigate(`/company-list?source=find-clients&saved=${savedCount}`)
     }
   }
 
@@ -476,16 +479,16 @@ export function PublicLeadFinderPage() {
 
       {(rows.length || savedTotal) ? (
         <section className="sm-surface p-6">
-          <p className="sm-kicker text-[var(--sm-accent)]">Next</p>
-          <h2 className="mt-3 text-3xl font-bold text-white">Keep a few, then open Company List.</h2>
+          <p className="sm-kicker text-[var(--sm-accent)]">Finish this demo</p>
+          <h2 className="mt-3 text-3xl font-bold text-white">Create the shortlist, then continue in Company List.</h2>
           <div className="mt-5 flex flex-wrap gap-3">
             {rows.length ? (
-              <button className="sm-button-primary" onClick={() => void saveTopResults()} type="button">
-                Keep first 3
+              <button className="sm-button-primary" onClick={() => void saveTopResultsAndContinue()} type="button">
+                Keep first 3 and open Company List
               </button>
             ) : null}
             {savedTotal ? (
-              <Link className="sm-button-secondary" to="/company-list">
+              <Link className="sm-button-secondary" to="/company-list?source=find-clients">
                 Open Company List
               </Link>
             ) : null}
@@ -498,9 +501,9 @@ export function PublicLeadFinderPage() {
           <div className="mt-4 sm-chip text-[var(--sm-muted)]">
             {hasLiveWorkspaceApi()
               ? hasSharedProfile
-                ? `Ready to save for ${profile.company}.`
+                ? `Saved companies will land in Company List for ${profile.company}.`
                 : 'Save will ask for company and work email once.'
-              : 'On this host, kept companies stay in this browser on this computer.'}
+              : 'On this host, kept companies stay in this browser and then open in Company List.'}
           </div>
         </section>
       ) : null}

@@ -279,6 +279,8 @@ export function WorkspaceLitePage() {
   const searchParams = new URLSearchParams(location.search)
   const requestedSetup = searchParams.get('setup')
   const shouldStartShared = searchParams.get('start') === '1'
+  const source = searchParams.get('source')?.trim() ?? ''
+  const importedCount = Number.parseInt(searchParams.get('saved') ?? '0', 10)
   const isReceivingDesk = requestedSetup === 'receiving' || normalizedPathname === '/receiving' || normalizedPathname === '/receiving-log'
   const publicSurface = isReceivingDesk || normalizedPathname === '/team-updates' || normalizedPathname === '/team-tasks' || normalizedPathname === '/task-list' ? 'updates' : 'sales'
   const publicBasePath = isReceivingDesk ? '/receiving-log' : publicSurface === 'sales' ? '/company-list' : '/task-list'
@@ -287,6 +289,7 @@ export function WorkspaceLitePage() {
   const activeView: WorkspaceView = publicSurface === 'updates' ? 'queue' : 'leads'
   const hasSharedProfile = isPublicWorkspaceProfileReady(profile)
   const pageEyebrow = isReceivingDesk ? 'Receiving control' : publicSurface === 'sales' ? 'Company List' : 'Task list'
+  const fromFindClients = publicSurface === 'sales' && source === 'find-clients'
 
   const summary = useMemo(() => {
     if (mode === 'local') {
@@ -302,6 +305,8 @@ export function WorkspaceLitePage() {
       openActionCount: openTasks.length,
     }
   }, [leads, mode, openTasks.length, tasks.length])
+
+  const importedCompanyCount = Number.isFinite(importedCount) && importedCount > 0 ? importedCount : summary.total
 
   const loadLocalState = useCallback(() => {
     setMode('local')
@@ -941,6 +946,27 @@ export function WorkspaceLitePage() {
       </div>
     ) : null
 
+  const guideBanner =
+    fromFindClients && hasData ? (
+      <div className="mt-5 sm-proof-card">
+        <p className="sm-kicker text-[var(--sm-accent)]">Saved from Find Clients</p>
+        <h2 className="mt-3 text-2xl font-bold text-white">
+          {importedCompanyCount} {importedCompanyCount === 1 ? 'company is' : 'companies are'} now in Company List.
+        </h2>
+        <p className="mt-3 max-w-2xl text-sm leading-relaxed text-[var(--sm-muted)]">
+          Next: review one company, copy the outreach, then open Task List so the follow-up stays visible.
+        </p>
+        <div className="mt-4 flex flex-wrap gap-3">
+          <Link className="sm-button-primary" to="/task-list">
+            Open Task List
+          </Link>
+          <Link className="sm-button-secondary" to="/find-companies">
+            Find more clients
+          </Link>
+        </div>
+      </div>
+    ) : null
+
   if (!hasData) {
     return (
       <div className="space-y-6">
@@ -956,6 +982,7 @@ export function WorkspaceLitePage() {
               ? 'Use this when you already have names from Google, Facebook, WhatsApp, Excel, or CRM. We remove duplicates, keep the contact clues, and turn the list into clear next steps.'
               : 'Paste messy notes, blockers, or updates and turn them into a short task list.'}
           </p>
+          {guideBanner}
           {setupPanel}
           {publicSurface === 'sales' ? (
             <div className="mt-5 text-sm text-[var(--sm-muted)]">
@@ -987,6 +1014,7 @@ export function WorkspaceLitePage() {
           ? 'This is for the names you already have. Clean them, stage them, and keep one clear next step.'
           : 'Add one task, finish it, then move to the next one.'}
       </p>
+      {guideBanner}
 
           {hasData ? (
             <>
