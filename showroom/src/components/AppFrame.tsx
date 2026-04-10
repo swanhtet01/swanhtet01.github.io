@@ -20,7 +20,7 @@ const appNavItems: Array<{ label: string; to: string; requires: WorkspaceCapabil
   { label: 'Agent Ops', to: '/app/teams', requires: ['agent_ops.view', 'tenant_admin.view', 'platform_admin.view'] },
   { label: 'Director', to: '/app/director', requires: ['director.view'] },
   { label: 'Architect', to: '/app/architect', requires: ['architect.view', 'tenant_admin.view', 'platform_admin.view'] },
-  { label: 'Factory', to: '/app/factory', requires: ['agent_ops.view', 'architect.view', 'tenant_admin.view', 'platform_admin.view'] },
+  { label: 'Build', to: '/app/factory', requires: ['agent_ops.view', 'architect.view', 'tenant_admin.view', 'platform_admin.view'] },
   { label: 'Connectors', to: '/app/connectors', requires: ['connector_admin.view', 'tenant_admin.view', 'platform_admin.view'] },
   { label: 'Knowledge', to: '/app/knowledge', requires: ['knowledge_admin.view', 'tenant_admin.view', 'platform_admin.view'] },
   { label: 'Policies', to: '/app/policies', requires: ['security_admin.view', 'tenant_admin.view', 'platform_admin.view'] },

@@ -169,7 +169,7 @@ export function ProductPortfolioPage() {
               <p>Pick a named product line, not a vague category.</p>
               <p>Use the build teams as the guardrails for connectors, knowledge, safety, and workflow repeatability.</p>
               <p>Layer agent teams onto the release train so success signals stay measurable.</p>
-              <p>Roll out the module with control-plane oversight from Build Studio, Platform Admin, and Agent Ops.</p>
+              <p>Roll out the module with control-plane oversight from Build, Platform Admin, and Agent Ops.</p>
             </div>
             <div className="mt-6 flex flex-wrap gap-3">
               <Link className="sm-button-primary" to="/factory">
