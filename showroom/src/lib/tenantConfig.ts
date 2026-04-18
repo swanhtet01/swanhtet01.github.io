@@ -28,28 +28,29 @@ const defaultTenant: TenantConfig = {
   siteMode: 'platform',
   navItems: [
     { label: 'Products', to: '/products' },
+    { label: 'Case Study', to: '/clients/yangon-tyre' },
     { label: 'Contact', to: '/contact' },
   ],
   showBookCta: true,
   bookCtaLabel: 'Start rollout',
   homeEyebrow: 'SUPERMEGA.dev',
   homeTitle: 'Replace tool sprawl with working company software.',
-  homeDescription: 'Start with live products for sales, company data, and receiving. Connect Gmail, Google Drive, Sheets, CSV, ERP exports, and APIs on one shared system.',
+  homeDescription: 'Start with a live product for sales, company data, or receiving, then expand it into a branded customer portal.',
   homePrimaryCta: { label: 'See products', to: '/products' },
-  homeSecondaryCta: { label: 'Start rollout', to: '/contact' },
+  homeSecondaryCta: { label: 'See case study', to: '/clients/yangon-tyre' },
   toolCards: [
     {
       title: 'Find Clients',
-      detail: 'Prospecting, company cleanup, follow-up, and manager visibility in one sales system.',
+      detail: 'Search public companies, keep the shortlist, and move it into one working follow-up list.',
       to: '/products',
     },
     {
-      title: 'Receiving control',
-      detail: 'One visible exception queue for GRN gaps, holds, supplier follow-up, and approvals.',
+      title: 'Customer portals',
+      detail: 'Expand the first workflow into a branded portal with roles, approvals, and shared history.',
       to: '/products',
     },
   ],
-  footerText: 'Start with one live product. Add the rest only after the first workflow works.',
+  footerText: 'Start with one working product. Expand into a customer portal only after the first workflow works.',
 }
 
 const ytfTenant: TenantConfig = {
@@ -61,9 +62,10 @@ const ytfTenant: TenantConfig = {
   tenantName: 'Yangon Tyre',
   tenantShortName: 'Plant A',
   navItems: [
-    { label: 'Home', to: '/' },
     { label: 'Sales Desk', to: '/app/sales' },
-    { label: 'Operations Desk', to: '/app/receiving' },
+    { label: 'Operations Desk', to: '/app/operations' },
+    { label: 'DQMS Desk', to: '/app/dqms' },
+    { label: 'Maintenance Desk', to: '/app/maintenance' },
     { label: 'CEO Brief', to: '/app/director' },
     { label: 'Admin Control', to: '/app/platform-admin' },
   ],
@@ -71,9 +73,9 @@ const ytfTenant: TenantConfig = {
   bookCtaLabel: 'Open workspace',
   homeEyebrow: 'Yangon Tyre / Plant A',
   homeTitle: 'Plant A tenant workspace.',
-  homeDescription: 'Sales, operations, CEO review, and admin control in one portal.',
-  homePrimaryCta: { label: 'Open operations desk', to: '/app/receiving' },
-  homeSecondaryCta: { label: 'Open sales desk', to: '/app/sales' },
+  homeDescription: 'Sales, operations, DQMS, maintenance, CEO review, and admin control in one portal.',
+  homePrimaryCta: { label: 'Open operations desk', to: '/app/operations' },
+  homeSecondaryCta: { label: 'Open DQMS desk', to: '/app/dqms' },
   toolCards: [
     {
       title: 'Sales Desk',
@@ -83,7 +85,17 @@ const ytfTenant: TenantConfig = {
     {
       title: 'Operations Desk',
       detail: 'Receiving, action queues, inventory pressure, and plant issues on one desk.',
-      to: '/app/receiving',
+      to: '/app/operations',
+    },
+    {
+      title: 'DQMS Desk',
+      detail: 'Incidents, CAPA, fishbone, 5W1H, and KPI review in one industrial quality desk.',
+      to: '/app/dqms',
+    },
+    {
+      title: 'Maintenance Desk',
+      detail: 'Breakdowns, PM work, spare-part blockers, and downtime follow-up in one reliability lane.',
+      to: '/app/maintenance',
     },
     {
       title: 'CEO Brief',
@@ -96,7 +108,7 @@ const ytfTenant: TenantConfig = {
       to: '/app/platform-admin',
     },
   ],
-  footerText: 'Yangon Tyre Plant A workspace for sales, operations, CEO review, and admin control.',
+  footerText: 'Yangon Tyre Plant A workspace for sales, operations, DQMS, maintenance, CEO review, and admin control.',
   defaultWorkspaceSlug: 'ytf-plant-a',
   defaultCompany: 'Yangon Tyre',
 }

@@ -20,6 +20,12 @@ const quickSearches = [
   { label: 'Industrial suppliers', query: 'industrial supplier', keywords: 'industrial,supplier,factory' },
 ]
 
+const flowSteps = [
+  ['1', 'Search companies'],
+  ['2', 'Keep the shortlist'],
+  ['3', 'Open Company List'],
+] as const
+
 const DEFAULT_PUBLIC_KEYWORDS = 'service,local,business'
 
 function keywordsFromQuery(value: string) {
@@ -303,16 +309,11 @@ export function PublicLeadFinderPage() {
           Use this when you need new names. Type a business type, niche, or place, then keep the companies worth contacting with fit reasons, contact clues, and first outreach ready.
         </p>
 
-        <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-          {[
-            ['Shortlist', 'Keep only the few companies worth chasing.'],
-            ['Fit reasons', 'See why each result matches the search.'],
-            ['First outreach', 'Copy a ready first message, not just a URL.'],
-            ['Company List', 'Send saved companies into one working follow-up list for the team.'],
-          ].map(([title, detail]) => (
+        <div className="mt-5 grid gap-3 md:grid-cols-3">
+          {flowSteps.map(([step, title]) => (
             <div className="sm-chip text-white" key={title}>
-              <p className="sm-kicker text-[var(--sm-accent)]">{title}</p>
-              <p className="mt-2 text-sm text-[var(--sm-muted)]">{detail}</p>
+              <p className="sm-kicker text-[var(--sm-accent)]">Step {step}</p>
+              <p className="mt-2 text-sm text-[var(--sm-muted)]">{title}</p>
             </div>
           ))}
         </div>
@@ -341,7 +342,7 @@ export function PublicLeadFinderPage() {
 
             <div className="flex flex-wrap gap-3">
               <button className="sm-button-primary" disabled={busy || !query.trim()} onClick={() => void runSearch()} type="button">
-                {busy ? 'Searching...' : 'Find Clients'}
+                {busy ? 'Searching...' : 'Search companies'}
               </button>
             </div>
 
@@ -479,8 +480,8 @@ export function PublicLeadFinderPage() {
 
       {(rows.length || savedTotal) ? (
         <section className="sm-surface p-6">
-          <p className="sm-kicker text-[var(--sm-accent)]">Finish this demo</p>
-          <h2 className="mt-3 text-3xl font-bold text-white">Create the shortlist, then continue in Company List.</h2>
+          <p className="sm-kicker text-[var(--sm-accent)]">Next step</p>
+          <h2 className="mt-3 text-3xl font-bold text-white">Save the shortlist into Company List.</h2>
           <div className="mt-5 flex flex-wrap gap-3">
             {rows.length ? (
               <button className="sm-button-primary" onClick={() => void saveTopResultsAndContinue()} type="button">
@@ -494,7 +495,7 @@ export function PublicLeadFinderPage() {
             ) : null}
             {hasLiveWorkspaceApi() ? (
               <button className="sm-button-secondary" onClick={() => setShowWorkspaceSetup((current) => !current)} type="button">
-                {showWorkspaceSetup ? 'Hide team setup' : 'Use with your team'}
+                {showWorkspaceSetup ? 'Hide team setup' : 'Save online for your team'}
               </button>
             ) : null}
           </div>

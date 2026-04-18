@@ -949,19 +949,22 @@ export function WorkspaceLitePage() {
   const guideBanner =
     fromFindClients && hasData ? (
       <div className="mt-5 sm-proof-card">
-        <p className="sm-kicker text-[var(--sm-accent)]">Saved from Find Clients</p>
-        <h2 className="mt-3 text-2xl font-bold text-white">
-          {importedCompanyCount} {importedCompanyCount === 1 ? 'company is' : 'companies are'} now in Company List.
-        </h2>
+        <div className="flex flex-wrap gap-2">
+          <span className="sm-status-pill">Step 1 done</span>
+          <span className="sm-status-pill">Step 2 now</span>
+          <span className="sm-status-pill">Step 3 task list</span>
+        </div>
+        <p className="mt-4 sm-kicker text-[var(--sm-accent)]">Saved from Find Clients</p>
+        <h2 className="mt-3 text-2xl font-bold text-white">Company List is ready.</h2>
         <p className="mt-3 max-w-2xl text-sm leading-relaxed text-[var(--sm-muted)]">
-          Next: review one company, copy the outreach, then open Task List so the follow-up stays visible.
+          {importedCompanyCount} {importedCompanyCount === 1 ? 'company was' : 'companies were'} saved from Find Clients. Review one company, then open Task List so the follow-up stays visible.
         </p>
         <div className="mt-4 flex flex-wrap gap-3">
           <Link className="sm-button-primary" to="/task-list">
             Open Task List
           </Link>
-          <Link className="sm-button-secondary" to="/find-companies">
-            Find more clients
+          <Link className="sm-link self-center" to="/find-companies">
+            Search again
           </Link>
         </div>
       </div>
@@ -1041,7 +1044,7 @@ export function WorkspaceLitePage() {
           {hasData && hasLiveWorkspaceApi() && mode === 'local' ? (
             <div className="mt-5 flex flex-wrap gap-3">
               <button className="sm-button-secondary" onClick={() => setShowCloudSetup((current) => !current)} type="button">
-                {showCloudSetup ? 'Hide team setup' : 'Use with your team'}
+                {showCloudSetup ? 'Hide team setup' : 'Save online for your team'}
               </button>
             </div>
           ) : null}
@@ -1165,12 +1168,15 @@ export function WorkspaceLitePage() {
                         <Link className="sm-button-primary" to="/task-list">
                           Open task list
                         </Link>
-                        <Link className="sm-button-secondary" to="/find-companies">
-                          Find more clients
-                        </Link>
                         <button className="sm-button-secondary" onClick={exportWorkspace} type="button">
                           Export CSV
                         </button>
+                      </div>
+                      <div className="text-sm text-[var(--sm-muted)]">
+                        Need more names?{' '}
+                        <Link className="text-white underline underline-offset-4" to="/find-companies">
+                          Search again
+                        </Link>
                       </div>
 
                       {leads.slice(0, 8).map((lead) => (

@@ -12,6 +12,13 @@ const screenshotSize = {
   height: 1024,
 } as const
 
+const templateImageMap: Record<string, string> = {
+  'sales-system': '/site/sales-desk.svg',
+  'operations-inbox': '/site/ops-desk.svg',
+  'client-portal': '/site/client-portal.svg',
+  'industrial-dqms': '/site/control-room.svg',
+}
+
 export function ProductDetailPage() {
   const { productId } = useParams()
   const starterProduct = getStarterPackDetail(productId)
@@ -26,9 +33,9 @@ export function ProductDetailPage() {
     const siblingModules: SoftwareModuleDetail[] = SOFTWARE_MODULE_DETAILS.filter((item: SoftwareModuleDetail) => item.id !== softwareModule.id).slice(0, 3)
     const rolloutPath = [
       `Start with ${softwareModule.surfaces[0]}.`,
-      'Connect the current data and files first.',
+      'Import the current data, files, or inbox flow first.',
       'Set the right roles, approvals, and history around the workflow.',
-      'Add more templates only after the team trusts the first one.',
+      'Add more templates only after the first team is using it daily.',
     ] as const
 
     return (
@@ -53,26 +60,33 @@ export function ProductDetailPage() {
               </div>
             </div>
 
-            <div className="grid gap-3 md:grid-cols-2">
-              <article className="sm-chip text-white">
-                <p className="sm-kicker text-[var(--sm-accent)]">Best for</p>
-                <p className="mt-3 text-sm text-[var(--sm-muted)]">{softwareModule.audience}</p>
-              </article>
-              <article className="sm-chip text-white">
-                <p className="sm-kicker text-[var(--sm-accent)]">Replaces</p>
-                <p className="mt-3 text-sm text-[var(--sm-muted)]">{softwareModule.replaces}</p>
-              </article>
-              <article className="sm-chip text-white md:col-span-2">
-                <p className="sm-kicker text-[var(--sm-accent-alt)]">Includes</p>
-                <p className="mt-3 text-sm text-[var(--sm-muted)]">{softwareModule.surfaces.join(' · ')}</p>
-              </article>
-            </div>
+            <article className="sm-pack-card overflow-hidden p-4">
+              <img
+                alt={`${softwareModule.name} template preview`}
+                className="aspect-[16/10] w-full rounded-2xl border border-white/10 bg-[#020612] object-cover object-center"
+                decoding="async"
+                height={screenshotSize.height}
+                loading="lazy"
+                src={templateImageMap[softwareModule.id] ?? '/site/control-room.svg'}
+                width={screenshotSize.width}
+              />
+              <div className="mt-4 grid gap-3 md:grid-cols-2">
+                <article className="sm-chip text-white">
+                  <p className="sm-kicker text-[var(--sm-accent)]">Best for</p>
+                  <p className="mt-3 text-sm text-[var(--sm-muted)]">{softwareModule.audience}</p>
+                </article>
+                <article className="sm-chip text-white">
+                  <p className="sm-kicker text-[var(--sm-accent)]">Replaces</p>
+                  <p className="mt-3 text-sm text-[var(--sm-muted)]">{softwareModule.replaces}</p>
+                </article>
+              </div>
+            </article>
           </div>
         </section>
 
         <section className="grid gap-6 lg:grid-cols-[1fr_1fr]">
           <article className="sm-site-panel">
-            <p className="sm-kicker text-[var(--sm-accent)]">What ships</p>
+            <p className="sm-kicker text-[var(--sm-accent)]">What it includes</p>
             <h2 className="mt-3 text-3xl font-bold text-white lg:text-4xl">A reusable template with a clear job.</h2>
             <p className="mt-4 text-sm leading-relaxed text-[var(--sm-muted)]">{softwareModule.summary}</p>
             <div className="mt-6 grid gap-3">
@@ -86,7 +100,7 @@ export function ProductDetailPage() {
 
           <article className="sm-site-panel">
             <p className="sm-kicker text-[var(--sm-accent-alt)]">Included in rollout</p>
-            <h2 className="mt-3 text-3xl font-bold text-white lg:text-4xl">Shared data, controls, and AI support.</h2>
+            <h2 className="mt-3 text-3xl font-bold text-white lg:text-4xl">Connected data and built-in controls.</h2>
             <div className="mt-6 grid gap-3">
               {softwareModule.knowledgeModules.map((item: string) => (
                 <article className="sm-chip text-white" key={`knowledge-${item}`}>
@@ -122,8 +136,8 @@ export function ProductDetailPage() {
           </article>
 
           <article className="sm-site-panel">
-            <p className="sm-kicker text-[var(--sm-accent-alt)]">Enterprise basics</p>
-            <h2 className="mt-3 text-3xl font-bold text-white lg:text-4xl">Ready for branded customer rollout.</h2>
+            <p className="sm-kicker text-[var(--sm-accent-alt)]">Customer rollout basics</p>
+            <h2 className="mt-3 text-3xl font-bold text-white lg:text-4xl">Ready for a branded customer portal.</h2>
             <div className="mt-6 grid gap-3">
               <article className="sm-chip text-white">
                 <p className="font-semibold">Roles and permissions</p>
@@ -283,8 +297,8 @@ export function ProductDetailPage() {
       <section className="sm-site-panel">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <p className="sm-kicker text-[var(--sm-accent)]">Next product</p>
-            <h2 className="mt-3 text-3xl font-bold text-white lg:text-4xl">Use the same system for another workflow.</h2>
+            <p className="sm-kicker text-[var(--sm-accent)]">Add next</p>
+            <h2 className="mt-3 text-3xl font-bold text-white lg:text-4xl">Use the same portal for another workflow.</h2>
           </div>
           <Link className="sm-button-secondary" to="/products">
             View all products
