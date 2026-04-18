@@ -89,8 +89,8 @@ export function YangonTyrePage() {
                 <span>Each team has a clear home.</span>
               </div>
               <div className="sm-demo-mini">
-                <strong>{model.agentPods.length} agent pods</strong>
-                <span>Cleanup and briefs stay inside the portal.</span>
+                <strong>{model.connectors.length} connectors</strong>
+                <span>Current data stays connected to the portal.</span>
               </div>
             </div>
           </article>

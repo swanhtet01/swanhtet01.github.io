@@ -359,7 +359,7 @@ export function PublicLeadFinderPage() {
 
             {hasLiveWorkspaceApi() && showWorkspaceSetup ? (
               <div className="sm-proof-card">
-                <p className="sm-kicker text-[var(--sm-accent)]">Use with your team</p>
+                <p className="sm-kicker text-[var(--sm-accent)]">Save online</p>
                 <p className="mt-2 text-sm text-[var(--sm-muted)]">
                   Enter your company and work email once. After that, kept companies can go into the same shared list for the team.
                 </p>

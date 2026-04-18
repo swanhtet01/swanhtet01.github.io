@@ -919,7 +919,7 @@ export function WorkspaceLitePage() {
   const cloudSavePanel =
     hasLiveWorkspaceApi() && mode === 'local' && showCloudSetup ? (
       <div className="sm-proof-card">
-        <p className="sm-kicker text-[var(--sm-accent)]">Use with your team</p>
+        <p className="sm-kicker text-[var(--sm-accent)]">Save online</p>
         <p className="mt-2 text-sm text-[var(--sm-muted)]">Use your company and work email once. After that, this list can stay in the shared team list.</p>
         <div className="mt-4 grid gap-3 md:grid-cols-3">
           <label className="grid gap-2 text-sm font-semibold text-[var(--sm-muted)]">
@@ -937,7 +937,7 @@ export function WorkspaceLitePage() {
         </div>
         <div className="mt-4 flex flex-wrap gap-3">
           <button className="sm-button-secondary" disabled={starting || !hasSharedProfile} onClick={() => void startSharedWorkspace()} type="button">
-            {starting ? 'Starting...' : 'Use with your team'}
+            {starting ? 'Starting...' : 'Save online for your team'}
           </button>
           <button className="sm-button-secondary" onClick={() => setShowCloudSetup(false)} type="button">
             Hide
