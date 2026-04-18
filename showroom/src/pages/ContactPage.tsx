@@ -35,16 +35,22 @@ function initialFormFromQuery(): LeadFormState {
 
 export function ContactPage() {
   const [form, setForm] = useState<LeadFormState>(initialFormFromQuery)
-  const [status, setStatus] = useState<'idle' | 'saving' | 'saved' | 'saved_local' | 'error'>('idle')
-  const [apiReady, setApiReady] = useState(false)
+  const [status, setStatus] = useState<'idle' | 'saving' | 'saved' | 'draft_only' | 'error'>('idle')
+  const [apiStatus, setApiStatus] = useState<'checking' | 'ready' | 'unavailable'>('checking')
   const requestedPackage = requestedPackageFromQuery()
 
   useEffect(() => {
     let cancelled = false
     async function checkApi() {
-      const result = await checkWorkspaceHealth()
-      if (!cancelled) {
-        setApiReady(result.ready)
+      try {
+        const result = await checkWorkspaceHealth()
+        if (!cancelled) {
+          setApiStatus(result.ready ? 'ready' : 'unavailable')
+        }
+      } catch {
+        if (!cancelled) {
+          setApiStatus('unavailable')
+        }
       }
     }
     void checkApi()
@@ -57,8 +63,8 @@ export function ContactPage() {
     if (status === 'saved') {
       return 'Your rollout request was saved. We can now follow it up inside the live app.'
     }
-    if (status === 'saved_local') {
-      return 'Your rollout request was saved in this browser. Book a rollout call if you want immediate follow-up.'
+    if (status === 'draft_only') {
+      return 'This request is saved only on this device. It has not reached SUPERMEGA.dev yet.'
     }
     if (status === 'error') {
       return 'The rollout request could not be saved. Try again.'
@@ -70,7 +76,7 @@ export function ContactPage() {
     event.preventDefault()
     setStatus('saving')
 
-    if (apiReady) {
+    if (apiStatus === 'ready') {
       try {
         await createContactSubmission({
           ...form,
@@ -88,7 +94,7 @@ export function ContactPage() {
     try {
       window.localStorage.setItem('supermega_contact_draft', JSON.stringify({ ...form, saved_at: new Date().toISOString() }))
       trackEvent('contact_submit', { source: 'contact_page', mode: 'local' })
-      setStatus('saved_local')
+      setStatus('draft_only')
     } catch {
       setStatus('error')
     }
@@ -142,6 +148,14 @@ export function ContactPage() {
             <div className="mb-5 sm-chip text-white">
               <p className="sm-kicker text-[var(--sm-accent)]">Requested product</p>
               <p className="mt-2 text-lg font-semibold">{requestedPackage}</p>
+            </div>
+          ) : null}
+          {apiStatus === 'unavailable' ? (
+            <div className="mb-5 sm-chip text-white">
+              <p className="sm-kicker text-[var(--sm-accent-alt)]">Live intake unavailable</p>
+              <p className="mt-2 text-sm text-[var(--sm-muted)]">
+                This page cannot send your request to the live backend right now. The form button below only saves a draft on this device. Use the rollout call button for immediate contact.
+              </p>
             </div>
           ) : null}
           <div className="grid gap-4 md:grid-cols-2">
@@ -200,7 +214,7 @@ export function ContactPage() {
 
           <div className="mt-5 flex flex-wrap gap-3">
             <button className="sm-button-accent" type="submit">
-              {status === 'saving' ? 'Sending...' : 'Send rollout request'}
+              {status === 'saving' ? 'Sending...' : apiStatus === 'ready' ? 'Send rollout request' : 'Save draft on this device'}
             </button>
             {bookingUrl ? (
               <a
