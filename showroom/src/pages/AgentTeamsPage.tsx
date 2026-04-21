@@ -1,6 +1,10 @@
 import { type FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 
 import { PageIntro } from '../components/PageIntro'
+import { getAgentOperatingModel, getToolDefinitionMap, type AgentOperatingModel } from '../lib/agentOperatingModel'
+import { SUPERMEGA_AUTONOMOUS_CLOUD_MODEL } from '../lib/autonomousCloudOperatingModel'
+import { getTenantConfig } from '../lib/tenantConfig'
 import {
   listAgentRuns,
   checkWorkspaceHealth,
@@ -39,17 +43,85 @@ type AgentTeam = {
   agents: AgentUnit[]
 }
 
+type AgentRuntimeCrew = {
+  team_id?: string
+  name?: string
+  scaling_tier?: string
+  workspace?: string
+  runtime_lane?: string
+  execution_mode?: string
+  tool_count?: number
+  connector_tool_count?: number
+  tool_modes?: string[]
+  tool_scopes?: string[]
+  approval_gates?: string[]
+  required_capabilities?: string[]
+  write_policy?: string
+  guardrail_posture?: string
+  job_types?: string[]
+  last_run_at?: string
+  last_run_status?: string
+  current_user_can_view?: boolean
+  current_user_can_run?: boolean
+  current_user_can_approve?: boolean
+  current_user_can_take_over?: boolean
+}
+
+type AgentRuntimeContract = {
+  generated_at?: string
+  viewer?: {
+    role?: string
+    display_name?: string
+    capabilities?: string[]
+    can_run_jobs?: boolean
+    can_manage_runtime?: boolean
+    can_approve_guardrails?: boolean
+  }
+  summary?: {
+    workspace_count?: number
+    scheduler_backed_team_count?: number
+    connector_enabled_team_count?: number
+    approval_gate_count?: number
+    guarded_team_count?: number
+  }
+  crews?: AgentRuntimeCrew[]
+}
+
+type TenantState = {
+  status?: string
+  blocked?: boolean
+  expected_tenant_key?: string
+  resource_tenant_key?: string
+  persisted_manifest_tenant_key?: string
+  current_state_tenant_key?: string
+  snapshot_tenant_key?: string
+  workspace_slug?: string
+  workspace_name?: string
+  detail?: string
+}
+
 type AgentTeamPayload = {
   status: string
+  tenant_state?: TenantState
   summary?: {
     team_count?: number
     shared_core_team_count?: number
     client_pod_team_count?: number
     autonomy_score?: number
     autonomy_level?: string
+    manifest_version?: string
+    manifest_tool_count?: number
+    manifest_playbook_count?: number
   }
   teams?: AgentTeam[]
-  gaps?: string[]
+  manifest?: AgentOperatingModel | null
+  runtime_contract?: AgentRuntimeContract
+  gaps?: Array<{
+    gap_id?: string
+    severity?: string
+    problem?: string
+    next_step?: string
+  }>
   next_moves?: string[]
   scaling_model?: {
     core_loop?: string[]
@@ -58,7 +130,7 @@ type AgentTeamPayload = {
   }
 }
 
-const roleOptions = ['member', 'operator', 'manager', 'owner'] as const
+const roleOptions = ['member', 'operator', 'manager', 'owner', 'sales', 'operations', 'quality', 'maintenance', 'ceo', 'admin'] as const
 const runnableJobTypes = [
   'revenue_scout',
   'list_clerk',
@@ -66,6 +138,7 @@ const runnableJobTypes = [
   'task_triage',
   'ops_watch',
   'founder_brief',
+  'github_release_watch',
 ] as const
 
 function cadenceThresholdMinutes(cadence: string) {
@@ -94,6 +167,9 @@ function formatDateTime(value: string) {
 }
 
 export function AgentTeamsPage() {
+  const tenant = getTenantConfig()
+  const fallbackOperatingModel = getAgentOperatingModel(tenant.key)
+  const autonomyModel = SUPERMEGA_AUTONOMOUS_CLOUD_MODEL
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [agentPayload, setAgentPayload] = useState<AgentTeamPayload | null>(null)
@@ -265,6 +341,48 @@ export function AgentTeamsPage() {
     [agentJobs],
   )
 
+  const operatingModel = useMemo(() => {
+    const runtimeManifest = agentPayload?.manifest
+    if (runtimeManifest && runtimeManifest.tenantKey === tenant.key) {
+      return runtimeManifest
+    }
+    return fallbackOperatingModel
+  }, [agentPayload?.manifest, fallbackOperatingModel, tenant.key])
+
+  const playbookSummary = useMemo(() => {
+    const automationCount = operatingModel.playbooks.reduce((total, playbook) => total + playbook.cadence.length, 0)
+    const guardedTeamCount = operatingModel.playbooks.filter((playbook) => playbook.writePolicy.trim().length > 0).length
+    return {
+      automationCount,
+      guardedTeamCount,
+      teamCount: operatingModel.playbooks.length,
+      toolCount: operatingModel.tools.length,
+    }
+  }, [operatingModel])
+
+  const toolUsage = useMemo(() => {
+    const toolMap = getToolDefinitionMap(operatingModel)
+    return operatingModel.tools
+      .map((tool) => ({
+        tool,
+        teams: operatingModel.playbooks
+          .filter((playbook) => playbook.tools.some((access) => access.toolId === tool.id))
+          .map((playbook) => playbook.name),
+        strongestMode:
+          operatingModel.playbooks.flatMap((playbook) => playbook.tools.filter((access) => access.toolId === tool.id).map((access) => access.mode))[0] ?? 'Read',
+        purpose: toolMap.get(tool.id)?.purpose ?? tool.purpose,
+      }))
+      .filter((entry) => entry.teams.length)
+  }, [operatingModel])
+
+  const foundryCrews = useMemo(
+    () =>
+      operatingModel.playbooks.filter((playbook) =>
+        ['tenant-app-foundry', 'manufacturing-genealogy', 'experience-assurance'].includes(playbook.id),
+      ),
+    [operatingModel],
+  )
+
   const runtimeHealth = useMemo(() => {
     const now = Date.now()
     let staleCount = 0
@@ -299,13 +417,39 @@ export function AgentTeamsPage() {
     }
   }, [activeJobs, agentRuns])
 
+  const runtimeContract = agentPayload?.runtime_contract ?? null
+
   return (
     <div className="space-y-8">
       <PageIntro
         eyebrow="Agent Ops"
-        title="Keep the company running with people, loops, and escalation."
-        description="Scheduler keeps the base loops alive. Manual run is for operator checks, recovery, and urgent refresh."
+        title={
+          tenant.key === 'ytf-plant-a'
+            ? 'Run the AI workforce that designs and operates the Yangon Tyre platform.'
+            : 'Keep the company running with people, loops, and escalation.'
+        }
+        description={
+          tenant.key === 'ytf-plant-a'
+            ? 'This surface now includes the app-foundry crews, manufacturing genealogy crew, and experience-evals crew alongside the runtime operators.'
+            : 'Scheduler keeps the base loops alive. Manual run is for operator checks, recovery, and urgent refresh.'
+        }
       />
+
+      {agentPayload?.tenant_state?.status &&
+      agentPayload.tenant_state.status !== 'matched' &&
+      agentPayload.tenant_state.status !== 'parallel' ? (
+        <section className="sm-surface p-6">
+          <p className="sm-kicker text-[var(--sm-accent-alt)]">Tenant state</p>
+          <h2 className="mt-2 text-2xl font-bold text-white">Crew state is gated until the active workspace and persisted tenant data line up.</h2>
+          <p className="mt-3 text-sm leading-relaxed text-[var(--sm-muted)]">{agentPayload.tenant_state.detail || 'Tenant alignment needs review.'}</p>
+          <div className="mt-4 flex flex-wrap gap-3 text-sm text-[var(--sm-muted)]">
+            <span className="sm-chip text-white">Expected: {agentPayload.tenant_state.expected_tenant_key || 'unknown'}</span>
+            <span className="sm-chip text-white">Live state: {agentPayload.tenant_state.current_state_tenant_key || 'not reported'}</span>
+            <span className="sm-chip text-white">Persisted manifest: {agentPayload.tenant_state.persisted_manifest_tenant_key || 'not reported'}</span>
+            <span className="sm-chip text-white">Snapshot: {agentPayload.tenant_state.snapshot_tenant_key || 'not reported'}</span>
+          </div>
+        </section>
+      ) : null}
 
       <section className="grid gap-4 md:grid-cols-4">
         <div className="sm-metric-card">
@@ -348,6 +492,466 @@ export function AgentTeamsPage() {
           <p className="mt-1 text-sm text-[var(--sm-muted)]">
             Last batch: {formatDateTime(runtimeHealth.lastBatchRun)}
           </p>
+        </div>
+      </section>
+
+      <section className="grid gap-4 md:grid-cols-4">
+        <div className="sm-metric-card">
+          <p className="sm-kicker text-[var(--sm-accent)]">Configured teams</p>
+          <p className="mt-3 text-3xl font-bold text-white">{playbookSummary.teamCount}</p>
+          <p className="mt-1 text-sm text-[var(--sm-muted)]">{operatingModel.title}</p>
+        </div>
+        <div className="sm-metric-card">
+          <p className="sm-kicker text-[var(--sm-accent-alt)]">Tool plane</p>
+          <p className="mt-3 text-3xl font-bold text-white">{playbookSummary.toolCount}</p>
+          <p className="mt-1 text-sm text-[var(--sm-muted)]">Named tools with scoped agent access.</p>
+        </div>
+        <div className="sm-metric-card">
+          <p className="sm-kicker text-[var(--sm-accent)]">Automation loops</p>
+          <p className="mt-3 text-3xl font-bold text-white">{playbookSummary.automationCount}</p>
+          <p className="mt-1 text-sm text-[var(--sm-muted)]">Cadenced loops attached to team playbooks.</p>
+        </div>
+        <div className="sm-metric-card">
+          <p className="sm-kicker text-[var(--sm-accent-alt)]">Guarded teams</p>
+          <p className="mt-3 text-3xl font-bold text-white">{playbookSummary.guardedTeamCount}</p>
+          <p className="mt-1 text-sm text-[var(--sm-muted)]">
+            {agentPayload?.summary?.manifest_version
+              ? `Runtime contract ${agentPayload.summary.manifest_version}`
+              : 'Teams with explicit write and escalation policy.'}
+          </p>
+        </div>
+      </section>
+
+      <section className="grid gap-6 lg:grid-cols-[0.94fr_1.06fr]">
+        <article className="sm-surface p-6">
+          <p className="sm-kicker text-[var(--sm-accent)]">Operating model</p>
+          <h2 className="mt-2 text-2xl font-bold text-white">{operatingModel.title}</h2>
+          <p className="mt-3 text-sm leading-relaxed text-[var(--sm-muted)]">{operatingModel.summary}</p>
+
+          <div className="mt-5 space-y-3">
+            {operatingModel.managerMoves.map((item) => (
+              <div className="sm-chip text-white" key={item}>
+                {item}
+              </div>
+            ))}
+          </div>
+        </article>
+
+        <article className="sm-surface p-6">
+          <p className="sm-kicker text-[var(--sm-accent-alt)]">Tool plane</p>
+          <h2 className="mt-2 text-2xl font-bold text-white">What the teams are actually equipped with.</h2>
+          <div className="mt-5 space-y-3">
+            {toolUsage.map(({ tool, teams, strongestMode, purpose }) => (
+              <div className="sm-proof-card" key={tool.id}>
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="text-lg font-bold text-white">{tool.name}</p>
+                    <p className="mt-2 text-sm text-[var(--sm-muted)]">{purpose}</p>
+                  </div>
+                  <span className="sm-status-pill">
+                    {tool.category} / {strongestMode}
+                  </span>
+                </div>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {teams.map((team) => (
+                    <span className="sm-status-pill" key={`${tool.id}-${team}`}>
+                      {team}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </article>
+      </section>
+
+      {runtimeContract?.crews?.length ? (
+        <section className="sm-surface p-6">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <p className="sm-kicker text-[var(--sm-accent)]">Crew runtime contract</p>
+              <h2 className="mt-2 text-2xl font-bold text-white">Each crew now has a named workspace, tool boundary, scheduler lane, and approval edge.</h2>
+              <p className="mt-3 text-sm text-[var(--sm-muted)]">
+                This is the operator-facing contract for cloud crews: where they run, what they can touch, and how risky work is contained.
+              </p>
+            </div>
+            <span className="sm-status-pill">{runtimeContract.crews.length} crews</span>
+          </div>
+
+          <div className="mt-5 grid gap-3 md:grid-cols-4">
+            <div className="sm-chip text-white">
+              <p className="sm-kicker text-[var(--sm-accent)]">Crew workspaces</p>
+              <p className="mt-2 text-sm">{runtimeContract.summary?.workspace_count ?? 0} named workspaces</p>
+            </div>
+            <div className="sm-chip text-white">
+              <p className="sm-kicker text-[var(--sm-accent-alt)]">Scheduler-backed crews</p>
+              <p className="mt-2 text-sm">{runtimeContract.summary?.scheduler_backed_team_count ?? 0} crews tied to recurring jobs</p>
+            </div>
+            <div className="sm-chip text-white">
+              <p className="sm-kicker text-[var(--sm-accent)]">Connector crews</p>
+              <p className="mt-2 text-sm">{runtimeContract.summary?.connector_enabled_team_count ?? 0} crews with direct connector scope</p>
+            </div>
+            <div className="sm-chip text-white">
+              <p className="sm-kicker text-[var(--sm-accent-alt)]">Approval boundaries</p>
+              <p className="mt-2 text-sm">{runtimeContract.summary?.approval_gate_count ?? 0} named approval gates in live use</p>
+            </div>
+          </div>
+
+          {runtimeContract.viewer ? (
+            <div className="mt-5 grid gap-4 lg:grid-cols-[0.78fr_1.22fr]">
+              <div className="sm-chip text-white">
+                <p className="sm-kicker text-[var(--sm-accent)]">My access</p>
+                <p className="mt-2 text-sm">
+                  {runtimeContract.viewer.display_name || 'Current operator'} · {runtimeContract.viewer.role || 'unknown role'}
+                </p>
+                <div className="mt-3 grid gap-2 md:grid-cols-3">
+                  <div className="sm-status-pill">{runtimeContract.viewer.can_run_jobs ? 'Can run jobs' : 'No run control'}</div>
+                  <div className="sm-status-pill">
+                    {runtimeContract.viewer.can_approve_guardrails ? 'Can approve guardrails' : 'No approval authority'}
+                  </div>
+                  <div className="sm-status-pill">
+                    {runtimeContract.viewer.can_manage_runtime ? 'Can take over runtime' : 'No takeover authority'}
+                  </div>
+                </div>
+              </div>
+              <div className="sm-chip text-white">
+                <p className="sm-kicker text-[var(--sm-accent-alt)]">Authoritative capabilities</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {(runtimeContract.viewer.capabilities ?? []).map((capability) => (
+                    <span className="sm-status-pill" key={`viewer-cap-${capability}`}>
+                      {capability}
+                    </span>
+                  ))}
+                  {!(runtimeContract.viewer.capabilities ?? []).length ? (
+                    <span className="sm-status-pill">No capabilities reported</span>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          <div className="mt-6 grid gap-4 xl:grid-cols-2">
+            {runtimeContract.crews.map((crew) => (
+              <article className="sm-proof-card" key={crew.team_id || crew.name}>
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xl font-bold text-white">{crew.name || crew.team_id || 'Crew'}</p>
+                    <p className="mt-2 text-sm text-[var(--sm-muted)]">{crew.runtime_lane || 'Runtime lane not declared yet.'}</p>
+                  </div>
+                  <span className="sm-status-pill">{crew.guardrail_posture || 'Guardrails pending'}</span>
+                </div>
+
+                <div className="mt-4 grid gap-3 md:grid-cols-2">
+                  <div className="sm-chip text-white">
+                    <p className="sm-kicker text-[var(--sm-accent)]">Workspace</p>
+                    <p className="mt-2 text-sm">{crew.workspace || 'Unassigned workspace'}</p>
+                  </div>
+                  <div className="sm-chip text-white">
+                    <p className="sm-kicker text-[var(--sm-accent-alt)]">Execution</p>
+                    <p className="mt-2 text-sm">{crew.execution_mode || 'Manual lane'}</p>
+                  </div>
+                </div>
+
+                <div className="mt-4 grid gap-3 md:grid-cols-3">
+                  <div className="sm-chip text-white">
+                    <p className="sm-kicker text-[var(--sm-accent)]">Tools</p>
+                    <p className="mt-2 text-sm">
+                      {crew.tool_count ?? 0} total / {crew.connector_tool_count ?? 0} connector
+                    </p>
+                  </div>
+                  <div className="sm-chip text-white">
+                    <p className="sm-kicker text-[var(--sm-accent-alt)]">Tracked jobs</p>
+                    <p className="mt-2 text-sm">{crew.job_types?.join(' · ') || 'No recurring job mapped yet'}</p>
+                  </div>
+                  <div className="sm-chip text-white">
+                    <p className="sm-kicker text-[var(--sm-accent)]">Last run</p>
+                    <p className="mt-2 text-sm">
+                      {crew.last_run_at ? formatDateTime(crew.last_run_at) : crew.last_run_status || 'Manual'}
+                    </p>
+                    {crew.last_run_at ? <p className="mt-1 text-xs text-[var(--sm-muted)]">{crew.last_run_status || 'Recorded'}</p> : null}
+                  </div>
+                </div>
+
+                {crew.tool_modes?.length ? (
+                  <div className="mt-4">
+                    <p className="sm-kicker text-[var(--sm-accent)]">Tool modes</p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {crew.tool_modes.map((mode) => (
+                        <span className="sm-status-pill" key={`${crew.team_id}-mode-${mode}`}>
+                          {mode}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+
+                {crew.tool_scopes?.length ? (
+                  <div className="mt-4">
+                    <p className="sm-kicker text-[var(--sm-accent-alt)]">Active scopes</p>
+                    <div className="mt-2 space-y-2">
+                      {crew.tool_scopes.map((scope) => (
+                        <div className="sm-chip text-white" key={`${crew.team_id}-scope-${scope}`}>
+                          {scope}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+
+                {crew.required_capabilities?.length ? (
+                  <div className="mt-4">
+                    <p className="sm-kicker text-[var(--sm-accent)]">Required capabilities</p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {crew.required_capabilities.map((capability) => (
+                        <span className="sm-status-pill" key={`${crew.team_id}-required-${capability}`}>
+                          {capability}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+
+                <div className="mt-4 grid gap-4 lg:grid-cols-2">
+                  <div>
+                    <p className="sm-kicker text-[var(--sm-accent)]">Approval gates</p>
+                    <div className="mt-2 space-y-2">
+                      {crew.approval_gates?.length ? (
+                        crew.approval_gates.map((gate) => (
+                          <div className="sm-chip text-white" key={`${crew.team_id}-gate-${gate}`}>
+                            {gate}
+                          </div>
+                        ))
+                      ) : (
+                        <div className="sm-chip text-white">No explicit gate recorded yet</div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="sm-chip text-white">
+                    <p className="sm-kicker text-[var(--sm-accent-alt)]">Write policy</p>
+                    <p className="mt-2 text-sm">{crew.write_policy || 'Human review before writes.'}</p>
+                    <div className="mt-3 grid gap-2">
+                      <div className="sm-status-pill">{crew.current_user_can_view ? 'You can view' : 'You cannot view'}</div>
+                      <div className="sm-status-pill">{crew.current_user_can_run ? 'You can run' : 'You cannot run'}</div>
+                      <div className="sm-status-pill">{crew.current_user_can_approve ? 'You can approve' : 'You cannot approve'}</div>
+                      <div className="sm-status-pill">{crew.current_user_can_take_over ? 'You can take over' : 'You cannot take over'}</div>
+                    </div>
+                  </div>
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      <section className="grid gap-6 lg:grid-cols-[1fr_1fr]">
+        <article className="sm-surface p-6">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <p className="sm-kicker text-[var(--sm-accent)]">Cloud development loops</p>
+              <h2 className="mt-2 text-2xl font-bold text-white">Autonomous development only works when the loops are named and audited.</h2>
+              <p className="mt-3 text-sm text-[var(--sm-muted)]">
+                These loops are the company’s internal machine for architecture, building, connector expansion, crew learning, and storytelling.
+              </p>
+            </div>
+            <span className="sm-status-pill">{autonomyModel.developmentLoops.length} loops</span>
+          </div>
+          <div className="mt-6 grid gap-4">
+            {autonomyModel.developmentLoops.map((loop) => (
+              <article className="sm-proof-card" key={loop.id}>
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="font-semibold text-white">{loop.name}</p>
+                    <p className="mt-2 text-sm text-[var(--sm-muted)]">{loop.mission}</p>
+                  </div>
+                  <Link className="sm-link" to={loop.route}>
+                    Open
+                  </Link>
+                </div>
+                <p className="mt-3 text-sm text-white/80">Cadence: {loop.cadence}</p>
+                <div className="mt-4 grid gap-3 md:grid-cols-2">
+                  <div className="sm-chip text-white">
+                    <p className="sm-kicker text-[var(--sm-accent)]">Reads</p>
+                    <p className="mt-2 text-sm">{loop.reads.join(', ')}</p>
+                  </div>
+                  <div className="sm-chip text-white">
+                    <p className="sm-kicker text-[var(--sm-accent-alt)]">Writes</p>
+                    <p className="mt-2 text-sm">{loop.writes.join(', ')}</p>
+                  </div>
+                </div>
+                <p className="mt-3 text-sm text-[var(--sm-muted)]">Success metric: {loop.successMetric}</p>
+              </article>
+            ))}
+          </div>
+        </article>
+
+        <article className="sm-surface p-6">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <p className="sm-kicker text-[var(--sm-accent-alt)]">Execution lanes</p>
+              <h2 className="mt-2 text-2xl font-bold text-white">Crews should know which runtime lane they belong to before they run autonomously.</h2>
+            </div>
+            <span className="sm-status-pill">{autonomyModel.modelLanes.length} lanes</span>
+          </div>
+          <div className="mt-6 grid gap-4">
+            {autonomyModel.modelLanes.map((lane) => (
+              <article className="sm-proof-card" key={lane.id}>
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="font-semibold text-white">{lane.name}</p>
+                    <p className="mt-2 text-sm text-[var(--sm-muted)]">{lane.mission}</p>
+                  </div>
+                  <Link className="sm-link" to={lane.route}>
+                    Open
+                  </Link>
+                </div>
+                <p className="mt-3 text-sm text-white/80">Placement: {lane.placement}</p>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {lane.workloads.map((item) => (
+                    <span className="sm-status-pill" key={`${lane.id}-workload-${item}`}>
+                      {item}
+                    </span>
+                  ))}
+                </div>
+                <p className="mt-3 text-sm text-[var(--sm-muted)]">Guardrails: {lane.guardrails.join(', ')}</p>
+              </article>
+            ))}
+          </div>
+        </article>
+      </section>
+
+      {foundryCrews.length ? (
+        <section className="sm-surface-deep p-6">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <p className="sm-kicker text-[var(--sm-accent)]">Foundry crews</p>
+              <h2 className="mt-2 text-2xl font-bold text-white">These crews design the apps, not just the automations.</h2>
+              <p className="mt-3 text-sm text-[var(--sm-muted)]">
+                The tenant now has explicit crews for app design, manufacturing genealogy, and experience evaluation. This is the workforce that turns the
+                platform into repeatable AI-native software.
+              </p>
+            </div>
+            <span className="sm-status-pill">{foundryCrews.length} design crews</span>
+          </div>
+
+          <div className="mt-6 grid gap-4 xl:grid-cols-3">
+            {foundryCrews.map((playbook) => (
+              <article className="sm-proof-card" key={playbook.id}>
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="font-semibold text-white">{playbook.name}</p>
+                    <p className="mt-2 text-sm text-[var(--sm-muted)]">{playbook.workspace}</p>
+                  </div>
+                  <span className="sm-status-pill">{playbook.leadRole}</span>
+                </div>
+                <p className="mt-3 text-sm text-[var(--sm-muted)]">{playbook.mission}</p>
+                <p className="mt-3 text-sm text-white/80">Outputs: {playbook.outputs.join(', ')}</p>
+                <p className="mt-2 text-sm text-white/80">Cadence: {playbook.cadence.join(' · ')}</p>
+              </article>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      <section className="sm-surface p-6">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="sm-kicker text-[var(--sm-accent)]">Team playbooks</p>
+            <h2 className="mt-2 text-2xl font-bold text-white">Named teams, instructions, handoff rules, and KPIs.</h2>
+            <p className="mt-3 text-sm text-[var(--sm-muted)]">
+              This is the canonical team design for the current tenant. Runtime jobs and people assignments should converge toward this model.
+            </p>
+          </div>
+          <span className="sm-status-pill">{tenant.brandName}</span>
+        </div>
+
+        <div className="mt-6 grid gap-5 xl:grid-cols-2">
+          {operatingModel.playbooks.map((playbook) => (
+            <article className="sm-proof-card" key={playbook.id}>
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-xl font-bold text-white">{playbook.name}</p>
+                  <p className="mt-2 text-sm text-[var(--sm-muted)]">{playbook.mission}</p>
+                </div>
+                <span className="sm-status-pill">{playbook.leadRole}</span>
+              </div>
+
+              <div className="mt-4 grid gap-3 md:grid-cols-2">
+                <div className="sm-chip text-white">
+                  <p className="sm-kicker text-[var(--sm-accent)]">Workspace</p>
+                  <p className="mt-2 text-sm">{playbook.workspace}</p>
+                </div>
+                <div className="sm-chip text-white">
+                  <p className="sm-kicker text-[var(--sm-accent-alt)]">Cadence</p>
+                  <p className="mt-2 text-sm">{playbook.cadence.join(' · ')}</p>
+                </div>
+              </div>
+
+              <div className="mt-4">
+                <p className="sm-kicker text-[var(--sm-accent)]">Outputs</p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {playbook.outputs.map((output) => (
+                    <span className="sm-status-pill" key={output}>
+                      {output}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              <div className="mt-4">
+                <p className="sm-kicker text-[var(--sm-accent-alt)]">Tool access</p>
+                <div className="mt-2 grid gap-2">
+                  {playbook.tools.map((toolAccess) => {
+                    const tool = operatingModel.tools.find((entry) => entry.id === toolAccess.toolId)
+                    return (
+                      <div className="sm-chip text-white" key={`${playbook.id}-${toolAccess.toolId}`}>
+                        <p className="font-semibold">{tool?.name || toolAccess.toolId}</p>
+                        <p className="mt-1 text-sm text-[var(--sm-muted)]">
+                          {toolAccess.mode} · {toolAccess.scope}
+                        </p>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+
+              <div className="mt-4 grid gap-4 lg:grid-cols-2">
+                <div>
+                  <p className="sm-kicker text-[var(--sm-accent)]">Instructions</p>
+                  <div className="mt-2 space-y-2">
+                    {playbook.instructions.map((item) => (
+                      <div className="sm-chip text-white" key={item}>
+                        {item}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <p className="sm-kicker text-[var(--sm-accent-alt)]">Escalate when</p>
+                  <div className="mt-2 space-y-2">
+                    {playbook.escalateWhen.map((item) => (
+                      <div className="sm-chip text-white" key={item}>
+                        {item}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-4 sm-chip text-white">
+                <p className="sm-kicker text-[var(--sm-accent)]">Write policy</p>
+                <p className="mt-2 text-sm">{playbook.writePolicy}</p>
+              </div>
+
+              <div className="mt-4 grid gap-3 md:grid-cols-2">
+                {playbook.kpis.map((kpi) => (
+                  <div className="sm-chip text-white" key={`${playbook.id}-${kpi.name}`}>
+                    <p className="sm-kicker text-[var(--sm-accent-alt)]">{kpi.name}</p>
+                    <p className="mt-2 text-sm">{kpi.target}</p>
+                  </div>
+                ))}
+              </div>
+            </article>
+          ))}
         </div>
       </section>
 
@@ -490,7 +1094,7 @@ export function AgentTeamsPage() {
 
             <article className="sm-surface p-6">
               <p className="sm-kicker text-[var(--sm-accent-alt)]">Invite</p>
-              <h2 className="mt-2 text-2xl font-bold text-white">Add a manager or operator</h2>
+              <h2 className="mt-2 text-2xl font-bold text-white">Add a workspace member</h2>
               <p className="mt-3 text-sm text-[var(--sm-muted)]">
                 This creates or updates login access for the current workspace. If you leave password blank, a one-time password is generated.
               </p>

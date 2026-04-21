@@ -1,3 +1,5 @@
+import type { LivePreviewVariant } from './liveProductPreviewModel'
+
 export type AgentTeamDetail = {
   id: string
   name: string
@@ -8,11 +10,25 @@ export type AgentTeamDetail = {
   products: string[]
 }
 
+export type ProductGalleryShot = {
+  src: string
+  alt: string
+  caption: string
+}
+
 export type SoftwareModuleDetail = {
   id: string
   name: string
   category: 'Workflow' | 'Knowledge' | 'Automation' | 'Intelligence'
   status: 'Live wedge' | 'Rollout module' | 'Control layer'
+  featured?: boolean
+  heroImage?: string
+  previewVariant?: LivePreviewVariant
+  proofRoute?: string
+  workspaceRoute?: string
+  ownedBy?: string
+  deliveryState?: string
+  liveNotes?: string[]
   audience: string
   summary: string
   promise: string
@@ -21,6 +37,49 @@ export type SoftwareModuleDetail = {
   knowledgeModules: string[]
   infrastructureModules: string[]
   agentTeams: string[]
+}
+
+const SITE_SCREENSHOT_LIBRARY = {
+  home: {
+    src: '/site/find-clients-live.png',
+    alt: 'SUPERMEGA Find Clients live workspace',
+    caption: 'Live sales wedge with shortlist review, company research, and owned next actions.',
+  },
+  products: {
+    src: '/site/receiving-control-live.png',
+    alt: 'SUPERMEGA Receiving Control live workspace',
+    caption: 'Live receiving queue for shortages, holds, GRN gaps, and supplier follow-up.',
+  },
+  companyList: {
+    src: '/site/company-list-live.png',
+    alt: 'SUPERMEGA company list live workspace',
+    caption: 'Live company cleanup desk for owned accounts, notes, and next-step control.',
+  },
+  yangonTyre: {
+    src: '/site/client-portal.svg',
+    alt: 'Yangon Tyre client portal preview',
+    caption: 'Client portal entry point for tenant-specific workspaces, roles, and operating flows.',
+  },
+} as const satisfies Record<string, ProductGalleryShot>
+
+const SOFTWARE_MODULE_GALLERY_SHOTS: Record<string, ProductGalleryShot[]> = {
+  'sales-system': [SITE_SCREENSHOT_LIBRARY.companyList, SITE_SCREENSHOT_LIBRARY.products],
+  'operations-inbox': [SITE_SCREENSHOT_LIBRARY.yangonTyre, SITE_SCREENSHOT_LIBRARY.home],
+  'industrial-dqms': [SITE_SCREENSHOT_LIBRARY.yangonTyre, SITE_SCREENSHOT_LIBRARY.products],
+  'manager-operating-system': [SITE_SCREENSHOT_LIBRARY.yangonTyre, SITE_SCREENSHOT_LIBRARY.products],
+  'client-portal': [SITE_SCREENSHOT_LIBRARY.yangonTyre, SITE_SCREENSHOT_LIBRARY.home],
+  'supplier-portal': [SITE_SCREENSHOT_LIBRARY.yangonTyre],
+  'support-service-desk': [SITE_SCREENSHOT_LIBRARY.home, SITE_SCREENSHOT_LIBRARY.products],
+  'commerce-back-office': [SITE_SCREENSHOT_LIBRARY.home],
+  'decision-journal': [SITE_SCREENSHOT_LIBRARY.products],
+  'document-intelligence': [SITE_SCREENSHOT_LIBRARY.products, SITE_SCREENSHOT_LIBRARY.yangonTyre],
+  'approval-policy-engine': [SITE_SCREENSHOT_LIBRARY.products],
+  'founder-brief': [SITE_SCREENSHOT_LIBRARY.home, SITE_SCREENSHOT_LIBRARY.yangonTyre],
+  'director-command-center': [SITE_SCREENSHOT_LIBRARY.yangonTyre, SITE_SCREENSHOT_LIBRARY.home],
+  'knowledge-graph': [SITE_SCREENSHOT_LIBRARY.products, SITE_SCREENSHOT_LIBRARY.yangonTyre],
+  'agent-runtime': [SITE_SCREENSHOT_LIBRARY.products, SITE_SCREENSHOT_LIBRARY.home],
+  'tenant-control-plane': [SITE_SCREENSHOT_LIBRARY.yangonTyre, SITE_SCREENSHOT_LIBRARY.products],
+  'data-science-studio': [SITE_SCREENSHOT_LIBRARY.yangonTyre, SITE_SCREENSHOT_LIBRARY.home],
 }
 
 export const AGENT_TEAM_DETAILS: AgentTeamDetail[] = [
@@ -70,6 +129,15 @@ export const AGENT_TEAM_DETAILS: AgentTeamDetail[] = [
     products: ['Receiving Control', 'Operations Inbox', 'Supplier Portal', 'Commerce Back Office'],
   },
   {
+    id: 'quality-architect',
+    name: 'Quality Architect',
+    strap: 'Turns incidents, KPI drift, and recurring failures into fishbone, 5W1H, and corrective-action logic.',
+    purpose: 'Delegates DQMS preparation so industrial teams work from structured quality methods instead of blank forms and retrospective reporting.',
+    delegates: ['root-cause drafting', 'KPI gap analysis', 'corrective-action preparation'],
+    handoff: 'Hands quality and operations leaders a decision-ready record with probable causes, KPI movement, and the next corrective step.',
+    products: ['Industrial DQMS', 'Data Science Studio', 'Director Command Center'],
+  },
+  {
     id: 'founder-brief',
     name: 'Founder Brief',
     strap: 'Compiles the daily review from live leads, tasks, approvals, and exceptions.',
@@ -77,6 +145,42 @@ export const AGENT_TEAM_DETAILS: AgentTeamDetail[] = [
     delegates: ['daily summary generation', 'risk ranking', 'cross-queue rollup'],
     handoff: 'Hands founders and directors the few changes, delays, and risks that justify attention today.',
     products: ['Distributor Sales Desk', 'List Cleanup Desk', 'Receiving Control', 'Founder Brief', 'Director Command Center'],
+  },
+  {
+    id: 'memory-curator',
+    name: 'Memory Curator',
+    strap: 'Extracts entities, relations, and provenance from company knowledge so every module uses the same memory.',
+    purpose: 'Delegates the company-memory cleanup layer that normally stays trapped in folders, notes, and attachments.',
+    delegates: ['entity extraction', 'relation linking', 'provenance tracking'],
+    handoff: 'Hands product modules a cleaner shared memory graph with sources and decision context attached.',
+    products: ['Knowledge Graph', 'Decision Journal', 'Data Science Studio'],
+  },
+  {
+    id: 'runtime-orchestrator',
+    name: 'Runtime Orchestrator',
+    strap: 'Schedules agent jobs, applies approval gates, and keeps autonomous work inside safe lanes.',
+    purpose: 'Delegates agent operations so prep work, retries, and policy checks happen continuously instead of manually.',
+    delegates: ['job dispatch', 'approval checks', 'runtime retries'],
+    handoff: 'Hands teams a safer runtime with visible agent work, review gates, and failure signals.',
+    products: ['Agent Runtime', 'Tenant Control Plane', 'Approval Policy Engine'],
+  },
+  {
+    id: 'forecast-analyst',
+    name: 'Forecast Analyst',
+    strap: 'Builds forecasts, anomaly alerts, and next-best-action from live workflow data.',
+    purpose: 'Delegates operating intelligence so analytics lives inside the workflow instead of in separate dashboard projects.',
+    delegates: ['forecast scoring', 'anomaly detection', 'next-best-action ranking'],
+    handoff: 'Hands leaders and operators explanations, scores, and priorities tied to current work.',
+    products: ['Data Science Studio', 'Founder Brief', 'Director Command Center'],
+  },
+  {
+    id: 'tenant-operator',
+    name: 'Tenant Operator',
+    strap: 'Prepares tenant configs, launches domains, maps roles, and closes onboarding gaps.',
+    purpose: 'Delegates rollout preparation so the same product core can scale across companies and sites.',
+    delegates: ['tenant setup', 'domain prep', 'role mapping'],
+    handoff: 'Hands implementation teams a cleaner launch checklist with the highest-risk rollout gaps already surfaced.',
+    products: ['Tenant Control Plane', 'Client Portal', 'Supplier Portal'],
   },
 ]
 
@@ -86,6 +190,14 @@ export const SOFTWARE_MODULE_DETAILS: SoftwareModuleDetail[] = [
     name: 'Sales System',
     category: 'Workflow',
     status: 'Rollout module',
+    featured: true,
+    heroImage: '/site/sales-desk.svg',
+    previewVariant: 'sales-setup',
+    proofRoute: '/company-list',
+    workspaceRoute: '/app/revenue',
+    ownedBy: 'Commercial Systems Team',
+    deliveryState: 'Live revenue wedge with shortlist, cleanup, and follow-up flow.',
+    liveNotes: ['Public proof: Company List', 'Shared sales follow-up and account history', 'Built-in automation: Revenue Scout, List Clerk, Founder Brief'],
     audience: 'Commercial teams, coordinators, founders, and owner-led distribution businesses',
     summary: 'Prospecting, account cleanup, follow-up, quoting, and handoff in one commercial operating layer.',
     promise: 'Replace CRM sprawl and spreadsheet prospecting with one sales system connected to company memory and delegated agent work.',
@@ -100,6 +212,14 @@ export const SOFTWARE_MODULE_DETAILS: SoftwareModuleDetail[] = [
     name: 'Operations Inbox',
     category: 'Workflow',
     status: 'Rollout module',
+    featured: true,
+    heroImage: '/site/ops-desk.svg',
+    previewVariant: 'receiving-control',
+    proofRoute: '/receiving-log',
+    workspaceRoute: '/app/operations',
+    ownedBy: 'Operations Systems Team',
+    deliveryState: 'Live operations wedge for receiving, blockers, and exception ownership.',
+    liveNotes: ['Public proof: Receiving Control', 'Shared exception queue and owner tracking', 'Built-in automation: Task Triage, Ops Watch, Approval Watch'],
     audience: 'Operations leads, warehouse teams, admins, service operators, and branch teams',
     summary: 'Requests, exceptions, documents, approvals, and blockers in one owned queue.',
     promise: 'Replace chat-driven ops and scattered trackers with one live control desk for operational work.',
@@ -110,10 +230,62 @@ export const SOFTWARE_MODULE_DETAILS: SoftwareModuleDetail[] = [
     agentTeams: ['Task Triage', 'Ops Watch', 'Approval Watch'],
   },
   {
+    id: 'industrial-dqms',
+    name: 'Industrial DQMS',
+    category: 'Workflow',
+    status: 'Rollout module',
+    featured: true,
+    heroImage: '/site/control-room.svg',
+    previewVariant: 'industrial-dqms',
+    proofRoute: '/clients/yangon-tyre',
+    workspaceRoute: '/app/dqms',
+    ownedBy: 'Operations Systems Team',
+    deliveryState: 'Named tenant rollout around quality methods, KPI gaps, and CAPA control.',
+    liveNotes: ['Case study: Yangon Tyre', 'Plant quality workspace with CAPA and KPI review', 'Methods: Ishikawa, 5W1H, CAPA, KPI review'],
+    audience: 'Industrial operators, quality teams, maintenance leads, plant managers, and company leadership',
+    summary: 'Industrial quality and operating control built around KPI review, fishbone, 5W1H, CAPA, and management gap analysis.',
+    promise: 'Replace generic ERP quality modules and spreadsheet reviews with an industrial-native system that matches how plants actually diagnose and improve work.',
+    replaces: 'generic ERP quality modules, standalone QMS tools, KPI spreadsheets, whiteboard root-cause reviews',
+    surfaces: ['DQMS command board', 'Fishbone and 5W1H desk', 'KPI review lane', 'Gap-analysis review'],
+    knowledgeModules: ['Knowledge Graph', 'Decision Journal', 'Knowledge Hub'],
+    infrastructureModules: ['Workflow Runtime', 'Agent Runtime', 'Connector Hub', 'Observability'],
+    agentTeams: ['Ops Watch', 'Quality Architect', 'Forecast Analyst'],
+  },
+  {
+    id: 'manager-operating-system',
+    name: 'Plant Manager Interface',
+    category: 'Workflow',
+    status: 'Rollout module',
+    featured: true,
+    heroImage: '/site/client-portal.svg',
+    previewVariant: 'ytf-portal',
+    proofRoute: '/clients/yangon-tyre',
+    workspaceRoute: '/app/plant-manager',
+    ownedBy: 'Industrial Systems Team',
+    deliveryState: 'Live manager layer for daily review loops, industrial methods, and frontline teaching.',
+    liveNotes: ['Live workspace: Plant Manager Interface', 'Built around daily review routines and industrial methods', 'Teaches managers how to use the portal without side trackers'],
+    audience: 'Plant managers, quality managers, maintenance leads, tenant admins, and industrial directors',
+    summary: 'A calmer manager-facing layer for daily review, team coaching, and the next desk to open.',
+    promise: 'Replace eye-strain dashboards and ad hoc manager chasing with one clear operating layer grounded in industrial management practice.',
+    replaces: 'manager side trackers, ad hoc shift review, verbal handoff, dashboard sprawl',
+    surfaces: ['Daily review loop', 'manager route map', 'teaching packs', 'industrial methods'],
+    knowledgeModules: ['Decision Journal', 'Knowledge Graph', 'Knowledge Hub'],
+    infrastructureModules: ['Workflow Runtime', 'Agent Runtime', 'Observability'],
+    agentTeams: ['Ops Watch', 'Quality Architect', 'Approval Watch'],
+  },
+  {
     id: 'client-portal',
     name: 'Client Portal',
     category: 'Workflow',
     status: 'Rollout module',
+    featured: true,
+    heroImage: '/site/client-portal.svg',
+    previewVariant: 'ytf-portal',
+    proofRoute: '/clients/yangon-tyre',
+    workspaceRoute: '/app/portal',
+    ownedBy: 'Tenant Launch Team',
+    deliveryState: 'Branded portal pattern proven through the Yangon Tyre tenant model.',
+    liveNotes: ['Public proof: Yangon Tyre case study', 'Role-based workspace entry', 'Extends into supplier and external service rooms'],
     audience: 'Agencies, service firms, managed operators, account managers, and external clients',
     summary: 'Status, requests, approvals, files, onboarding, and delivery communication in one branded workspace.',
     promise: 'Replace email chains and separate portal tools with a client-facing system attached to the same company memory.',
@@ -128,6 +300,12 @@ export const SOFTWARE_MODULE_DETAILS: SoftwareModuleDetail[] = [
     name: 'Supplier Portal',
     category: 'Workflow',
     status: 'Rollout module',
+    previewVariant: 'receiving-control',
+    proofRoute: '/clients/yangon-tyre',
+    workspaceRoute: '/app/approvals',
+    ownedBy: 'Operations Systems Team',
+    deliveryState: 'Supplier discrepancy and approval lane anchored in receiving and evidence control.',
+    liveNotes: ['Case study base: Yangon Tyre', 'Supplier discrepancy and evidence workspace', 'Built to move suppliers out of email-only loops'],
     audience: 'Procurement teams, receiving leads, warehouses, and external suppliers',
     summary: 'Documents, discrepancies, holds, approvals, and supplier follow-up in one external workspace.',
     promise: 'Replace supplier email loops and document chasing with one controlled vendor-facing system.',
@@ -142,6 +320,12 @@ export const SOFTWARE_MODULE_DETAILS: SoftwareModuleDetail[] = [
     name: 'Support and Service Desk',
     category: 'Workflow',
     status: 'Rollout module',
+    previewVariant: 'portal',
+    proofRoute: '/clients/yangon-tyre',
+    workspaceRoute: '/app/actions',
+    ownedBy: 'Portal Network Team',
+    deliveryState: 'Reusable service-workspace pattern sharing memory, SLA, and approval runtime.',
+    liveNotes: ['Uses the same client and supplier workspace model', 'Case ownership, SLA tracking, and approval routing', 'Ready for external service rollouts'],
     audience: 'Support leads, service ops, customer success teams, and account teams',
     summary: 'Case ownership, SLA drift, approvals, and knowledge-guided service delivery in one support surface.',
     promise: 'Replace helpdesk sprawl with one support desk that reads the same client context, SOPs, and service history.',
@@ -156,6 +340,12 @@ export const SOFTWARE_MODULE_DETAILS: SoftwareModuleDetail[] = [
     name: 'Commerce Back Office',
     category: 'Workflow',
     status: 'Rollout module',
+    previewVariant: 'portal',
+    proofRoute: '/app/inventory',
+    workspaceRoute: '/app/inventory',
+    ownedBy: 'Commercial Systems Team',
+    deliveryState: 'Back-office control lane for stock, settlements, and cross-branch exception review.',
+    liveNotes: ['Branch and warehouse control for stock and settlements', 'Shared approval and exception monitoring', 'Extends from operations and revenue workflows'],
     audience: 'Commerce operators, finance, branch leads, storefront managers, and directors',
     summary: 'Orders, settlements, branch issues, stock pressure, and exception follow-up in one control layer.',
     promise: 'Replace commerce ops spreadsheets and disconnected back-office suites with one operational base.',
@@ -170,6 +360,12 @@ export const SOFTWARE_MODULE_DETAILS: SoftwareModuleDetail[] = [
     name: 'Decision Journal',
     category: 'Knowledge',
     status: 'Control layer',
+    previewVariant: 'founder-brief',
+    proofRoute: '/app/decisions',
+    workspaceRoute: '/app/decisions',
+    ownedBy: 'Knowledge Systems Team',
+    deliveryState: 'Live control layer for approvals, escalations, and decision provenance.',
+    liveNotes: ['Searchable record of approvals and operating decisions', 'Feeds briefs, knowledge graph, and approval flows', 'Turns buried decisions into shared operating memory'],
     audience: 'Managers, founders, finance, procurement, and operations teams',
     summary: 'A searchable record of approvals, exceptions, policy calls, and directional decisions.',
     promise: 'Replace buried email decisions and approval screenshots with a durable reasoning layer connected to work.',
@@ -184,6 +380,12 @@ export const SOFTWARE_MODULE_DETAILS: SoftwareModuleDetail[] = [
     name: 'Document Intelligence',
     category: 'Knowledge',
     status: 'Control layer',
+    previewVariant: 'knowledge-graph',
+    proofRoute: '/app/documents',
+    workspaceRoute: '/app/documents',
+    ownedBy: 'Knowledge Systems Team',
+    deliveryState: 'Live ingest layer for routing files into structured operational records.',
+    liveNotes: ['Routes Gmail, Drive, and uploaded documents into live workflows', 'Feeds company memory and operations records', 'Built for attachments, folders, and uploaded evidence'],
     audience: 'Procurement, finance, warehouse teams, admins, and service operators',
     summary: 'Turns inbound files into structured fields, owned work, and routed operational records.',
     promise: 'Replace manual file sorting and dead attachments with a document layer that opens the next workflow automatically.',
@@ -198,6 +400,12 @@ export const SOFTWARE_MODULE_DETAILS: SoftwareModuleDetail[] = [
     name: 'Approval Policy Engine',
     category: 'Automation',
     status: 'Control layer',
+    previewVariant: 'agent-runtime',
+    proofRoute: '/app/approvals',
+    workspaceRoute: '/app/policies',
+    ownedBy: 'Governance Runtime',
+    deliveryState: 'Live policy and escalation layer wired into approvals, tasks, and agent jobs.',
+    liveNotes: ['Approval rules, evidence gates, and fallback steps', 'Controls thresholds and escalation paths', 'Pairs with visible review queues and automation'],
     audience: 'Managers, procurement, finance, founders, and service leads',
     summary: 'Thresholds, evidence requirements, approver chains, fallback rules, and delay escalation in one policy layer.',
     promise: 'Replace ad hoc approval behavior with a controlled engine that still fits real operational workflows.',
@@ -212,6 +420,12 @@ export const SOFTWARE_MODULE_DETAILS: SoftwareModuleDetail[] = [
     name: 'Founder Brief',
     category: 'Intelligence',
     status: 'Control layer',
+    previewVariant: 'founder-brief',
+    proofRoute: '/app/director',
+    workspaceRoute: '/app/director',
+    ownedBy: 'Control Tower Team',
+    deliveryState: 'Live executive review layer built from queues, approvals, and exceptions.',
+    liveNotes: ['Executive review built from live queues and approvals', 'Short daily brief for founders and leaders', 'Used as the leadership summary pattern across rollouts'],
     audience: 'Founders, GMs, directors, and owner-operators',
     summary: 'A daily operating brief built from live queues, approvals, revenue movement, and exceptions.',
     promise: 'Replace manual status recaps and stale dashboards with one short review surface built from real operating state.',
@@ -226,6 +440,12 @@ export const SOFTWARE_MODULE_DETAILS: SoftwareModuleDetail[] = [
     name: 'Director Command Center',
     category: 'Intelligence',
     status: 'Control layer',
+    previewVariant: 'data-science',
+    proofRoute: '/app/director',
+    workspaceRoute: '/app/director',
+    ownedBy: 'Control Tower Team',
+    deliveryState: 'Live cross-function command center for leadership intervention and portfolio review.',
+    liveNotes: ['Cross-function leadership review surface', 'Combines brief, risk ranking, and intervention view', 'Foundation for multi-site executive control'],
     audience: 'Holding company leaders, directors, regional operators, and group founders',
     summary: 'A multi-tenant leadership surface for cross-company review, escalation, and intervention.',
     promise: 'Replace manual rollups with one next-gen control plane for several sites, teams, or portfolio entities.',
@@ -234,6 +454,86 @@ export const SOFTWARE_MODULE_DETAILS: SoftwareModuleDetail[] = [
     knowledgeModules: ['Company Memory', 'Decision Journal', 'Knowledge Hub'],
     infrastructureModules: ['Identity and Governance', 'Observability', 'Agent Runtime'],
     agentTeams: ['Founder Brief', 'Ops Watch', 'Approval Watch'],
+  },
+  {
+    id: 'knowledge-graph',
+    name: 'Knowledge Graph',
+    category: 'Knowledge',
+    status: 'Control layer',
+    previewVariant: 'knowledge-graph',
+    proofRoute: '/app/knowledge',
+    workspaceRoute: '/app/knowledge',
+    ownedBy: 'Knowledge Systems Team',
+    deliveryState: 'Active company-memory layer shared across documents, decisions, and tenant workflows.',
+    liveNotes: ['Canonical entities, documents, and provenance', 'Shared memory for workflows and automation', 'Searchable knowledge layer across company records'],
+    audience: 'Knowledge-heavy operators, directors, quality teams, and document-heavy companies',
+    summary: 'A canonical memory layer for files, notes, decisions, entities, and provenance across every module.',
+    promise: 'Replace dead folders and note sprawl with one shared knowledge graph that every workflow and agent can reuse.',
+    replaces: 'folder sprawl, scattered notes, disconnected document memory',
+    surfaces: ['Document canon', 'entity graph', 'relation explorer', 'source provenance'],
+    knowledgeModules: ['Company Memory', 'Decision Journal'],
+    infrastructureModules: ['Connector Hub', 'Knowledge services', 'Observability'],
+    agentTeams: ['Memory Curator', 'Approval Watch'],
+  },
+  {
+    id: 'agent-runtime',
+    name: 'Agent Runtime',
+    category: 'Automation',
+    status: 'Control layer',
+    previewVariant: 'agent-runtime',
+    proofRoute: '/app/teams',
+    workspaceRoute: '/app/teams',
+    ownedBy: 'AI Runtime Team',
+    deliveryState: 'Live runtime for scheduled jobs, review loops, and safe autonomous preparation.',
+    liveNotes: ['Bounded automation with runs, jobs, and review gates', 'Visible history for scheduled and human-triggered work', 'Keeps autonomous work inside approval and audit lanes'],
+    audience: 'Product teams, operations leads, founders, and tenant operators',
+    summary: 'A bounded runtime for agent crews with job scheduling, review gates, runtime health, and audit history.',
+    promise: 'Replace ad hoc automations with a governed agent layer that can scale safely across workspaces and tenants.',
+    replaces: 'ungoverned bots, ad hoc scripts, fragile automations',
+    surfaces: ['Job board', 'run history', 'approval gates', 'eval state'],
+    knowledgeModules: ['Decision Journal', 'Company Memory'],
+    infrastructureModules: ['Workflow Runtime', 'Identity and Governance', 'Observability'],
+    agentTeams: ['Runtime Orchestrator', 'Approval Watch'],
+  },
+  {
+    id: 'tenant-control-plane',
+    name: 'Tenant Control Plane',
+    category: 'Automation',
+    status: 'Rollout module',
+    previewVariant: 'tenant-control',
+    proofRoute: '/app/platform-admin',
+    workspaceRoute: '/app/platform-admin',
+    ownedBy: 'Tenant Launch Team',
+    deliveryState: 'Live tenant-launch control around roles, domains, connectors, and rollout packs.',
+    liveNotes: ['Launches domains, roles, connectors, and rollout packs', 'Supports named client portals like Yangon Tyre', 'Reusable control layer for new company workspaces'],
+    audience: 'Implementation teams, product owners, founders, and tenant admins',
+    summary: 'The deployment layer for domains, onboarding, connectors, roles, and rollout health across tenants.',
+    promise: 'Replace one-off client setup with a reusable control plane for launching and scaling tenant workspaces.',
+    replaces: 'manual tenant setup, launch spreadsheets, one-off rollout scripts',
+    surfaces: ['Tenant registry', 'launch checklist', 'connector posture', 'role templates'],
+    knowledgeModules: ['Company Memory', 'Decision Journal'],
+    infrastructureModules: ['Identity and Governance', 'Connector Hub', 'Observability'],
+    agentTeams: ['Tenant Operator', 'Runtime Orchestrator'],
+  },
+  {
+    id: 'data-science-studio',
+    name: 'Data Science Studio',
+    category: 'Intelligence',
+    status: 'Control layer',
+    previewVariant: 'data-science',
+    proofRoute: '/app/insights',
+    workspaceRoute: '/app/insights',
+    ownedBy: 'Applied Data Science Team',
+    deliveryState: 'Live operating-intelligence layer for forecasts, anomalies, and next-best-action.',
+    liveNotes: ['Forecasts, anomalies, and next-best-action from live workflow data', 'Combines feature marts and scenario review', 'Feeds leaders and queue owners from current operating state'],
+    audience: 'Founders, directors, revenue ops, finance, and multi-site operators',
+    summary: 'Feature marts, forecasts, anomaly detection, and next-best-action built from live workflow state.',
+    promise: 'Replace BI lag and analyst-only models with operating intelligence that updates from the product runtime itself.',
+    replaces: 'BI lag, spreadsheet forecasting, disconnected analyst models',
+    surfaces: ['Feature mart', 'forecast review', 'anomaly triage', 'scenario desk'],
+    knowledgeModules: ['Company Memory', 'Decision Journal', 'Knowledge Hub'],
+    infrastructureModules: ['Observability', 'Agent Runtime', 'Connector Hub'],
+    agentTeams: ['Forecast Analyst', 'Memory Curator', 'Founder Brief'],
   },
 ]
 
@@ -255,4 +555,9 @@ export function getSoftwareModuleDetail(productIdOrSlug: string | null | undefin
     .trim()
     .toLowerCase()
   return SOFTWARE_MODULE_DETAILS.find((item) => item.id === normalized || item.name.toLowerCase() === normalized) ?? null
+}
+
+export function getSoftwareModuleGalleryShots(productIdOrSlug: string | null | undefined) {
+  const detail = getSoftwareModuleDetail(productIdOrSlug)
+  return detail ? SOFTWARE_MODULE_GALLERY_SHOTS[detail.id] ?? [] : []
 }

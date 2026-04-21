@@ -35,7 +35,6 @@ const LeadPipelinePage = lazy(() => import('./pages/LeadPipelinePage').then((mod
 const LoginPage = lazy(() => import('./pages/LoginPage').then((module) => ({ default: module.LoginPage })))
 const MetricIntakePage = lazy(() => import('./pages/MetricIntakePage').then((module) => ({ default: module.MetricIntakePage })))
 const MaintenanceDeskPage = lazy(() => import('./pages/MaintenanceDeskPage').then((module) => ({ default: module.MaintenanceDeskPage })))
-const ManagerOperatingSystemPage = lazy(() => import('./pages/ManagerOperatingSystemPage').then((module) => ({ default: module.ManagerOperatingSystemPage })))
 const MetaWorkspacePage = lazy(() => import('./pages/MetaWorkspacePage').then((module) => ({ default: module.MetaWorkspacePage })))
 const ModelOpsPage = lazy(() => import('./pages/ModelOpsPage').then((module) => ({ default: module.ModelOpsPage })))
 const NewsBriefPage = lazy(() => import('./pages/NewsBriefPage').then((module) => ({ default: module.NewsBriefPage })))
@@ -53,6 +52,7 @@ const ProductDetailPage = lazy(() => import('./pages/ProductDetailPage').then((m
 const OperationsDeskPage = lazy(() => import('./pages/OperationsDeskPage').then((module) => ({ default: module.OperationsDeskPage })))
 const PackagesPage = lazy(() => import('./pages/PackagesPage').then((module) => ({ default: module.PackagesPage })))
 const PilotCommandPage = lazy(() => import('./pages/PilotCommandPage').then((module) => ({ default: module.PilotCommandPage })))
+const PlantManagerPage = lazy(() => import('./pages/PlantManagerPage').then((module) => ({ default: module.PlantManagerPage })))
 const PublicLeadFinderPage = lazy(() => import('./pages/PublicLeadFinderPage').then((module) => ({ default: module.PublicLeadFinderPage })))
 const ReceivingControlPage = lazy(() => import('./pages/ReceivingControlPage').then((module) => ({ default: module.ReceivingControlPage })))
 const SignupPage = lazy(() => import('./pages/SignupPage').then((module) => ({ default: module.SignupPage })))
@@ -76,7 +76,7 @@ function App() {
   const liveAppAvailable = hasLiveWorkspaceApp()
   const tenant = getTenantConfig()
   const publicWorkspaceFallback = tenant.key === 'ytf-plant-a' ? '/receiving-log' : '/company-list'
-  const homeElement = tenant.key === 'ytf-plant-a' ? routeElement(<YangonTyrePage />) : routeElement(<HomePage />)
+  const homeElement = tenant.key === 'ytf-plant-a' ? <Navigate replace to="/app/portal" /> : routeElement(<HomePage />)
 
   return (
     <BrowserRouter>
@@ -138,9 +138,9 @@ function App() {
           <Route element={routeElement(<MetaWorkspacePage />)} path="meta" />
           <Route element={routeElement(<InsightsPage />)} path="insights" />
           <Route element={routeElement(<DirectorDashboardPage />)} path="director" />
-          <Route element={<Navigate replace to="/app/manager-system" />} path="plant-manager" />
+          <Route element={routeElement(<PlantManagerPage />)} path="plant-manager" />
           <Route element={routeElement(<OperationsDeskPage />)} path="operations" />
-          <Route element={routeElement(<ManagerOperatingSystemPage />)} path="manager-system" />
+          <Route element={<Navigate replace to="/app/plant-manager" />} path="manager-system" />
           <Route element={routeElement(<DQMSDeskPage />)} path="dqms" />
           <Route element={routeElement(<MaintenanceDeskPage />)} path="maintenance" />
           <Route element={routeElement(<WorkspacePage />)} path="actions" />

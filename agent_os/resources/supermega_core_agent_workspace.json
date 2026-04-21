@@ -1,0 +1,288 @@
+{
+  "resource_id": "supermega-core-agent-workspace",
+  "tenant_key": "default",
+  "company": {
+    "name": "SUPERMEGA.dev Core Platform",
+    "public_label": "SUPERMEGA.dev Core",
+    "domain": "app.supermega.dev",
+    "sector": "AI-native operating software"
+  },
+  "dialectic": {
+    "thesis": "Give operators one AI-native control plane for modules, queues, knowledge, runtime health, and rollout.",
+    "antithesis": "Tool sprawl, scattered context, and weak guardrails create automation theater instead of trustworthy execution.",
+    "synthesis": "A tenant-aware agent workspace merges roles, tools, trust boundaries, and live state into one governed operating surface."
+  },
+  "workspaces": [
+    {
+      "id": "control-plane",
+      "name": "Control Plane",
+      "route": "/app/workbench",
+      "mission": "Sequence product, architecture, runtime, and rollout decisions from one admin layer.",
+      "owner_roles": ["platform_admin", "tenant_admin", "architect"]
+    },
+    {
+      "id": "runtime-lane",
+      "name": "Runtime Lane",
+      "route": "/app/runtime",
+      "mission": "Monitor connectors, autonomy loops, policy guardrails, and operational health.",
+      "owner_roles": ["agent_ops", "director", "platform_admin"]
+    },
+    {
+      "id": "cloud-lane",
+      "name": "Cloud Lane",
+      "route": "/app/cloud",
+      "mission": "Run deployment posture, queue readiness, workforce cadence, and environment ownership.",
+      "owner_roles": ["platform_admin", "agent_ops", "architect"]
+    },
+    {
+      "id": "knowledge-lane",
+      "name": "Knowledge Lane",
+      "route": "/app/knowledge",
+      "mission": "Promote source evidence into canonical documents, entities, and durable memory.",
+      "owner_roles": ["knowledge_admin", "tenant_admin", "platform_admin"]
+    }
+  ],
+  "role_profiles": [
+    {
+      "id": "platform_admin",
+      "name": "Platform Admin",
+      "home": "/app/platform-admin",
+      "mission": "Provision tenants, manage modules, and own cross-tenant control posture.",
+      "capabilities": ["platform_admin.view", "tenant_admin.view", "security_admin.view"],
+      "tool_profile": "core-admin-stack"
+    },
+    {
+      "id": "tenant_admin",
+      "name": "Tenant Admin",
+      "home": "/app/platform-admin",
+      "mission": "Manage one workspace, its users, modules, and deployment readiness.",
+      "capabilities": ["tenant_admin.view", "connector_admin.view", "knowledge_admin.view"],
+      "tool_profile": "workspace-admin-stack"
+    },
+    {
+      "id": "architect",
+      "name": "Implementation Lead",
+      "home": "/app/architect",
+      "mission": "Map client operating reality into modules, rollout packs, and delivery order.",
+      "capabilities": ["architect.view", "agent_ops.view", "director.view"],
+      "tool_profile": "design-and-rollout-stack"
+    },
+    {
+      "id": "agent_ops",
+      "name": "Agent Ops",
+      "home": "/app/teams",
+      "mission": "Run bounded workforce loops and manage job health, retries, and team scope.",
+      "capabilities": ["agent_ops.view", "actions.view"],
+      "tool_profile": "autonomy-stack"
+    },
+    {
+      "id": "director",
+      "name": "Director",
+      "home": "/app/director",
+      "mission": "Review performance, risk, and strategic pressure with evidence-backed summaries.",
+      "capabilities": ["director.view", "actions.view", "operations.view"],
+      "tool_profile": "executive-stack"
+    },
+    {
+      "id": "knowledge_admin",
+      "name": "Knowledge Admin",
+      "home": "/app/knowledge",
+      "mission": "Govern canonical memory, provenance, and retrieval quality.",
+      "capabilities": ["knowledge_admin.view", "security_admin.view"],
+      "tool_profile": "knowledge-stack"
+    }
+  ],
+  "tool_profiles": [
+    {
+      "id": "core-admin-stack",
+      "name": "Core Admin Stack",
+      "users": ["platform_admin"],
+      "tools": ["Platform Admin", "Cloud Ops", "Workbench", "Security Control"],
+      "guardrails": ["Workspace or platform admin required", "Cross-tenant changes must be audited", "Sensitive writes require policy review"]
+    },
+    {
+      "id": "workspace-admin-stack",
+      "name": "Workspace Admin Stack",
+      "users": ["tenant_admin"],
+      "tools": ["Platform Admin", "Connectors", "Knowledge", "Policies"],
+      "guardrails": ["Tenant-scoped only", "Connector changes must preserve ownership", "Member roles require review"]
+    },
+    {
+      "id": "design-and-rollout-stack",
+      "name": "Design And Rollout Stack",
+      "users": ["architect", "director"],
+      "tools": ["Solution Architect", "Workbench", "Cloud Ops", "Meta Workspace"],
+      "guardrails": ["Rollout changes must stay workspace-scoped", "Launch packs cannot leak across tenants", "Tasks require saved task lineage"]
+    },
+    {
+      "id": "autonomy-stack",
+      "name": "Autonomy Stack",
+      "users": ["agent_ops"],
+      "tools": ["Agent Ops", "Runtime", "Cloud Ops", "Action Queue"],
+      "guardrails": ["No sensitive writes without approval", "Jobs need explicit read and write scope", "Queue workers must stay auditable"]
+    },
+    {
+      "id": "knowledge-stack",
+      "name": "Knowledge Stack",
+      "users": ["knowledge_admin", "tenant_admin"],
+      "tools": ["Knowledge", "Data Fabric", "Policies"],
+      "guardrails": ["Untrusted source data stays outside canon", "Promotion requires provenance", "Cross-workspace references are blocked by default"]
+    }
+  ],
+  "knowledge_resources": [
+    {
+      "id": "module-catalog",
+      "name": "Workspace module catalog",
+      "source": "enterprise module definitions",
+      "trust_tier": "canonical",
+      "cadence": "live query",
+      "used_by": ["Platform Admin", "Workbench", "Agent Space"]
+    },
+    {
+      "id": "workspace-membership",
+      "name": "Workspace membership and roles",
+      "source": "enterprise workspace members",
+      "trust_tier": "canonical",
+      "cadence": "live query",
+      "used_by": ["Platform Admin", "Agent Ops", "Agent Space"]
+    },
+    {
+      "id": "runtime-summary",
+      "name": "Runtime and cloud control signals",
+      "source": "runtime and cloud control payloads",
+      "trust_tier": "canonical",
+      "cadence": "live query",
+      "used_by": ["Runtime", "Cloud Ops", "Agent Space"]
+    },
+    {
+      "id": "supervisor-heartbeat",
+      "name": "Supervisor heartbeat",
+      "source": "pilot-data/supervisor_status.json",
+      "trust_tier": "operational",
+      "cadence": "every cycle",
+      "used_by": ["Cloud Ops", "Runtime", "Agent Space"]
+    },
+    {
+      "id": "agent-manifest",
+      "name": "Agent operating manifest",
+      "source": "agent_team_system snapshot and operating manifest",
+      "trust_tier": "modeled",
+      "cadence": "on update",
+      "used_by": ["Agent Ops", "Workbench", "Agent Space"]
+    },
+    {
+      "id": "rollout-packs",
+      "name": "Rollout packs and launch tasks",
+      "source": "workspace-scoped rollout snapshots",
+      "trust_tier": "canonical",
+      "cadence": "on launch",
+      "used_by": ["Meta", "Architect", "Agent Space"]
+    }
+  ],
+  "trust_boundaries": [
+    {
+      "id": "workspace-scope",
+      "name": "Workspace scope",
+      "rule": "Tenant data may only be read through the active workspace or a validated shared admin scope.",
+      "surfaces": ["/api/meta/workspace", "/api/rollouts/latest", "/api/snapshots/{workspace_key}"]
+    },
+    {
+      "id": "promotion-gate",
+      "name": "Knowledge promotion gate",
+      "rule": "Raw or inferred source material cannot become canonical memory without provenance and review.",
+      "surfaces": ["/app/knowledge", "/app/policies", "/app/data-fabric"]
+    },
+    {
+      "id": "autonomy-gate",
+      "name": "Autonomous write gate",
+      "rule": "Agents can prepare, classify, and draft but must stop before high-impact writes unless explicitly approved.",
+      "surfaces": ["/app/teams", "/app/runtime", "/app/actions"]
+    },
+    {
+      "id": "cloud-ops-gate",
+      "name": "Cloud operations gate",
+      "rule": "Queue, deploy, and runtime host changes are limited to cloud-capable roles and logged with environment context.",
+      "surfaces": ["/app/cloud", "/app/runtime"]
+    }
+  ],
+  "ai_teams": [
+    {
+      "id": "release-crew",
+      "name": "Release Crew",
+      "workspace": "control-plane",
+      "mission": "Turn module changes into rollout-safe releases with smoke, gating, and operator follow-through.",
+      "reads": ["module catalog", "runtime summary", "cloud control"],
+      "writes": ["release sequencing", "launch tasks", "change notes"],
+      "approval_gate": "Architect or platform admin review"
+    },
+    {
+      "id": "connector-reliability-pod",
+      "name": "Connector Reliability Pod",
+      "workspace": "runtime-lane",
+      "mission": "Keep Gmail, Drive, and other evidence sources fresh enough for agent work.",
+      "reads": ["connector signals", "coverage score", "audit events"],
+      "writes": ["repair queue", "refresh recommendations"],
+      "approval_gate": "Tenant admin or platform admin review"
+    },
+    {
+      "id": "knowledge-curation-pod",
+      "name": "Knowledge Curation Pod",
+      "workspace": "knowledge-lane",
+      "mission": "Convert raw evidence into structured, traceable knowledge assets.",
+      "reads": ["documents", "source metadata", "promotion rules"],
+      "writes": ["knowledge candidates", "entity suggestions", "provenance links"],
+      "approval_gate": "Knowledge admin review"
+    },
+    {
+      "id": "operator-assist-pod",
+      "name": "Operator Assist Pod",
+      "workspace": "runtime-lane",
+      "mission": "Prepare queues, classify work, and keep action owners focused on next moves.",
+      "reads": ["workspace tasks", "approvals", "exceptions"],
+      "writes": ["draft actions", "triage labels", "priority suggestions"],
+      "approval_gate": "Role owner review"
+    }
+  ],
+  "execution_loops": [
+    {
+      "id": "rollout-loop",
+      "name": "Rollout and launch loop",
+      "trigger": "New tenant or module expansion",
+      "outputs": ["recommended stack", "launch tasks", "queue alignment"],
+      "kpis": ["time to first live module", "launch task completion rate"]
+    },
+    {
+      "id": "connector-health-loop",
+      "name": "Connector health loop",
+      "trigger": "Freshness drop or auth drift",
+      "outputs": ["repair commands", "owner routing", "coverage recovery"],
+      "kpis": ["healthy connector count", "coverage score"]
+    },
+    {
+      "id": "knowledge-promotion-loop",
+      "name": "Knowledge promotion loop",
+      "trigger": "New evidence or source changes",
+      "outputs": ["canonical candidates", "entity links", "review queue"],
+      "kpis": ["promotion acceptance rate", "retrieval quality"]
+    },
+    {
+      "id": "autonomy-ops-loop",
+      "name": "Autonomy operations loop",
+      "trigger": "Queued work and stale job families",
+      "outputs": ["job runs", "priority queues", "exception routing"],
+      "kpis": ["stale job count", "queue throughput", "failed run count"]
+    }
+  ],
+  "quick_links": [
+    { "label": "Cloud Ops", "route": "/app/cloud" },
+    { "label": "Runtime", "route": "/app/runtime" },
+    { "label": "Agent Ops", "route": "/app/teams" },
+    { "label": "Workbench", "route": "/app/workbench" }
+  ],
+  "references": [
+    "showroom/src/lib/tenantOperatingModel.ts",
+    "showroom/src/lib/agentOperatingModel.ts",
+    "showroom/src/lib/enterprisePortalBlueprint.ts",
+    "tools/serve_solution.py"
+  ]
+}

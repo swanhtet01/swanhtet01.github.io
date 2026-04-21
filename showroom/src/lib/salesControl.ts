@@ -22,6 +22,8 @@ export type StarterPackDetail = {
   eyebrow: string
   audience: string
   promise: string
+  salesTrigger: string
+  launchWindow: string
   replaces: string
   image: string
   starterModules: string[]
@@ -30,8 +32,11 @@ export type StarterPackDetail = {
   problemsSolved: string[]
   integrations: string[]
   controls: string[]
+  securityProof: string[]
   agentLoops: string[]
   usedFor: string[]
+  launchDeliverables: string[]
+  demoSteps: Array<{ title: string; detail: string }>
   proofTool: { label: string; route: string }
   setupPath: string[]
   dailyUsers: string[]
@@ -73,6 +78,16 @@ export type LabTrack = {
 }
 
 export const CORE_SOLUTIONS: SellableSolution[] = [
+  {
+    id: 'spa-service-desk',
+    name: 'Spa Service Desk',
+    buyer: 'Spa owners, reception leads, wellness operators, and small service-retail teams.',
+    pain: 'Use this when bookings, checkouts, cash-outs, and end-of-day numbers still live in chat, paper, or separate apps.',
+    replaces: 'paper ledgers, generic POS, calculator-based daily close, and disconnected appointment notes',
+    promise: 'Run checkout, expense logging, and daily close from one simple operator desk.',
+    modules: ['Service Desk', 'Daily Close', 'Room Flow'],
+    pilot: '1-week pilot with one location, one reception desk, and one owner close routine.',
+  },
   {
     id: 'sales-setup',
     name: 'Find Clients',
@@ -129,7 +144,7 @@ export const PLATFORM_LAYER_DETAILS: PlatformLayerDetail[] = [
     name: 'Products',
     layer: 'Application',
     detail: 'The live screens teams actually open every day.',
-    modules: ['Find Clients', 'Company List', 'Receiving Log', 'Task List', 'Client Portal', 'Daily Summary'],
+    modules: ['Find Clients', 'Company List', 'Receiving Log', 'Task List', 'Service Desk', 'Daily Close', 'Client Portal', 'Daily Summary'],
   },
   {
     id: 'knowledge-layer',
@@ -148,6 +163,14 @@ export const PLATFORM_LAYER_DETAILS: PlatformLayerDetail[] = [
 ]
 
 export const PUBLIC_PRODUCTS: PublicProduct[] = [
+  {
+    id: 'spa-service-desk',
+    name: 'Spa Service Desk',
+    status: 'Live now',
+    audience: 'Spa owners and service businesses that need front-desk checkout and daily accounting in one place.',
+    promise: 'Keep checkouts, cash-outs, therapist ownership, and daily close on the same live desk.',
+    route: '/products/spa-service-desk',
+  },
   {
     id: 'find-companies',
     name: 'Find Clients',
@@ -170,7 +193,7 @@ export const PUBLIC_PRODUCTS: PublicProduct[] = [
     status: 'Add-on',
     audience: 'Teams replying to similar supplier and customer threads every day.',
     promise: 'Draft repetitive replies faster with the right context attached.',
-    route: '/app/sales',
+    route: '/app/revenue',
   },
   {
     id: 'founder-brief',
@@ -215,12 +238,69 @@ export const LAB_TRACKS: LabTrack[] = [
 
 export const STARTER_PACK_DETAILS: StarterPackDetail[] = [
   {
+    id: 'spa-service-desk',
+    slug: 'spa-service-desk',
+    name: 'Spa Service Desk',
+    eyebrow: 'Live product',
+    audience: 'Spa owners, front desk staff, and service-retail operators',
+    promise: 'Run front desk checkout, cash-out logging, and daily close from one simple workspace that can later scale into a broader service-retail operating system.',
+    salesTrigger: 'Use this when reception still closes the day with calculators, chats, paper notes, or a POS that does not fit service operations.',
+    launchWindow: 'First working front desk and close routine in one week.',
+    replaces: 'paper ledgers, generic POS, calculator-based daily close, and scattered appointment notes',
+    image: '/site/spa-service-desk.svg',
+    starterModules: ['Service Desk', 'Daily Close'],
+    knowledgeModules: ['Customer notes', 'Therapist history', 'Daily close journal'],
+    infrastructureModules: ['Local-first storage', 'FastAPI promotion path', 'Agent reminders and summaries'],
+    problemsSolved: [
+      'Log each checkout with the right therapist, services, and payment method.',
+      'Keep cash-outs, supply purchases, and till close attached to the same day ledger.',
+      'Give the owner one close-ready summary instead of chasing notes from reception.',
+    ],
+    integrations: ['Browser local storage', 'SQLite', 'Postgres', 'WhatsApp or Gmail reminders', 'Accounting export'],
+    controls: ['Cash drawer tracking', 'Service-to-therapist attribution', 'Expense source tracking', 'Daily close checklist'],
+    securityProof: [
+      'Single-location pilot can run locally before adding shared auth.',
+      'Every sale and cash-out stays attached to the day ledger with timestamp and operator context.',
+      'Low-risk agent tasks stay on reminders and summaries before any accounting write automation.',
+      'Shared rollout can graduate into role-based auth, approvals, and audit history.',
+    ],
+    agentLoops: ['Booking concierge', 'Daily close clerk', 'Stock watch'],
+    usedFor: ['spa reception', 'salon front desk', 'wellness studio checkout'],
+    launchDeliverables: ['Checkout workspace', 'Expense log', 'Daily accounting view', 'Close checklist'],
+    demoSteps: [
+      {
+        title: 'Take a checkout fast',
+        detail: 'Choose services, assign therapist, collect payment, and keep the ticket on the same day ledger.',
+      },
+      {
+        title: 'Log the cash-out',
+        detail: 'Record laundry, supplies, or petty cash without leaving the desk.',
+      },
+      {
+        title: 'Close the day',
+        detail: 'Review collected revenue, cash on hand, commissions, and pending checkouts in one place.',
+      },
+    ],
+    proofTool: { label: 'Open live product', route: '/app/service-desk' },
+    setupPath: [
+      'Load the single-site service list, staff roster, and opening cash float.',
+      'Use one front desk checkout form for every treatment and retail add-on.',
+      'Attach cash-outs and owner close to the same ledger before adding more automation.',
+      'Promote to shared backend only after the desk works every day.',
+    ],
+    dailyUsers: ['front desk', 'owner', 'therapists', 'back office reviewer'],
+    expandsTo: ['appointments and package balances', 'staff commissions', 'branch reporting', 'service-retail tenant rollout'],
+    otherUses: ['salon checkout', 'aesthetic clinic desk', 'wellness studio memberships'],
+  },
+  {
     id: 'sales-setup',
     slug: 'find-clients',
     name: 'Find Clients',
     eyebrow: 'Live product',
     audience: 'Founders, operators, and sales teams',
     promise: 'Search for companies, keep the right ones, and move them into one shared follow-up list.',
+    salesTrigger: 'Use this when prospecting still lives across search pages, copied links, and scattered notes.',
+    launchWindow: 'First working shortlist and follow-up flow in one week.',
     replaces: 'manual prospecting, copied links, and scattered lead lists',
     image: '/site/find-clients-live.png',
     starterModules: ['Find Clients', 'Company List'],
@@ -233,8 +313,29 @@ export const STARTER_PACK_DETAILS: StarterPackDetail[] = [
     ],
     integrations: ['Gmail', 'Google Sheets', 'Google Drive', 'CSV', 'API'],
     controls: ['Search history', 'Row ownership', 'Notes history', 'Role-based edits'],
+    securityProof: [
+      'Workspace-scoped search history and saved rows.',
+      'Role-based edits on company notes, stages, and ownership.',
+      'Audit trail on imports, list changes, and follow-up actions.',
+      'Clear human review before wider outreach or export.',
+    ],
     agentLoops: ['New company watch', 'List cleanup', 'Daily summary'],
     usedFor: ['new prospecting', 'channel mapping', 'partner outreach'],
+    launchDeliverables: ['Shared shortlist', 'Company list', 'First follow-up queue', 'Export-ready rows'],
+    demoSteps: [
+      {
+        title: 'Search a market',
+        detail: 'Run one focused search by place or niche and show the companies worth keeping.',
+      },
+      {
+        title: 'Keep the shortlist',
+        detail: 'Save the best companies with fit reasons, contact clues, and one clear owner.',
+      },
+      {
+        title: 'Open the next action',
+        detail: 'Push the kept companies into Company List with the first outreach task ready.',
+      },
+    ],
     proofTool: { label: 'Find Clients', route: '/find-companies' },
     setupPath: [
       'Run one focused market search.',
@@ -253,6 +354,8 @@ export const STARTER_PACK_DETAILS: StarterPackDetail[] = [
     eyebrow: 'Live product',
     audience: 'Teams working from exports, spreadsheets, or CRM dumps',
     promise: 'Turn a messy list into one clean company list with owners and next steps.',
+    salesTrigger: 'Use this when the list already exists, but the team does not trust it enough to work from it.',
+    launchWindow: 'Clean the first imported list and assign owners in one week.',
     replaces: 'dirty exports, duplicated rows, and follow-up hidden inside spreadsheets',
     image: '/site/company-list-live.png',
     starterModules: ['Company List', 'Task List'],
@@ -265,8 +368,29 @@ export const STARTER_PACK_DETAILS: StarterPackDetail[] = [
     ],
     integrations: ['CSV', 'Google Sheets', 'Google Drive', 'Gmail', 'CRM export'],
     controls: ['Dedupe review', 'Import history', 'Role-based edits', 'Audit trail'],
+    securityProof: [
+      'Import history tied back to the original file or export.',
+      'Role-based review for merges, edits, and row ownership.',
+      'Audit trail for field changes and cleanup decisions.',
+      'Safer export after the cleanup review is complete.',
+    ],
     agentLoops: ['List cleanup', 'Task triage', 'Daily summary'],
     usedFor: ['CRM cleanup', 'event lead cleanup', 'customer list rebuild'],
+    launchDeliverables: ['Clean working list', 'Dedupe queue', 'Owned next actions', 'CSV export'],
+    demoSteps: [
+      {
+        title: 'Import the current list',
+        detail: 'Bring in the spreadsheet, CRM export, or copied rows the team already uses.',
+      },
+      {
+        title: 'Clean and merge',
+        detail: 'Show the duplicate review, missing fields, and the rows that are now safe to work from.',
+      },
+      {
+        title: 'Assign the next step',
+        detail: 'Attach an owner and next action to each kept company instead of leaving it in the sheet.',
+      },
+    ],
     proofTool: { label: 'Company List', route: '/company-list' },
     setupPath: [
       'Import the list the team already uses.',
@@ -285,6 +409,8 @@ export const STARTER_PACK_DETAILS: StarterPackDetail[] = [
     eyebrow: 'Live product',
     audience: 'Warehouses, plants, procurement teams, and receiving teams',
     promise: 'Track shortages, holds, GRN gaps, and next actions in one shared queue.',
+    salesTrigger: 'Use this when shortages, holds, and missing GRN evidence disappear into chat, inboxes, or paper logs.',
+    launchWindow: 'First live exception board in one to two weeks.',
     replaces: 'paper receiving logs, chat follow-up, and missed inbound exceptions',
     image: '/site/receiving-control-live.png',
     starterModules: ['Receiving Log', 'Task List'],
@@ -297,8 +423,29 @@ export const STARTER_PACK_DETAILS: StarterPackDetail[] = [
     ],
     integrations: ['Gmail', 'Google Drive', 'Google Sheets', 'ERP extracts', 'Uploaded documents'],
     controls: ['Role-based queues', 'Approval gates', 'Attachment history', 'Exception audit'],
+    securityProof: [
+      'Role-based queue views by site, function, or manager.',
+      'Approval gates for higher-risk status changes and write-backs.',
+      'Attachment and evidence history on each receiving issue.',
+      'Audit trail for owner changes, holds, and resolution steps.',
+    ],
     agentLoops: ['Task triage', 'Exception watch', 'Daily summary'],
     usedFor: ['warehouse receiving', 'plant inbound checks', 'supplier exception control'],
+    launchDeliverables: ['Live exception board', 'Daily review queue', 'Supplier follow-up trail', 'Management summary'],
+    demoSteps: [
+      {
+        title: 'Log one inbound issue',
+        detail: 'Capture the supplier, batch or GRN, variance, and next action once.',
+      },
+      {
+        title: 'Show the blocked queue',
+        detail: 'Surface the hold, review, and blocked items with one owner beside each row.',
+      },
+      {
+        title: 'Review the next move',
+        detail: 'Use the same record for the evidence link, supplier follow-up, and management review.',
+      },
+    ],
     proofTool: { label: 'Receiving Log', route: '/receiving-log' },
     setupPath: [
       'Start with one inbound lane or one supplier problem.',

@@ -161,6 +161,38 @@ function createInitialAppointmentDraft(workspace: ServiceRetailWorkspace): Appoi
   }
 }
 
+function normalizeSaleDraft(draft: SaleDraft, workspace: ServiceRetailWorkspace): SaleDraft {
+  const validServiceIds = draft.serviceIds.filter((serviceId) => workspace.services.some((service) => service.id === serviceId))
+  const fallbackServiceId = workspace.services[0]?.id
+  const nextServiceIds = validServiceIds.length ? validServiceIds : fallbackServiceId ? [fallbackServiceId] : []
+  const nextStaffId = workspace.staff.some((member) => member.id === draft.staffId) ? draft.staffId : workspace.staff[0]?.id ?? ''
+
+  if (nextStaffId === draft.staffId && nextServiceIds.join('|') === draft.serviceIds.join('|')) {
+    return draft
+  }
+
+  return {
+    ...draft,
+    staffId: nextStaffId,
+    serviceIds: nextServiceIds,
+  }
+}
+
+function normalizeAppointmentDraft(draft: AppointmentDraft, workspace: ServiceRetailWorkspace): AppointmentDraft {
+  const nextServiceId = workspace.services.some((service) => service.id === draft.serviceId) ? draft.serviceId : workspace.services[0]?.id ?? ''
+  const nextStaffId = workspace.staff.some((member) => member.id === draft.staffId) ? draft.staffId : workspace.staff[0]?.id ?? ''
+
+  if (nextServiceId === draft.serviceId && nextStaffId === draft.staffId) {
+    return draft
+  }
+
+  return {
+    ...draft,
+    serviceId: nextServiceId,
+    staffId: nextStaffId,
+  }
+}
+
 function formatCurrency(amount: number, currencyCode: string) {
   return new Intl.NumberFormat(undefined, {
     style: 'currency',
@@ -220,40 +252,8 @@ export function ServiceDeskPage() {
     saveServiceRetailWorkspace(workspace)
   }, [workspace])
 
-  useEffect(() => {
-    setSaleDraft((current) => {
-      const validServiceIds = current.serviceIds.filter((serviceId) => workspace.services.some((service) => service.id === serviceId))
-      const fallbackServiceId = workspace.services[0]?.id
-      const nextServiceIds = validServiceIds.length ? validServiceIds : fallbackServiceId ? [fallbackServiceId] : []
-      const nextStaffId = workspace.staff.some((member) => member.id === current.staffId) ? current.staffId : workspace.staff[0]?.id ?? ''
-
-      if (nextStaffId === current.staffId && nextServiceIds.join('|') === current.serviceIds.join('|')) {
-        return current
-      }
-
-      return {
-        ...current,
-        staffId: nextStaffId,
-        serviceIds: nextServiceIds,
-      }
-    })
-
-    setAppointmentDraft((current) => {
-      const nextServiceId = workspace.services.some((service) => service.id === current.serviceId) ? current.serviceId : workspace.services[0]?.id ?? ''
-      const nextStaffId = workspace.staff.some((member) => member.id === current.staffId) ? current.staffId : workspace.staff[0]?.id ?? ''
-
-      if (nextServiceId === current.serviceId && nextStaffId === current.staffId) {
-        return current
-      }
-
-      return {
-        ...current,
-        serviceId: nextServiceId,
-        staffId: nextStaffId,
-      }
-    })
-  }, [workspace.services, workspace.staff])
-
+  const effectiveSaleDraft = normalizeSaleDraft(saleDraft, workspace)
+  const effectiveAppointmentDraft = normalizeAppointmentDraft(appointmentDraft, workspace)
   const summary = getServiceRetailDailySummary(workspace)
   const ledger = getServiceRetailLedger(workspace)
   const filteredLedger = deferredLedgerSearch
@@ -265,18 +265,18 @@ export function ServiceDeskPage() {
       )
     : ledger
 
-  const selectedServices = workspace.services.filter((service) => saleDraft.serviceIds.includes(service.id))
+  const selectedServices = workspace.services.filter((service) => effectiveSaleDraft.serviceIds.includes(service.id))
   const selectedSubtotal = selectedServices.reduce((sum, service) => sum + service.price, 0)
   const selectedDuration = selectedServices.reduce((sum, service) => sum + service.durationMinutes, 0)
-  const draftDiscount = Math.max(0, decimalStringToNumber(saleDraft.discount))
-  const draftTip = Math.max(0, decimalStringToNumber(saleDraft.tip))
+  const draftDiscount = Math.max(0, decimalStringToNumber(effectiveSaleDraft.discount))
+  const draftTip = Math.max(0, decimalStringToNumber(effectiveSaleDraft.tip))
   const draftTotal = Math.max(selectedSubtotal - draftDiscount + draftTip, 0)
-  const canSubmitSale = Boolean(saleDraft.staffId && saleDraft.serviceIds.length)
+  const canSubmitSale = Boolean(effectiveSaleDraft.staffId && effectiveSaleDraft.serviceIds.length)
   const canSubmitExpense = decimalStringToNumber(expenseDraft.amount) > 0
   const canSaveProfile = Boolean(workspaceSettingsDraft.businessName.trim() && workspaceSettingsDraft.currencyCode.trim())
   const canAddService = Boolean(serviceDraft.name.trim() && decimalStringToNumber(serviceDraft.price) > 0)
   const canAddStaff = Boolean(staffDraft.name.trim())
-  const canAddAppointment = Boolean(appointmentDraft.customerName.trim() && appointmentDraft.serviceId && appointmentDraft.staffId)
+  const canAddAppointment = Boolean(effectiveAppointmentDraft.customerName.trim() && effectiveAppointmentDraft.serviceId && effectiveAppointmentDraft.staffId)
 
   function replaceWorkspace(nextWorkspace: ServiceRetailWorkspace, message: string) {
     startTransition(() => {
@@ -293,10 +293,11 @@ export function ServiceDeskPage() {
 
   function toggleService(serviceId: string) {
     setSaleDraft((current) => {
-      const exists = current.serviceIds.includes(serviceId)
-      const nextServiceIds = exists ? current.serviceIds.filter((item) => item !== serviceId) : [...current.serviceIds, serviceId]
+      const draft = normalizeSaleDraft(current, workspace)
+      const exists = draft.serviceIds.includes(serviceId)
+      const nextServiceIds = exists ? draft.serviceIds.filter((item) => item !== serviceId) : [...draft.serviceIds, serviceId]
       return {
-        ...current,
+        ...draft,
         serviceIds: nextServiceIds,
       }
     })
@@ -321,13 +322,13 @@ export function ServiceDeskPage() {
     startTransition(() => {
       setWorkspace((current) =>
         appendSaleRecord(current, {
-          customerName: saleDraft.customerName,
-          serviceIds: saleDraft.serviceIds,
-          staffId: saleDraft.staffId,
-          paymentMethod: saleDraft.paymentMethod,
+          customerName: effectiveSaleDraft.customerName,
+          serviceIds: effectiveSaleDraft.serviceIds,
+          staffId: effectiveSaleDraft.staffId,
+          paymentMethod: effectiveSaleDraft.paymentMethod,
           discount: draftDiscount,
           tip: draftTip,
-          notes: saleDraft.notes,
+          notes: effectiveSaleDraft.notes,
         }),
       )
     })
@@ -430,12 +431,12 @@ export function ServiceDeskPage() {
     }
 
     const nextWorkspace = appendAppointmentRecord(workspace, {
-      customerName: appointmentDraft.customerName,
-      serviceIds: appointmentDraft.serviceId ? [appointmentDraft.serviceId] : [],
-      staffId: appointmentDraft.staffId,
-      startsAt: localDateTimeToIso(appointmentDraft.startsAt),
-      roomLabel: appointmentDraft.roomLabel,
-      status: appointmentDraft.status,
+      customerName: effectiveAppointmentDraft.customerName,
+      serviceIds: effectiveAppointmentDraft.serviceId ? [effectiveAppointmentDraft.serviceId] : [],
+      staffId: effectiveAppointmentDraft.staffId,
+      startsAt: localDateTimeToIso(effectiveAppointmentDraft.startsAt),
+      roomLabel: effectiveAppointmentDraft.roomLabel,
+      status: effectiveAppointmentDraft.status,
     })
 
     startTransition(() => {
@@ -551,7 +552,7 @@ export function ServiceDeskPage() {
                   className="sm-input"
                   onChange={(event) => setSaleDraft((current) => ({ ...current, customerName: event.target.value }))}
                   placeholder="Walk-in guest or member name"
-                  value={saleDraft.customerName}
+                  value={effectiveSaleDraft.customerName}
                 />
               </label>
               <label className="grid gap-2">
@@ -559,7 +560,7 @@ export function ServiceDeskPage() {
                 <select
                   className="sm-input"
                   onChange={(event) => setSaleDraft((current) => ({ ...current, staffId: event.target.value }))}
-                  value={saleDraft.staffId}
+                  value={effectiveSaleDraft.staffId}
                 >
                   {workspace.staff.map((member) => (
                     <option key={member.id} value={member.id}>
@@ -580,7 +581,7 @@ export function ServiceDeskPage() {
               </div>
               <div className="mt-4 grid gap-3 md:grid-cols-2">
                 {workspace.services.map((service) => {
-                  const active = saleDraft.serviceIds.includes(service.id)
+                    const active = effectiveSaleDraft.serviceIds.includes(service.id)
                   return (
                     <button
                       aria-pressed={active}
@@ -616,7 +617,7 @@ export function ServiceDeskPage() {
                   inputMode="decimal"
                   onChange={(event) => setSaleDraft((current) => ({ ...current, discount: event.target.value }))}
                   placeholder="0"
-                  value={saleDraft.discount}
+                  value={effectiveSaleDraft.discount}
                 />
               </label>
               <label className="grid gap-2">
@@ -626,7 +627,7 @@ export function ServiceDeskPage() {
                   inputMode="decimal"
                   onChange={(event) => setSaleDraft((current) => ({ ...current, tip: event.target.value }))}
                   placeholder="0"
-                  value={saleDraft.tip}
+                  value={effectiveSaleDraft.tip}
                 />
               </label>
               <label className="grid gap-2">
@@ -635,7 +636,7 @@ export function ServiceDeskPage() {
                   className="sm-input"
                   onChange={(event) => setSaleDraft((current) => ({ ...current, notes: event.target.value }))}
                   placeholder="Membership, package, or treatment note"
-                  value={saleDraft.notes}
+                  value={effectiveSaleDraft.notes}
                 />
               </label>
             </div>
@@ -645,7 +646,7 @@ export function ServiceDeskPage() {
                 <p className="sm-kicker text-[var(--sm-accent)]">Payment method</p>
                 <div className="mt-4 flex flex-wrap gap-2">
                   {(['cash', 'card', 'bank_transfer', 'e_wallet'] as PaymentMethod[]).map((method) => {
-                    const active = saleDraft.paymentMethod === method
+                    const active = effectiveSaleDraft.paymentMethod === method
                     return (
                       <button
                         aria-pressed={active}
@@ -1082,17 +1083,17 @@ export function ServiceDeskPage() {
                   <div className="grid gap-4 md:grid-cols-2">
                     <label className="grid gap-2">
                       <span className="text-sm font-semibold text-white">Customer</span>
-                      <input className="sm-input" onChange={(event) => setAppointmentDraft((current) => ({ ...current, customerName: event.target.value }))} value={appointmentDraft.customerName} />
+                      <input className="sm-input" onChange={(event) => setAppointmentDraft((current) => ({ ...current, customerName: event.target.value }))} value={effectiveAppointmentDraft.customerName} />
                     </label>
                     <label className="grid gap-2">
                       <span className="text-sm font-semibold text-white">Room or chair</span>
-                      <input className="sm-input" onChange={(event) => setAppointmentDraft((current) => ({ ...current, roomLabel: event.target.value }))} value={appointmentDraft.roomLabel} />
+                      <input className="sm-input" onChange={(event) => setAppointmentDraft((current) => ({ ...current, roomLabel: event.target.value }))} value={effectiveAppointmentDraft.roomLabel} />
                     </label>
                   </div>
                   <div className="grid gap-4 md:grid-cols-4">
                     <label className="grid gap-2">
                       <span className="text-sm font-semibold text-white">Service</span>
-                      <select className="sm-input" onChange={(event) => setAppointmentDraft((current) => ({ ...current, serviceId: event.target.value }))} value={appointmentDraft.serviceId}>
+                      <select className="sm-input" onChange={(event) => setAppointmentDraft((current) => ({ ...current, serviceId: event.target.value }))} value={effectiveAppointmentDraft.serviceId}>
                         {workspace.services.map((service) => (
                           <option key={service.id} value={service.id}>
                             {service.name}
@@ -1102,7 +1103,7 @@ export function ServiceDeskPage() {
                     </label>
                     <label className="grid gap-2">
                       <span className="text-sm font-semibold text-white">Staff</span>
-                      <select className="sm-input" onChange={(event) => setAppointmentDraft((current) => ({ ...current, staffId: event.target.value }))} value={appointmentDraft.staffId}>
+                      <select className="sm-input" onChange={(event) => setAppointmentDraft((current) => ({ ...current, staffId: event.target.value }))} value={effectiveAppointmentDraft.staffId}>
                         {workspace.staff.map((member) => (
                           <option key={member.id} value={member.id}>
                             {member.name}
@@ -1112,11 +1113,11 @@ export function ServiceDeskPage() {
                     </label>
                     <label className="grid gap-2">
                       <span className="text-sm font-semibold text-white">Start time</span>
-                      <input className="sm-input" onChange={(event) => setAppointmentDraft((current) => ({ ...current, startsAt: event.target.value }))} type="datetime-local" value={appointmentDraft.startsAt} />
+                      <input className="sm-input" onChange={(event) => setAppointmentDraft((current) => ({ ...current, startsAt: event.target.value }))} type="datetime-local" value={effectiveAppointmentDraft.startsAt} />
                     </label>
                     <label className="grid gap-2">
                       <span className="text-sm font-semibold text-white">Status</span>
-                      <select className="sm-input" onChange={(event) => setAppointmentDraft((current) => ({ ...current, status: event.target.value as AppointmentStatus }))} value={appointmentDraft.status}>
+                      <select className="sm-input" onChange={(event) => setAppointmentDraft((current) => ({ ...current, status: event.target.value as AppointmentStatus }))} value={effectiveAppointmentDraft.status}>
                         {(['booked', 'in_progress', 'needs_checkout', 'closed'] as AppointmentStatus[]).map((status) => (
                           <option key={status} value={status}>
                             {appointmentStatusLabel(status)}

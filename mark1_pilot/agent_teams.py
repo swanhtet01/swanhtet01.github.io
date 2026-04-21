@@ -64,6 +64,294 @@ def _agent(
     }
 
 
+def _tool_definition(tool_id: str, name: str, category: str, purpose: str) -> dict[str, Any]:
+    return {
+        "id": tool_id,
+        "name": name,
+        "category": category,
+        "purpose": purpose,
+    }
+
+
+def _tool_access(tool_id: str, mode: str, scope: str) -> dict[str, Any]:
+    return {
+        "toolId": tool_id,
+        "mode": mode,
+        "scope": scope,
+    }
+
+
+def _kpi(name: str, target: str) -> dict[str, Any]:
+    return {
+        "name": name,
+        "target": target,
+    }
+
+
+def _playbook(
+    playbook_id: str,
+    team_id: str,
+    name: str,
+    workspace: str,
+    lead_role: str,
+    mission: str,
+    outputs: list[str],
+    cadence: list[str],
+    tools: list[dict[str, Any]],
+    instructions: list[str],
+    escalate_when: list[str],
+    write_policy: str,
+    kpis: list[dict[str, Any]],
+) -> dict[str, Any]:
+    return {
+        "id": playbook_id,
+        "teamId": team_id,
+        "name": name,
+        "workspace": workspace,
+        "leadRole": lead_role,
+        "mission": mission,
+        "outputs": outputs,
+        "cadence": cadence,
+        "tools": tools,
+        "instructions": instructions,
+        "escalateWhen": escalate_when,
+        "writePolicy": write_policy,
+        "kpis": kpis,
+    }
+
+
+def build_agent_operating_manifest() -> dict[str, Any]:
+    return {
+        "version": "v2",
+        "tenantKey": "default",
+        "title": "SUPERMEGA.dev operating pods",
+        "summary": "Shared pods that sell, launch, observe, and scale the core product and new tenant rollouts.",
+        "managerMoves": [
+            "Keep one named owner on every tenant rollout, connector scope, and release decision.",
+            "Approve only high-risk writes; everything else should stay inside bounded playbooks.",
+            "Review runtime health, open escalations, and launch blockers every day from one control surface.",
+        ],
+        "tools": [
+            _tool_definition(
+                "gmail",
+                "Gmail",
+                "Connector",
+                "Watch rollout mailboxes, customer replies, and draft operator follow-up.",
+            ),
+            _tool_definition(
+                "google-drive",
+                "Google Drive",
+                "Connector",
+                "Index files, sheets, and rollout bundles that feed product and tenant memory.",
+            ),
+            _tool_definition(
+                "google-calendar",
+                "Google Calendar",
+                "Connector",
+                "Tie rollout reviews, sales meetings, and check-ins to live work.",
+            ),
+            _tool_definition(
+                "github",
+                "GitHub",
+                "Connector",
+                "Track code changes, release readiness, and implementation backlog.",
+            ),
+            _tool_definition(
+                "sentry",
+                "Sentry",
+                "Connector",
+                "Surface production failures and route them into runtime or product ops.",
+            ),
+            _tool_definition(
+                "platform-admin",
+                "Platform Admin",
+                "Control",
+                "Own tenant setup, role scope, and rollout posture.",
+            ),
+            _tool_definition(
+                "runtime-desk",
+                "Runtime Desk",
+                "Control",
+                "Monitor sync freshness, job health, and policy drift.",
+            ),
+            _tool_definition(
+                "solution-architect",
+                "Solution Architect",
+                "Control",
+                "Map a client into modules, roles, and rollout order.",
+            ),
+            _tool_definition(
+                "agent-ops",
+                "Agent Ops",
+                "Workspace",
+                "Run jobs, review outcomes, and manage operator access.",
+            ),
+            _tool_definition(
+                "knowledge-runtime",
+                "Knowledge Runtime",
+                "Knowledge",
+                "Keep canonical documents, entities, and provenance usable by product teams and agents.",
+            ),
+        ],
+        "playbooks": [
+            _playbook(
+                "tenant-launch",
+                "client_delivery",
+                "Client Onboarding Pod",
+                "core-platform/provisioning",
+                "Implementation Lead",
+                "Turn one client blueprint into a live tenant with the right modules, roles, domain, and starter data.",
+                ["tenant setup checklist", "module map", "role map", "launch blocker list"],
+                ["new tenant kickoff", "daily rollout review", "pre-launch validation"],
+                [
+                    _tool_access("solution-architect", "Admin", "module and role blueprint"),
+                    _tool_access("platform-admin", "Admin", "tenant, domain, and module posture"),
+                    _tool_access("google-drive", "Read", "client files and rollout bundles"),
+                    _tool_access("github", "Review", "implementation backlog and release scope"),
+                ],
+                [
+                    "Start from one live workflow, not the full transformation.",
+                    "Map current files, inboxes, exports, and human owners before enabling automations.",
+                    "Keep launch blockers visible until each one has a human owner.",
+                ],
+                [
+                    "The tenant needs a new data model or connector scope not covered by the product base.",
+                    "A role boundary or domain setup decision affects security or billing.",
+                    "Launch requires custom code instead of configuration.",
+                ],
+                "Tenant setup and domain changes are allowed only after implementation-lead or platform-admin review.",
+                [
+                    _kpi("time to first live workflow", "under 14 days for a standard rollout"),
+                    _kpi("launch blocker age", "no blocker unresolved beyond 48 hours"),
+                ],
+            ),
+            _playbook(
+                "connector-reliability",
+                "platform_engineering",
+                "Connector Reliability Pod",
+                "core-platform/connectors",
+                "Platform Admin",
+                "Keep Gmail, Drive, Calendar, and tenant data feeds fresh enough for agents and operators to trust.",
+                ["stale-source alerts", "retry decisions", "connector health digest"],
+                ["15-minute sync watch", "daily connector review"],
+                [
+                    _tool_access("gmail", "Review", "connector-linked inbox tests"),
+                    _tool_access("google-drive", "Review", "file index freshness and sheet publishing"),
+                    _tool_access("google-calendar", "Review", "calendar sync coverage"),
+                    _tool_access("runtime-desk", "Admin", "sync freshness and job failures"),
+                    _tool_access("sentry", "Review", "connector and runtime incidents"),
+                ],
+                [
+                    "Treat stale or partial sync as a production issue, not a cosmetic issue.",
+                    "Keep source-level provenance attached to every retry and repair decision.",
+                    "Prioritize the connectors that block live customer workflows first.",
+                ],
+                [
+                    "A connector requires broader OAuth scope, credential rotation, or source-owner approval.",
+                    "Data freshness drops below the workflow's required cadence.",
+                    "A broken sync affects more than one tenant or one critical client workspace.",
+                ],
+                "Connector retries are allowed automatically; scope changes and credential changes require platform-admin approval.",
+                [
+                    _kpi("critical connector freshness", "no critical feed stale beyond one cadence window"),
+                    _kpi("incident recovery time", "critical sync failures triaged within 30 minutes"),
+                ],
+            ),
+            _playbook(
+                "knowledge-graph",
+                "platform_engineering",
+                "Knowledge Graph Pod",
+                "core-platform/knowledge",
+                "Implementation Lead",
+                "Turn files, sheets, notes, and messages into canonical business memory with provenance.",
+                ["entity and relation candidates", "document canon updates", "knowledge quality review"],
+                ["document ingest", "daily relation repair", "weekly knowledge review"],
+                [
+                    _tool_access("google-drive", "Read", "files, sheets, and markdown bundles"),
+                    _tool_access("knowledge-runtime", "Admin", "documents, entities, relations, provenance"),
+                    _tool_access("agent-ops", "Review", "knowledge jobs and reviewer assignments"),
+                ],
+                [
+                    "Every extracted fact needs a source link that a human can inspect.",
+                    "Prefer canonical business entities over folder-level summaries.",
+                    "Do not publish schema changes into tenant workspaces without review.",
+                ],
+                [
+                    "A knowledge rule changes the meaning of commercial, financial, or quality records.",
+                    "Entity extraction quality drops below reviewer trust.",
+                    "A tenant needs a new domain schema that affects several modules.",
+                ],
+                "Knowledge writes are allowed for candidate records; canonical publishing requires reviewer approval when schema or trust boundaries change.",
+                [
+                    _kpi("source-linked records", "100 percent of published knowledge records retain provenance"),
+                    _kpi("reviewer acceptance", "over 85 percent accepted without rework"),
+                ],
+            ),
+            _playbook(
+                "runtime-safety",
+                "platform_engineering",
+                "Runtime Safety Pod",
+                "core-platform/runtime",
+                "Platform Admin",
+                "Keep agent jobs bounded, observable, and safe enough to scale across client workspaces.",
+                ["runtime health board", "autonomy guardrail updates", "escalation queue"],
+                ["continuous monitoring", "daily batch review", "weekly policy review"],
+                [
+                    _tool_access("agent-ops", "Admin", "job runs, members, and manual recovery"),
+                    _tool_access("runtime-desk", "Admin", "runtime posture and policy drift"),
+                    _tool_access("sentry", "Review", "production failures and runtime regressions"),
+                    _tool_access("platform-admin", "Review", "tenant posture and unsafe rollout pressure"),
+                ],
+                [
+                    "Move work into scheduled loops only when the failure mode and approval gate are visible.",
+                    "Every autonomous write path needs a human rollback path.",
+                    "Treat repeated manual recovery as a design bug, not an operator job.",
+                ],
+                [
+                    "An agent writes across tenant or security boundaries.",
+                    "A job repeatedly fails or goes stale beyond its approved cadence.",
+                    "A rollout depends on automations that do not have clear review gates.",
+                ],
+                "Runtime jobs may run automatically inside existing guardrails; guardrail changes require platform-admin approval.",
+                [
+                    _kpi("stale core loops", "zero stale core loops at daily review"),
+                    _kpi("manual recovery pressure", "down week over week"),
+                ],
+            ),
+            _playbook(
+                "growth-proof",
+                "growth_studio",
+                "Revenue Pod",
+                "core-platform/growth",
+                "Owner",
+                "Turn live products, case studies, and outreach into qualified rollout demand.",
+                ["account shortlist", "proof packs", "qualified rollout requests"],
+                ["daily prospect refresh", "weekly proof review"],
+                [
+                    _tool_access("gmail", "Review", "pilot follow-up and outbound drafts"),
+                    _tool_access("google-drive", "Read", "case-study assets and rollout collateral"),
+                    _tool_access("github", "Review", "release readiness for proof-worthy surfaces"),
+                ],
+                [
+                    "Lead with one real product and one concrete customer problem.",
+                    "Do not sell internal architecture as if it were customer value.",
+                    "Keep proof tied to working screens, rollout outcomes, and customer context.",
+                ],
+                [
+                    "The site promises a feature that is not production-ready.",
+                    "A customer request requires a new rollout pattern or unsupported integration.",
+                    "Demand is blocked by product gaps rather than messaging gaps.",
+                ],
+                "Drafting and proof-pack updates are allowed; public claims about enterprise readiness require owner review.",
+                [
+                    _kpi("qualified rollout requests", "increase month over month"),
+                    _kpi("time from proof to contact", "shorter each release cycle"),
+                ],
+            ),
+        ],
+    }
+
+
 def build_agent_team_system(config: PilotConfig, repo_root: Path | None = None) -> dict[str, Any]:
     root = repo_root or Path(__file__).resolve().parent.parent
     output_dir = config.output.inventory_path
@@ -114,14 +402,14 @@ def build_agent_team_system(config: PilotConfig, repo_root: Path | None = None) 
     teams = [
         {
             "team_id": "command_office",
-            "name": "Command Office",
+            "name": "Founder Control",
             "status": status,
             "scaling_tier": "shared_core",
-            "mission": "Turn scattered operational signals into a single decision layer for founders and directors.",
+            "mission": "Turn scattered operational signals into one decision layer for the owner and leadership.",
             "lead_agent": "Director Command Agent",
             "cadence": "daily",
             "inputs": ["action board", "execution review", "market watch", "workspace summaries"],
-            "outputs": ["director flash", "weekly operating brief", "priority queue"],
+            "outputs": ["founder brief", "weekly operating brief", "priority queue"],
             "handoff_to": ["control_tower", "growth_studio"],
             "agents": [
                 _agent(
@@ -161,7 +449,7 @@ def build_agent_team_system(config: PilotConfig, repo_root: Path | None = None) 
         },
         {
             "team_id": "control_tower",
-            "name": "Control Tower",
+            "name": "Client Operations Pod",
             "status": status,
             "scaling_tier": "per_client_pod",
             "mission": "Run the client operating layer: actions, supplier control, quality closeout, cash watch, and plant follow-up.",
@@ -230,10 +518,10 @@ def build_agent_team_system(config: PilotConfig, repo_root: Path | None = None) 
         },
         {
             "team_id": "client_delivery",
-            "name": "Client Delivery",
+            "name": "Client Onboarding Pod",
             "status": "active" if coverage_score >= 70 else "partial",
             "scaling_tier": "per_client_pod",
-            "mission": "Convert reusable templates into client-specific rollouts without rebuilding from zero.",
+            "mission": "Convert reusable templates into client-specific launches without rebuilding from zero.",
             "lead_agent": "Client Pod Manager",
             "cadence": "weekly",
             "inputs": ["client context pack", "selected modules", "input templates", "handover SOP"],
@@ -277,14 +565,14 @@ def build_agent_team_system(config: PilotConfig, repo_root: Path | None = None) 
         },
         {
             "team_id": "growth_studio",
-            "name": "Growth Studio",
+            "name": "Revenue Pod",
             "status": "active",
             "scaling_tier": "shared_core",
-            "mission": "Turn free tools and market interest into pilots, packs, and repeatable sales assets.",
+            "mission": "Turn site traffic, outreach, proof, and inbound requests into qualified rollout demand.",
             "lead_agent": "Lead-to-Pilot Agent",
             "cadence": "weekly",
             "inputs": ["lead finder usage", "contact submissions", "product portfolio", "showroom analytics"],
-            "outputs": ["qualified leads", "proposal inputs", "demo-to-pilot feedback"],
+            "outputs": ["qualified lead queue", "proof packs", "rollout-ready opportunities"],
             "handoff_to": ["command_office", "client_delivery"],
             "agents": [
                 _agent(
@@ -512,7 +800,7 @@ def build_agent_team_system(config: PilotConfig, repo_root: Path | None = None) 
     ]
 
     payload = {
-        "version": "v1",
+        "version": "v2",
         "generated_at": datetime.now().astimezone().isoformat(),
         "status": status,
         "summary": {
@@ -550,8 +838,8 @@ def build_agent_team_system(config: PilotConfig, repo_root: Path | None = None) 
         "teams": teams,
         "gaps": team_gaps,
         "scaling_model": {
-            "shared_core": "Keep strategy, growth, and platform teams shared across all clients.",
-            "client_pod_pattern": "Spin up a per-client Control Tower plus Client Delivery pod using the context pack and selected modules.",
+            "shared_core": "Keep founder control, revenue, platform, and R&D teams shared across all clients.",
+            "client_pod_pattern": "Spin up a per-client Client Operations Pod plus Client Onboarding Pod using the context pack and selected modules.",
             "rd_rule": "Keep R&D in the shared core. Only promote experiments into client pods after they survive eval and operator review.",
             "versions": versions,
             "client_specific_inputs": [
@@ -575,6 +863,7 @@ def build_agent_team_system(config: PilotConfig, repo_root: Path | None = None) 
             "priority_now": priority_products,
             "selected_for_context": selected_control_modules,
         },
+        "manifest": build_agent_operating_manifest(),
         "next_moves": [
             "Add canonical state for supplier risks, incidents, collections, and approvals so the teams act on records instead of only snapshots.",
             "Build one-command client pod provisioning from context pack to sheets, board, and workspace surface.",
@@ -650,6 +939,32 @@ def render_agent_team_markdown(payload: dict[str, Any]) -> str:
     lines.extend(["", "## Next Moves", ""])
     for item in payload.get("next_moves", []):
         lines.append(f"- {item}")
+
+    manifest = payload.get("manifest", {}) if isinstance(payload, dict) else {}
+    playbooks = manifest.get("playbooks", []) if isinstance(manifest, dict) else []
+    tools = manifest.get("tools", []) if isinstance(manifest, dict) else []
+    if manifest:
+        lines.extend(
+            [
+                "",
+                "## Runtime Contract",
+                "",
+                f"- Version: `{manifest.get('version', '')}`",
+                f"- Tenant key: `{manifest.get('tenantKey', '')}`",
+                f"- Tool count: `{len(tools)}`",
+                f"- Playbook count: `{len(playbooks)}`",
+                "",
+            ]
+        )
+        for playbook in playbooks:
+            lines.extend(
+                [
+                    f"- `{playbook.get('name', '')}` [{playbook.get('leadRole', '')}]: "
+                    f"{playbook.get('workspace', '')} / "
+                    f"{len(playbook.get('tools', []))} tools / "
+                    f"{len(playbook.get('kpis', []))} KPIs",
+                ]
+            )
     return "\n".join(lines).strip() + "\n"
 
 

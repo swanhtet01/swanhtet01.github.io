@@ -154,7 +154,7 @@ def build_lead_to_pilot_pack(*, leads: list[dict[str, Any]], campaign_goal: str 
                 "archetype": archetype,
                 "stage": "offer_ready",
                 "status": "open",
-                "owner": "Growth Studio",
+                "owner": "Revenue Pod",
                 "service_pack": offer["service_pack"],
                 "wedge_product": offer["wedge"],
                 "starter_modules": offer["starter_modules"],

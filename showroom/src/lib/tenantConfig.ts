@@ -24,20 +24,22 @@ const defaultTenant: TenantConfig = {
   key: 'default',
   brandName: 'SUPERMEGA.dev',
   compactMark: 'SM',
-  brandTagline: 'AI-native company software',
+  brandTagline: 'Company systems that replace tool sprawl',
   siteMode: 'platform',
   navItems: [
     { label: 'Products', to: '/products' },
+    { label: 'Demo Center', to: '/demo-center' },
+    { label: 'How it works', to: '/platform' },
     { label: 'Case Study', to: '/clients/yangon-tyre' },
     { label: 'Contact', to: '/contact' },
   ],
   showBookCta: true,
-  bookCtaLabel: 'Start rollout',
+  bookCtaLabel: 'Request rollout',
   homeEyebrow: 'SUPERMEGA.dev',
-  homeTitle: 'Replace tool sprawl with working company software.',
-  homeDescription: 'Start with a live product for sales, company data, or receiving, then expand it into a branded customer portal.',
-  homePrimaryCta: { label: 'See products', to: '/products' },
-  homeSecondaryCta: { label: 'See case study', to: '/clients/yangon-tyre' },
+  homeTitle: 'Replace tool sprawl with one working system.',
+  homeDescription: 'Start with one live product for sales, company data, operations, or client delivery. Expand only after the first team trusts it.',
+  homePrimaryCta: { label: 'Create workspace', to: '/signup' },
+  homeSecondaryCta: { label: 'Request rollout', to: '/contact' },
   toolCards: [
     {
       title: 'Find Clients',
@@ -45,24 +47,26 @@ const defaultTenant: TenantConfig = {
       to: '/products',
     },
     {
-      title: 'Customer portals',
-      detail: 'Expand the first workflow into a branded portal with roles, approvals, and shared history.',
+      title: 'Receiving Control',
+      detail: 'Track inbound issues, missing GRNs, and supplier follow-up in one shared queue.',
       to: '/products',
     },
   ],
-  footerText: 'Start with one working product. Expand into a customer portal only after the first workflow works.',
+  footerText: 'Start with one working product. Then expand into a branded client portal with roles, approvals, and history on the same system.',
 }
 
 const ytfTenant: TenantConfig = {
   key: 'ytf-plant-a',
   brandName: 'SUPERMEGA.dev',
   compactMark: 'SM',
-  brandTagline: 'Plant A tenant workspace',
+  brandTagline: 'AI-native manufacturing portal',
   siteMode: 'client',
   tenantName: 'Yangon Tyre',
   tenantShortName: 'Plant A',
   navItems: [
-    { label: 'Sales Desk', to: '/app/sales' },
+    { label: 'Portal', to: '/app/portal' },
+    { label: 'Plant Manager', to: '/app/plant-manager' },
+    { label: 'Sales Desk', to: '/app/revenue' },
     { label: 'Operations Desk', to: '/app/operations' },
     { label: 'DQMS Desk', to: '/app/dqms' },
     { label: 'Maintenance Desk', to: '/app/maintenance' },
@@ -72,15 +76,15 @@ const ytfTenant: TenantConfig = {
   showBookCta: false,
   bookCtaLabel: 'Open workspace',
   homeEyebrow: 'Yangon Tyre / Plant A',
-  homeTitle: 'Plant A tenant workspace.',
-  homeDescription: 'Sales, operations, DQMS, maintenance, CEO review, and admin control in one portal.',
-  homePrimaryCta: { label: 'Open operations desk', to: '/app/operations' },
+  homeTitle: 'Yangon Tyre enterprise portal.',
+  homeDescription: 'Sales, operations, manufacturing control, DQMS, maintenance, CEO review, and admin control in one portal.',
+  homePrimaryCta: { label: 'Open portal', to: '/app/portal' },
   homeSecondaryCta: { label: 'Open DQMS desk', to: '/app/dqms' },
   toolCards: [
     {
       title: 'Sales Desk',
       detail: 'Accounts, follow-up, pipeline, and commercial history in one queue.',
-      to: '/app/sales',
+      to: '/app/revenue',
     },
     {
       title: 'Operations Desk',
@@ -108,7 +112,7 @@ const ytfTenant: TenantConfig = {
       to: '/app/platform-admin',
     },
   ],
-  footerText: 'Yangon Tyre Plant A workspace for sales, operations, DQMS, maintenance, CEO review, and admin control.',
+  footerText: 'Yangon Tyre enterprise portal for sales, operations, manufacturing control, DQMS, maintenance, CEO review, and admin control.',
   defaultWorkspaceSlug: 'ytf-plant-a',
   defaultCompany: 'Yangon Tyre',
 }
@@ -125,7 +129,8 @@ function inferTenantKey(): TenantConfig['key'] {
   }
 
   const hostname = window.location.hostname.trim().toLowerCase()
-  if (hostname === 'ytf.supermega.dev' || hostname === 'www.ytf.supermega.dev') {
+  const subdomain = hostname.split('.')[0]
+  if (hostname === 'ytf.supermega.dev' || hostname === 'www.ytf.supermega.dev' || subdomain === 'ytf' || subdomain === 'ytf-plant-a') {
     return 'ytf-plant-a'
   }
 

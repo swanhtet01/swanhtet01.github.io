@@ -16,6 +16,7 @@ DEFAULT_JOB_TYPES = [
     "task_triage",
     "ops_watch",
     "founder_brief",
+    "github_release_watch",
 ]
 DEFAULT_BASE_URL = os.getenv("SUPERMEGA_RUNTIME_BASE_URL", "https://supermega-app-453184845544.asia-southeast1.run.app").strip() or "https://supermega-app-453184845544.asia-southeast1.run.app"
 

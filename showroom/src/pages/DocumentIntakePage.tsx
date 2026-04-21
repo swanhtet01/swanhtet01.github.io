@@ -179,7 +179,7 @@ export function DocumentIntakePage() {
           <p className="sm-kicker text-[var(--sm-accent-alt)]">Next step</p>
           <h2 className="mt-3 text-2xl font-bold text-white">Use intake as the front door.</h2>
           <p className="mt-3 text-sm text-[var(--sm-muted)]">
-            This should feed directly into Action OS, Receiving Control, Cash Watch, and Quality Closeout so teams do not need to retype key facts after opening a file.
+            This should feed directly into Action OS, Receiving Control, Cash Watch, and DQMS and Quality Methods so teams do not need to retype key facts after opening a file.
           </p>
           <div className="mt-5 flex flex-wrap gap-3">
             <Link className="sm-button-primary" to="/app/actions">

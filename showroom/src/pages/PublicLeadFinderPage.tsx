@@ -79,6 +79,11 @@ export function PublicLeadFinderPage() {
         .filter(Boolean),
     [keywords],
   )
+  const summaryCards = [
+    { label: 'Results', value: rows.length },
+    { label: 'Kept', value: savedKeys.length },
+    { label: 'Company List', value: savedTotal },
+  ]
 
   function applyQuickSearch(nextQuery: string, nextKeywords: string) {
     setQuery(nextQuery)
@@ -213,7 +218,7 @@ export function PublicLeadFinderPage() {
               name: row.name,
               stage: 'offer_ready',
               status: 'open',
-              owner: 'Growth Studio',
+              owner: 'Revenue Pod',
               service_pack: 'Find Clients',
               wedge_product: 'Find Clients',
               semi_products: ['Find Clients', 'Company List'],
@@ -302,23 +307,24 @@ export function PublicLeadFinderPage() {
 
   return (
     <div className="space-y-6">
-      <section className="sm-surface p-6 lg:p-8">
-        <p className="sm-kicker text-[var(--sm-accent)]">Find Clients</p>
-        <h1 className="mt-3 text-3xl font-bold text-white lg:text-4xl">Search public sources and build a shortlist.</h1>
-        <p className="mt-3 max-w-2xl text-sm leading-relaxed text-[var(--sm-muted)]">
-          Use this when you need new names. Type a business type, niche, or place, then keep the companies worth contacting with fit reasons, contact clues, and first outreach ready.
-        </p>
+      <section className="grid gap-6 lg:grid-cols-[0.84fr_1.16fr]">
+        <article className="sm-surface p-6 lg:p-8">
+          <p className="sm-kicker text-[var(--sm-accent)]">Find Clients</p>
+          <h1 className="mt-3 text-3xl font-bold text-white lg:text-4xl">Search, keep the shortlist, then open Company List.</h1>
+          <p className="mt-3 max-w-2xl text-sm leading-relaxed text-[var(--sm-muted)]">
+            Use this only for new names. Search a business type, niche, or place, then keep the companies worth contacting.
+          </p>
 
-        <div className="mt-5 grid gap-3 md:grid-cols-3">
-          {flowSteps.map(([step, title]) => (
-            <div className="sm-chip text-white" key={title}>
-              <p className="sm-kicker text-[var(--sm-accent)]">Step {step}</p>
-              <p className="mt-2 text-sm text-[var(--sm-muted)]">{title}</p>
-            </div>
-          ))}
-        </div>
+          <div className="mt-5 grid gap-3 md:grid-cols-3">
+            {flowSteps.map(([step, title]) => (
+              <div className="sm-chip text-white" key={title}>
+                <p className="sm-kicker text-[var(--sm-accent)]">Step {step}</p>
+                <p className="mt-2 text-sm text-[var(--sm-muted)]">{title}</p>
+              </div>
+            ))}
+          </div>
 
-        <div className="mt-5 grid gap-4">
+          <div className="mt-5 grid gap-4">
             <label className="grid gap-2 text-sm font-semibold text-[var(--sm-muted)]">
               Search
               <input
@@ -408,9 +414,41 @@ export function PublicLeadFinderPage() {
                 </div>
               </div>
             </details>
-        </div>
+          </div>
 
-        {message ? <div className="mt-3 sm-chip text-[var(--sm-muted)]">{message}</div> : null}
+          {message ? <div className="mt-3 sm-chip text-[var(--sm-muted)]">{message}</div> : null}
+        </article>
+
+        <article className="sm-terminal p-6">
+          <p className="sm-kicker text-[var(--sm-accent)]">Working view</p>
+          <p className="mt-2 text-sm text-[var(--sm-muted)]">The point here is simple: return a shortlist, keep the best rows, and move them into Company List.</p>
+          <div className="mt-5 grid gap-3 md:grid-cols-3 lg:grid-cols-1">
+            {summaryCards.map((item) => (
+              <div className="sm-chip text-white" key={item.label}>
+                <p className="sm-kicker text-[var(--sm-accent)]">{item.label}</p>
+                <p className="mt-2 text-3xl font-bold">{item.value}</p>
+              </div>
+            ))}
+          </div>
+          <div className="mt-5 space-y-3 text-sm text-[var(--sm-muted)]">
+            <p>Keep only rows with a clear fit reason and at least one contact clue.</p>
+            <p>Once the shortlist is good enough, stop searching and open Company List.</p>
+          </div>
+          {(rows.length || savedTotal) ? (
+            <div className="mt-6 flex flex-wrap gap-3">
+              {rows.length ? (
+                <button className="sm-button-primary" onClick={() => void saveTopResultsAndContinue()} type="button">
+                  Keep first 3 and continue
+                </button>
+              ) : null}
+              {savedTotal ? (
+                <Link className="sm-button-secondary" to="/company-list?source=find-clients">
+                  Open Company List
+                </Link>
+              ) : null}
+            </div>
+          ) : null}
+        </article>
       </section>
 
       {rows.length || manualInput.trim() || message ? (

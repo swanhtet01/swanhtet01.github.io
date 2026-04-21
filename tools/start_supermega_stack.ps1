@@ -78,6 +78,7 @@ try {
         "-ExecutionPolicy", "Bypass",
         "-File", $startSupervisor,
         "-Config", $Config,
+        "-BaseUrl", ("http://127.0.0.1:{0}" -f $Port),
         "-IntervalMinutes", $SupervisorIntervalMinutes,
         "-MaxCycles", 0
     )

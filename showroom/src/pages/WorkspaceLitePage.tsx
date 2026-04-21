@@ -225,6 +225,10 @@ function toSharedStage(stage: string) {
   return 'offer_ready'
 }
 
+function leadStageLabel(stage: string, mode: WorkspaceMode) {
+  return mode === 'shared' ? sharedStageLabels[stage] ?? stage : localStageLabels[stage as BrowserWorkspaceStage] ?? stage
+}
+
 function buildSharedLeadRow(row: LeadRow, contextLabel: string) {
   const outreach = buildBrowserOutreach(row, contextLabel, [])
   const importedList = contextLabel.toLowerCase().includes('imported')
@@ -232,7 +236,7 @@ function buildSharedLeadRow(row: LeadRow, contextLabel: string) {
     name: row.name,
     stage: 'offer_ready',
     status: 'open',
-    owner: 'Growth Studio',
+    owner: 'Revenue Pod',
     service_pack: importedList ? 'Company List' : 'Find Clients',
     wedge_product: importedList ? 'Company List' : 'Find Clients',
     semi_products: importedList ? ['Company List', 'Task List'] : ['Find Clients', 'Company List'],
@@ -288,7 +292,6 @@ export function WorkspaceLitePage() {
   const hasData = leads.length > 0 || tasks.length > 0
   const activeView: WorkspaceView = publicSurface === 'updates' ? 'queue' : 'leads'
   const hasSharedProfile = isPublicWorkspaceProfileReady(profile)
-  const pageEyebrow = isReceivingDesk ? 'Receiving control' : publicSurface === 'sales' ? 'Company List' : 'Task list'
   const fromFindClients = publicSurface === 'sales' && source === 'find-clients'
 
   const summary = useMemo(() => {
@@ -307,6 +310,45 @@ export function WorkspaceLitePage() {
   }, [leads, mode, openTasks.length, tasks.length])
 
   const importedCompanyCount = Number.isFinite(importedCount) && importedCount > 0 ? importedCount : summary.total
+  const surfaceMeta = isReceivingDesk
+    ? {
+        eyebrow: 'Receiving control',
+        emptyTitle: 'Log the issue and keep one next step.',
+        emptyDescription: 'Use this when GRN, hold, customs, batch, or quantity issues are scattered across chat, paper, or inbox notes.',
+        filledTitle: 'Keep the receiving queue short and clear.',
+        filledDescription: 'Operators should see only the open issues, the owner, and the next action.',
+        startHint: 'Paste one issue per line, then work the follow-up list.',
+      }
+    : publicSurface === 'sales'
+      ? {
+          eyebrow: 'Company List',
+          emptyTitle: 'Turn raw names into a working list.',
+          emptyDescription: 'Paste names from Google, Facebook, WhatsApp, Excel, or CRM, then keep only the next useful follow-up.',
+          filledTitle: 'Run the shortlist from one desk.',
+          filledDescription: 'Clean the list, move companies forward, and keep the next action visible without extra CRM clutter.',
+          startHint: 'Either find new companies first or paste the list you already have.',
+        }
+      : {
+          eyebrow: 'Task list',
+          emptyTitle: 'Turn messy updates into short next tasks.',
+          emptyDescription: 'Use this when notes, blockers, or team updates need one simple action list instead of more reporting.',
+          filledTitle: 'Keep only the tasks that matter now.',
+          filledDescription: 'The desk should show the open tasks, the owner, and what to finish next.',
+          startHint: 'Paste rough updates first, then prune the queue until it is usable.',
+        }
+
+  const deskStats =
+    publicSurface === 'sales'
+      ? [
+          { label: 'Companies', value: summary.total },
+          { label: 'Ready now', value: summary.newCount },
+          { label: 'Open tasks', value: summary.openActionCount },
+        ]
+      : [
+          { label: 'Open tasks', value: summary.openActionCount },
+          { label: 'All tasks', value: summary.actionCount },
+          { label: 'Done', value: Math.max(summary.actionCount - summary.openActionCount, 0) },
+        ]
 
   const loadLocalState = useCallback(() => {
     setMode('local')
@@ -973,30 +1015,48 @@ export function WorkspaceLitePage() {
   if (!hasData) {
     return (
       <div className="space-y-6">
-        <section className="sm-surface p-6 lg:p-8">
-          <p className="sm-kicker text-[var(--sm-accent)]">{pageEyebrow}</p>
-          <h1 className="mt-3 text-3xl font-bold text-white lg:text-4xl">
-            {isReceivingDesk ? 'Log receiving issues.' : publicSurface === 'sales' ? 'Already have names? Organize them here.' : 'Paste task notes.'}
-          </h1>
-          <p className="mt-3 max-w-2xl text-sm leading-relaxed text-[var(--sm-muted)]">
-            {isReceivingDesk
-              ? 'Paste GRN, hold, batch, customs, or quantity issues and turn them into one short follow-up list.'
-              : publicSurface === 'sales'
-              ? 'Use this when you already have names from Google, Facebook, WhatsApp, Excel, or CRM. We remove duplicates, keep the contact clues, and turn the list into clear next steps.'
-              : 'Paste messy notes, blockers, or updates and turn them into a short task list.'}
-          </p>
-          {guideBanner}
-          {setupPanel}
-          {publicSurface === 'sales' ? (
-            <div className="mt-5 text-sm text-[var(--sm-muted)]">
-              Need new names first?{' '}
-              <Link className="text-white underline underline-offset-4" to="/find-companies">
-                Find Clients
-              </Link>
+        <section className="grid gap-6 lg:grid-cols-[0.8fr_1.2fr]">
+          <article className="sm-surface p-6 lg:p-8">
+            <p className="sm-kicker text-[var(--sm-accent)]">{surfaceMeta.eyebrow}</p>
+            <h1 className="mt-3 text-3xl font-bold text-white lg:text-4xl">{surfaceMeta.emptyTitle}</h1>
+            <p className="mt-3 max-w-2xl text-sm leading-relaxed text-[var(--sm-muted)]">{surfaceMeta.emptyDescription}</p>
+            {guideBanner}
+
+            <div className="mt-6 flex flex-wrap gap-3">
+              {publicSurface === 'sales' ? (
+                <>
+                  <Link className="sm-button-primary" to="/find-companies">
+                    Need new names
+                  </Link>
+                  <button className="sm-button-secondary" onClick={() => setSetupFlow('leads')} type="button">
+                    Paste my list
+                  </button>
+                </>
+              ) : isReceivingDesk ? (
+                <button className="sm-button-primary" onClick={() => setSetupFlow('receiving')} type="button">
+                  Log issues
+                </button>
+              ) : (
+                <button className="sm-button-primary" onClick={() => setSetupFlow('updates')} type="button">
+                  Paste updates
+                </button>
+              )}
             </div>
-          ) : null}
-          {cloudSavePanel ? <div className="mt-5">{cloudSavePanel}</div> : null}
-          {message ? <div className="mt-4 sm-chip text-[var(--sm-muted)]">{message}</div> : null}
+
+            {publicSurface === 'sales' ? (
+              <div className="mt-5 text-sm text-[var(--sm-muted)]">
+                If you already searched in Find Clients, this is where the shortlist turns into a working list.
+              </div>
+            ) : null}
+            {cloudSavePanel ? <div className="mt-5">{cloudSavePanel}</div> : null}
+            {message ? <div className="mt-4 sm-chip text-[var(--sm-muted)]">{message}</div> : null}
+          </article>
+
+          <article className="sm-terminal p-6">
+            <p className="sm-kicker text-[var(--sm-accent)]">Start here</p>
+            <p className="mt-2 text-sm text-[var(--sm-muted)]">{surfaceMeta.startHint}</p>
+            <div className="mt-5">{setupPanel}</div>
+          </article>
         </section>
       </div>
     )
@@ -1005,41 +1065,45 @@ export function WorkspaceLitePage() {
   return (
     <div className="space-y-6">
       <section className="grid gap-6 lg:grid-cols-[0.82fr_1.18fr]">
-    <article className="sm-surface p-6">
-      <p className="sm-kicker text-[var(--sm-accent)]">{isReceivingDesk ? 'Receiving control' : publicSurface === 'sales' ? 'Company List' : 'Task list'}</p>
-      <h2 className="mt-3 text-3xl font-bold text-white">
-        {isReceivingDesk ? 'Keep only the receiving follow-up.' : publicSurface === 'sales' ? 'Turn raw names into one follow-up list.' : 'Keep only the next tasks.'}
-      </h2>
-      <p className="mt-3 text-sm leading-relaxed text-[var(--sm-muted)]">
-        {isReceivingDesk
-          ? 'Log one issue, assign the next step, and close it when the material is clear.'
-          : publicSurface === 'sales'
-          ? 'This is for the names you already have. Clean them, stage them, and keep one clear next step.'
-          : 'Add one task, finish it, then move to the next one.'}
-      </p>
-      {guideBanner}
+        <article className="sm-surface p-6">
+          <p className="sm-kicker text-[var(--sm-accent)]">{surfaceMeta.eyebrow}</p>
+          <h2 className="mt-3 text-3xl font-bold text-white">{surfaceMeta.filledTitle}</h2>
+          <p className="mt-3 text-sm leading-relaxed text-[var(--sm-muted)]">{surfaceMeta.filledDescription}</p>
+          {guideBanner}
 
-          {hasData ? (
-            <>
-              <div className={`mt-5 grid gap-3 ${publicSurface === 'sales' ? 'md:grid-cols-2' : 'md:grid-cols-1'}`}>
-                {publicSurface === 'sales' ? (
-                  <div className="sm-chip text-white">
-                    <p className="sm-kicker text-[var(--sm-accent)]">Companies</p>
-                    <p className="mt-2 text-3xl font-bold">{summary.total}</p>
-                  </div>
-                ) : null}
-                <div className="sm-chip text-white">
-                  <p className="sm-kicker text-[var(--sm-accent-alt)]">Open tasks</p>
-                  <p className="mt-2 text-3xl font-bold">{summary.openActionCount}</p>
-                </div>
+          <div className="mt-5 grid gap-3 md:grid-cols-3">
+            {deskStats.map((item) => (
+              <div className="sm-chip text-white" key={item.label}>
+                <p className="sm-kicker text-[var(--sm-accent)]">{item.label}</p>
+                <p className="mt-2 text-3xl font-bold">{item.value}</p>
               </div>
+            ))}
+          </div>
 
-            </>
-          ) : (
-        <div className="mt-5 sm-chip text-[var(--sm-muted)]">
-          {mode === 'shared' ? 'Team workspace ready.' : `Nothing saved yet. Start with one ${isReceivingDesk ? 'receiving issue' : publicSurface === 'sales' ? 'list import' : 'task list'}.`}
-        </div>
-      )}
+          <div className="mt-5 flex flex-wrap gap-3">
+            {publicSurface === 'sales' ? (
+              <>
+                <button className="sm-button-primary" onClick={() => setSetupFlow('leads')} type="button">
+                  Add names
+                </button>
+                <Link className="sm-button-secondary" to="/find-companies">
+                  Search more
+                </Link>
+                <Link className="sm-button-secondary" to="/task-list">
+                  Open task list
+                </Link>
+              </>
+            ) : (
+              <button className="sm-button-primary" onClick={() => setSetupFlow(isReceivingDesk ? 'receiving' : 'updates')} type="button">
+                Add more items
+              </button>
+            )}
+            {publicSurface === 'sales' ? (
+              <button className="sm-button-secondary" onClick={exportWorkspace} type="button">
+                Export CSV
+              </button>
+            ) : null}
+          </div>
 
           {hasData && hasLiveWorkspaceApi() && mode === 'local' ? (
             <div className="mt-5 flex flex-wrap gap-3">
@@ -1080,7 +1144,7 @@ export function WorkspaceLitePage() {
                 <>
                   <div className="flex items-center justify-between gap-3">
                     <div>
-                      <p className="sm-kicker text-[var(--sm-accent)]">{activeView === 'queue' ? "Today's next steps" : 'Your list'}</p>
+                      <p className="sm-kicker text-[var(--sm-accent)]">{activeView === 'queue' ? 'Next tasks' : 'Shortlist'}</p>
                       <p className="mt-2 text-sm text-[var(--sm-muted)]">
                         {activeView === 'queue'
                           ? 'Keep the task list short. Start with the top open items.'
@@ -1165,12 +1229,12 @@ export function WorkspaceLitePage() {
                   ) : leads.length ? (
                     <>
                       <div className="flex flex-wrap gap-3">
-                        <Link className="sm-button-primary" to="/task-list">
+                        <button className="sm-button-primary" onClick={() => setSetupFlow('leads')} type="button">
+                          Add names
+                        </button>
+                        <Link className="sm-button-secondary" to="/task-list">
                           Open task list
                         </Link>
-                        <button className="sm-button-secondary" onClick={exportWorkspace} type="button">
-                          Export CSV
-                        </button>
                       </div>
                       <div className="text-sm text-[var(--sm-muted)]">
                         Need more names?{' '}
@@ -1186,7 +1250,7 @@ export function WorkspaceLitePage() {
                               <p className="text-lg font-bold text-white">{lead.name}</p>
                               <p className="mt-2 text-sm text-[var(--sm-muted)]">{nextActionForLead(lead)}</p>
                             </div>
-                            <span className="sm-status-pill">{lead.stage}</span>
+                            <span className="sm-status-pill">{leadStageLabel(lead.stage, mode)}</span>
                           </div>
 
                           <div className="mt-4 sm-chip text-white">

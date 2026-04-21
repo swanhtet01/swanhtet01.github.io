@@ -25,7 +25,7 @@ function inferApiBase() {
     return `${protocol}//${hostname}:8787`
   }
 
-  return ''
+  return origin
 }
 
 function inferAppBase() {
@@ -46,17 +46,27 @@ function inferAppBase() {
     return `http://${hostname}:8787`
   }
 
-  return ''
+  return origin
 }
 
 export const workspaceApiBase = inferApiBase()
 export const workspaceAppBase = inferAppBase()
 const publicWorkspaceProfileKey = 'supermega.publicWorkspaceProfile.v1'
+const workspaceOnboardingDraftKey = 'supermega.workspaceOnboardingDraft.v1'
 
 export type PublicWorkspaceProfile = {
   name: string
   email: string
   company: string
+}
+
+export type WorkspaceOnboardingDraft = {
+  company: string
+  packageName: string
+  team: string
+  systems: string[]
+  goal: string
+  workspaceSlug: string
 }
 
 function normalizePublicWorkspaceProfile(profile?: Partial<PublicWorkspaceProfile> | null): PublicWorkspaceProfile {
@@ -66,6 +76,22 @@ function normalizePublicWorkspaceProfile(profile?: Partial<PublicWorkspaceProfil
     name: String(profile?.name ?? '').trim(),
     email: String(profile?.email ?? '').trim().toLowerCase(),
     company: String(profile?.company ?? tenantCompany).trim(),
+  }
+}
+
+function normalizeWorkspaceOnboardingDraft(draft?: Partial<WorkspaceOnboardingDraft> | null): WorkspaceOnboardingDraft {
+  const tenant = getTenantConfig()
+  const tenantCompany = String(tenant.defaultCompany ?? '').trim()
+  const tenantWorkspaceSlug = String(tenant.defaultWorkspaceSlug ?? '').trim()
+  return {
+    company: String(draft?.company ?? tenantCompany).trim(),
+    packageName: String(draft?.packageName ?? '').trim(),
+    team: String(draft?.team ?? '').trim(),
+    systems: Array.isArray(draft?.systems)
+      ? draft!.systems.map((item) => String(item).trim()).filter(Boolean)
+      : [],
+    goal: String(draft?.goal ?? '').trim(),
+    workspaceSlug: String(draft?.workspaceSlug ?? tenantWorkspaceSlug).trim(),
   }
 }
 
@@ -147,6 +173,48 @@ export function savePublicWorkspaceProfile(profile: Partial<PublicWorkspaceProfi
   return normalized
 }
 
+export function loadWorkspaceOnboardingDraft(): WorkspaceOnboardingDraft {
+  if (typeof window === 'undefined') {
+    return normalizeWorkspaceOnboardingDraft()
+  }
+
+  try {
+    const raw = window.localStorage.getItem(workspaceOnboardingDraftKey)
+    if (!raw) {
+      return normalizeWorkspaceOnboardingDraft()
+    }
+    return normalizeWorkspaceOnboardingDraft(JSON.parse(raw) as Partial<WorkspaceOnboardingDraft>)
+  } catch {
+    return normalizeWorkspaceOnboardingDraft()
+  }
+}
+
+export function saveWorkspaceOnboardingDraft(draft: Partial<WorkspaceOnboardingDraft>) {
+  if (typeof window === 'undefined') {
+    return normalizeWorkspaceOnboardingDraft(draft)
+  }
+
+  const normalized = normalizeWorkspaceOnboardingDraft(draft)
+  try {
+    window.localStorage.setItem(workspaceOnboardingDraftKey, JSON.stringify(normalized))
+  } catch {
+    // Ignore storage failures and keep using the returned value.
+  }
+  return normalized
+}
+
+export function clearWorkspaceOnboardingDraft() {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  try {
+    window.localStorage.removeItem(workspaceOnboardingDraftKey)
+  } catch {
+    // Ignore storage failures.
+  }
+}
+
 export function isPublicWorkspaceProfileReady(profile?: Partial<PublicWorkspaceProfile> | null) {
   const normalized = normalizePublicWorkspaceProfile(profile)
   return Boolean(normalized.email && normalized.company)
@@ -201,7 +269,9 @@ export type ContactSubmissionPayload = {
   email: string
   company: string
   workflow: string
+  requested_package?: string
   data: string
+  team?: string
   goal: string
 }
 
@@ -241,6 +311,19 @@ export type WorkspaceSessionPayload = {
   } | null
 }
 
+export type WorkspaceTenantState = {
+  status?: string
+  blocked?: boolean
+  expected_tenant_key?: string
+  resource_tenant_key?: string
+  persisted_manifest_tenant_key?: string
+  current_state_tenant_key?: string
+  snapshot_tenant_key?: string
+  workspace_slug?: string
+  workspace_name?: string
+  detail?: string
+}
+
 export async function getWorkspaceSession() {
   return workspaceFetch<WorkspaceSessionPayload>('/api/auth/session')
 }
@@ -249,6 +332,9 @@ export type WorkspaceCapability =
   | 'actions.view'
   | 'sales.view'
   | 'receiving.view'
+  | 'operations.view'
+  | 'dqms.view'
+  | 'maintenance.view'
   | 'approvals.view'
   | 'agent_ops.view'
   | 'director.view'
@@ -277,12 +363,38 @@ const MANAGER_CAPABILITIES: WorkspaceCapability[] = [
 ]
 const OWNER_CAPABILITIES: WorkspaceCapability[] = [
   ...MANAGER_CAPABILITIES,
+  'operations.view',
+  'dqms.view',
+  'maintenance.view',
   'tenant_admin.view',
   'connector_admin.view',
   'knowledge_admin.view',
   'security_admin.view',
 ]
 const PLATFORM_ADMIN_CAPABILITIES: WorkspaceCapability[] = [...OWNER_CAPABILITIES, 'platform_admin.view']
+
+const ROLE_ALIASES: Record<string, string> = {
+  ceo: 'ceo',
+  chief_executive: 'ceo',
+  chief_executive_officer: 'ceo',
+  executive: 'ceo',
+  admin: 'admin',
+  maintenance: 'maintenance',
+  maintenance_lead: 'maintenance',
+  maintenance_manager: 'maintenance',
+  maintenance_ops: 'maintenance',
+  operations: 'operations',
+  operations_lead: 'operations',
+  operations_manager: 'operations',
+  ops: 'operations',
+  quality: 'quality',
+  qc: 'quality',
+  quality_manager: 'quality',
+  quality_lead: 'quality',
+  sales: 'sales',
+  sales_lead: 'sales',
+  sales_manager: 'sales',
+}
 
 const ROLE_CAPABILITY_PROFILES: Record<string, Omit<CapabilityProfile, 'roleKey'>> = {
   member: {
@@ -293,7 +405,7 @@ const ROLE_CAPABILITY_PROFILES: Record<string, Omit<CapabilityProfile, 'roleKey'
   operator: {
     label: 'Operator',
     summary: 'Runs sales, receiving, approvals, and document workflows.',
-    capabilities: OPERATOR_CAPABILITIES,
+    capabilities: [...OPERATOR_CAPABILITIES, 'operations.view'],
   },
   manager: {
     label: 'Manager',
@@ -338,7 +450,7 @@ const ROLE_CAPABILITY_PROFILES: Record<string, Omit<CapabilityProfile, 'roleKey'
   plant_manager: {
     label: 'Plant Manager',
     summary: 'Runs plant queues, receiving issues, and daily operational follow-up.',
-    capabilities: ['actions.view', 'receiving.view', 'approvals.view', 'documents.view'],
+    capabilities: ['actions.view', 'receiving.view', 'operations.view', 'dqms.view', 'maintenance.view', 'approvals.view', 'documents.view'],
   },
   procurement_lead: {
     label: 'Procurement Lead',
@@ -348,12 +460,17 @@ const ROLE_CAPABILITY_PROFILES: Record<string, Omit<CapabilityProfile, 'roleKey'
   receiving_clerk: {
     label: 'Receiving Clerk',
     summary: 'Captures inbound issues and keeps the next action visible.',
-    capabilities: ['receiving.view', 'actions.view', 'documents.view'],
+    capabilities: ['receiving.view', 'operations.view', 'actions.view', 'documents.view'],
+  },
+  quality: {
+    label: 'Quality',
+    summary: 'Owns incidents, CAPA, root-cause review, and controlled quality closeout.',
+    capabilities: ['dqms.view', 'actions.view', 'approvals.view', 'documents.view', 'knowledge_admin.view'],
   },
   quality_manager: {
     label: 'Quality Manager',
     summary: 'Runs quality incidents, CAPA, and controlled closeout.',
-    capabilities: ['actions.view', 'approvals.view', 'documents.view', 'knowledge_admin.view'],
+    capabilities: ['dqms.view', 'actions.view', 'approvals.view', 'documents.view', 'knowledge_admin.view'],
   },
   finance_controller: {
     label: 'Finance Controller',
@@ -364,6 +481,31 @@ const ROLE_CAPABILITY_PROFILES: Record<string, Omit<CapabilityProfile, 'roleKey'
     label: 'Sales Lead',
     summary: 'Owns account follow-up, pipeline risk, and commercial review.',
     capabilities: ['sales.view', 'actions.view', 'director.view'],
+  },
+  sales: {
+    label: 'Sales',
+    summary: 'Owns CRM follow-up, pipeline visibility, and commercial work.',
+    capabilities: ['sales.view', 'actions.view', 'approvals.view', 'documents.view'],
+  },
+  maintenance: {
+    label: 'Maintenance',
+    summary: 'Owns work orders, equipment follow-up, and maintenance closeout.',
+    capabilities: ['maintenance.view', 'operations.view', 'actions.view', 'receiving.view', 'approvals.view', 'documents.view'],
+  },
+  operations: {
+    label: 'Operations',
+    summary: 'Owns plant flow, queue management, and daily operational review.',
+    capabilities: ['operations.view', 'dqms.view', 'actions.view', 'receiving.view', 'approvals.view', 'documents.view', 'agent_ops.view'],
+  },
+  ceo: {
+    label: 'CEO',
+    summary: 'Owns strategy, oversight, and full cross-tenant visibility.',
+    capabilities: [...PLATFORM_ADMIN_CAPABILITIES, 'operations.view', 'dqms.view', 'maintenance.view'],
+  },
+  admin: {
+    label: 'Admin',
+    summary: 'Owns tenant setup, roles, connectors, and control-plane access.',
+    capabilities: [...PLATFORM_ADMIN_CAPABILITIES, 'operations.view', 'dqms.view', 'maintenance.view'],
   },
 }
 
@@ -376,9 +518,10 @@ export function normalizeWorkspaceRole(role?: string | null) {
 
 export function getCapabilityProfileForRole(role?: string | null): CapabilityProfile {
   const roleKey = normalizeWorkspaceRole(role) || 'member'
-  const profile = ROLE_CAPABILITY_PROFILES[roleKey] ?? ROLE_CAPABILITY_PROFILES.member
+  const canonicalRoleKey = ROLE_ALIASES[roleKey] ?? roleKey
+  const profile = ROLE_CAPABILITY_PROFILES[canonicalRoleKey] ?? ROLE_CAPABILITY_PROFILES[roleKey] ?? ROLE_CAPABILITY_PROFILES.member
   return {
-    roleKey,
+    roleKey: canonicalRoleKey,
     ...profile,
   }
 }
@@ -404,12 +547,430 @@ export type TeamMemberRow = {
   updated_at: string
 }
 
+export type AuditEventRow = {
+  event_id: string
+  workspace_id: string
+  actor: string
+  event_type: string
+  entity_type: string
+  entity_id: string
+  severity: string
+  summary: string
+  detail: string
+  payload?: Record<string, unknown>
+  created_at: string
+}
+
+export type WorkspaceModuleRow = {
+  module_id: string
+  name: string
+  category: string
+  maturity: string
+  route: string
+  summary: string
+  default_enabled: boolean
+  workspace_status: 'enabled' | 'pilot' | 'disabled' | string
+  enabled: boolean
+  source: string
+  config?: Record<string, unknown>
+  assignment_id?: string
+}
+
+export type WorkspaceDomainRow = {
+  domain_id: string
+  workspace_id: string
+  workspace_slug?: string
+  workspace_name?: string
+  hostname: string
+  scope: string
+  provider: string
+  runtime_target: string
+  desired_state: string
+  route_root: string
+  dns_status: string
+  tls_status: string
+  http_status: string
+  verified_at: string
+  deployment_url: string
+  last_deployed_at: string
+  notes: string
+  config?: Record<string, unknown>
+  live_url?: string
+  display_name?: string
+  proof_paths?: string[]
+  status?: string
+}
+
+// Keep the cloud topology payload available from this shared API module for
+// older call sites and external surfaces that still import it from here.
+export type CloudTopologyDomain = {
+  domainId: string
+  workspaceId: string
+  workspaceSlug: string
+  workspaceName: string
+  hostname: string
+  name: string
+  summary: string
+  scope: string
+  provider: string
+  runtimeTarget: string
+  desiredState: string
+  routeRoot: string
+  dnsStatus: string
+  tlsStatus: string
+  httpStatus: string
+  verifiedAt: string | null
+  deploymentUrl: string
+  lastDeployedAt: string | null
+  notes: string
+  config: Record<string, unknown>
+  liveUrl: string
+  displayName: string
+  proofPaths: string[]
+  managedBy: string[]
+  status: string
+}
+
+export type CloudTopologyPayload = {
+  resourceId: string
+  rootDomain: string
+  sharedAppHost: string
+  summary: {
+    count: number
+    readyCount: number
+    attentionCount: number
+    blockerCount: number
+  }
+  rows: CloudTopologyDomain[]
+}
+
+export type WorkspaceProfile = {
+  workspace_id?: string
+  workspace_slug?: string
+  workspace_name?: string
+  company?: string
+  preferred_package?: string
+  first_team?: string
+  systems?: string[]
+  goal?: string
+  onboarding_status?: string
+  config?: Record<string, unknown>
+  created_at?: string
+  updated_at?: string
+}
+
+export type PlatformControlPlanePayload = {
+  status?: string
+  tenant_state?: WorkspaceTenantState
+  workspace?: {
+    workspace_id?: string
+    workspace_slug?: string
+    workspace_name?: string
+    workspace_plan?: string
+    role?: string
+    display_name?: string
+  }
+  profile?: WorkspaceProfile | null
+  catalog?: {
+    module_count?: number
+  }
+  modules?: {
+    count?: number
+    enabled_count?: number
+    pilot_count?: number
+    disabled_count?: number
+    rows?: WorkspaceModuleRow[]
+  }
+  members?: {
+    count?: number
+    rows?: TeamMemberRow[]
+  }
+  domains?: {
+    count?: number
+    ready_count?: number
+    attention_count?: number
+    blocker_count?: number
+    rows?: WorkspaceDomainRow[]
+  }
+  audit_events?: {
+    count?: number
+    rows?: AuditEventRow[]
+  }
+}
+
+export type AgentTeamUnitRow = {
+  unit_id?: string
+  agent_id: string
+  name: string
+  role: string
+  mode: string
+  output_schema: string
+  write_scope: string
+  approval_gate: string
+  focus: string
+}
+
+export type AgentTeamRow = {
+  team_id: string
+  name: string
+  status: string
+  scaling_tier: string
+  mission: string
+  lead_agent: string
+  cadence: string
+  agents: AgentTeamUnitRow[]
+}
+
+export type AgentTeamRuntimeCrew = {
+  team_id?: string
+  name?: string
+  scaling_tier?: string
+  workspace?: string
+  runtime_lane?: string
+  execution_mode?: string
+  tool_count?: number
+  connector_tool_count?: number
+  tool_modes?: string[]
+  tool_scopes?: string[]
+  approval_gates?: string[]
+  required_capabilities?: string[]
+  write_policy?: string
+  guardrail_posture?: string
+  job_types?: string[]
+  last_run_at?: string
+  last_run_status?: string
+  current_user_can_view?: boolean
+  current_user_can_run?: boolean
+  current_user_can_approve?: boolean
+  current_user_can_take_over?: boolean
+}
+
+export type AgentTeamRuntimeContract = {
+  generated_at?: string
+  viewer?: {
+    role?: string
+    display_name?: string
+    capabilities?: string[]
+    can_run_jobs?: boolean
+    can_manage_runtime?: boolean
+    can_approve_guardrails?: boolean
+  }
+  summary?: {
+    workspace_count?: number
+    scheduler_backed_team_count?: number
+    connector_enabled_team_count?: number
+    approval_gate_count?: number
+    guarded_team_count?: number
+  }
+  crews?: AgentTeamRuntimeCrew[]
+}
+
+export type AgentOperatingManifestPayload = {
+  version?: string
+  tenantKey?: string
+  title?: string
+  summary?: string
+  managerMoves?: string[]
+  tools?: Array<{
+    id?: string
+    name?: string
+    category?: string
+    purpose?: string
+  }>
+  playbooks?: Array<{
+    id?: string
+    teamId?: string
+    name?: string
+    workspace?: string
+    leadRole?: string
+    mission?: string
+    outputs?: string[]
+    cadence?: string[]
+    tools?: Array<{
+      toolId?: string
+      mode?: string
+      scope?: string
+    }>
+    instructions?: string[]
+    escalateWhen?: string[]
+    writePolicy?: string
+    kpis?: Array<{
+      name?: string
+      target?: string
+    }>
+  }>
+}
+
+export type AgentTeamsPayload = {
+  status?: string
+  tenant_state?: WorkspaceTenantState
+  summary?: {
+    team_count?: number
+    shared_core_team_count?: number
+    client_pod_team_count?: number
+    autonomy_score?: number
+    autonomy_level?: string
+    manifest_version?: string
+    manifest_tool_count?: number
+    manifest_playbook_count?: number
+  }
+  teams?: AgentTeamRow[]
+  manifest?: AgentOperatingManifestPayload | null
+  gaps?: Array<{
+    gap_id?: string
+    severity?: string
+    problem?: string
+    next_step?: string
+  }>
+  next_moves?: string[]
+  runtime_contract?: AgentTeamRuntimeContract
+  scaling_model?: {
+    core_loop?: string[]
+    founder_focus?: string[]
+    rules?: string[]
+  }
+}
+
 export async function listTeamMembers() {
   return workspaceFetch<{
     status?: string
     count?: number
     rows: TeamMemberRow[]
   }>('/api/team/members')
+}
+
+export async function getPlatformControlPlane() {
+  return workspaceFetch<PlatformControlPlanePayload>('/api/platform/control-plane')
+}
+
+export async function getAgentTeams() {
+  return workspaceFetch<AgentTeamsPayload>('/api/agent-teams')
+}
+
+export async function updateWorkspaceModuleStatus(moduleId: string, payload: { status: 'enabled' | 'pilot' | 'disabled'; config?: Record<string, unknown> }) {
+  return workspaceFetch<{
+    status?: string
+    row?: WorkspaceModuleRow
+    control_plane?: PlatformControlPlanePayload
+  }>(`/api/platform/modules/${encodeURIComponent(moduleId)}`, {
+    method: 'POST',
+    body: JSON.stringify({
+      status: payload.status,
+      config: payload.config ?? {},
+    }),
+  })
+}
+
+export async function updateWorkspaceProfile(payload: {
+  company?: string
+  preferredPackage?: string
+  firstTeam?: string
+  systems?: string[]
+  goal?: string
+  onboardingStatus?: string
+  config?: Record<string, unknown>
+}) {
+  return workspaceFetch<{
+    status?: string
+    profile?: WorkspaceProfile | null
+    control_plane?: PlatformControlPlanePayload
+  }>('/api/platform/workspace-profile', {
+    method: 'POST',
+    body: JSON.stringify({
+      company: payload.company ?? '',
+      preferred_package: payload.preferredPackage ?? '',
+      first_team: payload.firstTeam ?? '',
+      systems: Array.isArray(payload.systems) ? payload.systems : [],
+      goal: payload.goal ?? '',
+      onboarding_status: payload.onboardingStatus ?? '',
+      config: payload.config ?? {},
+    }),
+  })
+}
+
+export async function updateWorkspaceDomain(
+  domainId: string,
+  payload: {
+    hostname?: string
+    scope?: string
+    provider?: string
+    runtimeTarget?: string
+    desiredState?: string
+    routeRoot?: string
+    notes?: string
+    deploymentUrl?: string
+    config?: Record<string, unknown>
+  },
+) {
+  return workspaceFetch<{
+    status?: string
+    row?: WorkspaceDomainRow
+    control_plane?: PlatformControlPlanePayload
+  }>(`/api/platform/domains/${encodeURIComponent(domainId)}`, {
+    method: 'POST',
+    body: JSON.stringify({
+      hostname: payload.hostname ?? '',
+      scope: payload.scope ?? '',
+      provider: payload.provider ?? '',
+      runtime_target: payload.runtimeTarget ?? '',
+      desired_state: payload.desiredState ?? '',
+      route_root: payload.routeRoot ?? '',
+      notes: payload.notes ?? '',
+      deployment_url: payload.deploymentUrl ?? '',
+      config: payload.config ?? {},
+    }),
+  })
+}
+
+export async function verifyWorkspaceDomain(domainId: string, routes?: string[]) {
+  return workspaceFetch<{
+    status?: string
+    row?: WorkspaceDomainRow
+    control_plane?: PlatformControlPlanePayload
+  }>(`/api/platform/domains/${encodeURIComponent(domainId)}/verify`, {
+    method: 'POST',
+    body: JSON.stringify({
+      routes: Array.isArray(routes) ? routes : [],
+    }),
+  })
+}
+
+export async function verifyAllWorkspaceDomains(routes?: string[]) {
+  return workspaceFetch<{
+    status?: string
+    verified_count?: number
+    rows?: WorkspaceDomainRow[]
+    control_plane?: PlatformControlPlanePayload
+  }>('/api/platform/domains/verify-all', {
+    method: 'POST',
+    body: JSON.stringify({
+      routes: Array.isArray(routes) ? routes : [],
+    }),
+  })
+}
+
+export async function triggerPreviewDeploy(mode: 'claimable_preview' | 'preview' = 'claimable_preview') {
+  return workspaceFetch<{
+    status?: string
+    result?: Record<string, unknown>
+  }>('/api/cloud/deployments/preview', {
+    method: 'POST',
+    body: JSON.stringify({
+      mode,
+    }),
+  })
+}
+
+export async function triggerProductionDeploy() {
+  return workspaceFetch<{
+    status?: string
+    result?: Record<string, unknown>
+  }>('/api/cloud/deployments/production', {
+    method: 'POST',
+    body: JSON.stringify({
+      mode: 'production',
+    }),
+  })
 }
 
 export async function inviteTeamMember(payload: {
@@ -503,11 +1064,54 @@ export async function runDefaultAgentJobs(jobTypes?: string[]) {
     count?: number
     rows?: AgentRunRow[]
     jobs?: AgentJobTemplate[]
+    queued_count?: number
+    claimed_count?: number
+    processed_count?: number
+    mode?: string
+    dispatch?: Record<string, unknown>
   }>('/api/agent-runs/run-defaults', {
     method: 'POST',
     body: JSON.stringify({
       source: 'manual_batch',
       job_types: jobTypes ?? [],
+    }),
+  })
+}
+
+export async function queueDefaultAgentJobs(jobTypes?: string[]) {
+  return workspaceFetch<{
+    status?: string
+    count?: number
+    rows?: AgentRunRow[]
+    jobs?: AgentJobTemplate[]
+    queued_count?: number
+    mode?: string
+    dispatch?: Record<string, unknown>
+  }>('/api/agent-runs/run-defaults', {
+    method: 'POST',
+    body: JSON.stringify({
+      source: 'manual_queue',
+      job_types: jobTypes ?? [],
+      enqueue_only: true,
+    }),
+  })
+}
+
+export async function processAgentRunQueue(jobTypes?: string[], limit = 8) {
+  return workspaceFetch<{
+    status?: string
+    count?: number
+    rows?: AgentRunRow[]
+    jobs?: AgentJobTemplate[]
+    claimed_count?: number
+    processed_count?: number
+    mode?: string
+  }>('/api/agent-runs/process-queue', {
+    method: 'POST',
+    body: JSON.stringify({
+      source: 'manual_worker',
+      job_types: jobTypes ?? [],
+      limit,
     }),
   })
 }
@@ -588,12 +1192,16 @@ export async function importLeadPipeline(rows: Array<Record<string, unknown>>, c
 export type WorkspaceLeadRow = {
   lead_id: string
   company_name: string
+  archetype?: string
   stage: string
   status: string
   owner: string
   campaign_goal: string
   service_pack: string
   wedge_product: string
+  starter_modules?: string[]
+  semi_products?: string[]
+  discovery_questions?: string[]
   contact_email: string
   contact_phone: string
   website: string
@@ -621,6 +1229,141 @@ export type WorkspaceTaskRow = {
   notes: string
   created_at: string
   updated_at: string
+}
+
+export type ApprovalRow = {
+  approval_id: string
+  created_at: string
+  title: string
+  summary: string
+  approval_gate: string
+  requested_by: string
+  owner: string
+  status: string
+  due: string
+  related_route: string
+  related_entity: string
+  evidence_link: string
+  payload?: Record<string, unknown>
+}
+
+export type ApprovalSummary = {
+  approval_count?: number
+  by_status?: Record<string, number>
+}
+
+export type DecisionRow = {
+  decision_id: string
+  created_at: string
+  title: string
+  context: string
+  decision_text: string
+  rationale: string
+  owner: string
+  status: string
+  due: string
+  related_route: string
+}
+
+export type DecisionSummary = {
+  decision_count?: number
+  by_status?: Record<string, number>
+  top_owners?: Array<{
+    owner?: string
+    decision_count?: number
+  }>
+}
+
+export type ExceptionRow = {
+  exception_id: string
+  source_type: string
+  priority: string
+  status: string
+  owner: string
+  title: string
+  summary: string
+  entity: string
+  next_action: string
+  due: string
+  route: string
+}
+
+export type ExceptionSummary = {
+  total_items?: number
+  by_source?: Record<string, number>
+  by_priority?: Record<string, number>
+}
+
+export async function listDecisionEntries(status?: string, owner?: string, limit = 100) {
+  const params = new URLSearchParams()
+  if (status) {
+    params.set('status', status)
+  }
+  if (owner) {
+    params.set('owner', owner)
+  }
+  params.set('limit', String(limit))
+  return workspaceFetch<{
+    status?: string
+    count?: number
+    summary?: DecisionSummary
+    rows?: DecisionRow[]
+  }>(`/api/decisions?${params.toString()}`)
+}
+
+export async function listApprovalEntries(limit = 100, status?: string) {
+  const params = new URLSearchParams()
+  params.set('limit', String(limit))
+  if (status) {
+    params.set('status', status)
+  }
+  return workspaceFetch<{
+    status?: string
+    count?: number
+    summary?: ApprovalSummary
+    rows?: ApprovalRow[]
+  }>(`/api/approvals?${params.toString()}`)
+}
+
+export async function createDecisionEntry(payload: {
+  title: string
+  context?: string
+  decision_text: string
+  rationale?: string
+  owner?: string
+  status?: string
+  due?: string
+  related_route?: string
+}) {
+  return workspaceFetch<{
+    status?: string
+    message?: string
+    row?: DecisionRow
+    rows?: DecisionRow[]
+    summary?: DecisionSummary
+  }>('/api/decisions', {
+    method: 'POST',
+    body: JSON.stringify({
+      ...payload,
+      context: payload.context ?? '',
+      rationale: payload.rationale ?? '',
+      owner: payload.owner ?? 'Management',
+      status: payload.status ?? 'open',
+      due: payload.due ?? '',
+      related_route: payload.related_route ?? '/app/workbench',
+    }),
+  })
+}
+
+export async function listExceptionRows(limit = 100) {
+  const params = new URLSearchParams()
+  params.set('limit', String(limit))
+  return workspaceFetch<{
+    status?: string
+    count?: number
+    summary?: ExceptionSummary
+    rows?: ExceptionRow[]
+  }>(`/api/exceptions?${params.toString()}`)
 }
 
 export async function listWorkspaceLeadPipeline(stage?: string, status?: string, limit = 200) {
@@ -715,11 +1458,100 @@ export async function updateWorkspaceTask(
   })
 }
 
+export async function applyWorkforceAutomation(payload?: {
+  apply_assignments?: boolean
+  seed_review_cycles?: boolean
+  queue_default_jobs?: boolean
+  process_queue?: boolean
+  limit?: number
+  source?: string
+}) {
+  return workspaceFetch<{
+    status?: string
+    message?: string
+    applied_assignment_count?: number
+    seeded_review_count?: number
+    queued_job_count?: number
+    processed_job_count?: number
+    assignment_rows?: WorkspaceTaskRow[]
+    review_rows?: WorkspaceTaskRow[]
+    registry?: Record<string, unknown>
+  }>('/api/workforce/automation/apply', {
+    method: 'POST',
+    body: JSON.stringify({
+      apply_assignments: payload?.apply_assignments ?? true,
+      seed_review_cycles: payload?.seed_review_cycles ?? true,
+      queue_default_jobs: payload?.queue_default_jobs ?? false,
+      process_queue: payload?.process_queue ?? false,
+      limit: payload?.limit ?? 8,
+      source: payload?.source ?? 'supermega_dev',
+    }),
+  })
+}
+
 export async function removeWorkspaceTask(taskId: string) {
   return workspaceFetch<{
     status?: string
     removed?: boolean
   }>(`/api/workspace-tasks/${encodeURIComponent(taskId)}`, {
     method: 'DELETE',
+  })
+}
+
+export async function createApprovalEntry(payload: {
+  title: string
+  summary: string
+  approval_gate: string
+  requested_by: string
+  owner: string
+  status?: string
+  due?: string
+  related_route?: string
+  related_entity?: string
+  evidence_link?: string
+  payload?: Record<string, unknown>
+}) {
+  return workspaceFetch<{
+    status?: string
+    message?: string
+    row?: ApprovalRow
+    rows?: ApprovalRow[]
+    summary?: {
+      approval_count?: number
+      by_status?: Record<string, number>
+    }
+  }>('/api/approvals', {
+    method: 'POST',
+    body: JSON.stringify({
+      ...payload,
+      status: payload.status ?? 'pending',
+      due: payload.due ?? '',
+      related_route: payload.related_route ?? '/app/actions',
+      related_entity: payload.related_entity ?? '',
+      evidence_link: payload.evidence_link ?? '',
+    }),
+  })
+}
+
+export async function updateApprovalEntryStatus(
+  approvalId: string,
+  payload: {
+    status?: string
+    owner?: string
+    note?: string
+  },
+) {
+  return workspaceFetch<{
+    status?: string
+    message?: string
+    row?: ApprovalRow
+    rows?: ApprovalRow[]
+    summary?: {
+      approval_count?: number
+      by_status?: Record<string, number>
+    }
+  }>(`/api/approvals/${encodeURIComponent(approvalId)}/status`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
   })
 }

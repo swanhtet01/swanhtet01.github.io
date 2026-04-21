@@ -14,6 +14,7 @@ services:
       SUPERMEGA_APP_PASSWORD: supermega-demo
       SUPERMEGA_APP_DISPLAY_NAME: Owner
       SUPERMEGA_APP_ROLE: owner
+      SUPERMEGA_INTERNAL_CRON_TOKEN: supermega-internal-demo-token
     volumes:
       - supermega-app-data:/app/data
     restart: unless-stopped
@@ -31,14 +32,23 @@ services:
       - /app/config.example.json
       - --repo-root
       - /app
+      - --base-url
+      - http://supermega-app:8080
       - --interval-minutes
       - "60"
+      - --poll-seconds
+      - "30"
       - --max-cycles
       - "0"
+      - --enqueue-defaults
     environment:
       SUPERMEGA_PILOT_DATA: /app/data/pilot-data
+      SUPERMEGA_RUNTIME_BASE_URL: http://supermega-app:8080
+      SUPERMEGA_INTERNAL_CRON_TOKEN: supermega-internal-demo-token
     volumes:
       - supermega-app-data:/app/data
+    depends_on:
+      - supermega-app
     restart: unless-stopped
 
 volumes:

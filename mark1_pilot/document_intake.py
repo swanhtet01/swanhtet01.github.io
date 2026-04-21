@@ -7,9 +7,6 @@ import re
 from pathlib import Path
 from typing import Any
 
-from openpyxl import load_workbook
-from pypdf import PdfReader
-
 
 def _decode_bytes(content_base64: str) -> bytes:
     text = str(content_base64 or "").strip()
@@ -19,6 +16,8 @@ def _decode_bytes(content_base64: str) -> bytes:
 
 
 def _extract_text_from_pdf(data: bytes) -> tuple[str, dict[str, Any]]:
+    from pypdf import PdfReader
+
     reader = PdfReader(io.BytesIO(data))
     pages: list[str] = []
     for page in reader.pages[:5]:
@@ -30,6 +29,8 @@ def _extract_text_from_pdf(data: bytes) -> tuple[str, dict[str, Any]]:
 
 
 def _extract_text_from_workbook(data: bytes) -> tuple[str, dict[str, Any]]:
+    from openpyxl import load_workbook
+
     workbook = load_workbook(io.BytesIO(data), read_only=True, data_only=True)
     sheet_summaries: list[dict[str, Any]] = []
     lines: list[str] = []

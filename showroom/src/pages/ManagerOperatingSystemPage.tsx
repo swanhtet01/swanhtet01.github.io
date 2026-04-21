@@ -242,7 +242,7 @@ export function ManagerOperatingSystemPage() {
       <section className="sm-surface p-6">
         <p className="text-sm text-[var(--sm-muted)]">Login is required to open the manager operating system.</p>
         <div className="mt-4 flex flex-wrap gap-3">
-          <Link className="sm-button-primary" to="/login?next=/app/manager-system">
+          <Link className="sm-button-primary" to="/login?next=/app/plant-manager">
             Login
           </Link>
           <Link className="sm-button-secondary" to="/demo-center">

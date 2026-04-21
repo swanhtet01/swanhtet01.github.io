@@ -165,18 +165,18 @@ def _free_tools(priorities: list[str], sector: str) -> list[dict[str, str]]:
 
 def _agent_teams(modules: list[str], sector: str) -> list[dict[str, str]]:
     teams = [
-        {"name": "Command Office", "role": "Owns director visibility, priorities, and operating reviews."},
-        {"name": "Client Delivery", "role": "Turns reusable templates into a live client rollout."},
+        {"name": "Founder Control", "role": "Owns founder visibility, priorities, and operating reviews."},
+        {"name": "Client Onboarding Pod", "role": "Turns reusable templates into a live client rollout."},
         {"name": "R&D Lab", "role": "Tests new tools, UX, and workflow upgrades before productizing them."},
         {"name": "Platform Engineering", "role": "Owns connectors, APIs, state, evals, and deployment."},
     ]
     if modules:
         teams.insert(
             1,
-            {"name": "Control Tower", "role": "Runs live operational queues for actions, suppliers, receiving, inventory, quality, and cash."},
+            {"name": "Client Operations Pod", "role": "Runs live operational queues for actions, suppliers, receiving, inventory, quality, and cash."},
         )
     if sector in {"distribution", "trading", "services", "mixed"} or "Sales Signal" in modules:
-        teams.append({"name": "Growth Studio", "role": "Turns proof tools and outreach into qualified pilot demand."})
+        teams.append({"name": "Revenue Pod", "role": "Turns proof tools and outreach into qualified pilot demand."})
     return teams
 
 

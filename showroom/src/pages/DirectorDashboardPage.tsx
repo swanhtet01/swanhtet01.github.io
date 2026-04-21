@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import { PageIntro } from '../components/PageIntro'
+import { getTenantConfig } from '../lib/tenantConfig'
+import { YANGON_TYRE_DATA_PROFILE } from '../lib/yangonTyreDataProfile'
 import { checkWorkspaceHealth, getCapabilityProfileForRole, getWorkspaceSession, sessionHasCapability, workspaceFetch } from '../lib/workspaceApi'
 
 type SummaryPayload = {
@@ -54,6 +56,7 @@ type RoleRow = {
 }
 
 export function DirectorDashboardPage() {
+  const tenant = getTenantConfig()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [summary, setSummary] = useState<SummaryPayload | null>(null)
@@ -154,6 +157,31 @@ export function DirectorDashboardPage() {
           <p className="mt-3 text-3xl font-bold text-white">{leads.length}</p>
         </div>
       </section>
+
+      {tenant.key === 'ytf-plant-a' ? (
+        <section className="grid gap-4 md:grid-cols-4">
+          <div className="sm-chip text-white">
+            <p className="sm-kicker text-[var(--sm-accent)]">2024 output</p>
+            <p className="mt-2 text-lg font-bold">{YANGON_TYRE_DATA_PROFILE.annualBiasOutput2024.toLocaleString()} tyres</p>
+            <p className="mt-2 text-sm text-[var(--sm-muted)]">Bias tyre output from the local monthly workbook.</p>
+          </div>
+          <div className="sm-chip text-white">
+            <p className="sm-kicker text-[var(--sm-accent-alt)]">Average B+R</p>
+            <p className="mt-2 text-lg font-bold">{YANGON_TYRE_DATA_PROFILE.annualBPlusRRate2024}%</p>
+            <p className="mt-2 text-sm text-[var(--sm-muted)]">Worst month: {YANGON_TYRE_DATA_PROFILE.worstMonth2024.month} at {YANGON_TYRE_DATA_PROFILE.worstMonth2024.bPlusRRate}%.</p>
+          </div>
+          <div className="sm-chip text-white">
+            <p className="sm-kicker text-[var(--sm-accent)]">Best month</p>
+            <p className="mt-2 text-lg font-bold">{YANGON_TYRE_DATA_PROFILE.bestMonth2024.month}</p>
+            <p className="mt-2 text-sm text-[var(--sm-muted)]">{YANGON_TYRE_DATA_PROFILE.bestMonth2024.totalOutput.toLocaleString()} units at {YANGON_TYRE_DATA_PROFILE.bestMonth2024.bPlusRRate}% B+R.</p>
+          </div>
+          <div className="sm-chip text-white">
+            <p className="sm-kicker text-[var(--sm-accent-alt)]">Top 2025 SKU</p>
+            <p className="mt-2 text-lg font-bold">{YANGON_TYRE_DATA_PROFILE.focusProducts2025[0].name}</p>
+            <p className="mt-2 text-sm text-[var(--sm-muted)]">{YANGON_TYRE_DATA_PROFILE.focusProducts2025[0].units.toLocaleString()} units across weeks 01-06.</p>
+          </div>
+        </section>
+      ) : null}
 
       <section className="grid gap-6 lg:grid-cols-[1fr_1fr]">
         <article className="sm-surface p-6">

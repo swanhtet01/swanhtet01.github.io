@@ -1,0 +1,17 @@
+{
+  "name": "supermega-platform",
+  "private": true,
+  "version": "0.0.0",
+  "scripts": {
+    "build": "npm --prefix showroom ci && npm --prefix showroom run build",
+    "dev": "npm --prefix showroom run dev",
+    "bundle:preview": "python3 tools/package_preview_bundle.py",
+    "deploy:preview": "bash tools/deploy_preview.sh",
+    "vercel:pull": "npx vercel pull --yes",
+    "vercel:build": "npx vercel build --yes",
+    "vercel:deploy": "npx vercel deploy --prebuilt -y",
+    "vercel:deploy:prod": "npx vercel deploy --prebuilt --prod -y",
+    "smoke:local": "bash tools/run_local_smoke.sh",
+    "smoke:public": "python3 tools/smoke_test_public_site.py"
+  }
+}

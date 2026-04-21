@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link, NavLink, Outlet } from 'react-router-dom'
 
 import { getTenantBrandLabel, getTenantConfig } from '../lib/tenantConfig'
-import { BrandMark, BrandWordmark } from './Brand'
+import { BrandLockup } from './Brand'
 
 const navClassName = ({ isActive }: { isActive: boolean }) =>
   `rounded-full px-4 py-2 text-sm font-semibold transition ${
@@ -15,8 +15,10 @@ export function SiteFrame() {
   const [menuOpen, setMenuOpen] = useState(false)
   const tenant = getTenantConfig()
   const activeNavItems = tenant.navItems
-  const primaryCta = tenant.showBookCta ? { label: tenant.bookCtaLabel, to: '/contact' } : tenant.homePrimaryCta
-  const footerLink = tenant.key === 'default' ? { label: 'Team app', to: 'https://app.supermega.dev', external: true } : { label: 'Team login', to: '/login', external: false }
+  const primaryCta =
+    tenant.key === 'default' ? tenant.homePrimaryCta : tenant.showBookCta ? { label: tenant.bookCtaLabel, to: '/contact' } : tenant.homePrimaryCta
+  const footerLink = tenant.key === 'default' ? null : { label: 'Team login', to: '/login', external: false }
+  const footerNavItems = tenant.key === 'default' ? [] : activeNavItems
   const brandLabel = tenant.key === 'default' ? '' : getTenantBrandLabel(tenant)
 
   return (
@@ -27,11 +29,11 @@ export function SiteFrame() {
       <div className="fixed inset-x-0 top-0 z-40 border-b border-white/8 bg-[rgba(4,8,16,0.72)] backdrop-blur-xl">
         <nav className="mx-auto flex w-full max-w-7xl items-center justify-between px-4 py-3 lg:px-8">
           <NavLink className="flex items-center gap-3" to="/">
-            <BrandMark className="h-10 w-10" />
-            <span className="flex flex-col">
-              <BrandWordmark className="text-lg text-white" />
-              {brandLabel ? <span className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[var(--sm-muted)]">{brandLabel}</span> : null}
-            </span>
+            <BrandLockup
+              markClassName="h-10 w-10"
+              meta={brandLabel || tenant.brandTagline}
+              wordmarkClassName="text-lg text-white"
+            />
           </NavLink>
           <button
             aria-controls="site-menu"
@@ -78,7 +80,7 @@ export function SiteFrame() {
         <div className="mx-auto flex w-full max-w-7xl flex-col gap-4 px-4 py-6 text-sm text-[var(--sm-muted)] lg:flex-row lg:items-center lg:justify-between lg:px-8">
           <p>{tenant.footerText}</p>
           <div className="flex flex-wrap gap-4">
-            {activeNavItems.map((item) => (
+            {footerNavItems.map((item) => (
               <Link className="sm-link" key={item.to} to={item.to}>
                 {item.label}
               </Link>
@@ -86,15 +88,11 @@ export function SiteFrame() {
             <Link className="sm-link" to={primaryCta.to}>
               {primaryCta.label}
             </Link>
-            {footerLink.external ? (
-              <a className="sm-link" href={footerLink.to} rel="noreferrer" target="_blank">
-                {footerLink.label}
-              </a>
-            ) : (
+            {footerLink ? (
               <Link className="sm-link" to={footerLink.to}>
                 {footerLink.label}
               </Link>
-            )}
+            ) : null}
           </div>
         </div>
       </footer>

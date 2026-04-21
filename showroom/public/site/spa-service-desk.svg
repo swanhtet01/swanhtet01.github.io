@@ -1,0 +1,66 @@
+<svg width="1200" height="840" viewBox="0 0 1200 840" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1200" height="840" rx="40" fill="#07111B"/>
+  <rect x="30" y="30" width="1140" height="780" rx="30" fill="url(#paint0_linear)"/>
+  <rect x="70" y="76" width="1060" height="72" rx="20" fill="#0D1824"/>
+  <circle cx="112" cy="112" r="10" fill="#F28B82"/>
+  <circle cx="144" cy="112" r="10" fill="#FBCB6B"/>
+  <circle cx="176" cy="112" r="10" fill="#8AD7A8"/>
+  <text x="220" y="120" fill="#F4F7FA" font-family="Arial, sans-serif" font-size="30" font-weight="700">Spa Service Desk</text>
+  <text x="952" y="120" fill="#7BC4B0" font-family="Arial, sans-serif" font-size="22" font-weight="700">Daily Close Ready</text>
+
+  <rect x="70" y="182" width="248" height="588" rx="28" fill="#0E1823"/>
+  <text x="104" y="236" fill="#7BC4B0" font-family="Arial, sans-serif" font-size="22" font-weight="700">Checkout</text>
+  <rect x="102" y="268" width="184" height="104" rx="20" fill="#132230"/>
+  <text x="124" y="310" fill="#F4F7FA" font-family="Arial, sans-serif" font-size="20" font-weight="700">Aroma Reset</text>
+  <text x="124" y="340" fill="#91A4B8" font-family="Arial, sans-serif" font-size="18">90 min | THB 2,400</text>
+  <rect x="102" y="392" width="184" height="104" rx="20" fill="#122533"/>
+  <text x="124" y="434" fill="#F4F7FA" font-family="Arial, sans-serif" font-size="20" font-weight="700">Glow Facial</text>
+  <text x="124" y="464" fill="#91A4B8" font-family="Arial, sans-serif" font-size="18">75 min | THB 2,100</text>
+  <rect x="102" y="516" width="184" height="122" rx="20" fill="#162C3A"/>
+  <text x="124" y="556" fill="#D3A06D" font-family="Arial, sans-serif" font-size="18" font-weight="700">Collect now</text>
+  <text x="124" y="602" fill="#F4F7FA" font-family="Arial, sans-serif" font-size="36" font-weight="800">THB 2,950</text>
+  <rect x="102" y="662" width="184" height="60" rx="18" fill="#7BC4B0"/>
+  <text x="144" y="700" fill="#0B151D" font-family="Arial, sans-serif" font-size="22" font-weight="800">Add checkout</text>
+
+  <rect x="350" y="182" width="424" height="276" rx="28" fill="#0E1823"/>
+  <text x="384" y="236" fill="#7BC4B0" font-family="Arial, sans-serif" font-size="22" font-weight="700">Today's Ledger</text>
+  <rect x="382" y="270" width="360" height="68" rx="18" fill="#132230"/>
+  <text x="408" y="312" fill="#F4F7FA" font-family="Arial, sans-serif" font-size="20" font-weight="700">Rina P. | Aroma Reset Massage</text>
+  <text x="676" y="312" fill="#8AD7A8" font-family="Arial, sans-serif" font-size="20" font-weight="700">+ THB 2,650</text>
+  <rect x="382" y="354" width="360" height="68" rx="18" fill="#132230"/>
+  <text x="408" y="396" fill="#F4F7FA" font-family="Arial, sans-serif" font-size="20" font-weight="700">Laundry pickup</text>
+  <text x="676" y="396" fill="#F6B2A8" font-family="Arial, sans-serif" font-size="20" font-weight="700">- THB 420</text>
+  <rect x="350" y="478" width="424" height="292" rx="28" fill="#0E1823"/>
+  <text x="384" y="532" fill="#D3A06D" font-family="Arial, sans-serif" font-size="22" font-weight="700">Daily Accounting</text>
+  <rect x="382" y="566" width="160" height="148" rx="22" fill="#122533"/>
+  <text x="406" y="610" fill="#91A4B8" font-family="Arial, sans-serif" font-size="18">Collected</text>
+  <text x="406" y="658" fill="#F4F7FA" font-family="Arial, sans-serif" font-size="34" font-weight="800">THB 5,250</text>
+  <rect x="566" y="566" width="176" height="148" rx="22" fill="#122533"/>
+  <text x="590" y="610" fill="#91A4B8" font-family="Arial, sans-serif" font-size="18">Deposit target</text>
+  <text x="590" y="658" fill="#F4F7FA" font-family="Arial, sans-serif" font-size="34" font-weight="800">THB 1,830</text>
+
+  <rect x="806" y="182" width="324" height="276" rx="28" fill="#0E1823"/>
+  <text x="840" y="236" fill="#7BC4B0" font-family="Arial, sans-serif" font-size="22" font-weight="700">Room Flow</text>
+  <rect x="838" y="270" width="260" height="72" rx="18" fill="#132230"/>
+  <text x="862" y="312" fill="#F4F7FA" font-family="Arial, sans-serif" font-size="20" font-weight="700">Alicia T. | Room 2</text>
+  <rect x="1000" y="286" width="72" height="32" rx="16" fill="#7BC4B0" fill-opacity="0.18"/>
+  <text x="1014" y="308" fill="#F4F7FA" font-family="Arial, sans-serif" font-size="14" font-weight="700">CLOSE</text>
+  <rect x="838" y="358" width="260" height="72" rx="18" fill="#132230"/>
+  <text x="862" y="400" fill="#F4F7FA" font-family="Arial, sans-serif" font-size="20" font-weight="700">Mina K. | Room 1</text>
+  <rect x="1008" y="374" width="64" height="32" rx="16" fill="#D3A06D" fill-opacity="0.2"/>
+  <text x="1018" y="396" fill="#F4F7FA" font-family="Arial, sans-serif" font-size="14" font-weight="700">BOOKED</text>
+
+  <rect x="806" y="478" width="324" height="292" rx="28" fill="#0E1823"/>
+  <text x="840" y="532" fill="#D3A06D" font-family="Arial, sans-serif" font-size="22" font-weight="700">AI Workers</text>
+  <rect x="838" y="566" width="260" height="56" rx="18" fill="#132230"/>
+  <text x="860" y="601" fill="#F4F7FA" font-family="Arial, sans-serif" font-size="18" font-weight="700">Daily Close Clerk</text>
+  <rect x="838" y="638" width="260" height="56" rx="18" fill="#132230"/>
+  <text x="860" y="673" fill="#F4F7FA" font-family="Arial, sans-serif" font-size="18" font-weight="700">Booking Concierge</text>
+
+  <defs>
+    <linearGradient id="paint0_linear" x1="600" y1="30" x2="600" y2="810" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0B1622"/>
+      <stop offset="1" stop-color="#101B28"/>
+    </linearGradient>
+  </defs>
+</svg>

@@ -50,7 +50,7 @@ const MODULE_REASONS: Record<string, string> = {
   'Supplier Watch': 'Flags delay, customs, documentation, and supplier-payment risk before they hit operations.',
   'Receiving Control': 'Turns inbound receipt, variance, and hold status into one working control board.',
   'Inventory Pulse': 'Shows available stock, reorder pressure, and warehouse risk without waiting for a full ERP rollout.',
-  'Quality Closeout': 'Moves incidents from report-only into containment, CAPA, and closeout discipline.',
+  'DQMS and Quality Methods': 'Moves incidents from report-only into containment, CAPA, KPI review, and structured root-cause discipline.',
   'Cash Watch': 'Puts overdue, promised payment, and follow-up into one finance control surface.',
   'Production Pulse': 'Converts daily shift and downtime noise into a usable manager execution view.',
   'Sales Signal': 'Converts market and distributor updates into one commercial watch layer.',
@@ -63,7 +63,7 @@ const PRIORITY_TO_MODULE: Record<SolutionPriority, string> = {
   supplier: 'Supplier Watch',
   receiving: 'Receiving Control',
   inventory: 'Inventory Pulse',
-  quality: 'Quality Closeout',
+  quality: 'DQMS and Quality Methods',
   cash: 'Cash Watch',
   sales: 'Sales Signal',
   production: 'Production Pulse',
@@ -92,7 +92,7 @@ export function buildLocalSolutionBlueprint(request: SolutionArchitectRequest): 
   request.priorities.forEach((priority) => appendUnique(recommendedModules, PRIORITY_TO_MODULE[priority]))
 
   if (isFactory) {
-    ;['Receiving Control', 'Inventory Pulse', 'Supplier Watch', 'Quality Closeout', 'Production Pulse'].forEach((item) =>
+    ;['Receiving Control', 'Inventory Pulse', 'Supplier Watch', 'DQMS and Quality Methods', 'Production Pulse'].forEach((item) =>
       appendUnique(recommendedModules, item),
     )
   } else if (request.sector === 'distribution') {
@@ -127,19 +127,19 @@ export function buildLocalSolutionBlueprint(request: SolutionArchitectRequest): 
   freeTools.push({ name: 'Action Board', reason: 'Best universal proof tool because it turns messy updates into a usable board.' })
 
   const agentTeams = [
-    { name: 'Command Office', role: 'Owns director visibility, priorities, and review rhythm.' },
-    { name: 'Control Tower', role: 'Runs the live queues for actions, suppliers, receiving, inventory, quality, and cash.' },
-    { name: 'Client Delivery', role: 'Turns reusable templates into a live client rollout.' },
+    { name: 'Founder Control', role: 'Owns founder visibility, priorities, and review rhythm.' },
+    { name: 'Client Operations Pod', role: 'Runs the live queues for actions, suppliers, receiving, inventory, quality, and cash.' },
+    { name: 'Client Onboarding Pod', role: 'Turns reusable templates into a live client rollout.' },
     { name: 'R&D Lab', role: 'Tests new tools, UX, and workflow upgrades before productizing them.' },
     { name: 'Platform Engineering', role: 'Owns connectors, APIs, state, evals, and deployment.' },
   ]
   if (isCommercial || request.priorities.includes('sales')) {
-    agentTeams.push({ name: 'Growth Studio', role: 'Converts proof tools and outreach into pilot demand.' })
+    agentTeams.push({ name: 'Revenue Pod', role: 'Converts proof tools and outreach into pilot demand.' })
   }
 
   const implementationOrder = ['Action OS']
   if (isFactory) {
-    ;['Receiving Control', 'Inventory Pulse', 'Supplier Watch', 'Quality Closeout', 'Production Pulse'].forEach((item) =>
+    ;['Receiving Control', 'Inventory Pulse', 'Supplier Watch', 'DQMS and Quality Methods', 'Production Pulse'].forEach((item) =>
       appendUnique(implementationOrder, item),
     )
   } else {

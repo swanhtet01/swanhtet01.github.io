@@ -1,0 +1,46 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "version": 2,
+  "builds": [
+    {
+      "src": "api_app.py",
+      "use": "@vercel/python",
+      "config": {
+        "includeFiles": [
+          "api-static/**",
+          "agent_os/resources/**",
+          "agent_os/workforce/**",
+          "config.example.json",
+          "data/**",
+          "pilot-data/**",
+          "Super Mega Inc/runbooks/**",
+          "Super Mega Inc/sales/**",
+          "tools/check_supermega_domain.py",
+          "tools/deploy_claimable_preview.sh",
+          "tools/deploy_preview.sh",
+          "tools/package_preview_bundle.py"
+        ]
+      }
+    },
+    {
+      "src": "showroom/package.json",
+      "use": "@vercel/static-build",
+      "config": {
+        "distDir": "dist"
+      }
+    }
+  ],
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "/api_app.py"
+    },
+    {
+      "handle": "filesystem"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/api_app.py"
+    }
+  ]
+}
