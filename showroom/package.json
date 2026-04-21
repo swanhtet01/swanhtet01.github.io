@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite --configLoader runner",
-    "build": "tsc -b && vite build --configLoader runner && node ./scripts/prepare-static-routes.mjs",
+    "build": "node ./scripts/build-showroom.mjs",
     "lint": "eslint src scripts eslint.config.js",
     "preview": "vite preview --configLoader runner"
   },
@@ -33,5 +33,8 @@
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.48.0",
     "vite": "^7.3.1"
+  },
+  "optionalDependencies": {
+    "@rollup/rollup-linux-x64-gnu": "4.59.0"
   }
 }
