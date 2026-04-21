@@ -10,7 +10,6 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_OUTPUT = Path("/tmp/supermega-platform-preview.tgz")
 DEFAULT_PATHS = [
     "api_app.py",
-    "api-static",
     "package.json",
     "requirements.txt",
     "vercel.json",
@@ -25,6 +24,13 @@ DEFAULT_PATHS = [
     "Super Mega Inc/runbooks",
 ]
 EXCLUDED_PARTS = {"node_modules", ".git", ".venv-linux", "venv", "__pycache__", "dist"}
+EXCLUDED_GLOBS = {
+    "showroom/public/site/*.png",
+    "showroom/public/site/shots/*",
+    "tools/run_local_*.sh",
+    "tools/run_local_*.ps1",
+    "tools/smoke_test_*.py",
+}
 
 
 def _collect_files(paths: list[str]) -> list[str]:
@@ -34,6 +40,8 @@ def _collect_files(paths: list[str]) -> list[str]:
     for line in output.splitlines():
         pure_path = PurePosixPath(line)
         if any(part in EXCLUDED_PARTS for part in pure_path.parts):
+            continue
+        if any(pure_path.match(pattern) for pattern in EXCLUDED_GLOBS):
             continue
         files.append(line)
     return files
