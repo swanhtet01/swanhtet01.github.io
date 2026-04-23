@@ -1,0 +1,2642 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Director's Manual — Yangon Tyre Factory</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Playfair+Display:ital,wght@0,700;0,900;1,700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js"></script>
+<style>
+  :root {
+    --bg: #faf8f4;
+    --surface: #ffffff;
+    --border: #d8cfc0;
+    --text: #1a1209;
+    --text-muted: #6b5c45;
+    --accent: #8b1a1a;
+    --accent-light: #f5e6e6;
+    --link: #1a4a8b;
+    --sidebar-bg: #f2ede4;
+    --sidebar-width: 280px;
+    --header-h: 56px;
+    --chapter-num: #b5600b;
+    --rule: #c8bba6;
+    --code-bg: #f0ebe2;
+    --callout-bg: #fef9ee;
+    --callout-border: #e8c84a;
+    --note-bg: #eef3fc;
+    --note-border: #3a6abf;
+  }
+  [data-theme="dark"] {
+    --bg: #12100d;
+    --surface: #1c1913;
+    --border: #3a3228;
+    --text: #e8dfd0;
+    --text-muted: #9e8e78;
+    --accent: #e05555;
+    --accent-light: #2a1515;
+    --link: #7baae8;
+    --sidebar-bg: #181510;
+    --chapter-num: #e0902a;
+    --rule: #3a3228;
+    --code-bg: #221e18;
+    --callout-bg: #1e1b0e;
+    --callout-border: #c8a820;
+    --note-bg: #0e1520;
+    --note-border: #3a6abf;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html { scroll-behavior: smooth; font-size: 17px; }
+
+  body {
+    font-family: 'EB Garamond', Georgia, serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.75;
+    transition: background 0.25s, color 0.25s;
+  }
+
+  /* ── TOP BAR ── */
+  #topbar {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+    height: var(--header-h);
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; padding: 0 1.25rem;
+    gap: 1rem;
+    box-shadow: 0 1px 6px rgba(0,0,0,.06);
+  }
+  #topbar .logo {
+    font-family: 'Playfair Display', serif; font-weight: 700;
+    font-size: 1.05rem; color: var(--accent); letter-spacing: .02em; flex: 1;
+  }
+  #topbar .logo span { color: var(--text-muted); font-weight: 400; font-size: .85rem; }
+  .icon-btn {
+    background: none; border: 1px solid var(--border); border-radius: 6px;
+    cursor: pointer; padding: .35rem .65rem; color: var(--text-muted);
+    font-size: .8rem; display: flex; align-items: center; gap: .35rem;
+    transition: border-color .2s, background .2s;
+  }
+  .icon-btn:hover { border-color: var(--accent); background: var(--accent-light); color: var(--accent); }
+  #menuToggle { display: none; }
+
+  /* ── LAYOUT ── */
+  #wrapper {
+    display: flex;
+    padding-top: var(--header-h);
+    min-height: 100vh;
+  }
+
+  /* ── SIDEBAR ── */
+  #sidebar {
+    width: var(--sidebar-width);
+    flex-shrink: 0;
+    position: fixed;
+    top: var(--header-h);
+    left: 0;
+    bottom: 0;
+    overflow-y: auto;
+    background: var(--sidebar-bg);
+    border-right: 1px solid var(--border);
+    padding: 1.5rem 0 3rem;
+    transition: transform 0.28s ease, background 0.25s;
+  }
+  #sidebar h2 {
+    font-family: 'EB Garamond', serif; font-size: .7rem; font-weight: 600;
+    letter-spacing: .15em; text-transform: uppercase; color: var(--text-muted);
+    padding: 0 1.25rem .6rem; border-bottom: 1px solid var(--rule); margin-bottom: .75rem;
+  }
+  #sidebar nav a {
+    display: block; padding: .3rem 1.25rem .3rem 1.5rem;
+    text-decoration: none; color: var(--text-muted); font-size: .875rem;
+    border-left: 3px solid transparent; transition: all .18s;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  #sidebar nav a.chapter-link {
+    font-weight: 500; color: var(--text); font-size: .9rem;
+    padding-top: .45rem; padding-bottom: .45rem;
+  }
+  #sidebar nav a:hover, #sidebar nav a.active {
+    color: var(--accent); border-left-color: var(--accent);
+    background: var(--accent-light);
+  }
+  .sidebar-section { margin-top: 1.5rem; }
+  .sidebar-drive {
+    margin: 1.5rem 1rem 0; padding: 1rem;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+  }
+  .sidebar-drive h3 { font-size: .7rem; text-transform: uppercase; letter-spacing: .12em; color: var(--text-muted); margin-bottom: .6rem; }
+  .sidebar-drive a {
+    display: flex; align-items: center; gap: .4rem;
+    text-decoration: none; font-size: .82rem; color: var(--link);
+    padding: .3rem 0; border-bottom: 1px solid var(--rule);
+  }
+  .sidebar-drive a:last-child { border-bottom: none; }
+  .sidebar-drive a:hover { color: var(--accent); }
+  .drive-icon { font-size: 1rem; }
+
+  /* ── MAIN CONTENT ── */
+  #main {
+    margin-left: var(--sidebar-width);
+    flex: 1;
+    max-width: 860px;
+    padding: 3rem 3.5rem 6rem;
+  }
+
+  /* ── COVER PAGE ── */
+  #cover {
+    text-align: center; padding: 4rem 2rem 3rem;
+    border-bottom: 2px solid var(--rule); margin-bottom: 4rem;
+  }
+  #cover .overline {
+    font-size: .75rem; letter-spacing: .22em; text-transform: uppercase;
+    color: var(--text-muted); margin-bottom: 1.5rem;
+  }
+  #cover h1 {
+    font-family: 'Playfair Display', serif; font-size: 2.6rem; font-weight: 900;
+    line-height: 1.2; color: var(--accent); margin-bottom: .75rem;
+  }
+  #cover h1 span { display: block; font-size: 1.5rem; color: var(--text); margin-top: .25rem; }
+  #cover .cover-rule { border: none; border-top: 1px solid var(--rule); width: 200px; margin: 1.5rem auto; }
+  #cover .meta { font-style: italic; color: var(--text-muted); font-size: .95rem; }
+  #cover .cover-version {
+    display: inline-block; margin-top: 1.5rem; padding: .35rem 1rem;
+    border: 1px solid var(--border); border-radius: 20px;
+    font-size: .8rem; color: var(--text-muted); font-family: 'JetBrains Mono', monospace;
+  }
+  #cover .cover-links { display: flex; justify-content: center; gap: 1rem; margin-top: 1.75rem; flex-wrap: wrap; }
+  .cover-drive-btn {
+    display: inline-flex; align-items: center; gap: .5rem;
+    padding: .6rem 1.2rem; border-radius: 8px;
+    text-decoration: none; font-size: .875rem; font-family: 'EB Garamond', serif;
+    border: 1px solid var(--border); color: var(--link);
+    background: var(--surface); transition: all .2s;
+  }
+  .cover-drive-btn:hover { border-color: var(--accent); background: var(--accent-light); color: var(--accent); }
+
+  /* ── CHAPTERS ── */
+  .chapter { margin-bottom: 5rem; scroll-margin-top: calc(var(--header-h) + 1rem); }
+  .chapter-header {
+    display: flex; align-items: baseline; gap: 1rem;
+    border-bottom: 2px solid var(--rule); padding-bottom: 1rem; margin-bottom: 2rem;
+  }
+  .chapter-num {
+    font-family: 'Playfair Display', serif; font-size: 3rem; font-weight: 700;
+    color: var(--chapter-num); line-height: 1; flex-shrink: 0;
+  }
+  .chapter-title { font-family: 'Playfair Display', serif; font-size: 1.75rem; font-weight: 700; line-height: 1.2; }
+
+  h2.section-title {
+    font-family: 'Playfair Display', serif; font-size: 1.3rem; font-weight: 700;
+    margin: 2.5rem 0 1rem; color: var(--text);
+    padding-bottom: .35rem; border-bottom: 1px solid var(--rule);
+  }
+  h3.subsection-title {
+    font-size: 1.05rem; font-weight: 600; margin: 1.75rem 0 .65rem; color: var(--text);
+  }
+
+  p { margin-bottom: 1rem; }
+  ul, ol { padding-left: 1.5rem; margin-bottom: 1rem; }
+  li { margin-bottom: .35rem; }
+
+  /* ── DATA TABLE ── */
+  .data-table { width: 100%; border-collapse: collapse; margin: 1.5rem 0; font-size: .9rem; }
+  .data-table th {
+    background: var(--accent); color: #fff;
+    padding: .6rem .9rem; text-align: left; font-weight: 600;
+    font-family: 'EB Garamond', serif; font-size: .85rem; letter-spacing: .04em;
+  }
+  .data-table td { padding: .55rem .9rem; border-bottom: 1px solid var(--border); }
+  .data-table tr:nth-child(even) td { background: var(--code-bg); }
+  .data-table tr:hover td { background: var(--accent-light); }
+
+  /* ── KPI GRID ── */
+  .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; margin: 1.5rem 0; }
+  .kpi-card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 1.1rem; text-align: center;
+  }
+  .kpi-card .kpi-val {
+    font-family: 'Playfair Display', serif; font-size: 2rem; font-weight: 700;
+    color: var(--accent); display: block;
+  }
+  .kpi-card .kpi-label { font-size: .8rem; color: var(--text-muted); margin-top: .25rem; }
+  .kpi-card .kpi-trend { font-size: .8rem; margin-top: .3rem; }
+  .trend-up { color: #2e7d32; } .trend-down { color: #c62828; }
+
+  /* ── CALLOUT BOXES ── */
+  .callout {
+    background: var(--callout-bg); border-left: 4px solid var(--callout-border);
+    border-radius: 0 8px 8px 0; padding: 1rem 1.25rem; margin: 1.5rem 0;
+    font-size: .95rem;
+  }
+  .callout.note { background: var(--note-bg); border-color: var(--note-border); }
+  .callout.insight { background: #f0f7f0; border-color: #2e7d32; }
+  [data-theme=dark] .callout.insight { background: #1a2e1a; border-color: #4caf50; }
+  .callout .callout-title { font-weight: 700; font-size: .8rem; text-transform: uppercase; letter-spacing: .1em; margin-bottom: .4rem; color: var(--callout-border); }
+  .callout.note .callout-title { color: var(--note-border); }
+  .callout.insight .callout-title { color: #2e7d32; }
+  [data-theme=dark] .callout.insight .callout-title { color: #4caf50; }
+  .ref-list { list-style: none; padding: 0; margin: 0; }
+  .ref-list li { padding: .5rem 0; border-bottom: 1px solid var(--border); font-size: .93rem; line-height: 1.5; }
+  .ref-list li:last-child { border-bottom: none; }
+  .ref-list .ref-tag { display: inline-block; background: var(--surface); border: 1px solid var(--border); border-radius: 4px; padding: .1rem .45rem; font-size: .75rem; margin-right: .4rem; color: var(--text-muted); }
+
+  /* ── ACCORDION ── */
+  .accordion { border: 1px solid var(--border); border-radius: 8px; margin: 1.25rem 0; overflow: hidden; }
+  .accordion-item { border-bottom: 1px solid var(--border); }
+  .accordion-item:last-child { border-bottom: none; }
+  .accordion-btn {
+    width: 100%; background: var(--surface); border: none; cursor: pointer;
+    padding: .85rem 1.1rem; text-align: left; display: flex; align-items: center; justify-content: space-between;
+    font-family: 'EB Garamond', serif; font-size: 1rem; font-weight: 600; color: var(--text);
+    transition: background .18s;
+  }
+  .accordion-btn:hover { background: var(--accent-light); color: var(--accent); }
+  .accordion-btn .chevron { transition: transform .25s; font-size: .8rem; }
+  .accordion-btn.open .chevron { transform: rotate(180deg); }
+  .accordion-body {
+    overflow: hidden; transition: max-height .35s ease;
+    background: var(--bg); padding: 0 1.1rem; font-size: .95rem;
+    max-height: 0;
+  }
+  .accordion-body.open { max-height: 3000px; overflow: visible; padding: .9rem 1.1rem 1.1rem; }
+
+  /* ── CHARTS ── */
+  .chart-wrap {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 1.25rem; margin: 1.75rem 0;
+  }
+  .chart-title { font-size: .8rem; text-transform: uppercase; letter-spacing: .1em; color: var(--text-muted); margin-bottom: .75rem; }
+  .chart-wrap canvas { max-height: 320px; }
+
+  /* ── MERMAID ── */
+  .diagram-wrap {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 1.5rem; margin: 1.75rem 0; overflow-x: auto; text-align: center;
+  }
+  .diagram-wrap .diagram-caption { font-size: .82rem; color: var(--text-muted); margin-top: .75rem; font-style: italic; text-align: center; }
+
+  /* ── CODE ── */
+  code {
+    font-family: 'JetBrains Mono', monospace; font-size: .82rem;
+    background: var(--code-bg); padding: .15rem .4rem; border-radius: 4px;
+  }
+  pre code { display: block; padding: 1rem; overflow-x: auto; line-height: 1.6; }
+  pre { background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px; margin: 1.25rem 0; overflow: hidden; }
+
+  /* ── BLOCKQUOTE ── */
+  blockquote {
+    border-left: 3px solid var(--chapter-num); padding: .5rem 1.25rem;
+    margin: 1.5rem 0; font-style: italic; color: var(--text-muted);
+  }
+  blockquote cite { display: block; margin-top: .5rem; font-size: .85rem; font-style: normal; font-weight: 600; }
+
+  /* ── DRIVE SECTION ── */
+  .drive-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin: 1.25rem 0; }
+  .drive-card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 1.1rem; display: flex; flex-direction: column; gap: .5rem; text-decoration: none;
+    transition: border-color .2s, box-shadow .2s; color: var(--text);
+  }
+  .drive-card:hover { border-color: var(--accent); box-shadow: 0 4px 16px rgba(139,26,26,.12); }
+  .drive-card .dc-icon { font-size: 1.75rem; }
+  .drive-card .dc-name { font-weight: 600; font-size: .95rem; }
+  .drive-card .dc-desc { font-size: .82rem; color: var(--text-muted); }
+
+  /* ── READING PROGRESS ── */
+  #progress-bar {
+    position: fixed; top: var(--header-h); left: 0; right: 0; z-index: 101;
+    height: 3px; background: var(--border);
+  }
+  #progress-fill {
+    height: 100%; width: 0%; background: var(--accent);
+    transition: width .1s linear;
+  }
+
+  /* ── FONT SIZE CONTROLS ── */
+  .font-ctrl { display: flex; align-items: center; gap: .2rem; }
+  .font-ctrl button {
+    background: none; border: 1px solid var(--border); border-radius: 4px;
+    cursor: pointer; color: var(--text-muted); line-height: 1;
+    font-family: 'EB Garamond', serif; transition: all .15s;
+  }
+  .font-ctrl button:hover { border-color: var(--accent); color: var(--accent); }
+  .font-ctrl .fs-sm { font-size: .75rem; padding: .3rem .5rem; }
+  .font-ctrl .fs-lg { font-size: 1rem; padding: .2rem .45rem; }
+
+  /* ── LIVE URL BANNER ── */
+  .live-banner {
+    background: var(--note-bg); border: 1px solid var(--note-border); border-radius: 8px;
+    padding: .75rem 1.1rem; margin-top: 2rem; font-size: .9rem;
+    display: flex; align-items: flex-start; gap: .6rem; justify-content: center; flex-wrap: wrap; flex-direction: column; text-align: center; align-items: center;
+  }
+  .live-banner a { color: var(--link); font-weight: 600; word-break: break-all; }
+  .live-banner a:hover { color: var(--accent); }
+  .cover-read-btn {
+    background: var(--accent) !important; color: #fff !important; border-color: var(--accent) !important;
+    font-weight: 700 !important; font-size: 1rem !important; padding: .6rem 1.4rem !important;
+  }
+  .cover-read-btn:hover { opacity: .88; }
+
+  /* ── PRINT ── */
+  @media print {
+    #topbar, #sidebar, .no-print { display: none !important; }
+    #main { margin-left: 0; padding: 1.5cm 2cm; max-width: 100%; }
+    .chapter { page-break-before: always; }
+    #cover { page-break-after: always; }
+    .accordion-body { max-height: none !important; padding: .9rem 1.1rem 1.1rem !important; }
+  }
+
+  /* ── RESPONSIVE ── */
+  @media (max-width: 860px) {
+    :root { --sidebar-width: 260px; }
+    #main { padding: 2rem 1.5rem 5rem; }
+    #menuToggle { display: flex; }
+    #sidebar { transform: translateX(-100%); z-index: 90; }
+    #sidebar.open { transform: translateX(0); }
+    #main { margin-left: 0; }
+    #overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 89; }
+    #overlay.active { display: block; }
+  }
+</style>
+</head>
+<body>
+
+<!-- READING PROGRESS BAR -->
+<div id="progress-bar"><div id="progress-fill"></div></div>
+
+<!-- TOP BAR -->
+<header id="topbar">
+  <button class="icon-btn" id="menuToggle" aria-label="Toggle menu">☰</button>
+  <div class="logo">
+    Yangon Tyre Factory &nbsp;<span>Director's Manual</span>
+  </div>
+  <div class="font-ctrl no-print">
+    <button class="fs-sm" id="fontDown" title="Decrease font size">A−</button>
+    <button class="fs-lg" id="fontUp" title="Increase font size">A+</button>
+  </div>
+  <button class="icon-btn" id="themeToggle" title="Toggle dark/light mode">🌙 Dark</button>
+  <button class="icon-btn no-print" onclick="window.print()" title="Print to PDF">🖨 Print</button>
+  <a class="icon-btn" href="ytf-demo.html">← Demo</a>
+</header>
+
+<div id="overlay"></div>
+
+<div id="wrapper">
+  <!-- SIDEBAR -->
+  <aside id="sidebar">
+    <h2>Contents</h2>
+    <nav id="toc">
+      <a href="#cover" class="chapter-link">Cover</a>
+
+      <div class="sidebar-section">
+        <a href="#ch1" class="chapter-link">1 · Company Overview</a>
+        <a href="#ch1-vision">Vision &amp; Mission</a>
+        <a href="#ch1-products">Product Portfolio</a>
+        <a href="#ch1-market">Market Position</a>
+        <a href="#ch1-strategy">Strategic Frameworks</a>
+        <a href="#ch1-myanmar">Myanmar Regulatory</a>
+      </div>
+
+      <div class="sidebar-section">
+        <a href="#ch2" class="chapter-link">2 · Tyre Engineering</a>
+        <a href="#ch2-anatomy">Tyre Anatomy</a>
+        <a href="#ch2-compounds">Rubber Compounds</a>
+        <a href="#ch2-standards">Standards &amp; Specs</a>
+        <a href="#ch2-industry4">Industry 4.0 / Smart Mfg</a>
+      </div>
+
+      <div class="sidebar-section">
+        <a href="#ch3" class="chapter-link">3 · Manufacturing Ops</a>
+        <a href="#ch3-process">Production Process</a>
+        <a href="#ch3-oee">OEE Dashboard</a>
+        <a href="#ch3-maintenance">Maintenance</a>
+        <a href="#ch3-rca">Root Cause Analysis</a>
+      </div>
+
+      <div class="sidebar-section">
+        <a href="#ch4" class="chapter-link">4 · Quality (DQMS)</a>
+        <a href="#ch4-dqms">DQMS Overview</a>
+        <a href="#ch4-defects">Defect Classification</a>
+        <a href="#ch4-metrics">Quality Metrics</a>
+      </div>
+
+      <div class="sidebar-section">
+        <a href="#ch5" class="chapter-link">5 · Supply Chain</a>
+        <a href="#ch5-suppliers">Key Suppliers</a>
+        <a href="#ch5-procurement">Procurement Flow</a>
+        <a href="#ch5-inventory">Inventory Mgmt</a>
+      </div>
+
+      <div class="sidebar-section">
+        <a href="#ch6" class="chapter-link">6 · Finance &amp; KPIs</a>
+        <a href="#ch6-budget">Budget Overview</a>
+        <a href="#ch6-kpis">Director KPIs</a>
+        <a href="#ch6-roi">ROI &amp; Payback</a>
+        <a href="#ch6-workingcapital">Working Capital</a>
+        <a href="#ch6-pricing">Pricing &amp; Margins</a>
+        <a href="#ch6-capex">Capital Decisions</a>
+      </div>
+
+      <div class="sidebar-section">
+        <a href="#ch7" class="chapter-link">7 · Director's Cadence</a>
+        <a href="#ch7-daily">Daily Routine</a>
+        <a href="#ch7-weekly">Weekly Schedule</a>
+        <a href="#ch7-monthly">Monthly Cadence</a>
+        <a href="#ch7-annual">Annual Calendar</a>
+      </div>
+
+      <div class="sidebar-section">
+        <a href="#ch8" class="chapter-link">8 · HR &amp; Organisation</a>
+        <a href="#ch8-structure">Org Structure</a>
+        <a href="#ch8-training">Training Plan</a>
+        <a href="#ch8-kra">KRA Matrix</a>
+        <a href="#ch8-leadership">Leadership Toolkit</a>
+        <a href="#ch8-four-levels">4-Level Architecture</a>
+      </div>
+      <div class="sidebar-section">
+        <a href="#ch9" class="chapter-link">9 · Glossary &amp; Reference</a>
+        <a href="#ch9-glossary">Tyre Glossary</a>
+        <a href="#ch9-formulas">Key Formulas</a>
+        <a href="#ch9-contacts">Director Contacts</a>
+        <a href="#ch9-references">Further Reading</a>
+      </div>
+    </nav>
+
+    <!-- Google Drive Links -->
+    <div class="sidebar-drive">
+      <h3>📁 Reference Documents</h3>
+      <a href="https://drive.google.com/drive/folders/1lvNk73XNxIdPIagwal7YKEzlCtAkk-yv" target="_blank" rel="noopener">
+        <span class="drive-icon">🗂</span> Project Folder
+      </a>
+      <a href="https://drive.google.com/drive/folders/1OiqlWG6F6TmeOd_LjYeuZz4LZjart43m" target="_blank" rel="noopener">
+        <span class="drive-icon">📚</span> Industry Literature
+      </a>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <main id="main">
+
+    <!-- COVER -->
+    <section id="cover">
+      <p class="overline">Confidential Internal Document · SuperMega ERP</p>
+      <h1>Director's Manual<span>Yangon Tyre Factory</span></h1>
+      <hr class="cover-rule">
+      <p class="meta">Engineering · Operations · Quality · Finance · HR &amp; Leadership</p>
+      <div class="cover-version">Version 1.0 · March 2026 · Ever-Evolving Edition</div>
+      <div class="cover-links">
+        <a class="cover-drive-btn cover-read-btn" href="https://htmlpreview.github.io/?https://github.com/swanhtet01/swanhtet01.github.io/blob/copilot/build-interactive-manual/director-manual.html" target="_blank" rel="noopener">
+          📖 Read Manual (Preview)
+        </a>
+        <a class="cover-drive-btn" href="https://drive.google.com/drive/folders/1lvNk73XNxIdPIagwal7YKEzlCtAkk-yv" target="_blank" rel="noopener">
+          🗂 Full Project Folder
+        </a>
+        <a class="cover-drive-btn" href="https://drive.google.com/drive/folders/1OiqlWG6F6TmeOd_LjYeuZz4LZjart43m" target="_blank" rel="noopener">
+          📚 Industry Literature &amp; References
+        </a>
+        <a class="cover-drive-btn" href="ytf-demo.html">
+          ⚡ Live ERP Demo
+        </a>
+      </div>
+
+      <div class="live-banner no-print">
+        📖 <strong>Read the manual now (before merging):</strong>
+        <a href="https://htmlpreview.github.io/?https://github.com/swanhtet01/swanhtet01.github.io/blob/copilot/build-interactive-manual/director-manual.html" target="_blank" rel="noopener">Open preview in browser →</a>
+        (works on phone, tablet, or desktop — no download needed)<br>
+        <span style="font-size:.85rem; opacity:.8;">After merging to <code>main</code>, the permanent link will be:
+        <a href="https://swanhtet01.github.io/director-manual.html" target="_blank" rel="noopener">swanhtet01.github.io/director-manual.html</a></span>
+      </div>
+
+      <div style="margin-top:2.5rem; text-align:left; max-width:560px; margin-left:auto; margin-right:auto;">
+        <p style="font-size:.95rem; color:var(--text-muted);">
+          This manual is the operational and strategic reference for the Director of Yangon Tyre Factory.
+          It covers tyre engineering fundamentals, production operations, quality systems, supply chain,
+          financial management, and the Director's daily operational cadence. It is kept updated as the
+          factory and its systems evolve.
+        </p>
+      </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════
+         CHAPTER 1: COMPANY OVERVIEW
+    ═══════════════════════════════════════════════════ -->
+    <section class="chapter" id="ch1">
+      <div class="chapter-header">
+        <span class="chapter-num">1</span>
+        <h2 class="chapter-title">Company Overview &amp; Strategic Position</h2>
+      </div>
+
+      <h2 class="section-title" id="ch1-vision">1.1 Vision, Mission &amp; Values</h2>
+      <div class="kpi-grid">
+        <div class="kpi-card">
+          <span class="kpi-val">24/7</span>
+          <div class="kpi-label">Operations</div>
+        </div>
+        <div class="kpi-card">
+          <span class="kpi-val">3</span>
+          <div class="kpi-label">Shifts Daily</div>
+        </div>
+        <div class="kpi-card">
+          <span class="kpi-val">Myanmar</span>
+          <div class="kpi-label">Primary Market</div>
+        </div>
+        <div class="kpi-card">
+          <span class="kpi-val">ISO</span>
+          <div class="kpi-label">Quality Standard</div>
+        </div>
+      </div>
+
+      <blockquote>
+        "To be Myanmar's most reliable tyre manufacturer — delivering quality, safety, and value
+        to every road user, while pioneering digital-first manufacturing."
+        <cite>— Yangon Tyre Factory Mission Statement</cite>
+      </blockquote>
+
+      <div class="accordion">
+        <div class="accordion-item">
+          <button class="accordion-btn">Strategic Values <span class="chevron">▼</span></button>
+          <div class="accordion-body">
+            <ul>
+              <li><strong>Quality First:</strong> Every tyre that leaves the factory must exceed customer expectations.</li>
+              <li><strong>Safety Culture:</strong> Zero-incident target across all shifts and departments.</li>
+              <li><strong>Digital Innovation:</strong> Embrace AI and data to continuously improve operations.</li>
+              <li><strong>People Development:</strong> Invest in workforce upskilling and fair labour practices.</li>
+              <li><strong>Sustainable Growth:</strong> Responsible sourcing and environmental stewardship.</li>
+            </ul>
+          </div>
+        </div>
+        <div class="accordion-item">
+          <button class="accordion-btn">Competitive Advantages <span class="chevron">▼</span></button>
+          <div class="accordion-body">
+            <ul>
+              <li>Local production gives cost advantage vs. imported tyres (lower landed cost due to no import duty and shorter logistics chain).</li>
+              <li>Deep understanding of Myanmar road conditions enables tailored product specifications.</li>
+              <li>Digital quality management (DQMS) enables faster defect response and traceability than manual systems.</li>
+              <li>Strong relationships with ASEAN rubber suppliers ensure raw material security.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <h2 class="section-title" id="ch1-products">1.2 Product Portfolio</h2>
+      <table class="data-table">
+        <thead><tr><th>Product Line</th><th>Sizes</th><th>Application</th><th>Target Segment</th></tr></thead>
+        <tbody>
+          <tr><td>Motorcycle Tyres</td><td>2.50–17 to 3.00–18</td><td>Urban commuting</td><td>Mass market</td></tr>
+          <tr><td>Passenger Car</td><td>155/65R13 – 205/65R15</td><td>Sedan / Hatchback</td><td>Mid-market</td></tr>
+          <tr><td>Light Truck</td><td>185R14C – 215/75R16C</td><td>Delivery vans</td><td>Commercial</td></tr>
+          <tr><td>Heavy Truck / Bus</td><td>7.50R16 – 11R22.5</td><td>Long-haul transport</td><td>B2B fleet</td></tr>
+          <tr><td>Agricultural</td><td>5.00–15 to 12.4–28</td><td>Tractors, harvesters</td><td>Agri sector</td></tr>
+        </tbody>
+      </table>
+
+      <h2 class="section-title" id="ch1-market">1.3 Market &amp; Strategic Position</h2>
+      <div class="callout">
+        <div class="callout-title">⚡ Director Priority</div>
+        Myanmar's vehicle fleet is growing rapidly, with motorcycle tyres representing the largest volume segment. Local production offers a significant cost advantage over imports. The factory's strategy should focus on capturing domestic demand growth while expanding into the higher-margin truck and agricultural tyre segments.
+      </div>
+      <p>Key market dynamics (update figures from latest industry reports in the <a href="https://drive.google.com/drive/folders/1OiqlWG6F6TmeOd_LjYeuZz4LZjart43m" target="_blank" rel="noopener">Industry Literature folder</a>):</p>
+      <ul>
+        <li>Myanmar imports a significant share of tyres — presenting a strong import-substitution opportunity for local production.</li>
+        <li>Thai and Chinese brands dominate the car tyre segment; local production offers a pricing advantage through lower logistics cost and no import duty.</li>
+        <li>Fleet operators (buses, logistics companies) are priority B2B targets for contracted supply agreements.</li>
+        <li>Export to neighbouring markets (Bangladesh, Laos, Cambodia) is a medium-term growth direction to explore.</li>
+      </ul>
+    </section>
+
+      <h2 class="section-title" id="ch1-strategy">1.4 Strategic Analysis Frameworks</h2>
+
+      <p>
+        Every Director should be able to think strategically and communicate clearly with owners, banks,
+        and board members. The three frameworks below are the most practical for a tyre manufacturing business.
+        Use them in your annual planning cycle and whenever you face a major decision.
+      </p>
+
+      <div class="accordion">
+        <div class="accordion-item">
+          <button class="accordion-btn">SWOT Analysis — Factory Template <span class="chevron">▼</span></button>
+          <div class="accordion-body">
+            <p>Complete this annually or before any major strategic decision. Be honest — especially about weaknesses.</p>
+            <table class="data-table">
+              <thead><tr><th>Strengths (internal, positive)</th><th>Weaknesses (internal, negative)</th></tr></thead>
+              <tbody>
+                <tr>
+                  <td>
+                    <ul style="margin:0; padding-left:1.2rem;">
+                      <li>Local production — no import duty, faster delivery</li>
+                      <li>Myanmar road-condition expertise → tailored products</li>
+                      <li>Established customer relationships in motorcycle segment</li>
+                      <li>Digital quality system (DQMS) — faster defect response</li>
+                      <li><em>Add your factory's actual strengths here</em></li>
+                    </ul>
+                  </td>
+                  <td>
+                    <ul style="margin:0; padding-left:1.2rem;">
+                      <li>Limited product range vs large importers</li>
+                      <li>Dependent on imported raw materials (FX exposure)</li>
+                      <li>Smaller R&amp;D investment vs Thai/Chinese competitors</li>
+                      <li>Limited brand awareness outside Yangon region</li>
+                      <li><em>Add your factory's actual weaknesses here</em></li>
+                    </ul>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+            <table class="data-table" style="margin-top:.75rem">
+              <thead><tr><th>Opportunities (external, positive)</th><th>Threats (external, negative)</th></tr></thead>
+              <tbody>
+                <tr>
+                  <td>
+                    <ul style="margin:0; padding-left:1.2rem;">
+                      <li>Growing vehicle fleet = growing tyre replacement demand</li>
+                      <li>Infrastructure investment → more trucks, agricultural machinery</li>
+                      <li>Import substitution: government preference for local industry</li>
+                      <li>Export to Bangladesh, Laos, Cambodia</li>
+                      <li><em>Add current market opportunities here</em></li>
+                    </ul>
+                  </td>
+                  <td>
+                    <ul style="margin:0; padding-left:1.2rem;">
+                      <li>Low-cost Chinese tyre imports flooding the market</li>
+                      <li>Raw material price volatility (natural rubber, carbon black)</li>
+                      <li>FX/currency instability affecting import costs</li>
+                      <li>Energy price increases (electricity, gas for curing)</li>
+                      <li><em>Add current threats here</em></li>
+                    </ul>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="accordion-item">
+          <button class="accordion-btn">Porter's 5 Forces — Myanmar Tyre Market <span class="chevron">▼</span></button>
+          <div class="accordion-body">
+            <p>Porter's 5 Forces explains <em>why</em> some industries are more profitable than others, and where your competitive pressure comes from. For the Director, understanding this tells you which decisions are most strategically important.</p>
+            <table class="data-table">
+              <thead><tr><th>Force</th><th>Assessment for Myanmar Tyre Market</th><th>Implication for Director</th></tr></thead>
+              <tbody>
+                <tr>
+                  <td><strong>1. Rivalry (competitors)</strong></td>
+                  <td>Moderate to high: Chinese imports compete on price; Thai brands on quality; local competitors limited. Price competition most intense in motorcycle segment.</td>
+                  <td>Differentiate on reliability and delivery speed rather than racing to lowest price. Build long-term fleet contracts that reduce spot competition.</td>
+                </tr>
+                <tr>
+                  <td><strong>2. Threat of new entrants</strong></td>
+                  <td>Low to moderate: tyre manufacturing requires significant capital investment (mixers, presses, building machines), technical know-how, and customer trust. High barriers.</td>
+                  <td>Protect your position by deepening customer relationships and continuously improving quality — these are harder to copy than price.</td>
+                </tr>
+                <tr>
+                  <td><strong>3. Buyer power (customers)</strong></td>
+                  <td>High for large fleet customers (they buy in volume and can switch). Low for individual retail/wholesale buyers. Motorcycle segment is fragmented.</td>
+                  <td>Do not become too dependent on any single large customer (&lt;20% of revenue per customer is a healthy limit). Price differently for fleet vs retail.</td>
+                </tr>
+                <tr>
+                  <td><strong>4. Supplier power (raw materials)</strong></td>
+                  <td>High for specialty inputs (halobutyl, steel cord from limited global suppliers). Moderate for natural rubber (many ASEAN sources). Carbon black also moderate.</td>
+                  <td>Maintain 2+ qualified suppliers for every critical material. Hold strategic safety stock for highest-risk inputs. Long-term contracts for rubber during low-price periods.</td>
+                </tr>
+                <tr>
+                  <td><strong>5. Threat of substitutes</strong></td>
+                  <td>Low in medium term: vehicles still require pneumatic tyres. Solid/foam tyres exist only in niche industrial applications. No near-term technology disruption.</td>
+                  <td>Low short-term risk. Monitor EV adoption (EVs still need tyres, but different wear patterns). Focus competitive energy on forces 1–4 above.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="accordion-item">
+          <button class="accordion-btn">Product Portfolio Strategy — Where to Focus <span class="chevron">▼</span></button>
+          <div class="accordion-body">
+            <p>Different product lines have different strategic roles. Not all revenue is equal — high-margin segments deserve more attention and investment than high-volume, low-margin ones.</p>
+            <table class="data-table">
+              <thead><tr><th>Product Line</th><th>Strategic Role</th><th>Margin Profile</th><th>Director Focus</th></tr></thead>
+              <tbody>
+                <tr>
+                  <td>Motorcycle Tyres</td>
+                  <td>Volume base / Cash cow</td>
+                  <td>Low–medium (high competition)</td>
+                  <td>Protect market share; optimise production cost; automate where possible</td>
+                </tr>
+                <tr>
+                  <td>Passenger Car Tyres</td>
+                  <td>Growth segment</td>
+                  <td>Medium</td>
+                  <td>Invest in consistent quality (car owners are quality-sensitive); build dealer network</td>
+                </tr>
+                <tr>
+                  <td>Light Truck Tyres</td>
+                  <td>Growth + higher margin</td>
+                  <td>Medium–high</td>
+                  <td>Target logistics companies with supply contracts; this segment grows with e-commerce</td>
+                </tr>
+                <tr>
+                  <td>Heavy Truck / Bus Tyres</td>
+                  <td>High value / B2B focus</td>
+                  <td>High (if quality proven)</td>
+                  <td>Prioritise for fleet operator relationships; retreading potential adds revenue stream</td>
+                </tr>
+                <tr>
+                  <td>Agricultural Tyres</td>
+                  <td>Seasonal / Niche</td>
+                  <td>Medium–high</td>
+                  <td>Plan production ahead of harvest season; limited domestic competition is an advantage</td>
+                </tr>
+              </tbody>
+            </table>
+            <div class="callout note" style="margin-top:1rem">
+              <div class="callout-title">📌 Key Principle</div>
+              Volume does not equal profit. A factory that sells 100,000 motorcycle tyres at thin margin may be less profitable than one that sells 20,000 truck tyres at high margin with the same equipment. Track <strong>contribution margin by product line</strong>, not just revenue. See Section 6.5 for the formula.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <h2 class="section-title" id="ch1-myanmar">1.5 Myanmar Business &amp; Regulatory Environment</h2>
+      <p>Understanding the Myanmar business environment is essential for the Director to make legal, financial, and operational decisions confidently. This section covers the key regulatory bodies, laws, and risk factors specific to operating a manufacturing company in Myanmar.</p>
+
+      <div class="accordion">
+        <div class="accordion-item">
+          <button class="accordion-btn">Company Registration &amp; Governance <span class="chevron">▼</span></button>
+          <div class="accordion-body">
+            <table class="data-table">
+              <thead><tr><th>Topic</th><th>Key Facts for the Director</th></tr></thead>
+              <tbody>
+                <tr><td><strong>DICA</strong></td><td>Directorate of Investment and Company Administration — regulates company incorporation, annual filings, and foreign investment permits under the Myanmar Companies Act 2017. Every company must file an Annual Return and audited accounts.</td></tr>
+                <tr><td><strong>Myanmar Companies Act 2017</strong></td><td>Replaced the 1914 Act. Key provisions: companies may be up to 35% foreign-owned and still qualify as a "Myanmar company." Directors have statutory duties of care and loyalty.</td></tr>
+                <tr><td><strong>Board &amp; Director Duties</strong></td><td>As Director you are personally accountable for health &amp; safety, statutory filings, and avoiding insolvent trading. Keep minutes of key decisions — this is your legal protection.</td></tr>
+                <tr><td><strong>MIC Permit</strong></td><td>Myanmar Investment Commission permit — required if the factory has foreign investment or is in a restricted sector. Grants tax incentives and land-use rights.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="accordion-item">
+          <button class="accordion-btn">Labour Law &amp; Workforce Management <span class="chevron">▼</span></button>
+          <div class="accordion-body">
+            <table class="data-table">
+              <thead><tr><th>Law / Topic</th><th>Director's Action</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Minimum Wage</strong></td><td>Myanmar Minimum Wage Law sets the daily minimum wage (review annually — it has increased periodically). Ensure payroll complies; non-compliance is a criminal offence.</td></tr>
+                <tr><td><strong>Leave &amp; Working Hours</strong></td><td>Employment and Skill Development Law: max 8 hours/day, 44 hours/week. Overtime requires consent and a minimum 50% premium. Factory shifts must be documented.</td></tr>
+                <tr><td><strong>Social Security</strong></td><td>Myanmar Social Security Board (SSB): employer contributes 3% of gross wage, employee 2%. Must register all employees; failure attracts penalties.</td></tr>
+                <tr><td><strong>Termination</strong></td><td>Wrongful dismissal claims are common. Issue written warnings (verbal → 1st written → final written → termination) and keep signed records. Redundancy requires notice pay per the Settlement of Labour Dispute Law.</td></tr>
+                <tr><td><strong>Factory Safety (OSHA)</strong></td><td>Factories Act requires fire exits, machine guards, PPE provision, and accident reporting to the Labour Department within 24 hours. Director is personally liable for fatal accidents.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="accordion-item">
+          <button class="accordion-btn">Tax &amp; Financial Compliance <span class="chevron">▼</span></button>
+          <div class="accordion-body">
+            <table class="data-table">
+              <thead><tr><th>Tax / Duty</th><th>Key Points</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Corporate Income Tax (CIT)</strong></td><td>Standard rate 22% on net profit (25% for state-owned enterprises). Tax year April 1 – March 31. File within 3 months of year-end. Keep all supplier invoices for input cost deduction.</td></tr>
+                <tr><td><strong>Commercial Tax</strong></td><td>5% on most manufactured goods sold domestically. Register with IRD (Internal Revenue Department) if annual turnover exceeds threshold. File monthly returns.</td></tr>
+                <tr><td><strong>Customs &amp; Import Duty</strong></td><td>Natural rubber, carbon black, and textile cord are subject to import duties (rates vary; check MoC tariff schedule). Track HS codes for each raw material. Duty suspension may apply under MIC permit.</td></tr>
+                <tr><td><strong>Withholding Tax</strong></td><td>2.5% withheld on payments to local contractors/suppliers above threshold. 15% on dividends paid to foreign shareholders. File monthly to IRD.</td></tr>
+                <tr><td><strong>Transfer Pricing</strong></td><td>If transacting with related parties (e.g., parent company, foreign affiliates), maintain arm's-length documentation to avoid tax authority challenges.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="accordion-item">
+          <button class="accordion-btn">Currency, Banking &amp; FX Risk <span class="chevron">▼</span></button>
+          <div class="accordion-body">
+            <p>Myanmar's foreign exchange environment is tightly regulated by the Central Bank of Myanmar (CBM). Key risks and controls for a tyre factory that imports raw materials:</p>
+            <table class="data-table">
+              <thead><tr><th>Risk / Mechanism</th><th>Director's Response</th></tr></thead>
+              <tbody>
+                <tr><td><strong>MMK/USD volatility</strong></td><td>Raw materials (NR, SBR, carbon black) are typically priced in USD. A weaker MMK directly inflates your input costs. Include a currency buffer (5–10%) in all raw material budget forecasts.</td></tr>
+                <tr><td><strong>Foreign currency accounts</strong></td><td>Companies may hold USD accounts at CBM-licensed banks (KBZ, AYA, CB Bank, etc.) to receive export proceeds. Use these to pay USD-denominated suppliers, reducing conversion losses.</td></tr>
+                <tr><td><strong>Letter of Credit (LC)</strong></td><td>Use bank LCs for large international raw material purchases — protects both buyer and supplier, and provides documentary evidence for customs clearance.</td></tr>
+                <tr><td><strong>Repatriation rules</strong></td><td>Export proceeds must be repatriated and converted within the CBM-mandated window. Failure to comply triggers penalties and forex license review.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="accordion-item">
+          <button class="accordion-btn">Environment &amp; Industrial Compliance <span class="chevron">▼</span></button>
+          <div class="accordion-body">
+            <table class="data-table">
+              <thead><tr><th>Regulation</th><th>What the Factory Must Do</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Environmental Conservation Law 2012</strong></td><td>Tyre manufacturing involves rubber dust, solvent fumes, and wastewater with carbon black particles. Obtain Environmental Compliance Certificate (ECC) from the Environmental Conservation Department (ECD). Maintain effluent treatment.</td></tr>
+                <tr><td><strong>Waste disposal</strong></td><td>Scrap rubber, used solvents, and curing bladders are classified industrial waste. Engage a licensed waste collector — never discharge into waterways (criminal penalty).</td></tr>
+                <tr><td><strong>Fire safety</strong></td><td>Raw rubber, solvents, and carbon black are combustible. Annual fire safety inspection by the Fire Services Department is required. Maintain sprinkler systems and fire extinguisher logs.</td></tr>
+                <tr><td><strong>Building permits</strong></td><td>Any new construction or plant expansion requires a building permit from the township Development Committee and industrial zone authority. Start the permit process 3–6 months before planned work.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="accordion-item">
+          <button class="accordion-btn">Trade &amp; Market Context (Myanmar Tyre Sector) <span class="chevron">▼</span></button>
+          <div class="accordion-body">
+            <table class="data-table">
+              <thead><tr><th>Factor</th><th>Implication for Yangon Tyre Factory</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Import competition</strong></td><td>Myanmar's tyre market is dominated by imported tyres (primarily from China, Thailand, and India) due to historically low import duties. Locally manufactured tyres must compete on price, availability, and relationships — not on brand alone.</td></tr>
+                <tr><td><strong>ASEAN Free Trade</strong></td><td>ATIGA (ASEAN Trade in Goods Agreement) progressively reduces duties on tyres from ASEAN neighbours. Monitor tariff changes annually — a drop from 5% to 0% on Thai tyres directly impacts your price competitiveness.</td></tr>
+                <tr><td><strong>Infrastructure-driven demand</strong></td><td>Myanmar's tyre demand is tied to road construction, agricultural seasons, and vehicle import policy. Budget tracking of government infrastructure spending gives early signals of demand growth.</td></tr>
+                <tr><td><strong>Raw material sourcing</strong></td><td>Myanmar is a natural rubber producer. Sourcing NR domestically (from Tanintharyi/Mon State estates) can reduce FX exposure and lead time versus imported TSR20. Establish at least one local NR supplier relationship.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+    <!-- ═══════════════════════════════════════════════════
+         CHAPTER 2: TYRE ENGINEERING
+    ═══════════════════════════════════════════════════ -->
+    <section class="chapter" id="ch2">
+      <div class="chapter-header">
+        <span class="chapter-num">2</span>
+        <h2 class="chapter-title">Tyre Engineering &amp; Technology</h2>
+      </div>
+
+      <h2 class="section-title" id="ch2-anatomy">2.1 Tyre Anatomy — Key Components</h2>
+
+      <div class="diagram-wrap">
+        <div class="mermaid">
+graph LR
+    A[Natural Rubber\nNR / SBR / BR] --> B[Compounding]
+    B --> C[Banbury Mixing]
+    C --> D{Component\nBuilding}
+    D --> E[Bead Wire]
+    D --> F[Ply / Belt]
+    D --> G[Inner Liner]
+    D --> H[Tread Strip]
+    E & F & G & H --> I[Tyre Building\nMachine TBM]
+    I --> J[Green Tyre]
+    J --> K[Curing Press\n160°C · 15 min]
+    K --> L[Finished Tyre]
+    L --> M[Quality\nInspection]
+    M --> N{Pass?}
+    N -->|Yes| O[Warehouse]
+    N -->|No| P[Reject / Rework]
+        </div>
+        <div class="diagram-caption">Figure 2.1 — End-to-end tyre manufacturing process flow</div>
+      </div>
+
+      <table class="data-table">
+        <thead><tr><th>Component</th><th>Material</th><th>Function</th><th>Director Note</th></tr></thead>
+        <tbody>
+          <tr><td>Tread</td><td>NR + SBR + Carbon Black</td><td>Road contact, grip, wear</td><td>Critical for quality complaints</td></tr>
+          <tr><td>Belt Package</td><td>Steel cord + rubber</td><td>Dimensional stability</td><td>Highest scrap cost if wrong</td></tr>
+          <tr><td>Carcass Ply</td><td>Nylon / Polyester cord</td><td>Structural strength</td><td>Track cord supplier quality</td></tr>
+          <tr><td>Inner Liner</td><td>Halobutyl rubber</td><td>Air retention (tubeless)</td><td>Key for tubeless range</td></tr>
+          <tr><td>Bead</td><td>Steel wire + apex rubber</td><td>Wheel mounting</td><td>Bead seat accuracy = safety</td></tr>
+          <tr><td>Sidewall</td><td>NR + EPDM</td><td>Flex fatigue, branding</td><td>Ozone cracking = warranty risk</td></tr>
+        </tbody>
+      </table>
+
+      <h2 class="section-title" id="ch2-compounds">2.2 Rubber Compounding</h2>
+      <p>
+        Compound formulation is the core intellectual property of any tyre manufacturer.
+        The compound recipe determines rolling resistance, wet grip, durability, and cost.
+        As Director, you must understand the trade-offs:
+      </p>
+
+      <div class="accordion">
+        <div class="accordion-item">
+          <button class="accordion-btn">Natural Rubber (NR) — Primary Elastomer <span class="chevron">▼</span></button>
+          <div class="accordion-body">
+            <p>Sourced from Thailand and Myanmar. Key grade: RSS1, TSR20. Controls: <strong>Mooney viscosity (ML 1+4 @ 100°C)</strong>, dirt content, volatile matter. High NR content → better cut resistance and heat build-up in truck tyres. Price is commodity-driven — hedge with 90-day forward contracts.</p>
+          </div>
+        </div>
+        <div class="accordion-item">
+          <button class="accordion-btn">Synthetic Rubbers (SBR / BR) <span class="chevron">▼</span></button>
+          <div class="accordion-body">
+            <p><strong>SBR (Styrene-Butadiene Rubber):</strong> Blended with NR for tread compounds — improves wet grip and abrasion resistance. <strong>BR (Butadiene Rubber):</strong> Used in sidewalls and tread base — reduces rolling resistance and heat generation. Both are imported; monitor USD/barrel correlation for price forecasting.</p>
+          </div>
+        </div>
+        <div class="accordion-item">
+          <button class="accordion-btn">Carbon Black &amp; Silica <span class="chevron">▼</span></button>
+          <div class="accordion-body">
+            <p>Carbon black is 25–35% by weight of tread compound. Grade N330 (HAF) for truck tyres, N550 for sidewalls. Silica-filled compounds offer superior wet grip and lower rolling resistance but require silane coupling agent — higher cost, longer mixing cycle. Consider silica for passenger car premium range.</p>
+          </div>
+        </div>
+        <div class="accordion-item">
+          <button class="accordion-btn">Vulcanisation System <span class="chevron">▼</span></button>
+          <div class="accordion-body">
+            <p>Sulphur + accelerators (CBS, TBBS, TMTD) form crosslinks during curing. The crosslink density determines hardness (Shore A target: tread 60–68, sidewall 54–62). <strong>Cure time and temperature are critical process controls</strong> — deviations directly cause under/over-cure defects.</p>
+          </div>
+        </div>
+      </div>
+
+      <h2 class="section-title" id="ch2-standards">2.3 Applicable Standards</h2>
+      <table class="data-table">
+        <thead><tr><th>Standard</th><th>Scope</th><th>Relevance</th></tr></thead>
+        <tbody>
+          <tr><td>ISO 4210</td><td>Bicycle tyres (reference)</td><td>Bicycle segment</td></tr>
+          <tr><td>ISO 9001:2015</td><td>Quality Management System</td><td>Factory-wide QMS</td></tr>
+          <tr><td>ECE R30</td><td>Passenger car tyre safety</td><td>Export requirement</td></tr>
+          <tr><td>ECE R54</td><td>Commercial vehicle tyres</td><td>Truck tyre export</td></tr>
+          <tr><td>ASTM D1418</td><td>Rubber classification</td><td>Incoming material QC</td></tr>
+          <tr><td>Myanmar MES</td><td>Myanmar Engineering Standard</td><td>Local compliance</td></tr>
+        </tbody>
+      </table>
+
+      <div class="callout note">
+        <div class="callout-title">📚 Reference</div>
+        Full technical standards, compound specs, and reference manuals are in the
+        <a href="https://drive.google.com/drive/folders/1OiqlWG6F6TmeOd_LjYeuZz4LZjart43m" target="_blank" rel="noopener">Industry Literature folder</a>
+        on Google Drive.
+      </div>
+
+      <h2 class="section-title" id="ch2-industry4">2.4 Industry 4.0 &amp; Smart Manufacturing for Tyres</h2>
+      <p>Industry 4.0 refers to the integration of digital, connected, and data-driven technologies into physical manufacturing. For a tyre factory Director, this is not abstract — it is a set of specific, deployable technologies that reduce waste, improve quality consistency, and lower the cost of production. The following are the most relevant and proven technologies for the tyre manufacturing sector.</p>
+
+      <div class="callout insight">
+        <div class="callout-title">💡 Director's Insight</div>
+        Industry 4.0 adoption does not require replacing your entire factory. Start with data collection (IoT on the banbury mixer and curing presses) — this alone typically reveals 8–15% hidden OEE losses. Buy data before you buy automation.
+        <br><small>Reference: McKinsey Global Institute, <em>Manufacturing's Next Act</em> (2016) — still the most cited framework for smart factory ROI.</small>
+      </div>
+
+      <div class="accordion">
+        <div class="accordion-item">
+          <button class="accordion-btn">Process Automation &amp; Robotics <span class="chevron">▼</span></button>
+          <div class="accordion-body">
+            <table class="data-table">
+              <thead><tr><th>Application</th><th>Technology</th><th>Tyre Factory Benefit</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Tyre building</strong></td><td>Automated Tyre Building Machine (ATBM) with servo-motor precision</td><td>Consistent ply tension ±0.5mm vs operator variation of ±3mm; reduces crown/balance defects</td></tr>
+                <tr><td><strong>Curing press loading</strong></td><td>Robotic green tyre transfer arm</td><td>Eliminates manual handling distortion; reduces cure-centre defects by removing handling variance</td></tr>
+                <tr><td><strong>Compound weighing</strong></td><td>Automated batch weighing system (loss-in-weight feeders)</td><td>Compound consistency improves; reduces batch-to-batch viscosity variation (Mooney viscosity CV &lt;2%)</td></tr>
+                <tr><td><strong>Finished goods inspection</strong></td><td>Automated Visual Inspection (AVI) — LED strobes + camera array</td><td>100% surface inspection vs ~5% manual sampling; detects bulges, blisters, and tread voids at line speed</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="accordion-item">
+          <button class="accordion-btn">IoT &amp; Real-Time Process Monitoring <span class="chevron">▼</span></button>
+          <div class="accordion-body">
+            <table class="data-table">
+              <thead><tr><th>Machine / Asset</th><th>Sensor Type</th><th>KPI Unlocked</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Banbury Mixer</strong></td><td>Motor current transducer, rotor temperature, fill factor load cell</td><td>Mooney viscosity proxy (current-temperature profile); batch-end time consistency; carbon black dispersion index</td></tr>
+                <tr><td><strong>Curing Press</strong></td><td>Cure temperature/pressure sensors + dielectric cure monitor (DiCure)</td><td>Real-time cure state — eliminates under/over-cure; cure time optimisation saves energy 6–9%</td></tr>
+                <tr><td><strong>Calender / Extruder</strong></td><td>Laser thickness gauge (cross-web), line speed encoder</td><td>Real-time gauge profile control; reduces tread strip waste from spec deviation</td></tr>
+                <tr><td><strong>Banbury dust collection</strong></td><td>Differential pressure sensor on filter bags</td><td>Carbon black exposure monitoring; compliance with health/safety thresholds; predictive bag replacement</td></tr>
+                <tr><td><strong>Autoclave / steam supply</strong></td><td>Steam flow meter, condensate temperature</td><td>Steam trap failure detection; energy loss quantification; reduce energy cost 3–5%</td></tr>
+              </tbody>
+            </table>
+            <p style="font-size:.9rem; margin-top:.75rem;">Key standard: <strong>IEC 62443</strong> covers cybersecurity for industrial automation/control systems — essential if IoT devices are networked to plant IT systems.</p>
+          </div>
+        </div>
+
+        <div class="accordion-item">
+          <button class="accordion-btn">Digital Twin &amp; Simulation <span class="chevron">▼</span></button>
+          <div class="accordion-body">
+            <p>A <strong>digital twin</strong> is a virtual replica of a physical asset or process that is updated in real time from sensor data. In tyre manufacturing:</p>
+            <ul style="padding-left:1.2rem; line-height:1.9;">
+              <li><strong>Curing press digital twin:</strong> Simulates heat transfer inside the tyre mould given real compound thickness, initial temperature, and steam pressure. Used to predict optimum cure time for each batch — avoiding both under-cure (weak bond) and over-cure (hardened rubber, loss of elongation).</li>
+              <li><strong>Production scheduling twin:</strong> Models the entire factory floor — which presses are up/down, which moulds are in use, compound batch availability — to maximise schedule adherence and minimise mould changeover downtime.</li>
+              <li><strong>Compound formulation twin:</strong> Links raw material lot properties (e.g., NR Mooney viscosity ML1+4) to predicted compound performance (Shore A hardness, tensile strength, abrasion index) before batch is mixed.</li>
+            </ul>
+            <p style="font-size:.9rem; color:var(--text-muted);">Industry reference: Michelin, Bridgestone, and Hankook all use digital twin-based cure optimisation in their modern plants. Open-source simulation frameworks like OpenFOAM can be used for heat transfer modelling at low cost.</p>
+          </div>
+        </div>
+
+        <div class="accordion-item">
+          <button class="accordion-btn">IATF 16949 — Automotive Quality Standard <span class="chevron">▼</span></button>
+          <div class="accordion-body">
+            <p><strong>IATF 16949:2016</strong> is the global quality management standard for automotive parts suppliers — including tyre manufacturers supplying OEM (Original Equipment Manufacturer) automotive customers. It builds on ISO 9001 and adds automotive-specific requirements.</p>
+            <table class="data-table">
+              <thead><tr><th>IATF 16949 Requirement</th><th>What It Means for the Factory</th></tr></thead>
+              <tbody>
+                <tr><td><strong>APQP</strong> (Advanced Product Quality Planning)</td><td>Structured process for introducing new tyre sizes or compounds — gates from design to production approval</td></tr>
+                <tr><td><strong>PPAP</strong> (Production Part Approval Process)</td><td>Formal submission of samples + process capability data to the automotive customer before production begins</td></tr>
+                <tr><td><strong>FMEA</strong> (Failure Mode &amp; Effects Analysis)</td><td>Risk assessment for each manufacturing step — identifies what can go wrong and what controls prevent it</td></tr>
+                <tr><td><strong>SPC</strong> (Statistical Process Control)</td><td>Control charts on critical dimensions (tread width, section height, bead diameter) to detect process drift before defects are produced</td></tr>
+                <tr><td><strong>MSA</strong> (Measurement System Analysis)</td><td>Validates that your measurement tools (callipers, balancing machine, uniformity machine) are accurate and repeatable enough</td></tr>
+              </tbody>
+            </table>
+            <div class="callout insight">
+              <div class="callout-title">💡 Director's Insight</div>
+              IATF 16949 certification is mandatory to supply major vehicle manufacturers (Toyota, Mitsubishi, Suzuki) directly. Even without certification, implementing APQP and FMEA internally improves your product launch success rate and reduces warranty claims. Start with FMEA on your top-5 defect types — it is the highest-ROI quality tool.
+            </div>
+          </div>
+        </div>
+      </div>
+
+    <!-- ═══════════════════════════════════════════════════
+         CHAPTER 3: MANUFACTURING OPERATIONS
+    ═══════════════════════════════════════════════════ -->
+    <section class="chapter" id="ch3">
+      <div class="chapter-header">
+        <span class="chapter-num">3</span>
+        <h2 class="chapter-title">Manufacturing &amp; Production Operations</h2>
+      </div>
+
+      <h2 class="section-title" id="ch3-process">3.1 Production Process Flow</h2>
+
+      <div class="diagram-wrap">
+        <div class="mermaid">
+flowchart TD
+    subgraph RM [Raw Material Store]
+        R1[Rubber\nBales]
+        R2[Carbon\nBlack]
+        R3[Steel Cord\n& Wire]
+        R4[Fabric\nCord]
+    end
+    subgraph MIX [Mixing]
+        M1[Banbury\nMixer]
+        M2[Open Mill\nSheeting]
+        M3[Batch-off\n& Cooling]
+    end
+    subgraph BUILD [Building]
+        B1[Bead\nWinding]
+        B2[Ply\nCalendering]
+        B3[Tread\nExtrusion]
+        B4[Tyre Building\nMachine TBM]
+    end
+    subgraph CURE [Curing]
+        C1[Bladder\nCuring Press]
+        C2[Post-Cure\nInflation PCI]
+    end
+    subgraph QC [Quality]
+        Q1[Visual\nInspection]
+        Q2[X-Ray / Force\nVariation]
+        Q3[Uniformity\nTest]
+    end
+    RM --> MIX --> BUILD --> CURE --> QC
+    QC -->|Pass| WH[Finished\nGoods Store]
+    QC -->|Fail| REJ[Reject /\nRework]
+        </div>
+        <div class="diagram-caption">Figure 3.1 — Tyre manufacturing flow from raw material to finished goods</div>
+      </div>
+
+      <h2 class="section-title" id="ch3-oee">3.2 OEE — Overall Equipment Effectiveness</h2>
+      <p>
+        OEE is the primary production KPI. World-class OEE is 85%. The cards below show targets — fill in actual values from the plant's daily production report:
+      </p>
+
+      <div class="kpi-grid">
+        <div class="kpi-card">
+          <span class="kpi-val">≥80%</span>
+          <div class="kpi-label">OEE Target</div>
+          <div class="kpi-trend">Actual: <em>enter from report</em></div>
+        </div>
+        <div class="kpi-card">
+          <span class="kpi-val">≥90%</span>
+          <div class="kpi-label">Availability Target</div>
+          <div class="kpi-trend">Actual: <em>enter from report</em></div>
+        </div>
+        <div class="kpi-card">
+          <span class="kpi-val">≥90%</span>
+          <div class="kpi-label">Performance Target</div>
+          <div class="kpi-trend">Actual: <em>enter from report</em></div>
+        </div>
+        <div class="kpi-card">
+          <span class="kpi-val">≥98%</span>
+          <div class="kpi-label">Quality Rate Target</div>
+          <div class="kpi-trend">Actual: <em>enter from report</em></div>
+        </div>
+      </div>
+
+      <div class="chart-wrap">
+        <div class="chart-title">Monthly OEE Trend — Tyre Building Machines (Illustrative — replace with actual plant data)</div>
+        <canvas id="oeeChart"></canvas>
+      </div>
+
+      <div class="callout">
+        <div class="callout-title">⚡ Director Action: OEE Improvement</div>
+        The most common OEE losses are unplanned downtime (mould change delays, bladder failures, compound temperature deviations) and speed losses. Predictive maintenance via IoT sensors is the key lever for closing the gap between actual and 80% target. Review the weekly OEE loss pareto with the Plant Manager every Monday.
+      </div>
+
+      <h2 class="section-title" id="ch3-maintenance">3.3 Maintenance Philosophy</h2>
+      <div class="accordion">
+        <div class="accordion-item">
+          <button class="accordion-btn">Preventive Maintenance Schedule <span class="chevron">▼</span></button>
+          <div class="accordion-body">
+            <table class="data-table">
+              <thead><tr><th>Equipment</th><th>Frequency</th><th>Key Items</th></tr></thead>
+              <tbody>
+                <tr><td>Banbury Mixer</td><td>Weekly / 200 h</td><td>Rotor tip clearance, ram seal, cooling water</td></tr>
+                <tr><td>Tyre Building Machine</td><td>Weekly / 500 cycles</td><td>Drum width, bladder condition, PLC calibration</td></tr>
+                <tr><td>Curing Press</td><td>Monthly / 1000 cycles</td><td>Bladder replacement, steam trap, platen parallelism</td></tr>
+                <tr><td>Extruder</td><td>Fortnightly</td><td>Screw wear, die temperature, gear box oil</td></tr>
+                <tr><td>Calender</td><td>Monthly</td><td>Roll surface, bearing temperature, gauge control</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="accordion-item">
+          <button class="accordion-btn">Predictive Maintenance via IoT Sensors <span class="chevron">▼</span></button>
+          <div class="accordion-body">
+            <p>Accelerometers and temperature sensors on critical machines feed real-time data to the monitoring system. Anomaly detection (vibration threshold breach or temperature spike) triggers an alert and creates a maintenance work order. Target: detect the majority of failures before they cause unplanned production stops.</p>
+          </div>
+        </div>
+      </div>
+
+      <h2 class="section-title" id="ch3-rca">3.4 Root Cause Analysis &amp; Problem Solving</h2>
+      <p>When quality problems or machine failures recur, root cause analysis (RCA) is the Director's primary tool for permanent fixes. The goal is not to address the symptom but to eliminate the cause. Below are the four core methods used in manufacturing — each appropriate for different situations.</p>
+
+      <div class="callout insight">
+        <div class="callout-title">💡 Director's Insight</div>
+        A defect found in the warehouse costs 1× to fix. A defect found by the customer costs 100× — in returns, relationship damage, and brand impact. Invest in root cause analysis on every customer complaint, even if it seems minor. The first complaint is almost always the tip of an iceberg.
+        <br><small>Source: Juran's Quality Handbook (7th ed., McGraw-Hill, 2016) — the foundational text on cost of quality in manufacturing.</small>
+      </div>
+
+      <div class="accordion">
+        <div class="accordion-item">
+          <button class="accordion-btn">5-Why Analysis — Fast Root Cause for Production Problems <span class="chevron">▼</span></button>
+          <div class="accordion-body">
+            <p>Ask "Why?" five times in sequence until the systemic root cause is revealed. Example: tread separation defect.</p>
+            <table class="data-table">
+              <thead><tr><th>#</th><th>Why?</th><th>Answer</th></tr></thead>
+              <tbody>
+                <tr><td>1</td><td>Why did the tread separate from the carcass?</td><td>The adhesion between tread compound and carcass was insufficient.</td></tr>
+                <tr><td>2</td><td>Why was the adhesion insufficient?</td><td>The bonding skim compound viscosity was out of spec.</td></tr>
+                <tr><td>3</td><td>Why was the skim compound out of spec?</td><td>The mixing time was 40 seconds short of the required duration.</td></tr>
+                <tr><td>4</td><td>Why was the mixing time too short?</td><td>The Banbury timer was misconfigured after a maintenance reset.</td></tr>
+                <tr><td>5</td><td>Why was the timer not verified after maintenance?</td><td>There is no checklist step for parameter verification in the post-maintenance restart procedure.</td></tr>
+              </tbody>
+            </table>
+            <p><strong>Root Cause:</strong> Missing parameter verification step in restart SOP.<br>
+            <strong>Corrective Action:</strong> Add "Verify timer settings vs. Master Parameter Sheet" to post-maintenance restart checklist. Implement lock-out-tag-out for parameter changes.</p>
+          </div>
+        </div>
+
+        <div class="accordion-item">
+          <button class="accordion-btn">Fishbone Diagram (Ishikawa) — Structured Brainstorming <span class="chevron">▼</span></button>
+          <div class="accordion-body">
+            <p>The Fishbone diagram maps all possible causes of a problem across six standard categories (the "6M"s). Use it when the root cause is not obvious and you need the team to systematically explore all possibilities before choosing where to investigate.</p>
+            <table class="data-table">
+              <thead><tr><th>Category (M)</th><th>Example Causes in Tyre Manufacturing</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Machine</strong></td><td>Press bladder worn, calender roll misalignment, inadequate Banbury cooling</td></tr>
+                <tr><td><strong>Method</strong></td><td>Incorrect cure time, wrong ply angle, non-standard cement application technique</td></tr>
+                <tr><td><strong>Material</strong></td><td>NR Mooney viscosity out of spec, carbon black lot contamination, expired skim compound</td></tr>
+                <tr><td><strong>Man (People)</strong></td><td>Operator training gap, shift handover miscommunication, fatigue (night shift)</td></tr>
+                <tr><td><strong>Measurement</strong></td><td>Gauge not calibrated, incorrect sampling protocol, operator measurement variation</td></tr>
+                <tr><td><strong>Mother Nature (Environment)</strong></td><td>High ambient humidity causing tack variation, temperature affecting compound flow</td></tr>
+              </tbody>
+            </table>
+            <p style="font-size:.9rem; margin-top:.75rem;">Run the fishbone with your Plant Manager and QC team as a group session. Each arm of the fishbone is investigated and either confirmed or eliminated by data. The goal is to narrow to 1–2 probable root causes for 5-Why or experiment.</p>
+          </div>
+        </div>
+
+        <div class="accordion-item">
+          <button class="accordion-btn">8D Problem Solving — For Customer Complaints &amp; Escapes <span class="chevron">▼</span></button>
+          <div class="accordion-body">
+            <p>The 8 Disciplines (8D) process is the standard response format for customer-facing quality escapes in the automotive industry. Use it any time a defective tyre reaches a customer or OEM partner.</p>
+            <table class="data-table">
+              <thead><tr><th>Discipline</th><th>Action</th><th>Timeframe</th></tr></thead>
+              <tbody>
+                <tr><td><strong>D1 — Team</strong></td><td>Assemble cross-functional team (QC + Production + SC + Director)</td><td>Day 1</td></tr>
+                <tr><td><strong>D2 — Problem Statement</strong></td><td>Describe: What tyre, which lot, what defect, found where, how many</td><td>Day 1</td></tr>
+                <tr><td><strong>D3 — Containment</strong></td><td>Immediate action: quarantine all suspect stock, stop further shipment, customer notification</td><td>Day 1–2</td></tr>
+                <tr><td><strong>D4 — Root Cause</strong></td><td>5-Why or Fishbone analysis; confirm root cause with data (DO NOT assume)</td><td>Day 3–7</td></tr>
+                <tr><td><strong>D5 — Corrective Actions</strong></td><td>Define permanent fixes for confirmed root cause</td><td>Day 7–14</td></tr>
+                <tr><td><strong>D6 — Implementation &amp; Verification</strong></td><td>Implement fixes; verify effectiveness with data (run chart, PPM before/after)</td><td>Week 3–4</td></tr>
+                <tr><td><strong>D7 — Prevent Recurrence</strong></td><td>Update procedures, FMEA, control plans, training materials; apply fix to similar processes</td><td>Week 4–6</td></tr>
+                <tr><td><strong>D8 — Congratulate Team</strong></td><td>Document learnings; recognise team; close the 8D report formally</td><td>Week 6</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="accordion-item">
+          <button class="accordion-btn">Statistical Process Control (SPC) — Detecting Drift Before Defects <span class="chevron">▼</span></button>
+          <div class="accordion-body">
+            <p>SPC uses control charts to distinguish between normal process variation (common cause) and abnormal signals (special cause) that require investigation. Applied to critical tyre dimensions, it detects mould wear or material drift before out-of-spec product is made.</p>
+            <table class="data-table">
+              <thead><tr><th>Control Chart Concept</th><th>Meaning in Production</th></tr></thead>
+              <tbody>
+                <tr><td><strong>UCL / LCL</strong></td><td>Upper/Lower Control Limits — set at ±3σ from the process mean. Any point outside is a signal to investigate immediately.</td></tr>
+                <tr><td><strong>Run of 8 on one side</strong></td><td>Eight consecutive points above (or below) the mean indicates a process shift — even if within control limits. Common cause: mould temperature creeping up, material lot change.</td></tr>
+                <tr><td><strong>Cp / Cpk</strong></td><td>Process Capability Index. Cpk &gt;1.33 is the minimum for automotive OEM. Cpk &gt;1.67 is world-class. Cpk &lt;1.0 means your process cannot reliably produce to spec — re-engineer before relying on inspection.</td></tr>
+                <tr><td><strong>Where to apply SPC first</strong></td><td>Start with the 3 highest-PPM defect types from your DQMS data. SPC on bead diameter, tread gauge, and section width typically captures the most impactful variation.</td></tr>
+              </tbody>
+            </table>
+            <div class="callout insight">
+              <div class="callout-title">💡 Director's Insight</div>
+              SPC is most valuable when operators themselves read the charts and are empowered to stop the line (Andon). If charts only go to QC management, you lose the real-time benefit. Post control charts at each machine and train operators to identify "8 consecutive" and "outside control limits" conditions.
+              <br><small>Source: Wheeler, D.J. &amp; Chambers, D.S., <em>Understanding Statistical Process Control</em> (3rd ed., SPC Press, 2010) — the practitioner's standard reference.</small>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    <!-- ═══════════════════════════════════════════════════
+         CHAPTER 4: QUALITY MANAGEMENT — DQMS
+    ═══════════════════════════════════════════════════ -->
+    <section class="chapter" id="ch4">
+      <div class="chapter-header">
+        <span class="chapter-num">4</span>
+        <h2 class="chapter-title">Quality Management System (DQMS)</h2>
+      </div>
+
+      <h2 class="section-title" id="ch4-dqms">4.1 DQMS Overview</h2>
+      <p>
+        The Digital Quality Management System (DQMS) is the real-time quality nerve centre of the factory.
+        It integrates mobile inspection apps, AI-powered defect detection, and the SuperMega analytics engine
+        to provide zero-paper, zero-delay quality control.
+      </p>
+
+      <div class="diagram-wrap">
+        <div class="mermaid">
+flowchart LR
+    A[Operator\nMobile App] -->|Defect Photo| B[AWS Rekognition\nAI Analysis]
+    B -->|Auto-classify| C[DQMS Database]
+    D[QC Inspector\nTablet] -->|Dimensional Check| C
+    E[IoT Sensors] -->|Real-time Data| C
+    C --> F[AI Analytics\nEngine]
+    F --> G[QC Manager\nDashboard]
+    F --> H[Director\nReport]
+    F --> I[Automated\nAlerts SNS]
+    G -->|Corrective Action| J[Production\nTeam]
+        </div>
+        <div class="diagram-caption">Figure 4.1 — DQMS data flow and stakeholder integration</div>
+      </div>
+
+      <h2 class="section-title" id="ch4-defects">4.2 Defect Classification &amp; Action Matrix</h2>
+      <table class="data-table">
+        <thead><tr><th>Severity</th><th>Examples</th><th>Action</th><th>Escalation Time</th></tr></thead>
+        <tbody>
+          <tr><td><strong style="color:var(--accent)">Critical</strong></td><td>Exposed bead wire, ply separation, major bulge</td><td>Immediate production stop, Director alert</td><td>&lt; 15 min</td></tr>
+          <tr><td><strong style="color:#e07b2a">Major</strong></td><td>Tread void &gt;5mm, cure blister, sidewall crack</td><td>Batch quarantine, QC Manager review</td><td>&lt; 2 h</td></tr>
+          <tr><td><strong>Minor</strong></td><td>Cosmetic mark, slight flash, minor spew</td><td>Log and monitor, sort before dispatch</td><td>Shift report</td></tr>
+          <tr><td>Observation</td><td>Colour variation, slight roughness</td><td>Record only</td><td>Weekly trend</td></tr>
+        </tbody>
+      </table>
+
+      <h2 class="section-title" id="ch4-metrics">4.3 Quality Metrics Dashboard</h2>
+
+      <div class="chart-wrap">
+        <div class="chart-title">Monthly Defect Rate by Category (PPM — Illustrative, replace with actual DQMS data)</div>
+        <canvas id="qualityChart"></canvas>
+      </div>
+
+      <div class="callout note">
+        <div class="callout-title">📌 Note</div>
+        The full DQMS system with live data is accessible at
+        <a href="ytf-dqms/dashboard-plant-manager.html">Plant Manager Dashboard</a> and
+        <a href="ytf-dqms/dashboard-qc-manager.html">QC Manager Dashboard</a>.
+        Director-level aggregated reports are generated automatically every Monday at 08:00.
+      </div>
+
+      <div class="accordion">
+        <div class="accordion-item">
+          <button class="accordion-btn">Incoming Raw Material Inspection Protocol <span class="chevron">▼</span></button>
+          <div class="accordion-body">
+            <ol>
+              <li>Each rubber delivery receives lot number and enters the DQMS upon arrival.</li>
+              <li>Samples sent to lab: Mooney viscosity, density, ash content, volatile matter.</li>
+              <li>Certificate of Analysis (CoA) from supplier compared against spec limits.</li>
+              <li>Material released for production only after DQMS system shows "Released" status.</li>
+              <li>Non-conforming material quarantined and supplier notified within 2 hours via the DQMS system.</li>
+            </ol>
+          </div>
+        </div>
+        <div class="accordion-item">
+          <button class="accordion-btn">Final Product Audit — AQL Sampling Plan <span class="chevron">▼</span></button>
+          <div class="accordion-body">
+            <p>Using AQL 1.5 (ISO 2859-1) for critical defects, AQL 4.0 for major. For a batch of 1000 tyres, inspect 80 samples. Reject if more than 3 critical or 14 major defects found. All rejected batches undergo 100% re-inspection or destruction.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════
+         CHAPTER 5: SUPPLY CHAIN
+    ═══════════════════════════════════════════════════ -->
+    <section class="chapter" id="ch5">
+      <div class="chapter-header">
+        <span class="chapter-num">5</span>
+        <h2 class="chapter-title">Supply Chain &amp; Procurement</h2>
+      </div>
+
+      <h2 class="section-title" id="ch5-suppliers">5.1 Key Supplier Categories</h2>
+      <table class="data-table">
+        <thead><tr><th>Material</th><th>Source Country</th><th>Lead Time</th><th>Risk Level</th><th>Backup Supplier</th></tr></thead>
+        <tbody>
+          <tr><td>Natural Rubber (NR)</td><td>Thailand / Myanmar</td><td>7–14 days</td><td>Medium</td><td>Indonesia</td></tr>
+          <tr><td>Carbon Black</td><td>Thailand / India</td><td>21–28 days</td><td>Low</td><td>China</td></tr>
+          <tr><td>Steel Cord (belt)</td><td>China / South Korea</td><td>30–45 days</td><td>High</td><td>India</td></tr>
+          <tr><td>Textile Cord (nylon)</td><td>Thailand / China</td><td>21–30 days</td><td>Medium</td><td>India</td></tr>
+          <tr><td>Halobutyl (inner liner)</td><td>USA / Russia</td><td>45–60 days</td><td>High</td><td>Germany</td></tr>
+          <tr><td>Chemicals / Accelerators</td><td>China / India</td><td>21–35 days</td><td>Medium</td><td>Germany</td></tr>
+          <tr><td>Steel Bead Wire</td><td>China / South Korea</td><td>30–45 days</td><td>Medium</td><td>India</td></tr>
+        </tbody>
+      </table>
+
+      <h2 class="section-title" id="ch5-procurement">5.2 Procurement Process</h2>
+
+      <div class="diagram-wrap">
+        <div class="mermaid">
+sequenceDiagram
+    participant AI as AI Reorder Agent
+    participant PM as Procurement Mgr
+    participant S as Supplier
+    participant WH as Warehouse
+
+    AI->>PM: Stock below reorder point alert
+    PM->>PM: Review &amp; approve draft PO
+    PM->>S: Issue PO (email via AI agent)
+    S-->>PM: Acknowledge PO
+    S-->>WH: Deliver goods
+    WH->>AI: GRN raised — stock updated
+    AI->>PM: PO closed in system
+        </div>
+        <div class="diagram-caption">Figure 5.1 — AI-assisted procurement workflow</div>
+      </div>
+
+      <h2 class="section-title" id="ch5-inventory">5.3 Inventory Management Policy</h2>
+
+      <div class="accordion">
+        <div class="accordion-item">
+          <button class="accordion-btn">Safety Stock &amp; Reorder Point Formula <span class="chevron">▼</span></button>
+          <div class="accordion-body">
+            <p><strong>Safety Stock</strong> = Z × σ<sub>LT</sub> × √(Lead Time)<br>
+            Where Z = 1.65 for 95% service level, σ<sub>LT</sub> = demand standard deviation during lead time.</p>
+            <p style="margin-top:.75rem"><strong>Reorder Point (ROP)</strong> = (Average Daily Usage × Lead Time) + Safety Stock</p>
+            <p style="margin-top:.75rem">The inventory management system automatically calculates and monitors ROP for all tracked raw materials and triggers alerts when stock falls below threshold.</p>
+          </div>
+        </div>
+        <div class="accordion-item">
+          <button class="accordion-btn">FIFO &amp; Lot Traceability <span class="chevron">▼</span></button>
+          <div class="accordion-body">
+            <p>All raw materials are issued on FIFO basis. Each lot has a unique barcode scanned at receipt and at mixing. The DQMS maintains full traceability: finished tyre → production batch → compound lot → raw material lot → supplier CoA. This enables rapid recall if a field issue is traced to a specific material batch.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════
+         CHAPTER 6: FINANCE & KPIS
+    ═══════════════════════════════════════════════════ -->
+    <section class="chapter" id="ch6">
+      <div class="chapter-header">
+        <span class="chapter-num">6</span>
+        <h2 class="chapter-title">Business, Finance &amp; KPIs</h2>
+      </div>
+
+      <h2 class="section-title" id="ch6-budget">6.1 Budget Overview</h2>
+
+      <div class="callout">
+        <div class="callout-title">📌 Director Note — Real Data Required</div>
+        The table and chart below show the structure and cost categories to track. Fill in actual figures from your finance team's budget report. The chart will display illustrative proportions until updated with real data.
+      </div>
+
+      <div class="chart-wrap">
+        <div class="chart-title">Annual Cost Structure &amp; Revenue (Illustrative — update with actual budget figures)</div>
+        <canvas id="financeChart"></canvas>
+      </div>
+
+      <table class="data-table">
+        <thead><tr><th>Line Item</th><th>Year 1 (Actual)</th><th>Year 2 (Budget)</th><th>Year 3 (Forecast)</th></tr></thead>
+        <tbody>
+          <tr><td>Raw Materials</td><td>—</td><td>—</td><td>—</td></tr>
+          <tr><td>Labour</td><td>—</td><td>—</td><td>—</td></tr>
+          <tr><td>Energy (electricity/gas)</td><td>—</td><td>—</td><td>—</td></tr>
+          <tr><td>Depreciation</td><td>—</td><td>—</td><td>—</td></tr>
+          <tr><td>Digital / ERP (SuperMega)</td><td>—</td><td>—</td><td>—</td></tr>
+          <tr><td>SG&amp;A</td><td>—</td><td>—</td><td>—</td></tr>
+          <tr><td><strong>Total Cost</strong></td><td><strong>—</strong></td><td><strong>—</strong></td><td><strong>—</strong></td></tr>
+          <tr><td><strong>Revenue</strong></td><td><strong>—</strong></td><td><strong>—</strong></td><td><strong>—</strong></td></tr>
+          <tr><td><strong>EBITDA Margin</strong></td><td><strong>—%</strong></td><td><strong>—%</strong></td><td><strong>—%</strong></td></tr>
+        </tbody>
+      </table>
+
+      <div class="callout note">
+        <div class="callout-title">📌 Key Cost Ratios to Monitor</div>
+        <ul>
+          <li><strong>Raw materials:</strong> typically 55–65% of cost of goods in tyre manufacturing.</li>
+          <li><strong>Labour:</strong> typically 8–12% in Myanmar context.</li>
+          <li><strong>Energy:</strong> 6–10%; curing presses and Banbury mixers are highest consumers.</li>
+          <li><strong>Gross margin target for local tyre manufacturer:</strong> 20–30%.</li>
+        </ul>
+      </div>
+
+      <h2 class="section-title" id="ch6-kpis">6.2 Director KPI Scorecard</h2>
+      <p>Targets below are set based on industry benchmarks for Myanmar tyre manufacturing. Update actual values each month from your plant and DQMS reports.</p>
+      <div class="kpi-grid">
+        <div class="kpi-card">
+          <span class="kpi-val">≥80%</span>
+          <div class="kpi-label">OEE Target</div>
+          <div class="kpi-trend">Actual: <em>from production report</em></div>
+        </div>
+        <div class="kpi-card">
+          <span class="kpi-val">&lt;2%</span>
+          <div class="kpi-label">Defect Rate Target</div>
+          <div class="kpi-trend">Actual: <em>from DQMS</em></div>
+        </div>
+        <div class="kpi-card">
+          <span class="kpi-val">≥98%</span>
+          <div class="kpi-label">On-Time Delivery Target</div>
+          <div class="kpi-trend">Actual: <em>from logistics</em></div>
+        </div>
+        <div class="kpi-card">
+          <span class="kpi-val">0</span>
+          <div class="kpi-label">Lost-Time Incidents Target</div>
+          <div class="kpi-trend trend-up">▲ Safety first</div>
+        </div>
+        <div class="kpi-card">
+          <span class="kpi-val">≥25%</span>
+          <div class="kpi-label">Gross Margin Target</div>
+          <div class="kpi-trend">Actual: <em>from finance</em></div>
+        </div>
+        <div class="kpi-card">
+          <span class="kpi-val">≥4.0★</span>
+          <div class="kpi-label">Supplier Rating Target</div>
+          <div class="kpi-trend">Actual: <em>from procurement</em></div>
+        </div>
+      </div>
+
+      <h2 class="section-title" id="ch6-roi">6.3 Digital ERP ROI Analysis</h2>
+      <p>Use the table below as a framework when presenting the ERP business case. Replace the "Annual Saving" column with figures validated by your finance team once the system is live for 3–6 months.</p>
+      <table class="data-table">
+        <thead><tr><th>Benefit Area</th><th>How to Measure</th><th>Annual Saving (Enter Actual)</th></tr></thead>
+        <tbody>
+          <tr><td>Reduced defect scrap</td><td>(Before defect rate − After defect rate) × production volume × unit cost</td><td>—</td></tr>
+          <tr><td>Improved OEE</td><td>OEE % gain × planned hours × revenue per hour</td><td>—</td></tr>
+          <tr><td>Inventory optimisation</td><td>Reduction in average inventory value × holding cost rate</td><td>—</td></tr>
+          <tr><td>Predictive maintenance</td><td>Unplanned breakdown hours saved × cost per hour downtime</td><td>—</td></tr>
+          <tr><td>Labour efficiency</td><td>Admin hours saved × hourly labour cost</td><td>—</td></tr>
+          <tr><td><strong>Total Annual Benefit</strong></td><td></td><td><strong>—</strong></td></tr>
+          <tr><td>ERP Investment (Yr 1)</td><td>Setup fee + annual licence</td><td>—</td></tr>
+          <tr><td><strong>Payback Period</strong></td><td>Investment ÷ Annual Benefit × 12 months</td><td><strong>— months</strong></td></tr>
+        </tbody>
+      </table>
+      <h2 class="section-title" id="ch6-workingcapital">6.4 Working Capital Management</h2>
+
+      <p>
+        Working capital is the lifeblood of a manufacturing business. A profitable factory can still run out
+        of cash if it mismanages its working capital. As Director, you must understand the cash conversion
+        cycle and manage it actively.
+      </p>
+
+      <div class="callout">
+        <div class="callout-title">⚡ Core Concept: Cash Conversion Cycle (CCC)</div>
+        <p style="margin-bottom:.5rem"><strong>CCC = DIO + DSO − DPO</strong></p>
+        <ul>
+          <li><strong>DIO (Days Inventory Outstanding)</strong> = (Average Inventory ÷ COGS) × 365 — how many days your cash is locked in raw materials and finished goods.</li>
+          <li><strong>DSO (Days Sales Outstanding)</strong> = (Accounts Receivable ÷ Revenue) × 365 — how many days before customers pay you.</li>
+          <li><strong>DPO (Days Payable Outstanding)</strong> = (Accounts Payable ÷ COGS) × 365 — how many days before you pay your suppliers.</li>
+        </ul>
+        <p style="margin-top:.5rem"><strong>Goal:</strong> Keep CCC low. A CCC of 30 days means you recover cash 30 days after buying raw materials. A CCC of 90 days means cash is tied up for 3 months — requiring working capital loans and paying interest.</p>
+      </div>
+
+      <div class="accordion">
+        <div class="accordion-item">
+          <button class="accordion-btn">How to Reduce the Cash Conversion Cycle <span class="chevron">▼</span></button>
+          <div class="accordion-body">
+            <table class="data-table">
+              <thead><tr><th>Lever</th><th>Action</th><th>Who Owns It</th></tr></thead>
+              <tbody>
+                <tr><td>Reduce DIO</td><td>Improve demand forecasting; avoid over-stocking raw materials; reduce finished goods by matching production to orders; JIT receiving for short-lead-time materials</td><td>Supply Chain Manager + Production Manager</td></tr>
+                <tr><td>Reduce DSO</td><td>Tighten credit terms (e.g. Net 30 max for distributors); collect overdue invoices promptly; offer small early-payment discount to key customers</td><td>Finance Manager + Sales</td></tr>
+                <tr><td>Increase DPO</td><td>Negotiate longer payment terms with key suppliers (45–60 days); consolidate purchasing to increase negotiating power; only extend DPO for financially stable suppliers — don't stress small suppliers</td><td>Supply Chain Manager + Finance Manager</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="accordion-item">
+          <button class="accordion-btn">Inventory Management — Key Financial Ratios <span class="chevron">▼</span></button>
+          <div class="accordion-body">
+            <p><strong>Inventory Turnover</strong> = COGS ÷ Average Inventory<br>
+            A higher number is better. For a tyre manufacturer, aim for 8–12× per year on finished goods. Raw materials should turn faster (monthly deliveries = ~12×).</p>
+            <p style="margin-top:.75rem"><strong>Stock-out Cost</strong> vs <strong>Overstock Cost</strong>: Stock-outs cost you lost production and customer penalties. Overstock costs you interest on tied-up cash and risk of expiry/obsolescence. The sweet spot is the reorder point formula in Chapter 5.</p>
+            <p style="margin-top:.75rem"><strong>Slow-moving inventory</strong>: Any raw material or finished good sitting &gt;90 days should be flagged. Write down its value in your financial accounts and investigate the root cause — wrong forecast, cancelled order, or quality issue.</p>
+          </div>
+        </div>
+      </div>
+
+      <h2 class="section-title" id="ch6-pricing">6.5 Pricing Strategy &amp; Contribution Margin</h2>
+
+      <p>
+        Pricing is one of the most powerful profit levers — and one of the most misunderstood. Many
+        factory directors focus on revenue (top line) without understanding which products actually
+        contribute to profit. This section gives you the tools to price correctly and identify your most
+        profitable products.
+      </p>
+
+      <div class="callout">
+        <div class="callout-title">⚡ Key Formula: Contribution Margin</div>
+        <p><strong>Contribution Margin (CM) = Selling Price − Variable Costs per unit</strong></p>
+        <p style="margin-top:.5rem">Variable costs include: raw material per tyre + direct labour per tyre + energy per tyre + packaging per tyre.</p>
+        <p style="margin-top:.5rem"><strong>Contribution Margin % = (CM ÷ Selling Price) × 100</strong></p>
+        <p style="margin-top:.5rem">Fixed costs (depreciation, management salaries, factory rent) don't change with volume — so a product with high CM% is more profitable as volume grows. A product with low CM% may destroy value even when you're busy.</p>
+      </div>
+
+      <div class="accordion">
+        <div class="accordion-item">
+          <button class="accordion-btn">The Pricing Floor — Never Sell Below This <span class="chevron">▼</span></button>
+          <div class="accordion-body">
+            <p>The <strong>minimum price floor</strong> is the point where you cover all variable costs AND a contribution to fixed costs. Never accept an order below variable cost — you lose money on every unit. The formula:</p>
+            <p style="margin-top:.5rem; font-family:'JetBrains Mono',monospace; background:var(--code-bg); padding:.75rem; border-radius:6px; font-size:.88rem">
+              Price Floor = Raw Material + Direct Labour + Energy + Packaging + Minimum Contribution<br><br>
+              Example structure: If variable costs = 80% of your selling price,<br>
+              then: Selling Price = Total Variable Cost ÷ 0.80<br>
+              (i.e. if your variable cost per tyre is $8, the minimum price is $8 ÷ 0.80 = $10)
+            </p>
+            <p style="margin-top:.75rem">The contribution above variable cost must cover: factory depreciation, management salaries, interest, and profit. Work backwards from your target net margin.</p>
+          </div>
+        </div>
+        <div class="accordion-item">
+          <button class="accordion-btn">Pricing Strategies by Segment <span class="chevron">▼</span></button>
+          <div class="accordion-body">
+            <table class="data-table">
+              <thead><tr><th>Strategy</th><th>When to Use</th><th>Risk</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Cost-plus pricing</strong></td><td>Standard approach: variable cost + fixed cost allocation + target profit margin. Simple and ensures coverage. Best for commodity products (motorcycle tyres).</td><td>Ignores competition — may price too high or too low vs market.</td></tr>
+                <tr><td><strong>Value-based pricing</strong></td><td>Set price based on value to customer (e.g. truck tyres — longer tread life = lower cost per km for fleet operator). Premium price justified by premium performance.</td><td>Requires proof of performance data; customers may not believe claims without track record.</td></tr>
+                <tr><td><strong>Contract/volume pricing</strong></td><td>Fleet customers get volume discount in exchange for annual purchase commitment. Lower per-unit price but guaranteed volume improves production planning.</td><td>Locked-in price when costs rise. Build cost-escalation clauses into long-term contracts.</td></tr>
+                <tr><td><strong>Competitive pricing</strong></td><td>Match or beat competitor prices to win a new segment. Only viable if your cost structure supports it — use contribution margin analysis first.</td><td>Price wars destroy industry profitability. Compete on price only as a temporary market-entry tactic, not as a long-term strategy.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="accordion-item">
+          <button class="accordion-btn">Break-Even Analysis <span class="chevron">▼</span></button>
+          <div class="accordion-body">
+            <p><strong>Break-Even Volume</strong> = Total Fixed Costs ÷ Contribution Margin per unit</p>
+            <p style="margin-top:.5rem">This tells you the minimum number of tyres you must sell to cover all fixed costs. Below this volume, you are making a loss. Above it, every additional unit generates profit equal to its contribution margin.</p>
+            <p style="margin-top:.75rem"><strong>Break-Even Revenue</strong> = Total Fixed Costs ÷ Contribution Margin %</p>
+            <p style="margin-top:.5rem">Calculate this for each product line separately. It tells you which products "pay for themselves" fastest and which ones need volume to justify production.</p>
+            <div class="callout note" style="margin-top:1rem">
+              <div class="callout-title">📌 Director Application</div>
+              Before launching a new product or accepting a major order at a discounted price, always ask: does this pass the break-even test? Does the additional volume contribute enough to fixed costs without undermining your pricing in other segments?
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <h2 class="section-title" id="ch6-capex">6.6 Capital Investment Decisions</h2>
+
+      <p>
+        As Director you will face decisions on major capital expenditure: new machinery, capacity expansion,
+        new product lines, ERP systems, factory upgrades. These frameworks help you evaluate them rigorously.
+      </p>
+
+      <div class="accordion">
+        <div class="accordion-item">
+          <button class="accordion-btn">Payback Period — Simple and Fast <span class="chevron">▼</span></button>
+          <div class="accordion-body">
+            <p><strong>Payback Period</strong> = Capital Investment ÷ Annual Cash Saving (or Annual Net Profit from investment)</p>
+            <p style="margin-top:.5rem">Example: A new curing press costs $200K and saves $60K per year in downtime and rework costs → Payback = 200 ÷ 60 = 3.3 years.</p>
+            <p style="margin-top:.5rem">Rule of thumb for manufacturing equipment: payback ≤ 4 years is generally acceptable. Payback &gt; 6 years requires strong strategic justification beyond pure financial return.</p>
+            <p style="margin-top:.5rem"><strong>Weakness:</strong> Ignores the time value of money and cash flows beyond the payback point. Use NPV for larger decisions.</p>
+          </div>
+        </div>
+        <div class="accordion-item">
+          <button class="accordion-btn">NPV &amp; IRR — For Significant Investments <span class="chevron">▼</span></button>
+          <div class="accordion-body">
+            <p><strong>Net Present Value (NPV)</strong> discounts future cash flows back to today's value using a discount rate (your cost of capital, typically 12–20% for a Myanmar manufacturing business).</p>
+            <p style="margin-top:.5rem">NPV &gt; 0 → investment creates value. NPV &lt; 0 → investment destroys value at the given discount rate.</p>
+            <p style="margin-top:.5rem"><strong>Internal Rate of Return (IRR)</strong> is the discount rate at which NPV = 0. If IRR &gt; your cost of capital, invest. If IRR &lt; cost of capital, don't.</p>
+            <p style="margin-top:.75rem"><strong>Practical steps for any major investment decision:</strong></p>
+            <ol style="margin-top:.5rem">
+              <li>Define the investment cost (capital + installation + training).</li>
+              <li>Estimate annual cash benefits (cost savings, additional revenue, avoided costs).</li>
+              <li>Estimate the useful life of the asset (typically 7–15 years for factory equipment).</li>
+              <li>Calculate payback period and NPV (use Excel or a finance calculator).</li>
+              <li>Include a "downside scenario" (what if benefits are 30% lower than estimated?).</li>
+              <li>Compare alternatives — always evaluate at least 2 options before deciding.</li>
+            </ol>
+          </div>
+        </div>
+        <div class="accordion-item">
+          <button class="accordion-btn">Cost of Poor Quality (COPQ) — Hidden Capital Drain <span class="chevron">▼</span></button>
+          <div class="accordion-body">
+            <p>COPQ is the full cost of not getting quality right the first time. It is typically 10–25% of revenue in a factory that lacks a mature quality system — much larger than most directors realise.</p>
+            <table class="data-table">
+              <thead><tr><th>COPQ Category</th><th>Examples</th><th>How to Quantify</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Internal failure</strong></td><td>Scrap tyres, rework, sorting, retesting after repair</td><td>Units scrapped × material cost + rework labour hours × hourly rate</td></tr>
+                <tr><td><strong>External failure</strong></td><td>Customer warranty claims, returns, recalls, transport to collect</td><td>Number of claims × average cost per claim + any goodwill cost</td></tr>
+                <tr><td><strong>Appraisal</strong></td><td>Inspection labour, QC equipment, lab testing, AQL sampling</td><td>QC team salary + equipment depreciation + third-party testing fees</td></tr>
+                <tr><td><strong>Prevention</strong></td><td>Training, process improvement projects, calibration, DQMS system</td><td>Investment in prevention activities — these reduce internal and external failure costs</td></tr>
+              </tbody>
+            </table>
+            <div class="callout note" style="margin-top:1rem">
+              <div class="callout-title">📌 Director Rule</div>
+              A common quality management benchmark: every $1 spent on prevention saves approximately $10 in internal failure costs and $100 in external failure costs. The exact ratios vary by industry and context — the key principle is that prevention is always far cheaper than failure. Track your own factory's actual COPQ split to understand your specific ratios and improvement opportunity.
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </section>
+    <section class="chapter" id="ch7">
+      <div class="chapter-header">
+        <span class="chapter-num">7</span>
+        <h2 class="chapter-title">Director's Operational Cadence</h2>
+      </div>
+
+      <p>
+        Effective factory direction is built on consistent routines. This chapter defines the recommended
+        daily, weekly, and monthly cadence for the Director of Yangon Tyre Factory — covering production
+        reviews, management meetings, financial oversight, and strategic checkpoints.
+      </p>
+
+      <div class="callout note">
+        <div class="callout-title">📌 How to Use This Chapter</div>
+        Treat this as a living schedule template. Adjust timings to match your factory's shift patterns and management preferences. The goal is that no critical operational signal — safety, quality, production, or finance — goes unreviewed for more than one week.
+      </div>
+
+      <h2 class="section-title" id="ch7-daily">7.1 Daily Routine</h2>
+
+      <table class="data-table">
+        <thead><tr><th>Time</th><th>Activity</th><th>Input</th><th>Action</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><strong>07:00–07:30</strong></td>
+            <td>Overnight production &amp; safety review</td>
+            <td>Night shift report, DQMS alerts, maintenance log</td>
+            <td>Identify any critical issues before morning meeting; follow up on any safety near-miss</td>
+          </tr>
+          <tr>
+            <td><strong>07:30–08:30</strong></td>
+            <td>Morning management stand-up</td>
+            <td>Plant Manager, QC Manager, Shift Leader daily brief</td>
+            <td>Confirm production plan for day; clear blockers; escalate any critical defect or machine-down situation</td>
+          </tr>
+          <tr>
+            <td><strong>08:30–10:00</strong></td>
+            <td>Plant floor walk</td>
+            <td>Personal observation, operator conversations</td>
+            <td>Check housekeeping (5S), observe any quality issues at cure/building, verify safety compliance; note morale and pace</td>
+          </tr>
+          <tr>
+            <td><strong>10:00–12:00</strong></td>
+            <td>Operational work block</td>
+            <td>Emails, procurement approvals, customer queries, internal decisions</td>
+            <td>Respond to supplier issues; approve any POs over approval threshold; handle customer escalations</td>
+          </tr>
+          <tr>
+            <td><strong>13:00–15:00</strong></td>
+            <td>Department meetings / strategic work</td>
+            <td>Rotating: Finance Tue, Quality Wed, SC Thu (see weekly schedule)</td>
+            <td>Deep-dive into one department per afternoon; review data, challenge assumptions, agree actions</td>
+          </tr>
+          <tr>
+            <td><strong>15:00–16:00</strong></td>
+            <td>End-of-day review</td>
+            <td>Day's production total vs plan, any new DQMS alerts</td>
+            <td>Sign off on any urgent actions; confirm handover to afternoon shift leader; brief Plant Manager on priorities for next morning</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2 class="section-title" id="ch7-weekly">7.2 Weekly Schedule</h2>
+
+      <div class="accordion">
+        <div class="accordion-item">
+          <button class="accordion-btn">Monday — Production Planning &amp; Week Review <span class="chevron">▼</span></button>
+          <div class="accordion-body">
+            <ul>
+              <li><strong>09:00</strong> — Weekly management meeting (Director + all managers): last week's KPI review (OEE, quality PPM, delivery, safety), this week's production plan, open issues.</li>
+              <li><strong>10:30</strong> — Review weekly OEE loss pareto with Plant Manager: top 3 downtime causes, corrective actions assigned.</li>
+              <li><strong>PM</strong> — Approve weekly raw material orders / purchase requisitions above threshold.</li>
+            </ul>
+          </div>
+        </div>
+        <div class="accordion-item">
+          <button class="accordion-btn">Tuesday — Finance &amp; Cost Review <span class="chevron">▼</span></button>
+          <div class="accordion-body">
+            <ul>
+              <li>Review week-to-date cost against budget: raw material consumption, energy usage, overtime hours.</li>
+              <li>Flag any line item tracking &gt;5% over budget to Finance Manager for root cause.</li>
+              <li>Approve any capital expenditure requests or emergency procurement above standard limit.</li>
+              <li>Review accounts receivable (customer payments) and payable (supplier terms).</li>
+            </ul>
+          </div>
+        </div>
+        <div class="accordion-item">
+          <button class="accordion-btn">Wednesday — Quality Deep-Dive <span class="chevron">▼</span></button>
+          <div class="accordion-body">
+            <ul>
+              <li>Formal quality meeting with QC Manager and Plant Manager.</li>
+              <li>Review defect pareto for the week: which SKUs, which shifts, which machines generating most defects.</li>
+              <li>Review any critical or major defect incidents from the past 7 days — verify corrective actions are in place.</li>
+              <li>Customer complaint review: any new complaints; status of open corrective action reports (CARs).</li>
+              <li>Incoming material quality: any CoA failures or in-process issues flagged by lab.</li>
+            </ul>
+          </div>
+        </div>
+        <div class="accordion-item">
+          <button class="accordion-btn">Thursday — Supply Chain &amp; Inventory <span class="chevron">▼</span></button>
+          <div class="accordion-body">
+            <ul>
+              <li>Review raw material stock levels vs reorder points — flag any items approaching stock-out risk.</li>
+              <li>Supplier delivery performance: on-time vs late; any quality issues with incoming materials.</li>
+              <li>Approve major purchase orders and any spot-buy decisions for supply risk materials.</li>
+              <li>Review finished goods inventory: dispatch plan for the week; any customer order fulfilment at risk.</li>
+            </ul>
+          </div>
+        </div>
+        <div class="accordion-item">
+          <button class="accordion-btn">Friday — People, Safety &amp; Week Close <span class="chevron">▼</span></button>
+          <div class="accordion-body">
+            <ul>
+              <li>Safety walk and near-miss review with HR Manager — any incidents from the week, safety improvement actions.</li>
+              <li>HR items: attendance and disciplinary issues above shift-level; training schedule adherence.</li>
+              <li>Weekly Director's summary note: 3 things that went well, 3 improvement actions for next week.</li>
+              <li>Brief preparation for Monday's management meeting — collect data inputs from all managers by COB Friday.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <h2 class="section-title" id="ch7-monthly">7.3 Monthly Cadence</h2>
+
+      <table class="data-table">
+        <thead><tr><th>Week</th><th>Event</th><th>Participants</th><th>Output</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>Week 1 (1st Monday)</td>
+            <td>Monthly KPI &amp; Management Review</td>
+            <td>All managers + Director</td>
+            <td>Month scorecard vs targets; formal decisions on any below-target KPI; updated action plans</td>
+          </tr>
+          <tr>
+            <td>Week 1 (1st Tuesday)</td>
+            <td>Month-end P&amp;L &amp; Budget Review</td>
+            <td>Finance Manager + Director</td>
+            <td>Monthly P&amp;L vs budget; cost variance analysis; revised full-year forecast</td>
+          </tr>
+          <tr>
+            <td>Week 2</td>
+            <td>Customer &amp; Sales Review</td>
+            <td>Sales (if applicable) + Director</td>
+            <td>Order pipeline, customer satisfaction, any pricing or product issues; next month's sales forecast</td>
+          </tr>
+          <tr>
+            <td>Week 3</td>
+            <td>Supplier &amp; Procurement Review</td>
+            <td>Supply Chain Manager + Director</td>
+            <td>Supplier performance scorecards; commodity price outlook and hedging decisions; contract renewals</td>
+          </tr>
+          <tr>
+            <td>Week 4</td>
+            <td>Strategic Review / Planning</td>
+            <td>Director (+ owners if applicable)</td>
+            <td>Progress on strategic initiatives (new products, capacity, ERP milestones); next month priorities</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2 class="section-title" id="ch7-annual">7.4 Annual Calendar Anchors</h2>
+
+      <div class="accordion">
+        <div class="accordion-item">
+          <button class="accordion-btn">Q1 (Jan–Mar): Budget Finalisation &amp; Annual Plan <span class="chevron">▼</span></button>
+          <div class="accordion-body">
+            <ul>
+              <li>Finalise full-year production plan and headcount.</li>
+              <li>Complete annual supplier negotiations and framework contracts.</li>
+              <li>Review and update quality targets based on previous year's data.</li>
+              <li>Annual ISO 9001 internal audit preparation.</li>
+            </ul>
+          </div>
+        </div>
+        <div class="accordion-item">
+          <button class="accordion-btn">Q2 (Apr–Jun): Mid-Year Review &amp; Maintenance Shutdown <span class="chevron">▼</span></button>
+          <div class="accordion-body">
+            <ul>
+              <li>H1 financial and operational performance review vs plan.</li>
+              <li>Annual planned maintenance shutdown (typically 1 week): major overhauls, mould refurbishment, calender roll replacement.</li>
+              <li>Staff performance mid-year review.</li>
+              <li>Review raw material price outlook for H2 and adjust safety stock levels.</li>
+            </ul>
+          </div>
+        </div>
+        <div class="accordion-item">
+          <button class="accordion-btn">Q3 (Jul–Sep): Capacity Planning &amp; Rainy Season Prep <span class="chevron">▼</span></button>
+          <div class="accordion-body">
+            <ul>
+              <li>Forecast demand for agricultural tyre season (harvest period).</li>
+              <li>Review flood/storm risk to raw material logistics (road and port access).</li>
+              <li>Begin next year's capital budget planning.</li>
+              <li>External quality audit (ISO, customer).</li>
+            </ul>
+          </div>
+        </div>
+        <div class="accordion-item">
+          <button class="accordion-btn">Q4 (Oct–Dec): Year-End &amp; Next Year Plan <span class="chevron">▼</span></button>
+          <div class="accordion-body">
+            <ul>
+              <li>Full-year financial close and review.</li>
+              <li>Annual performance reviews and bonus decisions.</li>
+              <li>Build next year's production and financial plan.</li>
+              <li>Strategic targets and KRA setting for all managers.</li>
+              <li>Review digital systems roadmap — new features, integrations, DQMS updates.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════
+         CHAPTER 8: HR & ORGANISATION
+    ═══════════════════════════════════════════════════ -->
+    <section class="chapter" id="ch8">
+      <div class="chapter-header">
+        <span class="chapter-num">8</span>
+        <h2 class="chapter-title">HR &amp; Organisation</h2>
+      </div>
+
+      <h2 class="section-title" id="ch8-structure">8.1 Organisational Structure</h2>
+
+      <div class="diagram-wrap">
+        <div class="mermaid">
+graph TD
+    D[🏛 Director] --> PM[Plant Manager]
+    D --> FM[Finance Manager]
+    D --> HR[HR Manager]
+    PM --> ProdM[Production Mgr]
+    PM --> MaintM[Maintenance Mgr]
+    PM --> QCM[QC Manager]
+    PM --> SCM[Supply Chain Mgr]
+    ProdM --> TL1[Shift Leader A]
+    ProdM --> TL2[Shift Leader B]
+    ProdM --> TL3[Shift Leader C]
+    TL1 & TL2 & TL3 --> OP[Operators\n~40 per shift]
+    QCM --> QCI[QC Inspectors\n×6]
+    MaintM --> TECH[Technicians\n×8]
+    SCM --> PROC[Procurement\nOfficer]
+    SCM --> WH[Warehouse\nSupervisor]
+        </div>
+        <div class="diagram-caption">Figure 8.1 — Yangon Tyre Factory organisational chart</div>
+      </div>
+
+      <h2 class="section-title" id="ch8-training">8.2 Digital Transformation Training Plan</h2>
+      <table class="data-table">
+        <thead><tr><th>Group</th><th>Training Focus</th><th>Duration</th><th>Format</th></tr></thead>
+        <tbody>
+          <tr><td>Director &amp; Management</td><td>Dashboard navigation, KPI interpretation, AI agent reports</td><td>1 day</td><td>Classroom + hands-on</td></tr>
+          <tr><td>Plant Manager</td><td>OEE module, maintenance scheduling, shift reports</td><td>2 days</td><td>Workshop</td></tr>
+          <tr><td>QC Team (6 inspectors)</td><td>Mobile inspection app, defect AI, DQMS review</td><td>3 days</td><td>Hands-on + field</td></tr>
+          <tr><td>Production Operators (~40)</td><td>Mobile app for production logging, safety alerts</td><td>4 hours each</td><td>On-shift training</td></tr>
+          <tr><td>Maintenance Technicians</td><td>Work order system, IoT sensor data interpretation</td><td>1 day</td><td>Workshop</td></tr>
+          <tr><td>Procurement &amp; Warehouse</td><td>Inventory module, PO workflow, barcode scanning</td><td>1 day</td><td>Hands-on</td></tr>
+        </tbody>
+      </table>
+
+      <h2 class="section-title" id="ch8-kra">8.3 Key Result Areas (KRA) Matrix</h2>
+      <div class="accordion">
+        <div class="accordion-item">
+          <button class="accordion-btn">Plant Manager KRAs <span class="chevron">▼</span></button>
+          <div class="accordion-body">
+            <ul>
+              <li>Achieve OEE ≥ 80% across all tyre building machines (weight: 35%)</li>
+              <li>Zero critical safety incidents (weight: 25%)</li>
+              <li>Production plan adherence ≥ 95% (weight: 20%)</li>
+              <li>Maintenance work order completion within 48h: ≥ 90% (weight: 20%)</li>
+            </ul>
+          </div>
+        </div>
+        <div class="accordion-item">
+          <button class="accordion-btn">QC Manager KRAs <span class="chevron">▼</span></button>
+          <div class="accordion-body">
+            <ul>
+              <li>First-pass quality yield ≥ 98% (weight: 40%)</li>
+              <li>Customer field complaint rate &lt; 0.1% (weight: 30%)</li>
+              <li>DQMS data completeness ≥ 99% (no missing inspection records) (weight: 20%)</li>
+              <li>Corrective action closure within SLA: ≥ 95% (weight: 10%)</li>
+            </ul>
+          </div>
+        </div>
+        <div class="accordion-item">
+          <button class="accordion-btn">Supply Chain Manager KRAs <span class="chevron">▼</span></button>
+          <div class="accordion-body">
+            <ul>
+              <li>Zero raw material stock-outs causing production stops (weight: 40%)</li>
+              <li>Purchase price variance within ±5% of budget (weight: 25%)</li>
+              <li>Supplier on-time delivery ≥ 90% (weight: 25%)</li>
+              <li>Inventory turnover ≥ 8× per year (weight: 10%)</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <h2 class="section-title" id="ch8-leadership">8.4 Director's Leadership &amp; Management Toolkit</h2>
+
+      <p>
+        Technical knowledge alone does not make an effective factory director. Leadership — how you
+        make decisions, motivate teams, manage crises, and continuously improve the organisation — is
+        equally critical. This section distils the most practical frameworks for factory leadership.
+      </p>
+
+      <div class="accordion">
+        <div class="accordion-item">
+          <button class="accordion-btn">Lean Manufacturing Basics — What Every Director Must Know <span class="chevron">▼</span></button>
+          <div class="accordion-body">
+            <p>Lean manufacturing (derived from the Toyota Production System) is the dominant framework for reducing waste and improving flow in factories. As Director, you need to understand these principles to lead continuous improvement.</p>
+            <table class="data-table">
+              <thead><tr><th>Principle</th><th>What It Means</th><th>Applied to Tyre Factory</th></tr></thead>
+              <tbody>
+                <tr>
+                  <td><strong>5S</strong></td>
+                  <td>Sort, Set-in-order, Shine, Standardise, Sustain. Foundation of factory discipline — everything has a place and everything is in its place.</td>
+                  <td>Tools and moulds always in the right location → no time wasted searching; clean machines → defects spotted faster; daily 5S audit by shift leaders.</td>
+                </tr>
+                <tr>
+                  <td><strong>PDCA Cycle</strong></td>
+                  <td>Plan → Do → Check → Act. The universal continuous improvement loop. Never implement a change without a plan and a check.</td>
+                  <td>OEE improvement: Plan (define target, root cause), Do (trial one shift), Check (did OEE improve?), Act (standardise if yes, revise if no).</td>
+                </tr>
+                <tr>
+                  <td><strong>Kaizen</strong></td>
+                  <td>Small, continuous improvements by everyone, every day. Kaizen events are focused 3–5 day workshops to tackle a specific problem.</td>
+                  <td>Operators suggest improvements to mould change process → reduce changeover time from 45 to 30 minutes → OEE improves by 3%.</td>
+                </tr>
+                <tr>
+                  <td><strong>Andon / Visual Management</strong></td>
+                  <td>Make the status of every machine and process visible at a glance. If something is wrong, it should be visible immediately — not hidden in a report.</td>
+                  <td>Production boards showing actual vs target units per hour at each station; red/green light on curing presses; defect counters visible to operators in real time.</td>
+                </tr>
+                <tr>
+                  <td><strong>Poka-yoke</strong></td>
+                  <td>Mistake-proofing: design processes so errors are impossible or immediately detected. The best quality control is one that prevents defects, not just detects them.</td>
+                  <td>Curing press that won't close unless bladder pressure is correct; barcode scan required before material can be issued to production (prevents wrong compound).</td>
+                </tr>
+                <tr>
+                  <td><strong>Value Stream Mapping</strong></td>
+                  <td>A visual map of every step in the process from raw material to customer delivery — showing value-added time vs. waiting/waste time.</td>
+                  <td>Use to identify the biggest time waste in your production flow (often it's waiting time between curing and QC, or finished goods waiting for dispatch). This becomes your improvement priority.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="accordion-item">
+          <button class="accordion-btn">Managing Your Managers — Delegation &amp; Accountability <span class="chevron">▼</span></button>
+          <div class="accordion-body">
+            <p>A Director who does everything themselves creates a bottleneck. Your job is to create a system where managers are empowered to act within clear boundaries, and you focus on strategy and exception management.</p>
+            <table class="data-table">
+              <thead><tr><th>Delegation Level</th><th>Manager Action</th><th>Director Role</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Level 1 — Routine</strong></td><td>Manager decides and acts independently. Reports outcome at weekly meeting.</td><td>Review weekly; adjust KRA if pattern changes. Don't micro-manage routine decisions.</td></tr>
+                <tr><td><strong>Level 2 — Significant</strong></td><td>Manager recommends and acts after brief Director confirmation (same-day response).</td><td>Quick validation: Is it within budget? Does it conflict with another department? Then approve or adjust.</td></tr>
+                <tr><td><strong>Level 3 — Strategic</strong></td><td>Manager presents analysis and options. Director decides after proper review.</td><td>Major capex, new supplier contracts, pricing changes, hiring above a certain grade.</td></tr>
+                <tr><td><strong>Level 4 — Director-only</strong></td><td>Director handles directly: no delegation.</td><td>Critical safety incidents, customer escalations at the highest level, regulatory issues, media/government matters.</td></tr>
+              </tbody>
+            </table>
+            <p style="margin-top:.75rem"><strong>Setting accountability:</strong> Every action agreed in a meeting must have: (1) a named owner, (2) a specific deliverable, (3) a deadline. No meeting should end without these three elements for each agreed action. Review open actions at the start of every meeting.</p>
+          </div>
+        </div>
+
+        <div class="accordion-item">
+          <button class="accordion-btn">Crisis Management — What to Do When Things Go Wrong <span class="chevron">▼</span></button>
+          <div class="accordion-body">
+            <p>Three types of factory crises and how to respond:</p>
+            <table class="data-table">
+              <thead><tr><th>Crisis Type</th><th>First 15 Minutes</th><th>First 2 Hours</th><th>First 24 Hours</th></tr></thead>
+              <tbody>
+                <tr>
+                  <td><strong>Safety incident (injury)</strong></td>
+                  <td>Stop work in affected area. Ensure casualty receives immediate medical help. Do not move injured person unless danger. Call emergency services if serious.</td>
+                  <td>Secure the scene (don't disturb evidence). Notify HR and owner/chairman immediately. Begin witness statements. Issue a "do not operate" on affected machine.</td>
+                  <td>Formal incident report. Root cause investigation started. Regulatory notification if required (Labour Department). Full communication to all staff. Review similar risks in other areas.</td>
+                </tr>
+                <tr>
+                  <td><strong>Major quality escape (defective tyres reached customers)</strong></td>
+                  <td>Get the facts: which product, which batches, how many units, what is the defect and safety risk level. Do not guess — get the production and QC records.</td>
+                  <td>Quarantine all affected batches in your warehouse. Contact your key customers who have these tyres. If safety risk: initiate recall discussion. Inform owner/chairman.</td>
+                  <td>DQMS batch traceability report to identify full scope. Customer communication plan. Root cause analysis started. Corrective action plan with timeline. Legal review if needed.</td>
+                </tr>
+                <tr>
+                  <td><strong>Critical machine breakdown (production stop)</strong></td>
+                  <td>Confirm the scope: one machine or whole line? Maintenance team on it. Estimate time to repair — is it hours or days?</td>
+                  <td>Communicate to customers if delivery will be affected (before they chase you). Evaluate options: shift to other machines? Expedite spare parts? Bring in external repair contractor?</td>
+                  <td>If &gt;24h downtime: formal customer communication with revised delivery dates. Review spare parts holding for this machine type — this was a gap in your maintenance planning. Update preventive maintenance plan.</td>
+                </tr>
+              </tbody>
+            </table>
+            <div class="callout note" style="margin-top:1rem">
+              <div class="callout-title">📌 Crisis Communication Principle</div>
+              Communicate early, even when you don't have all the facts. Saying "We are aware of an issue and investigating — we will update you in 2 hours" is far better than silence. Customers and owners can handle bad news; they cannot handle surprises.
+            </div>
+          </div>
+        </div>
+
+        <div class="accordion-item">
+          <button class="accordion-btn">Performance Culture — How to Build a High-Performance Team <span class="chevron">▼</span></button>
+          <div class="accordion-body">
+            <ul>
+              <li><strong>Make performance visible:</strong> KPIs on a board in the factory, not hidden in a spreadsheet. People improve what they can see.</li>
+              <li><strong>Recognise good performance publicly:</strong> Name and thank teams or individuals who hit a target, solved a problem, or suggested an improvement. Recognition costs nothing and builds culture.</li>
+              <li><strong>Address poor performance early and directly:</strong> A manager who consistently misses KRAs without consequence destroys team morale. Performance conversations should be clear, respectful, and documented.</li>
+              <li><strong>Distinguish system failure from individual failure:</strong> If the same mistake happens repeatedly, it is likely a process problem, not a people problem. Fix the process before blaming the person.</li>
+              <li><strong>Invest in your top managers:</strong> Give them stretch projects, external training, and exposure to senior decisions. If they leave because you didn't develop them, that is a management failure.</li>
+              <li><strong>Lead by example on safety:</strong> If the Director doesn't wear PPE on the factory floor, why would anyone else? Your behaviour sets the standard for everything.</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="accordion-item">
+          <button class="accordion-btn">Negotiation Principles — Suppliers, Customers, &amp; Partners <span class="chevron">▼</span></button>
+          <div class="accordion-body">
+            <p>As Director you negotiate regularly — with suppliers on price and terms, with customers on contracts, with banks on financing, with the owner on budgets. These principles apply across all contexts.</p>
+            <ul>
+              <li><strong>Know your BATNA</strong> (Best Alternative to a Negotiated Agreement): Before any negotiation, know what you will do if you reach no deal. Your BATNA sets your walk-away point. Without it, you have no leverage.</li>
+              <li><strong>Know their BATNA too:</strong> A supplier who has no other large customer in your region has a weak BATNA. A supplier who can sell to 20 other factories has a strong one. This determines who has power.</li>
+              <li><strong>Separate people from the issue:</strong> Negotiate firmly on price and terms, but treat the other party with respect. You will deal with these people again. Burning a relationship over a small concession is poor strategy.</li>
+              <li><strong>Always get it in writing:</strong> Verbal agreements are worth nothing. Every negotiated outcome — price, volume, delivery date, payment terms, quality standard — must be in a signed contract or written purchase order.</li>
+              <li><strong>Anchor first:</strong> In price negotiations, the party who names a number first (the anchor) sets the frame. If buying, anchor low. If selling, anchor high. Always justify your anchor with data (cost breakdown, market price, delivery cost, etc.).</li>
+              <li><strong>Create value before claiming it:</strong> In supplier negotiations, explore what value you can offer them (volume commitment, early payment, referrals) before asking for a price reduction. Trades are more sustainable than pure price wins.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="callout">
+        <div class="callout-title">📁 Reference Documents</div>
+        HR policies, employment contracts, training materials, and industry reference manuals are stored in the shared Google Drive.
+        <div class="drive-grid" style="margin-top:1rem">
+          <a class="drive-card" href="https://drive.google.com/drive/folders/1lvNk73XNxIdPIagwal7YKEzlCtAkk-yv" target="_blank" rel="noopener">
+            <span class="dc-icon">🗂</span>
+            <span class="dc-name">Project Folder</span>
+            <span class="dc-desc">All project documents, reports, and plans</span>
+          </a>
+          <a class="drive-card" href="https://drive.google.com/drive/folders/1OiqlWG6F6TmeOd_LjYeuZz4LZjart43m" target="_blank" rel="noopener">
+            <span class="dc-icon">📚</span>
+            <span class="dc-name">Industry Literature</span>
+            <span class="dc-desc">Technical manuals, standards &amp; reference papers</span>
+          </a>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════
+         CHAPTER 9: GLOSSARY & QUICK REFERENCE
+    ═══════════════════════════════════════════════════ -->
+
+      <h2 class="section-title" id="ch8-four-levels">8.5 The Four-Level Organisational Architecture</h2>
+      <p>Every decision, communication, and training initiative in the factory must be designed with a clear understanding of <strong>who is receiving it and what lens they use to make sense of the world</strong>. The four levels — CEO/Director, Plant Manager, Manager, and Operator — each have different concerns, time horizons, vocabulary, and knowledge needs. Failing to account for this is the single most common reason factory initiatives fail: the right idea, delivered at the wrong level, in the wrong language.</p>
+
+      <div class="callout insight">
+        <div class="callout-title">💡 Director's Insight</div>
+        Your role as Director sits at the intersection of all four levels. You must be able to speak each language fluently. When talking to the CEO: speak strategy, risk, and returns. When walking the floor: speak safety, quality, and today's numbers. This linguistic flexibility is a trainable, deliberate skill — and the mark of an effective manufacturing leader.
+        <br><small>Source: Liker, J.K. &amp; Convis, G.L., <em>The Toyota Way to Lean Leadership</em> (McGraw-Hill, 2011) — specifically the "develop before deploy" and "go-and-see" (Genchi Genbutsu) leadership principles.</small>
+      </div>
+
+      <div class="accordion">
+        <div class="accordion-item">
+          <button class="accordion-btn">Level 1: CEO / Director — Strategic Steward <span class="chevron">▼</span></button>
+          <div class="accordion-body">
+            <table class="data-table">
+              <thead><tr><th>Dimension</th><th>Detail</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Primary concern</strong></td><td>Long-term value creation, competitive position, capital allocation, owner/investor relationship, regulatory exposure</td></tr>
+                <tr><td><strong>Time horizon</strong></td><td>1–5 years strategic; quarterly financial; annual budget cycle</td></tr>
+                <tr><td><strong>Core vocabulary</strong></td><td>EBITDA, ROCE, market share, risk appetite, strategic intent, NPV, CAGR, brand equity, regulatory compliance</td></tr>
+                <tr><td><strong>Knowledge needs</strong></td><td>Industry economics, Myanmar macro environment (FX, political risk, infrastructure), financial modelling, corporate governance, stakeholder management (banks, government, customers, suppliers at CEO level)</td></tr>
+                <tr><td><strong>What motivates them</strong></td><td>Growth, profitability, legacy, risk management, reputation</td></tr>
+                <tr><td><strong>Communication style</strong></td><td>Executive summary first (1 page), data-backed, scenario-based ("if we invest X, we expect Y"). Never bring a problem without a recommended solution and its financial impact.</td></tr>
+                <tr><td><strong>Blind spots</strong></td><td>Distance from operational reality; over-indexing on financial metrics at the expense of process/people health; strategic decisions made without understanding factory constraints</td></tr>
+              </tbody>
+            </table>
+            <div class="callout note">
+              <div class="callout-title">📋 Director's Reporting to CEO — Template</div>
+              When reporting up: (1) Headline KPI performance vs target in 3 numbers. (2) Top risk this month and mitigation. (3) One decision needed from CEO level. (4) Outlook for next quarter. Keep it to 3 minutes verbal + 1 slide visual. CEOs make decisions on patterns, not data — your job is to make the pattern visible.
+            </div>
+          </div>
+        </div>
+
+        <div class="accordion-item">
+          <button class="accordion-btn">Level 2: Plant Manager — Operational Translator <span class="chevron">▼</span></button>
+          <div class="accordion-body">
+            <table class="data-table">
+              <thead><tr><th>Dimension</th><th>Detail</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Primary concern</strong></td><td>Daily and weekly production output, OEE, quality PPM, machine uptime, shift coverage, cost vs budget, safety incidents</td></tr>
+                <tr><td><strong>Time horizon</strong></td><td>Today, this week, this month's production plan. Quarterly for maintenance planning.</td></tr>
+                <tr><td><strong>Core vocabulary</strong></td><td>OEE, throughput, cycle time, MTBF (Mean Time Between Failures), scrap rate, first-pass yield, downtime reason codes, shift handover</td></tr>
+                <tr><td><strong>Knowledge needs</strong></td><td>All tyre manufacturing processes end-to-end (Ch2-Ch3), TPM/preventive maintenance scheduling, workforce scheduling, production planning vs actual variance analysis, basic cost accounting (cost per unit, overhead absorption)</td></tr>
+                <tr><td><strong>What motivates them</strong></td><td>Meeting the production plan, solving today's problem, being respected by operators, being seen as reliable by the Director</td></tr>
+                <tr><td><strong>Communication style</strong></td><td>Data + action. "OEE was 68% yesterday, root cause was press #3 cure bladder failure, replacement scheduled for 06:00 today, expected recovery by 10:00." They value short, factual updates — not narrative. Use shift reports and visual boards.</td></tr>
+                <tr><td><strong>Blind spots</strong></td><td>Tactical firefighting instead of root cause elimination; reluctance to escalate problems upward (loss of face culture); under-investment in training because it reduces headcount availability in the short run</td></tr>
+              </tbody>
+            </table>
+            <div class="callout insight">
+              <div class="callout-title">💡 Director's Insight</div>
+              The Plant Manager is your operational multiplier. If they are strong, you can focus on strategy. If they are weak, you will be pulled into the factory floor daily. Investing in Plant Manager development — specifically in root cause analysis, production planning, and people communication — gives the highest ROI of any HR spend.
+            </div>
+            <p><strong>Key training priorities for Plant Manager level:</strong></p>
+            <ul style="padding-left:1.2rem; line-height:2;">
+              <li>OEE measurement and loss analysis (see §3.2)</li>
+              <li>Total Productive Maintenance (TPM) and AM (Autonomous Maintenance) fundamentals</li>
+              <li>Production planning and scheduling: capacity vs load, sequencing, changeover reduction (SMED)</li>
+              <li>5-Why and 8D problem solving (see §3.4)</li>
+              <li>Shift handover SOP: information, status, open issues — not verbal only</li>
+              <li>Leading indicators vs lagging indicators: manage the lead (inputs), not just the lag (results)</li>
+              <li>Basic P&amp;L literacy: understand cost of downtime, scrap cost, overtime premium</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="accordion-item">
+          <button class="accordion-btn">Level 3: Manager (QC / Supply Chain / Finance / HR) — Functional Expert <span class="chevron">▼</span></button>
+          <div class="accordion-body">
+            <table class="data-table">
+              <thead><tr><th>Dimension</th><th>Detail</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Primary concern</strong></td><td>Performance of their function's KPIs, cross-department coordination, adherence to standards and SOPs, team development</td></tr>
+                <tr><td><strong>Time horizon</strong></td><td>Weekly to monthly. Annual for budgets, plans, and performance reviews.</td></tr>
+                <tr><td><strong>Core vocabulary</strong></td><td>QC Manager: PPM, AQL, Cpk, FMEA, NCR (Non-Conformance Report) · SC Manager: lead time, MOQ, safety stock, supplier scorecard · Finance Manager: variance analysis, budget vs actual, cash flow · HR Manager: headcount, attrition, training hours, labour relations</td></tr>
+                <tr><td><strong>Knowledge needs</strong></td><td>Deep functional expertise in their domain + sufficient cross-functional literacy to collaborate. QC Manager must understand production economics (cost of scrapping vs re-work). SC Manager must understand production scheduling. Finance Manager must understand operational drivers of cost.</td></tr>
+                <tr><td><strong>What motivates them</strong></td><td>Functional excellence, recognition from the Director, professional growth, being the go-to expert for their domain</td></tr>
+                <tr><td><strong>Communication style</strong></td><td>Reports, data tables, and clear metrics with trend lines. They communicate up with structured monthly reports and down with daily/weekly team briefings. Appreciate specific feedback ("your supplier scorecard this month was excellent — the lead time tracking saved us from a stock-out") over generic praise.</td></tr>
+                <tr><td><strong>Blind spots</strong></td><td>Functional silos — optimising their own metric at the cost of the system (QC rejects everything → production cannot meet plan; SC over-stocks to be "safe" → cash is tied up in inventory). The Director's job is to align these managers to the system-level goal.</td></tr>
+              </tbody>
+            </table>
+            <p><strong>KRA matrix cross-reference:</strong> See §8.3 for the KRA matrix covering Plant Manager, QC Manager, and Supply Chain Manager with specific measurable targets.</p>
+            <p><strong>Cross-functional literacy training priorities:</strong></p>
+            <ul style="padding-left:1.2rem; line-height:2;">
+              <li><strong>QC Manager:</strong> Cost of Poor Quality (COPQ) — understand the financial weight of every PPM; SPC and process capability; customer complaint management (8D); IATF 16949 basics if automotive customers are a target</li>
+              <li><strong>Supply Chain Manager:</strong> Working capital impact of inventory decisions (DIO, cash conversion cycle — see §6.4); supplier negotiation principles (§8.4); demand-driven supply chain planning vs push-based</li>
+              <li><strong>Finance Manager:</strong> Manufacturing cost drivers — understand what affects direct material cost, conversion cost, and overhead so financial analysis drives real actions, not just reports</li>
+              <li><strong>HR Manager:</strong> Learning &amp; development design — adults learn by doing, not by sitting; tie training KPIs to production outcome improvement, not just training hours completed</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="accordion-item">
+          <button class="accordion-btn">Level 4: Operator — Execution Expert &amp; Process Intelligence <span class="chevron">▼</span></button>
+          <div class="accordion-body">
+            <table class="data-table">
+              <thead><tr><th>Dimension</th><th>Detail</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Primary concern</strong></td><td>Completing today's tasks safely, correctly, and on time; not getting blamed when things go wrong; working with equipment that functions reliably</td></tr>
+                <tr><td><strong>Time horizon</strong></td><td>This shift. This task.</td></tr>
+                <tr><td><strong>Core vocabulary</strong></td><td>Machine names and codes, shift targets (units/hour), defect descriptions in their local language (Myanmar), safety rules, their SOP steps — NOT company financials or strategy</td></tr>
+                <tr><td><strong>Knowledge needs</strong></td><td>Their machine/process completely (tyre building, mixing, curing, finishing); quality check points at their station; safety hazards for their work area; what to do when something goes wrong (escalation — Andon); their role in preventing defects (Poka-yoke awareness)</td></tr>
+                <tr><td><strong>What motivates them</strong></td><td>Fair pay on time, safe working environment, being respected and listened to, job security, not being blamed for system failures, small recognitions (best shift award, public acknowledgment)</td></tr>
+                <tr><td><strong>Communication style</strong></td><td>Visual, simple, in Myanmar language. SOPs with photos/diagrams. Safety signs with images. Shift targets on visible boards (not spreadsheets). When operators see the Director on the floor, acknowledge them by name if possible — it signals that their work matters.</td></tr>
+                <tr><td><strong>Blind spots</strong></td><td>Operators know the most about how the process actually behaves — but their knowledge is rarely captured in management systems. Kaizen suggestion systems (even a simple paper box) unlock enormous operational intelligence. The "hidden factory" of workarounds and undocumented fixes lives in the operator's head.</td></tr>
+              </tbody>
+            </table>
+            <div class="callout insight">
+              <div class="callout-title">💡 Director's Insight</div>
+              Operators are not "unskilled labour" — they are <em>process intelligence holders</em>. A Banbury mixer operator who has run the machine for 5 years knows more about its behaviour under different ambient temperatures and material lots than any engineer who has never touched it. Systematic knowledge capture (standard work documentation, kaizen sheets, operator feedback rounds) converts tribal knowledge into institutional capital. This is one of the highest-value and lowest-cost investments a Director can make.
+            </div>
+            <p><strong>Operator training design principles:</strong></p>
+            <ul style="padding-left:1.2rem; line-height:2;">
+              <li><strong>Show, don't tell:</strong> Demonstrate the correct method first, then have the operator perform it while you observe. Verbal instruction alone has &lt;20% retention.</li>
+              <li><strong>Job breakdown sheet:</strong> Each task broken into: (1) Important Steps — what to do, (2) Key Points — how to do it right, (3) Reasons — why it matters. Keep to one A4 sheet with photos per task.</li>
+              <li><strong>Toyota Job Instruction (JI) method:</strong> 4 steps — Prepare the worker, Present the operation, Try out performance, Follow up. Used in all Toyota-affiliated plants globally; directly applicable here.</li>
+              <li><strong>Safety training:</strong> Hazard identification at their specific station; PPE donning/doffing; what to do if a machine behaves abnormally (STOP, signal, report). Never assume operators know — verify by observation.</li>
+              <li><strong>Escalation clarity:</strong> Every operator must know: "When I see X, I stop and call my supervisor." Remove the ambiguity about when to stop vs continue. Operators should never feel they will be punished for stopping a line for a genuine safety or quality signal.</li>
+              <li><strong>Recognition systems:</strong> Monthly best-shift award (posted on notice board). Quality catch bonus for detecting a defect before it passes downstream. These cost almost nothing and build a quality-aware culture faster than any policy.</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="accordion-item">
+          <button class="accordion-btn">Cross-Level Communication Architecture <span class="chevron">▼</span></button>
+          <div class="accordion-body">
+            <p>Most factory failures — quality escapes, machine breakdowns that were predictable, missed production targets — have a communication failure somewhere in their chain. The table below maps the key communication flows between levels and the format that works for each.</p>
+            <table class="data-table">
+              <thead><tr><th>Communication Flow</th><th>What</th><th>How Often</th><th>Format</th><th>Key Success Factor</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Director → CEO</strong></td><td>Monthly KPI report + risks</td><td>Monthly</td><td>1-page executive summary + dashboard screenshot</td><td>Translate factory data into business language (cost, risk, trend)</td></tr>
+                <tr><td><strong>Director → Plant Manager</strong></td><td>Weekly priorities + targets</td><td>Weekly (Monday)</td><td>10-min standing meeting + written OKR for the week</td><td>Be specific: "OEE target this week is 75%, focus on press #2 availability." Not "do your best."</td></tr>
+                <tr><td><strong>Director → All Managers</strong></td><td>Monthly review</td><td>Monthly</td><td>Structured meeting: KPIs → issues → decisions → actions with owners</td><td>Every action must have a name, a date, and a definition of done. Follow up the next month.</td></tr>
+                <tr><td><strong>Plant Manager → Director</strong></td><td>Daily production report</td><td>Daily (07:30)</td><td>Structured template: output, OEE, top incident, status of open issues</td><td>Bad news first. Never hide a problem — the Director finding out later is always worse than finding out now.</td></tr>
+                <tr><td><strong>Manager → Director</strong></td><td>Weekly function report</td><td>Weekly</td><td>3 metrics vs target, 1 risk, 1 action completed, 1 action planned</td><td>Managers should self-report against their own KRA targets — not wait to be asked</td></tr>
+                <tr><td><strong>Plant Manager → Operators</strong></td><td>Shift briefing</td><td>Daily (start of shift)</td><td>5-min standing circle: today's target, safety minute, open issues from last shift</td><td>In Myanmar language. Posted on shift board. Same format every day creates habit.</td></tr>
+                <tr><td><strong>Operator → Plant Manager</strong></td><td>Escalation signal</td><td>Real-time</td><td>Andon cord/button, verbal, shift log</td><td>Response time &lt;5 minutes matters more than the response itself — it tells the operator they are heard</td></tr>
+                <tr><td><strong>Any Level → Director</strong></td><td>Safety incident</td><td>Immediately</td><td>Direct verbal escalation, no hierarchy bypass required</td><td>Safety is the one area where anyone at any level should be able to reach the Director directly and immediately</td></tr>
+              </tbody>
+            </table>
+
+            <div class="callout insight">
+              <div class="callout-title">💡 Director's Insight</div>
+              The most common communication failure in hierarchical manufacturing cultures is <em>upward distortion</em> — bad news gets softened at each level before reaching the Director. By the time a production crisis reaches you, it has been filtered 3 times and may look like a minor issue. Counter this with direct Genchi Genbutsu (go and see) — walk the floor at unpredictable times, read raw shift reports, talk directly to operators. Reality is on the floor, not in the meeting room.
+              <br><small>Reference: Liker, J.K., <em>The Toyota Way</em>, Principle 12: "Go and see for yourself to thoroughly understand the situation."</small>
+            </div>
+          </div>
+        </div>
+
+        <div class="accordion-item">
+          <button class="accordion-btn">Knowledge Framework by Level — What Each Level Must Know <span class="chevron">▼</span></button>
+          <div class="accordion-body">
+            <p>This table maps the <strong>domains of knowledge</strong> each level needs — not just job-specific technical skills, but also the broader business, people, and contextual knowledge that makes the difference between a good technician and a great leader.</p>
+            <table class="data-table">
+              <thead><tr><th>Knowledge Domain</th><th>CEO/Director</th><th>Plant Manager</th><th>Manager</th><th>Operator</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Tyre Engineering (Ch2)</strong></td><td>Overview: product types, key compounds, quality standards (ISO/IATF)</td><td>Deep: process parameters, compound specs, defect signatures, machine-process links</td><td>Functional depth (QC: defect anatomy; SC: material specs and lead times)</td><td>Their station: correct material, correct method, correct check</td></tr>
+                <tr><td><strong>Manufacturing Operations (Ch3)</strong></td><td>OEE, production capacity, bottleneck identification, capex timing</td><td>All processes end-to-end, OEE loss analysis, maintenance scheduling</td><td>Their function's role in production flow; how delays cascade</td><td>Their machine: startup, normal operation, shutdown, abnormality response</td></tr>
+                <tr><td><strong>Quality (Ch4)</strong></td><td>PPM trend vs targets, customer complaint status, cost of poor quality vs revenue</td><td>Defect by process, root cause patterns, in-process control points</td><td>QC: full DQMS + AQL + SPC · Others: quality impact of their decisions (e.g., SC: how material quality affects defect rate)</td><td>Go/No-go at their station, what defects look like, what to do when they find one</td></tr>
+                <tr><td><strong>Finance &amp; KPIs (Ch6)</strong></td><td>Full P&amp;L, working capital, pricing, NPV/IRR for investments, budget ownership</td><td>Cost per unit, overhead absorption, overtime cost, scrap cost by category</td><td>Function budget vs actual, cost drivers in their domain</td><td>Not required — but benefit from understanding "each defect costs the factory X" framing to make quality tangible</td></tr>
+                <tr><td><strong>People &amp; Leadership (Ch8)</strong></td><td>Organisational design, succession planning, Director-level stakeholder management, culture setting</td><td>Team performance management, shift scheduling, conflict resolution, coaching supervisors</td><td>Team motivation, functional training plans, giving and receiving feedback, cross-functional collaboration</td><td>Understanding their own role clearly, working as part of a team, raising issues through proper channels</td></tr>
+                <tr><td><strong>Myanmar Context (Ch1 §1.5)</strong></td><td>Regulatory exposure (DICA, MIC, labour law, tax), FX risk, political/supply risk</td><td>Labour law basics (working hours, overtime, safety obligations), supplier risk in Myanmar context</td><td>Domain-specific: QC (Myanmar MES standards); SC (customs/import duties, local supplier reliability)</td><td>Their rights and responsibilities under Myanmar Labour Law (working hours, SSB, safety)</td></tr>
+                <tr><td><strong>Outside-Domain Knowledge</strong></td><td>Psychology of organisations, negotiation theory (BATNA), geopolitics affecting commodity prices, scenario planning, digital transformation leadership, personal energy management</td><td>Psychology of motivation (what makes operators perform), systems thinking (why fixing one problem creates another), basic project management</td><td>Influence without authority (how to get cooperation from peers), data literacy (reading a control chart, variance analysis), customer empathy (who ultimately uses the tyres)</td><td>Pride of craft, teamwork norms, understanding how their role connects to the customer's safety on the road</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="accordion-item">
+          <button class="accordion-btn">Training Design by Level — Adult Learning Principles <span class="chevron">▼</span></button>
+          <div class="accordion-body">
+            <p>Adult learning (andragogy) works differently from school learning. Adults learn best when: the content is immediately relevant to a real problem they face; they can apply it right away; and they are treated as experienced contributors, not students. Training design must be adapted to each level.</p>
+            <table class="data-table">
+              <thead><tr><th>Level</th><th>Best Learning Method</th><th>What Doesn't Work</th><th>Cadence</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Director</strong></td><td>Peer learning with other factory directors; reading (Ch9 references); structured reflection after major decisions; external mentors; site visits to benchmark factories</td><td>Classroom training; generic management courses that ignore manufacturing context</td><td>Self-directed, monthly; quarterly external exposure</td></tr>
+                <tr><td><strong>Plant Manager</strong></td><td>On-the-job coaching by Director; OEE loss investigation with the team (learn by doing); production case study reviews; quarterly cross-factory benchmark visits</td><td>Generic operations management seminars without hands-on application</td><td>Weekly coaching (15 min one-on-one with Director); monthly structured review</td></tr>
+                <tr><td><strong>Manager</strong></td><td>Functional workshops tied to real current data (e.g., "analyse this month's quality PPM together and identify 3 improvements"); cross-functional job rotations (QC manager spending a week with SC to understand sourcing); reading + application</td><td>Theoretical training without connection to current factory numbers</td><td>Monthly functional training (2h); quarterly cross-functional rotation or workshop</td></tr>
+                <tr><td><strong>Operator</strong></td><td>Toyota Job Instruction (show → do → observe); photos/diagrams in Myanmar language; small-group safety drills; on-machine practice with supervisor sign-off; kaizen participation (trains problem-solving by doing)</td><td>Classroom lectures; English-language documentation; information overload (one skill at a time)</td><td>Onboarding: 2 weeks supervised; ongoing: monthly safety topic (5 min at shift briefing); annual skills re-certification</td></tr>
+              </tbody>
+            </table>
+
+            <div class="callout note">
+              <div class="callout-title">📋 Recommended Reading on Adult Learning &amp; Training Design</div>
+              <ul style="padding-left:1.2rem; line-height:1.8; font-size:.9rem;">
+                <li><strong>Wick, Pollock &amp; Jefferson</strong> — <em>The Six Disciplines of Breakthrough Learning</em> (Pfeiffer, 3rd ed. 2015). Practical framework for turning training into measurable performance improvement rather than "event-based training" that is forgotten after a week.</li>
+                <li><strong>Knowles, M.S.</strong> — <em>The Adult Learner: The Definitive Classic in Adult Education and Human Resource Development</em> (8th ed., Routledge, 2015). The foundational text on andragogy. Key principle: adults need to know WHY before HOW.</li>
+                <li><strong>TWI Institute</strong> — <em>Training Within Industry (TWI) Job Instruction</em>. The original Toyota training methodology, developed in 1940s US manufacturing and adopted globally. Free resources at twi-institute.org.</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    <section class="chapter" id="ch9">
+      <div class="chapter-header">
+        <span class="chapter-num">9</span>
+        <h2 class="chapter-title">Glossary &amp; Quick Reference</h2>
+      </div>
+
+      <p>This appendix is the Director's quick-lookup reference. Bookmark this page — it covers the essential terminology, formulas, and contacts needed to navigate any meeting, audit, or production review with confidence.</p>
+
+      <h2 class="section-title" id="ch9-glossary">9.1 Tyre Industry Glossary</h2>
+
+      <div class="accordion">
+        <div class="accordion-item">
+          <button class="accordion-btn">A – E <span class="chevron">▼</span></button>
+          <div class="accordion-body">
+            <table class="data-table">
+              <thead><tr><th>Term</th><th>Definition</th></tr></thead>
+              <tbody>
+                <tr><td><strong>AQL</strong></td><td>Acceptable Quality Level — the worst tolerable process average for sampling inspection (e.g. AQL 1.5 = max 1.5% defective in acceptable lot).</td></tr>
+                <tr><td><strong>Aspect Ratio</strong></td><td>Sidewall height ÷ section width × 100. A "65" in 205/65R15 means sidewall is 65% of 205mm. Lower ratio = sportier handling.</td></tr>
+                <tr><td><strong>Bead</strong></td><td>High-tensile steel wire bundle that locks the tyre to the wheel rim. Critical safety component — bead failure causes instant deflation.</td></tr>
+                <tr><td><strong>Banbury Mixer</strong></td><td>Internal batch mixer that combines rubber, carbon black, and chemicals at ~150°C with counter-rotating rotors. Core of the compounding department.</td></tr>
+                <tr><td><strong>Bladder</strong></td><td>Inflatable rubber bag inside the curing press mould that shapes the tyre from the inside during vulcanisation. Lifespan ~500 cycles.</td></tr>
+                <tr><td><strong>BR</strong></td><td>Butadiene Rubber — synthetic elastomer giving low rolling resistance and high resilience. Used in tread base and sidewalls.</td></tr>
+                <tr><td><strong>Calendering</strong></td><td>Process of applying rubber coating to fabric or steel cord between heavy rollers to produce ply sheets.</td></tr>
+                <tr><td><strong>Carcass</strong></td><td>The structural skeleton of the tyre — the cord plies that run from bead to bead and carry the load.</td></tr>
+                <tr><td><strong>Carbon Black (CB)</strong></td><td>Reinforcing filler made of near-pure carbon. Increases tyre strength 4–5× vs unfilled rubber. Gives tyres their black colour.</td></tr>
+                <tr><td><strong>CoA</strong></td><td>Certificate of Analysis — supplier document confirming a material lot meets specification. Required for DQMS material release.</td></tr>
+                <tr><td><strong>Compound</strong></td><td>A formulated rubber mixture (elastomers + fillers + chemicals) ready for processing. Each tyre component has a unique compound recipe.</td></tr>
+                <tr><td><strong>Cure / Vulcanisation</strong></td><td>The heat + pressure process that forms chemical crosslinks between rubber chains, transforming soft compound into tough, elastic rubber.</td></tr>
+                <tr><td><strong>DQMS</strong></td><td>Digital Quality Management System — SuperMega's integrated platform for real-time quality data capture, AI defect detection, and corrective action tracking.</td></tr>
+                <tr><td><strong>ECE</strong></td><td>United Nations Economic Commission for Europe — issues tyre safety regulations (R30 for car tyres, R54 for truck tyres) required for European market.</td></tr>
+                <tr><td><strong>EPDM</strong></td><td>Ethylene Propylene Diene Monomer — rubber with excellent ozone and UV resistance. Used in sidewall compounds.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="accordion-item">
+          <button class="accordion-btn">F – M <span class="chevron">▼</span></button>
+          <div class="accordion-body">
+            <table class="data-table">
+              <thead><tr><th>Term</th><th>Definition</th></tr></thead>
+              <tbody>
+                <tr><td><strong>FIFO</strong></td><td>First In, First Out — inventory management rule ensuring oldest stock is used first. Critical for natural rubber (shelf life: 2 years).</td></tr>
+                <tr><td><strong>Flash</strong></td><td>Thin rubber fin that forms at mould parting lines during curing. Minor cosmetic defect — trimmed in finishing.</td></tr>
+                <tr><td><strong>Green Tyre</strong></td><td>The uncured assembled tyre before it enters the curing press. Soft and sticky — must be cured within 8 hours of building.</td></tr>
+                <tr><td><strong>Groove</strong></td><td>Continuous channel in the tread pattern for water evacuation. Minimum legal groove depth varies by country (typically 1.6mm).</td></tr>
+                <tr><td><strong>Halobutyl</strong></td><td>Chloro- or bromobutyl rubber — used in the inner liner for excellent air impermeability. Key for tubeless tyres.</td></tr>
+                <tr><td><strong>IoT</strong></td><td>Internet of Things — sensors on factory machines that transmit real-time data (temperature, vibration, pressure) to the SuperMega platform.</td></tr>
+                <tr><td><strong>ISO 9001</strong></td><td>International standard for Quality Management Systems. Certification requires documented processes, management review, and continuous improvement.</td></tr>
+                <tr><td><strong>Kerf</strong></td><td>Narrow slot in the tread mould blade that creates sipes. Controls wet grip and noise.</td></tr>
+                <tr><td><strong>Mooney Viscosity</strong></td><td>Standardised measure of rubber flow resistance (ML 1+4 @ 100°C). Controls processing behaviour — too high = processing difficulty; too low = shape retention issues.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="accordion-item">
+          <button class="accordion-btn">N – Z <span class="chevron">▼</span></button>
+          <div class="accordion-body">
+            <table class="data-table">
+              <thead><tr><th>Term</th><th>Definition</th></tr></thead>
+              <tbody>
+                <tr><td><strong>NR</strong></td><td>Natural Rubber — from Hevea brasiliensis latex. High tensile strength and cut resistance. Grade RSS1 (premium) or TSR20 (standard). Commodity-priced.</td></tr>
+                <tr><td><strong>OEE</strong></td><td>Overall Equipment Effectiveness = Availability × Performance × Quality. World-class benchmark: 85%. Formula: (Good Units × Ideal Cycle Time) ÷ Planned Production Time.</td></tr>
+                <tr><td><strong>PCI</strong></td><td>Post-Cure Inflation — inflating the hot tyre immediately after curing press opens to prevent distortion as it cools. Critical for uniformity.</td></tr>
+                <tr><td><strong>Ply</strong></td><td>A layer of rubber-coated fabric or steel cord. Radial tyres have radial plies (90° to tread); bias tyres have diagonal plies.</td></tr>
+                <tr><td><strong>PPM</strong></td><td>Parts Per Million — quality metric for defect rate. 1000 PPM = 0.1% defect rate. World-class automotive target: &lt;50 PPM.</td></tr>
+                <tr><td><strong>Radial</strong></td><td>Tyre construction where ply cords run perpendicular (radially) to the direction of travel, topped by a steel belt package. Better fuel economy and handling vs bias.</td></tr>
+                <tr><td><strong>ROP</strong></td><td>Reorder Point — inventory level that triggers a purchase order. Formula: (Average Daily Usage × Lead Time) + Safety Stock.</td></tr>
+                <tr><td><strong>SBR</strong></td><td>Styrene-Butadiene Rubber — main synthetic tread rubber. Better wet grip and abrasion resistance than NR. Price tracks crude oil.</td></tr>
+                <tr><td><strong>Sidewall</strong></td><td>The flexible side section of the tyre between tread and bead. Contains tyre markings and must resist ozone cracking and flexing fatigue.</td></tr>
+                <tr><td><strong>Sipe</strong></td><td>Fine cut in tread blocks that improves wet traction and snow grip by creating additional biting edges.</td></tr>
+                <tr><td><strong>TBM</strong></td><td>Tyre Building Machine — the machine that assembles all tyre components (ply, belt, tread, bead) into a green tyre.</td></tr>
+                <tr><td><strong>Tread</strong></td><td>The road-contact zone of the tyre. Its compound and pattern determine grip, wear rate, noise, and rolling resistance.</td></tr>
+                <tr><td><strong>TWI</strong></td><td>Tread Wear Indicator — moulded rubber bar at 1.6mm groove depth. When tread is flush with TWI, tyre is legally worn out.</td></tr>
+                <tr><td><strong>Uniformity</strong></td><td>Consistency of tyre dimensions and stiffness around its circumference. Poor uniformity causes vibration and uneven wear. Measured on a uniformity machine (force variation test).</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <h2 class="section-title" id="ch9-formulas">9.2 Key Formulas Quick Reference</h2>
+      <table class="data-table">
+        <thead><tr><th>Formula</th><th>Equation</th><th>Units / Notes</th></tr></thead>
+        <tbody>
+          <tr><td><strong>OEE</strong></td><td>Availability × Performance × Quality</td><td>%; target ≥ 80%</td></tr>
+          <tr><td>Availability</td><td>(Planned Production Time − Downtime) ÷ Planned Production Time</td><td>%</td></tr>
+          <tr><td>Performance</td><td>(Total Count × Ideal Cycle Time) ÷ Run Time</td><td>%</td></tr>
+          <tr><td>Quality Rate</td><td>Good Count ÷ Total Count</td><td>%</td></tr>
+          <tr><td><strong>Defect Rate (PPM)</strong></td><td>(Defective Units ÷ Total Units) × 1,000,000</td><td>PPM</td></tr>
+          <tr><td><strong>Safety Stock</strong></td><td>Z × σ × √(Lead Time)</td><td>Z=1.65 for 95% SL</td></tr>
+          <tr><td><strong>Reorder Point</strong></td><td>(Avg Daily Usage × Lead Time) + Safety Stock</td><td>Units</td></tr>
+          <tr><td><strong>Inventory Turnover</strong></td><td>Cost of Goods Sold ÷ Average Inventory Value</td><td>×/year; target ≥ 8×</td></tr>
+          <tr><td><strong>Gross Margin</strong></td><td>(Revenue − COGS) ÷ Revenue × 100</td><td>%; target ≥ 25%</td></tr>
+          <tr><td><strong>Payback Period</strong></td><td>Initial Investment ÷ Annual Net Savings</td><td>Months / Years</td></tr>
+          <tr><td><strong>Tyre Aspect Ratio</strong></td><td>Section Height ÷ Section Width × 100</td><td>%; e.g. 65 in 205/65R15</td></tr>
+          <tr><td><strong>Cure Extent</strong></td><td>Equivalent Cure Time at Ref Temp via Arrhenius: t<sub>eq</sub> = ∑ exp((T−T<sub>ref</sub>)/10) × Δt</td><td>Engineering reference</td></tr>
+        </tbody>
+      </table>
+
+      <h2 class="section-title" id="ch9-contacts">9.3 Director's Key Contacts &amp; Escalation Matrix</h2>
+
+      <div class="callout note">
+        <div class="callout-title">📌 Note</div>
+        Update this table with actual contact details before distributing the manual. The roles and escalation levels are fixed.
+      </div>
+
+      <table class="data-table">
+        <thead><tr><th>Role</th><th>Responsibility Area</th><th>Escalate When</th><th>Contact</th></tr></thead>
+        <tbody>
+          <tr><td>Plant Manager</td><td>Production, maintenance, safety</td><td>OEE &lt;65%, any safety incident, critical machine down &gt;4h</td><td>—</td></tr>
+          <tr><td>QC Manager</td><td>Quality, DQMS, customer complaints</td><td>Critical defect found in finished goods, customer field return</td><td>—</td></tr>
+          <tr><td>Supply Chain Manager</td><td>Procurement, inventory, suppliers</td><td>Risk of production stop due to stock-out, supplier defaults</td><td>—</td></tr>
+          <tr><td>Finance Manager</td><td>Budget, P&amp;L, cost control</td><td>Variance &gt;10% from monthly budget</td><td>—</td></tr>
+          <tr><td>HR Manager</td><td>Staffing, training, labour relations</td><td>Headcount gap causing shift coverage risk</td><td>—</td></tr>
+          <tr><td>SuperMega Support</td><td>ERP / DQMS system issues</td><td>System downtime &gt;1h, agent anomaly, data loss</td><td>support@supermega.dev</td></tr>
+          <tr><td>AWS Emergency</td><td>Cloud infrastructure</td><td>Database unreachable, multi-region failure</td><td>AWS Support Console</td></tr>
+        </tbody>
+      </table>
+
+      <div class="callout">
+        <div class="callout-title">🔗 How to Access This Manual</div>
+        <strong>Right now (before merging):</strong>
+        <a href="https://htmlpreview.github.io/?https://github.com/swanhtet01/swanhtet01.github.io/blob/copilot/build-interactive-manual/director-manual.html" target="_blank" rel="noopener">Open the live preview →</a>
+        — works in any browser, phone or desktop, no download needed.<br><br>
+        <strong>After this PR is merged:</strong> Permanent link at
+        <a href="https://swanhtet01.github.io/director-manual.html" target="_blank" rel="noopener">swanhtet01.github.io/director-manual.html</a><br><br>
+        <strong>Offline / PDF:</strong> Click the 🖨 Print button in the top bar and select "Save as PDF". All accordion sections and charts will expand for the print view.<br><br>
+        <strong>To suggest improvements:</strong> The manual is hosted on GitHub. The Director or any authorised editor can submit updates via the <a href="https://github.com/swanhtet01/swanhtet01.github.io" target="_blank" rel="noopener">GitHub repository</a>, or contact the SuperMega team.
+      </div>
+
+      <h2 class="section-title" id="ch9-references">9.4 Further Reading &amp; Key Industry References</h2>
+      <p>The following references are curated for practical value — not academic completeness. Each is cited against the chapter it is most relevant to.</p>
+
+      <div class="accordion">
+        <div class="accordion-item">
+          <button class="accordion-btn">📗 Books — Manufacturing, Operations &amp; Quality <span class="chevron">▼</span></button>
+          <div class="accordion-body">
+            <ul class="ref-list">
+              <li><span class="ref-tag">Ch3 OEE</span> <strong>Hansen, R.C.</strong> — <em>Overall Equipment Effectiveness: A Powerful Production/Maintenance Tool for Increased Profits</em> (Industrial Press, 2001). The definitive practical guide to OEE calculation and improvement. Industry benchmark targets (85%+ world-class) come from this framework.</li>
+              <li><span class="ref-tag">Ch3 Lean</span> <strong>Womack, J.P. &amp; Jones, D.T.</strong> — <em>Lean Thinking: Banish Waste and Create Wealth in Your Corporation</em> (Free Press, 1996, 2nd ed. 2003). Introduces value stream mapping and 5 lean principles. The tyre factory equivalent: map material flow from raw NR bale to packaged tyre and eliminate the non-value-adding steps.</li>
+              <li><span class="ref-tag">Ch3/Ch4</span> <strong>Liker, J.K.</strong> — <em>The Toyota Way: 14 Management Principles from the World's Greatest Manufacturer</em> (McGraw-Hill, 2003). The most-cited book on lean manufacturing culture, Andon, and Jidoka. Relevant to how to build a production culture where problems are surfaced, not hidden.</li>
+              <li><span class="ref-tag">Ch6 Finance</span> <strong>Goldratt, E.M. &amp; Cox, J.</strong> — <em>The Goal: A Process of Ongoing Improvement</em> (North River Press, 1984, 3rd ed. 2004). A novel-format introduction to Theory of Constraints (TOC). Key insight: identify your factory's constraint (the bottleneck press or mixer) and subordinate everything else to maximising its throughput.</li>
+              <li><span class="ref-tag">Ch4 Quality</span> <strong>Juran, J.M. &amp; De Feo, J.A.</strong> — <em>Juran's Quality Handbook: The Complete Guide to Performance Excellence</em> (7th ed., McGraw-Hill, 2016). The comprehensive reference on QMS, cost of poor quality, and quality planning. Key formula used in Ch6: COPQ = (Internal failure + External failure + Appraisal + Prevention) costs.</li>
+              <li><span class="ref-tag">Ch3/Ch4 SPC</span> <strong>Wheeler, D.J. &amp; Chambers, D.S.</strong> — <em>Understanding Statistical Process Control</em> (3rd ed., SPC Press, 2010). The practitioner's guide to control charts. More practical than Shewhart's original work; focuses on what to do when a chart signals.</li>
+              <li><span class="ref-tag">Ch2 Tyre</span> <strong>Clark, S.K. (ed.)</strong> — <em>Mechanics of Pneumatic Tires</em> (US Dept of Transportation / NHTSA, 1981, 2nd ed.). The foundational technical text on tyre construction physics — carcass stress, bead design, tread compound mechanics. Available free from NHTSA digital archive.</li>
+              <li><span class="ref-tag">Ch2 Rubber</span> <strong>Morton, M. (ed.)</strong> — <em>Rubber Technology</em> (3rd ed., Springer, 1999). Covers NR, SBR, BR, vulcanisation chemistry, carbon black reinforcement, and processing. The chemical engineering reference for your compound team.</li>
+              <li><span class="ref-tag">Ch8 Leadership</span> <strong>Collins, J.</strong> — <em>Good to Great: Why Some Companies Make the Leap and Others Don't</em> (HarperCollins, 2001). Relevant to Director leadership: Level 5 Leadership concept (personal humility + professional will), "First Who, Then What" (get the right people before setting strategy), and the Hedgehog Concept (what you can be the best at in your market).</li>
+              <li><span class="ref-tag">Ch6 Finance</span> <strong>Brealey, R.A., Myers, S.C. &amp; Allen, F.</strong> — <em>Principles of Corporate Finance</em> (14th ed., McGraw-Hill, 2022). The standard MBA finance text. NPV, IRR, WACC, and capital budgeting chapters are directly applicable to Ch6 capex decisions. Also covers currency risk and working capital management.</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="accordion-item">
+          <button class="accordion-btn">📋 Industry Standards (Free &amp; Paid) <span class="chevron">▼</span></button>
+          <div class="accordion-body">
+            <ul class="ref-list">
+              <li><span class="ref-tag">QMS</span> <strong>ISO 9001:2015</strong> — Quality Management Systems: Requirements. Foundational standard; the factory's QMS is built on this. Available from ISO.org (purchase) or Myanmar MOST (national standards body). Audit your QMS against Clause 8.5 (production control) and Clause 10 (improvement).</li>
+              <li><span class="ref-tag">Automotive QMS</span> <strong>IATF 16949:2016</strong> — Quality Management System Requirements for Automotive Production and Relevant Service Parts Organizations. Required to supply OEM automotive. Available via IATF.global. Includes APQP, PPAP, FMEA, MSA, SPC requirements.</li>
+              <li><span class="ref-tag">Environment</span> <strong>ISO 14001:2015</strong> — Environmental Management Systems. Relevant for handling carbon black, solvent waste, rubber dust. Required by many export customers and by Myanmar ECC compliance.</li>
+              <li><span class="ref-tag">Safety</span> <strong>ISO 45001:2018</strong> — Occupational Health &amp; Safety Management Systems. Replaces OHSAS 18001. Tyre factory hazards (press operation, banbury heat, solvent vapours) make this standard highly relevant.</li>
+              <li><span class="ref-tag">Product — Export</span> <strong>UNECE Regulation No. 30 (ECE R30)</strong> — Uniform Provisions Concerning the Approval of Pneumatic Tyres for Motor Vehicles. Required for any tyre exported to ECE-member countries. Tests: endurance, high-speed performance, dimensional compliance. Available free from unece.org.</li>
+              <li><span class="ref-tag">Product — Export</span> <strong>UNECE Regulation No. 54 (ECE R54)</strong> — Commercial Vehicle Tyres. Same framework as R30 but for trucks and buses. If you supply truck tyres to Thailand or Singapore, ECE R54 approval may be required by customers.</li>
+              <li><span class="ref-tag">Rubber Testing</span> <strong>ASTM D1646</strong> — Mooney Viscosity (ML1+4 at 100°C) test method. The standard for incoming NR and SBR viscosity testing. Used daily by your compound QC lab.</li>
+              <li><span class="ref-tag">Rubber Testing</span> <strong>ASTM D2084</strong> — Vulcanisation characteristics by oscillating disc cure meter (ODR). Defines T90 (time to 90% cure) — the basis for your curing press time settings.</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="accordion-item">
+          <button class="accordion-btn">🌐 Industry Data &amp; Market Intelligence Sources <span class="chevron">▼</span></button>
+          <div class="accordion-body">
+            <ul class="ref-list">
+              <li><span class="ref-tag">Rubber Market</span> <strong>International Rubber Study Group (IRSG)</strong> — <em>Rubber Statistical Bulletin</em> (monthly, irsg.org). NR and SR production, consumption, and price data by country. Used to benchmark Myanmar NR pricing and forecast raw material costs. Singapore-based; Myanmar is a member state.</li>
+              <li><span class="ref-tag">Rubber Price</span> <strong>SICOM (Singapore Commodity Exchange)</strong> — TSR20 (Technically Specified Rubber) futures prices. The reference price for Grade 20 natural rubber — the most commonly traded grade in Southeast Asia. Use SICOM TSR20 as your NR price benchmark in procurement negotiations. Accessible at sicom.com.sg.</li>
+              <li><span class="ref-tag">Tyre Industry</span> <strong>European Tyre &amp; Rubber Manufacturers' Association (ETRMA)</strong> — Annual statistics report on European tyre production and market. Useful for global market context, technology trend benchmarking. Available free at etrma.org.</li>
+              <li><span class="ref-tag">Myanmar Trade</span> <strong>Myanmar Central Statistical Organisation (CSO)</strong> — Trade statistics including rubber exports and vehicle import data. Useful for estimating domestic vehicle fleet size (proxy for tyre demand). Accessible via planning.gov.mm.</li>
+              <li><span class="ref-tag">Myanmar Rubber</span> <strong>Myanmar Rubber Planters &amp; Producers Association (MRPPA)</strong> — Domestic NR production data, plantation statistics, and market prices. Key contact for establishing direct NR purchasing relationships from Tanintharyi Region estates.</li>
+              <li><span class="ref-tag">Commodity Prices</span> <strong>World Bank Commodity Price Data ("Pink Sheet")</strong> — Monthly benchmark prices for NR (RSS3), carbon black feedstock (naphtha), and synthetic rubber feedstocks. Free download at worldbank.org/commodities. Use for 12-month trend analysis in your raw material budget.</li>
+              <li><span class="ref-tag">Carbon Black</span> <strong>International Carbon Black Association (ICBA)</strong> — Technical publications on carbon black grades (N330, N550, N660, N774) and their performance effects in tyre compounds. Free technical papers at carbon-black.org. Reference when evaluating alternative CB suppliers.</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="accordion-item">
+          <button class="accordion-btn">🎓 MBA &amp; Business References <span class="chevron">▼</span></button>
+          <div class="accordion-body">
+            <ul class="ref-list">
+              <li><span class="ref-tag">Ch1 Strategy</span> <strong>Porter, M.E.</strong> — <em>Competitive Strategy: Techniques for Analyzing Industries and Competitors</em> (Free Press, 1980). The original source for Porter's 5 Forces and generic strategies. The Myanmar tyre market analysis in §1.4 directly applies Porter's framework.</li>
+              <li><span class="ref-tag">Ch1 Strategy</span> <strong>Porter, M.E.</strong> — <em>Competitive Advantage: Creating and Sustaining Superior Performance</em> (Free Press, 1985). Introduces the value chain concept — how every activity from NR procurement to tyre delivery either creates or erodes competitive advantage. Most actionable strategy framework for a manufacturing director.</li>
+              <li><span class="ref-tag">Ch6 Finance</span> <strong>Damodaran, A.</strong> — <em>Investment Valuation: Tools and Techniques for Determining the Value of Any Asset</em> (3rd ed., Wiley, 2012). The standard reference for NPV and DCF valuation. The author's website (pages.stern.nyu.edu/~adamodar) provides free industry beta data including manufacturing sector WACC estimates useful for capital budgeting in §6.6.</li>
+              <li><span class="ref-tag">Ch5 Supply Chain</span> <strong>Christopher, M.</strong> — <em>Logistics &amp; Supply Chain Management</em> (5th ed., FT Publishing, 2016). Covers supplier risk frameworks, demand-driven supply chains, and inventory optimisation — directly applicable to §5.3 safety stock and FIFO policy.</li>
+              <li><span class="ref-tag">Ch6 KPIs</span> <strong>Kaplan, R.S. &amp; Norton, D.P.</strong> — <em>The Balanced Scorecard: Translating Strategy into Action</em> (Harvard Business School Press, 1996). The framework behind the Director KPI scorecard in §6.2. Financial, Customer, Internal Process, and Learning/Growth perspectives ensure KPIs are balanced and not purely short-term financial.</li>
+              <li><span class="ref-tag">Ch8 Leadership</span> <strong>Drucker, P.F.</strong> — <em>The Effective Executive</em> (Harper &amp; Row, 1967, revised ed. 2006). The most practical management book for a Director. Key concepts: manage your time (relates to Ch7 daily cadence), focus on contribution (relates to delegation framework in §8.4), make strengths productive (relevant to KRA matrix in §8.3).</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+  </main>
+</div>
+
+<script>
+// ── READING PROGRESS BAR ──
+const progressFill = document.getElementById('progress-fill');
+function updateProgress() {
+  const scrollTop = window.scrollY;
+  const docHeight = document.documentElement.scrollHeight - window.innerHeight;
+  progressFill.style.width = docHeight > 0 ? (scrollTop / docHeight * 100) + '%' : '0%';
+}
+window.addEventListener('scroll', updateProgress, { passive: true });
+updateProgress();
+
+// ── FONT SIZE CONTROLS (range 13–22px for comfortable reading) ──
+const FS_MIN = 13, FS_MAX = 22, FS_DEFAULT = 17;
+const savedFs = parseFloat(localStorage.getItem('ytf-manual-fontsize'));
+let fontSize = (Number.isFinite(savedFs) && savedFs >= FS_MIN && savedFs <= FS_MAX) ? savedFs : FS_DEFAULT;
+function applyFontSize(sz) {
+  fontSize = Math.max(FS_MIN, Math.min(FS_MAX, sz));
+  document.documentElement.style.fontSize = fontSize + 'px';
+  localStorage.setItem('ytf-manual-fontsize', fontSize);
+}
+document.getElementById('fontUp').addEventListener('click', () => applyFontSize(fontSize + 1));
+document.getElementById('fontDown').addEventListener('click', () => applyFontSize(fontSize - 1));
+applyFontSize(fontSize);
+
+// ── THEME TOGGLE ──
+const themeBtn = document.getElementById('themeToggle');
+const html = document.documentElement;
+function setTheme(t) {
+  html.setAttribute('data-theme', t);
+  themeBtn.textContent = t === 'dark' ? '☀️ Light' : '🌙 Dark';
+  localStorage.setItem('ytf-manual-theme', t);
+  if (window.myCharts) {
+    window.myCharts.forEach(c => { c.options.plugins.legend.labels.color = t === 'dark' ? '#e8dfd0' : '#1a1209'; c.update(); });
+  }
+}
+themeBtn.addEventListener('click', () => setTheme(html.getAttribute('data-theme') === 'dark' ? 'light' : 'dark'));
+const saved = localStorage.getItem('ytf-manual-theme');
+if (saved) setTheme(saved);
+else if (window.matchMedia('(prefers-color-scheme: dark)').matches) setTheme('dark');
+
+// ── MOBILE MENU ──
+const menuToggle = document.getElementById('menuToggle');
+const sidebar = document.getElementById('sidebar');
+const overlay = document.getElementById('overlay');
+menuToggle.addEventListener('click', () => {
+  sidebar.classList.toggle('open');
+  overlay.classList.toggle('active');
+});
+overlay.addEventListener('click', () => {
+  sidebar.classList.remove('open');
+  overlay.classList.remove('active');
+});
+
+// ── ACCORDION ──
+document.querySelectorAll('.accordion-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const body = btn.nextElementSibling;
+    const isOpen = body.classList.contains('open');
+    // close all in same accordion
+    const parent = btn.closest('.accordion');
+    parent.querySelectorAll('.accordion-body').forEach(b => b.classList.remove('open'));
+    parent.querySelectorAll('.accordion-btn').forEach(b => b.classList.remove('open'));
+    if (!isOpen) {
+      body.classList.add('open');
+      btn.classList.add('open');
+    }
+  });
+});
+
+// ── ACTIVE TOC ──
+const sections = document.querySelectorAll('[id]');
+const tocLinks = document.querySelectorAll('#toc a');
+const observer = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      const id = e.target.getAttribute('id');
+      tocLinks.forEach(a => a.classList.toggle('active', a.getAttribute('href') === '#' + id));
+    }
+  });
+}, { rootMargin: '-20% 0px -70% 0px' });
+sections.forEach(s => observer.observe(s));
+
+// ── MERMAID ──
+mermaid.initialize({ startOnLoad: true, theme: html.getAttribute('data-theme') === 'dark' ? 'dark' : 'default', flowchart: { useMaxWidth: true } });
+
+// ── CHARTS ──
+window.myCharts = [];
+const isDark = () => html.getAttribute('data-theme') === 'dark';
+const textColor = () => isDark() ? '#e8dfd0' : '#1a1209';
+const gridColor = () => isDark() ? '#3a3228' : '#d8cfc0';
+
+// OEE Chart
+const oeeCtx = document.getElementById('oeeChart').getContext('2d');
+const oeeChart = new Chart(oeeCtx, {
+  type: 'line',
+  data: {
+    labels: ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'],
+    datasets: [
+      { label: 'OEE %', data: [68,70,69,71,72,73,72,74,75,76,77,78], borderColor: '#8b1a1a', backgroundColor: 'rgba(139,26,26,.08)', tension: 0.4, fill: true, pointRadius: 4 },
+      { label: 'Availability %', data: [84,85,85,86,87,88,87,88,89,89,90,90], borderColor: '#e07b2a', borderDash: [4,3], tension: 0.4, fill: false, pointRadius: 3 },
+      { label: 'Target OEE 80%', data: Array(12).fill(80), borderColor: '#3a6abf', borderDash: [8,4], pointRadius: 0, fill: false },
+    ]
+  },
+  options: {
+    responsive: true, interaction: { mode: 'index', intersect: false },
+    plugins: { legend: { labels: { color: textColor() } } },
+    scales: {
+      x: { ticks: { color: textColor() }, grid: { color: gridColor() } },
+      y: { min: 60, max: 100, ticks: { color: textColor(), callback: v => v + '%' }, grid: { color: gridColor() } }
+    }
+  }
+});
+window.myCharts.push(oeeChart);
+
+// Quality Chart
+const qualCtx = document.getElementById('qualityChart').getContext('2d');
+const qualChart = new Chart(qualCtx, {
+  type: 'bar',
+  data: {
+    labels: ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'],
+    datasets: [
+      { label: 'Tread Defects', data: [420,390,410,380,350,320,310,290,280,260,245,230], backgroundColor: '#8b1a1a' },
+      { label: 'Sidewall Defects', data: [180,170,165,155,148,140,135,128,120,115,108,100], backgroundColor: '#e07b2a' },
+      { label: 'Cure Defects', data: [90,85,80,75,72,68,65,62,58,55,50,48], backgroundColor: '#3a6abf' },
+    ]
+  },
+  options: {
+    responsive: true, interaction: { mode: 'index', intersect: false },
+    plugins: { legend: { labels: { color: textColor() } } },
+    scales: {
+      x: { stacked: true, ticks: { color: textColor() }, grid: { color: gridColor() } },
+      y: { stacked: true, ticks: { color: textColor(), callback: v => v + ' PPM' }, grid: { color: gridColor() } }
+    }
+  }
+});
+window.myCharts.push(qualChart);
+
+// Finance Chart
+const finCtx = document.getElementById('financeChart').getContext('2d');
+const finChart = new Chart(finCtx, {
+  type: 'bar',
+  data: {
+    labels: ['Year 1', 'Year 2', 'Year 3'],
+    datasets: [
+      { label: 'Revenue', data: [5200, 6100, 7400], backgroundColor: 'rgba(58,106,191,.7)', yAxisID: 'y' },
+      { label: 'Total Cost', data: [4144, 4612, 5292], backgroundColor: 'rgba(139,26,26,.6)', yAxisID: 'y' },
+      { label: 'EBITDA Margin %', data: [20, 24, 28], type: 'line', borderColor: '#e07b2a', backgroundColor: 'transparent', yAxisID: 'y2', tension: 0.4, pointRadius: 6 },
+    ]
+  },
+  options: {
+    responsive: true, interaction: { mode: 'index', intersect: false },
+    plugins: { legend: { labels: { color: textColor() } } },
+    scales: {
+      x: { ticks: { color: textColor() }, grid: { color: gridColor() } },
+      y: { ticks: { color: textColor(), callback: v => '$' + v + 'K' }, grid: { color: gridColor() }, title: { display: true, text: 'USD (000)', color: textColor() } },
+      y2: { position: 'right', min: 0, max: 40, ticks: { color: textColor(), callback: v => v + '%' }, grid: { display: false }, title: { display: true, text: 'EBITDA %', color: textColor() } }
+    }
+  }
+});
+window.myCharts.push(finChart);
+</script>
+</body>
+</html>
