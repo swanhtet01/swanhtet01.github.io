@@ -1,16 +1,10 @@
 name: Showroom CI
 
+# GitHub Actions billing is currently unavailable for this repo.
+# CI now runs through Vercel/Codex release gates:
+# powershell -ExecutionPolicy Bypass -File tools/run_vercel_release_gate.ps1 -Target all
 on:
-  pull_request:
-    paths:
-      - 'showroom/**'
-      - '.github/workflows/showroom-ci.yml'
-  push:
-    branches:
-      - main
-    paths:
-      - 'showroom/**'
-      - '.github/workflows/showroom-ci.yml'
+  workflow_dispatch:
 
 jobs:
   validate:
@@ -30,6 +24,9 @@ jobs:
         working-directory: showroom
         run: npm ci
 
+      - name: Guard public Vercel config
+        run: npm run vercel:guard
+
       - name: Preflight public env
         env:
           VITE_GOOGLE_MAPS_API_KEY: ${{ secrets.VITE_GOOGLE_MAPS_API_KEY }}
@@ -43,7 +40,6 @@ jobs:
         run: npm run lint
 
       - name: Build
-        working-directory: showroom
         env:
           VITE_GOOGLE_MAPS_API_KEY: ${{ secrets.VITE_GOOGLE_MAPS_API_KEY }}
           VITE_BOOKING_URL: ${{ vars.VITE_BOOKING_URL }}
@@ -56,6 +52,13 @@ jobs:
 
       - name: Verify public routes
         run: |
-          for route in find-companies company-list task-list lead-finder workspace action-os book; do
-            test -f "showroom/dist/$route/index.html"
+          for route in contact about products app/start app/portal; do
+            test -f "api-static/$route/index.html"
           done
+          test -f "api-static/index.html"
+          test -f "api-static/social/supermega-contact-qr.png"
+
+      - name: Verify public Vercel output
+        run: |
+          node tools/create_public_vercel_output.mjs
+          node tools/verify_public_vercel_output.mjs
