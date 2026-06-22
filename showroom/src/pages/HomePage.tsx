@@ -1,8 +1,6 @@
 import { Link } from 'react-router-dom'
 
 import { trackEvent } from '../lib/analytics'
-import { STARTER_PACK_DETAILS, type StarterPackDetail } from '../lib/salesControl'
-import { SOFTWARE_MODULE_DETAILS, type SoftwareModuleDetail } from '../lib/softwareCatalog'
 import { getTenantConfig } from '../lib/tenantConfig'
 import { YANGON_TYRE_MODEL } from '../lib/tenantOperatingModel'
 
@@ -11,30 +9,36 @@ const screenshotSize = {
   height: 1024,
 } as const
 
-const publicTemplateImageMap: Record<string, string> = {
-  'sales-system': '/site/sales-desk.svg',
-  'operations-inbox': '/site/ops-desk.svg',
-  'client-portal': '/site/client-portal.svg',
-}
-
-const featuredTemplateIds = ['sales-system', 'operations-inbox', 'client-portal'] as const
-const featuredTemplates = SOFTWARE_MODULE_DETAILS.filter((item: SoftwareModuleDetail) =>
-  featuredTemplateIds.includes(item.id as (typeof featuredTemplateIds)[number]),
-)
-
 const rolloutSteps = [
   {
-    title: 'Start with one live product',
-    detail: 'Pick Find Clients, Company List, or Receiving Control for the first painful workflow.',
+    title: 'Pick your business template',
+    detail: 'Spa, salon, retail, cafe, or repair desk — DeskPOS sets up the right services, staff fields, and payment methods.',
   },
   {
-    title: 'Add the right template',
-    detail: 'Expand into a sales portal, operations portal, or client portal after the first screen works.',
+    title: 'Enter prices, staff, and stock',
+    detail: 'No data entry training. Type your services, set MMK prices, add your team and inventory. Done in an afternoon.',
   },
   {
-    title: 'Roll it out to the client',
-    detail: 'Brand it, import current data, add roles, approvals, and history, then keep improving.',
+    title: 'Open the register and sell',
+    detail: 'Take cash, KBZPay, or MMQR. Track bookings. Close the day with one click. Works on a tablet without internet.',
   },
+] as const
+
+const deskposVerticals = [
+  { name: 'Spa', detail: 'Bookings, therapists, rooms, deposits, recipes.' },
+  { name: 'Salon', detail: 'Chairs, stylists, commissions, retail shelf.' },
+  { name: 'Retail', detail: 'Counter sales, stock counts, receipts.' },
+  { name: 'Cafe', detail: 'Menu, cash/QR, shift close, ingredient stock.' },
+  { name: 'Repair', detail: 'Jobs, technicians, parts, customer notes.' },
+] as const
+
+const deskposVsIncumbents = [
+  { feature: 'MMK / KBZPay / MMQR native', deskpos: 'Yes', square: 'No', fresha: 'No', vagaro: 'No' },
+  { feature: 'Works offline', deskpos: 'Yes (PWA)', square: 'Partial', fresha: 'No', vagaro: 'No' },
+  { feature: 'Monthly fee', deskpos: '$0', square: '$0–$60', fresha: 'Free + 2.19% on payments', vagaro: '$25–$165' },
+  { feature: 'Card-reader lock-in', deskpos: 'None', square: 'Square reader required', fresha: 'Optional', vagaro: 'Required for in-person' },
+  { feature: 'Burmese UI', deskpos: 'Yes', square: 'No', fresha: 'No', vagaro: 'No' },
+  { feature: 'Tablet + PC + phone', deskpos: 'All three', square: 'Tablet + phone', fresha: 'Tablet + phone', vagaro: 'Tablet + phone' },
 ] as const
 
 const yangonTyreHighlights = [
@@ -42,10 +46,6 @@ const yangonTyreHighlights = [
   'Connects Gmail, Drive, Calendar, ERP exports, forms, and uploaded files.',
   'Built from reusable templates instead of a one-off custom stack.',
 ] as const
-
-function contactLink(name: string) {
-  return `/contact?package=${encodeURIComponent(name)}`
-}
 
 export function HomePage() {
   const tenant = getTenantConfig()
@@ -111,55 +111,74 @@ export function HomePage() {
       <section className="sm-site-panel">
         <div className="grid gap-8 xl:grid-cols-[0.84fr_1.16fr] xl:items-center">
           <div>
-            <p className="sm-kicker text-[var(--sm-accent)]">SUPERMEGA.dev</p>
-            <h1 className="mt-4 max-w-3xl text-4xl font-extrabold tracking-tight text-white lg:text-6xl">Company software that starts useful on day one.</h1>
+            <p className="sm-kicker text-[var(--sm-accent)]">DeskPOS by SUPERMEGA · Live now</p>
+            <h1 className="mt-4 max-w-3xl text-4xl font-extrabold tracking-tight text-white lg:text-6xl">
+              A free POS that runs your spa, salon, retail, cafe, or repair desk.
+            </h1>
+            <p className="mt-3 max-w-2xl text-base text-[var(--sm-muted)] lg:text-lg" lang="my" style={{ fontFamily: "'Pyidaungsu', 'Noto Sans Myanmar', sans-serif" }}>
+              မြန်မာစီးပွားရေးအတွက် POS — KBZPay နှင့် MMQR ပါပြီးသား။
+            </p>
             <p className="mt-5 max-w-2xl text-base leading-relaxed text-[var(--sm-muted)] lg:text-lg">
-              Start with a real product for sales, company data, or receiving. Then expand it into a branded portal for the client or team that needs more.
+              MMK / KBZPay / MMQR / cash from day one. Runs on a tablet or PC, works offline. No monthly fee. No card-reader lock-in.
             </p>
             <div className="mt-6 flex flex-wrap gap-3 text-sm text-[var(--sm-muted)]">
-              <span className="sm-status-pill">Live products</span>
-              <span className="sm-status-pill">Reusable templates</span>
-              <span className="sm-status-pill">Customer rollouts</span>
+              <span className="sm-status-pill">MMK · KBZPay · MMQR</span>
+              <span className="sm-status-pill">Offline-ready</span>
+              <span className="sm-status-pill">No monthly fee</span>
+              <span className="sm-status-pill">Burmese &amp; English</span>
             </div>
             <div className="mt-8 flex flex-wrap gap-3">
-              <Link className="sm-button-primary" onClick={() => trackEvent('offer_open_click', { offer: 'Products overview' })} to="/products">
-                See products
-              </Link>
-              <Link className="sm-button-secondary" onClick={() => trackEvent('contact_open_click', { source: 'home_hero' })} to="/clients/yangon-tyre">
-                See case study
+              <a
+                className="sm-button-primary"
+                href="https://pos.supermega.dev/"
+                onClick={() => trackEvent('offer_open_click', { offer: 'DeskPOS live' })}
+                rel="noopener"
+                target="_blank"
+              >
+                Try the live demo →
+              </a>
+              <Link
+                className="sm-button-secondary"
+                onClick={() => trackEvent('contact_open_click', { source: 'home_hero_deskpos' })}
+                to="/contact?package=DeskPOS"
+              >
+                Talk to us
               </Link>
             </div>
+            <p className="mt-4 text-xs text-[var(--sm-muted)]">
+              Demo: login as <code className="rounded bg-white/5 px-1.5 py-0.5">owner</code> / <code className="rounded bg-white/5 px-1.5 py-0.5">owner</code> · then click <em>Load sample spa</em>
+            </p>
           </div>
 
           <article className="sm-surface-deep p-4 lg:p-6">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <p className="sm-kicker text-[var(--sm-accent)]">Live now</p>
-                <p className="mt-2 text-lg font-semibold text-white">Company List</p>
+                <p className="sm-kicker text-[var(--sm-accent)]">Live at</p>
+                <p className="mt-2 text-lg font-semibold text-white">pos.supermega.dev</p>
               </div>
-              <span className="sm-status-pill">Structured list</span>
+              <span className="sm-status-pill">PWA · tablet &amp; PC</span>
             </div>
             <img
-              alt="SUPERMEGA.dev company list live product"
-              className="mt-4 aspect-[16/10] w-full rounded-2xl border border-white/10 bg-[#020612] object-cover object-top"
+              alt="DeskPOS — the simple POS for Myanmar businesses"
+              className="mt-4 aspect-[1200/630] w-full rounded-2xl border border-white/10 bg-[#020612] object-cover object-center"
               decoding="async"
               fetchPriority="high"
-              height={screenshotSize.height}
-              src="/site/company-list-live.png"
-              width={screenshotSize.width}
+              height={630}
+              src="https://pos.supermega.dev/og-card.svg"
+              width={1200}
             />
             <div className="mt-4 grid gap-3 md:grid-cols-3">
               <div className="sm-chip text-white">
-                <p className="sm-kicker text-[var(--sm-accent)]">Import</p>
-                <p className="mt-2 text-sm text-[var(--sm-muted)]">Gmail, Drive, Sheets, CSV, CRM export</p>
+                <p className="sm-kicker text-[var(--sm-accent)]">Verticals</p>
+                <p className="mt-2 text-sm text-[var(--sm-muted)]">Spa · Salon · Retail · Cafe · Repair</p>
               </div>
               <div className="sm-chip text-white">
-                <p className="sm-kicker text-[var(--sm-accent-alt)]">Use</p>
-                <p className="mt-2 text-sm text-[var(--sm-muted)]">Assign owners, track stages, keep next steps visible</p>
+                <p className="sm-kicker text-[var(--sm-accent-alt)]">Payments</p>
+                <p className="mt-2 text-sm text-[var(--sm-muted)]">MMK cash, KBZPay, MMQR, bank transfer, card</p>
               </div>
               <div className="sm-chip text-white">
-                <p className="sm-kicker text-[var(--sm-accent)]">Expand</p>
-                <p className="mt-2 text-sm text-[var(--sm-muted)]">Turn it into a full sales or client portal later</p>
+                <p className="sm-kicker text-[var(--sm-accent)]">Counter ops</p>
+                <p className="mt-2 text-sm text-[var(--sm-muted)]">Bookings, stock, daily close, ESC/POS print</p>
               </div>
             </div>
           </article>
@@ -169,47 +188,18 @@ export function HomePage() {
       <section className="sm-site-panel">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <p className="sm-kicker text-[var(--sm-accent)]">Live products</p>
-            <h2 className="mt-3 max-w-3xl text-3xl font-bold text-white lg:text-5xl">Start with a product that already works.</h2>
+            <p className="sm-kicker text-[var(--sm-accent)]">Built for the way you sell</p>
+            <h2 className="mt-3 max-w-3xl text-3xl font-bold text-white lg:text-5xl">One POS, five verticals.</h2>
           </div>
           <p className="max-w-xl text-sm leading-relaxed text-[var(--sm-muted)] lg:text-base">
-            These are the current starting points. Each one solves a narrow job first, then expands into a broader customer system.
+            Pick a template at setup. DeskPOS configures services, payment methods, and stock recipes for your business — no generic-software wrestling.
           </p>
         </div>
-        <div className="mt-8 grid gap-6 xl:grid-cols-3">
-          {STARTER_PACK_DETAILS.map((product: StarterPackDetail) => (
-            <article className="sm-pack-card overflow-hidden p-4 text-white" key={product.id}>
-              <img
-                alt={`${product.name} live screenshot`}
-                className="aspect-[16/10] w-full rounded-2xl border border-white/10 bg-[#020612] object-cover object-top"
-                decoding="async"
-                height={screenshotSize.height}
-                loading="lazy"
-                src={product.image}
-                width={screenshotSize.width}
-              />
-              <div className="mt-4 flex items-center justify-between gap-3">
-                <p className="sm-kicker text-[var(--sm-accent)]">Live now</p>
-                <span className="sm-status-pill">{product.launchWindow}</span>
-              </div>
-              <h3 className="mt-4 text-2xl font-bold">{product.name}</h3>
-              <p className="mt-3 text-sm leading-relaxed text-[var(--sm-muted)]">{product.promise}</p>
-              <div className="mt-4 space-y-3">
-                {product.problemsSolved.slice(0, 2).map((item) => (
-                  <div className="sm-site-point" key={item}>
-                    <span className="sm-site-point-dot" />
-                    <span>{item}</span>
-                  </div>
-                ))}
-              </div>
-              <div className="mt-6 flex flex-wrap gap-3">
-                <Link className="sm-button-primary" to={`/products/${product.slug}`}>
-                  See product
-                </Link>
-                <Link className="sm-link" to={contactLink(product.name)}>
-                  Start rollout
-                </Link>
-              </div>
+        <div className="mt-8 grid gap-3 md:grid-cols-3 xl:grid-cols-5">
+          {deskposVerticals.map((vertical) => (
+            <article className="sm-proof-card" key={vertical.name}>
+              <p className="text-lg font-semibold text-white">{vertical.name}</p>
+              <p className="mt-3 text-sm leading-relaxed text-[var(--sm-muted)]">{vertical.detail}</p>
             </article>
           ))}
         </div>
@@ -218,115 +208,132 @@ export function HomePage() {
       <section className="sm-site-panel">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <p className="sm-kicker text-[var(--sm-accent)]">Portal templates</p>
-            <h2 className="mt-3 max-w-3xl text-3xl font-bold text-white lg:text-5xl">When the first workflow works, expand into a full portal.</h2>
+            <p className="sm-kicker text-[var(--sm-accent-alt)]">Why DeskPOS</p>
+            <h2 className="mt-3 max-w-3xl text-3xl font-bold text-white lg:text-5xl">vs Square, Fresha, Vagaro.</h2>
           </div>
           <p className="max-w-xl text-sm leading-relaxed text-[var(--sm-muted)] lg:text-base">
-            These are structured rollouts, not prototypes. They reuse the same product base, then adapt the roles, inputs, and screens for the customer.
+            Honest comparison for shop owners in Yangon. The big POS brands don&rsquo;t take MMK, don&rsquo;t do offline, and charge a US-dollar subscription. DeskPOS is built locally so it doesn&rsquo;t need any of that.
           </p>
         </div>
-        <div className="mt-8 grid gap-6 xl:grid-cols-3">
-          {featuredTemplates.map((template) => (
-            <article className="sm-pack-card overflow-hidden p-4 text-white" key={template.id}>
-              <img
-                alt={`${template.name} template preview`}
-                className="aspect-[16/10] w-full rounded-2xl border border-white/10 bg-[#020612] object-cover object-center"
-                decoding="async"
-                height={screenshotSize.height}
-                loading="lazy"
-                src={publicTemplateImageMap[template.id]}
-                width={screenshotSize.width}
-              />
-              <div className="mt-4 flex items-center justify-between gap-3">
-                <p className="sm-kicker text-[var(--sm-accent)]">Template</p>
-                <span className="sm-status-pill">{template.status}</span>
-              </div>
-              <h3 className="mt-4 text-2xl font-bold">{template.name}</h3>
-              <p className="mt-3 text-sm leading-relaxed text-[var(--sm-muted)]">{template.promise}</p>
-              <p className="mt-4 text-sm text-white/80">Includes: {template.surfaces.slice(0, 3).join(' · ')}</p>
-              <div className="mt-6 flex flex-wrap gap-3">
-                <Link className="sm-button-primary" to={`/products/${template.id}`}>
-                  See template
-                </Link>
-                <Link className="sm-link" to="/clients/yangon-tyre">
-                  See case study
-                </Link>
-              </div>
+        <div className="mt-6 overflow-x-auto">
+          <table className="w-full min-w-[560px] border-collapse text-left text-sm">
+            <thead>
+              <tr className="border-b border-white/10 text-[var(--sm-muted)]">
+                <th className="py-3 pr-4 font-semibold uppercase tracking-wider text-xs">Feature</th>
+                <th className="py-3 px-3 font-semibold uppercase tracking-wider text-xs text-[var(--sm-accent)]">DeskPOS</th>
+                <th className="py-3 px-3 font-semibold uppercase tracking-wider text-xs">Square</th>
+                <th className="py-3 px-3 font-semibold uppercase tracking-wider text-xs">Fresha</th>
+                <th className="py-3 px-3 font-semibold uppercase tracking-wider text-xs">Vagaro</th>
+              </tr>
+            </thead>
+            <tbody>
+              {deskposVsIncumbents.map((row) => (
+                <tr className="border-b border-white/5 text-white" key={row.feature}>
+                  <td className="py-3 pr-4 text-[var(--sm-muted)]">{row.feature}</td>
+                  <td className="py-3 px-3 font-semibold text-[var(--sm-accent)]">{row.deskpos}</td>
+                  <td className="py-3 px-3 text-white/80">{row.square}</td>
+                  <td className="py-3 px-3 text-white/80">{row.fresha}</td>
+                  <td className="py-3 px-3 text-white/80">{row.vagaro}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p className="mt-4 text-xs text-[var(--sm-muted)]">
+          Pricing figures based on each vendor&rsquo;s public website at the time of writing. We are not affiliated with Square, Fresha, or Vagaro.
+        </p>
+      </section>
+
+      <section className="sm-site-panel">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <p className="sm-kicker text-[var(--sm-accent)]">How setup works</p>
+            <h2 className="mt-3 max-w-3xl text-3xl font-bold text-white lg:text-5xl">From sign-in to first sale in an afternoon.</h2>
+          </div>
+          <p className="max-w-xl text-sm leading-relaxed text-[var(--sm-muted)] lg:text-base">
+            No installer, no card-reader, no provider account. Open pos.supermega.dev on the tablet or laptop you already have.
+          </p>
+        </div>
+        <div className="mt-8 grid gap-3 md:grid-cols-3">
+          {rolloutSteps.map((step, index) => (
+            <article className="sm-proof-card" key={step.title}>
+              <p className="sm-kicker text-[var(--sm-accent)]">Step {index + 1}</p>
+              <p className="mt-2 font-semibold text-white">{step.title}</p>
+              <p className="mt-3 text-sm leading-relaxed text-[var(--sm-muted)]">{step.detail}</p>
             </article>
           ))}
         </div>
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-[1.04fr_0.96fr]">
-        <article className="sm-site-panel">
-          <p className="sm-kicker text-[var(--sm-accent-alt)]">Case study</p>
-          <h2 className="mt-3 text-3xl font-bold text-white lg:text-4xl">Yangon Tyre is the first named client portal.</h2>
+      <section className="sm-site-panel">
+        <div className="grid gap-8 xl:grid-cols-[1.04fr_0.96fr]">
+          <div>
+            <p className="sm-kicker text-[var(--sm-accent-alt)]">Also from SUPERMEGA</p>
+            <h2 className="mt-3 text-3xl font-bold text-white lg:text-4xl">Custom ops portals — when a POS isn&rsquo;t enough.</h2>
+            <p className="mt-5 max-w-xl text-base leading-relaxed text-[var(--sm-muted)]">
+              For larger operations we build branded company portals: sales desks, operations queues, quality and maintenance lanes. Yangon Tyre is the first named example.
+            </p>
+            <div className="mt-6 grid gap-3 md:grid-cols-3">
+              <div className="sm-chip text-white">
+                <p className="sm-kicker text-[var(--sm-accent)]">Modules</p>
+                <p className="mt-2 text-3xl font-bold">{YANGON_TYRE_MODEL.modules.length}</p>
+              </div>
+              <div className="sm-chip text-white">
+                <p className="sm-kicker text-[var(--sm-accent-alt)]">Roles</p>
+                <p className="mt-2 text-3xl font-bold">{YANGON_TYRE_MODEL.roles.length}</p>
+              </div>
+              <div className="sm-chip text-white">
+                <p className="sm-kicker text-[var(--sm-accent)]">Connectors</p>
+                <p className="mt-2 text-3xl font-bold">{YANGON_TYRE_MODEL.connectors.length}</p>
+              </div>
+            </div>
+            <div className="mt-6 space-y-3">
+              {yangonTyreHighlights.map((point) => (
+                <div className="sm-site-point" key={point}>
+                  <span className="sm-site-point-dot" />
+                  <span>{point}</span>
+                </div>
+              ))}
+            </div>
+            <div className="mt-6 flex flex-wrap gap-3">
+              <Link className="sm-button-secondary" to="/clients/yangon-tyre">
+                Read the case study
+              </Link>
+              <Link className="sm-link" to="/contact">
+                Talk to us
+              </Link>
+            </div>
+          </div>
           <img
             alt="Yangon Tyre client portal"
-            className="mt-6 aspect-[16/10] w-full rounded-2xl border border-white/10 bg-[#020612] object-cover object-top"
+            className="aspect-[16/10] w-full self-start rounded-2xl border border-white/10 bg-[#020612] object-cover object-top"
             decoding="async"
             height={screenshotSize.height}
             loading="lazy"
             src="/site/receiving-control-live.png"
             width={screenshotSize.width}
           />
-          <div className="mt-6 space-y-3">
-            {yangonTyreHighlights.map((point) => (
-              <div className="sm-site-point" key={point}>
-                <span className="sm-site-point-dot" />
-                <span>{point}</span>
-              </div>
-            ))}
-          </div>
-          <div className="mt-6 flex flex-wrap gap-3">
-            <Link className="sm-button-primary" to="/clients/yangon-tyre">
-              Read case study
-            </Link>
-            <Link className="sm-button-secondary" to="/contact">
-              Start similar rollout
-            </Link>
-          </div>
-        </article>
-
-        <article className="sm-site-panel">
-          <p className="sm-kicker text-[var(--sm-accent)]">How rollout works</p>
-          <h2 className="mt-3 text-3xl font-bold text-white lg:text-4xl">Keep the path short and useful.</h2>
-          <div className="mt-6 grid gap-3">
-            {rolloutSteps.map((step) => (
-              <article className="sm-proof-card" key={step.title}>
-                <p className="font-semibold text-white">{step.title}</p>
-                <p className="mt-3 text-sm leading-relaxed text-[var(--sm-muted)]">{step.detail}</p>
-              </article>
-            ))}
-          </div>
-          <div className="mt-6 grid gap-3 md:grid-cols-3">
-            <div className="sm-chip text-white">
-              <p className="sm-kicker text-[var(--sm-accent)]">Modules</p>
-              <p className="mt-2 text-3xl font-bold">{YANGON_TYRE_MODEL.modules.length}</p>
-            </div>
-            <div className="sm-chip text-white">
-              <p className="sm-kicker text-[var(--sm-accent-alt)]">Roles</p>
-              <p className="mt-2 text-3xl font-bold">{YANGON_TYRE_MODEL.roles.length}</p>
-            </div>
-            <div className="sm-chip text-white">
-              <p className="sm-kicker text-[var(--sm-accent)]">Connectors</p>
-              <p className="mt-2 text-3xl font-bold">{YANGON_TYRE_MODEL.connectors.length}</p>
-            </div>
-          </div>
-        </article>
+        </div>
       </section>
 
       <section className="sm-site-final">
         <div>
-          <p className="sm-kicker text-[var(--sm-accent)]">Next step</p>
-          <h2 className="mt-3 text-3xl font-bold text-white lg:text-5xl">Choose the first workflow and start rollout.</h2>
+          <p className="sm-kicker text-[var(--sm-accent)]">Try it now</p>
+          <h2 className="mt-3 text-3xl font-bold text-white lg:text-5xl">Open DeskPOS on your phone or tablet.</h2>
+          <p className="mt-3 text-sm text-[var(--sm-muted)]">Login as <code className="rounded bg-white/5 px-1.5 py-0.5">owner</code> / <code className="rounded bg-white/5 px-1.5 py-0.5">owner</code> — no email, no card, no signup.</p>
         </div>
         <div className="flex flex-wrap gap-3">
-          <Link className="sm-button-primary" to="/products">
-            See products
-          </Link>
-          <Link className="sm-button-secondary" to="/contact">
-            Start rollout
+          <a
+            className="sm-button-primary"
+            href="https://pos.supermega.dev/"
+            onClick={() => trackEvent('offer_open_click', { offer: 'DeskPOS final cta' })}
+            rel="noopener"
+            target="_blank"
+          >
+            Try the live demo →
+          </a>
+          <Link className="sm-button-secondary" to="/contact?package=DeskPOS">
+            Talk to us
           </Link>
         </div>
       </section>
