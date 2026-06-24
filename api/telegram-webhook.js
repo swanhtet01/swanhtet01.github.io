@@ -98,7 +98,13 @@ module.exports = async function handler(req, res) {
   const supabaseKey = text(process.env.SUPABASE_SERVICE_ROLE_KEY)
 
   if (!token) {
-    json(res, 503, { status: 'error', reason: 'TELEGRAM_BOT_TOKEN not configured' })
+    json(res, 200, {
+      status: 'unconfigured',
+      reason: 'TELEGRAM_BOT_TOKEN not configured',
+      endpoint: 'telegram-webhook',
+      webhook_configured: false,
+      owner_chat_configured: Boolean(ownerChatId),
+    })
     return
   }
 
