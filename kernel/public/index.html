@@ -44,6 +44,8 @@
   .lead h3{font-size:16px}.lead .meta{color:var(--muted);font-size:12.5px;margin-top:3px}.lead .msg{margin-top:8px;font-size:13px}
   .pill{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;padding:3px 9px;border-radius:999px;background:var(--clay-soft);color:var(--clay)}
   .pill.won{background:#eaf3ed;color:var(--good)}
+  .pill.contacted{background:#e8f3ff;color:#1a56b0}
+  .pill.qualified{background:#fef9e7;color:#b45309}
   /* pipeline */
   .cols{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}
   .col h3{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-family:Inter,sans-serif;font-weight:700;margin-bottom:8px}
@@ -67,20 +69,53 @@
   <input class="key" id="opsKey" placeholder="ops passcode" />
 </header>
 <nav>
-  <button data-view="overview" class="active">Overview</button>
+  <button data-view="command" class="active">Command</button>
+  <button data-view="overview">Overview</button>
   <button data-view="leads">Leads</button>
   <button data-view="pipeline">Pipeline</button>
   <button data-view="outreach">Outreach</button>
   <button data-view="deal">Run a deal</button>
+  <button data-view="graduation">Graduation</button>
 </nav>
 <main>
-  <section id="view-overview">
+  <section id="view-command">
+    <!-- Company-wide health bar -->
+    <div class="stats" id="cmd-stats" style="margin-bottom:14px"></div>
+    <div style="display:grid;grid-template-columns:1fr 1.5fr;gap:14px">
+      <!-- Left: Engine status -->
+      <div>
+        <div class="panel" style="margin-bottom:12px">
+          <h3 style="font-size:14px;margin-bottom:12px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)">Agent Pipeline</h3>
+          <div id="cmd-agents"><div class="muted" style="font-size:12px">Loading…</div></div>
+          <div class="row" style="margin-top:12px;gap:8px">
+            <button class="sm primary" id="cmd-trigger-autopilot">Run autopilot</button>
+            <button class="sm" id="cmd-refresh">Refresh</button>
+          </div>
+        </div>
+        <div class="panel">
+          <h3 style="font-size:14px;margin-bottom:12px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)">Graduation Signals</h3>
+          <div id="cmd-grad"><div class="muted" style="font-size:12px">Loading…</div></div>
+        </div>
+      </div>
+      <!-- Right: CEO Thread -->
+      <div class="panel" style="display:flex;flex-direction:column;min-height:460px">
+        <h3 style="font-size:14px;margin-bottom:12px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)">CEO Thread</h3>
+        <div id="cmd-thread" style="flex:1;overflow-y:auto;max-height:340px;display:grid;gap:6px"></div>
+        <div style="margin-top:10px;display:flex;gap:8px;border-top:1px solid var(--line);padding-top:10px">
+          <input id="cmd-note" placeholder="Post a note, decision, or action…" style="flex:1" />
+          <button class="primary" id="cmd-post">Post</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="view-overview" hidden>
     <div class="stats" id="stats"></div>
     <div class="two">
       <div class="panel"><h3 style="font-size:15px;margin-bottom:12px">Pipeline by stage</h3><div class="bars" id="bars"></div></div>
       <div class="panel"><h3 style="font-size:15px;margin-bottom:12px">Recent activity</h3><div class="feed" id="feed"></div></div>
     </div>
-    <p class="muted" style="font-size:12px;margin-top:14px">Roadmap, in progress: per-client AI Operate loop (draft→approve→act) and the graduation tracker (3rd repeat → product).</p>
+    <p class="muted" style="font-size:12px;margin-top:14px">Nightly autopilot pushes top leads here. Graduation tab tracks repeat workflow types — flag at 3 signals a product.</p>
   </section>
 
   <section id="view-leads" hidden>
@@ -94,6 +129,15 @@
         <button class="primary" id="l-add">Add</button>
       </div>
     </div>
+    <div class="row" style="margin-bottom:12px;gap:6px;flex-wrap:wrap">
+      <button class="sm primary" data-lf="all" id="lf-all">All</button>
+      <button class="sm" data-lf="autopilot">Autopilot</button>
+      <button class="sm" data-lf="inbound">Inbound</button>
+      <button class="sm" data-lf="qualified">Qualified</button>
+      <button class="sm" data-lf="contacted">Contacted</button>
+      <button class="sm" data-lf="new">New only</button>
+      <input id="l-search" placeholder="Search…" style="max-width:180px;margin-left:auto" />
+    </div>
     <div class="grid" id="leads"></div>
   </section>
 
@@ -102,6 +146,20 @@
   <section id="view-outreach" hidden>
     <p class="muted" style="margin-bottom:12px">Saved deal packets. Drafts only — approve, then send from your own Viber/email. Nothing is sent automatically.</p>
     <div id="outreach"></div>
+  </section>
+
+  <section id="view-graduation" hidden>
+    <div class="panel" style="margin-bottom:14px">
+      <h3 style="font-size:15px;margin-bottom:10px">Log a workflow type</h3>
+      <div class="row">
+        <input id="g-category" placeholder="Category (e.g. POS for retail)" style="max-width:220px" />
+        <input id="g-client" placeholder="Client name" style="max-width:200px" />
+        <input id="g-note" placeholder="Note (optional)" style="flex:1;min-width:160px" />
+        <button class="primary" id="g-add">Log</button>
+      </div>
+      <p class="muted" style="font-size:12px;margin-top:8px">Same workflow type × 3 clients = product signal. Autopilot also logs here when it converts a lead.</p>
+    </div>
+    <div id="graduation-list"></div>
   </section>
 
   <section id="view-deal" hidden>
@@ -141,11 +199,13 @@ async function api(method,path,body){
 
 document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
   document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('active',x===b))
-  for(const v of ['overview','leads','pipeline','outreach','deal']) $('#view-'+v).hidden=v!==b.dataset.view
+  for(const v of ['command','overview','leads','pipeline','outreach','deal','graduation']) $('#view-'+v).hidden=v!==b.dataset.view
+  if(b.dataset.view==='command')loadCommand()
   if(b.dataset.view==='overview')loadOverview()
   if(b.dataset.view==='pipeline')loadProjects()
   if(b.dataset.view==='leads')loadLeads()
   if(b.dataset.view==='outreach')loadOutreach()
+  if(b.dataset.view==='graduation')loadGraduation()
 })
 
 async function loadOverview(){
@@ -165,25 +225,54 @@ async function loadOverview(){
   $('#feed').innerHTML=act.length?act.map(a=>`<div><span class="k">${esc(a.kind)}</span>${esc(a.summary)}</div>`).join(''):'<div class="muted">No activity yet.</div>'
 }
 
-async function loadLeads(){
-  const r=await api('GET','/api/leads')
-  $('#addLead').hidden=(r.mode!=='memory')
+let leadsFilter='all', leadsCache=null
+document.querySelectorAll('[data-lf]').forEach(b=>b.onclick=()=>{
+  leadsFilter=b.dataset.lf
+  document.querySelectorAll('[data-lf]').forEach(x=>{x.className=x.dataset.lf===leadsFilter?'sm primary':'sm'})
+  renderLeads()
+})
+$('#l-search').addEventListener('input',()=>renderLeads())
+
+function renderLeads(){
   const box=$('#leads');box.innerHTML=''
-  if(!r.leads||!r.leads.length){box.innerHTML='<div class="empty">No leads yet. They arrive here from the /contact/ form.</div>';return}
-  for(const l of r.leads){
+  const all=leadsCache||[]
+  const q=($('#l-search').value||'').toLowerCase().trim()
+  const filtered=all.filter(l=>{
+    if(leadsFilter==='autopilot'&&l.source!=='autopilot')return false
+    if(leadsFilter==='inbound'&&l.source!=='inbound'&&l.source!=='demo-funnel')return false
+    if(leadsFilter==='qualified'&&l.stage!=='qualified')return false
+    if(leadsFilter==='contacted'&&l.stage!=='contacted')return false
+    if(leadsFilter==='new'&&(l.stage==='qualified'||l.stage==='contacted'||l.stage==='won'))return false
+    if(q&&![l.name,l.company,l.contact,l.message,l.package].filter(Boolean).join(' ').toLowerCase().includes(q))return false
+    return true
+  })
+  if(!filtered.length){box.innerHTML='<div class="empty">No leads match this filter.</div>';return}
+  for(const l of filtered){
     const el=document.createElement('div');el.className='lead'
-    const stage=l.stage?`<span class="pill">${esc(l.stage)}</span>`:''
+    const stageCls=l.stage==='contacted'?'contacted':l.stage==='qualified'?'qualified':l.stage==='won'?'won':''
+    const stage=l.stage?`<span class="pill ${stageCls}">${esc(l.stage)}</span>`:''
+    const contactHtml=l.contact?(l.contact.includes('@')?`· <a href="mailto:${esc(l.contact)}" style="color:var(--teal)">${esc(l.contact)}</a>`:`· ${esc(l.contact)}`):'';
+    const notContacted=l.stage!=='contacted'&&l.stage!=='won'&&!l.converted
     el.innerHTML=`<div><h3>${esc(l.company||l.name||'—')} ${stage} <span class="muted" style="font-size:12px;font-weight:600">${l.score?'· '+l.score+'/100':''}</span></h3>
-      <div class="meta">${esc(l.name||'')}${l.contact?' · '+esc(l.contact):''}${l.package?' · '+esc(l.package):''} · ${esc(String(l.source||'').replace('-',' '))}</div>
+      <div class="meta">${esc(l.name||'')} ${contactHtml}${l.package?' · '+esc(l.package):''} · ${esc(String(l.source||'').replace('-',' '))}</div>
       ${l.message?`<div class="msg">${esc(l.message)}</div>`:''}</div>
       <div class="row" style="align-items:flex-start">
         ${l.converted?`<span class="pill won">✓ in pipeline</span>`:`<button class="sm primary" data-conv="${esc(l.id)}">Win → project</button>`}
         <button class="sm" data-deal="${esc(l.id)}">Run a deal</button>
+        ${notContacted?`<button class="sm" data-contact="${esc(l.id)}" title="Mark this lead as contacted">📬 Contacted</button>`:''}
       </div>`
     box.appendChild(el)
   }
   box.querySelectorAll('[data-conv]').forEach(b=>b.onclick=async()=>{const x=await api('POST','/api/leads/'+encodeURIComponent(b.dataset.conv)+'/convert',{});if(x.ok){toast('Project created');loadLeads()}})
-  box.querySelectorAll('[data-deal]').forEach(b=>b.onclick=()=>{const l=r.leads.find(x=>x.id===b.dataset.deal);dealLead=l;document.querySelector('nav button[data-view="deal"]').click();$('#d-name').value=l.name||'';$('#d-company').value=l.company||'';$('#d-contact').value=l.contact||'';$('#d-workflow').value=l.message||'';$('#d-leadtag').textContent='for '+(l.company||l.name||'lead')})
+  box.querySelectorAll('[data-deal]').forEach(b=>b.onclick=()=>{const l=(leadsCache||[]).find(x=>x.id===b.dataset.deal);if(!l)return;dealLead=l;document.querySelector('nav button[data-view="deal"]').click();$('#d-name').value=l.name||'';$('#d-company').value=l.company||'';$('#d-contact').value=l.contact||'';$('#d-workflow').value=l.message||'';$('#d-leadtag').textContent='for '+(l.company||l.name||'lead')})
+  box.querySelectorAll('[data-contact]').forEach(b=>b.onclick=async()=>{b.disabled=true;const x=await api('PATCH','/api/leads/'+encodeURIComponent(b.dataset.contact),{stage:'contacted'});if(x.ok){toast('Marked contacted');loadLeads()}else{b.disabled=false}})
+}
+
+async function loadLeads(){
+  const r=await api('GET','/api/leads')
+  $('#addLead').hidden=(r.mode!=='memory')
+  leadsCache=r.leads||[]
+  renderLeads()
 }
 
 const P_COLS=[['scoping','Scoping'],['deposit','Deposit'],['building','Building'],['live','Live'],['care','Care']]
@@ -221,17 +310,22 @@ async function loadOutreach(){
     const p=d.packet||{}
     const el=document.createElement('div');el.className='deal'
     el.innerHTML=`<div class="row" style="justify-content:space-between"><b style="font-size:15px">${esc(p.headline||'(deal)')}</b><span class="pill ${d.status==='sent'?'won':''}">${esc(d.status)}</span></div>
-      <div class="muted" style="font-size:12.5px;margin:4px 0 10px">fit ${p.fit_score||'—'}/100 · ${esc(p.segment||'')} · ${esc((p.pricing&&p.pricing.build_fee_mmk)||'')} MMK</div>
-      ${p.outreach_en?`<div class="draft" id="ot-${d.id}">${esc(p.outreach_en)}</div>`:'<div class="muted" style="font-size:12px">No outreach draft.</div>'}
+      <div class="muted" style="font-size:12.5px;margin:4px 0 4px">fit ${p.fit_score||'—'}/100 · ${esc(p.segment||'')} · ${esc((p.pricing&&p.pricing.build_fee_mmk)||'')} MMK</div>
+      ${(p._for&&p._for.contact)?`<div style="font-size:12.5px;margin-bottom:10px">${p._for.contact.includes('@')?`<a href="mailto:${esc(p._for.contact)}" style="color:var(--teal)">${esc(p._for.contact)}</a>`:esc(p._for.contact)}</div>`:''}
+      ${p.outreach_en?`<div class="draft" id="ot-${d.id}">${esc(p.outreach_en)}</div>`:''}
+      ${p.outreach_my?`<div class="draft" style="margin-top:6px;font-size:13px">${esc(p.outreach_my)}</div>`:''}
+      ${!p.outreach_en&&!p.outreach_my?'<div class="muted" style="font-size:12px">No outreach draft.</div>':''}
       <div class="row" style="margin-top:10px">
-        ${p.outreach_en?`<button class="sm" data-copy="${d.id}">Copy draft</button>`:''}
+        ${p.outreach_en?`<button class="sm" data-copy="${d.id}">Copy EN</button>`:''}
+        ${p.outreach_my?`<button class="sm" data-copymy="${d.id}">Copy MY</button>`:''}
         <button class="sm" data-prop2="${d.id}">Proposal</button>
         ${d.status!=='approved'&&d.status!=='sent'?`<button class="sm" data-app="${d.id}">Approve</button>`:''}
         ${d.status!=='sent'?`<button class="sm primary" data-sent="${d.id}">Mark sent</button>`:''}
       </div>`
     box.appendChild(el)
   }
-  box.querySelectorAll('[data-copy]').forEach(b=>b.onclick=()=>{const d=r.deals.find(x=>x.id===b.dataset.copy);navigator.clipboard.writeText(d.packet.outreach_en||'');toast('Copied draft')})
+  box.querySelectorAll('[data-copy]').forEach(b=>b.onclick=()=>{const d=r.deals.find(x=>x.id===b.dataset.copy);navigator.clipboard.writeText(d.packet.outreach_en||'');toast('EN draft copied')})
+  box.querySelectorAll('[data-copymy]').forEach(b=>b.onclick=()=>{const d=r.deals.find(x=>x.id===b.dataset.copymy);navigator.clipboard.writeText(d.packet.outreach_my||'');toast('MY draft copied')})
   box.querySelectorAll('[data-prop2]').forEach(b=>b.onclick=()=>{const d=r.deals.find(x=>x.id===b.dataset.prop2);openProposal(d)})
   box.querySelectorAll('[data-app]').forEach(b=>b.onclick=async()=>{await api('PATCH','/api/deals/'+b.dataset.app,{status:'approved'});loadOutreach()})
   box.querySelectorAll('[data-sent]').forEach(b=>b.onclick=async()=>{await api('PATCH','/api/deals/'+b.dataset.sent,{status:'sent'});loadOutreach();toast('Marked sent')})
@@ -278,14 +372,117 @@ $('#d-run').onclick=async()=>{
     <div><b>Build:</b> ${(p.modules||[]).map(m=>`<span class="chip">${esc(m.name)}</span>`).join('')}</div>
     <div style="margin:10px 0"><b>Phases:</b> ${(p.phases||[]).map(esc).join(' → ')}</div>
     <div class="kv"><dt>Build fee</dt><dd>${esc(p.pricing?.build_fee_mmk||'')} MMK</dd><dt>Care / mo</dt><dd>${esc(p.pricing?.pro_mrr_mmk||'')} MMK</dd></div>
-    ${p.outreach_en?`<div style="margin-top:10px"><b>Outreach draft</b><div class="draft">${esc(p.outreach_en)}</div></div>`:''}
+    ${(p.outreach_en||p.outreach_my)?`<div style="margin-top:10px"><b>Outreach draft</b><div class="row" style="gap:6px;margin:6px 0 4px">${p.outreach_en?`<button class="sm" id="d-copy-en">Copy EN</button>`:''} ${p.outreach_my?`<button class="sm" id="d-copy-my">Copy MY</button>`:''}</div>${p.outreach_en?`<div class="draft" id="d-draft-en">${esc(p.outreach_en)}</div>`:''} ${p.outreach_my?`<div class="draft" style="margin-top:6px;font-size:13px" id="d-draft-my">${esc(p.outreach_my)}</div>`:''}</div>`:''}
     <div class="muted" style="margin-top:10px"><b>Next:</b> ${esc(p.next_action||'')}</div>
     <div class="row" style="margin-top:14px"><button class="primary" id="d-save">Save deal${dealLead?' to '+esc(dealLead.company||dealLead.name):''}</button></div>
   </div>`
+  if($('#d-copy-en'))$('#d-copy-en').onclick=()=>{navigator.clipboard.writeText(p.outreach_en||'');toast('EN draft copied')}
+  if($('#d-copy-my'))$('#d-copy-my').onclick=()=>{navigator.clipboard.writeText(p.outreach_my||'');toast('MY draft copied')}
   $('#d-save').onclick=async()=>{
-    const x=await api('POST','/api/deals',{lead_id:dealLead?dealLead.id:null,packet:lastPacket})
+    const contact=dealLead?.contact||$('#d-contact').value.trim()
+    const enrichedPacket={...lastPacket,_for:{name:dealLead?.name||$('#d-name').value,company:dealLead?.company||$('#d-company').value,contact}}
+    const x=await api('POST','/api/deals',{lead_id:dealLead?dealLead.id:null,packet:enrichedPacket})
     if(x.ok){toast('Deal saved → Outreach');$('#d-save').textContent='Saved ✓';$('#d-save').disabled=true}
   }
+}
+
+async function loadCommand(){
+  // Stats row
+  const dash=await api('GET','/api/dashboard')
+  if(dash.ok){
+    const s=dash
+    $('#cmd-stats').innerHTML=[
+      ['Pipeline',usd(s.projects&&s.projects.pipelineUsd),'open'],
+      ['Live',(s.projects&&s.projects.live)||0,'clients'],
+      ['MRR',usd(s.mrrUsd)+'/mo','recurring'],
+      ['Leads',(s.leads&&s.leads.total)||0,'total'],
+      ['Deposits in',usd(s.deposits&&s.deposits.usd),(s.deposits&&s.deposits.count||0)+' paid'],
+      ['Deals',s.deals||0,'packets']
+    ].map(([t,v,sub])=>`<div class="stat"><small>${t}</small><b>${v}</b><span>${sub}</span></div>`).join('')
+  }
+  // Activity → CEO Thread
+  const act=await api('GET','/api/activity?limit=40')
+  const thread=$('#cmd-thread');thread.innerHTML=''
+  const items=act.activity||[]
+  if(!items.length){thread.innerHTML='<div class="muted" style="font-size:12px;padding:10px 0">No activity yet. The thread fills as agents run and you post notes.</div>'}
+  for(const a of [...items].reverse()){
+    const el=document.createElement('div')
+    const isNote=a.kind==='note'||a.kind==='decision'
+    el.style.cssText=`padding:8px 10px;border-radius:10px;font-size:13px;${isNote?'background:var(--clay-soft);border:1px solid #e8d0c4':'border:1px solid var(--line)'}`
+    const ts=a.at?new Date(a.at).toLocaleString('en-US',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}):''
+    el.innerHTML=`<div style="display:flex;gap:8px;align-items:baseline;justify-content:space-between"><span class="k" style="font-size:10px;color:${isNote?'var(--clay)':'var(--muted)'}">${esc(a.kind)}</span><span style="font-size:11px;color:var(--muted)">${ts}</span></div><div style="margin-top:3px">${esc(a.summary)}</div>`
+    thread.appendChild(el)
+  }
+  thread.scrollTop=thread.scrollHeight
+  // Graduation signals
+  const grad=await api('GET','/api/graduation')
+  const gradBox=$('#cmd-grad');gradBox.innerHTML=''
+  const flagged=(grad.grouped||[]).filter(g=>g.flag)
+  if(!flagged.length){gradBox.innerHTML='<div class="muted" style="font-size:12px">No product signals yet — log workflow types in the Graduation tab.</div>'}
+  else flagged.forEach(g=>{const el=document.createElement('div');el.style.cssText='display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--line)';el.innerHTML=`<span style="font-size:13px">${esc(g.category)}</span><span class="pill won">🎓 ${g.count}×</span>`;gradBox.appendChild(el)})
+  // Agent status — show recent activity kinds from kernel + last machine run
+  const agents=$('#cmd-agents');agents.innerHTML=''
+  const kinds=['Autopilot','Intake','Source','Qualify','Digest']
+  const byKind={}
+  for(const a of items) if(kinds.includes(a.kind)){if(!byKind[a.kind])byKind[a.kind]=a}
+  kinds.forEach(k=>{
+    const last=byKind[k];const el=document.createElement('div')
+    el.style.cssText='display:grid;grid-template-columns:90px 1fr;gap:6px;align-items:center;padding:5px 0;border-bottom:1px solid var(--line);font-size:12.5px'
+    el.innerHTML=`<span style="font-weight:600;color:var(--ink)">${k}</span><span class="muted">${last?esc(last.summary.slice(0,60))+'…':'never run'}</span>`
+    agents.appendChild(el)
+  })
+  // Machine last run — fetched from Ops pipeline
+  fetch('https://supermega-machine.vercel.app/api/runs',{headers:{'x-ops-key':$('#opsKey').value.trim()}})
+    .then(r=>r.json()).then(data=>{
+      const latest=(data.runs||[]).find(r=>r.agent==='Autopilot')
+      if(!latest)return
+      const sep=document.createElement('div')
+      sep.style.cssText='padding:6px 0;font-size:12px;color:var(--muted);border-top:1px solid var(--line);margin-top:4px'
+      sep.innerHTML=`<b style="color:var(--ink)">Machine · last cron</b><br>${esc(latest.summary.slice(0,90))} <span style="opacity:.5">${latest.at?new Date(latest.at).toLocaleDateString():''}</span>`
+      agents.appendChild(sep)
+    }).catch(()=>undefined)
+}
+
+$('#cmd-post').onclick=async()=>{
+  const note=$('#cmd-note').value.trim();if(!note)return
+  await api('POST','/api/activity',{kind:'note',summary:note})
+  $('#cmd-note').value='';loadCommand();toast('Posted to CEO thread')
+}
+$('#cmd-refresh').onclick=()=>loadCommand()
+$('#cmd-trigger-autopilot').onclick=async()=>{
+  const btn=$('#cmd-trigger-autopilot');btn.disabled=true;btn.textContent='Running…'
+  // Trigger autopilot on supermega-machine — opens a cross-origin POST, so we rely on activity log for feedback
+  toast('Autopilot triggered — check thread in ~30s')
+  await fetch('https://supermega-machine.vercel.app/api/cron',{method:'POST',headers:{'x-ops-key':$('#opsKey').value.trim()}}).catch(()=>undefined)
+  setTimeout(()=>{btn.disabled=false;btn.textContent='Run autopilot';loadCommand()},12000)
+}
+
+async function loadGraduation(){
+  const r=await api('GET','/api/graduation')
+  const box=$('#graduation-list');box.innerHTML=''
+  if(!r.ok){box.innerHTML=`<div class="empty" style="font-size:12.5px"><b>Graduation table not set up yet.</b><br>Run this in the Supabase SQL editor:<br><code style="display:block;margin-top:8px;padding:8px;background:var(--bg);border-radius:6px;font-size:11px;white-space:pre">create table if not exists supermega_graduation (
+  id text primary key default gen_random_uuid()::text,
+  category text, client_name text, project_id text,
+  note text, created_at timestamptz default now()
+);</code></div>`;return}
+  if(!r.grouped||!r.grouped.length){box.innerHTML='<div class="empty">No entries yet. Log your first workflow type above.</div>';return}
+  for(const g of r.grouped){
+    const el=document.createElement('div');el.className='panel';el.style.marginBottom='12px'
+    const flagHtml=g.flag?'<span class="pill won" style="font-size:12px">🎓 Product signal</span>':''
+    el.innerHTML=`<div class="row" style="justify-content:space-between;margin-bottom:10px">
+      <h3 style="font-size:16px">${esc(g.category)}</h3>
+      <div class="row">${flagHtml}<span class="pill">${g.count} client${g.count!==1?'s':''}</span></div>
+    </div>
+    <div class="feed">${(g.entries||[]).map(e=>`<div><b>${esc(e.client_name||'—')}</b>${e.note?' — '+esc(e.note):''}</div>`).join('')}</div>`
+    box.appendChild(el)
+  }
+}
+
+$('#g-add').onclick=async()=>{
+  const cat=$('#g-category').value.trim();const cl=$('#g-client').value.trim()
+  if(!cat){toast('Category required');return}
+  const r=await api('POST','/api/graduation',{category:cat,client_name:cl,note:$('#g-note').value.trim()})
+  if(r.ok){['g-category','g-client','g-note'].forEach(i=>$('#'+i).value='');loadGraduation();toast('Logged')}
 }
 
 async function refresh(){

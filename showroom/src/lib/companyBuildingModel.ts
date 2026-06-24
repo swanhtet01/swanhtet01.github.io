@@ -180,6 +180,17 @@ export const BUILD_TEAMS: BuildTeam[] = [
     rituals: ['weekly model review', 'forecast acceptance review', 'drift triage'],
     metric: 'Makes analytics change decisions inside the workflow instead of living in a separate reporting stack.',
   },
+  {
+    id: 'integration-systems',
+    name: 'Integration Systems',
+    workspace: 'platform/integration-studio',
+    mission: 'Convert proven open-source agent, browser, knowledge, and sandbox tools into governed SuperMega modules.',
+    ownership: ['repo radar', 'tool policy', 'pilot contracts', 'license review', 'acceptance checks'],
+    outputs: ['fusion pilots', 'tool broker policies', 'module integration plans', 'client-ready stack recipes'],
+    agentPods: ['Integration Architect', 'Release Judge'],
+    rituals: ['weekly stack radar', 'pilot acceptance review', 'license and safety gate'],
+    metric: 'Turns external tool leverage into sellable product capability without unsafe or random tool sprawl.',
+  },
 ]
 
 export const BUILD_WORKSPACES: BuildWorkspace[] = [
@@ -230,6 +241,14 @@ export const BUILD_WORKSPACES: BuildWorkspace[] = [
     owners: ['Data Science Lab', 'Knowledge Systems', 'Founder'],
     surfaces: ['feature marts', 'forecast review', 'anomaly triage', 'model eval packs'],
     reviewCadence: 'Weekly model review',
+  },
+  {
+    id: 'integration-studio',
+    name: 'Integration Studio',
+    purpose: 'Owns open-source radar, fusion product design, tool policy, and pilot acceptance before modules graduate.',
+    owners: ['Integration Systems', 'Governance Runtime', 'Module Factory'],
+    surfaces: ['open-source radar', 'fusion pilots', 'tool broker policy', 'acceptance checks'],
+    reviewCadence: 'Twice-weekly integration review',
   },
 ]
 
@@ -313,7 +332,7 @@ export const RELEASE_GATES: ReleaseGate[] = [
     name: 'Portfolio ready',
     question: 'Is this a real product line, not just a successful pilot?',
     requiredSignals: ['sales narrative', 'implementation playbook', 'support posture', 'repeatable pricing story'],
-    exitCriteria: 'The module is demoable, sellable, deployable, and supportable as part of the portfolio.',
+    exitCriteria: 'The module is provable, sellable, deployable, and supportable as part of the portfolio.',
   },
 ]
 
@@ -443,6 +462,26 @@ export const MODULE_PROGRAMS: ModuleProgram[] = [
     nextReleases: ['feature mart', 'forecast review desk', 'anomaly triage lane'],
     route: '/products/data-science-studio',
   },
+  {
+    id: 'agentic-integration-studio',
+    name: 'Agentic Integration Studio',
+    target: 'Disrupt internal software R&D by turning open-source agent infrastructure into governed, sellable modules faster than traditional platform teams.',
+    market: 'SuperMega delivery, AI product teams, technical operators, and clients that need custom workflow automation safely.',
+    stage: 'R&D control layer + portfolio integration',
+    owner: 'Integration Systems + Module Factory',
+    researchCell: 'Agent Integration Systems Cell',
+    starterWedge: 'Open Source Radar and Integration Studio',
+    tenantProof: 'fusion pilots for browser workers, knowledge cleanrooms, tool broker, and agent dev factory',
+    modules: ['Open Source Radar', 'Integration Studio', 'Agent Workbench', 'Policy Control'],
+    commercialStory: 'Sell a faster client-build machine: we benchmark useful open-source stacks, wrap them in policy, and ship governed pilots into client portals.',
+    differentiator: 'External tools become evidence-backed product modules with license review, acceptance checks, and human approval gates.',
+    releaseTrain: 'Weekly integration-studio release train',
+    agentCrews: ['Integration Architect', 'Release Judge', 'Runtime Orchestrator'],
+    successSignals: ['Each adopted repo maps to a module or rejection reason', 'Fusion pilots have acceptance checks', 'Tool use is permissioned before client rollout'],
+    nextMove: 'Promote the highest-value fusion pilots into Product Ops and client build templates.',
+    nextReleases: ['tool broker policy', 'browser-worker pilot', 'knowledge cleanroom pilot', 'agent sandbox bench'],
+    route: '/products/agentic-integration-studio',
+  },
 ]
 
 export const COMPETITIVE_FRONTS: CompetitiveFront[] = [
@@ -507,6 +546,12 @@ export const RESEARCH_PRIORITIES: ResearchPriority[] = [
     thesis: 'Forecasting, anomaly detection, and next-best-action need live workflow state, not disconnected BI pipelines.',
     graduation: 'Tenant-aware feature marts, forecast packs, anomaly scoring, and explanation views inside the product.',
   },
+  {
+    id: 'agentic-integration',
+    name: 'Agentic integration',
+    thesis: 'Open-source agent stacks only create advantage when they are selected, tested, governed, and wrapped into product modules.',
+    graduation: 'Radar-to-pilot-to-module flow with license review, tool policy, acceptance checks, and repeatable client packaging.',
+  },
 ]
 
 export const RESEARCH_CELLS: ResearchCell[] = [
@@ -563,6 +608,15 @@ export const RESEARCH_CELLS: ResearchCell[] = [
     supports: ['Operating Intelligence', 'Director OS', 'Revenue OS', 'Ops ERP Core'],
     inputs: ['metrics', 'task history', 'exceptions', 'entity graph', 'connector freshness'],
     outputs: ['feature marts', 'forecast packs', 'anomaly baselines', 'next-best-action scores'],
+  },
+  {
+    id: 'agent-integration-systems',
+    name: 'Agent Integration Systems Cell',
+    mandate: 'Evaluate open-source agent, browser, knowledge, sandbox, and observability tools and turn the winners into governed SuperMega modules.',
+    ownedBy: 'Integration Systems',
+    supports: ['Agentic Integration Studio', 'Knowledge Runtime', 'Operating Intelligence', 'Ops ERP Core'],
+    inputs: ['repo radar', 'license notes', 'pilot results', 'acceptance checks', 'agent failure modes'],
+    outputs: ['fusion pilots', 'tool policies', 'module recipes', 'integration scorecards'],
   },
 ]
 
@@ -640,6 +694,16 @@ export const INTERNAL_AGENT_CREWS: InternalAgentCrew[] = [
     writeScope: ['feature marts', 'model scores', 'forecast notes', 'anomaly alerts'],
     cadence: 'Daily scoring with weekly model review',
     approvalGate: 'Data Science Lab approves production model thresholds and score publication.',
+  },
+  {
+    id: 'integration-architect',
+    name: 'Integration Architect',
+    workspace: 'platform/integration-studio',
+    mission: 'Rank useful open-source tools, design fusion pilots, and reject stacks that do not improve a real SuperMega module.',
+    readScope: ['open-source radar', 'integration studio pilots', 'module gaps', 'license notes', 'acceptance checks'],
+    writeScope: ['pilot specs', 'tool policy proposals', 'module integration plans', 'rejection notes'],
+    cadence: 'Twice-weekly stack review plus pilot promotion checks',
+    approvalGate: 'Module Factory and Governance Runtime approve promotion into client-facing modules.',
   },
 ]
 

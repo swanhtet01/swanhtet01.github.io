@@ -198,7 +198,7 @@ export function SolutionArchitectPage() {
         <PageIntro
           eyebrow="SUPERMEGA.dev tool"
           title="Authenticated workspace required."
-          description="Solution Architect is an internal rollout-design console and does not run in public preview mode."
+          description="Solution Architect is an internal rollout-design console and does not run in the public website shell."
         />
         <section className="sm-surface-deep p-6">
           <p className="text-sm text-[var(--sm-muted)]">{access.error ?? 'Solution Architect is only available in the authenticated workspace.'}</p>

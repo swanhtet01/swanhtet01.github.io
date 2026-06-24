@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import { PageIntro } from '../components/PageIntro'
-import { checkWorkspaceHealth, getWorkspaceSession, workspaceFetch } from '../lib/workspaceApi'
+import { checkWorkspaceHealth, getWorkspaceSession, updateMetricRecordStatus, workspaceFetch } from '../lib/workspaceApi'
 
 type MetricRow = {
   metric_id?: string
@@ -19,6 +19,7 @@ type MetricRow = {
   evidence_link: string
   source_line?: string
   confidence?: string
+  source_ref?: Record<string, unknown>
 }
 
 type MetricAnalysis = {
@@ -45,6 +46,10 @@ type MetricSummary = {
 type MetricPayload = {
   rows: MetricRow[]
   summary: MetricSummary | null
+  enterprise?: {
+    rows?: MetricRow[]
+    summary?: MetricSummary | null
+  }
 }
 
 const DEFAULT_FORM: MetricRow = {
@@ -93,6 +98,15 @@ function parseQuickPaste(rawText: string): MetricRow[] {
     .filter((row) => row.metric_name && row.metric_value)
 }
 
+function rowsFromPayload(payload: MetricPayload | null | undefined) {
+  const enterpriseRows = payload?.enterprise?.rows ?? []
+  return enterpriseRows.length ? enterpriseRows : payload?.rows ?? []
+}
+
+function summaryFromPayload(payload: MetricPayload | null | undefined) {
+  return payload?.enterprise?.summary ?? payload?.summary ?? null
+}
+
 export function MetricIntakePage() {
   const [apiReady, setApiReady] = useState<boolean | null>(null)
   const [authenticated, setAuthenticated] = useState(false)
@@ -107,10 +121,14 @@ export function MetricIntakePage() {
   const [error, setError] = useState<string | null>(null)
   const [saved, setSaved] = useState<string | null>(null)
 
+  const candidateRows = useMemo(() => rows.filter((row) => row.status === 'candidate'), [rows])
+  const officialRows = useMemo(() => rows.filter((row) => ['official', 'reported', 'promoted'].includes(row.status)), [rows])
+  const rejectedRows = useMemo(() => rows.filter((row) => row.status === 'rejected'), [rows])
+
   async function loadRows() {
     const payload = await workspaceFetch<MetricPayload>('/api/metrics/records')
-    setRows(payload.rows ?? [])
-    setSummary(payload.summary ?? null)
+    setRows(rowsFromPayload(payload))
+    setSummary(summaryFromPayload(payload))
   }
 
   useEffect(() => {
@@ -195,8 +213,8 @@ export function MetricIntakePage() {
         method: 'POST',
         body: JSON.stringify(form),
       })
-      setRows(payload.rows ?? [])
-      setSummary(payload.summary ?? null)
+      setRows(rowsFromPayload(payload))
+      setSummary(summaryFromPayload(payload))
       setForm(DEFAULT_FORM)
       setSaved(payload.message ?? 'Metric saved.')
     } catch {
@@ -224,8 +242,8 @@ export function MetricIntakePage() {
           })),
         }),
       })
-      setRows(payload.rows ?? [])
-      setSummary(payload.summary ?? null)
+      setRows(rowsFromPayload(payload))
+      setSummary(summaryFromPayload(payload))
       setSaved(`Saved ${payload.saved_count ?? analysis.metrics.length} extracted metrics.`)
     } catch {
       setError('Could not save the extracted metrics right now.')
@@ -249,12 +267,36 @@ export function MetricIntakePage() {
         method: 'POST',
         body: JSON.stringify({ rows: parsedRows }),
       })
-      setRows(payload.rows ?? [])
-      setSummary(payload.summary ?? null)
+      setRows(rowsFromPayload(payload))
+      setSummary(summaryFromPayload(payload))
       setQuickPaste('')
       setSaved(`Saved ${payload.saved_count ?? parsedRows.length} pasted metrics.`)
     } catch {
       setError('Could not save the pasted metric rows right now.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function updateMetricStatus(row: MetricRow, status: 'official' | 'rejected') {
+    if (!apiReady || !authenticated || !row.metric_id) return
+    setSaving(true)
+    setSaved(null)
+    setError(null)
+    try {
+      const payload = await updateMetricRecordStatus(row.metric_id, {
+        status,
+        owner: row.owner || 'Management',
+        note:
+          status === 'official'
+            ? 'Promoted from extracted candidate KPI review.'
+            : 'Rejected during extracted KPI review.',
+      })
+      setRows(rowsFromPayload(payload as MetricPayload))
+      setSummary(summaryFromPayload(payload as MetricPayload))
+      setSaved(payload.message ?? `Metric marked ${status}.`)
+    } catch {
+      setError('Could not update the metric review status right now.')
     } finally {
       setSaving(false)
     }
@@ -358,7 +400,7 @@ export function MetricIntakePage() {
               </button>
             ) : null}
             {apiReady && !authenticated ? (
-              <Link className="sm-button-secondary" to="/login?next=/ops-intake">
+              <Link className="sm-button-secondary" to="/login?next=/app/intake">
                 Login to save
               </Link>
             ) : null}
@@ -424,13 +466,56 @@ export function MetricIntakePage() {
               <p className="mt-2 text-2xl font-bold">{summary?.top_groups?.[0]?.metric_group ?? 'n/a'}</p>
             </div>
             <div className="sm-chip text-white">
-              <p className="sm-kicker text-[var(--sm-accent)]">Use with</p>
-              <p className="mt-2 text-sm">Action OS, Inventory Pulse, Receiving Control</p>
+              <p className="sm-kicker text-[var(--sm-accent)]">Review queue</p>
+              <p className="mt-2 text-2xl font-bold">{candidateRows.length}</p>
             </div>
           </div>
 
+          {candidateRows.length ? (
+            <div className="mt-5 rounded-[1.4rem] border border-amber-300/20 bg-amber-300/10 p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="sm-kicker text-amber-200">KPI review board</p>
+                  <h3 className="mt-2 text-xl font-bold text-white">Promote only the candidate KPIs you trust.</h3>
+                  <p className="mt-2 text-sm text-[var(--sm-muted)]">
+                    These came from Drive extraction. Approve useful rows into official KPIs; reject noisy rows so the dashboard stays clean.
+                  </p>
+                </div>
+                <span className="sm-status-pill">{candidateRows.length} candidates</span>
+              </div>
+              <div className="mt-4 grid gap-3">
+                {candidateRows.slice(0, 10).map((row) => (
+                  <div className="sm-proof-card" key={row.metric_id || `${row.metric_name}-${row.captured_at}`}>
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <p className="font-semibold text-white">{row.metric_name}</p>
+                        <p className="mt-2 text-sm text-[var(--sm-muted)]">
+                          {row.metric_group} | {row.metric_value} {row.unit} {row.scope ? `| ${row.scope}` : ''}
+                        </p>
+                        {row.notes ? <p className="mt-2 text-xs text-[var(--sm-muted)]">{row.notes}</p> : null}
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <button className="sm-button-primary px-3 py-2 text-xs" disabled={saving} onClick={() => void updateMetricStatus(row, 'official')} type="button">
+                          Promote
+                        </button>
+                        <button className="sm-button-secondary px-3 py-2 text-xs" disabled={saving} onClick={() => void updateMetricStatus(row, 'rejected')} type="button">
+                          Reject
+                        </button>
+                      </div>
+                    </div>
+                    {row.evidence_link ? (
+                      <a className="mt-3 inline-flex text-xs text-[var(--sm-accent)] hover:text-white" href={row.evidence_link} rel="noreferrer" target="_blank">
+                        Open evidence
+                      </a>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
           <div className="mt-5 space-y-3">
-            {rows.slice(0, 8).map((row) => (
+            {officialRows.slice(0, 8).map((row) => (
               <div className="sm-proof-card" key={row.metric_id || `${row.metric_name}-${row.captured_at}`}>
                 <div className="flex items-start justify-between gap-3">
                   <div>
@@ -444,6 +529,8 @@ export function MetricIntakePage() {
               </div>
             ))}
             {rows.length === 0 ? <div className="sm-chip text-[var(--sm-muted)]">No saved metrics yet. Upload a file or enter the first KPI row.</div> : null}
+            {rows.length > 0 && officialRows.length === 0 ? <div className="sm-chip text-[var(--sm-muted)]">No official KPIs yet. Promote candidates from the review board first.</div> : null}
+            {rejectedRows.length ? <div className="sm-chip text-[var(--sm-muted)]">{rejectedRows.length} rejected candidate rows are kept as audit evidence.</div> : null}
           </div>
         </article>
       </section>

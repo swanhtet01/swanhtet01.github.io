@@ -21,11 +21,29 @@ export type MarketOutput = {
   actions: string[]
 }
 
+export type ActionBoardCategory =
+  | 'Shift issue'
+  | 'Quality issue'
+  | 'Supplier issue'
+  | 'Document control'
+  | 'Training'
+  | 'Audit / review'
+  | 'General follow-up'
+
+export type ActionBoardDesk = 'Operations' | 'DQMS' | 'Approvals' | 'Knowledge' | 'Adoption' | 'Plant Manager' | 'Shared queue'
+
 export type ActionRow = {
   title: string
   owner: string
   priority: 'High' | 'Medium' | 'Low'
   due: string
+  category: ActionBoardCategory
+  desk: ActionBoardDesk
+  deskRoute: string
+  nextStep: string
+  evidenceHint: string
+  isoFocus: string
+  lane: string
 }
 
 export const LEAD_SAMPLE_QUERY = 'clinic in dubai'
@@ -42,14 +60,79 @@ Distributor demand shifted toward truck tyres and industrial buyers this week.`
 export const MARKET_SAMPLE_URLS = `https://www.reuters.com/markets/commodities/
 https://www.spglobal.com/commodityinsights/en`
 
-export const ACTION_SAMPLE_TEXT = `Customer reply still waiting | Sales Team
-Missing production update from Shift B | Operations Team
-Confirm receiving variance on inbound batch | Procurement Team
-Follow up overdue invoice with two customers | Finance Team
-Check quality hold before dispatch | Quality Team`
+export const ACTION_SAMPLE_TEXT = `Bead wire splice defect found on morning batch 24A | Quality Team | Today
+Containment still open for the tread crack dealer complaint | Quality Manager | Today
+Receiving variance on carbon black COA for inbound lot 5521 | Procurement Team | Today
+Mixer SOP revision still needs sign-off before Shift B | Admin Team | This week
+Forklift safety refresher is overdue for the warehouse crew | HR Team | This week
+Internal audit follow-up is still missing packing-area evidence | Plant Manager | Friday`
+
+const ACTION_BOARD_PROFILES: Record<
+  ActionBoardCategory,
+  { desk: ActionBoardDesk; deskRoute: string; nextStep: string; evidenceHint: string; isoFocus: string }
+> = {
+  'Shift issue': {
+    desk: 'Operations',
+    deskRoute: '/app/operations',
+    nextStep: 'Put it in the today queue, confirm the owner, and clear the shift handoff.',
+    evidenceHint: 'Attach the line, machine, shift, batch, or downtime reference.',
+    isoFocus: 'Operation',
+  },
+  'Quality issue': {
+    desk: 'DQMS',
+    deskRoute: '/app/dqms',
+    nextStep: 'Open the incident, set containment, and assign the corrective-action owner.',
+    evidenceHint: 'Attach the defect photo, batch, complaint, or test result.',
+    isoFocus: 'Improvement',
+  },
+  'Supplier issue': {
+    desk: 'Approvals',
+    deskRoute: '/app/approvals',
+    nextStep: 'Attach the packet, confirm the variance, and assign the approval owner.',
+    evidenceHint: 'Attach supplier, PO or GRN, COA, mail trail, or discrepancy note.',
+    isoFocus: 'External provider control',
+  },
+  'Document control': {
+    desk: 'Knowledge',
+    deskRoute: '/app/knowledge',
+    nextStep: 'Update the controlled document, revision reason, and sign-off path.',
+    evidenceHint: 'Attach the SOP, form, version, or revision reason.',
+    isoFocus: 'Support and documented information',
+  },
+  Training: {
+    desk: 'Adoption',
+    deskRoute: '/app/adoption-command',
+    nextStep: 'Assign the training owner, target team, and the verification check.',
+    evidenceHint: 'Attach the role, station, coaching note, or proof of completion.',
+    isoFocus: 'Competence and awareness',
+  },
+  'Audit / review': {
+    desk: 'Plant Manager',
+    deskRoute: '/app/plant-manager',
+    nextStep: 'Add it to the review rhythm with one owner, one due date, and linked evidence.',
+    evidenceHint: 'Attach the finding, KPI drift, checklist, or review note.',
+    isoFocus: 'Performance evaluation',
+  },
+  'General follow-up': {
+    desk: 'Shared queue',
+    deskRoute: '/app/actions',
+    nextStep: 'Keep it in the shared queue until the right desk and owner are clear.',
+    evidenceHint: 'Attach one short context note or the original message.',
+    isoFocus: 'Planning and follow-up',
+  },
+}
 
 function uniqueValues(values: string[]) {
   return [...new Set(values.filter(Boolean))]
+}
+
+function parseActionLine(line: string) {
+  const parts = line.split('|').map((part) => part.trim())
+  return {
+    title: parts[0] || line.trim(),
+    ownerHint: parts[1] || '',
+    dueHint: parts[2] || '',
+  }
 }
 
 export function parseLeads(rawText: string): LeadRow[] {
@@ -136,8 +219,22 @@ export function buildMarketBrief(text: string): MarketOutput {
   }
 }
 
-function inferOwner(text: string) {
+function inferCategory(text: string): ActionBoardCategory {
   const lowered = text.toLowerCase()
+  if (/(train|training|coach|coaching|awareness|competenc|skill|refresher|induction)/.test(lowered)) return 'Training'
+  if (/(sop|revision|version|document|procedure|work instruction|form|policy|spec|record template)/.test(lowered)) return 'Document control'
+  if (/(audit|management review|review meeting|checklist|finding|scorecard|kpi review)/.test(lowered)) return 'Audit / review'
+  if (/(quality|defect|capa|reject|inspection|bead wire|ncr|nonconformance|containment|root cause|complaint|scrap|rework|release hold)/.test(lowered)) return 'Quality issue'
+  if (/(supplier|customs|eta|shipment|po|coa|receiving|inbound|grn|procurement|approval|variance)/.test(lowered)) return 'Supplier issue'
+  if (/(plant|production|power|shift|downtime|operations|machine|breakdown|line|packing|curing|mixing|extrusion|warehouse|dispatch)/.test(lowered)) return 'Shift issue'
+  return 'General follow-up'
+}
+
+function inferOwner(text: string, category: ActionBoardCategory) {
+  const lowered = text.toLowerCase()
+  if (category === 'Training') return 'HR / Admin'
+  if (category === 'Document control') return 'Admin'
+  if (category === 'Audit / review') return 'Plant Manager'
   if (/(quality|defect|capa|reject|inspection|bead wire)/.test(lowered)) return 'Quality'
   if (/(supplier|customs|eta|shipment|po|docs|procurement|junky|kiic)/.test(lowered)) return 'Procurement'
   if (/(cash|invoice|payment|overdue|collection|finance)/.test(lowered)) return 'Finance'
@@ -146,17 +243,56 @@ function inferOwner(text: string) {
   return 'Management'
 }
 
-function inferPriority(text: string): ActionRow['priority'] {
+function normalizePriority(priority: string | undefined): ActionRow['priority'] | null {
+  const normalized = priority?.trim().toLowerCase()
+  if (normalized === 'high') return 'High'
+  if (normalized === 'medium') return 'Medium'
+  if (normalized === 'low') return 'Low'
+  return null
+}
+
+function inferPriority(text: string, category: ActionBoardCategory): ActionRow['priority'] {
   const lowered = text.toLowerCase()
-  if (/(defect|delay|blocked|overdue|urgent|customs|power|shortage|risk)/.test(lowered)) return 'High'
-  if (/(confirm|review|check|follow|inspect)/.test(lowered)) return 'Medium'
+  if (/(defect|delay|blocked|overdue|urgent|customs|power|shortage|risk|hold|stop|shutdown|failure|complaint)/.test(lowered)) return 'High'
+  if (/(confirm|review|check|follow|inspect|audit|train|revision|document|sop|approve|variance)/.test(lowered)) return 'Medium'
+  if (category !== 'General follow-up') return 'Medium'
   return 'Low'
 }
 
-function inferDue(priority: ActionRow['priority']) {
+function inferDue(priority: ActionRow['priority'], category: ActionBoardCategory) {
   if (priority === 'High') return 'Today'
+  if (category === 'Audit / review' || category === 'Document control' || category === 'Training') return 'This week'
   if (priority === 'Medium') return 'This week'
   return 'Next review'
+}
+
+function inferLane(priority: ActionRow['priority']) {
+  if (priority === 'High') return 'do_now'
+  if (priority === 'Medium') return 'this_week'
+  return 'watch'
+}
+
+type ActionRowSeed = Partial<ActionRow> & Pick<ActionRow, 'title'>
+
+export function hydrateActionRow(row: ActionRowSeed): ActionRow {
+  const title = row.title.trim() || 'Follow-up item'
+  const category = row.category ?? inferCategory(title)
+  const priority = normalizePriority(row.priority) ?? inferPriority(title, category)
+  const profile = ACTION_BOARD_PROFILES[category]
+
+  return {
+    title,
+    owner: row.owner?.trim() || inferOwner(title, category),
+    priority,
+    due: row.due?.trim() || inferDue(priority, category),
+    category,
+    desk: row.desk ?? profile.desk,
+    deskRoute: row.deskRoute ?? profile.deskRoute,
+    nextStep: row.nextStep ?? profile.nextStep,
+    evidenceHint: row.evidenceHint ?? profile.evidenceHint,
+    isoFocus: row.isoFocus ?? profile.isoFocus,
+    lane: row.lane ?? inferLane(priority),
+  }
 }
 
 export function buildActionBoard(text: string): ActionRow[] {
@@ -165,13 +301,12 @@ export function buildActionBoard(text: string): ActionRow[] {
     .map((line) => line.trim())
     .filter(Boolean)
     .map((line) => {
-      const priority = inferPriority(line)
-      return {
-        title: line.split('|')[0]?.trim() || line,
-        owner: inferOwner(line),
-        priority,
-        due: inferDue(priority),
-      }
+      const parsed = parseActionLine(line)
+      return hydrateActionRow({
+        title: parsed.title,
+        owner: parsed.ownerHint || undefined,
+        due: parsed.dueHint || undefined,
+      })
     })
 }
 

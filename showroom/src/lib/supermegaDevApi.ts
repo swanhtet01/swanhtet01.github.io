@@ -20,6 +20,33 @@ export type SupermegaDomainReport = {
   checks?: SupermegaControlCheck[]
 }
 
+export type SupermegaEdgeHostRow = {
+  id?: string
+  label?: string
+  hostname?: string
+  status?: string
+  provider?: string
+  scope?: string
+  desired_state?: string
+  route_root?: string
+  deployment_url?: string
+  last_deployed_at?: string
+  checked_at?: string
+  dns_status?: string
+  tls_status?: string
+  http_status?: string
+  addresses?: string[]
+  observed_platform?: string
+  http_final_url?: string
+  server?: string
+  asset?: string
+  live_probe_status?: string
+  live_probe_message?: string
+  notes?: string
+  routes_checked?: string[]
+  next_action?: string
+}
+
 export type SupermegaResourceRow = {
   id: string
   label: string
@@ -131,6 +158,42 @@ export type SupermegaDataLinkRow = {
   next_automation?: string
 }
 
+export type SupermegaProductionReadinessDimension = {
+  id?: string
+  label?: string
+  score?: number
+  status?: string
+  detail?: string
+}
+
+export type SupermegaProductionReadinessPayload = {
+  status?: string
+  score?: number
+  generated_at?: string
+  service?: string
+  deployment?: {
+    vercel_url?: string
+    vercel_env?: string
+    commit?: string
+    python_version?: string
+  }
+  dimensions?: SupermegaProductionReadinessDimension[]
+  dependencies?: {
+    score?: number
+    ready_count?: number
+    count?: number
+    rows?: Array<{ module?: string; purpose?: string; status?: string }>
+  }
+  routes?: {
+    score?: number
+    ready_count?: number
+    count?: number
+    rows?: Array<{ id?: string; path?: string; status?: string }>
+  }
+  database?: Record<string, unknown>
+  next_actions?: string[]
+}
+
 export type SupermegaDevControlPayload = {
   status?: string
   generated_at?: string
@@ -203,6 +266,15 @@ export type SupermegaDevControlPayload = {
   domains?: {
     root_report?: SupermegaDomainReport | null
     shared_app_domain?: WorkspaceDomainRow | null
+    shared_app_report?: SupermegaDomainReport | null
+    edge_hosts?: SupermegaEdgeHostRow[]
+    edge_summary?: {
+      count?: number
+      ready_count?: number
+      attention_count?: number
+      blocker_count?: number
+      action_count?: number
+    }
     workspace_rows?: WorkspaceDomainRow[]
     topology_summary?: {
       count?: number
@@ -217,6 +289,7 @@ export type SupermegaDevControlPayload = {
     scripts?: SupermegaResourceRow[]
     commands?: SupermegaCommandRow[]
   }
+  production_readiness?: SupermegaProductionReadinessPayload
   smoke?: {
     ready?: boolean
     public_routes?: string[]

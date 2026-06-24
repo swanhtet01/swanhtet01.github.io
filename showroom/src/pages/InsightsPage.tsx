@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import { PageIntro } from '../components/PageIntro'
@@ -49,7 +49,7 @@ function formatSignalAt(value: string | null | undefined) {
 }
 
 export function InsightsPage() {
-  const seedPayload = buildYangonTyreInsightSeed()
+  const seedPayload = useMemo(() => buildYangonTyreInsightSeed(), [])
   const [loading, setLoading] = useState(true)
   const [mode, setMode] = useState<'live' | 'drive-seed'>('drive-seed')
   const [statusNote, setStatusNote] = useState<string | null>(null)
@@ -123,7 +123,7 @@ export function InsightsPage() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [seedPayload])
 
   const sourceRegistry = payload.source_registry ?? []
   const storyBeats = payload.story_beats ?? []
@@ -270,15 +270,15 @@ export function InsightsPage() {
                       </div>
                       <div className="mt-4 grid gap-3">
                         <div className="sm-chip text-white">
-                          <p className="sm-kicker text-[var(--sm-accent)]">Thesis</p>
+                          <p className="sm-kicker text-[var(--sm-accent)]">Current model</p>
                           <p className="mt-3 text-sm leading-relaxed text-[var(--sm-muted)]">{arc.thesis}</p>
                         </div>
                         <div className="sm-chip text-white">
-                          <p className="sm-kicker text-[var(--sm-accent-alt)]">Antithesis</p>
+                          <p className="sm-kicker text-[var(--sm-accent-alt)]">Operating pressure</p>
                           <p className="mt-3 text-sm leading-relaxed text-[var(--sm-muted)]">{arc.antithesis}</p>
                         </div>
                         <div className="sm-chip text-white">
-                          <p className="sm-kicker text-[var(--sm-accent)]">Synthesis</p>
+                          <p className="sm-kicker text-[var(--sm-accent)]">Next operating model</p>
                           <p className="mt-3 text-sm leading-relaxed text-[var(--sm-muted)]">{arc.synthesis}</p>
                         </div>
                       </div>

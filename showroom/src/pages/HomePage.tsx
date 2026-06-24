@@ -1,70 +1,107 @@
+import { type MouseEvent, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 
-import { BrandLockup } from '../components/Brand'
-import { LiveProductPreview } from '../components/LiveProductPreview'
-import { trackEvent } from '../lib/analytics'
-import { PUBLIC_PERSONAS } from '../lib/goToMarketShowcase'
-import { STARTER_PACK_DETAILS, type StarterPackDetail } from '../lib/salesControl'
+import { EnterpriseSolutionCanvas } from '../components/EnterpriseSolutionCanvas'
+import { PUBLIC_PRODUCT_ALIAS_BY_PORTAL_ID } from '../lib/publicProductAliases'
 import { getTenantConfig } from '../lib/tenantConfig'
 
-const heroHighlights = [
-  { label: 'Start small', value: 'One team, one workflow, one live screen.' },
-  { label: 'Connect first', value: 'Gmail, Drive, Sheets, Calendar, CSV, and ERP exports.' },
-  { label: 'Control stays built in', value: 'Roles, approvals, history, and tenant scope from day one.' },
-] as const
-
-const yangonTyreHighlights = [
-  'Sales, operations, quality, maintenance, and leadership work from one role-based portal.',
-  'Approvals and follow-up move into owned queues instead of chats and file loops.',
-  'Current Gmail, Drive, ERP exports, forms, and uploads connect into the same workspace.',
-] as const
-
-const rolloutPrinciples = [
-  'Each rollout starts with one product that already exists.',
-  'Current data is connected before any rewrite.',
-  'The client expands only after the first team is using it daily.',
-] as const
-
-const platformPaths = [
+const productGalleries = [
   {
-    label: 'Use the platform',
-    title: 'Open the guided workspace',
-    detail: 'Login into one clear start screen, then open the right desk instead of guessing between internal routes.',
-    primary: { label: 'Open workspace', to: '/login?next=/app/start' },
-    secondary: { label: 'See app flow', to: '/platform' },
+    ...PUBLIC_PRODUCT_ALIAS_BY_PORTAL_ID['agency-client-operator'],
+    line: 'Client requests, assets, approvals, reports.',
+    features: ['Clients', 'Assets', 'Reports'],
+    portalId: 'agency-client-operator',
   },
   {
-    label: 'Sell the platform',
-    title: 'Show live proof',
-    detail: 'Use demo center, products, and the Yangon Tyre case study to present what already works.',
-    primary: { label: 'Open demo center', to: '/demo-center' },
-    secondary: { label: 'Read case study', to: '/clients/yangon-tyre' },
+    ...PUBLIC_PRODUCT_ALIAS_BY_PORTAL_ID['ai-workflow-desk'],
+    line: 'Source records, queue, approvals.',
+    features: ['Intake', 'Queue', 'Proof'],
+    portalId: 'ai-workflow-desk',
   },
   {
-    label: 'Build products',
-    title: 'Run the foundry stack',
-    detail: 'Use the internal build lanes for R&D, modules, release gates, and the AI workforce that ships them.',
-    primary: { label: 'Open build stack', to: '/login?next=/app/factory' },
-    secondary: { label: 'Review products', to: '/products' },
+    ...PUBLIC_PRODUCT_ALIAS_BY_PORTAL_ID['operations-digital-twin'],
+    line: 'Assets, readings, CAPA, closeout.',
+    features: ['Assets', 'Signals', 'CAPA'],
+    portalId: 'operations-digital-twin',
   },
   {
-    label: 'Operate cloud',
-    title: 'Keep deploys and agents healthy',
-    detail: 'Use the cloud and runtime desks to manage deploys, domains, jobs, and the autonomous operating layer.',
-    primary: { label: 'Open cloud ops', to: '/login?next=/app/cloud' },
-    secondary: { label: 'Request rollout', to: '/contact' },
+    ...PUBLIC_PRODUCT_ALIAS_BY_PORTAL_ID['restaurant-group-os'],
+    line: 'Orders, stock, menu, daily close.',
+    features: ['Orders', 'Stock', 'Menu'],
+    portalId: 'restaurant-group-os',
   },
 ] as const
 
-function rolloutLink(name: string) {
-  return `/contact?package=${encodeURIComponent(name)}`
+const productContactPackages: Record<string, string> = {
+  'agency-client-operator': 'agency-client-operator',
+  'ai-workflow-desk': 'document-extraction-ledger',
+  'operations-digital-twin': 'factory-issues-maintenance-quality',
+  'restaurant-group-os': 'restaurant-pos-menu-inventory',
+}
+
+const productShotVersion = '20260523-uncropped'
+
+function productShotSrc(src: string) {
+  if (!src || src.includes('?')) return src
+  return `${src}?v=${productShotVersion}`
+}
+
+function productContactHref(portalId: string) {
+  return `/contact/?package=${encodeURIComponent(productContactPackages[portalId] ?? 'back-office-workflow-desk')}`
+}
+
+function syncProductGalleryHeight(carousel: Element | null) {
+  const track = carousel?.querySelector<HTMLElement>('.sm-product-gallery-media')
+  if (!track) return
+  const slides = Array.from(track.querySelectorAll<HTMLElement>('figure'))
+  const width = track.getBoundingClientRect().width || track.clientWidth || 1
+  const index = Math.max(0, Math.min(slides.length - 1, Math.round(track.scrollLeft / width)))
+  const activeSlide = slides[index]
+  if (activeSlide) {
+    track.style.height = `${activeSlide.offsetHeight}px`
+  }
+  carousel?.querySelectorAll<HTMLButtonElement>('.sm-product-carousel-dots button').forEach((dot, dotIndex) => {
+    dot.classList.toggle('active', dotIndex === index)
+    if (dotIndex === index) {
+      dot.setAttribute('aria-current', 'true')
+    } else {
+      dot.removeAttribute('aria-current')
+    }
+  })
+}
+
+function scrollProductGallery(event: MouseEvent<HTMLButtonElement>, direction: number) {
+  const carousel = event.currentTarget.closest('.sm-product-carousel')
+  const track = carousel?.querySelector<HTMLElement>('.sm-product-gallery-media')
+  if (!track) return
+  track.scrollBy({ left: direction * (track.clientWidth || 1), behavior: 'smooth' })
+  window.setTimeout(() => syncProductGalleryHeight(carousel), 520)
+}
+
+function scrollProductGalleryTo(event: MouseEvent<HTMLButtonElement>, index: number) {
+  const carousel = event.currentTarget.closest('.sm-product-carousel')
+  const track = carousel?.querySelector<HTMLElement>('.sm-product-gallery-media')
+  if (!track) return
+  track.scrollTo({ left: index * (track.clientWidth || 1), behavior: 'smooth' })
+  window.setTimeout(() => syncProductGalleryHeight(carousel), 520)
 }
 
 export function HomePage() {
   const tenant = getTenantConfig()
-  const featuredProducts: StarterPackDetail[] = STARTER_PACK_DETAILS.slice(0, 3)
-  const primaryProduct = featuredProducts[0]
-  const featuredPackages = PUBLIC_PERSONAS.slice(0, 3)
+
+  useEffect(() => {
+    const syncAll = () => {
+      document.querySelectorAll('.sm-product-carousel').forEach((carousel) => syncProductGalleryHeight(carousel))
+    }
+    const images = Array.from(document.querySelectorAll<HTMLImageElement>('.sm-product-gallery-media img'))
+    images.forEach((image) => image.addEventListener('load', syncAll, { once: true }))
+    window.addEventListener('resize', syncAll)
+    window.requestAnimationFrame(syncAll)
+    return () => {
+      images.forEach((image) => image.removeEventListener('load', syncAll))
+      window.removeEventListener('resize', syncAll)
+    }
+  }, [])
 
   if (tenant.key !== 'default') {
     return (
@@ -85,37 +122,22 @@ export function HomePage() {
               </div>
             </div>
 
-            <div className="grid gap-4 md:grid-cols-2">
-              {tenant.toolCards.map((item) => (
-                <article className="sm-proof-card" key={item.title}>
-                  <p className="font-semibold text-white">{item.title}</p>
-                  <p className="mt-3 text-sm leading-relaxed text-[var(--sm-muted)]">{item.detail}</p>
-                  <div className="mt-5">
-                    <Link className="sm-link" to={item.to}>
-                      Open
-                    </Link>
-                  </div>
-                </article>
-              ))}
+            <div className="grid gap-4">
+              <EnterpriseSolutionCanvas className="animate-rise-delayed" solutionId="client-workspace" />
+              <div className="grid gap-4 md:grid-cols-3">
+                {tenant.toolCards.map((item) => (
+                  <article className="sm-proof-card" key={item.title}>
+                    <p className="font-semibold text-white">{item.title}</p>
+                    <p className="mt-3 text-sm leading-relaxed text-[var(--sm-muted)]">{item.detail}</p>
+                    <div className="mt-4">
+                      <Link className="sm-link" to={item.to}>
+                        Open
+                      </Link>
+                    </div>
+                  </article>
+                ))}
+              </div>
             </div>
-          </div>
-        </section>
-
-        <section className="sm-site-final">
-          <div>
-            <p className="sm-kicker text-[var(--sm-accent)]">Next step</p>
-            <h2 className="mt-3 text-3xl font-bold text-white lg:text-5xl">Choose the workspace entry point.</h2>
-          </div>
-          <div className="flex flex-wrap gap-3">
-            <Link className="sm-button-primary" to="/app/receiving">
-              Open operations
-            </Link>
-            <Link className="sm-button-secondary" to="/app/revenue">
-              Open revenue
-            </Link>
-            <Link className="sm-button-secondary" to="/login">
-              Team login
-            </Link>
           </div>
         </section>
       </div>
@@ -123,234 +145,83 @@ export function HomePage() {
   }
 
   return (
-    <div className="space-y-12 pb-16">
-      <section className="sm-site-panel">
-        <div className="sm-home-hero-shell">
-          <div className="sm-home-hero-copy">
-            <BrandLockup className="mb-4" markClassName="h-11 w-11" meta={tenant.brandTagline} wordmarkClassName="text-2xl text-white" />
-            <h1 className="mt-4 max-w-3xl text-4xl font-extrabold tracking-tight text-white lg:text-6xl">Replace tool sprawl with one working system.</h1>
-            <p className="mt-5 max-w-2xl text-base leading-relaxed text-[var(--sm-muted)] lg:text-lg">
-              Start with sales follow-up, company cleanup, receiving control, or a client portal. Expand only after the first team is using the system every day.
+    <div className="sm-luxe-home sm-home-recut sm-public-premium pb-12">
+      <section className="sm-cinematic-hero sm-public-hero" aria-label="SUPERMEGA.dev homepage">
+        <div className="sm-cinematic-grid sm-public-grid" />
+
+        <div className="sm-cinematic-inner">
+          <div className="sm-cinematic-copy">
+            <h1>One workflow. One simple app.</h1>
+            <p>
+              Send a file, sheet, email, photo, export, or repeated task. We turn it into a private app your team can use.
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
-              <Link className="sm-button-primary" onClick={() => trackEvent('offer_open_click', { offer: 'products_overview' })} to="/products">
-                Review products
+              <Link className="sm-button-primary" to="/contact/">
+                Contact
               </Link>
-              <Link
-                className="sm-button-secondary"
-                onClick={() => trackEvent('signup_open_click', { source: 'home_hero' })}
-                to="/signup"
-              >
-                Create workspace
-              </Link>
-            </div>
-            <div className="sm-home-signal-grid">
-              {heroHighlights.map((item) => (
-                <article className="sm-hero-signal" key={item.label}>
-                  <span className="sm-hero-signal-label">{item.label}</span>
-                  <span className="sm-hero-signal-value">{item.value}</span>
-                </article>
-              ))}
+              <a className="sm-button-secondary" href="#products">
+                Products
+              </a>
             </div>
           </div>
 
-          <div className="sm-home-preview-stage">
-            <LiveProductPreview className="sm-home-preview-main animate-rise-delayed" variant="portal" />
-            <LiveProductPreview className="sm-home-preview-aux" compact variant="founder-brief" />
+          <div className="sm-hero-product-shot" aria-label="SUPERMEGA product screenshot">
+              <img alt="SuperMega Document Extraction Ledger screen showing reviewed records, proof, owner, and next action" src={productShotSrc(PUBLIC_PRODUCT_ALIAS_BY_PORTAL_ID['ai-workflow-desk'].mainShot)} />
           </div>
         </div>
       </section>
 
-      <section className="sm-site-panel">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <p className="sm-kicker text-[var(--sm-accent)]">Products</p>
-            <h2 className="mt-3 max-w-3xl text-3xl font-bold text-white lg:text-5xl">Three products ready to launch.</h2>
-          </div>
-          <p className="max-w-xl text-sm leading-relaxed text-[var(--sm-muted)] lg:text-base">
-            Each rollout starts with one clear job, one team, and one live outcome.
-          </p>
-        </div>
-        <div className="sm-home-product-rail mt-8">
-          {featuredProducts.map((product: StarterPackDetail) => (
-            <article className="sm-home-product-tile" key={product.id}>
-              <div className="sm-home-product-image">
-                <img alt={`${product.name} screenshot`} className="h-auto w-full object-cover object-top" loading="lazy" src={product.image} />
-              </div>
-              <div className="mt-4 flex items-center justify-between gap-3">
-                <p className="sm-kicker text-[var(--sm-accent)]">Working product</p>
-                <span className="sm-status-pill">Live now</span>
-              </div>
-              <h3 className="mt-4 text-2xl font-bold">{product.name}</h3>
-              <p className="mt-3 text-sm leading-relaxed text-[var(--sm-muted)]">{product.promise}</p>
-              <div className="mt-5 grid gap-2">
-                <div className="sm-site-point">
-                  <span className="sm-site-point-dot" />
-                  <span>{product.audience}</span>
+      <section className="sm-product-gallery-stack mt-10" id="products" aria-label="Actual SuperMega product screenshots">
+        <h2 className="max-w-3xl text-3xl font-extrabold tracking-tight text-white md:text-5xl">Products</h2>
+
+        {productGalleries.map((product) => {
+          return (
+            <article className="sm-product-gallery-block" id={product.requestPackage} key={product.portalId}>
+              <div className="sm-product-gallery-copy">
+                <h2>{product.publicName}</h2>
+                <p>{product.line}</p>
+                <div className="sm-product-gallery-checks">
+                  {product.features.map((item) => (
+                    <span key={item}>{item}</span>
+                  ))}
                 </div>
-                <div className="sm-site-point">
-                  <span className="sm-site-point-dot" />
-                  <span>{product.problemsSolved[0]}</span>
-                </div>
+                <Link className="sm-button-primary mt-5 w-fit" to={productContactHref(product.portalId)}>
+                  Contact
+                </Link>
               </div>
-              <div className="mt-6 flex flex-wrap gap-3">
-                <Link className="sm-button-primary" to={`/products/${product.slug}`}>
-                  Review product
-                </Link>
-                <Link className="sm-button-secondary" to={rolloutLink(product.name)}>
-                  Request rollout
-                </Link>
+              <div className="sm-product-carousel" aria-label={`${product.publicName} screenshot gallery`}>
+                <button aria-label="Previous screenshot" className="sm-product-carousel-btn prev" onClick={(event) => scrollProductGallery(event, -1)} type="button">
+                  &lsaquo;
+                </button>
+                <div className="sm-product-gallery-media" onScroll={(event) => syncProductGalleryHeight(event.currentTarget.closest('.sm-product-carousel'))}>
+                  {product.gallery.map((shot) => (
+                    <figure key={shot.src}>
+                      <a className="sm-product-shot-link" href={productShotSrc(shot.src)} rel="noopener noreferrer" target="_blank" aria-label={`Open ${shot.caption} screenshot`}>
+                        <img alt={shot.alt} src={productShotSrc(shot.src)} />
+                      </a>
+                      <figcaption>{shot.caption}</figcaption>
+                    </figure>
+                  ))}
+                </div>
+                <div className="sm-product-carousel-dots" aria-label="Screenshot slides">
+                  {product.gallery.map((shot, index) => (
+                    <button aria-current={index === 0 ? 'true' : undefined} aria-label={`Show ${shot.caption}`} className={index === 0 ? 'active' : ''} key={shot.src} onClick={(event) => scrollProductGalleryTo(event, index)} type="button" />
+                  ))}
+                </div>
+                <button aria-label="Next screenshot" className="sm-product-carousel-btn next" onClick={(event) => scrollProductGallery(event, 1)} type="button">
+                  &rsaquo;
+                </button>
               </div>
             </article>
-          ))}
-        </div>
+          )
+        })}
       </section>
 
-      <section className="sm-site-panel">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <p className="sm-kicker text-[var(--sm-accent)]">Choose your path</p>
-            <h2 className="mt-3 max-w-3xl text-3xl font-bold text-white lg:text-5xl">Use it, sell it, build it, or operate it.</h2>
-          </div>
-          <p className="max-w-xl text-sm leading-relaxed text-[var(--sm-muted)] lg:text-base">
-            SUPERMEGA.dev is easier to understand when the path is explicit. Start with the mode you are in, not the full platform map.
-          </p>
-        </div>
-        <div className="sm-home-package-list mt-8">
-          {platformPaths.map((path) => (
-            <article className="sm-home-package-row" key={path.title}>
-              <div>
-                <p className="sm-kicker text-[var(--sm-accent)]">{path.label}</p>
-                <h3 className="mt-2 text-xl font-semibold text-white">{path.title}</h3>
-                <p className="mt-3 max-w-2xl text-sm leading-relaxed text-[var(--sm-muted)]">{path.detail}</p>
-              </div>
-              <div className="sm-home-package-meta">
-                <Link className="sm-button-primary" to={path.primary.to}>
-                  {path.primary.label}
-                </Link>
-                <Link className="sm-link" to={path.secondary.to}>
-                  {path.secondary.label}
-                </Link>
-              </div>
-            </article>
-          ))}
-        </div>
-      </section>
-
-      <section className="grid gap-8 xl:grid-cols-[1.02fr_0.98fr] xl:items-start">
-        <article className="sm-site-panel sm-home-case-panel">
-          <p className="sm-kicker text-[var(--sm-accent-alt)]">Case study</p>
-          <h2 className="mt-3 text-3xl font-bold text-white lg:text-4xl">Yangon Tyre is the first full client portal.</h2>
-          <p className="mt-4 max-w-2xl text-sm leading-relaxed text-[var(--sm-muted)]">
-            The same product base expands into a company portal with role-based views, connected records, approvals, and audit history.
-          </p>
-          <div className="mt-6 space-y-3">
-            {yangonTyreHighlights.map((point) => (
-              <div className="sm-site-point" key={point}>
-                <span className="sm-site-point-dot" />
-                <span>{point}</span>
-              </div>
-            ))}
-          </div>
-          <div className="mt-6 flex flex-wrap gap-3">
-            <Link className="sm-button-primary" to="/clients/yangon-tyre">
-              Read case study
-            </Link>
-            <Link className="sm-button-secondary" to="/contact?package=Yangon%20Tyre%20portal">
-              Request rollout
-            </Link>
-          </div>
-        </article>
-
-        <aside className="sm-site-panel">
-          <div className="sm-home-showcase-stack">
-            <LiveProductPreview className="animate-rise" variant="ytf-portal" />
-            <LiveProductPreview compact variant="tenant-control" />
-          </div>
-        </aside>
-      </section>
-
-      <section className="grid gap-8 xl:grid-cols-[0.9fr_1.1fr] xl:items-start">
-        <article className="sm-site-panel">
-          <p className="sm-kicker text-[var(--sm-accent)]">Best-fit packages</p>
-          <h2 className="mt-3 text-3xl font-bold text-white lg:text-4xl">Start with the package that matches the client.</h2>
-          <div className="sm-home-package-list mt-6">
-            {featuredPackages.map((persona) => (
-              <article className="sm-home-package-row" key={persona.id}>
-                <div>
-                  <p className="sm-kicker text-[var(--sm-accent)]">{persona.name}</p>
-                  <h3 className="mt-2 text-xl font-semibold text-white">{persona.role}</h3>
-                  <p className="mt-2 text-sm leading-relaxed text-[var(--sm-muted)]">{persona.firstLaunch}</p>
-                </div>
-                <div className="sm-home-package-meta">
-                  <p>{persona.stack}</p>
-                  <Link className="sm-link" to={persona.route}>
-                    Review package
-                  </Link>
-                </div>
-              </article>
-            ))}
-          </div>
-          <div className="mt-6">
-            <Link className="sm-button-secondary" to="/packages">
-              Review all packages
-            </Link>
-          </div>
-        </article>
-
-        <article className="sm-site-panel">
-          <p className="sm-kicker text-[var(--sm-accent-alt)]">Rollout standard</p>
-          <h2 className="mt-3 text-3xl font-bold text-white lg:text-4xl">Every rollout stays small until it works.</h2>
-          <div className="mt-6 grid gap-4">
-            {rolloutPrinciples.map((item) => (
-              <div className="sm-site-point" key={item}>
-                <span className="sm-site-point-dot" />
-                <span>{item}</span>
-              </div>
-            ))}
-          </div>
-          {primaryProduct ? (
-            <div className="mt-8 overflow-hidden rounded-[1.25rem] border border-white/10 bg-[#040b16]">
-              <img
-                alt={`${primaryProduct.name} product screenshot`}
-                className="h-auto w-full object-cover object-top"
-                loading="lazy"
-                src={primaryProduct.image}
-              />
-            </div>
-          ) : null}
-        </article>
-      </section>
-
-      <section className="sm-site-final">
-        <div>
-          <p className="sm-kicker text-[var(--sm-accent)]">Next step</p>
-          <h2 className="mt-3 text-3xl font-bold text-white lg:text-5xl">Tell us the first team and current stack.</h2>
-        </div>
-        <div className="grid gap-4 lg:grid-cols-[1fr_auto] lg:items-center">
-          <div className="flex flex-wrap gap-3">
-            <Link className="sm-button-primary" to="/signup">
-              Create workspace
-            </Link>
-            <Link className="sm-button-secondary" to="/contact">
-              Request rollout
-            </Link>
-            <Link className="sm-button-secondary" to="/products">
-              Review products
-            </Link>
-            <Link className="sm-button-secondary" to="/clients/yangon-tyre">
-              Read case study
-            </Link>
-            <Link className="sm-button-secondary" to="/platform">
-              How it works
-            </Link>
-          </div>
-          <article className="sm-qr-card">
-            <p className="sm-kicker text-[var(--sm-accent)]">Open on mobile</p>
-            <img alt="QR code to open SUPERMEGA.dev" className="sm-qr-image" src="/site/supermega-qr.svg" />
-            <p className="text-sm leading-relaxed text-[var(--sm-muted)]">Scan to open `supermega.dev` on a phone or share it fast in a meeting.</p>
-          </article>
-        </div>
+      <section className="sm-site-panel mt-6">
+        <h2 className="mt-3 text-3xl font-extrabold tracking-tight text-white md:text-4xl">Send one source.</h2>
+        <Link className="sm-button-primary mt-6 inline-flex" to="/contact/">
+          Contact
+        </Link>
       </section>
     </div>
   )

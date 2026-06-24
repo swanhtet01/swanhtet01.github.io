@@ -1,471 +1,651 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 
-import { PageIntro } from '../components/PageIntro'
-import { getSeedDataFabricDataset, loadDataFabricDataset, type DataFabricDataset } from '../lib/dataFabricApi'
-import { buildYangonTyreAnalyticsMart, getYangonTyreAnalyticsMartView } from '../lib/yangonTyreAnalyticsMart'
-import { loadManagerHomeDataset, type ManagerHomeDataset } from '../lib/managerHomeApi'
 import {
-  YANGON_TYRE_DQMS_SUMMARY_SEED,
-  YANGON_TYRE_OPERATIONS_SUMMARY_SEED,
-  YANGON_TYRE_OPERATIONS_ACTIONS_SEED,
-  YANGON_TYRE_PLANT_CONTROL_UPDATED_AT,
-  YANGON_TYRE_PLANT_MANAGER_REVIEW_RHYTHMS,
-  YANGON_TYRE_PLANT_MANAGER_SHIFT_BOARDS,
-  YANGON_TYRE_QUALITY_INCIDENTS_SEED,
-} from '../lib/yangonTyrePlantControl'
-import { getTenantConfig } from '../lib/tenantConfig'
-import { resolveTenantRoleExperience } from '../lib/tenantRoleExperience'
-import { YTF_PORTAL_RUNTIME, YTF_SHIFT_START_PROTOCOL } from '../lib/ytfPortalRuntime'
+  getMetricRecords,
+  getWorkspaceSession,
+  getYtfDailyCloseSummary,
+  getYtfKpiDefinitionsLatest,
+  getYtfManagerFiveWOneHReport,
+  getYtfOperatingMetrics,
+  getYtfPipelineStats,
+  getYtfTwinSummary,
+  getYtfWcmIncidents,
+  listWorkspaceTasks,
+  loadCachedWorkspaceSession,
+  updateWorkspaceTask,
+  type EnterpriseMetricRecord,
+  type MetricRecordsResult,
+  type WorkspaceTaskRow,
+  type YtfDailyCloseSummaryResult,
+  type YtfKpiDefinitionsResult,
+  type YtfManagerFiveWOneHReportResult,
+  type YtfOperatingMetricsResult,
+  type YtfPipelineStatsResult,
+  type YtfTwinSummaryResult,
+  type YtfWcmIncidentRow,
+} from '../lib/workspaceApi'
+import { isYtfFactoryFacingTask, isYtfInternalOrBuildTask, summarizeYtfTaskNotes, ytfOwnerLabel } from '../lib/ytfUiFormat'
+import {
+  selectTopYtfOperatingRows,
+  ytfOperatingMetricContext,
+  ytfOperatingMetricSource,
+  ytfOperatingMetricTitle,
+  ytfOperatingMetricValue,
+} from '../lib/ytfMetricRows'
+import {
+  ytfCompactNumber,
+  ytfProcurementMetricCard,
+  ytfProductionMetricCard,
+  ytfQualityMetricCard,
+  ytfRawMaterialMetricCard,
+  ytfMetricIsCurrentOperational,
+  ytfMetricMatchesPlantScope,
+  normalizeYtfPlantScope,
+  ytfStockMetricCard,
+  type YtfMetricDisplayCard,
+  type YtfPlantScope,
+  type YtfSizeMetricLike,
+} from '../lib/ytfMetricContext'
 
-function formatDateTime(value: string | null | undefined) {
-  if (!value) {
-    return 'Not yet'
-  }
+type YtfPendingProductionCloseRow = NonNullable<
+  NonNullable<NonNullable<YtfOperatingMetricsResult['story']>['size_breakdowns']>['pending_production_close']
+>[number] & YtfSizeMetricLike
 
-  const parsed = new Date(value)
-  if (Number.isNaN(parsed.getTime())) {
-    return value
-  }
-
-  return parsed.toLocaleString()
+function formatDate(value?: string | null): string {
+  if (!value) return 'Not synced yet'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return date.toLocaleString([], {
+    month: 'short',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
 }
 
-function buildSeedPlantManagerDataset(tenantKey: string): ManagerHomeDataset {
-  const experience = resolveTenantRoleExperience(tenantKey as never, 'plant manager')
+function priorityWeight(priority?: string | null): number {
+  const text = String(priority ?? '').toLowerCase()
+  if (text.includes('critical')) return 4
+  if (text.includes('high')) return 3
+  if (text.includes('medium')) return 2
+  return 1
+}
 
-  return {
-    source: 'seed',
-    updatedAt: YANGON_TYRE_PLANT_CONTROL_UPDATED_AT,
-    experience,
-    headline: 'Plant manager command should stay usable even before the full live runtime is connected.',
-    metrics: [
-      {
-        label: 'Open follow-up',
-        value: String(YANGON_TYRE_OPERATIONS_SUMMARY_SEED.actions.total_items),
-        detail: 'Seeded plant follow-up queue from the combined operations and DQMS surface.',
-      },
-      {
-        label: 'Receiving holds',
-        value: String(YANGON_TYRE_OPERATIONS_SUMMARY_SEED.receiving.hold_count),
-        detail: 'Current seeded inbound holds that can affect release and line stability.',
-      },
-      {
-        label: 'Open incidents',
-        value: String(YANGON_TYRE_DQMS_SUMMARY_SEED.quality.by_status.open),
-        detail: 'Seeded DQMS incident load requiring containment or closeout.',
-      },
-      {
-        label: 'Review loops',
-        value: String(YANGON_TYRE_PLANT_MANAGER_REVIEW_RHYTHMS.length),
-        detail: 'Explicit plant-manager review cadences already modeled in the interface.',
-      },
-    ],
-    actions: YANGON_TYRE_OPERATIONS_ACTIONS_SEED.slice(0, 4).map((item) => ({
-      id: item.id,
-      title: item.title,
-      detail: item.action,
-      route: '/app/operations',
-      emphasis: item.priority.toLowerCase() === 'high' ? 'attention' : 'secondary',
-    })),
-    signals: [
-      {
-        id: 'seed-quality-signal',
-        label: 'Containment still active',
-        detail: 'Seeded DQMS issues show that release and containment still need one linked review loop.',
-        route: '/app/dqms',
-        tone: 'attention',
-      },
-      {
-        id: 'seed-receiving-signal',
-        label: 'Inbound variance remains visible',
-        detail: 'Receiving holds are part of the same plant-control rhythm, not a separate admin issue.',
-        route: '/app/receiving',
-        tone: 'watch',
-      },
-    ],
-    routines: YANGON_TYRE_PLANT_MANAGER_REVIEW_RHYTHMS.map((item) => ({
-      id: item.id,
-      name: item.name,
-      cadence: item.cadence,
-      purpose: item.purpose,
-      script: 'Open the lane, review what changed, assign the next owner, and close the loop before the next review.',
-      doneWhen: 'Every abnormal item has an owner, next step, and next review time.',
-      route: item.route,
-    })),
-    methods: [
-      {
-        id: 'seed-bottleneck',
-        name: 'Bottleneck focus',
-        question: 'Which process step is limiting plant flow right now?',
-        measure: 'Queue pressure, downtime, and quality containment in the same review.',
-        route: '/app/operations',
-      },
-      {
-        id: 'seed-first-pass-yield',
-        name: 'First-pass yield',
-        question: 'Where is the process losing good units before release?',
-        measure: 'B+R baseline, repeat defects, and open containment.',
-        route: '/app/dqms',
-      },
-    ],
-    modules: [
-      { id: 'ops', title: 'Operations control', route: '/app/operations', detail: 'Shift flow, receiving, and escalation control.', status: 'Seeded', reason: 'Usable now while live data expands.' },
-      { id: 'dqms', title: 'DQMS and quality', route: '/app/dqms', detail: 'Incidents, CAPA, containment, and KPI review.', status: 'Seeded', reason: 'Usable now while live writeback expands.' },
-      { id: 'maint', title: 'Maintenance', route: '/app/maintenance', detail: 'Reliability follow-up and asset review.', status: 'Available', reason: 'Supports the same plant control loop.' },
-      { id: 'fabric', title: 'Data Fabric', route: '/app/data-fabric', detail: 'Plant analytics, source behavior, and feature engineering.', status: 'Available', reason: 'Feeds the macro plant review.' },
-    ],
-    supportTools: [
-      { id: 'ops', label: 'Operations', route: '/app/operations', detail: 'Run today queue and plant flow.' },
-      { id: 'dqms', label: 'DQMS', route: '/app/dqms', detail: 'Run incidents and CAPA.' },
-      { id: 'fabric', label: 'Data Fabric', route: '/app/data-fabric', detail: 'Read micro and macro plant signals.' },
-    ],
-    trainingSequence: [
-      'Start every shift from the plant manager interface.',
-      'Open the right desk and record the abnormality there, not in side chat.',
-      'Use DQMS and operations together when the same issue affects flow and quality.',
-    ],
-    managerRules: [
-      'No carryover without owner and due time.',
-      'Containment before explanation.',
-      'Repeated pain must become a feature, method, or workflow change.',
-    ],
+function isOpenTask(task: WorkspaceTaskRow): boolean {
+  return !['done', 'closed', 'cancelled'].includes(String(task.status ?? '').toLowerCase())
+}
+
+function isFactoryVisibleTask(task: WorkspaceTaskRow): boolean {
+  const haystack = `${task.title} ${task.template} ${task.notes} ${task.owner}`.toLowerCase().replace(/_/g, ' ')
+  if (
+    isYtfInternalOrBuildTask(task) ||
+    /\b(extract kpi|kpi candidate|changed data|changed source|source change|source record|structured source|workbook|file agent|agent runtime|governance update|setup gap|oauth|database|postgres|cron|sync plan|build knowledge|full refresh)\b/i.test(
+      haystack,
+    )
+  ) {
+    return false
   }
+  return isYtfFactoryFacingTask(task)
+}
+
+function cleanTaskTitle(task: WorkspaceTaskRow): string {
+  const title = task.title?.trim()
+  if (!title) return 'Untitled action'
+  return title
+    .replace(/^review\s+/i, '')
+    .replace(/^resolve\s+/i, '')
+    .replace(/\s+shortcut evidence$/i, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function cleanTaskSummary(task: WorkspaceTaskRow): string {
+  const summary = summarizeYtfTaskNotes(task.notes).summary.replace(/\s+/g, ' ').trim()
+  if (!summary) return 'No daily note yet. Add one clear next action.'
+  return summary.length > 112 ? `${summary.slice(0, 112).trim()}...` : summary
+}
+
+function valueText(value?: number | null, suffix = ''): string {
+  if (value === null || value === undefined || Number.isNaN(value)) return 'Not entered'
+  if (Number.isInteger(value)) return `${value}${suffix}`
+  return `${value.toFixed(1)}${suffix}`
+}
+
+function plantScopeText(summary?: YtfDailyCloseSummaryResult | null): string {
+  const plant = summary?.inputs?.find((input) => input.latest?.plant)?.latest?.plant
+  if (!plant) return 'Plant A'
+  if (plant === 'plant_a') return 'Plant A'
+  if (plant === 'plant_b') return 'Plant B'
+  return plant
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (char) => char.toUpperCase())
+}
+
+function scopeCurrentRows<T extends YtfSizeMetricLike>(
+  rows: T[],
+  plantScope: YtfPlantScope,
+  options: { minYear?: number; allowLowConfidence?: boolean; allowArchiveMarker?: boolean } = {},
+): T[] {
+  return rows.filter((row) => ytfMetricIsCurrentOperational(row, options) && ytfMetricMatchesPlantScope(row, plantScope))
+}
+
+function ytfPendingProductionMetricCard(row?: YtfPendingProductionCloseRow): YtfMetricDisplayCard | null {
+  if (!row) return null
+  const qty = Number(row.pending_qty || 0)
+  if (!Number.isFinite(qty) || qty <= 0) return null
+  const asOf = String(row.source?.date_context || row.updated_at || '').trim()
+  return {
+    label: 'Confirm production',
+    value: `${ytfCompactNumber(qty)} pcs`,
+    detail: [row.plant || 'Plant', asOf, `${row.size || 'size'} close needs manager confirm`].filter(Boolean).join(' / '),
+    source: row.plant || 'Plant',
+    route: '/app/live-data?view=kpi&lane=production',
+  }
+}
+
+function buildPlantFocusCards(metrics: YtfOperatingMetricsResult | null, plantScope: YtfPlantScope = 'plant-a'): YtfMetricDisplayCard[] {
+  const breakdowns = metrics?.story?.size_breakdowns
+  const productionRow = scopeCurrentRows(breakdowns?.production_by_size ?? [], plantScope, { minYear: 2025 })[0]
+  const pendingProductionRow = scopeCurrentRows((breakdowns?.pending_production_close ?? []) as YtfPendingProductionCloseRow[], plantScope, {
+    minYear: 2025,
+    allowLowConfidence: true,
+  })[0]
+  const qualityRow = scopeCurrentRows(breakdowns?.quality_claims_by_size ?? [], plantScope, { minYear: 2024 })[0]
+  const stockRow = scopeCurrentRows(breakdowns?.stock_by_size ?? [], plantScope, { minYear: 2024 })[0]
+  const procurementRow = scopeCurrentRows(breakdowns?.procurement_by_size ?? [], plantScope, { minYear: 2024 })[0]
+  const materialRows = [
+    ...((breakdowns?.procurement_material_orders ?? []) as YtfSizeMetricLike[]),
+    ...((breakdowns?.raw_material_orders ?? []) as YtfSizeMetricLike[]),
+  ]
+  const materialRow = scopeCurrentRows(materialRows, plantScope, { minYear: 2024 })[0]
+  return [
+    ytfProductionMetricCard(productionRow) || ytfPendingProductionMetricCard(pendingProductionRow),
+    ytfQualityMetricCard(qualityRow),
+    ytfStockMetricCard(stockRow),
+    ytfProcurementMetricCard(procurementRow) || ytfRawMaterialMetricCard(materialRow),
+  ].filter(Boolean).map((card) => ({ ...(card as YtfMetricDisplayCard), route: `/app/live-data?view=kpi&plant=${plantScope}` })) as YtfMetricDisplayCard[]
+}
+
+function teamLabelFromTask(task: WorkspaceTaskRow): string {
+  const text = `${task.owner} ${task.title} ${task.notes} ${task.template}`.toLowerCase()
+  if (/(qc|quality|claim|defect|capa|inspection)/.test(text)) return 'QC team'
+  if (/(maintenance|machine|downtime|repair|utility|spare)/.test(text)) return 'Maintenance team'
+  if (/(sales|inventory|stock|showroom|dealer|dispatch)/.test(text)) return 'Sales / inventory team'
+  if (/(admin|planning|hr|ot|attendance)/.test(text)) return 'Admin / planning team'
+  if (/(mixing|curing|building|production|shift|output|wip)/.test(text)) return 'Production team'
+  return 'Plant team'
+}
+
+function buildTeamFocusRows(openTasks: WorkspaceTaskRow[]) {
+  const groups = new Map<string, { team: string; count: number; high: number; sample: WorkspaceTaskRow | null }>()
+  openTasks.forEach((task) => {
+    const team = teamLabelFromTask(task)
+    const current = groups.get(team) ?? { team, count: 0, high: 0, sample: null }
+    current.count += 1
+    if (priorityWeight(task.priority) >= 3) current.high += 1
+    current.sample = current.sample ?? task
+    groups.set(team, current)
+  })
+  return [...groups.values()].sort((left, right) => right.high - left.high || right.count - left.count).slice(0, 4)
 }
 
 export function PlantManagerPage() {
-  const tenant = getTenantConfig()
   const [loading, setLoading] = useState(true)
-  const [statusNote, setStatusNote] = useState('Loading plant manager command surface...')
-  const [source, setSource] = useState<'live' | 'seed'>('seed')
-  const [managerDataset, setManagerDataset] = useState<ManagerHomeDataset>(() => buildSeedPlantManagerDataset(tenant.key))
-  const [fabricDataset, setFabricDataset] = useState<DataFabricDataset>(() => getSeedDataFabricDataset())
+  const [message, setMessage] = useState<string | null>(null)
+  const [sessionName, setSessionName] = useState('Plant Manager')
+  const [sessionRole, setSessionRole] = useState(loadCachedWorkspaceSession()?.session?.role ?? 'plant_manager')
+  const [tasks, setTasks] = useState<WorkspaceTaskRow[]>([])
+  const [pipelineStats, setPipelineStats] = useState<YtfPipelineStatsResult | null>(null)
+  const [kpiDefinitions, setKpiDefinitions] = useState<YtfKpiDefinitionsResult | null>(null)
+  const [recentKpiValues, setRecentKpiValues] = useState<EnterpriseMetricRecord[]>([])
+  const [operatingMetrics, setOperatingMetrics] = useState<YtfOperatingMetricsResult | null>(null)
+  const [dailyCloseSummary, setDailyCloseSummary] = useState<YtfDailyCloseSummaryResult | null>(null)
+  const [managerReport, setManagerReport] = useState<YtfManagerFiveWOneHReportResult | null>(null)
+  const [twinSummary, setTwinSummary] = useState<YtfTwinSummaryResult | null>(null)
+  const [wcmIncidents, setWcmIncidents] = useState<YtfWcmIncidentRow[]>([])
+  const [closingTaskId, setClosingTaskId] = useState<string | null>(null)
+
+  const load = async () => {
+    setLoading(true)
+    setMessage(null)
+    try {
+      const cached = loadCachedWorkspaceSession()
+      setSessionName(cached?.session?.display_name ?? 'Plant Manager')
+
+      const [session, taskList, stats, definitions, values, metrics, dailyClose, report, twin, incidents] = await Promise.all([
+        getWorkspaceSession().catch(() => null),
+        listWorkspaceTasks(undefined, 40),
+        getYtfPipelineStats().catch(() => null),
+        getYtfKpiDefinitionsLatest().catch(() => null),
+        getMetricRecords({ status: 'reported', limit: 12 }).catch(() => ({ rows: [] }) as MetricRecordsResult),
+        getYtfOperatingMetrics().catch(() => null),
+        getYtfDailyCloseSummary().catch(() => null),
+        getYtfManagerFiveWOneHReport(8).catch(() => null),
+        getYtfTwinSummary().catch(() => null),
+        getYtfWcmIncidents({ limit: 8 }).catch(() => ({ rows: [] as YtfWcmIncidentRow[] })),
+      ])
+
+      setSessionName(session?.session?.display_name ?? cached?.session?.display_name ?? 'Plant Manager')
+      setSessionRole(session?.session?.role ?? cached?.session?.role ?? 'plant_manager')
+      setTasks(taskList.rows ?? [])
+      setPipelineStats(stats)
+      setKpiDefinitions(definitions)
+      setRecentKpiValues(values.rows ?? values.enterprise?.rows ?? [])
+      setOperatingMetrics(metrics)
+      setDailyCloseSummary(dailyClose)
+      setManagerReport(report)
+      setTwinSummary(twin)
+      setWcmIncidents(incidents.rows ?? [])
+    } catch (error) {
+      const text = error instanceof Error ? error.message : 'Could not load plant manager data.'
+      setMessage(text)
+    } finally {
+      setLoading(false)
+    }
+  }
 
   useEffect(() => {
-    let cancelled = false
-
-    async function load() {
-      try {
-        const [managerPayload, fabricPayload] = await Promise.all([
-          loadManagerHomeDataset(tenant.key, 'plant manager'),
-          loadDataFabricDataset(),
-        ])
-
-        if (cancelled) {
-          return
-        }
-
-        const nextSource = managerPayload.source === 'live' || fabricPayload.source === 'live' ? 'live' : 'seed'
-        setManagerDataset(managerPayload)
-        setFabricDataset(fabricPayload)
-        setSource(nextSource)
-        setStatusNote(
-          nextSource === 'live'
-            ? 'Live manager-home and data-fabric signals are connected.'
-            : 'Using the seeded plant manager command surface while the live workspace is still partial.',
-        )
-      } catch {
-        if (cancelled) {
-          return
-        }
-
-        setSource('seed')
-        setManagerDataset(buildSeedPlantManagerDataset(tenant.key))
-        setStatusNote('Plant manager command is running in seeded mode. The interface is usable now while live connectors and writeback continue to come online.')
-      } finally {
-        if (!cancelled) {
-          setLoading(false)
-        }
-      }
-    }
-
     void load()
-    return () => {
-      cancelled = true
+  }, [])
+
+  const openTasks = useMemo(() => {
+    return tasks
+      .filter(isOpenTask)
+      .filter(isFactoryVisibleTask)
+      .sort((left, right) => priorityWeight(right.priority) - priorityWeight(left.priority))
+  }, [tasks])
+
+  const metrics = useMemo(() => {
+    const reviewTasks =
+      pipelineStats?.source_changes?.task_promotion?.review_task_count ??
+      pipelineStats?.source_changes?.promoted_task_count ??
+      0
+    const kpiCandidates = pipelineStats?.workbooks?.metric_candidate_count ?? 0
+    const officialKpis =
+      kpiDefinitions?.summary?.official_count ?? kpiDefinitions?.rows?.length ?? recentKpiValues.length
+    const plantNumbers =
+      operatingMetrics?.summary?.extracted_metric_value_count ??
+      operatingMetrics?.top_rows?.length ??
+      recentKpiValues.length ??
+      officialKpis
+    const proofReady = reviewTasks + officialKpis
+    return {
+      openActions: openTasks.length,
+      highActions: openTasks.filter((task) => priorityWeight(task.priority) >= 3).length,
+      reviewTasks,
+      kpiCandidates,
+      officialKpis,
+      plantNumbers,
+      proofReady,
+      lastSync:
+        pipelineStats?.source_records?.latest_modified_time ??
+        pipelineStats?.refresh_loop?.latest_at ??
+        null,
+      sourceRecords: pipelineStats?.source_records?.count ?? 0,
     }
-  }, [tenant.key])
+  }, [
+    kpiDefinitions?.rows?.length,
+    kpiDefinitions?.summary?.official_count,
+    openTasks,
+    operatingMetrics?.summary?.extracted_metric_value_count,
+    operatingMetrics?.top_rows?.length,
+    pipelineStats,
+    recentKpiValues.length,
+  ])
 
-  const analyticsMart = useMemo(() => buildYangonTyreAnalyticsMart(fabricDataset), [fabricDataset])
-  const operationsView = useMemo(() => getYangonTyreAnalyticsMartView(analyticsMart, 'operations'), [analyticsMart])
-  const qualityView = useMemo(() => getYangonTyreAnalyticsMartView(analyticsMart, 'quality'), [analyticsMart])
-  const actionRows = useMemo(
-    () => [...(managerDataset?.actions ?? []), ...YANGON_TYRE_OPERATIONS_ACTIONS_SEED.map((item) => ({
-      id: item.id,
-      title: item.title,
-      detail: item.action,
-      route: '/app/operations',
-      emphasis: item.priority.toLowerCase() === 'high' ? 'attention' as const : 'secondary' as const,
-    }))].slice(0, 6),
-    [managerDataset],
+  const dailyInputs = dailyCloseSummary?.inputs ?? []
+  const missingDailyInputs = dailyInputs.filter((input) => input.status !== 'ready')
+  const hasDailyCloseMetrics = Boolean(
+    dailyCloseSummary?.summary?.oee_proxy ||
+      dailyCloseSummary?.summary?.availability ||
+      dailyCloseSummary?.summary?.quality,
   )
+  const dailyCloseMissingCount = dailyInputs.length ? missingDailyInputs.length : hasDailyCloseMetrics ? 0 : 1
+  const dailyCloseHeadline = hasDailyCloseMetrics
+    ? 'Daily close ready.'
+    : dailyInputs.length
+      ? `${dailyCloseMissingCount} field${dailyCloseMissingCount === 1 ? '' : 's'} missing.`
+      : 'Enter daily close.'
+  const managerPlantScope = useMemo(() => normalizeYtfPlantScope(sessionRole, 'plant-a'), [sessionRole])
+  const scopedDataRoute = `/app/live-data?view=kpi&plant=${managerPlantScope}`
+  const operatingRows = selectTopYtfOperatingRows(operatingMetrics?.top_rows ?? [], 12, {
+    preferredScope: managerPlantScope,
+    minYear: 2024,
+  })
+    .filter((row) => ytfMetricMatchesPlantScope(row as YtfSizeMetricLike, managerPlantScope))
+    .filter((row) => ytfMetricIsCurrentOperational(row as YtfSizeMetricLike, { minYear: 2024, allowLowConfidence: false }))
+    .slice(0, 6)
+  const plantFocusCards = useMemo(() => buildPlantFocusCards(operatingMetrics, managerPlantScope), [operatingMetrics, managerPlantScope])
+  const visibleOpenTasks = openTasks.slice(0, 3)
+  const visiblePlantFocusCards = plantFocusCards.slice(0, 2)
+  const visibleRecentKpiValues = recentKpiValues.slice(0, 2)
+  const visibleOperatingRows = operatingRows.slice(0, 2)
+  const teamFocusRows = useMemo(() => buildTeamFocusRows(openTasks), [openTasks])
+  const operatingLanes = operatingMetrics?.lanes?.filter((lane) => (lane.count ?? 0) > 0).slice(0, 4) ?? []
+  const needsDailyCloseInput = missingDailyInputs.length > 0
+  const managerReportRows = (managerReport?.rows ?? []).slice(0, 3)
 
-  if (loading && source === 'live') {
-    return <section className="sm-surface p-6 text-sm text-[var(--sm-muted)]">Opening plant manager command...</section>
+  const handleCloseTask = async (task: WorkspaceTaskRow) => {
+    setClosingTaskId(task.task_id)
+    setMessage(null)
+    try {
+      await updateWorkspaceTask(task.task_id, {
+        status: 'done',
+        notes: [task.notes, `Closed by ${sessionName} from Plant Manager.`].filter(Boolean).join('\n'),
+      })
+      setTasks((current) => current.map((item) => (item.task_id === task.task_id ? { ...item, status: 'done' } : item)))
+      setMessage('Action closed.')
+    } catch (error) {
+      const text = error instanceof Error ? error.message : 'Could not close action.'
+      setMessage(text)
+    } finally {
+      setClosingTaskId(null)
+    }
   }
 
   return (
-    <div className="space-y-8">
-      <PageIntro
-        eyebrow="Plant manager"
-        title="Run shift control, quality drift, and handoff from one command surface."
-        description="This is the combined plant manager interface for Yangon Tyre: operations, DQMS, maintenance, receiving, and data-fabric review on one working page."
-      />
-
-      <section className="sm-surface-deep relative overflow-hidden p-6 lg:p-8">
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,_rgba(132,194,176,0.16),_transparent_36%),radial-gradient(circle_at_bottom_left,_rgba(207,166,122,0.12),_transparent_44%)]" />
-        <div className="relative grid gap-6 xl:grid-cols-[1.08fr_0.92fr]">
-          <div>
-            <div className="sm-status-bar">
-              <span className="sm-status-pill">{YTF_PORTAL_RUNTIME.domain}</span>
-              <span className="sm-status-pill">{source === 'live' ? 'Live workspace' : 'Seeded control'}</span>
-              <span className="sm-status-pill">{YTF_PORTAL_RUNTIME.provider}</span>
-            </div>
-            <h2 className="mt-5 max-w-4xl text-4xl font-bold text-white">Open this surface first when the plant needs one command language.</h2>
-            <p className="mt-4 max-w-3xl text-sm leading-relaxed text-[var(--sm-muted)]">
-              Use Plant Manager for the first five minutes of a shift, abnormal review, or leadership escalation. Then move into the specific working desk only after the owner and evidence are clear.
-            </p>
-            <div className="mt-6 flex flex-wrap gap-3">
-              <Link className="sm-button-primary" to="/app/operations">
-                Open operations
-              </Link>
-              <Link className="sm-button-secondary" to="/app/dqms">
-                Open DQMS
-              </Link>
-              <Link className="sm-button-secondary" to="/app/portal">
-                Open tenant portal
-              </Link>
-            </div>
-          </div>
-
-          <article className="sm-manager-method">
-            <p className="sm-kicker text-[var(--sm-accent-alt)]">First five minutes</p>
-            <h3 className="mt-2 text-2xl font-bold text-white">Run the shift in this order</h3>
-            <div className="mt-5 grid gap-3">
-              {YTF_SHIFT_START_PROTOCOL.map((item, index) => (
-                <div className="sm-manager-rule" key={item.id}>
-                  <span className="sm-manager-rule-index">{index + 1}</span>
-                  <div>
-                    <p className="font-semibold text-white">{item.title}</p>
-                    <p className="mt-2 text-sm leading-relaxed text-[var(--sm-muted)]">{item.detail}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </article>
+    <div className="sm-ytf-simple-page sm-ytf-plant-manager-page">
+      <section className="sm-ytf-hero-row sm-ytf-hero-compact">
+        <div>
+          <span className="sm-eyebrow">Plant Manager</span>
+          <h1>Run today from one screen.</h1>
+          <p>Daily close, open work, and latest plant data.</p>
+        </div>
+        <div className="sm-ytf-status-stack" aria-label="Workspace status">
+          <span>{loading ? 'Live view' : 'Signed in'}</span>
+          <span>{sessionName}</span>
+          <span>{plantScopeText(dailyCloseSummary)}</span>
+          <span>Data {formatDate(metrics.lastSync)}</span>
         </div>
       </section>
 
-      <section className="sm-surface-deep p-6">
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-          <div>
-            <p className="sm-kicker text-[var(--sm-accent-alt)]">Command status</p>
-            <h2 className="mt-3 text-3xl font-bold text-white">This surface is available now.</h2>
-            <p className="mt-4 max-w-4xl text-sm leading-relaxed text-[var(--sm-muted)]">
-              {statusNote} Updated {formatDateTime(managerDataset.updatedAt ?? fabricDataset.updatedAt ?? YANGON_TYRE_PLANT_CONTROL_UPDATED_AT)}.
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-3">
-            <span className="sm-status-pill">{source === 'live' ? 'live + seed' : 'seed + manager rules'}</span>
-            <Link className="sm-button-primary" to="/app/operations">
-              Open operations
-            </Link>
-            <Link className="sm-button-secondary" to="/app/dqms">
-              Open DQMS
-            </Link>
-            <Link className="sm-button-secondary" to="/app/maintenance">
-              Open maintenance
-            </Link>
-          </div>
-        </div>
-      </section>
+      {message ? <div className="sm-ytf-alert">{message}</div> : null}
 
-      <section className="grid gap-4 md:grid-cols-3">
-        <article className="sm-manager-stat">
-          <p className="sm-kicker text-[var(--sm-accent)]">Micro means</p>
-          <p className="mt-3 text-2xl font-bold text-white">One batch, one defect, one machine</p>
-          <p className="mt-2 text-sm text-[var(--sm-muted)]">Use DQMS, receiving, and maintenance lanes for the immediate abnormality and the next containment move.</p>
-        </article>
-        <article className="sm-manager-stat">
-          <p className="sm-kicker text-[var(--sm-accent-alt)]">Macro means</p>
-          <p className="mt-3 text-2xl font-bold text-white">Throughput, drift, and repeat loss</p>
-          <p className="mt-2 text-sm text-[var(--sm-muted)]">Use the KPI layer and data fabric when the issue repeats across shifts, SKUs, or sections of the plant.</p>
-        </article>
-        <article className="sm-manager-stat">
-          <p className="sm-kicker text-[var(--sm-accent)]">Live host</p>
-          <p className="mt-3 text-2xl font-bold text-white">{YTF_PORTAL_RUNTIME.domain}</p>
-          <p className="mt-2 text-sm text-[var(--sm-muted)]">Keep the plant operating record inside the live tenant host so review, escalation, and analytics stay connected.</p>
-        </article>
-      </section>
-
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        {managerDataset.metrics.map((metric) => (
-          <article className="sm-metric-card" key={metric.label}>
-            <p className="sm-kicker text-[var(--sm-accent)]">{metric.label}</p>
-            <p className="mt-3 text-3xl font-bold text-white">{metric.value}</p>
-            <p className="mt-2 text-sm text-[var(--sm-muted)]">{metric.detail}</p>
-          </article>
+      <section className="sm-ytf-metric-strip" aria-label="Plant manager numbers">
+        {(visiblePlantFocusCards.length ? visiblePlantFocusCards : []).map((card) => (
+          <Link key={card.label} to={card.route}>
+            <span>{card.label}</span>
+            <strong>{card.value}</strong>
+            <small>{card.detail}</small>
+          </Link>
         ))}
+        {!plantFocusCards.length ? (
+          <article>
+            <span>Plant values</span>
+            <strong>{metrics.plantNumbers > 0 ? 'Open data' : 'Needs entry'}</strong>
+            <small>{metrics.plantNumbers > 0 ? 'Review scoped production, quality, stock, and supplier values.' : 'Add today output, quality, stock, or board photo.'}</small>
+          </article>
+        ) : null}
+        <article>
+          <span>Machines</span>
+          <strong>{twinSummary?.asset_count ? `${twinSummary?.state_counts?.ACTIVE ?? 0}/${twinSummary.asset_count}` : 'Needs setup'}</strong>
+          <small>{twinSummary?.asset_count ? 'active machine signals' : 'add machine list and downtime entries'}</small>
+        </article>
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-[1.04fr_0.96fr]">
-        <article className="sm-surface p-6">
-          <div className="flex flex-wrap items-end justify-between gap-3">
-            <div>
-              <p className="sm-kicker text-[var(--sm-accent)]">What to do now</p>
-              <h2 className="mt-2 text-3xl font-bold text-white">Plant-manager priority queue</h2>
-            </div>
-            <Link className="sm-link" to="/app/actions">
-              Open queue
+      <section className="sm-ytf-panel sm-ytf-daily-close-panel">
+        <div className="sm-ytf-section-head">
+          <div>
+            <span className="sm-eyebrow">Daily Close</span>
+            <h2>{dailyCloseHeadline}</h2>
+            <p>OEE appears only after output, rejects, downtime, and planned time exist.</p>
+          </div>
+          <div className="sm-ytf-action-row">
+            <Link className="sm-button sm-button-primary" to={dailyCloseSummary?.next_action?.route ?? '/app/daily-entry'}>
+              Add missing data
+            </Link>
+            <Link className="sm-button" to={scopedDataRoute}>
+              Plant values
             </Link>
           </div>
-          <div className="mt-6 grid gap-4">
-            {actionRows.map((item) => (
-              <Link className="sm-proof-card" key={item.id} to={item.route}>
-                <p className="font-semibold text-white">{item.title}</p>
-                <p className="mt-3 text-sm leading-relaxed text-[var(--sm-muted)]">{item.detail}</p>
+        </div>
+
+        <div className="sm-ytf-metric-strip sm-ytf-tight-strip">
+          <article>
+            <span>OEE</span>
+            <strong>{valueText(dailyCloseSummary?.summary?.oee_proxy, '%')}</strong>
+            <small>calculated only when inputs are ready</small>
+          </article>
+          <article>
+            <span>Availability</span>
+            <strong>{valueText(dailyCloseSummary?.summary?.availability, '%')}</strong>
+            <small>planned time minus downtime</small>
+          </article>
+          <article>
+            <span>Quality</span>
+            <strong>{valueText(dailyCloseSummary?.summary?.quality, '%')}</strong>
+            <small>good quantity versus total output</small>
+          </article>
+          <article>
+            <span>Missing</span>
+            <strong>{dailyCloseMissingCount}</strong>
+            <small>{dailyInputs.length ? 'fields before close is trusted' : 'daily close form needed'}</small>
+          </article>
+        </div>
+
+        <details className="sm-ytf-details sm-ytf-daily-close-details" aria-label="Daily close inputs">
+          <summary>Input checklist</summary>
+          <div className="sm-ytf-compact-list">
+          {dailyInputs.slice(0, 5).map((input) => (
+            <div key={input.key} className={input.status === 'ready' ? 'is-ready' : 'is-missing'}>
+              <span>{input.label}</span>
+              <strong>{input.status === 'ready' ? 'Ready' : 'Missing'}</strong>
+            </div>
+          ))}
+          {!dailyInputs.length ? (
+            <div className="is-missing">
+              <span>Daily close contract</span>
+              <strong>Not loaded</strong>
+            </div>
+          ) : null}
+          </div>
+        </details>
+      </section>
+
+      <section className="sm-ytf-panel">
+        <div className="sm-ytf-section-head">
+          <div>
+            <span className="sm-eyebrow">5W1H</span>
+            <h2>Manager report.</h2>
+          </div>
+          <Link className="sm-button" to={managerReport?.next_action?.route ?? '/app/daily-entry?mode=daily_routine'}>
+            Add 5W1H
+          </Link>
+        </div>
+        <div className="sm-ytf-compact-list">
+          {managerReportRows.length ? (
+            managerReportRows.map((row) => (
+              <Link key={`${row.source}-${row.id}-${row.when}`} className="sm-ytf-compact-link" to={row.route ?? '/app/daily-entry'}>
+                <span>{row.what ?? 'Manager record'}</span>
+                <strong>{[row.where, row.why].filter(Boolean).join(' / ') || 'Daily control'}</strong>
+                <small>{[row.who, row.how].filter(Boolean).join(' / ')}</small>
+              </Link>
+            ))
+          ) : (
+            <Link className="sm-ytf-compact-link" to="/app/daily-entry?mode=daily_routine">
+              <span>Daily report</span>
+              <strong>Enter 5W1H</strong>
+              <small>What, where, who, when, why, how.</small>
+            </Link>
+          )}
+        </div>
+      </section>
+
+      <section className="sm-ytf-mobile-command" aria-label="Daily work and data">
+        <article className="sm-ytf-panel">
+          <div className="sm-ytf-section-head">
+            <div>
+              <span className="sm-eyebrow">Work</span>
+              <h2>Open work.</h2>
+            </div>
+            <Link className="sm-button" to="/app/action-board">
+              Board
+            </Link>
+          </div>
+
+          <div className="sm-ytf-task-list">
+            {visibleOpenTasks.length ? (
+              visibleOpenTasks.map((task) => (
+                <article key={task.task_id} className="sm-ytf-task-card">
+                  <div>
+                    <h3>{cleanTaskTitle(task)}</h3>
+                    <p>{cleanTaskSummary(task)}</p>
+                    <small>
+                      {ytfOwnerLabel(task.owner)} / {task.priority ?? 'normal'} / {task.due ?? 'today'}
+                    </small>
+                  </div>
+                  <button
+                    className="sm-button"
+                    type="button"
+                    onClick={() => void handleCloseTask(task)}
+                    disabled={closingTaskId === task.task_id}
+                  >
+                    {closingTaskId === task.task_id ? 'Closing' : 'Close'}
+                  </button>
+                </article>
+              ))
+            ) : (
+              <div className="sm-ytf-empty-state">No open team work loaded.</div>
+            )}
+          </div>
+        </article>
+
+        <article className="sm-ytf-panel">
+          <div className="sm-ytf-section-head">
+            <div>
+              <span className="sm-eyebrow">Data</span>
+              <h2>Latest useful numbers.</h2>
+            </div>
+            <Link className="sm-button" to={scopedDataRoute}>
+              Open data
+            </Link>
+          </div>
+
+          <div className="sm-ytf-compact-list">
+            {visiblePlantFocusCards.map((card) => (
+              <Link key={`focus-${card.label}`} className="sm-ytf-compact-link" to={card.route}>
+                <span>{card.label}</span>
+                <strong>{card.value}</strong>
+                <small>{card.detail}</small>
               </Link>
             ))}
-          </div>
-        </article>
-
-        <article className="sm-surface-deep p-6">
-          <div className="flex flex-wrap items-end justify-between gap-3">
-            <div>
-              <p className="sm-kicker text-[var(--sm-accent-alt)]">Shift command boards</p>
-              <h2 className="mt-2 text-3xl font-bold text-white">Use one language for the plant, not separate screens.</h2>
-            </div>
-            <Link className="sm-link" to="/app/data-fabric">
-              Open data fabric
-            </Link>
-          </div>
-          <div className="mt-6 grid gap-4">
-            {YANGON_TYRE_PLANT_MANAGER_SHIFT_BOARDS.map((item) => (
-              <article className="sm-proof-card" key={item.id}>
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="sm-kicker text-[var(--sm-accent)]">{item.label}</p>
-                    <p className="mt-2 text-xl font-bold text-white">{item.title}</p>
-                  </div>
-                  <Link className="sm-link" to={item.route}>
-                    Open lane
-                  </Link>
-                </div>
-                <p className="mt-4 text-sm leading-relaxed text-[var(--sm-muted)]">{item.detail}</p>
-              </article>
-            ))}
-          </div>
-        </article>
-      </section>
-
-      <section className="grid gap-6 xl:grid-cols-[1fr_1fr]">
-        <article className="sm-surface p-6">
-          <div className="flex flex-wrap items-end justify-between gap-3">
-            <div>
-              <p className="sm-kicker text-[var(--sm-accent)]">Micro review</p>
-              <h2 className="mt-2 text-3xl font-bold text-white">Quality containment and process loss</h2>
-            </div>
-            <Link className="sm-link" to="/app/dqms">
-              Open DQMS
-            </Link>
-          </div>
-          <div className="mt-6 grid gap-4">
-            {YANGON_TYRE_QUALITY_INCIDENTS_SEED.map((item) => (
-              <article className="sm-proof-card" key={item.incident_id}>
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="font-semibold text-white">{item.title}</p>
-                    <p className="mt-2 text-sm text-[var(--sm-muted)]">{item.summary}</p>
-                  </div>
-                  <span className="sm-status-pill">{item.severity}</span>
-                </div>
-                <p className="mt-4 text-sm text-white/80">{item.owner} · due {item.target_close_date || 'review now'}</p>
-              </article>
-            ))}
-          </div>
-        </article>
-
-        <article className="sm-surface-deep p-6">
-          <div className="flex flex-wrap items-end justify-between gap-3">
-            <div>
-              <p className="sm-kicker text-[var(--sm-accent-alt)]">Macro review</p>
-              <h2 className="mt-2 text-3xl font-bold text-white">Operations and quality KPIs in one management frame</h2>
-            </div>
-            <Link className="sm-link" to="/app/insights">
-              Open insights
-            </Link>
-          </div>
-          <div className="mt-6 grid gap-4 md:grid-cols-2">
-            {[...operationsView.kpis.slice(0, 2), ...qualityView.kpis.slice(0, 2)].map((metric) => (
-              <article className="sm-proof-card" key={metric.id}>
-                <p className="sm-kicker text-[var(--sm-accent)]">{metric.label}</p>
-                <p className="mt-3 text-3xl font-bold text-white">{metric.value}</p>
-                <p className="mt-2 text-sm text-white/80">{metric.trend}</p>
-                <p className="mt-3 text-sm leading-relaxed text-[var(--sm-muted)]">{metric.detail}</p>
-              </article>
-            ))}
-          </div>
-        </article>
-      </section>
-
-      <section className="grid gap-6 xl:grid-cols-[1.02fr_0.98fr]">
-        <article className="sm-surface p-6">
-          <div className="flex flex-wrap items-end justify-between gap-3">
-            <div>
-              <p className="sm-kicker text-[var(--sm-accent)]">Review cadence</p>
-              <h2 className="mt-2 text-3xl font-bold text-white">Run the plant with explicit rhythms.</h2>
-            </div>
-            <Link className="sm-link" to="/app/adoption-command">
-              Open adoption
-            </Link>
-          </div>
-          <div className="mt-6 grid gap-4">
-            {YANGON_TYRE_PLANT_MANAGER_REVIEW_RHYTHMS.map((item) => (
-              <article className="sm-proof-card" key={item.id}>
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="font-semibold text-white">{item.name}</p>
-                    <p className="mt-2 text-sm text-[var(--sm-muted)]">{item.cadence}</p>
-                  </div>
-                  <Link className="sm-link" to={item.route}>
-                    Open lane
-                  </Link>
-                </div>
-                <p className="mt-4 text-sm leading-relaxed text-white/80">{item.purpose}</p>
-              </article>
-            ))}
-          </div>
-        </article>
-
-        <article className="sm-surface-deep p-6">
-          <div className="flex flex-wrap items-end justify-between gap-3">
-            <div>
-              <p className="sm-kicker text-[var(--sm-accent-alt)]">Launch desks</p>
-              <h2 className="mt-2 text-3xl font-bold text-white">Move fast between the core plant lanes.</h2>
-            </div>
-            <Link className="sm-link" to="/app/portal">
-              Open manager home
-            </Link>
-          </div>
-          <div className="mt-6 grid gap-3">
-            {[
-              { label: 'Operations control', route: '/app/operations', detail: 'Shift flow, receiving pressure, approvals, and exceptions.' },
-              { label: 'DQMS and quality', route: '/app/dqms', detail: 'Incidents, CAPA, containment, and quality KPI review.' },
-              { label: 'Maintenance', route: '/app/maintenance', detail: 'Reliability follow-up and breakdown patterns.' },
-              { label: 'Receiving', route: '/app/receiving', detail: 'Inbound discrepancy and release control.' },
-              { label: 'Data Fabric', route: '/app/data-fabric', detail: 'Warehouse, features, source behavior, and plant-level analytics.' },
-              { label: 'Insights', route: '/app/insights', detail: 'Story layer for managers and leadership.' },
-            ].map((item) => (
-              <Link className="sm-manager-row" key={item.route} to={item.route}>
-                <div>
-                  <p className="font-semibold text-white">{item.label}</p>
-                  <p className="mt-2 text-sm leading-relaxed text-[var(--sm-muted)]">{item.detail}</p>
-                </div>
-                <span className="sm-link">Open</span>
+            {visibleRecentKpiValues.map((record) => (
+              <Link
+                key={record.metric_id ?? `${record.metric_name}-${record.captured_at}`}
+                className="sm-ytf-compact-link"
+                to={`${scopedDataRoute}&focus=latest_metrics`}
+              >
+                <span>{record.metric_name}</span>
+                <strong>
+                  {record.metric_value ?? 'value'} {record.unit ?? ''}
+                </strong>
               </Link>
             ))}
+            {!recentKpiValues.length && !operatingRows.length ? (
+              <Link className="sm-ytf-compact-link" to={scopedDataRoute}>
+                <span>Plant values</span>
+                <strong>{metrics.plantNumbers > 0 ? 'Open data' : 'Needs entry'}</strong>
+                <small>{metrics.plantNumbers > 0 ? 'Open scoped operating values.' : 'Add today values from floor work.'}</small>
+              </Link>
+            ) : null}
+          </div>
+
+          <div className="sm-ytf-compact-list">
+            {visibleOperatingRows.map((row, index) => (
+              <Link
+                key={`${row.lane ?? 'lane'}-${row.metric_name ?? index}`}
+                className="sm-ytf-compact-link"
+                to={scopedDataRoute}
+              >
+                <span>{ytfOperatingMetricTitle(row)}</span>
+                <strong>{ytfOperatingMetricValue(row)}</strong>
+                <small>{ytfOperatingMetricContext(row)}</small>
+                <small>{ytfOperatingMetricSource(row)}</small>
+              </Link>
+            ))}
+            {!operatingRows.length
+              ? operatingLanes.map((lane) => (
+                  <Link key={lane.id ?? lane.label} className="sm-ytf-compact-link" to={scopedDataRoute}>
+                    <span>{lane.label ?? lane.id ?? 'Data lane'}</span>
+                    <strong>{lane.count ?? 0}</strong>
+                  </Link>
+                ))
+              : null}
           </div>
         </article>
       </section>
+
+      <section className="sm-ytf-panel">
+        <div className="sm-ytf-section-head">
+          <div>
+            <span className="sm-eyebrow">Collaboration</span>
+            <h2>Team focus.</h2>
+            <p>Use this to see which section needs help, a board update, or follow-up.</p>
+          </div>
+          <Link className="sm-button" to="/app/action-board">
+            Board
+          </Link>
+        </div>
+        <div className="sm-ytf-metric-strip sm-ytf-tight-strip">
+          {(teamFocusRows.length ? teamFocusRows : [{ team: 'Plant team', count: 0, high: 0, sample: null }]).map((row) => (
+            <Link key={row.team} to="/app/action-board">
+              <span>{row.team}</span>
+              <strong>{row.count}</strong>
+              <small>{row.high} high / {row.sample ? cleanTaskTitle(row.sample) : 'no open work loaded'}</small>
+            </Link>
+          ))}
+        </div>
+      </section>
+
+      <section className="sm-ytf-action-grid" aria-label="Plant manager actions">
+        <Link to="/app/daily-entry">
+          <span>Entry</span>
+          <strong>Record one issue</strong>
+          <small>Manager entry, board photo, and next action.</small>
+        </Link>
+        <Link to="/app/action-board">
+          <span>Work</span>
+          <strong>Close open work</strong>
+          <small>Team board, owner, due date, follow-up.</small>
+        </Link>
+        <Link to={scopedDataRoute}>
+          <span>Data</span>
+          <strong>See plant numbers</strong>
+          <small>Production, quality, stock, and supplier numbers.</small>
+        </Link>
+        <Link to="/app/dqms">
+          <span>Quality</span>
+          <strong>Open quality</strong>
+          <small>Defects, 5W1H, evidence, and closeout.</small>
+        </Link>
+      </section>
+
+      <details className="sm-ytf-panel sm-ytf-details-panel">
+        <summary>More data</summary>
+        <div className="sm-ytf-metric-strip sm-ytf-tight-strip">
+          <article>
+            <span>Open work</span>
+            <strong>{metrics.openActions}</strong>
+            <small>{metrics.highActions} high</small>
+          </article>
+          <article>
+            <span>5W1H records</span>
+            <strong>{wcmIncidents.length}</strong>
+            <small>latest 5W1H and abnormal entries</small>
+          </article>
+          <article>
+            <span>Evidence</span>
+            <strong>{metrics.proofReady}</strong>
+            <small>saved numbers plus work items</small>
+          </article>
+          <article>
+            <span>Daily close</span>
+            <strong>{needsDailyCloseInput ? 'Input needed' : 'Ready'}</strong>
+            <small>latest close status</small>
+          </article>
+        </div>
+      </details>
     </div>
   )
 }

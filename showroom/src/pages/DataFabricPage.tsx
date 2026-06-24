@@ -1,1470 +1,734 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 
-import { PageIntro } from '../components/PageIntro'
 import {
-  loadDataFabricDataset,
   getSeedDataFabricDataset,
+  loadDataFabricDataset,
   type DataFabricDataset,
-  type DataFabricHealthStatus,
 } from '../lib/dataFabricApi'
+import { canAccessPortalRoute } from '../lib/portalRouteAccess'
+import { resolveRoleDataView } from '../lib/roleDataVisibilityModel'
 import {
-  YANGON_TYRE_DATABASE_LAYERS,
-  YANGON_TYRE_DECISION_LENSES,
-  YANGON_TYRE_RUNTIME_GUIDE_STEPS,
-  YANGON_TYRE_TOOL_RECOMMENDATIONS,
-} from '../lib/yangonTyreDataRuntimeGuide'
+  getCapabilityProfileForRole,
+  getWorkspaceSession,
+  getYtfBotPipeline,
+  getYtfGmailStatus,
+  getYtfPipelineStats,
+  loadCachedWorkspaceSession,
+  runYtfDataManager,
+  sessionHasCapability,
+  type WorkspaceCapability,
+  type YtfBotPipelineResult,
+  type YtfGmailStatusResult,
+  type YtfPipelineStatsResult,
+} from '../lib/workspaceApi'
 import {
-  buildYangonTyreAnalyticsMart,
-  getYangonTyreAnalyticsMartView,
-  type YangonTyreAnalyticsLens,
-} from '../lib/yangonTyreAnalyticsMart'
-import { YANGON_TYRE_DATA_PROFILE } from '../lib/yangonTyreDataProfile'
-import { getTenantConfig } from '../lib/tenantConfig'
-import {
-  YANGON_TYRE_DATA_FABRIC_DIALECTIC,
-  type DataFabricStatus,
-} from '../lib/yangonTyreDataFabricModel'
+  getSeedYtfRootWarehouseDataset,
+  loadYtfRootWarehouseDataset,
+  type YtfRootWarehouseDataset,
+} from '../lib/ytfRootWarehouseApi'
+import { buildYtfDailyCloseItems, buildYtfOperatingInsights } from '../lib/ytfOperatingInsights'
 
-function toneForStatus(status: DataFabricStatus) {
-  if (status === 'live') {
-    return 'text-emerald-300'
-  }
-  if (status === 'mapped') {
-    return 'text-sky-300'
-  }
-  return 'text-amber-300'
+type SessionState = Awaited<ReturnType<typeof getWorkspaceSession>>['session']
+
+const DATA_MANAGER_CAPABILITIES: WorkspaceCapability[] = [
+  'operations.view',
+  'dqms.view',
+  'director.view',
+  'tenant_admin.view',
+  'platform_admin.view',
+]
+
+const DATA_EXPORT_CAPABILITIES: WorkspaceCapability[] = [
+  'director.view',
+  'connector_admin.view',
+  'knowledge_admin.view',
+  'tenant_admin.view',
+  'platform_admin.view',
+]
+
+const TECHNICAL_SOURCE_CAPABILITIES: WorkspaceCapability[] = [
+  'connector_admin.view',
+  'knowledge_admin.view',
+  'tenant_admin.view',
+  'platform_admin.view',
+]
+
+function hasAnyCapability(session: SessionState | null | undefined, capabilities: WorkspaceCapability[]) {
+  return capabilities.some((capability) => sessionHasCapability(session, capability))
 }
 
-function toneForHealthStatus(status: DataFabricHealthStatus) {
-  if (status === 'Healthy') {
-    return 'text-emerald-300'
-  }
-  if (status === 'Warning') {
-    return 'text-amber-300'
-  }
-  if (status === 'Degraded') {
-    return 'text-rose-300'
-  }
-  return 'text-slate-300'
+function formatDateTime(value?: string | null) {
+  if (!value) return 'Not synced yet'
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return value
+  return parsed.toLocaleString()
 }
 
-function toneForHandoffStatus(status: string) {
-  if (status === 'Active') {
-    return 'text-emerald-300'
-  }
-  if (status === 'Needs review') {
-    return 'text-amber-300'
-  }
-  return 'text-sky-300'
+function compactNumber(value?: number | string | null) {
+  if (typeof value === 'number') return new Intl.NumberFormat().format(value)
+  const normalized = String(value ?? '').trim()
+  return normalized || '0'
 }
 
-function toneForFeatureStatus(status: 'ready' | 'watch' | 'needs-writeback') {
-  if (status === 'ready') {
-    return 'text-emerald-300'
-  }
-  if (status === 'watch') {
-    return 'text-amber-300'
-  }
-  return 'text-rose-300'
+function statusText(value?: string | null) {
+  return String(value || 'watch').replace(/_/g, ' ')
 }
 
-function toneForToolPhase(phase: 'now' | 'next' | 'scale') {
-  if (phase === 'now') {
-    return 'text-emerald-300'
-  }
-  if (phase === 'next') {
-    return 'text-sky-300'
-  }
-  return 'text-amber-300'
+function compact(value?: string | null, max = 104) {
+  const trimmed = String(value || '').trim()
+  return trimmed.length > max ? `${trimmed.slice(0, max - 3).trim()}...` : trimmed
 }
 
-function formatSignalAt(value: string | null) {
-  if (!value) {
-    return 'No live signal yet'
-  }
-  return new Date(value).toLocaleString()
-}
-
-function formatSignalAge(value: string | null) {
-  if (!value) {
-    return 'No live signal'
-  }
-  const deltaMs = Date.now() - new Date(value).getTime()
-  if (!Number.isFinite(deltaMs) || deltaMs < 0) {
-    return 'Just updated'
-  }
-  const minutes = Math.max(1, Math.round(deltaMs / 60000))
-  if (minutes < 90) {
-    return `${minutes}m ago`
-  }
-  const hours = Math.max(1, Math.round(minutes / 60))
-  if (hours < 48) {
-    return `${hours}h ago`
-  }
-  const days = Math.max(1, Math.round(hours / 24))
-  return `${days}d ago`
+function daysSince(value?: string | null) {
+  if (!value) return null
+  const parsed = new Date(value).getTime()
+  if (Number.isNaN(parsed)) return null
+  return Math.max(0, Math.floor((Date.now() - parsed) / 86_400_000))
 }
 
 export function DataFabricPage() {
-  const tenant = getTenantConfig()
   const [dataset, setDataset] = useState<DataFabricDataset>(() => getSeedDataFabricDataset())
-  const [selectedAnalyticsLens, setSelectedAnalyticsLens] = useState<YangonTyreAnalyticsLens>('all')
+  const [warehouse, setWarehouse] = useState<YtfRootWarehouseDataset>(() => getSeedYtfRootWarehouseDataset())
+  const [loading, setLoading] = useState(true)
+  const [busy, setBusy] = useState(false)
+  const [message, setMessage] = useState('')
+  const [error, setError] = useState('')
+  const [pipelineStats, setPipelineStats] = useState<YtfPipelineStatsResult | null>(null)
+  const [gmailStatus, setGmailStatus] = useState<YtfGmailStatusResult | null>(null)
+  const [botStatus, setBotStatus] = useState<YtfBotPipelineResult | null>(null)
+  const [session, setSession] = useState<SessionState | null>(() => loadCachedWorkspaceSession()?.session ?? null)
+
+  async function load() {
+    setError('')
+    const [nextSessionPayload, nextDataset, nextWarehouse, nextPipelineStats, nextGmailStatus, nextBotStatus] = await Promise.all([
+      getWorkspaceSession().catch(() => loadCachedWorkspaceSession()),
+      loadDataFabricDataset().catch(() => getSeedDataFabricDataset()),
+      loadYtfRootWarehouseDataset().catch(() => getSeedYtfRootWarehouseDataset()),
+      getYtfPipelineStats().catch(() => null),
+      getYtfGmailStatus().catch(() => null),
+      getYtfBotPipeline().catch(() => null),
+    ])
+    setSession(nextSessionPayload?.session ?? null)
+    setDataset(nextDataset)
+    setWarehouse(nextWarehouse)
+    setPipelineStats(nextPipelineStats)
+    setGmailStatus(nextGmailStatus)
+    setBotStatus(nextBotStatus)
+  }
 
   useEffect(() => {
     let cancelled = false
 
-    async function load() {
-      const nextDataset = await loadDataFabricDataset()
-      if (!cancelled) {
-        setDataset(nextDataset)
+    async function start() {
+      try {
+        await load()
+      } catch {
+        if (!cancelled) setError('Data fabric could not refresh on this host.')
+      } finally {
+        if (!cancelled) setLoading(false)
       }
     }
 
-    void load()
+    void start()
     return () => {
       cancelled = true
     }
   }, [])
 
-  const summary = dataset.summary
-  const sourceRegistry = dataset.sourceRegistry
-  const connectorSignals = dataset.connectorSignals
-  const sourceEvents = dataset.sourceEvents
-  const learningDatabase = dataset.learningDatabase
-  const knowledgeGraphDomains = dataset.knowledgeGraphDomains
-  const changeLineage = dataset.changeLineage
-  const managerPrograms = dataset.managerPrograms
-  const agentHandoffs = dataset.agentHandoffs
-  const pipelineStages = dataset.pipelineStages
-  const topicPipelines = dataset.topicPipelines
-  const featureMarts = dataset.featureMarts
-  const roleStories = dataset.roleStories
-  const copilots = dataset.copilots
-  const writebackLanes = dataset.writebackLanes
-  const rankedSourceRegistry = useMemo(
+  const sourceRegistry = useMemo(
     () =>
-      [...sourceRegistry].sort((left, right) => {
-        const rightTime = right.lastSignalAt ? new Date(right.lastSignalAt).getTime() : 0
-        const leftTime = left.lastSignalAt ? new Date(left.lastSignalAt).getTime() : 0
-        if (rightTime !== leftTime) {
+      [...dataset.sourceRegistry]
+        .sort((left, right) => {
+          const rightTime = right.lastSignalAt ? new Date(right.lastSignalAt).getTime() : 0
+          const leftTime = left.lastSignalAt ? new Date(left.lastSignalAt).getTime() : 0
+          return rightTime - leftTime || right.evidenceCount - left.evidenceCount
+        })
+        .slice(0, 6),
+    [dataset.sourceRegistry],
+  )
+
+  const connectorAttention = useMemo(
+    () => dataset.connectorSignals.filter((signal) => signal.status !== 'Healthy').slice(0, 5),
+    [dataset.connectorSignals],
+  )
+
+  const liveSourceCount = dataset.sourceRegistry.filter((source) => source.status === 'live').length
+  const connectorGapCount = dataset.connectorSignals.filter((signal) => signal.status !== 'Healthy').length
+  const changeItems = warehouse.changeWatch.slice(0, 5)
+  const kpiCandidates = warehouse.kpiCandidates.slice(0, 5)
+  const latestDriveFolders = useMemo(
+    () =>
+      [...warehouse.recentLanes, ...warehouse.lanes]
+        .filter((lane, index, lanes) => lane.isFolder && lanes.findIndex((candidate) => candidate.id === lane.id) === index)
+        .sort((left, right) => {
+          const rightTime = new Date(right.lastActivityAt || right.modifiedTime || right.createdTime || 0).getTime()
+          const leftTime = new Date(left.lastActivityAt || left.modifiedTime || left.createdTime || 0).getTime()
           return rightTime - leftTime
-        }
-        return right.evidenceCount - left.evidenceCount
+        })
+        .slice(0, 3),
+    [warehouse.lanes, warehouse.recentLanes],
+  )
+  const workbookMetricCount = pipelineStats?.workbooks?.metric_candidate_count ?? warehouse.kpiCandidates.length
+  const workbookSelectedCount = pipelineStats?.workbooks?.selected_count ?? warehouse.summary.workbookCount
+  const gmailReadyCount = gmailStatus?.summary?.ready_count ?? pipelineStats?.communications?.gmail_ready_count ?? 0
+  const gmailSourceCount = gmailStatus?.summary?.source_count ?? pipelineStats?.communications?.gmail_source_count ?? 0
+  const botReadyCount = botStatus?.summary?.ready_count ?? pipelineStats?.communications?.bot_ready_count ?? 0
+  const botSourceCount = botStatus?.summary?.bot_source_count ?? pipelineStats?.communications?.bot_source_count ?? 0
+  const lastRefreshAt = pipelineStats?.refresh_loop?.latest_at || warehouse.lastSyncedAt || dataset.updatedAt
+  const refreshStatus = pipelineStats?.refresh_loop?.status || 'watch'
+  const dailyCloseItems = useMemo(() => buildYtfDailyCloseItems('plant'), [])
+  const latestSignalDays = daysSince(pipelineStats?.source_records?.latest_modified_time || warehouse.lastSyncedAt || dataset.updatedAt)
+  const staleSourceCount = dataset.sourceRegistry.filter((source) => {
+    const age = daysSince(source.lastSignalAt)
+    return age === null || age > 30
+  }).length
+  const ragCandidateCount = pipelineStats?.source_records?.rag_candidate_count ?? warehouse.knowledgeRuntime.summary.chunkCount
+  const changeEventCount = pipelineStats?.source_changes?.recent_event_count ?? warehouse.changeWatch.length
+  const shortcutCount = warehouse.summary.shortcutCount
+  const cleanupCount = warehouse.summary.cleanupLaneCount
+  const plantCounts = pipelineStats?.source_records?.by_plant ?? {}
+  const plantARecordCount = plantCounts['Plant A'] ?? plantCounts['plant_a'] ?? plantCounts.plant_a ?? 0
+  const plantBRecordCount = plantCounts['Plant B'] ?? plantCounts['plant_b'] ?? plantCounts.plant_b ?? 0
+  const databaseLabel = pipelineStats?.database?.external
+    ? 'Cloud history'
+    : pipelineStats?.database?.configured
+      ? 'Local history'
+      : 'Storage needed'
+  const ownerReviewCards = [
+    {
+      title: 'Review file values',
+      value: compactNumber(kpiCandidates.length || workbookMetricCount),
+      note: 'Use only after owner review.',
+      route: '/app/data-quality',
+    },
+    {
+      title: 'Freshness gaps',
+      value: latestSignalDays === null ? `${staleSourceCount} stale` : `${latestSignalDays}d`,
+      note: `${staleSourceCount} sources need attention.`,
+      route: '/app/change-monitor',
+    },
+    {
+      title: 'Private comms intake',
+      value: `${gmailReadyCount + botReadyCount}/${(gmailSourceCount || 0) + (botSourceCount || 0) || 8}`,
+      note: 'Admin-only source processing.',
+      route: '/app/email',
+      adminOnly: true,
+    },
+    {
+      title: 'Database',
+      value: databaseLabel,
+      note: `${compactNumber(warehouse.summary.canonicalRecordCount)} canonical records.`,
+      route: '/app/data-fabric',
+    },
+  ]
+  const release25Items = [
+    { no: 4, title: 'File freshness', value: staleSourceCount ? `${staleSourceCount} stale` : 'Clear', route: '/app/change-monitor' },
+    { no: 5, title: 'Changed-file monitor', value: `${compactNumber(changeEventCount)} recent`, route: '/app/change-monitor' },
+    { no: 6, title: 'Workbook value mining', value: `${compactNumber(workbookMetricCount)}/${compactNumber(workbookSelectedCount)}`, route: '/app/data-quality' },
+    { no: 7, title: 'Team confirm/fix', value: `${compactNumber(dataset.summary.pendingApprovalCount)} pending`, route: '/app/action-board' },
+    { no: 8, title: 'Exportable snapshot', value: 'Ready', route: '/app/data-fabric' },
+    { no: 9, title: 'Plant A baseline', value: compactNumber(plantARecordCount || warehouse.summary.canonicalRecordCount), route: '/app/plant-manager' },
+    { no: 10, title: 'Plant B staging', value: plantBRecordCount ? compactNumber(plantBRecordCount) : 'Mapped', route: '/app/change-monitor' },
+    { no: 11, title: 'Shortcut cleanup', value: `${compactNumber(shortcutCount)}/${compactNumber(cleanupCount)}`, route: '/app/data-quality' },
+    { no: 12, title: 'Supplier comms intake', value: `${gmailReadyCount}/${gmailSourceCount || 4}`, route: '/app/email' },
+    { no: 13, title: 'Director comms intake', value: gmailStatus?.gmail?.status || 'Watched', route: '/app/email' },
+    { no: 14, title: 'Chat bridge intake', value: `${botReadyCount}/${botSourceCount || 4}`, route: '/app/email' },
+    { no: 15, title: 'Attachment/OCR queue', value: `${compactNumber(ragCandidateCount)} docs`, route: '/app/knowledge' },
+    { no: 16, title: 'RAG evidence packs', value: compactNumber(warehouse.knowledgeRuntime.summary.retrievalPackCount), route: '/app/knowledge' },
+    { no: 17, title: 'Knowledge graph', value: `${compactNumber(warehouse.knowledgeRuntime.summary.graphNodeCount)} nodes`, route: '/app/ai-stack' },
+    { no: 18, title: 'Feature mart', value: `${compactNumber(dataset.learningDatabase.featureSetCount)} sets`, route: '/app/data-quality' },
+    { no: 19, title: 'Anomaly flags', value: `${compactNumber(warehouse.summary.highRiskCount)} high`, route: '/app/action-board' },
+    { no: 20, title: 'Daily close capture', value: `${dailyCloseItems.length} forms`, route: '/app/daily-entry' },
+    { no: 21, title: 'Role workspaces', value: `${dataset.managerPrograms.length} roles`, route: '/app/portal' },
+    { no: 22, title: 'ISO traceability', value: `${compactNumber(dataset.learningDatabase.lineageEventCount)} events`, route: '/app/invisible-iso' },
+    { no: 23, title: 'Action routing', value: `${compactNumber(dataset.summary.openTaskCount)} open`, route: '/app/action-board' },
+    { no: 24, title: 'Mobile-first entry', value: `${warehouse.knowledgeRuntime.mobileSurfaces.length} surfaces`, route: '/app/daily-entry' },
+    { no: 25, title: 'Owner brief', value: 'Live', route: '/app/owner-brief' },
+  ]
+  const operatingInsights = useMemo(
+    () => buildYtfOperatingInsights(dataset, warehouse, { audience: 'plant', limit: 6 }),
+    [dataset, warehouse],
+  )
+  const sourceRecordCount = pipelineStats?.source_records?.count ?? warehouse.summary.canonicalRecordCount
+  const sourceChangeEventCount = pipelineStats?.source_changes?.event_count ?? warehouse.changeWatch.length
+  const sourceChangeReviewCount =
+    pipelineStats?.source_changes?.promoted_task_count ??
+    pipelineStats?.source_changes?.task_promotion?.review_task_count ??
+    0
+  const knowledgeChunkCount = pipelineStats?.knowledge?.chunk_count ?? warehouse.knowledgeRuntime.summary.chunkCount
+  const capabilityProfile = useMemo(() => getCapabilityProfileForRole(session?.role), [session?.role])
+  const roleDataView = useMemo(
+    () =>
+      resolveRoleDataView(session?.role, capabilityProfile.capabilities, {
+        sourceRecordCount,
+        sourceChangeCount: sourceChangeEventCount,
+        reviewTaskCount: sourceChangeReviewCount,
+        latestMetricCount: workbookMetricCount,
+        officialKpiCount: workbookSelectedCount,
+        knowledgeChunkCount,
+        liveSourceCount,
+        connectorGapCount,
+        openTaskCount: dataset.summary.openTaskCount,
+        pendingApprovalCount: dataset.summary.pendingApprovalCount,
       }),
-    [sourceRegistry],
+    [
+      capabilityProfile.capabilities,
+      connectorGapCount,
+      dataset.summary.openTaskCount,
+      dataset.summary.pendingApprovalCount,
+      knowledgeChunkCount,
+      session?.role,
+      sourceChangeEventCount,
+      sourceChangeReviewCount,
+      sourceRecordCount,
+      workbookMetricCount,
+      workbookSelectedCount,
+      liveSourceCount,
+    ],
   )
-  const rankedConnectorSignals = useMemo(() => {
-    const priority: Record<DataFabricHealthStatus, number> = {
-      Degraded: 0,
-      'Needs wiring': 1,
-      Warning: 2,
-      Healthy: 3,
+  const canRunDataManager = hasAnyCapability(session, DATA_MANAGER_CAPABILITIES)
+  const canExportSourceSnapshot = hasAnyCapability(session, DATA_EXPORT_CAPABILITIES)
+  const canSeeTechnicalSources = hasAnyCapability(session, TECHNICAL_SOURCE_CAPABILITIES)
+  const roleSafeOwnerReviewCards = ownerReviewCards.filter((card) => {
+    if (card.adminOnly && !canSeeTechnicalSources) return false
+    return canAccessPortalRoute(card.route, session)
+  })
+  const roleSafeReleaseItems = canSeeTechnicalSources ? release25Items.filter((item) => canAccessPortalRoute(item.route, session)) : []
+  const roleSafeInsights = operatingInsights.filter((insight) => canAccessPortalRoute(insight.route, session))
+
+  function handleExportSnapshot() {
+    if (!canExportSourceSnapshot) {
+      setMessage('Export is limited to director, knowledge, connector, and admin roles.')
+      return
     }
-    return [...connectorSignals].sort((left, right) => {
-      const priorityDelta = priority[left.status] - priority[right.status]
-      if (priorityDelta !== 0) {
-        return priorityDelta
-      }
-      return left.name.localeCompare(right.name)
-    })
-  }, [connectorSignals])
-  const visibleSourceEvents = useMemo(() => sourceEvents.slice(0, 8), [sourceEvents])
-  const visibleChangeLineage = useMemo(() => changeLineage.slice(0, 8), [changeLineage])
-  const aggregateCounts = useMemo(
-    () => ({
-      sourcePackCount: topicPipelines.reduce((maxCount, pipeline) => Math.max(maxCount, pipeline.sourcePacks.length), 0),
-      connectorTrackCount: topicPipelines.reduce((maxCount, pipeline) => Math.max(maxCount, pipeline.connectorTracks.length), 0),
-      sourceRegistryCount: sourceRegistry.length,
-      liveSourceCount: sourceRegistry.filter((item) => item.status === 'live').length,
-      healthyConnectorCount: connectorSignals.filter((signal) => signal.status === 'Healthy').length,
-      attentionConnectorCount: connectorSignals.filter((signal) => signal.status !== 'Healthy').length,
-      sourceEventCount: visibleSourceEvents.length,
-      graphDomainCount: knowledgeGraphDomains.length,
-      managerProgramCount: managerPrograms.length,
-      handoffCount: agentHandoffs.length,
-    }),
-    [agentHandoffs.length, connectorSignals, knowledgeGraphDomains.length, managerPrograms.length, sourceRegistry, topicPipelines, visibleSourceEvents.length],
-  )
-  const analyticsMart = useMemo(() => buildYangonTyreAnalyticsMart(dataset), [dataset])
-  const analyticsView = useMemo(
-    () => getYangonTyreAnalyticsMartView(analyticsMart, selectedAnalyticsLens),
-    [analyticsMart, selectedAnalyticsLens],
-  )
+    const payload = {
+      generated_at: new Date().toISOString(),
+      role_view: roleDataView,
+      source: dataset.source,
+      updated_at: dataset.updatedAt,
+      warehouse: {
+        mode: warehouse.mode,
+        last_synced_at: warehouse.lastSyncedAt,
+        summary: warehouse.summary,
+      },
+      pipeline: pipelineStats,
+      gmail: gmailStatus?.summary,
+      bots: botStatus?.summary,
+      owner_review: ownerReviewCards,
+      build_map_4_to_25: release25Items,
+    }
+    const blob = new Blob([`${JSON.stringify(payload, null, 2)}\n`], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = `ytf-data-snapshot-${new Date().toISOString().slice(0, 10)}.json`
+    document.body.appendChild(anchor)
+    anchor.click()
+    anchor.remove()
+    URL.revokeObjectURL(url)
+    setMessage('Snapshot exported from the current live view.')
+  }
 
-  if (tenant.key !== 'ytf-plant-a') {
-    return (
-      <div className="space-y-8">
-        <PageIntro
-          eyebrow="Data fabric"
-          title="Data Fabric is currently configured for the Yangon Tyre tenant."
-          description="This app is the cross-functional pipeline layer that watches source systems, builds topic marts, and turns them into role-specific insight and writeback."
-        />
-
-        <section className="grid gap-6 xl:grid-cols-[1fr_1fr]">
-          <article className="sm-surface p-6">
-            <p className="sm-kicker text-[var(--sm-accent)]">What it is</p>
-            <h2 className="mt-3 text-3xl font-bold text-white">A tenant data runtime between connectors and operating desks.</h2>
-            <p className="mt-4 text-sm leading-relaxed text-[var(--sm-muted)]">
-              It unifies Google Drive, Gmail, human entry, feature engineering, AI cleanup, role stories, and structured writeback into one product surface.
-            </p>
-          </article>
-          <article className="sm-surface-deep p-6">
-            <p className="sm-kicker text-[var(--sm-accent-alt)]">Next control rooms</p>
-            <div className="mt-6 flex flex-wrap gap-3">
-              <Link className="sm-button-primary" to="/app/connectors">
-                Open connectors
-              </Link>
-              <Link className="sm-button-secondary" to="/app/insights">
-                Open insights
-              </Link>
-            </div>
-          </article>
-        </section>
-      </div>
-    )
+  async function handleRunManager() {
+    if (!canRunDataManager) {
+      setMessage('Refresh is limited to operations, quality, director, and admin roles.')
+      return
+    }
+    setBusy(true)
+    setMessage('')
+    setError('')
+    try {
+      const result = await runYtfDataManager()
+      await load()
+      setMessage(
+        `Data manager saved ${result.saved?.metrics ?? 0} metrics and ${result.saved?.actions ?? 0} actions.`,
+      )
+    } catch {
+      setError('Could not refresh data. Check saved history and cloud job access.')
+    } finally {
+      setBusy(false)
+    }
   }
 
   return (
-    <div className="space-y-8">
-      <PageIntro
-        eyebrow="Data fabric"
-        title="Use every Yangon Tyre data source as one AI-native operating pipeline."
-        description="This is the tenant data runtime for ytf.supermega.dev: full-folder Google Drive intake, internal and supplier email capture, topic-aware extraction, feature marts, industrial-engineering analysis, role-based storytelling, and structured team writeback."
-      />
-
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
-        <article className="sm-metric-card">
-          <p className="sm-kicker text-[var(--sm-accent)]">Registered sources</p>
-          <p className="mt-3 text-3xl font-bold text-white">{aggregateCounts.sourceRegistryCount}</p>
-          <p className="mt-2 text-sm text-[var(--sm-muted)]">
-            {aggregateCounts.sourcePackCount}+ source packs are grouped into governed tenant source surfaces.
-          </p>
-        </article>
-        <article className="sm-metric-card">
-          <p className="sm-kicker text-[var(--sm-accent-alt)]">Live sources</p>
-          <p className="mt-3 text-3xl font-bold text-white">{aggregateCounts.liveSourceCount}</p>
-          <p className="mt-2 text-sm text-[var(--sm-muted)]">
-            Sources with active evidence and a recent signal behind the Data Fabric runtime.
-          </p>
-        </article>
-        <article className="sm-metric-card">
-          <p className="sm-kicker text-[var(--sm-accent)]">Healthy connectors</p>
-          <p className="mt-3 text-3xl font-bold text-white">{aggregateCounts.healthyConnectorCount}</p>
-          <p className="mt-2 text-sm text-[var(--sm-muted)]">{aggregateCounts.connectorTrackCount}+ connector tracks exist; this shows the ones currently behaving like live lanes.</p>
-        </article>
-        <article className="sm-metric-card">
-          <p className="sm-kicker text-[var(--sm-accent-alt)]">Need attention</p>
-          <p className="mt-3 text-3xl font-bold text-white">{aggregateCounts.attentionConnectorCount}</p>
-          <p className="mt-2 text-sm text-[var(--sm-muted)]">Connector signals that are warning, degraded, or still unwired.</p>
-        </article>
-        <article className="sm-metric-card">
-          <p className="sm-kicker text-[var(--sm-accent)]">Source events</p>
-          <p className="mt-3 text-3xl font-bold text-white">{aggregateCounts.sourceEventCount}</p>
-          <p className="mt-2 text-sm text-[var(--sm-muted)]">Recent evidence, human entry, and agent-runtime changes are visible as one event timeline.</p>
-        </article>
-        <article className="sm-metric-card">
-          <p className="sm-kicker text-[var(--sm-accent-alt)]">Latest signal age</p>
-          <p className="mt-3 text-3xl font-bold text-white">{formatSignalAge(dataset.updatedAt)}</p>
-          <p className="mt-2 text-sm text-[var(--sm-muted)]">How recently the overall data runtime observed a source, writeback, or agent event.</p>
-        </article>
+    <div className="sm-ytf-simple-page">
+      <section className="sm-ytf-hero-row">
+        <div>
+          <p className="sm-kicker">Data</p>
+          <h1>Insights, not folders.</h1>
+          <p>Latest file and workbook signals, turned into useful values, work, and evidence.</p>
+        </div>
+        <div className="sm-ytf-status-stack">
+          <span>{loading ? 'Loading' : `Updated ${formatDateTime(dataset.updatedAt || warehouse.lastSyncedAt)}`}</span>
+          <span>{dataset.source === 'live' && warehouse.mode === 'live' ? 'Live data' : 'Baseline + live checks'}</span>
+          <span>{capabilityProfile.label}</span>
+        </div>
       </section>
 
-      <section className="sm-chip text-white">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+      <section className="sm-ytf-action-grid" aria-label="Data actions">
+        <button className="sm-ytf-action-tile is-primary" type="button" onClick={handleRunManager} disabled={busy || !canRunDataManager}>
+          <span>
+            <strong>{busy ? 'Refreshing insights' : canRunDataManager ? 'Refresh insights' : 'Review-only'}</strong>
+            <small>{canRunDataManager ? 'Build file values and work items.' : 'Your role can inspect the safe view.'}</small>
+          </span>
+          <span className="sm-ytf-action-arrow">Run</span>
+        </button>
+        <Link className="sm-ytf-action-tile" to={roleDataView.nextBestAction.route}>
+          <span>
+            <strong>{roleDataView.nextBestAction.label}</strong>
+            <small>{roleDataView.nextBestAction.detail}</small>
+          </span>
+          <span className="sm-ytf-action-arrow">Open</span>
+        </Link>
+        <Link className="sm-ytf-action-tile" to="/app/action-board">
+          <span>
+            <strong>Open actions</strong>
+            <small>Route owners, due dates, and closeout.</small>
+          </span>
+          <span className="sm-ytf-action-arrow">Open</span>
+        </Link>
+        <Link className="sm-ytf-action-tile" to="/app/daily-entry">
+          <span>
+            <strong>Daily close</strong>
+            <small>Enter the missing fact once.</small>
+          </span>
+          <span className="sm-ytf-action-arrow">Open</span>
+        </Link>
+        <Link className="sm-ytf-action-tile" to="/app/plant-manager">
+          <span>
+            <strong>Plant review</strong>
+            <small>Confirm or fix the output.</small>
+          </span>
+          <span className="sm-ytf-action-arrow">Open</span>
+        </Link>
+      </section>
+
+      {(message || error) && <p className="sm-ytf-alert">{message || error}</p>}
+
+      <section className="sm-ytf-panel">
+        <div className="sm-ytf-section-head">
           <div>
-            <p className="font-semibold">{dataset.source === 'live' ? 'Live workspace-backed data fabric connected.' : 'Using seeded data-fabric model.'}</p>
-            <p className="mt-2 text-sm text-[var(--sm-muted)]">
-              {dataset.source === 'live'
-                ? `Updated: ${dataset.updatedAt ? new Date(dataset.updatedAt).toLocaleString() : 'Live snapshot'}.
-              Leads ${summary.leadCount}, receiving rows ${summary.receivingCount}, holds ${summary.receivingHoldCount}, quality incidents ${summary.qualityIncidentCount},
-              supplier risks ${summary.supplierRiskCount}, approvals ${summary.pendingApprovalCount}, open tasks ${summary.openTaskCount}, healthy connectors ${aggregateCounts.healthyConnectorCount}, recent source events ${aggregateCounts.sourceEventCount}.`
-                : `Latest observed source signal: ${dataset.updatedAt ? new Date(dataset.updatedAt).toLocaleString() : 'Seed snapshot'}.
-              Registered sources ${aggregateCounts.sourceRegistryCount}, healthy connectors ${aggregateCounts.healthyConnectorCount}, staged source events ${aggregateCounts.sourceEventCount},
-              lineage events ${learningDatabase.lineageEventCount}, and extracted feature sets ${learningDatabase.featureSetCount}.`}
-            </p>
+            <p className="sm-kicker">Your role-safe data view</p>
+            <h2>{roleDataView.title}</h2>
+            <p>{roleDataView.subtitle}</p>
           </div>
-          <div className="flex flex-wrap gap-3">
-            <Link className="sm-button-primary" to="/app/connectors">
-              Connector control
-            </Link>
-            <Link className="sm-button-secondary" to="/app/insights">
-              Operating intelligence
-            </Link>
-            <Link className="sm-button-secondary" to="/app/adoption-command">
-              Adoption command
-            </Link>
-          </div>
+          <Link className="sm-ytf-action-arrow" to={roleDataView.defaultRoute}>
+            Open default desk
+          </Link>
         </div>
-      </section>
-
-      <section className="space-y-6">
-        <article className="sm-surface-deep p-6">
-          <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-            <div className="max-w-4xl">
-              <p className="sm-kicker text-[var(--sm-accent-alt)]">Analytical warehouse</p>
-              <h2 className="mt-3 text-3xl font-bold text-white">{analyticsMart.headline}</h2>
-              <p className="mt-4 text-sm leading-relaxed text-[var(--sm-muted)]">{analyticsMart.databaseNote}</p>
-            </div>
-            <div className="sm-terminal w-full max-w-xl p-5">
-              <p className="sm-kicker text-[var(--sm-accent)]">Selected lens</p>
-              <p className="mt-3 text-lg font-semibold text-white">{analyticsView.selectedLens.label}</p>
-              <p className="mt-2 text-sm leading-relaxed text-[var(--sm-muted)]">{analyticsView.selectedLens.description}</p>
-              <p className="mt-4 text-sm text-[var(--sm-muted)]">
-                Warehouse freshness: {dataset.updatedAt ? new Date(dataset.updatedAt).toLocaleString() : 'Seed snapshot'}.
-              </p>
-            </div>
-          </div>
-
-          <div className="mt-6 flex flex-wrap gap-3">
-            {analyticsMart.lenses.map((lens) => (
-              <button
-                className={lens.id === selectedAnalyticsLens ? 'sm-button-primary' : 'sm-button-secondary'}
-                key={lens.id}
-                onClick={() => setSelectedAnalyticsLens(lens.id)}
-                type="button"
-              >
-                {lens.label}
-              </button>
-            ))}
-          </div>
-
-          <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-            {analyticsView.kpis.map((metric) => (
-              <article className="sm-proof-card" key={metric.id}>
-                <p className="sm-kicker text-[var(--sm-accent)]">{metric.label}</p>
-                <p className="mt-3 text-3xl font-bold text-white">{metric.value}</p>
-                <p className="mt-2 text-sm text-white/80">{metric.trend}</p>
-                <p className="mt-3 text-sm leading-relaxed text-[var(--sm-muted)]">{metric.detail}</p>
-                <p className="mt-3 text-xs uppercase tracking-[0.28em] text-[var(--sm-muted)]">{metric.formula}</p>
-                <div className="mt-4 flex justify-end">
-                  <Link className="sm-link" to={metric.route}>
-                    Open metric lane
-                  </Link>
-                </div>
-              </article>
-            ))}
-          </div>
-        </article>
-
-        <div className="grid gap-6 xl:grid-cols-[1.02fr_0.98fr]">
-          <article className="sm-surface p-6">
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-              <div>
-                <p className="sm-kicker text-[var(--sm-accent)]">Source behavior map</p>
-                <h2 className="mt-3 text-3xl font-bold text-white">Each folder lane now has a normalized operating behavior.</h2>
-                <p className="mt-3 max-w-3xl text-sm leading-relaxed text-[var(--sm-muted)]">
-                  This is the first database-like cut of the Yangon Tyre source estate: structure, readiness, risk, and the exact metric families each lane should feed.
-                </p>
-              </div>
-              <Link className="sm-link" to="/app/connectors">
-                Open source registry
-              </Link>
-            </div>
-
-            <div className="mt-6 grid gap-4">
-              {analyticsView.sourceBehaviors.map((item) => (
-                <article className="sm-proof-card" key={item.id}>
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <p className="font-semibold text-white">{item.name}</p>
-                      <p className="mt-2 text-sm text-white/80">{item.behavior}</p>
-                    </div>
-                    <Link className="sm-link" to={item.route}>
-                      Open source
-                    </Link>
-                  </div>
-                  <div className="mt-4 grid gap-3 md:grid-cols-2">
-                    <div className="sm-chip text-white">
-                      <p className="sm-kicker text-[var(--sm-accent)]">Structure</p>
-                      <p className="mt-3 text-sm leading-relaxed text-[var(--sm-muted)]">{item.structure}</p>
-                    </div>
-                    <div className="sm-chip text-white">
-                      <p className="sm-kicker text-[var(--sm-accent-alt)]">Readiness</p>
-                      <p className="mt-3 text-sm leading-relaxed text-[var(--sm-muted)]">{item.readiness}</p>
-                    </div>
-                  </div>
-                  <p className="mt-4 text-sm leading-relaxed text-[var(--sm-muted)]">Risk: {item.risk}</p>
-                  <p className="mt-3 text-sm leading-relaxed text-white/80">Next automation: {item.detail}</p>
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    {item.connectedMetrics.map((metric) => (
-                      <span className="sm-status-pill" key={`${item.id}-metric-${metric}`}>
-                        {metric}
-                      </span>
-                    ))}
-                  </div>
-                </article>
-              ))}
-            </div>
-          </article>
-
-          <article className="sm-surface-deep p-6">
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-              <div>
-                <p className="sm-kicker text-[var(--sm-accent-alt)]">Segment board</p>
-                <h2 className="mt-3 text-3xl font-bold text-white">Filter the estate into concentration, quality, and evidence-weight signals.</h2>
-                <p className="mt-3 max-w-3xl text-sm leading-relaxed text-[var(--sm-muted)]">
-                  The same mart can now answer where volume, quality variation, and source attention are clustered.
-                </p>
-              </div>
-              <Link className="sm-link" to="/app/insights">
-                Open insight board
-              </Link>
-            </div>
-
-            <div className="mt-6 grid gap-4">
-              {analyticsView.segments.map((segment) => (
-                <article className="sm-proof-card" key={segment.id}>
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <p className="sm-kicker text-[var(--sm-accent)]">{segment.group}</p>
-                      <p className="mt-2 text-xl font-bold text-white">{segment.name}</p>
-                    </div>
-                    <span className="sm-status-pill">{segment.value}</span>
-                  </div>
-                  {segment.share !== null ? (
-                    <div className="mt-4 h-2 overflow-hidden rounded-full bg-white/10">
-                      <div
-                        className="h-full rounded-full bg-[var(--sm-accent)]"
-                        style={{ width: `${Math.max(8, Math.min(100, segment.share))}%` }}
-                      />
-                    </div>
-                  ) : null}
-                  <p className="mt-4 text-sm leading-relaxed text-[var(--sm-muted)]">{segment.detail}</p>
-                  <div className="mt-4 flex justify-end">
-                    <Link className="sm-link" to={segment.route}>
-                      Open segment
-                    </Link>
-                  </div>
-                </article>
-              ))}
-            </div>
-          </article>
-        </div>
-
-        <div className="grid gap-6 xl:grid-cols-[1.04fr_0.96fr]">
-          <article className="sm-surface p-6">
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-              <div>
-                <p className="sm-kicker text-[var(--sm-accent)]">Feature engineering lab</p>
-                <h2 className="mt-3 text-3xl font-bold text-white">Reusable metrics are now defined as named features, not one-off notes.</h2>
-                <p className="mt-3 max-w-3xl text-sm leading-relaxed text-[var(--sm-muted)]">
-                  Each feature includes a grain, formula, live or staged signal, and the teams that should consume it.
-                </p>
-              </div>
-              <Link className="sm-link" to="/app/workforce">
-                Open AI teams
-              </Link>
-            </div>
-
-            <div className="mt-6 grid gap-4">
-              {analyticsView.engineeredFeatures.map((feature) => (
-                <article className="sm-proof-card" key={feature.id}>
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <p className="font-semibold text-white">{feature.name}</p>
-                      <p className="mt-2 text-sm text-[var(--sm-muted)]">Grain: {feature.grain}</p>
-                    </div>
-                    <span className={`sm-status-pill ${toneForFeatureStatus(feature.status)}`}>{feature.status}</span>
-                  </div>
-                  <div className="mt-4 grid gap-3 md:grid-cols-2">
-                    <div className="sm-chip text-white">
-                      <p className="sm-kicker text-[var(--sm-accent)]">Formula</p>
-                      <p className="mt-3 text-sm leading-relaxed text-[var(--sm-muted)]">{feature.formula}</p>
-                    </div>
-                    <div className="sm-chip text-white">
-                      <p className="sm-kicker text-[var(--sm-accent-alt)]">Signal</p>
-                      <p className="mt-3 text-xl font-bold text-white">{feature.signal}</p>
-                    </div>
-                  </div>
-                  <p className="mt-4 text-sm leading-relaxed text-white/80">{feature.whyItMatters}</p>
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    {feature.consumers.map((consumer) => (
-                      <span className="sm-status-pill" key={`${feature.id}-consumer-${consumer}`}>
-                        {consumer}
-                      </span>
-                    ))}
-                  </div>
-                  <div className="mt-4 flex justify-end">
-                    <Link className="sm-link" to={feature.route}>
-                      Open feature lane
-                    </Link>
-                  </div>
-                </article>
-              ))}
-            </div>
-          </article>
-
-          <article className="sm-surface-deep p-6">
-            <div>
-              <p className="sm-kicker text-[var(--sm-accent-alt)]">Data science watchlists</p>
-              <h2 className="mt-3 text-3xl font-bold text-white">Quality trace and product watchlists are ready for real modeling.</h2>
-              <p className="mt-3 max-w-3xl text-sm leading-relaxed text-[var(--sm-muted)]">
-                These are the first normalized slices for trend monitoring, anomaly flags, and feature-store promotion.
-              </p>
-            </div>
-
-            <div className="mt-6">
-              <div className="flex flex-wrap items-end justify-between gap-3">
-                <div>
-                  <p className="sm-kicker text-[var(--sm-accent)]">Monthly quality trace</p>
-                  <p className="mt-2 text-sm text-[var(--sm-muted)]">Output and B+R now read as one compact monitor instead of buried workbook rows.</p>
-                </div>
-                <Link className="sm-link" to="/app/dqms">
-                  Open quality desk
-                </Link>
-              </div>
-              <div className="mt-4 grid gap-3 md:grid-cols-2">
-                {analyticsView.qualityTrace.length ? (
-                  analyticsView.qualityTrace.slice(0, 6).map((row) => (
-                    <article className="sm-chip text-white" key={row.id}>
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <p className="font-semibold text-white">{row.month}</p>
-                          <p className="mt-2 text-sm text-[var(--sm-muted)]">{row.output} units</p>
-                        </div>
-                        <span className="sm-status-pill">{row.defectRate}</span>
-                      </div>
-                      <p className="mt-3 text-sm text-[var(--sm-muted)]">{row.trend}</p>
-                    </article>
-                  ))
-                ) : (
-                  <article className="sm-chip text-white md:col-span-2">
-                    <p className="font-semibold text-white">This lens is not using the monthly quality trace.</p>
-                    <p className="mt-3 text-sm leading-relaxed text-[var(--sm-muted)]">
-                      Switch to the operations or quality lens to inspect output and B+R behavior from the current profile baseline.
-                    </p>
-                  </article>
-                )}
-              </div>
-            </div>
-
-            <div className="mt-8">
-              <div className="flex flex-wrap items-end justify-between gap-3">
-                <div>
-                  <p className="sm-kicker text-[var(--sm-accent-alt)]">Focus product watchlist</p>
-                  <p className="mt-2 text-sm text-[var(--sm-muted)]">Spec-versus-actual weight behavior and defect rate now sit beside unit volume for fast review.</p>
-                </div>
-                <Link className="sm-link" to="/app/revenue">
-                  Open commercial desk
-                </Link>
-              </div>
-              <div className="mt-4 grid gap-4">
-                {analyticsView.productWatchlist.length ? (
-                  analyticsView.productWatchlist.slice(0, 6).map((product) => (
-                    <article className="sm-proof-card" key={product.id}>
-                      <div className="flex flex-wrap items-start justify-between gap-3">
-                        <div>
-                          <p className="font-semibold text-white">{product.name}</p>
-                          <p className="mt-2 text-sm text-[var(--sm-muted)]">{product.units} units</p>
-                        </div>
-                        <span className="sm-status-pill">{product.defectRate}</span>
-                      </div>
-                      <p className="mt-4 text-sm text-white/80">Weight delta: {product.weightDelta}</p>
-                      <p className="mt-2 text-sm leading-relaxed text-[var(--sm-muted)]">{product.note}</p>
-                    </article>
-                  ))
-                ) : (
-                  <article className="sm-proof-card">
-                    <p className="font-semibold text-white">This lens is not currently showing product-level watch rows.</p>
-                    <p className="mt-3 text-sm leading-relaxed text-[var(--sm-muted)]">
-                      Switch to the commercial or quality lens to inspect spec-versus-actual weight behavior and defect-rate watchlists.
-                    </p>
-                  </article>
-                )}
-              </div>
-            </div>
-          </article>
-        </div>
-      </section>
-
-      <section className="grid gap-6 xl:grid-cols-[0.96fr_1.04fr]">
-        <article className="sm-surface p-6">
-          <div className="flex flex-wrap items-end justify-between gap-3">
-            <div>
-              <p className="sm-kicker text-[var(--sm-accent)]">How to use the database</p>
-              <h2 className="mt-3 text-3xl font-bold text-white">Operate from the mart first, then drop into source evidence only where needed.</h2>
-              <p className="mt-3 max-w-3xl text-sm leading-relaxed text-[var(--sm-muted)]">
-                The point of this database is not to admire folders. It is to move from signal to decision to writeback without rebuilding the same analysis every week.
-              </p>
-            </div>
-            <span className="sm-status-pill">{dataset.source === 'live' ? 'live + seed' : 'seed warehouse slice'}</span>
-          </div>
-          <div className="mt-6 grid gap-4">
-            {YANGON_TYRE_RUNTIME_GUIDE_STEPS.map((step, index) => (
-              <article className="sm-proof-card" key={step.id}>
-                <p className="text-sm font-semibold text-white">Step {index + 1}</p>
-                <p className="mt-2 text-lg font-bold text-white">{step.title}</p>
-                <p className="mt-3 text-sm leading-relaxed text-[var(--sm-muted)]">{step.detail}</p>
-              </article>
-            ))}
-          </div>
-        </article>
-
-        <article className="sm-surface-deep p-6">
-          <div className="flex flex-wrap items-end justify-between gap-3">
-            <div>
-              <p className="sm-kicker text-[var(--sm-accent-alt)]">Database layers</p>
-              <h2 className="mt-3 text-3xl font-bold text-white">This database should become a six-layer operating spine.</h2>
-              <p className="mt-3 max-w-3xl text-sm leading-relaxed text-[var(--sm-muted)]">
-                Start local and embedded, but keep the layer boundaries clear so the same architecture can scale into a real warehouse and graph-backed agent runtime.
-              </p>
-            </div>
-            <Link className="sm-link" to="/app/knowledge">
-              Open knowledge lane
+        <div className="sm-ytf-signal-grid">
+          {roleDataView.kpis.slice(0, 4).map((metric) => (
+            <Link className="sm-ytf-mini-card" key={`${metric.label}-${metric.route}`} to={metric.route}>
+              <span>{metric.label}</span>
+              <strong>{metric.value}</strong>
+              <small>{metric.detail}</small>
             </Link>
-          </div>
-          <div className="mt-6 grid gap-4">
-            {YANGON_TYRE_DATABASE_LAYERS.map((layer) => (
-              <article className="sm-proof-card" key={layer.id}>
-                <p className="font-semibold text-white">{layer.name}</p>
-                <p className="mt-3 text-sm leading-relaxed text-white/80">{layer.purpose}</p>
-                <div className="mt-4 grid gap-3 md:grid-cols-2">
-                  <div className="sm-chip text-white">
-                    <p className="sm-kicker text-[var(--sm-accent)]">Grain</p>
-                    <p className="mt-3 text-sm leading-relaxed text-[var(--sm-muted)]">{layer.grain}</p>
-                  </div>
-                  <div className="sm-chip text-white">
-                    <p className="sm-kicker text-[var(--sm-accent-alt)]">Storage</p>
-                    <p className="mt-3 text-sm leading-relaxed text-[var(--sm-muted)]">{layer.storage}</p>
-                  </div>
-                </div>
-                <div className="mt-4 flex flex-wrap gap-2">
-                  {layer.outputs.map((output) => (
-                    <span className="sm-status-pill" key={`${layer.id}-output-${output}`}>
-                      {output}
-                    </span>
-                  ))}
-                </div>
-              </article>
-            ))}
-          </div>
-        </article>
-      </section>
-
-      <section className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
-        <article className="sm-surface p-6">
-          <div className="flex flex-wrap items-end justify-between gap-3">
-            <div>
-              <p className="sm-kicker text-[var(--sm-accent)]">Micro and macro</p>
-              <h2 className="mt-3 text-3xl font-bold text-white">Use two decision scales, not one dashboard.</h2>
-              <p className="mt-3 max-w-3xl text-sm leading-relaxed text-[var(--sm-muted)]">
-                Micro analysis finds the exact broken unit. Macro analysis tells leadership where the business system is drifting. The same database should serve both without mixing them up.
-              </p>
-            </div>
-            <Link className="sm-link" to="/app/director">
-              Open director desk
-            </Link>
-          </div>
-          <div className="mt-6 grid gap-4">
-            {YANGON_TYRE_DECISION_LENSES.map((lens) => (
-              <article className="sm-proof-card" key={lens.id}>
-                <p className="sm-kicker text-[var(--sm-accent)]">{lens.name}</p>
-                <p className="mt-2 text-lg font-bold text-white">{lens.focus}</p>
-                <div className="mt-4 grid gap-3 md:grid-cols-2">
-                  <div className="sm-chip text-white">
-                    <p className="sm-kicker text-[var(--sm-accent)]">Watch</p>
-                    <div className="mt-3 space-y-2 text-sm text-[var(--sm-muted)]">
-                      {lens.watches.map((item) => (
-                        <p key={`${lens.id}-watch-${item}`}>{item}</p>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="sm-chip text-white">
-                    <p className="sm-kicker text-[var(--sm-accent-alt)]">Output</p>
-                    <div className="mt-3 space-y-2 text-sm text-[var(--sm-muted)]">
-                      {lens.outputs.map((item) => (
-                        <p key={`${lens.id}-output-${item}`}>{item}</p>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </article>
-            ))}
-          </div>
-        </article>
-
-        <article className="sm-surface-deep p-6">
-          <div className="flex flex-wrap items-end justify-between gap-3">
-            <div>
-              <p className="sm-kicker text-[var(--sm-accent-alt)]">Recommended stack</p>
-              <h2 className="mt-3 text-3xl font-bold text-white">Use different tools for extraction, marts, semantics, quality, graph, and AI discipline.</h2>
-              <p className="mt-3 max-w-3xl text-sm leading-relaxed text-[var(--sm-muted)]">
-                The right stack is staged. Do not overbuild the lakehouse on day one, but do choose tools that make the upgrade path clean.
-              </p>
-            </div>
-            <Link className="sm-link" to="/app/cloud-ops">
-              Open cloud ops
-            </Link>
-          </div>
-          <div className="mt-6 grid gap-4">
-            {YANGON_TYRE_TOOL_RECOMMENDATIONS.map((tool) => (
-              <article className="sm-proof-card" key={tool.id}>
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <p className="font-semibold text-white">{tool.name}</p>
-                    <p className="mt-2 text-sm text-[var(--sm-muted)]">{tool.category}</p>
-                  </div>
-                  <span className={`sm-status-pill ${toneForToolPhase(tool.phase)}`}>{tool.phase}</span>
-                </div>
-                <p className="mt-4 text-sm leading-relaxed text-white/80">{tool.why}</p>
-                <div className="mt-4 flex flex-wrap gap-2">
-                  {tool.useFor.map((item) => (
-                    <span className="sm-status-pill" key={`${tool.id}-use-${item}`}>
-                      {item}
-                    </span>
-                  ))}
-                </div>
-                <div className="mt-4 flex justify-end">
-                  <a className="sm-link" href={tool.url} rel="noreferrer" target="_blank">
-                    Open docs
-                  </a>
-                </div>
-              </article>
-            ))}
-          </div>
-        </article>
-      </section>
-
-      <section className="grid gap-6 xl:grid-cols-[1.04fr_0.96fr]">
-        <article className="sm-surface p-6">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-            <div>
-              <p className="sm-kicker text-[var(--sm-accent)]">Live source operations</p>
-              <h2 className="mt-3 text-3xl font-bold text-white">Source Registry</h2>
-              <p className="mt-3 max-w-3xl text-sm leading-relaxed text-[var(--sm-muted)]">
-                Each source surface now shows evidence volume, ownership, and where it should feed the platform.
-              </p>
-            </div>
-            <Link className="sm-link" to="/app/connectors">
-              Open connector control
-            </Link>
-          </div>
-          <div className="mt-6 grid gap-4">
-            {rankedSourceRegistry.map((item) => (
-              <article className="sm-proof-card" key={item.id}>
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <p className="font-semibold text-white">{item.name}</p>
-                    <p className="mt-2 text-sm leading-relaxed text-[var(--sm-muted)]">{item.coverage}</p>
-                  </div>
-                  <span className={`sm-status-pill ${toneForStatus(item.status)}`}>{item.status}</span>
-                </div>
-                <div className="mt-4 grid gap-3 md:grid-cols-2">
-                  <div className="sm-chip text-white">
-                    <p className="sm-kicker text-[var(--sm-accent)]">Evidence</p>
-                    <p className="mt-3 text-sm text-white/80">{item.evidenceCount} promoted rows</p>
-                    <p className="mt-2 text-sm text-[var(--sm-muted)]">Source type: {item.sourceType}</p>
-                    <p className="mt-2 text-sm text-[var(--sm-muted)]">Last signal: {formatSignalAt(item.lastSignalAt)}</p>
-                  </div>
-                  <div className="sm-chip text-white">
-                    <p className="sm-kicker text-[var(--sm-accent-alt)]">Consumers</p>
-                    <div className="mt-3 space-y-2 text-sm text-[var(--sm-muted)]">
-                      {item.consumers.map((consumer) => (
-                        <p key={`${item.id}-consumer-${consumer}`}>{consumer}</p>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-                <div className="mt-4 flex flex-wrap items-start justify-between gap-3">
-                  <p className="max-w-3xl text-sm leading-relaxed text-[var(--sm-muted)]">Next automation: {item.nextAutomation}</p>
-                  <Link className="sm-link" to={item.route}>
-                    Open surface
-                  </Link>
-                </div>
-              </article>
-            ))}
-          </div>
-        </article>
-
-        <article className="sm-surface-deep p-6">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-            <div>
-              <p className="sm-kicker text-[var(--sm-accent-alt)]">Live source operations</p>
-              <h2 className="mt-3 text-3xl font-bold text-white">Connector Health Signals</h2>
-              <p className="mt-3 max-w-3xl text-sm leading-relaxed text-[var(--sm-muted)]">
-                Connector lanes now show freshness, first jobs, and the exact wiring gaps still holding back autonomy.
-              </p>
-            </div>
-            <Link className="sm-link" to="/app/adoption-command">
-              Open adoption command
-            </Link>
-          </div>
-          <div className="mt-6 grid gap-4">
-            {rankedConnectorSignals.map((signal) => (
-              <article className="sm-proof-card" key={signal.id}>
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <p className="font-semibold text-white">{signal.name}</p>
-                    <p className="mt-2 text-sm text-[var(--sm-muted)]">{signal.system}</p>
-                  </div>
-                  <span className={`sm-status-pill ${toneForHealthStatus(signal.status)}`}>{signal.status}</span>
-                </div>
-                <p className="mt-4 text-sm text-white/80">{signal.freshness}</p>
-                <p className="mt-2 text-sm leading-relaxed text-[var(--sm-muted)]">{signal.backlog}</p>
-                <div className="mt-4 grid gap-3 md:grid-cols-2">
-                  <div className="sm-chip text-white">
-                    <p className="sm-kicker text-[var(--sm-accent)]">First jobs</p>
-                    <div className="mt-3 space-y-2 text-sm text-[var(--sm-muted)]">
-                      {signal.firstJobs.map((job) => (
-                        <p key={`${signal.id}-job-${job}`}>{job}</p>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="sm-chip text-white">
-                    <p className="sm-kicker text-[var(--sm-accent-alt)]">Surfaces</p>
-                    <div className="mt-3 space-y-2 text-sm text-[var(--sm-muted)]">
-                      {signal.surfaces.map((surface) => (
-                        <p key={`${signal.id}-surface-${surface}`}>{surface}</p>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-                <div className="mt-4 space-y-2 text-sm text-[var(--sm-muted)]">
-                  {signal.risks.map((risk) => (
-                    <p key={`${signal.id}-risk-${risk}`}>{risk}</p>
-                  ))}
-                </div>
-                <div className="mt-4 flex flex-wrap items-start justify-between gap-3">
-                  <p className="max-w-3xl text-sm leading-relaxed text-[var(--sm-muted)]">Next automation: {signal.nextAutomation}</p>
-                  <Link className="sm-link" to={signal.route}>
-                    Open surface
-                  </Link>
-                </div>
-              </article>
-            ))}
-          </div>
-        </article>
-      </section>
-
-      <section className="sm-surface p-6">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <p className="sm-kicker text-[var(--sm-accent)]">Recent source events</p>
-            <h2 className="mt-3 text-3xl font-bold text-white">The runtime now shows which evidence, human entry, and agent jobs moved most recently.</h2>
-          </div>
-          <div className="flex flex-wrap gap-3">
-            <Link className="sm-button-secondary" to="/app/connectors">
-              Connector control
-            </Link>
-            <Link className="sm-button-secondary" to="/app/adoption-command">
-              Adoption command
-            </Link>
-          </div>
-        </div>
-        <div className="mt-6 grid gap-4 xl:grid-cols-2">
-          {visibleSourceEvents.length ? (
-            visibleSourceEvents.map((event) => (
-              <article className="sm-proof-card" key={event.id}>
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <p className="sm-kicker text-[var(--sm-accent)]">{event.source}</p>
-                    <p className="mt-2 text-xl font-bold text-white">{event.title}</p>
-                  </div>
-                  <span className="sm-status-pill">{event.kind}</span>
-                </div>
-                <p className="mt-4 text-sm leading-relaxed text-[var(--sm-muted)]">{event.detail}</p>
-                <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-[var(--sm-muted)]">
-                  <span>Owner: {event.owner}</span>
-                  <span>{formatSignalAt(event.signalAt)}</span>
-                  <Link className="sm-link" to={event.route}>
-                    Open surface
-                  </Link>
-                </div>
-              </article>
-            ))
-          ) : (
-            <article className="sm-proof-card xl:col-span-2">
-              <p className="font-semibold text-white">No live source events have been recorded yet.</p>
-              <p className="mt-3 max-w-3xl text-sm leading-relaxed text-[var(--sm-muted)]">
-                The source registry and connector health model are ready. As more Drive, Gmail, ERP, and writeback evidence lands, the timeline here will become the live evidence strip
-                for Yangon Tyre managers.
-              </p>
-            </article>
-          )}
-        </div>
-      </section>
-
-      <section className="grid gap-6 xl:grid-cols-[0.96fr_1.04fr]">
-        <article className="sm-surface p-6">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-            <div>
-              <p className="sm-kicker text-[var(--sm-accent)]">Learning database</p>
-              <h2 className="mt-3 text-3xl font-bold text-white">The data runtime now scores trust, graph shape, and reusable learning signals.</h2>
-              <p className="mt-3 max-w-3xl text-sm leading-relaxed text-[var(--sm-muted)]">
-                This is the governed memory layer for Yangon Tyre managers and AI teams: canonical records, graph links, lineage events, feature coverage, and a rolling trust score.
-              </p>
-            </div>
-            <span className={`sm-status-pill ${toneForHealthStatus(learningDatabase.status)}`}>{learningDatabase.status}</span>
-          </div>
-          <div className="mt-6 grid gap-4 md:grid-cols-3">
-            <article className="sm-proof-card">
-              <p className="sm-kicker text-[var(--sm-accent)]">Canonical records</p>
-              <p className="mt-3 text-3xl font-bold text-white">{learningDatabase.canonicalRecordCount}</p>
-              <p className="mt-2 text-sm text-[var(--sm-muted)]">Promoted operational and management records available for reuse.</p>
-            </article>
-            <article className="sm-proof-card">
-              <p className="sm-kicker text-[var(--sm-accent-alt)]">Graph nodes</p>
-              <p className="mt-3 text-3xl font-bold text-white">{learningDatabase.graphNodeCount}</p>
-              <p className="mt-2 text-sm text-[var(--sm-muted)]">{learningDatabase.graphEdgeCount} active relationship edges modeled across the tenant graph.</p>
-            </article>
-            <article className="sm-proof-card">
-              <p className="sm-kicker text-[var(--sm-accent)]">Lineage events</p>
-              <p className="mt-3 text-3xl font-bold text-white">{learningDatabase.lineageEventCount}</p>
-              <p className="mt-2 text-sm text-[var(--sm-muted)]">Recent source and writeback changes flowing into the learning spine.</p>
-            </article>
-            <article className="sm-proof-card">
-              <p className="sm-kicker text-[var(--sm-accent-alt)]">Feature sets</p>
-              <p className="mt-3 text-3xl font-bold text-white">{learningDatabase.featureSetCount}</p>
-              <p className="mt-2 text-sm text-[var(--sm-muted)]">Reusable marts and signal packs feeding manager stories and AI teams.</p>
-            </article>
-            <article className="sm-proof-card">
-              <p className="sm-kicker text-[var(--sm-accent)]">Trust score</p>
-              <p className="mt-3 text-3xl font-bold text-white">{learningDatabase.trustScore}%</p>
-              <p className="mt-2 text-sm text-[var(--sm-muted)]">Completeness and freshness of the current learning database.</p>
-            </article>
-            <article className="sm-proof-card">
-              <p className="sm-kicker text-[var(--sm-accent-alt)]">Last learned</p>
-              <p className="mt-3 text-xl font-bold text-white">{formatSignalAge(learningDatabase.lastLearnedAt)}</p>
-              <p className="mt-2 text-sm text-[var(--sm-muted)]">{formatSignalAt(learningDatabase.lastLearnedAt)}</p>
-            </article>
-          </div>
-          <div className="mt-6 grid gap-4 md:grid-cols-2">
-            <article className="sm-chip text-white">
-              <p className="sm-kicker text-[var(--sm-accent)]">Qualitative methods</p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {learningDatabase.qualitativeMethods.map((item) => (
-                  <span className="sm-status-pill" key={`qual-${item}`}>
-                    {item}
-                  </span>
-                ))}
-              </div>
-            </article>
-            <article className="sm-chip text-white">
-              <p className="sm-kicker text-[var(--sm-accent-alt)]">Quantitative methods</p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {learningDatabase.quantitativeMethods.map((item) => (
-                  <span className="sm-status-pill" key={`quant-${item}`}>
-                    {item}
-                  </span>
-                ))}
-              </div>
-            </article>
-          </div>
-          <p className="mt-4 text-sm leading-relaxed text-[var(--sm-muted)]">Next automation: {learningDatabase.nextAutomation}</p>
-        </article>
-
-        <article className="sm-surface-deep p-6">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-            <div>
-              <p className="sm-kicker text-[var(--sm-accent-alt)]">Knowledge graph</p>
-              <h2 className="mt-3 text-3xl font-bold text-white">Managers and AI teams now get domain graphs, not just flat rows.</h2>
-            </div>
-            <span className="sm-status-pill">{aggregateCounts.graphDomainCount} graph domains</span>
-          </div>
-          <div className="mt-6 grid gap-4">
-            {knowledgeGraphDomains.map((domain) => (
-              <article className="sm-proof-card" key={domain.id}>
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <p className="font-semibold text-white">{domain.name}</p>
-                    <p className="mt-2 text-sm text-[var(--sm-muted)]">Owner: {domain.owner}</p>
-                  </div>
-                  <span className={`sm-status-pill ${toneForStatus(domain.status)}`}>{domain.status}</span>
-                </div>
-                <div className="mt-4 grid gap-3 md:grid-cols-2">
-                  <div className="sm-chip text-white">
-                    <p className="sm-kicker text-[var(--sm-accent)]">Shape</p>
-                    <p className="mt-3 text-sm text-white/80">{domain.nodeCount} nodes</p>
-                    <p className="mt-2 text-sm text-[var(--sm-muted)]">{domain.edgeCount} edges</p>
-                    <p className="mt-2 text-sm text-[var(--sm-muted)]">Latest signal: {formatSignalAt(domain.lastSignalAt)}</p>
-                  </div>
-                  <div className="sm-chip text-white">
-                    <p className="sm-kicker text-[var(--sm-accent-alt)]">Entity types</p>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {domain.entityTypes.map((item) => (
-                        <span className="sm-status-pill" key={`${domain.id}-entity-${item}`}>
-                          {item}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-                <div className="mt-4 grid gap-3 md:grid-cols-2">
-                  <div className="sm-chip text-white">
-                    <p className="sm-kicker text-[var(--sm-accent)]">Relation types</p>
-                    <div className="mt-3 space-y-2 text-sm text-[var(--sm-muted)]">
-                      {domain.relationTypes.map((item) => (
-                        <p key={`${domain.id}-relation-${item}`}>{item}</p>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="sm-chip text-white">
-                    <p className="sm-kicker text-[var(--sm-accent-alt)]">Questions it answers</p>
-                    <div className="mt-3 space-y-2 text-sm text-[var(--sm-muted)]">
-                      {domain.questions.map((item) => (
-                        <p key={`${domain.id}-question-${item}`}>{item}</p>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-                <div className="mt-4 flex justify-end">
-                  <Link className="sm-link" to={domain.route}>
-                    Open domain desk
-                  </Link>
-                </div>
-              </article>
-            ))}
-          </div>
-        </article>
-      </section>
-
-      <section className="grid gap-6 xl:grid-cols-[1.02fr_0.98fr]">
-        <article className="sm-surface p-6">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-            <div>
-              <p className="sm-kicker text-[var(--sm-accent)]">Change lineage</p>
-              <h2 className="mt-3 text-3xl font-bold text-white">The platform now tracks what changed, when it changed, and who moved it.</h2>
-            </div>
-            <span className="sm-status-pill">{visibleChangeLineage.length} recent lineage events</span>
-          </div>
-          <div className="mt-6 grid gap-4">
-            {visibleChangeLineage.length ? (
-              visibleChangeLineage.map((event) => (
-                <article className="sm-proof-card" key={event.id}>
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <p className="sm-kicker text-[var(--sm-accent)]">{event.source}</p>
-                      <p className="mt-2 text-xl font-bold text-white">{event.assetName}</p>
-                    </div>
-                    <span className="sm-status-pill">{event.changeType}</span>
-                  </div>
-                  <p className="mt-4 text-sm leading-relaxed text-white/80">{event.impact}</p>
-                  <div className="mt-4 grid gap-3 md:grid-cols-3 text-sm text-[var(--sm-muted)]">
-                    <p>Changed by: {event.changedBy}</p>
-                    <p>Changed at: {formatSignalAt(event.changedAt)}</p>
-                    <Link className="sm-link" to={event.route}>
-                      Open surface
-                    </Link>
-                  </div>
-                  <p className="mt-3 text-sm text-[var(--sm-muted)]">Next step: {event.nextStep}</p>
-                </article>
-              ))
-            ) : (
-              <article className="sm-proof-card">
-                <p className="font-semibold text-white">No direct lineage events have been recorded yet.</p>
-                <p className="mt-3 max-w-3xl text-sm leading-relaxed text-[var(--sm-muted)]">
-                  As Drive, Gmail, ERP, and writeback deltas move into the append-only connector spine, this becomes the trusted change strip for managers and AI handoffs.
-                </p>
-              </article>
-            )}
-          </div>
-        </article>
-
-        <article className="sm-surface-deep p-6">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-            <div>
-              <p className="sm-kicker text-[var(--sm-accent-alt)]">Manager programs</p>
-              <h2 className="mt-3 text-3xl font-bold text-white">Each department manager now has a program built from live data, methods, and AI support.</h2>
-            </div>
-            <div className="flex items-center gap-3">
-              <span className="sm-status-pill">{aggregateCounts.managerProgramCount} programs</span>
-              <Link className="sm-link" to="/app/workforce">
-                Workforce command
-              </Link>
-            </div>
-          </div>
-          <div className="mt-6 grid gap-4">
-            {managerPrograms.map((program) => (
-              <article className="sm-proof-card" key={program.id}>
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <p className="sm-kicker text-[var(--sm-accent)]">{program.role}</p>
-                    <h3 className="mt-2 text-2xl font-bold text-white">{program.name}</h3>
-                  </div>
-                  <Link className="sm-link" to={program.route}>
-                    Open program
-                  </Link>
-                </div>
-                <p className="mt-4 text-sm leading-relaxed text-white/80">{program.mission}</p>
-                <div className="mt-4 grid gap-3 md:grid-cols-2">
-                  <div className="sm-chip text-white">
-                    <p className="sm-kicker text-[var(--sm-accent)]">Watches</p>
-                    <div className="mt-3 space-y-2 text-sm text-[var(--sm-muted)]">
-                      {program.watches.map((item) => (
-                        <p key={`${program.id}-watch-${item}`}>{item}</p>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="sm-chip text-white">
-                    <p className="sm-kicker text-[var(--sm-accent-alt)]">Methods</p>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {program.methods.map((item) => (
-                        <span className="sm-status-pill" key={`${program.id}-method-${item}`}>
-                          {item}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-                <div className="mt-4 grid gap-3 md:grid-cols-2">
-                  <div className="sm-chip text-white">
-                    <p className="sm-kicker text-[var(--sm-accent)]">Metrics</p>
-                    <div className="mt-3 space-y-2 text-sm text-[var(--sm-muted)]">
-                      {program.metrics.map((item) => (
-                        <p key={`${program.id}-metric-${item}`}>{item}</p>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="sm-chip text-white">
-                    <p className="sm-kicker text-[var(--sm-accent-alt)]">AI teams</p>
-                    <div className="mt-3 space-y-2 text-sm text-[var(--sm-muted)]">
-                      {program.aiTeams.map((item) => (
-                        <p key={`${program.id}-team-${item}`}>{item}</p>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-                <p className="mt-4 text-sm text-[var(--sm-muted)]">Writeback lane: {program.writeback}</p>
-                <p className="mt-2 text-sm text-[var(--sm-muted)]">Next handoff: {program.nextHandoff}</p>
-              </article>
-            ))}
-          </div>
-
-          <div className="mt-8">
-            <div className="flex flex-wrap items-end justify-between gap-3">
-              <div>
-                <p className="sm-kicker text-[var(--sm-accent)]">AI handoff queue</p>
-                <p className="mt-2 text-sm leading-relaxed text-[var(--sm-muted)]">
-                  Qualitative and quantitative work should move to the next bounded AI team automatically, not stall inside one desk.
-                </p>
-              </div>
-              <span className="sm-status-pill">{aggregateCounts.handoffCount} handoffs</span>
-            </div>
-            <div className="mt-4 grid gap-4">
-              {agentHandoffs.map((handoff) => (
-                <article className="sm-proof-card" key={handoff.id}>
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <p className="font-semibold text-white">{handoff.topic}</p>
-                      <p className="mt-2 text-sm text-[var(--sm-muted)]">
-                        {handoff.fromTeam} to {handoff.toTeam}
-                      </p>
-                    </div>
-                    <span className={`sm-status-pill ${toneForHandoffStatus(handoff.status)}`}>{handoff.status}</span>
-                  </div>
-                  <p className="mt-4 text-sm leading-relaxed text-white/80">{handoff.reason}</p>
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    {handoff.payload.map((item) => (
-                      <span className="sm-status-pill" key={`${handoff.id}-payload-${item}`}>
-                        {item}
-                      </span>
-                    ))}
-                  </div>
-                  <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-[var(--sm-muted)]">
-                    <span>{formatSignalAt(handoff.signalAt)}</span>
-                    <Link className="sm-link" to={handoff.route}>
-                      Open source desk
-                    </Link>
-                  </div>
-                </article>
-              ))}
-            </div>
-          </div>
-        </article>
-      </section>
-
-      <section className="grid gap-4 xl:grid-cols-3">
-        <article className="sm-surface p-6">
-          <p className="sm-kicker text-[var(--sm-accent)]">Platform goal</p>
-          <h2 className="mt-3 text-2xl font-bold text-white">The source mesh should feed the whole platform.</h2>
-          <p className="mt-4 text-sm leading-relaxed text-[var(--sm-muted)]">{YANGON_TYRE_DATA_FABRIC_DIALECTIC.thesis}</p>
-        </article>
-        <article className="sm-surface p-6">
-          <p className="sm-kicker text-[var(--sm-accent-alt)]">Signal gap</p>
-          <h2 className="mt-3 text-2xl font-bold text-white">Files and messages still hide the real operating signal.</h2>
-          <p className="mt-4 text-sm leading-relaxed text-[var(--sm-muted)]">{YANGON_TYRE_DATA_FABRIC_DIALECTIC.antithesis}</p>
-        </article>
-        <article className="sm-surface-deep p-6">
-          <p className="sm-kicker text-[var(--sm-accent)]">Data response</p>
-          <h2 className="mt-3 text-2xl font-bold text-white">One data runtime powers control, insight, and writeback.</h2>
-          <p className="mt-4 text-sm leading-relaxed text-[var(--sm-muted)]">{YANGON_TYRE_DATA_FABRIC_DIALECTIC.synthesis}</p>
-        </article>
-      </section>
-
-      <section className="sm-surface p-6">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <p className="sm-kicker text-[var(--sm-accent)]">Pipeline architecture</p>
-            <h2 className="mt-3 text-3xl font-bold text-white">Google Drive and email are now modeled as a continuous intelligence pipeline, not passive storage.</h2>
-          </div>
-          <div className="flex flex-wrap gap-3">
-            <Link className="sm-button-primary" to="/app/connectors">
-              Connector control
-            </Link>
-            <Link className="sm-button-secondary" to="/app/insights">
-              Operating intelligence
-            </Link>
-            <Link className="sm-button-secondary" to="/app/workforce">
-              Workforce command
-            </Link>
-          </div>
-        </div>
-        <div className="mt-6 grid gap-4 xl:grid-cols-2">
-          {pipelineStages.map((stage) => (
-            <article className="sm-proof-card" key={stage.id}>
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <p className="sm-kicker text-[var(--sm-accent)]">{stage.name}</p>
-                  <p className="mt-2 text-sm leading-relaxed text-[var(--sm-muted)]">{stage.purpose}</p>
-                </div>
-                <span className={`sm-status-pill ${toneForStatus(stage.status)}`}>{stage.status}</span>
-              </div>
-              <div className="mt-4 grid gap-3 md:grid-cols-2">
-                <div className="sm-chip text-white">
-                  <p className="sm-kicker text-[var(--sm-accent)]">Sources</p>
-                  <div className="mt-3 space-y-2 text-sm text-[var(--sm-muted)]">
-                    {stage.sources.map((item) => (
-                      <p key={`${stage.id}-source-${item}`}>{item}</p>
-                    ))}
-                  </div>
-                </div>
-                <div className="sm-chip text-white">
-                  <p className="sm-kicker text-[var(--sm-accent-alt)]">Outputs</p>
-                  <div className="mt-3 space-y-2 text-sm text-[var(--sm-muted)]">
-                    {stage.outputs.map((item) => (
-                      <p key={`${stage.id}-output-${item}`}>{item}</p>
-                    ))}
-                  </div>
-                </div>
-              </div>
-              <p className="mt-4 text-sm text-white/80">AI crews: {stage.agents.join(', ')}</p>
-              <p className="mt-2 text-sm text-[var(--sm-muted)]">Review gate: {stage.reviewGate}</p>
-            </article>
           ))}
         </div>
-      </section>
-
-      <section className="grid gap-6 xl:grid-cols-[1.02fr_0.98fr]">
-        <article className="sm-surface p-6">
-          <p className="sm-kicker text-[var(--sm-accent)]">Whole folder and topic pipelines</p>
-          <h2 className="mt-3 text-3xl font-bold text-white">The full Google estate gets indexed once, then split into the right topic lenses.</h2>
-          <div className="mt-6 grid gap-4">
-            {topicPipelines.map((pipeline) => (
-              <article className="sm-proof-card" key={pipeline.id}>
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <p className="font-semibold text-white">{pipeline.name}</p>
-                    <p className="mt-2 text-sm leading-relaxed text-[var(--sm-muted)]">{pipeline.scope}</p>
-                  </div>
-                  <span className={`sm-status-pill ${toneForStatus(pipeline.status)}`}>{pipeline.status}</span>
-                </div>
-                <div className="mt-4 grid gap-3 md:grid-cols-2">
-                  <div className="sm-chip text-white">
-                    <p className="sm-kicker text-[var(--sm-accent)]">Source packs</p>
-                    <div className="mt-3 space-y-2 text-sm text-[var(--sm-muted)]">
-                      {pipeline.sourcePacks.map((item) => (
-                        <p key={`${pipeline.id}-pack-${item}`}>{item}</p>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="sm-chip text-white">
-                    <p className="sm-kicker text-[var(--sm-accent-alt)]">Connector tracks</p>
-                    <div className="mt-3 space-y-2 text-sm text-[var(--sm-muted)]">
-                      {pipeline.connectorTracks.map((item) => (
-                        <p key={`${pipeline.id}-connector-${item}`}>{item}</p>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-                <div className="mt-4 grid gap-3 md:grid-cols-2">
-                  <div className="sm-chip text-white">
-                    <p className="sm-kicker text-[var(--sm-accent)]">Transforms</p>
-                    <div className="mt-3 space-y-2 text-sm text-[var(--sm-muted)]">
-                      {pipeline.transforms.map((item) => (
-                        <p key={`${pipeline.id}-transform-${item}`}>{item}</p>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="sm-chip text-white">
-                    <p className="sm-kicker text-[var(--sm-accent-alt)]">Outputs</p>
-                    <div className="mt-3 space-y-2 text-sm text-[var(--sm-muted)]">
-                      {pipeline.outputs.map((item) => (
-                        <p key={`${pipeline.id}-output-${item}`}>{item}</p>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-                <p className="mt-4 text-sm text-white/80">Role stories: {pipeline.roleStories.join(', ')}</p>
-              </article>
-            ))}
-          </div>
-        </article>
-
-        <article className="sm-surface-deep p-6">
-          <p className="sm-kicker text-[var(--sm-accent-alt)]">Operating anchors</p>
-          <h2 className="mt-3 text-3xl font-bold text-white">Use the data fabric to improve quality, throughput, and management timing at the same time.</h2>
-          <div className="mt-6 grid gap-4 md:grid-cols-2">
-            <article className="sm-proof-card">
-              <p className="sm-kicker text-[var(--sm-accent)]">2024 output</p>
-              <p className="mt-3 text-3xl font-bold text-white">{YANGON_TYRE_DATA_PROFILE.annualBiasOutput2024.toLocaleString()}</p>
-              <p className="mt-2 text-sm text-[var(--sm-muted)]">Bias tyres from the current workbook baseline.</p>
-            </article>
-            <article className="sm-proof-card">
-              <p className="sm-kicker text-[var(--sm-accent-alt)]">Average B+R</p>
-              <p className="mt-3 text-3xl font-bold text-white">{YANGON_TYRE_DATA_PROFILE.annualBPlusRRate2024}%</p>
-              <p className="mt-2 text-sm text-[var(--sm-muted)]">Quality-loss features should help management move this down faster.</p>
-            </article>
-            <article className="sm-proof-card">
-              <p className="sm-kicker text-[var(--sm-accent)]">Line groups</p>
-              <p className="mt-3 text-3xl font-bold text-white">{YANGON_TYRE_DATA_PROFILE.productionLines.length}</p>
-              <p className="mt-2 text-sm text-[var(--sm-muted)]">Industrial-engineering cuts are designed around the actual Plant A stage map.</p>
-            </article>
-            <article className="sm-proof-card">
-              <p className="sm-kicker text-[var(--sm-accent-alt)]">Top defects</p>
-              <p className="mt-3 text-lg font-bold text-white">{YANGON_TYRE_DATA_PROFILE.topDefects.slice(0, 3).join(' / ')}</p>
-              <p className="mt-2 text-sm text-[var(--sm-muted)]">Defect clustering and closeout evidence should be one reusable pipeline, not a manual weekly rebuild.</p>
-            </article>
-          </div>
-
-          <div className="mt-6 grid gap-4">
-            {featureMarts.map((mart) => (
-              <article className="sm-proof-card" key={mart.id}>
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <p className="font-semibold text-white">{mart.name}</p>
-                    <p className="mt-2 text-sm text-[var(--sm-muted)]">Grain: {mart.grain}</p>
-                  </div>
-                  <span className={`sm-status-pill ${toneForStatus(mart.status)}`}>{mart.status}</span>
-                </div>
-                <p className="mt-3 text-sm text-white/80">Cadence: {mart.cadence}</p>
-                <p className="mt-2 text-sm text-[var(--sm-muted)]">Consumers: {mart.consumers.join(', ')}</p>
-              </article>
-            ))}
-          </div>
-        </article>
-      </section>
-
-      <section className="grid gap-6 xl:grid-cols-[0.98fr_1.02fr]">
-        <article className="sm-surface p-6">
-          <p className="sm-kicker text-[var(--sm-accent)]">AI pipeline crews</p>
-          <h2 className="mt-3 text-3xl font-bold text-white">Different agent pods clean, extract, model, and narrate different parts of the tenant data estate.</h2>
-          <div className="mt-6 grid gap-4">
-            {copilots.map((pod) => (
-              <article className="sm-proof-card" key={pod.id}>
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <p className="font-semibold text-white">{pod.name}</p>
-                    <p className="mt-2 text-sm text-[var(--sm-muted)]">Lead role: {pod.leadRole}</p>
-                  </div>
-                  <span className="sm-status-pill">{pod.outputs.length} outputs</span>
-                </div>
-                <p className="mt-4 text-sm leading-relaxed text-white/80">{pod.mission}</p>
-                <p className="mt-4 text-sm text-[var(--sm-muted)]">Cadence: {pod.cadence.join(', ')}</p>
-                <p className="mt-2 text-sm text-[var(--sm-muted)]">Write policy: {pod.writePolicy}</p>
-              </article>
-            ))}
-          </div>
-        </article>
-
-        <article className="sm-surface-deep p-6">
-          <p className="sm-kicker text-[var(--sm-accent-alt)]">Role stories</p>
-          <h2 className="mt-3 text-3xl font-bold text-white">The same data should tell a different story depending on who is looking at it.</h2>
-          <div className="mt-6 grid gap-4">
-            {roleStories.map((story) => (
-              <article className="sm-proof-card" key={story.id}>
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <p className="sm-kicker text-[var(--sm-accent)]">{story.role}</p>
-                    <h3 className="mt-2 text-2xl font-bold text-white">{story.name}</h3>
-                  </div>
-                  <Link className="sm-link" to={story.route}>
-                    Open desk
-                  </Link>
-                </div>
-                <div className="mt-4 grid gap-3 md:grid-cols-2">
-                  <div className="sm-chip text-white">
-                    <p className="sm-kicker text-[var(--sm-accent)]">Inputs</p>
-                    <div className="mt-3 space-y-2 text-sm text-[var(--sm-muted)]">
-                      {story.inputs.map((item) => (
-                        <p key={`${story.id}-input-${item}`}>{item}</p>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="sm-chip text-white">
-                    <p className="sm-kicker text-[var(--sm-accent-alt)]">Questions</p>
-                    <div className="mt-3 space-y-2 text-sm text-[var(--sm-muted)]">
-                      {story.questions.map((item) => (
-                        <p key={`${story.id}-question-${item}`}>{item}</p>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-                <div className="mt-4 flex flex-wrap gap-2">
-                  {story.outputs.map((item) => (
-                    <span className="sm-status-pill" key={`${story.id}-output-${item}`}>
-                      {item}
-                    </span>
-                  ))}
-                </div>
-              </article>
-            ))}
-          </div>
-        </article>
-      </section>
-
-      <section className="sm-surface p-6">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <p className="sm-kicker text-[var(--sm-accent)]">Team writeback and data entry</p>
-            <h2 className="mt-3 text-3xl font-bold text-white">The data pipeline stays alive only if the team writes back through the desks, not outside them.</h2>
-          </div>
-          <span className="sm-status-pill">{writebackLanes.length} structured writeback lanes</span>
+        <div className="sm-ytf-action-grid mt-5">
+          <article className="sm-ytf-action-tile">
+            <span>
+              <strong>Visible data</strong>
+              <small>{roleDataView.visibleData.slice(0, 4).join(', ')}</small>
+            </span>
+          </article>
+          <article className="sm-ytf-action-tile">
+            <span>
+              <strong>Hidden data</strong>
+              <small>{roleDataView.hiddenData.slice(0, 4).join(', ')}</small>
+            </span>
+          </article>
+          <article className="sm-ytf-action-tile">
+            <span>
+              <strong>ISO controls</strong>
+              <small>{roleDataView.isoControls.slice(0, 3).join(', ')}</small>
+            </span>
+          </article>
+          <article className="sm-ytf-action-tile">
+            <span>
+              <strong>AI actions</strong>
+              <small>{roleDataView.aiActions.slice(0, 3).join(', ')}</small>
+            </span>
+          </article>
         </div>
-        <div className="mt-6 grid gap-4 xl:grid-cols-2">
-          {writebackLanes.map((lane) => (
-            <article className="sm-proof-card" key={lane.id}>
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <p className="font-semibold text-white">{lane.name}</p>
-                  <p className="mt-2 text-sm text-[var(--sm-muted)]">{lane.users.join(' / ')}</p>
-                </div>
-                <Link className="sm-link" to={lane.route}>
-                  Open entry lane
-                </Link>
-              </div>
-              <div className="mt-4 grid gap-3 md:grid-cols-2">
-                <div className="sm-chip text-white">
-                  <p className="sm-kicker text-[var(--sm-accent)]">Captures</p>
-                  <p className="mt-3 text-sm leading-relaxed text-[var(--sm-muted)]">{lane.captures.join(' / ')}</p>
-                </div>
-                <div className="sm-chip text-white">
-                  <p className="sm-kicker text-[var(--sm-accent-alt)]">Quality rules</p>
-                  <p className="mt-3 text-sm leading-relaxed text-[var(--sm-muted)]">{lane.qualityRules.join(' / ')}</p>
-                </div>
-              </div>
-              <div className="mt-4 grid gap-3 md:grid-cols-2">
-                <div className="sm-chip text-white">
-                  <p className="sm-kicker text-[var(--sm-accent)]">Feeds marts</p>
-                  <div className="mt-3 space-y-2 text-sm text-[var(--sm-muted)]">
-                    {lane.downstreamMarts.map((item) => (
-                      <p key={`${lane.id}-mart-${item}`}>{item}</p>
-                    ))}
-                  </div>
-                </div>
-                <div className="sm-chip text-white">
-                  <p className="sm-kicker text-[var(--sm-accent-alt)]">Feeds stories</p>
-                  <div className="mt-3 space-y-2 text-sm text-[var(--sm-muted)]">
-                    {lane.downstreamStories.map((item) => (
-                      <p key={`${lane.id}-story-${item}`}>{item}</p>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </article>
+      </section>
+
+      <section className="sm-ytf-metric-strip is-five">
+        <Link to="/app/data-fabric">
+          <span>Records organized</span>
+          <strong>{compactNumber(sourceRecordCount)}</strong>
+          <small>Rebuilt into saved plant records.</small>
+        </Link>
+        <Link to="/app/change-monitor">
+          <span>File changes</span>
+          <strong>{compactNumber(sourceChangeEventCount)}</strong>
+          <small>{compactNumber(sourceChangeReviewCount)} review tasks.</small>
+        </Link>
+        <Link to="/app/change-monitor">
+          <span>Data lanes</span>
+          <strong>{liveSourceCount}/{dataset.sourceRegistry.length}</strong>
+          <small>{connectorGapCount} source gaps.</small>
+        </Link>
+        <Link to="/app/data-quality">
+          <span>File fields</span>
+          <strong>{compactNumber(workbookMetricCount)}</strong>
+          <small>Review before official use.</small>
+        </Link>
+        <Link to="/app/knowledge">
+          <span>AI context</span>
+          <strong>{compactNumber(knowledgeChunkCount)}</strong>
+          <small>{databaseLabel}.</small>
+        </Link>
+      </section>
+
+      <section className="sm-ytf-panel">
+        <div className="sm-ytf-section-head">
+          <div>
+            <p className="sm-kicker">Live data map</p>
+            <h2>What is feeding the ERP.</h2>
+          </div>
+          <div className="sm-ytf-chip-line is-inline">
+            <span className="sm-status-pill">
+              {statusText(refreshStatus)} - {formatDateTime(lastRefreshAt)}
+            </span>
+            <button className="sm-button-secondary" type="button" onClick={handleExportSnapshot} disabled={!canExportSourceSnapshot}>
+              {canExportSourceSnapshot ? 'Export' : 'Director export'}
+            </button>
+          </div>
+        </div>
+
+        <div className="sm-ytf-signal-grid">
+          {roleSafeOwnerReviewCards.map((card) => (
+            <Link className="sm-ytf-mini-card" key={card.title} to={card.route}>
+              <span>{card.title}</span>
+              <strong>{card.value}</strong>
+              <small>{card.note}</small>
+            </Link>
           ))}
         </div>
+
+        <div className="sm-ytf-compact-list mt-5">
+          {latestDriveFolders.map((folder) => (
+            <Link className="sm-ytf-list-row" key={folder.id} to="/app/action-board">
+              <span>
+                <strong>{folder.title}</strong>
+                <small>{folder.domain} - transformed into review work {formatDateTime(folder.lastActivityAt || folder.modifiedTime)}</small>
+              </span>
+              <em>{compactNumber(folder.canonicalRecordCount)} records</em>
+            </Link>
+          ))}
+          {!latestDriveFolders.length && <p className="sm-ytf-empty">Transformed source activity will appear after the next warehouse sync.</p>}
+        </div>
       </section>
+
+      <section className="sm-ytf-split">
+        <article className="sm-ytf-panel">
+          <div className="sm-ytf-section-head">
+            <div>
+              <p className="sm-kicker">Latest insights</p>
+              <h2>Click one to act.</h2>
+            </div>
+            <Link className="sm-ytf-action-arrow" to="/app/action-board">
+              Actions
+            </Link>
+          </div>
+          <div className="sm-ytf-compact-list">
+            {roleSafeInsights.map((insight) => (
+              <Link className="sm-ytf-list-row sm-ytf-insight-row" key={insight.id} to={insight.route}>
+                <span>
+                  <strong>{insight.title}</strong>
+                  <small>{insight.owner} - {compact(insight.signal)}</small>
+                </span>
+                <em>{insight.metric}</em>
+              </Link>
+            ))}
+            {!roleSafeInsights.length && <p className="sm-ytf-empty">No role-safe insight packet is available yet. Refresh insights first.</p>}
+          </div>
+        </article>
+
+        <article className="sm-ytf-panel">
+          <div className="sm-ytf-section-head">
+            <div>
+              <p className="sm-kicker">Daily close</p>
+              <h2>Our own operating sheet.</h2>
+            </div>
+            <Link className="sm-ytf-action-arrow" to="/app/daily-entry">
+              Enter
+            </Link>
+          </div>
+          <div className="sm-ytf-compact-list">
+            {dailyCloseItems.map((item) => (
+              <Link className="sm-ytf-list-row sm-ytf-insight-row" key={item.id} to={item.route}>
+                <span>
+                  <strong>{item.title}</strong>
+                  <small>{item.owner} - {item.prompt}</small>
+                </span>
+                <em>{item.metric}</em>
+              </Link>
+            ))}
+          </div>
+        </article>
+      </section>
+
+      {canSeeTechnicalSources && (
+        <details className="sm-ytf-panel sm-ytf-details">
+          <summary>Admin build map</summary>
+          <div>
+            <div className="sm-ytf-build-list">
+              {roleSafeReleaseItems.map((item) => (
+                <Link className="sm-ytf-build-item" key={item.no} to={item.route}>
+                  <span>{item.no}</span>
+                  <strong>{item.title}</strong>
+                  <em>{item.value}</em>
+                </Link>
+              ))}
+            </div>
+          </div>
+        </details>
+      )}
+
+      <details className="sm-ytf-panel sm-ytf-details">
+        <summary>Value review queue</summary>
+        <div>
+      <section className="sm-ytf-split">
+        <article className="sm-ytf-panel">
+          <div className="sm-ytf-section-head">
+            <div>
+              <p className="sm-kicker">Changed files</p>
+              <h2>Team confirmation.</h2>
+            </div>
+          </div>
+          <div className="sm-ytf-compact-list">
+            {changeItems.map((item) => (
+              <Link className="sm-ytf-list-row" key={item.id} to={item.route || '/app/action-board'}>
+                <span>
+                  <strong>{compact(item.nextAction || item.title, 72)}</strong>
+                  <small>
+                    {item.owner} - {compact(item.signal)}
+                  </small>
+                </span>
+                <em>{item.priority}</em>
+              </Link>
+            ))}
+            {!changeItems.length && <p className="sm-ytf-empty">No changed-file packet is available yet.</p>}
+          </div>
+        </article>
+
+        <article className="sm-ytf-panel">
+          <div className="sm-ytf-section-head">
+            <div>
+              <p className="sm-kicker">File values</p>
+              <h2>Use only after review.</h2>
+            </div>
+          </div>
+          <div className="sm-ytf-compact-list">
+            {kpiCandidates.map((candidate) => (
+              <Link className="sm-ytf-list-row" key={candidate.id} to={candidate.route || '/app/data-quality'}>
+                <span>
+                  <strong>{candidate.name}</strong>
+                  <small>
+                    {candidate.owner} - {compact(candidate.formulaHint)}
+                  </small>
+                </span>
+                <em>{candidate.stage}</em>
+              </Link>
+            ))}
+            {!kpiCandidates.length && <p className="sm-ytf-empty">Refresh data to build file values.</p>}
+          </div>
+        </article>
+      </section>
+        </div>
+      </details>
+
+      <details className="sm-ytf-panel sm-ytf-details">
+        <summary>{canSeeTechnicalSources ? 'Technical source health' : 'Data boundaries'}</summary>
+        <div>
+        {!canSeeTechnicalSources ? (
+          <section className="sm-ytf-action-grid">
+            <article className="sm-ytf-action-tile">
+              <strong>Role boundary</strong>
+              <small>Your role sees metrics, actions, and evidence it can act on. Connector internals stay with admins.</small>
+            </article>
+            <article className="sm-ytf-action-tile">
+              <strong>Source proof</strong>
+              <small>Every AI insight should point back to an owner, input source, and review checkpoint before writeback.</small>
+            </article>
+            <article className="sm-ytf-action-tile">
+              <strong>Request access</strong>
+              <small>Ask the tenant admin if you need raw source, connector, or export privileges.</small>
+            </article>
+          </section>
+        ) : (
+        <section className="sm-ytf-split">
+          <article>
+            <div className="sm-ytf-section-head">
+              <div>
+                <p className="sm-kicker">Source health</p>
+                <h2>Admin-only checks.</h2>
+              </div>
+              <Link className="sm-ytf-action-arrow" to="/app/change-monitor">
+                Monitor
+              </Link>
+            </div>
+            <div className="sm-ytf-compact-list">
+              {sourceRegistry.map((source) => (
+                <Link className="sm-ytf-list-row" key={source.id} to={source.route || '/app/data-fabric'}>
+                  <span>
+                    <strong>{source.name}</strong>
+                    <small>{source.coverage} - {formatDateTime(source.lastSignalAt)}</small>
+                  </span>
+                  <em>{statusText(source.status)}</em>
+                </Link>
+              ))}
+            </div>
+          </article>
+
+          <article>
+            <div className="sm-ytf-section-head">
+              <div>
+                <p className="sm-kicker">Connector attention</p>
+                <h2>Setup blockers.</h2>
+              </div>
+              <Link className="sm-ytf-action-arrow" to="/app/action-board">
+                Actions
+              </Link>
+            </div>
+            <div className="sm-ytf-compact-list">
+              {connectorAttention.map((signal) => (
+                <Link className="sm-ytf-list-row" key={signal.id} to={signal.route || '/app/action-board'}>
+                  <span>
+                    <strong>{signal.name}</strong>
+                    <small>{signal.backlog || signal.nextAutomation}</small>
+                  </span>
+                  <em>{statusText(signal.status)}</em>
+                </Link>
+              ))}
+              {!connectorAttention.length && <p className="sm-ytf-empty">Configured connectors look healthy.</p>}
+            </div>
+          </article>
+        </section>
+        )}
+        <div className="sm-ytf-action-grid">
+          <article className="sm-ytf-action-tile">
+            <strong>Cloud history</strong>
+            <small>Saved cloud history and scheduled refresh must stay configured before production history is official.</small>
+          </article>
+          <article className="sm-ytf-action-tile">
+            <strong>Change monitor</strong>
+            <small>Use event-style change tracking instead of manual review.</small>
+          </article>
+          <article className="sm-ytf-action-tile">
+            <strong>Team confirmation</strong>
+            <small>Every important value or work item needs a human owner before it becomes official.</small>
+          </article>
+          <article className="sm-ytf-action-tile">
+            <strong>Role packs</strong>
+            <small>Operations, maintenance, quality, sales, and admin get separate entry defaults.</small>
+          </article>
+        </div>
+        </div>
+      </details>
     </div>
   )
 }

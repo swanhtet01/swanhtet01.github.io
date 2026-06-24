@@ -107,7 +107,7 @@ export const SELLABLE_WORKSPACE_PROGRAMS: SellableWorkspaceProgram[] = [
   },
   {
     id: 'industrial-plant-os',
-    name: 'Industrial Plant OS',
+    name: 'Factory Operations App',
     strap: 'An AI-native plant, quality, and maintenance operating system running in cloud.',
     buyer: 'Factories, plants, industrial groups, manufacturing operators',
     outcome: 'Run receiving, DQMS, CAPA, downtime, inventory, and executive review in one tenant workspace.',
@@ -179,7 +179,7 @@ export const WORKFORCE_PACKAGES: WorkforcePackage[] = [
     mode: 'Scheduled + queue-backed',
     jobFamilies: ['task_triage', 'ops_watch'],
     guardrails: ['no autonomous sensitive writes', 'approval routing stays visible', 'retries stay bounded'],
-    soldWith: ['Operations Control Workspace', 'Industrial Plant OS', 'Agent Company Starter'],
+    soldWith: ['Operations Control Workspace', 'Factory Operations App', 'Agent Company Starter'],
     route: '/app/runtime',
   },
   {
@@ -201,7 +201,7 @@ export const WORKFORCE_PACKAGES: WorkforcePackage[] = [
     mode: 'Scheduled briefing',
     jobFamilies: ['founder_brief'],
     guardrails: ['summary is advisory', 'source links preserved', 'high-severity items escalate visibly'],
-    soldWith: ['Revenue Command Workspace', 'Industrial Plant OS', 'Director Control Tower', 'Agent Company Starter'],
+    soldWith: ['Revenue Command Workspace', 'Factory Operations App', 'Director Control Tower', 'Agent Company Starter'],
     route: '/app/director',
   },
   {
@@ -212,7 +212,7 @@ export const WORKFORCE_PACKAGES: WorkforcePackage[] = [
     mode: 'Continuous curation + promotion review',
     jobFamilies: ['task_triage', 'founder_brief'],
     guardrails: ['provenance retained', 'schema changes reviewed', 'publishing is gated'],
-    soldWith: ['Industrial Plant OS', 'Supplier Recovery Network', 'Director Control Tower'],
+    soldWith: ['Factory Operations App', 'Supplier Recovery Network', 'Director Control Tower'],
     route: '/app/knowledge',
   },
   {

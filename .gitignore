@@ -2,7 +2,12 @@ apikeys.txt
 *.pem
 .env*
 *credentials*
+*client_secret*
+*service-account*
+*.key.json
 hyper_unicorn/venv/
+venv/
+.venv/
 .secrets/
 pilot-data/*
 !pilot-data/
@@ -10,6 +15,7 @@ pilot-data/*
 *.oauth.json
 *.token.json
 *.service-account.json
+node_modules/
 showroom/node_modules/
 showroom/dist/
 showroom/.env*
@@ -19,7 +25,25 @@ __pycache__/
 swan-intelligence-hub/
 .vercel
 .codex
+.local/
+.vercel_python_packages/
 api-static/
 api-static-staging-*/
+output/
+artifacts/
+tmp/
+.tmp-*
 tmp-*.html
 tmp-*.png
+supabase/.temp/
+Super Mega Inc/ops/archive/
+showroom/apps/attendance-face-os/public/data/*.private.json
+showroom/apps/attendance-face-os/public/data/*.private.csv
+showroom/apps/attendance-face-os/.factory-data/
+*.deploy-collision-*
+*.ytf-deploy-hidden*
+mark1_pilot/out/
+NUL
+
+.vercel
+.env*.local

@@ -84,6 +84,48 @@ export type PlantControlMetricRow = {
   status: string
 }
 
+export type PlantControlTraceStage = {
+  stage_id: string
+  label: string
+  status: 'ok' | 'watch' | 'blocked'
+  evidence: string
+  owner: string
+}
+
+export type PlantControlTracePack = {
+  trace_id: string
+  product: string
+  batch_or_lot: string
+  release_state: 'hold' | 'review' | 'release-ready'
+  risk: 'high' | 'medium' | 'low'
+  owner: string
+  next_decision: string
+  due: string
+  source: string
+  stages: PlantControlTraceStage[]
+}
+
+export type PlantControlInspectionCheck = {
+  check_id: string
+  label: string
+  spec: string
+  sample: string
+  evidence: string
+}
+
+export type PlantControlInspectionPack = {
+  pack_id: string
+  name: string
+  inspection_type: 'incoming' | 'compound-release' | 'final-release' | 'claim-review'
+  stage: string
+  owner: string
+  default_decision: 'pass' | 'hold' | 'fail'
+  trigger: string
+  release_rule: string
+  source: string
+  checks: PlantControlInspectionCheck[]
+}
+
 export type PlantManagerShiftBoard = {
   id: string
   label: string
@@ -407,6 +449,271 @@ export const YANGON_TYRE_QUALITY_METRIC_ROWS_SEED: PlantControlMetricRow[] = [
     period_label: 'weekly review',
     owner: 'Maintenance lead',
     status: 'watch',
+  },
+]
+
+export const YANGON_TYRE_INSPECTION_PACKS_SEED: PlantControlInspectionPack[] = [
+  {
+    pack_id: 'inspection-incoming-material',
+    name: 'Incoming material check',
+    inspection_type: 'incoming',
+    stage: 'Receiving / raw material',
+    owner: 'Receiving + Quality',
+    default_decision: 'hold',
+    trigger: 'Use when GRN, supplier COA, quantity, packaging, or visual condition is not clean.',
+    release_rule: 'Material is not released to production until COA, quantity, visual condition, and quality disposition agree.',
+    source: 'GRN / raw-stock / supplier packet',
+    checks: [
+      {
+        check_id: 'incoming-coa',
+        label: 'COA and supplier document',
+        spec: 'COA present and matches purchase/GRN packet',
+        sample: 'One supplier packet per GRN or lot',
+        evidence: 'Attach supplier COA, PO/GRN reference, or photo of packet.',
+      },
+      {
+        check_id: 'incoming-quantity',
+        label: 'Quantity and packaging',
+        spec: 'Received quantity and packaging condition accepted',
+        sample: 'Receiving count plus visual check',
+        evidence: 'Attach receiving note or package photo if abnormal.',
+      },
+      {
+        check_id: 'incoming-disposition',
+        label: 'Quality disposition',
+        spec: 'Release / hold / return / concession decision recorded',
+        sample: 'One decision before production use',
+        evidence: 'Record owner and reason before moving material.',
+      },
+    ],
+  },
+  {
+    pack_id: 'inspection-compound-release',
+    name: 'Compound release check',
+    inspection_type: 'compound-release',
+    stage: 'Mixing / compound',
+    owner: 'Swe Latt + Quality',
+    default_decision: 'pass',
+    trigger: 'Use before compound is treated as ready for downstream production.',
+    release_rule: 'Compound moves forward only when batch identity, recipe/spec version, and visible abnormalities are reviewed.',
+    source: 'Mixing sheet / recipe spec / QC result',
+    checks: [
+      {
+        check_id: 'compound-batch',
+        label: 'Batch identity',
+        spec: 'Batch, date, shift, and material identity are clear',
+        sample: 'One batch record',
+        evidence: 'Attach mixing sheet or batch note.',
+      },
+      {
+        check_id: 'compound-spec',
+        label: 'Recipe/spec version',
+        spec: 'Current approved recipe/spec is used',
+        sample: 'One spec reference per batch family',
+        evidence: 'Attach Drive link or note current spec revision.',
+      },
+      {
+        check_id: 'compound-abnormality',
+        label: 'Visible abnormality',
+        spec: 'No contamination, scorch, under-mix, or abnormal handling',
+        sample: 'Operator + QC visual check',
+        evidence: 'Attach photo if abnormal.',
+      },
+    ],
+  },
+  {
+    pack_id: 'inspection-final-release',
+    name: 'Curing and final release check',
+    inspection_type: 'final-release',
+    stage: 'Curing / final QC',
+    owner: 'Hlaing Hlaing Aye + Kyaw Soe Win 1 QC',
+    default_decision: 'hold',
+    trigger: 'Use when curing, visual QC, repeat defects, or release authority is unclear.',
+    release_rule: 'Finished tyres are release-ready only after defect review, hold status, and release owner are clear.',
+    source: 'Curing press / final inspection / release hold',
+    checks: [
+      {
+        check_id: 'final-press',
+        label: 'Press and cure condition',
+        spec: 'Press, mould, time, and abnormal downtime are reviewed',
+        sample: 'One press or lot group',
+        evidence: 'Attach curing note or downtime evidence if abnormal.',
+      },
+      {
+        check_id: 'final-defect',
+        label: 'Visual defect decision',
+        spec: 'Accepted / rework / scrap / hold decision recorded',
+        sample: 'Sample by lot or defect cluster',
+        evidence: 'Attach defect photo and count.',
+      },
+      {
+        check_id: 'final-release-owner',
+        label: 'Release authority',
+        spec: 'Named QC owner approves release or hold',
+        sample: 'One owner decision per lot/review',
+        evidence: 'Record QC owner and decision reason.',
+      },
+    ],
+  },
+  {
+    pack_id: 'inspection-claim-review',
+    name: 'Claim tyre review',
+    inspection_type: 'claim-review',
+    stage: 'Claim / customer return',
+    owner: 'Quality + Sales',
+    default_decision: 'fail',
+    trigger: 'Use when a returned or claimed tyre needs technical review and customer follow-up.',
+    release_rule: 'Claim is not closed until tyre identity, failure mode, likely cause, and customer response are recorded.',
+    source: 'Claim tyre file / sales evidence / QC review',
+    checks: [
+      {
+        check_id: 'claim-identity',
+        label: 'Tyre identity',
+        spec: 'Size, pattern, serial/lot if available, customer, and date are captured',
+        sample: 'One returned tyre or claim group',
+        evidence: 'Attach claim photo and sales/customer note.',
+      },
+      {
+        check_id: 'claim-failure-mode',
+        label: 'Failure mode',
+        spec: 'Failure type is classified and linked to possible process/material/use cause',
+        sample: 'One failure mode per claim',
+        evidence: 'Attach photos from several angles.',
+      },
+      {
+        check_id: 'claim-response',
+        label: 'Customer response',
+        spec: 'Reject / accept / goodwill / more evidence decision recorded',
+        sample: 'One customer follow-up decision',
+        evidence: 'Attach response note or message thread.',
+      },
+    ],
+  },
+]
+
+export const YANGON_TYRE_TRACE_PACKS_SEED: PlantControlTracePack[] = [
+  {
+    trace_id: 'trace-pcr-review-1',
+    product: 'PCR focus tyre family',
+    batch_or_lot: 'Production week review',
+    release_state: 'review',
+    risk: 'high',
+    owner: 'Quality manager',
+    next_decision: 'Confirm whether the defect cluster is material, machine, or method before release closeout.',
+    due: 'Today',
+    source: 'Tyre production + QC + claim evidence',
+    stages: [
+      {
+        stage_id: 'trace-pcr-material',
+        label: 'Material / GRN',
+        status: 'watch',
+        evidence: 'Receiving variance exists; supplier packet and release note need one linked decision.',
+        owner: 'Receiving + Quality',
+      },
+      {
+        stage_id: 'trace-pcr-mixing',
+        label: 'Mixing',
+        status: 'ok',
+        evidence: 'Batch evidence is present enough for first review, but recipe/spec link should be promoted next.',
+        owner: 'Swe Latt',
+      },
+      {
+        stage_id: 'trace-pcr-building',
+        label: 'Building',
+        status: 'watch',
+        evidence: 'Handoff is visible, but operator/station context is not yet strict enough for genealogy.',
+        owner: 'Ye Lin Tun',
+      },
+      {
+        stage_id: 'trace-pcr-curing',
+        label: 'Curing',
+        status: 'blocked',
+        evidence: 'Repeat defect review needs press, timing, and containment proof before closeout.',
+        owner: 'Hlaing Hlaing Aye',
+      },
+      {
+        stage_id: 'trace-pcr-qc',
+        label: 'QC / release',
+        status: 'blocked',
+        evidence: 'Containment exists; CAPA verification and release authority are still pending.',
+        owner: 'Kyaw Soe Win 1 QC',
+      },
+    ],
+  },
+  {
+    trace_id: 'trace-inbound-nr-1',
+    product: 'Natural rubber input to finished tyre risk',
+    batch_or_lot: 'GRN-2025-041',
+    release_state: 'hold',
+    risk: 'high',
+    owner: 'Plant manager',
+    next_decision: 'Hold, release with concession, or escalate supplier recovery after packet review.',
+    due: 'Before next production use',
+    source: 'Receiving hold + supplier evidence + DQMS review',
+    stages: [
+      {
+        stage_id: 'trace-nr-supplier',
+        label: 'Supplier packet',
+        status: 'blocked',
+        evidence: 'COA and received quantity are still under review.',
+        owner: 'Procurement + Receiving',
+      },
+      {
+        stage_id: 'trace-nr-stores',
+        label: 'Stores / GRN',
+        status: 'watch',
+        evidence: 'GRN evidence exists but disposition is not yet finance-ready.',
+        owner: 'Stores',
+      },
+      {
+        stage_id: 'trace-nr-quality',
+        label: 'Quality disposition',
+        status: 'blocked',
+        evidence: 'Quality must confirm whether material can enter production or stays contained.',
+        owner: 'Quality manager',
+      },
+      {
+        stage_id: 'trace-nr-production',
+        label: 'Production impact',
+        status: 'watch',
+        evidence: 'Production risk should be visible in planning before the next run is approved.',
+        owner: 'Plant manager',
+      },
+    ],
+  },
+  {
+    trace_id: 'trace-asset-quality-1',
+    product: 'Asset-linked defect family',
+    batch_or_lot: 'Weekly reliability review',
+    release_state: 'review',
+    risk: 'medium',
+    owner: 'Maintenance lead',
+    next_decision: 'Verify whether maintenance countermeasure removes the repeat defect signal.',
+    due: 'This week',
+    source: 'Maintenance + DQMS + output review',
+    stages: [
+      {
+        stage_id: 'trace-asset-machine',
+        label: 'Machine condition',
+        status: 'blocked',
+        evidence: 'Asset-linked quality escape needs reliability countermeasure proof.',
+        owner: 'U Myo Lin Tun',
+      },
+      {
+        stage_id: 'trace-asset-capa',
+        label: 'CAPA action',
+        status: 'watch',
+        evidence: 'Preventive action exists, but effectiveness must be checked against repeat defects.',
+        owner: 'Aung Naing',
+      },
+      {
+        stage_id: 'trace-asset-qc',
+        label: 'QC verification',
+        status: 'watch',
+        evidence: 'QC should confirm next reviewed lots after the maintenance fix.',
+        owner: 'Kyaw Soe Win 1 QC',
+      },
+    ],
   },
 ]
 

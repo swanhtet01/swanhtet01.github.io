@@ -1,5 +1,33 @@
 # YTF DIGITAL QUALITY MANAGEMENT SYSTEM - DEVELOPMENT TODO
 
+## CURRENT REALITY SNAPSHOT - 2026-05-12
+
+This TODO is legacy-heavy. Current cloud tenant is `https://ytf.supermega.dev` on the separated Vercel YTF project, not the old `swanhtet01.github.io + AWS` demo framing.
+
+Verified live baseline:
+
+- YTF cloud smoke passed with required cron endpoints protected.
+- YTF privacy smoke passed.
+- Data pipeline smoke passed after full refresh.
+- Source records: 1,439.
+- Workbook metric candidates: 634.
+- KPI candidates: 705.
+- Knowledge chunks: 239.
+- Source-change review tasks: 95.
+- Latest full refresh: `ready`, `v3-source-evidence`, 10 steps.
+
+Finish-priority correction:
+
+- Do not build more isolated DQMS tables before the manager workflow is stable.
+- Finish the source-register graph, KPI curation, Action Board review flow, and client handoff/UAT package first.
+- Then expand QMS into inspection plans, specs, holds/releases, SPC, calibration, audit schedule, supplier quality, and batch-linked CAPA.
+
+Current client package:
+
+- Handoff: `docs/ytf_customer_handoff_package_2026-05-12.md`.
+- Quote/SOW: `docs/ytf_commercial_quote_and_sow_2026-05-12.md`.
+- Audit: `npm run audit:ytf-finish`.
+
 **Project:** AI-Native ERP Platform for Yangon Tyre Factory  
 **Module:** DQMS (Digital Quality Management System) - First Module  
 **Target:** Plant B Pilot Deployment  

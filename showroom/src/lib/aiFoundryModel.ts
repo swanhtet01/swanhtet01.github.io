@@ -314,7 +314,7 @@ export const FOUNDRY_HACKATHON_TRACKS: FoundryHackathonTrack[] = [
     unitId: 'prototype-studio',
     workspaceIds: ['prototype-floor', 'tenant-launch-room', 'module-release-desk'],
     appRoute: '/app/operations',
-    proofRoute: '/clients/yangon-tyre',
+    proofRoute: '/app/operations',
     thesis: 'Plant teams should run shift blockers, receiving pressure, quality, and maintenance from one queue.',
     antithesis: 'The real factory still splits those loops across meetings, sheets, and scattered records.',
     synthesis: 'Operations Control, Manufacturing Command, Maintenance Control, and DQMS are promoted as one tenant operating kernel.',

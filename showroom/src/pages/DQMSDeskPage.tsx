@@ -1,19 +1,15 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
 
-import { PageIntro } from '../components/PageIntro'
+import { YtfRoleScorecards } from '../components/YtfRoleScorecards'
 import {
-  YANGON_TYRE_APPROVAL_ROWS_SEED,
   YANGON_TYRE_CAPA_ROWS_SEED,
   YANGON_TYRE_DQMS_SUMMARY_SEED,
-  YANGON_TYRE_PLANT_CONTROL_UPDATED_AT,
-  YANGON_TYRE_PLANT_MANAGER_REVIEW_RHYTHMS,
   YANGON_TYRE_QUALITY_INCIDENTS_SEED,
   YANGON_TYRE_QUALITY_METRIC_ROWS_SEED,
 } from '../lib/yangonTyrePlantControl'
-import { getTenantConfig } from '../lib/tenantConfig'
-import { YANGON_TYRE_DATA_PROFILE } from '../lib/yangonTyreDataProfile'
-import { checkWorkspaceHealth, getCapabilityProfileForRole, getWorkspaceSession, sessionHasCapability, workspaceFetch } from '../lib/workspaceApi'
+import { OPERATING_RECORD_LOOP, operatingRecordFailureMessage, operatingRecordSavedMessage, type OperatingRecordSavePayload } from '../lib/operatingRecordStatus'
+import { loadCachedWorkspaceSession, sessionHasCapability, workspaceFetch, type WorkspaceCapability } from '../lib/workspaceApi'
+import { ytfOwnerLabel } from '../lib/ytfUiFormat'
 
 type QualityIncidentRow = {
   incident_id: string
@@ -49,18 +45,10 @@ type MetricRow = {
   status: string
 }
 
-type ApprovalRow = {
-  approval_id: string
-  title: string
-  approval_gate: string
-  owner: string
-  status: string
-  due: string
-}
-
 type SummaryPayload = {
   quality?: {
     incident_count?: number
+    inspection_count?: number
     capa_count?: number
     by_status?: Record<string, number>
     top_suppliers?: Array<{ supplier: string; incident_count: number }>
@@ -86,15 +74,16 @@ type CapaForm = {
   target_date: string
   owner: string
   status: string
+  create_action: boolean
 }
 
 const incidentDefaults: IncidentForm = {
   title: '',
   summary: '',
-  supplier: 'Internal',
+  supplier: 'Internal process',
   severity: 'medium',
   status: 'open',
-  owner: 'Quality Team',
+  owner: 'QC team',
   reported_at: '',
   target_close_date: '',
   evidence_link: '',
@@ -105,532 +94,478 @@ const capaDefaults: CapaForm = {
   action_title: '',
   verification_criteria: '',
   target_date: '',
-  owner: 'Quality Team',
+  owner: 'QC team',
   status: 'open',
+  create_action: true,
 }
 
-export function DQMSDeskPage() {
-  const tenant = getTenantConfig()
-  const [loading, setLoading] = useState(true)
-  const [savingIncident, setSavingIncident] = useState(false)
-  const [savingCapa, setSavingCapa] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [message, setMessage] = useState<string | null>(null)
-  const [statusNote, setStatusNote] = useState<string>('Using seeded DQMS surface while the live workspace connects.')
-  const [source, setSource] = useState<'live' | 'seed'>('seed')
-  const [summary, setSummary] = useState<SummaryPayload | null>(() => ({
+const qualityOwnerOptions = ['QC team', 'Production team', 'Maintenance team', 'Section owner']
+const protectedQualityRoles = new Set(['admin', 'tenant_admin', 'platform_admin', 'owner', 'ceo', 'director', 'plant_manager'])
+const protectedQualityCapabilities: WorkspaceCapability[] = ['tenant_admin.view', 'platform_admin.view', 'director.view']
+
+function canLoadProtectedQualityRecords() {
+  const payload = loadCachedWorkspaceSession()
+  const session = payload?.authenticated ? payload.session : null
+  const role = String(session?.role ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '_')
+  return Boolean(session && (protectedQualityRoles.has(role) || protectedQualityCapabilities.some((capability) => sessionHasCapability(session, capability))))
+}
+
+function getSeedSummary(): SummaryPayload {
+  return {
     quality: {
       incident_count: YANGON_TYRE_DQMS_SUMMARY_SEED.quality.incident_count,
       capa_count: YANGON_TYRE_DQMS_SUMMARY_SEED.quality.capa_count,
       by_status: { ...YANGON_TYRE_DQMS_SUMMARY_SEED.quality.by_status },
-      top_suppliers: YANGON_TYRE_DQMS_SUMMARY_SEED.quality.top_suppliers.map((item) => ({ ...item })),
+      top_suppliers: YANGON_TYRE_DQMS_SUMMARY_SEED.quality.top_suppliers.map((supplier) => ({ ...supplier })),
     },
-  }))
+  }
+}
+
+function formatDate(value?: string | null) {
+  if (!value) return 'Not dated'
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return value
+  return parsed.toLocaleDateString()
+}
+
+function compactNumber(value?: number | string | null) {
+  if (typeof value === 'number') return new Intl.NumberFormat().format(value)
+  const normalized = String(value ?? '').trim()
+  return normalized || '0'
+}
+
+function statusText(value?: string | null) {
+  return String(value || 'open').replace(/_/g, ' ')
+}
+
+export function DQMSDeskPage() {
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState('')
+  const [message, setMessage] = useState('')
+  const [error, setError] = useState('')
+  const [summary, setSummary] = useState<SummaryPayload>(() => getSeedSummary())
   const [incidents, setIncidents] = useState<QualityIncidentRow[]>(YANGON_TYRE_QUALITY_INCIDENTS_SEED)
-  const [capaRows, setCapaRows] = useState<CapaRow[]>(YANGON_TYRE_CAPA_ROWS_SEED)
-  const [metricRows, setMetricRows] = useState<MetricRow[]>(YANGON_TYRE_QUALITY_METRIC_ROWS_SEED)
-  const [approvalRows, setApprovalRows] = useState<ApprovalRow[]>(YANGON_TYRE_APPROVAL_ROWS_SEED)
+  const [capas, setCapas] = useState<CapaRow[]>(YANGON_TYRE_CAPA_ROWS_SEED)
+  const [metrics, setMetrics] = useState<MetricRow[]>(YANGON_TYRE_QUALITY_METRIC_ROWS_SEED)
   const [incidentForm, setIncidentForm] = useState<IncidentForm>(incidentDefaults)
   const [capaForm, setCapaForm] = useState<CapaForm>(capaDefaults)
+  const [draft, setDraft] = useState('')
 
   async function loadDesk() {
-    const [summaryPayload, incidentPayload, capaPayload, metricPayload, approvalPayload] = await Promise.all([
+    const [summaryPayload, incidentPayload, capaPayload, metricPayload] = await Promise.allSettled([
       workspaceFetch<SummaryPayload>('/api/summary'),
       workspaceFetch<{ rows?: QualityIncidentRow[] }>('/api/quality/incidents?limit=20'),
       workspaceFetch<{ rows?: CapaRow[] }>('/api/quality/capa?limit=20'),
       workspaceFetch<{ rows?: MetricRow[] }>('/api/metrics/records?limit=20'),
-      workspaceFetch<{ rows?: ApprovalRow[] }>('/api/approvals?limit=10'),
     ])
-    setSummary(summaryPayload)
-    setIncidents(incidentPayload.rows ?? [])
-    setCapaRows(capaPayload.rows ?? [])
-    setMetricRows(metricPayload.rows ?? [])
-    setApprovalRows(approvalPayload.rows ?? [])
+
+    if (summaryPayload.status === 'fulfilled') setSummary(summaryPayload.value)
+    if (incidentPayload.status === 'fulfilled') {
+      setIncidents(incidentPayload.value.rows?.length ? incidentPayload.value.rows : YANGON_TYRE_QUALITY_INCIDENTS_SEED)
+    }
+    if (capaPayload.status === 'fulfilled') setCapas(capaPayload.value.rows?.length ? capaPayload.value.rows : YANGON_TYRE_CAPA_ROWS_SEED)
+    if (metricPayload.status === 'fulfilled') setMetrics(metricPayload.value.rows?.length ? metricPayload.value.rows : YANGON_TYRE_QUALITY_METRIC_ROWS_SEED)
   }
 
   useEffect(() => {
     let cancelled = false
 
-    async function load() {
-      const health = await checkWorkspaceHealth()
-      if (cancelled) return
-      if (!health.ready) {
-        setSource('seed')
-        setStatusNote('Workspace API is not connected on this host yet. Showing the seeded DQMS surface.')
-        setLoading(false)
-        return
-      }
-
+    async function start() {
       try {
-        const session = await getWorkspaceSession()
-        if (cancelled) return
-        if (!session.authenticated) {
-          setSource('seed')
-          setStatusNote('Workspace login is not active here. Showing the seeded DQMS surface.')
-          setLoading(false)
+        if (!canLoadProtectedQualityRecords()) {
           return
         }
-        if (!sessionHasCapability(session.session, 'dqms.view') && !sessionHasCapability(session.session, 'approvals.view')) {
-          setSource('seed')
-          setStatusNote(`Live DQMS access is not available for the current role (${getCapabilityProfileForRole(session.session?.role).label}). Showing the seeded DQMS surface.`)
-          setLoading(false)
-          return
-        }
-      } catch {
-        if (!cancelled) {
-          setSource('seed')
-          setStatusNote('Workspace login could not be verified on this host yet. Showing the seeded DQMS surface.')
-          setLoading(false)
-        }
-        return
-      }
-
-      try {
         await loadDesk()
-        setSource('live')
-        setStatusNote('Live DQMS incidents, CAPA, and KPI rows are connected.')
       } catch {
-        if (!cancelled) {
-          setSource('seed')
-          setStatusNote('Live DQMS data could not be loaded right now. Showing the seeded DQMS surface.')
-        }
+        if (!cancelled) setError('Using seed quality records because live data did not load.')
       } finally {
-        if (!cancelled) {
-          setLoading(false)
-        }
+        if (!cancelled) setLoading(false)
       }
     }
 
-    void load()
+    void start()
     return () => {
       cancelled = true
     }
   }, [])
 
+  const quality = summary.quality ?? {}
+  const openIncidents = incidents.filter((incident) => incident.status !== 'closed')
   const qualityMetrics = useMemo(
-    () =>
-      metricRows.filter((row) => {
-        const group = String(row.metric_group || '').toLowerCase()
-        const name = String(row.metric_name || '').toLowerCase()
-        return group === 'quality' || group === 'production' || name.includes('reject') || name.includes('scrap') || name.includes('ppm') || name.includes('downtime')
-      }),
-    [metricRows],
+    () => metrics.filter((metric) => `${metric.metric_group} ${metric.metric_name}`.toLowerCase().includes('quality')),
+    [metrics],
   )
 
+  function updateIncident(key: keyof IncidentForm, value: string) {
+    setIncidentForm((current) => ({ ...current, [key]: value }))
+  }
+
+  function updateCapa(key: keyof CapaForm, value: string) {
+    setCapaForm((current) => ({ ...current, [key]: value }))
+  }
+
+  function draftCapa() {
+    const title = incidentForm.title.trim() || incidents[0]?.title || 'Quality issue'
+    const facts = incidentForm.summary.trim() || incidents[0]?.summary || 'Facts still need manager confirmation.'
+    setDraft(
+      [
+        `Issue: ${title}`,
+        `5W1H facts: ${facts}`,
+        'Containment: hold affected stock or process until QC confirms risk.',
+        'Likely cause branch: material, machine, method, people, measurement, or environment.',
+        'CAPA candidate: assign owner, due date, verification criteria, and photo/source proof before closure.',
+      ].join('\n'),
+    )
+  }
+
   async function saveIncident() {
-    if (!incidentForm.title.trim()) return
-    if (source !== 'live') {
-      setMessage('Seed mode is read-only. Connect the live workspace to write incidents back into the DQMS record.')
+    if (!incidentForm.title.trim() || !incidentForm.summary.trim()) {
+      setError('Add the issue title and facts before saving.')
       return
     }
-    setSavingIncident(true)
-    setMessage(null)
-    setError(null)
+    setSaving('incident')
+    setMessage('')
+    setError('')
+    const nextRecord: QualityIncidentRow = {
+      incident_id: `inc-local-${Date.now()}`,
+      ...incidentForm,
+      source_type: 'manual_entry',
+      reported_at: incidentForm.reported_at || new Date().toISOString(),
+      target_close_date: incidentForm.target_close_date || '',
+    }
     try {
-      const payload = await workspaceFetch<{ message?: string }>('/api/quality/incidents', {
+      const payload = await workspaceFetch<OperatingRecordSavePayload>('/api/quality/incidents', {
         method: 'POST',
-        body: JSON.stringify({
-          ...incidentForm,
-          source_type: 'manual_entry',
-        }),
+        body: JSON.stringify(nextRecord),
       })
       await loadDesk()
-      setIncidentForm(incidentDefaults)
-      setMessage(payload.message ?? 'Quality incident saved.')
+      setMessage(operatingRecordSavedMessage(payload, 'Quality incident saved.'))
     } catch {
-      setError('Could not save the quality incident right now.')
+      setIncidents((current) => [nextRecord, ...current])
+      setError(operatingRecordFailureMessage('Quality incident'))
     } finally {
-      setSavingIncident(false)
+      setIncidentForm(incidentDefaults)
+      setSaving('')
     }
   }
 
   async function saveCapa() {
-    if (!capaForm.incident_id.trim() || !capaForm.action_title.trim()) return
-    if (source !== 'live') {
-      setMessage('Seed mode is read-only. Connect the live workspace to write CAPA actions back into the DQMS record.')
+    if (!capaForm.action_title.trim() || !capaForm.verification_criteria.trim()) {
+      setError('Add CAPA action and verification criteria before saving.')
       return
     }
-    setSavingCapa(true)
-    setMessage(null)
-    setError(null)
+    setSaving('capa')
+    setMessage('')
+    setError('')
+    const nextRecord: CapaRow = {
+      capa_id: `capa-local-${Date.now()}`,
+      ...capaForm,
+      incident_id: capaForm.incident_id || incidents[0]?.incident_id || 'manual',
+      target_date: capaForm.target_date || '',
+    }
     try {
-      const payload = await workspaceFetch<{ message?: string }>('/api/quality/capa', {
+      const payload = await workspaceFetch<OperatingRecordSavePayload>('/api/quality/capa', {
         method: 'POST',
-        body: JSON.stringify(capaForm),
+        body: JSON.stringify(nextRecord),
       })
       await loadDesk()
-      setCapaForm(capaDefaults)
-      setMessage(payload.message ?? 'CAPA action saved.')
+      setMessage(operatingRecordSavedMessage(payload, 'CAPA saved.'))
     } catch {
-      setError('Could not save the CAPA action right now.')
+      setCapas((current) => [nextRecord, ...current])
+      setError(operatingRecordFailureMessage('CAPA'))
     } finally {
-      setSavingCapa(false)
+      setCapaForm(capaDefaults)
+      setSaving('')
     }
   }
 
   return (
-    <div className="space-y-8">
-      <PageIntro
-        eyebrow="DQMS"
-        title="Run incidents, CAPA, and quality methods in one place."
-        description="This is the industrial quality desk for Yangon Tyre: incident register, CAPA queue, KPI review, fishbone, 5W1H, and closeout discipline."
+    <div className="sm-ytf-simple-page">
+      <section className="sm-ytf-hero-row">
+        <div>
+          <p className="sm-kicker">Quality</p>
+          <h1>Contain, assign, close.</h1>
+          <p>
+            A simple DQMS lane for defects, holds, CAPA, and release risk. ISO logic stays behind the form: evidence,
+            root cause, owner, due date, and verification.
+          </p>
+        </div>
+        <div className="sm-ytf-status-stack">
+          <span>{loading ? 'Loading' : `${openIncidents.length} open`}</span>
+          <span>{compactNumber(quality.capa_count ?? capas.length)} CAPA</span>
+        </div>
+      </section>
+
+      <YtfRoleScorecards
+        role="quality"
+        title="Quality scorecard."
+        subtitle="Evidence, CAPA follow-up, quality metrics, and source proof."
       />
 
-      <section className="sm-chip text-white">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <p className="font-semibold">{source === 'live' ? 'Live DQMS surface connected.' : 'Seeded DQMS surface active.'}</p>
-            <p className="mt-2 text-sm text-[var(--sm-muted)]">
-              {statusNote} Updated signal: {source === 'live' ? 'Live workspace snapshot' : new Date(YANGON_TYRE_PLANT_CONTROL_UPDATED_AT).toLocaleString()}.
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-3">
-            <Link className="sm-button-primary" to="/app/plant-manager">
-              Plant manager
-            </Link>
-            <Link className="sm-button-secondary" to="/app/operations">
-              Open operations
-            </Link>
-          </div>
-        </div>
+      {(message || error) && <p className="sm-ytf-alert">{message || error}</p>}
+
+      <section className="sm-ytf-metric-strip">
+        {OPERATING_RECORD_LOOP.map((step) => (
+          <article key={step.label}>
+            <span>{step.label}</span>
+            <strong>{step.label === 'Capture' ? 'DQMS' : step.label === 'Route' ? 'Action Board' : 'QC review'}</strong>
+            <small>{step.detail}</small>
+          </article>
+        ))}
       </section>
 
-      <section className="grid gap-4 md:grid-cols-4">
-        <div className="sm-metric-card">
-          <p className="sm-kicker text-[var(--sm-accent)]">Incidents</p>
-          <p className="mt-3 text-3xl font-bold text-white">{summary?.quality?.incident_count ?? 0}</p>
-        </div>
-        <div className="sm-metric-card">
-          <p className="sm-kicker text-[var(--sm-accent-alt)]">Open</p>
-          <p className="mt-3 text-3xl font-bold text-white">{summary?.quality?.by_status?.open ?? 0}</p>
-        </div>
-        <div className="sm-metric-card">
-          <p className="sm-kicker text-[var(--sm-accent)]">CAPA</p>
-          <p className="mt-3 text-3xl font-bold text-white">{summary?.quality?.capa_count ?? 0}</p>
-        </div>
-        <div className="sm-metric-card">
-          <p className="sm-kicker text-[var(--sm-accent-alt)]">Quality KPIs</p>
-          <p className="mt-3 text-3xl font-bold text-white">{qualityMetrics.length}</p>
-        </div>
+      <section className="sm-ytf-metric-strip">
+        <article>
+          <span>Incidents</span>
+          <strong>{compactNumber(quality.incident_count ?? incidents.length)}</strong>
+        </article>
+        <article>
+          <span>Open</span>
+          <strong>{compactNumber(openIncidents.length)}</strong>
+        </article>
+        <article>
+          <span>CAPA</span>
+          <strong>{compactNumber(quality.capa_count ?? capas.length)}</strong>
+        </article>
+        <article>
+          <span>Quality KPIs</span>
+          <strong>{compactNumber(qualityMetrics.length)}</strong>
+        </article>
       </section>
 
-      {tenant.key === 'ytf-plant-a' ? (
-        <section className="grid gap-4 md:grid-cols-4">
-          <div className="sm-chip text-white">
-            <p className="sm-kicker text-[var(--sm-accent)]">Top defects</p>
-            <p className="mt-2 text-lg font-bold">{YANGON_TYRE_DATA_PROFILE.topDefects[0]}</p>
-            <p className="mt-2 text-sm text-[var(--sm-muted)]">{YANGON_TYRE_DATA_PROFILE.topDefects.slice(1).join(' / ')}</p>
-          </div>
-          <div className="sm-chip text-white">
-            <p className="sm-kicker text-[var(--sm-accent-alt)]">B+R baseline</p>
-            <p className="mt-2 text-lg font-bold">{YANGON_TYRE_DATA_PROFILE.annualBPlusRRate2024}% avg</p>
-            <p className="mt-2 text-sm text-[var(--sm-muted)]">Worst month: {YANGON_TYRE_DATA_PROFILE.worstMonth2024.month} at {YANGON_TYRE_DATA_PROFILE.worstMonth2024.bPlusRRate}%.</p>
-          </div>
-          <div className="sm-chip text-white">
-            <p className="sm-kicker text-[var(--sm-accent)]">Release logic</p>
-            <p className="mt-2 text-lg font-bold">Containment before closeout</p>
-            <p className="mt-2 text-sm text-[var(--sm-muted)]">{YANGON_TYRE_DATA_PROFILE.qualityTargets.join(' / ')}</p>
-          </div>
-          <div className="sm-chip text-white">
-            <p className="sm-kicker text-[var(--sm-accent-alt)]">Process scope</p>
-            <p className="mt-2 text-lg font-bold">Mixing to curing</p>
-            <p className="mt-2 text-sm text-[var(--sm-muted)]">{YANGON_TYRE_DATA_PROFILE.productionLines.join(' / ')}</p>
-          </div>
-        </section>
-      ) : null}
-
-      {tenant.key === 'ytf-plant-a' ? (
-        <section className="grid gap-6 lg:grid-cols-[1fr_1fr]">
-          <article className="sm-surface-deep p-6">
-            <p className="sm-kicker text-[var(--sm-accent-alt)]">Quality and plant rhythm</p>
-            <h2 className="mt-2 text-3xl font-bold text-white">Containment and plant flow should share one review cadence.</h2>
-            <div className="mt-6 grid gap-4">
-              {YANGON_TYRE_PLANT_MANAGER_REVIEW_RHYTHMS.slice(0, 2).map((item) => (
-                <article className="sm-proof-card" key={item.id}>
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="font-semibold text-white">{item.name}</p>
-                      <p className="mt-2 text-sm text-[var(--sm-muted)]">{item.cadence}</p>
-                    </div>
-                    <Link className="sm-link" to={item.route}>
-                      Open lane
-                    </Link>
-                  </div>
-                  <p className="mt-4 text-sm leading-relaxed text-white/80">{item.purpose}</p>
-                </article>
-              ))}
-            </div>
-          </article>
-          <article className="sm-surface p-6">
-            <p className="sm-kicker text-[var(--sm-accent)]">Writeback status</p>
-            <h2 className="mt-2 text-3xl font-bold text-white">This desk is already usable for review, and live mode enables writeback.</h2>
-            <div className="mt-6 grid gap-4">
-              <article className="sm-proof-card">
-                <p className="font-semibold text-white">Current mode</p>
-                <p className="mt-3 text-sm leading-relaxed text-[var(--sm-muted)]">
-                  {source === 'live'
-                    ? 'Live mode is active. New incidents and CAPA actions can be written back into the workspace APIs.'
-                    : 'Seed mode is active. You can review the DQMS flow, methods, and incident patterns now, then switch to live mode for writeback.'}
-                </p>
-              </article>
-              <article className="sm-proof-card">
-                <p className="font-semibold text-white">Next move</p>
-                <p className="mt-3 text-sm leading-relaxed text-[var(--sm-muted)]">
-                  Use the plant-manager interface to run the daily rhythm across operations, DQMS, maintenance, and receiving from one command surface.
-                </p>
-              </article>
-            </div>
-          </article>
-        </section>
-      ) : null}
-
-      {tenant.key === 'ytf-plant-a' ? (
-        <section className="sm-calm-surface p-6">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+      <details className="sm-ytf-panel">
+        <summary className="cursor-pointer text-lg font-bold text-[var(--sm-ink)]">Open incidents and CAPA list</summary>
+      <section className="mt-4 sm-ytf-split">
+        <article className="sm-ytf-panel" id="quality-incident">
+          <div className="sm-ytf-section-head">
             <div>
-              <p className="sm-kicker text-[var(--sm-accent)]">Manager routine</p>
-              <h2 className="mt-2 text-2xl font-bold text-white">Use Plant Manager for the review loop.</h2>
-              <p className="mt-3 max-w-3xl text-sm leading-relaxed text-[var(--sm-muted)]">
-                Use DQMS for the case itself. Use Plant Manager when quality managers need the daily routine, teaching sequence, and method framing before diving into individual incidents.
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-3">
-              <Link className="sm-button-primary" to="/app/plant-manager">
-                Open plant manager
-              </Link>
-              <Link className="sm-button-secondary" to="/app/adoption-command">
-                Review adoption
-              </Link>
+              <p className="sm-kicker">Incident</p>
+              <h2>Record facts once.</h2>
             </div>
           </div>
-        </section>
-      ) : null}
-
-      {loading && source === 'live' ? (
-        <section className="sm-surface p-6 text-sm text-[var(--sm-muted)]">Loading DQMS desk...</section>
-      ) : error ? (
-        <section className="sm-surface p-6">
-          <p className="text-sm text-[var(--sm-muted)]">{error}</p>
-          <div className="mt-4 flex flex-wrap gap-3">
-            <Link className="sm-button-primary" to="/login?next=/app/dqms">
-              Login
-            </Link>
-            <Link className="sm-button-secondary" to="/app/approvals">
-              Open approvals
-            </Link>
-          </div>
-        </section>
-      ) : (
-        <>
-          <section className="grid gap-6 lg:grid-cols-[0.95fr_1.05fr]">
-            <article className="sm-surface-deep p-6">
-              <p className="sm-kicker text-[var(--sm-accent)]">Log incident</p>
-              <h2 className="mt-3 text-3xl font-bold text-white">Capture the issue while the evidence is fresh.</h2>
-              <div className="mt-6 grid gap-4 md:grid-cols-2">
-                <label className="space-y-2">
-                  <span className="text-sm text-[var(--sm-muted)]">Title</span>
-                  <input className="sm-input" value={incidentForm.title} onChange={(event) => setIncidentForm((current) => ({ ...current, title: event.target.value }))} />
-                </label>
-                <label className="space-y-2">
-                  <span className="text-sm text-[var(--sm-muted)]">Supplier</span>
-                  <input className="sm-input" value={incidentForm.supplier} onChange={(event) => setIncidentForm((current) => ({ ...current, supplier: event.target.value }))} />
-                </label>
-                <label className="space-y-2">
-                  <span className="text-sm text-[var(--sm-muted)]">Severity</span>
-                  <select className="sm-input" value={incidentForm.severity} onChange={(event) => setIncidentForm((current) => ({ ...current, severity: event.target.value }))}>
-                    <option value="high">high</option>
-                    <option value="medium">medium</option>
-                    <option value="low">low</option>
-                  </select>
-                </label>
-                <label className="space-y-2">
-                  <span className="text-sm text-[var(--sm-muted)]">Owner</span>
-                  <input className="sm-input" value={incidentForm.owner} onChange={(event) => setIncidentForm((current) => ({ ...current, owner: event.target.value }))} />
-                </label>
-                <label className="space-y-2">
-                  <span className="text-sm text-[var(--sm-muted)]">Status</span>
-                  <select className="sm-input" value={incidentForm.status} onChange={(event) => setIncidentForm((current) => ({ ...current, status: event.target.value }))}>
-                    <option value="open">open</option>
-                    <option value="triage">triage</option>
-                    <option value="review">review</option>
-                    <option value="closed">closed</option>
-                  </select>
-                </label>
-                <label className="space-y-2">
-                  <span className="text-sm text-[var(--sm-muted)]">Target close</span>
-                  <input className="sm-input" value={incidentForm.target_close_date} onChange={(event) => setIncidentForm((current) => ({ ...current, target_close_date: event.target.value }))} />
-                </label>
-              </div>
-              <label className="mt-4 block space-y-2">
-                <span className="text-sm text-[var(--sm-muted)]">Summary</span>
-                <textarea
-                  className="min-h-24 rounded-xl border border-white/8 bg-white/4 px-3 py-3 text-sm font-normal text-white"
-                  value={incidentForm.summary}
-                  onChange={(event) => setIncidentForm((current) => ({ ...current, summary: event.target.value }))}
+          <div className="grid gap-3">
+            <label className="grid gap-1 text-sm font-bold text-[var(--sm-ink)]">
+              Issue title
+              <input
+                className="sm-input"
+                value={incidentForm.title}
+                onChange={(event) => updateIncident('title', event.target.value)}
+                placeholder="Example: Curing defect found on release check"
+              />
+            </label>
+            <div className="grid gap-3 sm:grid-cols-3">
+              <label className="grid gap-1 text-sm font-bold text-[var(--sm-ink)]">
+                Severity
+                <select className="sm-input" value={incidentForm.severity} onChange={(event) => updateIncident('severity', event.target.value)}>
+                  <option value="high">High</option>
+                  <option value="medium">Medium</option>
+                  <option value="low">Low</option>
+                </select>
+              </label>
+              <label className="grid gap-1 text-sm font-bold text-[var(--sm-ink)]">
+                Owner
+                <select className="sm-input" value={incidentForm.owner} onChange={(event) => updateIncident('owner', event.target.value)}>
+                  {qualityOwnerOptions.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="grid gap-1 text-sm font-bold text-[var(--sm-ink)]">
+                Target close
+                <input
+                  className="sm-input"
+                  type="date"
+                  value={incidentForm.target_close_date}
+                  onChange={(event) => updateIncident('target_close_date', event.target.value)}
                 />
               </label>
-              <div className="mt-6 flex flex-wrap gap-3">
-                <button className="sm-button-primary" disabled={savingIncident} onClick={() => void saveIncident()} type="button">
-                  {source === 'live' ? (savingIncident ? 'Saving...' : 'Save incident') : 'Live workspace required'}
-                </button>
-                <Link className="sm-button-secondary" to="/app/documents">
-                  Open documents
-                </Link>
-              </div>
+            </div>
+            <label className="grid gap-1 text-sm font-bold text-[var(--sm-ink)]">
+              Facts and evidence
+              <textarea
+                className="sm-ytf-textarea"
+                value={incidentForm.summary}
+                onChange={(event) => updateIncident('summary', event.target.value)}
+                rows={4}
+                placeholder="What happened, where, when, how much is affected, and what proof exists?"
+              />
+            </label>
+            <label className="grid gap-1 text-sm font-bold text-[var(--sm-ink)]">
+              Photo or Drive link
+              <input
+                className="sm-input"
+                value={incidentForm.evidence_link}
+                onChange={(event) => updateIncident('evidence_link', event.target.value)}
+                placeholder="Paste evidence link for now"
+              />
+            </label>
+            <button className="sm-button-primary" type="button" onClick={() => void saveIncident()} disabled={saving === 'incident'}>
+              {saving === 'incident' ? 'Saving...' : 'Save incident + action'}
+            </button>
+            <button className="sm-button-secondary" type="button" onClick={draftCapa}>
+              Draft 5W1H candidate
+            </button>
+          </div>
+        </article>
 
-              <div className="mt-8 border-t border-white/8 pt-6">
-                <p className="sm-kicker text-[var(--sm-accent-alt)]">Create CAPA</p>
-                <div className="mt-4 grid gap-4 md:grid-cols-2">
-                  <label className="space-y-2">
-                    <span className="text-sm text-[var(--sm-muted)]">Incident ID</span>
-                    <input className="sm-input" value={capaForm.incident_id} onChange={(event) => setCapaForm((current) => ({ ...current, incident_id: event.target.value }))} />
-                  </label>
-                  <label className="space-y-2">
-                    <span className="text-sm text-[var(--sm-muted)]">Owner</span>
-                    <input className="sm-input" value={capaForm.owner} onChange={(event) => setCapaForm((current) => ({ ...current, owner: event.target.value }))} />
-                  </label>
-                  <label className="space-y-2 md:col-span-2">
-                    <span className="text-sm text-[var(--sm-muted)]">Action title</span>
-                    <input className="sm-input" value={capaForm.action_title} onChange={(event) => setCapaForm((current) => ({ ...current, action_title: event.target.value }))} />
-                  </label>
-                  <label className="space-y-2 md:col-span-2">
-                    <span className="text-sm text-[var(--sm-muted)]">Verification criteria</span>
-                    <input className="sm-input" value={capaForm.verification_criteria} onChange={(event) => setCapaForm((current) => ({ ...current, verification_criteria: event.target.value }))} />
-                  </label>
-                  <label className="space-y-2">
-                    <span className="text-sm text-[var(--sm-muted)]">Target date</span>
-                    <input className="sm-input" value={capaForm.target_date} onChange={(event) => setCapaForm((current) => ({ ...current, target_date: event.target.value }))} />
-                  </label>
-                  <label className="space-y-2">
-                    <span className="text-sm text-[var(--sm-muted)]">Status</span>
-                    <select className="sm-input" value={capaForm.status} onChange={(event) => setCapaForm((current) => ({ ...current, status: event.target.value }))}>
-                      <option value="open">open</option>
-                      <option value="review">review</option>
-                      <option value="done">done</option>
-                    </select>
-                  </label>
-                </div>
-                <div className="mt-6 flex flex-wrap gap-3">
-                  <button className="sm-button-accent" disabled={savingCapa} onClick={() => void saveCapa()} type="button">
-                    {source === 'live' ? (savingCapa ? 'Saving...' : 'Save CAPA') : 'Live workspace required'}
-                  </button>
-                  <Link className="sm-button-secondary" to="/app/approvals">
-                    Open approvals
-                  </Link>
-                </div>
-              </div>
-
-              {message ? <div className="mt-4 sm-chip text-white">{message}</div> : null}
-              {error ? <div className="mt-4 sm-chip text-white">{error}</div> : null}
-            </article>
-
-            <article className="sm-terminal p-6">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="sm-kicker text-[var(--sm-accent-alt)]">Incident register</p>
-                  <h2 className="mt-2 text-2xl font-bold text-white">Open quality and DQMS items</h2>
-                </div>
-                <span className="sm-status-pill">{incidents.length} incidents</span>
-              </div>
-              <div className="mt-5 space-y-3">
-                {incidents.map((row) => (
-                  <article className="sm-proof-card" key={row.incident_id}>
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="text-lg font-bold text-white">{row.title}</p>
-                        <p className="mt-2 text-sm text-[var(--sm-muted)]">{row.summary}</p>
-                      </div>
-                      <span className="sm-status-pill">{row.severity}</span>
-                    </div>
-                    <div className="mt-4 grid gap-3 md:grid-cols-3">
-                      <div className="sm-chip text-white">
-                        <p className="sm-kicker text-[var(--sm-accent)]">Supplier</p>
-                        <p className="mt-2">{row.supplier || 'Internal'}</p>
-                      </div>
-                      <div className="sm-chip text-white">
-                        <p className="sm-kicker text-[var(--sm-accent-alt)]">Owner</p>
-                        <p className="mt-2">{row.owner}</p>
-                      </div>
-                      <div className="sm-chip text-white">
-                        <p className="sm-kicker text-[var(--sm-accent)]">Status</p>
-                        <p className="mt-2">{row.status}</p>
-                      </div>
-                    </div>
-                  </article>
+        <details className="sm-ytf-panel" id="quality-capa">
+          <summary className="cursor-pointer text-lg font-bold text-[var(--sm-ink)]">Add CAPA countermeasure</summary>
+          <div className="sm-ytf-section-head">
+            <div>
+              <p className="sm-kicker">CAPA</p>
+              <h2>Assign the countermeasure.</h2>
+            </div>
+          </div>
+          <div className="grid gap-3">
+            <label className="grid gap-1 text-sm font-bold text-[var(--sm-ink)]">
+              Related incident
+              <select className="sm-input" value={capaForm.incident_id} onChange={(event) => updateCapa('incident_id', event.target.value)}>
+                <option value="">Pick incident</option>
+                {incidents.map((incident) => (
+                  <option key={incident.incident_id} value={incident.incident_id}>
+                    {incident.title}
+                  </option>
                 ))}
-                {!incidents.length ? <div className="sm-chip text-[var(--sm-muted)]">No live incidents yet. Save the first incident from the form on the left.</div> : null}
-              </div>
-            </article>
-          </section>
+              </select>
+            </label>
+            <label className="grid gap-1 text-sm font-bold text-[var(--sm-ink)]">
+              CAPA action
+              <input
+                className="sm-input"
+                value={capaForm.action_title}
+                onChange={(event) => updateCapa('action_title', event.target.value)}
+                placeholder="What action prevents recurrence?"
+              />
+            </label>
+            <label className="grid gap-1 text-sm font-bold text-[var(--sm-ink)]">
+              Verification
+              <textarea
+                className="sm-ytf-textarea"
+                value={capaForm.verification_criteria}
+                onChange={(event) => updateCapa('verification_criteria', event.target.value)}
+                rows={4}
+                placeholder="How will QC prove this worked?"
+              />
+            </label>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="grid gap-1 text-sm font-bold text-[var(--sm-ink)]">
+                Owner
+                <select className="sm-input" value={capaForm.owner} onChange={(event) => updateCapa('owner', event.target.value)}>
+                  {qualityOwnerOptions.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="grid gap-1 text-sm font-bold text-[var(--sm-ink)]">
+                Target date
+                <input
+                  className="sm-input"
+                  type="date"
+                  value={capaForm.target_date}
+                  onChange={(event) => updateCapa('target_date', event.target.value)}
+                />
+              </label>
+            </div>
+            <button className="sm-button-primary" type="button" onClick={() => void saveCapa()} disabled={saving === 'capa'}>
+              {saving === 'capa' ? 'Saving...' : 'Save CAPA + action'}
+            </button>
+          </div>
+        </details>
+      </section>
 
-          <section className="grid gap-6 lg:grid-cols-[1fr_1fr]">
-            <article className="sm-surface p-6">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="sm-kicker text-[var(--sm-accent)]">CAPA queue</p>
-                  <h2 className="mt-2 text-2xl font-bold text-white">Corrective actions and verification</h2>
-                </div>
-                <span className="sm-status-pill">{capaRows.length} CAPA</span>
-              </div>
-              <div className="mt-5 space-y-3">
-                {capaRows.map((row) => (
-                  <article className="sm-proof-card" key={row.capa_id}>
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="text-lg font-bold text-white">{row.action_title}</p>
-                        <p className="mt-2 text-sm text-[var(--sm-muted)]">{row.verification_criteria}</p>
-                      </div>
-                      <span className="sm-status-pill">{row.status}</span>
-                    </div>
-                    <p className="mt-4 text-sm text-white/80">Incident: {row.incident_id} · owner {row.owner} · target {row.target_date || 'Review'}</p>
-                  </article>
-                ))}
-                {!capaRows.length ? <div className="sm-chip text-[var(--sm-muted)]">No CAPA actions yet.</div> : null}
-              </div>
-            </article>
-
-            <article className="sm-surface p-6">
-              <p className="sm-kicker text-[var(--sm-accent-alt)]">Methods and KPI review</p>
-              <h2 className="mt-2 text-2xl font-bold text-white">Use structured quality methods, not blank notes.</h2>
-              <div className="mt-5 flex flex-wrap gap-2">
-                {['Fishbone', '5W1H', 'Containment', 'CAPA', 'Gap review', 'Management review'].map((item) => (
-                  <span className="sm-status-pill" key={item}>
-                    {item}
-                  </span>
-                ))}
-              </div>
-              <div className="mt-5 space-y-3">
-                {qualityMetrics.slice(0, 6).map((row) => (
-                  <article className="sm-chip text-white" key={row.metric_id}>
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="font-semibold">{row.metric_name}</p>
-                        <p className="mt-2 text-sm text-[var(--sm-muted)]">{row.metric_group} · {row.period_label || row.owner}</p>
-                      </div>
-                      <span className="sm-status-pill">
-                        {row.metric_value} {row.unit}
-                      </span>
-                    </div>
-                  </article>
-                ))}
-                {!qualityMetrics.length ? <div className="sm-chip text-[var(--sm-muted)]">No quality KPI rows yet.</div> : null}
-              </div>
-              <div className="mt-6 flex flex-wrap gap-3">
-                <Link className="sm-button-primary" to="/app/insights">
-                  Open insights
-                </Link>
-                <Link className="sm-button-secondary" to="/app/knowledge">
-                  Open knowledge
-                </Link>
-                <Link className="sm-button-secondary" to="/app/approvals">
-                  Open approvals
-                </Link>
-              </div>
-              <div className="mt-4 text-sm text-[var(--sm-muted)]">Pending approvals in review: {approvalRows.filter((row) => row.status === 'pending' || row.status === 'review').length}</div>
-            </article>
-          </section>
-        </>
+      {draft && (
+        <section className="sm-ytf-panel">
+          <div className="sm-ytf-section-head">
+            <div>
+              <p className="sm-kicker">Candidate draft</p>
+              <h2>Manager must confirm.</h2>
+            </div>
+          </div>
+          <pre className="sm-ytf-alert whitespace-pre-wrap">{draft}</pre>
+        </section>
       )}
+
+      <section className="sm-ytf-split">
+        <article className="sm-ytf-panel">
+          <div className="sm-ytf-section-head">
+            <div>
+              <p className="sm-kicker">Open incidents</p>
+              <h2>Contain and close.</h2>
+            </div>
+          </div>
+          <div className="sm-ytf-compact-list">
+            {incidents.slice(0, 7).map((incident) => (
+              <div className="sm-ytf-list-row" key={incident.incident_id}>
+                <span>
+                  <strong>{incident.title}</strong>
+                  <small>
+                    {ytfOwnerLabel(incident.owner)} - {formatDate(incident.reported_at)} - {incident.summary}
+                  </small>
+                </span>
+                <em>{statusText(incident.severity || incident.status)}</em>
+              </div>
+            ))}
+          </div>
+        </article>
+
+        <article className="sm-ytf-panel">
+          <div className="sm-ytf-section-head">
+            <div>
+              <p className="sm-kicker">CAPA list</p>
+              <h2>Verify before closure.</h2>
+            </div>
+          </div>
+          <div className="sm-ytf-compact-list">
+            {capas.slice(0, 7).map((capa) => (
+              <div className="sm-ytf-list-row" key={capa.capa_id}>
+                <span>
+                  <strong>{capa.action_title}</strong>
+                  <small>
+                    {ytfOwnerLabel(capa.owner)} - due {capa.target_date || 'not set'} - {capa.verification_criteria}
+                  </small>
+                </span>
+                <em>{statusText(capa.status)}</em>
+              </div>
+            ))}
+          </div>
+        </article>
+      </section>
+      </details>
+
+      <details className="sm-ytf-panel">
+        <summary className="cursor-pointer text-lg font-bold text-[var(--sm-ink)]">Invisible ISO rules</summary>
+        <div className="sm-ytf-section-head">
+          <div>
+            <p className="sm-kicker">Invisible ISO</p>
+            <h2>Only four rules for managers.</h2>
+          </div>
+        </div>
+        <div className="sm-ytf-action-grid">
+          <article className="sm-ytf-action-tile">
+            <strong>Contain</strong>
+            <small>Hold, sort, release, or escalate affected stock.</small>
+          </article>
+          <article className="sm-ytf-action-tile">
+            <strong>Find cause</strong>
+            <small>Use 5W1H and fishbone only after facts are captured.</small>
+          </article>
+          <article className="sm-ytf-action-tile">
+            <strong>Assign CAPA</strong>
+            <small>One owner, due date, and clear countermeasure.</small>
+          </article>
+          <article className="sm-ytf-action-tile">
+            <strong>Verify</strong>
+            <small>Close only with evidence that the fix worked.</small>
+          </article>
+        </div>
+      </details>
     </div>
   )
 }

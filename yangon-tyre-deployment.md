@@ -1,5 +1,7 @@
 # Yangon Tyre - Complete ERP+DQMS Deployment Plan
 
+Status note, 2026-05-12: this file is now a legacy reference for the original deployment framing. The current SOW and client quote live in `docs/ytf_commercial_quote_and_sow_2026-05-12.md`, and the current handoff pack lives in `docs/ytf_customer_handoff_package_2026-05-12.md`. Use those current documents for client scope, pricing, acceptance criteria, exclusions, and paid handoff. Keep this playbook only for historical deployment context unless it is explicitly refreshed.
+
 ## Project Overview
 
 ### Live Demo & Status
@@ -729,5 +731,4 @@ def setup_periodic_tasks(sender, **kwargs):
 3. Begin infrastructure provisioning
 4. Iterative development with bi-weekly demos
 5. Go-live celebration 🎉
-
 

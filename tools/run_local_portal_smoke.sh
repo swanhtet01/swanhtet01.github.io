@@ -35,7 +35,7 @@ cleanup() {
 trap cleanup EXIT
 
 echo "Building showroom..."
-npm --prefix "${ROOT_DIR}/showroom" run build >/dev/null
+npm --prefix "${ROOT_DIR}/showroom" run build
 
 echo "Starting API at ${BASE_URL}..."
 SUPERMEGA_APP_USERNAME="${SMOKE_APP_USERNAME}" \

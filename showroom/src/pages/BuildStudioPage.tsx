@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 
 import { AGENT_TECHNIQUES, AI_NATIVE_STACK_LAYERS } from '../lib/aiArchitectureBlueprint'
 import { INFRASTRUCTURE_CAPABILITIES, TENANT_SCALE_LANES } from '../lib/aiNativeProductModel'
+import { AI_CAPABILITY_DOMAINS } from '../lib/aiReferenceArchitecture'
 import {
   AI_FOUNDRY_CREWS,
   AI_FOUNDRY_STAGES,
@@ -36,6 +37,9 @@ import {
   buildFactoryProgramBoard,
   summarizeFactoryProgramBoard,
 } from '../lib/moduleFactoryRuntime'
+import { PLATFORM_BUILD_STACK } from '../lib/platformBuildStack'
+import { PLATFORM_SELF_EVALUATION } from '../lib/platformSelfEvaluation'
+import { ADAPTIVE_PORTAL_ENGINE, INDUSTRY_PORTAL_KITS, industryPortalRolloutLink } from '../lib/industryPortalKits'
 import {
   buildTenantAppFoundryBoard,
   buildTenantAppFoundryGapQueue,
@@ -45,6 +49,12 @@ import { getTenantConfig } from '../lib/tenantConfig'
 import { DEFAULT_WORKSPACE_ROUTE_ACCESS, resolveWorkspaceRouteAccess, type WorkspaceRouteAccess } from '../lib/workspaceRouteAccess'
 import { YANGON_TYRE_DATA_PROFILE } from '../lib/yangonTyreDataProfile'
 import { YANGON_TYRE_CONNECTOR_EXPANSION, YANGON_TYRE_SOURCE_PACKS } from '../lib/yangonTyreDriveModel'
+import {
+  MODULE_MACHINE_OPERATING_RULES,
+  SAAS_MODULE_FAMILIES,
+  SAAS_MODULE_FACTORY_STAGES,
+  SAAS_MODULE_MACHINE_STACK,
+} from '../lib/saasModuleMachine'
 import {
   checkWorkspaceHealth,
   createWorkspaceTasks,
@@ -58,6 +68,7 @@ import {
   type AgentTeamsPayload,
   type PlatformControlPlanePayload,
 } from '../lib/workspaceApi'
+import { STARTER_PACK_DETAILS } from '../lib/salesControl'
 
 function formatDateTime(value: string) {
   if (!value) {
@@ -78,7 +89,8 @@ function statusTone(status: string) {
     normalized === 'completed' ||
     normalized === 'live sellable' ||
     normalized === 'release candidate' ||
-    normalized === 'live'
+    normalized === 'live' ||
+    normalized === 'strong'
   ) {
     return 'text-emerald-300'
   }
@@ -92,7 +104,9 @@ function statusTone(status: string) {
     normalized === 'crewed build' ||
     normalized === 'standby' ||
     normalized === 'designed' ||
-    normalized === 'mapped'
+    normalized === 'mapped' ||
+    normalized === 'improving' ||
+    normalized === 'medium'
   ) {
     return 'text-amber-300'
   }
@@ -103,12 +117,24 @@ function statusTone(status: string) {
     normalized === 'mapped only' ||
     normalized === 'workflow mapped' ||
     normalized === 'blueprint only' ||
-    normalized === 'missing'
+    normalized === 'missing' ||
+    normalized === 'weak' ||
+    normalized === 'high'
   ) {
     return 'text-rose-300'
   }
   return 'text-white/70'
 }
+
+const FOCUSED_BUILD_STACK_IDS = new Set([
+  'frontend-base',
+  'runtime-api',
+  'openai-agents-runtime',
+  'openai-sandbox-runtime',
+  'mcp-tool-plane',
+  'google-gemini-model-lane',
+  'google-agent-platform',
+])
 
 const BUILD_STUDIO_CORE_SPRINT = [
   {
@@ -117,7 +143,7 @@ const BUILD_STUDIO_CORE_SPRINT = [
     owner: 'Cloud pod',
     priority: 'High',
     due: 'This week',
-    notes: 'Use Cloud Ops, smoke, and Platform Admin to keep preview, production, and domain verification running from the app.',
+    notes: 'Use Cloud Ops, smoke, and Platform Admin to keep staging, production, and domain verification running from the app.',
   },
   {
     id: 'ytf-runtime',
@@ -141,7 +167,7 @@ const BUILD_STUDIO_CORE_SPRINT = [
     owner: 'Product systems pod',
     priority: 'Medium',
     due: 'This week',
-    notes: 'Every sellable module should keep a current proof path, live route, or guided preview.',
+    notes: 'Every sellable module should keep a current proof path, live route, or guided proof route.',
   },
 ] as const
 
@@ -180,7 +206,119 @@ const BUILD_STUDIO_PROTOTYPE_SPRINT = [
   },
 ] as const
 
-function buildStudioTemplateId(prefix: 'core' | 'prototype', taskId: string) {
+const BUILD_STUDIO_CLIENT_DELIVERY_SPRINT = [
+  {
+    id: 'pack-selection',
+    title: 'Lock the buyer pain, starter pack, and proof route before client outreach',
+    owner: 'Product systems pod',
+    priority: 'High',
+    due: 'This week',
+    notes: 'Choose the closest starter pack, the live proof route, and the first operator loop so sales and delivery use the same story.',
+  },
+  {
+    id: 'tenant-proof',
+    title: 'Wire the live tenant proof, role home, and proof path for the target client',
+    owner: 'Tenant delivery pod',
+    priority: 'High',
+    due: 'This week',
+    notes: 'Do not sell from screenshots alone. Keep one named tenant route, one login path, and one role-home flow ready to show.',
+  },
+  {
+    id: 'assets-and-walkthrough',
+    title: 'Capture screenshots, walkthrough steps, and onboarding pack from the live workspace',
+    owner: 'Prototype studio',
+    priority: 'High',
+    due: 'This week',
+    notes: 'Use the real workspace and route walkthrough instead of placeholder visuals so the sales pack and onboarding pack stay honest.',
+  },
+  {
+    id: 'cloud-launch-check',
+    title: 'Confirm domain, auth, smoke, rollback, and first-week adoption path',
+    owner: 'Cloud pod',
+    priority: 'High',
+    due: 'This week',
+    notes: 'Every client build needs a deployable host, a login path, a smoke check, and a first-week adoption owner before it counts as sellable.',
+  },
+] as const
+
+const BUILD_STUDIO_VERTICAL_SPRINT = [
+  {
+    id: 'restaurant-group-os',
+    title: 'Finalize the Restaurant POS + Inventory module pack and rollout wedge',
+    owner: 'Hospitality R&D cell',
+    priority: 'High',
+    due: 'Next sprint',
+    notes: 'Keep shift control, supplier recovery, waste watch, and guest recovery tied to one restaurant operating shell.',
+  },
+  {
+    id: 'industrial-plant-os-proof',
+    title: 'Deepen Factory Operations App module proof and first-client walkthroughs',
+    owner: 'Industrial R&D cell',
+    priority: 'High',
+    due: 'Next sprint',
+    notes: 'Turn every flagship module into a clear proof path: input, owner, evidence, agent assist, approval, KPI output, and next action.',
+  },
+  {
+    id: 'adaptive-module-kernel',
+    title: 'Harden the adaptive module kernel that promotes new industry tools from live usage',
+    owner: 'Module factory',
+    priority: 'High',
+    due: 'Next sprint',
+    notes: 'Watch source changes, usage, KPI drift, and approval friction so the next module promotion is data-backed instead of speculative.',
+  },
+] as const
+
+const RD_COMMAND_CHAIN = [
+  {
+    id: 'discover',
+    phase: 'Discover',
+    team: 'R&D Lab',
+    crew: 'Workflow Scout',
+    workspace: 'Research Backlog',
+    cadence: 'Weekly wedge review',
+    output: 'Problem brief with buyer pain, operator loop, proof route, and owner.',
+  },
+  {
+    id: 'prototype',
+    phase: 'Prototype',
+    team: 'Prototype Studio',
+    crew: 'Prototype Analyst',
+    workspace: 'Prototype Floor',
+    cadence: 'Daily operator replay',
+    output: 'Tenant proof with operator acceptance, usability gaps, and next experiment.',
+  },
+  {
+    id: 'productize',
+    phase: 'Productize',
+    team: 'Module Factory',
+    crew: 'Release Judge',
+    workspace: 'Module Release Desk',
+    cadence: 'Twice-weekly graduation review',
+    output: 'Reusable module contract, release packet, and proof-linked launch path.',
+  },
+  {
+    id: 'launch',
+    phase: 'Launch',
+    team: 'Tenant Launch Pod',
+    crew: 'Connector Watch',
+    workspace: 'Tenant Launch Room',
+    cadence: 'Launch standup',
+    output: 'Live tenant, domain, role setup, first-week adoption loop, and gap queue.',
+  },
+  {
+    id: 'deepen',
+    phase: 'Deepen',
+    team: 'Data Science Lab',
+    crew: 'Signal Modeler',
+    workspace: 'Model Lab',
+    cadence: 'Weekly model review',
+    output: 'Feature marts, anomaly scans, and next-best-action loops that raise account value after go-live.',
+  },
+] as const
+
+type BuildStudioSprintPrefix = 'core' | 'prototype' | 'client' | 'industry'
+
+function buildStudioTemplateId(prefix: BuildStudioSprintPrefix, taskId: string) {
   return `build-studio:${prefix}:${taskId}`
 }
 
@@ -197,6 +335,8 @@ export function BuildStudioPage() {
   const [executionError, setExecutionError] = useState<string | null>(null)
   const [seedCoreBusy, setSeedCoreBusy] = useState(false)
   const [seedPrototypeBusy, setSeedPrototypeBusy] = useState(false)
+  const [seedClientBusy, setSeedClientBusy] = useState(false)
+  const [seedIndustryBusy, setSeedIndustryBusy] = useState(false)
   const [controlPlane, setControlPlane] = useState<PlatformControlPlanePayload | null>(null)
   const [agentTeams, setAgentTeams] = useState<AgentTeamsPayload | null>(null)
   const [agentRuns, setAgentRuns] = useState<AgentRunRow[]>([])
@@ -327,10 +467,55 @@ export function BuildStudioPage() {
   const ytfFoundrySummary = useMemo(() => summarizeTenantAppFoundryBoard(ytfFoundryBoard), [ytfFoundryBoard])
   const ytfFoundryGapQueue = useMemo(() => buildTenantAppFoundryGapQueue(ytfFoundryBoard).slice(0, 8), [ytfFoundryBoard])
   const nextMoves = useMemo(() => (agentTeams?.next_moves ?? []).slice(0, 4), [agentTeams?.next_moves])
+  const focusedBuildStack = useMemo(() => PLATFORM_BUILD_STACK.filter((item) => FOCUSED_BUILD_STACK_IDS.has(item.id)), [])
+  const clientBuildTracks = useMemo(
+    () =>
+      STARTER_PACK_DETAILS.map((pack) => ({
+        id: pack.id,
+        name: pack.name,
+        audience: pack.audience,
+        launchWindow: pack.launchWindow,
+        promise: pack.promise,
+        proofRoute: pack.proofTool.route,
+        setupRoute: `/products/${pack.slug}`,
+        modules: pack.starterModules.slice(0, 3),
+        deliverables: pack.launchDeliverables.slice(0, 3),
+        operatorUsers: pack.dailyUsers.slice(0, 2),
+        agentLoops: pack.agentLoops.slice(0, 2),
+      })).slice(0, 4),
+    [],
+  )
+  const industryBuildTracks = useMemo(
+    () =>
+      INDUSTRY_PORTAL_KITS.map((kit) => ({
+        id: kit.id,
+        name: kit.name,
+        industry: kit.industry,
+        buyer: kit.buyer,
+        launchWedge: kit.launchWedge,
+        roles: kit.roles.slice(0, 3),
+        dataPlugs: kit.dataPlugs.slice(0, 4),
+        baseModules: kit.baseModules.slice(0, 3),
+        adaptiveModules: kit.adaptiveModules.slice(0, 3),
+        adaptationSignals: kit.adaptationSignals.slice(0, 3),
+        evolutionLanes: kit.evolutionLanes.slice(0, 2),
+        frameworks: kit.frameworks.slice(0, 3),
+        rolloutRoute: industryPortalRolloutLink(kit.requestPackage),
+      })),
+    [],
+  )
 
-  async function handleSeedSprint(prefix: 'core' | 'prototype') {
-    const taskPack = prefix === 'core' ? BUILD_STUDIO_CORE_SPRINT : BUILD_STUDIO_PROTOTYPE_SPRINT
-    const setBusy = prefix === 'core' ? setSeedCoreBusy : setSeedPrototypeBusy
+  async function handleSeedSprint(prefix: BuildStudioSprintPrefix) {
+    const taskPack =
+      prefix === 'core'
+        ? BUILD_STUDIO_CORE_SPRINT
+        : prefix === 'prototype'
+          ? BUILD_STUDIO_PROTOTYPE_SPRINT
+          : prefix === 'client'
+            ? BUILD_STUDIO_CLIENT_DELIVERY_SPRINT
+            : BUILD_STUDIO_VERTICAL_SPRINT
+    const setBusy =
+      prefix === 'core' ? setSeedCoreBusy : prefix === 'prototype' ? setSeedPrototypeBusy : prefix === 'client' ? setSeedClientBusy : setSeedIndustryBusy
     setBusy(true)
     setExecutionMessage(null)
     setExecutionError(null)
@@ -354,7 +539,15 @@ export function BuildStudioPage() {
         }))
 
       if (!rowsToCreate.length) {
-        setExecutionMessage(prefix === 'core' ? 'Core team sprint is already seeded into the workspace queue.' : 'Prototype sprint is already seeded into the workspace queue.')
+        setExecutionMessage(
+          prefix === 'core'
+            ? 'Core team sprint is already seeded into the workspace queue.'
+            : prefix === 'prototype'
+              ? 'Prototype sprint is already seeded into the workspace queue.'
+              : prefix === 'client'
+                ? 'Client delivery sprint is already seeded into the workspace queue.'
+                : 'Industry portal sprint is already seeded into the workspace queue.',
+        )
         return
       }
 
@@ -363,7 +556,11 @@ export function BuildStudioPage() {
       setExecutionMessage(
         prefix === 'core'
           ? `Seeded ${savedCount} core-team sprint tasks into the workspace queue.`
-          : `Seeded ${savedCount} prototype sprint tasks into the workspace queue.`,
+          : prefix === 'prototype'
+            ? `Seeded ${savedCount} prototype sprint tasks into the workspace queue.`
+            : prefix === 'client'
+              ? `Seeded ${savedCount} client delivery sprint tasks into the workspace queue.`
+              : `Seeded ${savedCount} industry portal sprint tasks into the workspace queue.`,
       )
     } catch (error) {
       setExecutionError(error instanceof Error ? error.message : 'Could not seed the build sprint tasks right now.')
@@ -390,7 +587,7 @@ export function BuildStudioPage() {
         <PageIntro
           eyebrow="Build system"
           title="Authenticated workspace required."
-          description="Build Studio is an internal change-control desk and does not run in public preview mode."
+          description="Build Studio is an internal change-control desk and does not run in the public website shell."
         />
         <section className="sm-surface-deep p-6">
           <p className="text-sm text-[var(--sm-muted)]">{access.error ?? 'Build Studio is only available in the authenticated workspace.'}</p>
@@ -440,9 +637,318 @@ export function BuildStudioPage() {
         description="The point is not to keep making isolated demos. The point is to turn painful workflows into live customer systems, then into reusable products with stronger connectors, controls, and rollout discipline."
       />
 
+      <section className="sm-site-panel">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <p className="sm-kicker text-[var(--sm-accent)]">SaaS module machine</p>
+            <h2 className="mt-3 text-3xl font-bold text-white lg:text-5xl">
+              Remake proven SaaS categories as tenant-specific agent apps.
+            </h2>
+          </div>
+          <p className="max-w-2xl text-sm leading-relaxed text-[var(--sm-muted)] lg:text-base">
+            The product strategy is a repeatable machine: study the winning workflow shape, compress it into a calmer role desk, connect the
+            customer data, add bounded AI workers, then package the result as a sellable module.
+          </p>
+        </div>
+
+        <div className="mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          {[
+            { label: 'Product families', value: `${SAAS_MODULE_FAMILIES.length}`, detail: 'CRM, ERP, workspace, BI, HR, finance, service, quality, commerce, IT.' },
+            { label: 'Factory stages', value: `${SAAS_MODULE_FACTORY_STAGES.length}`, detail: 'Map, simplify, compile, crew, productize.' },
+            { label: 'Shared stack layers', value: `${SAAS_MODULE_MACHINE_STACK.length}`, detail: 'Tenant kernel, connectors, workflow, agents, memory, release control.' },
+            { label: 'Release rule', value: 'Live route', detail: 'A module is not sellable without role, source data, proof route, and smoke evidence.' },
+          ].map((item) => (
+            <article className="sm-proof-card" key={item.label}>
+              <p className="text-sm uppercase tracking-[0.14em] text-[var(--sm-muted)]">{item.label}</p>
+              <p className="mt-3 text-3xl font-bold text-white">{item.value}</p>
+              <p className="mt-3 text-sm text-[var(--sm-muted)]">{item.detail}</p>
+            </article>
+          ))}
+        </div>
+
+        <div className="mt-6 grid gap-6 xl:grid-cols-[0.88fr_1.12fr]">
+          <article className="sm-proof-card">
+            <p className="sm-kicker text-[var(--sm-accent-alt)]">Factory loop</p>
+            <h3 className="mt-2 text-2xl font-bold text-white">This is the module builder that turns market categories into working products.</h3>
+            <div className="mt-4 grid gap-3">
+              {SAAS_MODULE_FACTORY_STAGES.map((stage, index) => (
+                <article className="sm-chip text-white" key={stage.id}>
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <p className="font-semibold">
+                      {index + 1}. {stage.name}
+                    </p>
+                    <span className="sm-status-pill">{stage.owner}</span>
+                  </div>
+                  <p className="mt-2 text-sm text-white/80">{stage.output}</p>
+                  <p className="mt-2 text-sm text-[var(--sm-muted)]">Gate: {stage.gate}</p>
+                </article>
+              ))}
+            </div>
+          </article>
+
+          <article className="sm-proof-card">
+            <p className="sm-kicker text-[var(--sm-accent)]">Machine stack</p>
+            <h3 className="mt-2 text-2xl font-bold text-white">The same backbone should power every product line.</h3>
+            <div className="mt-4 grid gap-3 md:grid-cols-2">
+              {SAAS_MODULE_MACHINE_STACK.map((layer) => (
+                <article className="sm-chip text-white" key={layer.id}>
+                  <p className="font-semibold">{layer.layer}</p>
+                  <p className="mt-2 text-sm text-[var(--sm-muted)]">{layer.purpose}</p>
+                  <p className="mt-2 text-sm text-white/80">{layer.requiredCapability}</p>
+                </article>
+              ))}
+            </div>
+          </article>
+        </div>
+
+        <div className="mt-6 grid gap-4 xl:grid-cols-3">
+          {SAAS_MODULE_FAMILIES.slice(0, 9).map((family) => (
+            <article className="sm-demo-link sm-demo-link-card" key={family.id}>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <span className="sm-home-proof-label">{family.firstSellableModule}</span>
+                <span className="sm-status-pill">{family.incumbents[0]}</span>
+              </div>
+              <strong>{family.name}</strong>
+              <span>{family.aiNativeUpgrade}</span>
+              <small className="text-[var(--sm-muted)]">Market pattern: {family.marketPattern}</small>
+              <small className="text-[var(--sm-muted)]">Jobs: {family.operatorJobs.join(', ')}</small>
+              <small className="text-[var(--sm-muted)]">Agents: {family.agentCrew.join(', ')}</small>
+              <small className="text-[var(--sm-muted)]">Connectors: {family.dataConnectors.join(', ')}</small>
+              <div className="mt-2 flex flex-wrap gap-3">
+                <Link className="sm-link" to={family.route}>
+                  Open module
+                </Link>
+                <span className="text-xs uppercase tracking-[0.16em] text-white/50">{family.sellablePackage}</span>
+              </div>
+            </article>
+          ))}
+        </div>
+
+        <div className="mt-6 grid gap-3 md:grid-cols-2">
+          {MODULE_MACHINE_OPERATING_RULES.map((rule) => (
+            <article className="sm-chip text-white" key={rule}>
+              <p className="font-semibold">Operating rule</p>
+              <p className="mt-2 text-sm text-[var(--sm-muted)]">{rule}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section className="grid gap-6 xl:grid-cols-[0.8fr_1.2fr]">
+        <article className="sm-site-panel">
+          <p className="sm-kicker text-[var(--sm-accent)]">Self evaluation / {PLATFORM_SELF_EVALUATION.date}</p>
+          <h2 className="mt-3 text-4xl font-bold text-white lg:text-6xl">{PLATFORM_SELF_EVALUATION.overallScore}/100</h2>
+          <p className="mt-2 text-sm font-semibold uppercase tracking-[0.18em] text-[var(--sm-accent-alt)]">
+            {PLATFORM_SELF_EVALUATION.stretchMindset} Score cap: {PLATFORM_SELF_EVALUATION.scoreCap} per metric.
+          </p>
+          <p className="mt-4 text-base leading-relaxed text-[var(--sm-muted)]">{PLATFORM_SELF_EVALUATION.verdict}</p>
+          <p className="mt-4 text-sm leading-relaxed text-white/80">{PLATFORM_SELF_EVALUATION.scoringRule}</p>
+          <div className="mt-6 grid gap-3">
+            {PLATFORM_SELF_EVALUATION.risks.slice(0, 2).map((risk) => (
+              <article className="sm-chip text-white" key={risk.id}>
+                <div className="flex items-center justify-between gap-3">
+                  <p className="font-semibold">{risk.risk}</p>
+                  <span className={`sm-status-pill ${statusTone(risk.severity)}`}>{risk.severity}</span>
+                </div>
+                <p className="mt-2 text-sm text-[var(--sm-muted)]">{risk.fix}</p>
+              </article>
+            ))}
+          </div>
+          <div className="mt-6 grid gap-3">
+            {PLATFORM_SELF_EVALUATION.weakestMetrics.map((metric) => (
+              <article className="sm-chip text-white" key={metric.id}>
+                <div className="flex items-center justify-between gap-3">
+                  <p className="font-semibold">{metric.name}</p>
+                  <span className="sm-status-pill">{metric.score}/{metric.cap}</span>
+                </div>
+                <p className="mt-2 text-sm text-white/80">{metric.area}</p>
+                <p className="mt-2 text-sm text-[var(--sm-muted)]">{metric.nextMove}</p>
+              </article>
+            ))}
+          </div>
+        </article>
+
+        <article className="sm-site-panel">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <p className="sm-kicker text-[var(--sm-accent-alt)]">Current build scorecard</p>
+              <h2 className="mt-3 text-3xl font-bold text-white lg:text-4xl">What is strong, what is still weak, and what must be fixed next.</h2>
+            </div>
+          </div>
+          <div className="mt-6 grid gap-3 md:grid-cols-2">
+            {PLATFORM_SELF_EVALUATION.areas.map((area) => (
+              <article className="sm-proof-card" key={area.id}>
+                <div className="flex items-center justify-between gap-3">
+                  <p className="font-semibold text-white">{area.area}</p>
+                  <span className={`sm-status-pill ${statusTone(area.status)}`}>{area.score}/100</span>
+                </div>
+                <p className="mt-3 text-sm text-[var(--sm-muted)]">{area.evidence}</p>
+                <div className="mt-4 grid gap-2">
+                  {area.metrics.map((metric) => (
+                    <div className="flex items-center justify-between border-b border-white/10 pb-2 text-sm last:border-b-0 last:pb-0" key={metric.id}>
+                      <span className="text-white/80">{metric.name}</span>
+                      <span className="font-semibold text-white">
+                        {metric.score}/{metric.cap}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                <p className="mt-3 text-sm text-white/80">Next: {area.nextMove}</p>
+              </article>
+            ))}
+          </div>
+        </article>
+      </section>
+
+      <section className="sm-site-panel">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <p className="sm-kicker text-[var(--sm-accent)]">Industry portal foundry</p>
+            <h2 className="mt-3 text-3xl font-bold text-white lg:text-4xl">Three vertical portal systems are now first-class build units.</h2>
+          </div>
+          <p className="max-w-2xl text-sm leading-relaxed text-[var(--sm-muted)] lg:text-base">
+            The same portal kernel should rebuild itself for each company type. Start from a vertical wedge, attach the right data plugs, then promote new modules
+            from repeat usage and KPI drift.
+          </p>
+        </div>
+        <div className="mt-6 grid gap-4 xl:grid-cols-3">
+          {industryBuildTracks.map((kit) => (
+            <article className="sm-demo-link sm-demo-link-card" key={kit.id}>
+              <div className="flex items-center justify-between gap-3">
+                <span className="sm-home-proof-label">{kit.industry}</span>
+                <span className="sm-status-pill">{kit.buyer}</span>
+              </div>
+              <strong>{kit.name}</strong>
+              <small className="text-[var(--sm-muted)]">Launch wedge: {kit.launchWedge}</small>
+              <small className="text-[var(--sm-muted)]">Roles: {kit.roles.join(', ')}</small>
+              <small className="text-[var(--sm-muted)]">Data plugs: {kit.dataPlugs.join(', ')}</small>
+              <small className="text-[var(--sm-muted)]">Base modules: {kit.baseModules.join(', ')}</small>
+              <small className="text-[var(--sm-muted)]">Adaptive modules: {kit.adaptiveModules.join(', ')}</small>
+              <small className="text-[var(--sm-muted)]">Frameworks: {kit.frameworks.join(', ')}</small>
+              <div className="mt-2 grid gap-2">
+                {kit.evolutionLanes.map((lane) => (
+                  <div className="sm-chip text-white" key={lane.id}>
+                    <p className="font-semibold">{lane.promotedModule}</p>
+                    <p className="mt-1 text-sm text-[var(--sm-muted)]">{lane.signal}</p>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-2 flex flex-wrap gap-3">
+                <Link className="sm-link" to={kit.rolloutRoute}>
+                  Start offer
+                </Link>
+                <Link className="sm-link" to="/app/product-ops">
+                  Open Product Ops
+                </Link>
+              </div>
+            </article>
+          ))}
+        </div>
+        <div className="mt-6 grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
+          <article className="sm-proof-card">
+            <p className="sm-kicker text-[var(--sm-accent-alt)]">Adaptive module kernel</p>
+            <h3 className="mt-2 text-2xl font-bold text-white">The portal should learn which new desk deserves promotion.</h3>
+            <div className="mt-4 grid gap-3">
+              {ADAPTIVE_PORTAL_ENGINE.map((step, index) => (
+                <article className="sm-chip text-white" key={step.id}>
+                  <p className="font-semibold">
+                    {index + 1}. {step.name}
+                  </p>
+                  <p className="mt-2 text-sm text-[var(--sm-muted)]">{step.detail}</p>
+                </article>
+              ))}
+            </div>
+          </article>
+          <article className="sm-proof-card">
+            <p className="sm-kicker text-[var(--sm-accent)]">Industry sprint</p>
+            <h3 className="mt-2 text-2xl font-bold text-white">Seed the vertical module work into the queue instead of leaving it as strategy.</h3>
+            <p className="mt-3 text-sm text-[var(--sm-muted)]">
+              This sprint creates the restaurant, retail, field-service, and adaptive-kernel tasks so the foundry can turn them into real client-ready products.
+            </p>
+            <div className="mt-6 flex flex-wrap gap-3">
+              <button className="sm-button-primary" disabled={seedIndustryBusy} onClick={() => void handleSeedSprint('industry')} type="button">
+                {seedIndustryBusy ? 'Seeding industry sprint...' : 'Seed industry portal sprint'}
+              </button>
+              <Link className="sm-button-secondary" to="/products">
+                Open Products
+              </Link>
+              <Link className="sm-button-secondary" to="/app/factory">
+                Refresh Build Studio
+              </Link>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section className="sm-site-panel">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <p className="sm-kicker text-[var(--sm-accent-alt)]">Metric proof</p>
+            <h2 className="mt-3 text-3xl font-bold text-white lg:text-4xl">The platform is only as strong as its weakest measurable behaviors.</h2>
+          </div>
+          <p className="max-w-2xl text-sm leading-relaxed text-[var(--sm-muted)] lg:text-base">
+            These are the current strongest signals and the proof-backed upgrades already landed in this thread.
+          </p>
+        </div>
+        <div className="mt-6 grid gap-4 xl:grid-cols-[1fr_1fr]">
+          <article className="sm-proof-card">
+            <p className="sm-kicker text-[var(--sm-accent)]">Strongest metrics</p>
+            <div className="mt-4 grid gap-3">
+              {PLATFORM_SELF_EVALUATION.strongestMetrics.map((metric) => (
+                <div className="sm-chip text-white" key={metric.id}>
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="font-semibold">{metric.name}</p>
+                    <span className="sm-status-pill">
+                      {metric.score}/{metric.cap}
+                    </span>
+                  </div>
+                  <p className="mt-2 text-sm text-white/80">{metric.area}</p>
+                  <p className="mt-2 text-sm text-[var(--sm-muted)]">{metric.evidence}</p>
+                </div>
+              ))}
+            </div>
+          </article>
+          <article className="sm-proof-card">
+            <p className="sm-kicker text-[var(--sm-accent-alt)]">Upgrades landed</p>
+            <div className="mt-4 grid gap-3">
+              {PLATFORM_SELF_EVALUATION.upgrades.map((upgrade) => (
+                <div className="sm-chip text-white" key={upgrade.id}>
+                  <p className="font-semibold">{upgrade.proof}</p>
+                  <p className="mt-2 text-sm text-[var(--sm-muted)]">{upgrade.impact}</p>
+                </div>
+              ))}
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section className="sm-site-panel">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <p className="sm-kicker text-[var(--sm-accent)]">Research integrated today</p>
+            <h2 className="mt-3 text-3xl font-bold text-white lg:text-4xl">Provider sprawl is not the strategy. A controlled two-lane stack is.</h2>
+          </div>
+          <p className="max-w-2xl text-sm leading-relaxed text-[var(--sm-muted)] lg:text-base">
+            OpenAI owns coded work cells and audited execution. Google owns Gemini, Workspace-heavy reasoning, and enterprise governance patterns. Security gates are mandatory before autonomy expands.
+          </p>
+        </div>
+        <div className="mt-6 grid gap-4 xl:grid-cols-5">
+          {PLATFORM_SELF_EVALUATION.researchInputs.map((item) => (
+            <article className="sm-proof-card" key={item.id}>
+              <p className="sm-kicker text-[var(--sm-accent-alt)]">{item.source}</p>
+              <h3 className="mt-3 text-xl font-bold text-white">{item.decision}</h3>
+              <p className="mt-3 text-sm leading-relaxed text-[var(--sm-muted)]">{item.useNow}</p>
+              <a className="mt-4 inline-flex text-sm font-semibold text-[var(--sm-accent)] hover:text-white" href={item.sourceUrl} rel="noreferrer" target="_blank">
+                Source
+              </a>
+            </article>
+          ))}
+        </div>
+      </section>
+
       <section className="grid gap-6 xl:grid-cols-[0.94fr_1.06fr]">
         <article className="sm-site-panel">
-          <p className="sm-kicker text-[var(--sm-accent)]">Operating thesis</p>
+          <p className="sm-kicker text-[var(--sm-accent)]">Operating rule</p>
           <h2 className="mt-3 text-3xl font-bold text-white lg:text-5xl">The advantage is not one giant suite. The advantage is turning workflow pain into products faster.</h2>
           <div className="mt-6 space-y-3">
             {[
@@ -482,6 +988,34 @@ export function BuildStudioPage() {
             </Link>
           </div>
         </article>
+      </section>
+
+      <section className="sm-site-panel">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <p className="sm-kicker text-[var(--sm-accent-alt)]">Tool radar</p>
+            <h2 className="mt-3 text-3xl font-bold text-white lg:text-4xl">Keep the surface simple. Upgrade the machine behind it.</h2>
+          </div>
+          <p className="max-w-2xl text-sm leading-relaxed text-[var(--sm-muted)] lg:text-base">
+            Blue ocean filter: eliminate menu sprawl, reduce prototype-only tools in production, raise proof and data quality, create agent work cells.
+          </p>
+        </div>
+        <div className="mt-6 grid gap-4 xl:grid-cols-3">
+          {focusedBuildStack.map((item) => (
+            <article className="sm-proof-card" key={item.id}>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="sm-kicker text-[var(--sm-accent)]">{item.stage}</p>
+                <span className="sm-status-pill">{item.primaryTool}</span>
+              </div>
+              <h3 className="mt-3 text-2xl font-bold text-white">{item.name}</h3>
+              <p className="mt-3 text-sm leading-relaxed text-white/85">{item.outcome}</p>
+              <p className="mt-4 text-sm text-[var(--sm-muted)]">{item.bestFor}</p>
+              <a className="mt-4 inline-flex text-sm font-semibold text-[var(--sm-accent)] hover:text-white" href={item.sourceUrl} rel="noreferrer" target="_blank">
+                {item.sourceLabel}
+              </a>
+            </article>
+          ))}
+        </div>
       </section>
 
       <section className="grid gap-6 xl:grid-cols-[1.04fr_0.96fr]">
@@ -685,6 +1219,52 @@ export function BuildStudioPage() {
         </article>
       </section>
 
+      <section className="grid gap-6 xl:grid-cols-[1.02fr_0.98fr]">
+        <article className="sm-site-panel">
+          <div>
+            <p className="sm-kicker text-[var(--sm-accent)]">Capability map</p>
+            <h2 className="mt-3 text-3xl font-bold text-white lg:text-4xl">These are the six AI capability families the product machine should actually build around.</h2>
+          </div>
+          <div className="mt-6 grid gap-3">
+            {AI_CAPABILITY_DOMAINS.map((domain) => (
+              <article className="sm-proof-card" key={domain.id}>
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="font-semibold text-white">{domain.name}</p>
+                    <p className="mt-2 text-sm text-[var(--sm-muted)]">{domain.thesis}</p>
+                  </div>
+                  <span className="sm-status-pill">{domain.modules.length} modules</span>
+                </div>
+                <p className="mt-3 text-sm text-white/80">Operator value: {domain.operatorValue}</p>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {domain.modules.map((module) => (
+                    <span className="sm-status-pill" key={`${domain.id}-module-${module}`}>
+                      {module}
+                    </span>
+                  ))}
+                </div>
+              </article>
+            ))}
+          </div>
+        </article>
+
+        <article className="sm-site-panel">
+          <div>
+            <p className="sm-kicker text-[var(--sm-accent-alt)]">What this means for modules</p>
+            <h2 className="mt-3 text-3xl font-bold text-white lg:text-4xl">Every module should belong to a capability family, not just a marketing category.</h2>
+          </div>
+          <div className="mt-6 grid gap-3">
+            {AI_CAPABILITY_DOMAINS.map((domain) => (
+              <article className="sm-chip text-white" key={`${domain.id}-skills`}>
+                <p className="font-semibold">{domain.name}</p>
+                <p className="mt-2 text-sm text-white/80">Skills: {domain.skills.join(', ')}</p>
+                <p className="mt-2 text-sm text-[var(--sm-muted)]">Tech: {domain.technologies.join(', ')}</p>
+              </article>
+            ))}
+          </div>
+        </article>
+      </section>
+
       <section className="grid gap-6 xl:grid-cols-[1fr_1fr]">
         <article className="sm-site-panel">
           <div>
@@ -734,6 +1314,90 @@ export function BuildStudioPage() {
                 <p className="mt-3 text-sm text-[var(--sm-muted)]">{item.detail}</p>
               </article>
             ))}
+          </div>
+        </article>
+      </section>
+
+      <section className="grid gap-6 xl:grid-cols-[1.06fr_0.94fr]">
+        <article className="sm-site-panel">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <p className="sm-kicker text-[var(--sm-accent)]">Client build kits</p>
+              <h2 className="mt-3 text-3xl font-bold text-white lg:text-4xl">Sell and build from one pack instead of starting from scratch every time.</h2>
+            </div>
+            <p className="max-w-2xl text-sm leading-relaxed text-[var(--sm-muted)] lg:text-base">
+              Pick the nearest starter pack, keep one proof route live, and use the same pack for sales, deployment, screenshots, and onboarding.
+            </p>
+          </div>
+          <div className="mt-6 grid gap-4 xl:grid-cols-2">
+            {clientBuildTracks.map((pack) => (
+              <article className="sm-demo-link sm-demo-link-card" key={pack.id}>
+                <div className="flex items-center justify-between gap-3">
+                  <span className="sm-home-proof-label">{pack.operatorUsers.join(' / ')}</span>
+                  <span className="sm-status-pill">{pack.launchWindow}</span>
+                </div>
+                <strong>{pack.name}</strong>
+                <span>{pack.audience}</span>
+                <small className="text-[var(--sm-muted)]">{pack.promise}</small>
+                <small className="text-[var(--sm-muted)]">Starter modules: {pack.modules.join(', ')}</small>
+                <small className="text-[var(--sm-muted)]">Deliverables: {pack.deliverables.join(', ')}</small>
+                <small className="text-[var(--sm-muted)]">Agent loops: {pack.agentLoops.join(', ')}</small>
+                <div className="mt-2 flex flex-wrap gap-3">
+                  <Link className="sm-link" to={pack.proofRoute}>
+                    Open proof
+                  </Link>
+                  <Link className="sm-link" to={pack.setupRoute}>
+                    Review setup
+                  </Link>
+                </div>
+              </article>
+            ))}
+          </div>
+          <div className="mt-6 flex flex-wrap gap-3">
+            <button className="sm-button-primary" disabled={seedClientBusy} onClick={() => void handleSeedSprint('client')} type="button">
+              {seedClientBusy ? 'Seeding client sprint...' : 'Seed client delivery sprint'}
+            </button>
+            <Link className="sm-button-secondary" to="/products">
+              Open Product Proof Center
+            </Link>
+            <Link className="sm-button-secondary" to="/packages">
+              Open Packages
+            </Link>
+            <Link className="sm-button-secondary" to="/app/product-ops">
+              Open Product Ops
+            </Link>
+          </div>
+        </article>
+
+        <article className="sm-site-panel">
+          <div>
+            <p className="sm-kicker text-[var(--sm-accent-alt)]">R&D command chain</p>
+            <h2 className="mt-3 text-3xl font-bold text-white lg:text-4xl">Keep discovery, prototyping, productization, and launch as separate owned loops.</h2>
+          </div>
+          <div className="mt-6 grid gap-3">
+            {RD_COMMAND_CHAIN.map((item) => (
+              <article className="sm-proof-card" key={item.id}>
+                <div className="flex items-center justify-between gap-3">
+                  <p className="font-semibold text-white">{item.phase}</p>
+                  <span className="sm-status-pill">{item.cadence}</span>
+                </div>
+                <p className="mt-3 text-sm text-white/85">{item.team}</p>
+                <p className="mt-2 text-sm text-[var(--sm-muted)]">Workspace: {item.workspace}</p>
+                <p className="mt-2 text-sm text-white/80">Crew: {item.crew}</p>
+                <p className="mt-2 text-sm text-[var(--sm-muted)]">{item.output}</p>
+              </article>
+            ))}
+          </div>
+          <div className="mt-6 flex flex-wrap gap-3">
+            <Link className="sm-button-primary" to="/app/teams">
+              Open Agent Ops
+            </Link>
+            <Link className="sm-button-secondary" to="/app/workbench">
+              Open Workbench
+            </Link>
+            <Link className="sm-button-secondary" to="/app/lab">
+              Open R&D Command
+            </Link>
           </div>
         </article>
       </section>
@@ -1069,7 +1733,7 @@ export function BuildStudioPage() {
         <article className="sm-site-panel">
           <div>
             <p className="sm-kicker text-[var(--sm-accent)]">Fast build loops</p>
-            <h2 className="mt-3 text-3xl font-bold text-white lg:text-4xl">Gen AI and data science should accelerate product updates, not create demo noise.</h2>
+            <h2 className="mt-3 text-3xl font-bold text-white lg:text-4xl">Gen AI and data science should accelerate product updates, not create prototype noise.</h2>
           </div>
           <div className="mt-6 grid gap-3">
             {RAPID_DELIVERY_LOOPS.map((loop) => (
@@ -1215,7 +1879,7 @@ export function BuildStudioPage() {
             <h2 className="mt-3 text-3xl font-bold text-white lg:text-4xl">A better build model creates better rollout results.</h2>
           </div>
           <p className="max-w-2xl text-sm leading-relaxed text-[var(--sm-muted)] lg:text-base">
-            This internal structure matters because clients do not want a nice demo. They want faster rollout, cleaner ownership, safer automation, and a system that can keep improving after launch.
+            This internal structure matters because clients do not want a polished prototype. They want faster rollout, cleaner ownership, safer automation, and a system that can keep improving after launch.
           </p>
         </div>
         <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -1418,7 +2082,7 @@ export function BuildStudioPage() {
       <section className="sm-site-final">
         <div>
           <p className="sm-kicker text-[var(--sm-accent)]">Next step</p>
-          <h2 className="mt-3 text-3xl font-bold text-white lg:text-5xl">Run the company like a product build system with release gates, not like a demo shop.</h2>
+          <h2 className="mt-3 text-3xl font-bold text-white lg:text-5xl">Run the company like a product build system with release gates, not like a prototype shop.</h2>
           <p className="mt-4 max-w-2xl text-base leading-relaxed text-[var(--sm-muted)]">
             The next compounding move is to keep routing research, pilots, product promotion, connector depth, and tenant launches through the same
             operating layer.
@@ -1437,8 +2101,8 @@ export function BuildStudioPage() {
           <Link className="sm-button-secondary" to="/platform">
             See Enterprise Setup
           </Link>
-          <Link className="sm-button-secondary" to="/clients/yangon-tyre">
-            Open tenant example
+          <Link className="sm-button-secondary" to="/app/portal">
+            Open tenant portal
           </Link>
         </div>
       </section>

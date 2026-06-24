@@ -28,19 +28,36 @@ export type TenantRoleExperience = {
 const YTF_ROLE_ALIASES: Record<string, string> = {
   ceo: 'director',
   director: 'director',
+  owner: 'manager',
   admin: 'tenant_admin',
   tenant_admin: 'tenant_admin',
   platform_admin: 'platform_admin',
+  manager: 'manager',
   plant_manager: 'plant_manager',
-  operations: 'plant_manager',
-  ops: 'plant_manager',
+  plant_a_manager: 'plant_manager',
+  plant_b_manager: 'plant_manager',
+  manager_plant_a: 'manager',
+  manager_plant_b: 'manager',
+  operations_admin: 'plant_manager',
+  maintenance_compliance: 'maintenance_lead',
+  engineering_maintenance: 'maintenance_lead',
+  curing_press_operations: 'plant_manager',
+  maintenance_operations: 'maintenance_lead',
+  utility: 'maintenance_lead',
+  admin_hr_planning: 'admin_hr_planning',
+  mixing_operator: 'plant_manager',
+  admin_sales: 'sales_lead',
+  tyre_building: 'plant_manager',
+  quality_control: 'quality_manager',
+  operations: 'operations',
+  ops: 'operations',
   receiving_clerk: 'receiving_clerk',
   procurement_lead: 'procurement_lead',
   finance_controller: 'finance_controller',
-  quality: 'quality_manager',
-  qc: 'quality_manager',
+  quality: 'quality',
+  qc: 'quality',
   quality_manager: 'quality_manager',
-  maintenance: 'maintenance_lead',
+  maintenance: 'maintenance',
   maintenance_lead: 'maintenance_lead',
   sales: 'sales_lead',
   sales_lead: 'sales_lead',
@@ -99,23 +116,22 @@ function getDefaultYtfExperience(canonicalRole: string): TenantRoleExperience {
 const YTF_ROLE_EXPERIENCES: Record<string, TenantRoleExperience> = {
   platform_admin: {
     canonicalRole: 'platform_admin',
-    title: 'Platform control',
-    mission: 'Steer tenant posture, architecture, and execution tracks from one control layer.',
-    defaultHome: '/app/workbench',
+    title: 'YTF setup control',
+    mission: 'Keep Yangon Tyre access, data sources, scheduled jobs, and role screens stable without exposing internal build tools.',
+    defaultHome: '/app/platform-admin',
     sections: [
-      { title: 'Control Workbench', route: '/app/workbench', detail: 'Run delegated pods, infrastructure phases, and execution tracks for the tenant.' },
-      { title: 'Platform Admin', route: '/app/platform-admin', detail: 'Control tenant modules, roles, rollout, and control-plane posture.' },
-      { title: 'Model Ops', route: '/app/model-ops', detail: 'Keep provider readiness, routing contracts, and benchmark drills explicit.' },
-      { title: 'Runtime Control', route: '/app/runtime', detail: 'Connector freshness, autonomy posture, and trust signals.' },
-      { title: 'Connector Control', route: '/app/connectors', detail: 'Drive, Gmail, ERP, chat, and shopfloor source coverage.' },
-      { title: 'Product Ops', route: '/app/product-ops', detail: 'Turn portfolio pressure into release gates, execution tracks, and rollout moves.' },
-      { title: 'Agent Ops', route: '/app/teams', detail: 'Run AI teams, approvals, and bounded automations.' },
+      { title: 'Workspace Setup', route: '/app/platform-admin', detail: 'Control users, role access, rollout status, and safe setup requests.' },
+      { title: 'Attendance and Payroll', route: '/app/attendance-payroll', detail: 'Prepare employee enrollment, tablet check-ins, OT approval, and payroll export controls.' },
+      { title: 'System Health', route: '/app/system', detail: 'Check domain, database, scheduled jobs, source refresh, and privacy health.' },
+      { title: 'Live Data', route: '/app/live-data', detail: 'Review transformed records, KPI candidates, changed files, and evidence search.' },
+      { title: 'Email and Chat', route: '/app/email', detail: 'Admin-only connector view for supplier, sales, and forwarded message lanes.' },
+      { title: 'Plant Review', route: '/app/plant-manager', detail: 'Confirm the manager and plant-manager loops are practical for daily use.' },
     ],
     insights: [
       {
         label: 'Control surface',
-        value: 'Workbench first',
-        detail: 'Use the control layer to turn platform direction into concrete execution tracks before changing runtime or rollout posture.',
+        value: 'Setup first',
+        detail: 'Use Setup and System before changing any manager-facing workflow.',
       },
       {
         label: 'Production stages',
@@ -133,8 +149,8 @@ const YTF_ROLE_EXPERIENCES: Record<string, TenantRoleExperience> = {
         detail: 'Control-layer improvements should tighten plant execution, adoption, and trust together.',
       },
     ],
-    focusModules: ['Control Workbench', 'Platform Admin', 'Model Ops', 'Runtime Control', 'Connector Control', 'Product Ops'],
-    nextModules: ['Operating Intelligence Studio', 'AI App Foundry'],
+    focusModules: ['Workspace Setup', 'Attendance and Payroll', 'System Health', 'Live Data', 'Email and Chat', 'Plant Review'],
+    nextModules: ['KPI Review', 'Whiteboard Capture'],
   },
   director: {
     canonicalRole: 'director',
@@ -143,16 +159,12 @@ const YTF_ROLE_EXPERIENCES: Record<string, TenantRoleExperience> = {
     defaultHome: '/app/director',
     sections: [
       { title: 'CEO Command Center', route: '/app/director', detail: 'Daily and weekly leadership review with risk, approvals, and follow-through.' },
-      { title: 'Plant Manager', route: '/app/plant-manager', detail: 'See the plant-manager review loop, teaching packs, and the desks that factory leaders should actually use.' },
-      { title: 'Control Workbench', route: '/app/workbench', detail: 'Resolve strategy, execution tracks, and infrastructure priorities from one control layer.' },
-      { title: 'Model Ops', route: '/app/model-ops', detail: 'Review provider posture and routing contracts before expanding agent authority.' },
-      { title: 'Workforce Command', route: '/app/workforce', detail: 'Role routines, manager review loops, and AI copilot coverage across the tenant.' },
-      { title: 'Data Fabric', route: '/app/data-fabric', detail: 'Whole-folder ingestion, KPI marts, and section-specific stories for leadership review.' },
-      { title: 'Operating Intelligence Studio', route: '/app/insights', detail: 'Gap analysis, KPI drift, and model-backed scenario review.' },
+      { title: 'Plant Manager', route: '/app/plant-manager', detail: 'See the plant review loop, teaching packs, and the desks that factory leaders should actually use.' },
+      { title: 'Live Data', route: '/app/live-data', detail: 'Transformed records, KPIs, changed files, and role-safe data stories.' },
+      { title: 'System Health', route: '/app/system', detail: 'Source freshness, scheduled jobs, database, email, and knowledge status.' },
       { title: 'Sales and Dealer Control', route: '/app/revenue', detail: 'Dealer pipeline, quote posture, and commercial exposure.' },
       { title: 'Approvals and Supplier Recovery', route: '/app/approvals', detail: 'High-impact approvals, supplier delays, and financial control.' },
-      { title: 'AI App Foundry', route: '/app/factory', detail: 'Design the platform, benchmark each app, and review the AI workforce that builds it.' },
-      { title: 'Foundry Release Desk', route: '/app/foundry', detail: 'Run the hackathon board that promotes proofs into reusable modules.' },
+      { title: 'DQMS', route: '/app/dqms', detail: 'Quality incidents, CAPA, containment, and ISO evidence review.' },
     ],
     insights: [
       {
@@ -176,27 +188,22 @@ const YTF_ROLE_EXPERIENCES: Record<string, TenantRoleExperience> = {
         detail: `${YANGON_TYRE_DATA_PROFILE.focusProducts2025[0].units.toLocaleString()} units across weeks 01-06 in 2025.`,
       },
     ],
-    focusModules: ['CEO Command Center', 'Plant Manager', 'Control Workbench', 'Model Ops', 'Data Fabric', 'Workforce Command', 'Sales CRM', 'AI App Foundry'],
-    nextModules: ['Lab SPC and Release', 'Operating Intelligence Studio', 'Product Ops'],
+    focusModules: ['CEO Command Center', 'Plant Manager', 'Live Data', 'System Health', 'Sales CRM', 'DQMS'],
+    nextModules: ['Lab SPC and Release', 'Operating Intelligence Studio'],
   },
   tenant_admin: {
     canonicalRole: 'tenant_admin',
-    title: 'Tenant admin',
-    mission: 'Control identity, connector scopes, rollout, runtime trust, and the AI workforce on the Yangon Tyre tenant.',
+    title: 'Admin workspace',
+    mission: 'Control identity, connector scopes, rollout, runtime trust, and private Yangon Tyre data readiness.',
     defaultHome: '/app/platform-admin',
     sections: [
-      { title: 'Platform Admin', route: '/app/platform-admin', detail: 'Tenant modules, roles, rollout, and control-plane posture.' },
+      { title: 'Workspace Setup', route: '/app/platform-admin', detail: 'Users, roles, rollout, data sources, cloud jobs, and setup requests.' },
+      { title: 'Attendance and Payroll', route: '/app/attendance-payroll', detail: 'Prepare phone/tablet check-ins, employee photo enrollment, OT approval, and salary export review.' },
       { title: 'Plant Manager', route: '/app/plant-manager', detail: 'Keep the factory manager layer simple, trainable, and connected to live desks.' },
-      { title: 'Control Workbench', route: '/app/workbench', detail: 'Turn platform strategy, pod charters, and execution tracks into live operating work.' },
-      { title: 'Model Ops', route: '/app/model-ops', detail: 'Bind provider posture, routing contracts, and benchmark drills to the tenant runtime.' },
-      { title: 'Workforce Command', route: '/app/workforce', detail: 'Role routines, adoption gaps, AI coworker coverage, and manager discipline.' },
-      { title: 'Data Fabric', route: '/app/data-fabric', detail: 'Source coverage, topic pipelines, feature marts, and writeback quality in one place.' },
-      { title: 'Runtime Control', route: '/app/runtime', detail: 'Connector freshness, autonomy posture, and trust signals.' },
-      { title: 'R&D Command', route: '/app/lab', detail: 'Review experiment loops, named research cells, and frontier module queue.' },
-      { title: 'Connector Control', route: '/app/connectors', detail: 'Drive, Gmail, ERP, chat, and shopfloor source coverage.' },
-      { title: 'Agent Ops', route: '/app/teams', detail: 'Run AI teams, approvals, and bounded automations.' },
-      { title: 'AI App Foundry', route: '/app/factory', detail: 'Design each app, benchmark successful SaaS, and promote modules through release gates.' },
-      { title: 'Foundry Release Desk', route: '/app/foundry', detail: 'Run the release desk for promotion gates, tenant rollout, and module graduation.' },
+      { title: 'Live Data', route: '/app/live-data', detail: 'Source coverage, KPI candidates, changed files, and role-safe data stories.' },
+      { title: 'System Health', route: '/app/system', detail: 'Database, Drive, Gmail, scheduled jobs, privacy, and knowledge status.' },
+      { title: 'Email and Chat', route: '/app/email', detail: 'Admin-only connector view for supplier, sales, and forwarded message lanes.' },
+      { title: 'Action Board', route: '/app/action-board', detail: 'Confirm that source-backed tasks route to owners and close cleanly.' },
     ],
     insights: [
       {
@@ -220,22 +227,70 @@ const YTF_ROLE_EXPERIENCES: Record<string, TenantRoleExperience> = {
         detail: 'Leading SKUs from the 2025 weekly workbook.',
       },
     ],
-    focusModules: ['Platform Admin', 'Plant Manager', 'Control Workbench', 'Model Ops', 'Data Fabric', 'Workforce Command', 'AI App Foundry', 'CEO Command Center'],
-    nextModules: ['Operating Intelligence Studio', 'Lab SPC and Release', 'Product Ops'],
+    focusModules: ['Workspace Setup', 'Attendance and Payroll', 'Plant Manager', 'Live Data', 'System Health', 'Email and Chat', 'Action Board'],
+    nextModules: ['Operating Intelligence Studio', 'Lab SPC and Release'],
+  },
+  manager: {
+    canonicalRole: 'manager',
+    title: 'Manager workspace',
+    mission: 'Use one compact form to capture today’s work, then check the action board only when follow-up is needed.',
+    defaultHome: '/app/manager-system',
+    sections: [
+      { title: 'Today', route: '/app/manager-system', detail: 'See only today work, missing proof, and useful plant numbers.' },
+      { title: 'New Entry', route: '/app/daily-entry', detail: 'Daily 5W1H, normal or abnormal record, 5S, or board photo.' },
+      { title: 'Team Board', route: '/app/action-board', detail: 'Finish open work with owner, proof, and next step.' },
+      { title: 'Plant Data', route: '/app/live-data', detail: 'Production, quality, stock, and supplier values by plant and source date.' },
+    ],
+    insights: [
+      {
+        label: 'Main job',
+        value: 'Capture and route',
+        detail: 'Manager work should save the fact once and make the next step visible.',
+      },
+      {
+        label: 'Default rhythm',
+        value: 'Daily entry first',
+        detail: 'Use the form before chat escalation or spreadsheet backfill.',
+      },
+      {
+        label: 'Plant handoff',
+        value: 'Escalate to Plant Manager',
+        detail: 'Use Plant Manager only when the issue crosses teams, shifts, or factory-level risk.',
+      },
+    ],
+    focusModules: ['Today', 'New Entry', 'Team Board', 'Plant Data'],
+    nextModules: ['Role-specific section packs'],
+  },
+  operations: {
+    canonicalRole: 'operations',
+    title: 'Operations entry',
+    mission: 'Capture shift flow, blockers, production drift, and line evidence from one short mobile-first pack.',
+    defaultHome: '/app/daily-entry?pack=production-flow',
+    sections: [
+      { title: 'Production Flow Pack', route: '/app/daily-entry?pack=production-flow', detail: 'Short phone-first entry for shift handoff, line blockers, and quick production KPIs.' },
+      { title: 'Operations Control', route: '/app/operations', detail: 'Escalate only after the issue is captured cleanly in the pack.' },
+      { title: 'Plant Manager', route: '/app/plant-manager', detail: 'Use when the issue crosses teams, shifts, or plant-level risk.' },
+      { title: 'Documents', route: '/app/documents', detail: 'Attach a file, screenshot, or controlled record when the entry needs more than a photo.' },
+    ],
+    insights: [
+      { label: 'Default screen', value: 'Production flow pack', detail: 'The fastest true entry should open first on a shared plant phone.' },
+      { label: 'Main proof', value: 'Photo + shift fact', detail: 'Capture the line, press, quantity, or blocker before discussing it in chat.' },
+      { label: 'Escalation rule', value: 'Cross-team only', detail: 'Use Plant Manager after the first owned fact is already saved.' },
+      { label: 'Data value', value: 'Flow history', detail: 'These entries become the production and loss story later in the warehouse.' },
+    ],
+    focusModules: ['Production Flow Pack', 'Operations Control', 'Plant Manager', 'Documents'],
+    nextModules: ['Live Data'],
   },
   plant_manager: {
     canonicalRole: 'plant_manager',
-    title: 'Plant control',
+    title: 'Plant Manager workspace',
     mission: 'Run shift flow, receiving, manufacturing control, quality escalation, and maintenance follow-up from one operator home.',
     defaultHome: '/app/plant-manager',
     sections: [
-      { title: 'Plant Manager', route: '/app/plant-manager', detail: 'Start here for the daily review loop, teaching packs, and the next desk to open.' },
-      { title: 'Operations Control', route: '/app/operations', detail: 'Daily blockers, shift actions, and cross-team handoff.' },
-      { title: 'Workforce Command', route: '/app/workforce', detail: 'Role routines, shift-review governance, and copilot coverage for the plant.' },
-      { title: 'Data Fabric', route: '/app/data-fabric', detail: 'Plant flow marts, industrial-engineering cuts, and feature freshness for operations.' },
-      { title: 'Receiving Control', route: '/app/receiving', detail: 'Inbound holds, GRN mismatches, and next physical action.' },
-      { title: 'DQMS and Quality Methods', route: '/app/dqms', detail: 'Incidents, CAPA, containment, and root-cause review.' },
-      { title: 'Maintenance Control', route: '/app/maintenance', detail: 'Breakdowns, PM work, and repeat-failure follow-up.' },
+      { title: 'Today', route: '/app/plant-manager', detail: 'Plant review, open team work, latest values, and daily close.' },
+      { title: 'Plant Data', route: '/app/live-data', detail: 'Production, quality, stock, supplier, and WCM signals by plant.' },
+      { title: 'Team Board', route: '/app/action-board', detail: 'Cross-team work that needs owner, proof, or closeout.' },
+      { title: 'New Entry', route: '/app/daily-entry', detail: 'Capture a plant-manager note, board photo, 5W1H, or abnormal condition.' },
     ],
     insights: [
       {
@@ -259,8 +314,88 @@ const YTF_ROLE_EXPERIENCES: Record<string, TenantRoleExperience> = {
         detail: 'Operate the daily queue around containment, downtime, and traceability.',
       },
     ],
-    focusModules: ['Plant Manager', 'Operations Control', 'Data Fabric', 'Workforce Command', 'Receiving Control', 'Manufacturing Command', 'Maintenance Control'],
-    nextModules: ['Lab SPC and Release', 'Operating Intelligence Studio'],
+    focusModules: ['Today', 'Plant Data', 'Team Board', 'New Entry'],
+    nextModules: ['Plant B split', 'CEO review'],
+  },
+  quality: {
+    canonicalRole: 'quality',
+    title: 'Quality entry',
+    mission: 'Capture defects, claims, release holds, audit findings, and closeout proof from one controlled quality pack.',
+    defaultHome: '/app/daily-entry?pack=quality',
+    sections: [
+      { title: 'Quality Pack', route: '/app/daily-entry?pack=quality', detail: 'Short phone-first entry for claims, defects, audit notes, training gaps, and release concerns.' },
+      { title: 'DQMS and Quality Methods', route: '/app/dqms', detail: 'Open the full quality desk only after the incident is captured cleanly.' },
+      { title: 'Invisible ISO', route: '/app/invisible-iso', detail: 'Use the hidden ISO loop when the issue needs a structured closeout rhythm.' },
+      { title: 'Plant Manager', route: '/app/plant-manager', detail: 'Escalate only when quality risk hits production, release, or customer exposure.' },
+    ],
+    insights: [
+      { label: 'Default screen', value: 'Quality pack', detail: 'Claims and defects should not start from a broad dashboard.' },
+      { label: 'Main proof', value: 'Photo + file', detail: 'Attach a defect image, claim evidence, or lab/Excel reference on the same record.' },
+      { label: 'Escalation rule', value: 'Release or customer risk', detail: 'Use Plant Manager when the issue affects more than one quality owner or department.' },
+      { label: 'Data value', value: 'Claim memory', detail: 'These entries build the internal quality knowledge base over time.' },
+    ],
+    focusModules: ['Quality Pack', 'DQMS and Quality Methods', 'Invisible ISO', 'Plant Manager'],
+    nextModules: ['Live Data'],
+  },
+  maintenance: {
+    canonicalRole: 'maintenance',
+    title: 'Maintenance entry',
+    mission: 'Capture downtime, failure, utility, and spare-part follow-up from one reliability pack before opening heavier control desks.',
+    defaultHome: '/app/daily-entry?pack=reliability-utility',
+    sections: [
+      { title: 'Maintenance Pack', route: '/app/daily-entry?pack=reliability-utility', detail: 'Short phone-first entry for breakdowns, utility issues, repeat faults, and reliability follow-up.' },
+      { title: 'Maintenance Control', route: '/app/maintenance', detail: 'Open the full maintenance desk after the fact, owner, and proof are saved.' },
+      { title: 'Plant Manager', route: '/app/plant-manager', detail: 'Escalate when downtime or repeat failure is crossing into wider plant control.' },
+      { title: 'Documents', route: '/app/documents', detail: 'Attach manuals, spare references, or compliance proof when needed.' },
+    ],
+    insights: [
+      { label: 'Default screen', value: 'Maintenance pack', detail: 'Breakdown capture should start on a compact phone screen.' },
+      { label: 'Main proof', value: 'Fault photo or video', detail: 'Capture the asset, spare, and downtime evidence on the first record.' },
+      { label: 'Escalation rule', value: 'Production impact', detail: 'Use Plant Manager when the stop affects output, quality, or more than one team.' },
+      { label: 'Data value', value: 'Failure memory', detail: 'These entries become repeat-failure and reliability intelligence later.' },
+    ],
+    focusModules: ['Maintenance Pack', 'Maintenance Control', 'Plant Manager', 'Documents'],
+    nextModules: ['Live Data'],
+  },
+  admin_hr_planning: {
+    canonicalRole: 'admin_hr_planning',
+    title: 'Admin and planning entry',
+    mission: 'Capture document changes, planning follow-up, training gaps, and admin issues from one compact manager pack.',
+    defaultHome: '/app/daily-entry?pack=admin-planning',
+    sections: [
+      { title: 'Admin and Planning Pack', route: '/app/daily-entry?pack=admin-planning', detail: 'Short phone-first entry for document control, training, planning changes, and audit follow-up.' },
+      { title: 'Document Control', route: '/app/documents', detail: 'Keep controlled files, SOPs, and records linked to the same operating layer.' },
+      { title: 'Manager Workspace', route: '/app/manager-system', detail: 'Use the broader manager desk only when the issue needs mixed review.' },
+      { title: 'Action Board', route: '/app/action-board', detail: 'Turn messy admin or planning notes into one owner and one due window.' },
+    ],
+    insights: [
+      { label: 'Default screen', value: 'Admin and planning pack', detail: 'Planning and document work should start from one simple structured form.' },
+      { label: 'Main proof', value: 'Current file or screenshot', detail: 'Attach the document, desktop proof, or training evidence before handoff.' },
+      { label: 'Escalation rule', value: 'Factory impact', detail: 'Escalate only when the admin or planning issue blocks production or compliance.' },
+      { label: 'Data value', value: 'Control history', detail: 'These entries become the living history for document and training control.' },
+    ],
+    focusModules: ['Admin and Planning Pack', 'Document Control', 'Manager Workspace', 'Action Board'],
+    nextModules: ['Plant Manager'],
+  },
+  sales: {
+    canonicalRole: 'sales',
+    title: 'Sales and inventory entry',
+    mission: 'Capture showroom, stock, dealer, and commercial signals from one compact pack that stays tied to plant reality.',
+    defaultHome: '/app/daily-entry?pack=sales-inventory',
+    sections: [
+      { title: 'Sales and Inventory Pack', route: '/app/daily-entry?pack=sales-inventory', detail: 'Short phone-first entry for stock changes, dealer follow-up, showroom issues, and account-side proof.' },
+      { title: 'Sales and Dealer Control', route: '/app/revenue', detail: 'Open the full sales desk after the commercial fact is saved cleanly.' },
+      { title: 'Documents', route: '/app/documents', detail: 'Attach Viber exports, stock files, invoices, and showroom records.' },
+      { title: 'Action Board', route: '/app/action-board', detail: 'Use when the update is mixed across money, stock, and customer follow-up.' },
+    ],
+    insights: [
+      { label: 'Default screen', value: 'Sales and inventory pack', detail: 'Showroom work should start from a compact entry loop, not a broad CRM page.' },
+      { label: 'Main proof', value: 'File, photo, or chat export', detail: 'Attach the stock file, screenshot, or Viber evidence to the same record.' },
+      { label: 'Escalation rule', value: 'Factory or cash impact', detail: 'Escalate when the commercial issue changes plant planning or financial control.' },
+      { label: 'Data value', value: 'Demand memory', detail: 'These entries later build the internal commercial and stock knowledge layer.' },
+    ],
+    focusModules: ['Sales and Inventory Pack', 'Sales and Dealer Control', 'Documents', 'Action Board'],
+    nextModules: ['Live Data'],
   },
   receiving_clerk: {
     canonicalRole: 'receiving_clerk',
@@ -269,7 +404,7 @@ const YTF_ROLE_EXPERIENCES: Record<string, TenantRoleExperience> = {
     defaultHome: '/app/receiving',
     sections: [
       { title: 'Receiving Control', route: '/app/receiving', detail: 'GRN, COA, shortage, hold, and next-action records.' },
-      { title: 'Workforce Command', route: '/app/workforce', detail: 'Receiving routines, manager checks, and source-pack coverage for inbound issues.' },
+      { title: 'Role Routines', route: '/app/use', detail: 'Receiving routines, manager checks, and source-pack coverage for inbound issues.' },
       { title: 'Operations Control', route: '/app/operations', detail: 'Shared plant queue for escalation and review.' },
       { title: 'Document Intelligence', route: '/app/documents', detail: 'Attach photos, docs, and supplier evidence to the receipt record.' },
       { title: 'Approvals', route: '/app/approvals', detail: 'Escalate supplier and financial decisions that block release.' },
@@ -296,7 +431,7 @@ const YTF_ROLE_EXPERIENCES: Record<string, TenantRoleExperience> = {
         detail: 'Release quality at receipt affects the whole tyre flow downstream.',
       },
     ],
-    focusModules: ['Receiving Control', 'Workforce Command', 'Document Intelligence', 'Supplier Control'],
+    focusModules: ['Receiving Control', 'Role Routines', 'Document Intelligence', 'Supplier Control'],
     nextModules: ['Manufacturing Command'],
   },
   procurement_lead: {
@@ -306,8 +441,8 @@ const YTF_ROLE_EXPERIENCES: Record<string, TenantRoleExperience> = {
     defaultHome: '/app/approvals',
     sections: [
       { title: 'Supplier Control', route: '/app/approvals', detail: 'Discrepancies, approvals, and supplier recovery loops.' },
-      { title: 'Workforce Command', route: '/app/workforce', detail: 'Procurement routines, recovery queues, and AI support mapped to daily work.' },
-      { title: 'Data Fabric', route: '/app/data-fabric', detail: 'Supplier recovery marts, evidence completeness, and mailbox-to-GRN linkage.' },
+      { title: 'Role Routines', route: '/app/use', detail: 'Procurement routines, recovery queues, and AI support mapped to daily work.' },
+      { title: 'Live Data', route: '/app/live-data', detail: 'Supplier recovery metrics, evidence completeness, and mailbox-to-GRN linkage.' },
       { title: 'Receiving Control', route: '/app/receiving', detail: 'Inbound issues and hold records tied back to shipment and PO.' },
       { title: 'Document Intelligence', route: '/app/documents', detail: 'Invoice, PO, COA, and customs evidence linked to the same case.' },
       { title: 'Director Review', route: '/app/director', detail: 'Escalate financial and supply-risk decisions with context.' },
@@ -334,7 +469,7 @@ const YTF_ROLE_EXPERIENCES: Record<string, TenantRoleExperience> = {
         detail: 'Every escalation should carry owner, due date, and supporting files.',
       },
     ],
-    focusModules: ['Supplier Control', 'Data Fabric', 'Workforce Command', 'Receiving Control', 'Document Intelligence'],
+    focusModules: ['Supplier Control', 'Live Data', 'Role Routines', 'Receiving Control', 'Document Intelligence'],
     nextModules: ['Operating Intelligence Studio'],
   },
   finance_controller: {
@@ -344,8 +479,8 @@ const YTF_ROLE_EXPERIENCES: Record<string, TenantRoleExperience> = {
     defaultHome: '/app/approvals',
     sections: [
       { title: 'Approvals', route: '/app/approvals', detail: 'Pending financial, supplier, and release decisions.' },
-      { title: 'Workforce Command', route: '/app/workforce', detail: 'Finance review posture, approval evidence, and cross-functional manager loops.' },
-      { title: 'Data Fabric', route: '/app/data-fabric', detail: 'Supplier, GRN, and finance evidence promoted into one reviewable data fabric.' },
+      { title: 'Role Routines', route: '/app/use', detail: 'Finance review posture, approval evidence, and cross-functional manager loops.' },
+      { title: 'Live Data', route: '/app/live-data', detail: 'Supplier, GRN, and finance evidence promoted into one reviewable view.' },
       { title: 'Director Dashboard', route: '/app/director', detail: 'Cross-module business risk and next decisions.' },
       { title: 'Sales Desk', route: '/app/revenue', detail: 'Commercial movement, credit context, and account exposure.' },
       { title: 'Document Intelligence', route: '/app/documents', detail: 'Invoice, PO, and evidence links for financial review.' },
@@ -372,7 +507,7 @@ const YTF_ROLE_EXPERIENCES: Record<string, TenantRoleExperience> = {
         detail: 'High-volume SKU issues can compound financial exposure quickly.',
       },
     ],
-    focusModules: ['Supplier Control', 'Data Fabric', 'Workforce Command', 'Sales CRM', 'CEO Command Center'],
+    focusModules: ['Supplier Control', 'Live Data', 'Role Routines', 'Sales CRM', 'CEO Command Center'],
     nextModules: ['Operating Intelligence Studio'],
   },
   quality_manager: {
@@ -383,9 +518,9 @@ const YTF_ROLE_EXPERIENCES: Record<string, TenantRoleExperience> = {
     sections: [
       { title: 'Plant Manager', route: '/app/plant-manager', detail: 'Run the quality-manager review loop and teach structured closeout discipline.' },
       { title: 'DQMS and Quality Methods', route: '/app/dqms', detail: 'Incidents, CAPA, fishbone, 5W1H, and containment.' },
-      { title: 'Workforce Command', route: '/app/workforce', detail: 'Quality routines, evidence discipline, and copilot pairing for closeout work.' },
-      { title: 'Data Fabric', route: '/app/data-fabric', detail: 'Quality-loss marts, release evidence, and recurring-defect analysis for technical review.' },
-      { title: 'Knowledge Graph and SOP Vault', route: '/app/knowledge', detail: 'Standards, work instructions, root-cause learning, and evidence.' },
+      { title: 'Role Routines', route: '/app/use', detail: 'Quality routines, evidence discipline, and closeout work.' },
+      { title: 'Live Data', route: '/app/live-data', detail: 'Quality-loss metrics, release evidence, and recurring-defect analysis for technical review.' },
+      { title: 'Knowledge and SOP evidence', route: '/app/live-data?view=data', detail: 'Standards, work instructions, root-cause learning, and evidence.' },
       { title: 'Operations Control', route: '/app/operations', detail: 'Shared execution queue with plant and maintenance.' },
       { title: 'Director Review', route: '/app/director', detail: 'Escalate major incidents and plant-quality debt.' },
     ],
@@ -411,7 +546,7 @@ const YTF_ROLE_EXPERIENCES: Record<string, TenantRoleExperience> = {
         detail: 'Quality needs batch, recipe, cure, and release history on the same case.',
       },
     ],
-    focusModules: ['Plant Manager', 'DQMS and Quality Methods', 'Data Fabric', 'Workforce Command', 'Knowledge Graph and SOP Vault', 'Manufacturing Command'],
+    focusModules: ['Plant Manager', 'DQMS and Quality Methods', 'Live Data', 'Role Routines', 'Knowledge and SOP Memory', 'Manufacturing Command'],
     nextModules: ['Lab SPC and Release', 'Operating Intelligence Studio'],
   },
   maintenance_lead: {
@@ -422,11 +557,11 @@ const YTF_ROLE_EXPERIENCES: Record<string, TenantRoleExperience> = {
     sections: [
       { title: 'Plant Manager', route: '/app/plant-manager', detail: 'Run daily reliability review, repeat-failure checks, and teaching drills for supervisors.' },
       { title: 'Maintenance Control', route: '/app/maintenance', detail: 'Breakdown logs, PM plans, and spare-part blockers.' },
-      { title: 'Workforce Command', route: '/app/workforce', detail: 'Reliability routines, downtime governance, and copilot support for repeat failures.' },
-      { title: 'Data Fabric', route: '/app/data-fabric', detail: 'Downtime features, asset-linked engineering cuts, and reliability storytelling.' },
+      { title: 'Role Routines', route: '/app/use', detail: 'Reliability routines, downtime governance, and repeat-failure discipline.' },
+      { title: 'Live Data', route: '/app/live-data', detail: 'Downtime metrics, asset-linked engineering cuts, and reliability storytelling.' },
       { title: 'Operations Control', route: '/app/operations', detail: 'Plant issues and cross-team escalation from one queue.' },
       { title: 'DQMS and Quality Methods', route: '/app/dqms', detail: 'Link machine issues to quality incidents and containment.' },
-      { title: 'Knowledge Vault', route: '/app/knowledge', detail: 'Preserve 5W1H, Ishikawa, and repeat-failure learning.' },
+      { title: 'SOP and evidence base', route: '/app/live-data?view=data', detail: 'Preserve 5W1H, Ishikawa, and repeat-failure learning.' },
     ],
     insights: [
       {
@@ -450,7 +585,7 @@ const YTF_ROLE_EXPERIENCES: Record<string, TenantRoleExperience> = {
         detail: 'Connect asset, batch, and incident history to isolate repeat failures faster.',
       },
     ],
-    focusModules: ['Plant Manager', 'Maintenance Control', 'Data Fabric', 'Workforce Command', 'Manufacturing Command', 'DQMS and Quality Methods'],
+    focusModules: ['Plant Manager', 'Maintenance Control', 'Live Data', 'Role Routines', 'Manufacturing Command', 'DQMS and Quality Methods'],
     nextModules: ['Lab SPC and Release'],
   },
   sales_lead: {
@@ -460,8 +595,8 @@ const YTF_ROLE_EXPERIENCES: Record<string, TenantRoleExperience> = {
     defaultHome: '/app/revenue',
     sections: [
       { title: 'Revenue Desk', route: '/app/revenue', detail: 'Dealer accounts, quotes, next actions, and account history.' },
-      { title: 'Workforce Command', route: '/app/workforce', detail: 'Commercial routines, follow-up discipline, and AI coverage for dealer work.' },
-      { title: 'Data Fabric', route: '/app/data-fabric', detail: 'Dealer demand marts, campaign signals, and role-specific sales storytelling.' },
+      { title: 'Role Routines', route: '/app/use', detail: 'Commercial routines and follow-up discipline for dealer work.' },
+      { title: 'Live Data', route: '/app/live-data', detail: 'Dealer demand metrics, campaign signals, and role-specific sales storytelling.' },
       { title: 'Pipeline', route: '/app/revenue/pipeline', detail: 'Pipeline stages, offer readiness, and follow-up ownership.' },
       { title: 'Director Review', route: '/app/director', detail: 'Escalate pricing, collections, or strategy calls.' },
       { title: 'Approvals', route: '/app/approvals', detail: 'Coordinate credit, collections, and commercial exceptions.' },
@@ -488,7 +623,7 @@ const YTF_ROLE_EXPERIENCES: Record<string, TenantRoleExperience> = {
         detail: 'Collections, pricing, and special cases stay evidence-linked.',
       },
     ],
-    focusModules: ['Sales CRM', 'Data Fabric', 'Workforce Command', 'CEO Command Center'],
+    focusModules: ['Sales CRM', 'Live Data', 'Role Routines', 'CEO Command Center'],
     nextModules: ['Operating Intelligence Studio'],
   },
 }
@@ -502,7 +637,7 @@ export function resolveTenantRoleExperience(tenantKey: TenantOperatingModel['ten
         canonicalRole: normalizedRole,
         title: 'Platform control',
         mission: 'Run the platform from the control layer, then move into rollout, runtime, and product execution surfaces as needed.',
-        defaultHome: '/app/workbench',
+        defaultHome: '/app/platform-admin',
         sections: [
           { title: 'Control Workbench', route: '/app/workbench', detail: 'Run delegated pods, infrastructure phases, and execution tracks.' },
           { title: 'Cloud Ops', route: '/app/cloud', detail: 'Keep pod ownership, cloud environments, and internal tooling visible from one map.' },
@@ -523,7 +658,7 @@ export function resolveTenantRoleExperience(tenantKey: TenantOperatingModel['ten
         canonicalRole: normalizedRole,
         title: 'Implementation control',
         mission: 'Translate company goals into tenant architecture, rollout plans, and the next bounded execution tracks.',
-        defaultHome: '/app/workbench',
+        defaultHome: '/app/architect',
         sections: [
           { title: 'Control Workbench', route: '/app/workbench', detail: 'Resolve architecture tradeoffs and seed execution tracks into the live queue.' },
           { title: 'Cloud Ops', route: '/app/cloud', detail: 'Define the pod topology, cloud environments, and service-lane shape before rollout expands.' },
@@ -543,7 +678,7 @@ export function resolveTenantRoleExperience(tenantKey: TenantOperatingModel['ten
         canonicalRole: normalizedRole,
         title: 'Director control',
         mission: 'Review company posture, convert priorities into decisions, and steer the execution machine without losing the big picture.',
-        defaultHome: '/app/workbench',
+        defaultHome: '/app/director',
         sections: [
           { title: 'Control Workbench', route: '/app/workbench', detail: 'Use the control layer to steer strategy, architecture, and execution.' },
           { title: 'Cloud Ops', route: '/app/cloud', detail: 'Review how pods, environments, and service lanes are set up to scale on cloud.' },
@@ -576,20 +711,80 @@ export function resolveTenantRoleExperience(tenantKey: TenantOperatingModel['ten
   const normalizedRole = normalizeWorkspaceRole(role)
   const canonicalRole = YTF_ROLE_ALIASES[normalizedRole] ?? 'plant_manager'
   const experience = YTF_ROLE_EXPERIENCES[canonicalRole] ?? getDefaultYtfExperience(canonicalRole)
+  const dailyEntrySection = {
+    title: 'Daily Entry',
+    route: '/app/daily-entry',
+    detail: 'Use one simple screen for shift handoff, quality, maintenance, receiving, and KPI capture.',
+  }
   const adoptionSection = {
     title: 'Adoption Command',
     route: '/app/adoption-command',
     detail: 'Live role scoring, writeback health, manager rituals, and intervention paths for staff adoption.',
   }
+  const invisibleIsoSection = {
+    title: 'Invisible ISO',
+    route: '/app/invisible-iso',
+    detail: 'Teach managers to use short routines, voice capture, and AI-backed standard work without paperwork overload.',
+  }
+  const managerSopsSection = {
+    title: 'Manager SOPs',
+    route: '/app/manager-sops',
+    detail: 'Run the exact operating routines, capture mode, and escalation rules managers should repeat inside the platform.',
+  }
+  const supportsInvisibleIso = new Set([
+    'director',
+    'tenant_admin',
+    'platform_admin',
+    'plant_manager',
+    'quality_manager',
+    'maintenance_lead',
+    'finance_controller',
+  ]).has(canonicalRole)
+  const supportsAdoptionCommand = new Set([
+    'director',
+    'tenant_admin',
+    'platform_admin',
+    'plant_manager',
+  ]).has(canonicalRole)
+  const supportsDailyEntry = new Set([
+    'director',
+    'tenant_admin',
+    'platform_admin',
+    'manager',
+    'plant_manager',
+    'quality_manager',
+    'maintenance_lead',
+    'receiving_clerk',
+    'procurement_lead',
+    'finance_controller',
+  ]).has(canonicalRole)
 
-  return experience.sections.some((section) => section.route === adoptionSection.route)
-    ? experience
-    : {
-        ...experience,
-        sections: [...experience.sections, adoptionSection],
-      }
+  const sections = [...experience.sections]
+  if (supportsDailyEntry && !sections.some((section) => section.route === dailyEntrySection.route)) {
+    sections.push(dailyEntrySection)
+  }
+  if (supportsAdoptionCommand && !sections.some((section) => section.route === adoptionSection.route)) {
+    sections.push(adoptionSection)
+  }
+  if (supportsInvisibleIso && !sections.some((section) => section.route === invisibleIsoSection.route)) {
+    sections.push(invisibleIsoSection)
+  }
+  if (supportsInvisibleIso && !sections.some((section) => section.route === managerSopsSection.route)) {
+    sections.push(managerSopsSection)
+  }
+
+  return {
+    ...experience,
+    sections,
+  }
 }
 
 export function resolveTenantLandingRoute(tenantKey: TenantOperatingModel['tenantKey'], role?: string | null) {
+  if (tenantKey === 'ytf-plant-a') {
+    const normalized = normalizeWorkspaceRole(role)
+    if (normalized) {
+      return '/app/erp'
+    }
+  }
   return resolveTenantRoleExperience(tenantKey, role).defaultHome
 }

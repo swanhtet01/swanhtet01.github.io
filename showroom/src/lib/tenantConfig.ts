@@ -1,3 +1,5 @@
+import { getSupermegaHostSurface, isSharedAppHost, isYtfClientHost } from './domainRouting'
+
 export type TenantConfig = {
   key: 'default' | 'ytf-plant-a'
   brandName: string
@@ -23,98 +25,106 @@ export type TenantConfig = {
 const defaultTenant: TenantConfig = {
   key: 'default',
   brandName: 'SUPERMEGA.dev',
-  compactMark: 'SM',
-  brandTagline: 'Company systems that replace tool sprawl',
+  compactMark: 'Signal',
+  brandTagline: 'CUSTOM SOFTWARE',
   siteMode: 'platform',
-  navItems: [
-    { label: 'Products', to: '/products' },
-    { label: 'Demo Center', to: '/demo-center' },
-    { label: 'How it works', to: '/platform' },
-    { label: 'Case Study', to: '/clients/yangon-tyre' },
-    { label: 'Contact', to: '/contact' },
-  ],
+  navItems: [],
   showBookCta: true,
-  bookCtaLabel: 'Request rollout',
-  homeEyebrow: 'SUPERMEGA.dev',
-  homeTitle: 'Replace tool sprawl with one working system.',
-  homeDescription: 'Start with one live product for sales, company data, operations, or client delivery. Expand only after the first team trusts it.',
-  homePrimaryCta: { label: 'Create workspace', to: '/signup' },
-  homeSecondaryCta: { label: 'Request rollout', to: '/contact' },
-  toolCards: [
-    {
-      title: 'Find Clients',
-      detail: 'Search public companies, keep the shortlist, and move it into one working follow-up list.',
-      to: '/products',
-    },
-    {
-      title: 'Receiving Control',
-      detail: 'Track inbound issues, missing GRNs, and supplier follow-up in one shared queue.',
-      to: '/products',
-    },
-  ],
-  footerText: 'Start with one working product. Then expand into a branded client portal with roles, approvals, and history on the same system.',
+  bookCtaLabel: 'Contact',
+  homeEyebrow: 'Custom software',
+  homeTitle: 'Messy work. Clean system.',
+  homeDescription: 'SUPERMEGA turns one important workflow into private software your team uses every day.',
+  homePrimaryCta: { label: 'Contact', to: '/contact' },
+  homeSecondaryCta: { label: 'Client login', to: '/login?next=/app/start' },
+  toolCards: [],
+  footerText: 'Start small. Prove value. Expand.',
+  defaultWorkspaceSlug: 'supermega-lab',
+  defaultCompany: 'SuperMega Lab',
 }
 
 const ytfTenant: TenantConfig = {
   key: 'ytf-plant-a',
-  brandName: 'SUPERMEGA.dev',
-  compactMark: 'SM',
-  brandTagline: 'AI-native manufacturing portal',
+  brandName: 'YTF Portal',
+  compactMark: 'YT',
+  brandTagline: 'Yangon Tyre private ERP',
   siteMode: 'client',
   tenantName: 'Yangon Tyre',
-  tenantShortName: 'Plant A',
+  tenantShortName: 'Private ERP',
   navItems: [
-    { label: 'Portal', to: '/app/portal' },
-    { label: 'Plant Manager', to: '/app/plant-manager' },
-    { label: 'Sales Desk', to: '/app/revenue' },
-    { label: 'Operations Desk', to: '/app/operations' },
-    { label: 'DQMS Desk', to: '/app/dqms' },
-    { label: 'Maintenance Desk', to: '/app/maintenance' },
-    { label: 'CEO Brief', to: '/app/director' },
-    { label: 'Admin Control', to: '/app/platform-admin' },
+    { label: 'Login', to: '/login?next=/app/portal' },
+    { label: 'Home', to: '/app/use' },
+    { label: 'Entry', to: '/app/daily-entry' },
+    { label: 'Plant', to: '/app/plant-manager' },
   ],
   showBookCta: false,
   bookCtaLabel: 'Open workspace',
-  homeEyebrow: 'Yangon Tyre / Plant A',
-  homeTitle: 'Yangon Tyre enterprise portal.',
-  homeDescription: 'Sales, operations, manufacturing control, DQMS, maintenance, CEO review, and admin control in one portal.',
-  homePrimaryCta: { label: 'Open portal', to: '/app/portal' },
-  homeSecondaryCta: { label: 'Open DQMS desk', to: '/app/dqms' },
+  homeEyebrow: 'Private plant workspace',
+  homeTitle: 'Run the plant from one simple portal.',
+  homeDescription: 'Managers capture work. Plant Manager reviews. Quality, data, and AI stay behind the scenes.',
+  homePrimaryCta: { label: 'Client login', to: '/login?next=/app/portal' },
+  homeSecondaryCta: { label: 'Open plant manager', to: '/app/plant-manager' },
   toolCards: [
     {
-      title: 'Sales Desk',
-      detail: 'Accounts, follow-up, pipeline, and commercial history in one queue.',
-      to: '/app/revenue',
+      title: 'Manager Workspace',
+      detail: 'Use one simple manager home for daily entry, action routing, document control, and light review.',
+      to: '/app/manager-system',
     },
     {
-      title: 'Operations Desk',
-      detail: 'Receiving, action queues, inventory pressure, and plant issues on one desk.',
-      to: '/app/operations',
+      title: 'Plant Manager',
+      detail: 'Open the plant-wide workspace for cross-functional review, escalation, daily close, and quality follow-through.',
+      to: '/app/plant-manager',
     },
     {
-      title: 'DQMS Desk',
-      detail: 'Incidents, CAPA, fishbone, 5W1H, and KPI review in one industrial quality desk.',
+      title: 'Quality',
+      detail: 'Keep defects, 5W1H, document control, and quality data entry inside the same live system instead of binders and side files.',
       to: '/app/dqms',
     },
-    {
-      title: 'Maintenance Desk',
-      detail: 'Breakdowns, PM work, spare-part blockers, and downtime follow-up in one reliability lane.',
-      to: '/app/maintenance',
-    },
-    {
-      title: 'CEO Brief',
-      detail: 'Open the daily director view for risk, blocked work, and company signals.',
-      to: '/app/director',
-    },
-    {
-      title: 'Admin Control',
-      detail: 'Manage tenant setup, access, connectors, policy, and rollout controls.',
-      to: '/app/platform-admin',
-    },
   ],
-  footerText: 'Yangon Tyre enterprise portal for sales, operations, manufacturing control, DQMS, maintenance, CEO review, and admin control.',
+  footerText: 'Private industrial portal.',
   defaultWorkspaceSlug: 'ytf-plant-a',
   defaultCompany: 'Yangon Tyre',
+}
+
+function inferTenantKeyFromCachedWorkspace(): TenantConfig['key'] | null {
+  if (typeof window === 'undefined') {
+    return null
+  }
+
+  try {
+    const raw = window.localStorage.getItem('supermega.workspaceSession.v1')
+    if (!raw) {
+      return null
+    }
+
+    const payload = JSON.parse(raw) as {
+      session?: {
+        workspace_slug?: string
+        workspace_id?: string
+        workspace_name?: string
+      } | null
+    }
+    const workspaceText = [
+      payload.session?.workspace_slug,
+      payload.session?.workspace_id,
+      payload.session?.workspace_name,
+    ]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase()
+
+    if (
+      workspaceText.includes('ytf') ||
+      workspaceText.includes('yangon tyre') ||
+      workspaceText.includes('plant a') ||
+      workspaceText.includes('plant b')
+    ) {
+      return 'ytf-plant-a'
+    }
+  } catch {
+    return null
+  }
+
+  return null
 }
 
 function inferTenantKey(): TenantConfig['key'] {
@@ -130,11 +140,29 @@ function inferTenantKey(): TenantConfig['key'] {
 
   const hostname = window.location.hostname.trim().toLowerCase()
   const subdomain = hostname.split('.')[0]
-  if (hostname === 'ytf.supermega.dev' || hostname === 'www.ytf.supermega.dev' || subdomain === 'ytf' || subdomain === 'ytf-plant-a') {
+  if (isYtfClientHost(hostname) || subdomain === 'ytf' || subdomain === 'ytf-plant-a') {
     return 'ytf-plant-a'
   }
 
+  const hostSurface = getSupermegaHostSurface(hostname)
+  if (hostSurface === 'public-site') {
+    return 'default'
+  }
+
+  const cachedTenant = inferTenantKeyFromCachedWorkspace()
+  if (cachedTenant && !isSharedAppHost(hostname) && (hostSurface === 'local' || hostSurface === 'preview')) {
+    return cachedTenant
+  }
+
   return 'default'
+}
+
+export function isPlatformAppHost() {
+  if (typeof window === 'undefined') {
+    return false
+  }
+
+  return isSharedAppHost(window.location.hostname)
 }
 
 export function getTenantConfig(): TenantConfig {

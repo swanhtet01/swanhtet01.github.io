@@ -1,7 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import { PageIntro } from '../components/PageIntro'
+import { YtfRoleScorecards } from '../components/YtfRoleScorecards'
+import { getTenantConfig } from '../lib/tenantConfig'
 import {
   checkWorkspaceHealth,
   createWorkspaceTasks,
@@ -107,6 +109,8 @@ function latestRunsByType(rows: AgentRunRow[]) {
 }
 
 export function SalesDeskPage() {
+  const tenant = getTenantConfig()
+  const isYtfTenant = tenant.key === 'ytf-plant-a'
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
@@ -116,7 +120,7 @@ export function SalesDeskPage() {
   const [tasks, setTasks] = useState<WorkspaceTaskRow[]>([])
   const [agentRuns, setAgentRuns] = useState<AgentRunRow[]>([])
 
-  async function loadData() {
+  const loadData = useCallback(async () => {
     const health = await checkWorkspaceHealth()
     if (!health.ready) {
       throw new Error('Workspace API is not connected on this host yet.')
@@ -124,7 +128,7 @@ export function SalesDeskPage() {
 
     const session = await getWorkspaceSession()
     if (!session.authenticated) {
-      throw new Error('Login is required to open the revenue desk.')
+      throw new Error(`Login is required to open the ${isYtfTenant ? 'sales and inventory desk' : 'revenue desk'}.`)
     }
     if (!sessionHasCapability(session.session, 'sales.view')) {
       const profile = getCapabilityProfileForRole(session.session?.role)
@@ -132,9 +136,9 @@ export function SalesDeskPage() {
     }
 
     const [leadPayload, taskPayload, agentPayload] = await Promise.all([
-      listWorkspaceLeadPipeline('', 'open', 120),
-      listWorkspaceTasks('open', 40),
-      listAgentRuns(20),
+      listWorkspaceLeadPipeline('', 'open', 120).catch(() => ({ rows: [], summary: { lead_count: 0 } })),
+      listWorkspaceTasks('open', 40).catch(() => ({ rows: [] })),
+      listAgentRuns(20).catch(() => ({ rows: [] })),
     ])
 
     const nextLeads = [...(leadPayload.rows ?? [])].sort((left, right) => {
@@ -149,7 +153,7 @@ export function SalesDeskPage() {
     setSummary((leadPayload.summary as LeadPipelineSummary | undefined) ?? null)
     setTasks((taskPayload.rows ?? []).filter((row) => String(row.status || '').trim().toLowerCase() !== 'done'))
     setAgentRuns(agentPayload.rows ?? [])
-  }
+  }, [isYtfTenant])
 
   useEffect(() => {
     let cancelled = false
@@ -162,7 +166,7 @@ export function SalesDeskPage() {
         }
       } catch (nextError) {
         if (!cancelled) {
-          setError(nextError instanceof Error ? nextError.message : 'Could not load the revenue desk.')
+          setError(nextError instanceof Error ? nextError.message : `Could not load the ${isYtfTenant ? 'sales and inventory desk' : 'revenue desk'}.`)
         }
       } finally {
         if (!cancelled) {
@@ -175,7 +179,7 @@ export function SalesDeskPage() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [isYtfTenant, loadData])
 
   const offerReadyCount = Number(summary?.by_stage?.offer_ready ?? 0)
   const discoveryCount = Number(summary?.by_stage?.discovery ?? 0)
@@ -192,7 +196,7 @@ export function SalesDeskPage() {
     setMessage(null)
     try {
       const payload = await runDefaultAgentJobs([...trackedSalesJobs])
-      setMessage(`Ran ${payload.count ?? 0} sales automation job${payload.count === 1 ? '' : 's'}.`)
+      setMessage(`Ran ${payload.count ?? 0} ${isYtfTenant ? 'commercial review' : 'sales automation'} job${payload.count === 1 ? '' : 's'}.`)
       await loadData()
     } catch (nextError) {
       setMessage(nextError instanceof Error ? nextError.message : 'Could not run the sales automation refresh.')
@@ -251,51 +255,105 @@ export function SalesDeskPage() {
   }
 
   if (loading) {
-    return <section className="sm-surface p-6 text-sm text-[var(--sm-muted)]">Loading revenue desk...</section>
+    return <section className="sm-surface p-6 text-sm text-[var(--sm-muted)]">Loading {isYtfTenant ? 'sales and inventory desk' : 'revenue desk'}...</section>
   }
 
   if (error) {
-    return <section className="sm-surface p-6 text-sm text-[var(--sm-muted)]">{error}</section>
+    return (
+      <div className="space-y-5 pb-10">
+        <PageIntro
+          compact
+          eyebrow={isYtfTenant ? 'Sales and inventory' : 'Revenue Desk'}
+          title={isYtfTenant ? 'Sales desk needs a refresh.' : 'Revenue desk needs a refresh.'}
+          description="The workspace API did not answer fast enough. The rest of the ERP is still available, and this desk can be retried without leaving the page."
+        />
+        <section className="sm-surface p-5">
+          <p className="text-sm font-semibold text-[var(--sm-ink)]">{error}</p>
+          <div className="mt-4 flex flex-wrap gap-3">
+            <button className="sm-button-primary" onClick={() => void loadData()} type="button">
+              Retry desk
+            </button>
+            <Link className="sm-button-secondary" to="/app/action-board">
+              Open actions
+            </Link>
+            <Link className="sm-button-secondary" to="/app/daily-entry?mode=sales_inventory">
+              Add update
+            </Link>
+          </div>
+        </section>
+      </div>
+    )
   }
 
   return (
     <div className="space-y-8 pb-10">
       <PageIntro
-        eyebrow="Revenue Desk"
-        title="Work inbound requests, live deals, and follow-up from one desk."
-        description="This is the commercial home for new website requests, active accounts, and the next action that moves revenue."
+        eyebrow={isYtfTenant ? 'Sales and inventory' : 'Revenue Desk'}
+        title={isYtfTenant ? 'Review customers, stock signals, and follow-up.' : 'Work inbound requests, live deals, and follow-up from one desk.'}
+        description={
+          isYtfTenant
+            ? 'Use this as the simple commercial desk for showroom/customer updates, dealer follow-up, stock movement tasks, and sales evidence.'
+            : 'This is the commercial home for new website requests, active accounts, and the next action that moves revenue.'
+        }
       />
+
+      {isYtfTenant ? (
+        <YtfRoleScorecards
+          role="sales"
+          title="Sales scorecard."
+          subtitle="Customer signals, approved comms actions, commercial KPIs, and source-backed memory."
+        />
+      ) : null}
 
       {message ? <section className="sm-chip text-white">{message}</section> : null}
 
       <section className="flex flex-wrap items-center gap-3">
-        <Link className="sm-button-primary" to="/app/revenue/pipeline">
-          Open full pipeline
-        </Link>
-        <Link className="sm-button-secondary" to="/app/revenue/prospecting">
-          Open prospecting
-        </Link>
+        {isYtfTenant ? (
+          <>
+            <Link className="sm-button-primary" to="/app/daily-entry?mode=sales_inventory">
+              Add sales update
+            </Link>
+            <Link className="sm-button-secondary" to="/app/action-board">
+              Open actions
+            </Link>
+            <Link className="sm-button-secondary" to="/app/live-data?view=kpi">
+              Open KPIs
+            </Link>
+          </>
+        ) : (
+          <>
+            <Link className="sm-button-primary" to="/app/revenue/pipeline">
+              Open full pipeline
+            </Link>
+            <Link className="sm-button-secondary" to="/app/revenue/offers">
+              Open offer system
+            </Link>
+            <Link className="sm-button-secondary" to="/app/revenue/prospecting">
+              Open prospecting
+            </Link>
+          </>
+        )}
         <button
           className="sm-button-secondary"
           disabled={busy === 'agent_refresh'}
           onClick={() => void handleRunSalesRefresh()}
           type="button"
         >
-          {busy === 'agent_refresh' ? 'Refreshing...' : 'Run refresh'}
+          {busy === 'agent_refresh' ? 'Refreshing...' : isYtfTenant ? 'Refresh desk' : 'Run refresh'}
         </button>
       </section>
 
       <section className="grid gap-4 md:grid-cols-5">
         <article className="sm-chip text-white">
-          <p className="sm-kicker text-[var(--sm-accent)]">Open deals</p>
+          <p className="sm-kicker text-[var(--sm-accent)]">{isYtfTenant ? 'Customer records' : 'Open deals'}</p>
           <p className="mt-2 text-3xl font-bold">{formatCount(summary?.lead_count)}</p>
         </article>
         <article className="sm-chip text-white">
-          <p className="sm-kicker text-[var(--sm-accent-alt)]">Inbound requests</p>
+          <p className="sm-kicker text-[var(--sm-accent-alt)]">{isYtfTenant ? 'New signals' : 'Inbound requests'}</p>
           <p className="mt-2 text-3xl font-bold">{inboundCount}</p>
         </article>
         <article className="sm-chip text-white">
-          <p className="sm-kicker text-[var(--sm-accent-alt)]">Offer ready</p>
+          <p className="sm-kicker text-[var(--sm-accent-alt)]">{isYtfTenant ? 'Needs quote' : 'Offer ready'}</p>
           <p className="mt-2 text-3xl font-bold">{offerReadyCount}</p>
         </article>
         <article className="sm-chip text-white">
@@ -312,11 +370,11 @@ export function SalesDeskPage() {
         <article className="sm-site-panel">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <p className="sm-kicker text-[var(--sm-accent)]">Inbound requests</p>
-              <h2 className="mt-2 text-3xl font-bold text-white">Reply to new requests before they go cold.</h2>
+              <p className="sm-kicker text-[var(--sm-accent)]">{isYtfTenant ? 'Customer signals' : 'Inbound requests'}</p>
+              <h2 className="mt-2 text-3xl font-bold text-white">{isYtfTenant ? 'Turn updates into follow-up.' : 'Reply to new requests before they go cold.'}</h2>
             </div>
-            <Link className="sm-button-secondary" to="/app/revenue/pipeline">
-              Open pipeline
+            <Link className="sm-button-secondary" to={isYtfTenant ? '/app/action-board' : '/app/revenue/pipeline'}>
+              {isYtfTenant ? 'Open actions' : 'Open pipeline'}
             </Link>
           </div>
           <div className="mt-6 grid gap-4">
@@ -329,10 +387,10 @@ export function SalesDeskPage() {
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <p className="text-xl font-semibold text-white">{lead.company_name}</p>
-                    <p className="mt-2 text-sm text-[var(--sm-muted)]">{lead.contact_email || lead.contact_phone || 'Website request'}</p>
+                  <p className="mt-2 text-sm text-[var(--sm-muted)]">{lead.contact_email || lead.contact_phone || (isYtfTenant ? 'Customer or showroom update' : 'Website request')}</p>
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    <span className="sm-status-pill">{lead.wedge_product || lead.service_pack || 'Working product'}</span>
+                    <span className="sm-status-pill">{lead.wedge_product || lead.service_pack || (isYtfTenant ? 'Sales follow-up' : 'Working product')}</span>
                     <span className="sm-status-pill">{formatStage(lead.stage)}</span>
                   </div>
                 </div>
@@ -343,11 +401,11 @@ export function SalesDeskPage() {
                   </div>
                   <div className="sm-chip text-white">
                     <p className="sm-kicker text-[var(--sm-accent-alt)]">Goal</p>
-                    <p className="mt-2 text-sm">{trimText(goal || lead.campaign_goal || 'Review the request and confirm the first rollout.', 120)}</p>
+                    <p className="mt-2 text-sm">{trimText(goal || lead.campaign_goal || (isYtfTenant ? 'Confirm customer, stock, price, or collection next step.' : 'Review the request and confirm the first rollout.'), 120)}</p>
                   </div>
                 </div>
                 <p className="mt-4 text-sm leading-relaxed text-[var(--sm-muted)]">
-                  {trimText(lead.notes || lead.outreach_message || 'Review the request and send the first response.', 180)}
+                  {trimText(lead.notes || lead.outreach_message || (isYtfTenant ? 'Review the customer or stock signal and create the next action.' : 'Review the request and send the first response.'), 180)}
                 </p>
                 <div className="mt-5 flex flex-wrap gap-3">
                   <button
@@ -356,7 +414,7 @@ export function SalesDeskPage() {
                     onClick={() => void handleOpenOutreach(lead.lead_id)}
                     type="button"
                   >
-                    {busy === `outreach:${lead.lead_id}` ? 'Opening...' : 'Draft outreach'}
+                    {busy === `outreach:${lead.lead_id}` ? 'Opening...' : isYtfTenant ? 'Draft follow-up' : 'Draft outreach'}
                   </button>
                   <button
                     className="sm-button-secondary"
@@ -369,18 +427,18 @@ export function SalesDeskPage() {
                 </div>
               </article>
             )})}
-            {!inboundLeads.length ? <div className="sm-chip text-white">No new website requests right now.</div> : null}
+            {!inboundLeads.length ? <div className="sm-chip text-white">{isYtfTenant ? 'No new commercial signals right now.' : 'No new website requests right now.'}</div> : null}
           </div>
         </article>
 
         <article className="sm-site-panel">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <p className="sm-kicker text-[var(--sm-accent)]">Active deals</p>
-              <h2 className="mt-2 text-3xl font-bold text-white">Keep the next committed accounts moving.</h2>
+              <p className="sm-kicker text-[var(--sm-accent)]">{isYtfTenant ? 'Active customers' : 'Active deals'}</p>
+              <h2 className="mt-2 text-3xl font-bold text-white">{isYtfTenant ? 'Keep dealer and showroom follow-up moving.' : 'Keep the next committed accounts moving.'}</h2>
             </div>
-            <Link className="sm-button-secondary" to="/app/revenue/pipeline">
-              Open pipeline
+            <Link className="sm-button-secondary" to={isYtfTenant ? '/app/action-board' : '/app/revenue/pipeline'}>
+              {isYtfTenant ? 'Open actions' : 'Open pipeline'}
             </Link>
           </div>
           <div className="mt-6 grid gap-3">
@@ -393,7 +451,7 @@ export function SalesDeskPage() {
                   </div>
                   <span className="sm-status-pill">Score {lead.score}</span>
                 </div>
-                <p className="mt-3 text-sm text-white/80">{lead.contact_email || lead.contact_phone || lead.website || 'Public source only'}</p>
+                <p className="mt-3 text-sm text-white/80">{lead.contact_email || lead.contact_phone || lead.website || (isYtfTenant ? 'Source transformed from commercial records' : 'Public source only')}</p>
                 <p className="mt-3 text-sm leading-relaxed text-[var(--sm-muted)]">
                   {trimText(lead.notes || lead.outreach_message || 'Use the existing outreach draft and update the stage after contact.', 180)}
                 </p>
@@ -417,7 +475,7 @@ export function SalesDeskPage() {
                 </div>
               </article>
             ))}
-            {!activeDeals.length ? <div className="sm-chip text-white">No active deals yet. Use prospecting or the public contact form to seed the desk.</div> : null}
+            {!activeDeals.length ? <div className="sm-chip text-white">{isYtfTenant ? 'No active customer follow-up records yet. Add a sales update or promote a stock/customer signal.' : 'No active deals yet. Use prospecting or the public contact form to seed the desk.'}</div> : null}
           </div>
         </article>
       </section>
@@ -427,7 +485,7 @@ export function SalesDeskPage() {
           <div className="flex items-center justify-between gap-3">
             <div>
               <p className="sm-kicker text-[var(--sm-accent)]">Follow-up queue</p>
-              <h2 className="mt-2 text-3xl font-bold text-white">Open tasks for the sales role.</h2>
+              <h2 className="mt-2 text-3xl font-bold text-white">{isYtfTenant ? 'Commercial tasks to close.' : 'Open tasks for the sales role.'}</h2>
             </div>
             <Link className="sm-link" to="/app/actions">
               Open action board
@@ -444,13 +502,13 @@ export function SalesDeskPage() {
                 <p className="mt-3 text-xs uppercase tracking-[0.16em] text-[var(--sm-muted)]">Owner {task.owner || 'Unassigned'} · Due {task.due || 'No due date'}</p>
               </article>
             ))}
-            {!recentTasks.length ? <div className="sm-chip text-white">No open sales tasks yet.</div> : null}
+            {!recentTasks.length ? <div className="sm-chip text-white">{isYtfTenant ? 'No open commercial tasks yet.' : 'No open sales tasks yet.'}</div> : null}
           </div>
         </article>
 
         <article className="sm-site-panel">
-          <p className="sm-kicker text-[var(--sm-accent-alt)]">Pipeline shape</p>
-          <h2 className="mt-2 text-3xl font-bold text-white">See stage mix, product mix, and automation health.</h2>
+          <p className="sm-kicker text-[var(--sm-accent-alt)]">{isYtfTenant ? 'Commercial shape' : 'Pipeline shape'}</p>
+          <h2 className="mt-2 text-3xl font-bold text-white">{isYtfTenant ? 'See status, stock/customer mix, and refresh health.' : 'See stage mix, product mix, and automation health.'}</h2>
           <div className="mt-6 grid gap-3 md:grid-cols-2">
             {Object.entries(summary?.by_stage ?? {}).map(([stage, count]) => (
               <article className="sm-chip text-white" key={stage}>
@@ -463,7 +521,7 @@ export function SalesDeskPage() {
             {byPackEntries.map(([pack, count]) => (
               <article className="sm-proof-card" key={pack}>
                 <p className="font-semibold text-white">{pack}</p>
-                <p className="mt-2 text-sm text-[var(--sm-muted)]">Open deals in this product lane</p>
+                <p className="mt-2 text-sm text-[var(--sm-muted)]">{isYtfTenant ? 'Records in this commercial lane' : 'Open deals in this product lane'}</p>
                 <p className="mt-3 text-2xl font-bold text-white">{count}</p>
               </article>
             ))}

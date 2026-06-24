@@ -59,10 +59,28 @@ export async function handle({ method, path, query = {}, body = {}, headers = {}
         } catch (e) { return ok({ ok: true, mode: store.mode, leads: [], dbStatus: 'error', dbError: String(e.message).slice(0, 140) }) }
       }
       if (method === 'POST' && !seg[1]) {
-        try {
-          const lead = await store.insertLead({ source: 'manual', name: String(body.name || '').slice(0, 200), company: String(body.company || '').slice(0, 200), contact: String(body.contact || '').slice(0, 200), package: String(body.package || '').slice(0, 80), message: String(body.message || '').slice(0, 4000) })
-          return ok({ ok: true, lead })
-        } catch (e) { if (String(e.message) === 'leads_from_site') return bad(400, 'leads_from_site'); throw e }
+        const lead = await store.insertLead({
+          id: body.id || null,
+          source: String(body.source || 'manual').slice(0, 60),
+          name: String(body.name || '').slice(0, 200),
+          company: String(body.company || '').slice(0, 200),
+          contact: String(body.contact || '').slice(0, 200),
+          package: String(body.package || '').slice(0, 80),
+          message: String(body.message || '').slice(0, 4000),
+          score: Number(body.score || 0),
+          stage: String(body.stage || 'new').slice(0, 30),
+          created_at: body.created_at || null,
+        })
+        if (String(body.source || '') === 'autopilot') log('autopilot', `Synced: ${lead.company || lead.name}`, lead.id)
+        return ok({ ok: true, lead })
+      }
+      if (method === 'PATCH' && seg[1] && !seg[2]) {
+        const patch = {}
+        if (body.stage) patch.stage = String(body.stage).slice(0, 30)
+        const lead = await store.updateLead(seg[1], patch)
+        if (!lead) return bad(404, 'lead_not_found')
+        if (patch.stage) log('lead', `Lead stage → ${patch.stage}`, lead.id)
+        return ok({ ok: true, lead })
       }
       if (method === 'POST' && seg[1] && seg[2] === 'convert') {
         const lead = await store.getLead(seg[1])
@@ -119,14 +137,46 @@ export async function handle({ method, path, query = {}, body = {}, headers = {}
         if (body.status && DEAL_STATUSES.includes(body.status)) patch.status = body.status
         const deal = await store.updateDeal(seg[1], patch)
         if (!deal) return bad(404, 'deal_not_found')
-        if (patch.status === 'sent') log('outreach', `Outreach marked sent`, deal.id)
+        if (patch.status === 'sent') {
+          log('outreach', `Outreach marked sent`, deal.id)
+          // Advance the lead stage to 'contacted' so the leads inbox reflects reality
+          if (deal.lead_id) store.updateLead(deal.lead_id, { stage: 'contacted' }).catch(() => {})
+        }
         if (patch.status === 'approved') log('outreach', `Outreach approved`, deal.id)
         return ok({ ok: true, deal })
       }
     }
 
     // ---- ACTIVITY LOG ----
-    if (method === 'GET' && seg[0] === 'activity') return ok({ ok: true, activity: await store.listActivity(Number(query.limit) || 40) })
+    if (seg[0] === 'activity') {
+      if (method === 'GET') return ok({ ok: true, activity: await store.listActivity(Number(query.limit) || 40) })
+      if (method === 'POST') {
+        const kind = String(body.kind || 'note').slice(0, 30)
+        const summary = String(body.summary || '').slice(0, 300)
+        if (!summary) return bad(400, 'summary_required')
+        await log(kind, summary, body.ref || null)
+        return ok({ ok: true })
+      }
+    }
+
+    // ---- GRADUATION TRACKER (3rd repeat → product signal) ----
+    if (seg[0] === 'graduation') {
+      if (method === 'GET') {
+        const rows = await store.listGraduations()
+        const counts = {}
+        for (const r of rows) counts[r.category] = (counts[r.category] || 0) + 1
+        const grouped = Object.entries(counts)
+          .map(([category, count]) => ({ category, count, flag: count >= 3, entries: rows.filter((r) => r.category === category) }))
+          .sort((a, b) => b.count - a.count)
+        return ok({ ok: true, grouped, total: rows.length })
+      }
+      if (method === 'POST') {
+        if (!body.category) return bad(400, 'category_required')
+        const row = await store.insertGraduation({ category: String(body.category).slice(0, 80), client_name: String(body.client_name || body.name || '').slice(0, 200), project_id: body.project_id || null, note: String(body.note || '').slice(0, 400) })
+        log('graduation', `${row.category} → ${row.client_name || '?'}`, row.id)
+        return ok({ ok: true, row })
+      }
+    }
 
     return bad(404, 'not_found')
   } catch (err) {

@@ -13,7 +13,7 @@ import {
   type RuntimeConnectorEvent,
   type RuntimeConnectorFeed,
 } from './runtimeControlModel'
-import { checkWorkspaceHealth, workspaceFetch } from './workspaceApi'
+import { checkWorkspaceHealth, getWorkspaceSession, sessionHasCapability, workspaceFetch, type WorkspaceCapability } from './workspaceApi'
 
 export type RuntimeControlSource = 'seed' | 'live'
 
@@ -209,6 +209,19 @@ export async function loadRuntimeControlDataset(): Promise<RuntimeControlDataset
   }
 
   try {
+    const session = await getWorkspaceSession()
+    const runtimeCapabilities: WorkspaceCapability[] = [
+      'agent_ops.view',
+      'connector_admin.view',
+      'knowledge_admin.view',
+      'security_admin.view',
+      'tenant_admin.view',
+      'platform_admin.view',
+    ]
+    if (!session.authenticated || !runtimeCapabilities.some((capability) => sessionHasCapability(session.session, capability))) {
+      return fallback
+    }
+
     const payload = await workspaceFetch<RuntimeControlPayload>('/api/runtime/control')
     return normalizeRuntimeControlDataset(payload, 'live')
   } catch {

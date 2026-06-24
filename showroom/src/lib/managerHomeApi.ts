@@ -122,7 +122,7 @@ const SUPPORT_TOOLS: ManagerHomeSupportTool[] = [
     id: 'plant-manager',
     label: 'Plant manager',
     route: '/app/plant-manager',
-    detail: 'Open the calm plant-manager layer for review loops, shift control, industrial methods, and teaching packs.',
+    detail: 'Open the calm plant-control layer for review loops, shift command, industrial methods, and teaching packs.',
   },
   {
     id: 'pilot',

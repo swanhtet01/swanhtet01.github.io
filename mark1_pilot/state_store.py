@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import secrets
+import shutil
 import sqlite3
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -47,7 +49,15 @@ def _coerce_number(value: str) -> float | None:
 
 
 def resolve_state_db(output_dir: Path) -> Path:
-    return output_dir.expanduser().resolve() / STATE_DB_FILE
+    db_path = output_dir.expanduser().resolve() / STATE_DB_FILE
+    if os.getenv("VERCEL"):
+        runtime_root = Path(os.getenv("SUPERMEGA_RUNTIME_DIR", "/tmp/supermega")).expanduser()
+        runtime_root.mkdir(parents=True, exist_ok=True)
+        runtime_db_path = runtime_root / STATE_DB_FILE
+        if not runtime_db_path.exists() and db_path.exists():
+            shutil.copy2(db_path, runtime_db_path)
+        return runtime_db_path
+    return db_path
 
 
 def _load_json(path: Path) -> Any:
@@ -459,6 +469,23 @@ def ensure_schema(db_path: Path) -> None:
                 synced_at TEXT NOT NULL
             );
 
+            CREATE TABLE IF NOT EXISTS quality_inspection_records (
+                inspection_id TEXT PRIMARY KEY,
+                pack_id TEXT NOT NULL,
+                inspection_type TEXT NOT NULL,
+                stage TEXT NOT NULL,
+                decision TEXT NOT NULL,
+                owner TEXT NOT NULL,
+                release_rule TEXT NOT NULL,
+                notes TEXT NOT NULL,
+                evidence_link TEXT NOT NULL,
+                source_type TEXT NOT NULL,
+                source_ref_json TEXT NOT NULL,
+                related_incident_id TEXT NOT NULL,
+                inspected_at TEXT NOT NULL,
+                synced_at TEXT NOT NULL
+            );
+
             CREATE TABLE IF NOT EXISTS capa_actions (
                 capa_id TEXT PRIMARY KEY,
                 incident_id TEXT NOT NULL,
@@ -474,6 +501,7 @@ def ensure_schema(db_path: Path) -> None:
             CREATE TABLE IF NOT EXISTS maintenance_records (
                 maintenance_id TEXT PRIMARY KEY,
                 logged_at TEXT NOT NULL,
+                plant_scope TEXT NOT NULL DEFAULT '',
                 asset_name TEXT NOT NULL,
                 issue_type TEXT NOT NULL,
                 priority TEXT NOT NULL,
@@ -694,6 +722,12 @@ def ensure_schema(db_path: Path) -> None:
             connection.execute("ALTER TABLE contact_submissions ADD COLUMN lead_id TEXT NOT NULL DEFAULT ''")
         if "task_id" not in contact_columns:
             connection.execute("ALTER TABLE contact_submissions ADD COLUMN task_id TEXT NOT NULL DEFAULT ''")
+        maintenance_columns = {
+            str(row["name"]).strip()
+            for row in connection.execute("PRAGMA table_info(maintenance_records)").fetchall()
+        }
+        if "plant_scope" not in maintenance_columns:
+            connection.execute("ALTER TABLE maintenance_records ADD COLUMN plant_scope TEXT NOT NULL DEFAULT ''")
         _migrate_agent_team_runtime_tables(connection)
         connection.executescript(
             """
@@ -2365,6 +2399,107 @@ def add_quality_incident(
     }
 
 
+def add_quality_inspection_record(
+    db_path: Path,
+    *,
+    pack_id: str,
+    inspection_type: str,
+    stage: str,
+    decision: str,
+    owner: str,
+    release_rule: str,
+    notes: str = "",
+    evidence_link: str = "",
+    source_type: str = "qc_inspection_pack",
+    related_incident_id: str = "",
+    inspected_at: str = "",
+    source_ref_extra: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    ensure_schema(db_path)
+    created_at = datetime.now().astimezone().isoformat()
+    normalized_pack_id = str(pack_id or "").strip() or "manual-inspection"
+    normalized_type = str(inspection_type or "").strip().lower() or "process"
+    normalized_stage = str(stage or "").strip() or "Quality inspection"
+    normalized_decision = str(decision or "").strip().lower() or "review"
+    if normalized_decision not in {"pass", "hold", "fail", "review"}:
+        normalized_decision = "review"
+    normalized_owner = str(owner or "").strip() or "Quality Team"
+    normalized_release_rule = str(release_rule or "").strip()
+    normalized_notes = str(notes or "").strip()
+    normalized_evidence = str(evidence_link or "").strip()
+    normalized_source_type = str(source_type or "").strip().lower() or "qc_inspection_pack"
+    normalized_incident_id = str(related_incident_id or "").strip()
+    normalized_inspected_at = str(inspected_at or "").strip() or created_at
+    inspection_id = _stable_key(
+        "QIR",
+        f"{normalized_pack_id}:{normalized_decision}:{normalized_owner}:{normalized_inspected_at}:{created_at}",
+    )
+    source_ref = {
+        "source": "tool:dqms_qc_inspection_pack",
+        "pack_id": normalized_pack_id,
+        "evidence_link": normalized_evidence,
+        "related_incident_id": normalized_incident_id,
+    }
+    if isinstance(source_ref_extra, dict):
+        source_ref.update(source_ref_extra)
+
+    with _connect(db_path) as connection:
+        connection.execute(
+            """
+            INSERT INTO quality_inspection_records (
+                inspection_id,
+                pack_id,
+                inspection_type,
+                stage,
+                decision,
+                owner,
+                release_rule,
+                notes,
+                evidence_link,
+                source_type,
+                source_ref_json,
+                related_incident_id,
+                inspected_at,
+                synced_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                inspection_id,
+                normalized_pack_id,
+                normalized_type,
+                normalized_stage,
+                normalized_decision,
+                normalized_owner,
+                normalized_release_rule,
+                normalized_notes,
+                normalized_evidence,
+                normalized_source_type,
+                json.dumps(source_ref, ensure_ascii=False),
+                normalized_incident_id,
+                normalized_inspected_at,
+                created_at,
+            ),
+        )
+        connection.commit()
+
+    return {
+        "inspection_id": inspection_id,
+        "pack_id": normalized_pack_id,
+        "inspection_type": normalized_type,
+        "stage": normalized_stage,
+        "decision": normalized_decision,
+        "owner": normalized_owner,
+        "release_rule": normalized_release_rule,
+        "notes": normalized_notes,
+        "evidence_link": normalized_evidence,
+        "source_type": normalized_source_type,
+        "source_ref": source_ref,
+        "related_incident_id": normalized_incident_id,
+        "inspected_at": normalized_inspected_at,
+        "synced_at": created_at,
+    }
+
+
 def add_capa_action(
     db_path: Path,
     *,
@@ -2786,6 +2921,7 @@ def add_receiving_record(
     owner: str,
     next_action: str,
     evidence_link: str,
+    source_ref_extra: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     ensure_schema(db_path)
     created_at = datetime.now().astimezone().isoformat()
@@ -2925,6 +3061,8 @@ def add_inventory_record(
         f"{normalized_item_code}:{normalized_item_name}:{normalized_warehouse}:{normalized_captured_at}:{created_at}",
     )
     source_ref = {"source": "tool:inventory_pulse", "mode": "manual_entry"}
+    if isinstance(source_ref_extra, dict):
+        source_ref.update(source_ref_extra)
 
     with _connect(db_path) as connection:
         connection.execute(
@@ -2961,7 +3099,7 @@ def add_inventory_record(
                 normalized_owner,
                 normalized_action,
                 normalized_evidence,
-                json.dumps(source_ref),
+                json.dumps(source_ref, ensure_ascii=False),
                 created_at,
             ),
         )
@@ -2991,6 +3129,7 @@ def add_maintenance_record(
     *,
     logged_at: str,
     asset_name: str,
+    plant_scope: str,
     issue_type: str,
     priority: str,
     status: str,
@@ -3002,6 +3141,7 @@ def add_maintenance_record(
     ensure_schema(db_path)
     created_at = datetime.now().astimezone().isoformat()
     normalized_logged_at = str(logged_at or "").strip() or created_at
+    normalized_plant_scope = str(plant_scope or "").strip().lower()
     normalized_asset_name = str(asset_name or "").strip() or "Unknown asset"
     normalized_issue_type = str(issue_type or "").strip().lower() or "breakdown"
     normalized_priority = str(priority or "").strip().lower() or "medium"
@@ -3014,7 +3154,11 @@ def add_maintenance_record(
         "MNT",
         f"{normalized_asset_name}:{normalized_issue_type}:{normalized_logged_at}:{created_at}",
     )
-    source_ref = {"source": "tool:maintenance_desk", "mode": "manual_entry"}
+    source_ref = {
+        "source": "tool:maintenance_desk",
+        "mode": "manual_entry",
+        "plant_scope": normalized_plant_scope,
+    }
 
     with _connect(db_path) as connection:
         connection.execute(
@@ -3022,6 +3166,7 @@ def add_maintenance_record(
             INSERT INTO maintenance_records (
                 maintenance_id,
                 logged_at,
+                plant_scope,
                 asset_name,
                 issue_type,
                 priority,
@@ -3032,11 +3177,12 @@ def add_maintenance_record(
                 evidence_link,
                 source_ref_json,
                 synced_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 maintenance_id,
                 normalized_logged_at,
+                normalized_plant_scope,
                 normalized_asset_name,
                 normalized_issue_type,
                 normalized_priority,
@@ -3054,6 +3200,7 @@ def add_maintenance_record(
     return {
         "maintenance_id": maintenance_id,
         "logged_at": normalized_logged_at,
+        "plant_scope": normalized_plant_scope,
         "asset_name": normalized_asset_name,
         "issue_type": normalized_issue_type,
         "priority": normalized_priority,
@@ -3082,6 +3229,7 @@ def add_metric_entry(
     notes: str,
     evidence_link: str,
     source_mode: str = "manual_entry",
+    source_ref_extra: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     ensure_schema(db_path)
     created_at = datetime.now().astimezone().isoformat()
@@ -3101,6 +3249,8 @@ def add_metric_entry(
         f"{normalized_name}:{normalized_group}:{normalized_scope}:{normalized_captured_at}:{normalized_value}:{created_at}",
     )
     source_ref = {"source": "tool:metric_intake", "mode": source_mode}
+    if isinstance(source_ref_extra, dict):
+        source_ref.update(source_ref_extra)
 
     with _connect(db_path) as connection:
         connection.execute(
@@ -3135,7 +3285,7 @@ def add_metric_entry(
                 normalized_status,
                 normalized_notes,
                 normalized_evidence,
-                json.dumps(source_ref),
+                json.dumps(source_ref, ensure_ascii=False),
                 created_at,
             ),
         )
@@ -3178,6 +3328,7 @@ def add_metric_entries(db_path: Path, *, rows: list[dict[str, Any]], source_mode
                 notes=str(row.get("notes", "")).strip(),
                 evidence_link=str(row.get("evidence_link", "")).strip(),
                 source_mode=source_mode,
+                source_ref_extra=row.get("source_ref") if isinstance(row.get("source_ref"), dict) else None,
             )
         )
     return {
@@ -3185,6 +3336,97 @@ def add_metric_entries(db_path: Path, *, rows: list[dict[str, Any]], source_mode
         "saved_count": len(created_rows),
         "rows": list_metric_entries(db_path, limit=100),
         "summary": load_metric_summary(db_path),
+    }
+
+
+def update_metric_entry_status(
+    db_path: Path,
+    *,
+    metric_id: str,
+    status: str,
+    owner: str | None = None,
+    note: str | None = None,
+) -> dict[str, Any] | None:
+    ensure_schema(db_path)
+    normalized_id = str(metric_id or "").strip()
+    normalized_status = str(status or "").strip().lower()
+    if not normalized_id or not normalized_status:
+        return None
+
+    synced_at = datetime.now().astimezone().isoformat()
+    with _connect(db_path) as connection:
+        row = connection.execute(
+            """
+            SELECT
+                metric_id,
+                captured_at,
+                metric_name,
+                metric_group,
+                metric_value,
+                unit,
+                period_label,
+                scope,
+                owner,
+                status,
+                notes,
+                evidence_link,
+                source_ref_json,
+                synced_at
+            FROM metric_entries
+            WHERE metric_id = ?
+            """,
+            (normalized_id,),
+        ).fetchone()
+        if not row:
+            return None
+
+        source_ref = json.loads(row["source_ref_json"]) if row["source_ref_json"] else {}
+        review_notes = source_ref.get("review_notes", [])
+        if not isinstance(review_notes, list):
+            review_notes = []
+        normalized_note = str(note or "").strip()
+        if normalized_note:
+            review_notes.append(
+                {
+                    "at": synced_at,
+                    "status": normalized_status,
+                    "note": normalized_note,
+                }
+            )
+        source_ref["review_notes"] = review_notes
+        source_ref["review_status"] = normalized_status
+        source_ref["reviewed_at"] = synced_at
+
+        next_owner = str(owner or row["owner"]).strip() or str(row["owner"]).strip()
+        notes = str(row["notes"] or "").strip()
+        if normalized_note:
+            notes = f"{notes}\nReview: {normalized_note}".strip()
+
+        connection.execute(
+            """
+            UPDATE metric_entries
+            SET status = ?, owner = ?, notes = ?, source_ref_json = ?, synced_at = ?
+            WHERE metric_id = ?
+            """,
+            (normalized_status, next_owner, notes, json.dumps(source_ref, ensure_ascii=False), synced_at, normalized_id),
+        )
+        connection.commit()
+
+    return {
+        "metric_id": row["metric_id"],
+        "captured_at": row["captured_at"],
+        "metric_name": row["metric_name"],
+        "metric_group": row["metric_group"],
+        "metric_value": row["metric_value"],
+        "unit": row["unit"],
+        "period_label": row["period_label"],
+        "scope": row["scope"],
+        "owner": next_owner,
+        "status": normalized_status,
+        "notes": notes,
+        "evidence_link": row["evidence_link"],
+        "source_ref": source_ref,
+        "synced_at": synced_at,
     }
 
 
@@ -3222,7 +3464,7 @@ def list_actions(
         params.append(status)
     if conditions:
         query += " WHERE " + " AND ".join(conditions)
-    query += " ORDER BY CASE priority WHEN 'high' THEN 0 WHEN 'medium' THEN 1 WHEN 'low' THEN 2 ELSE 3 END, due, title LIMIT ?"
+    query += " ORDER BY CASE priority WHEN 'high' THEN 0 WHEN 'medium' THEN 1 WHEN 'low' THEN 2 ELSE 3 END, synced_at DESC, due, title LIMIT ?"
     params.append(max(1, int(limit)))
 
     with _connect(db_path) as connection:
@@ -3308,21 +3550,94 @@ def list_quality_incidents(db_path: Path, *, status: str | None = None, limit: i
     ]
 
 
+def list_quality_inspection_records(
+    db_path: Path,
+    *,
+    decision: str | None = None,
+    pack_id: str | None = None,
+    limit: int = 100,
+) -> list[dict[str, Any]]:
+    ensure_schema(db_path)
+    query = """
+        SELECT
+            inspection_id,
+            pack_id,
+            inspection_type,
+            stage,
+            decision,
+            owner,
+            release_rule,
+            notes,
+            evidence_link,
+            source_type,
+            source_ref_json,
+            related_incident_id,
+            inspected_at,
+            synced_at
+        FROM quality_inspection_records
+    """
+    clauses: list[str] = []
+    params: list[Any] = []
+    if decision:
+        clauses.append("decision = ?")
+        params.append(str(decision).strip().lower())
+    if pack_id:
+        clauses.append("pack_id = ?")
+        params.append(str(pack_id).strip())
+    if clauses:
+        query += " WHERE " + " AND ".join(clauses)
+    query += " ORDER BY inspected_at DESC, synced_at DESC LIMIT ?"
+    params.append(max(1, int(limit)))
+    with _connect(db_path) as connection:
+        rows = connection.execute(query, params).fetchall()
+    records: list[dict[str, Any]] = []
+    for row in rows:
+        try:
+            source_ref = json.loads(row["source_ref_json"]) if row["source_ref_json"] else {}
+        except Exception:
+            source_ref = {}
+        records.append(
+            {
+                "inspection_id": row["inspection_id"],
+                "pack_id": row["pack_id"],
+                "inspection_type": row["inspection_type"],
+                "stage": row["stage"],
+                "decision": row["decision"],
+                "owner": row["owner"],
+                "release_rule": row["release_rule"],
+                "notes": row["notes"],
+                "evidence_link": row["evidence_link"],
+                "source_type": row["source_type"],
+                "source_ref": source_ref,
+                "related_incident_id": row["related_incident_id"],
+                "inspected_at": row["inspected_at"],
+                "synced_at": row["synced_at"],
+            }
+        )
+    return records
+
+
 def load_quality_summary(db_path: Path) -> dict[str, Any]:
     ensure_schema(db_path)
     with _connect(db_path) as connection:
         incident_total = int(connection.execute("SELECT COUNT(*) FROM quality_incidents").fetchone()[0])
+        inspection_total = int(connection.execute("SELECT COUNT(*) FROM quality_inspection_records").fetchone()[0])
         capa_total = int(connection.execute("SELECT COUNT(*) FROM capa_actions").fetchone()[0])
         status_rows = connection.execute(
             "SELECT status, COUNT(*) AS item_count FROM quality_incidents GROUP BY status"
+        ).fetchall()
+        inspection_rows = connection.execute(
+            "SELECT decision, COUNT(*) AS item_count FROM quality_inspection_records GROUP BY decision"
         ).fetchall()
         supplier_rows = connection.execute(
             "SELECT supplier, COUNT(*) AS item_count FROM quality_incidents GROUP BY supplier ORDER BY item_count DESC, supplier LIMIT 5"
         ).fetchall()
     return {
         "incident_count": incident_total,
+        "inspection_count": inspection_total,
         "capa_count": capa_total,
         "by_status": {str(row["status"]): int(row["item_count"]) for row in status_rows},
+        "by_inspection_decision": {str(row["decision"]): int(row["item_count"]) for row in inspection_rows},
         "top_suppliers": [
             {"supplier": str(row["supplier"]), "incident_count": int(row["item_count"])}
             for row in supplier_rows
@@ -3648,6 +3963,7 @@ def list_maintenance_records(
         SELECT
             maintenance_id,
             logged_at,
+            plant_scope,
             asset_name,
             issue_type,
             priority,
@@ -3679,6 +3995,7 @@ def list_maintenance_records(
         {
             "maintenance_id": row["maintenance_id"],
             "logged_at": row["logged_at"],
+            "plant_scope": row["plant_scope"],
             "asset_name": row["asset_name"],
             "issue_type": row["issue_type"],
             "priority": row["priority"],

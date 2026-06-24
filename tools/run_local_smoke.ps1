@@ -93,11 +93,19 @@ $env:SUPERMEGA_APP_PASSWORD = $appPassword
 $env:SUPERMEGA_APP_DISPLAY_NAME = $appDisplayName
 $env:SUPERMEGA_WORKSPACE_SLUG = $workspaceSlug
 $env:SUPERMEGA_WORKSPACE_NAME = $workspaceName
+$smokePilotDataDir = Join-Path $repoRoot "pilot-data"
+$smokeSiteRoot = Join-Path $repoRoot "showroom\dist"
+New-Item -ItemType Directory -Force -Path $smokePilotDataDir | Out-Null
+$smokeEnterpriseDbPath = [System.IO.Path]::GetFullPath((Join-Path $smokePilotDataDir "local-smoke-enterprise.db")).Replace("\", "/")
+$env:SUPERMEGA_DATABASE_URL = "sqlite:///$smokeEnterpriseDbPath"
+$env:SUPERMEGA_DB_CONNECT_TIMEOUT = "3"
 
 $serverProcess = Start-Process -FilePath $pythonExe -WorkingDirectory $repoRoot -PassThru -ArgumentList @(
     ('"{0}"' -f $serveScript),
     "--host", $BindHost,
-    "--port", $Port.ToString()
+    "--port", $Port.ToString(),
+    "--site-root", ('"{0}"' -f $smokeSiteRoot),
+    "--pilot-data", ('"{0}"' -f $smokePilotDataDir)
 ) -RedirectStandardOutput $serverStdoutLog -RedirectStandardError $serverStderrLog
 
 try {

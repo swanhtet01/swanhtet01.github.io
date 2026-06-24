@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 import os
 import re
+import hashlib
+import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -53,6 +55,19 @@ def _path_from_config(path_value: str) -> Path:
     return Path(_normalize_cross_platform_path(path_value)).expanduser()
 
 
+def _secret_json_path(value: str, *, suffix: str) -> Path | None:
+    raw = str(value or "").strip()
+    if not raw or not raw.startswith("{"):
+        return None
+    cache_root = Path(tempfile.gettempdir()) / "supermega-runtime-secrets"
+    cache_root.mkdir(parents=True, exist_ok=True)
+    digest = hashlib.sha1(raw.encode("utf-8")).hexdigest()[:16]
+    target = cache_root / f"{digest}{suffix}"
+    if not target.exists():
+        target.write_text(raw, encoding="utf-8")
+    return target
+
+
 @dataclass(slots=True)
 class DriveSourceConfig:
     mode: str
@@ -68,6 +83,9 @@ class DriveSourceConfig:
     def service_account_path(self) -> Path | None:
         if not self.service_account_json:
             return None
+        secret_path = _secret_json_path(self.service_account_json, suffix=".service-account.json")
+        if secret_path:
+            return secret_path
         return _path_from_config(self.service_account_json)
 
 

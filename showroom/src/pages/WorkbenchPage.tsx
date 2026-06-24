@@ -166,7 +166,7 @@ const quickLaunches = [
     to: '/app/insights',
   },
   {
-    name: 'Operations Desk',
+    name: 'Factory Operations App',
     detail: 'Run plant flow, inbound watch, approvals, and escalation from one desk.',
     to: '/app/operations',
   },

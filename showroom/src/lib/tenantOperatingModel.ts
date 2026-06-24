@@ -129,7 +129,7 @@ export const SUPERMEGA_CORE_MODEL: TenantOperatingModel = {
   tenantKey: 'default',
   companyName: 'SUPERMEGA.dev Core Platform',
   publicLabel: 'SUPERMEGA.dev Core',
-  domain: 'app.supermega.dev',
+  domain: 'supermega.dev',
   sector: 'multi-tenant operating software',
   thesis: 'One AI-native runtime for CRM, ERP, portals, knowledge, and control layers.',
   narrative:
@@ -964,7 +964,7 @@ export const YANGON_TYRE_MODEL: TenantOperatingModel = {
       source: 'Forms, Sheets, intake lanes, and mobile-ready entry screens',
       scope: 'Receiving inspection, CAPA actions, maintenance logs, supplier exceptions, and account reviews',
       cadence: 'Live entry',
-      outputs: ['clean records', 'quality history', 'operator-ready tasks', 'root-cause starters'],
+      outputs: ['Back Office Workflow Desk', 'quality history', 'operator-ready tasks', 'root-cause starters'],
       adminOwner: 'plant manager',
       writeBack: 'Primary record creation',
     },

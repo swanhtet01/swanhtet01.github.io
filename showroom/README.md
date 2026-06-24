@@ -51,7 +51,7 @@ Build script also creates:
 - `Find Companies` searches public business sources and can save kept rows into `Company List`.
 - `Company List` stores saved companies and lead notes.
 - `Task List` turns messy updates into a short daily queue.
-- `Spa Service Desk` is the current single-site service-retail wedge for checkout, appointments, expenses, and daily close.
+- `Service Desk POS` is the current single-site service-retail wedge for checkout, appointments, expenses, and daily close.
 
 ## Service Desk pilot
 
@@ -84,7 +84,7 @@ cmd.exe /c npm run build
 - Custom domain: `supermega.dev`
 - Fallback host: Google Cloud Run via `showroom/Dockerfile` and `tools/deploy_showroom_cloud_run.ps1`
 - Cloud Run guide: `showroom/DEPLOY_CLOUD_RUN.md`
-- Optional CI deploy workflow: `.github/workflows/showroom-cloud-run.yml` (requires `GCP_SA_KEY` secret)
+- Optional CI deploy workflow: `.github/workflows/supermega-app-cloud-run.yml` (requires `GCP_SA_KEY` secret)
 
 ### Vercel production path
 
@@ -95,7 +95,7 @@ cmd.exe /c "set npm_config_cache=%TEMP%\vercel-npm-cache-codex&& npx vercel depl
 
 Current live production deployment URL:
 
-- `https://supermega-platform-e8m5xhiho-swanhtet01s-projects.vercel.app`
+- `https://supermega-platform-qu2g4896i-swanhtet01s-projects.vercel.app`
 
 If `supermega.dev` is still serving the old GitHub Pages site, the apex DNS is not cut over yet. The minimum fix Vercel requested is:
 

@@ -207,13 +207,12 @@ export const metaTools: MetaTool[] = [
 ]
 
 export const ytfDeployment: TenantBlueprint = {
-  name: YANGON_TYRE_MODEL.publicLabel,
-  domain: YANGON_TYRE_MODEL.domain,
-  summary:
-    'A live tenant workspace for Yangon Tyre where sales, operations, maintenance, quality, CEO review, and admin control work from one connected system.',
-  modules: YANGON_TYRE_MODEL.modules.map((module) => module.name),
-  roles: YANGON_TYRE_MODEL.roles.map((role) => role.name),
-  dataSources: YANGON_TYRE_MODEL.connectors.map((connector) => connector.name),
+  name: 'Private industrial tenant',
+  domain: 'dedicated client host',
+  summary: 'A private tenant workspace where operations, quality, maintenance, leadership review, and admin control work from one connected system.',
+  modules: ['Operations Command', 'Quality and CAPA', 'Maintenance Control', 'Executive Brief', 'Admin Control'],
+  roles: ['Admin', 'Plant Manager', 'Manager', 'Quality', 'Maintenance', 'Sales'],
+  dataSources: ['Drive folders', 'Gmail lanes', 'workbooks', 'daily entries', 'quality and receiving records'],
   controls: [
     'Tenant-scoped access',
     'Role-based workspaces',
@@ -222,7 +221,7 @@ export const ytfDeployment: TenantBlueprint = {
   ],
   agentTeams: YANGON_TYRE_MODEL.agentPods.map((pod) => pod.name),
   outcomes: [
-    'One tenant portal for Plant A',
+    'One tenant portal for a private operating team',
     'Cleaner operational records and commercial follow-up',
     'Stronger CEO and admin review',
     'Human entry aligned with quality, operations, maintenance, and data science',

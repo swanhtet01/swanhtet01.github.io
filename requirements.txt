@@ -1,8 +1,16 @@
 beautifulsoup4
 fastapi
-google-cloud-tasks
+et_xmlfile
+google-api-python-client
+google-auth
+google-auth-oauthlib
+openpyxl
 pydantic
+pypdf
+psycopg[binary]
+python-multipart
 python-dotenv
 sentry-sdk[fastapi]
 sqlmodel
+openai
 uvicorn

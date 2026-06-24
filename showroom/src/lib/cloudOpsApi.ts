@@ -851,7 +851,7 @@ function normalizeCloudTopologyPayload(value: Record<string, unknown> | null | u
   return {
     resourceId: String(value.resource_id ?? '').trim() || 'supermega-cloud-topology',
     rootDomain: String(value.root_domain ?? '').trim() || 'supermega.dev',
-    sharedAppHost: String(value.shared_app_host ?? '').trim() || 'app.supermega.dev',
+    sharedAppHost: String(value.shared_app_host ?? '').trim() || 'supermega.dev',
     summary: {
       count: intOrZero(Number((value.summary as Record<string, unknown> | undefined)?.count ?? 0)),
       readyCount: intOrZero(Number((value.summary as Record<string, unknown> | undefined)?.ready_count ?? 0)),

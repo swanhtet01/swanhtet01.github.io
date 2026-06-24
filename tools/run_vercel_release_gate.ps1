@@ -1,8 +1,16 @@
 param(
-  [ValidateSet('all', 'public', 'ytf')]
+  [ValidateSet('all', 'public', 'pos', 'ytf')]
   [string]$Target = 'all',
   [switch]$DeployPublic,
+  [switch]$DeployPos,
   [switch]$DeployYtf,
+  [string]$PosProject = 'supermega-app',
+  [string]$PosDomain = 'pos.supermega.dev',
+  [int]$PosSmokeAttempts = 3,
+  [int]$PosSmokeRetryDelaySeconds = 8,
+  [int]$PosLoginSurfaceBudgetMs = 9000,
+  [int]$PosLoginRoleBudgetMs = 10000,
+  [int]$PosRoleWorkspaceBudgetMs = 15000,
   [switch]$SkipBuild,
   [switch]$SkipLive,
   [switch]$SkipRelink
@@ -41,6 +49,64 @@ function Set-VercelProject {
   Add-StepResult "Link Vercel project: $Project"
 }
 
+function Set-OrClearEnvVar {
+  param(
+    [string]$Name,
+    [string]$Value
+  )
+  if ([string]::IsNullOrWhiteSpace($Value)) {
+    Remove-Item "Env:$Name" -ErrorAction SilentlyContinue
+    return
+  }
+  Set-Item -Path "Env:$Name" -Value $Value
+}
+
+function Invoke-PosSmokeGate {
+  param(
+    [string]$Domain,
+    [string]$StepLabel = 'POS host smoke'
+  )
+
+  $attemptLimit = [Math]::Max(1, $PosSmokeAttempts)
+  $retryDelay = [Math]::Max(1, $PosSmokeRetryDelaySeconds)
+  $previousSurfaceBudget = $env:SUPERMEGA_POS_LOGIN_SURFACE_BUDGET_MS
+  $previousRoleBudget = $env:SUPERMEGA_POS_LOGIN_ROLE_BUDGET_MS
+  $previousWorkspaceBudget = $env:SUPERMEGA_POS_ROLE_WORKSPACE_BUDGET_MS
+
+  try {
+    if ($PosLoginSurfaceBudgetMs -gt 0) {
+      $env:SUPERMEGA_POS_LOGIN_SURFACE_BUDGET_MS = [string]$PosLoginSurfaceBudgetMs
+    }
+    if ($PosLoginRoleBudgetMs -gt 0) {
+      $env:SUPERMEGA_POS_LOGIN_ROLE_BUDGET_MS = [string]$PosLoginRoleBudgetMs
+    }
+    if ($PosRoleWorkspaceBudgetMs -gt 0) {
+      $env:SUPERMEGA_POS_ROLE_WORKSPACE_BUDGET_MS = [string]$PosRoleWorkspaceBudgetMs
+    }
+
+    $lastError = ''
+    for ($attempt = 1; $attempt -le $attemptLimit; $attempt++) {
+      try {
+        Invoke-Step "$StepLabel (attempt $attempt/$attemptLimit)" node @('tools/smoke_pos_host_login.mjs', "https://$Domain")
+        Add-StepResult $StepLabel
+        return
+      } catch {
+        $lastError = $_.Exception.Message
+        if ($attempt -lt $attemptLimit) {
+          Write-Host "POS smoke retry $attempt/$attemptLimit in $retryDelay second(s): $lastError" -ForegroundColor Yellow
+          Start-Sleep -Seconds $retryDelay
+        }
+      }
+    }
+
+    throw "$StepLabel failed after $attemptLimit attempt(s). Last error: $lastError"
+  } finally {
+    Set-OrClearEnvVar -Name 'SUPERMEGA_POS_LOGIN_SURFACE_BUDGET_MS' -Value $previousSurfaceBudget
+    Set-OrClearEnvVar -Name 'SUPERMEGA_POS_LOGIN_ROLE_BUDGET_MS' -Value $previousRoleBudget
+    Set-OrClearEnvVar -Name 'SUPERMEGA_POS_ROLE_WORKSPACE_BUDGET_MS' -Value $previousWorkspaceBudget
+  }
+}
+
 $root = (Get-Location).Path
 $startedAt = (Get-Date).ToUniversalTime().ToString('o')
 $results = [ordered]@{
@@ -73,6 +139,9 @@ if (-not (Test-CommandAvailable 'node')) {
 if (-not (Test-CommandAvailable 'npm')) {
   throw 'npm is required for this release gate.'
 }
+
+Invoke-Step 'Vercel auth preflight' node @('tools/check_vercel_cli_auth.mjs', '--auth-only')
+Add-StepResult 'Vercel auth preflight'
 
 Invoke-Step 'Vercel CLI version' npx @('vercel', '--version')
 Add-StepResult 'Vercel CLI version'
@@ -112,6 +181,33 @@ if ($Target -in @('all', 'public')) {
   if (-not $SkipLive) {
     Invoke-Step 'Public domain health' uv @('run', '--no-sync', 'python', 'tools/check_supermega_domain.py', '--json-out', 'tmp/domain_health_vercel_gate.json')
     Add-StepResult 'Public domain health'
+  }
+}
+
+if ($Target -in @('all', 'pos')) {
+  $normalizedPosDomain = ($PosDomain -replace '^https?://', '').TrimEnd('/')
+
+  if (-not $SkipLive) {
+    Invoke-PosSmokeGate -Domain $normalizedPosDomain -StepLabel 'POS baseline smoke'
+  }
+
+  if ($DeployPos) {
+    Set-VercelProject $PosProject
+    Invoke-Step 'Deploy POS host to Vercel' powershell @(
+      '-ExecutionPolicy',
+      'Bypass',
+      '-File',
+      'tools/deploy_app_to_project.ps1',
+      '-Project',
+      $PosProject,
+      '-Domains',
+      $normalizedPosDomain
+    )
+    Add-StepResult 'Deploy POS host to Vercel'
+  }
+
+  if (-not $SkipLive) {
+    Invoke-PosSmokeGate -Domain $normalizedPosDomain -StepLabel 'POS host smoke'
   }
 }
 

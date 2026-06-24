@@ -67,20 +67,22 @@ export function DocumentIntakePage() {
   return (
     <div className="space-y-8">
       <PageIntro
-        eyebrow="Semi-product"
-        title="Document Intake"
-        description="Upload a real file and turn it into a routed, structured intake result instead of another manual review step."
+        eyebrow="Invisible ISO / Document Control"
+        title="Document control intake."
+        description="Upload a file once, classify it, and route it into the right manager workflow without another paper or chat loop."
       />
 
       <section className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
         <article className="sm-surface-deep p-6">
           <p className="sm-kicker text-[var(--sm-accent)]">Upload a file</p>
-          <h2 className="mt-3 text-3xl font-bold text-white">Use actual documents, not just pasted text.</h2>
+          <h2 className="mt-3 text-3xl font-bold text-white">Use real files, not retyping.</h2>
           <p className="mt-3 text-sm text-[var(--sm-muted)]">
-            This intake layer reads supported PDFs, spreadsheets, text files, CSV, and JSON, then suggests the right SUPERMEGA.dev module to route it into.
+            This source intake layer reads PDFs, spreadsheets, text files, CSV, and JSON, then suggests the right desk for SOPs, forms, COAs,
+            supplier evidence, government documents, and internal records.
           </p>
 
           <div className="mt-6 grid gap-3">
+            <div className="sm-chip text-white">Source file and owner captured first</div>
             <div className="sm-chip text-white">PDF via `pypdf`</div>
             <div className="sm-chip text-white">Excel via `openpyxl`</div>
             <div className="sm-chip text-white">Text, CSV, and JSON</div>
@@ -88,7 +90,7 @@ export function DocumentIntakePage() {
 
           <label className="mt-6 flex cursor-pointer flex-col items-center justify-center rounded-[1.4rem] border border-dashed border-white/12 bg-[rgba(255,255,255,0.03)] px-6 py-10 text-center">
             <span className="text-lg font-semibold text-white">{busy ? 'Processing file...' : 'Choose a document'}</span>
-            <span className="mt-2 text-sm text-[var(--sm-muted)]">Invoices, GRNs, stock sheets, complaint PDFs, and similar files.</span>
+            <span className="mt-2 text-sm text-[var(--sm-muted)]">SOPs, forms, COAs, invoices, GRNs, complaint PDFs, lab sheets, and related files.</span>
             <input
               accept=".pdf,.xlsx,.xlsm,.txt,.csv,.json,.md"
               className="hidden"
@@ -169,24 +171,28 @@ export function DocumentIntakePage() {
         <article className="sm-surface p-6">
           <p className="sm-kicker text-[var(--sm-accent)]">Best fit</p>
           <div className="mt-5 grid gap-3">
-            <div className="sm-chip text-white">Goods received notes and packing lists</div>
-            <div className="sm-chip text-white">Stock and warehouse spreadsheets</div>
-            <div className="sm-chip text-white">Invoices, complaints, and quality evidence</div>
+            <div className="sm-chip text-white">SOPs, work instructions, forms, and revision packs</div>
+            <div className="sm-chip text-white">COAs, specifications, GRNs, supplier packets, and receiving evidence</div>
+            <div className="sm-chip text-white">Quality evidence, training proof, finance files, and government documents</div>
           </div>
         </article>
 
         <article className="sm-surface p-6">
           <p className="sm-kicker text-[var(--sm-accent-alt)]">Next step</p>
-          <h2 className="mt-3 text-2xl font-bold text-white">Use intake as the front door.</h2>
+          <h2 className="mt-3 text-2xl font-bold text-white">Keep document control inside the same loop.</h2>
           <p className="mt-3 text-sm text-[var(--sm-muted)]">
-            This should feed directly into Action OS, Receiving Control, Cash Watch, and DQMS and Quality Methods so teams do not need to retype key facts after opening a file.
+            Upload the file here, then use Daily Entry when a manager needs to log a revision, audit finding, or training action. Plant Manager should review the
+            resulting work there instead of maintaining a separate ISO binder workflow.
           </p>
           <div className="mt-5 flex flex-wrap gap-3">
-            <Link className="sm-button-primary" to="/app/actions">
-              Open Action OS
+            <Link className="sm-button-primary" to="/app/daily-entry">
+              Open daily entry
             </Link>
-            <Link className="sm-button-secondary" to="/products">
-              See all products
+            <Link className="sm-button-secondary" to="/app/plant-manager">
+              Open plant manager
+            </Link>
+            <Link className="sm-button-secondary" to="/app/data-fabric">
+              Open data fabric
             </Link>
           </div>
         </article>

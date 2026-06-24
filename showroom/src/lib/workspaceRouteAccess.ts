@@ -32,8 +32,8 @@ export async function resolveWorkspaceRouteAccess({
   try {
     const payload = await getWorkspaceSession()
     const capabilityProfile = getCapabilityProfileForRole(payload.session?.role)
-    const authenticated = Boolean(payload.authenticated)
-    const allowed = requiredCapabilities.some((capability) => sessionHasCapability(payload.session, capability))
+    const authenticated = Boolean(payload.authenticated) && payload.stale_session !== true
+    const allowed = authenticated && requiredCapabilities.some((capability) => sessionHasCapability(payload.session, capability))
 
     return {
       loading: false,

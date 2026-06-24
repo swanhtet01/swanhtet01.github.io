@@ -1,16 +1,20 @@
 from __future__ import annotations
 
+import base64
 from datetime import datetime
+import io
 from pathlib import Path
 from typing import Any
 
 
 DRIVE_METADATA_SCOPE = "https://www.googleapis.com/auth/drive.metadata.readonly"
+DRIVE_READONLY_SCOPE = "https://www.googleapis.com/auth/drive.readonly"
 DRIVE_FULL_SCOPE = "https://www.googleapis.com/auth/drive"
 SHEETS_SCOPE = "https://www.googleapis.com/auth/spreadsheets"
 FOLDER_MIME_TYPE = "application/vnd.google-apps.folder"
 DOC_MIME_TYPE = "application/vnd.google-apps.document"
 SPREADSHEET_MIME_TYPE = "application/vnd.google-apps.spreadsheet"
+XLSX_MIME_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 
 class GoogleDriveProbe:
@@ -40,7 +44,7 @@ class GoogleDriveProbe:
             str(self.service_account_json),
             scopes=scopes,
         )
-        service = build("drive", "v3", credentials=credentials, cache_discovery=False)
+        service = build("drive", "v3", credentials=credentials, cache_discovery=False, static_discovery=False)
         return service, credentials
 
     def _build_drive_and_sheets_services(self, scopes: list[str]) -> tuple[Any, Any, Any]:
@@ -51,8 +55,8 @@ class GoogleDriveProbe:
             str(self.service_account_json),
             scopes=scopes,
         )
-        drive_service = build("drive", "v3", credentials=credentials, cache_discovery=False)
-        sheets_service = build("sheets", "v4", credentials=credentials, cache_discovery=False)
+        drive_service = build("drive", "v3", credentials=credentials, cache_discovery=False, static_discovery=False)
+        sheets_service = build("sheets", "v4", credentials=credentials, cache_discovery=False, static_discovery=False)
         return drive_service, sheets_service, credentials
 
     @staticmethod
@@ -82,7 +86,7 @@ class GoogleDriveProbe:
                 ).execute()
                 children = service.files().list(
                     q=f"'{self.folder_id}' in parents and trashed = false",
-                    fields="files(id,name,mimeType,modifiedTime,size)",
+                    fields="files(id,name,mimeType,createdTime,modifiedTime,size)",
                     pageSize=25,
                     supportsAllDrives=True,
                     includeItemsFromAllDrives=True,
@@ -141,7 +145,7 @@ class GoogleDriveProbe:
             def walk(folder_id: str, depth: int) -> dict[str, Any]:
                 folder = service.files().get(
                     fileId=folder_id,
-                    fields="id,name,mimeType,webViewLink",
+                    fields="id,name,mimeType,webViewLink,createdTime,modifiedTime",
                     supportsAllDrives=True,
                 ).execute()
                 node = {
@@ -149,6 +153,8 @@ class GoogleDriveProbe:
                     "name": folder.get("name", ""),
                     "mime_type": folder.get("mimeType", ""),
                     "web_view_link": folder.get("webViewLink", ""),
+                    "created_time": folder.get("createdTime", ""),
+                    "modified_time": folder.get("modifiedTime", ""),
                 }
                 if depth >= max_depth:
                     return node
@@ -168,6 +174,7 @@ class GoogleDriveProbe:
                         "id": child.get("id", ""),
                         "name": child.get("name", ""),
                         "mime_type": child.get("mimeType", ""),
+                        "created_time": child.get("createdTime", ""),
                         "modified_time": child.get("modifiedTime", ""),
                         "size": child.get("size", ""),
                     }
@@ -191,7 +198,13 @@ class GoogleDriveProbe:
                 "message": str(exc),
             }
 
-    def list_folder_file_index(self, *, max_items: int = 5000, page_size: int = 200) -> dict[str, Any]:
+    def list_folder_file_index(
+        self,
+        *,
+        max_items: int = 5000,
+        page_size: int = 200,
+        follow_shortcuts: bool = True,
+    ) -> dict[str, Any]:
         base_error = self._validate_base_config()
         if base_error:
             return base_error
@@ -216,7 +229,49 @@ class GoogleDriveProbe:
             folders: list[dict[str, Any]] = []
             queue: list[tuple[str, str]] = [(self.folder_id, "")]
             visited: set[str] = set()
+            resolved_shortcut_targets: set[str] = set()
             truncated = False
+
+            def resolved_shortcut_file(raw_shortcut: dict[str, Any], *, shortcut_path: str) -> dict[str, Any] | None:
+                shortcut_details = raw_shortcut.get("shortcutDetails", {}) if isinstance(raw_shortcut.get("shortcutDetails", {}), dict) else {}
+                target_id = str(shortcut_details.get("targetId", "")).strip()
+                target_mime_type = str(shortcut_details.get("targetMimeType", "")).strip()
+                if not follow_shortcuts or not target_id or target_mime_type == FOLDER_MIME_TYPE:
+                    return None
+                if target_id in resolved_shortcut_targets:
+                    return None
+                try:
+                    target = service.files().get(
+                        fileId=target_id,
+                        fields=(
+                            "id,name,mimeType,modifiedTime,size,md5Checksum,webViewLink,driveId,"
+                            "lastModifyingUser(emailAddress,displayName)"
+                        ),
+                        supportsAllDrives=True,
+                    ).execute()
+                except Exception:
+                    return None
+                resolved_shortcut_targets.add(target_id)
+                target_name = str(target.get("name", "") or raw_shortcut.get("name", "")).strip()
+                display_path = shortcut_path
+                if target_name and target_name != str(raw_shortcut.get("name", "")).strip():
+                    display_path = f"{shortcut_path} -> {target_name}"
+                return {
+                    "id": target.get("id", target_id),
+                    "name": target_name or str(raw_shortcut.get("name", "")).strip(),
+                    "path": display_path,
+                    "mime_type": target.get("mimeType", target_mime_type),
+                    "modified_time": target.get("modifiedTime", raw_shortcut.get("modifiedTime", "")),
+                    "size": target.get("size", raw_shortcut.get("size", "")),
+                    "md5_checksum": target.get("md5Checksum", raw_shortcut.get("md5Checksum", "")),
+                    "web_view_link": target.get("webViewLink", raw_shortcut.get("webViewLink", "")),
+                    "drive_id": target.get("driveId", raw_shortcut.get("driveId", "")),
+                    "last_modified_by": target.get("lastModifyingUser", {}).get("emailAddress", ""),
+                    "shortcut_target_id": target_id,
+                    "shortcut_target_mime_type": target_mime_type,
+                    "source_shortcut_id": raw_shortcut.get("id", ""),
+                    "source_shortcut_name": raw_shortcut.get("name", ""),
+                }
 
             while queue and not truncated:
                 folder_id, folder_path = queue.pop(0)
@@ -231,6 +286,7 @@ class GoogleDriveProbe:
                         fields=(
                             "nextPageToken,"
                             "files(id,name,mimeType,modifiedTime,size,md5Checksum,webViewLink,driveId,"
+                            "shortcutDetails(targetId,targetMimeType),"
                             "lastModifyingUser(emailAddress,displayName))"
                         ),
                         orderBy="folder,name",
@@ -245,6 +301,9 @@ class GoogleDriveProbe:
                         path = f"{folder_path}/{name}" if folder_path else name
                         mime_type = item.get("mimeType", "")
                         item_id = item.get("id", "")
+                        shortcut_details = item.get("shortcutDetails", {}) if isinstance(item.get("shortcutDetails", {}), dict) else {}
+                        shortcut_target_id = str(shortcut_details.get("targetId", "")).strip()
+                        shortcut_target_mime_type = str(shortcut_details.get("targetMimeType", "")).strip()
 
                         if mime_type == FOLDER_MIME_TYPE:
                             folders.append(
@@ -256,11 +315,42 @@ class GoogleDriveProbe:
                                     "modified_time": item.get("modifiedTime", ""),
                                     "web_view_link": item.get("webViewLink", ""),
                                     "drive_id": item.get("driveId", ""),
+                                    "shortcut_target_id": shortcut_target_id,
+                                    "shortcut_target_mime_type": shortcut_target_mime_type,
                                 }
                             )
                             if item_id:
                                 queue.append((item_id, path))
                             continue
+
+                        if (
+                            follow_shortcuts
+                            and shortcut_target_id
+                            and shortcut_target_mime_type == FOLDER_MIME_TYPE
+                            and shortcut_target_id not in visited
+                        ):
+                            folders.append(
+                                {
+                                    "id": shortcut_target_id,
+                                    "name": name,
+                                    "path": path,
+                                    "mime_type": FOLDER_MIME_TYPE,
+                                    "modified_time": item.get("modifiedTime", ""),
+                                    "web_view_link": item.get("webViewLink", ""),
+                                    "drive_id": item.get("driveId", ""),
+                                    "shortcut_target_id": shortcut_target_id,
+                                    "shortcut_target_mime_type": shortcut_target_mime_type,
+                                    "source_shortcut_id": item_id,
+                                }
+                            )
+                            queue.append((shortcut_target_id, path))
+
+                        resolved_file = resolved_shortcut_file(item, shortcut_path=path)
+                        if resolved_file:
+                            files.append(resolved_file)
+                            if len(files) >= max_items:
+                                truncated = True
+                                break
 
                         files.append(
                             {
@@ -274,6 +364,10 @@ class GoogleDriveProbe:
                                 "web_view_link": item.get("webViewLink", ""),
                                 "drive_id": item.get("driveId", ""),
                                 "last_modified_by": item.get("lastModifyingUser", {}).get("emailAddress", ""),
+                                "shortcut_target_id": shortcut_target_id,
+                                "shortcut_target_mime_type": shortcut_target_mime_type,
+                                "source_shortcut_id": "",
+                                "source_shortcut_name": "",
                             }
                         )
                         if len(files) >= max_items:
@@ -363,7 +457,7 @@ class GoogleDriveProbe:
             query.append(f"mimeType = '{mime_type}'")
         response = service.files().list(
             q=" and ".join(query),
-            fields="files(id,name,mimeType,webViewLink,webContentLink)",
+            fields="files(id,name,mimeType,webViewLink,webContentLink,createdTime,modifiedTime)",
             pageSize=1,
             supportsAllDrives=True,
             includeItemsFromAllDrives=True,
@@ -788,6 +882,318 @@ class GoogleDriveProbe:
                 "message": str(exc),
             }
 
+    def read_spreadsheet_preview(
+        self,
+        *,
+        spreadsheet_id: str,
+        max_sheets: int = 3,
+        max_rows_per_sheet: int = 12,
+    ) -> dict[str, Any]:
+        base_error = self._validate_base_config()
+        if base_error:
+            return base_error
+
+        normalized_spreadsheet_id = str(spreadsheet_id or "").strip()
+        if not normalized_spreadsheet_id:
+            return {
+                "status": "missing_spreadsheet_id",
+                "message": "No spreadsheet ID was provided.",
+            }
+
+        try:
+            _, sheets_service, credentials = self._build_drive_and_sheets_services(
+                [DRIVE_METADATA_SCOPE, SHEETS_SCOPE]
+            )
+            metadata = sheets_service.spreadsheets().get(
+                spreadsheetId=normalized_spreadsheet_id,
+                fields="properties(title),sheets(properties(title,index))",
+            ).execute()
+            sheet_properties = [
+                sheet.get("properties", {})
+                for sheet in metadata.get("sheets", [])
+                if isinstance(sheet, dict)
+            ]
+            sheet_properties.sort(key=lambda item: int(item.get("index", 0) or 0))
+
+            previews: list[dict[str, Any]] = []
+            text_lines: list[str] = []
+            for sheet in sheet_properties[: max(1, int(max_sheets))]:
+                title = str(sheet.get("title", "")).strip()
+                if not title:
+                    continue
+                escaped_title = title.replace("'", "''")
+                range_name = f"'{escaped_title}'!A1:Z{max(2, int(max_rows_per_sheet))}"
+                values = sheets_service.spreadsheets().values().get(
+                    spreadsheetId=normalized_spreadsheet_id,
+                    range=range_name,
+                ).execute().get("values", [])
+                normalized_rows = [
+                    [str(cell).strip() for cell in row]
+                    for row in values
+                    if any(str(cell).strip() for cell in row)
+                ]
+                previews.append(
+                    {
+                        "sheet_name": title,
+                        "row_count": len(normalized_rows),
+                        "rows": normalized_rows,
+                    }
+                )
+                text_lines.append(f"Sheet: {title}")
+                for row in normalized_rows:
+                    text_lines.append(" | ".join(row))
+
+            ready_count = len([item for item in previews if int(item.get("row_count", 0) or 0) > 0])
+            return {
+                "status": "ready" if ready_count else "empty",
+                "generated_at": datetime.now().astimezone().isoformat(),
+                "service_account_email": getattr(credentials, "service_account_email", ""),
+                "spreadsheet_id": normalized_spreadsheet_id,
+                "title": str(metadata.get("properties", {}).get("title", "")).strip(),
+                "sheet_count": len(sheet_properties),
+                "preview_sheet_count": len(previews),
+                "ready_preview_sheet_count": ready_count,
+                "sheets": previews,
+                "text": "\n".join(text_lines).strip(),
+            }
+        except ImportError as exc:
+            return {
+                "status": "dependency_missing",
+                "message": f"Google API client libraries are not available: {exc}",
+            }
+        except Exception as exc:
+            return {
+                "status": "error",
+                "message": str(exc),
+                "spreadsheet_id": normalized_spreadsheet_id,
+            }
+
+    def read_named_spreadsheet_rows(
+        self,
+        *,
+        spreadsheet_name: str,
+        sheet_name: str = "Entries",
+        workspace_folder_name: str = "",
+        max_rows: int = 500,
+    ) -> dict[str, Any]:
+        base_error = self._validate_base_config()
+        if base_error:
+            return base_error
+
+        if not self.folder_id:
+            return {
+                "status": "missing_folder_id",
+                "message": "No Google Drive folder ID is configured.",
+            }
+
+        normalized_spreadsheet_name = str(spreadsheet_name or "").strip()
+        normalized_sheet_name = str(sheet_name or "").strip() or "Entries"
+        if not normalized_spreadsheet_name:
+            return {
+                "status": "missing_spreadsheet_name",
+                "message": "No spreadsheet name was provided.",
+            }
+
+        bounded_rows = max(1, min(5000, int(max_rows or 500)))
+
+        try:
+            drive_service, sheets_service, credentials = self._build_drive_and_sheets_services(
+                [DRIVE_METADATA_SCOPE, SHEETS_SCOPE]
+            )
+            parent_id = self.folder_id
+            target_folder = None
+            if str(workspace_folder_name or "").strip():
+                target_folder = self._find_child_by_name(
+                    drive_service,
+                    self.folder_id,
+                    str(workspace_folder_name).strip(),
+                    FOLDER_MIME_TYPE,
+                )
+                if not target_folder:
+                    return {
+                        "status": "not_found",
+                        "message": "Workspace folder was not found.",
+                        "spreadsheet_name": normalized_spreadsheet_name,
+                        "sheet_name": normalized_sheet_name,
+                        "row_count": 0,
+                        "headers": [],
+                        "rows": [],
+                    }
+                parent_id = str(target_folder.get("id", "")).strip() or self.folder_id
+
+            spreadsheet_file = self._find_child_by_name(
+                drive_service,
+                parent_id,
+                normalized_spreadsheet_name,
+                SPREADSHEET_MIME_TYPE,
+            )
+            if not spreadsheet_file:
+                return {
+                    "status": "not_found",
+                    "message": "Spreadsheet was not found.",
+                    "spreadsheet_name": normalized_spreadsheet_name,
+                    "sheet_name": normalized_sheet_name,
+                    "row_count": 0,
+                    "headers": [],
+                    "rows": [],
+                }
+
+            metadata = sheets_service.spreadsheets().get(
+                spreadsheetId=str(spreadsheet_file.get("id", "")).strip(),
+                fields="properties(title),sheets(properties(title,index))",
+            ).execute()
+            sheet_titles = [
+                str(sheet.get("properties", {}).get("title", "")).strip()
+                for sheet in metadata.get("sheets", [])
+                if isinstance(sheet, dict)
+            ]
+            if normalized_sheet_name not in sheet_titles:
+                return {
+                    "status": "missing_sheet",
+                    "message": "Spreadsheet exists but the requested sheet was not found.",
+                    "spreadsheet_name": normalized_spreadsheet_name,
+                    "sheet_name": normalized_sheet_name,
+                    "row_count": 0,
+                    "headers": [],
+                    "rows": [],
+                }
+
+            escaped_title = normalized_sheet_name.replace("'", "''")
+            range_name = f"'{escaped_title}'!A1:ZZ{bounded_rows + 1}"
+            values = sheets_service.spreadsheets().values().get(
+                spreadsheetId=str(spreadsheet_file.get("id", "")).strip(),
+                range=range_name,
+            ).execute().get("values", [])
+            normalized_rows = [
+                [str(cell).strip() for cell in row]
+                for row in values
+                if any(str(cell).strip() for cell in row)
+            ]
+            headers = normalized_rows[0] if normalized_rows else []
+            data_rows = normalized_rows[1:] if len(normalized_rows) > 1 else []
+            return {
+                "status": "ready" if data_rows else "empty",
+                "generated_at": datetime.now().astimezone().isoformat(),
+                "service_account_email": getattr(credentials, "service_account_email", ""),
+                "spreadsheet_id": str(spreadsheet_file.get("id", "")).strip(),
+                "spreadsheet_name": normalized_spreadsheet_name,
+                "title": str(metadata.get("properties", {}).get("title", "")).strip(),
+                "sheet_name": normalized_sheet_name,
+                "workspace_folder_name": str(workspace_folder_name or "").strip(),
+                "modified_time": str(spreadsheet_file.get("modifiedTime", "")).strip(),
+                "sample_row_limit": bounded_rows,
+                "row_count": len(data_rows),
+                "headers": headers,
+                "rows": data_rows,
+            }
+        except ImportError as exc:
+            return {
+                "status": "dependency_missing",
+                "message": f"Google API client libraries are not available: {exc}",
+            }
+        except Exception as exc:
+            return {
+                "status": "error",
+                "message": str(exc),
+                "spreadsheet_name": normalized_spreadsheet_name,
+                "sheet_name": normalized_sheet_name,
+            }
+
+    def download_workbook_content(
+        self,
+        *,
+        file_id: str,
+        filename: str = "",
+        max_bytes: int = 8_000_000,
+    ) -> dict[str, Any]:
+        base_error = self._validate_base_config()
+        if base_error:
+            return base_error
+
+        normalized_file_id = str(file_id or "").strip()
+        if not normalized_file_id:
+            return {
+                "status": "missing_file_id",
+                "message": "No Drive file ID was provided.",
+            }
+
+        try:
+            from googleapiclient.http import MediaIoBaseDownload
+
+            service, credentials = self._build_service([DRIVE_READONLY_SCOPE])
+            metadata = service.files().get(
+                fileId=normalized_file_id,
+                fields="id,name,mimeType,size,webViewLink,modifiedTime",
+                supportsAllDrives=True,
+            ).execute()
+            mime_type = str(metadata.get("mimeType", "")).strip()
+            drive_filename = str(metadata.get("name") or filename or normalized_file_id).strip()
+            size = int(metadata.get("size") or 0)
+            if size and size > max(1, int(max_bytes)):
+                return {
+                    "status": "too_large",
+                    "message": f"Drive file is {size} bytes, above the configured {max_bytes} byte preview limit.",
+                    "file_id": normalized_file_id,
+                    "filename": drive_filename,
+                    "mime_type": mime_type,
+                    "size_bytes": size,
+                    "web_view_link": str(metadata.get("webViewLink", "")).strip(),
+                }
+
+            if mime_type == SPREADSHEET_MIME_TYPE:
+                request = service.files().export_media(
+                    fileId=normalized_file_id,
+                    mimeType=XLSX_MIME_TYPE,
+                )
+                if not drive_filename.lower().endswith((".xlsx", ".xlsm")):
+                    drive_filename = f"{drive_filename}.xlsx"
+            else:
+                request = service.files().get_media(
+                    fileId=normalized_file_id,
+                    supportsAllDrives=True,
+                )
+
+            buffer = io.BytesIO()
+            downloader = MediaIoBaseDownload(buffer, request)
+            done = False
+            while not done:
+                _, done = downloader.next_chunk()
+                if buffer.tell() > max(1, int(max_bytes)):
+                    return {
+                        "status": "too_large",
+                        "message": f"Downloaded preview exceeded the configured {max_bytes} byte limit.",
+                        "file_id": normalized_file_id,
+                        "filename": drive_filename,
+                        "mime_type": mime_type,
+                        "size_bytes": buffer.tell(),
+                        "web_view_link": str(metadata.get("webViewLink", "")).strip(),
+                    }
+
+            data = buffer.getvalue()
+            return {
+                "status": "ready" if data else "empty",
+                "generated_at": datetime.now().astimezone().isoformat(),
+                "service_account_email": getattr(credentials, "service_account_email", ""),
+                "file_id": normalized_file_id,
+                "filename": drive_filename,
+                "mime_type": mime_type,
+                "size_bytes": len(data),
+                "web_view_link": str(metadata.get("webViewLink", "")).strip(),
+                "modified_time": str(metadata.get("modifiedTime", "")).strip(),
+                "content_base64": base64.b64encode(data).decode("ascii"),
+            }
+        except ImportError as exc:
+            return {
+                "status": "dependency_missing",
+                "message": f"Google API client libraries are not available: {exc}",
+            }
+        except Exception as exc:
+            return {
+                "status": "error",
+                "message": str(exc),
+                "file_id": normalized_file_id,
+            }
+
     def overwrite_input_center_template_rows(
         self,
         *,
@@ -853,6 +1259,110 @@ class GoogleDriveProbe:
                 "status": "error",
                 "message": str(exc),
                 "spreadsheet_id": spreadsheet_id,
+                "sheet_name": sheet_name,
+            }
+
+    def append_rows_sheet(
+        self,
+        *,
+        spreadsheet_name: str,
+        headers: list[str],
+        rows: list[list[str]],
+        sheet_name: str = "Intake",
+        workspace_folder_name: str = "",
+        description: str = "",
+    ) -> dict[str, Any]:
+        base_error = self._validate_base_config()
+        if base_error:
+            return base_error
+
+        if not self.folder_id:
+            return {
+                "status": "missing_folder_id",
+                "message": "No Google Drive folder ID is configured.",
+            }
+
+        normalized_headers = [str(value).strip() for value in headers if str(value).strip()]
+        if not normalized_headers:
+            return {
+                "status": "missing_headers",
+                "message": "Append requires at least one header.",
+            }
+
+        normalized_rows: list[list[str]] = []
+        for row in rows:
+            padded = [str(value or "").strip() for value in list(row[: len(normalized_headers)])]
+            while len(padded) < len(normalized_headers):
+                padded.append("")
+            normalized_rows.append(padded)
+
+        if not normalized_rows:
+            return {
+                "status": "empty",
+                "message": "No rows were provided.",
+                "row_count": 0,
+            }
+
+        try:
+            drive_service, sheets_service, _ = self._build_drive_and_sheets_services([DRIVE_FULL_SCOPE, SHEETS_SCOPE])
+            target_parent_id = self.folder_id
+            target_folder = None
+            if workspace_folder_name.strip():
+                target_folder = self._ensure_folder(drive_service, self.folder_id, workspace_folder_name.strip())
+                target_parent_id = str(target_folder.get("id", "")).strip() or self.folder_id
+
+            spreadsheet_file = self._find_child_by_name(
+                drive_service,
+                target_parent_id,
+                spreadsheet_name,
+                SPREADSHEET_MIME_TYPE,
+            )
+            created = False
+            if spreadsheet_file is None:
+                spreadsheet_file = self._create_spreadsheet(
+                    drive_service,
+                    parent_id=target_parent_id,
+                    name=spreadsheet_name,
+                )
+                created = True
+
+            template_status = self._ensure_spreadsheet_template(
+                sheets_service=sheets_service,
+                spreadsheet_id=str(spreadsheet_file.get("id", "")).strip(),
+                sheet_name=sheet_name,
+                headers=normalized_headers,
+                description=description,
+                sample_row=[],
+            )
+            sheets_service.spreadsheets().values().append(
+                spreadsheetId=str(spreadsheet_file.get("id", "")).strip(),
+                range=f"{sheet_name}!A:ZZ",
+                valueInputOption="RAW",
+                insertDataOption="INSERT_ROWS",
+                body={"values": normalized_rows},
+            ).execute()
+
+            return {
+                "status": "ready",
+                "created": created,
+                "spreadsheet_id": spreadsheet_file.get("id", ""),
+                "web_view_link": spreadsheet_file.get("webViewLink", ""),
+                "sheet_name": sheet_name,
+                "row_count": len(normalized_rows),
+                "workspace_folder_name": workspace_folder_name.strip(),
+                "workspace_folder_link": target_folder.get("webViewLink", "") if isinstance(target_folder, dict) else "",
+                "template_status": template_status,
+            }
+        except ImportError as exc:
+            return {
+                "status": "dependency_missing",
+                "message": f"Google API client libraries are not available: {exc}",
+            }
+        except Exception as exc:
+            return {
+                "status": "error",
+                "message": str(exc),
+                "spreadsheet_name": spreadsheet_name,
                 "sheet_name": sheet_name,
             }
 

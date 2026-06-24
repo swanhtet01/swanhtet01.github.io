@@ -123,7 +123,9 @@ if (-not [string]::IsNullOrWhiteSpace($gmailClientSecret)) {
 
 $serviceAccountPath = Find-FirstExistingPath -Candidates @(
     "C:\Users\swann\OneDrive - BDA\_tmp_keystore_20260328\keystore\supermega-468612-9c08e1ed3bb4.json",
-    "C:\Users\swann\Downloads\supermega-468612-9c08e1ed3bb4.json"
+    "C:\Users\swann\Downloads\supermega-468612-9c08e1ed3bb4.json",
+    "C:\Users\swann\Downloads\supermega-468612-d5f3446c088d.json",
+    "C:\Users\swann\OneDrive - BDA\_tmp_keystore_20260328\keystore\supermega-468612-d5f3446c088d.json"
 )
 if (-not [string]::IsNullOrWhiteSpace($serviceAccountPath)) {
     $envMap["GOOGLE_SERVICE_ACCOUNT_JSON"] = $serviceAccountPath

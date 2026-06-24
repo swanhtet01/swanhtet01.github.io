@@ -14,6 +14,48 @@ function Get-EnvValue {
     return [string]$item.Value
 }
 
+function Read-DotEnvValue {
+    param(
+        [string]$EnvFile,
+        [string]$Name
+    )
+
+    if (-not (Test-Path -LiteralPath $EnvFile)) {
+        return ""
+    }
+
+    $line = Get-Content -LiteralPath $EnvFile | Where-Object { $_ -match "^\s*$([regex]::Escape($Name))\s*=" } | Select-Object -First 1
+    if (-not $line) {
+        return ""
+    }
+
+    $value = ($line -split "=", 2)[1].Trim()
+    if (($value.StartsWith('"') -and $value.EndsWith('"')) -or ($value.StartsWith("'") -and $value.EndsWith("'"))) {
+        $value = $value.Substring(1, $value.Length - 2)
+    }
+    return $value
+}
+
+function Set-EnvFromDotEnvIfMissing {
+    param(
+        [string]$EnvFile,
+        [string]$Name
+    )
+
+    if (-not [string]::IsNullOrWhiteSpace((Get-EnvValue -Name $Name))) {
+        return
+    }
+
+    $value = Read-DotEnvValue -EnvFile $EnvFile -Name $Name
+    if ([string]::IsNullOrWhiteSpace($value)) {
+        return
+    }
+
+    Set-Item -Path ("Env:" + $Name) -Value $value
+    $display = if ($value.Trim().StartsWith("{")) { "inline-json" } else { $value }
+    Write-Host ("Using " + $Name + " from .env.app.local -> " + $display)
+}
+
 function Set-EnvPathIfMissing {
     param(
         [string]$Name,
@@ -89,6 +131,7 @@ function Invoke-CommandAttempt {
 
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repoRoot = Split-Path -Parent $scriptDir
+$envFile = Join-Path $repoRoot ".env.app.local"
 $attempts = New-Object "System.Collections.Generic.List[hashtable]"
 $secretsDir = Join-Path $repoRoot ".secrets"
 $gmailSecretsDir = Join-Path $secretsDir "gmail"
@@ -101,6 +144,10 @@ if (-not (Test-Path -LiteralPath $gmailSecretsDir)) {
 if (-not (Test-Path -LiteralPath $gcpSecretsDir)) {
     New-Item -ItemType Directory -Path $gcpSecretsDir -Force | Out-Null
 }
+
+Set-EnvFromDotEnvIfMissing -EnvFile $envFile -Name "GMAIL_OAUTH_TOKEN_JSON"
+Set-EnvFromDotEnvIfMissing -EnvFile $envFile -Name "GMAIL_OAUTH_CLIENT_JSON"
+Set-EnvFromDotEnvIfMissing -EnvFile $envFile -Name "GOOGLE_SERVICE_ACCOUNT_JSON"
 
 $gmailTokenDefault = Join-Path $gmailSecretsDir "token.json"
 if ([string]::IsNullOrWhiteSpace((Get-EnvValue -Name "GMAIL_OAUTH_TOKEN_JSON"))) {

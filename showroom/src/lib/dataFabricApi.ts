@@ -1,6 +1,8 @@
 import {
+  YANGON_TYRE_CAPTURE_NODES,
   YANGON_TYRE_DATA_FABRIC_DIALECTIC,
   YANGON_TYRE_DATA_PIPELINE_STAGES,
+  YANGON_TYRE_ENTERPRISE_CHAIN,
   YANGON_TYRE_FEATURE_MARTS,
   YANGON_TYRE_ROLE_STORIES,
   YANGON_TYRE_TOPIC_PIPELINES,
@@ -10,9 +12,11 @@ import {
   type DataFabricStatus,
   type YangonTyreDataCopilot,
   type YangonTyreDataPipelineStage,
+  type YangonTyreEnterpriseChainLink,
   type YangonTyreFeatureMart,
   type YangonTyreRoleStory,
   type YangonTyreTopicPipeline,
+  type YangonTyreCaptureNode,
   type YangonTyreWritebackLane,
 } from './yangonTyreDataFabricModel'
 import { YANGON_TYRE_CONNECTOR_EXPANSION, YANGON_TYRE_SOURCE_PACKS } from './yangonTyreDriveModel'
@@ -155,6 +159,10 @@ export type DataFabricAgentHandoff = {
   payload: string[]
 }
 
+export type DataFabricCaptureNode = YangonTyreCaptureNode
+
+export type DataFabricEnterpriseChainLink = YangonTyreEnterpriseChainLink
+
 export type DataFabricDataset = {
   source: DataFabricSource
   updatedAt: string | null
@@ -167,6 +175,8 @@ export type DataFabricDataset = {
   changeLineage: DataFabricChangeLineageEvent[]
   managerPrograms: DataFabricManagerProgram[]
   agentHandoffs: DataFabricAgentHandoff[]
+  captureNodes: DataFabricCaptureNode[]
+  enterpriseChain: DataFabricEnterpriseChainLink[]
   pipelineStages: YangonTyreDataPipelineStage[]
   topicPipelines: YangonTyreTopicPipeline[]
   featureMarts: YangonTyreFeatureMart[]
@@ -252,6 +262,8 @@ export type DataFabricPayload = {
       signal_at?: string | null
     }
   >
+  capture_nodes?: DataFabricCaptureNode[]
+  enterprise_chain?: DataFabricEnterpriseChainLink[]
   pipeline_stages?: YangonTyreDataPipelineStage[]
   topic_pipelines?: YangonTyreTopicPipeline[]
   feature_marts?: YangonTyreFeatureMart[]
@@ -470,6 +482,151 @@ function normalizeAgentHandoff(
     route: item.route ?? fallbackItem.route,
     signalAt: item.signalAt ?? item.signal_at ?? fallbackItem.signalAt,
     payload: payload.length ? payload : fallbackItem.payload,
+  }
+}
+
+function normalizeCaptureNode(
+  item: DataFabricCaptureNode,
+  fallbackItem: DataFabricCaptureNode,
+): DataFabricCaptureNode {
+  return {
+    id: item.id ?? fallbackItem.id,
+    name: item.name ?? fallbackItem.name,
+    status: normalizeSourceRegistryStatus(typeof item.status === 'string' ? item.status : fallbackItem.status),
+    location: item.location ?? fallbackItem.location,
+    team: item.team ?? fallbackItem.team,
+    sourceSurface: item.sourceSurface ?? fallbackItem.sourceSurface,
+    deviceCount: item.deviceCount ?? fallbackItem.deviceCount,
+    coverage: item.coverage ?? fallbackItem.coverage,
+    route: item.route ?? fallbackItem.route,
+    outputs: normalizeTextList(item.outputs).length ? normalizeTextList(item.outputs) : fallbackItem.outputs,
+    nextAutomation: item.nextAutomation ?? fallbackItem.nextAutomation,
+  }
+}
+
+function normalizeEnterpriseChainLink(
+  item: DataFabricEnterpriseChainLink,
+  fallbackItem: DataFabricEnterpriseChainLink,
+): DataFabricEnterpriseChainLink {
+  return {
+    id: item.id ?? fallbackItem.id,
+    name: item.name ?? fallbackItem.name,
+    status: normalizeSourceRegistryStatus(typeof item.status === 'string' ? item.status : fallbackItem.status),
+    focus: item.focus ?? fallbackItem.focus,
+    nodes: normalizeTextList(item.nodes).length ? normalizeTextList(item.nodes) : fallbackItem.nodes,
+    route: item.route ?? fallbackItem.route,
+    outputs: normalizeTextList(item.outputs).length ? normalizeTextList(item.outputs) : fallbackItem.outputs,
+  }
+}
+
+function normalizePipelineStage(
+  item: Partial<YangonTyreDataPipelineStage> & { review_gate?: string },
+  fallbackItem: YangonTyreDataPipelineStage,
+): YangonTyreDataPipelineStage {
+  return {
+    id: item.id ?? fallbackItem.id,
+    name: item.name ?? fallbackItem.name,
+    status: normalizeSourceRegistryStatus(typeof item.status === 'string' ? item.status : fallbackItem.status),
+    purpose: item.purpose ?? fallbackItem.purpose,
+    sources: normalizeTextList(item.sources).length ? normalizeTextList(item.sources) : fallbackItem.sources,
+    outputs: normalizeTextList(item.outputs).length ? normalizeTextList(item.outputs) : fallbackItem.outputs,
+    agents: normalizeTextList(item.agents).length ? normalizeTextList(item.agents) : fallbackItem.agents,
+    reviewGate: item.reviewGate ?? item.review_gate ?? fallbackItem.reviewGate,
+  }
+}
+
+function normalizeTopicPipeline(
+  item: Partial<YangonTyreTopicPipeline> & {
+    source_packs?: string[]
+    connector_tracks?: string[]
+    role_stories?: string[]
+  },
+  fallbackItem: YangonTyreTopicPipeline,
+): YangonTyreTopicPipeline {
+  const sourcePacks = normalizeTextList(item.sourcePacks ?? item.source_packs)
+  const connectorTracks = normalizeTextList(item.connectorTracks ?? item.connector_tracks)
+  const transforms = normalizeTextList(item.transforms)
+  const outputs = normalizeTextList(item.outputs)
+  const roleStories = normalizeTextList(item.roleStories ?? item.role_stories)
+  return {
+    id: item.id ?? fallbackItem.id,
+    name: item.name ?? fallbackItem.name,
+    status: normalizeSourceRegistryStatus(typeof item.status === 'string' ? item.status : fallbackItem.status),
+    scope: item.scope ?? fallbackItem.scope,
+    sourcePacks: sourcePacks.length ? sourcePacks : fallbackItem.sourcePacks,
+    connectorTracks: connectorTracks.length ? connectorTracks : fallbackItem.connectorTracks,
+    transforms: transforms.length ? transforms : fallbackItem.transforms,
+    outputs: outputs.length ? outputs : fallbackItem.outputs,
+    roleStories: roleStories.length ? roleStories : fallbackItem.roleStories,
+  }
+}
+
+function normalizeFeatureMart(
+  item: Partial<YangonTyreFeatureMart>,
+  fallbackItem: YangonTyreFeatureMart,
+): YangonTyreFeatureMart {
+  return {
+    id: item.id ?? fallbackItem.id,
+    name: item.name ?? fallbackItem.name,
+    status: normalizeSourceRegistryStatus(typeof item.status === 'string' ? item.status : fallbackItem.status),
+    grain: item.grain ?? fallbackItem.grain,
+    sources: normalizeTextList(item.sources).length ? normalizeTextList(item.sources) : fallbackItem.sources,
+    features: normalizeTextList(item.features).length ? normalizeTextList(item.features) : fallbackItem.features,
+    consumers: normalizeTextList(item.consumers).length ? normalizeTextList(item.consumers) : fallbackItem.consumers,
+    cadence: item.cadence ?? fallbackItem.cadence,
+  }
+}
+
+function normalizeRoleStory(
+  item: Partial<YangonTyreRoleStory>,
+  fallbackItem: YangonTyreRoleStory,
+): YangonTyreRoleStory {
+  return {
+    id: item.id ?? fallbackItem.id,
+    role: item.role ?? fallbackItem.role,
+    name: item.name ?? fallbackItem.name,
+    route: item.route ?? fallbackItem.route,
+    inputs: normalizeTextList(item.inputs).length ? normalizeTextList(item.inputs) : fallbackItem.inputs,
+    questions: normalizeTextList(item.questions).length ? normalizeTextList(item.questions) : fallbackItem.questions,
+    outputs: normalizeTextList(item.outputs).length ? normalizeTextList(item.outputs) : fallbackItem.outputs,
+  }
+}
+
+function normalizeCopilot(
+  item: Partial<YangonTyreDataCopilot> & { lead_role?: string; write_policy?: string },
+  fallbackItem: YangonTyreDataCopilot,
+): YangonTyreDataCopilot {
+  return {
+    id: item.id ?? fallbackItem.id,
+    name: item.name ?? fallbackItem.name,
+    leadRole: item.leadRole ?? item.lead_role ?? fallbackItem.leadRole,
+    mission: item.mission ?? fallbackItem.mission,
+    cadence: normalizeTextList(item.cadence).length ? normalizeTextList(item.cadence) : fallbackItem.cadence,
+    outputs: normalizeTextList(item.outputs).length ? normalizeTextList(item.outputs) : fallbackItem.outputs,
+    writePolicy: item.writePolicy ?? item.write_policy ?? fallbackItem.writePolicy,
+  }
+}
+
+function normalizeWritebackLane(
+  item: Partial<YangonTyreWritebackLane> & {
+    quality_rules?: string[]
+    downstream_marts?: string[]
+    downstream_stories?: string[]
+  },
+  fallbackItem: YangonTyreWritebackLane,
+): YangonTyreWritebackLane {
+  const qualityRules = normalizeTextList(item.qualityRules ?? item.quality_rules)
+  const downstreamMarts = normalizeTextList(item.downstreamMarts ?? item.downstream_marts)
+  const downstreamStories = normalizeTextList(item.downstreamStories ?? item.downstream_stories)
+  return {
+    id: item.id ?? fallbackItem.id,
+    name: item.name ?? fallbackItem.name,
+    route: item.route ?? fallbackItem.route,
+    users: normalizeTextList(item.users).length ? normalizeTextList(item.users) : fallbackItem.users,
+    captures: normalizeTextList(item.captures).length ? normalizeTextList(item.captures) : fallbackItem.captures,
+    qualityRules: qualityRules.length ? qualityRules : fallbackItem.qualityRules,
+    downstreamMarts: downstreamMarts.length ? downstreamMarts : fallbackItem.downstreamMarts,
+    downstreamStories: downstreamStories.length ? downstreamStories : fallbackItem.downstreamStories,
   }
 }
 
@@ -736,6 +893,8 @@ export function getSeedDataFabricDataset(): DataFabricDataset {
     changeLineage: YANGON_TYRE_DRIVE_CHANGE_LINEAGE_SEED.map((item) => ({ ...item })),
     managerPrograms,
     agentHandoffs,
+    captureNodes: YANGON_TYRE_CAPTURE_NODES.map((item) => ({ ...item, outputs: [...item.outputs] })),
+    enterpriseChain: YANGON_TYRE_ENTERPRISE_CHAIN.map((item) => ({ ...item, nodes: [...item.nodes], outputs: [...item.outputs] })),
     pipelineStages: YANGON_TYRE_DATA_PIPELINE_STAGES,
     topicPipelines: YANGON_TYRE_TOPIC_PIPELINES,
     featureMarts: YANGON_TYRE_FEATURE_MARTS,
@@ -824,6 +983,16 @@ export function normalizeDataFabricDataset(payload?: DataFabricPayload | null, s
           normalizeAgentHandoff(item, fallback.agentHandoffs[index] ?? fallback.agentHandoffs[0]),
         )
       : fallback.agentHandoffs
+  const captureNodes =
+    payload?.capture_nodes?.length
+      ? payload.capture_nodes.map((item, index) => normalizeCaptureNode(item, fallback.captureNodes[index] ?? fallback.captureNodes[0]))
+      : fallback.captureNodes
+  const enterpriseChain =
+    payload?.enterprise_chain?.length
+      ? payload.enterprise_chain.map((item, index) =>
+          normalizeEnterpriseChainLink(item, fallback.enterpriseChain[index] ?? fallback.enterpriseChain[0]),
+        )
+      : fallback.enterpriseChain
 
   return {
     source,
@@ -847,12 +1016,26 @@ export function normalizeDataFabricDataset(payload?: DataFabricPayload | null, s
     changeLineage,
     managerPrograms,
     agentHandoffs,
-    pipelineStages: payload?.pipeline_stages ?? fallback.pipelineStages,
-    topicPipelines: payload?.topic_pipelines ?? fallback.topicPipelines,
-    featureMarts: payload?.feature_marts ?? fallback.featureMarts,
-    roleStories: payload?.role_stories ?? fallback.roleStories,
-    copilots: payload?.copilots ?? fallback.copilots,
-    writebackLanes: payload?.writeback_lanes ?? fallback.writebackLanes,
+    captureNodes,
+    enterpriseChain,
+    pipelineStages: payload?.pipeline_stages?.length
+      ? payload.pipeline_stages.map((item, index) => normalizePipelineStage(item, fallback.pipelineStages[index] ?? fallback.pipelineStages[0]))
+      : fallback.pipelineStages,
+    topicPipelines: payload?.topic_pipelines?.length
+      ? payload.topic_pipelines.map((item, index) => normalizeTopicPipeline(item, fallback.topicPipelines[index] ?? fallback.topicPipelines[0]))
+      : fallback.topicPipelines,
+    featureMarts: payload?.feature_marts?.length
+      ? payload.feature_marts.map((item, index) => normalizeFeatureMart(item, fallback.featureMarts[index] ?? fallback.featureMarts[0]))
+      : fallback.featureMarts,
+    roleStories: payload?.role_stories?.length
+      ? payload.role_stories.map((item, index) => normalizeRoleStory(item, fallback.roleStories[index] ?? fallback.roleStories[0]))
+      : fallback.roleStories,
+    copilots: payload?.copilots?.length
+      ? payload.copilots.map((item, index) => normalizeCopilot(item, fallback.copilots[index] ?? fallback.copilots[0]))
+      : fallback.copilots,
+    writebackLanes: payload?.writeback_lanes?.length
+      ? payload.writeback_lanes.map((item, index) => normalizeWritebackLane(item, fallback.writebackLanes[index] ?? fallback.writebackLanes[0]))
+      : fallback.writebackLanes,
     bigPicture: {
       thesis: payload?.big_picture?.thesis ?? fallback.bigPicture.thesis,
       currentTruth: payload?.big_picture?.current_truth ?? fallback.bigPicture.currentTruth,

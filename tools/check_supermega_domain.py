@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
+import shutil
 import socket
 import ssl
+import subprocess
 import threading
 import time
 import urllib.error
@@ -181,7 +184,73 @@ def _tls_check(hostname: str, timeout_seconds: float = 4.0) -> CheckResult:
     )
 
 
-def _http_check(url: str, timeout_seconds: float = 4.0) -> CheckResult:
+def _parse_http_body_for_asset(body: str) -> str:
+    asset_match = re.search(r"/assets/index-[^\"']+\.js", body)
+    return asset_match.group(0) if asset_match else ""
+
+
+def _http_check_with_curl(url: str, timeout_seconds: float) -> CheckResult | None:
+    curl_path = shutil.which("curl")
+    if not curl_path:
+        return None
+
+    completed = subprocess.run(
+        [
+            curl_path,
+            "-4",
+            "-L",
+            "-sS",
+            "--max-time",
+            str(max(int(timeout_seconds), 1)),
+            "-A",
+            "supermega-domain-check/1.0",
+            "-H",
+            "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "-o",
+            "-",
+            "-w",
+            "\n__SM_STATUS__:%{http_code}\n__SM_FINAL_URL__:%{url_effective}\n__SM_SERVER__:%header{server}",
+            url,
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if completed.returncode != 0:
+        detail = completed.stderr.strip() or f"curl_failed_{completed.returncode}"
+        return CheckResult(target=f"http:{url}", status="error", detail=f"request_failed: {detail}", meta={"url": url})
+
+    body_and_status, _, server = completed.stdout.partition("\n__SM_SERVER__:")
+    body, _, trailer = body_and_status.rpartition("\n__SM_STATUS__:")
+    status_raw, _, final_url = trailer.partition("\n__SM_FINAL_URL__:")
+    status_code = int(status_raw.strip() or "0")
+    if status_code >= 400 or status_code <= 0:
+        return CheckResult(
+            target=f"http:{url}",
+            status="error",
+            detail=f"http_error_{status_code}",
+            meta={"url": url, "status_code": status_code, "final_url": final_url.strip() or url},
+        )
+
+    return CheckResult(
+        target=f"http:{url}",
+        status="ready",
+        detail="request_ok",
+        meta={
+            "url": url,
+            "status_code": status_code,
+            "final_url": final_url.strip() or url,
+            "server": server.strip(),
+            "asset": _parse_http_body_for_asset(body),
+        },
+    )
+
+
+def _http_check(url: str, timeout_seconds: float = 12.0) -> CheckResult:
+    curl_result = _http_check_with_curl(url, timeout_seconds)
+    if curl_result is not None:
+        return curl_result
+
     result: dict[str, Any] = {}
     error: dict[str, Exception] = {}
 
@@ -191,6 +260,11 @@ def _http_check(url: str, timeout_seconds: float = 4.0) -> CheckResult:
             with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
                 result["status_code"] = response.getcode()
                 result["final_url"] = response.geturl()
+                result["server"] = response.headers.get("server", "")
+                result["content_type"] = response.headers.get_content_type()
+                if result["content_type"] == "text/html":
+                    body = response.read(262144).decode("utf-8", errors="replace")
+                    result["asset"] = _parse_http_body_for_asset(body)
         except Exception as exc:  # noqa: BLE001
             error["exc"] = exc
 
@@ -223,6 +297,8 @@ def _http_check(url: str, timeout_seconds: float = 4.0) -> CheckResult:
 
     status_code = int(result.get("status_code", 0) or 0)
     final_url = str(result.get("final_url", url))
+    server = str(result.get("server", "")).strip()
+    asset = str(result.get("asset", "")).strip()
     return CheckResult(
         target=f"http:{url}",
         status="ready",
@@ -231,6 +307,8 @@ def _http_check(url: str, timeout_seconds: float = 4.0) -> CheckResult:
             "url": url,
             "status_code": status_code,
             "final_url": final_url,
+            "server": server,
+            "asset": asset,
         },
     )
 

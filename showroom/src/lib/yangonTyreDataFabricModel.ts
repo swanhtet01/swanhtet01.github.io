@@ -72,6 +72,30 @@ export type YangonTyreWritebackLane = {
   downstreamStories: string[]
 }
 
+export type YangonTyreCaptureNode = {
+  id: string
+  name: string
+  status: DataFabricStatus
+  location: string
+  team: string
+  sourceSurface: string
+  deviceCount: number
+  coverage: string
+  route: string
+  outputs: string[]
+  nextAutomation: string
+}
+
+export type YangonTyreEnterpriseChainLink = {
+  id: string
+  name: string
+  status: DataFabricStatus
+  focus: string
+  nodes: string[]
+  route: string
+  outputs: string[]
+}
+
 export const YANGON_TYRE_DATA_FABRIC_DIALECTIC = {
   thesis:
     'Every folder, sheet, email thread, and team update should become reusable tenant memory that can feed operational control, data science, and role-specific briefing.',
@@ -80,6 +104,156 @@ export const YANGON_TYRE_DATA_FABRIC_DIALECTIC = {
   synthesis:
     'Data Fabric watches the source mesh, extracts topic-aware records, builds feature marts, generates role stories, and loops humans back into structured writeback lanes.',
 } as const
+
+export const YANGON_TYRE_CAPTURE_NODES: YangonTyreCaptureNode[] = [
+  {
+    id: 'prod-office-a',
+    name: 'Production office A',
+    status: 'live',
+    location: 'Plant A / production office',
+    team: 'Production planning and shift coordination',
+    sourceSurface: 'Google Drive folders and operating sheets',
+    deviceCount: 1,
+    coverage: 'Shift planning, line follow-up, production updates, and manager-facing plant evidence are already entering the shared Drive spine.',
+    route: '/app/operations',
+    outputs: ['shift blockers', 'production updates', 'plant task evidence'],
+    nextAutomation: 'Turn sheet and folder changes into timestamped plant events with owner and stage tagging.',
+  },
+  {
+    id: 'prod-office-b',
+    name: 'Production office B',
+    status: 'live',
+    location: 'Plant A / production office',
+    team: 'Production office second station',
+    sourceSurface: 'Google Drive folders and operating sheets',
+    deviceCount: 1,
+    coverage: 'Second production office PC extends live capture of planning, execution follow-up, and daily plant coordination.',
+    route: '/app/operations',
+    outputs: ['daily production evidence', 'handoff notes', 'line-level support records'],
+    nextAutomation: 'Deduplicate repeated updates across the two production office stations and bind them into one plant event ledger.',
+  },
+  {
+    id: 'admin-office-a',
+    name: 'Admin office A',
+    status: 'live',
+    location: 'Plant A / admin',
+    team: 'Plant admin and document control',
+    sourceSurface: 'Google Drive folders, forms, and document packs',
+    deviceCount: 1,
+    coverage: 'Admin-side paperwork, ISO forms, and operating documents now contribute to the same evidence estate instead of sitting beside it.',
+    route: '/app/connectors',
+    outputs: ['document control evidence', 'admin support records', 'plant governance artifacts'],
+    nextAutomation: 'Promote document changes into governed lineage and task-ready admin events.',
+  },
+  {
+    id: 'admin-office-b',
+    name: 'Admin office B',
+    status: 'live',
+    location: 'Plant A / admin',
+    team: 'Admin and internal coordination',
+    sourceSurface: 'Google Drive folders and support spreadsheets',
+    deviceCount: 1,
+    coverage: 'Second admin PC closes the gap between plant-side coordination and the formal document or approval trail.',
+    route: '/app/approvals',
+    outputs: ['support records', 'approval context', 'admin corrections'],
+    nextAutomation: 'Route approval and admin deltas into one shared control queue instead of separate folders.',
+  },
+  {
+    id: 'qc-station',
+    name: 'QC station',
+    status: 'live',
+    location: 'Plant A / QC',
+    team: 'Quality control',
+    sourceSurface: 'Google Drive quality files and inspection sheets',
+    deviceCount: 1,
+    coverage: 'QC evidence gives the system the quality side of the plant loop, including inspection, incidents, and release-facing context.',
+    route: '/app/dqms',
+    outputs: ['inspection evidence', 'quality incidents', 'release context'],
+    nextAutomation: 'Promote QC file changes into incident-ready lineage and defect-family tracking.',
+  },
+  {
+    id: 'plant-b-station',
+    name: 'Plant B side station',
+    status: 'live',
+    location: 'Plant B',
+    team: 'Plant B operations',
+    sourceSurface: 'Google Drive folders and local operating sheets',
+    deviceCount: 1,
+    coverage: 'Plant B is now represented in the same evidence estate, which makes multi-site production and supply follow-up possible.',
+    route: '/app/operations',
+    outputs: ['Plant B operations evidence', 'cross-site plant comparison', 'site-specific blockers'],
+    nextAutomation: 'Normalize Plant B updates into the same stage dictionary used by Plant A so both sites can share metrics and alerts.',
+  },
+  {
+    id: 'showroom-sales',
+    name: 'Showroom sales lane',
+    status: 'mapped',
+    location: 'Showroom',
+    team: 'Sales and demand',
+    sourceSurface: 'Planned Google Drive lane for showroom PCs',
+    deviceCount: 1,
+    coverage: 'This is the next live commercial step: connect showroom PC evidence so inquiries, account notes, and sales movement share one demand graph.',
+    route: '/app/revenue',
+    outputs: ['sales movement', 'account updates', 'customer memory'],
+    nextAutomation: 'Turn showroom Drive deltas into account events, pipeline movement, and quote-ready history.',
+  },
+  {
+    id: 'showroom-accounts',
+    name: 'Showroom accounts lane',
+    status: 'mapped',
+    location: 'Showroom',
+    team: 'Money, collections, and local accounts',
+    sourceSurface: 'Planned Google Drive lane for showroom finance records',
+    deviceCount: 1,
+    coverage: 'A second showroom PC would complete the commercial side by adding local money, settlement, and account-support evidence.',
+    route: '/app/approvals',
+    outputs: ['showroom finance context', 'commercial payment support', 'account packet evidence'],
+    nextAutomation: 'Bind showroom accounts records into approvals, cash follow-up, and customer-level commercial packets.',
+  },
+  {
+    id: 'head-office-chain',
+    name: 'Head office supply-chain and finance lane',
+    status: 'next',
+    location: 'Head office',
+    team: 'Supply chain, finance, admin, and government docs',
+    sourceSurface: 'Planned Google Drive and document-control lane',
+    deviceCount: 1,
+    coverage: 'This final lane completes the company chain by bringing supply chain, finance, corporate admin, and government documents into the same governed memory.',
+    route: '/app/director',
+    outputs: ['supply-chain records', 'finance evidence', 'government and company documents'],
+    nextAutomation: 'Promote head-office records into the director graph, supplier approvals, finance packets, and document-governance controls.',
+  },
+] as const
+
+export const YANGON_TYRE_ENTERPRISE_CHAIN: YangonTyreEnterpriseChainLink[] = [
+  {
+    id: 'factory-core',
+    name: 'Factory operating core',
+    status: 'live',
+    focus: 'Plant A production, admin, QC, and Plant B now form the live evidence base for the operating system.',
+    nodes: ['Production office A', 'Production office B', 'Admin office A', 'Admin office B', 'QC station', 'Plant B side station'],
+    route: '/app/operations',
+    outputs: ['plant operations memory', 'quality evidence', 'site coordination graph'],
+  },
+  {
+    id: 'showroom-commercial',
+    name: 'Showroom commercial and money loop',
+    status: 'mapped',
+    focus: 'One or two showroom PCs would complete the sales, customer, and local money side of the chain.',
+    nodes: ['Showroom sales lane', 'Showroom accounts lane'],
+    route: '/app/revenue',
+    outputs: ['live sales memory', 'customer and account history', 'commercial finance support'],
+  },
+  {
+    id: 'head-office-governance',
+    name: 'Head office supply-chain and governance loop',
+    status: 'next',
+    focus: 'Head office completes the ERP-grade chain with supply, finance, company admin, and government-document control.',
+    nodes: ['Head office supply-chain and finance lane'],
+    route: '/app/director',
+    outputs: ['enterprise finance evidence', 'supply-chain control', 'company and government document governance'],
+  },
+] as const
 
 export const YANGON_TYRE_DATA_PIPELINE_STAGES: YangonTyreDataPipelineStage[] = [
   {

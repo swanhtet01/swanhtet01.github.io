@@ -36,7 +36,8 @@ def _extract_text_from_workbook(data: bytes) -> tuple[str, dict[str, Any]]:
     lines: list[str] = []
     for sheet in workbook.worksheets[:3]:
         preview_rows: list[list[str]] = []
-        for row in sheet.iter_rows(max_row=8, max_col=8, values_only=True):
+        lines.append(f"Sheet: {sheet.title}")
+        for row in sheet.iter_rows(max_row=20, max_col=12, values_only=True):
             values = [str(value).strip() for value in row if value not in {None, ""}]
             if values:
                 preview_rows.append(values)

@@ -232,6 +232,8 @@ const quickRooms = [
   { name: 'Exceptions', route: '/app/exceptions', group: 'Today', detail: 'What is starting to break', keywords: ['exceptions', 'risk', 'issues'] },
   { name: 'Approvals', route: '/app/approvals', group: 'Today', detail: 'Pending approval calls', keywords: ['approvals', 'review', 'decision'] },
   { name: 'Adoption Command', route: '/app/adoption-command', group: 'Today', detail: 'Live role scoring, writeback health, and manager rituals', keywords: ['adoption', 'command', 'training', 'data entry', 'ritual', 'usage'] },
+  { name: 'Daily Entry', route: '/app/daily-entry', group: 'Today', detail: 'Simple manager forms for handoff, quality, maintenance, receiving, and KPI capture', keywords: ['daily entry', 'form', 'capture', 'manager input', 'writeback', 'handoff'] },
+  { name: 'Invisible ISO', route: '/app/invisible-iso', group: 'Today', detail: 'Hidden standard-work, manager coaching, and AI-backed quality routines', keywords: ['invisible iso', 'training', 'manager coaching', 'standard work', 'voice capture', 'quality'] },
   { name: 'Workforce', route: '/app/workforce', group: 'Today', detail: 'Role routines, AI coworkers, and manager review loops', keywords: ['workforce', 'roles', 'daily routine', 'staff', 'manager review'] },
   { name: 'Sales', route: '/app/sales', group: 'Workstreams', detail: 'Commercial workspace', keywords: ['sales', 'crm', 'pipeline', 'leads'] },
   { name: 'Operations', route: '/app/operations', group: 'Workstreams', detail: 'Operations workspace', keywords: ['operations', 'ops', 'plant'] },
@@ -239,6 +241,8 @@ const quickRooms = [
   { name: 'DQMS', route: '/app/dqms', group: 'Workstreams', detail: 'Quality and CAPA', keywords: ['quality', 'dqms', 'capa', 'fishbone', '5w1h'] },
   { name: 'Maintenance', route: '/app/maintenance', group: 'Workstreams', detail: 'Asset reliability and downtime', keywords: ['maintenance', 'breakdown', 'pm'] },
   { name: 'Cloud Ops', route: '/app/cloud', group: 'Runtime', detail: 'Cloud pods, environments, and internal control surfaces', keywords: ['cloud', 'ops', 'pods', 'environments', 'internal tools'] },
+  { name: 'Meta Tools', route: '/app/meta-tools', group: 'Runtime', detail: 'Infrastructure access map, run actions, external runtimes, and agent controls', keywords: ['meta tools', 'infrastructure', 'cloud runtime', 'run actions', 'external agents'] },
+  { name: 'Process Organizer', route: '/app/process', group: 'Runtime', detail: 'Workstream support, Codex handoffs, progress review, and delegation cadence', keywords: ['process', 'organizer', 'progress', 'codex threads', 'handoff', 'meeting', 'support'] },
   { name: 'supermega.dev', route: '/app/supermega-dev', group: 'Runtime', detail: 'Domain, deploy, smoke, and machine control for the whole platform', keywords: ['supermega.dev', 'domain', 'deploy', 'smoke', 'machine', 'site'] },
   { name: 'Model Ops', route: '/app/model-ops', group: 'Runtime', detail: 'Provider lanes, routing contracts, and benchmark drills', keywords: ['model ops', 'provider routing', 'benchmarks', 'evals', 'llm'] },
   { name: 'Runtime', route: '/app/runtime', group: 'Runtime', detail: 'Runtime health and trust', keywords: ['runtime', 'connectors', 'autonomy'] },
@@ -251,6 +255,7 @@ const quickRooms = [
   { name: 'Agent Ops', route: '/app/teams', group: 'Change', detail: 'AI workforce and run control', keywords: ['agents', 'teams', 'ai', 'ops'] },
   { name: 'Foundry', route: '/app/foundry', group: 'Change', detail: 'Release desk for hackathons, promotion lanes, and module graduation', keywords: ['foundry', 'release desk', 'hackathon', 'promotion'] },
   { name: 'Build', route: '/app/factory', group: 'Change', detail: 'Build and module factory', keywords: ['build', 'factory', 'r&d'] },
+  { name: 'Portal Factory', route: '/app/portal-factory', group: 'Change', detail: 'Assemble industry templates, module packs, agent layers, and launchable client portals', keywords: ['portal factory', 'templates', 'modules', 'industry kits', 'agent runtime'] },
   { name: 'Product Ops', route: '/app/product-ops', group: 'Change', detail: 'Programs and release posture', keywords: ['product', 'ops', 'release'] },
   { name: 'Platform Admin', route: '/app/platform-admin', group: 'Change', detail: 'Tenant model and rollout posture', keywords: ['platform', 'admin', 'tenant'] },
   { name: 'Architect', route: '/app/architect', group: 'Change', detail: 'Blueprint and rollout design', keywords: ['architect', 'blueprint', 'solution'] },
@@ -712,15 +717,16 @@ export function MetaWorkspacePage() {
   )
 
   const filteredRooms = useMemo(() => {
+    const visibleQuickRooms = tenant.siteMode === 'client' ? quickRooms.filter((item) => item.route !== '/app/process') : quickRooms
     const normalizedQuery = commandQuery.trim().toLowerCase()
     if (!normalizedQuery) {
-      return quickRooms
+      return visibleQuickRooms
     }
-    return quickRooms.filter((item) => {
+    return visibleQuickRooms.filter((item) => {
       const haystack = [item.name, item.group, item.detail, ...item.keywords].join(' ').toLowerCase()
       return haystack.includes(normalizedQuery)
     })
-  }, [commandQuery])
+  }, [commandQuery, tenant.siteMode])
 
   const capabilityProfile = useMemo(
     () => getCapabilityProfileForRole(summary?.session?.role),
@@ -1757,6 +1763,7 @@ export function MetaWorkspacePage() {
               { name: 'Runtime', route: '/app/runtime', state: 'Live', detail: 'Track connector freshness, canon quality, autonomy loops, and guardrails.' },
               { name: 'Foundry', route: '/app/foundry', state: 'Live + model', detail: 'Run hackathon tracks, release desks, and module promotion flow.' },
               { name: 'Build', route: '/app/factory', state: 'Model / planning', detail: 'Build workspaces, release gates, and module-factory lanes.' },
+              { name: 'Portal Factory', route: '/app/portal-factory', state: 'Assembly line', detail: 'Package templates, modules, agents, data plugs, and launch checks into sellable client portals.' },
               { name: 'Product Ops', route: '/app/product-ops', state: 'Model / planning', detail: 'Programs, release trains, and delivery posture.' },
               { name: 'Architect', route: '/app/architect', state: 'Live + model', detail: 'Translate client problems into rollout blueprints.' },
             ].map((item) => (

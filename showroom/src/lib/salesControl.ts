@@ -80,7 +80,7 @@ export type LabTrack = {
 export const CORE_SOLUTIONS: SellableSolution[] = [
   {
     id: 'spa-service-desk',
-    name: 'Spa Service Desk',
+    name: 'Service Desk POS',
     buyer: 'Spa owners, reception leads, wellness operators, and small service-retail teams.',
     pain: 'Use this when bookings, checkouts, cash-outs, and end-of-day numbers still live in chat, paper, or separate apps.',
     replaces: 'paper ledgers, generic POS, calculator-based daily close, and disconnected appointment notes',
@@ -165,7 +165,7 @@ export const PLATFORM_LAYER_DETAILS: PlatformLayerDetail[] = [
 export const PUBLIC_PRODUCTS: PublicProduct[] = [
   {
     id: 'spa-service-desk',
-    name: 'Spa Service Desk',
+    name: 'Service Desk POS',
     status: 'Live now',
     audience: 'Spa owners and service businesses that need front-desk checkout and daily accounting in one place.',
     promise: 'Keep checkouts, cash-outs, therapist ownership, and daily close on the same live desk.',
@@ -240,7 +240,7 @@ export const STARTER_PACK_DETAILS: StarterPackDetail[] = [
   {
     id: 'spa-service-desk',
     slug: 'spa-service-desk',
-    name: 'Spa Service Desk',
+    name: 'Service Desk POS',
     eyebrow: 'Live product',
     audience: 'Spa owners, front desk staff, and service-retail operators',
     promise: 'Run front desk checkout, cash-out logging, and daily close from one simple workspace that can later scale into a broader service-retail operating system.',
@@ -281,7 +281,7 @@ export const STARTER_PACK_DETAILS: StarterPackDetail[] = [
         detail: 'Review collected revenue, cash on hand, commissions, and pending checkouts in one place.',
       },
     ],
-    proofTool: { label: 'Open live product', route: '/app/service-desk' },
+    proofTool: { label: 'Open live spa desk', route: '/app/service-desk' },
     setupPath: [
       'Load the single-site service list, staff roster, and opening cash float.',
       'Use one front desk checkout form for every treatment and retail add-on.',

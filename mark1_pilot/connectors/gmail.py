@@ -170,7 +170,7 @@ class GmailProbe:
             )
             if credentials.expired and credentials.refresh_token:
                 credentials.refresh(Request())
-            service = build("gmail", "v1", credentials=credentials, cache_discovery=False)
+            service = build("gmail", "v1", credentials=credentials, cache_discovery=False, static_discovery=False)
             profile = service.users().getProfile(userId="me").execute()
             return {
                 "status": "ready",
@@ -558,8 +558,12 @@ class GmailProbe:
             )
             if credentials.expired and credentials.refresh_token:
                 credentials.refresh(Request())
+                try:
+                    self.token_json.write_text(credentials.to_json(), encoding="utf-8")
+                except OSError:
+                    pass
 
-            service = build("gmail", "v1", credentials=credentials, cache_discovery=False)
+            service = build("gmail", "v1", credentials=credentials, cache_discovery=False, static_discovery=False)
             listing = service.users().messages().list(
                 userId="me",
                 q=query,
@@ -594,6 +598,8 @@ class GmailProbe:
             return {
                 "status": "ready",
                 "query": query,
+                "result_size_estimate": listing.get("resultSizeEstimate", 0),
+                "next_page_token": listing.get("nextPageToken", ""),
                 "messages": results,
             }
         except Exception as exc:
@@ -644,7 +650,7 @@ class GmailProbe:
             if credentials.expired and credentials.refresh_token:
                 credentials.refresh(Request())
 
-            service = build("gmail", "v1", credentials=credentials, cache_discovery=False)
+            service = build("gmail", "v1", credentials=credentials, cache_discovery=False, static_discovery=False)
             message = EmailMessage()
             if str(to or "").strip():
                 message["To"] = str(to).strip()

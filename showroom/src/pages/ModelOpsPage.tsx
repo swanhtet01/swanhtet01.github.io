@@ -276,9 +276,9 @@ export function ModelOpsPage() {
 
       <section className="grid gap-4 xl:grid-cols-3">
         {[
-          { label: 'Thesis', detail: payload.dialectic.thesis },
-          { label: 'Antithesis', detail: payload.dialectic.antithesis },
-          { label: 'Synthesis', detail: payload.dialectic.synthesis },
+          { label: 'Current model', detail: payload.dialectic.thesis },
+          { label: 'Operating pressure', detail: payload.dialectic.antithesis },
+          { label: 'Next operating model', detail: payload.dialectic.synthesis },
         ].map((item) => (
           <article className="sm-site-panel" key={item.label}>
             <p className="sm-kicker text-[var(--sm-accent)]">{item.label}</p>

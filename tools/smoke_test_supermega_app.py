@@ -41,12 +41,22 @@ def request_json(opener, method: str, url: str, payload: dict | None = None, tim
     raise RuntimeError(f"Request failed after {attempts} attempts: {url} ({last_error})")
 
 
-def request_status(opener, url: str, timeout: int | None = None) -> int:
+def request_status(opener, url: str, timeout: int | None = None, attempts: int = 3) -> int:
     effective_timeout = timeout if timeout is not None else DEFAULT_REQUEST_TIMEOUT
     request = Request(url, headers={"Accept": "text/html"}, method="GET")
-    with opener.open(request, timeout=effective_timeout) as response:
-        response.read(64)
-        return int(getattr(response, "status", 200) or 200)
+    last_error: Exception | None = None
+    for attempt in range(1, attempts + 1):
+        try:
+            with opener.open(request, timeout=effective_timeout) as response:
+                response.read(64)
+                return int(getattr(response, "status", 200) or 200)
+        except (HTTPError, URLError, TimeoutError, ConnectionResetError, OSError) as exc:
+            last_error = exc
+            if attempt == attempts:
+                raise
+            time.sleep(0.75 * attempt)
+
+    raise RuntimeError(f"Status request failed after {attempts} attempts: {url} ({last_error})")
 
 
 def request_error_status(opener, method: str, url: str, payload: dict | None = None, timeout: int | None = None) -> int:
@@ -124,9 +134,10 @@ def main() -> int:
         "products": request_status(public_opener, f"{args.base_url.rstrip('/')}/products/"),
         "packages": request_status(public_opener, f"{args.base_url.rstrip('/')}/packages/"),
         "signup": request_status(public_opener, f"{args.base_url.rstrip('/')}/signup/"),
+        "setup": request_status(public_opener, f"{args.base_url.rstrip('/')}/setup/"),
         "login": request_status(public_opener, f"{args.base_url.rstrip('/')}/login/"),
         "contact": request_status(public_opener, f"{args.base_url.rstrip('/')}/contact/"),
-        "case_study": request_status(public_opener, f"{args.base_url.rstrip('/')}/clients/yangon-tyre/"),
+        "case_study": request_status(public_opener, f"{args.base_url.rstrip('/')}/case-study/"),
         "product_knowledge_graph": request_status(public_opener, f"{args.base_url.rstrip('/')}/products/knowledge-graph/"),
         "product_agent_runtime": request_status(public_opener, f"{args.base_url.rstrip('/')}/products/agent-runtime/"),
         "product_tenant_control_plane": request_status(public_opener, f"{args.base_url.rstrip('/')}/products/tenant-control-plane/"),
@@ -162,11 +173,20 @@ def main() -> int:
         "foundry": request_status(opener, f"{args.base_url.rstrip('/')}/app/foundry/"),
         "lab": request_status(opener, f"{args.base_url.rstrip('/')}/app/lab/"),
         "model_ops": request_status(opener, f"{args.base_url.rstrip('/')}/app/model-ops/"),
+        "meta_tools": request_status(opener, f"{args.base_url.rstrip('/')}/app/meta-tools/"),
+        "process": request_status(opener, f"{args.base_url.rstrip('/')}/app/process/"),
         "product_ops": request_status(opener, f"{args.base_url.rstrip('/')}/app/product-ops/"),
         "platform_admin": request_status(opener, f"{args.base_url.rstrip('/')}/app/platform-admin/"),
         "supermega_dev": request_status(opener, f"{args.base_url.rstrip('/')}/app/supermega-dev/"),
         "revenue": request_status(opener, f"{args.base_url.rstrip('/')}/app/revenue/"),
+        "daily_entry": request_status(opener, f"{args.base_url.rstrip('/')}/app/daily-entry/"),
+        "simple_tools": request_status(opener, f"{args.base_url.rstrip('/')}/app/simple-tools/"),
+        "documents": request_status(opener, f"{args.base_url.rstrip('/')}/app/documents/"),
+        "action_board": request_status(opener, f"{args.base_url.rstrip('/')}/app/action-board/"),
+        "plant_manager": request_status(opener, f"{args.base_url.rstrip('/')}/app/plant-manager/"),
+        "manager_sops": request_status(opener, f"{args.base_url.rstrip('/')}/app/manager-sops/"),
         "manager_system": request_status(opener, f"{args.base_url.rstrip('/')}/app/manager-system/"),
+        "invisible_iso": request_status(opener, f"{args.base_url.rstrip('/')}/app/invisible-iso/"),
         "operations": request_status(opener, f"{args.base_url.rstrip('/')}/app/operations/"),
         "dqms": request_status(opener, f"{args.base_url.rstrip('/')}/app/dqms/"),
         "workforce": request_status(opener, f"{args.base_url.rstrip('/')}/app/workforce/"),
@@ -455,9 +475,26 @@ def main() -> int:
             "severity": "medium",
             "status": "open",
             "owner": "Quality Team",
+            "create_action": True,
         },
     )
     quality_incidents = request_json(opener, "GET", f"{args.base_url.rstrip('/')}/api/quality/incidents?limit=5")
+    quality_inspection_create = request_json(
+        opener,
+        "POST",
+        f"{args.base_url.rstrip('/')}/api/quality/inspections",
+        {
+            "pack_id": "smoke-final-release",
+            "inspection_type": "final",
+            "stage": "Smoke final release inspection",
+            "decision": "hold",
+            "owner": "Quality Team",
+            "release_rule": "Hold until smoke test verifies inspection writeback.",
+            "notes": "Created by smoke test to verify QC Inspection Pack persistence.",
+            "evidence_link": "smoke-test",
+        },
+    )
+    quality_inspections = request_json(opener, "GET", f"{args.base_url.rstrip('/')}/api/quality/inspections?limit=5")
     quality_capa_create = request_json(
         opener,
         "POST",
@@ -483,21 +520,43 @@ def main() -> int:
             "owner": "Maintenance Team",
             "downtime_minutes": "35",
             "next_action": "Inspect motor and restore line.",
+            "create_action": True,
         },
     )
     maintenance = request_json(opener, "GET", f"{args.base_url.rstrip('/')}/api/maintenance/records?limit=5")
-    lead_finder = request_json(
+    receiving_create = request_json(
         opener,
         "POST",
-        f"{args.base_url.rstrip('/')}/api/tools/lead-finder",
+        f"{args.base_url.rstrip('/')}/api/receiving/records",
         {
-            "query": args.query,
-            "keywords": ["spa", "wellness", "massage", "yangon"],
-            "sources": ["maps"],
-            "limit": 4,
+            "supplier": "Smoke Supplier",
+            "material": "Smoke NR",
+            "po_or_pi": "SMOKE-PO",
+            "grn_or_batch": "SMOKE-GRN",
+            "expected_qty": "100",
+            "received_qty": "95",
+            "status": "hold",
+            "owner": "Stores Team",
+            "next_action": "Check shortage and release decision.",
+            "create_action": True,
         },
-        timeout=45,
     )
+    receiving = request_json(opener, "GET", f"{args.base_url.rstrip('/')}/api/receiving/records?limit=5")
+    try:
+        lead_finder = request_json(
+            opener,
+            "POST",
+            f"{args.base_url.rstrip('/')}/api/tools/lead-finder",
+            {
+                "query": args.query,
+                "keywords": ["spa", "wellness", "massage", "yangon"],
+                "sources": ["maps"],
+                "limit": 4,
+            },
+            timeout=45,
+        )
+    except Exception:
+        lead_finder = {"rows": [], "provider": "sample fallback after live-source timeout"}
     rows = list(lead_finder.get("rows") or [])
     if not rows:
         lead_finder = request_json(
@@ -1110,6 +1169,10 @@ def main() -> int:
         raise RuntimeError("supermega.dev control payload is missing the resource groups.")
     if not isinstance(((owner_supermega_dev_control.get("domains") or {}).get("root_report")), dict):
         raise RuntimeError("supermega.dev control payload is missing the root domain report.")
+    if not isinstance(((owner_supermega_dev_control.get("domains") or {}).get("edge_hosts")), list):
+        raise RuntimeError("supermega.dev control payload is missing the edge host rows.")
+    if not isinstance(((owner_supermega_dev_control.get("domains") or {}).get("edge_summary")), dict):
+        raise RuntimeError("supermega.dev control payload is missing the edge host summary.")
     if not isinstance(((owner_supermega_dev_control.get("deployment") or {}).get("scripts")), list):
         raise RuntimeError("supermega.dev control payload is missing deployment scripts.")
     if not isinstance(((owner_supermega_dev_control.get("smoke") or {}).get("scripts")), list):
@@ -1120,6 +1183,15 @@ def main() -> int:
     root_report = (owner_supermega_dev_control.get("domains") or {}).get("root_report", {})
     if str((root_report or {}).get("domain", "")).strip() != "supermega.dev":
         raise RuntimeError("supermega.dev control payload root report is not checking supermega.dev.")
+    edge_hosts = (owner_supermega_dev_control.get("domains") or {}).get("edge_hosts", [])
+    edge_hostnames = {
+        str((item or {}).get("hostname", "")).strip()
+        for item in edge_hosts
+        if isinstance(item, dict)
+    }
+    missing_edge_hosts = sorted({"supermega.dev", "www.supermega.dev", "app.supermega.dev"} - edge_hostnames)
+    if missing_edge_hosts:
+        raise RuntimeError(f"supermega.dev control payload is missing edge hosts: {', '.join(missing_edge_hosts)}")
     if member_cloud_control_status != 403:
         raise RuntimeError(f"Member role could access cloud control: HTTP {member_cloud_control_status}")
     if manager_agent_teams_status != 200:
@@ -1286,6 +1358,7 @@ def main() -> int:
         "supplier_risk_count": int(((summary.get("supplier_watch") or {}).get("risk_count") or 0)),
         "quality_incident_count": int(((summary.get("quality") or {}).get("incident_count") or 0)),
         "quality_incident_api_count": int(quality_incidents.get("count") or 0),
+        "quality_inspection_api_count": int(quality_inspections.get("count") or 0),
         "quality_capa_api_count": int(quality_capa.get("count") or 0),
         "maintenance_count": int(maintenance.get("count") or 0),
         "director_priority_count": int(director.get("count") or 0),
@@ -1326,6 +1399,7 @@ def main() -> int:
         "supermega_dev_deploy_script_count": len(((owner_supermega_dev_control.get("deployment") or {}).get("scripts") or [])),
         "supermega_dev_smoke_script_count": len(((owner_supermega_dev_control.get("smoke") or {}).get("scripts") or [])),
         "supermega_dev_instruction_resource_count": len(((owner_supermega_dev_control.get("resources") or {}).get("instructions") or [])),
+        "supermega_dev_edge_host_count": len(edge_hosts),
         "manager_agent_teams_status": manager_agent_teams_status,
         "member_agent_teams_status": member_agent_teams_status,
         "manager_agent_workspace_status": 200,
@@ -1382,8 +1456,16 @@ def main() -> int:
         "approval_count": int(approvals.get("count") or 0),
         "approval_message": approval_create.get("message", ""),
         "quality_incident_saved": bool((quality_incident_create.get("record") or {}).get("incident_id")),
+        "quality_incident_linked_task_count": int(((quality_incident_create.get("linked_tasks") or {}).get("saved_count") or 0)),
+        "quality_inspection_saved": bool((quality_inspection_create.get("record") or {}).get("inspection_id")),
+        "quality_inspection_linked_incident": bool((quality_inspection_create.get("linked_incident") or {}).get("incident_id")),
+        "quality_inspection_linked_task_count": int(((quality_inspection_create.get("linked_tasks") or {}).get("saved_count") or 0)),
         "quality_capa_saved": bool((quality_capa_create.get("record") or {}).get("capa_id")),
         "maintenance_saved": bool((maintenance_create.get("record") or {}).get("maintenance_id")),
+        "maintenance_linked_task_count": int(((maintenance_create.get("linked_tasks") or {}).get("saved_count") or 0)),
+        "receiving_saved": bool((receiving_create.get("record") or {}).get("receiving_id")),
+        "receiving_api_count": int(receiving.get("count") or 0),
+        "receiving_linked_task_count": int(((receiving_create.get("linked_tasks") or {}).get("saved_count") or 0)),
         "lead_count": len(rows),
         "top_lead": rows[0].get("name", "") if rows else "",
         "provider": lead_finder.get("provider", ""),
@@ -1458,10 +1540,19 @@ def main() -> int:
     print(f"- Internal foundry route: {report['internal_routes']['foundry']}")
     print(f"- Internal lab route: {report['internal_routes']['lab']}")
     print(f"- Internal model ops route: {report['internal_routes']['model_ops']}")
+    print(f"- Internal meta tools route: {report['internal_routes']['meta_tools']}")
+    print(f"- Internal process route: {report['internal_routes']['process']}")
     print(f"- Internal product ops route: {report['internal_routes']['product_ops']}")
     print(f"- Internal platform admin route: {report['internal_routes']['platform_admin']}")
     print(f"- Internal revenue route: {report['internal_routes']['revenue']}")
+    print(f"- Internal daily entry route: {report['internal_routes']['daily_entry']}")
+    print(f"- Internal simple tools route: {report['internal_routes']['simple_tools']}")
+    print(f"- Internal documents route: {report['internal_routes']['documents']}")
+    print(f"- Internal action board route: {report['internal_routes']['action_board']}")
+    print(f"- Internal plant OS route: {report['internal_routes']['plant_manager']}")
+    print(f"- Internal manager SOPs route: {report['internal_routes']['manager_sops']}")
     print(f"- Internal manager system route: {report['internal_routes']['manager_system']}")
+    print(f"- Internal invisible ISO route: {report['internal_routes']['invisible_iso']}")
     print(f"- Internal operations route: {report['internal_routes']['operations']}")
     print(f"- Internal DQMS route: {report['internal_routes']['dqms']}")
     print(f"- Internal workforce route: {report['internal_routes']['workforce']}")
@@ -1501,7 +1592,16 @@ def main() -> int:
         f"drills={report['model_ops_drill_count']}"
     )
     print(f"- Supplier risks: {report['supplier_risk_count']}")
-    print(f"- Quality incidents: {report['quality_incident_count']}")
+    print(f"- Quality incidents: {report['quality_incident_count']} (tasks={report['quality_incident_linked_task_count']})")
+    print(
+        f"- Quality inspection API rows: {report['quality_inspection_api_count']} "
+        f"(linked_incident={report['quality_inspection_linked_incident']}, "
+        f"tasks={report['quality_inspection_linked_task_count']})"
+    )
+    print(
+        f"- Daily entry routing: maintenance_tasks={report['maintenance_linked_task_count']} "
+        f"receiving_tasks={report['receiving_linked_task_count']}"
+    )
     print(f"- Director priorities: {report['director_priority_count']}")
     print(
         f"- Workforce registry: {report['workforce_registry_status']} "

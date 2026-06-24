@@ -2,36 +2,163 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
-    <link rel="shortcut icon" href="/favicon-32.png" />
-    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-    <link rel="mask-icon" href="/favicon.svg" color="#07111f" />
-    <link rel="manifest" href="/site.webmanifest" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=signal-20260520-1" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png?v=signal-20260520-1" />
+    <link rel="shortcut icon" href="/favicon-32.png?v=signal-20260520-1" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=signal-20260520-1" />
+    <link rel="mask-icon" href="/favicon.svg?v=signal-20260520-1" color="#07111f" />
+    <link rel="manifest" href="/site.webmanifest?v=signal-20260520-1" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>SUPERMEGA.dev | Company Systems That Replace Tool Sprawl</title>
-    <meta
-      name="description"
-      content="SUPERMEGA.dev launches real company systems for sales, operations, quality, and client portals on one stack."
-    />
-    <meta name="theme-color" content="#07111f" />
-    <meta property="og:title" content="SUPERMEGA.dev | Company Systems That Replace Tool Sprawl" />
-    <meta
-      property="og:description"
-      content="Real company systems for sales, operations, quality, and client portals."
-    />
+    <title>SUPERMEGA.dev | Useful business software from messy work</title>
+    <meta name="description" content="Send one messy source or workflow. SuperMega turns it into one useful business screen your team can review and use." />
+    <meta name="theme-color" content="#0b1424" />
+    <meta property="og:title" content="SUPERMEGA.dev | Useful business software" />
+    <meta property="og:description" content="Send one messy source or workflow. Get one useful business screen first." />
     <meta property="og:type" content="website" />
-    <meta property="og:image" content="/site/company-list-live.png" />
+    <meta property="og:image" content="https://supermega.dev/social/supermega-portal-card.png" />
+    <meta property="og:image:secure_url" content="https://supermega.dev/social/supermega-portal-card.png" />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="SUPERMEGA.dev | Company Systems That Replace Tool Sprawl" />
-    <meta
-      name="twitter:description"
-      content="Real company systems for sales, operations, quality, and client portals."
-    />
-    <meta name="twitter:image" content="/site/company-list-live.png" />
+    <meta name="twitter:title" content="SUPERMEGA.dev | Useful business software" />
+    <meta name="twitter:description" content="Send one messy source or workflow. Get one useful business screen first." />
+    <meta name="twitter:image" content="https://supermega.dev/social/supermega-portal-card.png" />
+    <style>
+      :root {
+        color-scheme: dark;
+        background: #07111f;
+      }
+
+      html,
+      body,
+      #root {
+        min-height: 100%;
+      }
+
+      body {
+        margin: 0;
+        background:
+          radial-gradient(circle at 70% 0%, rgba(87, 231, 255, 0.14), transparent 34rem),
+          linear-gradient(135deg, #07111f, #030712);
+        color: #f8fbff;
+        font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+      }
+
+      .boot-shell {
+        display: grid;
+        min-height: 100vh;
+        place-items: center;
+        padding: 2rem;
+      }
+
+      .boot-card {
+        width: min(100%, 34rem);
+        border: 1px solid rgba(226, 232, 240, 0.14);
+        border-radius: 1.5rem;
+        background: rgba(7, 17, 31, 0.76);
+        box-shadow: 0 32px 90px -60px rgba(0, 0, 0, 0.9);
+        padding: 1.25rem;
+      }
+
+      .boot-brand-mark {
+        display: inline-grid;
+        width: 2.5rem;
+        height: 2.5rem;
+        place-items: center;
+        border-radius: 0.9rem;
+        background: #071321;
+        box-shadow: 0 18px 42px -28px rgba(56, 189, 248, 0.8);
+        overflow: hidden;
+      }
+
+      .boot-brand-mark svg {
+        display: block;
+        width: 100%;
+        height: 100%;
+      }
+
+      .boot-title {
+        margin: 1rem 0 0;
+        font-size: clamp(2.35rem, 8vw, 4rem);
+        letter-spacing: -0.07em;
+        line-height: 0.95;
+      }
+
+      .boot-text {
+        margin: 0.9rem 0 0;
+        color: #a9b8cc;
+        font-size: 1rem;
+        line-height: 1.6;
+      }
+
+      .boot-link {
+        display: inline-flex;
+        margin-top: 1.3rem;
+        color: #72f1ff;
+        font-size: 0.76rem;
+        font-weight: 900;
+        letter-spacing: 0.16em;
+        text-decoration: none;
+        text-transform: uppercase;
+      }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <main class="boot-shell">
+        <section class="boot-card" aria-label="Company portal loading">
+          <span class="boot-brand-mark" aria-hidden="true">
+            <svg focusable="false" viewBox="0 0 64 64">
+              <defs>
+                <linearGradient id="bootTile" x1="8" x2="56" y1="4" y2="60" gradientUnits="userSpaceOnUse">
+                  <stop stop-color="#0E2741" />
+                  <stop offset=".54" stop-color="#071321" />
+                  <stop offset="1" stop-color="#020610" />
+                </linearGradient>
+                <linearGradient id="bootSignal" x1="12" x2="52" y1="50" y2="14" gradientUnits="userSpaceOnUse">
+                  <stop stop-color="#83F4FF" />
+                  <stop offset=".46" stop-color="#25C7F5" />
+                  <stop offset="1" stop-color="#2F6BFF" />
+                </linearGradient>
+                <radialGradient id="bootCore" cx="50%" cy="50%" r="54%">
+                  <stop stop-color="#FFFFFF" />
+                  <stop offset=".38" stop-color="#9DEBFF" />
+                  <stop offset="1" stop-color="#1D4ED8" />
+                </radialGradient>
+              </defs>
+              <rect width="64" height="64" rx="18" fill="url(#bootTile)" />
+              <path d="M13.5 34.2C17.7 17.3 36.8 9.9 50.5 19.3" fill="none" stroke="rgba(223,247,255,.2)" stroke-width="3.4" stroke-linecap="round" />
+              <path d="M12.5 41.5C22.2 53.4 42.4 53.2 51.8 40.8" fill="none" stroke="rgba(223,247,255,.14)" stroke-width="3.4" stroke-linecap="round" />
+              <path d="M15.2 37.8C22.8 24.2 37.7 18 49.5 25.3" fill="none" stroke="url(#bootSignal)" stroke-width="5.4" stroke-linecap="round" />
+              <path d="M48.6 29.5C43.3 43 28.4 48.2 16.4 40.4" fill="none" stroke="url(#bootSignal)" stroke-width="5.4" stroke-linecap="round" opacity=".92" />
+              <circle cx="32" cy="34" r="11" fill="#04101E" stroke="rgba(223,247,255,.2)" stroke-width="1.5" />
+              <circle cx="32" cy="34" r="6.6" fill="url(#bootCore)" />
+              <circle cx="32" cy="34" r="2.2" fill="#03101D" opacity=".88" />
+            </svg>
+          </span>
+          <h1 class="boot-title" id="sm-boot-title">Opening workspace.</h1>
+          <p class="boot-text" id="sm-boot-text">Loading workspace.</p>
+          <a class="boot-link" href="/contact">Contact</a>
+        </section>
+      </main>
+    </div>
+    <script>
+      (() => {
+        const path = String(window.location.pathname || '').toLowerCase()
+        if (!path.startsWith('/pos')) {
+          return
+        }
+        const title = document.getElementById('sm-boot-title')
+        const text = document.getElementById('sm-boot-text')
+        if (title) {
+          title.textContent = 'Open POS workspace.'
+        }
+        if (text) {
+          text.textContent = 'Loading POS login and role routing.'
+        }
+      })()
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

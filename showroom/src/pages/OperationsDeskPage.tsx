@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import { PageIntro } from '../components/PageIntro'
+import { YtfRoleScorecards } from '../components/YtfRoleScorecards'
 import {
   YANGON_TYRE_APPROVAL_ROWS_SEED,
   YANGON_TYRE_INVENTORY_ROWS_SEED,
@@ -181,6 +182,12 @@ export function OperationsDeskPage() {
         description="This is the Yangon Tyre operations home: today queue, inbound issues, approvals, exceptions, and stock pressure in one working surface."
       />
 
+      <YtfRoleScorecards
+        role="operations"
+        title="Operations scorecard."
+        subtitle="Flow actions, board KPI candidates, mapped records, and AI context."
+      />
+
       <section className="sm-chip text-white">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
@@ -249,7 +256,7 @@ export function OperationsDeskPage() {
           <article className="sm-surface-deep p-6">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <p className="sm-kicker text-[var(--sm-accent-alt)]">Plant manager command</p>
+                <p className="sm-kicker text-[var(--sm-accent-alt)]">Plant manager</p>
                 <h2 className="mt-2 text-3xl font-bold text-white">Use one shift language across flow, quality, and handoff.</h2>
               </div>
               <Link className="sm-link" to="/app/plant-manager">

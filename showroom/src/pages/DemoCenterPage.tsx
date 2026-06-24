@@ -1,119 +1,107 @@
 import { Link } from 'react-router-dom'
 
 import { PageIntro } from '../components/PageIntro'
-import { ytfDeployment } from '../content'
+import { PLATFORM_BUILD_STACK } from '../lib/platformBuildStack'
 import { STARTER_PACK_DETAILS } from '../lib/salesControl'
+import { SOFTWARE_MODULE_DETAILS } from '../lib/softwareCatalog'
 
-const featuredPacks = STARTER_PACK_DETAILS
-const primaryPack = featuredPacks[0]!
+const featuredPacks = STARTER_PACK_DETAILS.slice(0, 3)
+const primaryPack = STARTER_PACK_DETAILS[0]!
 
-const proofGallery = featuredPacks.map((pack) => ({
-  slug: pack.slug,
-  title: pack.name,
-  description: pack.promise,
-  image: pack.image,
-  audience: pack.audience,
-  route: pack.proofTool.route,
-  detailRoute: `/products/${pack.slug}`,
-  deliverables: pack.launchDeliverables,
-}))
+const proofAgenda = [
+  {
+    label: '1. Current pain',
+    detail: 'Start by naming the spreadsheet, inbox, or exception loop the buyer already hates.',
+  },
+  {
+    label: '2. Working screen',
+    detail: 'Open the product screen that replaces that work and show one clean workflow from input to owner.',
+  },
+  {
+    label: '3. Connected evidence',
+    detail: 'Show the files, email, exports, or uploads that stay attached to the work instead of living beside it.',
+  },
+  {
+    label: '4. Controlled rollout',
+    detail: 'Close with the first team, the first workflow, and the next expansion step only after daily use is proven.',
+  },
+] as const
 
-const demoTracks = featuredPacks.map((pack) => ({
-  slug: pack.slug,
-  name: pack.name,
-  audience: pack.audience,
-  steps: pack.demoSteps,
-  outcome: pack.salesTrigger,
-  launchWindow: pack.launchWindow,
-  route: pack.proofTool.route,
-  detailRoute: `/products/${pack.slug}`,
-}))
+const buyerProof = [
+  {
+    label: 'What is live',
+    title: 'Working software, not a concept deck',
+    detail: 'Every module shown here maps to a route, a buyer workflow, and a productized first rollout.',
+  },
+  {
+    label: 'What connects',
+    title: 'Current tools feed the same system',
+    detail: 'Gmail, Drive, Sheets, CSV, and exported records stay attached to the work instead of being left in side folders.',
+  },
+  {
+    label: 'What expands',
+    title: 'The rollout grows from the first workflow',
+    detail: 'Approvals, role screens, writeback, and prepared checks come after the first daily workflow is trusted.',
+  },
+] as const
 
-const videoShots = [
+const liveEntryPattern = [
   {
-    title: 'Hero film',
-    detail: 'Capture a 45 to 60 second opening that shows the product name, the live module, and the first outcome in one motion.',
+    label: 'Team home',
+    value: '/app/portal',
+    detail: 'Role-based start screen for the customer team.',
   },
   {
-    title: 'Work flow',
-    detail: 'Show the import, cleanup, or issue log screen with the owner, next action, and audit trail visible at the same time.',
+    label: 'Manager System',
+    value: '/app/manager-system',
+    detail: 'Factory manager home for the daily operating loop.',
   },
   {
-    title: 'Before and after',
-    detail: 'Cut from the messy starting point into the live queue, cleaned list, or exception board to make the value obvious.',
+    label: 'Factory Operations App',
+    value: '/app/operations',
+    detail: 'Inbound issues, exceptions, approvals, and supplier chase.',
   },
   {
-    title: 'Agent layer',
-    detail: 'Record the runtime desk, guardrails, and release train so the product story is clearly AI-native, not just a UI demo.',
+    label: 'DQMS desk',
+    value: '/app/dqms',
+    detail: 'Incidents, CAPA, root cause, and closeout discipline.',
   },
-  {
-    title: 'Call to action',
-    detail: 'Close on the rollout request, pilot package, or contact form so the viewer knows exactly what to do next.',
-  },
-]
+] as const
 
-const launchSignals = [
-  {
-    label: 'Proof assets',
-    value: 'Live screenshots and module captures',
-  },
-  {
-    label: 'Demo tracks',
-    value: 'Sales, operations, and director flows',
-  },
-  {
-    label: 'Launch output',
-    value: 'Video scripts, pilot scope, and CTA flow',
-  },
-  {
-    label: 'Tenant proof',
-    value: ytfDeployment.domain,
-  },
-]
+const featuredModules = SOFTWARE_MODULE_DETAILS.filter((item) => item.featured).slice(0, 6)
 
 export function DemoCenterPage() {
   return (
     <div className="space-y-10 pb-16">
       <PageIntro
-        eyebrow="Demo Center"
-        title="Proof, demos, and motion media for live products."
-        description="Use the real product catalog to sell what is already running: a clean first workflow, the supporting controls, and the launch assets needed to close the first customer."
+        eyebrow="Product proof"
+        title="Show the product in one clean workflow."
+        description="Lead with the job being replaced, show the working screen, then close on a narrow rollout that can be used on day one."
       />
 
       <section className="sm-site-panel">
-        <div className="grid gap-6 lg:grid-cols-[1.05fr_0.95fr] lg:items-center">
+        <div className="grid gap-6 lg:grid-cols-[1.02fr_0.98fr] lg:items-center">
           <div className="space-y-5">
-            <p className="sm-kicker text-[var(--sm-accent)]">Launch-ready surface</p>
-            <h2 className="max-w-3xl text-4xl font-bold tracking-tight text-white lg:text-6xl">
-              Sell the product like software, not a prototype.
-            </h2>
+            <p className="sm-kicker text-[var(--sm-accent)]">Meeting flow</p>
+            <h2 className="text-4xl font-bold tracking-tight text-white lg:text-6xl">Show the product like software, not a platform lecture.</h2>
             <p className="max-w-2xl text-sm leading-relaxed text-[var(--sm-muted)] lg:text-base">
-              Start with one live module, show the clean before-and-after, then hand the prospect a clear rollout path with proof assets, security notes,
-              and a next step.
+              Buyers should leave knowing the manual work it replaces, the screen that proves it, and the first workflow their team can run.
             </p>
             <div className="flex flex-wrap gap-3">
-              <Link className="sm-button-primary" to="/contact">
-                Start rollout
+              <Link className="sm-button-primary" to={primaryPack.proofTool.route}>
+                Open primary proof
               </Link>
               <Link className="sm-button-secondary" to="/products">
-                Browse products
+                Review products
               </Link>
-              <Link className="sm-button-secondary" to="/clients/yangon-tyre">
-                Tenant example
+              <Link className="sm-button-secondary" to="/contact">
+                Book rollout
               </Link>
-            </div>
-            <div className="grid gap-3 md:grid-cols-3">
-              {launchSignals.map((signal) => (
-                <article className="sm-demo-link sm-demo-link-card" key={signal.label}>
-                  <span className="sm-home-proof-label">{signal.label}</span>
-                  <strong>{signal.value}</strong>
-                </article>
-              ))}
             </div>
           </div>
 
-          <div className="sm-site-proof-panel">
-            <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-[#020612]">
+          <article className="sm-site-proof-panel overflow-hidden">
+            <div className="relative">
               <img
                 alt={`${primaryPack.name} live screenshot`}
                 className="aspect-[16/10] w-full object-cover object-top"
@@ -126,91 +114,63 @@ export function DemoCenterPage() {
                 <p className="sm-kicker text-[var(--sm-accent)]">{primaryPack.eyebrow}</p>
                 <h3 className="mt-2 text-2xl font-semibold text-white">{primaryPack.name}</h3>
                 <p className="mt-2 max-w-xl text-sm leading-relaxed text-white/75">{primaryPack.promise}</p>
-                <p className="mt-3 text-xs uppercase tracking-[0.18em] text-white/45">{primaryPack.launchWindow}</p>
               </div>
             </div>
-          </div>
+          </article>
         </div>
       </section>
 
       <section className="sm-site-panel">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <p className="sm-kicker text-[var(--sm-accent)]">Proof gallery</p>
-            <h2 className="mt-2 text-3xl font-bold text-white">Real screenshots from the live product catalog.</h2>
+            <p className="sm-kicker text-[var(--sm-accent)]">Agenda</p>
+            <h2 className="mt-3 text-3xl font-bold text-white lg:text-4xl">Four moves are enough.</h2>
           </div>
           <p className="max-w-xl text-sm leading-relaxed text-[var(--sm-muted)]">
-            Each frame is a product people can buy now. Use them in outbound, onboarding, and the first pilot proposal.
+            If the proof path needs more than this, it is probably trying to sell complexity instead of value.
           </p>
         </div>
-        <div className="mt-6 grid gap-6 xl:grid-cols-3">
-          {proofGallery.map((item) => (
-            <article className="sm-site-proof-panel" id={item.slug} key={item.title}>
-              <div className="relative h-48 overflow-hidden rounded-2xl bg-slate-900/60">
-                <img
-                  alt={item.title}
-                  className="h-full w-full object-cover"
-                  decoding="async"
-                  fetchPriority="low"
-                  src={item.image}
-                />
-              </div>
-              <div className="mt-4 space-y-2 text-sm text-white/90">
-                <p className="text-lg font-semibold text-white">{item.title}</p>
-                <p className="text-xs uppercase tracking-[0.18em] text-white/45">{item.audience}</p>
-                <p className="text-[var(--sm-muted)]">{item.description}</p>
-                <div className="flex flex-wrap gap-2 pt-2">
-                  {item.deliverables.map((deliverable) => (
-                    <span className="sm-status-pill text-[var(--sm-accent)]" key={`${item.title}-${deliverable}`}>
-                      {deliverable}
-                    </span>
-                  ))}
-                </div>
-                <div className="flex flex-wrap gap-3 pt-2">
-                  <Link className="sm-link" to={item.route}>
-                    Open live route
-                  </Link>
-                  <Link className="sm-link" to={item.detailRoute}>
-                    Review setup
-                  </Link>
-                </div>
-              </div>
+        <div className="mt-6 grid gap-4 lg:grid-cols-2 xl:grid-cols-4">
+          {proofAgenda.map((item) => (
+            <article className="sm-proof-card" key={item.label}>
+              <p className="sm-kicker text-[var(--sm-accent)]">{item.label}</p>
+              <p className="mt-4 text-sm leading-relaxed text-[var(--sm-muted)]">{item.detail}</p>
             </article>
           ))}
         </div>
       </section>
 
       <section className="sm-site-panel">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <p className="sm-kicker text-[var(--sm-accent)]">Demo tracks</p>
-            <h2 className="mt-2 text-3xl font-bold text-white">Structured demos for every buyer.</h2>
+            <p className="sm-kicker text-[var(--sm-accent)]">Live proof</p>
+            <h2 className="mt-3 text-3xl font-bold text-white lg:text-4xl">Use one working screen as the hero.</h2>
           </div>
-          <p className="max-w-xl text-sm text-[var(--sm-muted)]">
-            Each track is built from a real starter pack so the talk track matches the actual product and the rollout scope.
+          <p className="max-w-xl text-sm leading-relaxed text-[var(--sm-muted)]">
+            Start with the workflow that matches the buyer's current pain. The broader rollout becomes believable after that.
           </p>
         </div>
-        <div className="mt-6 grid gap-4 lg:grid-cols-3">
-          {demoTracks.map((track) => (
-            <article className="sm-demo-link sm-demo-link-card" id={`track-${track.slug}`} key={track.name}>
-              <div className="flex items-center justify-between gap-3">
-                <span className="sm-status-pill text-[var(--sm-accent)]">{track.name}</span>
-                <span className="sm-home-proof-label">{track.launchWindow}</span>
+        <div className="mt-6 grid gap-6 xl:grid-cols-3">
+          {featuredPacks.map((pack) => (
+            <article className="sm-demo-link sm-demo-link-card" key={pack.slug}>
+              <div className="relative h-48 overflow-hidden rounded-2xl bg-slate-900/60">
+                <img alt={pack.name} className="h-full w-full object-cover" decoding="async" src={pack.image} />
               </div>
-              <h3 className="mt-2 text-2xl font-semibold text-white">{track.audience}</h3>
-              <ul className="mt-3 space-y-2 text-sm text-white/80 list-disc pl-4">
-                {track.steps.map((step) => (
-                  <li key={`${track.name}-${step.title}`}>
-                    <strong className="text-white">{step.title}:</strong> {step.detail}
-                  </li>
+              <p className="sm-home-proof-label">{pack.audience}</p>
+              <strong className="text-lg">{pack.name}</strong>
+              <span>{pack.promise}</span>
+              <div className="flex flex-wrap gap-2 pt-2">
+                {pack.launchDeliverables.slice(0, 3).map((deliverable) => (
+                  <span className="sm-status-pill text-[var(--sm-accent)]" key={`${pack.slug}-${deliverable}`}>
+                    {deliverable}
+                  </span>
                 ))}
-              </ul>
-              <p className="mt-3 text-sm text-[var(--sm-muted)]">{track.outcome}</p>
-              <div className="mt-4 flex flex-wrap gap-3">
-                <Link className="sm-link" to={track.route}>
+              </div>
+              <div className="flex flex-wrap gap-3 pt-2">
+                <Link className="sm-link" to={pack.proofTool.route}>
                   Open live route
                 </Link>
-                <Link className="sm-link" to={track.detailRoute}>
+                <Link className="sm-link" to={`/products/${pack.slug}`}>
                   Review setup
                 </Link>
               </div>
@@ -219,72 +179,155 @@ export function DemoCenterPage() {
         </div>
       </section>
 
-      <section className="sm-site-panel">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <p className="sm-kicker text-[var(--sm-accent)]">Launch media</p>
-            <h2 className="mt-2 text-3xl font-bold text-white">Shot-by-shot plan for clips, reels, and demos.</h2>
+      <section className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
+        <article className="sm-site-panel">
+          <p className="sm-kicker text-[var(--sm-accent)]">Operator entry pattern</p>
+          <h2 className="mt-3 text-3xl font-bold text-white lg:text-4xl">Show the working route, not fake credentials.</h2>
+          <p className="mt-4 max-w-2xl text-sm leading-relaxed text-[var(--sm-muted)]">
+            The buyer should understand where the team starts, what route they open, and what screen they use first. That is stronger proof than public login
+            theater.
+          </p>
+          <div className="mt-6 grid gap-3">
+            {liveEntryPattern.map((item) => (
+              <div className="sm-manager-row" key={item.label}>
+                <div>
+                  <p className="font-semibold text-white">{item.label}</p>
+                  <p className="mt-1 text-sm leading-relaxed text-[var(--sm-muted)]">{item.detail}</p>
+                </div>
+                <span className="sm-status-pill">{item.value}</span>
+              </div>
+            ))}
           </div>
-          <p className="max-w-lg text-sm text-[var(--sm-muted)]">
-            Record these angles once, then cut them into sales clips, onboarding reels, investor loops, and proof snippets.
+          <div className="mt-6 flex flex-wrap gap-3">
+            <Link className="sm-button-primary" to="/app/portal">
+              Open team route
+            </Link>
+            <Link className="sm-button-secondary" to="/app/manager-system">
+              Open manager system
+            </Link>
+          </div>
+        </article>
+
+        <article className="sm-site-panel">
+          <p className="sm-kicker text-[var(--sm-accent-alt)]">Core software</p>
+          <h2 className="mt-3 text-3xl font-bold text-white lg:text-4xl">The offer should read like tools that replace workflows.</h2>
+          <div className="mt-6 grid gap-3">
+            {featuredModules.map((module) => (
+              <article className="sm-proof-card" key={module.id}>
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="sm-kicker text-[var(--sm-accent)]">{module.category}</p>
+                    <h3 className="mt-2 text-2xl font-bold text-white">{module.name}</h3>
+                  </div>
+                  <span className="sm-status-pill">{module.status}</span>
+                </div>
+                <p className="mt-3 text-sm leading-relaxed text-[var(--sm-muted)]">{module.summary}</p>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {module.surfaces.slice(0, 3).map((surface) => (
+                    <span className="sm-status-pill" key={`${module.id}-${surface}`}>
+                      {surface}
+                    </span>
+                  ))}
+                </div>
+                <div className="mt-4 flex flex-wrap gap-3">
+                  <Link className="sm-link" to={`/products/${module.id}`}>
+                    Review module
+                  </Link>
+                  {module.workspaceRoute ? (
+                    <Link className="sm-link" to={module.workspaceRoute}>
+                      Open route
+                    </Link>
+                  ) : null}
+                </div>
+              </article>
+            ))}
+          </div>
+        </article>
+      </section>
+
+      <section className="grid gap-6 xl:grid-cols-[1fr_1fr]">
+        <article className="sm-site-panel">
+          <p className="sm-kicker text-[var(--sm-accent-alt)]">Buyer proof</p>
+          <h2 className="mt-3 text-3xl font-bold text-white lg:text-4xl">What the buyer needs to believe.</h2>
+          <div className="mt-6 grid gap-4">
+            {buyerProof.map((item) => (
+              <article className="sm-proof-card" key={item.label}>
+                <p className="sm-kicker text-[var(--sm-accent)]">{item.label}</p>
+                <h3 className="mt-3 text-2xl font-bold text-white">{item.title}</h3>
+                <p className="mt-3 text-sm leading-relaxed text-[var(--sm-muted)]">{item.detail}</p>
+              </article>
+            ))}
+          </div>
+        </article>
+
+        <article className="sm-site-panel">
+          <p className="sm-kicker text-[var(--sm-accent)]">Customer proof</p>
+          <h2 className="mt-3 text-3xl font-bold text-white lg:text-4xl">Make the enterprise story concrete without exposing client work.</h2>
+          <p className="mt-4 max-w-2xl text-sm leading-relaxed text-[var(--sm-muted)]">
+            Use a private customer workspace to show that the same product model scales into role screens, connected records, approvals, and controlled AI support.
+          </p>
+          <div className="mt-6 grid gap-3">
+            {[
+              'Private customer host with isolated workspace routing',
+              'Role-based manager, operations, quality, and maintenance views',
+              'Data fabric, writeback, review loops, and prepared checks on one operating layer',
+            ].map((item, index) => (
+              <div className="sm-manager-rule" key={item}>
+                <span className="sm-manager-rule-index">{index + 1}</span>
+                <p className="text-sm leading-relaxed text-white/92">{item}</p>
+              </div>
+            ))}
+          </div>
+          <div className="mt-6 flex flex-wrap gap-3">
+            <Link className="sm-button-primary" to="/products">
+              Open products
+            </Link>
+            <Link className="sm-button-secondary" to="/contact?package=Private%20tenant%20portal">
+              Start customer rollout
+            </Link>
+          </div>
+        </article>
+      </section>
+
+      <section className="sm-site-panel">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <p className="sm-kicker text-[var(--sm-accent)]">R&D stack</p>
+            <h2 className="mt-3 text-3xl font-bold text-white lg:text-4xl">Use stronger infrastructure where it changes the offering.</h2>
+          </div>
+          <p className="max-w-2xl text-sm leading-relaxed text-[var(--sm-muted)]">
+            Keep the product simple on the surface. Upgrade the runtime only where it makes customer rollout, agent control, or knowledge quality materially better.
           </p>
         </div>
-        <div className="mt-6 grid gap-3">
-          {videoShots.map((shot) => (
-            <article className="sm-chip text-white" key={shot.title}>
-              <p className="font-semibold">{shot.title}</p>
-              <p className="mt-1 text-sm text-[var(--sm-muted)]">{shot.detail}</p>
+        <div className="mt-6 grid gap-4 xl:grid-cols-3">
+          {PLATFORM_BUILD_STACK.map((item) => (
+            <article className="sm-proof-card" key={item.id}>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="sm-kicker text-[var(--sm-accent-alt)]">{item.stage}</p>
+                <span className="sm-status-pill">{item.primaryTool}</span>
+              </div>
+              <h3 className="mt-3 text-2xl font-bold text-white">{item.name}</h3>
+              <p className="mt-3 text-sm leading-relaxed text-[var(--sm-muted)]">{item.summary}</p>
+              <p className="mt-4 text-sm leading-relaxed text-white/80">{item.outcome}</p>
             </article>
           ))}
         </div>
       </section>
 
-      <section className="sm-site-panel">
-        <div className="grid gap-6 lg:grid-cols-[1.05fr_0.95fr] lg:items-start">
-          <div>
-            <p className="sm-kicker text-[var(--sm-accent)]">Launch package</p>
-            <h2 className="mt-2 text-3xl font-bold text-white">What the first client sees.</h2>
-            <p className="mt-3 max-w-2xl text-sm leading-relaxed text-[var(--sm-muted)]">
-              Lead with one live module, show the security proof, and make the next step obvious. The goal is to close a pilot with a clear product,
-              not a vague promise.
-            </p>
-          </div>
-          <div className="grid gap-4 md:grid-cols-2">
-            <article className="sm-demo-link sm-demo-link-card">
-              <span className="sm-home-proof-label">Launch deliverables</span>
-              <strong>{primaryPack.launchDeliverables.join(', ')}</strong>
-              <span>Use these in the pitch, the onboarding package, and the first pilot plan.</span>
-              <Link className="sm-link" to={primaryPack.proofTool.route}>
-                Open the primary demo
-              </Link>
-            </article>
-            <article className="sm-demo-link sm-demo-link-card">
-              <span className="sm-home-proof-label">Security proof</span>
-              <strong>{primaryPack.securityProof[0]}</strong>
-              <span>{primaryPack.securityProof[1]}</span>
-              <Link className="sm-link" to="/contact">
-                Start rollout
-              </Link>
-            </article>
-            <article className="sm-demo-link sm-demo-link-card">
-              <span className="sm-home-proof-label">Enterprise proof</span>
-              <strong>{ytfDeployment.domain}</strong>
-              <span>Use the named tenant to show the same product stack scaling into roles, files, approvals, and client-specific operations.</span>
-              <Link className="sm-link" to="/clients/yangon-tyre">
-                Open tenant example
-              </Link>
-            </article>
-          </div>
+      <section className="sm-site-final">
+        <div>
+          <p className="sm-kicker text-[var(--sm-accent)]">Next step</p>
+          <h2 className="mt-3 text-3xl font-bold text-white lg:text-5xl">Open the live screen, show the current input, then scope the first rollout.</h2>
         </div>
-        <div className="mt-6 flex flex-wrap gap-3">
-          <Link className="sm-button-primary" to="/contact">
-            Start rollout
-          </Link>
-          <Link className="sm-button-secondary" to="/portfolio">
-            Browse product stories
+        <div className="flex flex-wrap gap-3">
+          <Link className="sm-button-primary" to={primaryPack.proofTool.route}>
+            Open private proof
           </Link>
           <Link className="sm-button-secondary" to="/products">
-            See full product catalog
+            Review products
+          </Link>
+          <Link className="sm-button-secondary" to="/contact">
+            Request rollout
           </Link>
         </div>
       </section>

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 
+import { PageIntro } from '../components/PageIntro'
 import { browserWorkspaceSummary, buildBrowserOutreach, saveBrowserWorkspaceLeads } from '../lib/browserWorkspace'
 import { trackEvent } from '../lib/analytics'
 import { searchPublicLeads } from '../lib/publicLeadFinder'
@@ -19,12 +20,6 @@ const quickSearches = [
   { label: 'Regional distributors', query: 'regional distributor', keywords: 'distributor,regional,wholesale' },
   { label: 'Industrial suppliers', query: 'industrial supplier', keywords: 'industrial,supplier,factory' },
 ]
-
-const flowSteps = [
-  ['1', 'Search companies'],
-  ['2', 'Keep the shortlist'],
-  ['3', 'Open Company List'],
-] as const
 
 const DEFAULT_PUBLIC_KEYWORDS = 'service,local,business'
 
@@ -80,9 +75,9 @@ export function PublicLeadFinderPage() {
     [keywords],
   )
   const summaryCards = [
-    { label: 'Results', value: rows.length },
+    { label: 'Found', value: rows.length },
     { label: 'Kept', value: savedKeys.length },
-    { label: 'Company List', value: savedTotal },
+    { label: 'In list', value: savedTotal },
   ]
 
   function applyQuickSearch(nextQuery: string, nextKeywords: string) {
@@ -307,23 +302,18 @@ export function PublicLeadFinderPage() {
 
   return (
     <div className="space-y-6">
+      <PageIntro
+        compact
+        eyebrow="Revenue system"
+        title="Find the next few accounts."
+        description="Search public results, keep only the companies worth a first note, then move them into Company List."
+      />
+
       <section className="grid gap-6 lg:grid-cols-[0.84fr_1.16fr]">
-        <article className="sm-surface p-6 lg:p-8">
-          <p className="sm-kicker text-[var(--sm-accent)]">Find Clients</p>
-          <h1 className="mt-3 text-3xl font-bold text-white lg:text-4xl">Search, keep the shortlist, then open Company List.</h1>
-          <p className="mt-3 max-w-2xl text-sm leading-relaxed text-[var(--sm-muted)]">
-            Use this only for new names. Search a business type, niche, or place, then keep the companies worth contacting.
-          </p>
-
-          <div className="mt-5 grid gap-3 md:grid-cols-3">
-            {flowSteps.map(([step, title]) => (
-              <div className="sm-chip text-white" key={title}>
-                <p className="sm-kicker text-[var(--sm-accent)]">Step {step}</p>
-                <p className="mt-2 text-sm text-[var(--sm-muted)]">{title}</p>
-              </div>
-            ))}
-          </div>
-
+        <article className="sm-site-panel p-6 lg:p-8">
+          <p className="sm-kicker text-[var(--sm-accent)]">Search</p>
+          <h2 className="mt-3 text-3xl font-bold text-white lg:text-4xl">Use this only when you need new names.</h2>
+          <p className="mt-3 max-w-2xl text-sm leading-relaxed text-[var(--sm-muted)]">A good run ends with a shortlist, not a giant export.</p>
           <div className="mt-5 grid gap-4">
             <label className="grid gap-2 text-sm font-semibold text-[var(--sm-muted)]">
               Search
@@ -353,7 +343,7 @@ export function PublicLeadFinderPage() {
             </div>
 
             <div className="grid gap-2">
-              <p className="sm-kicker text-[var(--sm-accent)]">Try one</p>
+              <p className="sm-kicker text-[var(--sm-accent)]">Start fast</p>
               <div className="flex flex-wrap gap-2">
                 {quickSearches.map((item) => (
                   <button className="sm-button-secondary" key={item.label} onClick={() => applyQuickSearch(item.query, item.keywords)} type="button">
@@ -366,9 +356,7 @@ export function PublicLeadFinderPage() {
             {hasLiveWorkspaceApi() && showWorkspaceSetup ? (
               <div className="sm-proof-card">
                 <p className="sm-kicker text-[var(--sm-accent)]">Save online</p>
-                <p className="mt-2 text-sm text-[var(--sm-muted)]">
-                  Enter your company and work email once. After that, kept companies can go into the same shared list for the team.
-                </p>
+                <p className="mt-2 text-sm text-[var(--sm-muted)]">Enter your company and work email once. After that, kept companies can go into the shared team list.</p>
                 <div className="mt-4 grid gap-3 md:grid-cols-3">
                   <label className="grid gap-2 text-sm font-semibold text-[var(--sm-muted)]">
                     Name
@@ -386,11 +374,9 @@ export function PublicLeadFinderPage() {
                 <div className="mt-3 sm-chip text-[var(--sm-muted)]">
                   {hasSharedProfile ? `Ready to save into the team workspace for ${profile.company}.` : 'Company and work email are required before save.'}
                 </div>
-                <div className="mt-4 flex flex-wrap gap-3">
-                  <button className="sm-button-secondary" onClick={() => setShowWorkspaceSetup(false)} type="button">
-                    Hide
-                  </button>
-                </div>
+                <button className="mt-4 sm-button-secondary" onClick={() => setShowWorkspaceSetup(false)} type="button">
+                  Hide
+                </button>
               </div>
             ) : null}
 
@@ -416,12 +402,13 @@ export function PublicLeadFinderPage() {
             </details>
           </div>
 
-          {message ? <div className="mt-3 sm-chip text-[var(--sm-muted)]">{message}</div> : null}
+            {message ? <div className="mt-3 sm-chip text-[var(--sm-muted)]">{message}</div> : null}
         </article>
 
         <article className="sm-terminal p-6">
-          <p className="sm-kicker text-[var(--sm-accent)]">Working view</p>
-          <p className="mt-2 text-sm text-[var(--sm-muted)]">The point here is simple: return a shortlist, keep the best rows, and move them into Company List.</p>
+          <p className="sm-kicker text-[var(--sm-accent)]">Next move</p>
+          <h2 className="mt-3 text-2xl font-bold text-white">Keep the shortlist small.</h2>
+          <p className="mt-2 text-sm text-[var(--sm-muted)]">If a company has no fit reason and no contact clue, skip it.</p>
           <div className="mt-5 grid gap-3 md:grid-cols-3 lg:grid-cols-1">
             {summaryCards.map((item) => (
               <div className="sm-chip text-white" key={item.label}>
@@ -431,8 +418,8 @@ export function PublicLeadFinderPage() {
             ))}
           </div>
           <div className="mt-5 space-y-3 text-sm text-[var(--sm-muted)]">
-            <p>Keep only rows with a clear fit reason and at least one contact clue.</p>
-            <p>Once the shortlist is good enough, stop searching and open Company List.</p>
+            <p>Save only the rows you would actually contact this week.</p>
+            <p>Once the top three are good enough, stop searching and move into Company List.</p>
           </div>
           {(rows.length || savedTotal) ? (
             <div className="mt-6 flex flex-wrap gap-3">
@@ -453,14 +440,10 @@ export function PublicLeadFinderPage() {
 
       {rows.length || manualInput.trim() || message ? (
         <article className="sm-terminal p-6">
-          <div>
-            <div>
-              <p className="sm-kicker text-[var(--sm-accent)]">Results</p>
-              <p className="mt-2 text-sm text-[var(--sm-muted)]">
-                {rows.length ? `${rows.length} result${rows.length === 1 ? '' : 's'} returned. Keep the companies worth chasing.` : 'Run a search to get companies.'}
-              </p>
-            </div>
-          </div>
+          <p className="sm-kicker text-[var(--sm-accent)]">Shortlist</p>
+          <p className="mt-2 text-sm text-[var(--sm-muted)]">
+            {rows.length ? `${rows.length} result${rows.length === 1 ? '' : 's'} returned. Keep only the few worth the first note.` : 'Run a search to get companies.'}
+          </p>
 
           <div className="mt-5 space-y-4">
             {rows.length ? (
@@ -486,7 +469,7 @@ export function PublicLeadFinderPage() {
                       </div>
                     </div>
 
-                    <div className="mt-4 sm-chip text-[var(--sm-muted)]">{row.snippet || row.source || 'Public result'}</div>
+                    {row.snippet || row.source ? <div className="mt-4 sm-chip text-[var(--sm-muted)]">{row.snippet || row.source}</div> : null}
 
                     <div className="mt-4 flex flex-wrap gap-3">
                       <button className="sm-button-primary" onClick={() => void saveLead(row)} type="button">
@@ -507,9 +490,7 @@ export function PublicLeadFinderPage() {
             ) : manualInput.trim() ? (
               <div className="sm-chip text-[var(--sm-muted)]">Manual fallback is filled. Run search to merge it with browser results.</div>
             ) : (
-              <div className="sm-chip text-[var(--sm-muted)]">
-                Try one of the quick searches above, then keep the companies worth chasing.
-              </div>
+              <div className="sm-chip text-[var(--sm-muted)]">Try one quick search above, then keep only the companies worth chasing.</div>
             )}
 
           </div>

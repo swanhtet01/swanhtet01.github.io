@@ -165,6 +165,11 @@ class SupervisorRuntime:
     def _login_if_needed(self) -> None:
         if self.config.cron_token or self.logged_in:
             return
+        if not self.config.username or not self.config.password:
+            raise RuntimeError(
+                "Set SUPERMEGA_APP_USERNAME and SUPERMEGA_APP_PASSWORD, "
+                "or use SUPERMEGA_INTERNAL_CRON_TOKEN for supervisor auth."
+            )
         payload = _request_json(
             self.opener,
             "POST",
@@ -321,8 +326,8 @@ def _parse_args(argv: list[str]) -> SupervisorConfig:
         enqueue_defaults=bool(args.enqueue_defaults),
         job_types=job_types,
         cron_token=str(os.getenv("SUPERMEGA_INTERNAL_CRON_TOKEN", "")).strip(),
-        username=str(os.getenv("SUPERMEGA_APP_USERNAME", "owner")).strip() or "owner",
-        password=str(os.getenv("SUPERMEGA_APP_PASSWORD", "supermega-demo")).strip() or "supermega-demo",
+        username=str(os.getenv("SUPERMEGA_APP_USERNAME", "")).strip(),
+        password=str(os.getenv("SUPERMEGA_APP_PASSWORD", "")).strip(),
         workspace_slug=str(os.getenv("SUPERMEGA_WORKSPACE_SLUG", "supermega-lab")).strip() or "supermega-lab",
         status_path=_status_file_path(repo_root),
     )

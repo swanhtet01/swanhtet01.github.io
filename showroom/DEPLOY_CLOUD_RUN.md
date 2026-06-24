@@ -25,7 +25,7 @@ This script:
 
 ## GitHub Actions deploy (optional)
 
-Workflow: `.github/workflows/showroom-cloud-run.yml`
+Workflow: `.github/workflows/supermega-app-cloud-run.yml`
 
 Required repo secret:
 

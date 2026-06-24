@@ -74,6 +74,8 @@ $pythonExe = Get-PreferredPythonExecutable -RepoRoot $repoRoot
 $serveScript = Join-Path $repoRoot "tools\serve_solution.py"
 $appSmokeScript = Join-Path $repoRoot "tools\smoke_test_supermega_app.py"
 $publicSmokeScript = Join-Path $repoRoot "tools\smoke_test_public_site.py"
+$processBrowserSmokeScript = Join-Path $repoRoot "tools\verify_process_organizer_browser.cjs"
+$processCloudSmokeScript = Join-Path $repoRoot "tools\smoke_process_organizer_cloud.mjs"
 
 if ($Port -le 0) {
     $Port = Get-FreeTcpPort
@@ -105,11 +107,19 @@ $env:SUPERMEGA_APP_PASSWORD = $appPassword
 $env:SUPERMEGA_APP_DISPLAY_NAME = $appDisplayName
 $env:SUPERMEGA_WORKSPACE_SLUG = $workspaceSlug
 $env:SUPERMEGA_WORKSPACE_NAME = $workspaceName
+$smokePilotDataDir = Join-Path $repoRoot "pilot-data"
+$smokeSiteRoot = Join-Path $repoRoot "showroom\dist"
+New-Item -ItemType Directory -Force -Path $smokePilotDataDir | Out-Null
+$smokeEnterpriseDbPath = [System.IO.Path]::GetFullPath((Join-Path $smokePilotDataDir "portal-smoke-enterprise.db")).Replace("\", "/")
+$env:SUPERMEGA_DATABASE_URL = "sqlite:///$smokeEnterpriseDbPath"
+$env:SUPERMEGA_DB_CONNECT_TIMEOUT = "3"
 
 $serverProcess = Start-Process -FilePath $pythonExe -WorkingDirectory $repoRoot -PassThru -ArgumentList @(
     ('"{0}"' -f $serveScript),
     "--host", $BindHost,
-    "--port", $Port.ToString()
+    "--port", $Port.ToString(),
+    "--site-root", ('"{0}"' -f $smokeSiteRoot),
+    "--pilot-data", ('"{0}"' -f $smokePilotDataDir)
 ) -RedirectStandardOutput $serverStdoutLog -RedirectStandardError $serverStderrLog
 
 try {
@@ -135,8 +145,18 @@ try {
         exit $LASTEXITCODE
     }
 
-    & $pythonExe $publicSmokeScript --base-url $baseUrl
+& node $processBrowserSmokeScript "$baseUrl/login/?next=%2Fapp%2Fprocess%2F"
+if ($LASTEXITCODE -ne 0) {
     exit $LASTEXITCODE
+}
+
+& node $processCloudSmokeScript $baseUrl
+if ($LASTEXITCODE -ne 0) {
+    exit $LASTEXITCODE
+}
+
+& $pythonExe $publicSmokeScript --base-url $baseUrl --skip-api
+exit $LASTEXITCODE
 }
 finally {
     if ($serverProcess -and -not $serverProcess.HasExited) {

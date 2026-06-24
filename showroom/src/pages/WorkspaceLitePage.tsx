@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 
+import { PageIntro } from '../components/PageIntro'
 import { identifyUser, trackEvent } from '../lib/analytics'
 import {
   browserWorkspaceSummary,
@@ -37,12 +38,12 @@ import {
   type WorkspaceLeadRow,
   type WorkspaceTaskRow,
 } from '../lib/workspaceApi'
-import { ACTION_SAMPLE_TEXT, LEAD_SAMPLE_TEXT, buildActionBoard, downloadLeadCsv, parseLeads, type LeadRow } from '../lib/tooling'
+import { buildActionBoard, downloadLeadCsv, parseLeads, type LeadRow } from '../lib/tooling'
 
 type WorkspaceView = 'leads' | 'queue'
 type WorkspaceMode = 'local' | 'shared'
 type QueueTemplateId = 'lead_follow_up' | 'ops_blocker' | 'receiving_issue'
-type SetupFlow = 'pick' | 'find' | 'leads' | 'updates' | 'receiving'
+type SetupFlow = 'pick' | 'leads' | 'updates' | 'receiving'
 
 type WorkspaceLeadItem = {
   id: string
@@ -72,7 +73,6 @@ type WorkspaceTaskItem = {
 
 const localStageOptions: BrowserWorkspaceStage[] = ['new', 'outreach', 'contacted', 'qualified']
 const sharedStageOptions = ['offer_ready', 'contacted', 'discovery', 'qualified']
-const publicQueueTemplates: QueueTemplateId[] = ['lead_follow_up', 'ops_blocker', 'receiving_issue']
 
 const localStageLabels: Record<BrowserWorkspaceStage, string> = {
   new: 'saved',
@@ -126,7 +126,7 @@ const queueTemplates: Record<
 }
 
 function isSetupFlow(value: string | null): value is Exclude<SetupFlow, 'pick'> {
-  return value === 'find' || value === 'leads' || value === 'updates' || value === 'receiving'
+  return value === 'leads' || value === 'updates' || value === 'receiving'
 }
 
 function normalizeBrowserLead(row: BrowserWorkspaceLead): WorkspaceLeadItem {
@@ -312,29 +312,35 @@ export function WorkspaceLitePage() {
   const importedCompanyCount = Number.isFinite(importedCount) && importedCount > 0 ? importedCount : summary.total
   const surfaceMeta = isReceivingDesk
     ? {
-        eyebrow: 'Receiving control',
-        emptyTitle: 'Log the issue and keep one next step.',
-        emptyDescription: 'Use this when GRN, hold, customs, batch, or quantity issues are scattered across chat, paper, or inbox notes.',
-        filledTitle: 'Keep the receiving queue short and clear.',
-        filledDescription: 'Operators should see only the open issues, the owner, and the next action.',
-        startHint: 'Paste one issue per line, then work the follow-up list.',
+        eyebrow: 'Operations queue',
+        pageTitle: 'Run the operations queue.',
+        pageDescription: 'Keep issues, owner, and next action in one queue.',
+        emptyTitle: 'Log the first issues.',
+        emptyDescription: 'Paste receiving, procurement, or approval issues and work them in one place.',
+        filledTitle: 'Operations queue is live.',
+        filledDescription: 'Keep the queue short. One issue, one owner, one next move.',
+        startHint: 'Paste one issue per line: variance, hold, missing GRN, customs, or release blocker.',
       }
     : publicSurface === 'sales'
       ? {
-          eyebrow: 'Company List',
-          emptyTitle: 'Turn raw names into a working list.',
-          emptyDescription: 'Paste names from Google, Facebook, WhatsApp, Excel, or CRM, then keep only the next useful follow-up.',
-          filledTitle: 'Run the shortlist from one desk.',
-          filledDescription: 'Clean the list, move companies forward, and keep the next action visible without extra CRM clutter.',
-          startHint: 'Either find new companies first or paste the list you already have.',
+          eyebrow: 'Sales workspace',
+          pageTitle: 'Run the sales list.',
+          pageDescription: 'Keep one stage, one note, and one next move per company.',
+          emptyTitle: 'Paste the first companies.',
+          emptyDescription: 'Names, websites, emails, and phones are enough to start.',
+          filledTitle: 'Sales list is live.',
+          filledDescription: 'Review the company, set the stage, and keep the next move visible.',
+          startHint: 'Paste one company per line. Add website, email, or phone if you have it.',
         }
       : {
-          eyebrow: 'Task list',
-          emptyTitle: 'Turn messy updates into short next tasks.',
-          emptyDescription: 'Use this when notes, blockers, or team updates need one simple action list instead of more reporting.',
-          filledTitle: 'Keep only the tasks that matter now.',
-          filledDescription: 'The desk should show the open tasks, the owner, and what to finish next.',
-          startHint: 'Paste rough updates first, then prune the queue until it is usable.',
+          eyebrow: 'Action queue',
+          pageTitle: 'Run the action queue.',
+          pageDescription: 'Turn rough updates into a short list with a clear owner and next step.',
+          emptyTitle: 'Paste the first updates.',
+          emptyDescription: 'Use this when notes or blockers need one queue instead of more reporting.',
+          filledTitle: 'Action queue is live.',
+          filledDescription: 'Keep only the open tasks, the owner, and what must finish next.',
+          startHint: 'Paste rough updates or blockers, then prune the queue until it is usable.',
         }
 
   const deskStats =
@@ -380,6 +386,10 @@ export function WorkspaceLitePage() {
     setQueueTitle('')
   }
 
+  useEffect(() => {
+    applyQueueTemplate(isReceivingDesk ? 'receiving_issue' : publicSurface === 'sales' ? 'lead_follow_up' : 'ops_blocker')
+  }, [isReceivingDesk, publicSurface])
+
   function updateProfileField(field: keyof PublicWorkspaceProfile, value: string) {
     const nextProfile = savePublicWorkspaceProfile({
       ...profile,
@@ -416,7 +426,7 @@ export function WorkspaceLitePage() {
       })
       return true
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Could not save this list to the team workspace.')
+      setMessage(error instanceof Error ? error.message : 'Could not save this list online.')
       return false
     }
   }
@@ -427,7 +437,7 @@ export function WorkspaceLitePage() {
       return
     }
     if (!hasSharedProfile) {
-      promptCloudSetup('Enter your company and work email before saving this list to the team workspace.')
+      promptCloudSetup('Enter your company and work email before saving this list online.')
       return
     }
 
@@ -488,9 +498,9 @@ export function WorkspaceLitePage() {
         local_leads: localLeads.length,
         local_tasks: localTasks.length,
       })
-      setMessage(localLeads.length || localTasks.length ? 'Moved this list into the team workspace.' : 'Started the team workspace.')
+      setMessage(localLeads.length || localTasks.length ? 'Moved this list online.' : 'Started the online workspace.')
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Could not start the team workspace.')
+      setMessage(error instanceof Error ? error.message : 'Could not start the online workspace.')
     } finally {
       setStarting(false)
     }
@@ -729,7 +739,7 @@ export function WorkspaceLitePage() {
 
   async function removeLead(leadId: string) {
     if (mode === 'shared') {
-      setMessage('Remove is only available in the full app for team workspaces.')
+      setMessage('Remove is only available in the full app.')
       return
     }
     setLeads(removeBrowserWorkspaceLead(leadId).map(normalizeBrowserLead))
@@ -851,32 +861,19 @@ export function WorkspaceLitePage() {
   }
 
   const setupPanel =
-    setupFlow === 'find' ? (
+    setupFlow === 'leads' ? (
       <div className="sm-proof-card">
-        <p className="text-lg font-bold text-white">Need new clients first?</p>
-        <p className="mt-2 text-sm text-[var(--sm-muted)]">Search a place or niche, keep the shortlist, then come back here to run the next steps.</p>
-        <div className="mt-4 flex flex-wrap gap-3">
-          <Link className="sm-button-primary" to="/find-companies">
-            Open Find Clients
-          </Link>
-          <button className="sm-button-secondary" onClick={() => setSetupFlow('leads')} type="button">
-            I already have a list
-          </button>
-        </div>
-      </div>
-    ) : setupFlow === 'leads' ? (
-      <div className="sm-proof-card">
-        <p className="text-sm text-[var(--sm-muted)]">Names, websites, emails, and phones are enough. The first follow-up task will be created automatically.</p>
+        <p className="text-sm text-[var(--sm-muted)]">Names, websites, emails, and phones are enough. The first follow-up task can be created automatically.</p>
         <textarea
           className="sm-input mt-4 min-h-40"
           onChange={(event) => setLeadImportText(event.target.value)}
-          placeholder="North Star Clinic | www.northstarclinic.com | hello@northstarclinic.com | +1 555 111 2222"
+          placeholder="Company | website | email | phone"
           value={leadImportText}
         />
         <div className="mt-4 flex flex-wrap gap-3">
           <button className="sm-button-primary" onClick={() => void importLeadList()} type="button">
-              Paste my list
-            </button>
+            Paste my list
+          </button>
           <label className="sm-button-secondary cursor-pointer">
             Upload file
             <input
@@ -890,24 +887,21 @@ export function WorkspaceLitePage() {
               type="file"
             />
           </label>
-          <button className="sm-button-secondary" onClick={() => setLeadImportText(LEAD_SAMPLE_TEXT)} type="button">
-            Load example
-          </button>
         </div>
       </div>
     ) : setupFlow === 'updates' ? (
       <div className="sm-proof-card">
-        <p className="text-sm text-[var(--sm-muted)]">Paste messy notes, blockers, or receiving issues. They will be turned into a simple task list.</p>
+        <p className="text-sm text-[var(--sm-muted)]">Paste messy notes or blockers. They will be turned into a short task list.</p>
         <textarea
           className="sm-input mt-4 min-h-40"
           onChange={(event) => setUpdateImportText(event.target.value)}
-          placeholder="Power fluctuation at Plant A | Operations Team"
+          placeholder="Blocked release approval | Operations"
           value={updateImportText}
         />
         <div className="mt-4 flex flex-wrap gap-3">
-            <button className="sm-button-primary" onClick={() => void importUpdates()} type="button">
-              Build task list
-            </button>
+          <button className="sm-button-primary" onClick={() => void importUpdates()} type="button">
+            Build task list
+          </button>
           <label className="sm-button-secondary cursor-pointer">
             Upload file
             <input
@@ -921,48 +915,36 @@ export function WorkspaceLitePage() {
               type="file"
             />
           </label>
-          <button className="sm-button-secondary" onClick={() => setUpdateImportText(ACTION_SAMPLE_TEXT)} type="button">
-            Load example
-          </button>
         </div>
       </div>
     ) : setupFlow === 'receiving' ? (
       <div className="sm-proof-card">
         <p className="text-lg font-bold text-white">Log receiving or procurement issues.</p>
-        <p className="mt-2 text-sm text-[var(--sm-muted)]">Paste one issue per line. This is for operations teams, not for sales prospecting.</p>
+        <p className="mt-2 text-sm text-[var(--sm-muted)]">Paste one issue per line. Keep the issue, owner, and next action visible.</p>
         <textarea
           className="sm-input mt-4 min-h-40"
           onChange={(event) => setReceivingImportText(event.target.value)}
-          placeholder="Variance on inbound compound batch"
+          placeholder="Missing GRN on inbound batch"
           value={receivingImportText}
         />
         <div className="mt-4 flex flex-wrap gap-3">
           <button className="sm-button-primary" onClick={() => void importReceivingIssues()} type="button">
             Log issues
           </button>
-          <button
-            className="sm-button-secondary"
-            onClick={() =>
-              setReceivingImportText('Variance on inbound compound batch\nMissing GRN on truck tyre receipt\nHold release pending customs document')
-            }
-            type="button"
-          >
-            Load example
-          </button>
         </div>
       </div>
     ) : (
       <div className="sm-proof-card">
         <p className="text-lg font-bold text-white">Pick one starting point.</p>
-        <p className="mt-2 text-sm text-[var(--sm-muted)]">This tool works with anyone's data. Start with what you already have, not with a blank board.</p>
+        <p className="mt-2 text-sm text-[var(--sm-muted)]">Start with the data or queue you already have. Do not rebuild the whole system first.</p>
       </div>
     )
 
   const cloudSavePanel =
     hasLiveWorkspaceApi() && mode === 'local' && showCloudSetup ? (
       <div className="sm-proof-card">
-        <p className="sm-kicker text-[var(--sm-accent)]">Save online</p>
-        <p className="mt-2 text-sm text-[var(--sm-muted)]">Use your company and work email once. After that, this list can stay in the shared team list.</p>
+        <p className="sm-kicker text-[var(--sm-accent)]">Sync online</p>
+        <p className="mt-2 text-sm text-[var(--sm-muted)]">Use your company and work email once. After that, this list stays online.</p>
         <div className="mt-4 grid gap-3 md:grid-cols-3">
           <label className="grid gap-2 text-sm font-semibold text-[var(--sm-muted)]">
             Name
@@ -979,7 +961,7 @@ export function WorkspaceLitePage() {
         </div>
         <div className="mt-4 flex flex-wrap gap-3">
           <button className="sm-button-secondary" disabled={starting || !hasSharedProfile} onClick={() => void startSharedWorkspace()} type="button">
-            {starting ? 'Starting...' : 'Save online for your team'}
+            {starting ? 'Starting...' : 'Sync online'}
           </button>
           <button className="sm-button-secondary" onClick={() => setShowCloudSetup(false)} type="button">
             Hide
@@ -991,22 +973,17 @@ export function WorkspaceLitePage() {
   const guideBanner =
     fromFindClients && hasData ? (
       <div className="mt-5 sm-proof-card">
-        <div className="flex flex-wrap gap-2">
-          <span className="sm-status-pill">Step 1 done</span>
-          <span className="sm-status-pill">Step 2 now</span>
-          <span className="sm-status-pill">Step 3 task list</span>
-        </div>
-        <p className="mt-4 sm-kicker text-[var(--sm-accent)]">Saved from Find Clients</p>
-        <h2 className="mt-3 text-2xl font-bold text-white">Company List is ready.</h2>
+        <p className="sm-kicker text-[var(--sm-accent)]">Saved from Find Clients</p>
+        <h2 className="mt-3 text-2xl font-bold text-white">Companies saved.</h2>
         <p className="mt-3 max-w-2xl text-sm leading-relaxed text-[var(--sm-muted)]">
-          {importedCompanyCount} {importedCompanyCount === 1 ? 'company was' : 'companies were'} saved from Find Clients. Review one company, then open Task List so the follow-up stays visible.
+          {importedCompanyCount} {importedCompanyCount === 1 ? 'company is' : 'companies are'} in the sales list. Review one company, then open tasks so the follow-up stays visible.
         </p>
         <div className="mt-4 flex flex-wrap gap-3">
           <Link className="sm-button-primary" to="/task-list">
-            Open Task List
+            Open tasks
           </Link>
           <Link className="sm-link self-center" to="/find-companies">
-            Search again
+            Find more names
           </Link>
         </div>
       </div>
@@ -1015,9 +992,10 @@ export function WorkspaceLitePage() {
   if (!hasData) {
     return (
       <div className="space-y-6">
-        <section className="grid gap-6 lg:grid-cols-[0.8fr_1.2fr]">
-          <article className="sm-surface p-6 lg:p-8">
-            <p className="sm-kicker text-[var(--sm-accent)]">{surfaceMeta.eyebrow}</p>
+        <PageIntro compact description={surfaceMeta.pageDescription} eyebrow={surfaceMeta.eyebrow} title={surfaceMeta.pageTitle} />
+        <section className="sm-product-workspace mx-auto max-w-5xl">
+          <article className="sm-product-workspace-panel p-6 lg:p-8">
+            <p className="sm-kicker text-[var(--sm-accent)]">Start</p>
             <h1 className="mt-3 text-3xl font-bold text-white lg:text-4xl">{surfaceMeta.emptyTitle}</h1>
             <p className="mt-3 max-w-2xl text-sm leading-relaxed text-[var(--sm-muted)]">{surfaceMeta.emptyDescription}</p>
             {guideBanner}
@@ -1025,12 +1003,12 @@ export function WorkspaceLitePage() {
             <div className="mt-6 flex flex-wrap gap-3">
               {publicSurface === 'sales' ? (
                 <>
-                  <Link className="sm-button-primary" to="/find-companies">
-                    Need new names
-                  </Link>
-                  <button className="sm-button-secondary" onClick={() => setSetupFlow('leads')} type="button">
+                  <button className="sm-button-primary" onClick={() => setSetupFlow('leads')} type="button">
                     Paste my list
                   </button>
+                  <Link className="sm-link self-center" to="/find-companies">
+                    Find new names
+                  </Link>
                 </>
               ) : isReceivingDesk ? (
                 <button className="sm-button-primary" onClick={() => setSetupFlow('receiving')} type="button">
@@ -1044,18 +1022,15 @@ export function WorkspaceLitePage() {
             </div>
 
             {publicSurface === 'sales' ? (
-              <div className="mt-5 text-sm text-[var(--sm-muted)]">
-                If you already searched in Find Clients, this is where the shortlist turns into a working list.
-              </div>
+              <div className="mt-5 text-sm text-[var(--sm-muted)]">If you already searched in Find Clients, this is where the shortlist becomes a working list.</div>
             ) : null}
             {cloudSavePanel ? <div className="mt-5">{cloudSavePanel}</div> : null}
             {message ? <div className="mt-4 sm-chip text-[var(--sm-muted)]">{message}</div> : null}
-          </article>
-
-          <article className="sm-terminal p-6">
-            <p className="sm-kicker text-[var(--sm-accent)]">Start here</p>
-            <p className="mt-2 text-sm text-[var(--sm-muted)]">{surfaceMeta.startHint}</p>
-            <div className="mt-5">{setupPanel}</div>
+            <div className="mt-6 sm-product-action-panel p-6">
+              <p className="sm-kicker text-[var(--sm-accent)]">Start here</p>
+              <p className="mt-2 text-sm text-[var(--sm-muted)]">{surfaceMeta.startHint}</p>
+              <div className="mt-5">{setupPanel}</div>
+            </div>
           </article>
         </section>
       </div>
@@ -1064,9 +1039,10 @@ export function WorkspaceLitePage() {
 
   return (
     <div className="space-y-6">
-      <section className="grid gap-6 lg:grid-cols-[0.82fr_1.18fr]">
-        <article className="sm-surface p-6">
-          <p className="sm-kicker text-[var(--sm-accent)]">{surfaceMeta.eyebrow}</p>
+      <PageIntro compact description={surfaceMeta.pageDescription} eyebrow={surfaceMeta.eyebrow} title={surfaceMeta.pageTitle} />
+      <section className="sm-product-workspace grid gap-6 lg:grid-cols-[0.82fr_1.18fr]">
+        <article className="sm-product-workspace-panel p-6">
+          <p className="sm-kicker text-[var(--sm-accent)]">Overview</p>
           <h2 className="mt-3 text-3xl font-bold text-white">{surfaceMeta.filledTitle}</h2>
           <p className="mt-3 text-sm leading-relaxed text-[var(--sm-muted)]">{surfaceMeta.filledDescription}</p>
           {guideBanner}
@@ -1086,11 +1062,11 @@ export function WorkspaceLitePage() {
                 <button className="sm-button-primary" onClick={() => setSetupFlow('leads')} type="button">
                   Add names
                 </button>
-                <Link className="sm-button-secondary" to="/find-companies">
-                  Search more
-                </Link>
                 <Link className="sm-button-secondary" to="/task-list">
-                  Open task list
+                  Open tasks
+                </Link>
+                <Link className="sm-link self-center" to="/find-companies">
+                  Find more names
                 </Link>
               </>
             ) : (
@@ -1098,17 +1074,19 @@ export function WorkspaceLitePage() {
                 Add more items
               </button>
             )}
-            {publicSurface === 'sales' ? (
-              <button className="sm-button-secondary" onClick={exportWorkspace} type="button">
+          </div>
+          {publicSurface === 'sales' ? (
+            <div className="mt-4">
+              <button className="sm-link" onClick={exportWorkspace} type="button">
                 Export CSV
               </button>
-            ) : null}
-          </div>
+            </div>
+          ) : null}
 
           {hasData && hasLiveWorkspaceApi() && mode === 'local' ? (
             <div className="mt-5 flex flex-wrap gap-3">
               <button className="sm-button-secondary" onClick={() => setShowCloudSetup((current) => !current)} type="button">
-                {showCloudSetup ? 'Hide team setup' : 'Save online for your team'}
+                {showCloudSetup ? 'Hide sync' : 'Sync online'}
               </button>
             </div>
           ) : null}
@@ -1117,200 +1095,168 @@ export function WorkspaceLitePage() {
           {message ? <div className="mt-4 sm-chip text-[var(--sm-muted)]">{message}</div> : null}
         </article>
 
-        <article className="sm-terminal p-6">
-          {!hasData ? (
-            <div className="space-y-4">
-              {setupPanel}
-          <div className="sm-chip text-[var(--sm-muted)]">
-            {isReceivingDesk
-              ? 'Paste receiving issues and build the follow-up list.'
-              : publicSurface === 'sales'
-                ? 'Use Find Clients for new names. Use Company List when you already have names.'
-                      : "Paste today's notes and build the task list."}
-          </div>
-            </div>
-          ) : (
-            <div className="space-y-5">
-              {setupFlow !== 'pick' ? (
-                <div className="space-y-4">
-                  {setupPanel}
-                  <div className="flex flex-wrap gap-3">
-                    <button className="sm-button-secondary" onClick={() => setSetupFlow('pick')} type="button">
-                      Back to desk
-                    </button>
+        <article className="sm-product-action-panel p-6">
+          <div className="space-y-5">
+            {setupFlow !== 'pick' ? (
+              <div className="space-y-4">
+                {setupPanel}
+                <div className="flex flex-wrap gap-3">
+                  <button className="sm-button-secondary" onClick={() => setSetupFlow('pick')} type="button">
+                    Back to desk
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="sm-kicker text-[var(--sm-accent)]">{activeView === 'queue' ? 'Next tasks' : 'Shortlist'}</p>
+                    <p className="mt-2 text-sm text-[var(--sm-muted)]">
+                      {activeView === 'queue'
+                        ? 'Keep the task list short. Start with the top open items.'
+                        : 'Move the right companies forward and leave one clear next note.'}
+                    </p>
                   </div>
                 </div>
-              ) : (
-                <>
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="sm-kicker text-[var(--sm-accent)]">{activeView === 'queue' ? 'Next tasks' : 'Shortlist'}</p>
-                      <p className="mt-2 text-sm text-[var(--sm-muted)]">
-                        {activeView === 'queue'
-                          ? 'Keep the task list short. Start with the top open items.'
-                          : 'Move the right companies forward and leave one clear next note.'}
-                      </p>
-                    </div>
-                  </div>
 
-                  {loading ? (
-                    <div className="sm-chip text-[var(--sm-muted)]">Loading desk...</div>
-                  ) : activeView === 'queue' ? (
-                    <>
+                {loading ? (
+                  <div className="sm-chip text-[var(--sm-muted)]">Loading desk...</div>
+                ) : activeView === 'queue' ? (
+                  <>
+                    <div className="sm-proof-card">
+                      <p className="sm-kicker text-[var(--sm-accent)]">Add task</p>
+                      <label className="mt-4 grid gap-2 text-sm font-semibold text-[var(--sm-muted)]">
+                        Task
+                        <input
+                          className="sm-input"
+                          onChange={(event) => setQueueTitle(event.target.value)}
+                          placeholder={queueTemplates[queueTemplate].placeholder}
+                          value={queueTitle}
+                        />
+                      </label>
+
+                      <div className="mt-4 flex flex-wrap gap-3">
+                        <button className="sm-button-primary" onClick={() => void saveQuickAction()} type="button">
+                          Add task
+                        </button>
+                        {leads.length ? (
+                          <button className="sm-button-secondary" onClick={() => void seedQueue()} type="button">
+                            Pull from companies
+                          </button>
+                        ) : null}
+                      </div>
+                      <div className="mt-3 sm-chip text-[var(--sm-muted)]">{queueOwner} | {queuePriority} | {queueDue}</div>
+                    </div>
+
+                    {openTasks.length ? (
+                      openTasks.slice(0, 8).map((task) => (
+                        <div className="sm-proof-card" key={task.id}>
+                          <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div>
+                              <p className="text-lg font-bold text-white">{task.title}</p>
+                              <p className="mt-2 text-sm text-[var(--sm-muted)]">
+                                {task.owner} | {task.priority} | {task.due}
+                              </p>
+                            </div>
+                            <span className="sm-status-pill">{task.status}</span>
+                          </div>
+                          {task.notes ? <div className="mt-4 sm-chip text-[var(--sm-muted)]">{task.notes}</div> : null}
+                          <div className="mt-4 flex flex-wrap gap-3">
+                            <button className="sm-button-primary" onClick={() => void markDone(task.id)} type="button">
+                              Mark done
+                            </button>
+                            <button className="sm-button-secondary" onClick={() => void removeAction(task.id)} type="button">
+                              Remove
+                            </button>
+                          </div>
+                        </div>
+                      ))
+                    ) : (
                       <div className="sm-proof-card">
-                        <p className="sm-kicker text-[var(--sm-accent)]">Add one task</p>
-                        <div className="mt-4 grid gap-3 md:grid-cols-[0.28fr_0.72fr]">
-                          <label className="grid gap-2 text-sm font-semibold text-[var(--sm-muted)]">
-                            Type
-                            <select className="sm-input" onChange={(event) => applyQueueTemplate(event.target.value as QueueTemplateId)} value={queueTemplate}>
-                              {publicQueueTemplates.map((templateId) => (
-                                <option key={templateId} value={templateId}>
-                                  {queueTemplates[templateId].label}
+                        <p className="font-semibold text-white">No tasks yet</p>
+                        <p className="mt-2 text-sm text-[var(--sm-muted)]">Start with one next step above, or paste messy updates first.</p>
+                      </div>
+                    )}
+                  </>
+                ) : leads.length ? (
+                  <>
+                    <div className="flex flex-wrap gap-3">
+                      <button className="sm-button-primary" onClick={() => setSetupFlow('leads')} type="button">
+                        Add names
+                      </button>
+                      <Link className="sm-button-secondary" to="/task-list">
+                        Open tasks
+                      </Link>
+                    </div>
+                    <div className="text-sm text-[var(--sm-muted)]">Need more names? <Link className="text-white underline underline-offset-4" to="/find-companies">Find more names</Link></div>
+
+                    {leads.slice(0, 8).map((lead) => (
+                      <div className="sm-proof-card" key={lead.id}>
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div>
+                            <p className="text-lg font-bold text-white">{lead.name}</p>
+                            <p className="mt-2 text-sm text-[var(--sm-muted)]">{nextActionForLead(lead)}</p>
+                          </div>
+                          <span className="sm-status-pill">{leadStageLabel(lead.stage, mode)}</span>
+                        </div>
+
+                        <div className="mt-4 sm-chip text-white">
+                          <p className="sm-kicker text-[var(--sm-accent)]">Contact</p>
+                          <p className="mt-2 text-sm">{lead.email || lead.phone || lead.website || 'No direct contact yet'}</p>
+                        </div>
+
+                        <div className="mt-4 grid gap-3 md:grid-cols-[0.36fr_0.64fr]">
+                          <label className="grid gap-2 text-xs font-semibold text-[var(--sm-muted)]">
+                            Status
+                            <select className="sm-input" onChange={(event) => void updateStage(lead.id, event.target.value)} value={lead.stage}>
+                              {(mode === 'shared' ? sharedStageOptions : localStageOptions).map((stage) => (
+                                <option key={stage} value={stage}>
+                                  {mode === 'shared' ? sharedStageLabels[stage] ?? stage : localStageLabels[stage as BrowserWorkspaceStage] ?? stage}
                                 </option>
                               ))}
                             </select>
                           </label>
-                          <label className="grid gap-2 text-sm font-semibold text-[var(--sm-muted)]">
-                            Task
-                            <input
-                              className="sm-input"
-                              onChange={(event) => setQueueTitle(event.target.value)}
-                              placeholder={queueTemplates[queueTemplate].placeholder}
-                              value={queueTitle}
-                            />
+                          <label className="grid gap-2 text-xs font-semibold text-[var(--sm-muted)]">
+                            Next note
+                            <textarea className="sm-input min-h-24" onChange={(event) => void updateNotes(lead.id, event.target.value)} placeholder="Reply, blocker, or next step." value={lead.notes} />
                           </label>
                         </div>
 
                         <div className="mt-4 flex flex-wrap gap-3">
-                          <button className="sm-button-primary" onClick={() => void saveQuickAction()} type="button">
-                            Add task
+                          <button className="sm-button-primary" onClick={() => void copyOutreach(lead)} type="button">
+                            Copy email
                           </button>
-                          {leads.length ? (
-                            <button className="sm-button-secondary" onClick={() => void seedQueue()} type="button">
-                              Pull from companies
+                          {lead.sourceUrl ? (
+                            <a className="sm-button-secondary" href={lead.sourceUrl} rel="noreferrer" target="_blank">
+                              Open source
+                            </a>
+                          ) : null}
+                          {mode === 'local' ? (
+                            <button className="sm-button-secondary" onClick={() => void removeLead(lead.id)} type="button">
+                              Remove
                             </button>
                           ) : null}
                         </div>
-                        <div className="mt-3 text-sm text-[var(--sm-muted)]">
-                          Default owner: {queueOwner}. Default due: {queueDue}. Priority: {queuePriority}.
-                        </div>
                       </div>
-
-                      {openTasks.length ? (
-                        openTasks.slice(0, 8).map((task) => (
-                          <div className="sm-proof-card" key={task.id}>
-                            <div className="flex flex-wrap items-start justify-between gap-3">
-                              <div>
-                                <p className="text-lg font-bold text-white">{task.title}</p>
-                                <p className="mt-2 text-sm text-[var(--sm-muted)]">
-                                  {task.owner} | {task.priority} | {task.due}
-                                </p>
-                              </div>
-                              <span className="sm-status-pill">{task.status}</span>
-                            </div>
-                            {task.notes ? <div className="mt-4 sm-chip text-[var(--sm-muted)]">{task.notes}</div> : null}
-                            <div className="mt-4 flex flex-wrap gap-3">
-                              <button className="sm-button-primary" onClick={() => void markDone(task.id)} type="button">
-                                Mark done
-                              </button>
-                              <button className="sm-button-secondary" onClick={() => void removeAction(task.id)} type="button">
-                                Remove
-                              </button>
-                            </div>
-                          </div>
-                        ))
-                      ) : (
-                        <div className="sm-proof-card">
-                          <p className="font-semibold text-white">No tasks yet</p>
-                          <p className="mt-2 text-sm text-[var(--sm-muted)]">Start with one next step above, or paste messy updates first.</p>
-                        </div>
-                      )}
-                    </>
-                  ) : leads.length ? (
-                    <>
-                      <div className="flex flex-wrap gap-3">
-                        <button className="sm-button-primary" onClick={() => setSetupFlow('leads')} type="button">
-                          Add names
-                        </button>
-                        <Link className="sm-button-secondary" to="/task-list">
-                          Open task list
-                        </Link>
-                      </div>
-                      <div className="text-sm text-[var(--sm-muted)]">
-                        Need more names?{' '}
-                        <Link className="text-white underline underline-offset-4" to="/find-companies">
-                          Search again
-                        </Link>
-                      </div>
-
-                      {leads.slice(0, 8).map((lead) => (
-                        <div className="sm-proof-card" key={lead.id}>
-                          <div className="flex flex-wrap items-start justify-between gap-3">
-                            <div>
-                              <p className="text-lg font-bold text-white">{lead.name}</p>
-                              <p className="mt-2 text-sm text-[var(--sm-muted)]">{nextActionForLead(lead)}</p>
-                            </div>
-                            <span className="sm-status-pill">{leadStageLabel(lead.stage, mode)}</span>
-                          </div>
-
-                          <div className="mt-4 sm-chip text-white">
-                            <p className="sm-kicker text-[var(--sm-accent)]">Contact</p>
-                            <p className="mt-2 text-sm">{lead.email || lead.phone || lead.website || 'No direct contact yet'}</p>
-                          </div>
-
-                          <div className="mt-4 grid gap-3 md:grid-cols-[0.36fr_0.64fr]">
-                            <label className="grid gap-2 text-xs font-semibold text-[var(--sm-muted)]">
-                              Stage
-                              <select className="sm-input" onChange={(event) => void updateStage(lead.id, event.target.value)} value={lead.stage}>
-                                {(mode === 'shared' ? sharedStageOptions : localStageOptions).map((stage) => (
-                                  <option key={stage} value={stage}>
-                                    {mode === 'shared' ? sharedStageLabels[stage] ?? stage : localStageLabels[stage as BrowserWorkspaceStage] ?? stage}
-                                  </option>
-                                ))}
-                              </select>
-                            </label>
-                            <label className="grid gap-2 text-xs font-semibold text-[var(--sm-muted)]">
-                              Note
-                              <textarea className="sm-input min-h-24" onChange={(event) => void updateNotes(lead.id, event.target.value)} placeholder="Reply, blocker, or next step." value={lead.notes} />
-                            </label>
-                          </div>
-
-                          <div className="mt-4 flex flex-wrap gap-3">
-                            <button className="sm-button-primary" onClick={() => void copyOutreach(lead)} type="button">
-                              Copy outreach
-                            </button>
-                            {lead.sourceUrl ? (
-                              <a className="sm-button-secondary" href={lead.sourceUrl} rel="noreferrer" target="_blank">
-                                Open source
-                              </a>
-                            ) : null}
-                            {mode === 'local' ? (
-                              <button className="sm-button-secondary" onClick={() => void removeLead(lead.id)} type="button">
-                                Remove
-                              </button>
-                            ) : null}
-                          </div>
-                        </div>
-                      ))}
-                    </>
-                  ) : (
-                    <div className="sm-proof-card">
-                      <p className="font-semibold text-white">No companies yet</p>
-                      <p className="mt-2 text-sm text-[var(--sm-muted)]">Paste your own list here from Google, Facebook, Excel, or CRM. If you need new names first, use Find Clients.</p>
-                      <div className="mt-4 flex flex-wrap gap-3">
-                        <Link className="sm-button-primary" to="/find-companies">
-                          Find Clients
-                        </Link>
-                        <button className="sm-button-secondary" onClick={() => setSetupFlow('leads')} type="button">
-                          Paste my list
-                        </button>
-                      </div>
+                    ))}
+                  </>
+                ) : (
+                  <div className="sm-proof-card">
+                    <p className="font-semibold text-white">No companies yet</p>
+                    <p className="mt-2 text-sm text-[var(--sm-muted)]">Paste the list you already have. If you need new names first, use Find Clients.</p>
+                    <div className="mt-4 flex flex-wrap gap-3">
+                      <button className="sm-button-primary" onClick={() => setSetupFlow('leads')} type="button">
+                        Paste my list
+                      </button>
+                      <Link className="sm-link self-center" to="/find-companies">
+                        Find new names
+                      </Link>
                     </div>
-                  )}
-                </>
-              )}
-            </div>
-          )}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
         </article>
       </section>
     </div>

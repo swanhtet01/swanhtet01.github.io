@@ -77,6 +77,16 @@ export const YANGON_TYRE_PORTAL_APPS: YangonTyrePortalApp[] = [
     outcome: 'Plant execution stays visible by owner, due date, and next move.',
   },
   {
+    id: 'attendance-payroll',
+    name: 'Attendance, OT, and Payroll',
+    workspace: 'HR and Payroll',
+    route: '/app/attendance-payroll',
+    users: ['Admin', 'Plant manager', 'Payroll'],
+    mission: 'Replace brittle device sync with phone/tablet face or photo check-ins, exception review, OT approval, and payroll-ready evidence.',
+    dataSources: ['employee photos', 'Employee Details', 'OT Record', 'Yangon Salary', 'attendance check-ins'],
+    outcome: 'Every punch becomes a reviewed payroll signal instead of a disconnected device log.',
+  },
+  {
     id: 'manufacturing-command',
     name: 'Manufacturing Command',
     workspace: 'Factory',

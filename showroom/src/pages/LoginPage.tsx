@@ -1,58 +1,299 @@
-import { useEffect, useState, type FormEvent } from 'react'
-import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 
-import { LiveProductPreview } from '../components/LiveProductPreview'
-import { PageIntro } from '../components/PageIntro'
-import { appHref, getWorkspaceSession, loginWorkspace, needsLiveAppHandoff, publicShellOnly, workspaceAppBase } from '../lib/workspaceApi'
-import { getTenantBrandLabel, getTenantConfig, getTenantLabel } from '../lib/tenantConfig'
-import { YANGON_TYRE_CONNECTOR_CHANNELS, YANGON_TYRE_IDENTITY_LANES } from '../lib/yangonTyrePortalModel'
+import { buildProofLoginHref, productDemoSurfaces, productFocusLanes } from '../lib/demoSurfaces'
+import { isPosAuthHost } from '../lib/posAuth'
+import { resolveTenantLandingRoute } from '../lib/tenantRoleExperience'
+import {
+  appHref,
+  demoLoginWorkspace,
+  getWorkspaceSession,
+  loginWorkspace,
+  needsLiveAppHandoff,
+  publicShellOnly,
+} from '../lib/workspaceApi'
+import { getTenantConfig, type TenantConfig } from '../lib/tenantConfig'
 
-const defaultUseCases = ['Saved workspace and queues', 'Approvals and exceptions', 'Director and agent views'] as const
-const clientUseCases = ['Role-based enterprise login', 'Sales, plant, DQMS, maintenance, and CEO homes', 'Connector-scoped data and AI review'] as const
+type WorkspaceOption = {
+  slug?: string
+  name?: string
+  role?: string
+}
+
+type ProductDemoSurface = (typeof productDemoSurfaces)[number] | (typeof productFocusLanes)[number]
+
+const DEMO_WORKSPACE_SLUG = 'supermega-demo'
+const CLIENT_DEMO_PORTAL_IDS = new Set(['easy-erp', 'ai-workflow-desk', 'operations-digital-twin', 'restaurant-group-os'])
+const CLIENT_DEMO_APP_ROUTES = new Set([
+  '/app/start',
+  '/app/custom-workflow',
+  '/app/factory-operations',
+  '/app/restaurant-pos',
+  '/app/ai-workflow-desk',
+  '/app/operations-twin',
+  '/app/restaurant-os',
+])
+const POS_DEMO_PORTAL_ID = 'restaurant-group-os'
+const POS_DEMO_ROUTES = new Set(['/app/restaurant-pos', '/app/restaurant-os'])
+
+function resolveDemoLoginPortalId(demo: ProductDemoSurface) {
+  if (demo.portalId === 'agentops-toolbox') {
+    return 'ai-workflow-desk'
+  }
+  return demo.portalId
+}
+
+function resolveDemoNavigateRoute(demo: ProductDemoSurface) {
+  if (demo.portalId === 'agentops-toolbox') {
+    return '/app/start'
+  }
+  return demo.to as string
+}
+
+function normalizeWorkspaceOptions(options: WorkspaceOption[]) {
+  return options.filter((item): item is Required<Pick<WorkspaceOption, 'slug'>> & WorkspaceOption => Boolean(item.slug))
+}
+
+function sanitizeNextRoute(nextRoute: string | null) {
+  const requestedRoute = String(nextRoute ?? '').trim()
+  if (!requestedRoute || requestedRoute === '/app') {
+    return '/app/start'
+  }
+  if (!requestedRoute.startsWith('/app/') || requestedRoute.startsWith('//') || requestedRoute.includes('\\') || requestedRoute.includes('&')) {
+    return '/app/start'
+  }
+  return requestedRoute
+}
+
+function isPosProofRequest(nextRoute: string, proofParam: string | null | undefined) {
+  const normalizedProof = String(proofParam || '').trim().toLowerCase()
+  return normalizedProof === POS_DEMO_PORTAL_ID || POS_DEMO_ROUTES.has(nextRoute)
+}
+
+function resolvePostLoginRoute(nextRoute: string, tenantKey: TenantConfig['key'], role?: string | null) {
+  if (tenantKey === 'ytf-plant-a') {
+    const ytfShellRoutes = new Set(['/app', '/app/start', '/app/portal', '/app/manager-system'])
+    if (ytfShellRoutes.has(nextRoute)) {
+      return resolveTenantLandingRoute(tenantKey, role)
+    }
+  }
+
+  if (nextRoute && nextRoute.startsWith('/app/') && !nextRoute.startsWith('//') && !nextRoute.includes('\\')) {
+    return nextRoute
+  }
+  return resolveTenantLandingRoute(tenantKey, role)
+}
+
+function isDemoSession(session?: { workspace_slug?: string; workspace_name?: string; display_name?: string; username?: string; workspace_plan?: string } | null) {
+  const text = [
+    session?.workspace_slug,
+    session?.workspace_name,
+    session?.display_name,
+    session?.username,
+    session?.workspace_plan,
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase()
+
+  return text.includes(DEMO_WORKSPACE_SLUG) || text.includes('demo workspace')
+}
+
+function resolveLoginDestination(nextRoute: string, tenantKey: TenantConfig['key'], role?: string | null, session?: Parameters<typeof isDemoSession>[0]) {
+  if (tenantKey !== 'ytf-plant-a' && isDemoSession(session) && !CLIENT_DEMO_APP_ROUTES.has(nextRoute)) {
+    return '/app/start'
+  }
+
+  return resolvePostLoginRoute(nextRoute, tenantKey, role)
+}
+
+async function getWorkspaceSessionWithTimeout(timeoutMs = 1600) {
+  return await Promise.race([
+    getWorkspaceSession(),
+    new Promise<Awaited<ReturnType<typeof getWorkspaceSession>>>((resolve) => {
+      window.setTimeout(() => resolve({ authenticated: false, auth_required: true, session: null, workspaces: [] }), timeoutMs)
+    }),
+  ])
+}
+
+async function runDemoLoginWithTimeout(demo: ProductDemoSurface, timeoutMs = 12000) {
+  return await Promise.race([
+    demoLoginWorkspace(demo.portalId, DEMO_WORKSPACE_SLUG),
+    new Promise<Awaited<ReturnType<typeof demoLoginWorkspace>>>((_, reject) => {
+      window.setTimeout(() => reject(new Error('timeout')), timeoutMs)
+    }),
+  ])
+}
+
+function MinimalAppHandoff({ href }: { href: string }) {
+  return (
+    <div className="sm-public-handoff mx-auto grid min-h-[72vh] w-full place-items-center px-4 py-10">
+      <section className="sm-public-handoff-card">
+        <p className="sm-public-handoff-kicker">SUPERMEGA App</p>
+        <h1>Sign in once.</h1>
+        <p className="sm-public-handoff-copy">Use the app host for product apps, client accounts, and team access.</p>
+        <a className="sm-button-primary" href={href}>
+          Open app
+        </a>
+      </section>
+    </div>
+  )
+}
 
 export function LoginPage() {
   const navigate = useNavigate()
   const location = useLocation()
-  const tenant = getTenantConfig()
-  const isClientTenant = tenant.key !== 'default'
-  const next = new URLSearchParams(location.search).get('next') || (isClientTenant ? '/app/portal' : '/app/actions')
-  const tenantLabel = getTenantLabel(tenant) || tenant.defaultCompany || 'workspace'
-
-  const [loading, setLoading] = useState(true)
-  const [submitting, setSubmitting] = useState(false)
-  const [username, setUsername] = useState('owner')
-  const [password, setPassword] = useState('')
-  const [workspaceSlug, setWorkspaceSlug] = useState(tenant.defaultWorkspaceSlug ?? '')
-  const [error, setError] = useState('')
-  const [authRequired, setAuthRequired] = useState(true)
-  const [usesDefaultCredentials, setUsesDefaultCredentials] = useState(false)
-  const [workspaceOptions, setWorkspaceOptions] = useState<Array<{ slug?: string; name?: string; role?: string }>>([])
+  const searchParams = useMemo(() => new URLSearchParams(location.search), [location.search])
+  const tenantConfig = useMemo(() => getTenantConfig(), [])
+  const hostIsPrivateTenant =
+    typeof window !== 'undefined' &&
+    /(^|[.-])ytf([.-]|$)|ytf-plant-a/i.test(window.location.hostname.trim().toLowerCase())
+  const next = sanitizeNextRoute(searchParams.get('next'))
+  const tenantParam = searchParams.get('tenant')?.trim().toLowerCase()
+  const proofParam = searchParams.get('proof')?.trim() || searchParams.get('demo')?.trim()
+  const isPrivateTenant = tenantConfig.key === 'ytf-plant-a' || hostIsPrivateTenant || tenantParam === 'ytf' || tenantParam === 'ytf-plant-a'
+  const tenantKey = isPrivateTenant ? 'ytf-plant-a' : 'default'
+  const posProofRequest = !isPrivateTenant && isPosProofRequest(next, proofParam)
+  const posProofHref = buildProofLoginHref(POS_DEMO_PORTAL_ID, '/app/restaurant-pos')
   const handoffToApp = needsLiveAppHandoff()
   const shellOnly = publicShellOnly()
-  const useCases = isClientTenant ? clientUseCases : defaultUseCases
+  const autoDemoOption = useMemo(
+    () =>
+      isPrivateTenant
+        ? null
+        : (productDemoSurfaces.find((item) => CLIENT_DEMO_PORTAL_IDS.has(item.portalId) && item.portalId === proofParam) ?? null),
+    [proofParam, isPrivateTenant],
+  )
+  const autoDemoStartedRef = useRef(false)
+  const manualDemoNavigationRef = useRef(false)
+  const privateTenantLoginPath = `/login?tenant=ytf&next=${encodeURIComponent(next)}`
+  const liveLoginHref = isPrivateTenant
+    ? appHref(privateTenantLoginPath, privateTenantLoginPath)
+    : appHref(`/login?next=${encodeURIComponent(next)}`, '/intake')
+  const initialLoading = isPrivateTenant && !(handoffToApp || shellOnly || Boolean(autoDemoOption))
+
+  const [loading, setLoading] = useState(initialLoading)
+  const [submitting, setSubmitting] = useState(false)
+  const [username, setUsername] = useState('')
+  const [password, setPassword] = useState('')
+  const [workspaceSlug, setWorkspaceSlug] = useState('')
+  const [error, setError] = useState('')
+  const [authRequired, setAuthRequired] = useState(true)
+  const [sessionRole, setSessionRole] = useState<string | null>(null)
+  const [workspaceOptions, setWorkspaceOptions] = useState<WorkspaceOption[]>([])
+  const [demoLoadingPortalId, setDemoLoadingPortalId] = useState('')
+
+  const normalizedWorkspaceOptions = useMemo(() => normalizeWorkspaceOptions(workspaceOptions), [workspaceOptions])
+  const clientDemoOptions = useMemo(
+    () => (isPrivateTenant ? [] : productFocusLanes.filter((demo) => demo.portalId !== 'spa-service-desk')),
+    [isPrivateTenant],
+  )
+  const defaultWorkspaceSlug = normalizedWorkspaceOptions[0]?.slug || ''
+  const activeWorkspaceSlug = workspaceSlug || defaultWorkspaceSlug
+  const showWorkspacePicker = normalizedWorkspaceOptions.length > 1
+  const backgroundOpening = loading && isPrivateTenant
+  const isOpening = submitting || backgroundOpening || Boolean(demoLoadingPortalId)
+  const loginEyebrow = isPrivateTenant ? 'YTF / Yangon Tyre private ERP' : 'app.supermega.dev'
+  const loginTitle = isPrivateTenant ? 'Open private app.' : 'Open your product workspace.'
+  const loginCopy = isPrivateTenant
+    ? 'Sign in with your assigned account. The account decides Plant A, Plant B, admin, or CEO access.'
+    : 'Open your live product workspace — DeskPOS, Factory Operations, or Custom Portal. Private client accounts open after approval.'
+  const posHost = isPosAuthHost()
 
   useEffect(() => {
+    if (!posHost || isPrivateTenant) {
+      return
+    }
+    navigate('/pos/login', { replace: true })
+  }, [isPrivateTenant, navigate, posHost])
+
+  useEffect(() => {
+    if (!posProofRequest) {
+      return
+    }
+    if (typeof window === 'undefined') {
+      navigate('/login?next=/app/start', { replace: true })
+      return
+    }
+    window.location.replace(posProofHref)
+  }, [navigate, posProofHref, posProofRequest])
+
+  useEffect(() => {
+    if (!handoffToApp || typeof window === 'undefined') {
+      return
+    }
+
+    window.location.replace(liveLoginHref)
+  }, [handoffToApp, liveLoginHref])
+
+  useEffect(() => {
+    if (handoffToApp || shellOnly || !autoDemoOption || autoDemoStartedRef.current) {
+      return
+    }
+
+    autoDemoStartedRef.current = true
+    window.setTimeout(() => {
+      setLoading(false)
+      setSubmitting(true)
+      setError('')
+    }, 0)
+
+    runDemoLoginWithTimeout(autoDemoOption)
+      .then((payload) => {
+        if (!payload.authenticated) {
+          setError('Selected app is not available yet. Try signing in below.')
+          return
+        }
+        navigate(autoDemoOption.to)
+      })
+      .catch(() => {
+        setError('Selected app took too long to open. Try signing in below.')
+      })
+      .finally(() => {
+        setSubmitting(false)
+      })
+  }, [autoDemoOption, handoffToApp, navigate, shellOnly])
+
+  useEffect(() => {
+    if (handoffToApp || shellOnly) {
+      window.setTimeout(() => setLoading(false), 0)
+      return
+    }
+
+    if (autoDemoOption) {
+      window.setTimeout(() => setLoading(false), 0)
+      return
+    }
+
     let cancelled = false
+
     async function load() {
       try {
-        const session = await getWorkspaceSession()
+        const session = await getWorkspaceSessionWithTimeout()
         if (cancelled) {
           return
         }
+
         setAuthRequired(session.auth_required !== false)
-        setUsesDefaultCredentials(Boolean(session.uses_default_credentials))
+        setSessionRole(session.session?.role ?? null)
         setWorkspaceOptions(session.workspaces ?? [])
-        if (!workspaceSlug && session.workspaces?.length === 1) {
-          setWorkspaceSlug(session.workspaces[0].slug ?? '')
+
+        const nextWorkspaceSlug =
+          session.session?.workspace_slug ||
+          session.workspaces?.[0]?.slug ||
+          ''
+        if (nextWorkspaceSlug) {
+          setWorkspaceSlug((current) => current || nextWorkspaceSlug)
         }
+
         if (session.authenticated) {
-          navigate(next, { replace: true })
-          return
+          if (manualDemoNavigationRef.current || isPrivateTenant) {
+            return
+          }
+          navigate(resolveLoginDestination(next, tenantKey, session.session?.role, session.session), { replace: true })
         }
       } catch {
-        if (!cancelled) {
-          setError('The app host is not responding yet. Login works only on the live app backend.')
-        }
+        // Keep the entry screen calm. Failed background session checks should not look like a failed login.
       } finally {
         if (!cancelled) {
           setLoading(false)
@@ -64,225 +305,156 @@ export function LoginPage() {
     return () => {
       cancelled = true
     }
-  }, [navigate, next, workspaceSlug])
+  }, [autoDemoOption, handoffToApp, isPrivateTenant, navigate, next, shellOnly, tenantKey])
+
+  useEffect(() => {
+    if (loading || handoffToApp || shellOnly || authRequired || isPrivateTenant) {
+      return
+    }
+
+    navigate(resolvePostLoginRoute(next, tenantKey, sessionRole), { replace: true })
+  }, [authRequired, handoffToApp, isPrivateTenant, loading, navigate, next, sessionRole, shellOnly, tenantKey])
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setSubmitting(true)
     setError('')
+
     try {
-      const payload = await loginWorkspace(username, password, workspaceSlug)
+      const payload = await loginWorkspace(username.trim(), password, activeWorkspaceSlug)
       if (payload.authenticated) {
-        navigate(next, { replace: true })
+        navigate(resolveLoginDestination(next, tenantKey, payload.session?.role, payload.session), { replace: true })
         return
       }
-      setError('Login failed.')
+      setError('Sign-in failed. Check the username, password, and account.')
     } catch {
-      setError('Login failed. Check the username and password or use the live app host.')
+      setError(`Sign-in failed. Check the credentials or try again from ${isPrivateTenant ? 'the private app link' : 'app.supermega.dev'}.`)
     } finally {
       setSubmitting(false)
     }
   }
 
-  return (
-    <div className="space-y-8">
-      <PageIntro
-        eyebrow={isClientTenant ? getTenantBrandLabel(tenant) : tenant.brandName}
-        title={isClientTenant ? `Open the ${tenantLabel} enterprise portal.` : 'Open the workspace.'}
-        description={
-          isClientTenant
-            ? `Use this for role-based access to sales, operations, manufacturing, DQMS, maintenance, approvals, and director review inside ${tenantLabel}.`
-            : 'Use this only for the saved team workspace, approvals, and live operations.'
+  async function handleDemoOpen(demo: ProductDemoSurface) {
+    manualDemoNavigationRef.current = true
+    setDemoLoadingPortalId(demo.portalId)
+    setError('')
+
+    try {
+      if (demo.portalId === POS_DEMO_PORTAL_ID) {
+        if (typeof window !== 'undefined') {
+          window.location.assign(posProofHref)
         }
-      />
+        return
+      }
+      const demoLoginTarget = {
+        ...demo,
+        portalId: resolveDemoLoginPortalId(demo),
+      } as ProductDemoSurface
+      const payload = await runDemoLoginWithTimeout(demoLoginTarget)
+      if (!payload.authenticated) {
+        manualDemoNavigationRef.current = false
+        setError('Product workspace access is not enabled on this host yet. Use your assigned app credentials.')
+        return
+      }
+      navigate(resolveDemoNavigateRoute(demo))
+    } catch {
+      manualDemoNavigationRef.current = false
+      setError('Product workspace took too long to open. Use your assigned app credentials or retry from the direct product host.')
+    } finally {
+      setDemoLoadingPortalId('')
+    }
+  }
 
-      {shellOnly ? (
-        <section className="grid gap-6 lg:grid-cols-[0.76fr_1.24fr]">
-          <aside className="sm-terminal p-6">
-            <p className="sm-kicker text-[var(--sm-accent)]">What is live here</p>
-            <div className="mt-4 grid gap-3">
-              {useCases.map((item) => (
-                <div className="sm-chip text-white" key={item}>
-                  {item}
-                </div>
-              ))}
-            </div>
-          </aside>
-          <section className="sm-surface p-6">
-            <p className="text-sm leading-relaxed text-[var(--sm-muted)]">
-              {isClientTenant
-                ? 'This host shows the Yangon Tyre portal shell, but the saved enterprise workspace app is not deployed on this domain yet.'
-                : 'This host is the public site only. The saved workspace app is not deployed on this domain yet.'}
-            </p>
-            <div className="mt-5 flex flex-wrap gap-3">
-              <Link className="sm-button-primary" to={isClientTenant ? '/receiving-log' : '/find-companies'}>
-                {isClientTenant ? 'Open receiving queue' : 'Open Find Clients'}
-              </Link>
-              <Link className="sm-button-secondary" to="/contact">
-                Start rollout
-              </Link>
-            </div>
-          </section>
-        </section>
-      ) : handoffToApp ? (
-        <section className="grid gap-6 lg:grid-cols-[0.76fr_1.24fr]">
-          <aside className="sm-terminal p-6">
-            <p className="sm-kicker text-[var(--sm-accent)]">Use this for</p>
-            <div className="mt-4 grid gap-3">
-              {useCases.map((item) => (
-                <div className="sm-chip text-white" key={item}>
-                  {item}
-                </div>
-              ))}
-            </div>
-          </aside>
-          <section className="sm-surface p-6">
-            <p className="text-sm leading-relaxed text-[var(--sm-muted)]">
-              {isClientTenant
-                ? 'The Yangon Tyre enterprise workspace is on the live app host. Use that login to enter the tenant with role-based homes and connector-scoped data.'
-                : 'The saved workspace app is on the live app host, not this static site.'}
-            </p>
-            <div className="mt-5 flex flex-wrap gap-3">
-              <a className="sm-button-primary" href={appHref('/login/')}>
-                {isClientTenant ? 'Open enterprise portal' : 'Open workspace'}
-              </a>
-              <a className="sm-button-accent" href={appHref('/signup/')}>
-                Create workspace
-              </a>
-              <Link className="sm-button-secondary" to={isClientTenant ? '/receiving-log' : '/find-companies'}>
-                {isClientTenant ? 'Open receiving queue' : 'Open Find Clients'}
-              </Link>
-            </div>
-            <div className="mt-4 sm-chip text-[var(--sm-muted)]">Live app host: {workspaceAppBase}</div>
-          </section>
-        </section>
-      ) : (
-        <section className="grid gap-6 lg:grid-cols-[0.7fr_1.3fr]">
-          <aside className="sm-terminal p-6">
-            <p className="sm-kicker text-[var(--sm-accent)]">Use this for</p>
-            <div className="mt-4 grid gap-3">
-              {useCases.map((item) => (
-                <div className="sm-chip text-white" key={item}>
-                  {item}
-                </div>
-              ))}
-            </div>
-          </aside>
-          <form className="sm-surface p-6" onSubmit={handleSubmit}>
-            {isClientTenant ? (
-              <div className="mb-5 flex flex-wrap gap-3 text-sm text-[var(--sm-muted)]">
-                <span className="sm-status-pill">Enterprise login</span>
-                <span className="sm-status-pill">Role landing</span>
-                <span className="sm-status-pill">Connector scope</span>
-              </div>
-            ) : null}
-            <div className="grid gap-4">
-              <label className="grid gap-2 text-sm font-semibold text-[var(--sm-muted)]">
-                Username
-                <input className="sm-input" onChange={(event) => setUsername(event.target.value)} value={username} />
-              </label>
-              <label className="grid gap-2 text-sm font-semibold text-[var(--sm-muted)]">
-                Password
-                <input className="sm-input" onChange={(event) => setPassword(event.target.value)} type="password" value={password} />
-              </label>
-              <label className="grid gap-2 text-sm font-semibold text-[var(--sm-muted)]">
-                Workspace
-                <input
-                  className="sm-input"
-                  onChange={(event) => setWorkspaceSlug(event.target.value)}
-                  placeholder={
-                    workspaceOptions[0]?.slug
-                      ? `Default: ${workspaceOptions[0].slug}`
-                      : tenant.defaultWorkspaceSlug
-                        ? `Default: ${tenant.defaultWorkspaceSlug}`
-                        : 'Leave blank for default workspace'
-                  }
-                  value={workspaceSlug}
-                />
-              </label>
-            </div>
+  if (handoffToApp || shellOnly) {
+    return <MinimalAppHandoff href={liveLoginHref} />
+  }
 
-            <div className="mt-5 flex flex-wrap gap-3">
-              <button className="sm-button-primary" disabled={loading || submitting} type="submit">
-                {submitting ? 'Opening...' : isClientTenant ? 'Open enterprise portal' : 'Open workspace'}
-              </button>
-              <Link className="sm-button-accent" to="/signup">
-                Create workspace
-              </Link>
-              <Link className="sm-button-secondary" to={isClientTenant ? '/receiving-log' : '/find-companies'}>
-                {isClientTenant ? 'Open receiving queue' : 'Open Find Clients'}
-              </Link>
-            </div>
+  if (posHost && !isPrivateTenant) {
+    return null
+  }
 
-            {!authRequired ? <div className="mt-4 sm-chip text-[var(--sm-muted)]">Local sign-in bypass is enabled on this host, so the app should open directly.</div> : null}
-            {usesDefaultCredentials ? (
-              <div className="mt-4 sm-chip text-[var(--sm-muted)]">
-                This host is still using temporary credentials. Replace them before sharing the workspace more widely.
-              </div>
-            ) : null}
-            {workspaceOptions.length ? (
-              <div className="mt-4 sm-chip text-[var(--sm-muted)]">
-                Available workspaces: {workspaceOptions.map((item) => `${item.name || item.slug} (${item.role || 'member'})`).join(' / ')}
-              </div>
-            ) : null}
-            {isClientTenant ? (
-              <div className="mt-4 sm-chip text-[var(--sm-muted)]">
-                Default tenant: {tenant.defaultWorkspaceSlug || 'ytf-plant-a'}. Use the workspace field only if you need to switch to another Yangon Tyre
-                workspace slug.
-              </div>
-            ) : null}
-            {error ? <div className="mt-4 sm-chip text-white">{error}</div> : null}
-          </form>
-        </section>
-      )}
-
-      {isClientTenant ? (
-        <section className="grid gap-6 xl:grid-cols-[1.02fr_0.98fr]">
-          <article className="sm-surface-deep p-6">
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-              <div>
-                <p className="sm-kicker text-[var(--sm-accent)]">Portal map</p>
-                <h2 className="mt-3 text-2xl font-bold text-white lg:text-3xl">The login opens a real operating portal, not a blank shell.</h2>
-              </div>
-              <span className="sm-status-pill">Yangon Tyre tenant</span>
-            </div>
-            <div className="mt-6">
-              <LiveProductPreview compact variant="ytf-portal" />
-            </div>
-          </article>
-
-          <article className="sm-surface p-6">
-            <p className="sm-kicker text-[var(--sm-accent-alt)]">What login unlocks</p>
-            <h2 className="mt-3 text-2xl font-bold text-white lg:text-3xl">Right user, right home, right source lanes.</h2>
-            <div className="mt-6 grid gap-3">
-              {YANGON_TYRE_IDENTITY_LANES.map((lane) => (
-                <article className="sm-chip text-white" key={lane.id}>
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <p className="font-semibold">{lane.role}</p>
-                      <p className="mt-2 text-sm text-[var(--sm-muted)]">{lane.mandate}</p>
-                    </div>
-                    <Link className="sm-link" to={lane.route}>
-                      {lane.home}
-                    </Link>
-                  </div>
-                </article>
-              ))}
-            </div>
-
-            <div className="mt-6">
-              <p className="sm-kicker text-[var(--sm-accent)]">Connected inputs</p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {YANGON_TYRE_CONNECTOR_CHANNELS.map((connector) => (
-                  <span className="sm-status-pill" key={connector.id}>
-                    {connector.name}
-                  </span>
+  return (
+    <div className="sm-clean-login">
+      <section className="sm-clean-login-card">
+        <div className="sm-clean-login-copy">
+          <p className="sm-kicker text-[var(--sm-accent)]">{loginEyebrow}</p>
+          <h1>{loginTitle}</h1>
+          <p>{loginCopy}</p>
+          {!isPrivateTenant ? (
+            <aside className="sm-clean-demo-panel" aria-label="Product proof workspaces">
+              <span className="sm-status-pill">Product workspaces</span>
+              <h2>Choose one product.</h2>
+              <p className="sm-clean-demo-account">Shared product proof. Do not enter client data here. Private client accounts use the sign-in form.</p>
+              <div className="sm-clean-demo-grid">
+                {clientDemoOptions.map((demo) => (
+                  <button
+                    className="sm-clean-demo-card"
+                    disabled={isOpening}
+                    key={`${demo.portalId}-${demo.label}`}
+                    onClick={() => void handleDemoOpen(demo)}
+                    type="button"
+                  >
+                    {'shot' in demo && demo.shot ? <img alt="" aria-hidden="true" src={demo.shot} /> : null}
+                    <span>{demo.badge}</span>
+                    <strong>{demo.label}</strong>
+                    <small>{demo.portalId === POS_DEMO_PORTAL_ID ? `${demo.detail} Opens on pos.supermega.dev.` : demo.detail}</small>
+                  </button>
                 ))}
               </div>
-            </div>
-          </article>
-        </section>
-      ) : null}
+            </aside>
+          ) : (
+            <p className="sm-clean-login-gate">Private app. The username decides Admin, CEO, Plant A, Plant B, or manager access.</p>
+          )}
+        </div>
+
+        <form className="sm-clean-login-form" onSubmit={handleSubmit}>
+          <label>
+            <span>Username</span>
+            <input
+              autoComplete="username"
+              className="sm-input"
+              onChange={(event) => setUsername(event.target.value)}
+              placeholder="Username"
+              value={username}
+            />
+          </label>
+
+          <label>
+            <span>Password</span>
+            <input
+              autoComplete="current-password"
+              className="sm-input"
+              onChange={(event) => setPassword(event.target.value)}
+              placeholder="Password"
+              type="password"
+              value={password}
+            />
+          </label>
+
+          {showWorkspacePicker ? (
+            <label>
+              <span>Account</span>
+              <select className="sm-input" onChange={(event) => setWorkspaceSlug(event.target.value)} value={activeWorkspaceSlug}>
+                {normalizedWorkspaceOptions.map((item) => (
+                  <option key={item.slug} value={item.slug}>
+                    {item.name || item.slug}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+
+          {error ? <div className="sm-clean-login-error">{error}</div> : null}
+
+          <button className="sm-button-primary" disabled={isOpening} type="submit">
+            {demoLoadingPortalId ? 'Opening product...' : submitting || backgroundOpening ? 'Opening...' : authRequired ? 'Sign in' : 'Open app'}
+          </button>
+        </form>
+
+        <p className="sm-clean-login-help">
+          Need access? <a href="mailto:swanhtet@supermega.dev">swanhtet@supermega.dev</a>
+        </p>
+      </section>
     </div>
   )
 }

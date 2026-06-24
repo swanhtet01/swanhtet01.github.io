@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import { PageIntro } from '../components/PageIntro'
+import { ADAPTIVE_PORTAL_ENGINE, INDUSTRY_PORTAL_KITS, PORTAL_WORKSPACE_TYPES, industryPortalRolloutLink } from '../lib/industryPortalKits'
 import {
   getSupermegaDevControl,
   type SupermegaAssignmentRow,
@@ -10,6 +11,7 @@ import {
   type SupermegaDataLinkRow,
   type SupermegaDevControlPayload,
   type SupermegaDomainReport,
+  type SupermegaEdgeHostRow,
   type SupermegaResourceRow,
   type SupermegaReviewCycleRow,
 } from '../lib/supermegaDevApi'
@@ -45,29 +47,8 @@ function statusTone(value?: string | null) {
   return 'text-rose-300'
 }
 
-function rootReportStatus(report?: SupermegaDomainReport | null) {
-  const normalized = String(report?.overall_status ?? '').trim().toLowerCase()
-  if (normalized === 'warning') {
-    return 'warning'
-  }
-  if (normalized === 'ready') {
-    return 'ready'
-  }
-  return normalized || 'error'
-}
-
-function sharedAppStatus(row?: WorkspaceDomainRow | null) {
-  const normalized = String(row?.status ?? '').trim().toLowerCase()
-  if (normalized) {
-    return normalized
-  }
-  if (String(row?.dns_status ?? '').trim() === 'ready' && String(row?.tls_status ?? '').trim() === 'ready' && String(row?.http_status ?? '').trim() === 'ready') {
-    return 'ready'
-  }
-  if ([row?.dns_status, row?.tls_status, row?.http_status].some((value) => String(value ?? '').trim() === 'ready')) {
-    return 'attention'
-  }
-  return 'blocked'
+function edgeHostStatus(row?: SupermegaEdgeHostRow | null) {
+  return String(row?.status ?? '').trim().toLowerCase() || 'blocked'
 }
 
 function resourceTone(resource: SupermegaResourceRow) {
@@ -98,6 +79,20 @@ function domainInventoryRoute(row: WorkspaceDomainRow) {
 
 function domainInventoryDeployment(row: WorkspaceDomainRow) {
   return String(row.deployment_url || 'Not recorded')
+}
+
+function edgeHostInventoryKey(row: SupermegaEdgeHostRow) {
+  return String(row.id || row.hostname || row.label || 'edge-host')
+}
+
+function edgeHostAddresses(row?: SupermegaEdgeHostRow | null) {
+  const addresses = Array.isArray(row?.addresses) ? row!.addresses!.filter(Boolean) : []
+  return addresses.length ? addresses.join(', ') : 'No addresses captured'
+}
+
+function edgeHostRoutes(row?: SupermegaEdgeHostRow | null) {
+  const routes = Array.isArray(row?.routes_checked) ? row!.routes_checked!.filter(Boolean) : []
+  return routes.length ? routes.join(', ') : 'No routes recorded'
 }
 
 function normalizedOwner(value?: string | null) {
@@ -202,12 +197,17 @@ export function SupermegaDevPage() {
   }, [access.allowed])
 
   const machine = payload?.machine
-  const platform = payload?.platform
   const cloud = payload?.cloud
   const workforce = payload?.workforce
   const domains = payload?.domains
   const rootReport = domains?.root_report
+  const sharedAppReport = domains?.shared_app_report
   const sharedAppDomain = domains?.shared_app_domain
+  const edgeHosts = Array.isArray(domains?.edge_hosts) ? domains.edge_hosts : []
+  const edgeSummary = domains?.edge_summary
+  const apexEdgeHost = edgeHosts.find((row) => String(row.hostname ?? '').trim() === String(machine?.root_domain ?? 'supermega.dev'))
+  const wwwEdgeHost = edgeHosts.find((row) => String(row.hostname ?? '').trim() === `www.${String(machine?.root_domain ?? 'supermega.dev')}`)
+  const sharedAppEdgeHost = edgeHosts.find((row) => String(row.hostname ?? '').trim() === String(machine?.shared_app_host ?? ''))
   const topologyRows = useMemo<WorkspaceDomainRow[]>(
     () => (Array.isArray(cloud?.topology?.rows) ? cloud?.topology?.rows : Array.isArray(domains?.workspace_rows) ? domains?.workspace_rows : []),
     [cloud?.topology?.rows, domains?.workspace_rows],
@@ -224,6 +224,10 @@ export function SupermegaDevPage() {
   const nextMoves = Array.isArray(workforce?.next_moves) ? workforce.next_moves : []
   const linkedDataSources = Array.isArray(workforce?.data_links) ? workforce.data_links : []
   const rootFailures = failureList(rootReport)
+  const readiness = payload?.production_readiness
+  const readinessDimensions = Array.isArray(readiness?.dimensions) ? readiness!.dimensions!.slice(0, 5) : []
+  const readinessActions = Array.isArray(readiness?.next_actions) ? readiness!.next_actions!.slice(0, 3) : []
+  const readinessScore = Number(readiness?.score ?? 0)
 
   async function refreshControl() {
     setRefreshing(true)
@@ -372,7 +376,7 @@ export function SupermegaDevPage() {
       <PageIntro
         eyebrow="supermega.dev"
         title="Manage the whole SuperMega machine."
-        description="This page consolidates the public domain, shared app host, control-plane state, deploy loop, smoke harness, and core operating resources that keep supermega.dev running and explain how the platform fits together."
+        description="This page consolidates the public domain, shared app surface, control-plane state, deploy loop, smoke harness, and core operating resources that keep supermega.dev running and explain how the platform fits together."
       />
 
       <section className="sm-surface-deep p-6">
@@ -384,7 +388,7 @@ export function SupermegaDevPage() {
               <span className="sm-chip text-white">Updated: {formatDateTime(payload?.generated_at)}</span>
             </div>
             <p className="text-sm text-[var(--sm-muted)]">
-              Root domain `{machine?.root_domain ?? 'supermega.dev'}` and shared app host `{machine?.shared_app_host ?? 'app.supermega.dev'}` are mapped here together with the repo, runtime, deploy, and instruction stack.
+              Root domain `{machine?.root_domain ?? 'supermega.dev'}` and shared app surface `{machine?.shared_app_host ?? 'supermega.dev'}` are mapped here together with the repo, runtime, deploy, and instruction stack.
             </p>
           </div>
           <div className="flex flex-wrap gap-3">
@@ -422,57 +426,169 @@ export function SupermegaDevPage() {
 
       {!loading ? (
         <>
-          <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <section className="grid gap-4 xl:grid-cols-[0.82fr,1.18fr]">
             <article className="sm-surface p-6">
-              <p className="sm-kicker text-[var(--sm-accent)]">Public domain</p>
-              <h2 className={`mt-3 text-2xl font-semibold ${statusTone(rootReportStatus(rootReport))}`}>{String(machine?.root_domain ?? 'supermega.dev')}</h2>
-              <p className="mt-2 text-sm text-[var(--sm-muted)]">
-                {rootReportStatus(rootReport) === 'ready'
-                  ? 'Apex checks are healthy.'
-                  : rootReportStatus(rootReport) === 'warning'
-                    ? 'Apex checks are partially degraded.'
-                    : 'Apex checks need intervention.'}
+              <p className="sm-kicker text-[var(--sm-accent)]">Production readiness</p>
+              <div className="mt-3 flex items-end gap-3">
+                <span className={`text-5xl font-semibold ${statusTone(readiness?.status)}`}>{Number.isFinite(readinessScore) ? readinessScore : 0}</span>
+                <span className="pb-2 text-sm uppercase tracking-[0.22em] text-[var(--sm-muted)]">/ 100 {String(readiness?.status ?? 'unknown')}</span>
+              </div>
+              <p className="mt-3 text-sm text-[var(--sm-muted)]">
+                Runtime, static routes, dependencies, and persistence are checked from the same backend that serves the app.
               </p>
               <div className="mt-4 flex flex-wrap gap-2">
-                <span className="sm-chip text-white">Failures: {rootReport?.failure_count ?? 0}</span>
-                <span className="sm-chip text-white">Optional: {rootReport?.optional_failure_count ?? 0}</span>
+                <span className="sm-chip text-white">Python {String(readiness?.deployment?.python_version ?? 'unknown')}</span>
+                <span className="sm-chip text-white">Env {String(readiness?.deployment?.vercel_env ?? 'local')}</span>
+                <span className="sm-chip text-white">Updated {formatDateTime(readiness?.generated_at)}</span>
+              </div>
+            </article>
+
+            <article className="sm-surface p-6">
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+                {readinessDimensions.map((item) => (
+                  <div className="rounded-2xl border border-white/10 bg-white/4 p-4" key={String(item.id ?? item.label)}>
+                    <p className="text-xs uppercase tracking-[0.2em] text-[var(--sm-muted)]">{String(item.label ?? item.id ?? 'Check')}</p>
+                    <p className={`mt-3 text-2xl font-semibold ${statusTone(item.status)}`}>{Number(item.score ?? 0)}</p>
+                    <p className="mt-2 text-xs text-[var(--sm-muted)]">{String(item.detail ?? item.status ?? 'No detail')}</p>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-4 rounded-2xl border border-white/10 bg-black/20 p-4">
+                <p className="text-xs uppercase tracking-[0.22em] text-[var(--sm-accent)]">Next unblock</p>
+                <div className="mt-3 grid gap-2 md:grid-cols-3">
+                  {(readinessActions.length ? readinessActions : ['No production-readiness actions are currently reported.']).map((action) => (
+                    <p className="rounded-xl bg-white/5 px-3 py-2 text-sm text-white" key={action}>
+                      {action}
+                    </p>
+                  ))}
+                </div>
+              </div>
+            </article>
+          </section>
+
+          <section className="grid gap-4 xl:grid-cols-[1.02fr,0.98fr]">
+            <article className="sm-surface p-6">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <p className="sm-kicker text-[var(--sm-accent)]">Client portal factory</p>
+                  <h2 className="mt-2 text-2xl font-semibold text-white">Build the next client from a repeatable kit, not a blank project.</h2>
+                  <p className="mt-2 text-sm text-[var(--sm-muted)]">
+                    Pick the company pattern, map the data plugs, launch the first desk, then let the platform promote tighter modules from real usage.
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-3">
+                  <Link className="sm-button-secondary" to="/products">
+                    Public catalog
+                  </Link>
+                  <Link className="sm-button-secondary" to="/app/build">
+                    Build Studio
+                  </Link>
+                </div>
+              </div>
+              <div className="mt-5 grid gap-4 lg:grid-cols-3">
+                {INDUSTRY_PORTAL_KITS.map((kit) => (
+                  <div className="rounded-2xl border border-white/10 bg-white/4 p-4" key={kit.id}>
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <p className="font-semibold text-white">{kit.name}</p>
+                        <p className="mt-2 text-sm text-[var(--sm-muted)]">{kit.strap}</p>
+                      </div>
+                      <Link className="sm-button-secondary" to={industryPortalRolloutLink(kit.requestPackage)}>
+                        Quote
+                      </Link>
+                    </div>
+                    <p className="mt-4 text-sm text-white">{kit.launchWedge}</p>
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      {kit.dataPlugs.slice(0, 3).map((plug) => (
+                        <span className="sm-chip text-white" key={`${kit.id}-${plug}`}>
+                          {plug}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </article>
+
+            <div className="space-y-4">
+              <article className="sm-surface p-6">
+                <p className="sm-kicker text-[var(--sm-accent)]">Workspace types</p>
+                <h2 className="mt-2 text-2xl font-semibold text-white">Four desks cover most client rollouts.</h2>
+                <div className="mt-5 space-y-3">
+                  {PORTAL_WORKSPACE_TYPES.map((workspace) => (
+                    <div className="rounded-2xl border border-white/10 bg-white/4 p-4" key={workspace.id}>
+                      <p className="font-semibold text-white">{workspace.name}</p>
+                      <p className="mt-2 text-sm text-[var(--sm-muted)]">{workspace.purpose}</p>
+                      <p className="mt-3 text-sm text-white">{workspace.outcome}</p>
+                    </div>
+                  ))}
+                </div>
+              </article>
+
+              <article className="sm-surface p-6">
+                <p className="sm-kicker text-[var(--sm-accent-alt)]">Promotion engine</p>
+                <h2 className="mt-2 text-2xl font-semibold text-white">The system should keep learning from live data changes.</h2>
+                <div className="mt-5 space-y-3">
+                  {ADAPTIVE_PORTAL_ENGINE.map((step, index) => (
+                    <div className="rounded-2xl border border-white/10 bg-white/4 p-4" key={step.id}>
+                      <p className="text-xs uppercase tracking-[0.24em] text-[var(--sm-accent)]">Step {index + 1}</p>
+                      <p className="mt-2 font-semibold text-white">{step.name}</p>
+                      <p className="mt-2 text-sm text-[var(--sm-muted)]">{step.detail}</p>
+                    </div>
+                  ))}
+                </div>
+              </article>
+            </div>
+          </section>
+
+          <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <article className="sm-surface p-6">
+              <p className="sm-kicker text-[var(--sm-accent)]">Apex host</p>
+              <h2 className={`mt-3 text-2xl font-semibold ${statusTone(edgeHostStatus(apexEdgeHost))}`}>{String(apexEdgeHost?.hostname ?? machine?.root_domain ?? 'supermega.dev')}</h2>
+              <p className="mt-2 text-sm text-[var(--sm-muted)]">
+                {String(apexEdgeHost?.next_action ?? 'No live apex status is recorded yet.')}
+              </p>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <span className="sm-chip text-white">DNS {String(apexEdgeHost?.dns_status ?? 'unknown')}</span>
+                <span className="sm-chip text-white">TLS {String(apexEdgeHost?.tls_status ?? 'unknown')}</span>
+                <span className="sm-chip text-white">HTTP {String(apexEdgeHost?.http_status ?? 'unknown')}</span>
+              </div>
+            </article>
+
+            <article className="sm-surface p-6">
+              <p className="sm-kicker text-[var(--sm-accent)]">www alias</p>
+              <h2 className={`mt-3 text-2xl font-semibold ${statusTone(edgeHostStatus(wwwEdgeHost))}`}>{String(wwwEdgeHost?.hostname ?? `www.${String(machine?.root_domain ?? 'supermega.dev')}`)}</h2>
+              <p className="mt-2 text-sm text-[var(--sm-muted)]">
+                {String(wwwEdgeHost?.next_action ?? 'No live www status is recorded yet.')}
+              </p>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <span className="sm-chip text-white">Platform {String(wwwEdgeHost?.observed_platform ?? 'unknown')}</span>
+                <span className="sm-chip text-white">Asset {String(wwwEdgeHost?.asset ?? 'unknown')}</span>
               </div>
             </article>
 
             <article className="sm-surface p-6">
               <p className="sm-kicker text-[var(--sm-accent)]">Shared app host</p>
-              <h2 className={`mt-3 text-2xl font-semibold ${statusTone(sharedAppStatus(sharedAppDomain))}`}>{String(machine?.shared_app_host ?? 'app.supermega.dev')}</h2>
+              <h2 className={`mt-3 text-2xl font-semibold ${statusTone(edgeHostStatus(sharedAppEdgeHost))}`}>{String(sharedAppEdgeHost?.hostname ?? machine?.shared_app_host ?? 'app.supermega.dev')}</h2>
               <p className="mt-2 text-sm text-[var(--sm-muted)]">
-                Runtime target: {String(sharedAppDomain?.runtime_target ?? 'Not mapped')} | route root: {String(sharedAppDomain?.route_root ?? '/')}
+                {String(sharedAppEdgeHost?.next_action ?? 'No live shared-app status is recorded yet.')}
               </p>
               <div className="mt-4 flex flex-wrap gap-2">
-                <span className="sm-chip text-white">DNS {String(sharedAppDomain?.dns_status ?? 'unknown')}</span>
-                <span className="sm-chip text-white">TLS {String(sharedAppDomain?.tls_status ?? 'unknown')}</span>
-                <span className="sm-chip text-white">HTTP {String(sharedAppDomain?.http_status ?? 'unknown')}</span>
+                <span className="sm-chip text-white">DNS {String(sharedAppEdgeHost?.dns_status ?? sharedAppDomain?.dns_status ?? 'unknown')}</span>
+                <span className="sm-chip text-white">TLS {String(sharedAppEdgeHost?.tls_status ?? sharedAppDomain?.tls_status ?? 'unknown')}</span>
+                <span className="sm-chip text-white">HTTP {String(sharedAppEdgeHost?.http_status ?? sharedAppDomain?.http_status ?? 'unknown')}</span>
               </div>
             </article>
 
             <article className="sm-surface p-6">
-              <p className="sm-kicker text-[var(--sm-accent)]">Control plane</p>
-              <h2 className="mt-3 text-2xl font-semibold text-white">{platform?.modules?.enabled_count ?? 0} enabled</h2>
+              <p className="sm-kicker text-[var(--sm-accent)]">Edge summary</p>
+              <h2 className="mt-3 text-2xl font-semibold text-white">{edgeSummary?.ready_count ?? 0} ready</h2>
               <p className="mt-2 text-sm text-[var(--sm-muted)]">
-                {platform?.members?.count ?? 0} members, {platform?.domains?.count ?? 0} domains, {platform?.audit_events?.count ?? 0} audit events.
+                {edgeSummary?.action_count ?? 0} host action{edgeSummary?.action_count === 1 ? '' : 's'} still need attention. Preview deploy {payload?.deployment?.preview_ready ? 'ready' : 'partial'}, smoke {payload?.smoke?.ready ? 'ready' : 'partial'}.
               </p>
               <div className="mt-4 flex flex-wrap gap-2">
-                <span className="sm-chip text-white">Pilots {platform?.modules?.pilot_count ?? 0}</span>
-                <span className="sm-chip text-white">Disabled {platform?.modules?.disabled_count ?? 0}</span>
-              </div>
-            </article>
-
-            <article className="sm-surface p-6">
-              <p className="sm-kicker text-[var(--sm-accent)]">Worker and deploy loop</p>
-              <h2 className="mt-3 text-2xl font-semibold text-white">{String(cloud?.preferred_workforce_mode ?? 'direct_batch')}</h2>
-              <p className="mt-2 text-sm text-[var(--sm-muted)]">
-                {payload?.deployment?.preview_ready ? 'Preview deploy path is ready.' : 'Preview deploy path is partial.'} {payload?.smoke?.ready ? 'Smoke harness is ready.' : 'Smoke harness is partial.'}
-              </p>
-              <div className="mt-4 flex flex-wrap gap-2">
-                <span className="sm-chip text-white">Ready {cloud?.summary?.ready_count ?? 0}</span>
-                <span className="sm-chip text-white">Attention {cloud?.summary?.attention_count ?? 0}</span>
+                <span className="sm-chip text-white">Attention {edgeSummary?.attention_count ?? 0}</span>
+                <span className="sm-chip text-white">Blocked {edgeSummary?.blocker_count ?? 0}</span>
                 <span className="sm-chip text-white">Stale jobs {cloud?.summary?.stale_job_count ?? 0}</span>
               </div>
             </article>
@@ -774,20 +890,70 @@ export function SupermegaDevPage() {
             <article className="sm-surface p-6">
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <p className="sm-kicker text-[var(--sm-accent)]">Domain health</p>
-                  <h2 className="mt-2 text-2xl font-semibold text-white">Apex route checks</h2>
+                  <p className="sm-kicker text-[var(--sm-accent)]">Live edge hosts</p>
+                  <h2 className="mt-2 text-2xl font-semibold text-white">Which host is actually serving the platform.</h2>
                   <p className="mt-2 text-sm text-[var(--sm-muted)]">
-                    Checked at {formatDateTime(rootReport?.checked_at)} across {(machine?.public_routes ?? []).length} public routes.
+                    This view separates apex, `www`, and the shared app host so the live network state is not hidden behind one generic domain check.
                   </p>
                 </div>
-                <div className={`sm-chip ${statusTone(rootReportStatus(rootReport))}`}>{String(rootReport?.overall_status ?? 'unknown')}</div>
+                <div className="sm-chip text-white">{edgeHosts.length} host{edgeHosts.length === 1 ? '' : 's'}</div>
+              </div>
+              <div className="mt-5 space-y-3">
+                {edgeHosts.length ? (
+                  edgeHosts.map((row) => (
+                    <div className="rounded-2xl border border-white/10 bg-white/4 p-4" key={edgeHostInventoryKey(row)}>
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <p className="font-semibold text-white">{String(row.label ?? row.hostname ?? 'Host')}</p>
+                          <p className="mt-1 text-sm text-[var(--sm-muted)]">
+                            {String(row.hostname ?? 'host')} | {String(row.provider ?? 'provider not set')} | {String(row.scope ?? 'edge')}
+                          </p>
+                        </div>
+                        <a className="sm-button-secondary" href={`https://${String(row.hostname ?? '').trim()}`} rel="noreferrer" target="_blank">
+                          Open host
+                        </a>
+                      </div>
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        <span className={`sm-chip ${statusTone(row.status)}`}>{String(row.status ?? 'blocked')}</span>
+                        <span className="sm-chip text-white">DNS {String(row.dns_status ?? 'unknown')}</span>
+                        <span className="sm-chip text-white">TLS {String(row.tls_status ?? 'unknown')}</span>
+                        <span className="sm-chip text-white">HTTP {String(row.http_status ?? 'unknown')}</span>
+                        <span className="sm-chip text-white">Platform {String(row.observed_platform ?? 'unknown')}</span>
+                      </div>
+                      <p className="mt-3 text-sm text-white">{String(row.next_action ?? 'No next action recorded.')}</p>
+                      <p className="mt-2 text-sm text-[var(--sm-muted)]">Addresses: {edgeHostAddresses(row)}</p>
+                      <p className="mt-2 text-sm text-[var(--sm-muted)]">Routes checked: {edgeHostRoutes(row)}</p>
+                      <p className="mt-2 text-sm text-[var(--sm-muted)]">Observed URL: {String(row.http_final_url ?? 'Not recorded')}</p>
+                      <p className="mt-2 text-sm text-[var(--sm-muted)]">Asset: {String(row.asset ?? 'Not recorded')}</p>
+                      <p className="mt-2 text-sm text-[var(--sm-muted)]">Checked: {formatDateTime(row.checked_at)}</p>
+                    </div>
+                  ))
+                ) : (
+                  <div className="sm-chip text-white">No live edge hosts are tracked in this workspace yet.</div>
+                )}
+              </div>
+            </article>
+
+            <article className="sm-surface-deep p-6">
+              <p className="sm-kicker text-[var(--sm-accent-alt)]">Why a host is failing</p>
+              <h2 className="mt-2 text-2xl font-semibold text-white">Route-level detail for the apex and app probes.</h2>
+              <p className="mt-2 text-sm text-[var(--sm-muted)]">
+                Apex was checked at {formatDateTime(rootReport?.checked_at)}. Shared app probe was checked at {formatDateTime(sharedAppReport?.checked_at)}.
+              </p>
+              <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                <div className="rounded-2xl border border-white/10 bg-white/4 p-4">
+                  <p className="text-xs uppercase tracking-[0.18em] text-[var(--sm-muted)]">Apex required failures</p>
+                  <p className="mt-2 text-sm text-white">{rootReport?.failure_count ?? 0}</p>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-white/4 p-4">
+                  <p className="text-xs uppercase tracking-[0.18em] text-[var(--sm-muted)]">Apex optional failures</p>
+                  <p className="mt-2 text-sm text-white">{rootReport?.optional_failure_count ?? 0}</p>
+                </div>
               </div>
               <div className="mt-5 flex flex-wrap gap-2">
-                {(machine?.public_routes ?? []).map((route) => (
-                  <span className="sm-chip text-white" key={route}>
-                    {route}
-                  </span>
-                ))}
+                <span className="sm-chip text-white">Topology ready {domains?.topology_summary?.ready_count ?? 0}</span>
+                <span className="sm-chip text-white">Attention {domains?.topology_summary?.attention_count ?? 0}</span>
+                <span className="sm-chip text-white">Blocked {domains?.topology_summary?.blocker_count ?? 0}</span>
               </div>
               <div className="mt-5 space-y-3">
                 {rootFailures.length ? (
@@ -801,29 +967,8 @@ export function SupermegaDevPage() {
                     </div>
                   ))
                 ) : (
-                  <div className="sm-chip text-white">No domain failures were reported in the latest apex check.</div>
+                  <div className="sm-chip text-white">No apex route failures were reported in the latest probe.</div>
                 )}
-              </div>
-            </article>
-
-            <article className="sm-surface-deep p-6">
-              <p className="sm-kicker text-[var(--sm-accent-alt)]">Host posture</p>
-              <h2 className="mt-2 text-2xl font-semibold text-white">{String(sharedAppDomain?.display_name ?? sharedAppDomain?.hostname ?? machine?.shared_app_host ?? 'Shared app host')}</h2>
-              <p className="mt-2 text-sm text-[var(--sm-muted)]">{String(sharedAppDomain?.notes ?? sharedAppDomain?.deployment_url ?? 'Use this row to track the internal app host posture.')}</p>
-              <div className="mt-5 grid gap-3 sm:grid-cols-2">
-                <div className="rounded-2xl border border-white/10 bg-white/4 p-4">
-                  <p className="text-xs uppercase tracking-[0.18em] text-[var(--sm-muted)]">Deployment</p>
-                  <p className="mt-2 text-sm text-white">{String(sharedAppDomain?.deployment_url ?? 'Not recorded')}</p>
-                </div>
-                <div className="rounded-2xl border border-white/10 bg-white/4 p-4">
-                  <p className="text-xs uppercase tracking-[0.18em] text-[var(--sm-muted)]">Last deployed</p>
-                  <p className="mt-2 text-sm text-white">{formatDateTime(sharedAppDomain?.last_deployed_at)}</p>
-                </div>
-              </div>
-              <div className="mt-5 flex flex-wrap gap-2">
-                <span className="sm-chip text-white">Topology ready {domains?.topology_summary?.ready_count ?? 0}</span>
-                <span className="sm-chip text-white">Attention {domains?.topology_summary?.attention_count ?? 0}</span>
-                <span className="sm-chip text-white">Blocked {domains?.topology_summary?.blocker_count ?? 0}</span>
               </div>
             </article>
           </section>

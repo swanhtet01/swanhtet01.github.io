@@ -46,15 +46,17 @@ End with: *"I'll send you a short proposal — what we'd build first, the price,
 
 ## 4. Pricing (anchor with the tiers, quote on the call)
 
-Lead with the live `/offers/` anchors. USD anchors, MMK at the ~4,800 market rate.
+Lead with the live `/offers/` anchors. USD anchors, MMK at 4,000 MMK/USD.
 
 | Tier | From | Use it when… |
 |---|---|---|
-| Tool in a week | $600 · ~3.0M MMK | One sharp, single-job tool. Great first yes / foot in the door. |
-| Custom dashboard / internal tool | $1,500 · ~7.2M MMK | "Our numbers live in five spreadsheets." |
-| AI agent / automation | $2,500 · ~12M MMK | A recurring task eats hours daily; draft-and-approve fits. |
-| Design + ship system (flagship) | $6,000 · ~29M MMK | They want it to look premium AND run. The big yes. |
-| Care plan | $300/mo · ~1.44M MMK | Sold AFTER a build. Hosting + changes + 1 improvement/qtr. |
+| Tool in a week | $600 · 2.4M MMK | One sharp, single-job tool. Great first yes / foot in the door. |
+| Custom dashboard / internal tool | $1,500 · 6M MMK | "Our numbers live in five spreadsheets." |
+| AI agent / automation | $2,500 · 10M MMK | A recurring task eats hours daily; draft-and-approve fits. |
+| Design + ship system (flagship) | $6,000 · 24M MMK | They want it to look premium AND run. The big yes. |
+| Care plan | $300/mo · 1.2M MMK/mo | Sold AFTER a build. Hosting + changes + 1 improvement/qtr. |
+| Email / Drive Agent | $600 + $200/mo · 2.4M + 800k/mo | Gmail inbox or Drive file → AI action. Fastest foot in door. |
+| Digest Agent | $300 + $150/mo · 1.2M + 600k/mo | Daily/weekly AI summary. Easiest build — 1–2 days. |
 
 **Rules:**
 - Always **fixed scope + a revision cap** ("two rounds of changes included"). Kills scope creep.

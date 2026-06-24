@@ -2550,7 +2550,12 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main() -> int:
     if load_dotenv is not None:
-        load_dotenv()
+        env_path = Path.cwd() / ".env"
+        if env_path.exists():
+            try:
+                load_dotenv(env_path)
+            except OSError:
+                pass
 
     parser = build_parser()
     args = parser.parse_args()

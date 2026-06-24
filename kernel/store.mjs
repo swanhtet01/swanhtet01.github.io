@@ -48,12 +48,13 @@ async function ensurePgTables() {
     create table if not exists supermega_console_projects (id text primary key, client_id text, lead_id text, offer text, scope_summary text, price_mmk bigint, deposit_status text default 'unpaid', deposit_method text, status text default 'scoping', live_url text, created_at timestamptz default now());
     create table if not exists supermega_console_deals (id text primary key, lead_id text, project_id text, packet jsonb, status text default 'draft', created_at timestamptz default now());
     create table if not exists supermega_console_activity (id text primary key, at timestamptz default now(), kind text, summary text, ref text);
+    create table if not exists supermega_graduation (id text primary key, category text, client_name text, project_id text, note text, created_at timestamptz default now());
   `).then(() => true)
   return tablesReady
 }
 
 // ---------- in-memory fallback ----------
-const mem = { lead: new Map(), client: new Map(), project: new Map(), deal: new Map(), activity: new Map() }
+const mem = { lead: new Map(), client: new Map(), project: new Map(), deal: new Map(), activity: new Map(), graduation: new Map() }
 const memSort = (rows) => rows.sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))
 
 // ---------- leads (real supermega_leads) ----------
@@ -71,11 +72,51 @@ export async function getLead(id) {
   if (mode === 'postgres') { const r = await q('select * from public.supermega_leads where lead_id=$1 limit 1', [id]); return r[0] ? mapLead(r[0]) : null }
   return mem.lead.get(id) || null
 }
+export async function updateLead(id, patch) {
+  const allowed = { lead_stage: 'lead_stage', stage: 'lead_stage' }
+  const cols = {}
+  for (const [k, col] of Object.entries(allowed)) if (patch[k] != null) cols[col] = String(patch[k]).slice(0, 30)
+  if (!Object.keys(cols).length) return getLead(id)
+  if (mode === 'supabase') { const r = await rest('PATCH', `supermega_leads?lead_id=eq.${encodeURIComponent(id)}`, cols); return r[0] ? mapLead(r[0]) : null }
+  if (mode === 'postgres') { const keys = Object.keys(cols); const set = keys.map((k, i) => `${k}=$${i+2}`).join(','); const r = await q(`update public.supermega_leads set ${set} where lead_id=$1 returning ${LEAD_COLS}`, [id, ...keys.map(k => cols[k])]); return r[0] ? mapLead(r[0]) : null }
+  const cur = mem.lead.get(id); if (!cur) return null; const next = { ...cur, ...(cols.lead_stage ? { stage: cols.lead_stage } : {}) }; mem.lead.set(id, next); return next
+}
 export async function insertLead(l) {
-  if (mode !== 'memory') throw new Error('leads_from_site') // leads come from the public form, not manual entry
-  const rec = { id: randomUUID(), created_at: new Date().toISOString(), status: 'new', score: 0, ...l }
-  mem.lead.set(rec.id, rec)
-  return rec
+  const row = {
+    lead_id: String(l.id || l.lead_id || randomUUID()).slice(0, 80),
+    source: String(l.source || 'manual').slice(0, 60),
+    name: String(l.name || '').slice(0, 200),
+    email: String(l.contact || l.email || '').slice(0, 200).toLowerCase(),
+    company: String(l.company || '').slice(0, 200),
+    requested_package: String(l.package || '').slice(0, 80),
+    goal: String(l.message || '').slice(0, 4000),
+    lead_score: Number(l.score || 0),
+    lead_stage: String(l.stage || 'new').slice(0, 30),
+    submitted_at: l.created_at || new Date().toISOString(),
+  }
+  if (mode === 'supabase') {
+    // Upsert — autopilot pushes the same lead nightly; merge so enriched email + latest stage win
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/supermega_leads?on_conflict=lead_id`, {
+      method: 'POST',
+      headers: { apikey: SUPABASE_KEY, authorization: `Bearer ${SUPABASE_KEY}`, 'content-type': 'application/json', prefer: 'return=representation,resolution=merge-duplicates' },
+      body: JSON.stringify(row),
+    })
+    if (!res.ok && res.status !== 409) { const t = await res.text().catch(() => ''); throw new Error(`supabase_${res.status}: ${t.slice(0, 140)}`) }
+    const result = res.status === 204 ? [] : await res.json().catch(() => [])
+    return result[0] ? mapLead(result[0]) : mapLead({ ...row, id: row.lead_id, created_at: row.submitted_at })
+  }
+  if (mode === 'postgres') {
+    await ensurePgTables()
+    const r = await q(
+      `insert into public.supermega_leads (lead_id,source,name,email,company,requested_package,goal,lead_score,lead_stage,submitted_at)
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) on conflict (lead_id) do nothing returning ${LEAD_COLS}`,
+      [row.lead_id, row.source, row.name, row.email, row.company, row.requested_package, row.goal, row.lead_score, row.lead_stage, row.submitted_at]
+    )
+    return r[0] ? mapLead(r[0]) : mapLead({ ...row, id: row.lead_id, created_at: row.submitted_at })
+  }
+  const rec = { ...row, id: row.lead_id, created_at: new Date().toISOString(), status: 'new' }
+  mem.lead.set(rec.lead_id, mapLead(rec))
+  return mapLead(rec)
 }
 
 // ---------- pipeline: clients + projects ----------
@@ -144,4 +185,17 @@ export async function listActivity(limit = 30) {
   return [...mem.activity.values()].sort((a, b) => String(b.at).localeCompare(String(a.at))).slice(0, limit)
 }
 
-export default { mode, listLeads, getLead, insertLead, listProjects, createClient, createProject, updateProject, convertedLeadIds, saveDeal, listDeals, updateDeal, logActivity, listActivity }
+// ---------- graduation tracker ----------
+export async function insertGraduation(g) {
+  const row = { id: randomUUID(), category: String(g.category || '').slice(0, 80), client_name: String(g.client_name || '').slice(0, 200), project_id: g.project_id || null, note: String(g.note || '').slice(0, 400) }
+  if (mode === 'supabase') return (await rest('POST', 'supermega_graduation', row))[0]
+  if (mode === 'postgres') { await ensurePgTables(); return (await q('insert into supermega_graduation (id,category,client_name,project_id,note) values ($1,$2,$3,$4,$5) returning *', [row.id, row.category, row.client_name, row.project_id, row.note]))[0] }
+  const rec = { ...row, created_at: new Date().toISOString() }; mem.graduation.set(rec.id, rec); return rec
+}
+export async function listGraduations() {
+  if (mode === 'supabase') return rest('GET', 'supermega_graduation?order=created_at.desc')
+  if (mode === 'postgres') { await ensurePgTables(); return q('select * from supermega_graduation order by created_at desc') }
+  return memSort([...mem.graduation.values()])
+}
+
+export default { mode, listLeads, getLead, updateLead, insertLead, listProjects, createClient, createProject, updateProject, convertedLeadIds, saveDeal, listDeals, updateDeal, logActivity, listActivity, insertGraduation, listGraduations }

@@ -459,15 +459,15 @@ export function WorkforceCommandPage() {
 
       <section className="grid gap-4 xl:grid-cols-3">
         <article className="sm-surface p-6">
-          <p className="sm-kicker text-[var(--sm-accent)]">Thesis</p>
+          <p className="sm-kicker text-[var(--sm-accent)]">Current model</p>
           <p className="mt-4 text-sm leading-relaxed text-[var(--sm-muted)]">{payload.dialectic.thesis}</p>
         </article>
         <article className="sm-surface p-6">
-          <p className="sm-kicker text-[var(--sm-accent-alt)]">Antithesis</p>
+          <p className="sm-kicker text-[var(--sm-accent-alt)]">Operating pressure</p>
           <p className="mt-4 text-sm leading-relaxed text-[var(--sm-muted)]">{payload.dialectic.antithesis}</p>
         </article>
         <article className="sm-surface-deep p-6">
-          <p className="sm-kicker text-[var(--sm-accent)]">Synthesis</p>
+          <p className="sm-kicker text-[var(--sm-accent)]">Next operating model</p>
           <p className="mt-4 text-sm leading-relaxed text-[var(--sm-muted)]">{payload.dialectic.synthesis}</p>
         </article>
       </section>

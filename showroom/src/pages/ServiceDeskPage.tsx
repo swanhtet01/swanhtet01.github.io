@@ -1,8 +1,4 @@
 import { startTransition, type FormEvent, useDeferredValue, useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
-
-import { LiveProductPreview } from '../components/LiveProductPreview'
-import { PageIntro } from '../components/PageIntro'
 import {
   appendAppointmentRecord,
   appendExpenseRecord,
@@ -24,9 +20,6 @@ import {
   saveServiceRetailWorkspace,
   serializeServiceRetailWorkspace,
   serviceRetailSectorLabel,
-  SERVICE_RETAIL_AGENT_LOOPS,
-  SERVICE_RETAIL_OPEN_SOURCE_STACK,
-  SERVICE_RETAIL_TEMPLATE_LANES,
   updateAppointmentRecordStatus,
   updateServiceRetailWorkspaceProfile,
   type AppointmentStatus,
@@ -38,6 +31,15 @@ import {
 } from '../lib/serviceRetailDesk'
 
 const initialWorkspaceState = loadServiceRetailWorkspace()
+
+const serviceDeskModules = [
+  ['checkout', 'Checkout'],
+  ['closeout', 'Closeout'],
+  ['setup', 'Setup'],
+  ['ledger', 'Ledger'],
+] as const
+
+type ServiceDeskModule = (typeof serviceDeskModules)[number][0]
 
 type SaleDraft = {
   customerName: string
@@ -244,7 +246,8 @@ export function ServiceDeskPage() {
   const [staffDraft, setStaffDraft] = useState<StaffDraft>(createInitialStaffDraft)
   const [appointmentDraft, setAppointmentDraft] = useState<AppointmentDraft>(() => createInitialAppointmentDraft(initialWorkspaceState))
   const [importDraft, setImportDraft] = useState('')
-  const [dataMessage, setDataMessage] = useState('Using local-first pilot storage. Export a snapshot before pushing it live.')
+  const [dataMessage, setDataMessage] = useState('Using local-first storage. Export a snapshot before pushing it live.')
+  const [activeModule, setActiveModule] = useState<ServiceDeskModule>('checkout')
   const [ledgerSearch, setLedgerSearch] = useState('')
   const deferredLedgerSearch = useDeferredValue(ledgerSearch.trim().toLowerCase())
 
@@ -458,7 +461,7 @@ export function ServiceDeskPage() {
 
   function handleResetDemo() {
     clearServiceRetailWorkspace()
-    replaceWorkspace(createDefaultServiceRetailWorkspace(), 'Demo snapshot restored. Use export before replacing it with live spa data.')
+    replaceWorkspace(createDefaultServiceRetailWorkspace(), 'Sample workspace restored. Export before replacing it with live business data.')
   }
 
   function handleImportSnapshot() {
@@ -471,801 +474,334 @@ export function ServiceDeskPage() {
     replaceWorkspace(imported, 'Snapshot imported. Review the business setup and daily close totals before using it live.')
   }
 
+  const metricCards = [
+    ['Collected', formatCurrency(summary.collectedRevenue, workspace.currencyCode), String(summary.saleCount) + ' sales'],
+    ['Cash', formatCurrency(summary.cashOnHand, workspace.currencyCode), 'count drawer'],
+    ['Balance', formatCurrency(summary.operatingBalance, workspace.currencyCode), 'after expenses'],
+    ['Pending', String(summary.pendingCheckoutCount), String(summary.appointmentCount) + ' bookings'],
+  ] as const
+  const paymentRows = [
+    ['Cash', summary.cashSales],
+    ['Card', summary.cardSales],
+    ['Transfer', summary.bankTransferSales],
+    ['Wallet', summary.walletSales],
+  ] as const
+  const closeChecks = [
+    'Count drawer: ' + formatCurrency(summary.cashOnHand, workspace.currencyCode),
+    'Deposit: ' + formatCurrency(summary.depositTarget, workspace.currencyCode),
+    'Pending checkout: ' + String(summary.pendingCheckoutCount),
+    'Receipt check: ' + formatCurrency(summary.cashExpenses, workspace.currencyCode),
+  ] as const
+
   return (
-    <div className="space-y-8 pb-12">
-      <PageIntro
-        eyebrow="Service Retail / Spa Desk"
-        title="Run front desk checkout and daily close from one usable, self-buildable workspace."
-        description="This wedge is now set up to be adapted, not just demoed: configure the business, add services and staff, book appointments, export the data model, and promote it into a shared backend when the single-site flow is stable."
-      />
-
-      <section className="flex flex-wrap gap-3">
-        <Link className="sm-button-primary" to="/products/spa-service-desk">
-          Review public product page
-        </Link>
-        <Link className="sm-button-secondary" to="/contact?package=Spa%20Service%20Desk">
-          Request rollout
-        </Link>
-        <button className="sm-button-dark" onClick={() => downloadWorkspaceSnapshot(workspace)} type="button">
-          Export snapshot
-        </button>
-        <button className="sm-button-dark" onClick={handleResetDemo} type="button">
-          Reset demo data
-        </button>
-      </section>
-
-      <section className="sm-calm-surface p-5">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <p className="sm-kicker text-[var(--sm-accent)]">Current workspace</p>
-            <h2 className="mt-2 text-2xl font-bold text-white">
-              {workspace.businessName} | {serviceRetailSectorLabel(workspace.sector)} | {workspace.location}
-            </h2>
-          </div>
-          <span className="sm-status-pill">{workspace.services.length} services | {workspace.staff.length} staff</span>
+    <div className="sm-service-desk-screen">
+      <section className="sm-service-desk-command" aria-label="Service Desk POS command">
+        <div>
+          <span>Service Desk POS</span>
+          <strong>{workspace.businessName}</strong>
+          <p>{serviceRetailSectorLabel(workspace.sector)} / {workspace.location} / {dataMessage}</p>
         </div>
-        <p className="mt-4 text-sm text-[var(--sm-muted)]">{dataMessage}</p>
+        <div className="sm-service-desk-actions">
+          <button className="sm-button-primary" onClick={() => downloadWorkspaceSnapshot(workspace)} type="button">
+            Backup
+          </button>
+          <button className="sm-button-dark" onClick={handleResetDemo} type="button">
+            Reset
+          </button>
+        </div>
       </section>
 
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <article className="sm-manager-stat">
-          <p className="sm-kicker text-[var(--sm-accent)]">Collected today</p>
-          <p className="mt-3 text-3xl font-bold text-white">{formatCurrency(summary.collectedRevenue, workspace.currencyCode)}</p>
-          <p className="mt-2 text-sm text-[var(--sm-muted)]">{summary.saleCount} checkouts logged so far.</p>
-        </article>
-        <article className="sm-manager-stat">
-          <p className="sm-kicker text-[var(--sm-accent)]">Cash to count</p>
-          <p className="mt-3 text-3xl font-bold text-white">{formatCurrency(summary.cashOnHand, workspace.currencyCode)}</p>
-          <p className="mt-2 text-sm text-[var(--sm-muted)]">
-            Deposit target {formatCurrency(summary.depositTarget, workspace.currencyCode)} after keeping the float.
-          </p>
-        </article>
-        <article className="sm-manager-stat">
-          <p className="sm-kicker text-[var(--sm-accent-alt)]">Operating balance</p>
-          <p className="mt-3 text-3xl font-bold text-white">{formatCurrency(summary.operatingBalance, workspace.currencyCode)}</p>
-          <p className="mt-2 text-sm text-[var(--sm-muted)]">Expenses logged today: {formatCurrency(summary.expenses, workspace.currencyCode)}.</p>
-        </article>
-        <article className="sm-manager-stat">
-          <p className="sm-kicker text-[var(--sm-accent-alt)]">Pending checkout</p>
-          <p className="mt-3 text-3xl font-bold text-white">{summary.pendingCheckoutCount}</p>
-          <p className="mt-2 text-sm text-[var(--sm-muted)]">{summary.appointmentCount} appointments in today&apos;s room flow.</p>
-        </article>
+      <section className="sm-service-desk-metrics" aria-label="Today status">
+        {metricCards.map(([label, value, detail]) => (
+          <article key={label}>
+            <span>{label}</span>
+            <strong>{value}</strong>
+            <small>{detail}</small>
+          </article>
+        ))}
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-[1.18fr_0.82fr]">
-        <article className="sm-calm-surface p-6">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-            <div>
-              <p className="sm-kicker text-[var(--sm-accent)]">Front desk</p>
-              <h2 className="mt-2 text-3xl font-bold text-white">Quick checkout</h2>
-            </div>
-            <p className="max-w-xl text-sm text-[var(--sm-muted)]">
-              Keep the operator path short: pick services, assign therapist, take payment, and let the ledger and close routine update automatically.
-            </p>
-          </div>
+      <nav className="sm-service-desk-tabs" aria-label="Service Desk modules">
+        {serviceDeskModules.map(([key, label]) => (
+          <button
+            aria-pressed={activeModule === key}
+            className={activeModule === key ? 'is-active' : ''}
+            key={key}
+            onClick={() => setActiveModule(key)}
+            type="button"
+          >
+            {label}
+          </button>
+        ))}
+      </nav>
 
-          <form className="mt-6 space-y-6" onSubmit={handleSaleSubmit}>
-            <div className="grid gap-4 md:grid-cols-[1fr_1fr]">
-              <label className="grid gap-2">
-                <span className="text-sm font-semibold text-white">Customer</span>
-                <input
-                  className="sm-input"
-                  onChange={(event) => setSaleDraft((current) => ({ ...current, customerName: event.target.value }))}
-                  placeholder="Walk-in guest or member name"
-                  value={effectiveSaleDraft.customerName}
-                />
-              </label>
-              <label className="grid gap-2">
-                <span className="text-sm font-semibold text-white">Therapist or owner</span>
-                <select
-                  className="sm-input"
-                  onChange={(event) => setSaleDraft((current) => ({ ...current, staffId: event.target.value }))}
-                  value={effectiveSaleDraft.staffId}
-                >
-                  {workspace.staff.map((member) => (
-                    <option key={member.id} value={member.id}>
-                      {member.name} | {member.role}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
-
-            <div>
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-sm font-semibold text-white">Services and add-ons</p>
-                  <p className="mt-1 text-sm text-[var(--sm-muted)]">Toggle one or more items for the same ticket.</p>
-                </div>
-                <span className="sm-status-pill">{selectedDuration ? `${selectedDuration} min selected` : 'No services selected'}</span>
+      <section className="sm-service-desk-module-grid" data-module={activeModule}>
+        {activeModule === 'checkout' ? (
+          <>
+            <form className="sm-service-desk-panel sm-service-checkout-panel" onSubmit={handleSaleSubmit}>
+              <div className="sm-service-desk-panel-head">
+                <span>Checkout</span>
+                <strong>{formatCurrency(draftTotal, workspace.currencyCode)}</strong>
               </div>
-              <div className="mt-4 grid gap-3 md:grid-cols-2">
+
+              <div className="sm-service-desk-form-grid">
+                <label>
+                  <span>Customer</span>
+                  <input
+                    className="sm-input"
+                    onChange={(event) => setSaleDraft((current) => ({ ...current, customerName: event.target.value }))}
+                    placeholder="Walk-in or member"
+                    value={effectiveSaleDraft.customerName}
+                  />
+                </label>
+                <label>
+                  <span>Staff</span>
+                  <select
+                    className="sm-input"
+                    onChange={(event) => setSaleDraft((current) => ({ ...current, staffId: event.target.value }))}
+                    value={effectiveSaleDraft.staffId}
+                  >
+                    {workspace.staff.map((member) => (
+                      <option key={member.id} value={member.id}>
+                        {member.name} / {member.role}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+
+              <div className="sm-service-list-head">
+                <span>Services</span>
+                <strong>{selectedDuration ? String(selectedDuration) + ' min' : 'None'}</strong>
+              </div>
+              <div className="sm-service-service-grid">
                 {workspace.services.map((service) => {
-                    const active = effectiveSaleDraft.serviceIds.includes(service.id)
+                  const active = effectiveSaleDraft.serviceIds.includes(service.id)
                   return (
                     <button
                       aria-pressed={active}
-                      className={`rounded-[1.1rem] border p-4 text-left transition ${
-                        active
-                          ? 'border-[rgba(123,196,176,0.36)] bg-[rgba(123,196,176,0.1)] text-white'
-                          : 'border-white/10 bg-white/3 text-[var(--sm-muted)] hover:border-white/16 hover:bg-white/5 hover:text-white'
-                      }`}
+                      className={active ? 'is-active' : ''}
                       key={service.id}
                       onClick={() => toggleService(service.id)}
                       type="button"
                     >
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <p className="font-semibold text-white">{service.name}</p>
-                          <p className="mt-2 text-sm text-[var(--sm-muted)]">
-                            {service.category} {service.durationMinutes ? `| ${service.durationMinutes} min` : '| Retail'}
-                          </p>
-                        </div>
-                        <span className="sm-status-pill">{formatCurrency(service.price, workspace.currencyCode)}</span>
-                      </div>
+                      <strong>{service.name}</strong>
+                      <span>{formatCurrency(service.price, workspace.currencyCode)}</span>
                     </button>
                   )
                 })}
               </div>
-            </div>
 
-            <div className="grid gap-4 md:grid-cols-[1fr_1fr_1fr]">
-              <label className="grid gap-2">
-                <span className="text-sm font-semibold text-white">Discount</span>
-                <input
-                  className="sm-input"
-                  inputMode="decimal"
-                  onChange={(event) => setSaleDraft((current) => ({ ...current, discount: event.target.value }))}
-                  placeholder="0"
-                  value={effectiveSaleDraft.discount}
-                />
-              </label>
-              <label className="grid gap-2">
-                <span className="text-sm font-semibold text-white">Tip</span>
-                <input
-                  className="sm-input"
-                  inputMode="decimal"
-                  onChange={(event) => setSaleDraft((current) => ({ ...current, tip: event.target.value }))}
-                  placeholder="0"
-                  value={effectiveSaleDraft.tip}
-                />
-              </label>
-              <label className="grid gap-2">
-                <span className="text-sm font-semibold text-white">Notes</span>
-                <input
-                  className="sm-input"
-                  onChange={(event) => setSaleDraft((current) => ({ ...current, notes: event.target.value }))}
-                  placeholder="Membership, package, or treatment note"
-                  value={effectiveSaleDraft.notes}
-                />
-              </label>
-            </div>
-
-            <div className="grid gap-4 lg:grid-cols-[1fr_0.88fr]">
-              <div className="sm-proof-card">
-                <p className="sm-kicker text-[var(--sm-accent)]">Payment method</p>
-                <div className="mt-4 flex flex-wrap gap-2">
-                  {(['cash', 'card', 'bank_transfer', 'e_wallet'] as PaymentMethod[]).map((method) => {
-                    const active = effectiveSaleDraft.paymentMethod === method
-                    return (
-                      <button
-                        aria-pressed={active}
-                        className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
-                          active
-                            ? 'bg-[rgba(123,196,176,0.18)] text-white'
-                            : 'bg-white/4 text-[var(--sm-muted)] hover:bg-white/8 hover:text-white'
-                        }`}
-                        key={method}
-                        onClick={() => setSaleDraft((current) => ({ ...current, paymentMethod: method }))}
-                        type="button"
-                      >
-                        {paymentMethodLabel(method)}
-                      </button>
-                    )
-                  })}
-                </div>
-              </div>
-
-              <div className="sm-proof-card">
-                <p className="sm-kicker text-[var(--sm-accent-alt)]">Ticket total</p>
-                <div className="mt-4 space-y-3 text-sm text-[var(--sm-muted)]">
-                  <div className="flex items-center justify-between gap-3">
-                    <span>Services</span>
-                    <strong className="text-white">{formatCurrency(selectedSubtotal, workspace.currencyCode)}</strong>
-                  </div>
-                  <div className="flex items-center justify-between gap-3">
-                    <span>Discount</span>
-                    <strong className="text-white">-{formatCurrency(draftDiscount, workspace.currencyCode)}</strong>
-                  </div>
-                  <div className="flex items-center justify-between gap-3">
-                    <span>Tip</span>
-                    <strong className="text-white">{formatCurrency(draftTip, workspace.currencyCode)}</strong>
-                  </div>
-                  <div className="flex items-center justify-between gap-3 border-t border-white/10 pt-3">
-                    <span className="font-semibold text-white">Collect now</span>
-                    <strong className="text-xl text-white">{formatCurrency(draftTotal, workspace.currencyCode)}</strong>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-3">
-              <button className="sm-button-primary" disabled={!canSubmitSale} type="submit">
-                Add checkout
-              </button>
-              <span className="text-sm text-[var(--sm-muted)]">Stays local for the pilot, but the data model is exportable and backend-ready.</span>
-            </div>
-          </form>
-        </article>
-
-        <div className="space-y-6">
-          <article className="sm-calm-surface p-6">
-            <p className="sm-kicker text-[var(--sm-accent)]">Cash-out log</p>
-            <h2 className="mt-2 text-3xl font-bold text-white">Record expenses fast</h2>
-            <form className="mt-6 space-y-4" onSubmit={handleExpenseSubmit}>
-              <label className="grid gap-2">
-                <span className="text-sm font-semibold text-white">Category</span>
-                <select
-                  className="sm-input"
-                  onChange={(event) =>
-                    setExpenseDraft((current) => ({
-                      ...current,
-                      category: event.target.value as ExpenseCategory,
-                    }))
-                  }
-                  value={expenseDraft.category}
-                >
-                  {(['supplies', 'laundry', 'refreshments', 'marketing', 'staff_support'] as ExpenseCategory[]).map((category) => (
-                    <option key={category} value={category}>
-                      {expenseCategoryLabel(category)}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <div className="grid gap-4 md:grid-cols-[1fr_1fr]">
-                <label className="grid gap-2">
-                  <span className="text-sm font-semibold text-white">Amount</span>
-                  <input
-                    className="sm-input"
-                    inputMode="decimal"
-                    onChange={(event) => setExpenseDraft((current) => ({ ...current, amount: event.target.value }))}
-                    placeholder="0"
-                    value={expenseDraft.amount}
-                  />
+              <div className="sm-service-desk-form-grid is-compact">
+                <label>
+                  <span>Discount</span>
+                  <input className="sm-input" inputMode="decimal" onChange={(event) => setSaleDraft((current) => ({ ...current, discount: event.target.value }))} placeholder="0" value={effectiveSaleDraft.discount} />
                 </label>
-                <label className="grid gap-2">
-                  <span className="text-sm font-semibold text-white">Note</span>
-                  <input
-                    className="sm-input"
-                    onChange={(event) => setExpenseDraft((current) => ({ ...current, note: event.target.value }))}
-                    placeholder="What was spent and why"
-                    value={expenseDraft.note}
-                  />
+                <label>
+                  <span>Tip</span>
+                  <input className="sm-input" inputMode="decimal" onChange={(event) => setSaleDraft((current) => ({ ...current, tip: event.target.value }))} placeholder="0" value={effectiveSaleDraft.tip} />
+                </label>
+                <label>
+                  <span>Note</span>
+                  <input className="sm-input" onChange={(event) => setSaleDraft((current) => ({ ...current, notes: event.target.value }))} placeholder="Membership or treatment note" value={effectiveSaleDraft.notes} />
                 </label>
               </div>
 
-              <div>
-                <p className="text-sm font-semibold text-white">Paid from</p>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {(['cash', 'bank'] as ExpensePaidFrom[]).map((source) => {
-                    const active = expenseDraft.paidFrom === source
-                    return (
-                      <button
-                        aria-pressed={active}
-                        className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
-                          active
-                            ? 'bg-[rgba(123,196,176,0.18)] text-white'
-                            : 'bg-white/4 text-[var(--sm-muted)] hover:bg-white/8 hover:text-white'
-                        }`}
-                        key={source}
-                        onClick={() => setExpenseDraft((current) => ({ ...current, paidFrom: source }))}
-                        type="button"
-                      >
-                        {expensePaidFromLabel(source)}
-                      </button>
-                    )
-                  })}
-                </div>
+              <div className="sm-service-desk-payment-row" aria-label="Payment method">
+                {(['cash', 'card', 'bank_transfer', 'e_wallet'] as PaymentMethod[]).map((method) => (
+                  <button
+                    aria-pressed={effectiveSaleDraft.paymentMethod === method}
+                    className={effectiveSaleDraft.paymentMethod === method ? 'is-active' : ''}
+                    key={method}
+                    onClick={() => setSaleDraft((current) => ({ ...current, paymentMethod: method }))}
+                    type="button"
+                  >
+                    {paymentMethodLabel(method)}
+                  </button>
+                ))}
               </div>
 
-              <button className="sm-button-secondary" disabled={!canSubmitExpense} type="submit">
-                Add expense
-              </button>
+              <div className="sm-service-total-card">
+                <span>Collect now</span>
+                <strong>{formatCurrency(draftTotal, workspace.currencyCode)}</strong>
+                <small>{formatCurrency(selectedSubtotal, workspace.currencyCode)} services / -{formatCurrency(draftDiscount, workspace.currencyCode)} discount / +{formatCurrency(draftTip, workspace.currencyCode)} tip</small>
+                <button className="sm-button-primary" disabled={!canSubmitSale} type="submit">
+                  Add checkout
+                </button>
+              </div>
             </form>
-          </article>
 
-          <article className="sm-calm-surface p-6">
-            <div className="flex items-end justify-between gap-3">
-              <div>
-                <p className="sm-kicker text-[var(--sm-accent-alt)]">Room flow</p>
-                <h2 className="mt-2 text-3xl font-bold text-white">Today&apos;s appointments</h2>
-              </div>
-              <span className="sm-status-pill">{workspace.businessName}</span>
-            </div>
-            <div className="mt-5 space-y-3">
-              {workspace.appointments.map((appointment) => (
-                <article className="sm-proof-card" key={appointment.id}>
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <p className="font-semibold text-white">{appointment.customerName}</p>
-                      <p className="mt-2 text-sm text-[var(--sm-muted)]">
-                        {formatClock(appointment.startsAt)} | {appointment.roomLabel} | {resolveServiceNames(workspace, appointment.serviceIds).join(', ')}
-                      </p>
-                      <p className="mt-2 text-xs uppercase tracking-[0.18em] text-[var(--sm-muted)]">{resolveStaffName(workspace, appointment.staffId)}</p>
-                    </div>
-                    <span className="sm-status-pill">{appointmentStatusLabel(appointment.status)}</span>
-                  </div>
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    <button className="sm-button-secondary" onClick={() => loadAppointmentIntoCheckout(appointment.customerName, appointment.staffId, appointment.serviceIds)} type="button">
-                      Use in checkout
+            <aside className="sm-service-desk-side-stack">
+              <form className="sm-service-desk-panel" onSubmit={handleExpenseSubmit}>
+                <div className="sm-service-desk-panel-head">
+                  <span>Cash-out</span>
+                  <strong>{expensePaidFromLabel(expenseDraft.paidFrom)}</strong>
+                </div>
+                <label>
+                  <span>Category</span>
+                  <select className="sm-input" onChange={(event) => setExpenseDraft((current) => ({ ...current, category: event.target.value as ExpenseCategory }))} value={expenseDraft.category}>
+                    {(['supplies', 'laundry', 'refreshments', 'marketing', 'staff_support'] as ExpenseCategory[]).map((category) => (
+                      <option key={category} value={category}>{expenseCategoryLabel(category)}</option>
+                    ))}
+                  </select>
+                </label>
+                <div className="sm-service-desk-form-grid">
+                  <label>
+                    <span>Amount</span>
+                    <input className="sm-input" inputMode="decimal" onChange={(event) => setExpenseDraft((current) => ({ ...current, amount: event.target.value }))} placeholder="0" value={expenseDraft.amount} />
+                  </label>
+                  <label>
+                    <span>Note</span>
+                    <input className="sm-input" onChange={(event) => setExpenseDraft((current) => ({ ...current, note: event.target.value }))} placeholder="Receipt or reason" value={expenseDraft.note} />
+                  </label>
+                </div>
+                <div className="sm-service-desk-payment-row">
+                  {(['cash', 'bank'] as ExpensePaidFrom[]).map((source) => (
+                    <button aria-pressed={expenseDraft.paidFrom === source} className={expenseDraft.paidFrom === source ? 'is-active' : ''} key={source} onClick={() => setExpenseDraft((current) => ({ ...current, paidFrom: source }))} type="button">
+                      {expensePaidFromLabel(source)}
                     </button>
-                    <button className="sm-button-dark" onClick={() => handleAppointmentStatusChange(appointment.id, 'in_progress')} type="button">
-                      Start
-                    </button>
-                    <button className="sm-button-dark" onClick={() => handleAppointmentStatusChange(appointment.id, 'needs_checkout')} type="button">
-                      Ready
-                    </button>
-                    <button className="sm-button-dark" onClick={() => handleAppointmentStatusChange(appointment.id, 'closed')} type="button">
-                      Close
-                    </button>
-                  </div>
-                </article>
-              ))}
-            </div>
-          </article>
-        </div>
-      </section>
-
-      <section className="grid gap-6 xl:grid-cols-[1.08fr_0.92fr]">
-        <article className="sm-calm-surface p-6">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-            <div>
-              <p className="sm-kicker text-[var(--sm-accent)]">Daily close</p>
-              <h2 className="mt-2 text-3xl font-bold text-white">Accounting snapshot</h2>
-            </div>
-            <span className="sm-status-pill">Local-first pilot in {workspace.currencyCode}</span>
-          </div>
-
-          <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            <div className="sm-proof-card">
-              <p className="sm-kicker text-[var(--sm-accent)]">Gross sales</p>
-              <p className="mt-3 text-2xl font-bold text-white">{formatCurrency(summary.grossSales, workspace.currencyCode)}</p>
-              <p className="mt-2 text-sm text-[var(--sm-muted)]">Before discounts and tips.</p>
-            </div>
-            <div className="sm-proof-card">
-              <p className="sm-kicker text-[var(--sm-accent)]">Discounts + tips</p>
-              <p className="mt-3 text-2xl font-bold text-white">
-                -{formatCurrency(summary.discounts, workspace.currencyCode)} / +{formatCurrency(summary.tips, workspace.currencyCode)}
-              </p>
-              <p className="mt-2 text-sm text-[var(--sm-muted)]">Keep the commercial and service context visible on every ticket.</p>
-            </div>
-            <div className="sm-proof-card">
-              <p className="sm-kicker text-[var(--sm-accent-alt)]">Commission accrual</p>
-              <p className="mt-3 text-2xl font-bold text-white">{formatCurrency(summary.commissions, workspace.currencyCode)}</p>
-              <p className="mt-2 text-sm text-[var(--sm-muted)]">Estimated from treatment and retail lines.</p>
-            </div>
-          </div>
-
-          <div className="mt-6 grid gap-4 lg:grid-cols-[1fr_1fr]">
-            <article className="sm-proof-card">
-              <p className="sm-kicker text-[var(--sm-accent)]">Payment mix</p>
-              <div className="mt-4 space-y-3 text-sm text-[var(--sm-muted)]">
-                <div className="flex items-center justify-between gap-3">
-                  <span>Cash</span>
-                  <strong className="text-white">{formatCurrency(summary.cashSales, workspace.currencyCode)}</strong>
-                </div>
-                <div className="flex items-center justify-between gap-3">
-                  <span>Card</span>
-                  <strong className="text-white">{formatCurrency(summary.cardSales, workspace.currencyCode)}</strong>
-                </div>
-                <div className="flex items-center justify-between gap-3">
-                  <span>Transfer</span>
-                  <strong className="text-white">{formatCurrency(summary.bankTransferSales, workspace.currencyCode)}</strong>
-                </div>
-                <div className="flex items-center justify-between gap-3">
-                  <span>Wallet</span>
-                  <strong className="text-white">{formatCurrency(summary.walletSales, workspace.currencyCode)}</strong>
-                </div>
-              </div>
-            </article>
-
-            <article className="sm-proof-card">
-              <p className="sm-kicker text-[var(--sm-accent-alt)]">Close checklist</p>
-              <div className="mt-4 space-y-3 text-sm text-[var(--sm-muted)]">
-                <div className="sm-site-point">
-                  <span className="sm-site-point-dot" />
-                  <span>Count drawer: {formatCurrency(summary.cashOnHand, workspace.currencyCode)} on hand.</span>
-                </div>
-                <div className="sm-site-point">
-                  <span className="sm-site-point-dot" />
-                  <span>Set aside float and deposit {formatCurrency(summary.depositTarget, workspace.currencyCode)}.</span>
-                </div>
-                <div className="sm-site-point">
-                  <span className="sm-site-point-dot" />
-                  <span>Review {summary.pendingCheckoutCount} appointments still marked as needing checkout.</span>
-                </div>
-                <div className="sm-site-point">
-                  <span className="sm-site-point-dot" />
-                  <span>Confirm {formatCurrency(summary.cashExpenses, workspace.currencyCode)} cash-outs against receipts.</span>
-                </div>
-              </div>
-            </article>
-          </div>
-        </article>
-
-        <article className="sm-pack-card overflow-hidden p-5">
-          <div className="flex items-end justify-between gap-3">
-            <div>
-              <p className="sm-kicker text-[var(--sm-accent)]">Product proof</p>
-              <h2 className="mt-2 text-3xl font-bold text-white">Service-retail wedge</h2>
-            </div>
-            <span className="sm-status-pill">Single-site pilot</span>
-          </div>
-          <div className="mt-5">
-            <LiveProductPreview variant="service-desk" />
-          </div>
-          <div className="mt-5 grid gap-3">
-            <article className="sm-chip text-white">
-              <p className="sm-kicker text-[var(--sm-accent)]">First rollout</p>
-              <p className="mt-2 text-sm text-[var(--sm-muted)]">One reception desk, one day ledger, one owner close routine.</p>
-            </article>
-            <article className="sm-chip text-white">
-              <p className="sm-kicker text-[var(--sm-accent-alt)]">Next rollout</p>
-              <p className="mt-2 text-sm text-[var(--sm-muted)]">Bookings, package balances, commissions, branch analytics, and a shared backend.</p>
-            </article>
-          </div>
-        </article>
-      </section>
-
-      <section className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
-        <article className="sm-calm-surface p-6">
-          <p className="sm-kicker text-[var(--sm-accent)]">Make it yours</p>
-          <h2 className="mt-2 text-3xl font-bold text-white">Configure the actual business, not just the demo.</h2>
-
-          <div className="mt-6 space-y-4">
-            <details className="sm-details sm-proof-card" open>
-              <summary>Business profile</summary>
-              <div className="sm-details-content grid gap-4 pt-4">
-                <form className="grid gap-4" onSubmit={handleProfileSubmit}>
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <label className="grid gap-2">
-                      <span className="text-sm font-semibold text-white">Business name</span>
-                      <input
-                        className="sm-input"
-                        onChange={(event) => setWorkspaceSettingsDraft((current) => ({ ...current, businessName: event.target.value }))}
-                        value={workspaceSettingsDraft.businessName}
-                      />
-                    </label>
-                    <label className="grid gap-2">
-                      <span className="text-sm font-semibold text-white">Location</span>
-                      <input
-                        className="sm-input"
-                        onChange={(event) => setWorkspaceSettingsDraft((current) => ({ ...current, location: event.target.value }))}
-                        value={workspaceSettingsDraft.location}
-                      />
-                    </label>
-                  </div>
-                  <div className="grid gap-4 md:grid-cols-3">
-                    <label className="grid gap-2">
-                      <span className="text-sm font-semibold text-white">Sector</span>
-                      <select
-                        className="sm-input"
-                        onChange={(event) => setWorkspaceSettingsDraft((current) => ({ ...current, sector: event.target.value as ServiceRetailSector }))}
-                        value={workspaceSettingsDraft.sector}
-                      >
-                        {(['spa', 'salon', 'clinic', 'studio'] as ServiceRetailSector[]).map((sector) => (
-                          <option key={sector} value={sector}>
-                            {serviceRetailSectorLabel(sector)}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <label className="grid gap-2">
-                      <span className="text-sm font-semibold text-white">Currency</span>
-                      <input
-                        className="sm-input"
-                        maxLength={3}
-                        onChange={(event) => setWorkspaceSettingsDraft((current) => ({ ...current, currencyCode: event.target.value.toUpperCase() }))}
-                        value={workspaceSettingsDraft.currencyCode}
-                      />
-                    </label>
-                    <label className="grid gap-2">
-                      <span className="text-sm font-semibold text-white">Opening float</span>
-                      <input
-                        className="sm-input"
-                        inputMode="decimal"
-                        onChange={(event) => setWorkspaceSettingsDraft((current) => ({ ...current, openingCashFloat: event.target.value }))}
-                        value={workspaceSettingsDraft.openingCashFloat}
-                      />
-                    </label>
-                  </div>
-                  <div>
-                    <button className="sm-button-primary" disabled={!canSaveProfile} type="submit">
-                      Save business profile
-                    </button>
-                  </div>
-                </form>
-              </div>
-            </details>
-
-            <details className="sm-details sm-proof-card">
-              <summary>Services catalog</summary>
-              <div className="sm-details-content pt-4">
-                <div className="grid gap-3">
-                  {workspace.services.map((service) => (
-                    <article className="sm-manager-row" key={service.id}>
-                      <div>
-                        <p className="font-semibold text-white">{service.name}</p>
-                        <p className="mt-2 text-sm text-[var(--sm-muted)]">
-                          {service.category} | {service.durationMinutes ? `${service.durationMinutes} min` : 'Retail'} | {Math.round(service.commissionRate * 100)}% commission
-                        </p>
-                      </div>
-                      <strong className="text-white">{formatCurrency(service.price, workspace.currencyCode)}</strong>
-                    </article>
                   ))}
                 </div>
-                <form className="mt-4 grid gap-4" onSubmit={handleServiceSubmit}>
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <label className="grid gap-2">
-                      <span className="text-sm font-semibold text-white">Service name</span>
-                      <input className="sm-input" onChange={(event) => setServiceDraft((current) => ({ ...current, name: event.target.value }))} value={serviceDraft.name} />
-                    </label>
-                    <label className="grid gap-2">
-                      <span className="text-sm font-semibold text-white">Category</span>
-                      <input className="sm-input" onChange={(event) => setServiceDraft((current) => ({ ...current, category: event.target.value }))} value={serviceDraft.category} />
-                    </label>
-                  </div>
-                  <div className="grid gap-4 md:grid-cols-3">
-                    <label className="grid gap-2">
-                      <span className="text-sm font-semibold text-white">Duration (min)</span>
-                      <input className="sm-input" inputMode="numeric" onChange={(event) => setServiceDraft((current) => ({ ...current, durationMinutes: event.target.value }))} value={serviceDraft.durationMinutes} />
-                    </label>
-                    <label className="grid gap-2">
-                      <span className="text-sm font-semibold text-white">Price</span>
-                      <input className="sm-input" inputMode="decimal" onChange={(event) => setServiceDraft((current) => ({ ...current, price: event.target.value }))} value={serviceDraft.price} />
-                    </label>
-                    <label className="grid gap-2">
-                      <span className="text-sm font-semibold text-white">Commission %</span>
-                      <input className="sm-input" inputMode="decimal" onChange={(event) => setServiceDraft((current) => ({ ...current, commissionRate: event.target.value }))} value={serviceDraft.commissionRate} />
-                    </label>
-                  </div>
-                  <div>
-                    <button className="sm-button-secondary" disabled={!canAddService} type="submit">
-                      Add service
-                    </button>
-                  </div>
-                </form>
-              </div>
-            </details>
+                <button className="sm-button-secondary" disabled={!canSubmitExpense} type="submit">
+                  Add expense
+                </button>
+              </form>
 
-            <details className="sm-details sm-proof-card">
-              <summary>Staff roster</summary>
-              <div className="sm-details-content pt-4">
-                <div className="grid gap-3">
-                  {workspace.staff.map((member) => (
-                    <article className="sm-manager-row" key={member.id}>
+              <article className="sm-service-desk-panel">
+                <div className="sm-service-desk-panel-head">
+                  <span>Room flow</span>
+                  <strong>{workspace.appointments.length}</strong>
+                </div>
+                <div className="sm-service-appointment-list">
+                  {workspace.appointments.map((appointment) => (
+                    <div key={appointment.id}>
+                      <strong>{appointment.customerName}</strong>
+                      <span>{formatClock(appointment.startsAt)} / {resolveStaffName(workspace, appointment.staffId)}</span>
+                      <small>{resolveServiceNames(workspace, appointment.serviceIds).join(', ')} / {appointmentStatusLabel(appointment.status)}</small>
                       <div>
-                        <p className="font-semibold text-white">{member.name}</p>
-                        <p className="mt-2 text-sm text-[var(--sm-muted)]">
-                          {member.role} | {member.shift}
-                        </p>
+                        <button onClick={() => loadAppointmentIntoCheckout(appointment.customerName, appointment.staffId, appointment.serviceIds)} type="button">Checkout</button>
+                        <button onClick={() => handleAppointmentStatusChange(appointment.id, 'needs_checkout')} type="button">Ready</button>
+                        <button onClick={() => handleAppointmentStatusChange(appointment.id, 'closed')} type="button">Close</button>
                       </div>
-                    </article>
+                    </div>
                   ))}
                 </div>
-                <form className="mt-4 grid gap-4 md:grid-cols-3" onSubmit={handleStaffSubmit}>
-                  <label className="grid gap-2">
-                    <span className="text-sm font-semibold text-white">Name</span>
-                    <input className="sm-input" onChange={(event) => setStaffDraft((current) => ({ ...current, name: event.target.value }))} value={staffDraft.name} />
-                  </label>
-                  <label className="grid gap-2">
-                    <span className="text-sm font-semibold text-white">Role</span>
-                    <input className="sm-input" onChange={(event) => setStaffDraft((current) => ({ ...current, role: event.target.value }))} value={staffDraft.role} />
-                  </label>
-                  <label className="grid gap-2">
-                    <span className="text-sm font-semibold text-white">Shift</span>
-                    <input className="sm-input" onChange={(event) => setStaffDraft((current) => ({ ...current, shift: event.target.value }))} value={staffDraft.shift} />
-                  </label>
-                  <div className="md:col-span-3">
-                    <button className="sm-button-secondary" disabled={!canAddStaff} type="submit">
-                      Add team member
-                    </button>
-                  </div>
-                </form>
+              </article>
+            </aside>
+          </>
+        ) : null}
+
+        {activeModule === 'closeout' ? (
+          <>
+            <article className="sm-service-desk-panel">
+              <div className="sm-service-desk-panel-head">
+                <span>Daily close</span>
+                <strong>{workspace.currencyCode}</strong>
               </div>
-            </details>
-
-            <details className="sm-details sm-proof-card">
-              <summary>Appointment intake</summary>
-              <div className="sm-details-content pt-4">
-                <form className="grid gap-4" onSubmit={handleAppointmentSubmit}>
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <label className="grid gap-2">
-                      <span className="text-sm font-semibold text-white">Customer</span>
-                      <input className="sm-input" onChange={(event) => setAppointmentDraft((current) => ({ ...current, customerName: event.target.value }))} value={effectiveAppointmentDraft.customerName} />
-                    </label>
-                    <label className="grid gap-2">
-                      <span className="text-sm font-semibold text-white">Room or chair</span>
-                      <input className="sm-input" onChange={(event) => setAppointmentDraft((current) => ({ ...current, roomLabel: event.target.value }))} value={effectiveAppointmentDraft.roomLabel} />
-                    </label>
+              <div className="sm-service-closeout-grid">
+                {[
+                  ['Gross sales', summary.grossSales],
+                  ['Discounts', summary.discounts],
+                  ['Tips', summary.tips],
+                  ['Commission', summary.commissions],
+                  ['Expenses', summary.expenses],
+                  ['Deposit', summary.depositTarget],
+                ].map(([label, amount]) => (
+                  <div key={label}>
+                    <span>{label}</span>
+                    <strong>{formatCurrency(Number(amount), workspace.currencyCode)}</strong>
                   </div>
-                  <div className="grid gap-4 md:grid-cols-4">
-                    <label className="grid gap-2">
-                      <span className="text-sm font-semibold text-white">Service</span>
-                      <select className="sm-input" onChange={(event) => setAppointmentDraft((current) => ({ ...current, serviceId: event.target.value }))} value={effectiveAppointmentDraft.serviceId}>
-                        {workspace.services.map((service) => (
-                          <option key={service.id} value={service.id}>
-                            {service.name}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <label className="grid gap-2">
-                      <span className="text-sm font-semibold text-white">Staff</span>
-                      <select className="sm-input" onChange={(event) => setAppointmentDraft((current) => ({ ...current, staffId: event.target.value }))} value={effectiveAppointmentDraft.staffId}>
-                        {workspace.staff.map((member) => (
-                          <option key={member.id} value={member.id}>
-                            {member.name}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <label className="grid gap-2">
-                      <span className="text-sm font-semibold text-white">Start time</span>
-                      <input className="sm-input" onChange={(event) => setAppointmentDraft((current) => ({ ...current, startsAt: event.target.value }))} type="datetime-local" value={effectiveAppointmentDraft.startsAt} />
-                    </label>
-                    <label className="grid gap-2">
-                      <span className="text-sm font-semibold text-white">Status</span>
-                      <select className="sm-input" onChange={(event) => setAppointmentDraft((current) => ({ ...current, status: event.target.value as AppointmentStatus }))} value={effectiveAppointmentDraft.status}>
-                        {(['booked', 'in_progress', 'needs_checkout', 'closed'] as AppointmentStatus[]).map((status) => (
-                          <option key={status} value={status}>
-                            {appointmentStatusLabel(status)}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  </div>
-                  <div>
-                    <button className="sm-button-secondary" disabled={!canAddAppointment} type="submit">
-                      Add appointment
-                    </button>
-                  </div>
-                </form>
+                ))}
               </div>
-            </details>
-          </div>
-        </article>
-
-        <div className="space-y-6">
-          <article className="sm-calm-surface p-6">
-            <p className="sm-kicker text-[var(--sm-accent)]">Own the build</p>
-            <h2 className="mt-2 text-3xl font-bold text-white">Portable data and clear local commands</h2>
-            <div className="mt-5 space-y-4">
-              <button className="sm-button-primary" onClick={() => downloadWorkspaceSnapshot(workspace)} type="button">
-                Download current snapshot
-              </button>
-              <label className="grid gap-2">
-                <span className="text-sm font-semibold text-white">Import snapshot JSON</span>
-                <textarea
-                  className="sm-input min-h-40 font-mono text-xs"
-                  onChange={(event) => setImportDraft(event.target.value)}
-                  placeholder="Paste a previously exported service desk snapshot here."
-                  value={importDraft}
-                />
-              </label>
-              <button className="sm-button-secondary" onClick={handleImportSnapshot} type="button">
-                Load snapshot
-              </button>
-              <div className="sm-terminal p-4 text-xs text-[var(--sm-muted)]">
-                <pre className="overflow-x-auto whitespace-pre-wrap">
-{`cd showroom
-npm ci
-npm run dev
-
-# In this Windows Bash/Codex environment:
-cmd.exe /c npm run build
-
-# Root-level Vercel helpers:
-npm run vercel:build
-npm run vercel:deploy:prod`}
-                </pre>
+            </article>
+            <article className="sm-service-desk-panel">
+              <div className="sm-service-desk-panel-head">
+                <span>Payment mix</span>
+                <strong>{formatCurrency(summary.collectedRevenue, workspace.currencyCode)}</strong>
               </div>
-            </div>
-          </article>
+              <div className="sm-service-closeout-list">
+                {paymentRows.map(([label, amount]) => (
+                  <p key={label}><span>{label}</span><strong>{formatCurrency(amount, workspace.currencyCode)}</strong></p>
+                ))}
+              </div>
+              <div className="sm-service-checklist">
+                {closeChecks.map((check) => <span key={check}>{check}</span>)}
+              </div>
+            </article>
+          </>
+        ) : null}
 
-          <article className="sm-calm-surface p-6">
-            <p className="sm-kicker text-[var(--sm-accent)]">Open-source stack</p>
-            <h2 className="mt-2 text-3xl font-bold text-white">Simple setup path</h2>
-            <div className="mt-5 space-y-3">
-              {SERVICE_RETAIL_OPEN_SOURCE_STACK.map((layer) => (
-                <article className="sm-proof-card" key={layer.layer}>
-                  <p className="font-semibold text-white">{layer.layer}</p>
-                  <p className="mt-2 text-sm text-[var(--sm-muted)]">{layer.tools.join(', ')}</p>
-                  <p className="mt-3 text-sm leading-relaxed text-[var(--sm-muted)]">{layer.why}</p>
-                </article>
-              ))}
-            </div>
-          </article>
-        </div>
-      </section>
+        {activeModule === 'setup' ? (
+          <>
+            <article className="sm-service-desk-panel">
+              <div className="sm-service-desk-panel-head">
+                <span>Business setup</span>
+                <strong>{workspace.services.length} services / {workspace.staff.length} staff</strong>
+              </div>
+              <form className="sm-service-desk-form-grid" onSubmit={handleProfileSubmit}>
+                <label><span>Business</span><input className="sm-input" onChange={(event) => setWorkspaceSettingsDraft((current) => ({ ...current, businessName: event.target.value }))} value={workspaceSettingsDraft.businessName} /></label>
+                <label><span>Location</span><input className="sm-input" onChange={(event) => setWorkspaceSettingsDraft((current) => ({ ...current, location: event.target.value }))} value={workspaceSettingsDraft.location} /></label>
+                <label><span>Sector</span><select className="sm-input" onChange={(event) => setWorkspaceSettingsDraft((current) => ({ ...current, sector: event.target.value as ServiceRetailSector }))} value={workspaceSettingsDraft.sector}>{(['spa', 'salon', 'clinic', 'studio'] as ServiceRetailSector[]).map((sector) => <option key={sector} value={sector}>{serviceRetailSectorLabel(sector)}</option>)}</select></label>
+                <label><span>Currency</span><input className="sm-input" maxLength={3} onChange={(event) => setWorkspaceSettingsDraft((current) => ({ ...current, currencyCode: event.target.value.toUpperCase() }))} value={workspaceSettingsDraft.currencyCode} /></label>
+                <label><span>Float</span><input className="sm-input" inputMode="decimal" onChange={(event) => setWorkspaceSettingsDraft((current) => ({ ...current, openingCashFloat: event.target.value }))} value={workspaceSettingsDraft.openingCashFloat} /></label>
+                <button className="sm-button-primary" disabled={!canSaveProfile} type="submit">Save profile</button>
+              </form>
+            </article>
 
-      <section className="grid gap-6 xl:grid-cols-[1.12fr_0.88fr]">
-        <article className="sm-calm-surface p-6">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-            <div>
-              <p className="sm-kicker text-[var(--sm-accent)]">Today ledger</p>
-              <h2 className="mt-2 text-3xl font-bold text-white">One stream for sales and cash-outs</h2>
-            </div>
-            <label className="w-full max-w-sm">
-              <span className="sr-only">Search today&apos;s ledger</span>
-              <input
-                className="sm-input"
-                onChange={(event) => setLedgerSearch(event.target.value)}
-                placeholder="Search customer, note, service, or state"
-                value={ledgerSearch}
-              />
-            </label>
-          </div>
+            <article className="sm-service-desk-panel">
+              <div className="sm-service-desk-panel-head"><span>Catalog and schedule</span><strong>Live setup</strong></div>
+              <form className="sm-service-mini-form" onSubmit={handleServiceSubmit}>
+                <input className="sm-input" onChange={(event) => setServiceDraft((current) => ({ ...current, name: event.target.value }))} placeholder="Service name" value={serviceDraft.name} />
+                <input className="sm-input" onChange={(event) => setServiceDraft((current) => ({ ...current, category: event.target.value }))} placeholder="Category" value={serviceDraft.category} />
+                <input className="sm-input" inputMode="decimal" onChange={(event) => setServiceDraft((current) => ({ ...current, price: event.target.value }))} placeholder="Price" value={serviceDraft.price} />
+                <input className="sm-input" inputMode="numeric" onChange={(event) => setServiceDraft((current) => ({ ...current, durationMinutes: event.target.value }))} placeholder="Minutes" value={serviceDraft.durationMinutes} />
+                <input className="sm-input" inputMode="decimal" onChange={(event) => setServiceDraft((current) => ({ ...current, commissionRate: event.target.value }))} placeholder="Commission %" value={serviceDraft.commissionRate} />
+                <button className="sm-button-secondary" disabled={!canAddService} type="submit">Add service</button>
+              </form>
+              <form className="sm-service-mini-form" onSubmit={handleStaffSubmit}>
+                <input className="sm-input" onChange={(event) => setStaffDraft((current) => ({ ...current, name: event.target.value }))} placeholder="Staff name" value={staffDraft.name} />
+                <input className="sm-input" onChange={(event) => setStaffDraft((current) => ({ ...current, role: event.target.value }))} placeholder="Role" value={staffDraft.role} />
+                <input className="sm-input" onChange={(event) => setStaffDraft((current) => ({ ...current, shift: event.target.value }))} placeholder="Shift" value={staffDraft.shift} />
+                <button className="sm-button-secondary" disabled={!canAddStaff} type="submit">Add staff</button>
+              </form>
+              <form className="sm-service-mini-form" onSubmit={handleAppointmentSubmit}>
+                <input className="sm-input" onChange={(event) => setAppointmentDraft((current) => ({ ...current, customerName: event.target.value }))} placeholder="Customer" value={effectiveAppointmentDraft.customerName} />
+                <select className="sm-input" onChange={(event) => setAppointmentDraft((current) => ({ ...current, serviceId: event.target.value }))} value={effectiveAppointmentDraft.serviceId}>{workspace.services.map((service) => <option key={service.id} value={service.id}>{service.name}</option>)}</select>
+                <select className="sm-input" onChange={(event) => setAppointmentDraft((current) => ({ ...current, staffId: event.target.value }))} value={effectiveAppointmentDraft.staffId}>{workspace.staff.map((member) => <option key={member.id} value={member.id}>{member.name}</option>)}</select>
+                <input className="sm-input" onChange={(event) => setAppointmentDraft((current) => ({ ...current, startsAt: event.target.value }))} type="datetime-local" value={effectiveAppointmentDraft.startsAt} />
+                <input className="sm-input" onChange={(event) => setAppointmentDraft((current) => ({ ...current, roomLabel: event.target.value }))} placeholder="Room" value={effectiveAppointmentDraft.roomLabel} />
+                <button className="sm-button-secondary" disabled={!canAddAppointment} type="submit">Add booking</button>
+              </form>
+            </article>
+          </>
+        ) : null}
 
-          <div className="mt-6 space-y-3">
-            {filteredLedger.length ? (
-              filteredLedger.map((item) => (
-                <article className="sm-manager-row" key={item.id}>
-                  <div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <p className="font-semibold text-white">{item.title}</p>
-                      <span className="sm-status-pill">{item.state}</span>
-                    </div>
-                    <p className="mt-2 text-sm text-[var(--sm-muted)]">{item.subtitle}</p>
-                    <p className="mt-2 text-xs uppercase tracking-[0.18em] text-[var(--sm-muted)]">
-                      {formatClock(item.createdAt)} | {item.detail}
-                    </p>
+        {activeModule === 'ledger' ? (
+          <>
+            <article className="sm-service-desk-panel">
+              <div className="sm-service-desk-panel-head">
+                <span>Ledger</span>
+                <strong>{filteredLedger.length} rows</strong>
+              </div>
+              <input className="sm-input" onChange={(event) => setLedgerSearch(event.target.value)} placeholder="Search customer, note, service, state" value={ledgerSearch} />
+              <div className="sm-service-ledger-list">
+                {filteredLedger.length ? filteredLedger.map((item) => (
+                  <div key={item.id}>
+                    <strong>{item.title}</strong>
+                    <span>{item.state} / {formatClock(item.createdAt)} / {item.detail}</span>
+                    <small>{item.subtitle}</small>
+                    <em>{item.amount >= 0 ? '+' : '-'}{formatCurrency(Math.abs(item.amount), workspace.currencyCode)}</em>
                   </div>
-                  <strong className={item.amount >= 0 ? 'text-lg text-white' : 'text-lg text-[#ffb5ad]'}>
-                    {item.amount >= 0 ? '+' : '-'}
-                    {formatCurrency(Math.abs(item.amount), workspace.currencyCode)}
-                  </strong>
-                </article>
-              ))
-            ) : (
-              <div className="sm-proof-card">
-                <p className="text-sm text-[var(--sm-muted)]">No ledger rows match the current filter.</p>
+                )) : <p>No ledger rows match this filter.</p>}
               </div>
-            )}
-          </div>
-        </article>
-
-        <div className="space-y-6">
-          <article className="sm-calm-surface p-6">
-            <p className="sm-kicker text-[var(--sm-accent-alt)]">AI agent loops</p>
-            <h2 className="mt-2 text-3xl font-bold text-white">Useful automation, not agent theater</h2>
-            <div className="mt-5 space-y-3">
-              {SERVICE_RETAIL_AGENT_LOOPS.map((agent) => (
-                <article className="sm-proof-card" key={agent.name}>
-                  <p className="font-semibold text-white">{agent.name}</p>
-                  <p className="mt-2 text-sm text-[var(--sm-muted)]">{agent.role}</p>
-                  <p className="mt-3 text-sm leading-relaxed text-[var(--sm-muted)]">{agent.scope}</p>
-                  <p className="mt-3 text-sm text-white/80">{agent.handoff}</p>
-                </article>
-              ))}
-            </div>
-          </article>
-
-          <article className="sm-calm-surface p-6">
-            <p className="sm-kicker text-[var(--sm-accent)]">Generalize next</p>
-            <h2 className="mt-2 text-3xl font-bold text-white">The same core can expand beyond spa</h2>
-            <div className="mt-5 space-y-3">
-              {SERVICE_RETAIL_TEMPLATE_LANES.map((lane) => (
-                <article className="sm-proof-card" key={lane.name}>
-                  <p className="font-semibold text-white">{lane.name}</p>
-                  <p className="mt-3 text-sm leading-relaxed text-[var(--sm-muted)]">Start with: {lane.firstSurface}</p>
-                  <p className="mt-3 text-sm text-white/80">Then add: {lane.adaptsWith}</p>
-                </article>
-              ))}
-            </div>
-          </article>
-        </div>
+            </article>
+            <article className="sm-service-desk-panel">
+              <div className="sm-service-desk-panel-head"><span>Restore</span><strong>JSON snapshot</strong></div>
+              <textarea className="sm-input sm-service-import" onChange={(event) => setImportDraft(event.target.value)} placeholder="Paste exported Service Desk JSON" value={importDraft} />
+              <button className="sm-button-secondary" onClick={handleImportSnapshot} type="button">Load snapshot</button>
+            </article>
+          </>
+        ) : null}
       </section>
     </div>
   )

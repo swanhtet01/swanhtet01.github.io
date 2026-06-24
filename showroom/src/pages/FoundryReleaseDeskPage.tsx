@@ -423,7 +423,7 @@ export function FoundryReleaseDeskPage() {
         <PageIntro
           eyebrow="Foundry Release Desk"
           title="Authenticated workspace required."
-          description="This desk is reserved for the live internal workspace and does not run in public preview mode."
+          description="This desk is reserved for the live internal workspace and does not run in the public website shell."
         />
         <section className="sm-surface-deep p-6">
           <p className="text-sm text-[var(--sm-muted)]">

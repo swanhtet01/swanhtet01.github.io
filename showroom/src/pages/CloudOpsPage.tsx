@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom'
 import { PageIntro } from '../components/PageIntro'
 import { AI_NATIVE_STACK_LAYERS } from '../lib/aiArchitectureBlueprint'
 import { getAgentOperatingModel } from '../lib/agentOperatingModel'
+import { AI_INFRASTRUCTURE_PILLARS } from '../lib/aiReferenceArchitecture'
 import { loadCloudOpsDashboard, type CloudOpsDashboard } from '../lib/cloudOpsApi'
 import { SUPERMEGA_CLOUD_OPS_MODEL } from '../lib/cloudOpsModel'
 import { CLOUD_DEPLOYMENT_PATTERNS, SELLABLE_WORKSPACE_PROGRAMS, WORKFORCE_PACKAGES } from '../lib/cloudProductizationModel'
@@ -166,7 +167,7 @@ export function CloudOpsPage() {
             canManage: false,
             usesDefaultCredentials: false,
             roleLabel: 'Preview',
-            error: 'Cloud operations are shown in preview mode on this host.',
+            error: 'Cloud operations are shown in public shell mode on this host.',
           })
         }
       }
@@ -958,6 +959,34 @@ export function CloudOpsPage() {
           <p className="mt-3 text-3xl font-bold text-white">{AI_NATIVE_STACK_LAYERS.length}</p>
           <p className="mt-2 text-sm text-[var(--sm-muted)]">Recommended cloud stack layers for agent runtime, orchestration, and memory.</p>
         </article>
+      </section>
+
+      <section className="sm-site-panel">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <p className="sm-kicker text-[var(--sm-accent)]">AI infrastructure lane</p>
+            <h2 className="mt-3 text-3xl font-bold text-white lg:text-4xl">Run the platform as seven AI infrastructure pillars, not one generic cloud box.</h2>
+          </div>
+          <p className="max-w-2xl text-sm leading-relaxed text-[var(--sm-muted)] lg:text-base">
+            This is the control view for security, orchestration, data services, storage, networking, accelerated compute, and automation management across the tenant platform.
+          </p>
+        </div>
+        <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          {AI_INFRASTRUCTURE_PILLARS.map((pillar) => (
+            <article className="sm-proof-card" key={pillar.id}>
+              <p className="font-semibold text-white">{pillar.name}</p>
+              <p className="mt-3 text-sm leading-relaxed text-[var(--sm-muted)]">{pillar.summary}</p>
+              <div className="mt-4 flex flex-wrap gap-2">
+                {pillar.controls.map((control) => (
+                  <span className="sm-status-pill" key={`${pillar.id}-${control}`}>
+                    {control}
+                  </span>
+                ))}
+              </div>
+              <p className="mt-4 text-sm text-white/80">Outcome: {pillar.operatorOutcome}</p>
+            </article>
+          ))}
+        </div>
       </section>
 
       <section className="grid gap-6 xl:grid-cols-[0.98fr_1.02fr]">

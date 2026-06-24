@@ -26,16 +26,28 @@ Core files:
 - `14_updates_and_alerts.md`
 - `15_agent_architecture.md`
 - `16_next_gen_company_stack.md`
+- `17_solutions_readiness_map.md`
+- `18_launch_control.md`
+- `19_launch_execution_tracker.csv`
+- `20_go_to_market_operating_model.md`
+- `20_go_to_market_execution_tracker.csv`
 
 Ownership:
 - Founder Desk: scoreboard, founder brief, roadmap, solution catalog
+- Founder Desk: launch control, execution tracker
+- Founder Desk: GTM operating model, GTM execution tracker
 - Revenue Pod: sales pipeline, case-study program
+- Demand & Proof Pod: homepage, products, screenshots, case studies
+- Communications Pod: inbound routing, FAQ, response hygiene
+- Client Onboarding Pod: kickoff, source-data mapping, first-week success
 - Delivery Pod: delivery tracker, release log
 - Agent Ops: operator report, incident log
 
 Cadence:
 - Daily: founder brief, operator report, sales pipeline, delivery tracker
 - Weekly: company scoreboard, product roadmap, case-study program
+- Weekly: launch control, execution tracker
+- Weekly: GTM operating model, GTM execution tracker
 - Every release: release log
 - Every incident: incident log
 - Every workstation cycle: `index.html`

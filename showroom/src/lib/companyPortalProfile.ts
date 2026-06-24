@@ -70,7 +70,7 @@ function buildDefaultProfile(
     })),
   ])
   const metaTools = uniqueTools([
-    { title: 'Portal Manager', detail: 'Adjust roles, modules, and the company operating shell.', to: '/app/platform-admin', kind: 'meta' as const },
+    { title: 'Workspace Manager', detail: 'Adjust roles, modules, and the company operating shell.', to: '/app/platform-admin', kind: 'meta' as const },
     { title: 'Connector Control', detail: 'Link Gmail, Drive, ERP, web, and other company sources.', to: '/app/connectors', kind: 'meta' as const },
     { title: 'Workforce Manager', detail: 'Assign work, run review cycles, and keep AI support lanes active.', to: '/app/workforce', kind: 'meta' as const },
     { title: 'Cloud and Runtime', detail: 'Keep deploy, runtime, queues, and agent posture stable.', to: '/app/cloud', kind: 'meta' as const },
@@ -79,10 +79,10 @@ function buildDefaultProfile(
   return {
     companyName,
     industryLabel: tenant.siteMode === 'client' ? 'Industry workspace' : 'Cross-functional enterprise workspace',
-    operatingModelLabel: 'AI-native company portal',
+    operatingModelLabel: 'Company workspace',
     workspacePromise: `A custom workspace for ${companyName} where each employee sees the right desk, the right context, and the right next action.`,
     companySummary:
-      'This portal should feel like one operating system for the company, not a bundle of separate SaaS tabs. Each desk carries the company memory, role rules, and source data it actually needs.',
+      'This workspace should feel like one clear place to run the workflow, not a bundle of separate SaaS tabs. Each desk carries the company memory, role rules, and source data it actually needs.',
     operatorRule: 'Every action should live on one company record with an owner, a next step, and the evidence beside it.',
     todayPrompt: `Start from ${experience.sections[0]?.title || 'the main desk'}, then expand only when the first queue is clean.`,
     coreApps,
@@ -91,7 +91,7 @@ function buildDefaultProfile(
     knowledgePacks: [
       {
         title: 'Company memory',
-        detail: 'The portal should retain how this company works so people do not restart from scratch every day.',
+        detail: 'The workspace should retain how this company works so people do not restart from scratch every day.',
         bullets: [
           'Role home, queue rules, and escalation path stay visible.',
           'Key accounts, projects, suppliers, and incidents keep their history.',
@@ -127,7 +127,7 @@ function buildYangonTyreProfile(
 ): CompanyPortalProfile {
   const companyName = String(session?.workspace_name || tenant.tenantName || tenant.defaultCompany || 'Yangon Tyre').trim() || 'Yangon Tyre'
   const coreApps = uniqueTools([
-    { title: 'Operations Desk', detail: 'Run plant blockers, shift handoff, and shared actions.', to: '/app/operations', kind: 'core' as const },
+  { title: 'Operations Command', detail: 'Run plant blockers, shift handoff, and shared actions.', to: '/app/operations', kind: 'core' as const },
     { title: 'Receiving Desk', detail: 'Track GRN gaps, inbound holds, and supplier evidence.', to: '/app/receiving', kind: 'core' as const },
     { title: 'DQMS Desk', detail: 'Handle incidents, CAPA, release, and quality recurrence.', to: '/app/dqms', kind: 'core' as const },
     { title: 'Maintenance Desk', detail: 'Watch downtime, PM work, repeat failures, and spare blockers.', to: '/app/maintenance', kind: 'core' as const },

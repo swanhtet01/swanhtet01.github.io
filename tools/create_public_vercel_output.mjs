@@ -122,6 +122,8 @@ function normalizePublicProductNames(content) {
     .replace(/\/site\/shots\/product-factory-maintenance-quality-app\.svg|\/site\/shots\/product-factory-operations-app\.svg|\/site\/shots\/product-factory-issue-maintenance-tracker\.svg/g, '/site/shots/product-factory-issues-maintenance-quality.svg')
     .replace(/\/site\/shots\/product-restaurant-pos-inventory-app\.svg|\/site\/shots\/product-restaurant-pos-app\.svg|\/site\/shots\/product-restaurant-pos-stock-tracker\.svg/g, '/site/shots/product-restaurant-pos-menu-inventory.svg')
     .replace(/Back Office (?:Back Office )+Workflow Desk/g, 'Back Office Workflow Desk')
+    // Vercel Analytics + Speed Insights — injected on every public page
+    .replace('</body>', '<script defer src="/_vercel/insights/script.js"></script><script defer src="/_vercel/speed-insights/script.js"></script></body>')
 }
 
 const publicShellHtml = `<!doctype html>
@@ -3323,29 +3325,8 @@ const unicornShellStyle = `
       .reveal { opacity: 0; transform: translateY(18px); transition: opacity .66s cubic-bezier(.22,1,.36,1), transform .66s cubic-bezier(.22,1,.36,1); }
       .reveal.in { opacity: 1; transform: none; }
       a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, summary:focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; }
-      .btn.primary:focus-visible, .theme-toggle:focus-visible { outline-color: var(--ink); }
+      .btn.primary:focus-visible { outline-color: var(--ink); }
       @media (prefers-reduced-motion: reduce) { html, .product-shot-gallery { scroll-behavior: auto; } .reveal, .copy, .product-stage { animation: none !important; transition: none !important; opacity: 1 !important; transform: none !important; } }
-      .theme-toggle::before { content: 'Dark'; }
-      :root[data-theme="dark"] .theme-toggle::before { content: 'Light'; }
-      :root[data-theme="dark"] {
-        color-scheme: dark;
-        --cream: #1B1815; --paper: #242019; --ink: #F3EFE6; --muted: #A8A092;
-        --line: rgba(243,239,230,0.12); --blue: #D97757; --blue-soft: rgba(217,119,87,0.16);
-        --aqua: #E0A06B; --navy: #F3EFE6; --shadow: 0 34px 90px rgba(0,0,0,0.5); --gilt: #D7B25C;
-      }
-      :root[data-theme="dark"] body {
-        background:
-          radial-gradient(circle at 80% 2%, rgba(217,119,87,0.14), transparent 30rem),
-          radial-gradient(circle at 4% 18%, rgba(200,168,119,0.08), transparent 26rem),
-          linear-gradient(180deg, #1d1916 0%, var(--cream) 55%, #161310 100%);
-      }
-      :root[data-theme="dark"] body::before { background-image: linear-gradient(rgba(243,239,230,0.045) 1px, transparent 1px), linear-gradient(90deg, rgba(243,239,230,0.045) 1px, transparent 1px); }
-      :root[data-theme="dark"] .btn, :root[data-theme="dark"] button { background: rgba(243,239,230,0.06); }
-      :root[data-theme="dark"] .btn.primary, :root[data-theme="dark"] button { color: #fff; background: linear-gradient(135deg, #b1542f, #cc6e48); }
-      :root[data-theme="dark"] .output, :root[data-theme="dark"] .feature, :root[data-theme="dark"] .proof-card, :root[data-theme="dark"] .case, :root[data-theme="dark"] .proof-system, :root[data-theme="dark"] .final, :root[data-theme="dark"] .home-shot-card, :root[data-theme="dark"] .browser, :root[data-theme="dark"] .proof, :root[data-theme="dark"] .upgrade-card, :root[data-theme="dark"] .shell-card, :root[data-theme="dark"] .setup-card, :root[data-theme="dark"] .market-card, :root[data-theme="dark"] form, :root[data-theme="dark"] .feature-pills span, :root[data-theme="dark"] .chip, :root[data-theme="dark"] .metric, :root[data-theme="dark"] .proof-step, :root[data-theme="dark"] footer .footer-links a {
-        background: rgba(243,239,230,0.05); border-color: rgba(243,239,230,0.12);
-      }
-      :root[data-theme="dark"] .product-carousel, :root[data-theme="dark"] .product-shot-card, :root[data-theme="dark"] .product-shot-card .shot-open, :root[data-theme="dark"] .output > img { background: #201c17; }
       /* Premium product-screenshot framing — real-software look, clean on light + dark */
       .product-shot-card img { border: 1px solid rgba(42,36,28,0.12); border-radius: 14px; box-shadow: 0 22px 55px -30px rgba(42,36,28,0.45); }
       :root[data-theme="dark"] .product-shot-card img { border-color: rgba(243,239,230,0.14); box-shadow: 0 24px 60px -28px rgba(0,0,0,0.62); }
@@ -3358,14 +3339,13 @@ const unicornShellStyle = `
 `
 
 const unicornHeader = `
-      <script>(function(){try{var t=localStorage.getItem('sm-theme');if(!t){t=(window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light';}document.documentElement.setAttribute('data-theme',t);}catch(e){}})();</script>
+      <script>document.documentElement.setAttribute('data-theme','light');</script>
       <header>
         <a class="brand" href="/" aria-label="SUPERMEGA.dev home">
           <span class="mark"><svg viewBox="0 0 64 64" width="100%" height="100%" fill="none" aria-hidden="true"><g stroke="#D97757" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M35.8 10.3 A22 22 0 1 1 28.2 10.3"/><path d="M22 45 L22 26 L32 38 L42 26 L42 45" stroke-width="4"/></g><path d="M32 34.5 L33.2 37 L35.5 38 L33.2 39 L32 41.5 L30.8 39 L28.5 38 L30.8 37 Z" fill="#C9A24B"/><path d="M32 7.6 L32.9 9.7 L35 10.3 L32.9 10.9 L32 13 L31.1 10.9 L29 10.3 L31.1 9.7 Z" fill="#C9A24B"/></svg></span>
           <span class="brand-text"><strong>SUPERMEGA.dev</strong><small>Business apps for real work</small></span>
         </a>
         <nav class="nav" aria-label="Primary">
-          <button class="btn secondary theme-toggle" type="button" aria-label="Toggle dark mode" onclick="var r=document.documentElement,n=r.getAttribute('data-theme')==='dark'?'light':'dark';r.setAttribute('data-theme',n);try{localStorage.setItem('sm-theme',n)}catch(e){}"></button>
           <a class="btn secondary optional-nav" href="/#products">What we build</a>
           <a class="btn secondary" href="/work/">Work</a>
           <a class="btn secondary" href="/demo/">Demos</a>
@@ -3871,14 +3851,12 @@ const unicornPublicShellHtml = `<!doctype html>
       .proof-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px,1fr)); margin-top: 44px; border: 1px solid var(--line); border-radius: 18px; overflow: hidden; }
       .proof-strip > div { padding: 18px 22px; border-right: 1px solid var(--line); }
       .proof-strip > div:last-child { border-right: 0; }
-      :root[data-theme="dark"] .proof-strip > div { border-color: rgba(243,239,230,0.1); }
       .proof-strip strong { display: block; font-size: 22px; letter-spacing: -0.03em; }
       .proof-strip span { display: block; margin-top: 4px; color: var(--muted); font-size: 13px; line-height: 1.4; }
       .proof-strip a { color: inherit; text-decoration: none; }
       .proof-strip a:hover strong { color: var(--blue); }
       .uvp-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px,1fr)); gap: 14px; margin-top: 24px; }
       .uvp-card { border: 1px solid var(--line); border-radius: 18px; padding: 22px; background: rgba(255,255,255,0.5); }
-      :root[data-theme="dark"] .uvp-card { background: rgba(243,239,230,0.05); }
       .uvp-card strong { display: block; font-size: 18px; letter-spacing: -0.02em; }
       .uvp-card span { display: block; margin-top: 8px; color: var(--muted); font-size: 14px; line-height: 1.5; }
       .how-steps { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 16px; margin-top: 24px; }
@@ -3886,12 +3864,32 @@ const unicornPublicShellHtml = `<!doctype html>
       .how-step strong { display: block; margin-top: 12px; font-size: 18px; letter-spacing: -0.02em; }
       .how-step span { display: block; margin-top: 7px; color: var(--muted); font-size: 14px; line-height: 1.5; }
       .hero-img { width: 100%; display: block; border-radius: 16px; border: 1px solid rgba(42,36,28,0.12); box-shadow: var(--shadow); background: #f5f1e8; }
-      :root[data-theme="dark"] .hero-img { border-color: rgba(243,239,230,0.14); }
+      /* Hero auto-rotating product slideshow */
+      .hero-slideshow { position: relative; border-radius: 16px; border: 1px solid rgba(42,36,28,0.12); box-shadow: var(--shadow); background: #f5f1e8; overflow: hidden; aspect-ratio: 16/11; }
+      .hero-slide { position: absolute; inset: 0; opacity: 0; animation: hsf 15s infinite; }
+      .hero-slide:nth-child(1) { opacity: 1; animation-delay: 0s; }
+      .hero-slide:nth-child(2) { animation-delay: 5s; }
+      .hero-slide:nth-child(3) { animation-delay: 10s; }
+      .hero-slide img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: top left; }
+      .slide-label { position: absolute; bottom: 12px; left: 14px; background: rgba(42,36,28,0.72); backdrop-filter: blur(6px); color: #f7f4ec; font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; padding: 4px 10px; border-radius: 999px; }
+      @keyframes hsf { 0%,3%{opacity:1} 30%,97%,100%{opacity:0} }
+      /* Tier strips per product */
+      .tier-strip { display: grid; grid-template-columns: repeat(3,1fr); gap: 6px; margin: 18px 0 0; padding-top: 16px; border-top: 1px solid var(--line); }
+      .tier { padding: 11px 13px; border: 1px solid var(--line); border-radius: 13px; background: rgba(255,255,255,0.42); }
+      .tier.pro { border-color: var(--blue); background: var(--blue-soft); }
+      .tier > span { display: block; font-size: 9px; font-weight: 950; letter-spacing: 0.2em; text-transform: uppercase; color: var(--muted); }
+      .tier.pro > span { color: var(--blue); }
+      .tier > em { display: block; font-size: 15px; font-weight: 950; font-style: normal; letter-spacing: -0.03em; color: var(--ink); margin-top: 2px; }
+      .tier > small { display: block; font-size: 11px; line-height: 1.35; color: var(--muted); margin-top: 5px; }
       @media (max-width: 880px) {
         .how-steps { grid-template-columns: 1fr 1fr; }
         .proof-strip { grid-template-columns: 1fr 1fr; }
         .proof-strip > div { border-right: 0; border-bottom: 1px solid var(--line); }
         .proof-strip > div:last-child { border-bottom: 0; }
+        .tier-strip { grid-template-columns: 1fr 1fr; }
+      }
+      @media (max-width: 560px) {
+        .tier-strip { grid-template-columns: 1fr; }
       }
     </style>
   </head>
@@ -3910,8 +3908,21 @@ ${unicornHeader}
               <a class="btn secondary" href="/contact/">Talk to us</a>
             </div>
           </div>
-          <aside class="product-stage" aria-label="DeskPOS live product — point-of-sale for Myanmar shops">
-            <img class="hero-img" src="/site/shots/live-product-restaurant-pos-menu-inventory.png?v=${publicShotVersion}" alt="DeskPOS — point of sale, KBZPay, MMQR, daily close" loading="eager" decoding="async" />
+          <aside class="product-stage" aria-label="SuperMega live products — POS, factory ops, custom portals">
+            <div class="hero-slideshow" role="img" aria-label="Product screenshots: DeskPOS, Factory App, Custom Portal">
+              <div class="hero-slide">
+                <img src="/site/shots/live-product-restaurant-pos-menu-inventory.png?v=${publicShotVersion}" alt="DeskPOS — point of sale, KBZPay, MMQR, daily close" loading="eager" decoding="async" />
+                <span class="slide-label">DeskPOS — Point of Sale</span>
+              </div>
+              <div class="hero-slide">
+                <img src="/site/shots/live-product-plant-overview.png?v=${publicShotVersion}" alt="Factory Operations App — issues, maintenance, WCM" loading="lazy" decoding="async" />
+                <span class="slide-label">Factory &amp; Operations App</span>
+              </div>
+              <div class="hero-slide">
+                <img src="/site/shots/live-product-flow-records.png?v=${publicShotVersion}" alt="Custom Portal — approval workflows, documents, dashboards" loading="lazy" decoding="async" />
+                <span class="slide-label">Custom Portal &amp; Solutions</span>
+              </div>
+            </div>
             <div class="proof-line" aria-label="What the software does">
               <div class="proof"><b>Live</b><span>pos.supermega.dev</span></div>
               <div class="proof"><b>Payment</b><span>KBZPay · MMQR · cash</span></div>
@@ -3931,43 +3942,84 @@ ${unicornHeader}
           <div class="product-library-head">
             <h2>What we build</h2>
           </div>
-          <p style="max-width:48rem;color:var(--muted);margin:-4px 0 2px;line-height:1.55">We're a custom studio — no fixed catalog. DeskPOS is live to try right now; the rest are the kinds of systems we build to fit how you actually work.</p>
+          <p style="max-width:48rem;color:var(--muted);margin:-4px 0 2px;line-height:1.55">Three product classes — each with Starter, Pro, and Operator tiers. Every tier is a one-time build price: you own it, no per-seat subscriptions.</p>
           <div class="outputs">
-            <article class="output" id="build-app-from-workflow">
+            <article class="output" id="restaurant-pos-menu-inventory">
               <div class="output-copy">
-                <h3>Document Extraction Ledger</h3>
-                <p>Emails, chat photos, and scanned forms become one clean, reviewable record — with owners, statuses, and a source link on every row.</p>
-                <div class="feature-pills"><span>Intake</span><span>Queue</span><span>Proof</span></div>
-                <div class="cta"><a class="btn primary" href="/products/documents/">See details</a><a class="btn secondary" href="${productRequestLinks.workflow}">Contact</a></div>
+                <h3>DeskPOS — Point of Sale</h3>
+                <p>Ring up orders, take KBZPay / AYA Pay / MMQR / cash, track stock, and close the day with a cash-up the owner can trust. Works offline. Live right now at pos.supermega.dev — no signup.</p>
+                <div class="feature-pills"><span>Orders</span><span>Payments</span><span>Stock</span><span>Daily close</span></div>
+                <div class="tier-strip">
+                  <div class="tier"><span>Starter</span><em>from $600</em><small>Orders, KBZPay / MMQR / cash, daily close</small></div>
+                  <div class="tier pro"><span>Pro</span><em>from $1,500</em><small>+ QR menu, stock tracking, multi-cashier</small></div>
+                  <div class="tier"><span>Operator</span><em>from $2,500</em><small>+ AI daily audit, sales analytics, alerts</small></div>
+                </div>
+                <div class="cta"><a class="btn primary" href="https://pos.supermega.dev/" target="_blank" rel="noopener">Try live ↗</a><a class="btn secondary" href="/products/pos/">See details</a><a class="btn secondary" href="${productRequestLinks.restaurant}">Contact</a></div>
               </div>
-              ${workflowProductMedia}
+              ${restaurantProductMedia}
             </article>
             <article class="output" id="factory-issues-maintenance-quality">
               <div class="output-copy">
-                <h3>Factory Operations App</h3>
-                <p>Production, quality inspections, defect tracking, CAPA, and maintenance work orders — one system for the floor, the QC manager, and the CEO brief.</p>
-                <div class="feature-pills"><span>Production</span><span>Quality</span><span>CAPA</span></div>
+                <h3>Factory &amp; Operations App</h3>
+                <p>Production, quality inspections, defect tracking, CAPA, and maintenance work orders — one system for the floor, the QC manager, and the CEO brief. Built for Myanmar factories.</p>
+                <div class="feature-pills"><span>Production</span><span>Quality</span><span>CAPA</span><span>ISO</span></div>
+                <div class="tier-strip">
+                  <div class="tier"><span>Starter</span><em>from $1,500</em><small>Issue tracker, WCM daily board, CAPA</small></div>
+                  <div class="tier pro"><span>Pro</span><em>from $2,500</em><small>+ QC inspections, maintenance orders, ISO</small></div>
+                  <div class="tier"><span>Operator</span><em>from $4,000</em><small>+ AI pattern analysis, predictive alerts</small></div>
+                </div>
                 <div class="cta"><a class="btn primary" href="/products/factory/">See details</a><a class="btn secondary" href="${productRequestLinks.factory}">Contact</a></div>
               </div>
               ${factoryProductMedia}
             </article>
-            <article class="output" id="restaurant-pos-menu-inventory">
+            <article class="output" id="back-office-workflow-desk">
               <div class="output-copy">
-                <h3>DeskPOS — Point of Sale</h3>
-                <p>Ring up orders, take KBZPay / AYA Pay / MMQR / cash, track stock, and close the day with a cash-up the owner can trust. Works offline.</p>
-                <div class="feature-pills"><span>Orders</span><span>Payments</span><span>Daily close</span></div>
-                <div class="cta"><a class="btn primary" href="/products/pos/">See details</a><a class="btn secondary" href="https://pos.supermega.dev/" target="_blank" rel="noopener">Try it live ↗</a></div>
+                <h3>Custom Portals &amp; Solutions</h3>
+                <p>A web tool or portal built to your exact process — document extraction ledger, approval queues, client portal, AI workflow, or internal dashboard. Designed once, yours to keep forever.</p>
+                <div class="feature-pills"><span>Portals</span><span>AI workflows</span><span>Dashboards</span><span>Automation</span></div>
+                <div class="tier-strip">
+                  <div class="tier"><span>Starter</span><em>from $1,200</em><small>Single-purpose tool: extractor, tracker, form</small></div>
+                  <div class="tier pro"><span>Pro</span><em>from $2,500</em><small>+ Auth, multi-role, admin panel, AI operator</small></div>
+                  <div class="tier"><span>Operator</span><em>from $4,500</em><small>+ Multi-tenant, API-connected, care plan</small></div>
+                </div>
+                <div class="cta"><a class="btn primary" href="/contact/?package=custom-portal">Build one</a><a class="btn secondary" href="/demo/">See demo</a></div>
               </div>
-              ${restaurantProductMedia}
+              ${workflowProductMedia}
             </article>
-            <article class="output" id="back-office-ai-desk">
+          </div>
+        </section>
+
+        <section class="section" id="ai-agents">
+          <div class="eyebrow" style="color:var(--blue);font-size:12px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;margin-bottom:12px">AI agents — available now</div>
+          <h2 style="margin:0 0 6px">Running in days, not months.</h2>
+          <p style="max-width:52rem;color:var(--muted);margin:0 0 24px;line-height:1.55">Commission a build. Deposit today, we deliver a working agent in 3–7 days.</p>
+          <div class="outputs" style="gap:14px">
+            <article class="output" style="border-radius:18px;padding:24px 26px;background:rgba(194,96,63,0.04);border-color:rgba(194,96,63,0.22)">
               <div class="output-copy">
-                <h3>Back Office AI Desk</h3>
-                <p>An AI helper scoped to one recurring job — daily close audit, reorder watch, or supplier follow-up. It drafts; you approve. Nothing acts on its own.</p>
-                <div class="feature-pills"><span>Draft</span><span>Approve</span><span>Log</span></div>
-                <div class="cta"><a class="btn primary" href="/products/back-office/">See details</a><a class="btn secondary" href="${productRequestLinks.agentops}">Contact</a></div>
+                <div style="display:inline-block;font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:3px 9px;border-radius:999px;border:1px solid rgba(194,96,63,.3);color:var(--blue);background:var(--blue-soft);margin-bottom:10px">3–5 day build</div>
+                <h3 style="font-size:20px">📧 Email Intelligence Agent</h3>
+                <p>Reads your inbox, writes reply drafts. You approve before anything sends.</p>
+                <p style="color:var(--muted);font-size:13px;margin-top:4px">From $600 · 2,400,000 MMK + care plan $200/mo</p>
+                <div class="cta" style="margin-top:16px"><a class="btn primary" href="/contact/?package=email-agent">Talk to us →</a></div>
               </div>
-              ${agentOpsProductMedia}
+            </article>
+            <article class="output" style="border-radius:18px;padding:24px 26px;background:rgba(194,96,63,0.04);border-color:rgba(194,96,63,0.22)">
+              <div class="output-copy">
+                <div style="display:inline-block;font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:3px 9px;border-radius:999px;border:1px solid rgba(194,96,63,.3);color:var(--blue);background:var(--blue-soft);margin-bottom:10px">3–5 day build</div>
+                <h3 style="font-size:20px">📁 Drive Document Processor</h3>
+                <p>A file lands in your Drive. AI extracts the data and updates your Sheet.</p>
+                <p style="color:var(--muted);font-size:13px;margin-top:4px">From $600 · 2,400,000 MMK + care plan $200/mo</p>
+                <div class="cta" style="margin-top:16px"><a class="btn primary" href="/contact/?package=drive-processor">Talk to us →</a></div>
+              </div>
+            </article>
+            <article class="output" style="border-radius:18px;padding:24px 26px;background:rgba(194,96,63,0.04);border-color:rgba(194,96,63,0.22)">
+              <div class="output-copy">
+                <div style="display:inline-block;font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:3px 9px;border-radius:999px;border:1px solid rgba(194,96,63,.3);color:var(--blue);background:var(--blue-soft);margin-bottom:10px">1–2 day build</div>
+                <h3 style="font-size:20px">📨 Scheduled Digest Agent</h3>
+                <p>Daily or weekly AI summary of what matters, delivered to your inbox.</p>
+                <p style="color:var(--muted);font-size:13px;margin-top:4px">From $300 · 1,200,000 MMK + care plan $150/mo</p>
+                <div class="cta" style="margin-top:16px"><a class="btn primary" href="/contact/?package=digest-agent">Talk to us →</a></div>
+              </div>
             </article>
           </div>
         </section>
@@ -3989,6 +4041,21 @@ ${unicornHeader}
             <div class="how-step"><n>2</n><strong>Deposit</strong><span>50% to start — KBZPay, MMQR, cash, or card. Keeps both sides honest.</span></div>
             <div class="how-step"><n>3</n><strong>Ship</strong><span>We build it and hand you a running thing at a live URL. Not a folder of files.</span></div>
             <div class="how-step"><n>4</n><strong>Care</strong><span>Optional monthly plan keeps it running and improving. Or take it and go.</span></div>
+          </div>
+        </section>
+
+        <section class="section" id="founder">
+          <div class="eyebrow" style="color:var(--blue);font-size:12px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;margin-bottom:20px">The founder</div>
+          <div style="display:flex;align-items:flex-start;gap:24px;flex-wrap:wrap;border:1px solid var(--line);border-radius:20px;padding:28px;background:rgba(255,255,255,0.5)">
+            <div style="flex-shrink:0">
+              <div style="width:80px;height:80px;border-radius:50%;background:var(--blue-soft);border:2px solid var(--blue);display:flex;align-items:center;justify-content:center;font-family:var(--font-serif);font-size:26px;font-weight:600;color:var(--blue)">SH</div>
+            </div>
+            <div style="flex:1;min-width:200px">
+              <div style="font-family:var(--font-serif);font-size:24px;font-weight:600;letter-spacing:-0.02em;color:var(--ink)">Swan Htet</div>
+              <div style="font-size:13px;font-weight:600;color:var(--muted);margin-top:2px">Founder, SUPERMEGA</div>
+              <p style="color:var(--muted);font-size:15px;line-height:1.6;max-width:52ch;margin:12px 0 16px">I build AI-native software for businesses still running on Excel and WhatsApp. If you have a workflow that costs time or money every day, I can ship you a tool for it. Based in Yangon.</p>
+              <a href="https://www.linkedin.com/in/theswanhtet" target="_blank" rel="noopener noreferrer" style="display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:700;color:var(--blue);border:1px solid var(--blue);border-radius:999px;padding:6px 14px;text-decoration:none">LinkedIn ↗</a>
+            </div>
           </div>
         </section>
 
@@ -6028,34 +6095,34 @@ for (const detailDoc of productDetailDocs) {
   await writeFile(resolve(staticDir, 'products', detailDoc.slug, 'index.html'), normalizePublicProductNames(buildProductDetailHtml(detailDoc)), 'utf8')
 }
 
-// Offers / pricing — the revenue surface. Public "from" anchors (USD primary, MMK derived at the ~4,800 market rate).
+// Offers / pricing — the revenue surface. Public "from" anchors (USD primary, MMK at 4,000 MMK/USD).
 const publicOffers = [
   {
-    slug: 'tool-week', name: 'Tool in a week', usd: '600', mmk: '~2,900,000 MMK',
+    slug: 'tool-week', name: 'Tool in a week', usd: '600', mmk: '~2,400,000 MMK',
     who: 'You have one sharp, specific job to fix.',
     gets: ['One focused tool, fixed scope', 'Live at a real URL in days, not months', 'Yours to keep — no per-seat fee', 'One round of revisions included'],
     cta: 'Start this',
   },
   {
-    slug: 'dashboard', name: 'Custom dashboard / internal tool', usd: '1,500', mmk: '~7,200,000 MMK',
+    slug: 'dashboard', name: 'Custom dashboard / internal tool', usd: '1,500', mmk: '~6,000,000 MMK',
     who: 'Your numbers live across five spreadsheets and nobody trusts them.',
     gets: ['One screen that updates itself from your real data', 'Built around how you actually work', 'Bilingual MY/EN, MMK-native', 'Export to clean CSV anytime'],
     cta: 'Scope my dashboard',
   },
   {
-    slug: 'ai-agent', name: 'AI agent / automation', usd: '2,500', mmk: '~12,000,000 MMK',
+    slug: 'ai-agent', name: 'AI agent / automation', usd: '2,500', mmk: '~10,000,000 MMK',
     who: 'The same back-office task eats hours every single day.',
     gets: ['An agent that reads your real inputs and drafts the work', 'Approval gate on anything that sends, pays, or changes the books', 'A run ledger — nothing happens silently', 'Weekly report on time and money saved'],
     cta: 'Describe the job',
   },
   {
-    slug: 'design-ship', name: 'Design + ship system', usd: '6,000', mmk: '~29,000,000 MMK', flagship: true,
+    slug: 'design-ship', name: 'Design + ship system', usd: '6,000', mmk: '~24,000,000 MMK', flagship: true,
     who: 'You want it to look premium and actually run — one build, end to end.',
     gets: ['Brand and UI designed on our system', 'A full working system, live and in use', 'Local payments, offline-ready, bilingual', 'Hands over as a running thing, not a pile of files'],
     cta: 'Book a build',
   },
   {
-    slug: 'care-plan', name: 'Care plan', usd: '300', per: '/mo', mmk: '~1,440,000 MMK / mo',
+    slug: 'care-plan', name: 'Care plan', usd: '300', per: '/mo', mmk: '~1,200,000 MMK / mo',
     who: 'Keep what we built running, fresh, and improving.',
     gets: ['Hosting, monitoring, and small changes', 'One shipped improvement every quarter', 'Priority on fixes', 'Sold after a build — never "hours per month"'],
     cta: 'Add a care plan',
@@ -6112,6 +6179,23 @@ const publicOffersHtml = `<!doctype html>
       .compare .win { border-color: var(--blue); background: var(--blue-soft); }
       .compare .win p { color: var(--ink); }
       .of-note { margin-top: 16px; color: var(--muted); font-size: 13px; max-width: 60rem; }
+      .prod-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 16px; margin-top: 24px; }
+      .prod-card { border: 1px solid var(--line); border-radius: 20px; padding: 22px; background: rgba(255,255,255,0.55); display: flex; flex-direction: column; gap: 16px; }
+      :root[data-theme="dark"] .prod-card { background: rgba(243,239,230,0.05); }
+      .prod-head { display: flex; align-items: flex-start; gap: 12px; }
+      .prod-icon { font-size: 26px; line-height: 1; }
+      .prod-head h3 { margin: 0; font-size: 17px; letter-spacing: -0.02em; }
+      .prod-head .prod-sub { display: block; font-size: 12px; color: var(--muted); margin-top: 3px; }
+      .prod-tiers { display: grid; grid-template-columns: repeat(3,1fr); gap: 8px; }
+      .pt { border: 1px solid var(--line); border-radius: 13px; padding: 12px; }
+      .pt.pro { border-color: var(--blue); }
+      .pt > .pt-name { display: block; font-size: 10px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+      .pt.pro > .pt-name { color: var(--blue); }
+      .pt > .pt-price { display: block; font-size: 17px; font-weight: 800; letter-spacing: -0.02em; margin: 5px 0 8px; }
+      .pt > ul { list-style: none; padding: 0; margin: 0; display: grid; gap: 4px; }
+      .pt > ul > li { font-size: 11.5px; color: var(--muted); display: flex; gap: 5px; align-items: flex-start; line-height: 1.3; }
+      .pt > ul > li::before { content: '✓'; color: var(--blue); font-weight: 700; flex-shrink: 0; }
+      @media (max-width: 880px) { .prod-grid { grid-template-columns: 1fr; } }
       .pd-steps { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 16px; margin-top: 24px; }
       .pd-step n { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 999px; background: var(--blue); color: #fff; font-weight: 600; font-size: 15px; }
       .pd-step strong { display: block; margin-top: 13px; font-size: 17px; letter-spacing: -0.02em; }
@@ -6158,7 +6242,77 @@ ${unicornHeader}
               <a class="btn ${o.flagship ? 'primary' : 'secondary'}" href="/contact/?package=${o.slug}">${o.cta}</a>
             </div>`).join('')}
           </div>
-          <p class="of-note">All prices are starting "from" anchors in USD, with the MMK equivalent at the market rate. Final scope and price are agreed on a short call. Fixed-scope projects with clear revision caps; 50% deposit to start (KBZPay / MMQR / cash, or card for international).</p>
+          <p class="of-note">All prices are starting "from" anchors in USD, with the MMK equivalent at 4,000 MMK/USD. Final scope and price are agreed on a short call. Fixed-scope projects with clear revision caps; 50% deposit to start (KBZPay / MMQR / cash, or card for international).</p>
+        </section>
+
+        <section class="section">
+          <h2>By product</h2>
+          <p style="color:var(--muted);max-width:52rem;margin-bottom:4px">Three product classes, three tiers each. Pick where you start — you can upgrade later.</p>
+          <div class="prod-grid">
+            <div class="prod-card">
+              <div class="prod-head">
+                <div class="prod-icon">🏪</div>
+                <div><h3>DeskPOS</h3><span class="prod-sub">Restaurant · Retail · Spa · Gym · Counter</span></div>
+              </div>
+              <div class="prod-tiers">
+                <div class="pt">
+                  <span class="pt-name">Starter</span><span class="pt-price">$600</span>
+                  <ul><li>Core POS — orders, payments, cash</li><li>KBZPay / MMQR / cash</li><li>Daily close + cash-up</li><li>Single branch</li></ul>
+                </div>
+                <div class="pt pro">
+                  <span class="pt-name">Pro</span><span class="pt-price">$1,500</span>
+                  <ul><li>Multi-branch support</li><li>Bilingual MY / EN</li><li>Richer reports + exports</li><li>Booking &amp; membership</li></ul>
+                </div>
+                <div class="pt">
+                  <span class="pt-name">Operator</span><span class="pt-price">$2,500</span>
+                  <ul><li>AI drafts money-at-stake actions</li><li>One-tap approve</li><li>Smart daily brief</li><li>Anomaly alerts</li></ul>
+                </div>
+              </div>
+              <a class="btn primary" href="/contact/?package=tool-week">Start with DeskPOS</a>
+            </div>
+            <div class="prod-card">
+              <div class="prod-head">
+                <div class="prod-icon">🏭</div>
+                <div><h3>Factory &amp; Operations App</h3><span class="prod-sub">Issues · WCM · CAPA · QC · Maintenance</span></div>
+              </div>
+              <div class="prod-tiers">
+                <div class="pt">
+                  <span class="pt-name">Starter</span><span class="pt-price">$1,500</span>
+                  <ul><li>Issue tracker — photo, assign, close</li><li>WCM daily board</li><li>CAPA with root cause</li><li>Single plant</li></ul>
+                </div>
+                <div class="pt pro">
+                  <span class="pt-name">Pro</span><span class="pt-price">$2,500</span>
+                  <ul><li>QC inspections → ISO log</li><li>Maintenance work orders</li><li>Bilingual MY / EN</li><li>CEO daily brief</li></ul>
+                </div>
+                <div class="pt">
+                  <span class="pt-name">Operator</span><span class="pt-price">$4,000</span>
+                  <ul><li>AI defect pattern analysis</li><li>Predictive downtime alerts</li><li>One-tap escalation drafts</li></ul>
+                </div>
+              </div>
+              <a class="btn secondary" href="/contact/?package=dashboard">Scope a factory build</a>
+            </div>
+            <div class="prod-card">
+              <div class="prod-head">
+                <div class="prod-icon">🌐</div>
+                <div><h3>Custom Portals &amp; Solutions</h3><span class="prod-sub">Approvals · Workflows · Dashboards · Automation</span></div>
+              </div>
+              <div class="prod-tiers">
+                <div class="pt">
+                  <span class="pt-name">Starter</span><span class="pt-price">$1,200</span>
+                  <ul><li>Custom approval workflow</li><li>Document upload + storage</li><li>User roles + permissions</li><li>Dashboard</li></ul>
+                </div>
+                <div class="pt pro">
+                  <span class="pt-name">Pro</span><span class="pt-price">$2,500</span>
+                  <ul><li>Multi-step automation</li><li>API hooks (WhatsApp, email)</li><li>Advanced reports + exports</li></ul>
+                </div>
+                <div class="pt">
+                  <span class="pt-name">Operator</span><span class="pt-price">$4,500</span>
+                  <ul><li>AI document processing</li><li>Auto-draft responses</li><li>One-tap approve — never auto-sends</li></ul>
+                </div>
+              </div>
+              <a class="btn secondary" href="/contact/?package=build">Tell us what to build</a>
+            </div>
+          </div>
         </section>
 
         <section class="section">
@@ -6229,14 +6383,6 @@ const publicWorkCases = [
     built: ['Line and shift production vs. target', 'Inspections and defects with a live reject rate', '5W1H incidents → owned CAPA with due dates', 'Maintenance work orders + a daily plant-manager brief'],
     proof: 'Built around real factory operating data — line targets, defect taxonomy, grading rules, and CAPA owners.',
     cta: { label: 'See how it works', href: '/products/factory/', ext: false },
-  },
-  {
-    eyebrow: 'HR & Payroll · Live now',
-    headline: 'A salary spreadsheet becomes printable payslips in seconds',
-    story: 'Payroll staff were hand-making payslips from a monthly salary spreadsheet, one person at a time. We built a browser tool that takes the .xlsx — even password-protected — and turns it into clean, printable payslips for everyone. Nothing leaves the browser.',
-    built: ['Reads your existing salary .xlsx', 'Decrypts password-protected files in the browser', 'A clean, printable payslip per person', 'No upload — runs entirely on your device'],
-    proof: 'Live and open — try it with your own salary file.',
-    cta: { label: 'Try it live ↗', href: 'https://payslip-maker-topaz.vercel.app/', ext: true },
   },
 ]
 const publicWorkHtml = `<!doctype html>

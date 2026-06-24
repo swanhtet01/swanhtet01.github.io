@@ -22,6 +22,15 @@ export type ManagerTeachingPack = {
   drills: string[]
 }
 
+export type ManagerStartStep = {
+  id: string
+  label: string
+  title: string
+  detail: string
+  route: string
+  actionLabel: string
+}
+
 export const MANAGER_REVIEW_ROUTINES: ManagerReviewRoutine[] = [
   {
     id: 'start-of-shift',
@@ -136,5 +145,32 @@ export const MANAGER_TEACHING_PACKS: ManagerTeachingPack[] = [
       'Write the likely repeat-failure cause in plain language.',
       'Assign one preventive action and a verification date.',
     ],
+  },
+]
+
+export const MANAGER_START_STEPS: ManagerStartStep[] = [
+  {
+    id: 'review',
+    label: '1. Review',
+    title: 'Start from Manager Workspace',
+    detail: 'Open the role-home workspace first, decide the one problem that matters now, and do not open the whole platform.',
+    route: '/app/manager-system',
+    actionLabel: 'Open manager workspace',
+  },
+  {
+    id: 'clarify',
+    label: '2. Clarify',
+    title: 'Use Action Board for mixed updates',
+    detail: 'Paste messy notes, meeting scraps, or voice transcriptions and let the system turn them into one owner and one next move.',
+    route: '/app/action-board',
+    actionLabel: 'Open action board',
+  },
+  {
+    id: 'work',
+    label: '3. Work',
+    title: 'Move into the right desk',
+    detail: 'Open operations, DQMS, maintenance, approvals, or daily entry only after the next owner is clear.',
+    route: '/app/operations',
+    actionLabel: 'Open desk',
   },
 ]

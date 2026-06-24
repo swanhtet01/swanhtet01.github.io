@@ -1,6 +1,12 @@
 import type { ReactNode } from 'react'
 
 import type { LivePreviewVariant } from '../lib/liveProductPreviewModel'
+import {
+  YANGON_TYRE_AGENT_CELLS,
+  YANGON_TYRE_CONNECTOR_CHANNELS,
+  YANGON_TYRE_IDENTITY_LANES,
+  YANGON_TYRE_PORTAL_APPS,
+} from '../lib/yangonTyrePortalModel'
 
 type LiveProductPreviewProps = {
   variant: LivePreviewVariant
@@ -90,7 +96,7 @@ function PreviewTask({ title, owner, due }: { title: string; owner: string; due:
 
 function PortalPreview({ compact, className }: { compact?: boolean; className?: string }) {
   return (
-    <PreviewFrame className={joinClassNames('sm-live-preview-portal', className)} compact={compact} status="Platform view" subtitle="SUPERMEGA.dev modules, data, and agent jobs" title="SM Portal">
+    <PreviewFrame className={joinClassNames('sm-live-preview-portal', className)} compact={compact} status="Platform view" subtitle="SUPERMEGA.dev modules, data, and review jobs" title="Platform Portal">
       <div className="sm-live-preview-shell">
         <aside className="sm-live-preview-rail">
           {['Sales Desk', 'Company List', 'Receiving Control', 'Decision Journal'].map((item, index) => (
@@ -104,7 +110,7 @@ function PortalPreview({ compact, className }: { compact?: boolean; className?: 
           <div className="sm-live-preview-metrics-grid">
             <PreviewMetric label="Live desk" value="Sales" />
             <PreviewMetric label="Queue owner" value="Growth" />
-            <PreviewMetric label="Agent loop" value="Running" />
+            <PreviewMetric label="Review loop" value="Running" />
           </div>
           <PreviewActions items={['New account', 'Import sheet', 'Sync Gmail']} />
 
@@ -117,7 +123,7 @@ function PortalPreview({ compact, className }: { compact?: boolean; className?: 
             </section>
 
             <section className="sm-live-preview-pane">
-              <p className="sm-live-preview-label">Agent runtime</p>
+              <p className="sm-live-preview-label">Automation runtime</p>
               <PreviewTask due="09:00" owner="Revenue Scout" title="Reran regional distributor search" />
               <PreviewTask due="09:20" owner="List Clerk" title="Cleaned imported expo leads" />
               <PreviewTask due="10:00" owner="Founder Brief" title="Queued the daily review for leadership" />
@@ -152,50 +158,69 @@ function FounderBriefPreview({ compact, className }: { compact?: boolean; classN
 }
 
 function YangonTyrePortalPreview({ compact, className }: { compact?: boolean; className?: string }) {
+  const roleHomes = YANGON_TYRE_IDENTITY_LANES.slice(0, compact ? 3 : 4)
+  const workingApps = YANGON_TYRE_PORTAL_APPS.slice(0, compact ? 2 : 4)
+  const connectorLanes = YANGON_TYRE_CONNECTOR_CHANNELS.slice(0, compact ? 2 : 3)
+  const agentCells = YANGON_TYRE_AGENT_CELLS.slice(0, compact ? 2 : 3)
+
   return (
     <PreviewFrame
       className={joinClassNames('sm-live-preview-portal', className)}
       compact={compact}
-      status="Tenant pattern"
-      subtitle="ytf.supermega.dev | roles, data, agents, and factory control"
-      title="Yangon Tyre OS"
+      status="Live tenant pattern"
+      subtitle="private tenant host | role homes, routes, connectors, and review gates"
+      title="Factory Tenant OS"
     >
-      <div className="sm-live-preview-shell">
-        <aside className="sm-live-preview-rail">
-          {['CEO', 'Sales', 'Operations', 'DQMS', 'Maintenance', 'Connectors'].map((item, index) => (
-            <div className={joinClassNames('sm-live-preview-rail-item', index === 2 && 'is-active')} key={item}>
-              {item}
-            </div>
-          ))}
-        </aside>
+      <div className="sm-live-preview-stack">
+        <div className="sm-live-preview-metrics-grid">
+          <PreviewMetric label="Role homes" value={`${YANGON_TYRE_IDENTITY_LANES.length} routes`} />
+          <PreviewMetric label="Core desks" value={`${YANGON_TYRE_PORTAL_APPS.length} modules`} />
+          <PreviewMetric label="Data lanes" value={`${YANGON_TYRE_CONNECTOR_CHANNELS.length} sources`} />
+        </div>
+        <PreviewActions items={['portal home', 'manager system', 'ops + dqms']} />
 
-        <div className="sm-live-preview-stack">
-          <div className="sm-live-preview-metrics-grid">
-            <PreviewMetric label="B+R watch" value="2.4%" />
-            <PreviewMetric label="Open blockers" value="07" />
-            <PreviewMetric label="Supplier chase" value="05" />
-          </div>
-          <PreviewActions items={['Log issue', 'Open CAPA', 'Review connectors']} />
+        <div className="sm-live-preview-split">
+          <section className="sm-live-preview-pane">
+            <p className="sm-live-preview-label">Role homes</p>
+            {roleHomes.map((lane) => (
+              <PreviewRow key={lane.id} meta={lane.home} note={lane.route} state="live" title={lane.role} />
+            ))}
+          </section>
 
+          <section className="sm-live-preview-pane">
+            <p className="sm-live-preview-label">Working apps</p>
+            {workingApps.map((app) => (
+              <PreviewRow key={app.id} meta={app.workspace} note={app.route} state="route" title={app.name} />
+            ))}
+          </section>
+        </div>
+
+        {!compact ? (
           <div className="sm-live-preview-split">
             <section className="sm-live-preview-pane">
-              <p className="sm-live-preview-label">Shift control</p>
-              <PreviewRow meta="mixing batch genealogy linked" state="stable" title="Compound release queue" />
-              <PreviewRow meta="undercure spike on line 2" note="quality owner" state="review" title="Curing deviation" />
-              <PreviewRow meta="PO docs still incomplete" state="supplier" title="Inbound discrepancy" />
+              <p className="sm-live-preview-label">Connected sources</p>
+              {connectorLanes.map((connector) => (
+                <PreviewRow
+                  key={connector.id}
+                  meta={connector.outputs.slice(0, 2).join(' · ')}
+                  note={connector.cadence}
+                  state="sync"
+                  title={connector.name}
+                />
+              ))}
             </section>
 
             <section className="sm-live-preview-pane">
-              <p className="sm-live-preview-label">Agent cells</p>
-              <PreviewTask due="08:45" owner="Intake Router" title="Classified new Gmail, Drive, and chat signals" />
-              <PreviewTask due="09:10" owner="Quality Watch" title="Prepared CAPA starter for sidewall crack cluster" />
-              <PreviewTask due="09:30" owner="Executive Brief" title="Queued CEO summary with plant and sales risk" />
+            <p className="sm-live-preview-label">Review cells</p>
+              {agentCells.map((cell) => (
+                <PreviewRow key={cell.id} meta={cell.workspace} note={cell.guardrail} state="guarded" title={cell.name} />
+              ))}
             </section>
           </div>
+        ) : null}
 
-          <div className="sm-live-preview-footer">
-            <span>Factory truth, commercial history, connector health, and AI work all run on the same tenant.</span>
-          </div>
+        <div className="sm-live-preview-footer">
+          <span>One tenant runtime: current files, inboxes, exports, approvals, and routing stay attached to the same operating record.</span>
         </div>
       </div>
     </PreviewFrame>
@@ -228,7 +253,7 @@ function SalesSetupPreview({ compact, className }: { compact?: boolean; classNam
 
 function ServiceDeskPreview({ compact, className }: { compact?: boolean; className?: string }) {
   return (
-    <PreviewFrame className={className} compact={compact} status="Operator wedge" subtitle="Front desk POS + daily close" title="Spa Service Desk">
+      <PreviewFrame className={className} compact={compact} status="Operator wedge" subtitle="Front desk POS + daily close" title="Restaurant POS + Inventory">
       <div className="sm-live-preview-metrics-grid">
         <PreviewMetric label="Checkouts" value="6 today" />
         <PreviewMetric label="Cash on hand" value="THB 5.8k" />
@@ -245,7 +270,7 @@ function ServiceDeskPreview({ compact, className }: { compact?: boolean; classNa
         </section>
 
         <section className="sm-live-preview-pane">
-          <p className="sm-live-preview-label">AI support</p>
+          <p className="sm-live-preview-label">Prepared support</p>
           <PreviewTask due="17:30" owner="Daily Close Clerk" title="Drafted till count and deposit target" />
           <PreviewTask due="18:00" owner="Booking Concierge" title="Prepared tomorrow reminder list" />
           <PreviewTask due="18:30" owner="Stock Watch" title="Flagged low aroma oil inventory" />
@@ -363,7 +388,7 @@ function KnowledgeGraphPreview({ compact, className }: { compact?: boolean; clas
 
 function AgentRuntimePreview({ compact, className }: { compact?: boolean; className?: string }) {
   return (
-    <PreviewFrame className={className} compact={compact} status="Governed automation" subtitle="Jobs, reviews, and runtime posture" title="Agent Runtime">
+    <PreviewFrame className={className} compact={compact} status="Governed automation" subtitle="Jobs, reviews, and runtime posture" title="Automation Runtime">
       <div className="sm-live-preview-metrics-grid">
         <PreviewMetric label="Core loops" value="11 running" />
         <PreviewMetric label="Pending review" value="03" />
@@ -374,8 +399,8 @@ function AgentRuntimePreview({ compact, className }: { compact?: boolean; classN
       <div className="sm-live-preview-split">
         <section className="sm-live-preview-pane">
           <p className="sm-live-preview-label">Run board</p>
-          <PreviewRow meta="task triage | ytf-plant-a" state="done" title="Inbox routing cycle" />
-          <PreviewRow meta="ops watch | ytf-plant-a" note="needs retry" state="warning" title="Exception sweep" />
+          <PreviewRow meta="task triage | sample workspace" state="done" title="Inbox routing cycle" />
+          <PreviewRow meta="ops watch | sample workspace" note="needs retry" state="warning" title="Exception sweep" />
           <PreviewRow meta="founder brief | supermega-core" state="queued" title="Executive review pack" />
         </section>
 
@@ -394,7 +419,7 @@ function TenantControlPreview({ compact, className }: { compact?: boolean; class
   return (
     <PreviewFrame className={className} compact={compact} status="Launch control" subtitle="Roles, rollout, connectors, and domains" title="Tenant Control Plane">
       <div className="sm-live-preview-metrics-grid">
-        <PreviewMetric label="Live tenant" value="Yangon Tyre" />
+        <PreviewMetric label="Live tenant" value="Private workspace" />
         <PreviewMetric label="Open rollout" value="06 tasks" />
         <PreviewMetric label="Roles scoped" value="sales / ops / qc / ceo" />
       </div>

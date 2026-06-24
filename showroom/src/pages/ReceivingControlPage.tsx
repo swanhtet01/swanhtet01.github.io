@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import { PageIntro } from '../components/PageIntro'
+import { OPERATING_RECORD_LOOP, operatingRecordFailureMessage, operatingRecordSavedMessage, type OperatingRecordSavePayload } from '../lib/operatingRecordStatus'
+import { INDUSTRIAL_MODULE_CONTRACTS } from '../lib/portalModuleContracts'
 import { checkWorkspaceHealth, getWorkspaceSession, workspaceFetch } from '../lib/workspaceApi'
 
 type ReceivingRow = {
@@ -45,6 +47,8 @@ const RECEIVING_FORM_DEFAULT = {
   next_action: '',
   evidence_link: '',
 }
+
+const receivingContract = INDUSTRIAL_MODULE_CONTRACTS.find((module) => module.id === 'industrial-receiving-control')
 
 export function ReceivingControlPage() {
   const [apiReady, setApiReady] = useState(false)
@@ -124,16 +128,16 @@ export function ReceivingControlPage() {
     setSaved(null)
     setError(null)
     try {
-      const payload = await workspaceFetch<ReceivingPayload & { message?: string }>('/api/receiving/records', {
+      const payload = await workspaceFetch<ReceivingPayload & OperatingRecordSavePayload>('/api/receiving/records', {
         method: 'POST',
-        body: JSON.stringify(form),
+        body: JSON.stringify({ ...form, create_action: true }),
       })
       setRows(payload.rows ?? [])
       setSummary(payload.summary ?? null)
       setForm(RECEIVING_FORM_DEFAULT)
-      setSaved(payload.message ?? 'Receiving record saved.')
+      setSaved(operatingRecordSavedMessage(payload, 'Receiving record saved.'))
     } catch {
-      setError('Could not save the receiving record right now.')
+      setError(operatingRecordFailureMessage('Receiving record'))
     } finally {
       setSaving(false)
     }
@@ -146,6 +150,49 @@ export function ReceivingControlPage() {
         title="Receiving Control"
         description="Log inbound material, track GRN or batch status, catch quantity variance, and assign the next action before stock disappears into email and paper."
       />
+
+      <section className="sm-ytf-metric-strip">
+        {OPERATING_RECORD_LOOP.map((step) => (
+          <article key={step.label}>
+            <span>{step.label}</span>
+            <strong>{step.label === 'Capture' ? 'Receipt' : step.label === 'Route' ? 'Action Board' : 'Stores lead'}</strong>
+            <small>{step.detail}</small>
+          </article>
+        ))}
+      </section>
+
+      <section className="grid gap-4 lg:grid-cols-3">
+        <article className="sm-calm-surface p-5 lg:col-span-2">
+          <p className="sm-kicker text-[var(--sm-accent)]">Module contract</p>
+          <h2 className="mt-2 text-2xl font-bold text-white">{receivingContract?.job ?? 'Protect production from bad inbound records.'}</h2>
+          <div className="mt-4 grid gap-3 md:grid-cols-3">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-[0.16em] text-[var(--sm-muted)]">Trigger</p>
+              <p className="mt-2 text-sm text-white">{receivingContract?.trigger}</p>
+            </div>
+            <div>
+              <p className="text-xs font-bold uppercase tracking-[0.16em] text-[var(--sm-muted)]">Decision</p>
+              <p className="mt-2 text-sm text-white">{receivingContract?.decision}</p>
+            </div>
+            <div>
+              <p className="text-xs font-bold uppercase tracking-[0.16em] text-[var(--sm-muted)]">KPI</p>
+              <p className="mt-2 text-sm text-white">{receivingContract?.kpi}</p>
+            </div>
+          </div>
+        </article>
+        <article className="sm-surface-deep p-5">
+          <p className="sm-kicker text-[var(--sm-accent-alt)]">Prepared checks</p>
+          <div className="mt-4 grid gap-2">
+            {(receivingContract?.agentMoves ?? []).map((move) => (
+              <div className="sm-manager-rule" key={move}>
+                <span className="sm-led text-[var(--sm-accent)]" />
+                <p className="text-sm text-white/84">{move}</p>
+              </div>
+            ))}
+          </div>
+          <p className="mt-4 text-sm text-[var(--sm-muted)]">{receivingContract?.reviewGate}</p>
+        </article>
+      </section>
 
       <section className="grid gap-6 lg:grid-cols-[0.92fr_1.08fr]">
         <article className="sm-surface-deep p-6">
@@ -202,7 +249,7 @@ export function ReceivingControlPage() {
 
           <div className="mt-6 flex flex-wrap gap-3">
             <button className="sm-button-primary" disabled={!apiReady || saving || !form.supplier.trim() || !form.material.trim()} onClick={() => void saveRecord()} type="button">
-              {saving ? 'Saving...' : 'Save receiving record'}
+              {saving ? 'Saving...' : 'Save record + action'}
             </button>
             <Link className="sm-button-secondary" to="/app/inventory">
               Open Inventory Pulse

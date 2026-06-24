@@ -1,6 +1,6 @@
 # Service Desk Runbook
 
-Practical operating guide for the current `Spa Service Desk` pilot.
+Practical operating guide for the current `Service Desk POS` pilot.
 
 ## What it is right now
 
@@ -18,7 +18,7 @@ Current live URL:
 
 When `supermega.dev` DNS is cut over to Vercel, the target route is:
 
-- `https://supermega.dev/app/service-desk/`
+- `https://pos.supermega.dev/`
 
 ## Best way to use it today
 

@@ -17,14 +17,14 @@ export const YTF_PORTAL_RUNTIME = {
   provider: 'Vercel',
   rolloutState: 'pilot',
   routeRoot: '/app',
-  summary: 'First live tenant portal with sales, operations, DQMS, maintenance, and admin desks.',
+  summary: 'Private Yangon Tyre portal with operating intake, plant command, daily entry, quality follow-up, maintenance, and admin desks.',
   managedBy: ['Implementation Lead', 'Tenant Admin', 'Cloud Ops'],
-  proofPaths: ['/app/portal', '/app/plant-manager', '/app/operations', '/app/dqms', '/app/platform-admin'],
+  reviewPaths: ['/app/portal', '/app/live-data', '/app/plant-manager', '/app/action-board', '/app/daily-entry', '/app/platform-admin'],
 } as const
 
 export const YTF_PORTAL_DIALECTIC = {
   thesis: 'Run Yangon Tyre from one role-safe operating system with shared evidence.',
-  antithesis: 'Drive folders, email threads, ERP exports, and shift notes still fragment the operating record.',
+  antithesis: 'Department records, email threads, exports, and shift notes still fragment the operating record.',
   synthesis: 'ytf.supermega.dev becomes the live command surface where plant, quality, maintenance, sales, and admin work from one runtime.',
 } as const
 
@@ -37,7 +37,7 @@ export const YTF_FIRST_HOUR_PLAYBOOK: YtfPortalStep[] = [
   {
     id: 'pick-lane',
     title: 'Choose one working lane',
-    detail: 'Move into Operations, DQMS, Receiving, Maintenance, or Revenue based on the issue owner. Do not split the same issue across multiple side trackers.',
+    detail: 'Move into Entry, Work, Plant, or Data based on the issue owner. Do not split the same issue across multiple side trackers.',
   },
   {
     id: 'record-fact',
@@ -71,11 +71,18 @@ export const YTF_SHIFT_START_PROTOCOL: YtfPortalStep[] = [
 
 export const YTF_ROLE_ENTRYPOINTS: YtfPortalRoleRoute[] = [
   {
-    id: 'plant-manager',
+    id: 'manager-system',
     role: 'Plant manager',
     route: '/app/plant-manager',
     owner: 'Shift control',
-    detail: 'Combined command surface for operations, DQMS, maintenance, receiving, and plant-level review.',
+    detail: 'Combined command surface for production, quality, maintenance, receiving, and plant-level review.',
+  },
+  {
+    id: 'ai-erp',
+    role: 'AI ERP runtime',
+    route: '/app/erp',
+    owner: 'Module and automation map',
+    detail: 'Simple operating picture for useful modules, automation loops, and rollout depth.',
   },
   {
     id: 'operations',
@@ -87,14 +94,14 @@ export const YTF_ROLE_ENTRYPOINTS: YtfPortalRoleRoute[] = [
   {
     id: 'quality',
     role: 'Quality and lab',
-    route: '/app/dqms',
-    owner: 'Containment and CAPA',
-    detail: 'Incidents, CAPA, fishbone, 5W1H, KPI review, and closeout discipline.',
+    route: '/app/daily-entry?mode=normal_abnormal&section=QC%20%2F%20inspection',
+    owner: 'Containment and root cause',
+    detail: 'Defects, holds, 5W1H, KPI review, and closeout discipline.',
   },
   {
     id: 'maintenance',
     role: 'Maintenance and reliability',
-    route: '/app/maintenance',
+    route: '/app/daily-entry?mode=normal_abnormal&section=Maintenance',
     owner: 'Downtime and countermeasure',
     detail: 'Breakdowns, PM work, repeat-failure follow-up, and asset-level reliability review.',
   },

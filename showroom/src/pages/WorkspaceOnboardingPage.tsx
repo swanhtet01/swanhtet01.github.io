@@ -2,6 +2,13 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 
 import { PageIntro } from '../components/PageIntro'
+import {
+  PORTAL_SHELL_MODULES,
+  SHARED_PORTAL_MODULES,
+  getIndustryPortalKit,
+  getPortalModuleStandardTags,
+  getPortalModuleValueMetric,
+} from '../lib/industryPortalKits'
 import { DEFAULT_WORKSPACE_ROUTE_ACCESS, resolveWorkspaceRouteAccess, type WorkspaceRouteAccess } from '../lib/workspaceRouteAccess'
 import {
   clearWorkspaceOnboardingDraft,
@@ -20,9 +27,12 @@ type PackagePreset = {
   id: string
   name: string
   summary: string
+  kitId: string
   firstRoute: string
   teamLabel: string
   moduleIds: string[]
+  moduleLabels: string[]
+  dataPlugs: string[]
 }
 
 type InviteFormState = {
@@ -33,36 +43,26 @@ type InviteFormState = {
 
 const PACKAGE_PRESETS: PackagePreset[] = [
   {
-    id: 'revenue-system-package',
-    name: 'Revenue System Package',
-    summary: 'Start with sales follow-up, company cleanup, and leadership review.',
-    firstRoute: '/app/revenue',
-    teamLabel: 'Sales',
-    moduleIds: ['sales-system', 'decision-journal', 'founder-brief'],
-  },
-  {
-    id: 'operations-control-package',
-    name: 'Operations Control Package',
-    summary: 'Start with receiving, approvals, documents, and exception ownership.',
-    firstRoute: '/app/operations',
+    id: 'industrial-plant-os-package',
+    name: 'Factory Operations App',
+    summary: 'Start with daily issues, source evidence, supplier follow-up, and owner review.',
+    kitId: 'industrial-plant-os',
+    firstRoute: '/app/factory-operations',
     teamLabel: 'Operations',
-    moduleIds: ['operations-inbox', 'document-intelligence', 'approval-policy-engine'],
+    moduleIds: ['industrial-dqms', 'operations-inbox', 'manager-operating-system', 'knowledge-graph', 'data-science-studio'],
+    moduleLabels: ['Operations Command', 'Quality Traceability and CAPA', 'Asset Reliability', 'Supplier and Receiving Control', 'Executive Decision Brief'],
+    dataPlugs: ['Google Drive', 'Gmail', 'ERP/MES exports', 'QC sheets', 'CMMS logs', 'Utility meters'],
   },
   {
-    id: 'industrial-quality-package',
-    name: 'Industrial Quality Package',
-    summary: 'Start with DQMS, quality evidence, and plant leadership review.',
-    firstRoute: '/app/dqms',
-    teamLabel: 'Quality',
-    moduleIds: ['industrial-dqms', 'knowledge-graph', 'data-science-studio'],
-  },
-  {
-    id: 'portal-network-package',
-    name: 'Portal Network Package',
-    summary: 'Start with a role-based client or supplier portal on the same stack.',
-    firstRoute: '/app/portal',
-    teamLabel: 'Admin',
-    moduleIds: ['client-portal', 'tenant-control-plane', 'document-intelligence'],
+    id: 'restaurant-group-os-package',
+    name: 'Restaurant POS + Inventory',
+    summary: 'Start with menu and item setup, order/payment proof, cash-up close, shift board, stock/prep control, and owner report.',
+    kitId: 'restaurant-group-os',
+    firstRoute: '/app/restaurant-pos',
+    teamLabel: 'Store ops',
+    moduleIds: ['shift-command', 'operations-inbox', 'supplier-portal', 'founder-brief'],
+    moduleLabels: ['Menu and Items', 'Payment Proof and Cash-Up Control', 'Shift Board', 'Stock and Prep Control', 'Owner Report'],
+    dataPlugs: ['Menu PDFs/photos', 'provider payment exports', 'POS', 'Delivery apps', 'Supplier invoices', 'Prep logs'],
   },
 ]
 
@@ -97,10 +97,12 @@ function resolvePreset(requestedPackage: string, requestedTeam: string) {
     }
   }
 
-  if (teamKey.includes('quality')) return PACKAGE_PRESETS[2]
-  if (teamKey.includes('operation') || teamKey.includes('procurement')) return PACKAGE_PRESETS[1]
-  if (teamKey.includes('sales') || teamKey.includes('leadership')) return PACKAGE_PRESETS[0]
-  if (teamKey.includes('admin')) return PACKAGE_PRESETS[3]
+  if (teamKey.includes('quality')) return PACKAGE_PRESETS[0]
+  if (teamKey.includes('restaurant') || teamKey.includes('store') || teamKey.includes('kitchen')) return PACKAGE_PRESETS[1]
+  if (teamKey.includes('retail') || teamKey.includes('ecommerce') || teamKey.includes('inventory')) return PACKAGE_PRESETS[0]
+  if (teamKey.includes('service') || teamKey.includes('dispatch') || teamKey.includes('technician')) return PACKAGE_PRESETS[0]
+  if (teamKey.includes('operation') || teamKey.includes('procurement') || teamKey.includes('factory') || teamKey.includes('plant')) return PACKAGE_PRESETS[0]
+  if (teamKey.includes('sales') || teamKey.includes('leadership') || teamKey.includes('admin')) return PACKAGE_PRESETS[0]
   return PACKAGE_PRESETS[0]
 }
 
@@ -142,6 +144,7 @@ export function WorkspaceOnboardingPage() {
   const [inviteMessage, setInviteMessage] = useState('')
 
   const selectedPreset = useMemo(() => resolvePreset(draft.packageName, draft.team), [draft.packageName, draft.team])
+  const selectedPortalKit = useMemo(() => getIndustryPortalKit(selectedPreset.kitId), [selectedPreset.kitId])
   const liveModules = useMemo(() => controlPlane?.modules?.rows ?? [], [controlPlane?.modules?.rows])
 
   useEffect(() => {
@@ -170,11 +173,13 @@ export function WorkspaceOnboardingPage() {
           setControlPlane(payload)
           const nextDraft = profileToDraft(payload.profile)
           if (nextDraft) {
-            const mergedDraft = saveWorkspaceOnboardingDraft({
-              ...draft,
-              ...nextDraft,
+            setDraft((currentDraft) => {
+              const mergedDraft = saveWorkspaceOnboardingDraft({
+                ...currentDraft,
+                ...nextDraft,
+              })
+              return mergedDraft
             })
-            setDraft(mergedDraft)
           }
           setControlPlaneError(null)
         }
@@ -347,7 +352,7 @@ export function WorkspaceOnboardingPage() {
             <Link className="sm-button-primary" to="/login?next=/app/onboarding">
               Login
             </Link>
-            <Link className="sm-button-secondary" to="/signup">
+            <Link className="sm-button-secondary" to="/setup">
               Create workspace
             </Link>
           </div>
@@ -382,7 +387,7 @@ export function WorkspaceOnboardingPage() {
       <PageIntro
         eyebrow="Workspace onboarding"
         title={`Get ${workspaceName} live.`}
-        description="Pick the first rollout package, enable the first modules, invite the first users, and move the team into the right desk."
+        description={`Pick one rollout package, enable the shell and first modules, invite the first users, and move the team into the right desk.`}
       />
 
       <section className="grid gap-4 xl:grid-cols-5">
@@ -419,6 +424,13 @@ export function WorkspaceOnboardingPage() {
                   <h3 className="mt-3 text-2xl font-bold text-white">{item.name}</h3>
                   <p className="mt-3 text-sm leading-relaxed text-[var(--sm-muted)]">{item.summary}</p>
                   <p className="mt-4 text-sm text-white/80">First desk: {item.firstRoute.replace('/app/', '')}</p>
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    {item.moduleLabels.slice(0, 3).map((moduleName) => (
+                      <span className="sm-status-pill" key={moduleName}>
+                        {moduleName}
+                      </span>
+                    ))}
+                  </div>
                 </button>
               )
             })}
@@ -428,33 +440,76 @@ export function WorkspaceOnboardingPage() {
             <article className="sm-chip text-white">
               <p className="sm-kicker text-[var(--sm-accent)]">Modules in this package</p>
               <div className="mt-4 space-y-3">
-                {selectedModuleRows.length ? (
-                  selectedModuleRows.map((row) => (
-                    <div className="flex items-center justify-between gap-3" key={row.module_id}>
-                      <span>{row.name}</span>
-                      <span className="sm-status-pill">{row.workspace_status}</span>
+                {selectedPreset.moduleLabels.map((moduleName) => {
+                  const matchedRow = selectedModuleRows.find((row) => row.name === moduleName || row.module_id === moduleName)
+                  return (
+                    <div className="flex items-center justify-between gap-3" key={moduleName}>
+                      <span>{moduleName}</span>
+                      <span className="sm-status-pill">{matchedRow?.workspace_status || 'planned'}</span>
                     </div>
-                  ))
-                ) : (
-                  <p className="text-sm text-[var(--sm-muted)]">The selected modules will appear here after the control plane loads.</p>
-                )}
+                  )
+                })}
               </div>
             </article>
 
             <article className="sm-chip text-white">
-              <p className="sm-kicker text-[var(--sm-accent-alt)]">Current stack</p>
+              <p className="sm-kicker text-[var(--sm-accent-alt)]">Data plugs to map first</p>
               <div className="mt-4 flex flex-wrap gap-2">
-                {draft.systems.length ? (
-                  draft.systems.map((system) => (
-                    <span className="sm-status-pill" key={system}>
-                      {system}
-                    </span>
-                  ))
-                ) : (
-                  <p className="text-sm text-[var(--sm-muted)]">No systems captured yet. Update the onboarding profile below before connector work starts.</p>
-                )}
+                {(draft.systems.length ? draft.systems : selectedPreset.dataPlugs).map((system) => (
+                  <span className="sm-status-pill" key={system}>
+                    {system}
+                  </span>
+                ))}
               </div>
             </article>
+          </div>
+
+          {selectedPortalKit ? (
+            <div className="mt-6 grid gap-3 xl:grid-cols-2">
+              {selectedPortalKit.moduleBlueprints.slice(0, 4).map((module) => (
+                <article className="rounded-2xl border border-white/10 bg-white/5 p-4" key={module.id}>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="font-semibold text-white">{module.name}</p>
+                    <span className="sm-status-pill">{module.launchMode}</span>
+                  </div>
+                  <p className="mt-2 text-sm leading-relaxed text-[var(--sm-muted)]">{module.jobToBeDone}</p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {getPortalModuleStandardTags(module).slice(0, 3).map((standard) => (
+                      <span className="sm-status-pill" key={`${module.id}-${standard}`}>
+                        {standard}
+                      </span>
+                    ))}
+                  </div>
+                  <p className="mt-3 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--sm-accent)]">
+                    Metric: {getPortalModuleValueMetric(module)}
+                  </p>
+                  <p className="mt-3 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--sm-accent-alt)]">
+                    Prepared check: {module.agentAssist}
+                  </p>
+                </article>
+              ))}
+            </div>
+          ) : null}
+
+          <div className="mt-6 rounded-3xl border border-white/10 bg-white/5 p-4">
+            <p className="sm-kicker text-[var(--sm-accent)]">Portal shell included first</p>
+            <div className="mt-4 grid gap-3 md:grid-cols-2">
+              {PORTAL_SHELL_MODULES.slice(0, 6).map((module) => (
+                <div className="rounded-2xl border border-white/10 bg-black/20 p-3" key={module.id}>
+                  <p className="font-semibold text-white">{module.name}</p>
+                  <p className="mt-1 text-xs text-[var(--sm-muted)]">{module.purpose}</p>
+                </div>
+              ))}
+            </div>
+            <p className="mt-5 sm-kicker text-[var(--sm-accent-alt)]">Shared work modules</p>
+            <div className="mt-4 grid gap-3 md:grid-cols-2">
+              {SHARED_PORTAL_MODULES.slice(0, 4).map((module) => (
+                <div className="rounded-2xl border border-white/10 bg-black/20 p-3" key={module.id}>
+                  <p className="font-semibold text-white">{module.name}</p>
+                  <p className="mt-1 text-xs text-[var(--sm-muted)]">{module.oneLine}</p>
+                </div>
+              ))}
+            </div>
           </div>
 
           <div className="mt-6 flex flex-wrap gap-3">

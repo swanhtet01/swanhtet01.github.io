@@ -301,16 +301,16 @@ try {
     }
 
     if (-not $SkipCloudRun) {
-        Write-Host "Dispatching showroom-cloud-run workflow..."
+        Write-Host "Dispatching supermega-app-cloud-run workflow..."
         $cloudInputs = @{
             project_id = $ProjectId
             region = $Region
             service = $Service
         }
-        $cloudRun = Start-WorkflowRun -WorkflowFile "showroom-cloud-run.yml" -Headers $headers -RepoName $Repo -Ref $Branch -Inputs $cloudInputs
+        $cloudRun = Start-WorkflowRun -WorkflowFile "supermega-app-cloud-run.yml" -Headers $headers -RepoName $Repo -Ref $Branch -Inputs $cloudInputs
         $cloudDone = Wait-WorkflowRun -RepoName $Repo -Headers $headers -RunId $cloudRun.id -TimeoutMinutes $WaitMinutes
         $results += @{
-            workflow = "showroom-cloud-run.yml"
+            workflow = "supermega-app-cloud-run.yml"
             run_id = $cloudDone.id
             status = $cloudDone.status
             conclusion = $cloudDone.conclusion
