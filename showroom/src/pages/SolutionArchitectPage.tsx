@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import { PageIntro } from '../components/PageIntro'
+import { DEFAULT_WORKSPACE_ROUTE_ACCESS, resolveWorkspaceRouteAccess, type WorkspaceRouteAccess } from '../lib/workspaceRouteAccess'
 import { checkWorkspaceHealth, workspaceFetch } from '../lib/workspaceApi'
 import { buildLocalSolutionBlueprint, type SolutionArchitectRequest, type SolutionBlueprint, type SolutionPriority } from '../lib/solutionArchitect'
 
@@ -31,6 +32,49 @@ const initialRequest: SolutionArchitectRequest = {
   pain_points: 'Receiving variances, supplier files, and quality incidents are spread across Gmail, Drive, Sheets, and ERP exports, so managers see problems too late.',
 }
 
+type LaunchSnapshotPayload = {
+  generated_at?: string
+  workspace?: {
+    workspace_name?: string
+    workspace_slug?: string
+  }
+  task_summary?: {
+    saved_count?: number
+    saved_task_ids?: string[]
+  }
+  rollout_pack?: {
+    primary_pack?: string
+    wedge_product?: string
+    recommended_modules?: string[]
+    first_30_days?: string[]
+    agent_teams?: string[]
+  }
+}
+
+type LaunchResponse = {
+  status?: string
+  message?: string
+  snapshot_key?: string
+  workspace_snapshot_key?: string
+  blueprint?: SolutionBlueprint
+  payload?: LaunchSnapshotPayload
+  tasks?: {
+    saved_count?: number
+    saved_task_ids?: string[]
+  }
+}
+
+function formatDateTime(value?: string) {
+  if (!value) {
+    return 'Not launched yet'
+  }
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) {
+    return value
+  }
+  return parsed.toLocaleString()
+}
+
 function toggleString(values: string[], value: string) {
   return values.includes(value) ? values.filter((item) => item !== value) : [...values, value]
 }
@@ -40,14 +84,43 @@ function togglePriority(values: SolutionPriority[], value: SolutionPriority) {
 }
 
 export function SolutionArchitectPage() {
+  const [access, setAccess] = useState<WorkspaceRouteAccess>(DEFAULT_WORKSPACE_ROUTE_ACCESS)
   const [request, setRequest] = useState<SolutionArchitectRequest>(initialRequest)
   const [apiReady, setApiReady] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [launching, setLaunching] = useState(false)
   const [mode, setMode] = useState<'workspace' | 'local'>('local')
   const [blueprint, setBlueprint] = useState<SolutionBlueprint>(() => buildLocalSolutionBlueprint(initialRequest))
+  const [launchMessage, setLaunchMessage] = useState<string | null>(null)
+  const [launchSnapshot, setLaunchSnapshot] = useState<LaunchSnapshotPayload | null>(null)
 
   useEffect(() => {
     let cancelled = false
+    async function loadAccess() {
+      const nextAccess = await resolveWorkspaceRouteAccess({
+        requiredCapabilities: ['architect.view', 'tenant_admin.view', 'platform_admin.view'],
+        unauthenticatedMessage: 'Login is required to open Solution Architect.',
+        previewMessage: 'Solution Architect is only available in the authenticated workspace.',
+      })
+
+      if (!cancelled) {
+        setAccess(nextAccess)
+      }
+    }
+
+    void loadAccess()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    if (access.loading || !access.authenticated || !access.allowed) {
+      return
+    }
+
+    let cancelled = false
+
     async function checkApi() {
       const result = await checkWorkspaceHealth()
       if (!cancelled) {
@@ -55,14 +128,16 @@ export function SolutionArchitectPage() {
         setMode(result.ready ? 'workspace' : 'local')
       }
     }
+
     void checkApi()
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [access.allowed, access.authenticated, access.loading])
 
   async function buildBlueprint(nextRequest = request) {
     setBusy(true)
+    setLaunchMessage(null)
     try {
       if (apiReady) {
         const payload = await workspaceFetch<{ blueprint: SolutionBlueprint }>('/api/tools/solution-architect', {
@@ -79,6 +154,90 @@ export function SolutionArchitectPage() {
     } finally {
       setBusy(false)
     }
+  }
+
+  async function launchBlueprint() {
+    setLaunching(true)
+    setLaunchMessage(null)
+    try {
+      const payload = await workspaceFetch<LaunchResponse>('/api/tools/solution-architect/launch', {
+        method: 'POST',
+        body: JSON.stringify({
+          ...request,
+          create_tasks: true,
+        }),
+      })
+      if (payload.blueprint) {
+        setBlueprint(payload.blueprint)
+      }
+      setLaunchSnapshot(payload.payload ?? null)
+      setMode('workspace')
+      setLaunchMessage(payload.message ?? 'Rollout pack saved.')
+    } catch (error) {
+      setLaunchMessage(error instanceof Error ? error.message : 'Could not launch the rollout pack.')
+    } finally {
+      setLaunching(false)
+    }
+  }
+
+  if (access.loading) {
+    return (
+      <div className="space-y-8">
+        <PageIntro
+          eyebrow="SUPERMEGA.dev tool"
+          title="Loading Solution Architect."
+          description="Checking workspace access for the rollout design console."
+        />
+      </div>
+    )
+  }
+
+  if (!access.authenticated) {
+    return (
+      <div className="space-y-8">
+        <PageIntro
+          eyebrow="SUPERMEGA.dev tool"
+          title="Authenticated workspace required."
+          description="Solution Architect is an internal rollout-design console and does not run in public preview mode."
+        />
+        <section className="sm-surface-deep p-6">
+          <p className="text-sm text-[var(--sm-muted)]">{access.error ?? 'Solution Architect is only available in the authenticated workspace.'}</p>
+          <div className="mt-6 flex flex-wrap gap-3">
+            <Link className="sm-button-primary" to="/login?next=/app/architect">
+              Login
+            </Link>
+            <Link className="sm-button-secondary" to="/products">
+              Open products
+            </Link>
+          </div>
+        </section>
+      </div>
+    )
+  }
+
+  if (!access.allowed) {
+    return (
+      <div className="space-y-8">
+        <PageIntro
+          eyebrow="SUPERMEGA.dev tool"
+          title="Architect access required."
+          description="This console is reserved for implementation architects and tenant control roles that can design rollouts and launch execution packs."
+        />
+        <section className="sm-surface-deep p-6">
+          <p className="text-sm text-[var(--sm-muted)]">
+            Current role: {access.roleLabel}. Ask an architect, tenant admin, or platform admin to grant access.
+          </p>
+          <div className="mt-6 flex flex-wrap gap-3">
+            <Link className="sm-button-secondary" to="/app/workbench">
+              Open workbench
+            </Link>
+            <Link className="sm-button-secondary" to="/app/actions">
+              Open my queue
+            </Link>
+          </div>
+        </section>
+      </div>
+    )
   }
 
   return (
@@ -210,6 +369,9 @@ export function SolutionArchitectPage() {
               <button className="sm-button-primary" onClick={() => void buildBlueprint()} type="button">
                 {busy ? 'Building...' : 'Build blueprint'}
               </button>
+              <button className="sm-button-secondary" disabled={!apiReady || busy || launching} onClick={() => void launchBlueprint()} type="button">
+                {launching ? 'Launching...' : 'Launch rollout pack'}
+              </button>
               <button
                 className="sm-button-secondary"
                 onClick={() => {
@@ -221,6 +383,8 @@ export function SolutionArchitectPage() {
                 Load Yangon Tyre sample
               </button>
             </div>
+            {!apiReady ? <div className="sm-chip text-white">Launch requires the live workspace API and a logged-in workspace session.</div> : null}
+            {launchMessage ? <div className="sm-chip text-white">{launchMessage}</div> : null}
           </div>
         </article>
 
@@ -350,9 +514,66 @@ export function SolutionArchitectPage() {
             <Link className="sm-button-primary" to="/app/actions">
               Open Action OS
             </Link>
+            <Link className="sm-button-secondary" to="/app/meta">
+              Open Meta
+            </Link>
+            <Link className="sm-button-secondary" to="/app/platform-admin">
+              Open Platform Admin
+            </Link>
             <Link className="sm-button-secondary" to="/contact?package=Action%20OS">
               Start this rollout
             </Link>
+          </div>
+        </article>
+      </section>
+
+      <section className="grid gap-5 lg:grid-cols-[0.98fr_1.02fr]">
+        <article className="sm-surface p-6">
+          <p className="sm-kicker text-[var(--sm-accent)]">Launch state</p>
+          <h2 className="mt-3 text-3xl font-bold text-white">Save the rollout and open the actual work.</h2>
+          <div className="mt-5 grid gap-3 md:grid-cols-3">
+            <div className="sm-chip text-white">
+              <p className="sm-kicker text-[var(--sm-accent)]">Last launch</p>
+              <p className="mt-2 text-sm">{formatDateTime(launchSnapshot?.generated_at)}</p>
+            </div>
+            <div className="sm-chip text-white">
+              <p className="sm-kicker text-[var(--sm-accent-alt)]">Workspace</p>
+              <p className="mt-2 text-sm">{launchSnapshot?.workspace?.workspace_name || 'No launch saved yet'}</p>
+            </div>
+            <div className="sm-chip text-white">
+              <p className="sm-kicker text-[var(--sm-accent)]">Queued tasks</p>
+              <p className="mt-2 text-2xl font-bold">{launchSnapshot?.task_summary?.saved_count ?? 0}</p>
+            </div>
+          </div>
+          <div className="mt-5 grid gap-3">
+            {launchSnapshot?.rollout_pack?.recommended_modules?.length ? (
+              launchSnapshot.rollout_pack.recommended_modules.slice(0, 5).map((item) => (
+                <div className="sm-chip text-white" key={item}>
+                  {item}
+                </div>
+              ))
+            ) : (
+              <div className="sm-chip text-[var(--sm-muted)]">Launch the blueprint to save the rollout pack and push tasks into the workspace queue.</div>
+            )}
+          </div>
+        </article>
+
+        <article className="sm-surface p-6">
+          <p className="sm-kicker text-[var(--sm-accent-alt)]">What Launch Does</p>
+          <h2 className="mt-3 text-3xl font-bold text-white">This is no longer just a planning surface.</h2>
+          <div className="mt-5 grid gap-3">
+            <div className="sm-proof-card">
+              <p className="font-semibold text-white">Save rollout snapshot</p>
+              <p className="mt-2 text-sm text-[var(--sm-muted)]">The blueprint becomes a saved tenant rollout pack the control plane can read later.</p>
+            </div>
+            <div className="sm-proof-card">
+              <p className="font-semibold text-white">Queue launch tasks</p>
+              <p className="mt-2 text-sm text-[var(--sm-muted)]">Implementation, platform, delivery, and agent-ops work gets created inside the workspace backlog.</p>
+            </div>
+            <div className="sm-proof-card">
+              <p className="font-semibold text-white">Feed Platform Admin</p>
+              <p className="mt-2 text-sm text-[var(--sm-muted)]">Platform Admin can then show the latest rollout pack beside modules, roles, and rollout phases.</p>
+            </div>
           </div>
         </article>
       </section>

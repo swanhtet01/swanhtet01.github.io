@@ -67,6 +67,233 @@ def _connect(db_path: Path) -> sqlite3.Connection:
     return connection
 
 
+def _agent_team_snapshot_key(tenant_key: str) -> str:
+    normalized_tenant_key = str(tenant_key or "").strip().lower() or "default"
+    return f"agent_team_system__{normalized_tenant_key}"
+
+
+def _agent_team_snapshot_tenant_key(payload: Any) -> str:
+    if not isinstance(payload, dict):
+        return ""
+    manifest = payload.get("manifest", {})
+    if isinstance(manifest, dict):
+        manifest_tenant_key = str(manifest.get("tenantKey", "")).strip()
+        if manifest_tenant_key:
+            return manifest_tenant_key
+    return str(payload.get("tenant_key", "")).strip()
+
+
+def _resolve_legacy_agent_team_tenant_key(connection: sqlite3.Connection) -> str:
+    model_row = connection.execute(
+        """
+        SELECT tenant_key
+        FROM agent_operating_models
+        ORDER BY generated_at DESC, tenant_key DESC
+        LIMIT 1
+        """
+    ).fetchone()
+    if model_row and str(model_row["tenant_key"]).strip():
+        return str(model_row["tenant_key"]).strip()
+
+    snapshot_row = connection.execute(
+        """
+        SELECT payload_json
+        FROM snapshots
+        WHERE snapshot_key = 'agent_team_system'
+        """
+    ).fetchone()
+    if snapshot_row:
+        try:
+            payload = json.loads(snapshot_row["payload_json"] or "{}")
+        except Exception:
+            payload = {}
+        tenant_key = _agent_team_snapshot_tenant_key(payload)
+        if tenant_key:
+            return tenant_key
+
+    return "default"
+
+
+def _resolve_latest_agent_team_tenant_key(connection: sqlite3.Connection) -> str:
+    model_row = connection.execute(
+        """
+        SELECT tenant_key
+        FROM agent_operating_models
+        ORDER BY generated_at DESC, tenant_key DESC
+        LIMIT 1
+        """
+    ).fetchone()
+    if model_row and str(model_row["tenant_key"]).strip():
+        return str(model_row["tenant_key"]).strip()
+
+    team_rows = connection.execute("PRAGMA table_info(agent_teams)").fetchall()
+    team_columns = {str(row["name"]).strip() for row in team_rows}
+    if "tenant_key" in team_columns:
+        team_row = connection.execute(
+            """
+            SELECT tenant_key
+            FROM agent_teams
+            ORDER BY generated_at DESC, tenant_key DESC
+            LIMIT 1
+            """
+        ).fetchone()
+        if team_row and str(team_row["tenant_key"]).strip():
+            return str(team_row["tenant_key"]).strip()
+
+    snapshot_row = connection.execute(
+        """
+        SELECT snapshot_key, payload_json
+        FROM snapshots
+        WHERE snapshot_key LIKE 'agent_team_system__%'
+        ORDER BY generated_at DESC, snapshot_key DESC
+        LIMIT 1
+        """
+    ).fetchone()
+    if snapshot_row:
+        try:
+            payload = json.loads(snapshot_row["payload_json"] or "{}")
+        except Exception:
+            payload = {}
+        tenant_key = _agent_team_snapshot_tenant_key(payload)
+        if tenant_key:
+            return tenant_key
+        snapshot_key = str(snapshot_row["snapshot_key"]).strip()
+        if snapshot_key.startswith("agent_team_system__"):
+            return snapshot_key.split("__", 1)[1]
+
+    snapshot_row = connection.execute(
+        """
+        SELECT payload_json
+        FROM snapshots
+        WHERE snapshot_key = 'agent_team_system'
+        """
+    ).fetchone()
+    if snapshot_row:
+        try:
+            payload = json.loads(snapshot_row["payload_json"] or "{}")
+        except Exception:
+            payload = {}
+        tenant_key = _agent_team_snapshot_tenant_key(payload)
+        if tenant_key:
+            return tenant_key
+
+    return "default"
+
+
+def _migrate_agent_team_runtime_tables(connection: sqlite3.Connection) -> None:
+    team_columns = {
+        str(row["name"]).strip()
+        for row in connection.execute("PRAGMA table_info(agent_teams)").fetchall()
+    }
+    unit_columns = {
+        str(row["name"]).strip()
+        for row in connection.execute("PRAGMA table_info(agent_units)").fetchall()
+    }
+    if "tenant_key" in team_columns and "tenant_key" in unit_columns:
+        return
+
+    legacy_tenant_key = _resolve_legacy_agent_team_tenant_key(connection)
+    connection.execute("ALTER TABLE agent_units RENAME TO agent_units_legacy")
+    connection.execute("ALTER TABLE agent_teams RENAME TO agent_teams_legacy")
+    connection.executescript(
+        """
+        CREATE TABLE agent_teams (
+            tenant_key TEXT NOT NULL,
+            team_id TEXT NOT NULL,
+            name TEXT NOT NULL,
+            status TEXT NOT NULL,
+            scaling_tier TEXT NOT NULL,
+            mission TEXT NOT NULL,
+            lead_agent TEXT NOT NULL,
+            cadence TEXT NOT NULL,
+            generated_at TEXT NOT NULL,
+            PRIMARY KEY (tenant_key, team_id)
+        );
+
+        CREATE TABLE agent_units (
+            tenant_key TEXT NOT NULL,
+            unit_id TEXT NOT NULL,
+            team_id TEXT NOT NULL,
+            name TEXT NOT NULL,
+            role TEXT NOT NULL,
+            mode TEXT NOT NULL,
+            output_schema TEXT NOT NULL,
+            write_scope TEXT NOT NULL,
+            approval_gate TEXT NOT NULL,
+            focus TEXT NOT NULL,
+            generated_at TEXT NOT NULL,
+            PRIMARY KEY (tenant_key, unit_id)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_agent_teams_tenant_generated
+        ON agent_teams (tenant_key, generated_at DESC, name);
+
+        CREATE INDEX IF NOT EXISTS idx_agent_units_tenant_team
+        ON agent_units (tenant_key, team_id, name);
+        """
+    )
+    connection.execute(
+        """
+        INSERT INTO agent_teams (
+            tenant_key,
+            team_id,
+            name,
+            status,
+            scaling_tier,
+            mission,
+            lead_agent,
+            cadence,
+            generated_at
+        )
+        SELECT
+            ?,
+            team_id,
+            name,
+            status,
+            scaling_tier,
+            mission,
+            lead_agent,
+            cadence,
+            generated_at
+        FROM agent_teams_legacy
+        """,
+        (legacy_tenant_key,),
+    )
+    connection.execute(
+        """
+        INSERT INTO agent_units (
+            tenant_key,
+            unit_id,
+            team_id,
+            name,
+            role,
+            mode,
+            output_schema,
+            write_scope,
+            approval_gate,
+            focus,
+            generated_at
+        )
+        SELECT
+            ?,
+            unit_id,
+            team_id,
+            name,
+            role,
+            mode,
+            output_schema,
+            write_scope,
+            approval_gate,
+            focus,
+            generated_at
+        FROM agent_units_legacy
+        """,
+        (legacy_tenant_key,),
+    )
+    connection.execute("DROP TABLE agent_units_legacy")
+    connection.execute("DROP TABLE agent_teams_legacy")
+
+
 def ensure_schema(db_path: Path) -> None:
     with _connect(db_path) as connection:
         connection.executescript(
@@ -100,8 +327,15 @@ def ensure_schema(db_path: Path) -> None:
                 email TEXT NOT NULL,
                 company TEXT NOT NULL,
                 workflow TEXT NOT NULL,
+                requested_package TEXT NOT NULL DEFAULT '',
                 data_summary TEXT NOT NULL,
-                goal TEXT NOT NULL
+                goal TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'captured',
+                owner TEXT NOT NULL DEFAULT 'Revenue Pod',
+                next_step TEXT NOT NULL DEFAULT '',
+                workspace_id TEXT NOT NULL DEFAULT '',
+                lead_id TEXT NOT NULL DEFAULT '',
+                task_id TEXT NOT NULL DEFAULT ''
             );
 
             CREATE TABLE IF NOT EXISTS workspace_members (
@@ -237,6 +471,21 @@ def ensure_schema(db_path: Path) -> None:
                 synced_at TEXT NOT NULL
             );
 
+            CREATE TABLE IF NOT EXISTS maintenance_records (
+                maintenance_id TEXT PRIMARY KEY,
+                logged_at TEXT NOT NULL,
+                asset_name TEXT NOT NULL,
+                issue_type TEXT NOT NULL,
+                priority TEXT NOT NULL,
+                status TEXT NOT NULL,
+                owner TEXT NOT NULL,
+                downtime_minutes TEXT NOT NULL,
+                next_action TEXT NOT NULL,
+                evidence_link TEXT NOT NULL,
+                source_ref_json TEXT NOT NULL,
+                synced_at TEXT NOT NULL
+            );
+
             CREATE TABLE IF NOT EXISTS supplier_risks (
                 risk_id TEXT PRIMARY KEY,
                 supplier TEXT NOT NULL,
@@ -307,18 +556,21 @@ def ensure_schema(db_path: Path) -> None:
             );
 
             CREATE TABLE IF NOT EXISTS agent_teams (
-                team_id TEXT PRIMARY KEY,
+                tenant_key TEXT NOT NULL,
+                team_id TEXT NOT NULL,
                 name TEXT NOT NULL,
                 status TEXT NOT NULL,
                 scaling_tier TEXT NOT NULL,
                 mission TEXT NOT NULL,
                 lead_agent TEXT NOT NULL,
                 cadence TEXT NOT NULL,
-                generated_at TEXT NOT NULL
+                generated_at TEXT NOT NULL,
+                PRIMARY KEY (tenant_key, team_id)
             );
 
             CREATE TABLE IF NOT EXISTS agent_units (
-                unit_id TEXT PRIMARY KEY,
+                tenant_key TEXT NOT NULL,
+                unit_id TEXT NOT NULL,
                 team_id TEXT NOT NULL,
                 name TEXT NOT NULL,
                 role TEXT NOT NULL,
@@ -327,7 +579,81 @@ def ensure_schema(db_path: Path) -> None:
                 write_scope TEXT NOT NULL,
                 approval_gate TEXT NOT NULL,
                 focus TEXT NOT NULL,
+                generated_at TEXT NOT NULL,
+                PRIMARY KEY (tenant_key, unit_id)
+            );
+
+            CREATE TABLE IF NOT EXISTS agent_operating_models (
+                tenant_key TEXT PRIMARY KEY,
+                version TEXT NOT NULL,
+                title TEXT NOT NULL,
+                summary TEXT NOT NULL,
+                manager_moves_json TEXT NOT NULL,
                 generated_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS agent_tool_registry (
+                tenant_key TEXT NOT NULL,
+                tool_id TEXT NOT NULL,
+                name TEXT NOT NULL,
+                category TEXT NOT NULL,
+                purpose TEXT NOT NULL,
+                generated_at TEXT NOT NULL,
+                PRIMARY KEY (tenant_key, tool_id)
+            );
+
+            CREATE TABLE IF NOT EXISTS agent_playbooks (
+                tenant_key TEXT NOT NULL,
+                playbook_id TEXT NOT NULL,
+                team_id TEXT NOT NULL,
+                name TEXT NOT NULL,
+                workspace TEXT NOT NULL,
+                lead_role TEXT NOT NULL,
+                mission TEXT NOT NULL,
+                cadence_json TEXT NOT NULL,
+                write_policy TEXT NOT NULL,
+                generated_at TEXT NOT NULL,
+                PRIMARY KEY (tenant_key, playbook_id)
+            );
+
+            CREATE TABLE IF NOT EXISTS agent_playbook_outputs (
+                tenant_key TEXT NOT NULL,
+                playbook_id TEXT NOT NULL,
+                output_index INTEGER NOT NULL,
+                output_text TEXT NOT NULL,
+                generated_at TEXT NOT NULL,
+                PRIMARY KEY (tenant_key, playbook_id, output_index)
+            );
+
+            CREATE TABLE IF NOT EXISTS agent_playbook_tools (
+                tenant_key TEXT NOT NULL,
+                playbook_id TEXT NOT NULL,
+                tool_index INTEGER NOT NULL,
+                tool_id TEXT NOT NULL,
+                mode TEXT NOT NULL,
+                scope TEXT NOT NULL,
+                generated_at TEXT NOT NULL,
+                PRIMARY KEY (tenant_key, playbook_id, tool_index)
+            );
+
+            CREATE TABLE IF NOT EXISTS agent_playbook_notes (
+                tenant_key TEXT NOT NULL,
+                playbook_id TEXT NOT NULL,
+                note_type TEXT NOT NULL,
+                note_index INTEGER NOT NULL,
+                note_text TEXT NOT NULL,
+                generated_at TEXT NOT NULL,
+                PRIMARY KEY (tenant_key, playbook_id, note_type, note_index)
+            );
+
+            CREATE TABLE IF NOT EXISTS agent_playbook_kpis (
+                tenant_key TEXT NOT NULL,
+                playbook_id TEXT NOT NULL,
+                kpi_index INTEGER NOT NULL,
+                kpi_name TEXT NOT NULL,
+                kpi_target TEXT NOT NULL,
+                generated_at TEXT NOT NULL,
+                PRIMARY KEY (tenant_key, playbook_id, kpi_index)
             );
 
             CREATE TABLE IF NOT EXISTS app_users (
@@ -350,6 +676,35 @@ def ensure_schema(db_path: Path) -> None:
             );
             """
         )
+        contact_columns = {
+            str(row["name"]).strip()
+            for row in connection.execute("PRAGMA table_info(contact_submissions)").fetchall()
+        }
+        if "requested_package" not in contact_columns:
+            connection.execute("ALTER TABLE contact_submissions ADD COLUMN requested_package TEXT NOT NULL DEFAULT ''")
+        if "status" not in contact_columns:
+            connection.execute("ALTER TABLE contact_submissions ADD COLUMN status TEXT NOT NULL DEFAULT 'captured'")
+        if "owner" not in contact_columns:
+            connection.execute("ALTER TABLE contact_submissions ADD COLUMN owner TEXT NOT NULL DEFAULT 'Revenue Pod'")
+        if "next_step" not in contact_columns:
+            connection.execute("ALTER TABLE contact_submissions ADD COLUMN next_step TEXT NOT NULL DEFAULT ''")
+        if "workspace_id" not in contact_columns:
+            connection.execute("ALTER TABLE contact_submissions ADD COLUMN workspace_id TEXT NOT NULL DEFAULT ''")
+        if "lead_id" not in contact_columns:
+            connection.execute("ALTER TABLE contact_submissions ADD COLUMN lead_id TEXT NOT NULL DEFAULT ''")
+        if "task_id" not in contact_columns:
+            connection.execute("ALTER TABLE contact_submissions ADD COLUMN task_id TEXT NOT NULL DEFAULT ''")
+        _migrate_agent_team_runtime_tables(connection)
+        connection.executescript(
+            """
+            CREATE INDEX IF NOT EXISTS idx_agent_teams_tenant_generated
+            ON agent_teams (tenant_key, generated_at DESC, name);
+
+            CREATE INDEX IF NOT EXISTS idx_agent_units_tenant_team
+            ON agent_units (tenant_key, team_id, name);
+            """
+        )
+        connection.commit()
 
 
 def upsert_snapshot(db_path: Path, key: str, payload: Any) -> None:
@@ -928,8 +1283,15 @@ def add_contact_submission(
     email: str,
     company: str,
     workflow: str,
+    requested_package: str = "",
     data_summary: str,
     goal: str,
+    status: str = "captured",
+    owner: str = "Revenue Pod",
+    next_step: str = "",
+    workspace_id: str = "",
+    lead_id: str = "",
+    task_id: str = "",
 ) -> dict[str, Any]:
     ensure_schema(db_path)
     created_at = datetime.now().astimezone().isoformat()
@@ -943,11 +1305,34 @@ def add_contact_submission(
                 email,
                 company,
                 workflow,
+                requested_package,
                 data_summary,
-                goal
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                goal,
+                status,
+                owner,
+                next_step,
+                workspace_id,
+                lead_id,
+                task_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (created_at, source, name, email, company, workflow, data_summary, goal),
+            (
+                created_at,
+                source,
+                name,
+                email,
+                company,
+                workflow,
+                requested_package,
+                data_summary,
+                goal,
+                status,
+                owner,
+                next_step,
+                workspace_id,
+                lead_id,
+                task_id,
+            ),
         )
         connection.commit()
         submission_id = int(cursor.lastrowid)
@@ -959,8 +1344,15 @@ def add_contact_submission(
         "email": email,
         "company": company,
         "workflow": workflow,
+        "requested_package": requested_package,
         "data_summary": data_summary,
         "goal": goal,
+        "status": status,
+        "owner": owner,
+        "next_step": next_step,
+        "workspace_id": workspace_id,
+        "lead_id": lead_id,
+        "task_id": task_id,
     }
 
 
@@ -977,8 +1369,15 @@ def list_contact_submissions(db_path: Path, *, limit: int = 50) -> list[dict[str
                 email,
                 company,
                 workflow,
+                requested_package,
                 data_summary,
-                goal
+                goal,
+                status,
+                owner,
+                next_step,
+                workspace_id,
+                lead_id,
+                task_id
             FROM contact_submissions
             ORDER BY submission_id DESC
             LIMIT ?
@@ -994,11 +1393,100 @@ def list_contact_submissions(db_path: Path, *, limit: int = 50) -> list[dict[str
             "email": row["email"],
             "company": row["company"],
             "workflow": row["workflow"],
+            "requested_package": row["requested_package"],
             "data_summary": row["data_summary"],
             "goal": row["goal"],
+            "status": row["status"],
+            "owner": row["owner"],
+            "next_step": row["next_step"],
+            "workspace_id": row["workspace_id"],
+            "lead_id": row["lead_id"],
+            "task_id": row["task_id"],
         }
         for row in rows
     ]
+
+
+def update_contact_submission_handoff(
+    db_path: Path,
+    *,
+    submission_id: int,
+    status: str,
+    owner: str,
+    next_step: str,
+    workspace_id: str = "",
+    lead_id: str = "",
+    task_id: str = "",
+) -> dict[str, Any] | None:
+    ensure_schema(db_path)
+    with _connect(db_path) as connection:
+        connection.execute(
+            """
+            UPDATE contact_submissions
+            SET
+                status = ?,
+                owner = ?,
+                next_step = ?,
+                workspace_id = ?,
+                lead_id = ?,
+                task_id = ?
+            WHERE submission_id = ?
+            """,
+            (
+                str(status or "").strip() or "captured",
+                str(owner or "").strip() or "Revenue Pod",
+                str(next_step or "").strip(),
+                str(workspace_id or "").strip(),
+                str(lead_id or "").strip(),
+                str(task_id or "").strip(),
+                int(submission_id),
+            ),
+        )
+        connection.commit()
+        row = connection.execute(
+            """
+            SELECT
+                submission_id,
+                created_at,
+                source,
+                name,
+                email,
+                company,
+                workflow,
+                requested_package,
+                data_summary,
+                goal,
+                status,
+                owner,
+                next_step,
+                workspace_id,
+                lead_id,
+                task_id
+            FROM contact_submissions
+            WHERE submission_id = ?
+            """,
+            (int(submission_id),),
+        ).fetchone()
+    if not row:
+        return None
+    return {
+        "id": int(row["submission_id"]),
+        "created_at": row["created_at"],
+        "source": row["source"],
+        "name": row["name"],
+        "email": row["email"],
+        "company": row["company"],
+        "workflow": row["workflow"],
+        "requested_package": row["requested_package"],
+        "data_summary": row["data_summary"],
+        "goal": row["goal"],
+        "status": row["status"],
+        "owner": row["owner"],
+        "next_step": row["next_step"],
+        "workspace_id": row["workspace_id"],
+        "lead_id": row["lead_id"],
+        "task_id": row["task_id"],
+    }
 
 
 def grant_workspace_access(
@@ -1154,7 +1642,7 @@ def add_lead_pipeline_rows(
                 "archetype": str(row.get("archetype", "")).strip() or "owner_led_business",
                 "stage": str(row.get("stage", "")).strip().lower() or "offer_ready",
                 "status": str(row.get("status", "")).strip().lower() or "open",
-                "owner": str(row.get("owner", "")).strip() or "Growth Studio",
+                "owner": str(row.get("owner", "")).strip() or "Revenue Pod",
                 "campaign_goal": str(campaign_goal or row.get("campaign_goal", "")).strip(),
                 "service_pack": str(row.get("service_pack", "")).strip(),
                 "wedge_product": str(row.get("wedge_product", "")).strip() or "Action OS",
@@ -1287,7 +1775,7 @@ def update_lead_pipeline_row(
         params.append(str(status).strip().lower() or "open")
     if owner is not None:
         fields.append("owner = ?")
-        params.append(str(owner).strip() or "Growth Studio")
+        params.append(str(owner).strip() or "Revenue Pod")
     if notes is not None:
         fields.append("notes = ?")
         params.append(str(notes).strip())
@@ -1505,6 +1993,7 @@ def add_product_feedback(
 def list_product_feedback(
     db_path: Path,
     *,
+    source: str | None = None,
     surface: str | None = None,
     status: str | None = None,
     limit: int = 50,
@@ -1524,6 +2013,9 @@ def list_product_feedback(
     """
     conditions: list[str] = []
     params: list[Any] = []
+    if source:
+        conditions.append("source = ?")
+        params.append(source)
     if surface:
         conditions.append("surface = ?")
         params.append(surface)
@@ -1783,6 +2275,158 @@ def add_approval_entry(
         "related_entity": normalized_entity,
         "evidence_link": normalized_evidence,
         "payload": payload or {},
+    }
+
+
+def add_quality_incident(
+    db_path: Path,
+    *,
+    status: str,
+    severity: str,
+    owner: str,
+    supplier: str,
+    title: str,
+    summary: str,
+    source_type: str,
+    reported_at: str,
+    target_close_date: str,
+    evidence_link: str = "",
+) -> dict[str, Any]:
+    ensure_schema(db_path)
+    created_at = datetime.now().astimezone().isoformat()
+    normalized_status = str(status or "").strip().lower() or "open"
+    normalized_severity = str(severity or "").strip().lower() or "medium"
+    normalized_owner = str(owner or "").strip() or "Quality Team"
+    normalized_supplier = str(supplier or "").strip() or "Internal"
+    normalized_title = str(title or "").strip() or "Untitled incident"
+    normalized_summary = str(summary or "").strip()
+    normalized_source_type = str(source_type or "").strip().lower() or "manual_entry"
+    normalized_reported_at = str(reported_at or "").strip() or created_at
+    normalized_target_close_date = str(target_close_date or "").strip()
+    normalized_evidence = str(evidence_link or "").strip()
+    incident_id = _stable_key(
+        "INC",
+        f"{normalized_supplier}:{normalized_title}:{normalized_reported_at}:{created_at}",
+    )
+    source_ref = {
+        "source": "tool:dqms_desk",
+        "mode": "manual_entry",
+        "evidence_link": normalized_evidence,
+    }
+
+    with _connect(db_path) as connection:
+        connection.execute(
+            """
+            INSERT INTO quality_incidents (
+                incident_id,
+                status,
+                severity,
+                owner,
+                supplier,
+                title,
+                summary,
+                source_type,
+                source_ref_json,
+                reported_at,
+                target_close_date,
+                synced_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                incident_id,
+                normalized_status,
+                normalized_severity,
+                normalized_owner,
+                normalized_supplier,
+                normalized_title,
+                normalized_summary,
+                normalized_source_type,
+                json.dumps(source_ref),
+                normalized_reported_at,
+                normalized_target_close_date,
+                created_at,
+            ),
+        )
+        connection.commit()
+
+    return {
+        "incident_id": incident_id,
+        "status": normalized_status,
+        "severity": normalized_severity,
+        "owner": normalized_owner,
+        "supplier": normalized_supplier,
+        "title": normalized_title,
+        "summary": normalized_summary,
+        "source_type": normalized_source_type,
+        "source_ref": source_ref,
+        "reported_at": normalized_reported_at,
+        "target_close_date": normalized_target_close_date,
+        "synced_at": created_at,
+    }
+
+
+def add_capa_action(
+    db_path: Path,
+    *,
+    incident_id: str,
+    status: str,
+    owner: str,
+    action_title: str,
+    verification_criteria: str,
+    target_date: str,
+) -> dict[str, Any]:
+    ensure_schema(db_path)
+    created_at = datetime.now().astimezone().isoformat()
+    normalized_incident_id = str(incident_id or "").strip()
+    normalized_status = str(status or "").strip().lower() or "open"
+    normalized_owner = str(owner or "").strip() or "Quality Team"
+    normalized_action_title = str(action_title or "").strip() or "Corrective action"
+    normalized_verification = str(verification_criteria or "").strip() or "Owner confirms corrective action effectiveness."
+    normalized_target_date = str(target_date or "").strip()
+    capa_id = _stable_key(
+        "CAPA",
+        f"{normalized_incident_id}:{normalized_action_title}:{normalized_target_date}:{created_at}",
+    )
+
+    with _connect(db_path) as connection:
+        connection.execute(
+            """
+            INSERT INTO capa_actions (
+                capa_id,
+                incident_id,
+                status,
+                owner,
+                action_title,
+                verification_criteria,
+                target_date,
+                created_at,
+                synced_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                capa_id,
+                normalized_incident_id,
+                normalized_status,
+                normalized_owner,
+                normalized_action_title,
+                normalized_verification,
+                normalized_target_date,
+                created_at,
+                created_at,
+            ),
+        )
+        connection.commit()
+
+    return {
+        "capa_id": capa_id,
+        "incident_id": normalized_incident_id,
+        "status": normalized_status,
+        "owner": normalized_owner,
+        "action_title": normalized_action_title,
+        "verification_criteria": normalized_verification,
+        "target_date": normalized_target_date,
+        "created_at": created_at,
+        "synced_at": created_at,
     }
 
 
@@ -2336,6 +2980,87 @@ def add_inventory_record(
         "status": normalized_status,
         "owner": normalized_owner,
         "next_action": normalized_action,
+        "evidence_link": normalized_evidence,
+        "source_ref": source_ref,
+        "synced_at": created_at,
+    }
+
+
+def add_maintenance_record(
+    db_path: Path,
+    *,
+    logged_at: str,
+    asset_name: str,
+    issue_type: str,
+    priority: str,
+    status: str,
+    owner: str,
+    downtime_minutes: str,
+    next_action: str,
+    evidence_link: str,
+) -> dict[str, Any]:
+    ensure_schema(db_path)
+    created_at = datetime.now().astimezone().isoformat()
+    normalized_logged_at = str(logged_at or "").strip() or created_at
+    normalized_asset_name = str(asset_name or "").strip() or "Unknown asset"
+    normalized_issue_type = str(issue_type or "").strip().lower() or "breakdown"
+    normalized_priority = str(priority or "").strip().lower() or "medium"
+    normalized_status = str(status or "").strip().lower() or "open"
+    normalized_owner = str(owner or "").strip() or "Maintenance Team"
+    normalized_downtime_minutes = str(downtime_minutes or "").strip()
+    normalized_next_action = str(next_action or "").strip() or "Review maintenance follow-up"
+    normalized_evidence = str(evidence_link or "").strip()
+    maintenance_id = _stable_key(
+        "MNT",
+        f"{normalized_asset_name}:{normalized_issue_type}:{normalized_logged_at}:{created_at}",
+    )
+    source_ref = {"source": "tool:maintenance_desk", "mode": "manual_entry"}
+
+    with _connect(db_path) as connection:
+        connection.execute(
+            """
+            INSERT INTO maintenance_records (
+                maintenance_id,
+                logged_at,
+                asset_name,
+                issue_type,
+                priority,
+                status,
+                owner,
+                downtime_minutes,
+                next_action,
+                evidence_link,
+                source_ref_json,
+                synced_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                maintenance_id,
+                normalized_logged_at,
+                normalized_asset_name,
+                normalized_issue_type,
+                normalized_priority,
+                normalized_status,
+                normalized_owner,
+                normalized_downtime_minutes,
+                normalized_next_action,
+                normalized_evidence,
+                json.dumps(source_ref),
+                created_at,
+            ),
+        )
+        connection.commit()
+
+    return {
+        "maintenance_id": maintenance_id,
+        "logged_at": normalized_logged_at,
+        "asset_name": normalized_asset_name,
+        "issue_type": normalized_issue_type,
+        "priority": normalized_priority,
+        "status": normalized_status,
+        "owner": normalized_owner,
+        "downtime_minutes": normalized_downtime_minutes,
+        "next_action": normalized_next_action,
         "evidence_link": normalized_evidence,
         "source_ref": source_ref,
         "synced_at": created_at,
@@ -2911,6 +3636,99 @@ def load_inventory_summary(db_path: Path) -> dict[str, Any]:
     }
 
 
+def list_maintenance_records(
+    db_path: Path,
+    *,
+    issue_type: str | None = None,
+    status: str | None = None,
+    limit: int = 100,
+) -> list[dict[str, Any]]:
+    ensure_schema(db_path)
+    query = """
+        SELECT
+            maintenance_id,
+            logged_at,
+            asset_name,
+            issue_type,
+            priority,
+            status,
+            owner,
+            downtime_minutes,
+            next_action,
+            evidence_link,
+            source_ref_json,
+            synced_at
+        FROM maintenance_records
+    """
+    conditions: list[str] = []
+    params: list[Any] = []
+    if issue_type:
+        conditions.append("issue_type = ?")
+        params.append(issue_type)
+    if status:
+        conditions.append("status = ?")
+        params.append(status)
+    if conditions:
+        query += " WHERE " + " AND ".join(conditions)
+    query += " ORDER BY CASE priority WHEN 'high' THEN 0 WHEN 'medium' THEN 1 WHEN 'low' THEN 2 ELSE 3 END, logged_at DESC LIMIT ?"
+    params.append(max(1, int(limit)))
+
+    with _connect(db_path) as connection:
+        rows = connection.execute(query, params).fetchall()
+    return [
+        {
+            "maintenance_id": row["maintenance_id"],
+            "logged_at": row["logged_at"],
+            "asset_name": row["asset_name"],
+            "issue_type": row["issue_type"],
+            "priority": row["priority"],
+            "status": row["status"],
+            "owner": row["owner"],
+            "downtime_minutes": row["downtime_minutes"],
+            "next_action": row["next_action"],
+            "evidence_link": row["evidence_link"],
+            "source_ref": json.loads(row["source_ref_json"]) if row["source_ref_json"] else {},
+            "synced_at": row["synced_at"],
+        }
+        for row in rows
+    ]
+
+
+def load_maintenance_summary(db_path: Path) -> dict[str, Any]:
+    ensure_schema(db_path)
+    with _connect(db_path) as connection:
+        total = int(connection.execute("SELECT COUNT(*) FROM maintenance_records").fetchone()[0])
+        status_rows = connection.execute(
+            "SELECT status, COUNT(*) AS item_count FROM maintenance_records GROUP BY status"
+        ).fetchall()
+        type_rows = connection.execute(
+            "SELECT issue_type, COUNT(*) AS item_count FROM maintenance_records GROUP BY issue_type ORDER BY item_count DESC, issue_type LIMIT 5"
+        ).fetchall()
+        breakdown_rows = connection.execute(
+            "SELECT COUNT(*) FROM maintenance_records WHERE issue_type = 'breakdown'"
+        ).fetchone()
+        downtime_rows = connection.execute(
+            "SELECT downtime_minutes FROM maintenance_records"
+        ).fetchall()
+
+    downtime_total = 0.0
+    for row in downtime_rows:
+        downtime_value = _coerce_number(str(row["downtime_minutes"]))
+        if downtime_value is not None:
+            downtime_total += downtime_value
+
+    return {
+        "maintenance_count": total,
+        "by_status": {str(row["status"]): int(row["item_count"]) for row in status_rows},
+        "breakdown_count": int(breakdown_rows[0] if breakdown_rows else 0),
+        "downtime_minutes_total": int(downtime_total) if float(downtime_total).is_integer() else round(downtime_total, 2),
+        "top_issue_types": [
+            {"issue_type": str(row["issue_type"]), "item_count": int(row["item_count"])}
+            for row in type_rows
+        ],
+    }
+
+
 def list_metric_entries(
     db_path: Path,
     *,
@@ -3018,12 +3836,17 @@ def sync_agent_team_system(db_path: Path, payload: dict[str, Any]) -> dict[str, 
     ensure_schema(db_path)
     generated_at = str(payload.get("generated_at", "")).strip() or datetime.now().astimezone().isoformat()
     teams = payload.get("teams", []) if isinstance(payload, dict) else []
+    manifest = payload.get("manifest", {}) if isinstance(payload, dict) else {}
+    manifest_tenant_key = str(manifest.get("tenantKey", "default")).strip() or "default"
+    snapshot_payload = dict(payload) if isinstance(payload, dict) else {}
+    snapshot_payload["tenant_key"] = manifest_tenant_key
     with _connect(db_path) as connection:
-        connection.execute("DELETE FROM agent_units")
-        connection.execute("DELETE FROM agent_teams")
+        connection.execute("DELETE FROM agent_units WHERE tenant_key = ?", (manifest_tenant_key,))
+        connection.execute("DELETE FROM agent_teams WHERE tenant_key = ?", (manifest_tenant_key,))
         connection.executemany(
             """
             INSERT INTO agent_teams (
+                tenant_key,
                 team_id,
                 name,
                 status,
@@ -3032,10 +3855,11 @@ def sync_agent_team_system(db_path: Path, payload: dict[str, Any]) -> dict[str, 
                 lead_agent,
                 cadence,
                 generated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             [
                 (
+                    manifest_tenant_key,
                     str(team.get("team_id", "")).strip(),
                     str(team.get("name", "")).strip(),
                     str(team.get("status", "")).strip(),
@@ -3052,6 +3876,7 @@ def sync_agent_team_system(db_path: Path, payload: dict[str, Any]) -> dict[str, 
         connection.executemany(
             """
             INSERT INTO agent_units (
+                tenant_key,
                 unit_id,
                 team_id,
                 name,
@@ -3062,10 +3887,11 @@ def sync_agent_team_system(db_path: Path, payload: dict[str, Any]) -> dict[str, 
                 approval_gate,
                 focus,
                 generated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             [
                 (
+                    manifest_tenant_key,
                     f"{str(team.get('team_id', '')).strip()}::{str(agent.get('agent_id', '')).strip()}",
                     str(team.get("team_id", "")).strip(),
                     str(agent.get("name", "")).strip(),
@@ -3083,21 +3909,218 @@ def sync_agent_team_system(db_path: Path, payload: dict[str, Any]) -> dict[str, 
                 if str(agent.get("agent_id", "")).strip()
             ],
         )
+        connection.execute("DELETE FROM agent_playbook_kpis WHERE tenant_key = ?", (manifest_tenant_key,))
+        connection.execute("DELETE FROM agent_playbook_notes WHERE tenant_key = ?", (manifest_tenant_key,))
+        connection.execute("DELETE FROM agent_playbook_tools WHERE tenant_key = ?", (manifest_tenant_key,))
+        connection.execute("DELETE FROM agent_playbook_outputs WHERE tenant_key = ?", (manifest_tenant_key,))
+        connection.execute("DELETE FROM agent_playbooks WHERE tenant_key = ?", (manifest_tenant_key,))
+        connection.execute("DELETE FROM agent_tool_registry WHERE tenant_key = ?", (manifest_tenant_key,))
+        connection.execute("DELETE FROM agent_operating_models WHERE tenant_key = ?", (manifest_tenant_key,))
+        if isinstance(manifest, dict) and manifest:
+            connection.execute(
+                """
+                INSERT INTO agent_operating_models (
+                    tenant_key,
+                    version,
+                    title,
+                    summary,
+                    manager_moves_json,
+                    generated_at
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    manifest_tenant_key,
+                    str(manifest.get("version", "")).strip() or "v1",
+                    str(manifest.get("title", "")).strip(),
+                    str(manifest.get("summary", "")).strip(),
+                    json.dumps(manifest.get("managerMoves", []) if isinstance(manifest.get("managerMoves", []), list) else []),
+                    generated_at,
+                ),
+            )
+            connection.executemany(
+                """
+                INSERT INTO agent_tool_registry (
+                    tenant_key,
+                    tool_id,
+                    name,
+                    category,
+                    purpose,
+                    generated_at
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                [
+                    (
+                        manifest_tenant_key,
+                        str(tool.get("id", "")).strip(),
+                        str(tool.get("name", "")).strip(),
+                        str(tool.get("category", "")).strip(),
+                        str(tool.get("purpose", "")).strip(),
+                        generated_at,
+                    )
+                    for tool in manifest.get("tools", [])
+                    if isinstance(tool, dict) and str(tool.get("id", "")).strip()
+                ],
+            )
+            connection.executemany(
+                """
+                INSERT INTO agent_playbooks (
+                    tenant_key,
+                    playbook_id,
+                    team_id,
+                    name,
+                    workspace,
+                    lead_role,
+                    mission,
+                    cadence_json,
+                    write_policy,
+                    generated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                [
+                    (
+                        manifest_tenant_key,
+                        str(playbook.get("id", "")).strip(),
+                        str(playbook.get("teamId", "")).strip(),
+                        str(playbook.get("name", "")).strip(),
+                        str(playbook.get("workspace", "")).strip(),
+                        str(playbook.get("leadRole", "")).strip(),
+                        str(playbook.get("mission", "")).strip(),
+                        json.dumps(playbook.get("cadence", []) if isinstance(playbook.get("cadence", []), list) else []),
+                        str(playbook.get("writePolicy", "")).strip(),
+                        generated_at,
+                    )
+                    for playbook in manifest.get("playbooks", [])
+                    if isinstance(playbook, dict) and str(playbook.get("id", "")).strip()
+                ],
+            )
+            connection.executemany(
+                """
+                INSERT INTO agent_playbook_outputs (
+                    tenant_key,
+                    playbook_id,
+                    output_index,
+                    output_text,
+                    generated_at
+                ) VALUES (?, ?, ?, ?, ?)
+                """,
+                [
+                    (
+                        manifest_tenant_key,
+                        str(playbook.get("id", "")).strip(),
+                        output_index,
+                        str(output_text).strip(),
+                        generated_at,
+                    )
+                    for playbook in manifest.get("playbooks", [])
+                    if isinstance(playbook, dict) and str(playbook.get("id", "")).strip()
+                    for output_index, output_text in enumerate(playbook.get("outputs", []))
+                    if str(output_text).strip()
+                ],
+            )
+            connection.executemany(
+                """
+                INSERT INTO agent_playbook_tools (
+                    tenant_key,
+                    playbook_id,
+                    tool_index,
+                    tool_id,
+                    mode,
+                    scope,
+                    generated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                [
+                    (
+                        manifest_tenant_key,
+                        str(playbook.get("id", "")).strip(),
+                        tool_index,
+                        str(tool_access.get("toolId", "")).strip(),
+                        str(tool_access.get("mode", "")).strip(),
+                        str(tool_access.get("scope", "")).strip(),
+                        generated_at,
+                    )
+                    for playbook in manifest.get("playbooks", [])
+                    if isinstance(playbook, dict) and str(playbook.get("id", "")).strip()
+                    for tool_index, tool_access in enumerate(playbook.get("tools", []))
+                    if isinstance(tool_access, dict) and str(tool_access.get("toolId", "")).strip()
+                ],
+            )
+            connection.executemany(
+                """
+                INSERT INTO agent_playbook_notes (
+                    tenant_key,
+                    playbook_id,
+                    note_type,
+                    note_index,
+                    note_text,
+                    generated_at
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                [
+                    (
+                        manifest_tenant_key,
+                        str(playbook.get("id", "")).strip(),
+                        note_type,
+                        note_index,
+                        str(note_text).strip(),
+                        generated_at,
+                    )
+                    for playbook in manifest.get("playbooks", [])
+                    if isinstance(playbook, dict) and str(playbook.get("id", "")).strip()
+                    for note_type, note_values in (
+                        ("instruction", playbook.get("instructions", [])),
+                        ("escalation", playbook.get("escalateWhen", [])),
+                    )
+                    for note_index, note_text in enumerate(note_values if isinstance(note_values, list) else [])
+                    if str(note_text).strip()
+                ],
+            )
+            connection.executemany(
+                """
+                INSERT INTO agent_playbook_kpis (
+                    tenant_key,
+                    playbook_id,
+                    kpi_index,
+                    kpi_name,
+                    kpi_target,
+                    generated_at
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                [
+                    (
+                        manifest_tenant_key,
+                        str(playbook.get("id", "")).strip(),
+                        kpi_index,
+                        str(kpi.get("name", "")).strip(),
+                        str(kpi.get("target", "")).strip(),
+                        generated_at,
+                    )
+                    for playbook in manifest.get("playbooks", [])
+                    if isinstance(playbook, dict) and str(playbook.get("id", "")).strip()
+                    for kpi_index, kpi in enumerate(playbook.get("kpis", []))
+                    if isinstance(kpi, dict) and str(kpi.get("name", "")).strip()
+                ],
+            )
         connection.commit()
-    upsert_snapshot(db_path, "agent_team_system", payload)
+    upsert_snapshot(db_path, "agent_team_system", snapshot_payload)
+    upsert_snapshot(db_path, _agent_team_snapshot_key(manifest_tenant_key), snapshot_payload)
     return {
         "status": "ready",
         "team_count": len(teams),
+        "manifest_playbook_count": len(manifest.get("playbooks", [])) if isinstance(manifest, dict) else 0,
         "generated_at": generated_at,
     }
 
 
-def list_agent_teams(db_path: Path) -> list[dict[str, Any]]:
+def list_agent_teams(db_path: Path, tenant_key: str | None = None) -> list[dict[str, Any]]:
     ensure_schema(db_path)
+    requested_tenant_key = str(tenant_key or "").strip()
     with _connect(db_path) as connection:
+        actual_tenant_key = requested_tenant_key or _resolve_latest_agent_team_tenant_key(connection)
         team_rows = connection.execute(
             """
             SELECT
+                tenant_key,
                 team_id,
                 name,
                 status,
@@ -3107,12 +4130,15 @@ def list_agent_teams(db_path: Path) -> list[dict[str, Any]]:
                 cadence,
                 generated_at
             FROM agent_teams
+            WHERE tenant_key = ?
             ORDER BY name
-            """
+            """,
+            (actual_tenant_key,),
         ).fetchall()
         unit_rows = connection.execute(
             """
             SELECT
+                tenant_key,
                 unit_id,
                 team_id,
                 name,
@@ -3124,16 +4150,21 @@ def list_agent_teams(db_path: Path) -> list[dict[str, Any]]:
                 focus,
                 generated_at
             FROM agent_units
+            WHERE tenant_key = ?
             ORDER BY team_id, name
-            """
+            """,
+            (actual_tenant_key,),
         ).fetchall()
 
     units_by_team: dict[str, list[dict[str, Any]]] = {}
     for row in unit_rows:
         team_id = str(row["team_id"])
+        unit_id = str(row["unit_id"])
+        agent_id = unit_id.split("::", 1)[1] if "::" in unit_id else unit_id
         units_by_team.setdefault(team_id, []).append(
             {
                 "unit_id": row["unit_id"],
+                "agent_id": agent_id,
                 "name": row["name"],
                 "role": row["role"],
                 "mode": row["mode"],
@@ -3147,6 +4178,7 @@ def list_agent_teams(db_path: Path) -> list[dict[str, Any]]:
 
     return [
         {
+            "tenant_key": row["tenant_key"],
             "team_id": row["team_id"],
             "name": row["name"],
             "status": row["status"],
@@ -3161,17 +4193,216 @@ def list_agent_teams(db_path: Path) -> list[dict[str, Any]]:
     ]
 
 
-def load_agent_team_summary(db_path: Path) -> dict[str, Any]:
-    payload = load_snapshot(db_path, "agent_team_system")
-    summary = payload.get("summary", {}) if isinstance(payload, dict) else {}
-    teams = list_agent_teams(db_path)
+def load_agent_operating_model(db_path: Path, tenant_key: str | None = None) -> dict[str, Any]:
+    ensure_schema(db_path)
+    requested_tenant = str(tenant_key or "").strip()
+    with _connect(db_path) as connection:
+        if requested_tenant:
+            model_row = connection.execute(
+                """
+                SELECT tenant_key, version, title, summary, manager_moves_json, generated_at
+                FROM agent_operating_models
+                WHERE tenant_key = ?
+                """,
+                (requested_tenant,),
+            ).fetchone()
+        else:
+            model_row = connection.execute(
+                """
+                SELECT tenant_key, version, title, summary, manager_moves_json, generated_at
+                FROM agent_operating_models
+                ORDER BY generated_at DESC
+                LIMIT 1
+                """
+            ).fetchone()
+    if not model_row:
+        payload = load_agent_team_system_snapshot(db_path, tenant_key=requested_tenant or None)
+        manifest = payload.get("manifest", {}) if isinstance(payload, dict) else {}
+        if isinstance(manifest, dict) and manifest:
+            if requested_tenant and not str(manifest.get("tenantKey", "")).strip():
+                return {**manifest, "tenantKey": requested_tenant}
+            snapshot_tenant_key = _agent_team_snapshot_tenant_key(payload)
+            if snapshot_tenant_key and not str(manifest.get("tenantKey", "")).strip():
+                return {**manifest, "tenantKey": snapshot_tenant_key}
+            return manifest
+        return {}
+
+    actual_tenant = str(model_row["tenant_key"]).strip()
+    with _connect(db_path) as connection:
+        tool_rows = connection.execute(
+            """
+            SELECT tool_id, name, category, purpose
+            FROM agent_tool_registry
+            WHERE tenant_key = ?
+            ORDER BY name
+            """,
+            (actual_tenant,),
+        ).fetchall()
+        playbook_rows = connection.execute(
+            """
+            SELECT playbook_id, team_id, name, workspace, lead_role, mission, cadence_json, write_policy
+            FROM agent_playbooks
+            WHERE tenant_key = ?
+            ORDER BY name
+            """,
+            (actual_tenant,),
+        ).fetchall()
+        output_rows = connection.execute(
+            """
+            SELECT playbook_id, output_index, output_text
+            FROM agent_playbook_outputs
+            WHERE tenant_key = ?
+            ORDER BY playbook_id, output_index
+            """,
+            (actual_tenant,),
+        ).fetchall()
+        tool_access_rows = connection.execute(
+            """
+            SELECT playbook_id, tool_index, tool_id, mode, scope
+            FROM agent_playbook_tools
+            WHERE tenant_key = ?
+            ORDER BY playbook_id, tool_index
+            """,
+            (actual_tenant,),
+        ).fetchall()
+        note_rows = connection.execute(
+            """
+            SELECT playbook_id, note_type, note_index, note_text
+            FROM agent_playbook_notes
+            WHERE tenant_key = ?
+            ORDER BY playbook_id, note_type, note_index
+            """,
+            (actual_tenant,),
+        ).fetchall()
+        kpi_rows = connection.execute(
+            """
+            SELECT playbook_id, kpi_index, kpi_name, kpi_target
+            FROM agent_playbook_kpis
+            WHERE tenant_key = ?
+            ORDER BY playbook_id, kpi_index
+            """,
+            (actual_tenant,),
+        ).fetchall()
+
+    outputs_by_playbook: dict[str, list[str]] = {}
+    for row in output_rows:
+        outputs_by_playbook.setdefault(str(row["playbook_id"]), []).append(str(row["output_text"]))
+
+    tools_by_playbook: dict[str, list[dict[str, Any]]] = {}
+    for row in tool_access_rows:
+        tools_by_playbook.setdefault(str(row["playbook_id"]), []).append(
+            {
+                "toolId": str(row["tool_id"]),
+                "mode": str(row["mode"]),
+                "scope": str(row["scope"]),
+            }
+        )
+
+    instructions_by_playbook: dict[str, list[str]] = {}
+    escalations_by_playbook: dict[str, list[str]] = {}
+    for row in note_rows:
+        bucket = instructions_by_playbook if str(row["note_type"]) == "instruction" else escalations_by_playbook
+        bucket.setdefault(str(row["playbook_id"]), []).append(str(row["note_text"]))
+
+    kpis_by_playbook: dict[str, list[dict[str, Any]]] = {}
+    for row in kpi_rows:
+        kpis_by_playbook.setdefault(str(row["playbook_id"]), []).append(
+            {
+                "name": str(row["kpi_name"]),
+                "target": str(row["kpi_target"]),
+            }
+        )
+
+    try:
+        manager_moves = json.loads(model_row["manager_moves_json"] or "[]")
+    except Exception:
+        manager_moves = []
+
+    playbooks: list[dict[str, Any]] = []
+    for row in playbook_rows:
+        try:
+            cadence = json.loads(row["cadence_json"] or "[]")
+        except Exception:
+            cadence = []
+        playbook_id = str(row["playbook_id"])
+        playbooks.append(
+            {
+                "id": playbook_id,
+                "teamId": str(row["team_id"]),
+                "name": str(row["name"]),
+                "workspace": str(row["workspace"]),
+                "leadRole": str(row["lead_role"]),
+                "mission": str(row["mission"]),
+                "outputs": outputs_by_playbook.get(playbook_id, []),
+                "cadence": cadence if isinstance(cadence, list) else [],
+                "tools": tools_by_playbook.get(playbook_id, []),
+                "instructions": instructions_by_playbook.get(playbook_id, []),
+                "escalateWhen": escalations_by_playbook.get(playbook_id, []),
+                "writePolicy": str(row["write_policy"]),
+                "kpis": kpis_by_playbook.get(playbook_id, []),
+            }
+        )
+
     return {
+        "version": str(model_row["version"]),
+        "tenantKey": actual_tenant,
+        "title": str(model_row["title"]),
+        "summary": str(model_row["summary"]),
+        "managerMoves": manager_moves if isinstance(manager_moves, list) else [],
+        "tools": [
+            {
+                "id": str(row["tool_id"]),
+                "name": str(row["name"]),
+                "category": str(row["category"]),
+                "purpose": str(row["purpose"]),
+            }
+            for row in tool_rows
+        ],
+        "playbooks": playbooks,
+    }
+
+
+def load_agent_team_system_snapshot(db_path: Path, tenant_key: str | None = None) -> dict[str, Any]:
+    ensure_schema(db_path)
+    requested_tenant_key = str(tenant_key or "").strip()
+    if requested_tenant_key:
+        payload = load_snapshot(db_path, _agent_team_snapshot_key(requested_tenant_key))
+        if payload:
+            return payload if isinstance(payload, dict) else {}
+        if requested_tenant_key == "default":
+            payload = load_snapshot(db_path, "agent_team_system")
+            payload_tenant_key = _agent_team_snapshot_tenant_key(payload)
+            if not payload_tenant_key or payload_tenant_key == "default":
+                return payload if isinstance(payload, dict) else {}
+        return {}
+
+    payload = load_snapshot(db_path, "agent_team_system")
+    if payload:
+        return payload if isinstance(payload, dict) else {}
+
+    with _connect(db_path) as connection:
+        latest_tenant_key = _resolve_latest_agent_team_tenant_key(connection)
+    payload = load_snapshot(db_path, _agent_team_snapshot_key(latest_tenant_key))
+    return payload if isinstance(payload, dict) else {}
+
+
+def load_agent_team_summary(db_path: Path, tenant_key: str | None = None) -> dict[str, Any]:
+    requested_tenant_key = str(tenant_key or "").strip()
+    payload = load_agent_team_system_snapshot(db_path, tenant_key=requested_tenant_key or None)
+    summary = payload.get("summary", {}) if isinstance(payload, dict) else {}
+    teams = list_agent_teams(db_path, tenant_key=requested_tenant_key or None)
+    manifest = load_agent_operating_model(db_path, tenant_key=requested_tenant_key or None)
+    return {
+        "tenant_key": _agent_team_snapshot_tenant_key(payload) or requested_tenant_key,
         "team_count": len(teams),
         "shared_core_team_count": int(summary.get("shared_core_team_count", 0) or 0),
         "client_pod_team_count": int(summary.get("client_pod_team_count", 0) or 0),
         "autonomy_score": int(summary.get("autonomy_score", 0) or 0),
         "autonomy_level": str(summary.get("autonomy_level", "")).strip(),
         "status": str(payload.get("status", "")).strip() if isinstance(payload, dict) else "",
+        "manifest_version": str(manifest.get("version", "")).strip() if isinstance(manifest, dict) else "",
+        "manifest_tool_count": len(manifest.get("tools", [])) if isinstance(manifest, dict) else 0,
+        "manifest_playbook_count": len(manifest.get("playbooks", [])) if isinstance(manifest, dict) else 0,
     }
 
 
@@ -3405,7 +4636,7 @@ def add_lead_activity(
         "activity_id": activity_id,
         "lead_id": normalized_lead_id,
         "created_at": created_at,
-        "actor": str(actor or "").strip() or "Growth Studio",
+        "actor": str(actor or "").strip() or "Revenue Pod",
         "activity_type": str(activity_type or "").strip() or "note",
         "channel": str(channel or "").strip() or "manual",
         "direction": str(direction or "").strip() or "internal",

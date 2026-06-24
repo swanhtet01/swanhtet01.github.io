@@ -1,22 +1,32 @@
 import { Link, Navigate, useParams } from 'react-router-dom'
 
+import { LiveProductPreview } from '../components/LiveProductPreview'
+import { previewVariantForSoftwareModule, previewVariantForStarterProduct } from '../lib/liveProductPreviewUtils'
 import { getStarterPackDetail, STARTER_PACK_DETAILS, type StarterPackDetail } from '../lib/salesControl'
-import { getAgentTeamDetails, getSoftwareModuleDetail, SOFTWARE_MODULE_DETAILS, type SoftwareModuleDetail } from '../lib/softwareCatalog'
+import {
+  getAgentTeamDetails,
+  getSoftwareModuleDetail,
+  getSoftwareModuleGalleryShots,
+  SOFTWARE_MODULE_DETAILS,
+  type SoftwareModuleDetail,
+} from '../lib/softwareCatalog'
 
-function contactLink(name: string) {
+function rolloutLink(name: string) {
   return `/contact?package=${encodeURIComponent(name)}`
 }
 
-const screenshotSize = {
-  width: 1440,
-  height: 1024,
-} as const
+function publicReferenceRoute(route: string | undefined) {
+  if (!route || route.startsWith('/app/')) {
+    return null
+  }
+  return route
+}
 
-const templateImageMap: Record<string, string> = {
-  'sales-system': '/site/sales-desk.svg',
-  'operations-inbox': '/site/ops-desk.svg',
-  'client-portal': '/site/client-portal.svg',
-  'industrial-dqms': '/site/control-room.svg',
+function workspaceReferenceRoute(route: string | undefined) {
+  if (!route || !route.startsWith('/app/')) {
+    return null
+  }
+  return `/login?next=${encodeURIComponent(route)}`
 }
 
 export function ProductDetailPage() {
@@ -31,11 +41,15 @@ export function ProductDetailPage() {
   if (softwareModule) {
     const automationSupport = getAgentTeamDetails(softwareModule.agentTeams)
     const siblingModules: SoftwareModuleDetail[] = SOFTWARE_MODULE_DETAILS.filter((item: SoftwareModuleDetail) => item.id !== softwareModule.id).slice(0, 3)
+    const liveNotes = softwareModule.liveNotes ?? []
+    const galleryShots = getSoftwareModuleGalleryShots(softwareModule.id)
+    const proofRoute = publicReferenceRoute(softwareModule.proofRoute)
+    const liveModuleRoute = workspaceReferenceRoute(softwareModule.proofRoute) ?? workspaceReferenceRoute(softwareModule.workspaceRoute)
     const rolloutPath = [
       `Start with ${softwareModule.surfaces[0]}.`,
       'Import the current data, files, or inbox flow first.',
       'Set the right roles, approvals, and history around the workflow.',
-      'Add more templates only after the first team is using it daily.',
+      'Add another product only after the first team is using it daily.',
     ] as const
 
     return (
@@ -48,28 +62,54 @@ export function ProductDetailPage() {
               <p className="mt-4 max-w-3xl text-base leading-relaxed text-[var(--sm-muted)] lg:text-lg">{softwareModule.promise}</p>
               <div className="mt-6 flex flex-wrap gap-3 text-sm text-[var(--sm-muted)]">
                 <span className="sm-status-pill">{softwareModule.status}</span>
-                <span className="sm-status-pill">{softwareModule.audience}</span>
+                {softwareModule.deliveryState ? <span className="sm-status-pill">{softwareModule.deliveryState}</span> : null}
               </div>
               <div className="mt-8 flex flex-wrap gap-3">
-                <Link className="sm-button-primary" to={contactLink(softwareModule.name)}>
-                  Start rollout
+                <Link className="sm-button-primary" to={rolloutLink(softwareModule.name)}>
+                  Start this rollout
                 </Link>
-                <Link className="sm-button-secondary" to="/clients/yangon-tyre">
-                  See case study
-                </Link>
+                {proofRoute ? (
+                  <Link className="sm-button-secondary" to={proofRoute}>
+                    See proof
+                  </Link>
+                ) : null}
+                {liveModuleRoute ? (
+                  <Link className="sm-button-secondary" to={liveModuleRoute}>
+                    Open live module
+                  </Link>
+                ) : null}
+              </div>
+              {liveModuleRoute ? <p className="mt-3 text-sm text-[var(--sm-muted)]">This module’s proof lives inside the authenticated workspace.</p> : null}
+              <div className="mt-4">
+                {proofRoute === '/clients/yangon-tyre' ? (
+                  <Link className="sm-link" to="/products">
+                    View all products
+                  </Link>
+                ) : (
+                  <Link className="sm-link" to="/clients/yangon-tyre">
+                    Read the Yangon Tyre case study
+                  </Link>
+                )}
               </div>
             </div>
 
             <article className="sm-pack-card overflow-hidden p-4">
-              <img
-                alt={`${softwareModule.name} template preview`}
-                className="aspect-[16/10] w-full rounded-2xl border border-white/10 bg-[#020612] object-cover object-center"
-                decoding="async"
-                height={screenshotSize.height}
-                loading="lazy"
-                src={templateImageMap[softwareModule.id] ?? '/site/control-room.svg'}
-                width={screenshotSize.width}
-              />
+              <LiveProductPreview variant={softwareModule.previewVariant || previewVariantForSoftwareModule(softwareModule.id)} />
+              {softwareModule.heroImage ? (
+                <div className="mt-4 overflow-hidden rounded-[1.1rem] border border-white/10 bg-[#040b16] p-3">
+                  <div className="overflow-hidden rounded-[0.9rem] border border-white/10 bg-black/20">
+                    <img
+                      alt={`${softwareModule.name} catalog view`}
+                      className="h-auto w-full object-cover object-top"
+                      loading="lazy"
+                      src={softwareModule.heroImage}
+                    />
+                  </div>
+                  <p className="mt-3 text-xs leading-relaxed text-[var(--sm-muted)]">
+                    Catalog image pulled directly from the module metadata so the public page stays aligned with the product catalog.
+                  </p>
+                </div>
+              ) : null}
               <div className="mt-4 grid gap-3 md:grid-cols-2">
                 <article className="sm-chip text-white">
                   <p className="sm-kicker text-[var(--sm-accent)]">Best for</p>
@@ -87,7 +127,7 @@ export function ProductDetailPage() {
         <section className="grid gap-6 lg:grid-cols-[1fr_1fr]">
           <article className="sm-site-panel">
             <p className="sm-kicker text-[var(--sm-accent)]">What it includes</p>
-            <h2 className="mt-3 text-3xl font-bold text-white lg:text-4xl">A reusable template with a clear job.</h2>
+            <h2 className="mt-3 text-3xl font-bold text-white lg:text-4xl">A clear system for one job.</h2>
             <p className="mt-4 text-sm leading-relaxed text-[var(--sm-muted)]">{softwareModule.summary}</p>
             <div className="mt-6 grid gap-3">
               {softwareModule.surfaces.map((surface) => (
@@ -99,7 +139,7 @@ export function ProductDetailPage() {
           </article>
 
           <article className="sm-site-panel">
-            <p className="sm-kicker text-[var(--sm-accent-alt)]">Included in rollout</p>
+            <p className="sm-kicker text-[var(--sm-accent-alt)]">Included</p>
             <h2 className="mt-3 text-3xl font-bold text-white lg:text-4xl">Connected data and built-in controls.</h2>
             <div className="mt-6 grid gap-3">
               {softwareModule.knowledgeModules.map((item: string) => (
@@ -121,10 +161,37 @@ export function ProductDetailPage() {
           </article>
         </section>
 
+        {galleryShots.length ? (
+          <section className="sm-site-panel">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+              <div>
+                <p className="sm-kicker text-[var(--sm-accent)]">Live screenshots</p>
+                <h2 className="mt-3 text-3xl font-bold text-white lg:text-4xl">Actual product surfaces, not placeholders.</h2>
+              </div>
+              <span className="sm-status-pill">Captured from the working site</span>
+            </div>
+            <div className="mt-6 grid gap-4 lg:grid-cols-2">
+              {galleryShots.map((shot) => (
+                <figure className="sm-proof-card overflow-hidden" key={shot.src}>
+                  <div className="overflow-hidden rounded-[1.2rem] border border-white/10 bg-[#040b16]">
+                    <img
+                      alt={shot.alt}
+                      className="h-auto w-full object-cover object-top"
+                      loading="lazy"
+                      src={shot.src}
+                    />
+                  </div>
+                  <figcaption className="mt-4 text-sm leading-relaxed text-[var(--sm-muted)]">{shot.caption}</figcaption>
+                </figure>
+              ))}
+            </div>
+          </section>
+        ) : null}
+
         <section className="grid gap-6 lg:grid-cols-[1fr_1fr]">
           <article className="sm-site-panel">
-            <p className="sm-kicker text-[var(--sm-accent)]">Rollout path</p>
-            <h2 className="mt-3 text-3xl font-bold text-white lg:text-4xl">How clients usually start.</h2>
+            <p className="sm-kicker text-[var(--sm-accent)]">How teams start</p>
+            <h2 className="mt-3 text-3xl font-bold text-white lg:text-4xl">The usual first setup.</h2>
             <div className="mt-6 space-y-3">
               {rolloutPath.map((step, index) => (
                 <div className="sm-site-point" key={step}>
@@ -136,21 +203,35 @@ export function ProductDetailPage() {
           </article>
 
           <article className="sm-site-panel">
-            <p className="sm-kicker text-[var(--sm-accent-alt)]">Customer rollout basics</p>
-            <h2 className="mt-3 text-3xl font-bold text-white lg:text-4xl">Ready for a branded customer portal.</h2>
+            <p className="sm-kicker text-[var(--sm-accent-alt)]">What you get</p>
+            <h2 className="mt-3 text-3xl font-bold text-white lg:text-4xl">The workflow, controls, and rollout proof.</h2>
             <div className="mt-6 grid gap-3">
-              <article className="sm-chip text-white">
-                <p className="font-semibold">Roles and permissions</p>
-              </article>
-              <article className="sm-chip text-white">
-                <p className="font-semibold">Approval steps</p>
-              </article>
-              <article className="sm-chip text-white">
-                <p className="font-semibold">Audit history</p>
-              </article>
-              <article className="sm-chip text-white">
-                <p className="font-semibold">Customer-specific workspace</p>
-              </article>
+              {softwareModule.deliveryState ? (
+                <article className="sm-chip text-white">
+                  <p className="font-semibold">{softwareModule.deliveryState}</p>
+                </article>
+              ) : null}
+              {liveNotes.map((item) => (
+                <article className="sm-chip text-white" key={item}>
+                  <p className="font-semibold">{item}</p>
+                </article>
+              ))}
+              {!liveNotes.length ? (
+                <>
+                  <article className="sm-chip text-white">
+                    <p className="font-semibold">Roles and permissions</p>
+                  </article>
+                  <article className="sm-chip text-white">
+                    <p className="font-semibold">Approval steps</p>
+                  </article>
+                  <article className="sm-chip text-white">
+                    <p className="font-semibold">Audit history</p>
+                  </article>
+                  <article className="sm-chip text-white">
+                    <p className="font-semibold">Customer-specific workspace</p>
+                  </article>
+                </>
+              ) : null}
             </div>
           </article>
         </section>
@@ -159,9 +240,9 @@ export function ProductDetailPage() {
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div>
               <p className="sm-kicker text-[var(--sm-accent)]">Use with</p>
-              <h2 className="mt-3 text-3xl font-bold text-white lg:text-4xl">Expand with more templates later.</h2>
+              <h2 className="mt-3 text-3xl font-bold text-white lg:text-4xl">Add another product later.</h2>
             </div>
-            <Link className="sm-button-secondary" to="/products">
+            <Link className="sm-link" to="/products">
               View all products
             </Link>
           </div>
@@ -172,7 +253,7 @@ export function ProductDetailPage() {
                 <p className="mt-3 text-sm leading-relaxed text-[var(--sm-muted)]">{item.summary}</p>
                 <div className="mt-5">
                   <Link className="sm-link" to={`/products/${item.id}`}>
-                    See template
+                    View setup
                   </Link>
                 </div>
               </article>
@@ -195,29 +276,26 @@ export function ProductDetailPage() {
             <h1 className="mt-4 max-w-4xl text-4xl font-extrabold tracking-tight text-white lg:text-6xl">{product.name}</h1>
             <p className="mt-4 max-w-3xl text-base leading-relaxed text-[var(--sm-muted)] lg:text-lg">{product.promise}</p>
             <div className="mt-6 flex flex-wrap gap-3 text-sm text-[var(--sm-muted)]">
-              <span className="sm-status-pill">Live product</span>
-              <span className="sm-status-pill">Open now</span>
+              <span className="sm-status-pill">Working product</span>
+              <span className="sm-status-pill">{product.launchWindow}</span>
             </div>
             <div className="mt-8 flex flex-wrap gap-3">
-              <Link className="sm-button-primary" to={product.proofTool.route}>
-                Open product
+              <Link className="sm-button-primary" to={rolloutLink(product.name)}>
+                Start this rollout
               </Link>
-              <Link className="sm-button-secondary" to={contactLink(product.name)}>
-                Start rollout
+              <Link className="sm-button-secondary" to={product.proofTool.route}>
+                Open live product
+              </Link>
+            </div>
+            <div className="mt-4">
+              <Link className="sm-link" to="/clients/yangon-tyre">
+                Need a larger client system around this? Read the case study.
               </Link>
             </div>
           </div>
 
           <article className="sm-pack-card overflow-hidden p-4">
-            <img
-              alt={`${product.name} live screenshot`}
-              className="aspect-[16/10] w-full rounded-2xl border border-white/10 bg-[#020612] object-cover object-top"
-              decoding="async"
-              height={screenshotSize.height}
-              loading="lazy"
-              src={product.image}
-              width={screenshotSize.width}
-            />
+            <LiveProductPreview variant={previewVariantForStarterProduct(product.id)} />
             <div className="mt-4 grid gap-3 md:grid-cols-2">
               <article className="sm-chip">
                 <p className="sm-kicker text-[var(--sm-accent)]">Starts with</p>
@@ -300,30 +378,19 @@ export function ProductDetailPage() {
             <p className="sm-kicker text-[var(--sm-accent)]">Add next</p>
             <h2 className="mt-3 text-3xl font-bold text-white lg:text-4xl">Use the same portal for another workflow.</h2>
           </div>
-          <Link className="sm-button-secondary" to="/products">
+          <Link className="sm-link" to="/products">
             View all products
           </Link>
         </div>
         <div className="mt-6 grid gap-4 lg:grid-cols-2">
           {siblingProducts.map((item: StarterPackDetail) => (
             <article className="sm-pack-card overflow-hidden p-4 text-white" key={item.id}>
-              <img
-                alt={`${item.name} live screenshot`}
-                className="aspect-[16/10] w-full rounded-2xl border border-white/10 bg-[#020612] object-cover object-top"
-                decoding="async"
-                height={screenshotSize.height}
-                loading="lazy"
-                src={item.image}
-                width={screenshotSize.width}
-              />
+              <LiveProductPreview compact variant={previewVariantForStarterProduct(item.id)} />
               <p className="mt-4 text-xl font-semibold">{item.name}</p>
               <p className="mt-3 text-sm leading-relaxed text-[var(--sm-muted)]">{item.promise}</p>
-              <div className="mt-5 flex flex-wrap gap-3">
+              <div className="mt-5">
                 <Link className="sm-button-primary" to={`/products/${item.slug}`}>
-                  See product
-                </Link>
-                <Link className="sm-link" to={contactLink(item.name)}>
-                  Start rollout
+                  View product
                 </Link>
               </div>
             </article>

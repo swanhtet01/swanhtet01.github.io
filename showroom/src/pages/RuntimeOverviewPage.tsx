@@ -2,8 +2,11 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import { PageIntro } from '../components/PageIntro'
+import { SUPERMEGA_AUTONOMOUS_CLOUD_MODEL } from '../lib/autonomousCloudOperatingModel'
 import { getSeedRuntimeControlDataset, loadRuntimeControlDataset, type RuntimeControlDataset } from '../lib/runtimeControlApi'
 import { type RuntimeHealthStatus } from '../lib/runtimeControlModel'
+import { YANGON_TYRE_DATA_PROFILE } from '../lib/yangonTyreDataProfile'
+import { YANGON_TYRE_CONNECTOR_EXPANSION, YANGON_TYRE_SOURCE_PACKS } from '../lib/yangonTyreDriveModel'
 
 type AttentionItem = {
   id: string
@@ -32,8 +35,20 @@ const tenantLabels = {
   shared: 'Shared runtime',
 } as const
 
+function rolloutTone(value: string) {
+  const normalized = String(value || '').trim().toLowerCase()
+  if (normalized === 'live') {
+    return 'text-emerald-300'
+  }
+  if (normalized === 'mapped' || normalized === 'queued') {
+    return 'text-amber-300'
+  }
+  return 'text-white/70'
+}
+
 export function RuntimeOverviewPage() {
   const [dataset, setDataset] = useState<RuntimeControlDataset>(getSeedRuntimeControlDataset())
+  const autonomyModel = SUPERMEGA_AUTONOMOUS_CLOUD_MODEL
 
   useEffect(() => {
     let cancelled = false
@@ -121,6 +136,9 @@ export function RuntimeOverviewPage() {
       activeIssues,
     }
   })
+  const liveSourceCount = YANGON_TYRE_SOURCE_PACKS.filter((item) => item.status === 'live').length
+  const pendingSourceCount = YANGON_TYRE_SOURCE_PACKS.filter((item) => item.status !== 'live').length
+  const queuedConnectorCount = YANGON_TYRE_CONNECTOR_EXPANSION.filter((item) => item.status === 'queued').length
 
   return (
     <div className="space-y-10 pb-12">
@@ -129,6 +147,62 @@ export function RuntimeOverviewPage() {
         title="One dashboard for feeds, memory, autonomy, and guardrails."
         description="Track whether the AI-native runtime is healthy enough to trust. This desk brings connector freshness, canon quality, autonomous loops, and policy posture into one control surface."
       />
+
+      {dataset.source === 'live' &&
+      dataset.tenantState.status !== 'matched' &&
+      dataset.tenantState.status !== 'parallel' ? (
+        <section className="sm-surface p-6">
+          <p className="sm-kicker text-[var(--sm-accent-alt)]">Tenant state</p>
+          <h2 className="mt-2 text-2xl font-bold text-white">Runtime alignment needs attention before this workspace can trust live control data.</h2>
+          <p className="mt-3 max-w-3xl text-sm leading-relaxed text-[var(--sm-muted)]">{dataset.tenantState.detail}</p>
+          <div className="mt-4 flex flex-wrap gap-3 text-sm text-[var(--sm-muted)]">
+            <span className="sm-chip text-white">Expected: {dataset.tenantState.expectedTenantKey || 'unknown'}</span>
+            <span className="sm-chip text-white">Live state: {dataset.tenantState.currentStateTenantKey || 'not reported'}</span>
+            <span className="sm-chip text-white">Persisted manifest: {dataset.tenantState.persistedManifestTenantKey || 'not reported'}</span>
+            <span className="sm-chip text-white">Snapshot: {dataset.tenantState.snapshotTenantKey || 'not reported'}</span>
+          </div>
+        </section>
+      ) : null}
+
+      <section className="sm-site-panel">
+        <div className="grid gap-6 lg:grid-cols-[1.05fr_0.95fr]">
+          <article className="sm-surface p-6">
+            <p className="sm-kicker text-[var(--sm-accent)]">Big picture</p>
+            <h2 className="mt-3 text-3xl font-bold text-white lg:text-4xl">{dataset.bigPicture.thesis}</h2>
+            <div className="mt-6 space-y-3">
+              {dataset.bigPicture.currentTruth.map((item) => (
+                <div className="sm-site-point" key={item}>
+                  <span className="sm-site-point-dot" />
+                  <span>{item}</span>
+                </div>
+              ))}
+            </div>
+          </article>
+
+          <article className="sm-terminal p-6">
+            <p className="sm-kicker text-[var(--sm-accent-alt)]">Next builds</p>
+            <div className="mt-6 space-y-3">
+              {dataset.bigPicture.nextBuilds.map((item) => (
+                <p key={item}>{item}</p>
+              ))}
+            </div>
+            <div className="mt-6 flex flex-wrap gap-3">
+              <Link className="sm-button-primary" to="/app/data-fabric">
+                Open Data Fabric
+              </Link>
+              <Link className="sm-button-secondary" to="/app/cloud">
+                Open Cloud Ops
+              </Link>
+              <Link className="sm-button-secondary" to="/app/product-ops">
+                Open Product Ops
+              </Link>
+              <Link className="sm-button-secondary" to="/app/platform-admin">
+                Open Platform Admin
+              </Link>
+            </div>
+          </article>
+        </div>
+      </section>
 
       <section className="grid gap-4 md:grid-cols-5">
         <article className="sm-metric-card">
@@ -184,6 +258,169 @@ export function RuntimeOverviewPage() {
         </div>
       </section>
 
+      <section className="grid gap-6 xl:grid-cols-[1fr_1fr]">
+        <article className="sm-site-panel">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <p className="sm-kicker text-[var(--sm-accent)]">Cloud autonomy contract</p>
+              <h2 className="mt-3 text-3xl font-bold text-white lg:text-4xl">Runtime trust depends on the right model lane for the right kind of work.</h2>
+              <p className="mt-3 max-w-3xl text-sm leading-relaxed text-[var(--sm-muted)]">{autonomyModel.summary}</p>
+            </div>
+            <span className="sm-status-pill">{autonomyModel.modelLanes.length} model lanes</span>
+          </div>
+          <p className="mt-5 text-sm text-white/80">{autonomyModel.northStar}</p>
+          <div className="mt-6 grid gap-4">
+            {autonomyModel.modelLanes.map((lane) => (
+              <article className="sm-proof-card" key={lane.id}>
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="font-semibold text-white">{lane.name}</p>
+                    <p className="mt-2 text-sm text-[var(--sm-muted)]">{lane.mission}</p>
+                  </div>
+                  <Link className="sm-link" to={lane.route}>
+                    Open
+                  </Link>
+                </div>
+                <p className="mt-3 text-sm text-white/80">Placement: {lane.placement}</p>
+                <div className="mt-4 grid gap-3 md:grid-cols-2">
+                  <div className="sm-chip text-white">
+                    <p className="sm-kicker text-[var(--sm-accent)]">Workloads</p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {lane.workloads.map((item) => (
+                        <span className="sm-status-pill" key={`${lane.id}-workload-${item}`}>
+                          {item}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="sm-chip text-white">
+                    <p className="sm-kicker text-[var(--sm-accent-alt)]">Guardrails</p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {lane.guardrails.map((item) => (
+                        <span className="sm-status-pill" key={`${lane.id}-guardrail-${item}`}>
+                          {item}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </article>
+            ))}
+          </div>
+        </article>
+
+        <article className="sm-site-panel">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <p className="sm-kicker text-[var(--sm-accent-alt)]">Action lanes</p>
+              <h2 className="mt-3 text-3xl font-bold text-white lg:text-4xl">Queues, workflows, and crews should run in different lanes on purpose.</h2>
+            </div>
+            <span className="sm-status-pill">{autonomyModel.actionLanes.length} action lanes</span>
+          </div>
+          <div className="mt-6 grid gap-4">
+            {autonomyModel.actionLanes.map((lane) => (
+              <article className="sm-proof-card" key={lane.id}>
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="font-semibold text-white">{lane.name}</p>
+                    <p className="mt-2 text-sm text-[var(--sm-muted)]">{lane.mission}</p>
+                  </div>
+                  <Link className="sm-link" to={lane.route}>
+                    Open
+                  </Link>
+                </div>
+                <div className="mt-4 grid gap-3 md:grid-cols-2">
+                  <div className="sm-chip text-white">
+                    <p className="sm-kicker text-[var(--sm-accent)]">Execution plane</p>
+                    <p className="mt-2 text-sm">{lane.executionPlane}</p>
+                  </div>
+                  <div className="sm-chip text-white">
+                    <p className="sm-kicker text-[var(--sm-accent-alt)]">Queue class</p>
+                    <p className="mt-2 text-sm">{lane.queueClass}</p>
+                  </div>
+                </div>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {lane.defaultCrews.map((item) => (
+                    <span className="sm-status-pill" key={`${lane.id}-crew-${item}`}>
+                      {item}
+                    </span>
+                  ))}
+                </div>
+                <p className="mt-3 text-sm text-white/80">Triggers: {lane.triggers.join(', ')}</p>
+                <p className="mt-2 text-sm text-[var(--sm-muted)]">Outputs: {lane.outputs.join(', ')}</p>
+              </article>
+            ))}
+          </div>
+          <div className="mt-6 grid gap-3">
+            {autonomyModel.antifragilityRules.map((rule) => (
+              <article className="sm-chip text-white" key={rule.id}>
+                <p className="font-semibold">{rule.title}</p>
+                <p className="mt-2 text-sm text-[var(--sm-muted)]">{rule.detail}</p>
+              </article>
+            ))}
+          </div>
+        </article>
+      </section>
+
+      <section className="grid gap-6 xl:grid-cols-[1fr_1fr]">
+        <article className="sm-site-panel">
+          <div>
+            <p className="sm-kicker text-[var(--sm-accent)]">Yangon Tyre tenant spotlight</p>
+            <h2 className="mt-3 text-3xl font-bold text-white lg:text-4xl">Runtime health only matters if it protects the real factory and management loop.</h2>
+          </div>
+          <div className="mt-6 grid gap-3">
+            <article className="sm-proof-card">
+              <p className="font-semibold text-white">Operating goal</p>
+              <p className="mt-3 text-sm text-[var(--sm-muted)]">
+                The runtime should keep plant, quality, commercial, and leadership decisions attached to one evidence-bearing operating memory.
+              </p>
+            </article>
+            <article className="sm-proof-card">
+              <p className="font-semibold text-white">Current risk</p>
+              <p className="mt-3 text-sm text-[var(--sm-muted)]">
+                Trust breaks when {pendingSourceCount} source packs are still waiting for promotion, {queuedConnectorCount} connector tracks remain queued, and live
+                runtime issues still separate signal from action.
+              </p>
+            </article>
+            <article className="sm-proof-card">
+              <p className="font-semibold text-white">Control response</p>
+              <p className="mt-3 text-sm text-[var(--sm-muted)]">
+                The runtime desk becomes a leadership gate: it shows source readiness, connector posture, operational risk, and whether the tenant is safe to deepen
+                autonomy.
+              </p>
+            </article>
+          </div>
+        </article>
+
+        <article className="sm-site-panel">
+          <div>
+            <p className="sm-kicker text-[var(--sm-accent-alt)]">Factory and leadership signals</p>
+            <h2 className="mt-3 text-3xl font-bold text-white lg:text-4xl">Plant risk should be visible with the same clarity as runtime risk.</h2>
+          </div>
+          <div className="mt-6 grid gap-3 md:grid-cols-2">
+            <article className="sm-chip text-white">
+              <p className="sm-kicker text-[var(--sm-accent)]">2024 output</p>
+              <p className="mt-2 text-2xl font-bold">{YANGON_TYRE_DATA_PROFILE.annualBiasOutput2024.toLocaleString()}</p>
+              <p className="mt-2 text-sm text-[var(--sm-muted)]">Bias tyres used as the live operations baseline.</p>
+            </article>
+            <article className="sm-chip text-white">
+              <p className="sm-kicker text-[var(--sm-accent-alt)]">B+R rate</p>
+              <p className="mt-2 text-2xl font-bold">{YANGON_TYRE_DATA_PROFILE.annualBPlusRRate2024}%</p>
+              <p className="mt-2 text-sm text-[var(--sm-muted)]">Best month {YANGON_TYRE_DATA_PROFILE.bestMonth2024.month}; worst month {YANGON_TYRE_DATA_PROFILE.worstMonth2024.month}.</p>
+            </article>
+            <article className="sm-chip text-white">
+              <p className="sm-kicker text-[var(--sm-accent)]">Live source packs</p>
+              <p className="mt-2 text-2xl font-bold">{liveSourceCount}</p>
+              <p className="mt-2 text-sm text-[var(--sm-muted)]">{pendingSourceCount} still mapped or queued.</p>
+            </article>
+            <article className="sm-chip text-white">
+              <p className="sm-kicker text-[var(--sm-accent-alt)]">Top defects</p>
+              <p className="mt-2 text-sm text-[var(--sm-muted)]">{YANGON_TYRE_DATA_PROFILE.topDefects.slice(0, 4).join(', ')}</p>
+            </article>
+          </div>
+        </article>
+      </section>
+
       <section className="sm-site-panel">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
@@ -217,6 +454,46 @@ export function RuntimeOverviewPage() {
             </article>
           ))}
         </div>
+      </section>
+
+      <section className="grid gap-6 xl:grid-cols-[0.96fr_1.04fr]">
+        <article className="sm-site-panel">
+          <div>
+            <p className="sm-kicker text-[var(--sm-accent)]">Source readiness</p>
+            <h2 className="mt-3 text-3xl font-bold text-white lg:text-4xl">The runtime should know which Yangon Tyre evidence packs are already promotable.</h2>
+          </div>
+          <div className="mt-6 grid gap-3">
+            {YANGON_TYRE_SOURCE_PACKS.map((pack) => (
+              <article className="sm-proof-card" key={pack.id}>
+                <div className="flex items-center justify-between gap-3">
+                  <p className="font-semibold text-white">{pack.name}</p>
+                  <span className={`sm-status-pill ${rolloutTone(pack.status)}`}>{pack.status}</span>
+                </div>
+                <p className="mt-3 text-sm text-[var(--sm-muted)]">{pack.evidence}</p>
+                <p className="mt-2 text-sm text-white/80">Feeds: {pack.feedsApps.join(', ')}</p>
+              </article>
+            ))}
+          </div>
+        </article>
+
+        <article className="sm-site-panel">
+          <div>
+            <p className="sm-kicker text-[var(--sm-accent-alt)]">Channel expansion risk</p>
+            <h2 className="mt-3 text-3xl font-bold text-white lg:text-4xl">Every new channel changes the runtime burden and the operating promise.</h2>
+          </div>
+          <div className="mt-6 grid gap-3">
+            {YANGON_TYRE_CONNECTOR_EXPANSION.map((item) => (
+              <article className="sm-chip text-white" key={item.id}>
+                <div className="flex items-center justify-between gap-3">
+                  <p className="font-semibold">{item.name}</p>
+                  <span className={`sm-status-pill ${rolloutTone(item.status)}`}>{item.status}</span>
+                </div>
+                <p className="mt-2 text-sm text-[var(--sm-muted)]">{item.purpose}</p>
+                <p className="mt-2 text-sm text-white/80">Apps: {item.apps.join(', ')}</p>
+              </article>
+            ))}
+          </div>
+        </article>
       </section>
 
       <section className="grid gap-6 xl:grid-cols-[0.94fr_1.06fr]">

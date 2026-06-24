@@ -18,11 +18,10 @@ function Get-PreferredPythonExecutable {
 
     $oneDriveRoot = Split-Path -Parent (Split-Path -Parent $RepoRoot)
     $candidates = @(
-        (Join-Path $oneDriveRoot ".venv\Scripts\python.exe"),
         (Join-Path $RepoRoot ".venv\Scripts\python.exe"),
         (Join-Path $RepoRoot "venv\Scripts\python.exe"),
-        (Join-Path $RepoRoot "venv\bin\python"),
-        (Join-Path $RepoRoot ".venv-wsl\bin\python")
+        (Join-Path $env:USERPROFILE ".cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe"),
+        (Join-Path $oneDriveRoot ".venv\Scripts\python.exe")
     )
 
     foreach ($candidate in $candidates) {
@@ -34,6 +33,11 @@ function Get-PreferredPythonExecutable {
     $pythonCmd = Get-Command python -ErrorAction SilentlyContinue
     if ($pythonCmd -and $pythonCmd.Source -notmatch "WindowsApps\\python.exe$") {
         return $pythonCmd.Source
+    }
+
+    $pyCmd = Get-Command py -ErrorAction SilentlyContinue
+    if ($pyCmd) {
+        return $pyCmd.Source
     }
 
     return ""

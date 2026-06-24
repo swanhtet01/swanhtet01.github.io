@@ -1,0 +1,308 @@
+{
+  "resource_id": "yangon-tyre-workforce",
+  "tenant_key": "ytf-plant-a",
+  "title": "Yangon Tyre workforce",
+  "dialectic": {
+    "thesis": "Every Yangon Tyre role should open one home, enter evidence once, and get immediate operational value back.",
+    "antithesis": "If the portal behaves like extra reporting work, staff return to chat groups, side sheets, and memory.",
+    "synthesis": "The tenant workforce binds role homes, manager cadences, source packs, and bounded AI copilots into one daily operating system."
+  },
+  "manager_moves": [
+    "Treat the portal as the official review surface for plant, quality, commercial, and admin work.",
+    "Keep every AI suggestion attached to a role owner, source evidence, and review gate.",
+    "Use operational methods like 5W1H, fishbone, and gap analysis inside the same case record."
+  ],
+  "role_cells": [
+    {
+      "id": "director",
+      "role": "CEO and Director",
+      "home": "CEO Command Center",
+      "route": "/app/director",
+      "frequency": "daily",
+      "manager_cadence": "Daily executive review and weekly KPI reset",
+      "must_capture": ["priority reset", "cross-functional escalation", "decision note"],
+      "useful_outputs": ["director brief", "weekly risk summary", "priority changes"]
+    },
+    {
+      "id": "sales",
+      "role": "Sales lead",
+      "home": "Sales and Dealer Control",
+      "route": "/app/revenue",
+      "frequency": "daily",
+      "manager_cadence": "Daily follow-up review and weekly market check",
+      "must_capture": ["dealer follow-up", "quote status", "visit note"],
+      "useful_outputs": ["account memory", "follow-up queue", "market signal summary"]
+    },
+    {
+      "id": "plant",
+      "role": "Plant manager",
+      "home": "Plant Operations Control",
+      "route": "/app/operations",
+      "frequency": "shift and daily",
+      "manager_cadence": "Shift review and daily plant blocker review",
+      "must_capture": ["top blocker", "owner", "due date", "shift issue"],
+      "useful_outputs": ["plant blocker queue", "shift narrative", "cross-team action list"]
+    },
+    {
+      "id": "quality",
+      "role": "Quality manager",
+      "home": "DQMS and Quality Lab",
+      "route": "/app/dqms",
+      "frequency": "daily",
+      "manager_cadence": "Daily incident review and weekly CAPA closeout review",
+      "must_capture": ["incident evidence", "containment", "root cause", "CAPA status"],
+      "useful_outputs": ["quality queue", "fishbone prompt", "5W1H case frame"]
+    },
+    {
+      "id": "maintenance",
+      "role": "Maintenance lead",
+      "home": "Maintenance and Reliability",
+      "route": "/app/maintenance",
+      "frequency": "daily",
+      "manager_cadence": "Daily downtime review and weekly repeat-failure review",
+      "must_capture": ["failure mode", "downtime impact", "next action"],
+      "useful_outputs": ["repeat-failure ranking", "downtime summary", "PM follow-up"]
+    },
+    {
+      "id": "admin",
+      "role": "Admin",
+      "home": "Admin and Connector Control",
+      "route": "/app/platform-admin",
+      "frequency": "daily",
+      "manager_cadence": "Daily connector and role review",
+      "must_capture": ["role change", "connector issue", "policy decision"],
+      "useful_outputs": ["tenant posture", "connector action list", "access audit"]
+    }
+  ],
+  "workspaces": [
+    {
+      "id": "commercial-desk",
+      "name": "Commercial Desk",
+      "purpose": "Run dealer follow-up, market demand, and account memory from one place.",
+      "owners": ["Sales lead", "CEO"],
+      "surfaces": ["Revenue", "Approvals", "Action Queue"],
+      "review_cadence": "Daily follow-up review"
+    },
+    {
+      "id": "plant-command",
+      "name": "Plant Command",
+      "purpose": "Coordinate shift blockers, inbound issues, and daily operating review.",
+      "owners": ["Plant manager", "Receiving", "Procurement"],
+      "surfaces": ["Operations", "Receiving", "Approvals"],
+      "review_cadence": "Shift and daily plant review"
+    },
+    {
+      "id": "quality-lab",
+      "name": "Quality Lab",
+      "purpose": "Handle incidents, CAPA, evidence, and closeout discipline in one case flow.",
+      "owners": ["Quality manager", "Plant manager"],
+      "surfaces": ["DQMS", "Knowledge", "Action Queue"],
+      "review_cadence": "Daily quality review"
+    },
+    {
+      "id": "tenant-admin",
+      "name": "Tenant Admin",
+      "purpose": "Manage roles, connectors, domains, policies, and workforce posture.",
+      "owners": ["Admin"],
+      "surfaces": ["Platform Admin", "Connectors", "Cloud Ops"],
+      "review_cadence": "Daily control review"
+    }
+  ],
+  "instruction_packs": [
+    {
+      "id": "receiving-discipline-pack",
+      "name": "Receiving Discipline Pack",
+      "audience": "Plant and receiving teams",
+      "workspace": "plant-command",
+      "instructions": [
+        "Every inbound issue must retain the supplier, document, batch, and owner reference.",
+        "Use hold or release decisions only with attached evidence.",
+        "Escalate quantity variance or missing COA on the same day."
+      ],
+      "done_when": "Inbound variance and holds are visible by owner and due date."
+    },
+    {
+      "id": "quality-closeout-pack",
+      "name": "Quality Closeout Pack",
+      "audience": "Quality and plant teams",
+      "workspace": "quality-lab",
+      "instructions": [
+        "Containment, cause, and corrective action should live on the same incident record.",
+        "Use fishbone and 5W1H prompts to structure the closeout, not as separate side documents.",
+        "Do not close CAPA without evidence."
+      ],
+      "done_when": "Incidents move to evidence-backed closeout instead of email-only status."
+    },
+    {
+      "id": "commercial-followup-pack",
+      "name": "Commercial Follow-Up Pack",
+      "audience": "Sales and leadership",
+      "workspace": "commercial-desk",
+      "instructions": [
+        "Every dealer thread should resolve into one next action and due date.",
+        "Use the portal as the account memory instead of fragmented inbox recall.",
+        "Keep product demand signals tied to source evidence."
+      ],
+      "done_when": "Dealer follow-up and market movement are visible in one commercial queue."
+    },
+    {
+      "id": "admin-control-pack",
+      "name": "Admin Control Pack",
+      "audience": "Admin and leadership",
+      "workspace": "tenant-admin",
+      "instructions": [
+        "Keep role, domain, and connector changes auditable.",
+        "Promote raw data into canon only when provenance is visible.",
+        "Treat connector freshness drops as operating issues, not background noise."
+      ],
+      "done_when": "Access, connectors, and automation posture can be reviewed from one control layer."
+    }
+  ],
+  "seed_playbooks": [
+    {
+      "id": "commercial-memory",
+      "teamId": "commercial_pod",
+      "name": "Commercial Memory Pod",
+      "workspace": "ytf/commercial",
+      "leadRole": "Sales Lead",
+      "mission": "Turn email, visit notes, and market signals into a real account timeline and next move.",
+      "outputs": ["account summary", "follow-up prompt", "dealer timeline"],
+      "cadence": ["daily queue prep", "weekly account review"],
+      "tools": [
+        { "toolId": "gmail", "mode": "Review", "scope": "dealer follow-up and inbound demand" },
+        { "toolId": "google-calendar", "mode": "Review", "scope": "visit plan and meeting follow-up" },
+        { "toolId": "agent-ops", "mode": "Review", "scope": "queue and draft review" }
+      ],
+      "instructions": [
+        "Do not let dealer knowledge stay trapped in inbox search.",
+        "Prepare next actions, but keep external send decisions with sales.",
+        "Keep market movement tied to source evidence."
+      ],
+      "escalateWhen": [
+        "A major account has no next action owner.",
+        "Commercial commitments need price or leadership approval."
+      ],
+      "writePolicy": "Draft account updates and follow-up prompts are allowed; outbound send requires human review.",
+      "kpis": [
+        { "name": "open follow-up count", "target": "down week over week" },
+        { "name": "dealer response lag", "target": "same-day for high-priority accounts" }
+      ]
+    },
+    {
+      "id": "operations-reliability",
+      "teamId": "plant_ops_pod",
+      "name": "Operations Reliability Pod",
+      "workspace": "ytf/plant",
+      "leadRole": "Plant Manager",
+      "mission": "Keep blockers, handoffs, and shift issues visible by owner and due date.",
+      "outputs": ["blocker queue", "shift summary", "cross-team action pack"],
+      "cadence": ["shift review", "daily manager review"],
+      "tools": [
+        { "toolId": "runtime-desk", "mode": "Review", "scope": "workflow freshness and queued actions" },
+        { "toolId": "agent-ops", "mode": "Review", "scope": "task routing and operator drafts" },
+        { "toolId": "google-drive", "mode": "Read", "scope": "line logs and plant sheets" }
+      ],
+      "instructions": [
+        "Every blocker needs one owner and next move.",
+        "Treat cross-functional delays as operating issues, not status updates.",
+        "Push unresolved plant work into a shared queue instead of chat memory."
+      ],
+      "escalateWhen": [
+        "A blocker crosses shift boundaries without an owner.",
+        "A plant issue impacts release, quality, or major customer commitments."
+      ],
+      "writePolicy": "Task suggestions and queue prep are allowed; release-affecting updates require manager review.",
+      "kpis": [
+        { "name": "open blocker age", "target": "no critical blocker older than 24 hours" },
+        { "name": "shared-owner coverage", "target": "100 percent of open blockers have owners" }
+      ]
+    },
+    {
+      "id": "quality-watch",
+      "teamId": "quality_pod",
+      "name": "Quality Watch Pod",
+      "workspace": "ytf/quality",
+      "leadRole": "Quality Manager",
+      "mission": "Move incidents from report to containment, cause, and evidence-backed closeout.",
+      "outputs": ["incident summary", "root-cause prompt", "closeout checklist"],
+      "cadence": ["daily incident review", "weekly CAPA review"],
+      "tools": [
+        { "toolId": "knowledge-runtime", "mode": "Review", "scope": "evidence and SOP references" },
+        { "toolId": "google-drive", "mode": "Read", "scope": "quality evidence and sheets" },
+        { "toolId": "agent-ops", "mode": "Review", "scope": "incident and CAPA job review" }
+      ],
+      "instructions": [
+        "Keep containment, root cause, and CAPA on the same case record.",
+        "Use fishbone and 5W1H to structure the investigation, not as detached documents.",
+        "Do not close incidents without evidence."
+      ],
+      "escalateWhen": [
+        "A high-severity incident lacks containment or evidence.",
+        "Repeat defects cross the agreed tolerance."
+      ],
+      "writePolicy": "Case summaries and draft actions are allowed; incident closure needs quality approval.",
+      "kpis": [
+        { "name": "open CAPA age", "target": "high-severity CAPA closed within 7 days" },
+        { "name": "evidence-attached closeout", "target": "100 percent for closed incidents" }
+      ]
+    },
+    {
+      "id": "maintenance-reliability",
+      "teamId": "maintenance_pod",
+      "name": "Maintenance Reliability Pod",
+      "workspace": "ytf/reliability",
+      "leadRole": "Maintenance Lead",
+      "mission": "Turn downtime and repeat failures into ranked interventions and accountable actions.",
+      "outputs": ["repeat-failure ranking", "downtime note", "draft intervention plan"],
+      "cadence": ["daily downtime review", "weekly repeat-failure review"],
+      "tools": [
+        { "toolId": "google-drive", "mode": "Read", "scope": "maintenance sheets and downtime logs" },
+        { "toolId": "agent-ops", "mode": "Review", "scope": "reliability queue review" },
+        { "toolId": "runtime-desk", "mode": "Review", "scope": "job cadence and failure watch" }
+      ],
+      "instructions": [
+        "Keep downtime tied to machine, failure mode, and operator impact.",
+        "Rank repeat failures before proposing new work.",
+        "Use the same queue as operations when the issue crosses functions."
+      ],
+      "escalateWhen": [
+        "A repeat failure keeps returning without a closed countermeasure.",
+        "Downtime pressure affects customer commitments or release."
+      ],
+      "writePolicy": "Draft reliability summaries are allowed; maintenance interventions require manager review.",
+      "kpis": [
+        { "name": "repeat failure count", "target": "down month over month" },
+        { "name": "downtime escalation lag", "target": "same-shift for critical failures" }
+      ]
+    },
+    {
+      "id": "executive-brief",
+      "teamId": "executive_pod",
+      "name": "Executive Brief Pod",
+      "workspace": "ytf/executive",
+      "leadRole": "CEO",
+      "mission": "Synthesize risk, KPI gap, and intervention candidates for leadership.",
+      "outputs": ["director brief", "gap analysis", "priority reset suggestion"],
+      "cadence": ["daily brief", "weekly KPI reset"],
+      "tools": [
+        { "toolId": "knowledge-runtime", "mode": "Review", "scope": "cross-functional evidence and summaries" },
+        { "toolId": "agent-ops", "mode": "Review", "scope": "queued brief jobs and outputs" },
+        { "toolId": "runtime-desk", "mode": "Review", "scope": "freshness and loop posture" }
+      ],
+      "instructions": [
+        "Leadership summaries must stay linked to source records, owner, and due date.",
+        "Favor intervention candidates over generic reporting.",
+        "Show cross-functional tension clearly when quality, plant, and commercial signals conflict."
+      ],
+      "escalateWhen": [
+        "A critical risk has no owner or next move.",
+        "The same blocker appears across several teams."
+      ],
+      "writePolicy": "Briefs and draft priorities are allowed; final strategic decisions remain human-owned.",
+      "kpis": [
+        { "name": "critical risk visibility", "target": "all critical risks visible in the daily brief" },
+        { "name": "priority reset cycle", "target": "weekly without missing source evidence" }
+      ]
+    }
+  ]
+}

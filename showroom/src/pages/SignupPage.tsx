@@ -2,7 +2,15 @@ import { useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 
 import { PageIntro } from '../components/PageIntro'
-import { appHref, needsLiveAppHandoff, publicShellOnly, workspaceAppBase, workspaceFetch } from '../lib/workspaceApi'
+import {
+  appHref,
+  needsLiveAppHandoff,
+  publicShellOnly,
+  savePublicWorkspaceProfile,
+  saveWorkspaceOnboardingDraft,
+  workspaceAppBase,
+  workspaceFetch,
+} from '../lib/workspaceApi'
 import { getTenantBrandLabel, getTenantConfig, getTenantLabel } from '../lib/tenantConfig'
 
 type SignupPayload = {
@@ -10,9 +18,24 @@ type SignupPayload = {
   email: string
   company: string
   password: string
+  packageName: string
+  team: string
+  systems: string
   goal: string
   workspace_slug: string
 }
+
+const packageOptions = [
+  'Revenue System Package',
+  'Operations Control Package',
+  'Industrial Quality Package',
+  'Portal Network Package',
+  'Find Clients',
+  'Company List',
+  'Receiving Control',
+] as const
+
+const teamOptions = ['Sales', 'Operations', 'Procurement', 'Quality', 'Maintenance', 'Leadership', 'Admin'] as const
 
 export function SignupPage() {
   const navigate = useNavigate()
@@ -24,6 +47,9 @@ export function SignupPage() {
     email: '',
     company: tenant.defaultCompany ?? '',
     password: '',
+    packageName: isClientTenant ? 'Portal Network Package' : 'Revenue System Package',
+    team: isClientTenant ? 'Operations' : 'Sales',
+    systems: '',
     goal: '',
     workspace_slug: tenant.defaultWorkspaceSlug ?? '',
   })
@@ -44,13 +70,38 @@ export function SignupPage() {
         generated_password?: string
       }>('/api/auth/signup', {
         method: 'POST',
-        body: JSON.stringify(form),
+        body: JSON.stringify({
+          name: form.name,
+          email: form.email,
+          company: form.company,
+          password: form.password,
+          package_name: form.packageName,
+          first_team: form.team,
+          current_systems: form.systems
+            .split(',')
+            .map((item) => item.trim())
+            .filter(Boolean),
+          goal: form.goal,
+          workspace_slug: form.workspace_slug,
+        }),
+      })
+      savePublicWorkspaceProfile({ name: form.name, email: form.email, company: form.company })
+      saveWorkspaceOnboardingDraft({
+        company: form.company,
+        packageName: form.packageName,
+        team: form.team,
+        systems: form.systems
+          .split(',')
+          .map((item) => item.trim())
+          .filter(Boolean),
+        goal: form.goal,
+        workspaceSlug: form.workspace_slug,
       })
       if (payload.generated_password) {
         setMessage(`Workspace created. Generated password: ${payload.generated_password}`)
       }
       if (payload.authenticated) {
-        navigate('/app', { replace: true })
+        navigate('/app/onboarding?welcome=1', { replace: true })
         return
       }
       setError('Signup did not finish.')
@@ -92,7 +143,7 @@ export function SignupPage() {
                 {isClientTenant ? 'Open receiving queue' : 'Open Find Clients'}
               </Link>
               <Link className="sm-button-secondary" to="/contact">
-                Start rollout
+                Request rollout
               </Link>
             </div>
           </section>
@@ -127,7 +178,7 @@ export function SignupPage() {
           <aside className="sm-terminal p-6">
             <p className="sm-kicker text-[var(--sm-accent)]">What you get</p>
             <div className="mt-5 grid gap-3">
-              {['Queues and approvals', 'Director review', 'Agent operations', 'History and audit'].map((item) => (
+              {['Workspace onboarding', 'Queues and approvals', 'Connector setup', 'History and audit'].map((item) => (
                 <div className="sm-chip text-white" key={item}>
                   {item}
                 </div>
@@ -155,9 +206,39 @@ export function SignupPage() {
                 <input
                   className="sm-input"
                   onChange={(event) => setForm((prev) => ({ ...prev, password: event.target.value }))}
-                  placeholder="Leave blank to auto-generate"
+                  placeholder="Choose a strong password"
+                  required
                   type="password"
                   value={form.password}
+                />
+              </label>
+              <label className="grid gap-2 text-sm font-semibold text-[var(--sm-muted)]">
+                First package
+                <select className="sm-input" onChange={(event) => setForm((prev) => ({ ...prev, packageName: event.target.value }))} value={form.packageName}>
+                  {packageOptions.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="grid gap-2 text-sm font-semibold text-[var(--sm-muted)]">
+                First team
+                <select className="sm-input" onChange={(event) => setForm((prev) => ({ ...prev, team: event.target.value }))} value={form.team}>
+                  {teamOptions.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="grid gap-2 text-sm font-semibold text-[var(--sm-muted)]">
+                Current systems
+                <input
+                  className="sm-input"
+                  onChange={(event) => setForm((prev) => ({ ...prev, systems: event.target.value }))}
+                  placeholder="Gmail, Google Drive, ERP export, CSV"
+                  value={form.systems}
                 />
               </label>
               <label className="grid gap-2 text-sm font-semibold text-[var(--sm-muted)]">
@@ -175,6 +256,9 @@ export function SignupPage() {
               <button className="sm-button-primary" disabled={busy} type="submit">
                 {busy ? 'Creating...' : 'Create workspace'}
               </button>
+              <Link className="sm-button-secondary" to="/contact">
+                Request rollout
+              </Link>
               <Link className="sm-button-secondary" to="/login">
                 Open workspace
               </Link>

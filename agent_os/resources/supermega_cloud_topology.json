@@ -1,0 +1,46 @@
+{
+  "resource_id": "supermega-cloud-topology",
+  "root_domain": "supermega.dev",
+  "shared_app_host": "app.supermega.dev",
+  "deployment_units": [
+    {
+      "hostname": "supermega.dev",
+      "workspace_slug": "supermega-lab",
+      "name": "Public platform site",
+      "scope": "public_site",
+      "provider": "vercel",
+      "runtime_target": "public_site",
+      "route_root": "/",
+      "desired_state": "live",
+      "proof_paths": ["/", "/products", "/contact"],
+      "summary": "Public marketing, product catalog, and rollout entry.",
+      "managed_by": ["Cloud Ops", "Platform Admin"]
+    },
+    {
+      "hostname": "app.supermega.dev",
+      "workspace_slug": "supermega-lab",
+      "name": "Shared app host",
+      "scope": "shared_app",
+      "provider": "vercel",
+      "runtime_target": "shared_app",
+      "route_root": "/app",
+      "desired_state": "live",
+      "proof_paths": ["/login", "/app", "/app/cloud"],
+      "summary": "Shared authenticated host for the control plane and internal workspaces.",
+      "managed_by": ["Cloud Ops", "Platform Admin", "Agent Ops"]
+    },
+    {
+      "hostname": "ytf.supermega.dev",
+      "workspace_slug": "ytf-plant-a",
+      "name": "Yangon Tyre portal",
+      "scope": "tenant_portal",
+      "provider": "vercel",
+      "runtime_target": "tenant_portal",
+      "route_root": "/app",
+      "desired_state": "pilot",
+      "proof_paths": ["/app/portal", "/app/dqms", "/app/platform-admin"],
+      "summary": "First live tenant portal with sales, operations, DQMS, maintenance, and admin desks.",
+      "managed_by": ["Implementation Lead", "Tenant Admin", "Cloud Ops"]
+    }
+  ]
+}

@@ -17,3 +17,9 @@ __pycache__/
 *.pyc
 .venv-wsl/
 swan-intelligence-hub/
+.vercel
+.codex
+api-static/
+api-static-staging-*/
+tmp-*.html
+tmp-*.png

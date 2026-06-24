@@ -1,0 +1,13 @@
+export type LivePreviewVariant =
+  | 'portal'
+  | 'ytf-portal'
+  | 'founder-brief'
+  | 'sales-setup'
+  | 'service-desk'
+  | 'company-cleanup'
+  | 'receiving-control'
+  | 'industrial-dqms'
+  | 'knowledge-graph'
+  | 'agent-runtime'
+  | 'tenant-control'
+  | 'data-science'

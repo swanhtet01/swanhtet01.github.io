@@ -46,6 +46,8 @@ export function SecurityControlPage() {
   const platformModel = getOperatingModelById('supermega-core')
   const tenantModel = getOperatingModelById('yangon-tyre')
   const guardrails = runtimeData.policyGuardrails
+  const capabilityCells = runtimeData.agentCapabilityCells
+  const modelRoutingProfiles = runtimeData.modelRoutingProfiles
   const zoneSummaries = zoneOrder.map((zoneId) => {
     const zone = platformModel.securityZones.find((item) => item.id === zoneId)
     return {
@@ -57,6 +59,14 @@ export function SecurityControlPage() {
   const guardrailSummaries = guardrailOrder.map((status) => ({
     status,
     count: guardrails.filter((guardrail) => guardrail.status === status).length,
+  }))
+  const capabilitySummaries = guardrailOrder.map((status) => ({
+    status,
+    count: capabilityCells.filter((cell) => cell.status === status).length,
+  }))
+  const modelRoutingSummaries = guardrailOrder.map((status) => ({
+    status,
+    count: modelRoutingProfiles.filter((profile) => profile.status === status).length,
   }))
 
   return (
@@ -122,6 +132,107 @@ export function SecurityControlPage() {
             </div>
           </article>
         ))}
+      </section>
+
+      <section className="sm-site-panel">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <p className="sm-kicker text-[var(--sm-accent)]">Agent contract</p>
+            <h2 className="mt-2 text-3xl font-bold text-white">Every crew needs an explicit workspace, tool, data, and approval boundary.</h2>
+          </div>
+          <div className="flex flex-wrap gap-2 text-sm text-[var(--sm-muted)]">
+            {capabilitySummaries.map((summary) => (
+              <span key={summary.status} className="sm-chip text-white">
+                {summary.status}: {summary.count}
+              </span>
+            ))}
+          </div>
+        </div>
+        <div className="mt-6 grid gap-4 xl:grid-cols-2">
+          {capabilityCells.map((cell) => (
+            <article className="sm-demo-link sm-demo-link-card" key={cell.id}>
+              <div className="flex items-center justify-between gap-3">
+                <span className="sm-home-proof-label">{cell.workspace}</span>
+                <span className="sm-status-pill">{cell.status}</span>
+              </div>
+              <strong>{cell.name}</strong>
+              <p className="mt-2 text-sm text-white/80">{cell.mission}</p>
+              <div className="mt-3 space-y-2 text-sm text-[var(--sm-muted)]">
+                <p>Boundary: {cell.trustBoundary}</p>
+                <p>Approval gate: {cell.approvalGate}</p>
+                <p>Next move: {cell.nextMove}</p>
+              </div>
+              <div className="mt-3 grid gap-3 md:grid-cols-2">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.16em] text-white/60">Tool classes</p>
+                  <div className="mt-2 flex flex-wrap gap-2 text-xs uppercase tracking-[0.14em] text-white/70">
+                    {cell.toolClasses.map((item) => (
+                      <span key={`${cell.id}-tool-${item}`}>{item}</span>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <p className="text-xs uppercase tracking-[0.16em] text-white/60">Data sources</p>
+                  <div className="mt-2 flex flex-wrap gap-2 text-xs uppercase tracking-[0.14em] text-white/70">
+                    {cell.dataSources.map((item) => (
+                      <span key={`${cell.id}-source-${item}`}>{item}</span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              <div className="mt-3">
+                <p className="text-xs uppercase tracking-[0.16em] text-white/60">Allowed actions</p>
+                <p className="mt-2 text-sm text-white/80">{cell.allowedActions.join(', ')}</p>
+              </div>
+              <div className="mt-3">
+                <p className="text-xs uppercase tracking-[0.16em] text-white/60">Observability</p>
+                <p className="mt-2 text-sm text-white/80">{cell.observability.join(', ')}</p>
+              </div>
+              <p className="mt-3 text-sm text-white/80">Risks: {cell.risks.join(' ')}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section className="sm-site-panel">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <p className="sm-kicker text-[var(--sm-accent)]">Model routing</p>
+            <h2 className="mt-2 text-3xl font-bold text-white">Route planning, coding, crews, and extraction to different model lanes on purpose.</h2>
+          </div>
+          <div className="flex flex-wrap gap-2 text-sm text-[var(--sm-muted)]">
+            {modelRoutingSummaries.map((summary) => (
+              <span key={summary.status} className="sm-chip text-white">
+                {summary.status}: {summary.count}
+              </span>
+            ))}
+          </div>
+        </div>
+        <div className="mt-6 grid gap-4 xl:grid-cols-2">
+          {modelRoutingProfiles.map((profile) => (
+            <article className="sm-demo-link sm-demo-link-card" key={profile.id}>
+              <div className="flex items-center justify-between gap-3">
+                <span className="sm-home-proof-label">{profile.preferredModel}</span>
+                <span className="sm-status-pill">{profile.status}</span>
+              </div>
+              <strong>{profile.name}</strong>
+              <p className="mt-2 text-sm text-white/80">{profile.useCase}</p>
+              <div className="mt-3 space-y-2 text-sm text-[var(--sm-muted)]">
+                <p>Fallback: {profile.fallbackModel}</p>
+                <p>Reasoning: {profile.reasoning}</p>
+                <p>Next move: {profile.nextMove}</p>
+              </div>
+              <div className="mt-3">
+                <p className="text-xs uppercase tracking-[0.16em] text-white/60">Tools</p>
+                <p className="mt-2 text-sm text-white/80">{profile.tools.join(', ')}</p>
+              </div>
+              <div className="mt-3">
+                <p className="text-xs uppercase tracking-[0.16em] text-white/60">Safeguards</p>
+                <p className="mt-2 text-sm text-white/80">{profile.safeguards.join(', ')}</p>
+              </div>
+            </article>
+          ))}
+        </div>
       </section>
 
       <section className="sm-site-panel">

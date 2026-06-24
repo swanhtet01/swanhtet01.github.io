@@ -1,93 +1,94 @@
 import { Link } from 'react-router-dom'
 
+import { LiveProductPreview } from '../components/LiveProductPreview'
 import { PageIntro } from '../components/PageIntro'
+import { PUBLIC_PERSONAS, PUBLIC_SHOWCASE_TEMPLATES } from '../lib/goToMarketShowcase'
 import { STARTER_PACK_DETAILS, type StarterPackDetail } from '../lib/salesControl'
-import { SOFTWARE_MODULE_DETAILS, type SoftwareModuleDetail } from '../lib/softwareCatalog'
-import { YANGON_TYRE_MODEL } from '../lib/tenantOperatingModel'
 
-function contactLink(name: string) {
+function rolloutLink(name: string) {
   return `/contact?package=${encodeURIComponent(name)}`
 }
 
-const screenshotSize = {
-  width: 1440,
-  height: 1024,
-} as const
-
-const featuredTemplateIds = ['sales-system', 'operations-inbox', 'client-portal', 'industrial-dqms'] as const
-const featuredTemplates: SoftwareModuleDetail[] = SOFTWARE_MODULE_DETAILS.filter((item: SoftwareModuleDetail) =>
-  featuredTemplateIds.includes(item.id as (typeof featuredTemplateIds)[number]),
-)
-
-const templateImageMap: Record<string, string> = {
-  'sales-system': '/site/sales-desk.svg',
-  'operations-inbox': '/site/ops-desk.svg',
-  'client-portal': '/site/client-portal.svg',
-  'industrial-dqms': '/site/control-room.svg',
-}
-
 const caseStudyLanes = [
-  {
-    name: 'Sales workspace',
-    detail: 'Accounts, visit plans, follow-up, and commercial notes in one place.',
-  },
-  {
-    name: 'Operations workspace',
-    detail: 'Receiving, supplier issues, quality, maintenance, and inventory in one queue.',
-  },
-  {
-    name: 'Management workspace',
-    detail: 'Decision review, approvals, and company-wide oversight in one place.',
-  },
+  'Sales follow-up and account history in one place.',
+  'Operations, receiving, and quality issues in one place.',
+  'Leadership review without chasing updates across tools.',
 ] as const
 
-const rolloutIncludes = ['Role-based access', 'Imported current data', 'Approval steps', 'Audit history'] as const
+const supportedInputs = ['Gmail', 'Google Drive', 'Google Sheets', 'Google Calendar', 'CSV / Excel', 'ERP / CRM exports', 'Uploaded documents'] as const
 
 export function ProductsPage() {
+  const liveProductCount = STARTER_PACK_DETAILS.length
+
   return (
     <div className="space-y-10 pb-12">
       <PageIntro
         eyebrow="Products"
-        title="Live products first. Templates after that."
-        description="Start with one real workflow now, then expand it into a structured portal for sales, operations, clients, or management."
+        title="Choose the first product or package."
+        description="Start with one live product. Move into a fuller package only after the first team is using it every day."
       />
+
+      <section className="sm-site-panel">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <p className="sm-kicker text-[var(--sm-accent)]">Supported inputs</p>
+            <h2 className="mt-3 text-3xl font-bold text-white lg:text-4xl">Connect the current stack before replacing it.</h2>
+          </div>
+          <Link className="sm-link" to="/platform">
+            See how it works
+          </Link>
+        </div>
+        <div className="mt-6 flex flex-wrap gap-2">
+          {supportedInputs.map((item) => (
+            <span className="sm-status-pill" key={item}>
+              {item}
+            </span>
+          ))}
+        </div>
+      </section>
 
       <section className="space-y-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <p className="sm-kicker text-[var(--sm-accent)]">Live products</p>
-            <h2 className="mt-3 text-3xl font-bold text-white lg:text-4xl">These are real starting points, not placeholders.</h2>
+            <p className="sm-kicker text-[var(--sm-accent)]">Products</p>
+            <h2 className="mt-3 text-3xl font-bold text-white lg:text-4xl">{liveProductCount} live products are ready to review.</h2>
           </div>
           <p className="max-w-xl text-sm leading-relaxed text-[var(--sm-muted)] lg:text-base">
-            Use one of these when the team has one painful job that needs a working screen immediately.
+            Pick the closest fit, review the product page, and start the rollout.
           </p>
         </div>
-        <div className="grid gap-6 xl:grid-cols-3">
+        <div className="grid gap-6 xl:grid-cols-2 2xl:grid-cols-4">
           {STARTER_PACK_DETAILS.map((product: StarterPackDetail) => (
             <article className="sm-pack-card overflow-hidden p-4 text-white" key={product.id}>
-              <img
-                alt={`${product.name} live screenshot`}
-                className="aspect-[16/10] w-full rounded-2xl border border-white/10 bg-[#020612] object-cover object-top"
-                decoding="async"
-                height={screenshotSize.height}
-                loading="lazy"
-                src={product.image}
-                width={screenshotSize.width}
-              />
+              <div className="overflow-hidden rounded-[1.15rem] border border-white/10 bg-[#040b16]">
+                <img alt={`${product.name} screenshot`} className="h-auto w-full object-cover object-top" loading="lazy" src={product.image} />
+              </div>
               <div className="mt-4 flex items-center justify-between gap-3">
-                <p className="sm-kicker text-[var(--sm-accent)]">Live now</p>
-                <span className="sm-status-pill">{product.audience}</span>
+                <p className="sm-kicker text-[var(--sm-accent)]">Live product</p>
+                <span className="sm-status-pill">Shipping now</span>
               </div>
               <p className="mt-4 text-2xl font-semibold text-white">{product.name}</p>
               <p className="mt-3 text-sm leading-relaxed text-[var(--sm-muted)]">{product.promise}</p>
-              <p className="mt-4 text-sm text-white/80">Inputs: {product.integrations.slice(0, 4).join(' · ')}</p>
-              <p className="mt-2 text-sm text-white/80">Includes: {product.starterModules.join(' + ')}</p>
+              <div className="mt-5 grid gap-3">
+                <article className="sm-chip text-white">
+                  <p className="sm-kicker text-[var(--sm-accent)]">Best for</p>
+                  <p className="mt-2 text-sm text-[var(--sm-muted)]">{product.audience}</p>
+                </article>
+                <article className="sm-chip text-white">
+                  <p className="sm-kicker text-[var(--sm-accent-alt)]">Connects to</p>
+                  <p className="mt-2 text-sm text-[var(--sm-muted)]">{product.integrations.slice(0, 3).join(', ')}</p>
+                </article>
+                <article className="sm-chip text-white">
+                  <p className="sm-kicker text-[var(--sm-accent)]">First result</p>
+                  <p className="mt-2 text-sm text-[var(--sm-muted)]">{product.problemsSolved[0]}</p>
+                </article>
+              </div>
               <div className="mt-5 flex flex-wrap gap-3">
                 <Link className="sm-button-primary" to={`/products/${product.slug}`}>
-                  See product
+                  Review product
                 </Link>
-                <Link className="sm-link" to={contactLink(product.name)}>
-                  Start rollout
+                <Link className="sm-button-secondary" to={rolloutLink(product.name)}>
+                  Request rollout
                 </Link>
               </div>
             </article>
@@ -98,40 +99,59 @@ export function ProductsPage() {
       <section className="sm-site-panel">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <p className="sm-kicker text-[var(--sm-accent)]">Portal templates</p>
-            <h2 className="mt-3 text-3xl font-bold text-white lg:text-4xl">These templates turn one product into a fuller customer system.</h2>
+            <p className="sm-kicker text-[var(--sm-accent)]">Rollout packages</p>
+            <h2 className="mt-3 text-3xl font-bold text-white lg:text-4xl">These are the four main packages we sell.</h2>
           </div>
           <p className="max-w-xl text-sm leading-relaxed text-[var(--sm-muted)] lg:text-base">
-            Use these when the client needs more roles, more screens, or a branded portal around the first workflow.
+            Match the buyer to the right package, then launch the first module before expanding the rest.
           </p>
         </div>
 
         <div className="mt-6 grid gap-6 xl:grid-cols-2">
-          {featuredTemplates.map((template) => (
-            <article className="sm-pack-card overflow-hidden p-4 text-white" key={template.id}>
-              <img
-                alt={`${template.name} template preview`}
-                className="aspect-[16/10] w-full rounded-2xl border border-white/10 bg-[#020612] object-cover object-center"
-                decoding="async"
-                height={screenshotSize.height}
-                loading="lazy"
-                src={templateImageMap[template.id]}
-                width={screenshotSize.width}
-              />
-              <div className="flex items-center justify-between gap-3">
-                <span className="sm-home-proof-label">Template</span>
-                <span className="sm-status-pill">{template.status}</span>
+          {PUBLIC_SHOWCASE_TEMPLATES.map((template) => (
+            <article className="sm-proof-card" key={template.id}>
+              <div className="mb-5 overflow-hidden rounded-[1.4rem] border border-white/10 bg-[#040b16]">
+                <img alt={`${template.name} showcase`} className="h-auto w-full object-cover object-top" loading="lazy" src={template.image} />
               </div>
-              <p className="mt-4 text-xl font-semibold text-white">{template.name}</p>
-              <p className="mt-3 text-sm leading-relaxed text-[var(--sm-muted)]">{template.promise}</p>
-              <p className="mt-4 text-sm text-white/80">Used by: {template.audience}</p>
-              <p className="mt-2 text-sm text-white/80">Screens: {template.surfaces.slice(0, 3).join(' · ')}</p>
+              <div className="flex items-center justify-between gap-3">
+                <span className="sm-home-proof-label">Template rollout</span>
+                <span className="sm-status-pill">Ready to launch</span>
+              </div>
+              <h3 className="mt-4 text-2xl font-semibold text-white">{template.name}</h3>
+              <p className="mt-2 text-sm text-white/80">{template.strap}</p>
+              <div className="mt-5 grid gap-3 md:grid-cols-2">
+                <article className="sm-chip text-white">
+                  <p className="sm-kicker text-[var(--sm-accent)]">Best for</p>
+                  <p className="mt-2 text-sm text-[var(--sm-muted)]">{template.audience}</p>
+                </article>
+                <article className="sm-chip text-white">
+                  <p className="sm-kicker text-[var(--sm-accent-alt)]">Current stack</p>
+                  <p className="mt-2 text-sm text-[var(--sm-muted)]">{template.currentStack}</p>
+                </article>
+              </div>
+              <div className="mt-4 grid gap-3">
+                <article className="sm-chip text-white">
+                  <p className="sm-kicker text-[var(--sm-accent)]">Launch first</p>
+                  <p className="mt-2 text-sm text-[var(--sm-muted)]">{template.firstLaunch}</p>
+                </article>
+                <article className="sm-chip text-white">
+                  <p className="sm-kicker text-[var(--sm-accent-alt)]">Then expand</p>
+                  <p className="mt-2 text-sm text-[var(--sm-muted)]">{template.expandsTo}</p>
+                </article>
+              </div>
+              <div className="mt-4 flex flex-wrap gap-2">
+                {template.modules.map((item) => (
+                  <div className="sm-chip text-white" key={item}>
+                    {item}
+                  </div>
+                ))}
+              </div>
               <div className="mt-5 flex flex-wrap gap-3">
-                <Link className="sm-button-primary" to={`/products/${template.id}`}>
-                  See template
+                <Link className="sm-button-primary" to={template.route}>
+                  Review package
                 </Link>
-                <Link className="sm-link" to={contactLink(template.name)}>
-                  Start rollout
+                <Link className="sm-button-secondary" to={rolloutLink(template.packageName)}>
+                  Request rollout
                 </Link>
               </div>
             </article>
@@ -139,59 +159,71 @@ export function ProductsPage() {
         </div>
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-[1.02fr_0.98fr]">
-        <article className="sm-site-panel">
-          <p className="sm-kicker text-[var(--sm-accent)]">What every rollout includes</p>
-          <h2 className="mt-3 text-3xl font-bold text-white lg:text-4xl">The customer system is structured from the start.</h2>
-          <div className="mt-6 grid gap-3 sm:grid-cols-2">
-            {rolloutIncludes.map((item) => (
-              <article className="sm-chip text-white" key={item}>
-                <p className="font-semibold">{item}</p>
-              </article>
-            ))}
+      <section className="sm-site-panel">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <p className="sm-kicker text-[var(--sm-accent-alt)]">Buyer fit</p>
+            <h2 className="mt-3 text-3xl font-bold text-white lg:text-4xl">These are the clearest buyer types right now.</h2>
           </div>
-        </article>
-
-        <article className="sm-site-panel">
-          <p className="sm-kicker text-[var(--sm-accent-alt)]">Case study</p>
-          <h2 className="mt-3 text-3xl font-bold text-white lg:text-4xl">Yangon Tyre is the first named client portal.</h2>
-          <p className="mt-4 max-w-2xl text-sm leading-relaxed text-[var(--sm-muted)]">
-            One client portal combines {YANGON_TYRE_MODEL.modules.length} modules, {YANGON_TYRE_MODEL.roles.length} roles, and{' '}
-            {YANGON_TYRE_MODEL.connectors.length} connectors.
-          </p>
-          <div className="mt-6 space-y-3">
-            {caseStudyLanes.map((lane) => (
-              <div className="sm-site-point" key={lane.name}>
-                <span className="sm-site-point-dot" />
-                <span>
-                  <strong>{lane.name}:</strong> {lane.detail}
-                </span>
+          <Link className="sm-link" to="/contact">
+            Tell us your current stack
+          </Link>
+        </div>
+        <div className="mt-6 grid gap-4 xl:grid-cols-2">
+          {PUBLIC_PERSONAS.map((persona) => (
+            <article className="sm-proof-card" key={persona.id}>
+              <p className="sm-kicker text-[var(--sm-accent)]">{persona.name}</p>
+              <h3 className="mt-3 text-2xl font-semibold text-white">{persona.role}</h3>
+              <p className="mt-3 text-sm leading-relaxed text-[var(--sm-muted)]">{persona.pain}</p>
+              <div className="mt-4 grid gap-3 md:grid-cols-2">
+                <article className="sm-chip text-white">
+                  <p className="sm-kicker text-[var(--sm-accent)]">Current stack</p>
+                  <p className="mt-2 text-sm text-[var(--sm-muted)]">{persona.stack}</p>
+                </article>
+                <article className="sm-chip text-white">
+                  <p className="sm-kicker text-[var(--sm-accent-alt)]">Start with</p>
+                  <p className="mt-2 text-sm text-[var(--sm-muted)]">{persona.firstLaunch}</p>
+                </article>
               </div>
-            ))}
-          </div>
-          <div className="mt-6 flex flex-wrap gap-3">
-            <Link className="sm-button-primary" to="/clients/yangon-tyre">
-              Read case study
-            </Link>
-            <Link className="sm-button-secondary" to="/contact">
-              Start similar rollout
-            </Link>
-          </div>
-        </article>
+              <p className="mt-4 text-sm text-white/80">Expands to: {persona.expandsTo}</p>
+              <div className="mt-5">
+                <Link className="sm-link" to={persona.route}>
+                  Review package
+                </Link>
+              </div>
+            </article>
+          ))}
+        </div>
       </section>
 
-      <section className="sm-site-final">
-        <div>
-          <p className="sm-kicker text-[var(--sm-accent)]">Next step</p>
-          <h2 className="mt-3 text-3xl font-bold text-white lg:text-5xl">Pick the first product or ask for a customer rollout.</h2>
-        </div>
-        <div className="flex flex-wrap gap-3">
-          <Link className="sm-button-primary" to="/contact">
-            Start rollout
-          </Link>
-          <Link className="sm-button-secondary" to="/clients/yangon-tyre">
-            Read case study
-          </Link>
+      <section className="sm-site-panel">
+        <p className="sm-kicker text-[var(--sm-accent-alt)]">Case study</p>
+        <div className="mt-3 grid gap-6 lg:grid-cols-[1.02fr_0.98fr] lg:items-center">
+          <div>
+            <h2 className="text-3xl font-bold text-white lg:text-4xl">Yangon Tyre shows what the full system looks like.</h2>
+            <p className="mt-4 max-w-2xl text-sm leading-relaxed text-[var(--sm-muted)]">
+              One role-based portal brings sales, operations, quality, maintenance, and leadership into the same working system.
+            </p>
+            <div className="mt-6 grid gap-3 md:grid-cols-3">
+              {caseStudyLanes.map((item) => (
+                <article className="sm-chip text-white" key={item}>
+                  <p className="text-sm leading-relaxed">{item}</p>
+                </article>
+              ))}
+            </div>
+            <div className="mt-6 flex flex-wrap gap-3">
+              <Link className="sm-button-primary" to="/clients/yangon-tyre">
+                Read case study
+              </Link>
+              <Link className="sm-button-secondary" to={rolloutLink('Yangon Tyre portal')}>
+                Request rollout
+              </Link>
+            </div>
+          </div>
+          <div className="sm-home-showcase-stack">
+            <LiveProductPreview variant="ytf-portal" />
+            <LiveProductPreview compact variant="tenant-control" />
+          </div>
         </div>
       </section>
     </div>

@@ -6,6 +6,12 @@ export type RuntimeConnectorFeed = {
   tenant: 'core' | 'yangon-tyre'
   system: 'Gmail' | 'Google Drive' | 'ERP Export' | 'GitHub' | 'Markdown Vault' | 'Human Entry'
   status: RuntimeHealthStatus
+  installState: 'Live' | 'Pilot' | 'Needs wiring'
+  credentialMode: string
+  cursorMode: string
+  lastSuccessAt: string
+  replayMode: string
+  blastRadius: string
   freshness: string
   owner: string
   workspace: string
@@ -15,6 +21,21 @@ export type RuntimeConnectorFeed = {
   writeBack: string
   nextAutomation: string
   risks: string[]
+}
+
+export type RuntimeConnectorEvent = {
+  id: string
+  connectorId: string
+  connectorName: string
+  tenant: 'core' | 'yangon-tyre'
+  source: string
+  kind: string
+  title: string
+  detail: string
+  route: string
+  severity: string
+  actor: string
+  createdAt: string | null
 }
 
 export type KnowledgeCollection = {
@@ -61,6 +82,36 @@ export type AutonomyRuntimeLoop = {
   risks: string[]
 }
 
+export type AgentCapabilityCell = {
+  id: string
+  name: string
+  tenant: 'core' | 'yangon-tyre'
+  status: RuntimeHealthStatus
+  workspace: string
+  mission: string
+  trustBoundary: string
+  toolClasses: string[]
+  dataSources: string[]
+  allowedActions: string[]
+  approvalGate: string
+  observability: string[]
+  nextMove: string
+  risks: string[]
+}
+
+export type ModelRoutingProfile = {
+  id: string
+  name: string
+  status: RuntimeHealthStatus
+  preferredModel: string
+  fallbackModel: string
+  reasoning: string
+  useCase: string
+  tools: string[]
+  safeguards: string[]
+  nextMove: string
+}
+
 export const RUNTIME_CONNECTOR_FEEDS: RuntimeConnectorFeed[] = [
   {
     id: 'ytf-sales-gmail',
@@ -68,6 +119,12 @@ export const RUNTIME_CONNECTOR_FEEDS: RuntimeConnectorFeed[] = [
     tenant: 'yangon-tyre',
     system: 'Gmail',
     status: 'Warning',
+    installState: 'Live',
+    credentialMode: 'OAuth mailbox access',
+    cursorMode: 'thread delta cursor',
+    lastSuccessAt: 'Within the last sync window',
+    replayMode: 'Task replay plus manager review',
+    blastRadius: 'Yangon Tyre commercial lane',
     freshness: '15 minutes behind mailbox state',
     owner: 'Connector Systems',
     workspace: 'ytf/commercial-memory',
@@ -84,6 +141,12 @@ export const RUNTIME_CONNECTOR_FEEDS: RuntimeConnectorFeed[] = [
     tenant: 'yangon-tyre',
     system: 'Gmail',
     status: 'Degraded',
+    installState: 'Pilot',
+    credentialMode: 'Mailbox access with manual review',
+    cursorMode: 'partial thread replay',
+    lastSuccessAt: 'Manual refresh on weekday review cycle',
+    replayMode: 'Manual recovery only',
+    blastRadius: 'Yangon Tyre supplier recovery lane',
     freshness: 'Manual refresh on weekday review cycle',
     owner: 'Connector Systems',
     workspace: 'ytf/supplier-recovery',
@@ -96,15 +159,21 @@ export const RUNTIME_CONNECTOR_FEEDS: RuntimeConnectorFeed[] = [
   },
   {
     id: 'ytf-drive-quality',
-    name: 'YTF Drive Quality and Receiving Folders',
+    name: 'YTF Drive DQMS and Receiving Folders',
     tenant: 'yangon-tyre',
     system: 'Google Drive',
     status: 'Warning',
+    installState: 'Live',
+    credentialMode: 'Drive service account index',
+    cursorMode: 'folder scan and revision polling',
+    lastSuccessAt: 'Hourly index refresh',
+    replayMode: 'Folder replay with reviewer tasking',
+    blastRadius: 'Yangon Tyre quality and receiving lane',
     freshness: 'Hourly index refresh',
     owner: 'Knowledge Systems',
     workspace: 'ytf/plant-quality',
-    inputs: ['receiving photos', 'inspection forms', 'quality closeout folders'],
-    outputs: ['document intake records', 'quality issue evidence', 'plant review bundles'],
+    inputs: ['receiving photos', 'inspection forms', 'DQMS folders'],
+    outputs: ['document intake records', 'DQMS evidence', 'plant review bundles'],
     backlog: '18 files indexed without canonical issue or batch linkage',
     writeBack: 'Folder tagging and review sheet updates',
     nextAutomation: 'Detect file revisions that change inspection status or supplier evidence completeness',
@@ -116,6 +185,12 @@ export const RUNTIME_CONNECTOR_FEEDS: RuntimeConnectorFeed[] = [
     tenant: 'yangon-tyre',
     system: 'ERP Export',
     status: 'Needs wiring',
+    installState: 'Needs wiring',
+    credentialMode: 'Manual export handoff',
+    cursorMode: 'daily snapshot diff planned',
+    lastSuccessAt: 'No native delta feed yet',
+    replayMode: 'Snapshot re-import only',
+    blastRadius: 'Yangon Tyre operations and finance lane',
     freshness: 'Daily manual export',
     owner: 'Tenant Launch Pod',
     workspace: 'ytf/ops-erp-core',
@@ -132,6 +207,12 @@ export const RUNTIME_CONNECTOR_FEEDS: RuntimeConnectorFeed[] = [
     tenant: 'yangon-tyre',
     system: 'Markdown Vault',
     status: 'Healthy',
+    installState: 'Live',
+    credentialMode: 'Controlled app and vault access',
+    cursorMode: 'append and note-save sync',
+    lastSuccessAt: 'Synced on note save',
+    replayMode: 'Append-only replay',
+    blastRadius: 'Yangon Tyre director and knowledge lane',
     freshness: 'Synced on note save',
     owner: 'Knowledge Systems',
     workspace: 'ytf/director-review',
@@ -143,11 +224,39 @@ export const RUNTIME_CONNECTOR_FEEDS: RuntimeConnectorFeed[] = [
     risks: ['Free-form notes still hide some numeric fields', 'Terminology differs by department'],
   },
   {
+    id: 'ytf-shopfloor-entry',
+    name: 'YTF Shopfloor and Manager Writeback',
+    tenant: 'yangon-tyre',
+    system: 'Human Entry',
+    status: 'Warning',
+    installState: 'Live',
+    credentialMode: 'Portal login and role-based writeback',
+    cursorMode: 'live record writes',
+    lastSuccessAt: 'Current app session and daily manager review',
+    replayMode: 'Record replay plus coaching loop',
+    blastRadius: 'Yangon Tyre writeback and queue lane',
+    freshness: 'Live app entry with daily manager review',
+    owner: 'Workforce Command',
+    workspace: 'ytf/shopfloor-writeback',
+    inputs: ['receiving desks', 'DQMS forms', 'maintenance records', 'metric intake', 'manager tasks'],
+    outputs: ['structured records', 'role-specific escalations', 'writeback coverage signals'],
+    backlog: 'Writeback is live, but stale-lane enforcement and coaching still depend on manual review.',
+    writeBack: 'Primary role-based writeback through the portal and guided desks',
+    nextAutomation: 'Open manager coaching and connector review work automatically when desks go stale or incomplete.',
+    risks: ['Usage discipline still varies by role and shift', 'Some supervisors still rely on chat or side notes before app entry lands'],
+  },
+  {
     id: 'core-github-build',
     name: 'SuperMega Build GitHub Feed',
     tenant: 'core',
     system: 'GitHub',
     status: 'Warning',
+    installState: 'Pilot',
+    credentialMode: 'Repository token and release read scope',
+    cursorMode: 'issue and release polling',
+    lastSuccessAt: 'Every 30 minutes',
+    replayMode: 'Release sync rerun',
+    blastRadius: 'Core build and release lane',
     freshness: 'Every 30 minutes',
     owner: 'Module Factory',
     workspace: 'core/build-studio',
@@ -164,6 +273,12 @@ export const RUNTIME_CONNECTOR_FEEDS: RuntimeConnectorFeed[] = [
     tenant: 'core',
     system: 'Human Entry',
     status: 'Healthy',
+    installState: 'Live',
+    credentialMode: 'Portal login and role validation',
+    cursorMode: 'live structured writes',
+    lastSuccessAt: 'Live app state',
+    replayMode: 'Record replay and operator review',
+    blastRadius: 'Core platform structured entry lane',
     freshness: 'Live app state',
     owner: 'Prototype Studio',
     workspace: 'core/data-entry',
@@ -207,17 +322,17 @@ export const KNOWLEDGE_COLLECTIONS: KnowledgeCollection[] = [
   },
   {
     id: 'ytf-quality-canon',
-    name: 'YTF Quality Canon',
+    name: 'YTF DQMS Canon',
     tenant: 'yangon-tyre',
     status: 'Warning',
     owner: 'Quality Watch Pod',
-    purpose: 'Convert inspection files, photos, notes, and holds into auditable quality records.',
-    sources: ['Drive quality folders', 'receiving photos', 'markdown notes', 'human-entry closeout forms'],
-    canonicalRecords: ['quality issue', 'inspection run', 'batch evidence', 'closeout decision'],
+    purpose: 'Convert inspection files, photos, notes, KPI gaps, and holds into auditable DQMS records.',
+    sources: ['Drive quality folders', 'receiving photos', 'markdown notes', 'human-entry DQMS forms'],
+    canonicalRecords: ['quality issue', 'inspection run', 'batch evidence', 'closeout decision', 'KPI gap'],
     relations: ['quality issue -> batch evidence', 'quality issue -> supplier', 'closeout decision -> approver'],
-    consumers: ['receiving control', 'quality closeout', 'director review'],
+    consumers: ['receiving control', 'DQMS and quality methods', 'director review'],
     qualityChecks: ['batch reference completeness', 'approver linkage', 'photo-to-issue traceability'],
-    nextMove: 'Bind file revisions and closeout approvals into the same canonical issue lifecycle.',
+    nextMove: 'Bind file revisions, KPI drift, and closeout approvals into the same canonical DQMS issue lifecycle.',
   },
   {
     id: 'core-product-memory',
@@ -299,6 +414,42 @@ export const POLICY_GUARDRAILS: PolicyGuardrail[] = [
     failureMode: 'Sensitive commercial or finance fields leak across roles or agent runs',
   },
   {
+    id: 'sandbox-regression-pack',
+    name: 'Sandbox regression pack',
+    domain: 'Security',
+    status: 'Warning',
+    scope: 'Shell execution, workspace isolation, filesystem boundaries, and tool permissions',
+    trigger: 'New agent runtime template, tool permission change, or workspace image update',
+    automation: 'Run sandbox escape and least-privilege regression scenarios before the runtime is promoted',
+    approvalGate: 'Platform Admin and Security Admin sign-off required before runtime promotion',
+    auditSignals: ['sandbox regression results', 'tool permission diff', 'workspace template diff'],
+    failureMode: 'A coding or browser agent escapes its bounded workspace or gains unintended reach',
+  },
+  {
+    id: 'untrusted-content-quarantine',
+    name: 'Untrusted content quarantine',
+    domain: 'Connector',
+    status: 'Warning',
+    scope: 'Web results, emails, docs, chat, and uploaded content entering agent context',
+    trigger: 'Any external content is introduced into a tool-using or write-capable run',
+    automation: 'Separate raw content from action prompts, preserve provenance, and downgrade risky actions to review tasks',
+    approvalGate: 'Connector or manager review required before untrusted content can drive writes',
+    auditSignals: ['content provenance links', 'downgraded action count', 'tool-triggered review tasks'],
+    failureMode: 'Prompt injection or hostile instructions travel from external content into tool use',
+  },
+  {
+    id: 'memory-poisoning-review',
+    name: 'Memory poisoning review',
+    domain: 'Knowledge',
+    status: 'Needs wiring',
+    scope: 'Persistent memory, reusable skills, learned preferences, and canonical knowledge promotions',
+    trigger: 'A new memory record, skill pack, or canon promotion is proposed for reuse',
+    automation: 'Require provenance, confidence, and rollback path before memory or skill state becomes shared',
+    approvalGate: 'Knowledge Systems review required for reusable memory and skill changes',
+    auditSignals: ['memory rollback log', 'skill change approvals', 'shared-canon rejection rate'],
+    failureMode: 'A poisoned memory or unsafe skill silently spreads to several agents and workspaces',
+  },
+  {
     id: 'release-gate-enforcement',
     name: 'Release gate enforcement',
     domain: 'Release',
@@ -345,17 +496,17 @@ export const AUTONOMY_RUNTIME_LOOPS: AutonomyRuntimeLoop[] = [
   },
   {
     id: 'ytf-quality-watch-loop',
-    name: 'YTF quality watch loop',
+    name: 'YTF DQMS watch loop',
     tenant: 'yangon-tyre',
     status: 'Warning',
     owner: 'Quality Watch Pod',
     workspace: 'ytf/plant-quality',
-    surface: 'Receiving Control',
+    surface: 'DQMS and Quality Methods',
     cadence: 'Hourly',
-    automation: 'Watch inspection files, receiving issues, and closeout notes for new quality risk or stale evidence.',
+    automation: 'Watch inspection files, receiving issues, KPI drift, and closeout notes for new quality risk or stale evidence.',
     approvalGate: 'Quality manager review for closeout and supplier-impact writes',
     backlog: '9 quality issues still depend on manual photo and batch reconciliation.',
-    nextMove: 'Attach Drive revisions and closeout approvals to the same canonical quality issue lifecycle.',
+    nextMove: 'Attach Drive revisions, KPI changes, and closeout approvals to the same canonical DQMS lifecycle.',
     risks: ['Photo evidence still arrives without batch references', 'Closeout notes can diverge from the receiving queue'],
   },
   {
@@ -387,6 +538,140 @@ export const AUTONOMY_RUNTIME_LOOPS: AutonomyRuntimeLoop[] = [
     backlog: 'Policy and runtime summaries exist, but the cross-surface promotion gate is still manual.',
     nextMove: 'Join connector lag, knowledge confidence, and policy health into one promotion gate.',
     risks: ['Autonomy can expand faster than the shared runtime evidence', 'No single runtime desk yet blocks unsafe promotion automatically'],
+  },
+]
+
+export const AGENT_CAPABILITY_CELLS: AgentCapabilityCell[] = [
+  {
+    id: 'ytf-commercial-pod',
+    name: 'YTF commercial pod',
+    tenant: 'yangon-tyre',
+    status: 'Warning',
+    workspace: 'ytf/commercial-memory',
+    mission: 'Turn inbox, quote, and lead movement into controlled account memory and next-step drafts.',
+    trustBoundary: 'Sandboxed workspace, connector-limited mailbox access, and draft-only external writes.',
+    toolClasses: ['Gmail connector', 'knowledge memory', 'skills', 'task writeback'],
+    dataSources: ['sales Gmail', 'lead pipeline', 'quote packs', 'manager tasks'],
+    allowedActions: ['read evidence', 'classify threads', 'open tasks', 'draft follow-ups', 'propose account updates'],
+    approvalGate: 'Sales lead review for customer-facing writes',
+    observability: ['connector ledger', 'workspace task review', 'founder brief trace'],
+    nextMove: 'Persist thread and attachment deltas as first-class account events instead of summary-only memory.',
+    risks: ['External mail can carry prompt injection', 'Attachment lineage is still thinner than account memory needs'],
+  },
+  {
+    id: 'ytf-supplier-recovery-pod',
+    name: 'YTF supplier recovery pod',
+    tenant: 'yangon-tyre',
+    status: 'Degraded',
+    workspace: 'ytf/supplier-recovery',
+    mission: 'Bind supplier mail, approvals, GRN drift, and receiving holds into one recovery queue.',
+    trustBoundary: 'Read-heavy evidence gathering with packet drafting only; no direct supplier writes.',
+    toolClasses: ['Gmail connector', 'approvals runtime', 'ERP evidence', 'skills'],
+    dataSources: ['procurement Gmail', 'approvals', 'receiving exceptions', 'ERP exports'],
+    allowedActions: ['cluster evidence', 'score packet completeness', 'open escalation tasks', 'draft claims'],
+    approvalGate: 'Procurement lead review for supplier-facing or finance-sensitive writes',
+    observability: ['approval history', 'connector events', 'hold queue aging', 'review tasks'],
+    nextMove: 'Add mailbox-native and ERP-native deltas so supplier recovery stops depending on inferred state.',
+    risks: ['Supplier identity drifts across systems', 'Claims can move faster than supporting evidence joins'],
+  },
+  {
+    id: 'ytf-quality-watch-pod',
+    name: 'YTF quality watch pod',
+    tenant: 'yangon-tyre',
+    status: 'Warning',
+    workspace: 'ytf/plant-quality',
+    mission: 'Keep DQMS evidence, receiving variance, and closeout state attached to the same quality lifecycle.',
+    trustBoundary: 'Drive and writeback evidence can trigger tasks, but closeout writes stay manager-gated.',
+    toolClasses: ['Drive connector', 'document intake', 'human entry', 'skills'],
+    dataSources: ['Drive folders', 'receiving photos', 'DQMS forms', 'metric intake'],
+    allowedActions: ['index evidence', 'open quality tasks', 'score freshness', 'propose closeout packets'],
+    approvalGate: 'Quality manager review for supplier-impact and closeout writes',
+    observability: ['file lineage', 'issue aging', 'variance queue', 'metric drift'],
+    nextMove: 'Promote file revisions and KPI changes into the same canonical DQMS event stream.',
+    risks: ['Folder structure is still partly human-disciplined', 'Photo evidence can land without batch identifiers'],
+  },
+  {
+    id: 'core-build-pod',
+    name: 'Core build pod',
+    tenant: 'core',
+    status: 'Healthy',
+    workspace: 'core/build-studio',
+    mission: 'Design, code, test, and package reusable modules from bounded cloud workspaces.',
+    trustBoundary: 'Sandboxed coding workspace, branch isolation, CI checks, and release-gated promotion.',
+    toolClasses: ['GitHub feed', 'shell', 'apply patch', 'skills', 'QA tooling'],
+    dataSources: ['repo state', 'release notes', 'product memory', 'runtime findings'],
+    allowedActions: ['code changes', 'test runs', 'release packet prep', 'preview packaging'],
+    approvalGate: 'Build and Platform Admin review for release and portfolio promotion',
+    observability: ['run history', 'release desk', 'CI status', 'runtime governance'],
+    nextMove: 'Attach live issue, PR, and release state directly to every product line and launch packet.',
+    risks: ['Long-horizon coding still needs stronger automated evals', 'Release truth is ahead of delivery telemetry'],
+  },
+  {
+    id: 'core-governance-pod',
+    name: 'Core governance pod',
+    tenant: 'core',
+    status: 'Warning',
+    workspace: 'core/runtime-governance',
+    mission: 'Decide when a connector, skill, or autonomous write path is safe enough to scale.',
+    trustBoundary: 'Read across runtime evidence, but all medium-risk autonomy expansion stays approval-backed.',
+    toolClasses: ['policy engine', 'connector ledger', 'knowledge review', 'audit logs'],
+    dataSources: ['runtime control', 'cloud ops', 'connector events', 'approval queues'],
+    allowedActions: ['open review tasks', 'downgrade writes', 'block promotion', 'package evidence'],
+    approvalGate: 'Platform Admin approval for new medium-risk autonomous capabilities',
+    observability: ['guardrail status', 'connector lag', 'approval pressure', 'rollback evidence'],
+    nextMove: 'Join eval traces, sandbox regressions, and connector trust into one promotion gate.',
+    risks: ['Governance posture is visible before it is fully enforced', 'Memory and skill rollback still need harder controls'],
+  },
+]
+
+export const MODEL_ROUTING_PROFILES: ModelRoutingProfile[] = [
+  {
+    id: 'frontier-governance',
+    name: 'Frontier planner and reviewer',
+    status: 'Healthy',
+    preferredModel: 'gpt-5.4',
+    fallbackModel: 'gpt-5.4-mini',
+    reasoning: 'high to xhigh',
+    useCase: 'Architecture, policy synthesis, executive review, cross-workspace root-cause analysis, and approval packets.',
+    tools: ['file search', 'web research', 'connector context', 'structured outputs'],
+    safeguards: ['citation-backed research', 'approval before medium-risk writes', 'evidence packet required'],
+    nextMove: 'Attach scored evals for approval quality, architecture diffs, and escalation decisions.',
+  },
+  {
+    id: 'codex-builder',
+    name: 'Long-horizon coding builder',
+    status: 'Healthy',
+    preferredModel: 'gpt-5.3-codex',
+    fallbackModel: 'gpt-5.4-mini',
+    reasoning: 'medium to high',
+    useCase: 'Repo navigation, controlled code changes, refactors, and production-grade software implementation.',
+    tools: ['shell', 'apply patch', 'tests', 'repo history', 'skills'],
+    safeguards: ['sandboxed workspaces', 'bounded write scope', 'build or syntax verification'],
+    nextMove: 'Route larger migrations and multi-file implementation work here by default, then feed results to review and QA lanes.',
+  },
+  {
+    id: 'crew-operator',
+    name: 'High-volume crew operator',
+    status: 'Healthy',
+    preferredModel: 'gpt-5.4-mini',
+    fallbackModel: 'gpt-5.4-nano',
+    reasoning: 'low to medium',
+    useCase: 'Subagents, browser-based verification, skill execution, daily bug sweeps, and repetitive workflow steps.',
+    tools: ['computer use', 'connector calls', 'task queues', 'skills', 'tool search'],
+    safeguards: ['task scoping', 'queue isolation', 'approval for external writes', 'trace logging'],
+    nextMove: 'Move routine QA, bug triage, and connector review loops into this lane with stronger eval coverage.',
+  },
+  {
+    id: 'extract-classify',
+    name: 'Extraction and ranking lane',
+    status: 'Warning',
+    preferredModel: 'gpt-5.4-nano',
+    fallbackModel: 'gpt-5.4-mini',
+    reasoning: 'low',
+    useCase: 'Classification, data extraction, ranking, feature generation, and cheap background workers.',
+    tools: ['structured outputs', 'retrieval', 'batch jobs', 'MCP/connectors'],
+    safeguards: ['schema validation', 'confidence thresholds', 'promotion review before canon writeback'],
+    nextMove: 'Push inbox triage, document parsing, revision scoring, and KPI feature extraction into durable background jobs.',
   },
 ]
 

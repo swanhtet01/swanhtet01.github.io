@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import base64
 import hashlib
+import hmac
 import json
 import os
 import secrets
@@ -13,6 +15,121 @@ from sqlmodel import Field, SQLModel, Session, create_engine, select
 
 
 ENTERPRISE_DB_FILE = "supermega_enterprise.db"
+PASSWORD_HASH_PREFIX = "pbkdf2_sha256"
+PASSWORD_HASH_ITERATIONS = 310000
+
+CORE_MODULE_DEFINITIONS: list[dict[str, Any]] = [
+    {
+        "module_id": "find-clients",
+        "name": "Find Clients",
+        "category": "Workflow",
+        "maturity": "live_wedge",
+        "route": "/find-companies",
+        "summary": "Search a market, keep the shortlist, and create the first follow-up.",
+        "default_enabled": True,
+    },
+    {
+        "module_id": "company-list",
+        "name": "Company List",
+        "category": "Workflow",
+        "maturity": "live_wedge",
+        "route": "/company-list",
+        "summary": "Turn raw rows into one usable company list with owners and next steps.",
+        "default_enabled": True,
+    },
+    {
+        "module_id": "receiving-control",
+        "name": "Receiving Control",
+        "category": "Workflow",
+        "maturity": "live_wedge",
+        "route": "/receiving-log",
+        "summary": "Track shortages, holds, GRN gaps, and next actions in one shared queue.",
+        "default_enabled": True,
+    },
+    {
+        "module_id": "founder-brief",
+        "name": "Founder Brief",
+        "category": "Intelligence",
+        "maturity": "pilot_ready",
+        "route": "/app/director",
+        "summary": "Condense live queue, approval, and exception state into one short executive brief.",
+        "default_enabled": True,
+    },
+    {
+        "module_id": "sales-system",
+        "name": "Sales System",
+        "category": "Workflow",
+        "maturity": "mapped_module",
+        "route": "/app/sales",
+        "summary": "Prospecting, follow-up, quoting, and commercial review on one shared operating layer.",
+        "default_enabled": False,
+    },
+    {
+        "module_id": "operations-inbox",
+        "name": "Operations Inbox",
+        "category": "Workflow",
+        "maturity": "mapped_module",
+        "route": "/app/operations",
+        "summary": "Requests, blockers, files, and operational exceptions in one owned queue.",
+        "default_enabled": False,
+    },
+    {
+        "module_id": "approval-flow",
+        "name": "Approval Flow",
+        "category": "Automation",
+        "maturity": "mapped_module",
+        "route": "/app/approvals",
+        "summary": "Purchase, exception, and rollout approvals with timestamps and decision history.",
+        "default_enabled": False,
+    },
+    {
+        "module_id": "document-intake",
+        "name": "Document Intake",
+        "category": "Knowledge",
+        "maturity": "mapped_module",
+        "route": "/app/documents",
+        "summary": "Collect files, extract useful fields, and route the next action.",
+        "default_enabled": False,
+    },
+    {
+        "module_id": "client-portal",
+        "name": "Client Portal",
+        "category": "Workflow",
+        "maturity": "mapped_module",
+        "route": "/products/client-portal",
+        "summary": "Status, approvals, files, and delivery communication in one branded workspace.",
+        "default_enabled": False,
+    },
+    {
+        "module_id": "platform-admin",
+        "name": "Platform Admin",
+        "category": "Control",
+        "maturity": "control_layer",
+        "route": "/app/platform-admin",
+        "summary": "Manage tenant posture, modules, roles, connectors, and rollout readiness.",
+        "default_enabled": True,
+    },
+    {
+        "module_id": "runtime-desk",
+        "name": "Runtime Desk",
+        "category": "Control",
+        "maturity": "control_layer",
+        "route": "/app/runtime",
+        "summary": "Watch connector freshness, guardrails, and agent execution health.",
+        "default_enabled": True,
+    },
+    {
+        "module_id": "adoption-command",
+        "name": "Adoption Command",
+        "category": "Control",
+        "maturity": "control_layer",
+        "route": "/app/adoption-command",
+        "summary": "Score role usage, writeback health, manager rituals, and agent reinforcement from live workspace state.",
+        "default_enabled": True,
+    },
+]
+
+DEFAULT_ROOT_DOMAIN = "supermega.dev"
 
 
 def _now() -> str:
@@ -24,27 +141,131 @@ def _stable_key(prefix: str, seed: str) -> str:
     return f"{prefix}-{digest}"
 
 
-def _role_rank(role: str) -> int:
+WORKSPACE_ROLE_ALIASES = {
+    "ceo": "ceo",
+    "chief_executive": "ceo",
+    "chief_executive_officer": "ceo",
+    "executive": "ceo",
+    "architect": "implementation_lead",
+    "product_manager": "product_owner",
+    "maintenance_lead": "maintenance",
+    "maintenance_manager": "maintenance",
+    "maintenance_ops": "maintenance",
+    "ops": "operations",
+    "operations_lead": "operations",
+    "operations_manager": "operations",
+    "quality_manager": "quality",
+    "quality_lead": "quality",
+    "qc": "quality",
+    "sales_lead": "sales",
+    "sales_manager": "sales",
+}
+
+SUPPORTED_WORKSPACE_ROLES = {
+    "platform_admin",
+    "tenant_admin",
+    "owner",
+    "admin",
+    "ceo",
+    "product_owner",
+    "implementation_lead",
+    "manager",
+    "director",
+    "tenant_operator",
+    "plant_manager",
+    "finance_controller",
+    "procurement_lead",
+    "receiving_clerk",
+    "operations",
+    "quality",
+    "maintenance",
+    "sales",
+    "lead",
+    "operator",
+    "member",
+}
+
+WORKSPACE_ROLE_RANKS = {
+    "platform_admin": 11,
+    "ceo": 10,
+    "admin": 10,
+    "tenant_admin": 9,
+    "owner": 8,
+    "product_owner": 7,
+    "implementation_lead": 7,
+    "director": 6,
+    "manager": 6,
+    "tenant_operator": 5,
+    "plant_manager": 5,
+    "finance_controller": 5,
+    "procurement_lead": 4,
+    "receiving_clerk": 4,
+    "operations": 4,
+    "quality": 4,
+    "maintenance": 4,
+    "sales": 4,
+    "lead": 3,
+    "operator": 2,
+    "member": 1,
+}
+
+
+def _normalize_workspace_role(role: str) -> str:
     normalized = str(role or "").strip().lower()
-    if normalized == "owner":
-        return 4
-    if normalized == "manager":
-        return 3
-    if normalized in {"lead", "operator"}:
-        return 2
-    if normalized == "member":
-        return 1
-    return 0
+    return WORKSPACE_ROLE_ALIASES.get(normalized, normalized)
+
+
+def _role_rank(role: str) -> int:
+    normalized = _normalize_workspace_role(role)
+    return int(WORKSPACE_ROLE_RANKS.get(normalized, 0) or 0)
 
 
 def _merge_user_role(current_role: str, next_role: str) -> str:
-    current = str(current_role or "").strip() or "member"
-    proposed = str(next_role or "").strip() or "member"
+    current = _normalize_workspace_role(current_role) or "member"
+    proposed = _normalize_workspace_role(next_role) or "member"
     return current if _role_rank(current) >= _role_rank(proposed) else proposed
 
 
 def _hash_password(password: str) -> str:
-    return hashlib.sha256(str(password or "").encode("utf-8")).hexdigest()
+    normalized_password = str(password or "")
+    salt = secrets.token_bytes(16)
+    digest = hashlib.pbkdf2_hmac(
+        "sha256",
+        normalized_password.encode("utf-8"),
+        salt,
+        PASSWORD_HASH_ITERATIONS,
+    )
+    return (
+        f"{PASSWORD_HASH_PREFIX}${PASSWORD_HASH_ITERATIONS}$"
+        f"{base64.b64encode(salt).decode('ascii')}$"
+        f"{base64.b64encode(digest).decode('ascii')}"
+    )
+
+
+def _verify_password(password: str, stored_hash: str) -> tuple[bool, bool]:
+    normalized_password = str(password or "")
+    normalized_hash = str(stored_hash or "").strip()
+    if not normalized_hash:
+        return False, False
+
+    if normalized_hash.startswith(f"{PASSWORD_HASH_PREFIX}$"):
+        try:
+            _, iterations_raw, salt_raw, digest_raw = normalized_hash.split("$", 3)
+            iterations = int(iterations_raw)
+            salt = base64.b64decode(salt_raw.encode("ascii"))
+            expected_digest = base64.b64decode(digest_raw.encode("ascii"))
+        except Exception:
+            return False, False
+        computed_digest = hashlib.pbkdf2_hmac(
+            "sha256",
+            normalized_password.encode("utf-8"),
+            salt,
+            iterations,
+        )
+        return hmac.compare_digest(computed_digest, expected_digest), iterations != PASSWORD_HASH_ITERATIONS
+
+    legacy_digest = hashlib.sha256(normalized_password.encode("utf-8")).hexdigest()
+    return hmac.compare_digest(legacy_digest, normalized_hash), True
 
 
 class EnterpriseWorkspace(SQLModel, table=True):
@@ -95,6 +316,108 @@ class EnterpriseSession(SQLModel, table=True):
     last_seen_at: str
 
 
+class EnterpriseModuleDefinition(SQLModel, table=True):
+    __tablename__ = "enterprise_module_definitions"
+
+    module_id: str = Field(primary_key=True)
+    name: str
+    category: str = "Workflow"
+    maturity: str = "mapped_module"
+    route: str = ""
+    summary: str = ""
+    default_enabled: bool = False
+    created_at: str
+    updated_at: str
+
+
+class EnterpriseWorkspaceModule(SQLModel, table=True):
+    __tablename__ = "enterprise_workspace_modules"
+
+    assignment_id: str = Field(primary_key=True)
+    workspace_id: str = Field(index=True, foreign_key="enterprise_workspaces.workspace_id")
+    module_id: str = Field(index=True, foreign_key="enterprise_module_definitions.module_id")
+    status: str = "disabled"
+    source: str = "default"
+    config_json: str = Field(default="{}", sa_column=Column(Text, nullable=False))
+    created_at: str
+    updated_at: str
+
+
+class EnterpriseWorkspaceDomain(SQLModel, table=True):
+    __tablename__ = "enterprise_workspace_domains"
+
+    domain_id: str = Field(primary_key=True)
+    workspace_id: str = Field(index=True, foreign_key="enterprise_workspaces.workspace_id")
+    hostname: str = Field(index=True)
+    scope: str = Field(default="tenant_portal", index=True)
+    provider: str = "vercel"
+    runtime_target: str = "tenant_portal"
+    desired_state: str = "planned"
+    route_root: str = "/"
+    dns_status: str = "unknown"
+    tls_status: str = "unknown"
+    http_status: str = "unknown"
+    verified_at: str = ""
+    deployment_url: str = ""
+    last_deployed_at: str = ""
+    notes: str = ""
+    config_json: str = Field(default="{}", sa_column=Column(Text, nullable=False))
+    created_at: str
+    updated_at: str
+
+
+class EnterpriseWorkspaceProfile(SQLModel, table=True):
+    __tablename__ = "enterprise_workspace_profiles"
+
+    workspace_id: str = Field(primary_key=True, foreign_key="enterprise_workspaces.workspace_id")
+    company: str = ""
+    preferred_package: str = ""
+    first_team: str = ""
+    systems_json: str = Field(default="[]", sa_column=Column(Text, nullable=False))
+    goal: str = ""
+    onboarding_status: str = "draft"
+    config_json: str = Field(default="{}", sa_column=Column(Text, nullable=False))
+    created_at: str
+    updated_at: str
+
+
+class EnterpriseAuditEvent(SQLModel, table=True):
+    __tablename__ = "enterprise_audit_events"
+
+    event_id: str = Field(primary_key=True)
+    workspace_id: str = Field(index=True, foreign_key="enterprise_workspaces.workspace_id")
+    actor: str
+    event_type: str = Field(index=True)
+    entity_type: str = ""
+    entity_id: str = ""
+    severity: str = "info"
+    summary: str
+    detail: str = ""
+    payload_json: str = Field(default="{}", sa_column=Column(Text, nullable=False))
+    created_at: str
+
+
+class EnterpriseConnectorEvent(SQLModel, table=True):
+    __tablename__ = "enterprise_connector_events"
+
+    event_id: str = Field(primary_key=True)
+    workspace_id: str = Field(index=True, foreign_key="enterprise_workspaces.workspace_id")
+    connector_id: str = Field(index=True)
+    connector_name: str = ""
+    tenant: str = ""
+    source: str = ""
+    kind: str = Field(default="event", index=True)
+    title: str
+    detail: str = ""
+    route: str = ""
+    severity: str = Field(default="info", index=True)
+    actor: str = "system"
+    entity_type: str = ""
+    entity_id: str = ""
+    payload_json: str = Field(default="{}", sa_column=Column(Text, nullable=False))
+    created_at: str = Field(index=True)
+
+
 class EnterpriseLead(SQLModel, table=True):
     __tablename__ = "enterprise_leads"
 
@@ -105,7 +428,7 @@ class EnterpriseLead(SQLModel, table=True):
     archetype: str = ""
     stage: str = "offer_ready"
     status: str = "open"
-    owner: str = "Growth Studio"
+    owner: str = "Revenue Pod"
     campaign_goal: str = ""
     service_pack: str = ""
     wedge_product: str = ""
@@ -167,7 +490,7 @@ class EnterpriseLeadHuntProfile(SQLModel, table=True):
     updated_at: str
     last_run_at: str = ""
     name: str
-    owner: str = "Growth Studio"
+    owner: str = "Revenue Pod"
     status: str = "active"
     query: str = ""
     raw_text: str = ""
@@ -274,6 +597,212 @@ def _agent_run_to_dict(row: EnterpriseAgentRun) -> dict[str, Any]:
     }
 
 
+def _module_definition_to_dict(row: EnterpriseModuleDefinition) -> dict[str, Any]:
+    return {
+        "module_id": row.module_id,
+        "name": row.name,
+        "category": row.category,
+        "maturity": row.maturity,
+        "route": row.route,
+        "summary": row.summary,
+        "default_enabled": bool(row.default_enabled),
+        "created_at": row.created_at,
+        "updated_at": row.updated_at,
+    }
+
+
+def _workspace_module_to_dict(
+    definition: EnterpriseModuleDefinition,
+    assignment: EnterpriseWorkspaceModule | None,
+) -> dict[str, Any]:
+    config = _json_object(assignment.config_json) if assignment else {}
+    workspace_status = str(assignment.status if assignment else "disabled").strip() or "disabled"
+    return {
+        **_module_definition_to_dict(definition),
+        "workspace_status": workspace_status,
+        "enabled": workspace_status in {"enabled", "pilot"},
+        "source": str(assignment.source if assignment else "default").strip() or "default",
+        "config": config,
+        "assignment_id": str(assignment.assignment_id if assignment else "").strip(),
+    }
+
+
+def _workspace_domain_templates(workspace_slug: str, workspace_name: str) -> list[dict[str, Any]]:
+    normalized_slug = str(workspace_slug or "").strip().lower()
+    normalized_name = str(workspace_name or "").strip().lower()
+    is_platform_workspace = normalized_slug in {"", "default", "supermega", "supermega-lab"} or normalized_name.startswith("supermega")
+    templates: list[dict[str, Any]] = []
+
+    if is_platform_workspace:
+        templates.extend(
+            [
+                {
+                    "hostname": DEFAULT_ROOT_DOMAIN,
+                    "scope": "public_site",
+                    "provider": "vercel",
+                    "runtime_target": "public_site",
+                    "desired_state": "live",
+                    "route_root": "/",
+                    "notes": "Primary public platform site.",
+                    "config": {
+                        "display_name": "Public platform site",
+                        "workspace_slug": normalized_slug or "supermega-lab",
+                        "proof_paths": ["/", "/products", "/contact"],
+                    },
+                },
+                {
+                    "hostname": f"app.{DEFAULT_ROOT_DOMAIN}",
+                    "scope": "shared_app",
+                    "provider": "vercel",
+                    "runtime_target": "shared_app",
+                    "desired_state": "live",
+                    "route_root": "/app",
+                    "notes": "Shared authenticated app host.",
+                    "config": {
+                        "display_name": "Shared app host",
+                        "workspace_slug": normalized_slug or "supermega-lab",
+                        "proof_paths": ["/login", "/app", "/app/cloud"],
+                    },
+                },
+            ]
+        )
+        return templates
+
+    tenant_subdomain = normalized_slug or "workspace"
+    if tenant_subdomain == "ytf-plant-a" or "yangon tyre" in normalized_name:
+        tenant_subdomain = "ytf"
+    desired_state = "pilot" if tenant_subdomain == "ytf" else "planned"
+    proof_paths = ["/app", "/app/platform-admin"]
+    if tenant_subdomain == "ytf":
+        proof_paths = ["/app/portal", "/app/dqms", "/app/platform-admin"]
+
+    templates.append(
+        {
+            "hostname": f"{tenant_subdomain}.{DEFAULT_ROOT_DOMAIN}",
+            "scope": "tenant_portal",
+            "provider": "vercel",
+            "runtime_target": "tenant_portal",
+            "desired_state": desired_state,
+            "route_root": "/app",
+            "notes": "Workspace-scoped tenant portal host.",
+            "config": {
+                "display_name": f"{workspace_name or workspace_slug or 'Workspace'} portal",
+                "proof_paths": proof_paths,
+                "workspace_slug": normalized_slug,
+            },
+        }
+    )
+    return templates
+
+
+def _workspace_domain_to_dict(
+    row: EnterpriseWorkspaceDomain,
+    workspace: EnterpriseWorkspace | None = None,
+    *,
+    workspace_slug: str = "",
+    workspace_name: str = "",
+) -> dict[str, Any]:
+    config = _json_object(row.config_json)
+    route_root = str(row.route_root or "").strip() or "/"
+    hostname = str(row.hostname or "").strip().lower()
+    live_url = f"https://{hostname}"
+    workspace_slug_value = str(workspace.slug if workspace else workspace_slug or config.get("workspace_slug", "")).strip()
+    workspace_name_value = str(workspace.name if workspace else workspace_name or config.get("workspace_name", "")).strip()
+    return {
+        "domain_id": row.domain_id,
+        "workspace_id": row.workspace_id,
+        "workspace_slug": workspace_slug_value,
+        "workspace_name": workspace_name_value,
+        "hostname": hostname,
+        "scope": row.scope,
+        "provider": row.provider,
+        "runtime_target": row.runtime_target,
+        "desired_state": row.desired_state,
+        "route_root": route_root,
+        "dns_status": row.dns_status,
+        "tls_status": row.tls_status,
+        "http_status": row.http_status,
+        "verified_at": row.verified_at,
+        "deployment_url": row.deployment_url,
+        "last_deployed_at": row.last_deployed_at,
+        "notes": row.notes,
+        "config": config,
+        "live_url": live_url,
+        "display_name": str(config.get("display_name", "")).strip() or hostname,
+        "proof_paths": [str(item).strip() for item in (config.get("proof_paths") or []) if str(item).strip()],
+        "status": (
+            "ready"
+            if row.dns_status == "ready" and row.tls_status == "ready" and row.http_status == "ready"
+            else "attention"
+            if any(str(value).strip() == "ready" for value in (row.dns_status, row.tls_status, row.http_status))
+            else "blocked"
+        ),
+    }
+
+
+def _workspace_profile_to_dict(
+    row: EnterpriseWorkspaceProfile,
+    workspace: EnterpriseWorkspace | None = None,
+    *,
+    workspace_slug: str = "",
+    workspace_name: str = "",
+) -> dict[str, Any]:
+    config = _json_object(row.config_json)
+    workspace_slug_value = str(workspace.slug if workspace else workspace_slug or config.get("workspace_slug", "")).strip()
+    workspace_name_value = str(workspace.name if workspace else workspace_name or config.get("workspace_name", "")).strip()
+    return {
+        "workspace_id": row.workspace_id,
+        "workspace_slug": workspace_slug_value,
+        "workspace_name": workspace_name_value,
+        "company": str(row.company or workspace_name_value).strip(),
+        "preferred_package": str(row.preferred_package or "").strip(),
+        "first_team": str(row.first_team or "").strip(),
+        "systems": _json_list(row.systems_json),
+        "goal": str(row.goal or "").strip(),
+        "onboarding_status": str(row.onboarding_status or "draft").strip() or "draft",
+        "config": config,
+        "created_at": row.created_at,
+        "updated_at": row.updated_at,
+    }
+
+
+def _audit_event_to_dict(row: EnterpriseAuditEvent) -> dict[str, Any]:
+    return {
+        "event_id": row.event_id,
+        "workspace_id": row.workspace_id,
+        "actor": row.actor,
+        "event_type": row.event_type,
+        "entity_type": row.entity_type,
+        "entity_id": row.entity_id,
+        "severity": row.severity,
+        "summary": row.summary,
+        "detail": row.detail,
+        "payload": _json_object(row.payload_json),
+        "created_at": row.created_at,
+    }
+
+
+def _connector_event_to_dict(row: EnterpriseConnectorEvent) -> dict[str, Any]:
+    return {
+        "event_id": row.event_id,
+        "workspace_id": row.workspace_id,
+        "connector_id": row.connector_id,
+        "connector_name": row.connector_name,
+        "tenant": row.tenant,
+        "source": row.source,
+        "kind": row.kind,
+        "title": row.title,
+        "detail": row.detail,
+        "route": row.route,
+        "severity": row.severity,
+        "actor": row.actor,
+        "entity_type": row.entity_type,
+        "entity_id": row.entity_id,
+        "payload": _json_object(row.payload_json),
+        "created_at": row.created_at,
+    }
+
+
 def resolve_database_url(output_dir: Path) -> str:
     env_value = str(os.getenv("SUPERMEGA_DATABASE_URL", "")).strip()
     if env_value:
@@ -331,13 +860,573 @@ def ensure_workspace(
             session.add(workspace)
         session.commit()
         session.refresh(workspace)
-        return {
+        payload = {
             "workspace_id": workspace.workspace_id,
             "slug": workspace.slug,
             "name": workspace.name,
             "plan": workspace.plan,
             "status": workspace.status,
         }
+    ensure_workspace_modules(database_url, workspace_id=str(payload["workspace_id"]))
+    ensure_workspace_domains(
+        database_url,
+        workspace_id=str(payload["workspace_id"]),
+        workspace_slug=str(payload["slug"]),
+        workspace_name=str(payload["name"]),
+    )
+    ensure_workspace_profile(
+        database_url,
+        workspace_id=str(payload["workspace_id"]),
+        workspace_slug=str(payload["slug"]),
+        workspace_name=str(payload["name"]),
+    )
+    return payload
+
+
+def ensure_core_module_definitions(database_url: str) -> list[dict[str, Any]]:
+    ensure_schema(database_url)
+    now = _now()
+    engine = get_engine(database_url)
+    with Session(engine) as session:
+        for item in CORE_MODULE_DEFINITIONS:
+            module_id = str(item.get("module_id", "")).strip()
+            if not module_id:
+                continue
+            row = session.get(EnterpriseModuleDefinition, module_id)
+            if not row:
+                row = EnterpriseModuleDefinition(
+                    module_id=module_id,
+                    created_at=now,
+                    updated_at=now,
+                    name=str(item.get("name", "")).strip() or module_id,
+                )
+            row.name = str(item.get("name", row.name)).strip() or row.name
+            row.category = str(item.get("category", row.category)).strip() or row.category
+            row.maturity = str(item.get("maturity", row.maturity)).strip() or row.maturity
+            row.route = str(item.get("route", row.route)).strip()
+            row.summary = str(item.get("summary", row.summary)).strip()
+            row.default_enabled = bool(item.get("default_enabled", row.default_enabled))
+            row.updated_at = now
+            session.add(row)
+        session.commit()
+        rows = session.exec(select(EnterpriseModuleDefinition).order_by(EnterpriseModuleDefinition.name.asc())).all()
+    return [_module_definition_to_dict(row) for row in rows]
+
+
+def ensure_workspace_modules(database_url: str, *, workspace_id: str) -> list[dict[str, Any]]:
+    ensure_core_module_definitions(database_url)
+    normalized_workspace_id = str(workspace_id or "").strip()
+    if not normalized_workspace_id:
+        return []
+    now = _now()
+    engine = get_engine(database_url)
+    with Session(engine) as session:
+        definitions = session.exec(
+            select(EnterpriseModuleDefinition).order_by(EnterpriseModuleDefinition.name.asc())
+        ).all()
+        for definition in definitions:
+            assignment_id = _stable_key("WMOD", f"{normalized_workspace_id}:{definition.module_id}")
+            assignment = session.get(EnterpriseWorkspaceModule, assignment_id)
+            if assignment:
+                continue
+            assignment = EnterpriseWorkspaceModule(
+                assignment_id=assignment_id,
+                workspace_id=normalized_workspace_id,
+                module_id=definition.module_id,
+                status="enabled" if definition.default_enabled else "disabled",
+                source="default",
+                config_json="{}",
+                created_at=now,
+                updated_at=now,
+            )
+            session.add(assignment)
+        session.commit()
+        refreshed_definitions = session.exec(
+            select(EnterpriseModuleDefinition).order_by(EnterpriseModuleDefinition.name.asc())
+        ).all()
+        refreshed_assignments = session.exec(
+            select(EnterpriseWorkspaceModule).where(EnterpriseWorkspaceModule.workspace_id == normalized_workspace_id)
+        ).all()
+    assignments_by_module = {row.module_id: row for row in refreshed_assignments}
+    return [_workspace_module_to_dict(definition, assignments_by_module.get(definition.module_id)) for definition in refreshed_definitions]
+
+
+def ensure_workspace_domains(
+    database_url: str,
+    *,
+    workspace_id: str,
+    workspace_slug: str = "",
+    workspace_name: str = "",
+) -> list[dict[str, Any]]:
+    ensure_schema(database_url)
+    normalized_workspace_id = str(workspace_id or "").strip()
+    if not normalized_workspace_id:
+        return []
+    now = _now()
+    engine = get_engine(database_url)
+    with Session(engine) as session:
+        workspace = session.get(EnterpriseWorkspace, normalized_workspace_id)
+        if not workspace:
+            return []
+        slug_value = str(workspace_slug or workspace.slug or "").strip().lower()
+        name_value = str(workspace_name or workspace.name or "").strip()
+        templates = _workspace_domain_templates(slug_value, name_value)
+        for item in templates:
+            hostname = str(item.get("hostname", "")).strip().lower()
+            if not hostname:
+                continue
+            domain_id = _stable_key("DOM", f"{normalized_workspace_id}:{hostname}")
+            row = session.get(EnterpriseWorkspaceDomain, domain_id)
+            if row:
+                continue
+            row = EnterpriseWorkspaceDomain(
+                domain_id=domain_id,
+                workspace_id=normalized_workspace_id,
+                hostname=hostname,
+                scope=str(item.get("scope", "tenant_portal")).strip() or "tenant_portal",
+                provider=str(item.get("provider", "vercel")).strip() or "vercel",
+                runtime_target=str(item.get("runtime_target", "tenant_portal")).strip() or "tenant_portal",
+                desired_state=str(item.get("desired_state", "planned")).strip() or "planned",
+                route_root=str(item.get("route_root", "/")).strip() or "/",
+                dns_status="unknown",
+                tls_status="unknown",
+                http_status="unknown",
+                verified_at="",
+                deployment_url="",
+                last_deployed_at="",
+                notes=str(item.get("notes", "")).strip(),
+                config_json=json.dumps(item.get("config", {}), ensure_ascii=False),
+                created_at=now,
+                updated_at=now,
+            )
+            session.add(row)
+        session.commit()
+        rows = session.exec(
+            select(EnterpriseWorkspaceDomain)
+            .where(EnterpriseWorkspaceDomain.workspace_id == normalized_workspace_id)
+            .order_by(EnterpriseWorkspaceDomain.scope.asc(), EnterpriseWorkspaceDomain.hostname.asc())
+        ).all()
+    workspace_slug_value = str(slug_value or workspace.slug or "").strip()
+    workspace_name_value = str(name_value or workspace.name or "").strip()
+    return [_workspace_domain_to_dict(row, workspace_slug=workspace_slug_value, workspace_name=workspace_name_value) for row in rows]
+
+
+def list_module_definitions(database_url: str) -> list[dict[str, Any]]:
+    ensure_core_module_definitions(database_url)
+    engine = get_engine(database_url)
+    with Session(engine) as session:
+        rows = session.exec(select(EnterpriseModuleDefinition).order_by(EnterpriseModuleDefinition.name.asc())).all()
+    return [_module_definition_to_dict(row) for row in rows]
+
+
+def list_workspace_modules(database_url: str, *, workspace_id: str) -> list[dict[str, Any]]:
+    normalized_workspace_id = str(workspace_id or "").strip()
+    if not normalized_workspace_id:
+        return []
+    ensure_workspace_modules(database_url, workspace_id=normalized_workspace_id)
+    engine = get_engine(database_url)
+    with Session(engine) as session:
+        definitions = session.exec(
+            select(EnterpriseModuleDefinition).order_by(EnterpriseModuleDefinition.name.asc())
+        ).all()
+        assignments = session.exec(
+            select(EnterpriseWorkspaceModule).where(EnterpriseWorkspaceModule.workspace_id == normalized_workspace_id)
+        ).all()
+    assignments_by_module = {row.module_id: row for row in assignments}
+    return [_workspace_module_to_dict(definition, assignments_by_module.get(definition.module_id)) for definition in definitions]
+
+
+def list_workspace_domains(database_url: str, *, workspace_id: str) -> list[dict[str, Any]]:
+    normalized_workspace_id = str(workspace_id or "").strip()
+    if not normalized_workspace_id:
+        return []
+    return ensure_workspace_domains(database_url, workspace_id=normalized_workspace_id)
+
+
+def ensure_workspace_profile(
+    database_url: str,
+    *,
+    workspace_id: str,
+    workspace_slug: str = "",
+    workspace_name: str = "",
+) -> dict[str, Any] | None:
+    ensure_schema(database_url)
+    normalized_workspace_id = str(workspace_id or "").strip()
+    if not normalized_workspace_id:
+        return None
+    now = _now()
+    engine = get_engine(database_url)
+    with Session(engine) as session:
+        workspace = session.get(EnterpriseWorkspace, normalized_workspace_id)
+        if not workspace:
+            return None
+        workspace_slug_value = str(workspace_slug or workspace.slug or "").strip()
+        workspace_name_value = str(workspace_name or workspace.name or "").strip()
+        row = session.get(EnterpriseWorkspaceProfile, normalized_workspace_id)
+        if not row:
+            row = EnterpriseWorkspaceProfile(
+                workspace_id=normalized_workspace_id,
+                company=workspace_name_value,
+                preferred_package="",
+                first_team="",
+                systems_json="[]",
+                goal="",
+                onboarding_status="draft",
+                config_json=json.dumps(
+                    {
+                        "workspace_slug": workspace_slug_value,
+                        "workspace_name": workspace_name_value,
+                    },
+                    ensure_ascii=False,
+                ),
+                created_at=now,
+                updated_at=now,
+            )
+            session.add(row)
+        else:
+            config = _json_object(row.config_json)
+            if workspace_slug_value:
+                config["workspace_slug"] = workspace_slug_value
+            if workspace_name_value:
+                config["workspace_name"] = workspace_name_value
+            if not str(row.company or "").strip() and workspace_name_value:
+                row.company = workspace_name_value
+            row.config_json = json.dumps(config, ensure_ascii=False)
+            row.updated_at = now
+        session.commit()
+        session.refresh(row)
+    return _workspace_profile_to_dict(row, workspace_slug=workspace_slug_value, workspace_name=workspace_name_value)
+
+
+def get_workspace_profile(database_url: str, *, workspace_id: str) -> dict[str, Any] | None:
+    normalized_workspace_id = str(workspace_id or "").strip()
+    if not normalized_workspace_id:
+        return None
+    return ensure_workspace_profile(database_url, workspace_id=normalized_workspace_id)
+
+
+def get_workspace_domain_by_hostname(database_url: str, *, hostname: str) -> dict[str, Any] | None:
+    ensure_schema(database_url)
+    normalized_hostname = str(hostname or "").strip().lower()
+    if not normalized_hostname:
+        return None
+    candidates = [normalized_hostname]
+    if normalized_hostname.startswith("www."):
+        candidates.append(normalized_hostname[4:])
+    engine = get_engine(database_url)
+    with Session(engine) as session:
+        row = session.exec(
+            select(EnterpriseWorkspaceDomain).where(or_(*[EnterpriseWorkspaceDomain.hostname == item for item in candidates]))
+        ).first()
+        workspace = session.get(EnterpriseWorkspace, row.workspace_id) if row else None
+    workspace_slug_value = str(workspace.slug if workspace else "").strip()
+    workspace_name_value = str(workspace.name if workspace else "").strip()
+    return _workspace_domain_to_dict(row, workspace_slug=workspace_slug_value, workspace_name=workspace_name_value) if row else None
+
+
+def update_workspace_module(
+    database_url: str,
+    *,
+    workspace_id: str,
+    module_id: str,
+    status: str,
+    source: str = "manual",
+    config: dict[str, Any] | None = None,
+) -> dict[str, Any] | None:
+    normalized_workspace_id = str(workspace_id or "").strip()
+    normalized_module_id = str(module_id or "").strip()
+    normalized_status = str(status or "").strip().lower() or "disabled"
+    if normalized_status not in {"enabled", "pilot", "disabled"}:
+        normalized_status = "disabled"
+    if not normalized_workspace_id or not normalized_module_id:
+        return None
+
+    ensure_workspace_modules(database_url, workspace_id=normalized_workspace_id)
+    now = _now()
+    engine = get_engine(database_url)
+    with Session(engine) as session:
+        definition = session.get(EnterpriseModuleDefinition, normalized_module_id)
+        if not definition:
+            return None
+        assignment_id = _stable_key("WMOD", f"{normalized_workspace_id}:{normalized_module_id}")
+        assignment = session.get(EnterpriseWorkspaceModule, assignment_id)
+        if not assignment:
+            assignment = EnterpriseWorkspaceModule(
+                assignment_id=assignment_id,
+                workspace_id=normalized_workspace_id,
+                module_id=normalized_module_id,
+                created_at=now,
+                updated_at=now,
+            )
+        assignment.status = normalized_status
+        assignment.source = str(source or "").strip() or "manual"
+        if config is not None:
+            assignment.config_json = json.dumps(config, ensure_ascii=False)
+        elif not str(assignment.config_json or "").strip():
+            assignment.config_json = "{}"
+        assignment.updated_at = now
+        session.add(assignment)
+        session.commit()
+        session.refresh(definition)
+        session.refresh(assignment)
+        return _workspace_module_to_dict(definition, assignment)
+
+
+def update_workspace_domain(
+    database_url: str,
+    *,
+    workspace_id: str,
+    domain_id: str,
+    hostname: str | None = None,
+    scope: str | None = None,
+    provider: str | None = None,
+    runtime_target: str | None = None,
+    desired_state: str | None = None,
+    route_root: str | None = None,
+    dns_status: str | None = None,
+    tls_status: str | None = None,
+    http_status: str | None = None,
+    verified_at: str | None = None,
+    deployment_url: str | None = None,
+    last_deployed_at: str | None = None,
+    notes: str | None = None,
+    config: dict[str, Any] | None = None,
+) -> dict[str, Any] | None:
+    normalized_workspace_id = str(workspace_id or "").strip()
+    normalized_domain_id = str(domain_id or "").strip()
+    if not normalized_workspace_id or not normalized_domain_id:
+        return None
+
+    ensure_workspace_domains(database_url, workspace_id=normalized_workspace_id)
+    now = _now()
+    engine = get_engine(database_url)
+    with Session(engine) as session:
+        row = session.get(EnterpriseWorkspaceDomain, normalized_domain_id)
+        if not row or row.workspace_id != normalized_workspace_id:
+            return None
+        if hostname is not None:
+            row.hostname = str(hostname or "").strip().lower() or row.hostname
+        if scope is not None:
+            row.scope = str(scope or "").strip() or row.scope
+        if provider is not None:
+            row.provider = str(provider or "").strip() or row.provider
+        if runtime_target is not None:
+            row.runtime_target = str(runtime_target or "").strip() or row.runtime_target
+        if desired_state is not None:
+            row.desired_state = str(desired_state or "").strip() or row.desired_state
+        if route_root is not None:
+            row.route_root = str(route_root or "").strip() or row.route_root
+        if dns_status is not None:
+            row.dns_status = str(dns_status or "").strip() or row.dns_status
+        if tls_status is not None:
+            row.tls_status = str(tls_status or "").strip() or row.tls_status
+        if http_status is not None:
+            row.http_status = str(http_status or "").strip() or row.http_status
+        if verified_at is not None:
+            row.verified_at = str(verified_at or "").strip()
+        if deployment_url is not None:
+            row.deployment_url = str(deployment_url or "").strip()
+        if last_deployed_at is not None:
+            row.last_deployed_at = str(last_deployed_at or "").strip()
+        if notes is not None:
+            row.notes = str(notes or "").strip()
+        if config is not None:
+            row.config_json = json.dumps(config, ensure_ascii=False)
+        elif not str(row.config_json or "").strip():
+            row.config_json = "{}"
+        row.updated_at = now
+        session.add(row)
+        session.commit()
+        session.refresh(row)
+        workspace = session.get(EnterpriseWorkspace, row.workspace_id)
+    workspace_slug_value = str(workspace.slug if workspace else "").strip()
+    workspace_name_value = str(workspace.name if workspace else "").strip()
+    return _workspace_domain_to_dict(row, workspace_slug=workspace_slug_value, workspace_name=workspace_name_value)
+
+
+def update_workspace_profile(
+    database_url: str,
+    *,
+    workspace_id: str,
+    company: str | None = None,
+    preferred_package: str | None = None,
+    first_team: str | None = None,
+    systems: list[str] | None = None,
+    goal: str | None = None,
+    onboarding_status: str | None = None,
+    config: dict[str, Any] | None = None,
+) -> dict[str, Any] | None:
+    normalized_workspace_id = str(workspace_id or "").strip()
+    if not normalized_workspace_id:
+        return None
+
+    ensure_workspace_profile(database_url, workspace_id=normalized_workspace_id)
+    now = _now()
+    engine = get_engine(database_url)
+    with Session(engine) as session:
+        row = session.get(EnterpriseWorkspaceProfile, normalized_workspace_id)
+        workspace = session.get(EnterpriseWorkspace, normalized_workspace_id)
+        if not row or not workspace:
+            return None
+        workspace_slug_value = str(workspace.slug or "").strip()
+        workspace_name_value = str(workspace.name or "").strip()
+        if company is not None:
+            row.company = str(company or "").strip()
+        if preferred_package is not None:
+            row.preferred_package = str(preferred_package or "").strip()
+        if first_team is not None:
+            row.first_team = str(first_team or "").strip()
+        if systems is not None:
+            normalized_systems = [str(item).strip() for item in systems if str(item).strip()]
+            row.systems_json = json.dumps(normalized_systems, ensure_ascii=False)
+        if goal is not None:
+            row.goal = str(goal or "").strip()
+        if onboarding_status is not None:
+            row.onboarding_status = str(onboarding_status or "").strip() or row.onboarding_status or "draft"
+
+        profile_config = _json_object(row.config_json)
+        if config is not None:
+            profile_config.update(config)
+        profile_config["workspace_slug"] = workspace_slug_value
+        profile_config["workspace_name"] = workspace_name_value
+        row.config_json = json.dumps(profile_config, ensure_ascii=False)
+        row.updated_at = now
+        session.add(row)
+        session.commit()
+        session.refresh(row)
+    return _workspace_profile_to_dict(row, workspace_slug=workspace_slug_value, workspace_name=workspace_name_value)
+
+
+def add_audit_event(
+    database_url: str,
+    *,
+    workspace_id: str,
+    actor: str,
+    event_type: str,
+    summary: str,
+    detail: str = "",
+    entity_type: str = "",
+    entity_id: str = "",
+    severity: str = "info",
+    payload: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    ensure_schema(database_url)
+    now = _now()
+    normalized_workspace_id = str(workspace_id or "").strip()
+    row = EnterpriseAuditEvent(
+        event_id=secrets.token_urlsafe(16),
+        workspace_id=normalized_workspace_id,
+        actor=str(actor or "").strip() or "system",
+        event_type=str(event_type or "").strip() or "unknown",
+        entity_type=str(entity_type or "").strip(),
+        entity_id=str(entity_id or "").strip(),
+        severity=str(severity or "").strip() or "info",
+        summary=str(summary or "").strip() or "Audit event",
+        detail=str(detail or "").strip(),
+        payload_json=json.dumps(payload or {}, ensure_ascii=False),
+        created_at=now,
+    )
+    engine = get_engine(database_url)
+    with Session(engine) as session:
+        session.add(row)
+        session.commit()
+        session.refresh(row)
+    return _audit_event_to_dict(row)
+
+
+def list_audit_events(
+    database_url: str,
+    *,
+    workspace_id: str,
+    limit: int = 25,
+    event_type: str | None = None,
+) -> list[dict[str, Any]]:
+    ensure_schema(database_url)
+    normalized_workspace_id = str(workspace_id or "").strip()
+    engine = get_engine(database_url)
+    statement = select(EnterpriseAuditEvent).where(EnterpriseAuditEvent.workspace_id == normalized_workspace_id)
+    if event_type:
+        statement = statement.where(EnterpriseAuditEvent.event_type == str(event_type).strip())
+    statement = statement.order_by(EnterpriseAuditEvent.created_at.desc()).limit(max(1, int(limit or 25)))
+    with Session(engine) as session:
+        rows = session.exec(statement).all()
+    return [_audit_event_to_dict(row) for row in rows]
+
+
+def add_connector_event(
+    database_url: str,
+    *,
+    workspace_id: str,
+    connector_id: str,
+    title: str,
+    connector_name: str = "",
+    tenant: str = "",
+    source: str = "",
+    kind: str = "",
+    detail: str = "",
+    route: str = "",
+    severity: str = "info",
+    actor: str = "system",
+    entity_type: str = "",
+    entity_id: str = "",
+    payload: dict[str, Any] | None = None,
+    created_at: str = "",
+) -> dict[str, Any] | None:
+    ensure_schema(database_url)
+    normalized_workspace_id = str(workspace_id or "").strip()
+    normalized_connector_id = str(connector_id or "").strip()
+    normalized_title = str(title or "").strip()
+    if not normalized_workspace_id or not normalized_connector_id or not normalized_title:
+        return None
+
+    row = EnterpriseConnectorEvent(
+        event_id=secrets.token_urlsafe(16),
+        workspace_id=normalized_workspace_id,
+        connector_id=normalized_connector_id,
+        connector_name=str(connector_name or "").strip(),
+        tenant=str(tenant or "").strip(),
+        source=str(source or "").strip(),
+        kind=str(kind or "").strip() or "event",
+        title=normalized_title,
+        detail=str(detail or "").strip(),
+        route=str(route or "").strip(),
+        severity=str(severity or "").strip() or "info",
+        actor=str(actor or "").strip() or "system",
+        entity_type=str(entity_type or "").strip(),
+        entity_id=str(entity_id or "").strip(),
+        payload_json=json.dumps(payload or {}, ensure_ascii=False),
+        created_at=str(created_at or "").strip() or _now(),
+    )
+    engine = get_engine(database_url)
+    with Session(engine) as session:
+        session.add(row)
+        session.commit()
+        session.refresh(row)
+    return _connector_event_to_dict(row)
+
+
+def list_connector_events(
+    database_url: str,
+    *,
+    workspace_id: str,
+    limit: int = 25,
+    connector_id: str | None = None,
+    kind: str | None = None,
+) -> list[dict[str, Any]]:
+    ensure_schema(database_url)
+    normalized_workspace_id = str(workspace_id or "").strip()
+    if not normalized_workspace_id:
+        return []
+    engine = get_engine(database_url)
+    statement = select(EnterpriseConnectorEvent).where(EnterpriseConnectorEvent.workspace_id == normalized_workspace_id)
+    if connector_id:
+        statement = statement.where(EnterpriseConnectorEvent.connector_id == str(connector_id).strip())
+    if kind:
+        statement = statement.where(EnterpriseConnectorEvent.kind == str(kind).strip())
+    statement = statement.order_by(EnterpriseConnectorEvent.created_at.desc()).limit(max(1, int(limit or 25)))
+    with Session(engine) as session:
+        rows = session.exec(statement).all()
+    return [_connector_event_to_dict(row) for row in rows]
 
 
 def ensure_user(
@@ -419,24 +1508,31 @@ def ensure_user(
 def authenticate_user(database_url: str, *, username: str, password: str) -> dict[str, Any] | None:
     ensure_schema(database_url)
     normalized_username = str(username or "").strip().lower()
-    password_hash = _hash_password(password)
     engine = get_engine(database_url)
     with Session(engine) as session:
         user = session.exec(
             select(EnterpriseUser).where(
                 EnterpriseUser.username == normalized_username,
-                EnterpriseUser.password_hash == password_hash,
                 EnterpriseUser.status == "active",
             )
         ).first()
-    if not user:
-        return None
-    return {
-        "username": user.username,
-        "display_name": user.display_name,
-        "role": user.role,
-        "status": user.status,
-    }
+        if not user:
+            return None
+        matched, needs_upgrade = _verify_password(password, user.password_hash)
+        if not matched:
+            return None
+        if needs_upgrade:
+            user.password_hash = _hash_password(password)
+            user.updated_at = _now()
+            session.add(user)
+            session.commit()
+            session.refresh(user)
+        return {
+            "username": user.username,
+            "display_name": user.display_name,
+            "role": user.role,
+            "status": user.status,
+        }
 
 
 def list_user_workspaces(database_url: str, *, username: str) -> list[dict[str, Any]]:
@@ -526,8 +1622,8 @@ def invite_workspace_member(
     ensure_schema(database_url)
     normalized_workspace_id = str(workspace_id or "").strip()
     normalized_email = str(email or "").strip().lower()
-    normalized_role = str(role or "").strip().lower() or "member"
-    if normalized_role not in {"owner", "manager", "lead", "operator", "member"}:
+    normalized_role = _normalize_workspace_role(role) or "member"
+    if normalized_role not in SUPPORTED_WORKSPACE_ROLES:
         normalized_role = "member"
     if not normalized_workspace_id or not normalized_email:
         return {"status": "skipped"}
@@ -536,6 +1632,7 @@ def invite_workspace_member(
     engine = get_engine(database_url)
     membership_id = _stable_key("MEM", f"{normalized_email}:{normalized_workspace_id}")
     generated_password = ""
+    invite_password = str(password or "").strip() or secrets.token_urlsafe(10)
     created = False
     with Session(engine) as session:
         workspace = session.get(EnterpriseWorkspace, normalized_workspace_id)
@@ -553,11 +1650,10 @@ def invite_workspace_member(
             user.role = _merge_user_role(user.role, normalized_role)
             user.status = "active"
             user.updated_at = now
-            if str(password or "").strip():
-                generated_password = str(password).strip()
-                user.password_hash = _hash_password(generated_password)
+            generated_password = invite_password
+            user.password_hash = _hash_password(generated_password)
         else:
-            generated_password = str(password or "").strip() or secrets.token_urlsafe(10)
+            generated_password = invite_password
             user = EnterpriseUser(
                 username=normalized_email,
                 display_name=name_value,
@@ -920,7 +2016,7 @@ def add_leads_with_tasks(
             lead.archetype = str(row.get("archetype", "")).strip()
             lead.stage = str(row.get("stage", "")).strip() or "offer_ready"
             lead.status = str(row.get("status", "")).strip() or "open"
-            lead.owner = str(row.get("owner", "")).strip() or "Growth Studio"
+            lead.owner = str(row.get("owner", "")).strip() or "Revenue Pod"
             lead.campaign_goal = str(campaign_goal or row.get("campaign_goal", "")).strip()
             lead.service_pack = str(row.get("service_pack", "")).strip()
             lead.wedge_product = str(row.get("wedge_product", "")).strip()
@@ -1080,7 +2176,7 @@ def save_lead_hunt_profile(
     workspace_id: str,
     hunt_id: str | None = None,
     name: str,
-    owner: str = "Growth Studio",
+    owner: str = "Revenue Pod",
     query: str = "",
     raw_text: str = "",
     keywords: list[str] | None = None,
@@ -1095,7 +2191,7 @@ def save_lead_hunt_profile(
     keywords_payload = [str(item).strip() for item in (keywords or []) if str(item).strip()]
     sources_payload = [str(item).strip() for item in (sources or []) if str(item).strip()]
     normalized_name = str(name or "").strip() or "Untitled hunt"
-    normalized_owner = str(owner or "").strip() or "Growth Studio"
+    normalized_owner = str(owner or "").strip() or "Revenue Pod"
     normalized_query = str(query or "").strip()
     normalized_raw_text = str(raw_text or "").strip()
     normalized_campaign_goal = str(campaign_goal or "").strip()
@@ -1427,7 +2523,7 @@ def add_leads(
             lead.archetype = str(row.get("archetype", "")).strip()
             lead.stage = str(row.get("stage", "")).strip() or "offer_ready"
             lead.status = str(row.get("status", "")).strip() or "open"
-            lead.owner = str(row.get("owner", "")).strip() or "Growth Studio"
+            lead.owner = str(row.get("owner", "")).strip() or "Revenue Pod"
             lead.campaign_goal = str(campaign_goal or row.get("campaign_goal", "")).strip()
             lead.service_pack = str(row.get("service_pack", "")).strip()
             lead.wedge_product = str(row.get("wedge_product", "")).strip()
@@ -1526,7 +2622,7 @@ def add_lead_activity(
         workspace_id=str(workspace_id),
         lead_id=str(lead_id),
         created_at=created_at,
-        actor=str(actor or "").strip() or "Growth Studio",
+        actor=str(actor or "").strip() or "Revenue Pod",
         activity_type=str(activity_type or "").strip() or "note",
         channel=str(channel or "").strip() or "manual",
         direction=str(direction or "").strip() or "internal",

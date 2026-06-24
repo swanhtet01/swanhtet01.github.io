@@ -434,7 +434,7 @@ export function LeadFinderPage() {
           archetype: 'manual',
           stage: 'offer_ready',
           status: 'open',
-          owner: 'Growth Studio',
+          owner: 'Revenue Pod',
           service_pack: 'Find Clients',
           wedge_product: 'Find Clients',
           starter_modules: ['Find Clients', 'Company List'],

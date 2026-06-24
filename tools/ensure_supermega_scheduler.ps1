@@ -128,7 +128,7 @@ Invoke-Gcloud -CommandArgs @(
     "--update-secrets=SUPERMEGA_INTERNAL_CRON_TOKEN=supermega-internal-cron-token:latest"
 ) | Out-Null
 
-Ensure-SchedulerJob -Name "supermega-default-agent-jobs" -Schedule "0 */2 * * *" -Uri $enqueueUri -Body '{"source":"scheduler","job_types":["revenue_scout","list_clerk","task_triage","template_clerk"]}'
+Ensure-SchedulerJob -Name "supermega-default-agent-jobs" -Schedule "0 */2 * * *" -Uri $enqueueUri -Body '{"source":"scheduler","job_types":["revenue_scout","list_clerk","task_triage","template_clerk","github_release_watch"]}'
 Ensure-SchedulerJob -Name "supermega-ops-watch" -Schedule "*/15 * * * *" -Uri $enqueueUri -Body '{"source":"scheduler","job_types":["ops_watch"]}'
 Ensure-SchedulerJob -Name "supermega-founder-brief-daily" -Schedule "0 8 * * *" -Uri $enqueueUri -Body '{"source":"scheduler","job_types":["founder_brief"]}'
 Ensure-SchedulerJob -Name "supermega-agent-worker" -Schedule "*/5 * * * *" -Uri $workerUri -Body '{"source":"worker","limit":12}'

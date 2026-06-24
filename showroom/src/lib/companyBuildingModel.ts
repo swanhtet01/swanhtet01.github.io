@@ -169,6 +169,17 @@ export const BUILD_TEAMS: BuildTeam[] = [
     rituals: ['launch readiness review', 'first-week adoption readout', 'tenant gap triage'],
     metric: 'Gets real companies live quickly enough that the platform learns from production.',
   },
+  {
+    id: 'data-science-lab',
+    name: 'Data Science Lab',
+    workspace: 'platform/data-science',
+    mission: 'Turn live workflow state into feature marts, forecasts, anomaly detection, and next-best-action.',
+    ownership: ['metrics contracts', 'feature engineering', 'forecast review', 'model evals'],
+    outputs: ['feature marts', 'forecast packs', 'anomaly alerts', 'decision scores'],
+    agentPods: ['Signal Modeler', 'Release Judge'],
+    rituals: ['weekly model review', 'forecast acceptance review', 'drift triage'],
+    metric: 'Makes analytics change decisions inside the workflow instead of living in a separate reporting stack.',
+  },
 ]
 
 export const BUILD_WORKSPACES: BuildWorkspace[] = [
@@ -211,6 +222,14 @@ export const BUILD_WORKSPACES: BuildWorkspace[] = [
     owners: ['Tenant Launch Pod', 'Implementation lead'],
     surfaces: ['tenant checklists', 'domain status', 'migration runs', 'training loops'],
     reviewCadence: 'Launch standup during active rollout',
+  },
+  {
+    id: 'model-lab',
+    name: 'Model Lab',
+    purpose: 'Owns feature marts, forecast review, anomaly baselines, and model acceptance for AI-native product loops.',
+    owners: ['Data Science Lab', 'Knowledge Systems', 'Founder'],
+    surfaces: ['feature marts', 'forecast review', 'anomaly triage', 'model eval packs'],
+    reviewCadence: 'Weekly model review',
   },
 ]
 
@@ -322,22 +341,27 @@ export const MODULE_PROGRAMS: ModuleProgram[] = [
   {
     id: 'ops-erp-core',
     name: 'Ops ERP Core',
-    target: 'Disrupt ERP suites by starting from live operational wedges instead of giant suite rollouts.',
-    market: 'Plants, procurement teams, warehouses, service operators, and operations leaders',
+    target: 'Disrupt ERP, QMS, and DQMS suites by starting from live industrial control instead of giant suite rollouts.',
+    market: 'Plants, industrial operators, quality teams, maintenance leads, warehouses, and operations leaders',
     stage: 'Named tenant rollout',
     owner: 'Tenant Launch Pod + Connector Systems',
     researchCell: 'Input Systems Cell',
     starterWedge: 'Receiving Control',
-    tenantProof: 'Yangon Tyre receiving, supplier recovery, quality closeout',
-    modules: ['Operations Inbox', 'Approval Policy Engine', 'Document Intelligence'],
-    commercialStory: 'Sell operations control from the plant floor upward, then replace more of the ERP exception, approval, and document stack behind it.',
-    differentiator: 'Operational queues, documents, approvals, and exceptions live in one operator-facing layer.',
+    tenantProof: 'Yangon Tyre receiving, industrial DQMS, maintenance follow-up, supplier recovery',
+    modules: ['Operations Inbox', 'Industrial DQMS', 'Approval Policy Engine', 'Document Intelligence'],
+    commercialStory:
+      'Sell industrial control from the plant floor upward, then replace more of the ERP, quality, and reporting stack with DQMS, KPI control, and gap-analysis workflows.',
+    differentiator: 'Operational queues, quality methods, KPI reviews, and corrective action all live in one operator-facing industrial layer.',
     releaseTrain: 'Daily operations-hardening release train',
     agentCrews: ['Connector Watch', 'Prototype Analyst', 'Release Judge'],
-    successSignals: ['Exceptions are captured the same day', 'Supplier recovery is visible and owned', 'Quality and finance controls survive live rollout'],
-    nextMove: 'Finish tenant-scoped state, event-driven file sync, and field-level policy for production rollout.',
-    nextReleases: ['supplier recovery lane', 'ERP event ingestion', 'quality closeout workflow'],
-    route: '/clients/yangon-tyre',
+    successSignals: [
+      'Exceptions are captured the same day',
+      'Quality and maintenance reviews use structured methods instead of blank notes',
+      'KPI drift and corrective action survive live rollout',
+    ],
+    nextMove: 'Finish tenant-scoped state, event-driven file sync, and dedicated DQMS review surfaces for production rollout.',
+    nextReleases: ['supplier recovery lane', 'ERP event ingestion', 'industrial DQMS desk', 'KPI gap-analysis lane'],
+    route: '/products/industrial-dqms',
   },
   {
     id: 'portal-network',
@@ -399,6 +423,26 @@ export const MODULE_PROGRAMS: ModuleProgram[] = [
     nextReleases: ['cross-tenant health scoring', 'intervention log', 'director exception radar'],
     route: '/products/director-command-center',
   },
+  {
+    id: 'operating-intelligence',
+    name: 'Operating Intelligence',
+    target: 'Disrupt BI, planning, and analytics stacks by embedding forecasts and anomaly detection inside live workflows.',
+    market: 'Founders, directors, revenue ops, finance, and multi-site operators',
+    stage: 'Infrastructure + control-layer rollout',
+    owner: 'Data Science Lab + Knowledge Systems',
+    researchCell: 'Data Science Systems Cell',
+    starterWedge: 'Founder Brief and Director Command Center',
+    tenantProof: 'daily risk scoring, forecast review, anomaly alerts',
+    modules: ['Data Science Studio', 'Founder Brief', 'Director Command Center'],
+    commercialStory: 'Sell operating intelligence from live workflow state instead of static dashboard projects and analyst spreadsheets.',
+    differentiator: 'Predictions and next-best-action stay attached to queues, policy state, and company memory.',
+    releaseTrain: 'Weekly intelligence-model train',
+    agentCrews: ['Knowledge Curator', 'Signal Modeler', 'Release Judge'],
+    successSignals: ['Forecasts refresh from live state', 'Anomalies surface before manual review', 'Leaders act inside the workflow instead of exporting to BI'],
+    nextMove: 'Ship tenant-aware feature marts, anomaly triage, and model explanation views.',
+    nextReleases: ['feature mart', 'forecast review desk', 'anomaly triage lane'],
+    route: '/products/data-science-studio',
+  },
 ]
 
 export const COMPETITIVE_FRONTS: CompetitiveFront[] = [
@@ -406,7 +450,7 @@ export const COMPETITIVE_FRONTS: CompetitiveFront[] = [
     id: 'erp-suites',
     name: 'ERP suites',
     incumbents: 'Odoo, SAP, NetSuite',
-    supermegaAngle: 'Start from live operational wedges and unify the runtime underneath, instead of forcing a giant suite rollout first.',
+    supermegaAngle: 'Start from live industrial wedges, DQMS logic, and operator methods, then unify the runtime underneath instead of forcing a giant suite rollout first.',
     whyItMatters: 'Winning here means better adoption, faster rollout, and less process theater.',
   },
   {
@@ -457,6 +501,12 @@ export const RESEARCH_PRIORITIES: ResearchPriority[] = [
     thesis: 'Agent teams need measurable quality, retry logic, and failure classes before they can run the prep layer at scale.',
     graduation: 'Eval packs, runtime scoring, human review loops, and promotion gates.',
   },
+  {
+    id: 'operating-intelligence',
+    name: 'Operating intelligence',
+    thesis: 'Forecasting, anomaly detection, and next-best-action need live workflow state, not disconnected BI pipelines.',
+    graduation: 'Tenant-aware feature marts, forecast packs, anomaly scoring, and explanation views inside the product.',
+  },
 ]
 
 export const RESEARCH_CELLS: ResearchCell[] = [
@@ -504,6 +554,15 @@ export const RESEARCH_CELLS: ResearchCell[] = [
     supports: ['All product lines'],
     inputs: ['agent failures', 'eval packs', 'approval logs', 'write-risk reviews'],
     outputs: ['promotion gates', 'eval standards', 'approval patterns'],
+  },
+  {
+    id: 'data-science-systems',
+    name: 'Data Science Systems Cell',
+    mandate: 'Build the feature, forecast, anomaly, and prioritization loops that turn workflow data into operating intelligence.',
+    ownedBy: 'Data Science Lab',
+    supports: ['Operating Intelligence', 'Director OS', 'Revenue OS', 'Ops ERP Core'],
+    inputs: ['metrics', 'task history', 'exceptions', 'entity graph', 'connector freshness'],
+    outputs: ['feature marts', 'forecast packs', 'anomaly baselines', 'next-best-action scores'],
   },
 ]
 
@@ -571,6 +630,16 @@ export const INTERNAL_AGENT_CREWS: InternalAgentCrew[] = [
     writeScope: ['gate scores', 'release blockers', 'graduation recommendations'],
     cadence: 'At every release gate',
     approvalGate: 'Module Factory and Governance Runtime approve promotion into the portfolio.',
+  },
+  {
+    id: 'signal-modeler',
+    name: 'Signal Modeler',
+    workspace: 'platform/data-science',
+    mission: 'Train forecasting, anomaly, and prioritization loops from live workflow state and shared company memory.',
+    readScope: ['metrics', 'task history', 'exception queues', 'entity graph', 'connector freshness'],
+    writeScope: ['feature marts', 'model scores', 'forecast notes', 'anomaly alerts'],
+    cadence: 'Daily scoring with weekly model review',
+    approvalGate: 'Data Science Lab approves production model thresholds and score publication.',
   },
 ]
 

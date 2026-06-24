@@ -1,0 +1,5 @@
+[project]
+name = "app"
+version = "0.1.0"
+dependencies = [ "beautifulsoup4", "fastapi", "google-cloud-tasks", "pydantic", "python-dotenv", "sentry-sdk[fastapi]", "sqlmodel", "uvicorn" ]
+requires-python = "~=3.14.0"

@@ -1,0 +1,187 @@
+{
+  "resource_id": "supermega-build-workforce",
+  "tenant_key": "default",
+  "title": "SUPERMEGA build workforce",
+  "dialectic": {
+    "thesis": "Build a company that ships AI-native workspaces, not isolated demos.",
+    "antithesis": "Without named owners, workspaces, and review gates, the AI workforce becomes a pile of disconnected experiments.",
+    "synthesis": "A live workforce registry ties build teams, pods, workspaces, and playbooks into one operational machine."
+  },
+  "manager_moves": [
+    "Keep one named team on every module, connector lane, and tenant launch.",
+    "Give each pod a bounded read scope, write scope, and review gate.",
+    "Treat stale loops and repeated manual recovery as product failures, not operator chores."
+  ],
+  "build_teams": [
+    {
+      "id": "rd-lab",
+      "name": "R&D Lab",
+      "workspace": "factory/research",
+      "mission": "Turn painful workflow reality and incumbent teardown into build-ready wedges.",
+      "ownership": ["problem briefs", "category maps", "eval design", "prototype specs"],
+      "outputs": ["problem brief", "market wedge", "prototype charter"],
+      "agent_pods": ["Workflow Scout", "Release Judge"],
+      "rituals": ["weekly wedge review", "competitor teardown", "problem-ranking review"],
+      "metric": "Produces buildable wedges with evidence, owner, and release path."
+    },
+    {
+      "id": "prototype-studio",
+      "name": "Prototype Studio",
+      "workspace": "factory/prototypes",
+      "mission": "Build fast proof systems against live company data and operator loops.",
+      "ownership": ["pilot UI", "operator replay", "tenant proof", "entry experiments"],
+      "outputs": ["live pilot", "operator surface", "acceptance notes"],
+      "agent_pods": ["Prototype Analyst", "Workflow Scout"],
+      "rituals": ["daily operator replay", "pilot acceptance review"],
+      "metric": "Ships proofs that teach the product what the reusable module must become."
+    },
+    {
+      "id": "module-factory",
+      "name": "Module Factory",
+      "workspace": "factory/modules",
+      "mission": "Generalize repeatable proofs into reusable, sellable modules.",
+      "ownership": ["module contracts", "shared UI", "runtime hooks", "release gates"],
+      "outputs": ["module package", "launch-ready route", "release packet"],
+      "agent_pods": ["Release Judge", "Knowledge Curator"],
+      "rituals": ["release gate review", "contract review", "packaging review"],
+      "metric": "Promotes pilots into modules that can be sold and supported repeatedly."
+    },
+    {
+      "id": "tenant-launch",
+      "name": "Tenant Launch Pod",
+      "workspace": "factory/launch",
+      "mission": "Turn the product into real deployments for named companies and sites.",
+      "ownership": ["tenant setup", "domain rollout", "migration path", "onboarding discipline"],
+      "outputs": ["live tenant", "launch checklist", "adoption loop"],
+      "agent_pods": ["Prototype Analyst", "Connector Watch"],
+      "rituals": ["launch readiness review", "first-week adoption readout"],
+      "metric": "Gets customers live quickly enough that the platform learns from production."
+    }
+  ],
+  "workspaces": [
+    {
+      "id": "research-backlog",
+      "name": "Research Backlog",
+      "purpose": "Rank wedges, problems, and product opportunities before engineers build.",
+      "owners": ["R&D Lab", "Founder", "Product lead"],
+      "surfaces": ["problem briefs", "category maps", "priority scorecards"],
+      "review_cadence": "Weekly wedge review"
+    },
+    {
+      "id": "prototype-floor",
+      "name": "Prototype Floor",
+      "purpose": "Hold pilots, operator recordings, data-entry experiments, and acceptance notes.",
+      "owners": ["Prototype Studio", "Tenant Launch Pod"],
+      "surfaces": ["pilot tenants", "operator loops", "acceptance tests"],
+      "review_cadence": "Daily operator replay"
+    },
+    {
+      "id": "module-release-desk",
+      "name": "Module Release Desk",
+      "purpose": "Own generalized module contracts, release gates, and launch readiness.",
+      "owners": ["Module Factory", "Governance Runtime"],
+      "surfaces": ["module contracts", "release gates", "launch packets"],
+      "review_cadence": "Twice-weekly graduation review"
+    },
+    {
+      "id": "tenant-launch-room",
+      "name": "Tenant Launch Room",
+      "purpose": "Coordinate domains, onboarding, migration, access, and first-week adoption.",
+      "owners": ["Tenant Launch Pod", "Implementation lead"],
+      "surfaces": ["launch checklist", "domain status", "migration runs", "training loops"],
+      "review_cadence": "Launch standup during active rollout"
+    }
+  ],
+  "delegated_pods": [
+    {
+      "id": "orchestration-pod",
+      "name": "Orchestration Pod",
+      "mission": "Own specialist agent definitions, handoffs, and tool-routing discipline.",
+      "owns": ["agent contracts", "handoff rules", "guardrail wiring", "background run policy"],
+      "read_scope": ["agent traces", "tool registry", "task outcomes", "playbook definitions"],
+      "write_scope": ["agent prompts", "tool schemas", "handoff templates"],
+      "review_gate": "Platform lead review",
+      "routes": [
+        { "label": "Workbench", "to": "/app/workbench" },
+        { "label": "Agent Ops", "to": "/app/teams" }
+      ]
+    },
+    {
+      "id": "connector-protocol-pod",
+      "name": "Connector and Protocol Pod",
+      "mission": "Turn internal and external systems into reusable tools and resources.",
+      "owns": ["connector contracts", "source mapping", "context exposure policy"],
+      "read_scope": ["connector health", "source metadata", "oauth posture"],
+      "write_scope": ["resource schemas", "tool registry entries", "connector policies"],
+      "review_gate": "Connector Systems review",
+      "routes": [
+        { "label": "Connectors", "to": "/app/connectors" },
+        { "label": "Runtime", "to": "/app/runtime" }
+      ]
+    },
+    {
+      "id": "durable-runtime-pod",
+      "name": "Durable Runtime Pod",
+      "mission": "Convert long-running business sequences into resumable workflows.",
+      "owns": ["workflow definitions", "retry policy", "launch choreography", "rollback rules"],
+      "read_scope": ["launch tasks", "agent runs", "approval history", "runtime incidents"],
+      "write_scope": ["workflow templates", "checkpoint rules", "recovery playbooks"],
+      "review_gate": "Architecture and Runtime review",
+      "routes": [
+        { "label": "Workbench", "to": "/app/workbench" },
+        { "label": "Platform Admin", "to": "/app/platform-admin" }
+      ]
+    },
+    {
+      "id": "prompt-eval-pod",
+      "name": "Prompt and Eval Pod",
+      "mission": "Treat prompts, datasets, and evaluation rules as production assets.",
+      "owns": ["prompt registry", "eval datasets", "model comparison", "regression review"],
+      "read_scope": ["traces", "feedback notes", "output examples"],
+      "write_scope": ["prompt versions", "eval configs", "quality thresholds"],
+      "review_gate": "AI Product review",
+      "routes": [
+        { "label": "Workbench", "to": "/app/workbench" },
+        { "label": "Knowledge", "to": "/app/knowledge" }
+      ]
+    }
+  ],
+  "instruction_packs": [
+    {
+      "id": "module-readiness-pack",
+      "name": "Module Readiness Pack",
+      "audience": "Module Factory",
+      "workspace": "factory/modules",
+      "instructions": [
+        "Do not promote a module until the live route, role model, and operator record are visible.",
+        "Keep screenshots, smoke results, and rollout narrative attached to the release packet.",
+        "Any repeated tenant-only patch must become a candidate for product generalization."
+      ],
+      "done_when": "The module is sellable, route-backed, and release-ready."
+    },
+    {
+      "id": "tenant-launch-pack",
+      "name": "Tenant Launch Pack",
+      "audience": "Tenant Launch Pod",
+      "workspace": "factory/launch",
+      "instructions": [
+        "Start with one live workflow and one role home before expanding the tenant surface.",
+        "Map files, inboxes, exports, and owners before enabling write automation.",
+        "Treat migration blockers as launch-critical and keep them visible."
+      ],
+      "done_when": "The tenant is live with one working workflow and a clear next expansion lane."
+    },
+    {
+      "id": "runtime-hardening-pack",
+      "name": "Runtime Hardening Pack",
+      "audience": "Orchestration and Runtime pods",
+      "workspace": "core-platform/runtime",
+      "instructions": [
+        "Every autonomous write path needs a human rollback path.",
+        "Repeated manual recovery means the workflow contract is wrong.",
+        "Tool and prompt changes must stay linked to trace evidence and evaluation."
+      ],
+      "done_when": "Core loops stay inside guardrails and stale job families are visible."
+    }
+  ]
+}

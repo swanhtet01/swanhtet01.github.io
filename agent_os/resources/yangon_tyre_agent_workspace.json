@@ -1,0 +1,347 @@
+{
+  "resource_id": "yangon-tyre-agent-workspace",
+  "tenant_key": "ytf-plant-a",
+  "company": {
+    "name": "Yangon Tyre",
+    "public_label": "YTF Plant A",
+    "domain": "ytf.supermega.dev",
+    "sector": "Tyre manufacturing and distribution"
+  },
+  "dialectic": {
+    "thesis": "Build one portal where sales, plant, quality, maintenance, procurement, and leadership work from shared evidence.",
+    "antithesis": "Email threads, Drive folders, chat groups, ERP exports, and manual sheets fragment the operating record.",
+    "synthesis": "A tenant-specific agent workspace turns human-organized data into role-safe workflows, industrial analysis, and governed AI assistance."
+  },
+  "workspaces": [
+    {
+      "id": "executive-command",
+      "name": "Executive Command",
+      "route": "/app/director",
+      "mission": "Show company risk, supply pressure, quality exposure, and commercial movement in one daily brief.",
+      "owner_roles": ["ceo", "admin", "director"]
+    },
+    {
+      "id": "commercial-desk",
+      "name": "Commercial Desk",
+      "route": "/app/revenue",
+      "mission": "Run dealer follow-up, quote memory, visit planning, and market demand signals.",
+      "owner_roles": ["sales", "sales_lead", "ceo"]
+    },
+    {
+      "id": "plant-command",
+      "name": "Plant Command",
+      "route": "/app/operations",
+      "mission": "Control inbound blockers, shift issues, approvals, and daily execution from one queue.",
+      "owner_roles": ["operations", "plant_manager", "receiving_clerk"]
+    },
+    {
+      "id": "quality-lab",
+      "name": "DQMS and Quality Lab",
+      "route": "/app/dqms",
+      "mission": "Handle incidents, CAPA, containment, fishbone, 5W1H, and structured quality closeout.",
+      "owner_roles": ["quality", "quality_manager", "plant_manager"]
+    },
+    {
+      "id": "reliability-cell",
+      "name": "Maintenance and Reliability",
+      "route": "/app/maintenance",
+      "mission": "Track breakdowns, preventive plans, spare-part blockers, and repeat-failure studies.",
+      "owner_roles": ["maintenance", "plant_manager", "quality_manager"]
+    },
+    {
+      "id": "tenant-admin",
+      "name": "Tenant Admin and Connector Control",
+      "route": "/app/platform-admin",
+      "mission": "Manage users, modules, domains, connector scope, policy, and AI workforce posture.",
+      "owner_roles": ["admin", "tenant_admin", "platform_admin"]
+    }
+  ],
+  "role_profiles": [
+    {
+      "id": "ceo",
+      "name": "CEO",
+      "home": "/app/director",
+      "mission": "See cross-company risk, operating pressure, and decision-ready narratives.",
+      "capabilities": ["director.view", "operations.view", "actions.view"],
+      "tool_profile": "executive-command-stack"
+    },
+    {
+      "id": "admin",
+      "name": "Admin",
+      "home": "/app/platform-admin",
+      "mission": "Own roles, connector posture, rollout governance, and meta-tool control.",
+      "capabilities": ["tenant_admin.view", "connector_admin.view", "knowledge_admin.view"],
+      "tool_profile": "tenant-control-stack"
+    },
+    {
+      "id": "sales",
+      "name": "Sales",
+      "home": "/app/revenue",
+      "mission": "Move dealer relationships, quote follow-up, and market signals through one CRM layer.",
+      "capabilities": ["sales.view", "actions.view", "approvals.view"],
+      "tool_profile": "commercial-stack"
+    },
+    {
+      "id": "plant_manager",
+      "name": "Plant Manager",
+      "home": "/app/operations",
+      "mission": "Review production risk, plant blockers, and countermeasure ownership across the factory.",
+      "capabilities": ["operations.view", "receiving.view", "dqms.view", "maintenance.view"],
+      "tool_profile": "plant-command-stack"
+    },
+    {
+      "id": "quality_manager",
+      "name": "Quality Manager",
+      "home": "/app/dqms",
+      "mission": "Close incidents with evidence, containment, cause, and corrective action discipline.",
+      "capabilities": ["dqms.view", "operations.view", "actions.view", "director.view"],
+      "tool_profile": "quality-stack"
+    },
+    {
+      "id": "maintenance",
+      "name": "Maintenance Lead",
+      "home": "/app/maintenance",
+      "mission": "Reduce repeat failures and translate downtime into fixable reliability programs.",
+      "capabilities": ["maintenance.view", "operations.view", "actions.view"],
+      "tool_profile": "reliability-stack"
+    },
+    {
+      "id": "receiving_clerk",
+      "name": "Receiving Clerk",
+      "home": "/app/receiving",
+      "mission": "Capture inbound variance, holds, COA evidence, and supplier recovery triggers cleanly.",
+      "capabilities": ["receiving.view", "operations.view", "approvals.view"],
+      "tool_profile": "plant-command-stack"
+    }
+  ],
+  "tool_profiles": [
+    {
+      "id": "executive-command-stack",
+      "name": "Executive Command Stack",
+      "users": ["ceo", "director"],
+      "tools": ["Director Dashboard", "Insights", "Cloud Ops", "Agent Space"],
+      "guardrails": ["Executive view is read-mostly", "Sensitive writebacks require admin or manager sign-off", "Cross-functional summaries must include provenance"]
+    },
+    {
+      "id": "tenant-control-stack",
+      "name": "Tenant Control Stack",
+      "users": ["admin", "tenant_admin", "platform_admin"],
+      "tools": ["Platform Admin", "Connectors", "Cloud Ops", "Workbench", "Agent Space"],
+      "guardrails": ["Connector scope stays tenant-bounded", "Role changes require audit trail", "Policy and rollout changes are reviewable"]
+    },
+    {
+      "id": "commercial-stack",
+      "name": "Commercial Stack",
+      "users": ["sales", "sales_lead"],
+      "tools": ["Revenue", "Action Queue", "Approvals", "Calendar-linked planning"],
+      "guardrails": ["Agents may draft but not send external communications without review", "CRM updates need tenant evidence", "Collections or pricing escalations need approval"]
+    },
+    {
+      "id": "plant-command-stack",
+      "name": "Plant Command Stack",
+      "users": ["plant_manager", "operations", "receiving_clerk"],
+      "tools": ["Operations", "Receiving", "Approvals", "Data Fabric"],
+      "guardrails": ["Line status changes must remain attributable", "Hold or release decisions require evidence", "Inbound corrections stay attached to source documents"]
+    },
+    {
+      "id": "quality-stack",
+      "name": "Quality Stack",
+      "users": ["quality", "quality_manager"],
+      "tools": ["DQMS", "Data Fabric", "Knowledge", "Action Queue"],
+      "guardrails": ["CAPA closeout requires evidence", "Root-cause suggestions remain draft until accepted", "Quality overrides escalate to management"]
+    },
+    {
+      "id": "reliability-stack",
+      "name": "Reliability Stack",
+      "users": ["maintenance", "plant_manager"],
+      "tools": ["Maintenance", "Operations", "DQMS", "Action Queue"],
+      "guardrails": ["Downtime and failure coding must preserve source history", "Repeat-failure programs need plant review", "Spare-part decisions follow approval rules"]
+    }
+  ],
+  "knowledge_resources": [
+    {
+      "id": "gmail-intake",
+      "name": "Gmail and attachment intake",
+      "source": "dealer, supplier, quality, and finance email threads",
+      "trust_tier": "raw",
+      "cadence": "15-minute target",
+      "used_by": ["Commercial", "Procurement", "Quality", "Agent Space"]
+    },
+    {
+      "id": "drive-folders",
+      "name": "Google Drive shared folders",
+      "source": "plant folders, QC evidence, maintenance sheets, SOP vault, finance docs",
+      "trust_tier": "raw",
+      "cadence": "hourly target",
+      "used_by": ["Quality", "Maintenance", "Admin", "Agent Space"]
+    },
+    {
+      "id": "erp-exports",
+      "name": "ERP and CSV exports",
+      "source": "PO, GRN, stock, invoice, batch, branch, and production extracts",
+      "trust_tier": "normalized",
+      "cadence": "intraday batch",
+      "used_by": ["Operations", "Receiving", "Executive", "Agent Space"]
+    },
+    {
+      "id": "shopfloor-logs",
+      "name": "Shopfloor logs and mobile forms",
+      "source": "mixing, extrusion, calender, building, curing, inspection, downtime",
+      "trust_tier": "normalized",
+      "cadence": "shift or live entry",
+      "used_by": ["Operations", "Quality", "Maintenance", "Agent Space"]
+    },
+    {
+      "id": "quality-cases",
+      "name": "Quality incidents and CAPA memory",
+      "source": "DQMS cases and evidence links",
+      "trust_tier": "canonical",
+      "cadence": "live query",
+      "used_by": ["Quality", "Executive", "Agent Space"]
+    },
+    {
+      "id": "manager-actions",
+      "name": "Manager action board",
+      "source": "task queue and role-based work management",
+      "trust_tier": "canonical",
+      "cadence": "live query",
+      "used_by": ["Executive", "Plant", "Commercial", "Agent Space"]
+    },
+    {
+      "id": "tenant-context",
+      "name": "Tenant operating context",
+      "source": "Yangon Tyre context template and portal models",
+      "trust_tier": "modeled",
+      "cadence": "on design update",
+      "used_by": ["Architect", "Admin", "Agent Space"]
+    }
+  ],
+  "trust_boundaries": [
+    {
+      "id": "raw-to-canon",
+      "name": "Raw to canonical boundary",
+      "rule": "Email, chat, OCR, and folder contents remain raw until normalized and reviewed before promotion.",
+      "surfaces": ["/app/data-fabric", "/app/knowledge", "/app/agent-space"]
+    },
+    {
+      "id": "commercial-send-gate",
+      "name": "Commercial send gate",
+      "rule": "Agents may draft sales or supplier responses but cannot send or confirm commitments without human approval.",
+      "surfaces": ["/app/revenue", "/app/approvals"]
+    },
+    {
+      "id": "release-hold-gate",
+      "name": "Release and hold gate",
+      "rule": "Material release, hold, CAPA closeout, and supplier override actions require evidence-backed authorization.",
+      "surfaces": ["/app/receiving", "/app/dqms", "/app/approvals"]
+    },
+    {
+      "id": "tenant-admin-gate",
+      "name": "Tenant admin gate",
+      "rule": "Connector scope, user roles, rollout posture, and domain changes stay limited to admin-capable roles.",
+      "surfaces": ["/app/platform-admin", "/app/connectors", "/app/cloud"]
+    },
+    {
+      "id": "autonomous-field-write-gate",
+      "name": "Autonomous field-write gate",
+      "rule": "Agents can suggest classifications, priorities, and summaries but sensitive record changes remain review-first.",
+      "surfaces": ["/app/actions", "/app/runtime", "/app/agent-space"]
+    }
+  ],
+  "ai_teams": [
+    {
+      "id": "intake-router",
+      "name": "Intake Router",
+      "workspace": "tenant-admin",
+      "mission": "Classify mail, files, forms, and chat into the correct app, owner, and queue lane.",
+      "reads": ["gmail-intake", "drive-folders", "manager-actions"],
+      "writes": ["draft tasks", "classification tags", "owner suggestions"],
+      "approval_gate": "Admin or function owner review"
+    },
+    {
+      "id": "quality-watch",
+      "name": "Quality Watch",
+      "workspace": "quality-lab",
+      "mission": "Detect emerging defect patterns, evidence gaps, and overdue CAPA closeout work.",
+      "reads": ["quality-cases", "shopfloor-logs", "drive-folders"],
+      "writes": ["case summaries", "root-cause prompts", "follow-up drafts"],
+      "approval_gate": "Quality manager review"
+    },
+    {
+      "id": "maintenance-reliability-cell",
+      "name": "Maintenance Reliability Cell",
+      "workspace": "reliability-cell",
+      "mission": "Rank repeat failures, connect downtime with plant evidence, and prepare reliability actions.",
+      "reads": ["shopfloor-logs", "erp-exports", "manager-actions"],
+      "writes": ["downtime clusters", "repeat-failure summaries", "draft action items"],
+      "approval_gate": "Plant manager or maintenance lead review"
+    },
+    {
+      "id": "commercial-memory-pod",
+      "name": "Commercial Memory Pod",
+      "workspace": "commercial-desk",
+      "mission": "Turn fragmented dealer and inquiry signals into a coherent account timeline and next move.",
+      "reads": ["gmail-intake", "manager-actions", "tenant-context"],
+      "writes": ["account notes", "follow-up prompts", "meeting prep"],
+      "approval_gate": "Sales lead review"
+    },
+    {
+      "id": "executive-brief-cell",
+      "name": "Executive Brief Cell",
+      "workspace": "executive-command",
+      "mission": "Synthesize cross-functional risk, KPI gaps, and intervention candidates for leadership.",
+      "reads": ["manager-actions", "quality-cases", "erp-exports", "shopfloor-logs"],
+      "writes": ["director brief", "gap analysis", "priority reset suggestions"],
+      "approval_gate": "CEO or admin review"
+    }
+  ],
+  "execution_loops": [
+    {
+      "id": "incoming-material-loop",
+      "name": "Incoming material and supplier assurance",
+      "trigger": "New receipt, missing COA, quantity variance, or delayed supplier response",
+      "outputs": ["hold or release suggestion", "supplier chase task", "evidence trail"],
+      "kpis": ["receiving variance rate", "supplier response age"]
+    },
+    {
+      "id": "quality-closeout-loop",
+      "name": "Quality closeout loop",
+      "trigger": "Incident open, CAPA overdue, repeat defect cluster, or missing evidence",
+      "outputs": ["fishbone prompt", "5W1H case frame", "closeout checklist"],
+      "kpis": ["open CAPA age", "closure rate", "repeat defect count"]
+    },
+    {
+      "id": "maintenance-loop",
+      "name": "Maintenance and repeat-failure loop",
+      "trigger": "Downtime event, spare-part blocker, or recurring machine fault",
+      "outputs": ["repeat-failure ranking", "draft intervention plan", "downtime narrative"],
+      "kpis": ["repeat failure count", "downtime hours", "preventive completion rate"]
+    },
+    {
+      "id": "commercial-loop",
+      "name": "Dealer follow-up and demand loop",
+      "trigger": "New inquiry, missed follow-up, visit plan, or market shift",
+      "outputs": ["next action queue", "account summary", "meeting follow-up draft"],
+      "kpis": ["open follow-ups", "dealer response lag", "quote movement"]
+    },
+    {
+      "id": "executive-review-loop",
+      "name": "Executive review and gap-analysis loop",
+      "trigger": "Daily brief cycle, KPI miss, or cross-functional escalation",
+      "outputs": ["priority reset", "intervention options", "management review summary"],
+      "kpis": ["weekly KPI gap count", "open critical risks", "decision cycle time"]
+    }
+  ],
+  "quick_links": [
+    { "label": "Director", "route": "/app/director" },
+    { "label": "Data Fabric", "route": "/app/data-fabric" },
+    { "label": "Cloud Ops", "route": "/app/cloud" },
+    { "label": "Platform Admin", "route": "/app/platform-admin" }
+  ],
+  "references": [
+    "Super Mega Inc/templates/contexts/yangon_tyre_context.json",
+    "showroom/src/lib/tenantOperatingModel.ts",
+    "showroom/src/lib/yangonTyrePortalModel.ts",
+    "showroom/src/lib/yangonTyreDataProfile.ts"
+  ]
+}
