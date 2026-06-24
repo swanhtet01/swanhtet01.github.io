@@ -67,7 +67,7 @@ export async function handle({ method, path, query = {}, body = {}, headers = {}
           return ok({ ok: true, lead })
         } catch (e) { if (String(e.message) === 'leads_from_site') return bad(400, 'leads_from_site'); throw e }
       }
-      if (method === 'POST' && seg[1] && seg[2] === 'convert') {
+      if (method === 'POST' && seg[1] && !seg[2] && query.action === 'convert') {
         const lead = await store.getLead(seg[1])
         if (!lead) return bad(404, 'lead_not_found')
         const client = await store.createClient({ name: lead.company || lead.name || 'New client', contacts: [{ name: lead.name, channel: 'contact', handle: lead.contact }] })
@@ -139,9 +139,10 @@ export async function handle({ method, path, query = {}, body = {}, headers = {}
         if (patch.status === 'approved') log('outreach', `Outreach approved`, deal.id)
         return ok({ ok: true, deal })
       }
-      // POST /api/deals/:id/send — fires the approved outreach email via Resend.
+      // POST /api/deals/:id?action=send — fires the approved outreach email via Resend.
       // Gate: deal.status must be 'approved' — enforces draft→approve→send discipline.
-      if (method === 'POST' && seg[1] && seg[2] === 'send') {
+      // Uses query.action (not a 3rd path segment) because Vercel's [[...path]] only matches 1 segment.
+      if (method === 'POST' && seg[1] && !seg[2] && query.action === 'send') {
         const rows = await store.listDeals({ id: seg[1] })
         const deal = rows[0] || null
         if (!deal) return bad(404, 'deal_not_found')

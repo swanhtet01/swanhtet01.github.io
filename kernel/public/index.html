@@ -182,7 +182,7 @@ async function loadLeads(){
       </div>`
     box.appendChild(el)
   }
-  box.querySelectorAll('[data-conv]').forEach(b=>b.onclick=async()=>{const x=await api('POST','/api/leads/'+encodeURIComponent(b.dataset.conv)+'/convert',{});if(x.ok){toast('Project created');loadLeads()}})
+  box.querySelectorAll('[data-conv]').forEach(b=>b.onclick=async()=>{const x=await api('POST','/api/leads/'+encodeURIComponent(b.dataset.conv)+'?action=convert',{});if(x.ok){toast('Project created');loadLeads()}})
   box.querySelectorAll('[data-deal]').forEach(b=>b.onclick=()=>{const l=r.leads.find(x=>x.id===b.dataset.deal);dealLead=l;document.querySelector('nav button[data-view="deal"]').click();$('#d-name').value=l.name||'';$('#d-company').value=l.company||'';$('#d-contact').value=l.contact||'';$('#d-workflow').value=l.message||'';$('#d-leadtag').textContent='for '+(l.company||l.name||'lead')})
 }
 
@@ -227,13 +227,20 @@ async function loadOutreach(){
         ${p.outreach_en?`<button class="sm" data-copy="${d.id}">Copy draft</button>`:''}
         <button class="sm" data-prop2="${d.id}">Proposal</button>
         ${d.status!=='approved'&&d.status!=='sent'?`<button class="sm" data-app="${d.id}">Approve</button>`:''}
-        ${d.status!=='sent'?`<button class="sm primary" data-sent="${d.id}">Mark sent</button>`:''}
+        ${d.status==='approved'?`<button class="sm primary" data-emailsend="${d.id}">Send email</button>`:''}
+        ${d.status!=='sent'?`<button class="sm" data-sent="${d.id}">Mark sent</button>`:''}
       </div>`
     box.appendChild(el)
   }
   box.querySelectorAll('[data-copy]').forEach(b=>b.onclick=()=>{const d=r.deals.find(x=>x.id===b.dataset.copy);navigator.clipboard.writeText(d.packet.outreach_en||'');toast('Copied draft')})
   box.querySelectorAll('[data-prop2]').forEach(b=>b.onclick=()=>{const d=r.deals.find(x=>x.id===b.dataset.prop2);openProposal(d)})
   box.querySelectorAll('[data-app]').forEach(b=>b.onclick=async()=>{await api('PATCH','/api/deals/'+b.dataset.app,{status:'approved'});loadOutreach()})
+  box.querySelectorAll('[data-emailsend]').forEach(b=>b.onclick=async()=>{
+    const d=r.deals.find(x=>x.id===b.dataset.emailsend);const defTo=(d&&d.packet&&d.packet.outreach_en)?'':''
+    const to=prompt('Send to email address:',defTo);if(!to||!to.includes('@'))return
+    const x=await api('POST','/api/deals/'+b.dataset.emailsend+'?action=send',{to})
+    if(x.ok){toast('Email sent → '+to);loadOutreach()}else toast('Error: '+(x.reason||'failed'))
+  })
   box.querySelectorAll('[data-sent]').forEach(b=>b.onclick=async()=>{await api('PATCH','/api/deals/'+b.dataset.sent,{status:'sent'});loadOutreach();toast('Marked sent')})
 }
 
