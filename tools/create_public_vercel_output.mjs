@@ -5372,7 +5372,7 @@ const activationContactHtml = `<!doctype html>
             submit.textContent = 'Sending...';
           }
           try {
-            const response = await fetch('/api/contact-submissions', { method: 'POST', body: payload });
+            const response = await fetch('/api/contact-submissions', { method: 'POST', body: payload, headers: { 'X-SuperMega-Response': 'json' } });
             const body = await response.json().catch(() => ({}));
             if (!response.ok) throw new Error(body.reason || 'send_failed');
             const leadId = body.pipeline?.lead_id || body.submission?.lead_id || '';
