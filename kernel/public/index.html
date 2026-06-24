@@ -202,7 +202,7 @@ async function loadProjects(){
       const deal=dealByProj[p.id]||dealByProj['lead:'+p.lead_id]
       const c=document.createElement('div');c.className='card'
       c.innerHTML=`<b>${esc(p.offer||'build')}</b><div class="sub">${usd(price)} · deposit ${usd(dep)} · ${esc(p.deposit_status||'unpaid')}</div>
-        <div class="row">${p.deposit_status!=='paid'?`<button class="sm" data-dep="${p.id}">Deposit paid</button>`:''}${adv?`<button class="sm" data-padv="${p.id}" data-to="${adv}">→ ${adv}</button>`:''}${deal?`<button class="sm" data-prop="${deal.id}">Proposal</button>`:''}</div>`
+        <div class="row">${p.deposit_status!=='paid'?`<button class="sm" data-dep="${p.id}">Deposit paid</button><button class="sm" data-stripepay="${p.id}">Stripe link</button>`:''}${adv?`<button class="sm" data-padv="${p.id}" data-to="${adv}">→ ${adv}</button>`:''}${deal?`<button class="sm" data-prop="${deal.id}">Proposal</button>`:''}</div>`
       col.appendChild(c)
     }
     if(!items.length)col.innerHTML+='<div class="muted" style="font-size:12px;padding:6px">—</div>'
@@ -210,6 +210,13 @@ async function loadProjects(){
   }
   box.querySelectorAll('[data-padv]').forEach(b=>b.onclick=async()=>{await api('PATCH','/api/projects/'+b.dataset.padv,{status:b.dataset.to});loadProjects()})
   box.querySelectorAll('[data-dep]').forEach(b=>b.onclick=async()=>{await api('PATCH','/api/projects/'+b.dataset.dep,{deposit_status:'paid',deposit_method:'KBZPay/MMQR'});loadProjects();toast('Deposit recorded')})
+  box.querySelectorAll('[data-stripepay]').forEach(b=>b.onclick=async()=>{
+    b.disabled=true;b.textContent='Creating…'
+    const x=await api('POST','/api/projects/'+b.dataset.stripepay+'?action=pay',{})
+    if(x.ok&&x.url){window.open(x.url,'_blank');toast('Stripe checkout opened — share the link with the client')}
+    else{toast('Error: '+(x.reason||'stripe_failed'))}
+    b.disabled=false;b.textContent='Stripe link'
+  })
   box.querySelectorAll('[data-prop]').forEach(b=>b.onclick=()=>{const d=(dl.deals||[]).find(x=>x.id===b.dataset.prop);if(d)openProposal(d)})
 }
 

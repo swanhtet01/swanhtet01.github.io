@@ -177,6 +177,23 @@ export async function handle({ method, path, query = {}, body = {}, headers = {}
       }
     }
 
+    // ---- STRIPE PAYMENT LINK — create a Checkout session for a project deposit.
+    // POST /api/projects/:id?action=pay  { currency? }
+    // Gate: project must exist. Stripe connector must be configured.
+    // Returns { ok, url, session_id } — CEO shares the URL with the client.
+    if (method === 'POST' && seg[0] === 'projects' && seg[1] && !seg[2] && query.action === 'pay') {
+      const project = (await store.listProjects()).find((p) => p.id === seg[1])
+      if (!project) return bad(404, 'project_not_found')
+      const stripe = connectors.get('payment-stripe')
+      if (!stripe || !stripe.configured()) return bad(503, 'stripe_not_configured')
+      const usd = priceOf(project.offer)
+      const deposit = Math.round(usd * 0.5) // 50% deposit
+      const currency = String(body.currency || 'usd').toLowerCase()
+      const result = await stripe.createCheckout({ amount: deposit, currency, ref: project.id, description: `SuperMega deposit — ${project.offer || 'build'} (50%)` })
+      log('payment', `Stripe checkout created: $${deposit} for project ${project.offer}`, project.id)
+      return ok({ ok: true, url: result.url, session_id: result.id, amount_usd: deposit, ref: project.id })
+    }
+
     // ---- CLIENTS ----
     if (method === 'GET' && seg[0] === 'clients') return ok({ ok: true, clients: await store.listClients() })
 
