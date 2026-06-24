@@ -850,7 +850,7 @@ const publicFreeScanHtml = `<!doctype html>
               <div class="grid">
                 <label>Work to improve<input name="workflow" required placeholder="Lead research, messy files, weekly report" /></label>
                 <label>Current tool<select name="tool"><option>SaaS app</option><option>Spreadsheet</option><option>Email or inbox</option><option>Paper/PDF</option><option>Browser routine</option></select></label>
-                <label>Monthly cost USD<input name="cost" inputmode="decimal" value="300" /></label>
+                <label>Monthly software cost (MMK or USD)<input name="cost" inputmode="decimal" value="0" /></label>
                 <label>Hours wasted weekly<input name="hours" inputmode="decimal" value="8" /></label>
               </div>
               <label>Where the data lives<textarea name="sources" placeholder="Google Drive folder, Gmail inbox, exported CSV, PDFs, screenshots, Viber notes"></textarea></label>
@@ -1020,7 +1020,7 @@ const publicWorkflowBlueprintHtml = `<!doctype html>
               <label>What is painful today?<textarea name="pain">The owner cannot see what changed, who owns it, and what needs action today.</textarea></label>
               <label>What should the first screen show?<textarea name="screen">A daily list with owner, source proof, status, and next action.</textarea></label>
               <div class="grid">
-                <label>Monthly SaaS cost USD<input name="cost" inputmode="decimal" value="450" /></label>
+                <label>Monthly software cost (optional)<input name="cost" inputmode="decimal" value="0" /></label>
                 <label>Hours wasted weekly<input name="hours" inputmode="decimal" value="10" /></label>
               </div>
               <button type="submit">Create my tool plan</button>
