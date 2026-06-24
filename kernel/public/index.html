@@ -1,0 +1,303 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex,nofollow" />
+<title>SuperMega Console</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;500;600;700&display=swap');
+  :root{--bg:#f7f4ec;--ink:#2a2420;--muted:#6f655c;--clay:#c2603f;--clay-soft:#f1e4dc;--line:#e4ddd0;--surf:#fff;--good:#3f7d56;--shadow:0 18px 40px -28px rgba(42,36,28,.5)}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:Inter,system-ui,sans-serif;font-size:14px;line-height:1.5}
+  h1,h2,h3{font-family:Fraunces,Georgia,serif;letter-spacing:-.02em;margin:0}
+  header{display:flex;align-items:center;gap:14px;padding:14px 22px;border-bottom:1px solid var(--line);background:var(--surf);position:sticky;top:0;z-index:5}
+  .brand{font-family:Fraunces,serif;font-weight:600;font-size:18px}.brand b{color:var(--clay)}
+  .badge{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;padding:4px 9px;border-radius:999px;border:1px solid var(--line);color:var(--muted)}
+  .badge.on{color:var(--good);border-color:#cfe3d6;background:#f0f7f2}.badge.off{color:var(--clay);border-color:var(--clay-soft);background:#fbf1ec}
+  .grow{flex:1}
+  input,textarea,select,button{font:inherit;color:var(--ink)}
+  input,textarea,select{width:100%;border:1px solid var(--line);border-radius:10px;background:var(--surf);padding:9px 11px;outline:none}
+  input:focus,textarea:focus{border-color:var(--clay)}.key{max-width:180px}
+  button{cursor:pointer;border:1px solid var(--line);border-radius:999px;background:var(--surf);padding:8px 14px;font-weight:600}
+  button.primary{background:var(--clay);color:#fff;border-color:var(--clay)}button.sm{padding:5px 10px;font-size:12px}button:disabled{opacity:.5;cursor:wait}
+  nav{display:flex;gap:6px;padding:14px 22px 0;flex-wrap:wrap}
+  nav button{border-radius:10px 10px 0 0;border-bottom:0;background:transparent;border-color:transparent;color:var(--muted)}
+  nav button.active{background:var(--surf);border-color:var(--line);color:var(--ink)}
+  main{padding:18px 22px 70px;max-width:1180px}
+  .panel{background:var(--surf);border:1px solid var(--line);border-radius:16px;padding:18px;box-shadow:var(--shadow)}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}.grid{display:grid;gap:12px}
+  .muted{color:var(--muted)}.empty{color:var(--muted);padding:18px;text-align:center;border:1px dashed var(--line);border-radius:12px}
+  /* dashboard */
+  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+  .stat{border:1px solid var(--line);border-radius:14px;padding:15px 16px;background:var(--surf)}
+  .stat small{display:block;color:var(--muted);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
+  .stat b{display:block;margin-top:6px;font-family:Fraunces,serif;font-size:30px;letter-spacing:-.03em}
+  .stat span{color:var(--muted);font-size:12px}
+  .two{display:grid;grid-template-columns:1.4fr 1fr;gap:14px;margin-top:14px}
+  .feed{display:grid;gap:8px}.feed div{font-size:13px;padding:8px 0;border-bottom:1px solid var(--line)}.feed div:last-child{border:0}
+  .feed b{font-weight:600}.feed .k{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--clay);font-weight:700;margin-right:7px}
+  .bars{display:grid;gap:7px}.bar{display:grid;grid-template-columns:90px 1fr auto;gap:9px;align-items:center;font-size:12.5px}
+  .bar i{height:8px;border-radius:999px;background:var(--clay);display:block;min-width:4px}
+  /* leads */
+  .lead{display:grid;grid-template-columns:1fr auto;gap:10px;border:1px solid var(--line);border-radius:12px;padding:13px 15px}
+  .lead h3{font-size:16px}.lead .meta{color:var(--muted);font-size:12.5px;margin-top:3px}.lead .msg{margin-top:8px;font-size:13px}
+  .pill{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;padding:3px 9px;border-radius:999px;background:var(--clay-soft);color:var(--clay)}
+  .pill.won{background:#eaf3ed;color:var(--good)}
+  /* pipeline */
+  .cols{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}
+  .col h3{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-family:Inter,sans-serif;font-weight:700;margin-bottom:8px}
+  .card{border:1px solid var(--line);border-radius:11px;padding:11px;margin-bottom:8px;font-size:13px}
+  .card b{display:block}.card .sub{color:var(--muted);font-size:12px;margin:3px 0 8px}
+  label{display:block;font-size:12px;font-weight:600;color:var(--muted);margin:0 0 5px}.field{margin-bottom:11px}
+  .chip{display:inline-block;border:1px solid var(--line);border-radius:999px;padding:4px 10px;font-size:12px;margin:0 5px 5px 0}
+  .draft{border:1px solid var(--clay-soft);background:#fbf6f2;border-radius:12px;padding:13px;white-space:pre-wrap;font-size:13px}
+  .kv{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;margin:10px 0}.kv dt{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.05em}
+  .deal{border:1px solid var(--line);border-radius:14px;padding:15px;margin-bottom:12px}
+  .toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:9px 16px;border-radius:999px;font-size:13px;opacity:0;transition:.2s;pointer-events:none}.toast.show{opacity:1}
+  @media(max-width:820px){.cols{grid-template-columns:1fr}.two{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header>
+  <span class="brand">SUPER<b>MEGA</b> console</span>
+  <span class="badge" id="modeBadge">store: …</span>
+  <span class="badge" id="aiBadge">ai: …</span>
+  <span class="grow"></span>
+  <input class="key" id="opsKey" placeholder="ops passcode" />
+</header>
+<nav>
+  <button data-view="overview" class="active">Overview</button>
+  <button data-view="leads">Leads</button>
+  <button data-view="pipeline">Pipeline</button>
+  <button data-view="outreach">Outreach</button>
+  <button data-view="deal">Run a deal</button>
+</nav>
+<main>
+  <section id="view-overview">
+    <div class="stats" id="stats"></div>
+    <div class="two">
+      <div class="panel"><h3 style="font-size:15px;margin-bottom:12px">Pipeline by stage</h3><div class="bars" id="bars"></div></div>
+      <div class="panel"><h3 style="font-size:15px;margin-bottom:12px">Recent activity</h3><div class="feed" id="feed"></div></div>
+    </div>
+    <p class="muted" style="font-size:12px;margin-top:14px">Roadmap, in progress: per-client AI Operate loop (draft→approve→act) and the graduation tracker (3rd repeat → product).</p>
+  </section>
+
+  <section id="view-leads" hidden>
+    <div class="panel" id="addLead" style="margin-bottom:14px">
+      <h3 style="font-size:15px;margin-bottom:10px">Add a lead</h3>
+      <div class="row">
+        <input id="l-name" placeholder="Name" style="max-width:160px" />
+        <input id="l-company" placeholder="Company" style="max-width:180px" />
+        <input id="l-contact" placeholder="Contact (Viber / email)" style="max-width:200px" />
+        <input id="l-message" placeholder="What they need…" style="flex:1;min-width:180px" />
+        <button class="primary" id="l-add">Add</button>
+      </div>
+    </div>
+    <div class="grid" id="leads"></div>
+  </section>
+
+  <section id="view-pipeline" hidden><div class="cols" id="pipeline"></div></section>
+
+  <section id="view-outreach" hidden>
+    <p class="muted" style="margin-bottom:12px">Saved deal packets. Drafts only — approve, then send from your own Viber/email. Nothing is sent automatically.</p>
+    <div id="outreach"></div>
+  </section>
+
+  <section id="view-deal" hidden>
+    <div class="row" style="align-items:flex-start;gap:18px">
+      <div class="panel" style="flex:0 0 320px">
+        <h3 style="font-size:15px;margin-bottom:12px">Generate a deal packet</h3>
+        <div class="field"><label>Name</label><input id="d-name" /></div>
+        <div class="field"><label>Company</label><input id="d-company" /></div>
+        <div class="field"><label>Contact</label><input id="d-contact" placeholder="Viber / email (optional)" /></div>
+        <div class="field"><label>The workflow / problem</label><textarea id="d-workflow" rows="5" placeholder="What do they do by hand today? What's messy?"></textarea></div>
+        <button class="primary" id="d-run">Generate</button>
+        <span id="d-leadtag" class="muted" style="font-size:12px;margin-left:8px"></span>
+        <p class="muted" style="font-size:12px;margin-top:9px">Drafts only — nothing is sent. The AI never moves money.</p>
+      </div>
+      <div class="grow" id="dealOut" style="min-width:280px"></div>
+    </div>
+  </section>
+</main>
+<div class="toast" id="toast"></div>
+<script>
+const $=(s)=>document.querySelector(s)
+const esc=(s)=>String(s==null?'':s).replace(/[&<>"']/g,(c)=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))
+const toast=(m)=>{const t=$('#toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),1800)}
+const usd=(n)=>'$'+Number(n||0).toLocaleString()
+let dealLead=null, lastPacket=null
+
+$('#opsKey').value=localStorage.getItem('sm.ops')||''
+$('#opsKey').addEventListener('change',()=>{localStorage.setItem('sm.ops',$('#opsKey').value.trim());refresh();loadOverview()})
+
+async function api(method,path,body){
+  const res=await fetch(path,{method,headers:{'content-type':'application/json','x-ops-key':$('#opsKey').value.trim()},body:body?JSON.stringify(body):undefined})
+  const json=await res.json().catch(()=>({}))
+  if(res.status===401){toast('Enter the ops passcode');$('#opsKey').focus()}
+  if(!res.ok&&json.reason)toast(json.reason)
+  return {ok:res.ok,...json}
+}
+
+document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('active',x===b))
+  for(const v of ['overview','leads','pipeline','outreach','deal']) $('#view-'+v).hidden=v!==b.dataset.view
+  if(b.dataset.view==='overview')loadOverview()
+  if(b.dataset.view==='pipeline')loadProjects()
+  if(b.dataset.view==='leads')loadLeads()
+  if(b.dataset.view==='outreach')loadOutreach()
+})
+
+async function loadOverview(){
+  const r=await api('GET','/api/dashboard')
+  const s=r||{}
+  $('#stats').innerHTML=[
+    ['Leads',(s.leads&&s.leads.total)||0,'in the funnel'],
+    ['Pipeline value',usd(s.projects&&s.projects.pipelineUsd),'open builds'],
+    ['Deposits in',usd(s.deposits&&s.deposits.usd),(s.deposits&&s.deposits.count||0)+' paid'],
+    ['Care MRR',usd(s.mrrUsd)+'/mo','recurring'],
+    ['Live',(s.projects&&s.projects.live)||0,'shipped'],
+    ['Deals',s.deals||0,'packets']
+  ].map(([t,v,sub])=>`<div class="stat"><small>${t}</small><b>${v}</b><span>${sub}</span></div>`).join('')
+  const bs=(s.projects&&s.projects.byStatus)||{}; const order=['scoping','deposit','building','live','care']; const max=Math.max(1,...order.map(k=>bs[k]||0))
+  $('#bars').innerHTML=order.map(k=>`<div class="bar"><span class="muted">${k}</span><i style="width:${Math.round((bs[k]||0)/max*100)}%"></i><span>${bs[k]||0}</span></div>`).join('')||'<div class="muted">No projects yet.</div>'
+  const act=(s.activity||[])
+  $('#feed').innerHTML=act.length?act.map(a=>`<div><span class="k">${esc(a.kind)}</span>${esc(a.summary)}</div>`).join(''):'<div class="muted">No activity yet.</div>'
+}
+
+async function loadLeads(){
+  const r=await api('GET','/api/leads')
+  $('#addLead').hidden=(r.mode!=='memory')
+  const box=$('#leads');box.innerHTML=''
+  if(!r.leads||!r.leads.length){box.innerHTML='<div class="empty">No leads yet. They arrive here from the /contact/ form.</div>';return}
+  for(const l of r.leads){
+    const el=document.createElement('div');el.className='lead'
+    const stage=l.stage?`<span class="pill">${esc(l.stage)}</span>`:''
+    el.innerHTML=`<div><h3>${esc(l.company||l.name||'—')} ${stage} <span class="muted" style="font-size:12px;font-weight:600">${l.score?'· '+l.score+'/100':''}</span></h3>
+      <div class="meta">${esc(l.name||'')}${l.contact?' · '+esc(l.contact):''}${l.package?' · '+esc(l.package):''} · ${esc(String(l.source||'').replace('-',' '))}</div>
+      ${l.message?`<div class="msg">${esc(l.message)}</div>`:''}</div>
+      <div class="row" style="align-items:flex-start">
+        ${l.converted?`<span class="pill won">✓ in pipeline</span>`:`<button class="sm primary" data-conv="${esc(l.id)}">Win → project</button>`}
+        <button class="sm" data-deal="${esc(l.id)}">Run a deal</button>
+      </div>`
+    box.appendChild(el)
+  }
+  box.querySelectorAll('[data-conv]').forEach(b=>b.onclick=async()=>{const x=await api('POST','/api/leads/'+encodeURIComponent(b.dataset.conv)+'/convert',{});if(x.ok){toast('Project created');loadLeads()}})
+  box.querySelectorAll('[data-deal]').forEach(b=>b.onclick=()=>{const l=r.leads.find(x=>x.id===b.dataset.deal);dealLead=l;document.querySelector('nav button[data-view="deal"]').click();$('#d-name').value=l.name||'';$('#d-company').value=l.company||'';$('#d-contact').value=l.contact||'';$('#d-workflow').value=l.message||'';$('#d-leadtag').textContent='for '+(l.company||l.name||'lead')})
+}
+
+const P_COLS=[['scoping','Scoping'],['deposit','Deposit'],['building','Building'],['live','Live'],['care','Care']]
+const P_NEXT={scoping:'deposit',deposit:'building',building:'live',live:'care'}
+const PRICE={'tool-week':600,dashboard:1500,'ai-agent':2500,'design-ship':6000,'care-plan':300,build:2000}
+async function loadProjects(){
+  const [pr,dl]=await Promise.all([api('GET','/api/projects'),api('GET','/api/deals')])
+  const dealByProj={}; (dl.deals||[]).forEach(d=>{if(d.project_id)dealByProj[d.project_id]=d; if(d.lead_id&&!dealByProj['lead:'+d.lead_id])dealByProj['lead:'+d.lead_id]=d})
+  const box=$('#pipeline');box.innerHTML=''
+  for(const [key,label] of P_COLS){
+    const col=document.createElement('div');col.className='col'
+    const items=(pr.projects||[]).filter(p=>p.status===key)
+    col.innerHTML=`<h3>${label} · ${items.length}</h3>`
+    for(const p of items){
+      const adv=P_NEXT[p.status];const price=PRICE[p.offer]||PRICE.build;const dep=Math.round(price*0.5)
+      const deal=dealByProj[p.id]||dealByProj['lead:'+p.lead_id]
+      const c=document.createElement('div');c.className='card'
+      c.innerHTML=`<b>${esc(p.offer||'build')}</b><div class="sub">${usd(price)} · deposit ${usd(dep)} · ${esc(p.deposit_status||'unpaid')}</div>
+        <div class="row">${p.deposit_status!=='paid'?`<button class="sm" data-dep="${p.id}">Deposit paid</button>`:''}${adv?`<button class="sm" data-padv="${p.id}" data-to="${adv}">→ ${adv}</button>`:''}${deal?`<button class="sm" data-prop="${deal.id}">Proposal</button>`:''}</div>`
+      col.appendChild(c)
+    }
+    if(!items.length)col.innerHTML+='<div class="muted" style="font-size:12px;padding:6px">—</div>'
+    box.appendChild(col)
+  }
+  box.querySelectorAll('[data-padv]').forEach(b=>b.onclick=async()=>{await api('PATCH','/api/projects/'+b.dataset.padv,{status:b.dataset.to});loadProjects()})
+  box.querySelectorAll('[data-dep]').forEach(b=>b.onclick=async()=>{await api('PATCH','/api/projects/'+b.dataset.dep,{deposit_status:'paid',deposit_method:'KBZPay/MMQR'});loadProjects();toast('Deposit recorded')})
+  box.querySelectorAll('[data-prop]').forEach(b=>b.onclick=()=>{const d=(dl.deals||[]).find(x=>x.id===b.dataset.prop);if(d)openProposal(d)})
+}
+
+async function loadOutreach(){
+  const r=await api('GET','/api/deals')
+  const box=$('#outreach');box.innerHTML=''
+  if(!r.deals||!r.deals.length){box.innerHTML='<div class="empty">No saved deals yet. Run a deal and click “Save”, and it lands here.</div>';return}
+  for(const d of r.deals){
+    const p=d.packet||{}
+    const el=document.createElement('div');el.className='deal'
+    el.innerHTML=`<div class="row" style="justify-content:space-between"><b style="font-size:15px">${esc(p.headline||'(deal)')}</b><span class="pill ${d.status==='sent'?'won':''}">${esc(d.status)}</span></div>
+      <div class="muted" style="font-size:12.5px;margin:4px 0 10px">fit ${p.fit_score||'—'}/100 · ${esc(p.segment||'')} · ${esc((p.pricing&&p.pricing.build_fee_mmk)||'')} MMK</div>
+      ${p.outreach_en?`<div class="draft" id="ot-${d.id}">${esc(p.outreach_en)}</div>`:'<div class="muted" style="font-size:12px">No outreach draft.</div>'}
+      <div class="row" style="margin-top:10px">
+        ${p.outreach_en?`<button class="sm" data-copy="${d.id}">Copy draft</button>`:''}
+        <button class="sm" data-prop2="${d.id}">Proposal</button>
+        ${d.status!=='approved'&&d.status!=='sent'?`<button class="sm" data-app="${d.id}">Approve</button>`:''}
+        ${d.status!=='sent'?`<button class="sm primary" data-sent="${d.id}">Mark sent</button>`:''}
+      </div>`
+    box.appendChild(el)
+  }
+  box.querySelectorAll('[data-copy]').forEach(b=>b.onclick=()=>{const d=r.deals.find(x=>x.id===b.dataset.copy);navigator.clipboard.writeText(d.packet.outreach_en||'');toast('Copied draft')})
+  box.querySelectorAll('[data-prop2]').forEach(b=>b.onclick=()=>{const d=r.deals.find(x=>x.id===b.dataset.prop2);openProposal(d)})
+  box.querySelectorAll('[data-app]').forEach(b=>b.onclick=async()=>{await api('PATCH','/api/deals/'+b.dataset.app,{status:'approved'});loadOutreach()})
+  box.querySelectorAll('[data-sent]').forEach(b=>b.onclick=async()=>{await api('PATCH','/api/deals/'+b.dataset.sent,{status:'sent'});loadOutreach();toast('Marked sent')})
+}
+
+function openProposal(d){
+  const p=d.packet||{}
+  const modules=(p.modules||[]).map(m=>`<li><b>${esc(m.name)}</b> — ${esc(m.why)}</li>`).join('')
+  const phases=(p.phases||[]).map((s,i)=>`<li>Phase ${i+1}: ${esc(s)}</li>`).join('')
+  const w=window.open('','_blank');if(!w){toast('Allow popups for proposals');return}
+  w.document.write(`<!doctype html><meta charset=utf-8><title>Proposal — ${esc(p.headline||'')}</title>
+  <style>body{font-family:Georgia,serif;max-width:720px;margin:40px auto;padding:0 20px;color:#2a2420;line-height:1.6}h1{font-size:26px}h2{font-size:14px;text-transform:uppercase;letter-spacing:.08em;color:#c2603f;margin-top:26px}.muted{color:#6f655c}ul{padding-left:20px}.box{border:1px solid #e4ddd0;border-radius:12px;padding:16px;margin-top:8px}@media print{a{display:none}}</style>
+  <h1>SUPERMEGA.dev — Proposal</h1>
+  <p class=muted>${esc(p.segment||'')} · ${new Date().toLocaleDateString()}</p>
+  <h2>The problem</h2><p>${esc(p.pain||'')}</p>
+  <h2>What we'll build</h2><ul>${modules}</ul>
+  <h2>How it works for you</h2><p>Built for Myanmar — MMK, KBZPay / MMQR, bilingual, offline-ready. You own it. AI-native: it drafts, you approve anything that sends, pays, or changes records.${p.operator?' '+esc(p.operator):''}</p>
+  <h2>Timeline</h2><ul>${phases}</ul><p class=muted>Two rounds of revisions included.</p>
+  <h2>Price</h2><div class=box><b>Build:</b> ${esc((p.pricing&&p.pricing.build_fee_mmk)||'')} MMK${p.pricing&&p.pricing.pro_mrr_mmk?` · <b>Care:</b> ${esc(p.pricing.pro_mrr_mmk)} MMK/month`:''}<br><span class=muted>${esc((p.pricing&&p.pricing.rationale)||'')}</span><br><br>To start: <b>50% deposit by KBZPay / MMQR</b>. Balance on go-live + your sign-off.</div>
+  <h2>Next step</h2><p>${esc(p.next_action||'Reply to confirm and we send the KBZPay/MMQR details to start.')}</p>
+  <p class=muted>— Swan Htet · swanhtet@supermega.dev · +95 9 500 0721</p>
+  <a href="javascript:print()" style="display:inline-block;margin-top:20px;padding:10px 16px;background:#c2603f;color:#fff;border-radius:999px;text-decoration:none">Print / Save PDF</a>`)
+  w.document.close()
+}
+
+$('#l-add').onclick=async()=>{
+  const body={source:'manual',name:$('#l-name').value,company:$('#l-company').value,contact:$('#l-contact').value,message:$('#l-message').value}
+  if(!body.company&&!body.name){toast('Name or company required');return}
+  const r=await api('POST','/api/leads',body)
+  if(r.ok){['l-name','l-company','l-contact','l-message'].forEach(i=>$('#'+i).value='');loadLeads();toast('Lead added')}
+}
+
+$('#d-run').onclick=async()=>{
+  const btn=$('#d-run');btn.disabled=true;btn.textContent='Generating…'
+  const out=$('#dealOut');out.innerHTML='<div class="panel muted">Thinking… (drafts only)</div>'
+  const r=await api('POST','/api/deal',{name:$('#d-name').value,company:$('#d-company').value,contact:$('#d-contact').value,workflow:$('#d-workflow').value})
+  btn.disabled=false;btn.textContent='Generate'
+  if(!r.ok){out.innerHTML=`<div class="panel"><b>Could not generate.</b><p class="muted">${esc(r.reason||'error')}${r.reason==='ai_not_configured'?' — set ANTHROPIC_API_KEY.':''}</p></div>`;return}
+  lastPacket=r.packet;const p=r.packet
+  out.innerHTML=`<div class="panel">
+    <h2 style="font-size:22px">${esc(p.headline||'')}</h2>
+    <div class="muted">Fit ${p.fit_score}/100 · ${esc(p.segment||'')}</div>
+    <div class="kv"><dt>Pain</dt><dd>${esc(p.pain||'')}</dd><dt>Operator</dt><dd>${esc(p.operator||'')}</dd></div>
+    <div><b>Build:</b> ${(p.modules||[]).map(m=>`<span class="chip">${esc(m.name)}</span>`).join('')}</div>
+    <div style="margin:10px 0"><b>Phases:</b> ${(p.phases||[]).map(esc).join(' → ')}</div>
+    <div class="kv"><dt>Build fee</dt><dd>${esc(p.pricing?.build_fee_mmk||'')} MMK</dd><dt>Care / mo</dt><dd>${esc(p.pricing?.pro_mrr_mmk||'')} MMK</dd></div>
+    ${p.outreach_en?`<div style="margin-top:10px"><b>Outreach draft</b><div class="draft">${esc(p.outreach_en)}</div></div>`:''}
+    <div class="muted" style="margin-top:10px"><b>Next:</b> ${esc(p.next_action||'')}</div>
+    <div class="row" style="margin-top:14px"><button class="primary" id="d-save">Save deal${dealLead?' to '+esc(dealLead.company||dealLead.name):''}</button></div>
+  </div>`
+  $('#d-save').onclick=async()=>{
+    const x=await api('POST','/api/deals',{lead_id:dealLead?dealLead.id:null,packet:lastPacket})
+    if(x.ok){toast('Deal saved → Outreach');$('#d-save').textContent='Saved ✓';$('#d-save').disabled=true}
+  }
+}
+
+async function refresh(){
+  const r=await api('GET','/api/state')
+  const dbBad=r.dbStatus==='error'
+  $('#modeBadge').textContent=dbBad?'db: '+String(r.dbError||'error').slice(0,30):'store: '+(r.mode||'?')
+  $('#modeBadge').className='badge '+(dbBad?'off':(r.mode==='supabase'||r.mode==='postgres'?'on':''))
+  $('#modeBadge').title=r.dbError||''
+  $('#aiBadge').textContent='ai: '+(r.aiConfigured?'on':'off')
+  $('#aiBadge').className='badge '+(r.aiConfigured?'on':'off')
+}
+refresh();loadOverview()
+</script>
+</body>
+</html>
