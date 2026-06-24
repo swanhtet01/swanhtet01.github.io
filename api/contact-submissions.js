@@ -1,5 +1,6 @@
 const crypto = require('crypto')
 const datastore = require('./lib/supermega-datastore')
+const { notifyTelegram: sendTelegram } = require('./lib/notify-telegram')
 
 const notifyEmail = process.env.SUPERMEGA_CONTACT_NOTIFY_EMAIL || 'swanhtet@supermega.dev'
 const fallbackFrom = 'SUPERMEGA <onboarding@resend.dev>'
@@ -776,15 +777,17 @@ async function postLeadWebhook({ record }) {
   }
 }
 
-async function notifyTelegram({ record }) {
-  const token = text(process.env.TELEGRAM_BOT_TOKEN)
-  const chatId = text(process.env.TELEGRAM_CHAT_ID)
-  if (!token || !chatId) return { status: 'skipped', reason: 'telegram_not_configured' }
+// Build the concise CEO lead-alert text, then push it via the shared Telegram helper.
+// Best-effort: the helper never throws and skips cleanly when TELEGRAM_* isn't configured.
+function telegramLeadMessage(record) {
   const company = record.company || record.name || 'Unknown'
   const goal = (record.goal || record.workflow || '').slice(0, 280)
   const score = record.lead_score || 0
   const pkg = record.requested_package || ''
-  const msg = [
+  const consoleUrl = text(process.env.SUPERMEGA_CONSOLE_URL)
+  const sheetUrl = text(process.env.SUPERMEGA_LEAD_SHEET_URL)
+  const link = sheetUrl || consoleUrl
+  return [
     `🔔 New lead — ${record.lead_id}`,
     `👤 ${record.name} · ${company}`,
     `📧 ${record.email}${record.phone ? ' · ' + record.phone : ''}`,
@@ -792,18 +795,12 @@ async function notifyTelegram({ record }) {
     `⭐ Score ${score} · ${record.lead_stage || 'needs_discovery'}`,
     `💬 ${goal}`,
     `→ ${record.next_step || 'Review and reply.'}`,
+    link ? `🔗 ${link}` : '',
   ].filter(Boolean).join('\n')
-  try {
-    const res2 = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ chat_id: chatId, text: msg }),
-      signal: AbortSignal.timeout(5000),
-    })
-    return res2.ok ? { status: 'ready' } : { status: 'error', reason: `tg_${res2.status}` }
-  } catch (err) {
-    return { status: 'error', reason: text(err?.message) || 'telegram_failed' }
-  }
+}
+
+async function notifyTelegram({ record }) {
+  return sendTelegram(telegramLeadMessage(record))
 }
 
 async function appendToGoogleSheet({ record }) {

@@ -3,6 +3,7 @@
 // Returns { ok: true, lead_id, scope: { summary, build, first_proof } }.
 // CJS module — matches .vercel/output/functions/api/lead.js.func/package.json "type":"commonjs"
 const crypto = require('crypto')
+const { notifyTelegram } = require('./lib/notify-telegram')
 
 const ALLOWED_ORIGINS = [
   'https://supermega.dev',
@@ -90,24 +91,15 @@ async function notifySwann(lead) {
 }
 
 async function telegramAlert(lead) {
-  const token = process.env.TELEGRAM_BOT_TOKEN
-  const chatId = process.env.TELEGRAM_CHAT_ID
-  if (!token || !chatId) return
   const msg = [
     `🔔 Demo lead — ${lead.id}`,
     `👤 ${lead.name}${lead.company ? ' · ' + lead.company : ''}`,
-    `📧 ${lead.email}`,
+    `📧 ${lead.email}${lead.phone ? ' · ' + lead.phone : ''}`,
     `💬 ${(lead.workflow || '').slice(0, 280)}`,
     lead.scope?.summary ? `→ ${lead.scope.summary}` : '',
   ].filter(Boolean).join('\n')
-  try {
-    await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ chat_id: chatId, text: msg }),
-      signal: AbortSignal.timeout(5000),
-    })
-  } catch { /* never block */ }
+  // Best-effort: the shared helper never throws and skips when TELEGRAM_* isn't configured.
+  await notifyTelegram(msg)
 }
 
 module.exports = async function handler(request, response) {
