@@ -3880,23 +3880,23 @@ const unicornPublicShellHtml = `<!doctype html>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="robots" content="index,follow" />
-    <title>Custom business software, built for Myanmar | SUPERMEGA.dev</title>
-    <meta name="description" content="Custom software, priced in MMK — AI-native builds for Myanmar shops, factories, and distributors. You own it. No per-seat fees. KBZPay, MMQR, offline-ready." />
+    <title>SUPERMEGA.dev — Custom Software for Myanmar Business</title>
+    <meta name="description" content="We build custom software for Myanmar factories, distributors, and service businesses — starting from your real data. Priced in MMK. Delivered in weeks. Yours to keep." />
     <meta name="theme-color" content="#f4efe6" />
     <link rel="canonical" href="https://supermega.dev/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" />
     <link rel="manifest" href="/site.webmanifest?v=supermega-atelier-20260623" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="SUPERMEGA.dev" />
-    <meta property="og:title" content="Custom business software, built for Myanmar | SUPERMEGA.dev" />
-    <meta property="og:description" content="Custom software, priced in MMK — AI-native, made for how you work, yours to keep. KBZPay · MMQR · MY/EN · offline." />
+    <meta property="og:title" content="SUPERMEGA.dev — Custom Software for Myanmar Business" />
+    <meta property="og:description" content="We build custom software for Myanmar factories, distributors, and service businesses — starting from your real data. Priced in MMK. Delivered in weeks. Yours to keep." />
     <meta property="og:url" content="https://supermega.dev/" />
     <meta property="og:image" content="https://supermega.dev/site/social/supermega-portal-card.png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Custom business software, built for Myanmar | SUPERMEGA.dev" />
-    <meta name="twitter:description" content="Custom software, priced in MMK. AI-native builds. KBZPay · MMQR · MY/EN · offline." />
+    <meta name="twitter:title" content="SUPERMEGA.dev — Custom Software for Myanmar Business" />
+    <meta name="twitter:description" content="Custom software for Myanmar business — starting from your real data. Priced in MMK. Built in weeks. Yours to keep." />
     <meta name="twitter:image" content="https://supermega.dev/site/social/supermega-portal-card.png" />
     <script type="application/ld+json">{"@context":"https://schema.org","@type":"Organization","name":"SUPERMEGA.dev","url":"https://supermega.dev/","logo":"https://supermega.dev/favicon.svg","description":"Custom business software at SaaS prices, AI-native, built for Myanmar SMBs and factories. POS, factory operations, dashboards, AI agents, and more.","email":"swanhtet@supermega.dev","telephone":"+95-9-500-0721","sameAs":["https://www.linkedin.com/in/theswanhtet"]}</script>
     <style>${unicornShellStyle}
@@ -3938,13 +3938,13 @@ ${unicornHeader}
       <main>
         <section class="poster">
           <div class="copy">
-            <div class="eyebrow">AI-native · Myanmar-built · Yours to keep</div>
-            <h1>Custom software at SaaS prices.</h1>
-            <p>We build the exact software your business needs — not a generic SaaS product built for someone else. AI-native, made for how you actually work, and yours forever. No per-seat tax that grows when you hire.</p>
+            <div class="eyebrow">Built for Myanmar operations · Priced in MMK · Yours to keep</div>
+            <h1>Stop running your business on Viber.</h1>
+            <p>We replace your Viber threads, shared spreadsheets, and email chains with software that actually fits — priced in MMK, built in weeks, yours to keep. No per-seat fees, ever.</p>
             <div class="cta">
-              <a class="btn primary" href="/offers/">See pricing</a>
+              <a class="btn primary" href="/contact/">Share one workflow</a>
               <a class="btn secondary" href="/demo/">See live demos</a>
-              <a class="btn secondary" href="/contact/">Talk to us</a>
+              <a class="btn secondary" href="/offers/">See pricing</a>
             </div>
           </div>
           <aside class="product-stage" aria-label="DeskPOS live product — point-of-sale for Myanmar shops">
@@ -4040,7 +4040,7 @@ ${unicornHeader}
               <h2 style="margin-top:10px;font-size:clamp(18px,2.4vw,26px);line-height:1.45">I'm Swan Htet — I've spent years working inside Yangon factories and trading companies, not observing from the outside, and I know exactly where the work breaks down.</h2>
               <p style="margin-top:14px;font-size:16px;line-height:1.7;color:var(--ink)">The pattern is always the same: the owner is sharp, the team works hard, and the operation runs on Viber threads, shared Excel files, and memory. Not because people are disorganised — because every off-the-shelf SaaS product is priced in USD, built for a US workflow, and takes months to configure before it does anything useful. Nothing fits. So nothing gets adopted.</p>
               <p style="margin-top:12px;font-size:16px;line-height:1.7;color:var(--ink)">I started SUPERMEGA to build the other kind: software that starts from your actual data — the spreadsheet you already update, the email thread you already send, the Viber group you already run — and turns it into something structured and useful in weeks. Priced in MMK. No subscription. Yours to keep.</p>
-              <p style="margin-top:12px;font-size:16px;line-height:1.7;color:var(--ink)">I built a warranty claim tracking system that handles 300+ cases a month for a Yangon tyre manufacturer. Before: Viber threads and Excel. Now: structured approval workflow, full claim history, one screen. That's the kind of system I build — specific to your operation, priced in MMK, live in weeks.</p>
+              <p style="margin-top:12px;font-size:16px;line-height:1.7;color:var(--ink)">I built a warranty claim tracking system that handles 300+ cases a month for a Yangon-based manufacturer. Before: Viber threads and Excel. Now: structured approval workflow, full claim history, one screen. That's the kind of system I build — specific to your operation, priced in MMK, live in weeks.</p>
               <p style="margin-top:12px;font-size:15px;line-height:1.6;color:var(--muted)">If there's a workflow in your business that runs on memory and group chats, describe it. I'll tell you whether software can fix it and what it would cost.</p>
               <p style="margin-top:20px;font-size:14px;color:var(--muted)">Based in Yangon &mdash; <a href="mailto:swanhtet@supermega.dev" style="color:var(--clay,#c2603f);font-weight:500">swanhtet@supermega.dev</a> &mdash; <a href="https://www.linkedin.com/in/theswanhtet" style="color:var(--clay,#c2603f);font-weight:500" rel="noreferrer" target="_blank">LinkedIn</a></p>
             </div>
@@ -4629,8 +4629,8 @@ ${unicornHeader}
       <main class="contact-main">
         <section aria-label="Contact SUPERMEGA">
           <div class="eyebrow">Contact</div>
-          <h1 data-contact-heading>Send one workflow.</h1>
-          <p data-contact-lead>Send the source your team already uses.</p>
+          <h1 data-contact-heading>Tell us the one job to fix.</h1>
+          <p data-contact-lead>Share a file, link, question, or screenshot — about anything running on spreadsheets or Viber today. We reply within one business day with a clear first step and a rough price in MMK.</p>
         </section>
         <section aria-label="Workflow contact form">
           <form action="/api/contact-submissions" data-sm-lead-form enctype="multipart/form-data" method="post">
@@ -6225,8 +6225,8 @@ ${unicornHeader}
         <section class="poster" style="min-height:auto;align-items:center">
           <div class="copy">
             <div class="eyebrow">Pricing</div>
-            <h1>Custom software, priced in MMK</h1>
-            <p>We build the exact thing your business needs — AI-native, made for how you actually work, and yours to keep. Clear starting prices below; the final quote comes after one short call.</p>
+            <h1>You own it. No per-seat bill, ever.</h1>
+            <p>Most Myanmar businesses run on SaaS priced in USD for someone else's workflow. We build the exact version that fits yours — and you keep it outright. Starting prices in MMK below; exact quote after one short call.</p>
             <div class="cta">
               <a class="btn primary" href="/contact/?package=build">Get a quote</a>
               <a class="btn secondary" href="/demo/">See live demos</a>
@@ -6270,6 +6270,7 @@ ${unicornHeader}
             <div class="pd-step"><n>1</n><strong>Scope</strong><span>One short call. We agree exactly what ships and what's out of scope — no open-ended hours.</span></div>
             <div class="pd-step"><n>2</n><strong>Deposit</strong><span>50% to start — KBZPay, MMQR, cash, or card. The local norm, and it keeps us both honest.</span></div>
             <div class="pd-step"><n>3</n><strong>Ship</strong><span>We build it AI-native and hand you a running thing at a live URL — not a folder of files.</span></div>
+            <div class="pd-step"><n>4</n><strong>Care</strong><span>Optional monthly plan keeps it running and improving as your business grows. Or take it and go — it's yours.</span></div>
           </div>
         </section>
 
