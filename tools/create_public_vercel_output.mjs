@@ -145,24 +145,27 @@ const publicShellHtml = `<!doctype html>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="robots" content="index,follow" />
-    <title>SUPERMEGA.dev | Messy Work In, Useful Output Out</title>
-    <meta name="description" content="Send a spreadsheet, folder, screenshot, PDF, email thread, or business question that slows your team down. Get one useful screen, record, or owner report." />
+    <title>SUPERMEGA.dev — Custom Software for Myanmar Business</title>
+    <meta name="description" content="We build custom software for Myanmar factories, distributors, and service businesses — starting from your real data. Priced in MMK. Delivered in weeks. Yours to keep." />
     <meta name="theme-color" content="#f7f4ed" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" />
     <link rel="manifest" href="/site.webmanifest?v=supermega-atelier-20260623" />
     <style>
+      @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=swap');
       :root {
         color-scheme: light;
         --bg: #f7f4ed;
         --paper: #fffaf0;
         --card: #ffffff;
-        --line: #ded6c7;
+        --line: #e8dfd0;
         --text: #14110c;
         --muted: #6f6a60;
-        --blue: #2458ff;
-        --cyan: #2458ff;
-        --blue-soft: #e7edff;
+        --blue: #1e50f0;
+        --cyan: #1e50f0;
+        --blue-soft: #e6ecff;
         --ink: #ffffff;
+        --clay: #b85c38;
+        --gold: #c09050;
       }
       * { box-sizing: border-box; }
       html { scroll-behavior: smooth; }
@@ -170,12 +173,13 @@ const publicShellHtml = `<!doctype html>
         margin: 0;
         min-height: 100vh;
         background:
-          linear-gradient(90deg, rgba(20, 17, 12, 0.035) 1px, transparent 1px),
-          linear-gradient(180deg, rgba(20, 17, 12, 0.035) 1px, transparent 1px),
+          radial-gradient(circle at 85% 0%, rgba(30,80,240,0.04), transparent 32rem),
+          linear-gradient(90deg, rgba(20, 17, 12, 0.03) 1px, transparent 1px),
+          linear-gradient(180deg, rgba(20, 17, 12, 0.03) 1px, transparent 1px),
           var(--bg);
-        background-size: 44px 44px;
+        background-size: auto, 44px 44px, 44px 44px;
         color: var(--text);
-        font-family: "Aptos", "Segoe UI Variable", "Segoe UI", system-ui, -apple-system, sans-serif;
+        font-family: "Inter", "Aptos", "Segoe UI Variable", "Segoe UI", system-ui, -apple-system, sans-serif;
         text-rendering: optimizeLegibility;
         -webkit-font-smoothing: antialiased;
       }
@@ -187,32 +191,43 @@ const publicShellHtml = `<!doctype html>
       .mark { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 12px; background: var(--text); border: 1px solid var(--text); color: #ffffff; }
       .wordmark { display: grid; gap: 2px; }
       .wordmark small { color: var(--muted); font-size: 10px; font-weight: 850; letter-spacing: 0.22em; }
-      .btn { border: 1px solid var(--line); border-radius: 999px; padding: 13px 18px; background: rgba(255,255,255,0.72); font-weight: 850; }
-      .btn.primary, button { background: var(--blue); color: var(--ink); border-color: var(--blue); box-shadow: none; }
+      .btn { border: 1px solid var(--line); border-radius: 999px; padding: 13px 18px; background: rgba(255,255,255,0.82); font-weight: 700; transition: transform 0.15s ease, box-shadow 0.15s ease; }
+      .btn.primary, button {
+        background: linear-gradient(135deg, #1842e0, #1e50f0);
+        color: var(--ink);
+        border-color: #1842e0;
+        box-shadow: 0 4px 24px rgba(24,66,224,0.22);
+        letter-spacing: 0.01em;
+        transition: transform 0.15s ease, box-shadow 0.15s ease;
+      }
+      .btn.primary:hover, button:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 8px 32px rgba(24,66,224,0.30);
+      }
       main { padding: 24px 0 56px; }
       .hero { min-height: min(720px, calc(100svh - 110px)); display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, 0.9fr); gap: clamp(22px, 5vw, 70px); align-items: center; }
       .copy { padding: clamp(6px, 2vw, 20px) 0; }
-      .eyebrow { color: var(--cyan); font-size: 12px; font-weight: 950; letter-spacing: 0.2em; text-transform: uppercase; }
+      .eyebrow { color: var(--cyan); font-size: 12px; font-weight: 700; letter-spacing: 0.2em; text-transform: uppercase; }
       h1 { margin: 18px 0 18px; max-width: 9.8ch; font-size: clamp(58px, 9vw, 118px); line-height: 0.86; letter-spacing: -0.085em; }
       p { color: var(--muted); font-size: clamp(18px, 2.1vw, 23px); line-height: 1.48; margin: 0; max-width: 34rem; }
       .cta { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 24px; }
       .hero-art { display: grid; gap: 14px; }
-      .hero-shot { overflow: hidden; border: 1px solid var(--line); border-radius: 28px; background: var(--card); box-shadow: 0 24px 70px rgba(20,17,12,0.10); }
+      .hero-shot { overflow: hidden; border: 1px solid var(--line); border-radius: 28px; background: var(--card); box-shadow: 0 32px 80px rgba(20,17,12,0.14), 0 4px 16px rgba(20,17,12,0.06); }
       .hero-shot img { display: block; width: 100%; aspect-ratio: 16 / 11; object-fit: cover; object-position: top left; background: #fbf7ef; }
-      .caption { display: grid; gap: 6px; border: 1px solid var(--line); border-radius: 20px; background: rgba(255,255,255,0.78); padding: 16px; }
-      .caption span { color: var(--blue); font-size: 11px; font-weight: 950; letter-spacing: 0.16em; text-transform: uppercase; }
+      .caption { display: grid; gap: 6px; border: 1px solid var(--line); border-radius: 20px; background: rgba(255,255,255,0.88); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); padding: 16px; }
+      .caption span { color: var(--blue); font-size: 11px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; }
       .caption strong { font-size: clamp(22px, 3vw, 34px); line-height: 0.96; letter-spacing: -0.055em; }
       .section { border-top: 1px solid var(--line); padding: 42px 0; }
       .split { display: grid; grid-template-columns: minmax(0, 0.92fr) minmax(320px, 1.08fr); gap: clamp(18px, 4vw, 38px); align-items: start; }
       h2 { margin: 0; max-width: 13ch; font-size: clamp(36px, 6vw, 72px); line-height: 0.92; letter-spacing: -0.07em; }
-      .film { display: grid; gap: 12px; border: 1px solid var(--line); border-radius: 24px; padding: 18px; background: rgba(255,255,255,0.72); }
+      .film { display: grid; gap: 12px; border: 1px solid var(--line); border-radius: 24px; padding: 18px; background: rgba(255,255,255,0.88); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
       .film-row { display: grid; grid-template-columns: auto 1fr auto; gap: 12px; align-items: center; border-radius: 16px; border: 1px solid var(--line); background: #fbf7ef; padding: 14px; }
-      .film-row b { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 999px; background: var(--blue); color: #ffffff; }
+      .film-row b { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 999px; background: linear-gradient(135deg, #1842e0, #1e50f0); color: #ffffff; }
       .film-row strong { display: block; }
-      .film-row small { color: var(--muted); font-weight: 760; }
-      .pulse { min-width: 78px; border-radius: 999px; padding: 8px 10px; color: var(--blue); background: var(--blue-soft); text-align: center; font-size: 12px; font-weight: 950; }
+      .film-row small { color: var(--muted); font-weight: 500; }
+      .pulse { min-width: 78px; border-radius: 999px; padding: 8px 10px; color: var(--blue); background: var(--blue-soft); text-align: center; font-size: 12px; font-weight: 700; }
       .cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
-      .tile { border: 1px solid var(--line); border-radius: 20px; padding: 18px; background: var(--card); min-height: 132px; }
+      .tile { border: 1px solid var(--line); border-radius: 20px; padding: 18px; background: var(--card); min-height: 132px; box-shadow: 0 2px 12px rgba(20,17,12,0.05); }
       .tile strong { display: block; margin-bottom: 10px; font-size: 19px; }
       .tile span { color: var(--muted); line-height: 1.45; }
       .cases { display: grid; gap: 10px; }
@@ -220,21 +235,21 @@ const publicShellHtml = `<!doctype html>
       .case b { display: block; margin-bottom: 5px; color: var(--blue); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; }
       .case strong { display: block; font-size: 18px; letter-spacing: -0.035em; }
       .case span { color: var(--muted); line-height: 1.38; }
-      .arrow { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 999px; background: var(--text); color: #ffffff; font-weight: 950; }
+      .arrow { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 999px; background: var(--text); color: #ffffff; font-weight: 700; }
       .shots { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
       .shot { overflow: hidden; border: 1px solid var(--line); border-radius: 22px; background: var(--card); box-shadow: 0 20px 56px rgba(20,17,12,0.08); }
       .shot img { display: block; width: 100%; aspect-ratio: 16 / 10; object-fit: cover; object-position: top left; background: #fbf7ef; }
       .shot div { display: grid; gap: 6px; padding: 15px; }
       .shot strong { font-size: 17px; letter-spacing: -0.03em; }
       .shot span { color: var(--muted); line-height: 1.4; font-size: 14px; }
-      form { display: grid; gap: 12px; border: 1px solid var(--line); border-radius: 24px; padding: clamp(18px, 3vw, 28px); background: var(--card); }
-      label { display: grid; gap: 7px; color: var(--muted); font-size: 12px; font-weight: 950; letter-spacing: 0.14em; text-transform: uppercase; }
-      input, textarea { width: 100%; border: 1px solid var(--line); border-radius: 14px; background: #fffdf8; color: var(--text); padding: 13px 14px; font: inherit; outline: none; }
+      form { display: grid; gap: 12px; border: 1px solid rgba(20,17,12,0.14); border-radius: 24px; padding: clamp(18px, 3vw, 28px); background: var(--card); }
+      label { display: grid; gap: 7px; color: var(--muted); font-size: 12px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; }
+      input, textarea { width: 100%; border: 1px solid rgba(20,17,12,0.14); border-radius: 14px; background: #fffdf8; color: var(--text); padding: 13px 14px; font: inherit; outline: none; transition: border-color 0.15s ease, box-shadow 0.15s ease; }
       textarea { min-height: 112px; resize: vertical; }
-      input:focus, textarea:focus { border-color: var(--blue); box-shadow: 0 0 0 4px rgba(36,88,255,0.12); }
-      button { cursor: pointer; min-height: 50px; border: 0; border-radius: 999px; padding: 14px 18px; font: inherit; font-weight: 950; }
-      .email { color: var(--blue); font-weight: 850; }
-      footer { border-top: 1px solid var(--line); padding: 22px 0; color: var(--muted); font-weight: 760; }
+      input:focus, textarea:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(24,66,224,0.14); }
+      button { cursor: pointer; min-height: 50px; border: 0; border-radius: 999px; padding: 14px 18px; font: inherit; font-weight: 700; }
+      .email { color: var(--blue); font-weight: 700; }
+      footer { border-top: 1px solid var(--line); padding: 22px 0; color: var(--muted); font-weight: 500; }
       @media (max-width: 820px) {
         header { gap: 14px; align-items: flex-start; }
         .nav { justify-content: flex-end; flex-wrap: wrap; }
@@ -255,7 +270,7 @@ const publicShellHtml = `<!doctype html>
       <header>
         <a class="brand" href="/" aria-label="SUPERMEGA.dev home">
           <span class="mark"><img src="/favicon.svg" alt="" /></span>
-          <span class="wordmark"><span>SUPERMEGA.dev</span><small>Messy work in. Useful output out.</small></span>
+          <span class="wordmark"><span>SUPERMEGA.dev</span><small>Built for Myanmar operations. Priced to match.</small></span>
         </a>
         <nav class="nav" aria-label="Primary">
           <a class="btn secondary-nav" href="/products/">Examples</a>
@@ -265,10 +280,11 @@ const publicShellHtml = `<!doctype html>
       <main>
         <section class="hero">
           <div class="copy">
-            <h1>Messy work in. Useful output out.</h1>
-            <p>Send the spreadsheet, folder, screenshot, PDF, email thread, or question that slows your team down. We return one clear result first.</p>
+            <h1>Stop running your business on Viber.</h1>
+            <p>We replace your Viber threads, shared spreadsheets, and email chains with software that actually fits — priced in MMK, built in weeks, yours to keep.</p>
             <div class="cta">
-              <a class="btn primary" href="/contact/">Send one source</a>
+              <a class="btn primary" href="/contact/">Share one workflow</a>
+              <a class="btn" href="/products/">See what we build</a>
             </div>
           </div>
           <aside class="hero-art" aria-label="SuperMega product example">
@@ -2720,12 +2736,12 @@ const publicCardHtml = `<!doctype html>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="robots" content="index,follow" />
     <title>Swan Htet | SUPERMEGA.dev</title>
-    <meta name="description" content="Swan Htet builds simple AI work tools for business teams." />
+    <meta name="description" content="Swan Htet builds custom software for Myanmar businesses — starting from your real spreadsheets, Viber threads, and files. Priced in MMK. Delivered in weeks." />
     <link rel="canonical" href="https://supermega.dev/card/" />
     <meta property="og:type" content="profile" />
     <meta property="og:site_name" content="SUPERMEGA.dev" />
     <meta property="og:title" content="Swan Htet | SUPERMEGA.dev" />
-    <meta property="og:description" content="Swan Htet builds simple AI work tools for business teams." />
+    <meta property="og:description" content="Swan Htet builds custom software for Myanmar businesses — from your real data. Priced in MMK. Done in weeks." />
     <meta property="og:url" content="https://supermega.dev/card/" />
     <meta property="og:image" content="https://supermega.dev/site/social/supermega-portal-card.png" />
     <meta name="twitter:card" content="summary_large_image" />
@@ -2735,10 +2751,11 @@ const publicCardHtml = `<!doctype html>
     <style>
       :root { color-scheme: dark; --bg: #07111f; --text: #f7fbff; --muted: #a8b8ca; --cyan: #64efff; --blue: #4f8cff; --ink: #06101d; }
       * { box-sizing: border-box; }
-      body { margin: 0; min-height: 100svh; display: grid; place-items: center; padding: 24px; background-color: #07111f; background-image: radial-gradient(circle at 76% 22%, rgba(100,239,255,0.2), transparent 24rem), radial-gradient(circle at 6% 88%, rgba(79,140,255,0.18), transparent 26rem), linear-gradient(135deg, #07111f, #030710 70%); color: var(--text); font-family: "Aptos", "Segoe UI Variable", "Segoe UI", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+      body { margin: 0; min-height: 100svh; display: grid; place-items: center; padding: 24px; background-color: #06101c; background-image: radial-gradient(ellipse at 78% 18%, rgba(100,239,255,0.22), transparent 26rem), radial-gradient(ellipse at 5% 86%, rgba(79,140,255,0.2), transparent 28rem), radial-gradient(ellipse at 50% 50%, rgba(30,50,120,0.15), transparent 50rem), linear-gradient(160deg, #06101c, #020810 70%); color: var(--text); font-family: "Inter", "Aptos", "Segoe UI Variable", "Segoe UI", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
       a { color: inherit; text-decoration: none; }
-      .card { position: relative; overflow: hidden; width: min(980px, 100%); min-height: min(660px, calc(100svh - 48px)); display: flex; align-items: center; border: 1px solid rgba(217,247,255,0.14); border-radius: clamp(28px, 5vw, 54px); background: linear-gradient(135deg, rgba(255,255,255,0.08), rgba(255,255,255,0.035)); box-shadow: inset 0 1px 0 rgba(255,255,255,0.12), 0 42px 120px rgba(0,0,0,0.38); padding: clamp(28px, 7vw, 78px); }
-      .card::before { content: "SUPERMEGA"; position: absolute; right: -5%; bottom: 0; color: transparent; -webkit-text-stroke: 1.5px rgba(247,251,255,0.045); font-size: clamp(68px, 16vw, 190px); font-weight: 950; letter-spacing: -0.1em; line-height: 0.8; }
+      .card { position: relative; overflow: hidden; width: min(1020px, 100%); min-height: min(680px, calc(100svh - 48px)); display: flex; align-items: center; border: 1px solid rgba(217,247,255,0.16); border-radius: clamp(28px, 5vw, 60px); background: linear-gradient(135deg, rgba(255,255,255,0.09) 0%, rgba(255,255,255,0.04) 100%); box-shadow: inset 0 1px 0 rgba(255,255,255,0.14), inset 0 -1px 0 rgba(255,255,255,0.04), 0 50px 130px rgba(0,0,0,0.45), 0 8px 32px rgba(0,0,0,0.22); padding: clamp(32px, 7vw, 84px); backdrop-filter: blur(2px); }
+      .card::before { content: "SUPERMEGA"; position: absolute; right: -4%; bottom: -2%; color: transparent; -webkit-text-stroke: 1px rgba(247,251,255,0.038); font-size: clamp(72px, 17vw, 200px); font-weight: 900; letter-spacing: -0.1em; line-height: 0.8; pointer-events: none; }
+      .card::after { content: ""; position: absolute; top: 0; right: 0; width: 55%; height: 100%; background: radial-gradient(ellipse at 80% 30%, rgba(100,239,255,0.07), transparent 60%); pointer-events: none; }
       .content { position: relative; max-width: 690px; }
       .brand { display: inline-flex; align-items: center; gap: 12px; color: var(--cyan); font-size: 12px; font-weight: 950; letter-spacing: 0.22em; text-transform: uppercase; }
       .mark { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 14px; overflow: hidden; background: #07111f; border: 1px solid rgba(255,255,255,0.16); }
@@ -2762,7 +2779,7 @@ const publicCardHtml = `<!doctype html>
         <a class="brand" href="/" aria-label="SUPERMEGA.dev home"><span class="mark"><img src="/favicon.svg?v=supermega-atelier-20260623" alt="" /></span><span>SUPERMEGA.dev</span></a>
         <h1>Swan Htet</h1>
         <p class="role">Founder, SUPERMEGA.dev</p>
-        <p class="pitch">I turn your messiest workflow — the one running on Viber and Excel — into a real system. Priced in MMK. Done in weeks.</p>
+        <p class="pitch">I build the software your Myanmar business actually needs. Not generic SaaS. Starting from your real data — the spreadsheet, the Viber thread, the approval chain. Done in weeks.</p>
         <div class="details">
           <a href="mailto:swanhtet@supermega.dev">swanhtet@supermega.dev</a>
           <a href="tel:+9595000721">+95 9 500 0721</a>
@@ -4019,12 +4036,12 @@ ${unicornHeader}
               <img src="/site/social/swan-htet.jpg" alt="Swan Htet — founder of SUPERMEGA.dev" style="width:100%;border-radius:18px;display:block;border:1px solid rgba(42,36,28,0.1)" loading="lazy" />
             </div>
             <div>
-              <div class="eyebrow" style="color:var(--clay,#c2603f)">Who builds this</div>
-              <h2 style="margin-top:10px;font-size:clamp(18px,2.4vw,26px);line-height:1.45">I'm Swan Htet — I've spent years inside Yangon factories and trading companies, watching the gap between how business actually runs and what the software industry sells.</h2>
-              <p style="margin-top:14px;font-size:16px;line-height:1.7;color:var(--ink)">The pattern is always the same: the owner is sharp, the team works hard, and the operation runs on a combination of Viber threads, shared Excel files, and memory. Not because people are disorganised — but because every off-the-shelf SaaS product is priced in USD, built for a US workflow, and takes months to configure before it does anything useful.</p>
-              <p style="margin-top:12px;font-size:16px;line-height:1.7;color:var(--ink)">I started SUPERMEGA to build the other kind of software. The kind that starts from your actual data — the spreadsheet you already update, the email thread you already send, the Viber group you already use — and turns it into something structured and useful in weeks, not quarters. Priced in MMK. No subscription. Yours to keep.</p>
-              <p style="margin-top:12px;font-size:16px;line-height:1.7;color:var(--ink)">I've built claim tracking systems for a tyre manufacturer processing hundreds of claims a month, POS and inventory tools for retail operations, and AI-powered daily briefings that surface what management needs to know before 9 AM. Each one started with a single messy workflow and a clear first output.</p>
-              <p style="margin-top:12px;font-size:15px;line-height:1.6;color:var(--muted)">If you send me one workflow that costs your team real hours every week, I'll tell you exactly what I can build — and what it would take to see the first result.</p>
+              <div class="eyebrow" style="color:var(--clay,#b85c38)">The builder</div>
+              <h2 style="margin-top:10px;font-size:clamp(18px,2.4vw,26px);line-height:1.45">I'm Swan Htet — I've spent years working inside Yangon factories and trading companies, not observing from the outside, and I know exactly where the work breaks down.</h2>
+              <p style="margin-top:14px;font-size:16px;line-height:1.7;color:var(--ink)">The pattern is always the same: the owner is sharp, the team works hard, and the operation runs on Viber threads, shared Excel files, and memory. Not because people are disorganised — because every off-the-shelf SaaS product is priced in USD, built for a US workflow, and takes months to configure before it does anything useful. Nothing fits. So nothing gets adopted.</p>
+              <p style="margin-top:12px;font-size:16px;line-height:1.7;color:var(--ink)">I started SUPERMEGA to build the other kind: software that starts from your actual data — the spreadsheet you already update, the email thread you already send, the Viber group you already run — and turns it into something structured and useful in weeks. Priced in MMK. No subscription. Yours to keep.</p>
+              <p style="margin-top:12px;font-size:16px;line-height:1.7;color:var(--ink)">I built a warranty claim tracking system that handles 300+ cases a month for a Yangon tyre manufacturer. Before: Viber threads and Excel. Now: structured approval workflow, full claim history, one screen. That's the kind of system I build — specific to your operation, priced in MMK, live in weeks.</p>
+              <p style="margin-top:12px;font-size:15px;line-height:1.6;color:var(--muted)">If there's a workflow in your business that runs on memory and group chats, describe it. I'll tell you whether software can fix it and what it would cost.</p>
               <p style="margin-top:20px;font-size:14px;color:var(--muted)">Based in Yangon &mdash; <a href="mailto:swanhtet@supermega.dev" style="color:var(--clay,#c2603f);font-weight:500">swanhtet@supermega.dev</a> &mdash; <a href="https://www.linkedin.com/in/theswanhtet" style="color:var(--clay,#c2603f);font-weight:500" rel="noreferrer" target="_blank">LinkedIn</a></p>
             </div>
           </div>
