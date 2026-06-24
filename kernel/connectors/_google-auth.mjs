@@ -19,6 +19,7 @@
 
 import crypto from 'node:crypto'
 import { createRequire } from 'node:module'
+import { oauthConfigured, getOAuthAccessToken } from './_google-oauth.mjs'
 
 // CommonJS require shim for the optional service-account file read (ESM has no global require).
 const require = createRequire(import.meta.url)
@@ -34,8 +35,13 @@ function rawCredEnv() {
   return String(process.env.GOOGLE_SERVICE_ACCOUNT_JSON || '').trim()
 }
 
-/** True when *some* Google service-account credential env is present. Cheap — no parse, no file I/O. */
+/** True when service-account OR OAuth2 user credentials are present. Cheap — no parse, no file I/O. */
 export function credsConfigured() {
+  return Boolean(rawCredEnv() || String(process.env.GOOGLE_APPLICATION_CREDENTIALS || '').trim()) || oauthConfigured()
+}
+
+/** True when specifically a service-account credential is present (not OAuth2). */
+export function saConfigured() {
   return Boolean(rawCredEnv() || String(process.env.GOOGLE_APPLICATION_CREDENTIALS || '').trim())
 }
 
@@ -130,6 +136,11 @@ export function resetTokenCache() {
  * @returns {Promise<string>} access token
  */
 export async function getAccessToken(scopes, { subject } = {}) {
+  // Prefer service account (domain-wide delegation + subject support). Fall back to OAuth2 user creds.
+  if (!saConfigured()) {
+    if (oauthConfigured()) return getOAuthAccessToken(scopes)
+    throw new Error('google_creds_missing_or_invalid')
+  }
   const sa = readServiceAccount()
   if (!sa) throw new Error('google_creds_missing_or_invalid')
   const sub = subject || String(process.env.GOOGLE_WORKSPACE_SUBJECT || '').trim() || undefined
