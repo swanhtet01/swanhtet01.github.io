@@ -89,6 +89,27 @@ async function notifySwann(lead) {
   }
 }
 
+async function telegramAlert(lead) {
+  const token = process.env.TELEGRAM_BOT_TOKEN
+  const chatId = process.env.TELEGRAM_CHAT_ID
+  if (!token || !chatId) return
+  const msg = [
+    `🔔 Demo lead — ${lead.id}`,
+    `👤 ${lead.name}${lead.company ? ' · ' + lead.company : ''}`,
+    `📧 ${lead.email}`,
+    `💬 ${(lead.workflow || '').slice(0, 280)}`,
+    lead.scope?.summary ? `→ ${lead.scope.summary}` : '',
+  ].filter(Boolean).join('\n')
+  try {
+    await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ chat_id: chatId, text: msg }),
+      signal: AbortSignal.timeout(5000),
+    })
+  } catch { /* never block */ }
+}
+
 module.exports = async function handler(request, response) {
   const origin = request.headers.origin || ''
   setCors(response, origin)
@@ -113,7 +134,7 @@ module.exports = async function handler(request, response) {
   }
 
   const lead = { id: leadId(), name, email, phone, company, workflow, source_url, scope }
-  await notifySwann(lead)
+  await Promise.all([notifySwann(lead), telegramAlert(lead)])
 
   response.status(200).json({ ok: true, lead_id: lead.id, scope })
 }

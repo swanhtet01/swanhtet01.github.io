@@ -776,6 +776,71 @@ async function postLeadWebhook({ record }) {
   }
 }
 
+async function notifyTelegram({ record }) {
+  const token = text(process.env.TELEGRAM_BOT_TOKEN)
+  const chatId = text(process.env.TELEGRAM_CHAT_ID)
+  if (!token || !chatId) return { status: 'skipped', reason: 'telegram_not_configured' }
+  const company = record.company || record.name || 'Unknown'
+  const goal = (record.goal || record.workflow || '').slice(0, 280)
+  const score = record.lead_score || 0
+  const pkg = record.requested_package || ''
+  const msg = [
+    `🔔 New lead — ${record.lead_id}`,
+    `👤 ${record.name} · ${company}`,
+    `📧 ${record.email}${record.phone ? ' · ' + record.phone : ''}`,
+    pkg && pkg !== 'General enquiry' ? `📦 ${pkg}` : '',
+    `⭐ Score ${score} · ${record.lead_stage || 'needs_discovery'}`,
+    `💬 ${goal}`,
+    `→ ${record.next_step || 'Review and reply.'}`,
+  ].filter(Boolean).join('\n')
+  try {
+    const res2 = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ chat_id: chatId, text: msg }),
+      signal: AbortSignal.timeout(5000),
+    })
+    return res2.ok ? { status: 'ready' } : { status: 'error', reason: `tg_${res2.status}` }
+  } catch (err) {
+    return { status: 'error', reason: text(err?.message) || 'telegram_failed' }
+  }
+}
+
+async function appendToGoogleSheet({ record }) {
+  const saRaw = text(process.env.GOOGLE_SA_KEY)
+  const sheetId = text(process.env.SUPERMEGA_LEAD_SHEET_ID)
+  if (!saRaw || !sheetId) return { status: 'skipped', reason: 'sheets_not_configured' }
+  try {
+    const sa = JSON.parse(saRaw)
+    const now = Math.floor(Date.now() / 1000)
+    const b64url = (buf) => Buffer.from(buf).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+    const header = b64url(JSON.stringify({ alg: 'RS256', typ: 'JWT' }))
+    const claim = b64url(JSON.stringify({ iss: sa.client_email, scope: 'https://www.googleapis.com/auth/spreadsheets', aud: 'https://oauth2.googleapis.com/token', iat: now, exp: now + 3600 }))
+    const { createSign } = await import('node:crypto')
+    const signer = createSign('RSA-SHA256')
+    signer.update(`${header}.${claim}`)
+    const sig = b64url(signer.sign(sa.private_key))
+    const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer', assertion: `${header}.${claim}.${sig}` }),
+      signal: AbortSignal.timeout(8000),
+    })
+    if (!tokenRes.ok) return { status: 'error', reason: 'sa_token_failed' }
+    const { access_token: tok } = await tokenRes.json()
+    const row = [record.submitted_at || new Date().toISOString(), record.lead_id, record.name, record.email, record.phone || '', record.company || '', record.requested_package || '', record.lead_score || 0, record.lead_stage || '', record.goal || '', record.next_step || '']
+    const appendRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/Leads!A:K:append?valueInputOption=USER_ENTERED`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${tok}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ values: [row] }),
+      signal: AbortSignal.timeout(8000),
+    })
+    return appendRes.ok ? { status: 'ready' } : { status: 'error', reason: `sheets_${appendRes.status}` }
+  } catch (err) {
+    return { status: 'error', reason: text(err?.message) || 'sheets_failed' }
+  }
+}
+
 module.exports = async function handler(req, res) {
   cors(req, res)
   const pathname = new URL(req.url || '/api/contact-submissions', 'https://supermega.dev').pathname
@@ -868,8 +933,12 @@ module.exports = async function handler(req, res) {
   const ledger = await saveLeadLedger({ record })
   const pipelineAction = await savePipelineAction({ record })
   const webhook = await postLeadWebhook({ record })
-  const delivery = await sendEmail({ record })
-  const confirmation = await sendConfirmationEmail({ record })
+  const [delivery, confirmation, telegram, sheets] = await Promise.all([
+    sendEmail({ record }),
+    sendConfirmationEmail({ record }),
+    notifyTelegram({ record }),
+    appendToGoogleSheet({ record }),
+  ])
 
   // Forward to the Ops pipeline so the lead appears in the machine console
   // Fire-and-forget: doesn't block or affect the response
@@ -948,6 +1017,8 @@ module.exports = async function handler(req, res) {
     pipeline_action: pipelineAction,
     webhook,
     confirmation,
+    telegram,
+    sheets,
     pipeline: {
       saved_count: ledger.status === 'ready' ? 1 : 0,
       saved_task_count: pipelineAction.status === 'ready' ? 1 : 0,
