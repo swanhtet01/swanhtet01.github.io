@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+﻿import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import { PageIntro } from '../components/PageIntro'
@@ -306,7 +306,7 @@ export function MetricIntakePage() {
               value={quickPaste}
               onChange={(event) => setQuickPaste(event.target.value)}
             />
-            <p className="text-xs text-[var(--sm-muted)]">Example: Output,1200,pcs,production,2026-03-26,Plant A,Ops Team,reported,Night shift total</p>
+            <p className="text-xs text-[var(--sm-muted)]">Example: Output,1200,pcs,production,2026-03-26,Floor A,Ops Team,reported,Night shift total</p>
           </div>
 
           <div className="mt-6 grid gap-4 md:grid-cols-2">

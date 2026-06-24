@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+﻿import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import { AGENT_TECHNIQUES, AI_NATIVE_STACK_LAYERS } from '../lib/aiArchitectureBlueprint'
@@ -121,7 +121,7 @@ const BUILD_STUDIO_CORE_SPRINT = [
   },
   {
     id: 'ytf-runtime',
-    title: 'Harden Yangon Tyre runtime, roles, and portal defaults',
+    title: 'Harden Factory Client runtime, roles, and portal defaults',
     owner: 'Tenant delivery pod',
     priority: 'High',
     due: 'This week',
@@ -677,7 +677,7 @@ export function BuildStudioPage() {
                 <p className="font-semibold">{technique.name}</p>
                 <p className="mt-2 text-sm text-white/80">Pattern: {technique.pattern}</p>
                 <p className="mt-2 text-sm text-[var(--sm-muted)]">{technique.purpose}</p>
-                <p className="mt-2 text-sm text-white/80">Yangon Tyre use: {technique.ytfUse}</p>
+                <p className="mt-2 text-sm text-white/80">Factory Client use: {technique.ytfUse}</p>
                 <p className="mt-2 text-sm text-white/80">Adopt next: {technique.adoptNext}</p>
               </article>
             ))}
@@ -862,12 +862,12 @@ export function BuildStudioPage() {
           <article className="sm-site-panel">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
               <div>
-                <p className="sm-kicker text-[var(--sm-accent)]">Yangon Tyre app foundry</p>
+                <p className="sm-kicker text-[var(--sm-accent)]">Factory Client app foundry</p>
                 <h2 className="mt-3 text-3xl font-bold text-white lg:text-4xl">Each tenant app now has a live build posture, source spine, and AI crew contract.</h2>
               </div>
               <p className="max-w-2xl text-sm leading-relaxed text-[var(--sm-muted)] lg:text-base">
                 This tenant board now scores each app against real module coverage, live or designed crews, and the Drive or spreadsheet evidence already visible in
-                Yangon Tyre data sources.
+                Factory Client data sources.
               </p>
             </div>
 
@@ -922,7 +922,7 @@ export function BuildStudioPage() {
               <article className="sm-proof-card">
                 <p className="font-semibold text-white">Open build gaps</p>
                 <p className="mt-3 text-sm text-[var(--sm-muted)]">
-                  These are the missing modules or missing crews blocking Yangon Tyre apps from moving into harder daily use.
+                  These are the missing modules or missing crews blocking Factory Client apps from moving into harder daily use.
                 </p>
                 <div className="mt-4 grid gap-3">
                   {ytfFoundryGapQueue.length > 0 ? (
@@ -1024,7 +1024,7 @@ export function BuildStudioPage() {
             <article className="sm-site-panel">
               <div>
                 <p className="sm-kicker text-[var(--sm-accent)]">Current source spine</p>
-                <h2 className="mt-3 text-3xl font-bold text-white lg:text-4xl">The app line is now tied to the real Yangon Tyre Drive evidence already in hand.</h2>
+                <h2 className="mt-3 text-3xl font-bold text-white lg:text-4xl">The app line is now tied to the real Factory Client Drive evidence already in hand.</h2>
               </div>
               <div className="mt-6 grid gap-3">
                 {YANGON_TYRE_SOURCE_PACKS.map((pack) => (
@@ -1437,7 +1437,7 @@ export function BuildStudioPage() {
           <Link className="sm-button-secondary" to="/platform">
             See Enterprise Setup
           </Link>
-          <Link className="sm-button-secondary" to="/clients/yangon-tyre">
+          <Link className="sm-button-secondary" to="/clients/factory-client">
             Open tenant example
           </Link>
         </div>

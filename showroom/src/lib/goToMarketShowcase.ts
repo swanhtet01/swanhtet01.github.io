@@ -1,4 +1,4 @@
-export type PublicPersonaProfile = {
+﻿export type PublicPersonaProfile = {
   id: string
   name: string
   role: string
@@ -46,7 +46,7 @@ export const PUBLIC_PERSONAS: PublicPersonaProfile[] = [
   },
   {
     id: 'plant-quality',
-    name: 'Plant and quality leadership',
+    name: 'Floor And quality leadership',
     role: 'Plant manager, quality lead, maintenance lead, or director',
     pain: 'Quality incidents, KPI drift, CAPA, and maintenance review still happen in generic ERP screens or offline files.',
     stack: 'ERP export, shift files, quality forms, maintenance logs',

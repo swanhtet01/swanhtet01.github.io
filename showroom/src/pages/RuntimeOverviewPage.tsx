@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+﻿import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import { PageIntro } from '../components/PageIntro'
@@ -31,7 +31,7 @@ const statusOrder: RuntimeHealthStatus[] = ['Healthy', 'Warning', 'Degraded', 'N
 
 const tenantLabels = {
   core: 'Core platform',
-  'yangon-tyre': 'Yangon Tyre',
+  'yangon-tyre': 'Factory Client',
   shared: 'Shared runtime',
 } as const
 
@@ -365,7 +365,7 @@ export function RuntimeOverviewPage() {
       <section className="grid gap-6 xl:grid-cols-[1fr_1fr]">
         <article className="sm-site-panel">
           <div>
-            <p className="sm-kicker text-[var(--sm-accent)]">Yangon Tyre tenant spotlight</p>
+            <p className="sm-kicker text-[var(--sm-accent)]">Factory Client tenant spotlight</p>
             <h2 className="mt-3 text-3xl font-bold text-white lg:text-4xl">Runtime health only matters if it protects the real factory and management loop.</h2>
           </div>
           <div className="mt-6 grid gap-3">
@@ -460,7 +460,7 @@ export function RuntimeOverviewPage() {
         <article className="sm-site-panel">
           <div>
             <p className="sm-kicker text-[var(--sm-accent)]">Source readiness</p>
-            <h2 className="mt-3 text-3xl font-bold text-white lg:text-4xl">The runtime should know which Yangon Tyre evidence packs are already promotable.</h2>
+            <h2 className="mt-3 text-3xl font-bold text-white lg:text-4xl">The runtime should know which Factory Client evidence packs are already promotable.</h2>
           </div>
           <div className="mt-6 grid gap-3">
             {YANGON_TYRE_SOURCE_PACKS.map((pack) => (

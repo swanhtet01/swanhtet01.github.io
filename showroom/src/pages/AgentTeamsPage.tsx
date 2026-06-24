@@ -1,4 +1,4 @@
-import { type FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
+﻿import { type FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import { PageIntro } from '../components/PageIntro'
@@ -425,7 +425,7 @@ export function AgentTeamsPage() {
         eyebrow="Agent Ops"
         title={
           tenant.key === 'ytf-plant-a'
-            ? 'Run the AI workforce that designs and operates the Yangon Tyre platform.'
+            ? 'Run the AI workforce that designs and operates the Factory Client platform.'
             : 'Keep the company running with people, loops, and escalation.'
         }
         description={

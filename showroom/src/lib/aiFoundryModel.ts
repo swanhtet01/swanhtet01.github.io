@@ -1,4 +1,4 @@
-export type AiFoundryCrew = {
+﻿export type AiFoundryCrew = {
   id: string
   name: string
   workspace: string
@@ -532,7 +532,7 @@ export const YTF_APP_FOUNDRY_BLUEPRINTS: TenantAppFoundryBlueprint[] = [
     route: '/app/operations',
     workspace: 'Plant',
     incumbents: ['monday.com', 'Asana', 'ERP task lists'],
-    coreRecord: 'Plant blocker',
+    coreRecord: 'Floor Blocker',
     operatingLoop: 'Shift notes, receiving pressure, breakdowns, and quality escalations merge into one plant queue.',
     thesis: 'Shift blockers are discussed in meetings, chat threads, and handwritten notes before they appear in any usable queue.',
     antithesis: 'Carryovers slip when receiving, breakdown, and quality pressure stay in separate trackers with no shared owner discipline.',
@@ -622,7 +622,7 @@ export const YTF_APP_FOUNDRY_BLUEPRINTS: TenantAppFoundryBlueprint[] = [
     coreRecord: 'Asset event',
     operatingLoop: 'Breakdown, downtime, PM, spare-part risk, and repeat-failure reasoning stay attached to one asset history.',
     thesis: 'Maintenance teams log breakdowns, PM work, parts issues, and downtime reasons in work orders that rarely preserve asset history.',
-    antithesis: 'Repeat failures keep reopening because closure hides impact, pattern, and cross-functional context from plant and quality teams.',
+    antithesis: 'Repeat failures keep reopening because closure hides impact, pattern, and cross-functional context from Floor And quality teams.',
     synthesis: 'A reliability loop centers on asset-event history, ranks repeat-failure pressure, and drafts the next intervention before downtime becomes routine.',
     aiCrew: 'Operations and Reliability Pod + Experience Assurance Pod',
     experienceEdge: 'The useful view is repeat-failure pressure and next action, not just a closed work-order list.',
@@ -641,7 +641,7 @@ export const YTF_APP_FOUNDRY_BLUEPRINTS: TenantAppFoundryBlueprint[] = [
     successSignals: [
       'Downtime records always show owner, impact, and next action.',
       'Repeat failures are ranked and investigated rather than reopened as isolated jobs.',
-      'Maintenance history stays connected to plant and quality context.',
+      'Maintenance history stays connected to Floor And quality context.',
     ],
   },
   {
@@ -668,7 +668,7 @@ export const YTF_APP_FOUNDRY_BLUEPRINTS: TenantAppFoundryBlueprint[] = [
     requiredArtifacts: ['supplier discrepancy pack', 'approval context packet', 'recovery queue'],
     successSignals: [
       'Approvals always carry shipment, receipt, or finance context.',
-      'Supplier recovery work is ranked by plant and financial impact.',
+      'Supplier recovery work is ranked by Floor And financial impact.',
       'Managers can see which evidence gaps are blocking release or payment.',
     ],
   },

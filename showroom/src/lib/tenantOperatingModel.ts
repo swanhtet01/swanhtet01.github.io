@@ -1,4 +1,4 @@
-export type OperatingModelModule = {
+﻿export type OperatingModelModule = {
   id: string
   name: string
   category: 'CRM' | 'ERP' | 'Knowledge' | 'Portal' | 'Automation' | 'Control'
@@ -497,13 +497,13 @@ export const SUPERMEGA_CORE_MODEL: TenantOperatingModel = {
 export const YANGON_TYRE_MODEL: TenantOperatingModel = {
   id: 'yangon-tyre',
   tenantKey: 'ytf-plant-a',
-  companyName: 'Yangon Tyre Plant A',
-  publicLabel: 'Yangon Tyre',
+  companyName: 'Factory Client Factory Floor',
+  publicLabel: 'Factory Client',
   domain: 'ytf.supermega.dev',
   sector: 'manufacturing + distribution hybrid',
-  thesis: 'An industrial operating system for Yangon Tyre: CRM, ERP, DQMS, knowledge graph, and agent runtime on one tenant.',
+  thesis: 'An industrial operating system for Factory Client: CRM, ERP, DQMS, knowledge graph, and agent runtime on one tenant.',
   narrative:
-    'Yangon Tyre should not be forced into a generic ERP shell. The stronger model is one client portal where sales, receiving, supplier control, quality, maintenance, inventory, manufacturing control, and CEO review share the same memory, connector mesh, and agent runtime. Gmail, Drive, Sheets, Calendar, ERP extracts, markdown notes, Viber or LINE or WeChat threads, and human forms all feed canonical operating records with batch genealogy and evidence links.',
+    'Factory Client should not be forced into a generic ERP shell. The stronger model is one client portal where sales, receiving, supplier control, quality, maintenance, inventory, manufacturing control, and CEO review share the same memory, connector mesh, and agent runtime. Gmail, Drive, Sheets, Calendar, ERP extracts, markdown notes, Viber or LINE or WeChat threads, and human forms all feed canonical operating records with batch genealogy and evidence links.',
   paradigmShifts: [
     'From human-organized folders and trackers to canonical supplier, shipment, GRN, batch, machine, and customer records.',
     'From reactive reporting to role-based workspaces with agent-managed exception queues and briefs.',
@@ -747,7 +747,7 @@ export const YANGON_TYRE_MODEL: TenantOperatingModel = {
     {
       id: 'tenant_admin',
       name: 'Admin',
-      summary: 'Owns module enablement, connector scopes, user roles, and runtime posture for Yangon Tyre.',
+      summary: 'Owns module enablement, connector scopes, user roles, and runtime posture for Factory Client.',
       defaultHome: '/app/platform-admin',
       capabilities: ['tenant_admin.view', 'security_admin.view', 'connector_admin.view', 'knowledge_admin.view'],
       securityZones: ['executive-control', 'shared-knowledge'],
@@ -1232,7 +1232,7 @@ export const YANGON_TYRE_MODEL: TenantOperatingModel = {
       id: 'tenant-blueprint',
       name: 'Tenant operating model now defined',
       status: 'Live now',
-      detail: 'Yangon Tyre now has explicit modules, roles, zones, connectors, data-entry surfaces, and agent pods for sales, ops, quality, maintenance, CEO, and admin.',
+      detail: 'Factory Client now has explicit modules, roles, zones, connectors, data-entry surfaces, and agent pods for sales, ops, quality, maintenance, CEO, and admin.',
     },
     {
       id: 'ytf-intelligence-lane',
@@ -1245,7 +1245,7 @@ export const YANGON_TYRE_MODEL: TenantOperatingModel = {
     {
       id: 'ytf-tenant-scope',
       name: 'Tenant-scoped knowledge and state need deeper backend wiring',
-      risk: 'Yangon Tyre can be demoed now, but canonical knowledge records still need live backend persistence across modules.',
+      risk: 'Factory Client can be demoed now, but canonical knowledge records still need live backend persistence across modules.',
       nextMove: 'Extend the enterprise store and state store so YTF entities and relations become first-class runtime objects.',
     },
     {

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+﻿import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import { PageIntro } from '../components/PageIntro'
@@ -419,7 +419,7 @@ export function ProductOperationsPage() {
             <Link className="sm-button-secondary" to="/app/factory">
               Open Build room
             </Link>
-            <Link className="sm-button-secondary" to="/clients/yangon-tyre">
+            <Link className="sm-button-secondary" to="/clients/factory-client">
               Open Yangon proof
             </Link>
           </div>
@@ -532,18 +532,18 @@ export function ProductOperationsPage() {
       <section className="sm-site-panel">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <p className="sm-kicker text-[var(--sm-accent)]">Yangon Tyre proof</p>
+            <p className="sm-kicker text-[var(--sm-accent)]">Factory Client proof</p>
             <h2 className="mt-2 text-3xl font-bold text-white">Named tenant proof with direct app routes.</h2>
           </div>
           <p className="max-w-2xl text-sm text-[var(--sm-muted)]">
-            The proof is not abstract. Yangon Tyre already names the tenant, the workspaces, and the apps that show whether the platform can replace scattered
+            The proof is not abstract. Factory Client already names the tenant, the workspaces, and the apps that show whether the platform can replace scattered
             plant, commercial, quality, maintenance, and admin work.
           </p>
         </div>
         <div className="mt-6 grid gap-6 xl:grid-cols-[0.94fr_1.06fr]">
           <article className="sm-surface-deep p-6">
             <p className="sm-kicker text-[var(--sm-accent-alt)]">Tenant proof</p>
-            <h3 className="mt-2 text-2xl font-bold text-white">Yangon Tyre Factory</h3>
+            <h3 className="mt-2 text-2xl font-bold text-white">Factory Client Factory</h3>
             <p className="mt-3 text-sm text-[var(--sm-muted)]">
               One named tenant proving director review, commercial control, plant operations, quality, maintenance, approvals, and tenant administration on the
               same operating model.
@@ -561,7 +561,7 @@ export function ProductOperationsPage() {
               </article>
             </div>
             <div className="mt-6 flex flex-wrap gap-3">
-              <Link className="sm-button-primary" to="/clients/yangon-tyre">
+              <Link className="sm-button-primary" to="/clients/factory-client">
                 Open tenant proof
               </Link>
               <Link className="sm-button-secondary" to="/app/director">
@@ -589,7 +589,7 @@ export function ProductOperationsPage() {
                   <Link className="sm-link" to={app.route}>
                     Open app
                   </Link>
-                  <Link className="sm-link" to="/clients/yangon-tyre">
+                  <Link className="sm-link" to="/clients/factory-client">
                     View tenant proof
                   </Link>
                 </div>

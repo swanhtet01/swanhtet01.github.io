@@ -1,4 +1,4 @@
-import type { DataFabricDataset, DataFabricSourceRegistryItem } from './dataFabricApi'
+﻿import type { DataFabricDataset, DataFabricSourceRegistryItem } from './dataFabricApi'
 import { YANGON_TYRE_DATA_PROFILE } from './yangonTyreDataProfile'
 
 export type YangonTyreAnalyticsLens = 'all' | 'operations' | 'quality' | 'commercial' | 'governance'
@@ -348,7 +348,7 @@ function buildEngineeredFeatures(dataset: DataFabricDataset) {
       id: 'feature-volume-drift',
       name: 'Guidebook versus workbook drift',
       status: 'watch',
-      grain: 'plant annual output claim',
+      grain: 'Floor Annual output claim',
       formula: `${formatUnits(WORKBOOK_UNITS_2023)} workbook units / ${formatUnits(GUIDEBOOK_ANNUAL_VOLUME)} guidebook units`,
       signal: formatRatio(WORKBOOK_UNITS_2023 / GUIDEBOOK_ANNUAL_VOLUME),
       whyItMatters: 'The documentation layer and analytical workbook disagree enough to require governance review before targets are trusted.',
@@ -480,7 +480,7 @@ export function buildYangonTyreAnalyticsMart(dataset: DataFabricDataset): Yangon
       id: 'kpi-guidebook-sections',
       label: 'Guidebook sections',
       value: formatUnits(GUIDEBOOK_SECTION_COUNT),
-      detail: 'Named Plant A sections already encoded in the operations guide and ready for SOP or writeback modeling.',
+      detail: 'Named Factory Floor sections already encoded in the operations guide and ready for SOP or writeback modeling.',
       formula: 'Operations guidebook section count',
       route: '/app/knowledge',
       trend: 'Process grammar',
@@ -565,7 +565,7 @@ export function buildYangonTyreAnalyticsMart(dataset: DataFabricDataset): Yangon
     headline: 'Turn the curated Drive estate into a warehouse-grade operating mart.',
     databaseNote:
       dataset.source === 'live'
-        ? 'Live workspace counts are merged with the Yangon Tyre mart. Curated Drive evidence still provides the structure, feature definitions, and storytelling grammar.'
+        ? 'Live workspace counts are merged with the Factory Client mart. Curated Drive evidence still provides the structure, feature definitions, and storytelling grammar.'
         : 'This is a local analytical mart built from curated Drive and workbook evidence. It behaves like a warehouse-ready slice even before a full backend ingestion loop is online.',
     updatedAt: dataset.updatedAt,
     lenses: [...ANALYTICS_LENSES],

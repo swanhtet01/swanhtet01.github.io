@@ -1,4 +1,4 @@
-import type { TenantConfig } from './tenantConfig'
+﻿import type { TenantConfig } from './tenantConfig'
 import type { TenantRoleExperience } from './tenantRoleExperience'
 
 type SessionLike = {
@@ -125,7 +125,7 @@ function buildYangonTyreProfile(
   experience: TenantRoleExperience,
   session: SessionLike | null | undefined,
 ): CompanyPortalProfile {
-  const companyName = String(session?.workspace_name || tenant.tenantName || tenant.defaultCompany || 'Yangon Tyre').trim() || 'Yangon Tyre'
+  const companyName = String(session?.workspace_name || tenant.tenantName || tenant.defaultCompany || 'Factory Client').trim() || 'Factory Client'
   const coreApps = uniqueTools([
     { title: 'Operations Desk', detail: 'Run plant blockers, shift handoff, and shared actions.', to: '/app/operations', kind: 'core' as const },
     { title: 'Receiving Desk', detail: 'Track GRN gaps, inbound holds, and supplier evidence.', to: '/app/receiving', kind: 'core' as const },
@@ -158,7 +158,7 @@ function buildYangonTyreProfile(
     operatingModelLabel: 'Manufacturing command portal',
     workspacePromise: `A role-based operating portal for ${companyName} where plant, quality, maintenance, commercial, and management teams share the same records.`,
     companySummary:
-      'Yangon Tyre needs one calmer system for plant execution: receiving, production, quality, maintenance, and director review should stay connected instead of splitting into chats, sheets, and disconnected tools.',
+      'Factory Client needs one calmer system for plant execution: receiving, production, quality, maintenance, and director review should stay connected instead of splitting into chats, sheets, and disconnected tools.',
     operatorRule: 'Capture the issue where it happens, keep the evidence attached, and review the next move inside the portal.',
     todayPrompt: `Open ${experience.sections[0]?.title || 'the main desk'} and keep the day grounded in the live plant queue.`,
     coreApps,

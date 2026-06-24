@@ -1,4 +1,4 @@
-export type BuildTeam = {
+﻿export type BuildTeam = {
   id: string
   name: string
   workspace: string
@@ -347,7 +347,7 @@ export const MODULE_PROGRAMS: ModuleProgram[] = [
     owner: 'Tenant Launch Pod + Connector Systems',
     researchCell: 'Input Systems Cell',
     starterWedge: 'Receiving Control',
-    tenantProof: 'Yangon Tyre receiving, industrial DQMS, maintenance follow-up, supplier recovery',
+    tenantProof: 'Factory Client receiving, industrial DQMS, maintenance follow-up, supplier recovery',
     modules: ['Operations Inbox', 'Industrial DQMS', 'Approval Policy Engine', 'Document Intelligence'],
     commercialStory:
       'Sell industrial control from the plant floor upward, then replace more of the ERP, quality, and reporting stack with DQMS, KPI control, and gap-analysis workflows.',

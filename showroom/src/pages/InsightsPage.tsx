@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+﻿import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import { PageIntro } from '../components/PageIntro'
@@ -65,7 +65,7 @@ export function InsightsPage() {
 
         if (!health.ready) {
           setMode('drive-seed')
-          setStatusNote('Workspace API is not connected on this host yet. Showing the Drive-derived Yangon Tyre brief.')
+          setStatusNote('Workspace API is not connected on this host yet. Showing the Drive-derived Factory Client brief.')
           setLoading(false)
           return
         }
@@ -76,7 +76,7 @@ export function InsightsPage() {
 
           if (!session.authenticated) {
             setMode('drive-seed')
-            setStatusNote('Workspace login is not active here. Showing the Drive-derived Yangon Tyre brief.')
+            setStatusNote('Workspace login is not active here. Showing the Drive-derived Factory Client brief.')
             setLoading(false)
             return
           }
@@ -84,7 +84,7 @@ export function InsightsPage() {
           if (cancelled) return
 
           setMode('drive-seed')
-          setStatusNote('Workspace login could not be verified here. Showing the Drive-derived Yangon Tyre brief.')
+          setStatusNote('Workspace login could not be verified here. Showing the Drive-derived Factory Client brief.')
           setLoading(false)
           return
         }
@@ -110,7 +110,7 @@ export function InsightsPage() {
         if (cancelled) return
 
         setMode('drive-seed')
-        setStatusNote('Live insight generation is unavailable right now. Showing the Drive-derived Yangon Tyre brief.')
+        setStatusNote('Live insight generation is unavailable right now. Showing the Drive-derived Factory Client brief.')
         setPayload(seedPayload)
       } finally {
         if (!cancelled) {
@@ -135,7 +135,7 @@ export function InsightsPage() {
     <div className="space-y-8">
       <PageIntro
         eyebrow="Insights"
-        title="Read Yangon Tyre as a governed operating story."
+        title="Read Factory Client as a governed operating story."
         description="This surface starts from the Drive source estate, lifts out the strongest signals, and turns them into role-ready narrative instead of leaving them trapped in files."
       />
 
@@ -292,7 +292,7 @@ export function InsightsPage() {
               <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
                 <div>
                   <p className="sm-kicker text-[var(--sm-accent)]">Visual storytelling</p>
-                  <h2 className="mt-3 text-3xl font-bold text-white">The strongest Yangon Tyre signals now read like chapters, not scattered rows.</h2>
+                  <h2 className="mt-3 text-3xl font-bold text-white">The strongest Factory Client signals now read like chapters, not scattered rows.</h2>
                 </div>
                 <Link className="sm-link" to="/app/director">
                   Open director desk

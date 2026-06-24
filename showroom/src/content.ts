@@ -1,4 +1,4 @@
-import { CORE_SOLUTIONS } from './lib/salesControl'
+﻿import { CORE_SOLUTIONS } from './lib/salesControl'
 import { YANGON_TYRE_MODEL } from './lib/tenantOperatingModel'
 
 export type ProofPoint = {
@@ -210,7 +210,7 @@ export const ytfDeployment: TenantBlueprint = {
   name: YANGON_TYRE_MODEL.publicLabel,
   domain: YANGON_TYRE_MODEL.domain,
   summary:
-    'A live tenant workspace for Yangon Tyre where sales, operations, maintenance, quality, CEO review, and admin control work from one connected system.',
+    'A live tenant workspace for Factory Client where sales, operations, maintenance, quality, CEO review, and admin control work from one connected system.',
   modules: YANGON_TYRE_MODEL.modules.map((module) => module.name),
   roles: YANGON_TYRE_MODEL.roles.map((role) => role.name),
   dataSources: YANGON_TYRE_MODEL.connectors.map((connector) => connector.name),
@@ -222,7 +222,7 @@ export const ytfDeployment: TenantBlueprint = {
   ],
   agentTeams: YANGON_TYRE_MODEL.agentPods.map((pod) => pod.name),
   outcomes: [
-    'One tenant portal for Plant A',
+    'One tenant portal for Factory Floor',
     'Cleaner operational records and commercial follow-up',
     'Stronger CEO and admin review',
     'Human entry aligned with quality, operations, maintenance, and data science',

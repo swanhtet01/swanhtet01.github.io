@@ -1,4 +1,4 @@
-import { startTransition, useEffect, useMemo, useState } from 'react'
+﻿import { startTransition, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import { PageIntro } from '../components/PageIntro'
@@ -128,7 +128,7 @@ export function AdoptionCommandPage() {
       <div className="space-y-8">
         <PageIntro
           eyebrow="Adoption command"
-          title="Adoption Command is currently configured for the Yangon Tyre tenant."
+          title="Adoption Command is currently configured for the Factory Client tenant."
           description="This command surface measures role usage, writeback quality, review rituals, and agent reinforcement across the live enterprise portal."
         />
 
@@ -161,7 +161,7 @@ export function AdoptionCommandPage() {
       <PageIntro
         eyebrow="Adoption command"
         title="Run staff usage, data discipline, and role storytelling as one enterprise control loop."
-        description="This is the working adoption layer for ytf.supermega.dev: live role scoring, writeback health, manager rituals, and agent reinforcement tied back to actual Yangon Tyre workspace records."
+        description="This is the working adoption layer for ytf.supermega.dev: live role scoring, writeback health, manager rituals, and agent reinforcement tied back to actual Factory Client workspace records."
       />
 
       <section className="grid gap-4 md:grid-cols-6">

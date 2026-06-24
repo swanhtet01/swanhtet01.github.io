@@ -1,4 +1,4 @@
-import { getAgentOperatingModel } from './agentOperatingModel'
+﻿import { getAgentOperatingModel } from './agentOperatingModel'
 import { YANGON_TYRE_CONNECTOR_EXPANSION, YANGON_TYRE_SOURCE_PACKS } from './yangonTyreDriveModel'
 import { YANGON_TYRE_MODEL } from './tenantOperatingModel'
 
@@ -76,7 +76,7 @@ export const YANGON_TYRE_DATA_FABRIC_DIALECTIC = {
   thesis:
     'Every folder, sheet, email thread, and team update should become reusable tenant memory that can feed operational control, data science, and role-specific briefing.',
   antithesis:
-    'Yangon Tyre still spreads signal across Drive folders, procurement and internal mail, ERP exports, chat, and retrospective spreadsheets, so analysis and action drift apart.',
+    'Factory Client still spreads signal across Drive folders, procurement and internal mail, ERP exports, chat, and retrospective spreadsheets, so analysis and action drift apart.',
   synthesis:
     'Data Fabric watches the source mesh, extracts topic-aware records, builds feature marts, generates role stories, and loops humans back into structured writeback lanes.',
 } as const
@@ -87,7 +87,7 @@ export const YANGON_TYRE_DATA_PIPELINE_STAGES: YangonTyreDataPipelineStage[] = [
     name: 'Source Watch and Whole-Folder Intake',
     status: 'live',
     purpose: 'Continuously watch the full Google Drive folder tree, Gmail threads, attachments, and operator writeback surfaces for new evidence.',
-    sources: ['Plant A shared folders', 'CEO data hub', 'Finance and purchase-order mail packs', 'Sales and procurement Gmail', 'Structured app entry'],
+    sources: ['Factory Floor shared folders', 'CEO data hub', 'Finance and purchase-order mail packs', 'Sales and procurement Gmail', 'Structured app entry'],
     outputs: ['source event registry', 'attachment manifests', 'sheet snapshots', 'topic candidate queue'],
     agents: ['Intake Router Pod', 'Connector Control', 'Document Intake'],
     reviewGate: 'Source scope and connector permissions stay under tenant-admin review.',
@@ -159,8 +159,8 @@ export const YANGON_TYRE_TOPIC_PIPELINES: YangonTyreTopicPipeline[] = [
     id: 'whole-folder',
     name: 'Whole-folder operating memory',
     status: 'live',
-    scope: 'Crawl the entire Yangon Tyre Google Drive structure and mailbox evidence so no important file or update stays invisible to the platform.',
-    sourcePacks: ['Plant A operations manual', 'Plant A shared folders', 'CEO data hub', 'Data source register'],
+    scope: 'Crawl the entire Factory Client Google Drive structure and mailbox evidence so no important file or update stays invisible to the platform.',
+    sourcePacks: ['Factory Floor operations manual', 'Factory Floor shared folders', 'CEO data hub', 'Data source register'],
     connectorTracks: ['Google Drive evidence spine', 'Gmail and attachment intake'],
     transforms: ['folder and shortcut indexing', 'sheet snapshotting', 'file-to-topic routing', 'attachment lineage'],
     outputs: ['tenant evidence spine', 'topic queues', 'knowledge candidates', 'stale-source alerts'],
@@ -171,7 +171,7 @@ export const YANGON_TYRE_TOPIC_PIPELINES: YangonTyreTopicPipeline[] = [
     name: 'Manufacturing and industrial engineering',
     status: 'mapped',
     scope: 'Use production, downtime, genealogy, and planning data to study throughput, bottlenecks, yield, and line balance.',
-    sourcePacks: ['Plant A operations manual', 'Plant A shared folders', 'Tyre Analysis workbook'],
+    sourcePacks: ['Factory Floor operations manual', 'Factory Floor shared folders', 'Tyre Analysis workbook'],
     connectorTracks: ['Google Drive evidence spine', 'Shopfloor mobile forms and line logs'],
     transforms: ['stage tagging', 'batch and asset linkage', 'yield normalization', 'bottleneck feature engineering'],
     outputs: ['plant flow mart', 'downtime reason cuts', 'bottleneck watchlist', 'shift engineering brief'],
@@ -182,7 +182,7 @@ export const YANGON_TYRE_TOPIC_PIPELINES: YangonTyreTopicPipeline[] = [
     name: 'Quality, genealogy, and release',
     status: 'mapped',
     scope: 'Bind incidents, batch evidence, closeout actions, and release history into one quality-learning loop.',
-    sourcePacks: ['Plant A operations manual', 'Plant A shared folders', 'Tyre Analysis workbook'],
+    sourcePacks: ['Factory Floor operations manual', 'Factory Floor shared folders', 'Tyre Analysis workbook'],
     connectorTracks: ['Google Drive evidence spine', 'Gmail and attachment intake', 'Shopfloor mobile forms and line logs'],
     transforms: ['incident extraction', 'batch reference repair', 'photo-to-issue linkage', 'quality-loss feature generation'],
     outputs: ['quality loss mart', 'incident canon', 'release evidence packs', 'weekly defect storyline'],
@@ -193,7 +193,7 @@ export const YANGON_TYRE_TOPIC_PIPELINES: YangonTyreTopicPipeline[] = [
     name: 'Supplier, GRN, and finance recovery',
     status: 'mapped',
     scope: 'Keep supplier discrepancies, missing documents, GRN mismatches, and financial exposure on one recovery graph.',
-    sourcePacks: ['Finance and purchase-order mail packs', 'Plant A shared folders', 'Data source register'],
+    sourcePacks: ['Finance and purchase-order mail packs', 'Factory Floor shared folders', 'Data source register'],
     connectorTracks: ['Gmail and attachment intake', 'Google Drive evidence spine', 'Viber, LINE, and WeChat internal and external chat mesh'],
     transforms: ['supplier identity normalization', 'mail-to-GRN binding', 'evidence completeness scoring', 'delay aging'],
     outputs: ['supplier recovery mart', 'document debt ranking', 'plant-blocking discrepancy board', 'approval-ready packets'],
@@ -229,7 +229,7 @@ export const YANGON_TYRE_FEATURE_MARTS: YangonTyreFeatureMart[] = [
     name: 'Plant flow and industrial engineering mart',
     status: 'mapped',
     grain: 'shift x stage x asset x product family',
-    sources: ['Plant A folders', 'shopfloor logs', 'maintenance entry', 'production sheets'],
+    sources: ['Factory Floor folders', 'shopfloor logs', 'maintenance entry', 'production sheets'],
     features: ['throughput by stage', 'downtime minutes', 'line-balance pressure', 'yield loss by asset', 'repeat-blocker rate'],
     consumers: ['Operations Control', 'Workforce Command', 'Operating Intelligence Studio'],
     cadence: 'Every shift',

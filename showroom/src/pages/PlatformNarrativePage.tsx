@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom'
+﻿import { Link } from 'react-router-dom'
 
 import { PageIntro } from '../components/PageIntro'
 import { STARTER_PACK_DETAILS, type StarterPackDetail } from '../lib/salesControl'
@@ -183,7 +183,7 @@ export function PlatformNarrativePage() {
             <p className="sm-kicker text-[var(--sm-accent)]">Case study</p>
             <h2 className="mt-3 text-3xl font-bold text-white lg:text-4xl">{YANGON_TYRE_MODEL.domain}</h2>
             <p className="mt-4 max-w-2xl text-sm leading-relaxed text-[var(--sm-muted)]">
-              Yangon Tyre shows how the same base can expand into a full client portal with role-based workspaces, connected records, and leadership visibility.
+              Factory Client shows how the same base can expand into a full client portal with role-based workspaces, connected records, and leadership visibility.
             </p>
             <div className="mt-6 space-y-3">
               {[
@@ -198,10 +198,10 @@ export function PlatformNarrativePage() {
               ))}
             </div>
             <div className="mt-6 flex flex-wrap gap-3">
-              <Link className="sm-button-primary" to="/clients/yangon-tyre">
+              <Link className="sm-button-primary" to="/clients/factory-client">
                 Read case study
               </Link>
-              <Link className="sm-button-secondary" to={rolloutLink('Yangon Tyre portal')}>
+              <Link className="sm-button-secondary" to={rolloutLink('Factory Client portal')}>
                 Start similar rollout
               </Link>
             </div>
@@ -209,7 +209,7 @@ export function PlatformNarrativePage() {
 
           <div className="space-y-4">
             <article className="overflow-hidden rounded-[1.35rem] border border-white/10 bg-[#040b16] p-4">
-              <img alt="Yangon Tyre client portal preview" className="h-auto w-full object-cover object-top" loading="lazy" src="/site/client-portal.svg" />
+              <img alt="Factory Client client portal preview" className="h-auto w-full object-cover object-top" loading="lazy" src="/site/client-portal.svg" />
             </article>
 
             <article className="sm-terminal p-6">

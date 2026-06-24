@@ -1,4 +1,4 @@
-import { startTransition, useEffect, useMemo, useState } from 'react'
+﻿import { startTransition, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import { PageIntro } from '../components/PageIntro'
@@ -281,7 +281,7 @@ export function ManagerOperatingSystemPage() {
 
       <section className="sm-calm-surface flex flex-col gap-4 p-6 lg:flex-row lg:items-end lg:justify-between">
         <div className="space-y-2">
-          <p className="sm-kicker text-[var(--sm-accent)]">Yangon Tyre data pipeline</p>
+          <p className="sm-kicker text-[var(--sm-accent)]">Factory Client data pipeline</p>
           <h2 className="text-3xl font-bold text-white">Google Drive, Gmail, and staff writeback already feed one manager-facing runtime.</h2>
           <p className="max-w-3xl text-sm leading-relaxed text-[var(--sm-muted)]">
             Use this screen to see what is already live from the shared data estate, what is still only mapped, and where your team should enter or review data instead of rebuilding the truth in chat or side sheets.
@@ -340,7 +340,7 @@ export function ManagerOperatingSystemPage() {
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
               <p className="sm-kicker text-[var(--sm-accent)]">What is already built</p>
-              <h2 className="mt-2 text-3xl font-bold text-white">Live source lanes from Yangon Tyre data.</h2>
+              <h2 className="mt-2 text-3xl font-bold text-white">Live source lanes from Factory Client data.</h2>
             </div>
             <Link className="sm-button-secondary" to="/app/connectors">
               Open connectors

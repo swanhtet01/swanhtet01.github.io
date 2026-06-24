@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+﻿import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 
 import { getTenantConfig } from '../lib/tenantConfig'
@@ -299,7 +299,7 @@ export function AppFrame() {
             <section className="mb-6 rounded-3xl border border-white/10 bg-[rgba(17,24,34,0.72)] px-5 py-4">
               <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                 <div>
-                  <p className="text-sm font-semibold text-white">Preview mode is open for the Yangon Tyre tenant surfaces.</p>
+                  <p className="text-sm font-semibold text-white">Preview mode is open for the Factory Client tenant surfaces.</p>
                   <p className="mt-1 text-sm text-[var(--sm-muted)]">
                     Use this host to review the portal, plant-manager flow, and seeded desks. Login unlocks live workspace data, permissions, and writeback.
                   </p>

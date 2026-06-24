@@ -1,4 +1,4 @@
-export type YangonTyreSourcePack = {
+﻿export type YangonTyreSourcePack = {
   id: string
   name: string
   status: 'live' | 'mapped' | 'queued'
@@ -20,12 +20,12 @@ export type YangonTyreConnectorExpansion = {
 export const YANGON_TYRE_SOURCE_PACKS: YangonTyreSourcePack[] = [
   {
     id: 'drive-ops-manual',
-    name: 'Plant A operations manual',
+    name: 'Factory Floor operations manual',
     status: 'live',
     sourceType: 'Google Docs',
-    evidence: 'Plant A operations manual covering mixing, rubberizing, extrusion, bead, cutting, building, curing, packing, warehouse, utilities, and QC.',
+    evidence: 'Factory Floor operations manual covering mixing, rubberizing, extrusion, bead, cutting, building, curing, packing, warehouse, utilities, and QC.',
     feedsApps: ['Manufacturing Command', 'DQMS and Quality Lab', 'Maintenance and Reliability', 'Knowledge Graph and SOP Vault'],
-    note: 'This gives the platform the real factory stage map, SOP structure, and KPI expectations for Plant A.',
+    note: 'This gives the platform the real factory stage map, SOP structure, and KPI expectations for Factory Floor.',
   },
   {
     id: 'drive-tyre-analysis',
@@ -39,7 +39,7 @@ export const YANGON_TYRE_SOURCE_PACKS: YangonTyreSourcePack[] = [
   },
   {
     id: 'drive-plant-a',
-    name: 'Plant A shared folders',
+    name: 'Factory Floor shared folders',
     status: 'live',
     sourceType: 'Google Drive folders and shortcuts',
     evidence: 'Planning, admin, tyre sales and inventory, GRN shortcuts, raw-stock details, tyre production, ISO forms, and procedure packs.',
@@ -69,7 +69,7 @@ export const YANGON_TYRE_SOURCE_PACKS: YangonTyreSourcePack[] = [
     name: 'Data source register',
     status: 'live',
     sourceType: 'Google Docs',
-    evidence: 'The source register already links Plant A, Plant B, historical folders, op guide, analysis workbook, financial packs, and planning docs.',
+    evidence: 'The source register already links Factory Floor, Plant B, historical folders, op guide, analysis workbook, financial packs, and planning docs.',
     feedsApps: ['Admin and Connector Control', 'Tenant App Foundry', 'Operating Intelligence Studio'],
     note: 'This becomes the tenant ingestion backlog and data-governance starting point.',
   },

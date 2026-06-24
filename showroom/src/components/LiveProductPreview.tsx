@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+﻿import type { ReactNode } from 'react'
 
 import type { LivePreviewVariant } from '../lib/liveProductPreviewModel'
 
@@ -158,7 +158,7 @@ function YangonTyrePortalPreview({ compact, className }: { compact?: boolean; cl
       compact={compact}
       status="Tenant pattern"
       subtitle="ytf.supermega.dev | roles, data, agents, and factory control"
-      title="Yangon Tyre OS"
+      title="Factory OS"
     >
       <div className="sm-live-preview-shell">
         <aside className="sm-live-preview-rail">
@@ -189,7 +189,7 @@ function YangonTyrePortalPreview({ compact, className }: { compact?: boolean; cl
               <p className="sm-live-preview-label">Agent cells</p>
               <PreviewTask due="08:45" owner="Intake Router" title="Classified new Gmail, Drive, and chat signals" />
               <PreviewTask due="09:10" owner="Quality Watch" title="Prepared CAPA starter for sidewall crack cluster" />
-              <PreviewTask due="09:30" owner="Executive Brief" title="Queued CEO summary with plant and sales risk" />
+              <PreviewTask due="09:30" owner="Executive Brief" title="Queued CEO summary with Floor And sales risk" />
             </section>
           </div>
 
@@ -346,7 +346,7 @@ function KnowledgeGraphPreview({ compact, className }: { compact?: boolean; clas
         <section className="sm-live-preview-pane">
           <p className="sm-live-preview-label">Canonical records</p>
           <PreviewRow meta="supplier | docs + approvals + incidents" state="linked" title="Golden Road Rubber" />
-          <PreviewRow meta="plant batch | genealogy + CAPA + lab" state="provenance" title="BATCH-C2404-18" />
+          <PreviewRow meta="Floor Batch | genealogy + CAPA + lab" state="provenance" title="BATCH-C2404-18" />
           <PreviewRow meta="dealer account | mail + quote + visit notes" state="memory" title="Delta Truck Centre" />
         </section>
 
@@ -394,7 +394,7 @@ function TenantControlPreview({ compact, className }: { compact?: boolean; class
   return (
     <PreviewFrame className={className} compact={compact} status="Launch control" subtitle="Roles, rollout, connectors, and domains" title="Tenant Control Plane">
       <div className="sm-live-preview-metrics-grid">
-        <PreviewMetric label="Live tenant" value="Yangon Tyre" />
+        <PreviewMetric label="Live tenant" value="Factory Client" />
         <PreviewMetric label="Open rollout" value="06 tasks" />
         <PreviewMetric label="Roles scoped" value="sales / ops / qc / ceo" />
       </div>

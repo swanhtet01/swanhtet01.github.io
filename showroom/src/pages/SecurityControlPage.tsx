@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+﻿import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import { PageIntro } from '../components/PageIntro'
@@ -99,7 +99,7 @@ export function SecurityControlPage() {
         <article className="sm-metric-card">
           <p className="sm-kicker text-[var(--sm-accent)]">Tenants</p>
           <p className="mt-3 text-3xl font-bold text-white">{OPERATING_MODELS.length}</p>
-          <p className="mt-2 text-sm text-[var(--sm-muted)]">Core platform versus Yangon Tyre trust posture.</p>
+          <p className="mt-2 text-sm text-[var(--sm-muted)]">Core platform versus Factory Client trust posture.</p>
         </article>
       </section>
 

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+﻿import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 
 import { identifyUser, trackEvent } from '../lib/analytics'
@@ -901,7 +901,7 @@ export function WorkspaceLitePage() {
         <textarea
           className="sm-input mt-4 min-h-40"
           onChange={(event) => setUpdateImportText(event.target.value)}
-          placeholder="Power fluctuation at Plant A | Operations Team"
+          placeholder="Power fluctuation at Floor A | Operations Team"
           value={updateImportText}
         />
         <div className="mt-4 flex flex-wrap gap-3">

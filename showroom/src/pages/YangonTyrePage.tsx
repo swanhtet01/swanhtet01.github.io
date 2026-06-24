@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom'
+﻿import { Link } from 'react-router-dom'
 
 import { LiveProductPreview } from '../components/LiveProductPreview'
 import { getTenantConfig } from '../lib/tenantConfig'
@@ -51,7 +51,7 @@ export function YangonTyrePage() {
         <div className="grid gap-8 xl:grid-cols-[0.9fr_1.1fr] xl:items-center">
           <div>
             <p className="sm-kicker text-[var(--sm-accent)]">Case study / {model.domain}</p>
-            <h1 className="mt-4 max-w-4xl text-4xl font-extrabold tracking-tight text-white lg:text-6xl">Yangon Tyre client portal.</h1>
+            <h1 className="mt-4 max-w-4xl text-4xl font-extrabold tracking-tight text-white lg:text-6xl">Factory Client client portal.</h1>
             <p className="mt-5 max-w-3xl text-base leading-relaxed text-[var(--sm-muted)] lg:text-lg">
               One role-based portal replaces scattered tools across sales, operations, quality, maintenance, supplier follow-up, and leadership review without a big-bang rewrite.
             </p>
@@ -154,7 +154,7 @@ export function YangonTyrePage() {
       <section className="grid gap-6 xl:grid-cols-[1.02fr_0.98fr]">
         <article className="sm-site-panel">
           <p className="sm-kicker text-[var(--sm-accent)]">Connected data</p>
-          <h2 className="mt-3 text-3xl font-bold text-white lg:text-4xl">It starts from the tools Yangon Tyre already uses.</h2>
+          <h2 className="mt-3 text-3xl font-bold text-white lg:text-4xl">It starts from the tools Factory Client already uses.</h2>
           <div className="mt-6 grid gap-4">
             {featuredConnectors.map((connector) => (
               <article className="sm-proof-card" key={connector.id}>

@@ -1,4 +1,4 @@
-import { startTransition, useEffect, useMemo, useState } from 'react'
+﻿import { startTransition, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import { PageIntro } from '../components/PageIntro'
@@ -16,7 +16,7 @@ const runtimeSections = [
     description: 'Shared feeds that keep SuperMega attached to inboxes, drive folders, GitHub delivery state, and structured operator input.',
   },
   {
-    title: 'Yangon Tyre feeds',
+    title: 'Factory Client feeds',
     tenant: 'yangon-tyre' as const,
     description: 'Tenant-specific feeds that keep plant, procurement, quality, and director surfaces on the same operating data.',
   },
@@ -211,7 +211,7 @@ export function ConnectorOpsPage() {
       }))
 
       if (!rows.length) {
-        setMessage('No Yangon Tyre connector feeds need review tasks right now.')
+        setMessage('No Factory Client connector feeds need review tasks right now.')
         return
       }
 
@@ -250,7 +250,7 @@ export function ConnectorOpsPage() {
       <PageIntro
         eyebrow="Connectors"
         title="Operate the runtime feeds that keep SuperMega attached to real company data."
-        description="This surface shows connector freshness, backlog, risk, and next automation work across the core platform and Yangon Tyre."
+        description="This surface shows connector freshness, backlog, risk, and next automation work across the core platform and Factory Client."
       />
 
       <section className="sm-chip text-white">
@@ -258,7 +258,7 @@ export function ConnectorOpsPage() {
           <div>
             <p className="font-semibold">{loading ? 'Refreshing runtime view.' : runtimeData.source === 'live' ? 'Live runtime feed connected.' : 'Using seeded runtime model.'}</p>
             <p className="mt-2 text-sm text-[var(--sm-muted)]">
-              Source timestamp: {formatUpdatedAt(runtimeData.updatedAt)}. Connector Control now includes a live event ledger, review-task loop, and the Yangon Tyre writeback feed
+              Source timestamp: {formatUpdatedAt(runtimeData.updatedAt)}. Connector Control now includes a live event ledger, review-task loop, and the Factory Client writeback feed
               inside the same runtime contract.
             </p>
           </div>
@@ -295,7 +295,7 @@ export function ConnectorOpsPage() {
         <article className="sm-metric-card">
           <p className="sm-kicker text-[var(--sm-accent)]">Healthy YTF feeds</p>
           <p className="mt-3 text-3xl font-bold text-white">{healthyYtfFeedCount}</p>
-          <p className="mt-2 text-sm text-[var(--sm-muted)]">Yangon Tyre connector lanes currently behaving like live runtime feeds.</p>
+          <p className="mt-2 text-sm text-[var(--sm-muted)]">Factory Client connector lanes currently behaving like live runtime feeds.</p>
         </article>
         <article className="sm-metric-card">
           <p className="sm-kicker text-[var(--sm-accent-alt)]">Need review</p>
@@ -426,7 +426,7 @@ export function ConnectorOpsPage() {
               <article className="sm-proof-card">
                 <p className="font-semibold text-white">No live connector events have landed yet.</p>
                 <p className="mt-3 text-sm leading-relaxed text-[var(--sm-muted)]">
-                  The connector ledger is ready. As Yangon Tyre teams enter receiving, quality, maintenance, approvals, metrics, and connector-review work, that activity will appear
+                  The connector ledger is ready. As Factory Client teams enter receiving, quality, maintenance, approvals, metrics, and connector-review work, that activity will appear
                   here alongside agent runtime movement.
                 </p>
               </article>
@@ -454,7 +454,7 @@ export function ConnectorOpsPage() {
               ))
             ) : (
               <article className="sm-proof-card">
-                <p className="font-semibold text-white">No Yangon Tyre connector lanes currently need review tasks.</p>
+                <p className="font-semibold text-white">No Factory Client connector lanes currently need review tasks.</p>
                 <p className="mt-3 text-sm leading-relaxed text-[var(--sm-muted)]">
                   Healthy feeds still appear in the runtime sections below. Use the refresh loop if you want to force a new runtime pass from the default agent jobs.
                 </p>
@@ -485,7 +485,7 @@ export function ConnectorOpsPage() {
       <section className="grid gap-6 xl:grid-cols-[0.96fr_1.04fr]">
         <article className="sm-site-panel">
           <div>
-            <p className="sm-kicker text-[var(--sm-accent)]">Yangon Tyre connector operating frame</p>
+            <p className="sm-kicker text-[var(--sm-accent)]">Factory Client connector operating frame</p>
             <h2 className="mt-3 text-3xl font-bold text-white lg:text-4xl">Promote the source spine first, then widen the mesh without breaking trust.</h2>
           </div>
           <div className="mt-6 grid gap-3">
@@ -581,7 +581,7 @@ export function ConnectorOpsPage() {
         <article className="sm-site-panel">
           <div>
             <p className="sm-kicker text-[var(--sm-accent)]">Current source packs</p>
-            <h2 className="mt-3 text-3xl font-bold text-white lg:text-4xl">These are the real Yangon Tyre inputs already promoted into the connector roadmap.</h2>
+            <h2 className="mt-3 text-3xl font-bold text-white lg:text-4xl">These are the real Factory Client inputs already promoted into the connector roadmap.</h2>
           </div>
           <div className="mt-6 grid gap-3">
             {YANGON_TYRE_SOURCE_PACKS.map((pack) => (

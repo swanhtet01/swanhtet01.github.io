@@ -1,4 +1,4 @@
-import {
+﻿import {
   YANGON_TYRE_DATA_FABRIC_DIALECTIC,
   YANGON_TYRE_DATA_PIPELINE_STAGES,
   YANGON_TYRE_FEATURE_MARTS,
@@ -747,7 +747,7 @@ export function getSeedDataFabricDataset(): DataFabricDataset {
       currentTruth: YANGON_TYRE_DRIVE_BIG_PICTURE.currentTruth.length
         ? [...YANGON_TYRE_DRIVE_BIG_PICTURE.currentTruth]
         : [
-            `${aggregate.sourcePackCount} source packs are mapped into the Yangon Tyre evidence spine.`,
+            `${aggregate.sourcePackCount} source packs are mapped into the Factory Client evidence spine.`,
             `${sourceRegistry.length} source registry entries define which data packs feed which desks.`,
             `${connectorSignals.length} connector signals define how Drive, Gmail, analytics, social, chat, and shopfloor inputs should mature.`,
             `${aggregate.topicPipelineCount} topic pipelines define how Google Drive, Gmail, ERP, and team writeback become reusable records.`,

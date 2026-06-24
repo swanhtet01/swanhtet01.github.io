@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom'
+﻿import { Link } from 'react-router-dom'
 
 import { LiveProductPreview } from '../components/LiveProductPreview'
 import { PageIntro } from '../components/PageIntro'
@@ -200,7 +200,7 @@ export function ProductsPage() {
         <p className="sm-kicker text-[var(--sm-accent-alt)]">Case study</p>
         <div className="mt-3 grid gap-6 lg:grid-cols-[1.02fr_0.98fr] lg:items-center">
           <div>
-            <h2 className="text-3xl font-bold text-white lg:text-4xl">Yangon Tyre shows what the full system looks like.</h2>
+            <h2 className="text-3xl font-bold text-white lg:text-4xl">Factory Client shows what the full system looks like.</h2>
             <p className="mt-4 max-w-2xl text-sm leading-relaxed text-[var(--sm-muted)]">
               One role-based portal brings sales, operations, quality, maintenance, and leadership into the same working system.
             </p>
@@ -212,10 +212,10 @@ export function ProductsPage() {
               ))}
             </div>
             <div className="mt-6 flex flex-wrap gap-3">
-              <Link className="sm-button-primary" to="/clients/yangon-tyre">
+              <Link className="sm-button-primary" to="/clients/factory-client">
                 Read case study
               </Link>
-              <Link className="sm-button-secondary" to={rolloutLink('Yangon Tyre portal')}>
+              <Link className="sm-button-secondary" to={rolloutLink('Factory Client portal')}>
                 Request rollout
               </Link>
             </div>

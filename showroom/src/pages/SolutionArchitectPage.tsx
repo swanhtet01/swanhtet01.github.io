@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+﻿import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import { PageIntro } from '../components/PageIntro'
@@ -22,7 +22,7 @@ const dataSourceOptions = ['gmail', 'drive', 'sheets', 'whatsapp_exports', 'loca
 const toolOptions = ['gmail', 'drive', 'sheets', 'whatsapp', 'manual_trackers', 'existing_erp']
 
 const initialRequest: SolutionArchitectRequest = {
-  company_name: 'Yangon Tyre',
+  company_name: 'Factory Client',
   sector: 'factory',
   team_size: 120,
   site_count: 1,
@@ -380,7 +380,7 @@ export function SolutionArchitectPage() {
                 }}
                 type="button"
               >
-                Load Yangon Tyre sample
+                Load Factory Client sample
               </button>
             </div>
             {!apiReady ? <div className="sm-chip text-white">Launch requires the live workspace API and a logged-in workspace session.</div> : null}

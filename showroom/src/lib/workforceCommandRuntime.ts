@@ -1,4 +1,4 @@
-import { getAgentOperatingModel } from './agentOperatingModel'
+﻿import { getAgentOperatingModel } from './agentOperatingModel'
 import { YANGON_TYRE_ROLE_PLAYBOOKS } from './yangonTyreAdoptionModel'
 import { resolveTenantRoleExperience } from './tenantRoleExperience'
 import { YANGON_TYRE_MODEL } from './tenantOperatingModel'
@@ -41,7 +41,7 @@ export type WorkforceRoleCommandCell = {
 }
 
 export const YANGON_TYRE_WORKFORCE_DIALECTIC = {
-  thesis: 'Every Yangon Tyre role should open one home, enter the minimum necessary evidence once, and get immediate operational value back.',
+  thesis: 'Every Factory Client role should open one home, enter the minimum necessary evidence once, and get immediate operational value back.',
   antithesis:
     'If the portal behaves like an executive dashboard or second reporting burden, staff fall back to Viber, side spreadsheets, and manager memory.',
   synthesis:

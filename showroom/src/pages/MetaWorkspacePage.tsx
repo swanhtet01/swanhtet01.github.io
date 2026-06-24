@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+﻿import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import { PageIntro } from '../components/PageIntro'
@@ -746,7 +746,7 @@ export function MetaWorkspacePage() {
     return (
       <div className="space-y-8">
         <PageIntro
-          eyebrow={tenant.key === 'ytf-plant-a' ? 'Yangon Tyre Meta' : 'Meta'}
+          eyebrow={tenant.key === 'ytf-plant-a' ? 'Factory Client Meta' : 'Meta'}
           title="Loading internal workspace."
           description="Loading company state, runtime health, and the latest work queue."
         />
@@ -758,11 +758,11 @@ export function MetaWorkspacePage() {
     return (
       <div className="space-y-8">
         <PageIntro
-          eyebrow={tenant.key === 'ytf-plant-a' ? 'Yangon Tyre Meta' : 'Meta'}
-          title={tenant.key === 'ytf-plant-a' ? 'Open the Yangon Tyre control room.' : 'Open the internal workspace.'}
+          eyebrow={tenant.key === 'ytf-plant-a' ? 'Factory Client Meta' : 'Meta'}
+          title={tenant.key === 'ytf-plant-a' ? 'Open the Factory Client control room.' : 'Open the internal workspace.'}
           description={
             tenant.key === 'ytf-plant-a'
-              ? 'This is the role-aware control room for Yangon Tyre sales, plant, quality, maintenance, supplier control, and management review.'
+              ? 'This is the role-aware control room for Factory Client sales, plant, quality, maintenance, supplier control, and management review.'
               : 'This is the internal control room for live work, system health, and role-based execution.'
           }
         />
@@ -784,11 +784,11 @@ export function MetaWorkspacePage() {
   return (
     <div className="space-y-8 pb-12">
       <PageIntro
-        eyebrow={tenant.key === 'ytf-plant-a' ? 'Yangon Tyre Meta' : 'Meta'}
-        title={tenant.key === 'ytf-plant-a' ? 'One control room for Yangon Tyre.' : 'One screen to run the company.'}
+        eyebrow={tenant.key === 'ytf-plant-a' ? 'Factory Client Meta' : 'Meta'}
+        title={tenant.key === 'ytf-plant-a' ? 'One control room for Factory Client.' : 'One screen to run the company.'}
         description={
           tenant.key === 'ytf-plant-a'
-            ? 'Start here to see what needs attention, open the role-appropriate workspace, and move Yangon Tyre work forward with real plant context.'
+            ? 'Start here to see what needs attention, open the role-appropriate workspace, and move Factory Client work forward with real plant context.'
             : 'Start here to see what needs attention, open the right workspace, and move real work forward.'
         }
       />
@@ -940,7 +940,7 @@ export function MetaWorkspacePage() {
           <article className="sm-surface p-6">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
-                <p className="sm-kicker text-[var(--sm-accent-alt)]">Yangon Tyre data profile</p>
+                <p className="sm-kicker text-[var(--sm-accent-alt)]">Factory Client data profile</p>
                 <h2 className="mt-2 text-2xl font-bold text-white">Real plant context from local YTF workbooks.</h2>
               </div>
               <span className="sm-status-pill">Data-backed</span>
@@ -1538,7 +1538,7 @@ export function MetaWorkspacePage() {
             <div>
               <p className="sm-kicker text-[var(--sm-accent)]">{tenant.key === 'ytf-plant-a' ? 'Tenant system' : 'Platform system'}</p>
               <h2 className="mt-2 text-2xl font-bold text-white">
-                {tenant.key === 'ytf-plant-a' ? 'The Yangon Tyre runtime behind this role-based portal.' : 'Reusable standards behind every rollout.'}
+                {tenant.key === 'ytf-plant-a' ? 'The Factory Client runtime behind this role-based portal.' : 'Reusable standards behind every rollout.'}
               </h2>
             </div>
             <Link className="sm-button-secondary" to="/app/platform-admin">

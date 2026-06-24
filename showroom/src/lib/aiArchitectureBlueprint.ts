@@ -1,4 +1,4 @@
-export type AgentTechnique = {
+﻿export type AgentTechnique = {
   id: string
   name: string
   pattern: string
@@ -21,7 +21,7 @@ export const AGENT_TECHNIQUES: AgentTechnique[] = [
     name: 'Thesis-antithesis-synthesis loop',
     pattern: 'Frame the current workflow as thesis, the operational conflict as antithesis, and the AI-native operating system as synthesis.',
     purpose: 'This keeps redesign grounded in real business tension instead of copying menus or growing random features.',
-    ytfUse: 'Use the triad on every Yangon Tyre module before promotion: current process, failure mode, then the new role-home and record loop.',
+    ytfUse: 'Use the triad on every Factory Client module before promotion: current process, failure mode, then the new role-home and record loop.',
     adoptNext: 'Add thesis, antithesis, and synthesis fields to every tenant app brief and release review.',
   },
   {
@@ -37,7 +37,7 @@ export const AGENT_TECHNIQUES: AgentTechnique[] = [
     name: 'Stateful per-tenant agents',
     pattern: 'Give important agents durable per-tenant memory, schedules, and live connections instead of rebuilding context every run.',
     purpose: 'Long-lived agents can keep thread state, watch loops, and review posture without stitching state together on every request.',
-    ytfUse: 'Run Yangon Tyre watch loops as stateful tenant agents for director review, manufacturing drift, and supplier recovery.',
+    ytfUse: 'Run Factory Client watch loops as stateful tenant agents for director review, manufacturing drift, and supplier recovery.',
     adoptNext: 'Move always-on tenant crews into a stateful agent runtime with explicit tenant and workspace IDs.',
   },
   {
@@ -53,7 +53,7 @@ export const AGENT_TECHNIQUES: AgentTechnique[] = [
     name: 'MCP connector plane',
     pattern: 'Expose external systems through MCP tools, resources, and prompts rather than bespoke connector code in every agent.',
     purpose: 'A shared connector plane makes Gmail, Drive, ERP, shopfloor, and future chat apps composable across the whole platform.',
-    ytfUse: 'Promote Yangon Tyre data sources into reusable MCP servers so any tenant app or agent can read the same evidence spine.',
+    ytfUse: 'Promote Factory Client data sources into reusable MCP servers so any tenant app or agent can read the same evidence spine.',
     adoptNext: 'Package connector domains as remote MCP servers with tenant-aware auth and rate controls.',
   },
   {
@@ -94,7 +94,7 @@ export const AI_NATIVE_STACK_LAYERS: ArchitectureStackLayer[] = [
     layer: 'Stateful tenant memory',
     recommendation: 'Cloudflare Agents SDK backed by Durable Objects for always-on tenant and app crews.',
     role: 'Give each tenant or app crew durable state, scheduling, WebSockets, and tenant-scoped coordination.',
-    whyNow: 'Yangon Tyre needs continuous watch loops, not just stateless prompt calls.',
+    whyNow: 'Factory Client needs continuous watch loops, not just stateless prompt calls.',
   },
   {
     id: 'durable-orchestration',

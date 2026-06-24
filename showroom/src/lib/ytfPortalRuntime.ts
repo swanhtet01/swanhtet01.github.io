@@ -1,4 +1,4 @@
-export type YtfPortalStep = {
+﻿export type YtfPortalStep = {
   id: string
   title: string
   detail: string
@@ -23,7 +23,7 @@ export const YTF_PORTAL_RUNTIME = {
 } as const
 
 export const YTF_PORTAL_DIALECTIC = {
-  thesis: 'Run Yangon Tyre from one role-safe operating system with shared evidence.',
+  thesis: 'Run Factory Client from one role-safe operating system with shared evidence.',
   antithesis: 'Drive folders, email threads, ERP exports, and shift notes still fragment the operating record.',
   synthesis: 'ytf.supermega.dev becomes the live command surface where plant, quality, maintenance, sales, and admin work from one runtime.',
 } as const

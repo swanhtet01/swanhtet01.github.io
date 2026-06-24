@@ -1,4 +1,4 @@
-export type YangonTyreMonthlyQualityPoint = {
+﻿export type YangonTyreMonthlyQualityPoint = {
   month: string
   totalOutput: number
   bCount: number
@@ -42,7 +42,7 @@ export const YANGON_TYRE_FOCUS_PRODUCTS_2025: YangonTyreFocusProduct[] = [
 
 export const YANGON_TYRE_DATA_PROFILE = {
   sourceNote:
-    'Profile built from the local Yangon Tyre workbooks in ../InsightFactory/data plus the YTF DQMS project notes already in this repo.',
+    'Profile built from the local Factory Client workbooks in ../InsightFactory/data plus the YTF DQMS project notes already in this repo.',
   annualBiasOutput2024: 251667,
   annualBPlusRRate2024: 0.51,
   bestMonth2024: {

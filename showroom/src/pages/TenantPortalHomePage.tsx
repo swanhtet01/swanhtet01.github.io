@@ -1,4 +1,4 @@
-import { startTransition, useEffect, useState } from 'react'
+﻿import { startTransition, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import { PageIntro } from '../components/PageIntro'
@@ -118,7 +118,7 @@ export function TenantPortalHomePage() {
         <PageIntro
           eyebrow={`${getTenantBrandLabel(tenant)} / Tenant portal`}
           title={`${fallbackExperience.title}: live operating host and role entry.`}
-          description="The workspace runtime is still partial on this host, but the tenant portal remains usable as the operating map for Yangon Tyre."
+          description="The workspace runtime is still partial on this host, but the tenant portal remains usable as the operating map for Factory Client."
         />
 
         <section className="sm-surface-deep relative overflow-hidden p-6 lg:p-8">
@@ -247,7 +247,7 @@ export function TenantPortalHomePage() {
               <span className="sm-status-pill">{dataset.source === 'live' ? 'Live workspace' : 'Seeded runtime'}</span>
               <span className="sm-status-pill">{YTF_PORTAL_RUNTIME.provider}</span>
             </div>
-            <h2 className="mt-5 max-w-4xl text-4xl font-bold text-white">ytf.supermega.dev is the tenant operating layer for Yangon Tyre.</h2>
+            <h2 className="mt-5 max-w-4xl text-4xl font-bold text-white">ytf.supermega.dev is the tenant operating layer for Factory Client.</h2>
             <p className="mt-4 max-w-3xl text-sm leading-relaxed text-[var(--sm-muted)]">
               {YTF_PORTAL_RUNTIME.summary} Use this host to enter the right desk, keep the operating record in one place, and move from daily control into analytics without losing provenance.
             </p>

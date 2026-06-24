@@ -1,4 +1,4 @@
-export type SellableSolution = {
+﻿export type SellableSolution = {
   id: string
   name: string
   buyer: string
@@ -419,7 +419,7 @@ export const STARTER_PACK_DETAILS: StarterPackDetail[] = [
     problemsSolved: [
       'Track shortages, holds, and missing GRN evidence in one queue.',
       'Route supplier follow-up without losing files, notes, or decision history.',
-      'Give plant and procurement managers the same live exception view.',
+      'Give Floor And procurement managers the same live exception view.',
     ],
     integrations: ['Gmail', 'Google Drive', 'Google Sheets', 'ERP extracts', 'Uploaded documents'],
     controls: ['Role-based queues', 'Approval gates', 'Attachment history', 'Exception audit'],

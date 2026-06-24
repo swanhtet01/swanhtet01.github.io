@@ -1,4 +1,4 @@
-import { normalizeWorkspaceRole } from './workspaceApi'
+﻿import { normalizeWorkspaceRole } from './workspaceApi'
 import { YANGON_TYRE_DATA_PROFILE } from './yangonTyreDataProfile'
 import { YANGON_TYRE_MODEL, type TenantOperatingModel } from './tenantOperatingModel'
 
@@ -182,7 +182,7 @@ const YTF_ROLE_EXPERIENCES: Record<string, TenantRoleExperience> = {
   tenant_admin: {
     canonicalRole: 'tenant_admin',
     title: 'Tenant admin',
-    mission: 'Control identity, connector scopes, rollout, runtime trust, and the AI workforce on the Yangon Tyre tenant.',
+    mission: 'Control identity, connector scopes, rollout, runtime trust, and the AI workforce on the Factory Client tenant.',
     defaultHome: '/app/platform-admin',
     sections: [
       { title: 'Platform Admin', route: '/app/platform-admin', detail: 'Tenant modules, roles, rollout, and control-plane posture.' },
@@ -212,7 +212,7 @@ const YTF_ROLE_EXPERIENCES: Record<string, TenantRoleExperience> = {
       {
         label: 'Target posture',
         value: 'B+R below 3.0%',
-        detail: 'Use controlled incident capture and closeout to tighten plant and quality loops.',
+        detail: 'Use controlled incident capture and closeout to tighten Floor And quality loops.',
       },
       {
         label: 'Top SKU mix',
@@ -321,7 +321,7 @@ const YTF_ROLE_EXPERIENCES: Record<string, TenantRoleExperience> = {
       {
         label: 'Target result',
         value: 'Fewer holds and faster release',
-        detail: 'Clear document debt before it becomes a plant blocker.',
+        detail: 'Clear document debt before it becomes a Floor Blocker.',
       },
       {
         label: 'Most exposed SKU',
@@ -386,7 +386,7 @@ const YTF_ROLE_EXPERIENCES: Record<string, TenantRoleExperience> = {
       { title: 'Workforce Command', route: '/app/workforce', detail: 'Quality routines, evidence discipline, and copilot pairing for closeout work.' },
       { title: 'Data Fabric', route: '/app/data-fabric', detail: 'Quality-loss marts, release evidence, and recurring-defect analysis for technical review.' },
       { title: 'Knowledge Graph and SOP Vault', route: '/app/knowledge', detail: 'Standards, work instructions, root-cause learning, and evidence.' },
-      { title: 'Operations Control', route: '/app/operations', detail: 'Shared execution queue with plant and maintenance.' },
+      { title: 'Operations Control', route: '/app/operations', detail: 'Shared execution queue with Floor And maintenance.' },
       { title: 'Director Review', route: '/app/director', detail: 'Escalate major incidents and plant-quality debt.' },
     ],
     insights: [

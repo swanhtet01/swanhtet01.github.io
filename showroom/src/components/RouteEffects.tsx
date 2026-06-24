@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+﻿import { useEffect } from 'react'
 import { useLocation } from 'react-router-dom'
 import { formatTenantPageTitle, getTenantConfig } from '../lib/tenantConfig'
 
@@ -15,8 +15,8 @@ export function RouteEffects() {
       '/agents': formatTenantPageTitle('Products', tenant),
       '/factory': formatTenantPageTitle('Products', tenant),
       '/products': formatTenantPageTitle('Products', tenant),
-      '/clients/yangon-tyre': formatTenantPageTitle('Yangon Tyre case study', tenant),
-      '/ytf': formatTenantPageTitle('Yangon Tyre case study', tenant),
+      '/clients/factory-client': formatTenantPageTitle('Factory Client case study', tenant),
+      '/ytf': formatTenantPageTitle('Factory Client case study', tenant),
       '/work': formatTenantPageTitle('Products', tenant),
       '/systems': formatTenantPageTitle('Products', tenant),
       '/templates': formatTenantPageTitle('Products', tenant),

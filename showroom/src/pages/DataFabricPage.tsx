@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+﻿import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import { PageIntro } from '../components/PageIntro'
@@ -197,7 +197,7 @@ export function DataFabricPage() {
       <div className="space-y-8">
         <PageIntro
           eyebrow="Data fabric"
-          title="Data Fabric is currently configured for the Yangon Tyre tenant."
+          title="Data Fabric is currently configured for the Factory Client tenant."
           description="This app is the cross-functional pipeline layer that watches source systems, builds topic marts, and turns them into role-specific insight and writeback."
         />
 
@@ -229,7 +229,7 @@ export function DataFabricPage() {
     <div className="space-y-8">
       <PageIntro
         eyebrow="Data fabric"
-        title="Use every Yangon Tyre data source as one AI-native operating pipeline."
+        title="Use every Factory Client data source as one AI-native operating pipeline."
         description="This is the tenant data runtime for ytf.supermega.dev: full-folder Google Drive intake, internal and supplier email capture, topic-aware extraction, feature marts, industrial-engineering analysis, role-based storytelling, and structured team writeback."
       />
 
@@ -354,7 +354,7 @@ export function DataFabricPage() {
                 <p className="sm-kicker text-[var(--sm-accent)]">Source behavior map</p>
                 <h2 className="mt-3 text-3xl font-bold text-white">Each folder lane now has a normalized operating behavior.</h2>
                 <p className="mt-3 max-w-3xl text-sm leading-relaxed text-[var(--sm-muted)]">
-                  This is the first database-like cut of the Yangon Tyre source estate: structure, readiness, risk, and the exact metric families each lane should feed.
+                  This is the first database-like cut of the Factory Client source estate: structure, readiness, risk, and the exact metric families each lane should feed.
                 </p>
               </div>
               <Link className="sm-link" to="/app/connectors">
@@ -878,7 +878,7 @@ export function DataFabricPage() {
               <p className="font-semibold text-white">No live source events have been recorded yet.</p>
               <p className="mt-3 max-w-3xl text-sm leading-relaxed text-[var(--sm-muted)]">
                 The source registry and connector health model are ready. As more Drive, Gmail, ERP, and writeback evidence lands, the timeline here will become the live evidence strip
-                for Yangon Tyre managers.
+                for Factory Client managers.
               </p>
             </article>
           )}
@@ -892,7 +892,7 @@ export function DataFabricPage() {
               <p className="sm-kicker text-[var(--sm-accent)]">Learning database</p>
               <h2 className="mt-3 text-3xl font-bold text-white">The data runtime now scores trust, graph shape, and reusable learning signals.</h2>
               <p className="mt-3 max-w-3xl text-sm leading-relaxed text-[var(--sm-muted)]">
-                This is the governed memory layer for Yangon Tyre managers and AI teams: canonical records, graph links, lineage events, feature coverage, and a rolling trust score.
+                This is the governed memory layer for Factory Client managers and AI teams: canonical records, graph links, lineage events, feature coverage, and a rolling trust score.
               </p>
             </div>
             <span className={`sm-status-pill ${toneForHealthStatus(learningDatabase.status)}`}>{learningDatabase.status}</span>
@@ -1318,7 +1318,7 @@ export function DataFabricPage() {
             <article className="sm-proof-card">
               <p className="sm-kicker text-[var(--sm-accent)]">Line groups</p>
               <p className="mt-3 text-3xl font-bold text-white">{YANGON_TYRE_DATA_PROFILE.productionLines.length}</p>
-              <p className="mt-2 text-sm text-[var(--sm-muted)]">Industrial-engineering cuts are designed around the actual Plant A stage map.</p>
+              <p className="mt-2 text-sm text-[var(--sm-muted)]">Industrial-engineering cuts are designed around the actual Floor A stage map.</p>
             </article>
             <article className="sm-proof-card">
               <p className="sm-kicker text-[var(--sm-accent-alt)]">Top defects</p>

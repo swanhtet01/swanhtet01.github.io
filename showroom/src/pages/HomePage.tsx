@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom'
+﻿import { Link } from 'react-router-dom'
 
 import { BrandLockup } from '../components/Brand'
 import { LiveProductPreview } from '../components/LiveProductPreview'
@@ -36,9 +36,9 @@ const platformPaths = [
   {
     label: 'Sell the platform',
     title: 'Show live proof',
-    detail: 'Use demo center, products, and the Yangon Tyre case study to present what already works.',
+    detail: 'Use demo center, products, and the Factory Client case study to present what already works.',
     primary: { label: 'Open demo center', to: '/demo-center' },
-    secondary: { label: 'Read case study', to: '/clients/yangon-tyre' },
+    secondary: { label: 'Read case study', to: '/clients/factory-client' },
   },
   {
     label: 'Build products',
@@ -240,7 +240,7 @@ export function HomePage() {
       <section className="grid gap-8 xl:grid-cols-[1.02fr_0.98fr] xl:items-start">
         <article className="sm-site-panel sm-home-case-panel">
           <p className="sm-kicker text-[var(--sm-accent-alt)]">Case study</p>
-          <h2 className="mt-3 text-3xl font-bold text-white lg:text-4xl">Yangon Tyre is the first full client portal.</h2>
+          <h2 className="mt-3 text-3xl font-bold text-white lg:text-4xl">Factory Client is the first full client portal.</h2>
           <p className="mt-4 max-w-2xl text-sm leading-relaxed text-[var(--sm-muted)]">
             The same product base expands into a company portal with role-based views, connected records, approvals, and audit history.
           </p>
@@ -253,7 +253,7 @@ export function HomePage() {
             ))}
           </div>
           <div className="mt-6 flex flex-wrap gap-3">
-            <Link className="sm-button-primary" to="/clients/yangon-tyre">
+            <Link className="sm-button-primary" to="/clients/factory-client">
               Read case study
             </Link>
             <Link className="sm-button-secondary" to="/contact?package=Yangon%20Tyre%20portal">
@@ -338,7 +338,7 @@ export function HomePage() {
             <Link className="sm-button-secondary" to="/products">
               Review products
             </Link>
-            <Link className="sm-button-secondary" to="/clients/yangon-tyre">
+            <Link className="sm-button-secondary" to="/clients/factory-client">
               Read case study
             </Link>
             <Link className="sm-button-secondary" to="/platform">

@@ -1,4 +1,4 @@
-export type TenantConfig = {
+﻿export type TenantConfig = {
   key: 'default' | 'ytf-plant-a'
   brandName: string
   compactMark: string
@@ -31,7 +31,7 @@ const defaultTenant: TenantConfig = {
     { label: 'Pricing', to: '/offers/' },
     { label: 'Demo Center', to: '/demo-center' },
     { label: 'How it works', to: '/platform' },
-    { label: 'Case Study', to: '/clients/yangon-tyre' },
+    { label: 'Case Study', to: '/clients/factory-client' },
     { label: 'Contact', to: '/contact' },
   ],
   showBookCta: true,
@@ -62,8 +62,8 @@ const ytfTenant: TenantConfig = {
   compactMark: 'SM',
   brandTagline: 'AI-native manufacturing portal',
   siteMode: 'client',
-  tenantName: 'Yangon Tyre',
-  tenantShortName: 'Plant A',
+  tenantName: 'Factory Client',
+  tenantShortName: 'Factory Floor',
   navItems: [
     { label: 'Portal', to: '/app/portal' },
     { label: 'Plant Manager', to: '/app/plant-manager' },
@@ -76,8 +76,8 @@ const ytfTenant: TenantConfig = {
   ],
   showBookCta: false,
   bookCtaLabel: 'Open workspace',
-  homeEyebrow: 'Yangon Tyre / Plant A',
-  homeTitle: 'Yangon Tyre enterprise portal.',
+  homeEyebrow: 'Factory Client / Factory Floor',
+  homeTitle: 'Factory Client enterprise portal.',
   homeDescription: 'Sales, operations, manufacturing control, DQMS, maintenance, CEO review, and admin control in one portal.',
   homePrimaryCta: { label: 'Open portal', to: '/app/portal' },
   homeSecondaryCta: { label: 'Open DQMS desk', to: '/app/dqms' },
@@ -113,9 +113,9 @@ const ytfTenant: TenantConfig = {
       to: '/app/platform-admin',
     },
   ],
-  footerText: 'Yangon Tyre enterprise portal for sales, operations, manufacturing control, DQMS, maintenance, CEO review, and admin control.',
+  footerText: 'Factory Client enterprise portal for sales, operations, manufacturing control, DQMS, maintenance, CEO review, and admin control.',
   defaultWorkspaceSlug: 'ytf-plant-a',
-  defaultCompany: 'Yangon Tyre',
+  defaultCompany: 'Factory Client',
 }
 
 function inferTenantKey(): TenantConfig['key'] {

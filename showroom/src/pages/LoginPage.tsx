@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react'
+﻿import { useEffect, useState, type FormEvent } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 
 import { LiveProductPreview } from '../components/LiveProductPreview'
@@ -111,7 +111,7 @@ export function LoginPage() {
           <section className="sm-surface p-6">
             <p className="text-sm leading-relaxed text-[var(--sm-muted)]">
               {isClientTenant
-                ? 'This host shows the Yangon Tyre portal shell, but the saved enterprise workspace app is not deployed on this domain yet.'
+                ? 'This host shows the Factory Client portal shell, but the saved enterprise workspace app is not deployed on this domain yet.'
                 : 'This host is the public site only. The saved workspace app is not deployed on this domain yet.'}
             </p>
             <div className="mt-5 flex flex-wrap gap-3">
@@ -139,7 +139,7 @@ export function LoginPage() {
           <section className="sm-surface p-6">
             <p className="text-sm leading-relaxed text-[var(--sm-muted)]">
               {isClientTenant
-                ? 'The Yangon Tyre enterprise workspace is on the live app host. Use that login to enter the tenant with role-based homes and connector-scoped data.'
+                ? 'The Factory Client enterprise workspace is on the live app host. Use that login to enter the tenant with role-based homes and connector-scoped data.'
                 : 'The saved workspace app is on the live app host, not this static site.'}
             </p>
             <div className="mt-5 flex flex-wrap gap-3">
@@ -227,7 +227,7 @@ export function LoginPage() {
             ) : null}
             {isClientTenant ? (
               <div className="mt-4 sm-chip text-[var(--sm-muted)]">
-                Default tenant: {tenant.defaultWorkspaceSlug || 'ytf-plant-a'}. Use the workspace field only if you need to switch to another Yangon Tyre
+                Default tenant: {tenant.defaultWorkspaceSlug || 'ytf-plant-a'}. Use the workspace field only if you need to switch to another Factory Client
                 workspace slug.
               </div>
             ) : null}
@@ -244,7 +244,7 @@ export function LoginPage() {
                 <p className="sm-kicker text-[var(--sm-accent)]">Portal map</p>
                 <h2 className="mt-3 text-2xl font-bold text-white lg:text-3xl">The login opens a real operating portal, not a blank shell.</h2>
               </div>
-              <span className="sm-status-pill">Yangon Tyre tenant</span>
+              <span className="sm-status-pill">Factory Client tenant</span>
             </div>
             <div className="mt-6">
               <LiveProductPreview compact variant="ytf-portal" />

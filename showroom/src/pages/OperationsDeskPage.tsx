@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+﻿import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import { PageIntro } from '../components/PageIntro'
@@ -178,7 +178,7 @@ export function OperationsDeskPage() {
       <PageIntro
         eyebrow="Operations desk"
         title="Run plant flow, receiving, and escalation from one desk."
-        description="This is the Yangon Tyre operations home: today queue, inbound issues, approvals, exceptions, and stock pressure in one working surface."
+        description="This is the Factory Client operations home: today queue, inbound issues, approvals, exceptions, and stock pressure in one working surface."
       />
 
       <section className="sm-chip text-white">

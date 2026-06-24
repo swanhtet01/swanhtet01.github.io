@@ -1,4 +1,4 @@
-export type AgentToolDefinition = {
+﻿export type AgentToolDefinition = {
   id: string
   name: string
   category: 'Connector' | 'Workspace' | 'Knowledge' | 'Control'
@@ -220,7 +220,7 @@ const SUPERMEGA_AGENT_MODEL: AgentOperatingModel = {
 const YTF_AGENT_MODEL: AgentOperatingModel = {
   version: 'v2',
   tenantKey: 'ytf-plant-a',
-  title: 'Yangon Tyre tenant crews',
+  title: 'Factory Client tenant crews',
   summary: 'Tenant-scoped agent teams for sales, receiving, supplier recovery, quality, maintenance, data science, and the CEO brief.',
   managerMoves: [
     'Name one human owner for every queue, exception, and agent escalation.',
@@ -235,7 +235,7 @@ const YTF_AGENT_MODEL: AgentOperatingModel = {
     { id: 'erp-extracts', name: 'ERP Extract Feed', category: 'Connector', purpose: 'Bring PO, GRN, stock, and invoice state into the tenant runtime.' },
     { id: 'human-entry', name: 'Structured Human Entry', category: 'Workspace', purpose: 'Capture inspection, CAPA, maintenance, supplier, and account reviews cleanly.' },
     { id: 'sales-crm', name: 'Sales CRM', category: 'Workspace', purpose: 'Keep dealer accounts, quote follow-up, and commercial context in one place.' },
-    { id: 'operations-control', name: 'Operations Control', category: 'Workspace', purpose: 'Own plant action queues, inbound blockers, and shift follow-up.' },
+    { id: 'operations-control', name: 'Operations Control', category: 'Workspace', purpose: 'Own Floor Action queues, inbound blockers, and shift follow-up.' },
     { id: 'receiving-control', name: 'Receiving Control', category: 'Workspace', purpose: 'Run GRN mismatch, hold, shortage, and next-action workflows.' },
     { id: 'dqms', name: 'DQMS and Quality Methods', category: 'Workspace', purpose: 'Structure incidents, 5W1H, Ishikawa, CAPA, and closeout work.' },
     { id: 'maintenance-control', name: 'Maintenance Control', category: 'Workspace', purpose: 'Track breakdowns, PM work, spare parts, and repeat-failure follow-up.' },
@@ -314,7 +314,7 @@ const YTF_AGENT_MODEL: AgentOperatingModel = {
       name: 'Supplier Recovery Pod',
       workspace: 'ytf/procurement',
       leadRole: 'Procurement',
-      mission: 'Chase missing documents, delayed replies, and unresolved supplier discrepancies before they age into plant blockers.',
+      mission: 'Chase missing documents, delayed replies, and unresolved supplier discrepancies before they age into Floor Blockers.',
       outputs: ['document request task', 'supplier follow-up draft', 'delay ranking', 'approval escalation'],
       cadence: ['missing-doc sweep', 'daily delay ranking', 'supplier digest'],
       tools: [
@@ -355,17 +355,17 @@ const YTF_AGENT_MODEL: AgentOperatingModel = {
       ],
       instructions: [
         'Convert raw shift reporting into one clear next action per issue.',
-        'Flag repeat failures and recurring plant blockers instead of reopening them as new noise.',
+        'Flag repeat failures and recurring Floor Blockers instead of reopening them as new noise.',
         'Keep receiving and maintenance context attached to the same operating record when possible.',
       ],
       escalateWhen: [
         'A repeat failure crosses shifts without a root-cause owner.',
         'A receiving issue blocks production or a senior approval.',
-        'A plant blocker needs quality, maintenance, and operations review together.',
+        'A Floor Blocker needs quality, maintenance, and operations review together.',
       ],
       writePolicy: 'Task shaping and draft follow-up are allowed; published root-cause tags and cross-functional escalations require manager review.',
       kpis: [
-        { name: 'unowned plant blockers', target: 'zero by daily meeting' },
+        { name: 'unowned Floor Blockers', target: 'zero by daily meeting' },
         { name: 'repeat failures without root-cause owner', target: 'zero' },
       ],
     },
@@ -434,7 +434,7 @@ const YTF_AGENT_MODEL: AgentOperatingModel = {
       name: 'Tenant App Foundry Pod',
       workspace: 'ytf/foundry',
       leadRole: 'Admin',
-      mission: 'Design each Yangon Tyre app as an AI-native remake of successful SaaS: role home, core record, workflow contract, and bounded agent crew.',
+      mission: 'Design each Factory Client app as an AI-native remake of successful SaaS: role home, core record, workflow contract, and bounded agent crew.',
       outputs: ['app brief', 'role-home spec', 'entry contract', 'agent crew proposal'],
       cadence: ['module benchmark', 'weekly app review', 'release candidate check'],
       tools: [
@@ -535,7 +535,7 @@ const YTF_AGENT_MODEL: AgentOperatingModel = {
       tools: [
         { toolId: 'director', mode: 'Write', scope: 'brief draft and priority framing' },
         { toolId: 'approvals', mode: 'Read', scope: 'approval debt and supplier exposure' },
-        { toolId: 'operations-control', mode: 'Read', scope: 'plant blockers and action pressure' },
+        { toolId: 'operations-control', mode: 'Read', scope: 'Floor Blockers and action pressure' },
         { toolId: 'sales-crm', mode: 'Read', scope: 'commercial risk and movement' },
         { toolId: 'knowledge-runtime', mode: 'Read', scope: 'decision history and linked evidence' },
       ],

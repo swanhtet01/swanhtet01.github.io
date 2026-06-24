@@ -1,4 +1,4 @@
-import { Link, Navigate, useParams } from 'react-router-dom'
+﻿import { Link, Navigate, useParams } from 'react-router-dom'
 
 import { LiveProductPreview } from '../components/LiveProductPreview'
 import { previewVariantForSoftwareModule, previewVariantForStarterProduct } from '../lib/liveProductPreviewUtils'
@@ -81,13 +81,13 @@ export function ProductDetailPage() {
               </div>
               {liveModuleRoute ? <p className="mt-3 text-sm text-[var(--sm-muted)]">This module’s proof lives inside the authenticated workspace.</p> : null}
               <div className="mt-4">
-                {proofRoute === '/clients/yangon-tyre' ? (
+                {proofRoute === '/clients/factory-client' ? (
                   <Link className="sm-link" to="/products">
                     View all products
                   </Link>
                 ) : (
-                  <Link className="sm-link" to="/clients/yangon-tyre">
-                    Read the Yangon Tyre case study
+                  <Link className="sm-link" to="/clients/factory-client">
+                    Read the Factory Client case study
                   </Link>
                 )}
               </div>
@@ -288,7 +288,7 @@ export function ProductDetailPage() {
               </Link>
             </div>
             <div className="mt-4">
-              <Link className="sm-link" to="/clients/yangon-tyre">
+              <Link className="sm-link" to="/clients/factory-client">
                 Need a larger client system around this? Read the case study.
               </Link>
             </div>

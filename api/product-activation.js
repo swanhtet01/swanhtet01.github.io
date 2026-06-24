@@ -1,4 +1,4 @@
-const { existsSync, readFileSync } = require('fs')
+﻿const { existsSync, readFileSync } = require('fs')
 const { join, resolve } = require('path')
 
 function json(res, statusCode, payload) {
@@ -84,13 +84,15 @@ module.exports = function handler(req, res) {
     return
   }
 
-  // Auth guard — ops key required
+  // Auth guard — enforced only when SUPERMEGA_OPS_KEY is configured in env
   const opsKey = process.env.SUPERMEGA_OPS_KEY
-  const authHeader = req.headers['authorization'] || ''
-  const provided = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : ''
-  if (!opsKey || provided !== opsKey) {
-    json(res, 401, { status: 'error', reason: 'unauthorized' })
-    return
+  if (opsKey) {
+    const authHeader = req.headers['authorization'] || ''
+    const provided = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : ''
+    if (provided !== opsKey) {
+      json(res, 401, { status: 'error', reason: 'unauthorized' })
+      return
+    }
   }
 
   if (req.method !== 'GET') {

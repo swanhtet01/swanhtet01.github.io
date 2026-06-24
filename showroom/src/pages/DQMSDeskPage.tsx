@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+﻿import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import { PageIntro } from '../components/PageIntro'
@@ -273,7 +273,7 @@ export function DQMSDeskPage() {
       <PageIntro
         eyebrow="DQMS"
         title="Run incidents, CAPA, and quality methods in one place."
-        description="This is the industrial quality desk for Yangon Tyre: incident register, CAPA queue, KPI review, fishbone, 5W1H, and closeout discipline."
+        description="This is the industrial quality desk for Factory Client: incident register, CAPA queue, KPI review, fishbone, 5W1H, and closeout discipline."
       />
 
       <section className="sm-chip text-white">

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+﻿import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import { PageIntro } from '../components/PageIntro'
@@ -473,7 +473,7 @@ export function PlatformAdminPage() {
         <section className="grid gap-6 xl:grid-cols-[0.96fr_1.04fr]">
           <article className="sm-surface p-6">
             <p className="sm-kicker text-[var(--sm-accent)]">Rollout operating frame</p>
-            <h2 className="mt-3 text-3xl font-bold text-white">Current operating shape, rollout drag, and admin response for Yangon Tyre.</h2>
+            <h2 className="mt-3 text-3xl font-bold text-white">Current operating shape, rollout drag, and admin response for Factory Client.</h2>
             <div className="mt-6 grid gap-3">
               <article className="sm-proof-card">
                 <p className="font-semibold text-white">Operating intent</p>
@@ -1283,7 +1283,7 @@ export function PlatformAdminPage() {
         <section className="grid gap-6 xl:grid-cols-[1fr_1fr]">
           <article className="sm-surface p-6">
             <p className="sm-kicker text-[var(--sm-accent)]">Source governance</p>
-            <h2 className="mt-3 text-3xl font-bold text-white">Real Yangon Tyre source packs should be promoted deliberately.</h2>
+            <h2 className="mt-3 text-3xl font-bold text-white">Real Factory Client source packs should be promoted deliberately.</h2>
             <div className="mt-6 grid gap-3">
               {ytfSourcePacks.map((pack) => (
                 <article className="sm-proof-card" key={pack.id}>
@@ -1399,7 +1399,7 @@ export function PlatformAdminPage() {
             <Link className="sm-button-secondary" to="/app/teams">
               Open Agent Ops
             </Link>
-            <Link className="sm-button-secondary" to="/clients/yangon-tyre">
+            <Link className="sm-button-secondary" to="/clients/factory-client">
               Open YTF public demo
             </Link>
           </div>

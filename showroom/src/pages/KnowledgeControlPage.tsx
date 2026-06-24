@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+﻿import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import { PageIntro } from '../components/PageIntro'
@@ -48,7 +48,7 @@ export function KnowledgeControlPage() {
   }))
   const tenantTotals = [
     { tenant: 'core' as const, label: 'Core platform' },
-    { tenant: 'yangon-tyre' as const, label: 'Yangon Tyre' },
+    { tenant: 'yangon-tyre' as const, label: 'Factory Client' },
   ].map((item) => ({
     ...item,
     count: collections.filter((collection) => collection.tenant === item.tenant).length,
@@ -103,7 +103,7 @@ export function KnowledgeControlPage() {
             <article className="sm-demo-link sm-demo-link-card" key={collection.id}>
               <div className="flex items-center justify-between gap-3">
                 <span className="sm-home-proof-label">{collection.status}</span>
-                <span className="sm-status-pill">{collection.tenant === 'core' ? 'Core' : 'Yangon Tyre'}</span>
+                <span className="sm-status-pill">{collection.tenant === 'core' ? 'Core' : 'Factory Client'}</span>
               </div>
               <strong>{collection.name}</strong>
               <p className="mt-2 text-sm text-[var(--sm-muted)]">{collection.purpose}</p>

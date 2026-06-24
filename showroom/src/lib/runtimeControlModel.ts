@@ -1,4 +1,4 @@
-export type RuntimeHealthStatus = 'Healthy' | 'Warning' | 'Degraded' | 'Needs wiring'
+﻿export type RuntimeHealthStatus = 'Healthy' | 'Warning' | 'Degraded' | 'Needs wiring'
 
 export type RuntimeConnectorFeed = {
   id: string
@@ -124,7 +124,7 @@ export const RUNTIME_CONNECTOR_FEEDS: RuntimeConnectorFeed[] = [
     cursorMode: 'thread delta cursor',
     lastSuccessAt: 'Within the last sync window',
     replayMode: 'Task replay plus manager review',
-    blastRadius: 'Yangon Tyre commercial lane',
+    blastRadius: 'Factory Client commercial lane',
     freshness: '15 minutes behind mailbox state',
     owner: 'Connector Systems',
     workspace: 'ytf/commercial-memory',
@@ -146,7 +146,7 @@ export const RUNTIME_CONNECTOR_FEEDS: RuntimeConnectorFeed[] = [
     cursorMode: 'partial thread replay',
     lastSuccessAt: 'Manual refresh on weekday review cycle',
     replayMode: 'Manual recovery only',
-    blastRadius: 'Yangon Tyre supplier recovery lane',
+    blastRadius: 'Factory Client supplier recovery lane',
     freshness: 'Manual refresh on weekday review cycle',
     owner: 'Connector Systems',
     workspace: 'ytf/supplier-recovery',
@@ -168,7 +168,7 @@ export const RUNTIME_CONNECTOR_FEEDS: RuntimeConnectorFeed[] = [
     cursorMode: 'folder scan and revision polling',
     lastSuccessAt: 'Hourly index refresh',
     replayMode: 'Folder replay with reviewer tasking',
-    blastRadius: 'Yangon Tyre quality and receiving lane',
+    blastRadius: 'Factory Client quality and receiving lane',
     freshness: 'Hourly index refresh',
     owner: 'Knowledge Systems',
     workspace: 'ytf/plant-quality',
@@ -190,7 +190,7 @@ export const RUNTIME_CONNECTOR_FEEDS: RuntimeConnectorFeed[] = [
     cursorMode: 'daily snapshot diff planned',
     lastSuccessAt: 'No native delta feed yet',
     replayMode: 'Snapshot re-import only',
-    blastRadius: 'Yangon Tyre operations and finance lane',
+    blastRadius: 'Factory Client operations and finance lane',
     freshness: 'Daily manual export',
     owner: 'Tenant Launch Pod',
     workspace: 'ytf/ops-erp-core',
@@ -212,7 +212,7 @@ export const RUNTIME_CONNECTOR_FEEDS: RuntimeConnectorFeed[] = [
     cursorMode: 'append and note-save sync',
     lastSuccessAt: 'Synced on note save',
     replayMode: 'Append-only replay',
-    blastRadius: 'Yangon Tyre director and knowledge lane',
+    blastRadius: 'Factory Client director and knowledge lane',
     freshness: 'Synced on note save',
     owner: 'Knowledge Systems',
     workspace: 'ytf/director-review',
@@ -234,7 +234,7 @@ export const RUNTIME_CONNECTOR_FEEDS: RuntimeConnectorFeed[] = [
     cursorMode: 'live record writes',
     lastSuccessAt: 'Current app session and daily manager review',
     replayMode: 'Record replay plus coaching loop',
-    blastRadius: 'Yangon Tyre writeback and queue lane',
+    blastRadius: 'Factory Client writeback and queue lane',
     freshness: 'Live app entry with daily manager review',
     owner: 'Workforce Command',
     workspace: 'ytf/shopfloor-writeback',

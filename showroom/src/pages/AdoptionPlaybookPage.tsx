@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom'
+﻿import { Link } from 'react-router-dom'
 
 import { PageIntro } from '../components/PageIntro'
 import {
@@ -26,7 +26,7 @@ export function AdoptionPlaybookPage() {
       <PageIntro
         eyebrow="Adoption playbook"
         title="Make the portal useful enough that staff actually use it."
-        description="This is the operating adoption layer for Yangon Tyre: who enters what, when they enter it, what insight comes back out, and what managers have to review in the system. Use Adoption Command for the live score and intervention view."
+        description="This is the operating adoption layer for Factory Client: who enters what, when they enter it, what insight comes back out, and what managers have to review in the system. Use Adoption Command for the live score and intervention view."
       />
 
       <section className="grid gap-4 md:grid-cols-4">

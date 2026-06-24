@@ -1,4 +1,4 @@
-export type YangonTyreStoryBeat = {
+﻿export type YangonTyreStoryBeat = {
   id: string
   label: string
   metric: string
@@ -43,7 +43,7 @@ export const YANGON_TYRE_DRIVE_SOURCE_REGISTRY_SEED = [
     sourceType: 'Google Docs',
     status: 'live',
     coverage:
-      'The register links 13 meaningful source lanes after collapsing duplicate references to the same shared Yangon Tyre root folder.',
+      'The register links 13 meaningful source lanes after collapsing duplicate references to the same shared Factory Client root folder.',
     route: '/app/connectors',
     evidenceCount: 13,
     lastSignalAt: '2025-11-16T02:01:53.302Z',
@@ -53,17 +53,17 @@ export const YANGON_TYRE_DRIVE_SOURCE_REGISTRY_SEED = [
   },
   {
     id: 'drive-plant-a',
-    name: 'Plant A operating structure',
+    name: 'Factory Floor operating structure',
     sourceType: 'Google Drive folders and shortcuts',
     status: 'live',
     coverage:
-      'Plant A now exposes planning, admin, and tyre sales and inventory folders plus shortcut lanes for GRN, ISO, raw stock, and tyre production.',
+      'Factory Floor now exposes planning, admin, and tyre sales and inventory folders plus shortcut lanes for GRN, ISO, raw stock, and tyre production.',
     route: '/app/operations',
     evidenceCount: 10,
     lastSignalAt: '2026-04-09T08:47:52.705Z',
     consumers: ['Receiving Control', 'Operations Control', 'Manufacturing Command', 'Supplier and Approval Control'],
     nextAutomation:
-      'Resolve every Plant A shortcut target and persist revision lineage for GRN, raw stock, ISO, and production records.',
+      'Resolve every Factory Floor shortcut target and persist revision lineage for GRN, raw stock, ISO, and production records.',
   },
   {
     id: 'drive-ops-manual',
@@ -129,7 +129,7 @@ export const YANGON_TYRE_DRIVE_CONNECTOR_SIGNAL_SEED = [
     name: 'Google Drive evidence spine',
     system: 'Google Drive',
     status: 'Healthy',
-    freshness: 'Drive estate was reorganized on April 9, 2026 and still points to a curated source register plus live plant and CEO branches.',
+    freshness: 'Drive estate was reorganized on April 9, 2026 and still points to a curated source register plus live Floor And CEO branches.',
     backlog:
       'Highest-value work is target resolution for shortcuts, nested folder crawl, and source-to-topic extraction from the analysis workbook and operations guide.',
     route: '/app/connectors',
@@ -221,7 +221,7 @@ export const YANGON_TYRE_DRIVE_SOURCE_EVENT_SEED = [
     id: 'drive-register-confirmed',
     source: 'Drive source register',
     kind: 'source register',
-    title: 'Register links the full Yangon Tyre source estate.',
+    title: 'Register links the full Factory Client source estate.',
     detail:
       'The register now points to plant PCs, the shared showroom folder, the Tyre Analysis workbook, the Operations Guidebook, finance sheets, purchase orders, export planning, and strategy docs.',
     route: '/app/connectors',
@@ -230,9 +230,9 @@ export const YANGON_TYRE_DRIVE_SOURCE_EVENT_SEED = [
   },
   {
     id: 'plant-a-curated',
-    source: 'Plant A',
+    source: 'Factory Floor',
     kind: 'folder curation',
-    title: 'Plant A reorganized into operations-ready branches.',
+    title: 'Factory Floor reorganized into operations-ready branches.',
     detail:
       'Planning, admin, and tyre sales and inventory folders now sit beside GRN, raw stock, ISO, and tyre production shortcut lanes.',
     route: '/app/operations',
@@ -259,7 +259,7 @@ export const YANGON_TYRE_DRIVE_SOURCE_EVENT_SEED = [
       'Guidebook encodes 11 named sections, process instructions, machinery context, KPI headings, and raw-material usage references.',
     route: '/app/knowledge',
     signalAt: '2024-11-14T15:13:50.157Z',
-    owner: 'Plant and quality',
+    owner: 'Floor And quality',
   },
   {
     id: 'analysis-workbook-revised',
@@ -289,8 +289,8 @@ export const YANGON_TYRE_DRIVE_CHANGE_LINEAGE_SEED = [
   },
   {
     id: 'lineage-plant-a-layout',
-    source: 'Plant A folder',
-    assetName: 'Plant A operational branch layout',
+    source: 'Factory Floor folder',
+    assetName: 'Factory Floor operational branch layout',
     changeType: 'folder restructuring',
     changedAt: '2026-04-09T08:47:52.705Z',
     changedBy: 'Operations',
@@ -314,10 +314,10 @@ export const YANGON_TYRE_DRIVE_CHANGE_LINEAGE_SEED = [
   {
     id: 'lineage-ops-guide',
     source: 'YT Operations Guidebook',
-    assetName: 'Plant A stage map',
+    assetName: 'Factory Floor stage map',
     changeType: 'document revision',
     changedAt: '2024-11-14T15:13:50.157Z',
-    changedBy: 'Plant and quality',
+    changedBy: 'Floor And quality',
     route: '/app/knowledge',
     impact:
       'Plant knowledge is structured enough to become stage-aware SOP graph nodes, but still lives as a narrative document instead of event-linked operations data.',
@@ -354,11 +354,11 @@ export const YANGON_TYRE_DRIVE_LEARNING_SEED = {
 
 export const YANGON_TYRE_DRIVE_BIG_PICTURE = {
   thesis:
-    'Yangon Tyre already has a usable source mesh; the next step is to turn that mesh into governed extraction, feature marts, and role stories.',
+    'Factory Client already has a usable source mesh; the next step is to turn that mesh into governed extraction, feature marts, and role stories.',
   currentTruth: [
     'The source register now maps 13 meaningful source lanes once duplicate shared-root references are collapsed.',
-    'Plant A already exposes three real operating branches plus seven shortcuts that map to GRN, raw stock, ISO, and production workflows.',
-    'The Operations Guidebook defines 11 plant and support sections, giving the pipeline a true factory process grammar.',
+    'Factory Floor already exposes three real operating branches plus seven shortcuts that map to GRN, raw stock, ISO, and production workflows.',
+    'The Operations Guidebook defines 11 Floor And support sections, giving the pipeline a true factory process grammar.',
     'The Tyre Analysis workbook shows 263,317 units in 2023 sales, MMK 59.1B gross sales, MMK 54.8B net after tube cost, and roughly a 5.0% price reset across key lines.',
     'CEO data is now curated into a leadership lane, but shortcut opacity still blocks target-level freshness and provenance.',
   ],
@@ -379,9 +379,9 @@ export const YANGON_TYRE_DRIVE_STORY_BEATS: YangonTyreStoryBeat[] = [
       'The source register ties together plant PCs, shared Drive folders, the Tyre Analysis workbook, the Operations Guidebook, finance packs, purchase orders, and strategy documents.',
     route: '/app/connectors',
     evidence: [
-      'Shared Yangon Tyre Drive root appears twice in the register and needs deduping into one canonical source.',
+      'Shared Factory Client Drive root appears twice in the register and needs deduping into one canonical source.',
       'Finance and purchase-order packs are present as named links, but not yet as mailbox-derived evidence chains.',
-      'Plant A and CEO lanes have been curated more recently than the workbook itself.',
+      'Factory Floor and CEO lanes have been curated more recently than the workbook itself.',
     ],
     implication:
       'The pipeline problem is not finding data anymore. It is normalizing ownership, freshness, and lineage across different source behaviors.',
@@ -424,7 +424,7 @@ export const YANGON_TYRE_DRIVE_STORY_BEATS: YangonTyreStoryBeat[] = [
     metric: '2.63x gap',
     title: 'Documentation drift is already a planning risk.',
     summary:
-      'The Operations Guidebook says Plant A manufactures about 100,000 pieces annually, while the workbook shows 263,317 units in 2023 sales.',
+      'The Operations Guidebook says Factory Floor manufactures about 100,000 pieces annually, while the workbook shows 263,317 units in 2023 sales.',
     route: '/app/knowledge',
     evidence: [
       'Guidebook plant overview still says about 100,000 pcs annually and even leaves question marks in place.',
@@ -438,7 +438,7 @@ export const YANGON_TYRE_DRIVE_STORY_BEATS: YangonTyreStoryBeat[] = [
     id: 'plant-grammar',
     label: 'Operations',
     metric: '11 sections',
-    title: 'Plant A already gives the pipeline a full process grammar.',
+    title: 'Factory Floor already gives the pipeline a full process grammar.',
     summary:
       'From mixing and rubberizing through curing, packing, warehouse, utilities, and quality control, the guidebook encodes a real stage map for extraction and writeback.',
     route: '/app/operations',
@@ -504,7 +504,7 @@ export const YANGON_TYRE_DRIVE_PIPELINE_CHAPTERS: YangonTyrePipelineChapter[] = 
     stage: 'Watch',
     headline: 'Watch the full Drive estate, not just a chosen sheet.',
     detail:
-      'Start with the source register, shared root, Plant A branches, and leadership shortcuts so the pipeline sees the real document and folder behavior.',
+      'Start with the source register, shared root, Factory Floor branches, and leadership shortcuts so the pipeline sees the real document and folder behavior.',
     route: '/app/connectors',
     actions: ['parse the source register', 'crawl the root folders', 'resolve shortcut targets'],
   },
@@ -567,7 +567,7 @@ export const YANGON_TYRE_DRIVE_SNAPSHOT_METRICS: YangonTyreSnapshotMetric[] = [
 export function buildYangonTyreInsightSeed() {
   return {
     headline:
-      'Yangon Tyre already has the raw material for an AI-native data pipeline; the missing layer is governed extraction, contradiction handling, and role-specific storytelling.',
+      'Factory Client already has the raw material for an AI-native data pipeline; the missing layer is governed extraction, contradiction handling, and role-specific storytelling.',
     engine: 'drive-source-register + ops-guide + tyre-analysis seed',
     insights: [
       {
@@ -604,7 +604,7 @@ export function buildYangonTyreInsightSeed() {
       },
     ],
     recommended_actions: [
-      'Resolve Plant A and CEO shortcuts into canonical target IDs before deeper automation.',
+      'Resolve Factory Floor and CEO shortcuts into canonical target IDs before deeper automation.',
       'Promote the Tyre Analysis workbook into marts for product mix, price drift, dealer concentration, and tube-cost leakage.',
       'Turn the 11 Operations Guidebook sections into stage-linked writeback forms and KPI checks.',
       'Flag contradictory source claims so outdated narrative docs cannot silently override structured evidence.',

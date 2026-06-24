@@ -1,4 +1,4 @@
-export type YangonTyreAdoptionPrinciple = {
+﻿export type YangonTyreAdoptionPrinciple = {
   title: string
   detail: string
 }
@@ -44,7 +44,7 @@ export const YANGON_TYRE_ADOPTION_DIALECTIC = {
   antithesis:
     'If managers still review from chat, side spreadsheets, or memory, staff will treat data entry as extra reporting instead of part of the operating job.',
   synthesis:
-    'Adoption Command scores role usage, writeback quality, review rituals, and agent reinforcement so the Yangon Tyre platform becomes the actual operating system.',
+    'Adoption Command scores role usage, writeback quality, review rituals, and agent reinforcement so the Factory Client platform becomes the actual operating system.',
 } as const
 
 export const YANGON_TYRE_ADOPTION_PRINCIPLES: YangonTyreAdoptionPrinciple[] = [

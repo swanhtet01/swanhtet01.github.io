@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+﻿import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import { PageIntro } from '../components/PageIntro'
@@ -113,7 +113,7 @@ function buildSeedPlantManagerDataset(tenantKey: string): ManagerHomeDataset {
       { id: 'ops', title: 'Operations control', route: '/app/operations', detail: 'Shift flow, receiving, and escalation control.', status: 'Seeded', reason: 'Usable now while live data expands.' },
       { id: 'dqms', title: 'DQMS and quality', route: '/app/dqms', detail: 'Incidents, CAPA, containment, and KPI review.', status: 'Seeded', reason: 'Usable now while live writeback expands.' },
       { id: 'maint', title: 'Maintenance', route: '/app/maintenance', detail: 'Reliability follow-up and asset review.', status: 'Available', reason: 'Supports the same plant control loop.' },
-      { id: 'fabric', title: 'Data Fabric', route: '/app/data-fabric', detail: 'Plant analytics, source behavior, and feature engineering.', status: 'Available', reason: 'Feeds the macro plant review.' },
+      { id: 'fabric', title: 'Data Fabric', route: '/app/data-fabric', detail: 'Floor Analytics, source behavior, and feature engineering.', status: 'Available', reason: 'Feeds the macro plant review.' },
     ],
     supportTools: [
       { id: 'ops', label: 'Operations', route: '/app/operations', detail: 'Run today queue and plant flow.' },
@@ -208,7 +208,7 @@ export function PlantManagerPage() {
       <PageIntro
         eyebrow="Plant manager"
         title="Run shift control, quality drift, and handoff from one command surface."
-        description="This is the combined plant manager interface for Yangon Tyre: operations, DQMS, maintenance, receiving, and data-fabric review on one working page."
+        description="This is the combined plant manager interface for Factory Client: operations, DQMS, maintenance, receiving, and data-fabric review on one working page."
       />
 
       <section className="sm-surface-deep relative overflow-hidden p-6 lg:p-8">
