@@ -11,6 +11,18 @@ function fail(message, extra = {}) {
   process.exit(1)
 }
 
+// CANON: pricing.json is the single source of truth. Build the set of allowed public MMK price strings
+// so no thread can ship a price the canon doesn't sanction (owner directive 2026-06-25; see SITE-SPEC.md).
+if (!existsSync(resolve(root, 'pricing.json'))) fail('missing_pricing_json')
+const pricing = JSON.parse(readFileSync(resolve(root, 'pricing.json'), 'utf8'))
+const canonicalMmkNumbers = new Set()
+const addCanonicalMmk = (raw) => {
+  for (const num of String(raw || '').match(/\d{1,3}(?:,\d{3})+/g) || []) canonicalMmkNumbers.add(num)
+}
+for (const service of pricing.services || []) addCanonicalMmk(service.mmk)
+for (const product of pricing.products || []) for (const tier of Object.values(product.tiers || {})) addCanonicalMmk(tier)
+for (const plan of pricing.care || []) addCanonicalMmk(plan.mmk) // care: not on /offers/, but allowed if shown 1:1 elsewhere
+
 const configPath = resolve(outputRoot, 'config.json')
 if (!existsSync(configPath)) fail('missing_vercel_output_config')
 const config = JSON.parse(readFileSync(configPath, 'utf8'))
@@ -566,6 +578,20 @@ for (const entry of walkHtmlFiles(staticDir)) {
   if (staleMatch) fail('retired_public_copy_found_anywhere', { entry, match: staleMatch[0] })
   const privateMatch = html.match(privateLeakPattern)
   if (privateMatch) fail('private_client_copy_leak_anywhere', { entry, match: privateMatch[0] })
+  // Every public "N,NNN,NNN MMK" price string MUST be a canonical value from pricing.json.
+  for (const priceMatch of html.match(/\d{1,3}(?:,\d{3})+\s*MMK/g) || []) {
+    const num = priceMatch.match(/\d{1,3}(?:,\d{3})+/)?.[0]
+    if (num && !canonicalMmkNumbers.has(num)) {
+      fail('non_canonical_mmk_price', { entry, price: priceMatch, allowed: [...canonicalMmkNumbers] })
+    }
+  }
+  // No Starter/Pro/Operator pricing-tier naming on the /offers/ pricing surface (canon: 2 honest tiers, no
+  // such names). Scoped to /offers/ so legitimate product copy/labels elsewhere ("Operator tablet flows",
+  // the "Operator Builder" screenshot label) aren't flagged — /offers/ carries no such product labels.
+  if (entry === 'offers/index.html') {
+    const tierNameMatch = html.match(/\b(Starter|Operator)\b/)
+    if (tierNameMatch) fail('retired_pricing_tier_name', { entry, match: tierNameMatch[0] })
+  }
 }
 
 // Approved product detail pages (premium per-product pages, linked from the /products/ index "See details" CTAs).

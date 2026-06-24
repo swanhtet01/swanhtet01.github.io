@@ -1,0 +1,47 @@
+{
+  "_README": "SINGLE SOURCE OF TRUTH for ALL SuperMega pricing. Every thread/agent/file reads from here before writing ANY price (site generator, deal.js, demo, POS, creative assets, docs). Do NOT hardcode a price that contradicts this. To change a price: edit THIS file first, get CEO (Swan) ratification, then propagate. See AGENTS.md section 0.",
+  "updated": "2026-06-25",
+  "status": "canonical — research-backed (exec-team reprice) + CEO rate correction to 4,300. Supersedes the parallel-thread $1,500/$300-mo/4,000 draft.",
+  "currency": {
+    "priceOfRecord": "USD",
+    "mmkPerUsd": 4300,
+    "mmkNote": "Real market/transaction rate SMBs actually pay. NOT the ~2,100 official CBM peg, NOT the stale 4,000. USD is quoted and invoiced; MMK is a guide confirmed at invoice date.",
+    "display": {
+      "web": "MMK ONLY on all public pages — show NO USD (supermega.dev, /offers/, homepage, product pages, contact). Owner directive 2026-06-25. See SITE-SPEC.md. USD kept here only as the internal rate anchor.",
+      "localSalesDoc": "MMK direct, no USD (whatsapp-price-card, pitch-onepager, Burmese VO)"
+    },
+    "verifierRule": "tools/verify_public_vercel_output.mjs BANS the literal 'USD ' (USD+space) in public copy. Write 'US dollars'."
+  },
+  "services": [
+    { "key": "tool-week",   "name": "Tool in a week",                         "usd": 600,  "mmk": "2,500,000",  "role": "foot-in-the-door, NOT the default ask" },
+    { "key": "dashboard",   "name": "Custom build — dashboard / internal tool", "usd": 1800, "mmk": "8,000,000",  "role": "THE DEFAULT ASK — visually featured ('Most chosen')" },
+    { "key": "ai-agent",    "name": "AI agent / automation",                  "usd": 2500, "mmk": "11,000,000", "role": "differentiated, no local competitor anchor" },
+    { "key": "design-ship", "name": "Design + ship system",                   "usd": 6000, "mmk": "25,000,000", "role": "month-2/3 milestone, NOT the headline (do not call it 'flagship')" }
+  ],
+  "_careDisplay": "REMOVED from the public /offers/ page per owner 2026-06-25 — do NOT render a Care card. Care is still offered 1:1 AFTER a build; just not shown as a plan.",
+  "care": [
+    { "key": "care-annual", "name": "Care — Annual", "usd": 720, "period": "/yr", "mmk": "3,100,000 / yr", "role": "sold 1:1 after a build; NOT shown on /offers/" },
+    { "key": "care-lite",   "name": "Care — Lite",   "usd": 79,  "period": "/mo", "mmk": "340,000 / mo",   "role": "monthly fallback; NOT shown on /offers/" }
+  ],
+  "products": [
+    { "key": "deskpos",   "name": "DeskPOS",                      "note": "LIVE product",                    "tiers": { "Counter": "2,500,000 MMK", "Counter + AI": "8,000,000 MMK" } },
+    { "key": "factory",   "name": "Factory & Operations App",     "note": "build-to-order (no shipped app)", "tiers": { "Operations build": "8,000,000 MMK", "Full plant build": "13,000,000 MMK" } },
+    { "key": "custom-ai", "name": "Custom Solutions & AI Agents", "note": "build-to-order (no shipped app)", "tiers": { "One agent": "8,000,000 MMK", "Pipeline build": "13,000,000 MMK" } }
+  ],
+  "taxonomy": {
+    "canonicalProductNames": ["DeskPOS", "Factory & Operations App", "Custom Solutions & AI Agents"],
+    "retireTheseVariants": ["Custom Workflow App", "Custom Portal", "Back-Office & Workflow Desk"],
+    "twoViewsNote": "Two views, prices must agree: (1) BY SCOPE = the 4 services above (Tool / Custom build / AI agent / Design+ship); (2) BY PRODUCT = the 3 classes, each with 2 tiers. DeskPOS Counter/Counter+AI are REAL; Factory & Custom are build-to-order bands. MMK only on public surfaces.",
+    "thirdTierNote": "KILLED: there is no 3rd tier and no Starter/Pro/Operator/Operate/Managed naming anymore. By-product = exactly 2 tiers per class (see products above). Any reappearance of a 3-tier or monthly Operate/Care tier is a regression."
+  },
+  "killed": [
+    "$1,500 mid tier (now $1,800)",
+    "$300/mo Care (now $720/yr + $79/mo)",
+    "$800/mo Operate (now $900/yr Managed)",
+    "DeskPOS Operator $2,500 (now $2,800)",
+    "Factory Operator $4,000 (now $4,500)",
+    "'From $300' agent anchors (floor is $600)",
+    "rates: 2,100 (CBM peg) / 4,000 / 4,800 — all wrong; use 4,300"
+  ],
+  "galaxyDefense": "Galaxy CafePOS = ~$257 one-time, 10k+ shops. On a call: 'Galaxy sells you THEIR software; we build you YOURS — AI-native, you own the code, no per-seat tax.'"
+}
