@@ -3,12 +3,13 @@
 
 import store from '../store.mjs'
 import { generateDeal } from './deal.mjs'
+import connectors from '../connectors/index.mjs'
 
 const OPS_KEY = (process.env.SUPERMEGA_OPS_KEY || '').trim()
 const PROJECT_STATUSES = ['scoping', 'deposit', 'building', 'live', 'care']
 const DEAL_STATUSES = ['draft', 'approved', 'sent']
 // USD anchors per offer (mirrors /offers/). Deposit = 50%. care-plan is monthly (MRR).
-const OFFER_USD = { 'tool-week': 600, dashboard: 1500, 'ai-agent': 2500, 'design-ship': 6000, 'care-plan': 300, build: 2000 }
+const OFFER_USD = { 'tool-week': 600, dashboard: 1800, 'ai-agent': 2500, 'design-ship': 6000, build: 1800 }
 const priceOf = (offer) => OFFER_USD[offer] || OFFER_USD.build
 const aiConfigured = () => Boolean(process.env.ANTHROPIC_API_KEY || process.env.CLAUDE_API_KEY)
 
@@ -69,6 +70,7 @@ export async function handle({ method, path, query = {}, body = {}, headers = {}
         if (!lead) return bad(404, 'lead_not_found')
         const client = await store.createClient({ name: lead.company || lead.name || 'New client', contacts: [{ name: lead.name, channel: 'contact', handle: lead.contact }] })
         const project = await store.createProject({ client_id: client.id, lead_id: lead.id, offer: lead.package || body.offer || 'build', status: 'scoping' })
+        await store.updateLead(seg[1], { stage: 'won' }).catch(() => {})
         log('won', `Won ${lead.company || lead.name} → ${project.offer} project`, project.id)
         return ok({ ok: true, client, project })
       }
@@ -125,8 +127,38 @@ export async function handle({ method, path, query = {}, body = {}, headers = {}
       }
     }
 
+    // ---- CLIENTS ----
+    if (method === 'GET' && seg[0] === 'clients') return ok({ ok: true, clients: await store.listClients() })
+
     // ---- ACTIVITY LOG ----
     if (method === 'GET' && seg[0] === 'activity') return ok({ ok: true, activity: await store.listActivity(Number(query.limit) || 40) })
+
+    // ---- INTEGRATIONS (connector framework health; same passcode gate as everything above) ----
+    if (method === 'GET' && seg[0] === 'integrations') {
+      const report = await connectors.healthAll()
+      return ok({ mode: store.mode, ...report })
+    }
+
+    // ---- AUTOPILOT (batch deal generation for un-dealt leads) ----
+    if (method === 'POST' && seg[0] === 'autopilot') {
+      if (!aiConfigured()) return bad(503, 'ai_not_configured')
+      const [leads, deals] = await Promise.all([store.listLeads(), store.listDeals()])
+      const dealtLeads = new Set(deals.map((d) => d.lead_id).filter(Boolean))
+      const pending = leads.filter((l) => !dealtLeads.has(l.id) && (!l.stage || l.stage === 'new' || l.stage === 'qualified')).slice(0, 5)
+      if (!pending.length) return ok({ ok: true, ran: 0, message: 'No pending leads to process.' })
+      const results = []
+      for (const lead of pending) {
+        const result = await generateDeal({ name: lead.name, company: lead.company, workflow: lead.package, contact: lead.contact })
+        if (result.ok) {
+          const deal = await store.saveDeal({ lead_id: lead.id, packet: result.packet, status: 'draft' })
+          log('autopilot', `Autopilot: deal generated for ${lead.company || lead.name}`, deal.id)
+          results.push({ lead_id: lead.id, company: lead.company || lead.name, deal_id: deal.id, ok: true })
+        } else {
+          results.push({ lead_id: lead.id, company: lead.company || lead.name, ok: false, reason: result.reason })
+        }
+      }
+      return ok({ ok: true, ran: results.length, results })
+    }
 
     return bad(404, 'not_found')
   } catch (err) {

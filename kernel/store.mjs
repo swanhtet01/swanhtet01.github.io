@@ -77,6 +77,16 @@ export async function insertLead(l) {
   mem.lead.set(rec.id, rec)
   return rec
 }
+export async function updateLead(id, patch) {
+  // Maps the store's field names (stage, score) to the DB column names (lead_stage, lead_score)
+  const colMap = { stage: 'lead_stage', score: 'lead_score' }
+  const dbPatch = {}
+  for (const [k, v] of Object.entries(patch)) if (colMap[k]) dbPatch[colMap[k]] = v
+  if (!Object.keys(dbPatch).length) return null
+  if (mode === 'supabase') { const r = await rest('PATCH', `supermega_leads?lead_id=eq.${encodeURIComponent(id)}`, dbPatch); return r?.[0] ? mapLead(r[0]) : null }
+  if (mode === 'postgres') { const keys = Object.keys(dbPatch); const set = keys.map((k, i) => `${k}=$${i + 2}`).join(', '); const r = await q(`update public.supermega_leads set ${set} where lead_id=$1 returning ${LEAD_COLS}`, [id, ...keys.map((k) => dbPatch[k])]); return r[0] ? mapLead(r[0]) : null }
+  const cur = mem.lead.get(id); if (!cur) return null; const next = { ...cur, ...patch }; mem.lead.set(id, next); return next
+}
 
 // ---------- pipeline: clients + projects ----------
 export async function listProjects() {
@@ -111,6 +121,11 @@ export async function convertedLeadIds() {
   if (mode === 'postgres') { await ensurePgTables(); return (await q('select distinct lead_id from supermega_console_projects where lead_id is not null')).map((r) => r.lead_id) }
   return [...mem.project.values()].map((p) => p.lead_id).filter(Boolean)
 }
+export async function listClients() {
+  if (mode === 'supabase') return rest('GET', 'supermega_console_clients?order=created_at.desc')
+  if (mode === 'postgres') { await ensurePgTables(); return q('select * from supermega_console_clients order by created_at desc') }
+  return memSort([...mem.client.values()])
+}
 
 // ---------- deals (saved deal packets; also the outreach source) ----------
 export async function saveDeal(d) {
@@ -144,4 +159,4 @@ export async function listActivity(limit = 30) {
   return [...mem.activity.values()].sort((a, b) => String(b.at).localeCompare(String(a.at))).slice(0, limit)
 }
 
-export default { mode, listLeads, getLead, insertLead, listProjects, createClient, createProject, updateProject, convertedLeadIds, saveDeal, listDeals, updateDeal, logActivity, listActivity }
+export default { mode, listLeads, getLead, insertLead, updateLead, listClients, listProjects, createClient, createProject, updateProject, convertedLeadIds, saveDeal, listDeals, updateDeal, logActivity, listActivity }
