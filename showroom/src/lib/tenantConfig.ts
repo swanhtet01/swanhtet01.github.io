@@ -28,6 +28,7 @@ const defaultTenant: TenantConfig = {
   siteMode: 'platform',
   navItems: [
     { label: 'Products', to: '/products' },
+    { label: 'Pricing', to: '/offers/' },
     { label: 'Demo Center', to: '/demo-center' },
     { label: 'How it works', to: '/platform' },
     { label: 'Case Study', to: '/clients/yangon-tyre' },

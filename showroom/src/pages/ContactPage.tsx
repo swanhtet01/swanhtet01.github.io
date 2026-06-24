@@ -44,11 +44,19 @@ type LeadFormState = {
   goal: string
 }
 
+const PACKAGE_LABELS: Record<string, string> = {
+  'back-office-workflow-desk': 'Custom Build — Back-Office & Workflow',
+  'industrial-plant-os': 'Factory & Operations App',
+}
+
 function requestedPackageFromQuery() {
   if (typeof window === 'undefined') {
     return ''
   }
-  return new URLSearchParams(window.location.search).get('package')?.trim() ?? ''
+  const raw = new URLSearchParams(window.location.search).get('package')?.trim()
+    ?? new URLSearchParams(window.location.search).get('tool')?.trim()
+    ?? ''
+  return PACKAGE_LABELS[raw] ?? raw
 }
 
 function initialFormFromQuery(): LeadFormState {
