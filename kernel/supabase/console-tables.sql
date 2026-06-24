@@ -44,11 +44,30 @@ create table if not exists public.supermega_console_activity (
   ref      text
 );
 
+-- AI gateway tables (token tracking + response cache)
+create table if not exists public.supermega_token_ledger (
+  tenant_id  text not null,
+  window     text not null,
+  in_tokens  bigint default 0,
+  out_tokens bigint default 0,
+  calls      bigint default 0,
+  updated_at timestamptz default now(),
+  primary key (tenant_id, window)
+);
+
+create table if not exists public.supermega_ai_cache (
+  cache_key  text primary key,
+  payload    jsonb not null,
+  created_at timestamptz default now()
+);
+
 -- RLS: ops-only, no public access needed
 alter table public.supermega_console_clients  enable row level security;
 alter table public.supermega_console_projects enable row level security;
 alter table public.supermega_console_deals    enable row level security;
 alter table public.supermega_console_activity enable row level security;
+alter table public.supermega_token_ledger     enable row level security;
+alter table public.supermega_ai_cache         enable row level security;
 
 -- Reload PostgREST schema cache
 notify pgrst, 'reload schema';

@@ -48,12 +48,14 @@ async function ensurePgTables() {
     create table if not exists supermega_console_projects (id text primary key, client_id text, lead_id text, offer text, scope_summary text, price_mmk bigint, deposit_status text default 'unpaid', deposit_method text, status text default 'scoping', live_url text, created_at timestamptz default now());
     create table if not exists supermega_console_deals (id text primary key, lead_id text, project_id text, packet jsonb, status text default 'draft', created_at timestamptz default now());
     create table if not exists supermega_console_activity (id text primary key, at timestamptz default now(), kind text, summary text, ref text);
+    create table if not exists supermega_token_ledger (tenant_id text not null, window text not null, in_tokens bigint default 0, out_tokens bigint default 0, calls bigint default 0, updated_at timestamptz default now(), primary key (tenant_id, window));
+    create table if not exists supermega_ai_cache (cache_key text primary key, payload jsonb not null, created_at timestamptz default now());
   `).then(() => true)
   return tablesReady
 }
 
 // ---------- in-memory fallback ----------
-const mem = { lead: new Map(), client: new Map(), project: new Map(), deal: new Map(), activity: new Map() }
+const mem = { lead: new Map(), client: new Map(), project: new Map(), deal: new Map(), activity: new Map(), tokenLedger: new Map(), aiCache: new Map() }
 const memSort = (rows) => rows.sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))
 
 // ---------- leads (real supermega_leads) ----------
@@ -159,4 +161,84 @@ export async function listActivity(limit = 30) {
   return [...mem.activity.values()].sort((a, b) => String(b.at).localeCompare(String(a.at))).slice(0, limit)
 }
 
-export default { mode, listLeads, getLead, insertLead, updateLead, listClients, listProjects, createClient, createProject, updateProject, convertedLeadIds, saveDeal, listDeals, updateDeal, logActivity, listActivity }
+// ---------- per-tenant token ledger (monthly window) + AI response cache ----------
+// Backs gateway.mjs so per-client spend caps + caching survive cold starts / multiple instances.
+// memory mode keeps the same shape so nothing breaks locally without credentials.
+
+// Read one tenant's usage for a window (e.g. '2026-06'). Always returns a row shape.
+export async function getTokenUsage(tenantId, window) {
+  const empty = { tenant_id: tenantId, window, in_tokens: 0, out_tokens: 0, calls: 0 }
+  if (!tenantId || !window) return empty
+  if (mode === 'supabase') {
+    const r = await rest('GET', `supermega_token_ledger?tenant_id=eq.${encodeURIComponent(tenantId)}&window=eq.${encodeURIComponent(window)}&limit=1`)
+    return r[0] ? { ...empty, ...r[0] } : empty
+  }
+  if (mode === 'postgres') {
+    await ensurePgTables()
+    const r = await q('select tenant_id, window, in_tokens, out_tokens, calls from supermega_token_ledger where tenant_id=$1 and window=$2 limit 1', [tenantId, window])
+    return r[0] ? { ...empty, ...r[0] } : empty
+  }
+  return mem.tokenLedger.get(`${tenantId}::${window}`) || empty
+}
+
+// Atomically add spend to a tenant's window and return the new running totals.
+export async function addTokenUsage(tenantId, window, { inTokens = 0, outTokens = 0, calls = 1 } = {}) {
+  if (!tenantId || !window) return null
+  if (mode === 'supabase') {
+    // PostgREST has no native UPSERT-with-increment; read-modify-write (best-effort, monthly granularity).
+    const cur = await getTokenUsage(tenantId, window)
+    const row = { tenant_id: tenantId, window, in_tokens: Number(cur.in_tokens) + inTokens, out_tokens: Number(cur.out_tokens) + outTokens, calls: Number(cur.calls) + calls, updated_at: new Date().toISOString() }
+    const r = await rest('POST', 'supermega_token_ledger?on_conflict=tenant_id,window', row).catch(async () => rest('PATCH', `supermega_token_ledger?tenant_id=eq.${encodeURIComponent(tenantId)}&window=eq.${encodeURIComponent(window)}`, row))
+    return r?.[0] ? r[0] : row
+  }
+  if (mode === 'postgres') {
+    await ensurePgTables()
+    const r = await q(
+      `insert into supermega_token_ledger (tenant_id, window, in_tokens, out_tokens, calls, updated_at)
+       values ($1,$2,$3,$4,$5, now())
+       on conflict (tenant_id, window) do update set
+         in_tokens = supermega_token_ledger.in_tokens + excluded.in_tokens,
+         out_tokens = supermega_token_ledger.out_tokens + excluded.out_tokens,
+         calls = supermega_token_ledger.calls + excluded.calls,
+         updated_at = now()
+       returning tenant_id, window, in_tokens, out_tokens, calls`,
+      [tenantId, window, inTokens, outTokens, calls],
+    )
+    return r[0] || null
+  }
+  const key = `${tenantId}::${window}`
+  const cur = mem.tokenLedger.get(key) || { tenant_id: tenantId, window, in_tokens: 0, out_tokens: 0, calls: 0 }
+  const next = { ...cur, in_tokens: cur.in_tokens + inTokens, out_tokens: cur.out_tokens + outTokens, calls: cur.calls + calls }
+  mem.tokenLedger.set(key, next)
+  return next
+}
+
+// AI response cache (optional). Returns the stored payload or null.
+export async function getCachedResponse(cacheKey) {
+  if (!cacheKey) return null
+  if (mode === 'supabase') {
+    const r = await rest('GET', `supermega_ai_cache?cache_key=eq.${encodeURIComponent(cacheKey)}&select=payload&limit=1`)
+    return r[0]?.payload || null
+  }
+  if (mode === 'postgres') {
+    await ensurePgTables()
+    const r = await q('select payload from supermega_ai_cache where cache_key=$1 limit 1', [cacheKey])
+    return r[0]?.payload || null
+  }
+  return mem.aiCache.get(cacheKey) || null
+}
+
+export async function putCachedResponse(cacheKey, payload) {
+  if (!cacheKey) return null
+  if (mode === 'supabase') {
+    return rest('POST', 'supermega_ai_cache?on_conflict=cache_key', { cache_key: cacheKey, payload }).catch(() => null)
+  }
+  if (mode === 'postgres') {
+    await ensurePgTables()
+    return q('insert into supermega_ai_cache (cache_key, payload) values ($1,$2) on conflict (cache_key) do update set payload = excluded.payload', [cacheKey, JSON.stringify(payload)]).then(() => true).catch(() => null)
+  }
+  mem.aiCache.set(cacheKey, payload)
+  return true
+}
+
+export default { mode, listLeads, getLead, insertLead, updateLead, listClients, listProjects, createClient, createProject, updateProject, convertedLeadIds, saveDeal, listDeals, updateDeal, logActivity, listActivity, getTokenUsage, addTokenUsage, getCachedResponse, putCachedResponse }
