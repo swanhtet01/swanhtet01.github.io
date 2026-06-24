@@ -174,15 +174,20 @@ module.exports = async function handler(req, res) {
       since24h: isoHoursAgo(24),
       since7d: isoHoursAgo(24 * 7),
     })
+    // Fall through to Supabase if Postgres quota exceeded or table missing
     if (snapshot.status !== 'ready') {
-      json(res, 200, {
-        status: 'blocked',
-        reason: 'vercel_postgres_query_failed',
-        detail: snapshot,
-        pc_dependency: 'none',
-      })
-      return
-    }
+      const isQuotaOrMissing = /quota|does not exist|relation/i.test(JSON.stringify(snapshot))
+      if (!isQuotaOrMissing) {
+        json(res, 200, {
+          status: 'blocked',
+          reason: 'vercel_postgres_query_failed',
+          detail: snapshot,
+          pc_dependency: 'none',
+        })
+        return
+      }
+      // Fall through to Supabase path below
+    } else {
 
     const recentRuns = snapshot.latestRuns.map(safeRun)
     const recentLeads = snapshot.latestLeads.map(safeLead)
@@ -223,7 +228,8 @@ module.exports = async function handler(req, res) {
       next_action: nextAction,
     })
     return
-  }
+  } // end else (postgres success)
+  } // end if (postgresConfigured)
 
   if (!config.url || !config.serviceRoleKey) {
     json(res, 200, {
