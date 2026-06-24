@@ -1,4 +1,4 @@
-import { cp, mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
+﻿import { cp, mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { dirname, relative, resolve } from 'node:path'
 
 const root = process.cwd()
@@ -2746,7 +2746,8 @@ const publicCardHtml = `<!doctype html>
       <section class="content">
         <a class="brand" href="/" aria-label="SUPERMEGA.dev home"><span class="mark"><img src="/favicon.svg?v=supermega-atelier-20260623" alt="" /></span><span>SUPERMEGA.dev</span></a>
         <h1>Swan Htet</h1>
-        <p class="role">Founder</p>
+        <p class="role">Founder, SUPERMEGA.dev</p>
+        <p class="pitch">I build custom business software for Myanmar shops, factories, and restaurants — priced in MMK, yours to keep.</p>
         <div class="details">
           <a href="mailto:swanhtet@supermega.dev">swanhtet@supermega.dev</a>
           <a href="tel:+9595000721">+95 9 500 0721</a>
@@ -2911,6 +2912,7 @@ const publicContactHtml = `<!doctype html>
             <label>Work email<input autocomplete="email" name="email" required type="email" /></label>
             <label>Phone / Viber<input autocomplete="tel" name="phone" type="tel" /></label>
             <label>Company<input autocomplete="organization" name="company" required /></label>
+            <label>Type of business<select name="business_type"><option value="">Select…</option><option>Shop / Retail</option><option>Restaurant / Café</option><option>Factory / Plant</option><option>Trading / Import-Export</option><option>Professional Services</option><option>Other</option></select></label>
             <label>Paste a link or describe it<textarea name="goal" placeholder="Example: sales list needs cleanup, invoices and photos for one issue, or weekly report from emails." required></textarea></label>
             <input autocomplete="off" name="website" style="display:none" tabindex="-1" />
             <button type="submit">Send to Swan</button>
@@ -3925,7 +3927,7 @@ ${unicornHeader}
 
         <div class="proof-strip section">
           <a href="https://pos.supermega.dev/" target="_blank" rel="noopener noreferrer"><div><strong>Live now</strong><span>Try DeskPOS free — no signup</span></div></a>
-          <div><strong>From $600</strong><span>Paid once — not a subscription</span></div>
+          <div><strong>မှ 2,580,000 MMK</strong><span>တစ်ကြိမ်ပေး — subscription မဟုတ်</span></div>
           <div><strong>You own it</strong><span>No per-seat fees, ever</span></div>
           <div><strong>Offline-ready</strong><span>Keeps working when the internet drops</span></div>
         </div>
@@ -3978,10 +3980,11 @@ ${unicornHeader}
         <section class="section">
           <h2>Why custom beats SaaS</h2>
           <div class="uvp-grid">
-            <div class="uvp-card"><strong>You own it.</strong><span>No per-seat tax that grows when you hire. No vendor that can switch it off. The software is yours to keep.</span></div>
-            <div class="uvp-card"><strong>The exact thing.</strong><span>Built around how you actually work — not the average workflow some other company built a template for.</span></div>
-            <div class="uvp-card"><strong>AI-native.</strong><span>AI is the substrate: every build can read messy real inputs, draft the next step, and explain itself. Not a chatbot bolted on.</span></div>
-            <div class="uvp-card"><strong>Built for Myanmar.</strong><span>MMK, KBZPay / MMQR, MY/EN bilingual, works when the power and the internet don't. Made here, for here.</span></div>
+            <div class="uvp-card"><strong>You own it.</strong><span>No per-seat bill that compounds when you hire. No vendor that can switch it off. Yours forever.</span></div>
+            <div class="uvp-card"><strong>The exact thing.</strong><span>Built around how you actually work — your process, your approval flow, your team's language. Not the average template.</span></div>
+            <div class="uvp-card"><strong>Your data is already there.</strong><span>The system reads your Viber threads, Gmail chains, and scanned invoices. No one re-keys anything into a form.</span></div>
+            <div class="uvp-card"><strong>Built for Myanmar.</strong><span>KBZPay, MMQR, Wave Money, MMK pricing, MY/EN bilingual, works when the internet doesn't. Made here, for here.</span></div>
+            <div class="uvp-card"><strong>Costs less than SaaS.</strong><span>Less than a year of Odoo or QuickBooks seats for a 5-person team — and you own it outright, forever.</span></div>
           </div>
         </section>
 
@@ -4002,8 +4005,11 @@ ${unicornHeader}
             </div>
             <div>
               <div class="eyebrow" style="color:var(--clay,#c2603f)">Who builds this</div>
-              <h2 style="margin-top:10px">I built SUPERMEGA because I kept watching sharp business owners lose hours every day to spreadsheets and manual workarounds — fixable problems that nobody had fixed yet. Every build starts with one question: what's the single thing costing you the most time this week? That's where we start, and we ship fast.</h2>
-              <p style="margin-top:16px;color:var(--muted);font-size:15px;line-height:1.6">Based in Yangon. Reach me directly: <a href="mailto:swanhtet@supermega.dev" style="color:inherit">swanhtet@supermega.dev</a></p>
+              <h2 style="margin-top:10px;font-size:clamp(18px,2.4vw,26px);line-height:1.45">Hi, I'm Swan Htet — a software engineer from Yangon.</h2>
+              <p style="margin-top:14px;font-size:16px;line-height:1.7;color:var(--ink)">I started SUPERMEGA after watching too many good businesses run on three Excel files, a shared Drive folder, and a Viber group chat. The owners were sharp — the tools just weren't built for them. Overseas SaaS is expensive, locked into USD, and built for workflows that don't match how a Yangon factory, trading company, or shop actually runs.</p>
+              <p style="margin-top:12px;font-size:16px;line-height:1.7;color:var(--ink)">So I build the specific thing each business needs — connected to the data they already have, priced in MMK, and shipped to a live URL within weeks. Not a template. Not a subscription to something 80% irrelevant. The exact tool, owned by you.</p>
+              <p style="margin-top:12px;font-size:15px;line-height:1.6;color:var(--muted)">Every project starts with one call where we agree exactly what ships. If you have a recurring problem that costs you real hours every week, that's what we fix first.</p>
+              <p style="margin-top:20px;font-size:14px;color:var(--muted)">Based in Yangon &mdash; <a href="mailto:swanhtet@supermega.dev" style="color:var(--clay,#c2603f);font-weight:500">swanhtet@supermega.dev</a> &mdash; <a href="https://www.linkedin.com/in/theswanhtet" style="color:var(--clay,#c2603f);font-weight:500" rel="noreferrer" target="_blank">LinkedIn</a></p>
             </div>
           </div>
         </section>
@@ -4622,6 +4628,7 @@ ${unicornHeader}
               <label>Work email<input autocomplete="email" name="email" required type="email" /></label>
               <label class="optional-phone">Phone / Viber<input autocomplete="tel" name="phone" type="tel" /></label>
               <label>Company<input autocomplete="organization" name="company" required /></label>
+              <label>Type of business<select name="business_type"><option value="">Select…</option><option>Shop / Retail</option><option>Restaurant / Café</option><option>Factory / Plant</option><option>Trading / Import-Export</option><option>Professional Services</option><option>Other</option></select></label>
               <div class="wide selected-path" data-selected-path hidden><small>Selected</small><strong>General enquiry</strong><span class="selected-price" data-selected-price hidden></span><span class="selected-next" data-selected-next hidden></span></div>
               <label class="wide file-label">Upload files<input data-file-picker multiple name="source_files" type="file" /><span class="upload-list" data-upload-list></span></label>
               <label class="wide">Source link or system<input name="source_links" placeholder="Drive folder, sheet, email thread, POS export, meter reading, device, or note" /></label>
@@ -6102,34 +6109,34 @@ for (const detailDoc of productDetailDocs) {
   await writeFile(resolve(staticDir, 'products', detailDoc.slug, 'index.html'), normalizePublicProductNames(buildProductDetailHtml(detailDoc)), 'utf8')
 }
 
-// Offers / pricing — the revenue surface. Public "from" anchors (USD primary, MMK derived at the ~4,800 market rate).
+// Offers / pricing — the revenue surface. MMK primary at canonical 4,300 MMK/USD rate.
 const publicOffers = [
   {
-    slug: 'tool-week', name: 'Tool in a week', usd: '600', mmk: '~2,900,000 MMK',
+    slug: 'tool-week', name: 'Tool in a week', mmkDisplay: '2,580,000', usdNote: '~$600',
     who: 'You have one sharp, specific job to fix.',
     gets: ['One focused tool, fixed scope', 'Live at a real URL in days, not months', 'Yours to keep — no per-seat fee', 'One round of revisions included'],
     cta: 'Start this',
   },
   {
-    slug: 'dashboard', name: 'Custom dashboard / internal tool', usd: '1,500', mmk: '~7,200,000 MMK',
+    slug: 'dashboard', name: 'Custom dashboard / internal tool', mmkDisplay: '6,450,000', usdNote: '~$1,500',
     who: 'Your numbers live across five spreadsheets and nobody trusts them.',
     gets: ['One screen that updates itself from your real data', 'Built around how you actually work', 'Bilingual MY/EN, MMK-native', 'Export to clean CSV anytime'],
     cta: 'Scope my dashboard',
   },
   {
-    slug: 'ai-agent', name: 'AI agent / automation', usd: '2,500', mmk: '~12,000,000 MMK',
+    slug: 'ai-agent', name: 'AI agent / automation', mmkDisplay: '10,750,000', usdNote: '~$2,500',
     who: 'The same back-office task eats hours every single day.',
     gets: ['An agent that reads your real inputs and drafts the work', 'Approval gate on anything that sends, pays, or changes the books', 'A run ledger — nothing happens silently', 'Weekly report on time and money saved'],
     cta: 'Describe the job',
   },
   {
-    slug: 'design-ship', name: 'Design + ship system', usd: '6,000', mmk: '~29,000,000 MMK', flagship: true,
+    slug: 'design-ship', name: 'Design + ship system', mmkDisplay: '25,800,000', usdNote: '~$6,000', flagship: true,
     who: 'You want it to look premium and actually run — one build, end to end.',
     gets: ['Brand and UI designed on our system', 'A full working system, live and in use', 'Local payments, offline-ready, bilingual', 'Hands over as a running thing, not a pile of files'],
     cta: 'Book a build',
   },
   {
-    slug: 'care-plan', name: 'Care plan', usd: '300', per: '/mo', mmk: '~1,440,000 MMK / mo',
+    slug: 'care-plan', name: 'Care plan', mmkDisplay: '3,096,000', usdNote: '~$720', per: '/yr',
     who: 'Keep what we built running, fresh, and improving.',
     gets: ['Hosting, monitoring, and small changes', 'One shipped improvement every quarter', 'Priority on fixes', 'Sold after a build — never "hours per month"'],
     cta: 'Add a care plan',
@@ -6203,7 +6210,7 @@ ${unicornHeader}
             <h1>Custom software at SaaS prices</h1>
             <p>SaaS sells you the average and rents it back forever, per seat. We build you the exact thing — AI-native, made for how you actually work, and yours to keep. Clear starting prices below; the final quote comes after one short call.</p>
             <div class="cta">
-              <a class="btn primary" href="/contact/?package=dashboard">Book a build</a>
+              <a class="btn primary" href="/contact/?package=build">Get a quote</a>
               <a class="btn secondary" href="/demo/">See live demos</a>
             </div>
           </div>
@@ -6225,14 +6232,14 @@ ${unicornHeader}
             ${publicOffers.map((o) => `<div class="of-card${o.flagship ? ' flagship' : ''}">${o.flagship ? '<span class="of-tag">Most complete</span>' : ''}
               <h3>${o.name}</h3>
               <p class="of-who">${o.who}</p>
-              <div class="of-price"><span class="from">from</span><b>$${o.usd}</b>${o.per ? `<span class="per">${o.per}</span>` : ''}</div>
-              <div class="of-mmk">${o.mmk}</div>
+              <div class="of-price"><span class="from">from</span><b>${o.mmkDisplay} MMK</b>${o.per ? `<span class="per">${o.per}</span>` : ''}</div>
+              <div class="of-mmk">${o.usdNote}</div>
               <ul class="of-gets">${o.gets.map((g) => `<li>${g}</li>`).join('')}</ul>
               <div class="of-spacer"></div>
               <a class="btn ${o.flagship ? 'primary' : 'secondary'}" href="/contact/?package=${o.slug}">${o.cta}</a>
             </div>`).join('')}
           </div>
-          <p class="of-note">All prices are starting "from" anchors in USD, with the MMK equivalent at the market rate. Final scope and price are agreed on a short call. Fixed-scope projects with clear revision caps; 50% deposit to start (KBZPay / MMQR / cash, or card for international).</p>
+          <p class="of-note">Starting "from" prices in MMK at the current market rate (4,300 MMK/USD). Final scope and price confirmed on a short call. Fixed-scope with clear revision caps; 50% deposit to start via KBZPay, MMQR, cash, or card.</p>
         </section>
 
         <section class="section">
@@ -6257,7 +6264,7 @@ ${unicornHeader}
         <section class="section">
           <div class="final">
             <div><h2>Tell us the one thing to fix first.</h2></div>
-            <a class="btn primary" href="/contact/?package=dashboard">Book a build</a>
+            <a class="btn primary" href="/contact/?package=build">Get a quote</a>
           </div>
         </section>
       </main>
