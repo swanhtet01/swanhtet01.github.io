@@ -15,6 +15,7 @@ import './data-gmail.mjs'
 import './data-calendar.mjs'
 import './payment-stripe.mjs'
 import './payment-mmqr.mjs'
+import './messaging-resend.mjs'
 
 export * from './registry.mjs'
 export default registry

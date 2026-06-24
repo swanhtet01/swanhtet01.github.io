@@ -130,7 +130,7 @@ export async function handle({ method, path, query = {}, body = {}, headers = {}
         onDealSaved(body.packet, deal.id).catch(() => {})
         return ok({ ok: true, deal })
       }
-      if (method === 'PATCH' && seg[1]) {
+      if (method === 'PATCH' && seg[1] && !seg[2]) {
         const patch = {}
         if (body.status && DEAL_STATUSES.includes(body.status)) patch.status = body.status
         const deal = await store.updateDeal(seg[1], patch)
@@ -138,6 +138,41 @@ export async function handle({ method, path, query = {}, body = {}, headers = {}
         if (patch.status === 'sent') log('outreach', `Outreach marked sent`, deal.id)
         if (patch.status === 'approved') log('outreach', `Outreach approved`, deal.id)
         return ok({ ok: true, deal })
+      }
+      // POST /api/deals/:id/send — fires the approved outreach email via Resend.
+      // Gate: deal.status must be 'approved' — enforces draft→approve→send discipline.
+      if (method === 'POST' && seg[1] && seg[2] === 'send') {
+        const rows = await store.listDeals({ id: seg[1] })
+        const deal = rows[0] || null
+        if (!deal) return bad(404, 'deal_not_found')
+        if (deal.status !== 'approved') return bad(400, 'deal_not_approved')
+        const resend = connectors.get('messaging-resend')
+        if (!resend || !resend.configured()) return bad(503, 'resend_not_configured')
+        // Resolve recipient: explicit body.to or lead contact if it contains '@'.
+        let to = String(body.to || '').trim()
+        if (!to && deal.lead_id) {
+          const lead = await store.getLead(deal.lead_id)
+          const contact = String(lead?.contact || '')
+          if (contact.includes('@')) to = contact
+        }
+        if (!to) return bad(400, 'no_recipient_email')
+        const p = deal.packet || {}
+        const subject = p.headline ? `Proposal: ${String(p.headline).slice(0, 160)}` : 'A custom software proposal from SuperMega'
+        const modulesHtml = (p.modules || []).map((m) => `<li><strong>${m.name}</strong> — ${m.why}</li>`).join('')
+        const html = [
+          '<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;color:#1a1a1a;line-height:1.6">',
+          p.outreach_en ? `<p>${p.outreach_en.replace(/\n/g, '<br>')}</p>` : '',
+          modulesHtml ? `<p><strong>What we'd build for you:</strong></p><ul>${modulesHtml}</ul>` : '',
+          p.pricing?.build_fee_mmk ? `<p><strong>Build fee:</strong> ${p.pricing.build_fee_mmk}${p.pricing.pro_mrr_mmk ? ` &middot; Care: ${p.pricing.pro_mrr_mmk}/mo` : ''}</p>` : '',
+          p.first_proof ? `<p><strong>First result you'd see:</strong> ${p.first_proof}</p>` : '',
+          '<p style="margin-top:24px">— Swan Htet, SuperMega<br><a href="https://supermega.dev">supermega.dev</a></p>',
+          '</div>',
+        ].filter(Boolean).join('\n')
+        const text = p.outreach_en || p.headline || ''
+        const sent = await resend.send({ to, subject, html, text })
+        const updated = await store.updateDeal(seg[1], { status: 'sent' })
+        log('outreach', `Email sent to ${to.slice(0, 80)}: "${String(p.headline || '').slice(0, 60)}"`, deal.id)
+        return ok({ ok: true, email_id: sent.id, to, deal: updated })
       }
     }
 
