@@ -1555,3 +1555,214 @@ export async function updateApprovalEntryStatus(
     body: JSON.stringify(payload),
   })
 }
+
+// ─── YTF result types ──────────────────────────────────────────────────────────
+// These types describe API responses from the YTF data pipeline endpoints.
+
+export type YtfPipelineStatsResult = {
+  status?: string
+  database?: { configured?: boolean; external?: boolean; mode?: string; scheme?: string; env_source?: string; next_step?: string }
+  source_records?: {
+    count?: number
+    latest_modified_time?: string
+    by_domain?: Record<string, number>
+    by_plant?: Record<string, number>
+    kpi_candidate_count?: number
+    rag_candidate_count?: number
+    shortcut_count?: number
+    drive_shortcut_count?: number
+    windows_shortcut_count?: number
+    resolved_shortcut_target_count?: number
+    unresolved_shortcut_count?: number
+    unresolved_drive_shortcut_count?: number
+    shortcut_backed_record_count?: number
+    agentic_extraction?: Record<string, unknown>
+  }
+  source_changes?: {
+    event_count?: number
+    recent_event_count?: number
+    promoted_task_count?: number
+    latest_promoted_at?: string
+    summary?: { by_plant?: Record<string, number> }
+    task_promotion?: { status?: string; review_task_count?: number; promoted_at?: string }
+  }
+  workbooks?: { profiled_count?: number; selected_count?: number; metric_candidate_count?: number; blocked_count?: number }
+  knowledge?: { chunk_count?: number; pgvector_ready?: boolean }
+  communications?: {
+    gmail_ready_count?: number
+    gmail_source_count?: number
+    bot_ready_count?: number
+    bot_source_count?: number
+    manual_message_count?: number
+  }
+  refresh_loop?: { status?: string; latest_at?: string; run_count?: number }
+}
+
+export type YtfOperatingMetricsResult = {
+  status?: string
+  workspace_id?: string
+  generated_at?: string
+  summary?: {
+    extracted_metric_value_count?: number
+    official_kpi_count?: number
+    lane_count?: number
+    plant_split?: Record<string, number>
+  }
+  top_rows?: Array<Record<string, unknown>>
+  lanes?: Array<Record<string, unknown>>
+  story?: {
+    status?: string
+    headline?: string
+    management_brief?: string
+    next_actions?: string[]
+    size_breakdowns?: {
+      coverage?: Record<string, number>
+      production_by_size?: Array<Record<string, unknown>>
+      quality_claims_by_size?: Array<Record<string, unknown>>
+      stock_by_size?: Array<Record<string, unknown>>
+      procurement_by_size?: Array<Record<string, unknown>>
+      procurement_material_orders?: Array<Record<string, unknown>>
+      raw_material_orders?: Array<Record<string, unknown>>
+      energy_by_plant?: Array<Record<string, unknown>>
+      size_attention?: Array<Record<string, unknown>>
+      missing_inputs?: Array<Record<string, unknown>>
+    }
+    factory_system?: {
+      status?: string
+      overview?: Record<string, unknown>
+      lanes?: Array<Record<string, unknown>>
+    }
+  }
+}
+
+export type YtfDashboardSummaryResult = {
+  status?: string
+  mode?: string
+  generated_at?: string
+  pipeline_stats?: YtfPipelineStatsResult
+  knowledge_status?: { summary?: { chunk_count?: number } }
+  gmail_status?: { summary?: { token_status?: string }; gmail?: { status?: string } }
+  bot_pipeline?: { summary?: { ready_count?: number; bot_source_count?: number } }
+  kpi_definitions?: { approved_count?: number; rows?: unknown[] }
+  story?: Record<string, unknown>
+}
+
+export async function getYtfDashboardSummary(params?: { compact?: boolean }) {
+  return workspaceFetch<YtfDashboardSummaryResult>('/api/ytf/dashboard-summary' + (params?.compact ? '?compact=1' : ''))
+    .catch(() => null)
+}
+
+const SESSION_CACHE_KEY = 'sm_workspace_session_v1'
+
+export function loadCachedWorkspaceSession(): WorkspaceSessionPayload | null {
+  try {
+    const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(SESSION_CACHE_KEY) : null
+    if (!raw) return null
+    return JSON.parse(raw) as WorkspaceSessionPayload
+  } catch {
+    return null
+  }
+}
+
+// ─── YTF Owner Brief types ─────────────────────────────────────────────────────
+
+type YtfDecisionItem = {
+  id?: string
+  title?: string
+  route?: string
+  owner?: string
+  urgency?: string
+  decision?: string
+  why?: string
+}
+
+type YtfChangeItem = {
+  id?: string
+  title?: string
+  route?: string
+  owner?: string
+  priority?: string
+  domain?: string
+  next_action?: string
+  signal?: string
+}
+
+type YtfChunk = {
+  chunk_id?: string
+  text?: string
+  route?: string
+}
+
+export type YtfOwnerBriefResult = {
+  readiness?: number
+  headline?: string
+  synced_at?: string
+  today?: Record<string, unknown>
+  evaluation?: { database?: { external?: boolean; mode?: string } }
+  rag?: {
+    answer?: string
+    rag?: {
+      summary?: Record<string, unknown>
+      semantic?: {
+        matched_chunk_count?: number
+        model?: string
+        next_upgrade?: string
+        top_chunks?: YtfChunk[]
+      }
+      chunks?: YtfChunk[]
+    }
+  }
+  next_decisions?: YtfDecisionItem[]
+  top_changes?: YtfChangeItem[]
+  operating_rhythm?: string[]
+}
+
+export type YtfActionFeedbackResult = {
+  status?: string
+  task_id?: string
+  task_status?: string
+  next_step?: string
+}
+
+export async function getYtfOwnerBrief() {
+  return workspaceFetch<YtfOwnerBriefResult>('/api/ytf/owner-brief')
+}
+
+export async function syncYtfOwnerBrief() {
+  return workspaceFetch<YtfOwnerBriefResult>('/api/ytf/owner-brief/sync', { method: 'POST' })
+}
+
+export async function getYtfActionFeedbackLatest() {
+  return workspaceFetch<YtfActionFeedbackResult>('/api/ytf/action-feedback/latest')
+}
+
+export async function writebackYtfOwnerDecisions() {
+  return workspaceFetch<{
+    workspace_tasks?: { saved_count?: number }
+    actions?: { saved_count?: number }
+  }>('/api/ytf/owner-brief/writeback', { method: 'POST' })
+}
+
+// ─── YTF pipeline/knowledge types ─────────────────────────────────────────────
+
+export type YtfKnowledgeStatusResult = {
+  status?: string
+  summary?: {
+    chunk_count?: number
+    entity_count?: number
+    relation_count?: number
+    retrieval_trace_count?: number
+    token_status?: string
+    model?: string
+    pgvector_ready?: boolean
+  }
+  pgvector_ready?: boolean
+}
+
+export async function getYtfPipelineStats() {
+  return workspaceFetch<YtfPipelineStatsResult>('/api/ytf/pipeline-stats')
+}
+
+export async function getYtfKnowledgeStatus() {
+  return workspaceFetch<YtfKnowledgeStatusResult>('/api/ytf/knowledge-status')
+}

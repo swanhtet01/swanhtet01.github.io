@@ -800,7 +800,7 @@ const publicFreeScanHtml = `<!doctype html>
         <a class="brand" href="/" aria-label="SUPERMEGA.dev home"><span class="mark"><img src="/favicon.svg" alt="" /></span><span>SUPERMEGA.dev</span></a>
         <nav class="nav" aria-label="Primary">
           <a class="btn secondary-nav" href="/products/">Examples</a>
-          <a class="btn primary" href="/start/">Start sprint</a>
+          <a class="btn primary" href="/contact/">Start sprint</a>
         </nav>
       </header>
       <main>
@@ -822,7 +822,7 @@ const publicFreeScanHtml = `<!doctype html>
                 <label>Monthly cost USD<input name="cost" inputmode="decimal" value="300" /></label>
                 <label>Hours wasted weekly<input name="hours" inputmode="decimal" value="8" /></label>
               </div>
-              <label>Where the data lives<textarea name="sources" placeholder="Google Drive folder, Gmail inbox, exported CSV, PDFs, screenshots, WhatsApp notes"></textarea></label>
+              <label>Where the data lives<textarea name="sources" placeholder="Google Drive folder, Gmail inbox, exported CSV, PDFs, screenshots, Viber notes"></textarea></label>
               <button type="submit">Generate replacement brief</button>
             </form>
           </aside>
@@ -876,7 +876,7 @@ const publicFreeScanHtml = `<!doctype html>
             '<div class="row"><b>2</b><div><strong>Use real source evidence.</strong><small>Start from: ' + sources + '.</small></div><span class="pill">Source</span></div>' +
             '<div class="row"><b>3</b><div><strong>Add one reviewed action.</strong><small>Recommended first prepared loop: ' + aiAction + ' with human approval before writeback.</small></div><span class="pill">Review</span></div>' +
           '</div>' +
-          '<div class="cta"><a class="btn primary" href="/contact/?source=free-workflow-scan&workflow=' + encodeURIComponent(workflow) + '">Send this scan</a><a class="btn" href="/start/?workflow=' + encodeURIComponent(workflow) + '">Start sprint</a></div>';
+          '<div class="cta"><a class="btn primary" href="/contact/?source=free-workflow-scan&workflow=' + encodeURIComponent(workflow) + '">Send this scan</a><a class="btn" href="/contact/?workflow=' + encodeURIComponent(workflow) + '">Start sprint</a></div>';
         result.scrollIntoView({ behavior: 'smooth', block: 'start' });
       });
     </script>
@@ -982,7 +982,7 @@ const publicWorkflowBlueprintHtml = `<!doctype html>
                 <label>Task to turn into a tool<input name="workflow" required value="Customer follow-up desk" placeholder="Daily cash close, file cleanup, weekly owner report" /></label>
                 <label>Business type<input name="business" value="Small business" placeholder="Restaurant, factory, clinic, shop, service company" /></label>
                 <label>Main user<input name="role" value="Owner / manager" placeholder="Owner, cashier, plant manager, admin, accountant" /></label>
-                <label>Where it happens now<select name="tool"><option>Spreadsheet</option><option>Email or inbox</option><option>Drive folder and PDFs</option><option>WhatsApp / Messenger</option><option>POS or app export</option><option>Paper or photos</option></select></label>
+                <label>Where it happens now<select name="tool"><option>Spreadsheet</option><option>Email or inbox</option><option>Drive folder and PDFs</option><option>Viber / Messenger</option><option>POS or app export</option><option>Paper or photos</option></select></label>
                 <label>Best sample to share<select name="source"><option>Spreadsheet export</option><option>PDF, screenshot, or photo</option><option>Email or inbox</option><option>Drive folder</option><option>POS or app export</option><option>Meeting notes or transcript</option></select></label>
                 <label>Approval level<select name="risk"><option>Normal: owner reviews first</option><option>Low: read-only summary is enough</option><option>High: money, customer, or compliance sensitive</option></select></label>
               </div>
@@ -1194,7 +1194,7 @@ Next step: copy this packet or share the blueprint link with SUPERMEGA.</pre>
             '<label>Work email<input name="email" required type="email" autocomplete="email" placeholder="you@company.com" /></label>' +
             '<label>Company<input name="company" required autocomplete="organization" placeholder="Company" /></label>' +
           '</div>' +
-          '<label>Phone or WhatsApp, optional<input name="phone" autocomplete="tel" placeholder="+95..." /></label>' +
+          '<label>Phone or Viber, optional<input name="phone" autocomplete="tel" placeholder="+95..." /></label>' +
           '<label class="honeypot">Website<input name="website" autocomplete="off" tabindex="-1" /></label>' +
           '<button type="submit">Send plan</button>' +
           '<p class="hint lead-status" data-blueprint-lead-status></p>' +
@@ -1435,7 +1435,7 @@ const publicDailyCloseCheckerHtml = `<!doctype html>
             <form data-close-form>
               <div class="grid">
                 <label>Business<input name="business" value="Store / restaurant" /></label>
-                <label>Contact<input name="contact" placeholder="Phone, WhatsApp, or email" /></label>
+                <label>Contact<input name="contact" placeholder="Phone, Viber, or email" /></label>
                 <label>Date<input name="date" type="date" /></label>
                 <label>Expected sales<input name="expected" inputmode="decimal" placeholder="0" /></label>
                 <label>Cash collected<input name="cash" inputmode="decimal" placeholder="0" /></label>
@@ -1659,7 +1659,7 @@ const publicAgentScopeBuilderHtml = `<!doctype html>
               <div class="grid">
                 <label>Workflow job<input name="job" required value="Prepare the daily owner summary" /></label>
                 <label>Business type<input name="business" value="Shop / service business" /></label>
-                <label>Main source<select name="source"><option>Gmail or inbox</option><option>Drive folder / PDFs</option><option>Spreadsheet / CSV</option><option>POS or payment export</option><option>WhatsApp / Messenger notes</option><option>Photos or screenshots</option></select></label>
+                <label>Main source<select name="source"><option>Gmail or inbox</option><option>Drive folder / PDFs</option><option>Spreadsheet / CSV</option><option>POS or payment export</option><option>Viber / Messenger notes</option><option>Photos or screenshots</option></select></label>
                 <label>Allowed action<select name="action"><option>Read and summarize</option><option>Prepare reviewable records</option><option>Draft reply or task</option><option>Route to owner</option><option>Flag mismatch</option><option>Export report</option></select></label>
                 <label>Approval gate<select name="approval"><option>Human approves before anything changes</option><option>Read-only report only</option><option>Manager approves before sending</option><option>Owner approves before payment/customer action</option></select></label>
                 <label>Output<select name="output"><option>Daily brief</option><option>Review queue</option><option>Clean table</option><option>Draft message</option><option>Exception list</option><option>Report packet</option></select></label>
@@ -1668,7 +1668,7 @@ const publicAgentScopeBuilderHtml = `<!doctype html>
               <label>What does success look like?<textarea name="success">The owner sees what changed, what is missing, who owns it, and what needs a decision today.</textarea></label>
               <div class="grid">
                 <label>Your name<input name="name" placeholder="Optional" /></label>
-                <label>Contact<input name="contact" placeholder="Phone, WhatsApp, or email" /></label>
+                <label>Contact<input name="contact" placeholder="Phone, Viber, or email" /></label>
               </div>
               <button class="primary" type="submit">Build workflow scope</button>
             </form>
@@ -2133,7 +2133,7 @@ function publicValueHtmlFromEngine(engine) {
         <a class="brand" href="/" aria-label="SUPERMEGA.dev home"><span class="mark"><img src="/favicon.svg" alt="" /></span><span>SUPERMEGA.dev</span></a>
         <nav class="nav" aria-label="Primary">
           <a class="btn secondary-nav" href="/tools/">Tools</a>
-          <a class="btn secondary-nav" href="/start/">Start</a>
+          <a class="btn secondary-nav" href="/contact/">Start</a>
           <a class="btn primary" href="/contact/?source=value">Contact</a>
         </nav>
       </header>
@@ -2344,7 +2344,7 @@ ${routeOptions}
               </div>
               <div class="pair">
                 <label>Company<input autocomplete="organization" name="company" required /></label>
-                <label>Phone / WhatsApp<input autocomplete="tel" name="phone" type="tel" /></label>
+                <label>Phone / Viber<input autocomplete="tel" name="phone" type="tel" /></label>
               </div>
               <div class="result" data-router-result>
                 <span>Selected output</span>
@@ -2909,7 +2909,7 @@ const publicContactHtml = `<!doctype html>
             <input type="hidden" name="utm_term" value="" />
             <label>Name<input autocomplete="name" name="name" required /></label>
             <label>Work email<input autocomplete="email" name="email" required type="email" /></label>
-            <label>Phone / WhatsApp<input autocomplete="tel" name="phone" type="tel" /></label>
+            <label>Phone / Viber<input autocomplete="tel" name="phone" type="tel" /></label>
             <label>Company<input autocomplete="organization" name="company" required /></label>
             <label>Paste a link or describe it<textarea name="goal" placeholder="Example: sales list needs cleanup, invoices and photos for one issue, or weekly report from emails." required></textarea></label>
             <input autocomplete="off" name="website" style="display:none" tabindex="-1" />
@@ -3367,7 +3367,6 @@ const unicornHeader = `
         <nav class="nav" aria-label="Primary">
           <button class="btn secondary theme-toggle" type="button" aria-label="Toggle dark mode" onclick="var r=document.documentElement,n=r.getAttribute('data-theme')==='dark'?'light':'dark';r.setAttribute('data-theme',n);try{localStorage.setItem('sm-theme',n)}catch(e){}"></button>
           <a class="btn secondary optional-nav" href="/#products">What we build</a>
-          <a class="btn secondary" href="/work/">Work</a>
           <a class="btn secondary" href="/demo/">Demos</a>
           <a class="btn secondary" href="/offers/">Pricing</a>
           <a class="btn primary" href="/contact/">Contact</a>
@@ -3893,6 +3892,10 @@ const unicornPublicShellHtml = `<!doctype html>
         .proof-strip > div { border-right: 0; border-bottom: 1px solid var(--line); }
         .proof-strip > div:last-child { border-bottom: 0; }
       }
+      @media (max-width: 640px) {
+        #founder > div { grid-template-columns: 1fr; }
+        #founder img { max-width: 180px; }
+      }
     </style>
   </head>
   <body>
@@ -3992,6 +3995,19 @@ ${unicornHeader}
           </div>
         </section>
 
+        <section class="section" id="founder">
+          <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2.2fr);gap:clamp(24px,5vw,60px);align-items:start">
+            <div>
+              <img src="/site/social/swan-htet.jpg" alt="Swan Htet — founder of SUPERMEGA.dev" style="width:100%;border-radius:18px;display:block;border:1px solid rgba(42,36,28,0.1)" loading="lazy" />
+            </div>
+            <div>
+              <div class="eyebrow" style="color:var(--clay,#c2603f)">Who builds this</div>
+              <h2 style="margin-top:10px">I built SUPERMEGA because I kept watching sharp business owners lose hours every day to spreadsheets and manual workarounds — fixable problems that nobody had fixed yet. Every build starts with one question: what's the single thing costing you the most time this week? That's where we start, and we ship fast.</h2>
+              <p style="margin-top:16px;color:var(--muted);font-size:15px;line-height:1.6">Based in Yangon. Reach me directly: <a href="mailto:swanhtet@supermega.dev" style="color:inherit">swanhtet@supermega.dev</a></p>
+            </div>
+          </div>
+        </section>
+
         <section class="section">
           <div class="final">
             <div><h2>Tell us the one thing to fix first.</h2></div>
@@ -4010,6 +4026,7 @@ ${unicornHeader}
           <a href="/products/">Products</a>
           <a href="/demo/">Demos</a>
           <a href="/offers/">Pricing</a>
+          <a href="/privacy/">Privacy</a>
           <a href="https://www.linkedin.com/in/theswanhtet" rel="noreferrer" target="_blank">LinkedIn</a>
         </span>
       </footer>
@@ -4208,6 +4225,7 @@ ${unicornHeader}
         <span class="footer-links">
           <a href="mailto:swanhtet@supermega.dev">swanhtet@supermega.dev</a>
           <a href="tel:+9595000721">+95 9 500 0721</a>
+          <a href="/privacy/">Privacy</a>
           <a href="https://www.linkedin.com/in/theswanhtet" rel="noreferrer" target="_blank">LinkedIn</a>
         </span>
       </footer>
@@ -4602,7 +4620,7 @@ ${unicornHeader}
             <div class="form-row">
               <label>Name<input autocomplete="name" name="name" required /></label>
               <label>Work email<input autocomplete="email" name="email" required type="email" /></label>
-              <label class="optional-phone">Phone / WhatsApp<input autocomplete="tel" name="phone" type="tel" /></label>
+              <label class="optional-phone">Phone / Viber<input autocomplete="tel" name="phone" type="tel" /></label>
               <label>Company<input autocomplete="organization" name="company" required /></label>
               <div class="wide selected-path" data-selected-path hidden><small>Selected</small><strong>General enquiry</strong><span class="selected-price" data-selected-price hidden></span><span class="selected-next" data-selected-next hidden></span></div>
               <label class="wide file-label">Upload files<input data-file-picker multiple name="source_files" type="file" /><span class="upload-list" data-upload-list></span></label>
@@ -4611,7 +4629,7 @@ ${unicornHeader}
             </div>
             <input autocomplete="off" name="website" style="display:none" tabindex="-1" />
             <button type="submit">Send request</button>
-            <p class="policy">No account or data connection before you approve the first step.</p>
+            <p class="policy">No account or data connection before you approve the first step. We handle your data per our <a href="/privacy/">privacy notice</a>.</p>
             <p class="form-status" data-lead-status aria-live="polite"></p>
             <div class="next-card" data-next-card hidden><strong>Saved</strong><span>We review the workflow and reply with the first app to build. Nothing changes without approval.</span></div>
           </form>
@@ -4793,6 +4811,57 @@ ${publicLanguageToggleScript}
 </html>`
 
 const collapsedContactHtml = unicornContactHtml
+
+const publicPrivacyHtml = `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="index,follow" />
+    <title>Privacy | SUPERMEGA.dev</title>
+    <meta name="description" content="What SUPERMEGA collects from the contact form, why, who we share it with, and how to see or delete your data." />
+    <link rel="canonical" href="https://supermega.dev/privacy/" />
+    <meta name="theme-color" content="#f4efe6" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" />
+    <style>${unicornShellStyle}
+      .privacy-main { padding: 18px 0 40px; }
+      .privacy-card { max-width: 44rem; border: 1px solid rgba(255,255,255,0.74); border-radius: 28px; padding: clamp(22px, 4vw, 40px); background: rgba(255,255,255,0.62); box-shadow: var(--shadow); backdrop-filter: blur(22px); }
+      .privacy-card h2 { margin: 26px 0 8px; max-width: none; font-size: clamp(20px, 2.4vw, 26px); }
+      .privacy-card h2:first-of-type { margin-top: 14px; }
+      .privacy-card p { max-width: none; margin: 0; font-size: clamp(16px, 1.7vw, 18px); line-height: 1.55; }
+      .privacy-updated { margin-top: 28px; color: var(--muted); font-size: 13px; font-weight: 850; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+${unicornHeader}
+      <main class="privacy-main">
+        <div class="eyebrow">Privacy</div>
+        <h1>How we handle your data</h1>
+        <div class="privacy-card">
+          <h2>What we collect</h2>
+          <p>What you send us through the contact form &mdash; your name, business, contact handle, and what you want built. Plus basic technical data (your IP address and browser) for security and anti-spam.</p>
+          <h2>Why</h2>
+          <p>To reply to your enquiry and prepare a proposal. Nothing else. We don&rsquo;t sell your data and we don&rsquo;t use it for ads.</p>
+          <h2>Who we share it with</h2>
+          <p>Only our infrastructure providers: Supabase stores the submission and Resend delivers the email to us. That&rsquo;s it.</p>
+          <h2>Your control</h2>
+          <p>Email <a href="mailto:swanhtet@supermega.dev">swanhtet@supermega.dev</a> any time to see, correct, or delete the data we hold about you.</p>
+          <p class="privacy-updated">SUPERMEGA.dev &mdash; last updated June 2026.</p>
+        </div>
+      </main>
+      <footer>
+        <span>SUPERMEGA.dev builds custom business apps from real work.</span>
+        <span class="footer-links">
+          <a href="mailto:swanhtet@supermega.dev">swanhtet@supermega.dev</a>
+          <a href="/contact/">Contact</a>
+          <a href="/privacy/">Privacy</a>
+        </span>
+      </footer>
+    </div>
+${publicLanguageToggleScript}
+  </body>
+</html>`
 
 const activationProductsHtml = `<!doctype html>
 <html lang="en">
@@ -5454,6 +5523,10 @@ const config = {
       dest: '/api/health.js',
     },
     {
+      src: '^/api/lead$',
+      dest: '/api/lead.js',
+    },
+    {
       src: '^/api/(.*)$',
       dest: '/api/not-found.js',
     },
@@ -5685,7 +5758,7 @@ async function copyPublicStatic(source, destination, rootSource = source) {
 }
 
 async function prunePublicStaticRoot() {
-  const allowedRootDirs = new Set(['assets', 'site', 'social', 'products', 'start', 'contact', 'offers', 'work', 'machine', 'card', 'c', 'demo'])
+  const allowedRootDirs = new Set(['assets', 'site', 'social', 'products', 'start', 'contact', 'offers', 'work', 'machine', 'card', 'c', 'demo', 'privacy'])
   for (const entry of await readdir(staticDir, { withFileTypes: true }).catch(() => [])) {
     if (!entry.isDirectory() || allowedRootDirs.has(entry.name)) continue
     await rm(resolve(staticDir, entry.name), { recursive: true, force: true, maxRetries: 8, retryDelay: 250 })
@@ -5723,7 +5796,7 @@ for (const filename of requiredPublicSiteJsonFiles) {
 }
 await mkdir(resolve(staticDir, 'site', 'shots'), { recursive: true })
 await mkdir(resolve(staticDir, 'site', 'social'), { recursive: true })
-for (const filename of ['supermega-portal-card.png', 'supermega-contact-qr.png']) {
+for (const filename of ['supermega-portal-card.png', 'supermega-contact-qr.png', 'swan-htet.jpg']) {
   await cp(resolve(root, 'showroom', 'public', 'social', filename), resolve(staticDir, 'site', 'social', filename), { force: true })
 }
 const publicShotCopies = [
@@ -6016,6 +6089,7 @@ ${unicornHeader}
           <a href="mailto:swanhtet@supermega.dev">swanhtet@supermega.dev</a>
           <a href="/products/">Products</a>
           <a href="/contact/">Contact</a>
+          <a href="/privacy/">Privacy</a>
         </span>
       </footer>
     </div>
@@ -6129,7 +6203,7 @@ ${unicornHeader}
             <h1>Custom software at SaaS prices</h1>
             <p>SaaS sells you the average and rents it back forever, per seat. We build you the exact thing — AI-native, made for how you actually work, and yours to keep. Clear starting prices below; the final quote comes after one short call.</p>
             <div class="cta">
-              <a class="btn primary" href="/contact/?package=design-ship">Book a build</a>
+              <a class="btn primary" href="/contact/?package=dashboard">Book a build</a>
               <a class="btn secondary" href="/demo/">See live demos</a>
             </div>
           </div>
@@ -6183,7 +6257,7 @@ ${unicornHeader}
         <section class="section">
           <div class="final">
             <div><h2>Tell us the one thing to fix first.</h2></div>
-            <a class="btn primary" href="/contact/?package=design-ship">Book a build</a>
+            <a class="btn primary" href="/contact/?package=dashboard">Book a build</a>
           </div>
         </section>
       </main>
@@ -6209,130 +6283,11 @@ await mkdir(resolve(staticDir, 'c'), { recursive: true })
 await writeTextFileEnsuringDir(resolve(staticDir, 'c', 'index.html'), normalizePublicProductNames(publicCampaignRedirectHtml))
 await mkdir(resolve(staticDir, 'contact'), { recursive: true })
 await writeFile(resolve(staticDir, 'contact', 'index.html'), normalizePublicProductNames(collapsedContactHtml), 'utf8')
+await mkdir(resolve(staticDir, 'privacy'), { recursive: true })
+await writeFile(resolve(staticDir, 'privacy', 'index.html'), normalizePublicProductNames(publicPrivacyHtml), 'utf8')
 await mkdir(resolve(staticDir, 'offers'), { recursive: true })
 await writeFile(resolve(staticDir, 'offers', 'index.html'), normalizePublicProductNames(publicOffersHtml), 'utf8')
 
-// Work / case studies — public proof. Honest, de-identified real builds (live products + client systems).
-const publicWorkCases = [
-  {
-    eyebrow: 'Retail & F&B · Live now',
-    headline: 'A daily close the owner can actually trust',
-    story: 'Counter staff were juggling cash, KBZPay, AYA Pay, and MMQR with no clean way to reconcile at the end of the day. We built DeskPOS: ring up orders, take any payment with the slip attached, track stock, and close the day with the drawer counted against expected sales — even when the internet drops.',
-    built: ['Fast counter checkout, priced in MMK', 'Every payment method, with proof attached', 'Offline-first — syncs when the line returns', 'One-tap daily cash-up and owner digest'],
-    proof: 'Live and open — try the full point-of-sale and daily-close flow with realistic Myanmar shop data, no signup.',
-    cta: { label: 'Try it live ↗', href: 'https://pos.supermega.dev/', ext: true },
-  },
-  {
-    eyebrow: 'Manufacturing · Client build',
-    headline: 'Log books and Excel, replaced by one operations system',
-    story: 'A Myanmar manufacturer ran production, quality, and maintenance on shop-floor log books and scattered Excel files. We built one system: capture on the floor (bilingual, works offline), grade inspections with a live reject rate, turn defects into owned corrective actions, and give the plant manager one daily brief.',
-    built: ['Line and shift production vs. target', 'Inspections and defects with a live reject rate', '5W1H incidents → owned CAPA with due dates', 'Maintenance work orders + a daily plant-manager brief'],
-    proof: 'Built around real factory operating data — line targets, defect taxonomy, grading rules, and CAPA owners.',
-    cta: { label: 'See how it works', href: '/products/factory/', ext: false },
-  },
-  {
-    eyebrow: 'HR & Payroll · Live now',
-    headline: 'A salary spreadsheet becomes printable payslips in seconds',
-    story: 'Payroll staff were hand-making payslips from a monthly salary spreadsheet, one person at a time. We built a browser tool that takes the .xlsx — even password-protected — and turns it into clean, printable payslips for everyone. Nothing leaves the browser.',
-    built: ['Reads your existing salary .xlsx', 'Decrypts password-protected files in the browser', 'A clean, printable payslip per person', 'No upload — runs entirely on your device'],
-    proof: 'Live and open — try it with your own salary file.',
-    cta: { label: 'Try it live ↗', href: 'https://payslip-maker-topaz.vercel.app/', ext: true },
-  },
-]
-const publicWorkHtml = `<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="robots" content="index,follow" />
-    <title>Our work | SUPERMEGA.dev</title>
-    <meta name="description" content="Real software we've built and shipped for businesses in Myanmar — live products you can try right now, and custom systems built from real, messy work." />
-    <meta name="theme-color" content="#f4efe6" />
-    <link rel="canonical" href="https://supermega.dev/work/" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" />
-    <meta property="og:type" content="website" />
-    <meta property="og:site_name" content="SUPERMEGA.dev" />
-    <meta property="og:title" content="Our work — real software, running in real businesses" />
-    <meta property="og:description" content="Live products you can try right now, and custom systems we've shipped for businesses in Myanmar." />
-    <meta property="og:url" content="https://supermega.dev/work/" />
-    <meta property="og:image" content="https://supermega.dev/site/social/supermega-portal-card.png" />
-    <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:image" content="https://supermega.dev/site/social/supermega-portal-card.png" />
-    <style>${unicornShellStyle}
-      .wk-list { display: grid; gap: 18px; margin-top: 28px; }
-      .wk-case { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: clamp(18px,4vw,40px); align-items: start; border: 1px solid var(--line); border-radius: 22px; padding: clamp(20px,3vw,32px); background: rgba(255,255,255,0.5); }
-      :root[data-theme="dark"] .wk-case { background: rgba(243,239,230,0.05); }
-      .wk-case .eyebrow { margin-bottom: 10px; }
-      .wk-case h2 { font-size: clamp(24px,3vw,32px); letter-spacing: -0.03em; line-height: 1.08; margin: 0; }
-      .wk-story { margin-top: 14px; color: var(--muted); font-size: 16px; line-height: 1.6; }
-      .wk-built { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
-      .wk-built-label { color: var(--blue); font-size: 11px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; margin: 0 0 12px; }
-      .wk-built li { display: grid; grid-template-columns: auto minmax(0,1fr); gap: 10px; align-items: start; color: var(--ink); font-size: 15px; line-height: 1.45; }
-      .wk-built li::before { content: ""; margin-top: 7px; width: 6px; height: 6px; border-radius: 999px; background: var(--blue); }
-      .wk-proof { margin-top: 18px; border-left: 2px solid var(--blue); padding: 4px 0 4px 14px; color: var(--ink); font-size: 14px; line-height: 1.5; }
-      .wk-case .btn { margin-top: 18px; }
-      @media (max-width: 820px) { .wk-case { grid-template-columns: 1fr; gap: 18px; } }
-    </style>
-  </head>
-  <body>
-    <div class="wrap">
-${unicornHeader}
-      <main>
-        <section class="poster" style="min-height:auto;align-items:center">
-          <div class="copy">
-            <div class="eyebrow">Our work</div>
-            <h1>Real software, running in real businesses.</h1>
-            <p>A few of the things we've built — live products you can try right now, and custom systems we've shipped for businesses in Myanmar. Every one started from someone's real, messy work.</p>
-            <div class="cta">
-              <a class="btn primary" href="/offers/">See pricing</a>
-              <a class="btn secondary" href="/demo/">See live demos</a>
-            </div>
-          </div>
-        </section>
-
-        <section class="section">
-          <div class="wk-list">
-            ${publicWorkCases.map((c) => `<article class="wk-case">
-              <div>
-                <div class="eyebrow">${c.eyebrow}</div>
-                <h2>${c.headline}</h2>
-                <p class="wk-story">${c.story}</p>
-                <div class="wk-proof">${c.proof}</div>
-                <a class="btn primary" href="${c.cta.href}"${c.cta.ext ? ' target="_blank" rel="noopener noreferrer"' : ''}>${c.cta.label}</a>
-              </div>
-              <div>
-                <p class="wk-built-label">What we built</p>
-                <ul class="wk-built">${c.built.map((b) => `<li>${b}</li>`).join('')}</ul>
-              </div>
-            </article>`).join('')}
-          </div>
-        </section>
-
-        <section class="section">
-          <div class="final">
-            <div><h2>Want one built for your business?</h2></div>
-            <div style="display:flex;gap:12px;flex-wrap:wrap">
-              <a class="btn primary" href="/contact/?package=build">Book a build</a>
-              <a class="btn secondary" href="/offers/">See pricing</a>
-            </div>
-          </div>
-        </section>
-      </main>
-      <footer>
-        <span>SUPERMEGA.dev — custom business software at SaaS prices.</span>
-        <span class="footer-links">
-          <a href="mailto:swanhtet@supermega.dev">swanhtet@supermega.dev</a>
-          <a href="/products/">Products</a>
-          <a href="/demo/">Demos</a>
-          <a href="/offers/">Pricing</a>
-        </span>
-      </footer>
-    </div>
-${publicLanguageToggleScript}
-  </body>
-</html>`
-await mkdir(resolve(staticDir, 'work'), { recursive: true })
-await writeFile(resolve(staticDir, 'work', 'index.html'), normalizePublicProductNames(publicWorkHtml), 'utf8')
 await mkdir(resolve(staticDir, 'machine'), { recursive: true })
 await writeFile(resolve(staticDir, 'machine', 'index.html'), normalizePublicProductNames(publicMachineHtml), 'utf8')
 // Demo hub (source lives in C:/sm-site, outside OneDrive) served at /demo/
@@ -6340,7 +6295,7 @@ await mkdir(resolve(staticDir, 'demo'), { recursive: true })
 await cp('C:/sm-site/supermega-demo/index.html', resolve(staticDir, 'demo', 'index.html'), { force: true }).catch(() => undefined)
 await cp('C:/sm-site/supermega-demo/favicon.svg', resolve(staticDir, 'demo', 'favicon.svg'), { force: true }).catch(() => undefined)
 await writeFile(resolve(staticDir, 'robots.txt'), 'User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /app/\nDisallow: /clients/\nDisallow: /machine/\nSitemap: https://supermega.dev/sitemap.xml\n', 'utf8')
-await writeFile(resolve(staticDir, 'sitemap.xml'), '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url><loc>https://supermega.dev/</loc><changefreq>weekly</changefreq><priority>1.0</priority></url>\n  <url><loc>https://supermega.dev/products/</loc><changefreq>weekly</changefreq><priority>0.9</priority></url>\n  <url><loc>https://supermega.dev/offers/</loc><changefreq>weekly</changefreq><priority>0.95</priority></url>\n  <url><loc>https://supermega.dev/work/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>\n  <url><loc>https://supermega.dev/contact/</loc><changefreq>monthly</changefreq><priority>0.9</priority></url>\n  <url><loc>https://supermega.dev/card/</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>\n</urlset>\n', 'utf8')
+await writeFile(resolve(staticDir, 'sitemap.xml'), '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url><loc>https://supermega.dev/</loc><changefreq>weekly</changefreq><priority>1.0</priority></url>\n  <url><loc>https://supermega.dev/products/</loc><changefreq>weekly</changefreq><priority>0.9</priority></url>\n  <url><loc>https://supermega.dev/offers/</loc><changefreq>weekly</changefreq><priority>0.95</priority></url>\n  <url><loc>https://supermega.dev/contact/</loc><changefreq>monthly</changefreq><priority>0.9</priority></url>\n  <url><loc>https://supermega.dev/card/</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>\n</urlset>\n', 'utf8')
 await writeFile(
   resolve(staticDir, 'sw.js'),
   `const CACHE_VERSION = 'supermega-public-clean-20260522'
@@ -6361,6 +6316,7 @@ self.addEventListener('activate', (event) => {
   'utf8',
 )
 await writeNodeFunction('health.js')
+await writeNodeFunction('lead.js')
 await writeNodeFunction('contact-submissions.js')
 await writeNodeFunction('campaign-clicks.js')
 await writeNodeFunction('commercial-control.js')
