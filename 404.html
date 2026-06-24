@@ -1,93 +1,71 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SuperMega OS - Page Not Found</title>
+  <head>
+    <meta charset="UTF-8" />
+    <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+    <title>Redirecting to SUPERMEGA.dev</title>
     <style>
-        body {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-            background: #0a0a0a;
-            color: #ffffff;
-            margin: 0;
-            padding: 0;
-            min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        .error-container {
-            text-align: center;
-            max-width: 500px;
-            padding: 40px 20px;
-        }
-        .error-code {
-            font-size: 6rem;
-            font-weight: 700;
-            background: linear-gradient(135deg, #00ff88 0%, #0088ff 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-            margin-bottom: 20px;
-        }
-        .error-title {
-            font-size: 1.5rem;
-            font-weight: 600;
-            margin-bottom: 15px;
-            color: #ffffff;
-        }
-        .error-description {
-            color: #cccccc;
-            margin-bottom: 30px;
-            line-height: 1.6;
-        }
-        .error-actions {
-            display: flex;
-            gap: 15px;
-            justify-content: center;
-            flex-wrap: wrap;
-        }
-        .btn {
-            padding: 12px 25px;
-            border-radius: 25px;
-            font-weight: 600;
-            cursor: pointer;
-            text-decoration: none;
-            transition: all 0.3s ease;
-            border: none;
-        }
-        .btn-primary {
-            background: linear-gradient(135deg, #00ff88 0%, #0088ff 100%);
-            color: #000000;
-        }
-        .btn-secondary {
-            background: transparent;
-            color: #ffffff;
-            border: 2px solid #333;
-        }
-        .btn:hover {
-            transform: translateY(-2px);
-        }
-        .btn-primary:hover {
-            box-shadow: 0 5px 15px rgba(0, 255, 136, 0.3);
-        }
-        .btn-secondary:hover {
-            border-color: #00ff88;
-            color: #00ff88;
-        }
+      :root {
+        color-scheme: dark;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        background:
+          radial-gradient(circle at top right, rgba(196, 164, 132, 0.18), transparent 28%),
+          radial-gradient(circle at bottom left, rgba(110, 153, 141, 0.22), transparent 34%),
+          #0b1110;
+        color: #edf2ec;
+        font-family: Manrope, "Segoe UI", sans-serif;
+      }
+
+      main {
+        width: min(540px, calc(100vw - 48px));
+        padding: 32px;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 28px;
+        background: rgba(9, 17, 16, 0.86);
+        box-shadow: 0 24px 80px rgba(0, 0, 0, 0.28);
+      }
+
+      .eyebrow {
+        margin: 0 0 10px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        font-size: 12px;
+        color: #7bc4b0;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: clamp(32px, 5vw, 44px);
+        line-height: 1.05;
+      }
+
+      p {
+        margin: 14px 0 0;
+        color: rgba(237, 242, 236, 0.78);
+        line-height: 1.6;
+      }
+
+      a {
+        color: #f0c18c;
+        font-weight: 700;
+      }
     </style>
-</head>
-<body>
-    <div class="error-container">
-        <div class="error-code">404</div>
-        <h1 class="error-title">Page Not Found</h1>
-        <p class="error-description">
-            The page you're looking for doesn't exist yet. Our AI suites are being prepared for you!
-        </p>
-        <div class="error-actions">
-            <a href="index.html" class="btn btn-primary">🚀 Back to Platform</a>
-            <a href="platform.html" class="btn btn-secondary">📊 Go to Dashboard</a>
-        </div>
-    </div>
-</body>
+    <script>
+      const target = `https://www.supermega.dev${window.location.pathname}${window.location.search}${window.location.hash}`
+      window.location.replace(target)
+    </script>
+  </head>
+  <body>
+    <main>
+      <p class="eyebrow">SUPERMEGA.dev</p>
+      <h1>Redirecting to the live workspace.</h1>
+      <p>This route is handled on <a href="https://www.supermega.dev">www.supermega.dev</a>. Redirecting now.</p>
+    </main>
+  </body>
 </html>
