@@ -65,7 +65,7 @@ async function health() {
   }
 }
 
-register({
+export const messagingResend = {
   key: 'messaging-resend',
   name: 'Resend Email',
   category: 'messaging',
@@ -73,6 +73,8 @@ register({
   capabilities: ['send', 'health'],
   send,
   health,
-})
+}
 
-export default { send, health }
+register(messagingResend)
+
+export default messagingResend
