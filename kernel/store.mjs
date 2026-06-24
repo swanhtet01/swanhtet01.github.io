@@ -50,12 +50,14 @@ async function ensurePgTables() {
     create table if not exists supermega_console_activity (id text primary key, at timestamptz default now(), kind text, summary text, ref text);
     create table if not exists supermega_token_ledger (tenant_id text not null, window text not null, in_tokens bigint default 0, out_tokens bigint default 0, calls bigint default 0, updated_at timestamptz default now(), primary key (tenant_id, window));
     create table if not exists supermega_ai_cache (cache_key text primary key, payload jsonb not null, created_at timestamptz default now());
+    create table if not exists supermega_graduation (signature text primary key, label text, count int not null default 1, sources jsonb default '[]'::jsonb, modules jsonb default '[]'::jsonb, productized boolean not null default false, graduated_at timestamptz, updated_at timestamptz default now());
+    create table if not exists supermega_build_modules (id text primary key, project_id text, signature text, modules jsonb default '[]'::jsonb, shipped_at timestamptz default now());
   `).then(() => true)
   return tablesReady
 }
 
 // ---------- in-memory fallback ----------
-const mem = { lead: new Map(), client: new Map(), project: new Map(), deal: new Map(), activity: new Map(), tokenLedger: new Map(), aiCache: new Map() }
+const mem = { lead: new Map(), client: new Map(), project: new Map(), deal: new Map(), activity: new Map(), tokenLedger: new Map(), aiCache: new Map(), graduation: new Map(), buildModules: new Map() }
 const memSort = (rows) => rows.sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))
 
 // ---------- leads (real supermega_leads) ----------
@@ -241,4 +243,80 @@ export async function putCachedResponse(cacheKey, payload) {
   return true
 }
 
-export default { mode, listLeads, getLead, insertLead, updateLead, listClients, listProjects, createClient, createProject, updateProject, convertedLeadIds, saveDeal, listDeals, updateDeal, logActivity, listActivity, getTokenUsage, addTokenUsage, getCachedResponse, putCachedResponse }
+// ---------- graduation flywheel (auto: 3rd repeat of a request signature → productize) ----------
+// supermega_graduation: one row per normalized request signature; count grows as deals/builds repeat it.
+// supermega_build_modules: the modules of each shipped project (the "what we actually built" record).
+// All best-effort: every method swallows its own errors so the deal/convert path is never broken.
+const GRAD_THRESHOLD = 3
+const uniqStrs = (a, b) => [...new Set([...(Array.isArray(a) ? a : []), ...(Array.isArray(b) ? b : [])].filter(Boolean).map(String))]
+
+// Increment (or create) the counter for a request signature. Flags graduation-ready at the threshold.
+// Returns { signature, count, productized, graduated } or null on failure (never throws).
+export async function bumpGraduation(signature, { label = '', source = null, modules = [] } = {}) {
+  const sig = String(signature || '').trim()
+  if (!sig) return null
+  try {
+    if (mode === 'supabase') {
+      const existing = (await rest('GET', `supermega_graduation?signature=eq.${encodeURIComponent(sig)}&limit=1`))[0]
+      if (existing) {
+        const count = (Number(existing.count) || 0) + 1
+        const productized = Boolean(existing.productized) || count >= GRAD_THRESHOLD
+        const patch = { count, label: existing.label || label, sources: uniqStrs(existing.sources, source ? [source] : []), modules: uniqStrs(existing.modules, modules), productized, updated_at: new Date().toISOString() }
+        if (productized && !existing.graduated_at) patch.graduated_at = new Date().toISOString()
+        const r = await rest('PATCH', `supermega_graduation?signature=eq.${encodeURIComponent(sig)}`, patch)
+        const row = r?.[0] || { signature: sig, ...patch }
+        return { signature: sig, count, productized, graduated: productized && !existing.productized }
+      }
+      const row = { signature: sig, label, count: 1, sources: source ? [source] : [], modules: uniqStrs([], modules), productized: 1 >= GRAD_THRESHOLD }
+      await rest('POST', 'supermega_graduation', row).catch(() => {})
+      return { signature: sig, count: 1, productized: row.productized, graduated: row.productized }
+    }
+    if (mode === 'postgres') {
+      await ensurePgTables()
+      const cur = (await q('select * from supermega_graduation where signature=$1 limit 1', [sig]))[0]
+      const count = (Number(cur?.count) || 0) + 1
+      const wasProductized = Boolean(cur?.productized)
+      const productized = wasProductized || count >= GRAD_THRESHOLD
+      const sources = uniqStrs(cur?.sources, source ? [source] : [])
+      const mods = uniqStrs(cur?.modules, modules)
+      const gradAt = productized && !cur?.graduated_at ? new Date().toISOString() : (cur?.graduated_at || null)
+      await q(
+        `insert into supermega_graduation (signature, label, count, sources, modules, productized, graduated_at, updated_at)
+         values ($1,$2,$3,$4,$5,$6,$7, now())
+         on conflict (signature) do update set count=$3, label=coalesce(nullif(supermega_graduation.label,''),$2), sources=$4, modules=$5, productized=$6, graduated_at=$7, updated_at=now()`,
+        [sig, label, count, JSON.stringify(sources), JSON.stringify(mods), productized, gradAt],
+      )
+      return { signature: sig, count, productized, graduated: productized && !wasProductized }
+    }
+    const cur = mem.graduation.get(sig)
+    const count = (Number(cur?.count) || 0) + 1
+    const wasProductized = Boolean(cur?.productized)
+    const productized = wasProductized || count >= GRAD_THRESHOLD
+    const next = { signature: sig, label: cur?.label || label, count, sources: uniqStrs(cur?.sources, source ? [source] : []), modules: uniqStrs(cur?.modules, modules), productized, graduated_at: productized && !cur?.graduated_at ? new Date().toISOString() : (cur?.graduated_at || null), updated_at: new Date().toISOString() }
+    mem.graduation.set(sig, next)
+    return { signature: sig, count, productized, graduated: productized && !wasProductized }
+  } catch { return null }
+}
+
+// Record the modules of a shipped project (best-effort; never throws).
+export async function recordBuildModules(projectId, modules, signature = null) {
+  const mods = uniqStrs([], modules)
+  if (!mods.length) return null
+  const row = { id: randomUUID(), project_id: projectId || null, signature: signature || null, modules: mods }
+  try {
+    if (mode === 'supabase') return (await rest('POST', 'supermega_build_modules', row))[0]
+    if (mode === 'postgres') { await ensurePgTables(); return (await q('insert into supermega_build_modules (id,project_id,signature,modules) values ($1,$2,$3,$4) returning *', [row.id, row.project_id, row.signature, JSON.stringify(row.modules)]))[0] }
+    const rec = { ...row, shipped_at: new Date().toISOString() }; mem.buildModules.set(rec.id, rec); return rec
+  } catch { return null }
+}
+
+// List graduation signatures (highest count first). Always returns an array.
+export async function listGraduation(limit = 100) {
+  try {
+    if (mode === 'supabase') return await rest('GET', `supermega_graduation?order=count.desc,updated_at.desc&limit=${limit}`)
+    if (mode === 'postgres') { await ensurePgTables(); return await q('select * from supermega_graduation order by count desc, updated_at desc limit $1', [limit]) }
+    return [...mem.graduation.values()].sort((a, b) => (b.count - a.count) || String(b.updated_at).localeCompare(String(a.updated_at))).slice(0, limit)
+  } catch { return [] }
+}
+
+export default { mode, listLeads, getLead, insertLead, updateLead, listClients, listProjects, createClient, createProject, updateProject, convertedLeadIds, saveDeal, listDeals, updateDeal, logActivity, listActivity, getTokenUsage, addTokenUsage, getCachedResponse, putCachedResponse, bumpGraduation, recordBuildModules, listGraduation }

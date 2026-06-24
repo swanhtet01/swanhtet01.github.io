@@ -10,6 +10,9 @@ import registry from './registry.mjs'
 // Side-effect imports — each module calls register(...) when loaded.
 import './ai-gateway.mjs'
 import './data-supabase.mjs'
+import './data-sheets.mjs'
+import './data-gmail.mjs'
+import './data-calendar.mjs'
 import './payment-stripe.mjs'
 import './payment-mmqr.mjs'
 

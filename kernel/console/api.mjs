@@ -3,6 +3,7 @@
 
 import store from '../store.mjs'
 import { generateDeal } from './deal.mjs'
+import { onDealSaved, onProjectShipped } from './graduation.mjs'
 import connectors from '../connectors/index.mjs'
 
 const OPS_KEY = (process.env.SUPERMEGA_OPS_KEY || '').trim()
@@ -37,16 +38,17 @@ export async function handle({ method, path, query = {}, body = {}, headers = {}
     // ---- DASHBOARD (the money/funnel overview) ----
     if (method === 'GET' && seg[0] === 'dashboard') {
       try {
-        const [leads, projects, deals, activity] = await Promise.all([store.listLeads(), store.listProjects(), store.listDeals(), store.listActivity(12)])
+        const [leads, projects, deals, activity, grad] = await Promise.all([store.listLeads(), store.listProjects(), store.listDeals(), store.listActivity(12), store.listGraduation(100)])
         const byStage = {}; for (const l of leads) byStage[l.stage || 'new'] = (byStage[l.stage || 'new'] || 0) + 1
         const byStatus = {}; for (const p of projects) byStatus[p.status] = (byStatus[p.status] || 0) + 1
         const pipelineUsd = projects.filter((p) => p.offer !== 'care-plan').reduce((s, p) => s + priceOf(p.offer), 0)
         const paid = projects.filter((p) => p.deposit_status === 'paid')
         const depositUsd = paid.reduce((s, p) => s + Math.round(priceOf(p.offer) * 0.5), 0)
         const mrrUsd = projects.filter((p) => p.offer === 'care-plan' && (p.status === 'live' || p.status === 'care')).length * OFFER_USD['care-plan']
-        return ok({ ok: true, dbStatus: 'ok', leads: { total: leads.length, byStage }, projects: { total: projects.length, byStatus, pipelineUsd, live: byStatus.live || 0, care: byStatus.care || 0 }, deposits: { count: paid.length, usd: depositUsd }, mrrUsd, deals: deals.length, activity })
+        const gradReady = (grad || []).filter((r) => r.productized || (Number(r.count) || 0) >= 3)
+        return ok({ ok: true, dbStatus: 'ok', leads: { total: leads.length, byStage }, projects: { total: projects.length, byStatus, pipelineUsd, live: byStatus.live || 0, care: byStatus.care || 0 }, deposits: { count: paid.length, usd: depositUsd }, mrrUsd, deals: deals.length, activity, graduation: { tracked: (grad || []).length, ready: gradReady.length, top: (grad || []).slice(0, 5).map((r) => ({ signature: r.signature, label: r.label, count: Number(r.count) || 0, productized: Boolean(r.productized) })) } })
       } catch (e) {
-        return ok({ ok: true, dbStatus: 'error', dbError: String(e.message).slice(0, 140), leads: { total: 0, byStage: {} }, projects: { total: 0, byStatus: {}, pipelineUsd: 0, live: 0, care: 0 }, deposits: { count: 0, usd: 0 }, mrrUsd: 0, deals: 0, activity: [] })
+        return ok({ ok: true, dbStatus: 'error', dbError: String(e.message).slice(0, 140), leads: { total: 0, byStage: {} }, projects: { total: 0, byStatus: {}, pipelineUsd: 0, live: 0, care: 0 }, deposits: { count: 0, usd: 0 }, mrrUsd: 0, deals: 0, activity: [], graduation: { tracked: 0, ready: 0, top: [] } })
       }
     }
 
@@ -91,6 +93,16 @@ export async function handle({ method, path, query = {}, body = {}, headers = {}
         if (!project) return bad(404, 'project_not_found')
         if (patch.status) log('project', `Project → ${patch.status}`, project.id)
         if (patch.deposit_status === 'paid') log('deposit', `Deposit marked paid (${project.deposit_method || 'KBZPay/MMQR'})`, project.id)
+        // Auto-graduation flywheel: a shipped project records its modules + bumps their repeat counters (best-effort).
+        if (patch.status === 'live') {
+          store.listDeals({ project_id: project.id })
+            .then(async (ds) => {
+              let modules = ds?.[0]?.packet?.modules
+              if (!modules?.length && project.lead_id) { const byLead = await store.listDeals({ lead_id: project.lead_id }); modules = byLead?.[0]?.packet?.modules }
+              if (modules?.length) await onProjectShipped(project.id, modules, project.id)
+            })
+            .catch(() => {})
+        }
         return ok({ ok: true, project })
       }
     }
@@ -114,6 +126,8 @@ export async function handle({ method, path, query = {}, body = {}, headers = {}
         if (!body.packet) return bad(400, 'no_packet')
         const deal = await store.saveDeal({ lead_id: body.lead_id || null, project_id: body.project_id || null, packet: body.packet, status: 'draft' })
         log('deal', `Deal saved: ${String(body.packet.headline || '').slice(0, 60)}`, deal.id)
+        // Auto-graduation flywheel: each module signature in the packet bumps its repeat counter (best-effort).
+        onDealSaved(body.packet, deal.id).catch(() => {})
         return ok({ ok: true, deal })
       }
       if (method === 'PATCH' && seg[1]) {
@@ -132,6 +146,13 @@ export async function handle({ method, path, query = {}, body = {}, headers = {}
 
     // ---- ACTIVITY LOG ----
     if (method === 'GET' && seg[0] === 'activity') return ok({ ok: true, activity: await store.listActivity(Number(query.limit) || 40) })
+
+    // ---- GRADUATION TRACKER (auto-flywheel: which requests have repeated → which are productize-ready) ----
+    if (method === 'GET' && seg[0] === 'graduation') {
+      const rows = await store.listGraduation(Number(query.limit) || 100)
+      const ready = rows.filter((r) => r.productized || (Number(r.count) || 0) >= 3)
+      return ok({ ok: true, threshold: 3, ready: ready.length, graduation: rows })
+    }
 
     // ---- INTEGRATIONS (connector framework health; same passcode gate as everything above) ----
     if (method === 'GET' && seg[0] === 'integrations') {

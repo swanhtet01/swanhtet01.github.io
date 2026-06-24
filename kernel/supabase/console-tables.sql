@@ -44,6 +44,18 @@ create table if not exists public.supermega_console_activity (
   ref      text
 );
 
+-- Graduation flywheel (which request signatures have repeated → productize-ready at count ≥ 3)
+create table if not exists public.supermega_graduation (
+  signature    text primary key,
+  label        text,
+  count        int not null default 1,
+  sources      jsonb default '[]'::jsonb,
+  modules      jsonb default '[]'::jsonb,
+  productized  boolean not null default false,
+  graduated_at timestamptz,
+  updated_at   timestamptz default now()
+);
+
 -- AI gateway tables (token tracking + response cache)
 create table if not exists public.supermega_token_ledger (
   tenant_id  text not null,
@@ -61,13 +73,15 @@ create table if not exists public.supermega_ai_cache (
   created_at timestamptz default now()
 );
 
--- RLS: ops-only, no public access needed
+-- RLS: enabled on all tables; service_role key (used by kernel) bypasses RLS automatically.
+-- Anon/authenticated roles have no access by policy (deny-by-default when RLS is on + no policies).
 alter table public.supermega_console_clients  enable row level security;
 alter table public.supermega_console_projects enable row level security;
 alter table public.supermega_console_deals    enable row level security;
 alter table public.supermega_console_activity enable row level security;
 alter table public.supermega_token_ledger     enable row level security;
 alter table public.supermega_ai_cache         enable row level security;
+alter table public.supermega_graduation       enable row level security;
 
 -- Reload PostgREST schema cache
 notify pgrst, 'reload schema';

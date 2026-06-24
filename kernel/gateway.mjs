@@ -16,11 +16,29 @@ export const TIERS = {
 }
 const FALLBACK = { deep: 'reason', reason: 'bulk', bulk: null }
 
-// Per-client token ledger + response cache are in-memory per warm instance for now.
-// TODO(spine): back both with Supabase/KV so caps + caching survive across instances.
-const ledger = new Map() // clientId -> { inTokens, outTokens, calls }
+// Per-client token ledger + response cache. In-memory per warm instance for speed; ALSO backed by
+// the data spine (store.mjs) when credentials are present, so caps + caching survive cold starts and
+// span every instance. The store is imported lazily so memory-mode/dev with no deps still works.
+const ledger = new Map() // clientId -> { inTokens, outTokens, calls } (this instance, current process life)
 const cache = new Map() // cacheKey -> { text, data, usage }
 const DEFAULT_CAP_TOKENS = Number(process.env.SUPERMEGA_CLIENT_TOKEN_CAP || 2_000_000)
+
+// Persistent ledger/cache toggle. On by default; set SUPERMEGA_GATEWAY_PERSIST=0 to force pure in-memory.
+const PERSIST = String(process.env.SUPERMEGA_GATEWAY_PERSIST ?? '1') !== '0'
+let _store // lazily-loaded store.mjs module (null once we know it's unavailable)
+async function spine() {
+  if (!PERSIST) return null
+  if (_store === undefined) {
+    try { _store = (await import('./store.mjs')).default }
+    catch { _store = null } // no store / no deps → silently fall back to in-memory
+  }
+  return _store
+}
+
+// Monthly window key in UTC, e.g. '2026-06'. The cap is a per-tenant monthly ceiling.
+function currentWindow(d = new Date()) {
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`
+}
 
 function hash(str) {
   let h = 5381
@@ -39,17 +57,44 @@ export function stripInjectionFrames(text) {
     .trim()
 }
 
-function recordUsage(clientId, usage) {
+async function recordUsage(clientId, usage) {
   if (!clientId || !usage) return
+  const inTokens = usage.input_tokens || 0
+  const outTokens = usage.output_tokens || 0
+  // Always update the fast in-memory ledger (synchronous source for usageFor()).
   const e = ledger.get(clientId) || { inTokens: 0, outTokens: 0, calls: 0 }
-  e.inTokens += usage.input_tokens || 0
-  e.outTokens += usage.output_tokens || 0
+  e.inTokens += inTokens
+  e.outTokens += outTokens
   e.calls += 1
   ledger.set(clientId, e)
+  // Best-effort persist to the spine so the cap survives cold starts / spans instances.
+  const store = await spine()
+  if (store?.addTokenUsage) {
+    try { await store.addTokenUsage(clientId, currentWindow(), { inTokens, outTokens, calls: 1 }) }
+    catch { /* never break a completed call on a ledger write */ }
+  }
 }
 
+// Synchronous, in-memory view (this instance only). Kept for back-compat with existing callers.
 export function usageFor(clientId) {
   return ledger.get(clientId) || { inTokens: 0, outTokens: 0, calls: 0 }
+}
+
+// Authoritative monthly usage for a tenant: the persisted ledger when available, else in-memory.
+// Returns { inTokens, outTokens, calls, total, window, source }.
+export async function monthlyUsageFor(clientId) {
+  const local = usageFor(clientId)
+  const window = currentWindow()
+  const store = await spine()
+  if (store?.getTokenUsage) {
+    try {
+      const r = await store.getTokenUsage(clientId, window)
+      const inTokens = Number(r.in_tokens) || 0
+      const outTokens = Number(r.out_tokens) || 0
+      return { inTokens, outTokens, calls: Number(r.calls) || 0, total: inTokens + outTokens, window, source: 'spine' }
+    } catch { /* fall through to in-memory */ }
+  }
+  return { ...local, total: local.inTokens + local.outTokens, window, source: 'memory' }
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
@@ -79,10 +124,11 @@ async function callAnthropic(body, signal) {
  * @param {string}   o.system            system prompt
  * @param {Array}    o.messages          [{role, content}]
  * @param {string}   [o.tier='reason']   'bulk' | 'reason' | 'deep'
- * @param {string}   [o.clientId]        for per-client cost caps + logging
+ * @param {string}   [o.clientId]        tenant id — enables the per-tenant monthly cost cap + logging
  * @param {object}   [o.schema]          JSON Schema -> forces validated structured output (tool-use)
  * @param {string}   [o.cacheKey]        explicit cache key; else derived from the request
  * @param {number}   [o.maxTokens]       override the tier default
+ * @param {number}   [o.capTokens]       override the monthly token cap for THIS tenant (else DEFAULT_CAP_TOKENS)
  * @param {number}   [o.timeoutMs=45000]
  * @returns {Promise<{text?:string, data?:object, usage:object, model:string, tier:string}>}
  */
@@ -90,18 +136,35 @@ export async function complete(o) {
   const { system, messages, clientId, schema, maxTokens, timeoutMs = 45_000 } = o
   let tier = o.tier && TIERS[o.tier] ? o.tier : 'reason'
 
-  // Cost cap (best-effort, per warm instance until the spine backs it).
+  // Per-tenant monthly cost cap, enforced against the persisted ledger (survives cold starts /
+  // spans instances). Over the hard cap → refuse. Over the soft threshold → downgrade to a cheaper
+  // tier so the client stays under budget instead of being cut off mid-month.
   if (clientId) {
-    const used = usageFor(clientId)
-    if (used.inTokens + used.outTokens >= DEFAULT_CAP_TOKENS) {
+    const cap = Number(o.capTokens || DEFAULT_CAP_TOKENS)
+    const used = await monthlyUsageFor(clientId)
+    if (cap > 0 && used.total >= cap) {
       const err = new Error('gateway_client_cap_reached')
       err.clientId = clientId
+      err.used = used.total
+      err.cap = cap
+      err.window = used.window
       throw err
     }
+    // Soft downgrade band (default: last 20% of the cap). One step down the tier ladder.
+    const softAt = cap > 0 ? cap * Number(process.env.SUPERMEGA_CLIENT_CAP_SOFT_RATIO || 0.8) : Infinity
+    if (used.total >= softAt && FALLBACK[tier]) tier = FALLBACK[tier]
   }
 
   const key = o.cacheKey || hash(JSON.stringify({ system, messages, tier, schema: schema?.title || !!schema }))
   if (cache.has(key)) return { ...cache.get(key), cached: true }
+  // Shared cache: a hit on another instance still saves the spend.
+  const store = await spine()
+  if (store?.getCachedResponse) {
+    try {
+      const hit = await store.getCachedResponse(key)
+      if (hit) { cache.set(key, hit); return { ...hit, cached: true } }
+    } catch { /* cache is best-effort; fall through to a live call */ }
+  }
 
   // Structured output is done via forced tool-use, NOT JSON-from-text.
   // (JSON-in-text breaks on raw newlines in Burmese — a real Deal Desk bug.)
@@ -124,7 +187,7 @@ export async function complete(o) {
       }
       const json = await callAnthropic(body, controller.signal)
       clearTimeout(timer)
-      recordUsage(clientId, json.usage)
+      await recordUsage(clientId, json.usage)
       let out
       if (tool) {
         const block = (json.content || []).find((b) => b.type === 'tool_use' && b.name === 'emit')
@@ -135,6 +198,7 @@ export async function complete(o) {
         out = { text, usage: json.usage, model: t.model, tier }
       }
       cache.set(key, out)
+      if (store?.putCachedResponse) { try { await store.putCachedResponse(key, out) } catch { /* best-effort */ } }
       return out
     } catch (err) {
       clearTimeout(timer)
@@ -149,4 +213,4 @@ export async function complete(o) {
   throw lastErr || new Error('gateway_failed')
 }
 
-export default { complete, stripInjectionFrames, usageFor, TIERS }
+export default { complete, stripInjectionFrames, usageFor, monthlyUsageFor, TIERS }
