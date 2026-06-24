@@ -18,6 +18,7 @@ import './payment-stripe.mjs'
 import './payment-mmqr.mjs'
 import './messaging-resend.mjs'
 import './messaging-telegram.mjs'
+import './messaging-viber.mjs'
 
 export * from './registry.mjs'
 export default registry

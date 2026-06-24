@@ -210,7 +210,13 @@ export async function handle({ method, path, query = {}, body = {}, headers = {}
     // ---- INTEGRATIONS (connector framework health; same passcode gate as everything above) ----
     if (method === 'GET' && seg[0] === 'integrations') {
       const report = await connectors.healthAll()
-      return ok({ mode: store.mode, ...report })
+      // Reshape each flat probe result into the shape the Connectors panel UI expects:
+      // { key, name, category, configured, health: { ok, detail } }
+      const shaped = report.connectors.map(({ ok: cOk, detail, ...rest }) => ({
+        ...rest,
+        health: { ok: cOk, detail: detail || (cOk ? 'ok' : 'unhealthy') },
+      }))
+      return ok({ mode: store.mode, ok: report.ok, counts: report.counts, byCategory: report.byCategory, connectors: shaped })
     }
 
     // ---- AUTOPILOT (batch deal generation for un-dealt leads) ----
