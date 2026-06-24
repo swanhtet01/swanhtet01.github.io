@@ -2762,7 +2762,7 @@ const publicCardHtml = `<!doctype html>
         <a class="brand" href="/" aria-label="SUPERMEGA.dev home"><span class="mark"><img src="/favicon.svg?v=supermega-atelier-20260623" alt="" /></span><span>SUPERMEGA.dev</span></a>
         <h1>Swan Htet</h1>
         <p class="role">Founder, SUPERMEGA.dev</p>
-        <p class="pitch">I build custom business software for Myanmar shops, factories, and restaurants — priced in MMK, yours to keep.</p>
+        <p class="pitch">I turn your messiest workflow — the one running on Viber and Excel — into a real system. Priced in MMK. Done in weeks.</p>
         <div class="details">
           <a href="mailto:swanhtet@supermega.dev">swanhtet@supermega.dev</a>
           <a href="tel:+9595000721">+95 9 500 0721</a>
@@ -4020,10 +4020,11 @@ ${unicornHeader}
             </div>
             <div>
               <div class="eyebrow" style="color:var(--clay,#c2603f)">Who builds this</div>
-              <h2 style="margin-top:10px;font-size:clamp(18px,2.4vw,26px);line-height:1.45">Hi, I'm Swan Htet — a software engineer from Yangon.</h2>
-              <p style="margin-top:14px;font-size:16px;line-height:1.7;color:var(--ink)">I started SUPERMEGA after watching too many good businesses run on three Excel files, a shared Drive folder, and a Viber group chat. The owners were sharp — the tools just weren't built for them. Overseas SaaS is expensive, locked into USD, and built for workflows that don't match how a Yangon factory, trading company, or shop actually runs.</p>
-              <p style="margin-top:12px;font-size:16px;line-height:1.7;color:var(--ink)">So I build the specific thing each business needs — connected to the data they already have, priced in MMK, and shipped to a live URL within weeks. Not a template. Not a subscription to something 80% irrelevant. The exact tool, owned by you.</p>
-              <p style="margin-top:12px;font-size:15px;line-height:1.6;color:var(--muted)">Every project starts with one call where we agree exactly what ships. If you have a recurring problem that costs you real hours every week, that's what we fix first.</p>
+              <h2 style="margin-top:10px;font-size:clamp(18px,2.4vw,26px);line-height:1.45">I'm Swan Htet — I've spent years inside Yangon factories and trading companies, watching the gap between how business actually runs and what the software industry sells.</h2>
+              <p style="margin-top:14px;font-size:16px;line-height:1.7;color:var(--ink)">The pattern is always the same: the owner is sharp, the team works hard, and the operation runs on a combination of Viber threads, shared Excel files, and memory. Not because people are disorganised — but because every off-the-shelf SaaS product is priced in USD, built for a US workflow, and takes months to configure before it does anything useful.</p>
+              <p style="margin-top:12px;font-size:16px;line-height:1.7;color:var(--ink)">I started SUPERMEGA to build the other kind of software. The kind that starts from your actual data — the spreadsheet you already update, the email thread you already send, the Viber group you already use — and turns it into something structured and useful in weeks, not quarters. Priced in MMK. No subscription. Yours to keep.</p>
+              <p style="margin-top:12px;font-size:16px;line-height:1.7;color:var(--ink)">I've built claim tracking systems for a tyre manufacturer processing hundreds of claims a month, POS and inventory tools for retail operations, and AI-powered daily briefings that surface what management needs to know before 9 AM. Each one started with a single messy workflow and a clear first output.</p>
+              <p style="margin-top:12px;font-size:15px;line-height:1.6;color:var(--muted)">If you send me one workflow that costs your team real hours every week, I'll tell you exactly what I can build — and what it would take to see the first result.</p>
               <p style="margin-top:20px;font-size:14px;color:var(--muted)">Based in Yangon &mdash; <a href="mailto:swanhtet@supermega.dev" style="color:var(--clay,#c2603f);font-weight:500">swanhtet@supermega.dev</a> &mdash; <a href="https://www.linkedin.com/in/theswanhtet" style="color:var(--clay,#c2603f);font-weight:500" rel="noreferrer" target="_blank">LinkedIn</a></p>
             </div>
           </div>
@@ -5541,6 +5542,10 @@ const config = {
       dest: '/api/lead.js',
     },
     {
+      src: '^/api/telegram-webhook$',
+      dest: '/api/telegram-webhook.js',
+    },
+    {
       src: '^/api/(.*)$',
       dest: '/api/not-found.js',
     },
@@ -6321,6 +6326,7 @@ await writeNodeFunction('commercial-control.js')
 await writeNodeFunction('pipeline-control.js')
 await writeNodeFunction('checkout-start.js')
 await writeNodeFunction('product-activation.js')
+await writeNodeFunction('telegram-webhook.js')
 await writeNodeFunction('sales-daily.js')
 await writeNodeFunction('not-found.js')
 await writeNodeFunction('public-app-handoff.js')
