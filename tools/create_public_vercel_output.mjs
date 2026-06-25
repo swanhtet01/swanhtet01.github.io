@@ -2454,13 +2454,68 @@ ${unicornHeader}
         </section>
 
         <section class="section">
-          <div style="border:1px solid var(--line);border-radius:24px;padding:clamp(24px,4vw,40px);background:linear-gradient(135deg, rgba(194,96,63,0.06), rgba(201,162,75,0.05));">
+          <div style="border:1px solid var(--line);border-radius:28px;padding:clamp(22px,4vw,40px);background:linear-gradient(135deg, rgba(194,96,63,0.055), rgba(201,162,75,0.05));">
             <div class="eyebrow" style="color:#c2603f">The part global software can't copy</div>
-            <h2 style="margin:8px 0 12px">Wired into Myanmar's own rails.</h2>
-            <p style="max-width:60ch;color:var(--muted);line-height:1.6;margin:0 0 20px">KBZPay, Wave Money, AYA Pay, CB Pay, MMQR, the live CBM exchange rate, and Viber are built in — not bolted on. 36 connectors in total. An agent can read a Viber thread, total it in MMK at today's rate, and send a payment request — in one pipeline. No international SaaS reads these.</p>
-            <div style="display:flex;flex-wrap:wrap;gap:8px" aria-label="Myanmar-native connectors">
-              ${['KBZPay','Wave Money','AYA Pay','CB Pay','MMQR','CBM rate','Viber','+24 more'].map((r,i)=>`<span style="display:inline-flex;align-items:center;border:1px solid ${i===7?'rgba(201,162,75,0.5)':'var(--line)'};border-radius:999px;padding:7px 14px;font-size:13px;font-weight:850;letter-spacing:-0.01em;color:${i===7?'#9a7d2f':'var(--ink)'};background:${i===7?'rgba(201,162,75,0.10)':'var(--paper)'}">${r}</span>`).join('')}
-            </div>
+            <h2 style="margin:8px 0 20px;max-width:20ch">One kernel. 36 connectors. Your data, structured.</h2>
+            <svg viewBox="0 0 960 400" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="lk-t lk-d" style="width:100%;height:auto;display:block;max-width:920px;margin:0 auto" font-family="Inter, system-ui, sans-serif">
+              <title id="lk-t">The SUPERMEGA kernel: your data flows in, the kernel structures it, approved actions flow out</title>
+              <desc id="lk-d">Data sources (Gmail, Viber, Drive, Sheets, Telegram) feed a central kernel of 36 connectors; approved actions flow out (KBZPay request, MMK total at the CBM rate, Viber alert, approval queue, audit-linked record). Myanmar-native rails are highlighted in gold.</desc>
+              <defs>
+                <radialGradient id="lkCore" cx="50%" cy="38%" r="68%"><stop offset="0%" stop-color="#d3754f"/><stop offset="55%" stop-color="#c2603f"/><stop offset="100%" stop-color="#9c4a2d"/></radialGradient>
+                <filter id="lkSoft" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="7" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+                <style>
+                  .lk-pill{fill:#fffdf8;stroke:rgba(42,36,28,.16);stroke-width:1.2}
+                  .lk-pill.lk-gilt{stroke:#c9a24b;stroke-width:1.6}
+                  .lk-pl{fill:#2a241c;font-size:15px;font-weight:650;letter-spacing:-.01em}
+                  .lk-ps{fill:#8a8073;font-size:11px;font-weight:700}
+                  .lk-col{fill:#9c4a2d;font-size:11px;font-weight:900;letter-spacing:.2em}
+                  .lk-wire{fill:none;stroke-linecap:round}
+                  .lk-flow-in{stroke:#c2603f;stroke-width:2;stroke-dasharray:2 11;opacity:.55;animation:lkin 1.5s linear infinite}
+                  .lk-flow-out{stroke:#c9a24b;stroke-width:2.2;stroke-dasharray:2 11;opacity:.7;animation:lkout 1.4s linear infinite}
+                  @keyframes lkin{to{stroke-dashoffset:-13}}
+                  @keyframes lkout{to{stroke-dashoffset:-13}}
+                  .lk-ring{fill:none;stroke:#c9a24b;stroke-width:1.5;opacity:.5;transform-origin:480px 200px;animation:lkpulse 3.4s ease-out infinite}
+                  @keyframes lkpulse{0%{transform:scale(.82);opacity:.55}70%{opacity:0}100%{transform:scale(1.5);opacity:0}}
+                  .lk-dot{animation:lkblink 2.6s ease-in-out infinite}
+                  @keyframes lkblink{0%,100%{opacity:.4}50%{opacity:1}}
+                  @media (prefers-reduced-motion: reduce){.lk-flow-in,.lk-flow-out,.lk-ring,.lk-dot{animation:none}.lk-flow-in,.lk-flow-out{stroke-dasharray:none;opacity:.4}}
+                </style>
+              </defs>
+              <text x="118" y="22" text-anchor="middle" class="lk-col">YOUR DATA</text>
+              <text x="842" y="22" text-anchor="middle" class="lk-col" fill="#9a7d2f">ACTIONS · YOU APPROVE</text>
+              <path class="lk-wire lk-flow-in" d="M212,75 C 300,75 330,200 392,200"/>
+              <path class="lk-wire lk-flow-in" d="M212,137 C 300,137 332,200 392,200"/>
+              <path class="lk-wire lk-flow-in" d="M212,199 C 320,199 350,200 392,200"/>
+              <path class="lk-wire lk-flow-in" d="M212,261 C 320,261 350,200 392,200"/>
+              <path class="lk-wire lk-flow-in" d="M212,323 C 300,323 332,200 392,200"/>
+              <path class="lk-wire lk-flow-out" d="M568,200 C 630,200 660,75 748,75"/>
+              <path class="lk-wire lk-flow-out" d="M568,200 C 630,200 660,137 748,137"/>
+              <path class="lk-wire lk-flow-out" d="M568,200 C 640,200 670,199 748,199"/>
+              <path class="lk-wire lk-flow-out" d="M568,200 C 640,200 670,261 748,261"/>
+              <path class="lk-wire lk-flow-out" d="M568,200 C 630,200 660,323 748,323"/>
+              <g>
+                <rect class="lk-pill" x="24" y="52" width="188" height="46" rx="23"/><text class="lk-pl" x="48" y="80">Gmail</text>
+                <rect class="lk-pill lk-gilt" x="24" y="114" width="188" height="46" rx="23"/><circle class="lk-dot" cx="40" cy="137" r="4" fill="#c9a24b"/><text class="lk-pl" x="56" y="142">Viber</text>
+                <rect class="lk-pill" x="24" y="176" width="188" height="46" rx="23"/><text class="lk-pl" x="48" y="204">Google Drive</text>
+                <rect class="lk-pill" x="24" y="238" width="188" height="46" rx="23"/><text class="lk-pl" x="48" y="266">Sheets</text>
+                <rect class="lk-pill" x="24" y="300" width="188" height="46" rx="23"/><text class="lk-pl" x="48" y="328">Telegram</text>
+              </g>
+              <circle class="lk-ring" cx="480" cy="200" r="86"/>
+              <circle cx="480" cy="200" r="82" fill="url(#lkCore)" filter="url(#lkSoft)"/>
+              <circle cx="480" cy="200" r="82" fill="none" stroke="#c9a24b" stroke-width="2" opacity=".85"/>
+              <text x="480" y="176" text-anchor="middle" fill="#fff" font-size="13" font-weight="900" letter-spacing=".18em">SUPERMEGA</text>
+              <text x="480" y="210" text-anchor="middle" fill="#fff" font-family="Fraunces, Georgia, serif" font-size="40" font-weight="600">36</text>
+              <text x="480" y="232" text-anchor="middle" fill="#f7e9d8" font-size="12" font-weight="800">connectors</text>
+              <text x="480" y="306" text-anchor="middle" fill="#6f665a" font-size="12.5" font-weight="800">one kernel · one data spine</text>
+              <g>
+                <rect class="lk-pill lk-gilt" x="748" y="52" width="188" height="46" rx="23"/><circle class="lk-dot" cx="764" cy="75" r="4" fill="#c9a24b"/><text class="lk-pl" x="780" y="80">KBZPay request</text>
+                <rect class="lk-pill lk-gilt" x="748" y="114" width="188" height="46" rx="23"/><circle class="lk-dot" cx="764" cy="137" r="4" fill="#c9a24b"/><text class="lk-pl" x="780" y="134">MMK total</text><text class="lk-ps" x="780" y="150">at today's CBM rate</text>
+                <rect class="lk-pill lk-gilt" x="748" y="176" width="188" height="46" rx="23"/><circle class="lk-dot" cx="764" cy="199" r="4" fill="#c9a24b"/><text class="lk-pl" x="780" y="204">Viber alert</text>
+                <rect class="lk-pill" x="748" y="238" width="188" height="46" rx="23"/><text class="lk-pl" x="772" y="266">Approval queue</text>
+                <rect class="lk-pill" x="748" y="300" width="188" height="46" rx="23"/><text class="lk-pl" x="772" y="322">Audit-linked</text><text class="lk-ps" x="772" y="336">every number traceable</text>
+              </g>
+            </svg>
+            <p style="max-width:64ch;color:var(--muted);line-height:1.6;margin:18px auto 0;text-align:center">SUPERMEGA reads the tools your team already uses, structures the work in one kernel, and acts only when you approve. <strong style="color:#9a7d2f">Myanmar-native rails — KBZPay, Wave, AYA, CB Pay, MMQR, the live CBM rate, and Viber — are built in. No global SaaS has them.</strong></p>
           </div>
         </section>
 
