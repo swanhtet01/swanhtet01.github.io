@@ -25,6 +25,7 @@ import './messaging-line.mjs'
 import './messaging-facebook.mjs'
 import './messaging-whatsapp.mjs'
 import './messaging-sms.mjs'
+import './integration-webhook.mjs'
 import './payment-onepay.mjs'
 
 export * from './registry.mjs'
