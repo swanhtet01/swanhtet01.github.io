@@ -17,10 +17,12 @@ import './data-calendar.mjs'
 import './payment-stripe.mjs'
 import './payment-mmqr.mjs'
 import './payment-kbzpay.mjs'
+import './payment-wavepay.mjs'
 import './messaging-resend.mjs'
 import './messaging-telegram.mjs'
 import './messaging-viber.mjs'
 import './messaging-facebook.mjs'
+import './messaging-whatsapp.mjs'
 
 export * from './registry.mjs'
 export default registry

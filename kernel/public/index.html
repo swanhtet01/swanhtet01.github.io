@@ -236,12 +236,20 @@ async function loadProjects(){
   }
   box.querySelectorAll('[data-padv]').forEach(b=>b.onclick=async()=>{await api('PATCH','/api/projects/'+b.dataset.padv,{status:b.dataset.to});loadProjects()})
   box.querySelectorAll('[data-dep]').forEach(b=>b.onclick=async()=>{await api('PATCH','/api/projects/'+b.dataset.dep,{deposit_status:'paid',deposit_method:'KBZPay/MMQR'});loadProjects();toast('Deposit recorded')})
+  const stripeInFlight = new Set()
   box.querySelectorAll('[data-stripepay]').forEach(b=>b.onclick=async()=>{
+    const pid = b.dataset.stripepay
+    if (stripeInFlight.has(pid)) return
+    stripeInFlight.add(pid)
     b.disabled=true;b.textContent='Creating…'
-    const x=await api('POST','/api/projects/'+b.dataset.stripepay+'?action=pay',{})
-    if(x.ok&&x.url){window.open(x.url,'_blank');toast('Stripe checkout opened — share the link with the client')}
-    else{toast('Error: '+(x.reason||'stripe_failed'))}
-    b.disabled=false;b.textContent='Stripe link'
+    try {
+      const x=await api('POST','/api/projects/'+pid+'?action=pay',{})
+      if(x.ok&&x.url){window.open(x.url,'_blank');toast('Stripe checkout opened — share the link with the client')}
+      else{toast('Error: '+(x.reason||'stripe_failed'))}
+    } finally {
+      stripeInFlight.delete(pid)
+      b.disabled=false;b.textContent='Stripe link'
+    }
   })
   box.querySelectorAll('[data-prop]').forEach(b=>b.onclick=()=>{const d=(dl.deals||[]).find(x=>x.id===b.dataset.prop);if(d)openProposal(d)})
 }
@@ -349,6 +357,26 @@ async function loadConnectors(){
       ${info?`<div class="info">${esc(String(info).slice(0,80))}</div>`:''}
     </div>`
   }).join('')
+  // Add refresh controls (guard against duplicates on re-render)
+  if (!document.querySelector('#view-connectors #conn-ctrl')) {
+    let autoTimer = null
+    const ctrl = document.createElement('div')
+    ctrl.id = 'conn-ctrl'
+    ctrl.style = 'display:flex;gap:8px;margin-top:12px'
+    const refreshBtn = document.createElement('button')
+    refreshBtn.textContent = '↻ Refresh now'
+    refreshBtn.className = 'sm'
+    refreshBtn.onclick = loadConnectors
+    const autoBtn = document.createElement('button')
+    autoBtn.textContent = 'Auto ○'
+    autoBtn.className = 'sm'
+    autoBtn.onclick = () => {
+      if (autoTimer) { clearInterval(autoTimer); autoTimer = null; autoBtn.textContent = 'Auto ○' }
+      else { autoTimer = setInterval(loadConnectors, 30000); autoBtn.textContent = 'Auto ●' }
+    }
+    ctrl.appendChild(refreshBtn); ctrl.appendChild(autoBtn)
+    document.querySelector('#view-connectors').appendChild(ctrl)
+  }
 }
 
 async function refresh(){
