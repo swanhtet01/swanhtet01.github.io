@@ -1,7 +1,15 @@
 import { cp, mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
+import { readFileSync } from 'node:fs'
 import { dirname, relative, resolve } from 'node:path'
 
 const root = process.cwd()
+const pricing = JSON.parse(readFileSync(resolve(root, 'pricing.json'), 'utf8'))
+const pricingServiceByKey = Object.fromEntries((pricing.services || []).map((s) => [s.key, s]))
+const mmk = (raw) => {
+  const value = String(raw || '').trim()
+  return /MMK/i.test(value) ? value : `${value} MMK`
+}
+const serviceMmk = (key) => mmk(pricingServiceByKey[key]?.mmk)
 const outputDir = resolve(root, '.vercel', 'output')
 const staticDir = resolve(outputDir, 'static')
 const functionsDir = resolve(outputDir, 'functions', 'api')
@@ -2118,7 +2126,7 @@ const unicornPublicShellHtml = `<!doctype html>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="robots" content="index,follow" />
     <title>Custom business software, built for Myanmar | SUPERMEGA.dev</title>
-    <meta name="description" content="Custom software at SaaS prices — AI-native builds from $600 for Myanmar shops, factories, and distributors. You own it. No per-seat fees. KBZPay, MMQR, offline-ready." />
+    <meta name="description" content="Custom software at SaaS prices — AI-native builds from 2,500,000 MMK for Myanmar shops, factories, and distributors. You own it. No per-seat fees. KBZPay, MMQR, offline-ready." />
     <meta name="theme-color" content="#f4efe6" />
     <link rel="canonical" href="https://supermega.dev/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" />
@@ -2126,14 +2134,14 @@ const unicornPublicShellHtml = `<!doctype html>
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="SUPERMEGA.dev" />
     <meta property="og:title" content="Custom business software, built for Myanmar | SUPERMEGA.dev" />
-    <meta property="og:description" content="Custom software at SaaS prices — AI-native, made for how you work, yours to keep. Builds from $600. KBZPay · MMQR · MY/EN · offline." />
+    <meta property="og:description" content="Custom software at SaaS prices — AI-native, made for how you work, yours to keep. Builds from 2,500,000 MMK. KBZPay · MMQR · MY/EN · offline." />
     <meta property="og:url" content="https://supermega.dev/" />
     <meta property="og:image" content="https://supermega.dev/site/social/supermega-portal-card.png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Custom business software, built for Myanmar | SUPERMEGA.dev" />
-    <meta name="twitter:description" content="Custom software at SaaS prices. AI-native builds from $600. KBZPay · MMQR · MY/EN · offline." />
+    <meta name="twitter:description" content="Custom software at SaaS prices. AI-native builds from 2,500,000 MMK. KBZPay · MMQR · MY/EN · offline." />
     <meta name="twitter:image" content="https://supermega.dev/site/social/supermega-portal-card.png" />
     <script type="application/ld+json">{"@context":"https://schema.org","@type":"Organization","name":"SUPERMEGA.dev","url":"https://supermega.dev/","logo":"https://supermega.dev/favicon.svg","description":"Custom business software at SaaS prices, AI-native, built for Myanmar SMBs and factories. POS, factory operations, dashboards, AI agents, and more.","email":"swanhtet@supermega.dev","telephone":"+95-9-500-0721","sameAs":["https://www.linkedin.com/in/theswanhtet"]}</script>
     <style>${unicornShellStyle}
@@ -2192,7 +2200,7 @@ ${unicornHeader}
 
         <div class="proof-strip section">
           <a href="https://pos.supermega.dev/" target="_blank" rel="noopener noreferrer"><div><strong>Live now</strong><span>Try DeskPOS free — no signup</span></div></a>
-          <div><strong>From $600</strong><span>Paid once — not a subscription</span></div>
+          <div><strong>From 2,500,000 MMK</strong><span>Paid once — not a subscription</span></div>
           <div><strong>You own it</strong><span>No per-seat fees, ever</span></div>
           <div><strong>Offline-ready</strong><span>Keeps working when the internet drops</span></div>
         </div>
@@ -2659,40 +2667,40 @@ ${publicLanguageToggleScript}
           'tool-week': {
             name: 'Tool in a week',
             heading: 'Tell us what to build.',
-            price: 'From $600',
-            lead: 'Tool in a week — from $600. Tell us the one job to build.',
+            price: 'From 2,500,000 MMK',
+            lead: 'Tool in a week — from 2,500,000 MMK. Tell us the one job to build.',
             placeholder: 'Describe the single sharp tool you need and the job it does.',
             next: 'Next: a short scope call, then 50% deposit to start.'
           },
           'dashboard': {
             name: 'Custom dashboard',
             heading: 'Tell us what to build.',
-            price: 'From $1,500',
-            lead: 'Custom dashboard — from $1,500. What should it show?',
+            price: 'From 8,000,000 MMK',
+            lead: 'Custom dashboard — from 8,000,000 MMK. What should it show?',
             placeholder: 'Describe the numbers and sources it should pull together, and who reads it.',
             next: 'Next: a short scope call, then 50% deposit to start.'
           },
           'ai-agent': {
             name: 'AI agent / automation',
             heading: 'Tell us what to build.',
-            price: 'From $2,500',
-            lead: 'AI agent — from $2,500. What recurring job should it do?',
+            price: 'From 11,000,000 MMK',
+            lead: 'AI agent — from 11,000,000 MMK. What recurring job should it do?',
             placeholder: 'Describe the recurring task, the inputs it reads, and what must stay approval-only.',
             next: 'Next: a short scope call, then 50% deposit to start.'
           },
           'design-ship': {
             name: 'Design + ship system',
             heading: 'Tell us what to build.',
-            price: 'From $6,000',
-            lead: 'Design + ship system — from $6,000. What do you want built?',
+            price: 'From 25,000,000 MMK',
+            lead: 'Design + ship system — from 25,000,000 MMK. What do you want built?',
             placeholder: 'Describe the system you want — what it does, who uses it, and what it replaces.',
             next: 'Next: a short scope call, then 50% deposit to start.'
           },
           'care-plan': {
             name: 'Care plan',
             heading: 'Keep it running.',
-            price: 'From $300/mo',
-            lead: 'Care plan — from $300/mo. What should we keep running?',
+            price: 'Monthly plan',
+            lead: 'Care plan — keep it running. What should we keep running?',
             placeholder: 'Tell us what needs hosting, changes, and improvements each month.',
             next: 'Next: we confirm scope and start the monthly plan.'
           },
@@ -3502,36 +3510,38 @@ for (const detailDoc of productDetailDocs) {
 // Offers / pricing — the revenue surface. Public "from" anchors (USD primary, MMK derived at the ~4,800 market rate).
 const publicOffers = [
   {
-    slug: 'tool-week', name: 'Tool in a week', usd: '600', mmk: '~2,900,000 MMK',
+    slug: 'tool-week', name: pricingServiceByKey['tool-week'].name, mmkDisplay: serviceMmk('tool-week'),
     who: 'You have one sharp, specific job to fix.',
-    gets: ['One focused tool, fixed scope', 'Live at a real URL in days, not months', 'Yours to keep — no per-seat fee', 'One round of revisions included'],
+    gets: ['One focused tool, fixed scope', 'Live at a real URL in days, not months', 'One round of revisions included'],
     cta: 'Start this',
   },
   {
-    slug: 'dashboard', name: 'Custom dashboard / internal tool', usd: '1,500', mmk: '~7,200,000 MMK',
+    slug: 'dashboard', name: 'Custom build — dashboard / internal tool', mmkDisplay: serviceMmk('dashboard'), flagship: true,
     who: 'Your numbers live across five spreadsheets and nobody trusts them.',
-    gets: ['One screen that updates itself from your real data', 'Built around how you actually work', 'Bilingual MY/EN, MMK-native', 'Export to clean CSV anytime'],
-    cta: 'Scope my dashboard',
+    gets: ['One screen that updates itself from your real data', 'Built around how you actually work', 'Export to clean CSV anytime'],
+    cta: 'Scope my build',
   },
   {
-    slug: 'ai-agent', name: 'AI agent / automation', usd: '2,500', mmk: '~12,000,000 MMK',
+    slug: 'ai-agent', name: pricingServiceByKey['ai-agent'].name, mmkDisplay: serviceMmk('ai-agent'),
     who: 'The same back-office task eats hours every single day.',
-    gets: ['An agent that reads your real inputs and drafts the work', 'Approval gate on anything that sends, pays, or changes the books', 'A run ledger — nothing happens silently', 'Weekly report on time and money saved'],
+    gets: ['An agent that reads your real inputs and drafts the work', 'Approval gate on anything that sends, pays, or changes the books', 'A run ledger — nothing happens silently'],
     cta: 'Describe the job',
   },
   {
-    slug: 'design-ship', name: 'Design + ship system', usd: '6,000', mmk: '~29,000,000 MMK', flagship: true,
+    slug: 'design-ship', name: pricingServiceByKey['design-ship'].name, mmkDisplay: serviceMmk('design-ship'),
     who: 'You want it to look premium and actually run — one build, end to end.',
-    gets: ['Brand and UI designed on our system', 'A full working system, live and in use', 'Local payments, offline-ready, bilingual', 'Hands over as a running thing, not a pile of files'],
+    gets: ['Brand and UI designed on our system', 'A full working system, live and in use', 'Hands over as a running thing, not a pile of files'],
     cta: 'Book a build',
   },
-  {
-    slug: 'care-plan', name: 'Care plan', usd: '300', per: '/mo', mmk: '~1,440,000 MMK / mo',
-    who: 'Keep what we built running, fresh, and improving.',
-    gets: ['Hosting, monitoring, and small changes', 'One shipped improvement every quarter', 'Priority on fixes', 'Sold after a build — never "hours per month"'],
-    cta: 'Add a care plan',
-  },
 ]
+// By-product view — 2 honest tiers per product class, MMK only, from pricing.json.
+// Only DeskPOS is a shipped product; Factory & Custom are build-to-order. NO Starter/Pro/Operator.
+const publicProductTiers = (pricing.products || []).map((p) => ({
+  name: p.name,
+  note: p.note,
+  buildToOrder: /build-to-order/i.test(p.note || ''),
+  tiers: Object.entries(p.tiers || {}).map(([tierName, price]) => ({ tierName, price: mmk(price) })),
+}))
 const publicOffersHtml = `<!doctype html>
 <html lang="en">
   <head>
@@ -3539,26 +3549,19 @@ const publicOffersHtml = `<!doctype html>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="robots" content="index,follow" />
     <title>Pricing | SUPERMEGA.dev</title>
-    <meta name="description" content="Custom software at SaaS prices. Clear from-anchor pricing for tools, dashboards, AI agents, full systems, and care plans — built for Myanmar, yours to keep." />
+    <meta name="description" content="Custom software, priced in MMK. Clear starting prices for tools, dashboards, AI agents, and full systems — built for Myanmar, yours to keep." />
     <meta name="theme-color" content="#f4efe6" />
     <link rel="canonical" href="https://supermega.dev/offers/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="SUPERMEGA.dev" />
-    <meta property="og:title" content="Pricing — custom software at SaaS prices" />
-    <meta property="og:description" content="Clear from-anchor pricing for tools, dashboards, AI agents, full systems, and care plans. Built for Myanmar, yours to keep." />
+    <meta property="og:title" content="Pricing — custom software, priced in MMK" />
+    <meta property="og:description" content="Clear starting prices for tools, dashboards, AI agents, and full systems. Built for Myanmar, yours to keep." />
     <meta property="og:url" content="https://supermega.dev/offers/" />
     <meta property="og:image" content="https://supermega.dev/site/social/supermega-portal-card.png" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:image" content="https://supermega.dev/site/social/supermega-portal-card.png" />
     <style>${unicornShellStyle}
-      .of-thesis { border: 1px solid var(--blue); background: var(--blue-soft); border-radius: 20px; padding: 24px 26px; }
-      .of-thesis p { color: var(--ink); max-width: 64rem; font-size: 18px; line-height: 1.55; }
-      .of-pillars { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px,1fr)); gap: 14px; margin-top: 24px; }
-      .of-pillar { border: 1px solid var(--line); border-radius: 16px; padding: 18px; background: rgba(255,255,255,0.5); }
-      :root[data-theme="dark"] .of-pillar { background: rgba(243,239,230,0.05); }
-      .of-pillar strong { display: block; font-size: 16px; letter-spacing: -0.02em; }
-      .of-pillar span { display: block; margin-top: 7px; color: var(--muted); font-size: 14px; line-height: 1.5; }
       .of-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px,1fr)); gap: 16px; margin-top: 24px; align-items: stretch; }
       .of-card { position: relative; display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 20px; padding: 24px; background: rgba(255,255,255,0.55); }
       :root[data-theme="dark"] .of-card { background: rgba(243,239,230,0.05); }
@@ -3569,25 +3572,18 @@ const publicOffersHtml = `<!doctype html>
       .of-price { margin-top: 16px; display: flex; align-items: baseline; gap: 8px; }
       .of-price b { font-size: 34px; letter-spacing: -0.03em; line-height: 1; }
       .of-price .from { color: var(--muted); font-size: 13px; font-weight: 600; }
-      .of-price .per { color: var(--muted); font-size: 15px; font-weight: 600; }
-      .of-mmk { margin-top: 5px; color: var(--muted); font-size: 13px; }
       .of-gets { list-style: none; padding: 0; margin: 18px 0 0; display: grid; gap: 9px; }
       .of-gets li { display: grid; grid-template-columns: auto minmax(0,1fr); gap: 10px; align-items: start; color: var(--ink); font-size: 14px; line-height: 1.45; }
       .of-gets li::before { content: ""; margin-top: 7px; width: 6px; height: 6px; border-radius: 999px; background: var(--blue); }
       .of-card .btn { margin-top: 20px; width: 100%; text-align: center; }
       .of-card .of-spacer { flex: 1; }
-      .compare { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 24px; }
-      .compare > div { border: 1px solid var(--line); border-radius: 18px; padding: 22px; }
-      .compare h3 { margin: 0 0 10px; font-size: 16px; letter-spacing: -0.01em; }
-      .compare p { color: var(--muted); font-size: 14px; line-height: 1.55; }
-      .compare .win { border-color: var(--blue); background: var(--blue-soft); }
-      .compare .win p { color: var(--ink); }
+      .of-gets li strong { color: var(--ink); font-weight: 750; }
       .of-note { margin-top: 16px; color: var(--muted); font-size: 13px; max-width: 60rem; }
       .pd-steps { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 16px; margin-top: 24px; }
       .pd-step n { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 999px; background: var(--blue); color: #fff; font-weight: 600; font-size: 15px; }
       .pd-step strong { display: block; margin-top: 13px; font-size: 17px; letter-spacing: -0.02em; }
       .pd-step span { display: block; margin-top: 7px; color: var(--muted); font-size: 14px; line-height: 1.5; }
-      @media (max-width: 880px) { .pd-steps { grid-template-columns: 1fr 1fr; } .compare { grid-template-columns: 1fr; } }
+      @media (max-width: 880px) { .pd-steps { grid-template-columns: 1fr 1fr; } }
     </style>
   </head>
   <body>
@@ -3597,64 +3593,59 @@ ${unicornHeader}
         <section class="poster" style="min-height:auto;align-items:center">
           <div class="copy">
             <div class="eyebrow">Pricing</div>
-            <h1>Custom software at SaaS prices</h1>
-            <p>SaaS sells you the average and rents it back forever, per seat. We build you the exact thing — AI-native, made for how you actually work, and yours to keep. Clear starting prices below; the final quote comes after one short call.</p>
+            <h1>You own it. No per-seat bill, ever.</h1>
+            <p>Most Myanmar businesses run on foreign SaaS priced for someone else's workflow. We build the exact version that fits yours — and you keep it outright. Starting prices in MMK below; exact quote after one short call.</p>
             <div class="cta">
-              <a class="btn primary" href="/contact/?package=design-ship">Book a build</a>
+              <a class="btn primary" href="/contact/?package=build">Get a quote</a>
               <a class="btn secondary" href="/demo/">See live demos</a>
             </div>
           </div>
         </section>
 
         <section class="section">
-          <div class="of-thesis"><p><strong>SaaS sells the average. We build the exact</strong> — and because we build <em>with</em> AI, the exact now costs less than two or three years of renting the average. One system instead of seven subscriptions that fight each other, with no per-seat tax that grows every time you hire.</p></div>
-          <div class="of-pillars">
-            <div class="of-pillar"><strong>You own it</strong><span>No per-seat fee, no vendor that can switch it off. The thing is yours.</span></div>
-            <div class="of-pillar"><strong>AI-native</strong><span>AI is the substrate — every build can read messy real inputs and draft the next step.</span></div>
-            <div class="of-pillar"><strong>Built for Myanmar</strong><span>MMK, KBZPay / WavePay / MMQR, MY/EN — and it works when the internet doesn't.</span></div>
-            <div class="of-pillar"><strong>One system, not seven</strong><span>Your tools stop fighting each other; your data lives in one place you control.</span></div>
-          </div>
-        </section>
-
-        <section class="section">
           <h2>What you can start</h2>
           <div class="of-grid">
-            ${publicOffers.map((o) => `<div class="of-card${o.flagship ? ' flagship' : ''}">${o.flagship ? '<span class="of-tag">Most complete</span>' : ''}
+            ${publicOffers.map((o) => `<div class="of-card${o.flagship ? ' flagship' : ''}">${o.flagship ? '<span class="of-tag">Most chosen</span>' : ''}
               <h3>${o.name}</h3>
               <p class="of-who">${o.who}</p>
-              <div class="of-price"><span class="from">from</span><b>$${o.usd}</b>${o.per ? `<span class="per">${o.per}</span>` : ''}</div>
-              <div class="of-mmk">${o.mmk}</div>
+              <div class="of-price"><span class="from">from</span><b>${o.mmkDisplay}</b></div>
               <ul class="of-gets">${o.gets.map((g) => `<li>${g}</li>`).join('')}</ul>
               <div class="of-spacer"></div>
               <a class="btn ${o.flagship ? 'primary' : 'secondary'}" href="/contact/?package=${o.slug}">${o.cta}</a>
             </div>`).join('')}
           </div>
-          <p class="of-note">All prices are starting "from" anchors in USD, with the MMK equivalent at the market rate. Final scope and price are agreed on a short call. Fixed-scope projects with clear revision caps; 50% deposit to start (KBZPay / MMQR / cash, or card for international).</p>
+          <p class="of-note">Starting "from" prices in MMK. Final scope and price confirmed on a short call. Fixed-scope with clear revision caps; 50% deposit to start via KBZPay, MMQR, cash, or card.</p>
+        </section>
+
+        <section class="section">
+          <h2>By product</h2>
+          <p class="of-note" style="margin-top:6px">Two ways to look at the same work. DeskPOS is a shipped product you can try today; Factory &amp; Operations and Custom Solutions are built to order for your business.</p>
+          <div class="of-grid">
+            ${publicProductTiers.map((p) => `<div class="of-card">
+              <h3>${p.name}</h3>
+              <p class="of-who">${p.buildToOrder ? 'Build-to-order — shaped to your business.' : 'Live product — try it today.'}</p>
+              <ul class="of-gets">${p.tiers.map((t) => `<li><strong>${t.tierName}</strong> — ${t.price}</li>`).join('')}</ul>
+              <div class="of-spacer"></div>
+              <a class="btn secondary" href="/contact/?package=build">Talk to us</a>
+            </div>`).join('')}
+          </div>
         </section>
 
         <section class="section">
           <h2>How we work</h2>
+          <p class="of-note" style="margin-top:6px">One-time build, yours to keep. No per-seat tax that climbs every time you hire — pay once, own it, take it and go.</p>
           <div class="pd-steps">
             <div class="pd-step"><n>1</n><strong>Scope</strong><span>One short call. We agree exactly what ships and what's out of scope — no open-ended hours.</span></div>
             <div class="pd-step"><n>2</n><strong>Deposit</strong><span>50% to start — KBZPay, MMQR, cash, or card. The local norm, and it keeps us both honest.</span></div>
             <div class="pd-step"><n>3</n><strong>Ship</strong><span>We build it AI-native and hand you a running thing at a live URL — not a folder of files.</span></div>
-            <div class="pd-step"><n>4</n><strong>Care</strong><span>Optional care plan keeps it running and improving. You can also just take it and go.</span></div>
+            <div class="pd-step"><n>4</n><strong>Care</strong><span>Optional monthly plan keeps it running and improving as your business grows. Or take it and go — it's yours.</span></div>
           </div>
-        </section>
-
-        <section class="section">
-          <h2>Why this beats another subscription</h2>
-          <div class="compare">
-            <div><h3>The SaaS path</h3><p>A 15-person shop on separate POS, accounting, and HR tools easily pays $200–400 a month — over $7,000 in two to three years — and it grows with every hire. Most SMBs run 25+ apps, add about seven a month, and leave over half the seats underused. The tools rarely talk to each other.</p></div>
-            <div class="win"><h3>The SuperMega path</h3><p>One custom build, paid once, plus a light care plan if you want it. It's shaped to your work, it speaks to itself, and the price doesn't climb when you hire. You own it. Over two to three years it wins on total cost — and you stop paying the integration tax forever.</p></div>
-          </div>
-          <p class="of-note">Sources: Zylo 2025 SaaS Management Index; JumpCloud; Spendesk. Figures are industry averages used to frame total cost — your numbers are confirmed on the scoping call.</p>
         </section>
 
         <section class="section">
           <div class="final">
             <div><h2>Tell us the one thing to fix first.</h2></div>
-            <a class="btn primary" href="/contact/?package=design-ship">Book a build</a>
+            <a class="btn primary" href="/contact/?package=build">Get a quote</a>
           </div>
         </section>
       </main>
@@ -3665,19 +3656,14 @@ ${unicornHeader}
           <a href="/products/">Products</a>
           <a href="/demo/">Demos</a>
           <a href="/contact/">Contact</a>
+          <a href="/privacy/">Privacy</a>
         </span>
       </footer>
     </div>
 ${publicLanguageToggleScript}
   </body>
 </html>`
-await rm(resolve(staticDir, 'pricing'), { recursive: true, force: true, maxRetries: 8, retryDelay: 250 })
-await rm(resolve(staticDir, 'start'), { recursive: true, force: true, maxRetries: 8, retryDelay: 250 })
-await mkdir(resolve(staticDir, 'card'), { recursive: true })
-await writeTextFileEnsuringDir(resolve(staticDir, 'card', 'index.html'), normalizePublicProductNames(publicCardHtml))
-await rm(resolve(staticDir, 'about'), { recursive: true, force: true, maxRetries: 8, retryDelay: 250 })
-await mkdir(resolve(staticDir, 'c'), { recursive: true })
-await writeTextFileEnsuringDir(resolve(staticDir, 'c', 'index.html'), normalizePublicProductNames(publicCampaignRedirectHtml))
+
 await mkdir(resolve(staticDir, 'contact'), { recursive: true })
 await writeFile(resolve(staticDir, 'contact', 'index.html'), normalizePublicProductNames(collapsedContactHtml), 'utf8')
 await mkdir(resolve(staticDir, 'offers'), { recursive: true })

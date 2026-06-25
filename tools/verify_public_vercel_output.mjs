@@ -585,6 +585,14 @@ for (const entry of walkHtmlFiles(staticDir)) {
       fail('non_canonical_mmk_price', { entry, price: priceMatch, allowed: [...canonicalMmkNumbers] })
     }
   }
+  // CANON GUARDRAIL (owner directive 2026-06-25): NO USD/$ price strings on ANY public surface — MMK only.
+  // This is the guard that was missing when /offers/ silently regressed to "$600 / $1,500 …". A dollar sign
+  // followed by a digit ($600, $1,500, $200–400) is a price and must never ship. MMK-only, always.
+  const dollarPriceMatch = html.match(/\$\s?\d/)
+  if (dollarPriceMatch) {
+    const at = html.indexOf(dollarPriceMatch[0])
+    fail('usd_dollar_price_found', { entry, context: html.slice(Math.max(0, at - 15), at + 20) })
+  }
   // No Starter/Pro/Operator pricing-tier naming on the /offers/ pricing surface (canon: 2 honest tiers, no
   // such names). Scoped to /offers/ so legitimate product copy/labels elsewhere ("Operator tablet flows",
   // the "Operator Builder" screenshot label) aren't flagged — /offers/ carries no such product labels.
