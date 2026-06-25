@@ -963,7 +963,9 @@ module.exports = async function handler(req, res) {
     }
   })().catch(() => {})
 
-  if (delivery.status !== 'ready') {
+  // Email is a notification layer — only fail hard if the lead was not saved anywhere
+  const leadSaved = ledger.status === 'ready'
+  if (delivery.status !== 'ready' && !leadSaved) {
     if (shouldRenderHtmlFormResponse(req)) {
       html(res, 502, 'Could not send.', `Email ${notifyEmail} directly and include your company, workflow, and contact details.`)
       return

@@ -2153,7 +2153,7 @@ const unicornPublicShellHtml = `<!doctype html>
       .proof-strip span { display: block; margin-top: 4px; color: var(--muted); font-size: 13px; line-height: 1.4; }
       .proof-strip a { color: inherit; text-decoration: none; }
       .proof-strip a:hover strong { color: var(--blue); }
-      .uvp-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px,1fr)); gap: 14px; margin-top: 24px; }
+      .uvp-grid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 14px; margin-top: 24px; }
       .uvp-card { border: 1px solid var(--line); border-radius: 18px; padding: 22px; background: rgba(255,255,255,0.5); }
       :root[data-theme="dark"] .uvp-card { background: rgba(243,239,230,0.05); }
       .uvp-card strong { display: block; font-size: 18px; letter-spacing: -0.02em; }
@@ -2177,6 +2177,7 @@ const unicornPublicShellHtml = `<!doctype html>
       .founder-linkedin { font-size: 14px; font-weight: 600; color: var(--blue); text-decoration: none; }
       .founder-linkedin:hover { text-decoration: underline; }
       @media (max-width: 880px) {
+        .uvp-grid { grid-template-columns: 1fr; }
         .how-steps { grid-template-columns: 1fr 1fr; }
         .proof-strip { grid-template-columns: 1fr 1fr; }
         .proof-strip > div { border-right: 0; border-bottom: 1px solid var(--line); }
@@ -2192,7 +2193,7 @@ ${unicornHeader}
       <main>
         <section class="poster">
           <div class="copy">
-            <div class="eyebrow">Extraction-first · Myanmar-built · Yours to keep</div>
+            <div class="eyebrow">Starts from your real data · Built to last · Yours to keep</div>
             <h1>Stop running your business on Viber.</h1>
             <p>Most businesses we work with already have a system — it's spread across a group chat, a shared Excel, and someone's memory. We pull that out, structure it, and give you software you actually own. From 2,500,000 MMK. Delivered in weeks.</p>
             <div class="cta">
@@ -2226,13 +2227,15 @@ ${unicornHeader}
             <div class="uvp-card"><strong>The exact thing.</strong><span>Built around how you actually work — not the average workflow some other company built a template for.</span></div>
             <div class="uvp-card"><strong>AI-native.</strong><span>AI is the substrate: every build can read messy real inputs, draft the next step, and explain itself. Not a chatbot bolted on.</span></div>
             <div class="uvp-card"><strong>Built for real conditions.</strong><span>Works when the internet drops. Handles your local data formats. Runs fast on the hardware you already own.</span></div>
+            <div class="uvp-card"><strong>Traceable output.</strong><span>Every extracted record links to the source document, chat, or file it came from. Nothing is invented — every figure can be checked.</span></div>
+            <div class="uvp-card"><strong>You approve every step.</strong><span>AI drafts the next action; you decide whether it sends, saves, or charges. Nothing acts without sign-off.</span></div>
           </div>
         </section>
 
         <section class="section">
           <h2>How it works</h2>
           <div class="how-steps">
-            <div class="how-step"><n>1</n><strong>Scope</strong><span>One short call. We agree exactly what ships and what is out of scope — fixed, no open-ended hours.</span></div>
+            <div class="how-step"><n>1</n><strong>Send one source</strong><span>A file, Viber export, Gmail chain, or spreadsheet — we start from data you already have, not a blank template.</span></div>
             <div class="how-step"><n>2</n><strong>Deposit</strong><span>50% to start. Keeps both sides honest.</span></div>
             <div class="how-step"><n>3</n><strong>Ship</strong><span>We build it and hand you a running thing at a live URL. Not a folder of files.</span></div>
             <div class="how-step"><n>4</n><strong>Care</strong><span>Optional monthly plan keeps it running and improving. Or take it and go.</span></div>
@@ -2892,6 +2895,10 @@ const config = {
       dest: '/api/telegram-webhook.js',
     },
     {
+      src: '^/api/action-runner$',
+      dest: '/api/action-runner.js',
+    },
+    {
       src: '^/api/pipeline-control/status$',
       dest: '/api/pipeline-control.js',
     },
@@ -3015,6 +3022,11 @@ const config = {
       dest: '/machine/index.html',
     },
     {
+      src: '^/work/?$',
+      status: 308,
+      headers: { Location: '/demo/' },
+    },
+    {
       src: '^/(?:site/.*|favicon\\.svg|favicon-[0-9]+\\.png|apple-touch-icon\\.png|vite\\.svg|site\\.webmanifest)$',
       headers: { 'cache-control': 'public, max-age=31536000, immutable' },
       continue: true,
@@ -3032,6 +3044,10 @@ const config = {
     {
       path: '/api/cron/sales-daily',
       schedule: '30 2 * * *',
+    },
+    {
+      path: '/api/action-runner',
+      schedule: '*/5 * * * *',
     },
   ],
 }
@@ -3799,6 +3815,7 @@ await writeNodeFunction('checkout-start.js')
 await writeNodeFunction('product-activation.js')
 await writeNodeFunction('sales-daily.js')
 await writeNodeFunction('telegram-webhook.js')
+await writeNodeFunction('action-runner.js')
 await writeNodeFunction('not-found.js')
 await writeNodeFunction('public-app-handoff.js')
 await removePrivateRootFunctions()
