@@ -2186,8 +2186,11 @@ ${unicornHeader}
             <div class="connector-chip">OnePay</div>
             <div class="connector-chip">Supabase</div>
             <div class="connector-chip">Webhook</div>
+            <div class="connector-chip">Microsoft Teams</div>
+            <div class="connector-chip">Notion</div>
+            <div class="connector-chip">Shopify</div>
           </div>
-          <p class="connector-note">19 connectors wired in. Most clients start with two or three — that's enough to scope and build the first agent.</p>
+          <p class="connector-note">22 connectors wired in. Most clients start with two or three — that's enough to scope and build the first agent.</p>
         </section>
 
         <section class="section agent-proof">
@@ -2199,7 +2202,7 @@ ${unicornHeader}
         </section>
       </main>
       <footer>
-        <span>SUPERMEGA.dev — custom business software for Myanmar. Built from your real data.</span>
+        <span>© 2026 SUPERMEGA.dev — custom business software for Myanmar. Built from your real data.</span>
         <span class="footer-links">
           <a href="mailto:swanhtet@supermega.dev">swanhtet@supermega.dev</a>
           <a href="/products/">Products</a>
@@ -2364,7 +2367,7 @@ ${unicornHeader}
           <div class="uvp-grid">
             <div class="uvp-card"><strong>You own it.</strong><span>No per-seat tax that grows when you hire. No vendor that can switch it off. The software is yours to keep.</span></div>
             <div class="uvp-card"><strong>The exact thing.</strong><span>Built around how you actually work — not the average workflow some other company built a template for.</span></div>
-            <div class="uvp-card"><strong>AI-native.</strong><span>Reads from Gmail, Telegram, Drive, Sheets, Viber — 19 connectors wired in — drafts the next step, and waits for your sign-off. Not a chatbot bolted on.</span></div>
+            <div class="uvp-card"><strong>AI-native.</strong><span>Reads from Gmail, Telegram, Drive, Sheets, Viber — 22 connectors wired in — drafts the next step, and waits for your sign-off. Not a chatbot bolted on.</span></div>
             <div class="uvp-card"><strong>Built for real conditions.</strong><span>Works when the internet drops. Handles your local data formats. Runs fast on the hardware you already own.</span></div>
             <div class="uvp-card"><strong>Traceable output.</strong><span>Every extracted record links to the source document, chat, or file it came from. Nothing is invented — every figure can be checked.</span></div>
             <div class="uvp-card"><strong>You approve every step.</strong><span>AI drafts the next action; you decide whether it sends, saves, or charges. Nothing acts without sign-off.</span></div>
@@ -2384,7 +2387,7 @@ ${unicornHeader}
         <section class="section founder-section" id="founder">
           <div class="founder-inner">
             <div class="founder-photo-wrap">
-              <img class="founder-photo" src="/social/swan-htet.jpg" alt="Swan Htet — founder, SUPERMEGA.dev" loading="lazy" decoding="async" />
+              <img class="founder-photo" src="/site/social/swan-htet.jpg" alt="Swan Htet — founder, SUPERMEGA.dev" loading="lazy" decoding="async" />
             </div>
             <div class="founder-copy">
               <p class="founder-quote">"Most of the businesses I work with already have a system — it's just spread across a Viber group, a shared Excel, and someone's memory."</p>
@@ -2410,7 +2413,7 @@ ${unicornHeader}
         </section>
       </main>
       <footer>
-        <span>SUPERMEGA.dev — custom business software for Myanmar. Built from your real data.</span>
+        <span>© 2026 SUPERMEGA.dev — custom business software for Myanmar. Built from your real data.</span>
         <span class="footer-links">
           <a href="mailto:swanhtet@supermega.dev">swanhtet@supermega.dev</a>
           <a href="tel:+9595000721">+95 9 500 0721</a>
@@ -2433,13 +2436,13 @@ const unicornProductsHtml = `<!doctype html>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="robots" content="index,follow" />
     <title>Products | SUPERMEGA.dev</title>
-    <meta name="description" content="SUPERMEGA.dev products for Myanmar shops, factories, and restaurants: DeskPOS, Factory Operations, Document Extraction Ledger, and the Back Office Workflow Desk — built from your real data." />
+    <meta name="description" content="SUPERMEGA.dev products for Myanmar shops, factories, and restaurants: DeskPOS, Factory Operations, Document Extraction Ledger, and the Back Office AI Desk — built from your real data." />
     <meta name="theme-color" content="#f4efe6" />
     <link rel="canonical" href="https://supermega.dev/products/" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="SUPERMEGA.dev" />
     <meta property="og:title" content="SUPERMEGA.dev products — software for Myanmar shops, factories, and restaurants" />
-    <meta property="og:description" content="DeskPOS, Factory Operations, the Document Extraction Ledger, and the Back Office Workflow Desk — built from real work." />
+    <meta property="og:description" content="DeskPOS, Factory Operations, the Document Extraction Ledger, and the Back Office AI Desk — built from real work." />
     <meta property="og:url" content="https://supermega.dev/products/" />
     <meta property="og:image" content="https://supermega.dev/site/social/supermega-portal-card.png" />
     <meta name="twitter:card" content="summary_large_image" />
@@ -2611,7 +2614,7 @@ ${unicornHeader}
         </section>
       </main>
       <footer>
-        <span>Start with one useful app. Expand only after proof.</span>
+        <span>© 2026 SUPERMEGA.dev — start with one useful app. Expand only after proof.</span>
         <span class="footer-links">
           <a href="mailto:swanhtet@supermega.dev">swanhtet@supermega.dev</a>
           <a href="tel:+9595000721">+95 9 500 0721</a>
@@ -2741,6 +2744,17 @@ ${unicornHeader}
           </form>
         </section>
       </main>
+      <footer>
+        <span>© 2026 SUPERMEGA.dev — custom business software for Myanmar. Built from your real data.</span>
+        <span class="footer-links">
+          <a href="mailto:swanhtet@supermega.dev">swanhtet@supermega.dev</a>
+          <a href="tel:+9595000721">+95 9 500 0721</a>
+          <a href="/products/">Products</a>
+          <a href="/demo/">Demos</a>
+          <a href="/offers/">Pricing</a>
+          <a href="/privacy/">Privacy</a>
+        </span>
+      </footer>
     </div>
 ${publicLanguageToggleScript}
     <script>
@@ -3648,7 +3662,7 @@ ${unicornHeader}
         </section>
       </main>
       <footer>
-        <span>SUPERMEGA.dev builds custom business apps from real work.</span>
+        <span>© 2026 SUPERMEGA.dev — builds custom business apps from real work.</span>
         <span class="footer-links">
           <a href="mailto:swanhtet@supermega.dev">swanhtet@supermega.dev</a>
           <a href="/products/">Products</a>
@@ -3785,7 +3799,7 @@ ${unicornHeader}
         </section>
       </main>
       <footer>
-        <span>SUPERMEGA.dev builds custom business apps from real work.</span>
+        <span>© 2026 SUPERMEGA.dev — builds custom business apps from real work.</span>
         <span class="footer-links">
           <a href="mailto:swanhtet@supermega.dev">swanhtet@supermega.dev</a>
           <a href="/products/">Products</a>
@@ -3914,7 +3928,7 @@ ${unicornHeader}
         </section>
       </main>
       <footer>
-        <span>SUPERMEGA.dev — custom business software for Myanmar. Built from your real data.</span>
+        <span>© 2026 SUPERMEGA.dev — custom business software for Myanmar. Built from your real data.</span>
         <span class="footer-links">
           <a href="mailto:swanhtet@supermega.dev">swanhtet@supermega.dev</a>
           <a href="/products/">Products</a>

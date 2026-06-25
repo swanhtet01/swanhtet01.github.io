@@ -28,6 +28,9 @@ import './messaging-whatsapp.mjs'
 import './messaging-sms.mjs'
 import './integration-webhook.mjs'
 import './payment-onepay.mjs'
+import './messaging-teams.mjs'
+import './data-notion.mjs'
+import './commerce-shopify.mjs'
 
 export * from './registry.mjs'
 export default registry
