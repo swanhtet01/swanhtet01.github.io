@@ -3,6 +3,7 @@
 //
 // Dispatch table:
 //   draft_reply  → compose a draft reply to the lead's email (saves to DB, does NOT send)
+//   send_reply   → sends the approved reply via Resend (args = reply body, lead.email = recipient)
 //   freeform     → Claude haiku interprets command, stores structured result
 //   mark_done    → sets supermega_leads.status = 'done'
 //   snooze       → sets supermega_leads.status = 'snoozed' for 24 h
@@ -13,7 +14,7 @@
 //   CRON_SECRET or SUPERMEGA_INTERNAL_CRON_TOKEN — for GET (cron) auth
 //   SUPERMEGA_OPS_KEY — for POST (manual) auth
 //   ANTHROPIC_API_KEY — required for freeform dispatch
-//   RESEND_API_KEY — optional; used to pre-populate draft reply body via Resend drafts table
+//   RESEND_API_KEY — required for send_reply dispatch
 
 const BATCH_LIMIT = 10
 const SUPABASE_TIMEOUT_MS = 8000
@@ -116,6 +117,41 @@ async function dispatchDraftReply(sb, row) {
   return { status: 'ready', draft }
 }
 
+async function dispatchSendReply(sb, row) {
+  const apiKey = text(process.env.RESEND_API_KEY)
+  if (!apiKey) return { status: 'skipped', reason: 'resend_not_configured' }
+
+  const lead = await fetchLead(sb, row.lead_id)
+  if (!lead) return { status: 'error', reason: 'lead_not_found', lead_id: row.lead_id }
+
+  const to = text(lead.email)
+  const replyBody = text(row.args || row.raw_text)
+  if (!to) return { status: 'error', reason: 'lead_email_missing' }
+  if (!replyBody) return { status: 'error', reason: 'reply_body_missing' }
+
+  const subject = `Re: ${text(lead.company) || text(lead.name) || 'Your SuperMega request'}`
+
+  try {
+    const res = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        from: 'Swan Htet <swanhtet@supermega.dev>',
+        to: [to],
+        subject,
+        text: replyBody,
+      }),
+      signal: AbortSignal.timeout(SUPABASE_TIMEOUT_MS),
+    })
+    const data = await res.json().catch(() => null)
+    if (!res.ok) return { status: 'error', reason: 'resend_error', code: res.status, data }
+    await updateLead(sb, row.lead_id, { status: 'replied' })
+    return { status: 'ready', email_id: data?.id, to }
+  } catch (e) {
+    return { status: 'error', reason: text(e?.message) || 'resend_timeout' }
+  }
+}
+
 async function dispatchFreeform(row) {
   const apiKey = text(process.env.ANTHROPIC_API_KEY)
   if (!apiKey) return { status: 'skipped', reason: 'anthropic_not_configured' }
@@ -168,6 +204,9 @@ async function processRow(sb, row) {
     switch (row.action_type) {
       case 'draft_reply':
         result = await dispatchDraftReply(sb, row)
+        break
+      case 'send_reply':
+        result = await dispatchSendReply(sb, row)
         break
       case 'freeform':
         result = await dispatchFreeform(row)

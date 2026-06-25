@@ -2112,11 +2112,15 @@ const unicornAiAgentsHtml = `<!doctype html>
       .agent-hero p { max-width: 46ch; margin: 0 auto 36px; color: var(--muted); font-size: clamp(16px,1.5vw,19px); line-height: 1.6; }
       .sprint-grid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 20px; margin-top: 48px; }
       .sprint-card { border: 1px solid var(--line); border-radius: 18px; padding: 28px; background: var(--surface); display: flex; flex-direction: column; gap: 14px; }
-      .sprint-card .s-icon { font-size: 28px; }
       .sprint-card .s-time { font-size: 12px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--blue); }
       .sprint-card h3 { font-size: 20px; letter-spacing: -.02em; margin: 0; }
       .sprint-card p { font-size: 15px; color: var(--muted); line-height: 1.55; margin: 0; flex: 1; }
       .sprint-card .btn { align-self: flex-start; }
+      .connector-section h2 { margin-bottom: 8px; }
+      .connector-section .section-sub { color: var(--muted); font-size: 15px; margin-bottom: 24px; max-width: 52ch; }
+      .connector-grid { display: flex; flex-wrap: wrap; gap: 10px; }
+      .connector-chip { border: 1px solid var(--line); border-radius: 100px; padding: 7px 16px; font-size: 13px; font-weight: 500; color: var(--muted); background: var(--surface); }
+      .connector-note { margin-top: 18px; font-size: 14px; color: var(--muted); max-width: 52ch; }
       .agent-proof { margin: 64px auto 0; max-width: 600px; text-align: center; }
       .agent-proof blockquote { font-family: 'Fraunces', Georgia, serif; font-size: clamp(17px,2vw,22px); font-style: italic; line-height: 1.45; color: var(--ink); border-left: 3px solid var(--blue); padding-left: 20px; text-align: left; margin: 0 0 20px; }
       .agent-proof cite { font-size: 14px; color: var(--muted); display: block; margin-top: 8px; }
@@ -2137,21 +2141,18 @@ ${unicornHeader}
         <section class="section">
           <div class="sprint-grid">
             <div class="sprint-card">
-              <div class="s-icon">📧</div>
               <div class="s-time">3–5 days</div>
               <h3>Email Intelligence Agent</h3>
               <p>Reads your inbox, surfaces what needs action, writes reply drafts. You approve before anything sends.</p>
               <a class="btn secondary" href="/contact/?package=agent-email">Talk to us →</a>
             </div>
             <div class="sprint-card">
-              <div class="s-icon">📁</div>
               <div class="s-time">3–5 days</div>
               <h3>Drive Document Processor</h3>
               <p>A file lands in your Drive. AI pulls the key fields and updates your Sheet automatically — no re-typing.</p>
               <a class="btn secondary" href="/contact/?package=agent-drive">Talk to us →</a>
             </div>
             <div class="sprint-card">
-              <div class="s-icon">📨</div>
               <div class="s-time">1–2 days</div>
               <h3>Scheduled Digest Agent</h3>
               <p>Daily or weekly AI summary of what matters, delivered to your inbox. Set it once, it runs itself.</p>
@@ -2160,9 +2161,36 @@ ${unicornHeader}
           </div>
         </section>
 
+        <section class="section connector-section">
+          <h2>Reads from where your data actually lives.</h2>
+          <p class="section-sub">Every agent is wired to real connectors — not API mocks. We plug into what your team already uses and route the output wherever you need it.</p>
+          <div class="connector-grid">
+            <div class="connector-chip">Gmail</div>
+            <div class="connector-chip">Google Drive</div>
+            <div class="connector-chip">Google Sheets</div>
+            <div class="connector-chip">Google Calendar</div>
+            <div class="connector-chip">Telegram</div>
+            <div class="connector-chip">Viber</div>
+            <div class="connector-chip">WhatsApp</div>
+            <div class="connector-chip">Slack</div>
+            <div class="connector-chip">Line</div>
+            <div class="connector-chip">Facebook</div>
+            <div class="connector-chip">SMS</div>
+            <div class="connector-chip">Email (Resend)</div>
+            <div class="connector-chip">Stripe</div>
+            <div class="connector-chip">WavePay</div>
+            <div class="connector-chip">KBZPay</div>
+            <div class="connector-chip">MMQR</div>
+            <div class="connector-chip">OnePay</div>
+            <div class="connector-chip">Supabase</div>
+            <div class="connector-chip">Webhook</div>
+          </div>
+          <p class="connector-note">19 connectors wired in. Most clients start with two or three — that's enough to scope and build the first agent.</p>
+        </section>
+
         <section class="section agent-proof">
           <blockquote>"We had 300+ warranty claims buried in a Gmail chain. Three weeks later we had a tracked ledger with owners and statuses on every row."</blockquote>
-          <cite>— Real client project, Yangon-based manufacturer</cite>
+          <cite>— Manufacturing client, built in 3 weeks</cite>
           <div class="cta" style="justify-content:center;margin-top:28px">
             <a class="btn primary" href="/contact/?package=agent">Start with one agent</a>
           </div>
@@ -2334,7 +2362,7 @@ ${unicornHeader}
           <div class="uvp-grid">
             <div class="uvp-card"><strong>You own it.</strong><span>No per-seat tax that grows when you hire. No vendor that can switch it off. The software is yours to keep.</span></div>
             <div class="uvp-card"><strong>The exact thing.</strong><span>Built around how you actually work — not the average workflow some other company built a template for.</span></div>
-            <div class="uvp-card"><strong>AI-native.</strong><span>AI is the substrate: every build can read messy real inputs, draft the next step, and explain itself. Not a chatbot bolted on.</span></div>
+            <div class="uvp-card"><strong>AI-native.</strong><span>Reads from Gmail, Telegram, Drive, Sheets, Viber — 19 connectors wired in — drafts the next step, and waits for your sign-off. Not a chatbot bolted on.</span></div>
             <div class="uvp-card"><strong>Built for real conditions.</strong><span>Works when the internet drops. Handles your local data formats. Runs fast on the hardware you already own.</span></div>
             <div class="uvp-card"><strong>Traceable output.</strong><span>Every extracted record links to the source document, chat, or file it came from. Nothing is invented — every figure can be checked.</span></div>
             <div class="uvp-card"><strong>You approve every step.</strong><span>AI drafts the next action; you decide whether it sends, saves, or charges. Nothing acts without sign-off.</span></div>

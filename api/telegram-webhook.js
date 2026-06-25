@@ -26,11 +26,6 @@ function text(value) {
   return String(value || '').trim()
 }
 
-function hmacVerify(body, signature, secret) {
-  if (!signature || !secret) return false
-  const expected = crypto.createHmac('sha256', secret).update(body).digest('hex')
-  return crypto.timingSafeEqual(Buffer.from(signature, 'hex'), Buffer.from(expected, 'hex'))
-}
 
 async function telegramSend(token, chatId, msg, replyToMessageId) {
   const body = { chat_id: chatId, text: msg, parse_mode: 'HTML' }
@@ -142,13 +137,13 @@ module.exports = async function handler(req, res) {
     })
   }
 
-  // Verify webhook secret — timing-safe comparison to prevent brute-force timing attacks
+  // Verify webhook secret — constant-time comparison prevents timing oracle attacks
   if (webhookSecret) {
     const sigHeader = text(req.headers['x-telegram-bot-api-secret-token'])
-    const a = Buffer.from(sigHeader.padEnd(webhookSecret.length))
-    const b = Buffer.from(webhookSecret.padStart(sigHeader.length))
-    const safe = a.length === b.length && crypto.timingSafeEqual(a, b)
-    if (!safe) {
+    const a = Buffer.from(sigHeader)
+    const b = Buffer.from(webhookSecret)
+    const valid = a.length === b.length && crypto.timingSafeEqual(a, b)
+    if (!valid) {
       json(res, 401, { status: 'error', reason: 'invalid_secret' })
       return
     }
