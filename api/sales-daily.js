@@ -67,10 +67,19 @@ function expectedSecrets() {
   return [envText('CRON_SECRET'), envText('SUPERMEGA_INTERNAL_CRON_TOKEN')].filter(Boolean)
 }
 
+function safeEqual(a, b) {
+  const ha = crypto.createHash('sha256').update(String(a)).digest()
+  const hb = crypto.createHash('sha256').update(String(b)).digest()
+  return crypto.timingSafeEqual(ha, hb)
+}
+
 function isAuthorized(req) {
   const secrets = expectedSecrets()
   if (!secrets.length) return false
-  return secrets.some((secret) => text(req.headers.authorization) === `Bearer ${secret}`)
+  const provided = text(req.headers.authorization).startsWith('Bearer ')
+    ? text(req.headers.authorization).slice(7)
+    : text(req.headers.authorization)
+  return secrets.some((secret) => safeEqual(provided, secret))
 }
 
 function supabaseConfig() {
@@ -382,6 +391,7 @@ async function saveRun(run) {
       'Content-Type': 'application/json',
       Prefer: 'return=minimal',
     },
+    signal: AbortSignal.timeout(8000),
     body: JSON.stringify({
       run_id: run.run_id,
       run_type: run.run_type,

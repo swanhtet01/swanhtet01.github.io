@@ -38,6 +38,7 @@ async function aiScope(workflow, name, company) {
     const resp = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
+      signal: AbortSignal.timeout(8000),
       body: JSON.stringify({
         model: 'claude-haiku-4-5',
         max_tokens: 300,
@@ -52,7 +53,9 @@ async function aiScope(workflow, name, company) {
     const text = data.content?.[0]?.text || ''
     const match = text.match(/\{[\s\S]*\}/)
     if (!match) return null
-    return JSON.parse(match[0])
+    const parsed = JSON.parse(match[0])
+    if (!parsed?.summary || !parsed?.build || !parsed?.first_proof) return null
+    return parsed
   } catch {
     return null
   }
@@ -67,6 +70,7 @@ async function notifySwann(lead) {
     await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: { Authorization: `Bearer ${key}`, 'content-type': 'application/json' },
+      signal: AbortSignal.timeout(8000),
       body: JSON.stringify({
         from,
         to,

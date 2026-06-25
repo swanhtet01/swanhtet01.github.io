@@ -111,7 +111,7 @@ module.exports = async function handler(req, res) {
       webhook_configured: Boolean(webhookSecret),
       owner_chat_configured: Boolean(ownerChatId),
       supabase_configured: Boolean(supabaseUrl && supabaseKey),
-      register_url: `https://api.telegram.org/bot${token}/setWebhook`,
+      register_url: `https://api.telegram.org/bot<TOKEN>/setWebhook`,
       notes: 'POST register_url with {"url":"https://supermega.dev/api/telegram-webhook","secret_token":"<TELEGRAM_WEBHOOK_SECRET>"}',
     })
     return
@@ -237,6 +237,6 @@ module.exports = async function handler(req, res) {
 
     await telegramSend(token, chatId, ack, msgId)
   } catch (e) {
-    // Never let processing errors surface back to Telegram
+    console.error('[telegram-webhook] processing_error', e?.message)
   }
 }

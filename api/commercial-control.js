@@ -152,7 +152,7 @@ function onboardingPlan(latestLead) {
 module.exports = async function handler(req, res) {
   if (req.method === 'OPTIONS') {
     res.statusCode = 204
-    res.setHeader('Access-Control-Allow-Origin', '*')
+    res.setHeader('Access-Control-Allow-Origin', process.env.SUPERMEGA_CONSOLE_URL || 'https://supermega.dev')
     res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS')
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization')
     res.end()
