@@ -11,6 +11,9 @@
     "vercel:build": "npx vercel build --yes",
     "vercel:deploy": "npx vercel deploy --prebuilt -y",
     "vercel:deploy:prod": "npx vercel deploy --prebuilt --prod -y",
+    "public:build": "node tools/create_public_vercel_output.mjs",
+    "public:verify": "node tools/verify_public_vercel_output.mjs",
+    "deploy:public:prod": "node tools/create_public_vercel_output.mjs && node tools/verify_public_vercel_output.mjs && npx vercel deploy --prebuilt --prod -y",
     "smoke:local": "bash tools/run_local_smoke.sh",
     "smoke:public": "python3 tools/smoke_test_public_site.py"
   }
