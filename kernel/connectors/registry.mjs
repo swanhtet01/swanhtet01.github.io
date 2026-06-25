@@ -9,18 +9,22 @@
 // Zero dependencies (matches gateway.mjs / store.mjs). ESM. See ../../PLATFORM.md.
 
 /**
- * @typedef {'payment'|'messaging'|'data'|'ai'|'integration'} ConnectorCategory
+ * @typedef {'payment'|'messaging'|'data'|'ai'|'integration'|'commerce'} ConnectorCategory
  *
  * @typedef {object} Connector
  * @property {string} key                 stable id, e.g. 'payment-stripe' (unique in the registry)
  * @property {string} name                human label, e.g. 'Stripe'
- * @property {ConnectorCategory} category one of the four lanes
+ * @property {ConnectorCategory} category one of the connector lanes
  * @property {() => boolean} configured   true when the env/credentials needed are present
  * @property {() => Promise<{ok:boolean, detail?:string}>} health  cheap liveness probe
  * @property {string} [docs]              optional pointer to where the real impl lives
  */
 
-export const CATEGORIES = ['payment', 'messaging', 'data', 'ai', 'integration']
+// NOTE: keep this in sync with any connector's `category`. A connector declaring a
+// category NOT in this list throws connector_bad_category at register() time, which runs
+// at import — taking down the ENTIRE registry and /api/integrations (the whole console
+// API). 'commerce' was added for commerce-shopify; 'integration' for integration-webhook.
+export const CATEGORIES = ['payment', 'messaging', 'data', 'ai', 'integration', 'commerce']
 
 const registry = new Map() // key -> Connector
 
