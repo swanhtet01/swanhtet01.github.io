@@ -3755,8 +3755,9 @@ ${unicornHeader}
             <h1>Real software, running in real businesses.</h1>
             <p>A few of the things we've built — live products you can try right now, and custom systems we've shipped for businesses in Myanmar. Every one started from someone's real, messy work.</p>
             <div class="cta">
-              <a class="btn primary" href="/offers/">See pricing</a>
+              <a class="btn primary" href="/contact/">Tell us what to fix</a>
               <a class="btn secondary" href="/demo/">See live demos</a>
+              <a class="btn secondary" href="/offers/">Pricing</a>
             </div>
           </div>
         </section>
