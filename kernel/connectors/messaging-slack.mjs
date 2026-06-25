@@ -123,7 +123,7 @@ export const messagingSlack = {
    * @returns {Promise<{ ok:boolean, configured:boolean, team?:string, bot?:string, reason?:string }>}
    */
   async health() {
-    if (!configured()) return { ok: false, configured: false, reason: 'missing SLACK_WEBHOOK_URL' }
+    if (!configured()) return { ok: false, configured: false, detail: 'missing SLACK_WEBHOOK_URL' }
     const token = botToken()
     if (token) {
       try {
@@ -137,11 +137,11 @@ export const messagingSlack = {
         })
         const json = await res.json().catch(() => ({}))
         if (!res.ok || !json.ok) {
-          return { ok: false, configured: true, reason: `auth.test failed: ${json.error || res.status}` }
+          return { ok: false, configured: true, detail: `auth.test failed: ${json.error || res.status}` }
         }
         return { ok: true, configured: true, team: json.team || '', bot: json.bot_id || json.user || '' }
       } catch (e) {
-        return { ok: false, configured: true, reason: String(e.message || 'slack_error').slice(0, 160) }
+        return { ok: false, configured: true, detail: String(e.message || 'slack_error').slice(0, 160) }
       }
     }
     // Webhook-only mode: can't probe the URL without sending a message — report presence only.

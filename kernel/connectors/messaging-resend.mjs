@@ -26,8 +26,8 @@ const getFrom = () => {
 
 async function send({ to, subject, html, text, from, fromName, replyTo, cc, bcc }) {
   const key = getKey()
-  if (!key) throw new Error('resend_not_configured')
-  if (!to || !subject || (!html && !text)) throw new Error('resend: to, subject, and html or text are required')
+  if (!key) return { ok: false, reason: 'resend_not_configured' }
+  if (!to || !subject || (!html && !text)) return { ok: false, reason: 'resend: to, subject, and html or text are required' }
 
   let fromField = from
   if (!fromField) {

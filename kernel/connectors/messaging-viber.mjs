@@ -78,7 +78,7 @@ export const messagingViber = {
     if (!configured()) return { ok: false, detail: 'missing VIBER_AUTH_TOKEN' }
     try {
       const info = await viber('get_account_info', {})
-      return { ok: true, name: info?.name || botName(), uri: info?.uri || '' }
+      return { ok: true, detail: `account: ${info?.name || botName()} (${info?.uri || ''})` }
     } catch (e) {
       return { ok: false, detail: String(e.message || 'viber_error').slice(0, 160) }
     }

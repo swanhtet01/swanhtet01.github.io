@@ -78,7 +78,7 @@ export const messagingTeams = {
   docs: 'kernel/connectors/messaging-teams.mjs',
   configured,
   async health() {
-    if (!configured()) return { ok: false, configured: false, reason: 'missing TEAMS_WEBHOOK_URL' }
+    if (!configured()) return { ok: false, configured: false, detail: 'missing TEAMS_WEBHOOK_URL' }
     return { ok: true, configured: true, detail: 'webhook url set; Teams does not support probe-only health checks without sending a message' }
   },
   send,

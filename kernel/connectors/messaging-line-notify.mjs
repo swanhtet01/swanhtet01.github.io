@@ -65,7 +65,7 @@ export const messagingLineNotify = {
   docs: 'kernel/connectors/messaging-line-notify.mjs',
   configured,
   async health() {
-    if (!configured()) return { ok: false, configured: false, reason: 'missing LINE_NOTIFY_TOKEN' }
+    if (!configured()) return { ok: false, configured: false, detail: 'missing LINE_NOTIFY_TOKEN' }
     try {
       const res = await fetch(`${BASE}/status`, {
         headers: {
@@ -75,10 +75,10 @@ export const messagingLineNotify = {
         signal: AbortSignal.timeout(8000),
       })
       const data = await res.json().catch(() => ({}))
-      if (!res.ok) return { ok: false, configured: true, reason: `status check failed: ${data?.message || res.status}` }
+      if (!res.ok) return { ok: false, configured: true, detail: `status check failed: ${data?.message || res.status}` }
       return { ok: true, configured: true, target: data?.targetType || '', name: data?.target || '' }
     } catch (e) {
-      return { ok: false, configured: true, reason: String(e.message || 'line_notify_error').slice(0, 160) }
+      return { ok: false, configured: true, detail: String(e.message || 'line_notify_error').slice(0, 160) }
     }
   },
   send,

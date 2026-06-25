@@ -105,6 +105,18 @@ module.exports = async function handler(req, res) {
 
   // GET: return registration status
   if (req.method === 'GET') {
+    const opsKey = text(process.env.SUPERMEGA_OPS_KEY)
+    if (opsKey) {
+      const provided = text(req.headers.authorization).startsWith('Bearer ')
+        ? text(req.headers.authorization).slice(7)
+        : text(req.headers.authorization)
+      const ha = crypto.createHash('sha256').update(provided).digest()
+      const hb = crypto.createHash('sha256').update(opsKey).digest()
+      if (!crypto.timingSafeEqual(ha, hb)) {
+        json(res, 401, { status: 'error', reason: 'unauthorized' })
+        return
+      }
+    }
     json(res, 200, {
       status: 'ready',
       endpoint: 'telegram-webhook',

@@ -110,6 +110,7 @@ export const messagingLine = {
     try {
       const r = await fetch(`${API}/v2/bot/info`, {
         headers: { authorization: `Bearer ${getToken()}` },
+        signal: AbortSignal.timeout(8000),
       })
       const j = await r.json().catch(() => ({}))
       if (!r.ok) return { ok: false, configured: true, detail: `auth failed: ${j.message || r.status}` }

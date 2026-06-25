@@ -105,9 +105,9 @@ export const commerceShopify = {
   docs: 'kernel/connectors/commerce-shopify.mjs',
   configured,
   async health() {
-    if (!configured()) return { ok: false, configured: false, reason: 'missing SHOPIFY_STORE_DOMAIN or SHOPIFY_ACCESS_TOKEN' }
+    if (!configured()) return { ok: false, configured: false, detail: 'missing SHOPIFY_STORE_DOMAIN or SHOPIFY_ACCESS_TOKEN' }
     const result = await shopifyGet('shop.json')
-    if (!result.ok) return { ok: false, configured: true, reason: `shop.json failed: ${result.reason}` }
+    if (!result.ok) return { ok: false, configured: true, detail: `shop.json failed: ${result.reason}` }
     return { ok: true, configured: true, shop: result.data?.shop?.name || result.data?.shop?.domain || '' }
   },
   listOrders,

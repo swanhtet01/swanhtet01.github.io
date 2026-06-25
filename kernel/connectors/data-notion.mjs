@@ -124,17 +124,17 @@ export const dataNotion = {
   docs: 'kernel/connectors/data-notion.mjs',
   configured,
   async health() {
-    if (!configured()) return { ok: false, configured: false, reason: 'missing NOTION_API_KEY' }
+    if (!configured()) return { ok: false, configured: false, detail: 'missing NOTION_API_KEY' }
     try {
       const res = await fetch(`${BASE}/users/me`, {
         headers: headers(),
         signal: AbortSignal.timeout(8000),
       })
       const data = await res.json().catch(() => ({}))
-      if (!res.ok) return { ok: false, configured: true, reason: `users/me failed: ${data?.message || res.status}` }
+      if (!res.ok) return { ok: false, configured: true, detail: `users/me failed: ${data?.message || res.status}` }
       return { ok: true, configured: true, bot: data?.name || data?.id || '' }
     } catch (e) {
-      return { ok: false, configured: true, reason: String(e.message || 'notion_error').slice(0, 160) }
+      return { ok: false, configured: true, detail: String(e.message || 'notion_error').slice(0, 160) }
     }
   },
   queryDatabase,

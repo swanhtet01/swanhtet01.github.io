@@ -65,9 +65,9 @@ assertIncludes('products', products, [
 ])
 assertIncludes('contact', contact, ['<title>Contact | SUPERMEGA.dev</title>', 'Send one workflow.', 'Send the source your team already uses.'])
 assertIncludes('combined', combinedText, [
-  'Back Office',
-  'Document Extraction Ledger',
-  '/contact/?package=back-office-workflow-desk',
+  'Custom Solutions & AI Agents',
+  'Factory & Operations App',
+  '/contact/?package=build',
 ])
 
 for (const [label, text] of [

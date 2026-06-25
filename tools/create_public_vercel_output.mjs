@@ -2185,7 +2185,7 @@ ${unicornHeader}
 
         <section class="section connector-section">
           <h2>Reads from where your data actually lives.</h2>
-          <p class="section-sub">Every agent is wired to real connectors — not mocks. We plug into what your team already uses, and route output wherever you need it. 28 connectors wired in.</p>
+          <p class="section-sub">We connect to the tools your team already uses, and route the output wherever you need it — Gmail, Viber, LINE, Sheets, KBZPay, and more. 31 connectors available.</p>
           <div class="connector-groups">
             <div class="connector-group">
               <div class="connector-group-label">Work data</div>
@@ -2239,7 +2239,7 @@ ${unicornHeader}
               </div>
             </div>
           </div>
-          <p class="connector-note">31 connectors wired in. Most clients start with two or three — that's enough to scope and build the first agent.</p>
+          <p class="connector-note">31 connectors available. Most clients start with two or three — that's enough to scope and build the first agent.</p>
         </section>
 
         <section class="section">
@@ -2255,8 +2255,8 @@ ${unicornHeader}
         </section>
 
         <section class="section agent-proof">
-          <blockquote>"We had 300+ warranty claims buried in a Gmail chain. Three weeks later we had a tracked ledger with owners and statuses on every row."</blockquote>
-          <cite>— Manufacturing client, built in 3 weeks</cite>
+          <blockquote>A Yangon factory had a year of warranty claims — about 120 of them — buried across hundreds of Gmail threads, with no owner and no way to see what was overdue. We turned them into one clean ledger: every claim with an owner, a status, and a link back to the email it came from.</blockquote>
+          <cite>— A real build, from real data</cite>
           <div class="cta" style="justify-content:center;margin-top:28px">
             <a class="btn primary" href="/contact/?package=agent">Start with one agent</a>
           </div>
@@ -2455,9 +2455,9 @@ ${unicornHeader}
               <img class="founder-photo" src="/site/social/swan-htet.jpg" alt="Swan Htet — founder, SUPERMEGA.dev" loading="lazy" decoding="async" />
             </div>
             <div class="founder-copy">
-              <p class="founder-quote">"Most businesses I work with in Yangon already have a system. It's just spread across a Viber group, a shared Excel no one fully trusts, and one person who holds the whole thing in their head. I build the software that replaces that."</p>
-              <p>I started SUPERMEGA because this kept showing up everywhere — factories, distributors, shops all running real operations on improvised tools. A manufacturer I work with came to me with 300+ warranty claims buried in 18 months of Gmail. No owner column. No way to know what was overdue without reading every thread from scratch. I built the ledger and a Monday brief the ops team now runs without thinking. Three weeks. One payment. They own it — no subscription, no vendor to call when something needs updating.</p>
-              <p>I take one project at a time. Before you pay anything, I build the first screen from your actual data — not a mockup, not sample data. If it doesn't feel immediately worth it, we stop there. No hard sell, no proposal to sit on.</p>
+              <p class="founder-quote">"Every Myanmar business I've sat with has the same look when I ask them how they track their warranty claims — or their orders, or their suppliers. A slight pause, then: 'We have a system.' And they do. It's just split across a Viber group, a notebook on someone's desk, and one person who would be impossible to replace if they ever left."</p>
+              <p>A manufacturer here in Yangon came to me last year with 18 months of warranty claims buried in Gmail. No one knew what was overdue. No one knew who owned what. The team was capable — they just had no surface to work from. Within three weeks I had built them a weekly ops brief pulled from their own data: owner column, days-open, escalation flag. They run it every Monday now. No subscription. No vendor to call. It's theirs.</p>
+              <p>I do this full-time, one business at a time, here in Yangon. I don't pitch you a platform or ask you to change how your team works. I start by turning your existing data — whatever you have, however messy — into one screen that's immediately useful. If that first screen doesn't feel worth it to you, we stop there and you owe me nothing. The only ask is one honest conversation about what's actually breaking.</p>
               <div class="founder-sig">
                 <strong>Swan Htet</strong>
                 <span>Founder, SUPERMEGA.dev</span>
@@ -2652,19 +2652,6 @@ ${unicornHeader}
             </div>
           </article>
 
-          <article class="feature" id="back-office-ai-desk">
-            <div class="feature-copy">
-              <div class="eyebrow">Back office and admin</div>
-              <h2>Back Office AI Desk.</h2>
-              <p>A scoped AI helper for one recurring job — daily close audit, reorder watch, or supplier follow-up. It drafts; you approve. Nothing acts on its own.</p>
-              <div class="chips"><span class="chip">Draft</span><span class="chip">Approve</span><span class="chip">Run ledger</span><span class="chip">Weekly report</span></div>
-              <div class="use"><strong>First result</strong><span>Each day it reads your source, drafts findings ranked by money at risk, and holds them for your approval.</span></div>
-              <a class="btn primary" href="/products/back-office/">See details</a>
-            </div>
-            <div class="shot-gallery" aria-label="Back Office AI Desk product screenshot">
-              <img src="/site/shots/live-demo-agent-builder.png?v=${publicShotVersion}" alt="Back Office AI Desk — draft-and-approve queue" loading="lazy" decoding="async" />
-            </div>
-          </article>
         </section>
 
 
@@ -2809,6 +2796,21 @@ ${unicornHeader}
             <p class="form-status" data-lead-status aria-live="polite"></p>
             <div class="next-card" data-next-card hidden><strong>Saved</strong><span>We review the workflow and reply with the first app to build. Nothing changes without approval.</span></div>
           </form>
+        </section>
+        <section aria-label="Direct contact options" style="margin-top:32px;padding-top:24px;border-top:1px solid rgba(255,255,255,0.1)">
+          <p style="font-size:14px;color:rgba(247,251,255,0.6);margin:0 0 16px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase">Or reach us directly</p>
+          <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center">
+            <a href="viber://chat?number=%2B9595000721" style="display:inline-flex;align-items:center;gap:8px;background:rgba(115,74,192,0.18);border:1px solid rgba(115,74,192,0.35);color:#c9a4ff;padding:10px 18px;border-radius:10px;font-size:15px;font-weight:700;text-decoration:none;letter-spacing:-0.01em" aria-label="Chat on Viber">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 0C5.376 0 0 5.376 0 12s5.376 12 12 12 12-5.376 12-12S18.624 0 12 0zm5.568 16.8c-.24.576-.96 1.056-1.608 1.2-.432.096-.984.168-2.856-.624-2.4-.984-3.936-3.432-4.056-3.6-.12-.168-.984-1.32-.984-2.52s.624-1.776 1.2-1.776c.216 0 .624.024.84.576.144.36.384.984.432 1.128.12.288.024.624-.12.84l-.384.48c-.12.168-.24.36-.12.696.576 1.44 1.872 2.376 3.48 3.024.264.096.456.048.624-.144l.528-.624c.192-.24.432-.264.696-.168.648.264 1.56.648 1.8.744.288.12.48.168.528.288.048.192.048.864-.192 1.296zm.12-4.848c-.072 0-.12-.024-.12-.096-.264-2.952-2.496-5.136-5.424-5.4-.072-.024-.12-.072-.12-.144v-.528c0-.072.048-.12.12-.12 3.336.288 5.976 2.904 6.264 6.168 0 .072-.048.12-.12.12h-.6zm-1.464-1.584c-.072 0-.144-.024-.144-.12-.216-1.68-1.536-3-3.216-3.24-.072 0-.12-.072-.12-.144v-.528c0-.072.048-.12.12-.12 2.016.264 3.624 1.848 3.888 3.864 0 .072-.048.12-.12.12h-.408zm-1.272-1.584c-.072 0-.12-.048-.12-.12-.144-.792-.768-1.416-1.56-1.56-.072-.024-.12-.072-.12-.144v-.528c0-.072.048-.12.12-.12 1.128.168 2.016 1.032 2.184 2.16 0 .072-.048.12-.12.12h-.384z"/></svg>
+              Viber
+            </a>
+            <a href="mailto:swanhtet@supermega.dev" style="display:inline-flex;align-items:center;gap:8px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.14);color:rgba(247,251,255,0.84);padding:10px 18px;border-radius:10px;font-size:15px;font-weight:700;text-decoration:none">
+              swanhtet@supermega.dev
+            </a>
+            <a href="tel:+9595000721" style="display:inline-flex;align-items:center;gap:8px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.14);color:rgba(247,251,255,0.84);padding:10px 18px;border-radius:10px;font-size:15px;font-weight:700;text-decoration:none">
+              +95 9 500 0721
+            </a>
+          </div>
         </section>
       </main>
       <footer>
@@ -3573,10 +3575,10 @@ const productDetailDocs = [
   },
   {
     slug: 'documents',
-    displayName: 'Document Extraction Ledger',
-    eyebrow: 'Document extraction ledger',
+    displayName: 'Custom Solutions & AI Agents',
+    eyebrow: 'Custom solutions & AI agents',
     headline: 'Turn messy files into clean records you can act on',
-    subhead: 'Emails, spreadsheets, chat photos, and scanned forms become one structured ledger — with a work queue, owners, status, approvals, and a link back to the original source for every record.',
+    subhead: 'We build you a custom AI agent for one job you do by hand — reading your Gmail, Viber, LINE, Drive, and spreadsheets and turning them into one structured ledger with a work queue, owners, status, approvals, and a link back to the source for every record.',
     shot: '/site/shots/live-product-build-app-from-workflow.png',
     whatItDoes: [
       'Reads the documents you already work in — Gmail, Viber and LINE chats, Drive files, spreadsheets, and photos of handwritten forms',
@@ -3601,37 +3603,6 @@ const productDetailDocs = [
     proofPoint: 'We turn messy operating records — hundreds of emails, chat threads, and scanned forms — into one structured ledger of reviewable claims, decisions, owners, and source-linked evidence. We build yours around your real document shapes and naming conventions.',
     whoFor: 'Shops, factories, and distributors whose real work arrives as emails, chat messages, and photos — and the office staff who today re-key all of it into spreadsheets by hand.',
     primaryCta: { label: 'Talk to us about your documents', href: '/contact/' },
-  },
-  {
-    slug: 'back-office',
-    displayName: 'Back Office AI Desk',
-    eyebrow: 'Back office · Pilot available',
-    headline: 'An AI helper for one back-office job — it drafts, you approve',
-    subhead: 'Takes one recurring task you already do by hand — the daily close audit, reorder watch, or supplier follow-up — and prepares the work for you each day. Every finding and message is held in a review queue. Nothing is sent, posted, or changed until you press approve.',
-    shot: '/site/shots/live-demo-agent-builder.png',
-    whatItDoes: [
-      'Reads the source you already have — register Z-reports, settlement exports, a stock sheet — and prepares one job',
-      'Drafts findings and suggested next steps, ranked by money at risk, instead of doing anything on its own',
-      'Holds every draft in an approval queue: approve, edit, or dismiss, one at a time',
-      'Keeps sends, edits, refunds, and anything customer-facing blocked until you say so',
-      'Logs every run so you can see exactly what was read, what was drafted, and what you approved',
-    ],
-    howItWorks: [
-      { step: 'Pick one job and send examples', detail: 'You choose the single recurring task and share a few real examples — past closes, a stock sheet, supplier threads — plus the actions that must stay approval-only.' },
-      { step: 'The desk drafts each day', detail: 'Each run, the agent reads your source, prepares findings and next steps ranked by what matters most, and places them in your review queue. It takes no action.' },
-      { step: 'You review and approve', detail: 'Approve, edit, or dismiss each draft. Approved items are the only ones that ever go anywhere, and every decision is written to the run ledger.' },
-    ],
-    features: [
-      { title: 'Scoped to one job', desc: 'Set up around a single recurring task — daily close audit, reorder watch, or supplier follow-up — so it does one thing well, not many loosely.' },
-      { title: 'Approve before anything happens', desc: 'Every output lands in a review queue as a draft. The agent never sends, edits the books, or messages anyone on its own.' },
-      { title: 'Findings with evidence attached', desc: 'Each finding cites the exact numbers and source rows — system total vs counted cash, a missing settlement, a void with no note — so you can check it in seconds.' },
-      { title: 'Blocked actions stay blocked', desc: 'Sends, writes, payments, credentials, and customer-impacting decisions are off by default. You decide which, if any, are ever turned on — and it is logged.' },
-      { title: 'A run ledger you can trust', desc: 'Every run records what was read, what was drafted, who approved it, and when. No hidden activity, nothing autonomous to wonder about.' },
-      { title: 'Weekly value report', desc: 'A short weekly report shows findings raised, money flagged, and time saved — so the desk has to keep proving it is worth keeping.' },
-    ],
-    proofPoint: 'Built on a strict draft-only boundary: sends, writes, payments, credentials, and customer-impacting decisions stay blocked until you approve them, and every run is logged. This is an early product — we set up the first desk in 4–5 working days once the job, examples, and blocked actions are agreed.',
-    whoFor: 'Shop, restaurant, and factory owners and their operations managers who do the same back-office check every day by hand and want a careful AI helper that prepares the work but never acts without approval.',
-    primaryCta: { label: 'Talk to us about a pilot', href: '/contact/?package=back-office-workflow-desk' },
   },
 ]
 function buildProductDetailHtml(p) {
@@ -3879,6 +3850,13 @@ ${unicornHeader}
         </section>
 
         <section class="section">
+          <div class="trust-note" style="margin-top:24px;padding:20px 24px;border:1px solid var(--line);border-radius:16px;background:rgba(255,255,255,0.5);max-width:640px;">
+            <strong style="display:block;font-size:15px;letter-spacing:-0.02em;margin-bottom:8px;">Our guarantee</strong>
+            <p style="font-size:14px;color:var(--muted);margin:0;line-height:1.55;">If we haven't delivered a working first screen within 14 days of your deposit, we refund in full. We accept KBZPay, AYA Pay, Wave Money, and bank transfer (MMK or USD).</p>
+          </div>
+        </section>
+
+        <section class="section">
           <div class="final">
             <div><h2>Tell us the one thing to fix first.</h2></div>
             <a class="btn primary" href="/contact/?package=build">Get a quote</a>
@@ -3905,7 +3883,7 @@ await writeFile(resolve(staticDir, 'contact', 'index.html'), normalizePublicProd
 await mkdir(resolve(staticDir, 'offers'), { recursive: true })
 await writeFile(resolve(staticDir, 'offers', 'index.html'), normalizePublicProductNames(publicOffersHtml), 'utf8')
 await mkdir(resolve(staticDir, 'ai-agents'), { recursive: true })
-await writeFile(resolve(staticDir, 'ai-agents', 'index.html'), unicornAiAgentsHtml)
+await writeFile(resolve(staticDir, 'ai-agents', 'index.html'), normalizePublicProductNames(unicornAiAgentsHtml), 'utf8')
 
 // Work / case studies — public proof. Honest, de-identified real builds (live products + client systems).
 const publicWorkCases = [
@@ -3924,14 +3902,6 @@ const publicWorkCases = [
     built: ['Line and shift production vs. target', 'Inspections and defects with a live reject rate', '5W1H incidents → owned CAPA with due dates', 'Maintenance work orders + a daily plant-manager brief'],
     proof: 'Built around real factory operating data — line targets, defect taxonomy, grading rules, and CAPA owners.',
     cta: { label: 'See how it works', href: '/products/factory/', ext: false },
-  },
-  {
-    eyebrow: 'HR & Payroll · Live now',
-    headline: 'A salary spreadsheet becomes printable payslips in seconds',
-    story: 'Payroll staff were hand-making payslips from a monthly salary spreadsheet, one person at a time. We built a browser tool that takes the .xlsx — even password-protected — and turns it into clean, printable payslips for everyone. Nothing leaves the browser.',
-    built: ['Reads your existing salary .xlsx', 'Decrypts password-protected files in the browser', 'A clean, printable payslip per person', 'No upload — runs entirely on your device'],
-    proof: 'Live and open — try it with your own salary file.',
-    cta: { label: 'Try it live ↗', href: 'https://payslip-maker-topaz.vercel.app/', ext: true },
   },
 ]
 const publicWorkHtml = `<!doctype html>
@@ -4103,12 +4073,14 @@ await mkdir(resolve(staticDir, 'privacy'), { recursive: true })
 await writeFile(resolve(staticDir, 'privacy', 'index.html'), unicornPrivacyHtml, 'utf8')
 await mkdir(resolve(staticDir, 'machine'), { recursive: true })
 await writeFile(resolve(staticDir, 'machine', 'index.html'), normalizePublicProductNames(publicMachineHtml), 'utf8')
+await mkdir(resolve(staticDir, 'card'), { recursive: true })
+await writeFile(resolve(staticDir, 'card', 'index.html'), publicCardHtml, 'utf8')
 // Demo hub (source lives in C:/sm-site, outside OneDrive) served at /demo/
 await mkdir(resolve(staticDir, 'demo'), { recursive: true })
 await cp('C:/sm-site/supermega-demo/index.html', resolve(staticDir, 'demo', 'index.html'), { force: true }).catch(() => undefined)
 await cp('C:/sm-site/supermega-demo/favicon.svg', resolve(staticDir, 'demo', 'favicon.svg'), { force: true }).catch(() => undefined)
 await writeFile(resolve(staticDir, 'robots.txt'), 'User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /app/\nDisallow: /clients/\nDisallow: /machine/\nSitemap: https://supermega.dev/sitemap.xml\n', 'utf8')
-await writeFile(resolve(staticDir, 'sitemap.xml'), '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url><loc>https://supermega.dev/</loc><changefreq>weekly</changefreq><priority>1.0</priority></url>\n  <url><loc>https://supermega.dev/products/</loc><changefreq>weekly</changefreq><priority>0.9</priority></url>\n  <url><loc>https://supermega.dev/products/pos/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>\n  <url><loc>https://supermega.dev/products/factory/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>\n  <url><loc>https://supermega.dev/products/documents/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>\n  <url><loc>https://supermega.dev/products/back-office/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>\n  <url><loc>https://supermega.dev/ai-agents/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>\n  <url><loc>https://supermega.dev/offers/</loc><changefreq>weekly</changefreq><priority>0.95</priority></url>\n  <url><loc>https://supermega.dev/work/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>\n  <url><loc>https://supermega.dev/contact/</loc><changefreq>monthly</changefreq><priority>0.9</priority></url>\n  <url><loc>https://supermega.dev/card/</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>\n  <url><loc>https://supermega.dev/privacy/</loc><changefreq>yearly</changefreq><priority>0.3</priority></url>\n</urlset>\n', 'utf8')
+await writeFile(resolve(staticDir, 'sitemap.xml'), '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url><loc>https://supermega.dev/</loc><changefreq>weekly</changefreq><priority>1.0</priority></url>\n  <url><loc>https://supermega.dev/products/</loc><changefreq>weekly</changefreq><priority>0.9</priority></url>\n  <url><loc>https://supermega.dev/products/pos/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>\n  <url><loc>https://supermega.dev/products/factory/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>\n  <url><loc>https://supermega.dev/products/documents/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>\n  <url><loc>https://supermega.dev/ai-agents/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>\n  <url><loc>https://supermega.dev/offers/</loc><changefreq>weekly</changefreq><priority>0.95</priority></url>\n  <url><loc>https://supermega.dev/work/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>\n  <url><loc>https://supermega.dev/contact/</loc><changefreq>monthly</changefreq><priority>0.9</priority></url>\n  <url><loc>https://supermega.dev/card/</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>\n  <url><loc>https://supermega.dev/privacy/</loc><changefreq>yearly</changefreq><priority>0.3</priority></url>\n</urlset>\n', 'utf8')
 await writeFile(
   resolve(staticDir, 'sw.js'),
   `const CACHE_VERSION = 'supermega-public-clean-20260522'

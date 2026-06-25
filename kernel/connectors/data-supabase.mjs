@@ -21,6 +21,7 @@ export const dataSupabase = {
   configured,
   // Trivial read that works in every mode and never mutates: pull 1 activity row.
   async health() {
+    if (!configured()) return { ok: false, detail: 'missing SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY' }
     try {
       await store.listActivity(1)
       return { ok: true, detail: `mode=${store.mode}` }

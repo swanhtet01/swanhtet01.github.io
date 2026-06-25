@@ -145,7 +145,7 @@ export const paymentAyapay = {
         !apiKey()     && 'AYAPAY_API_KEY',
         !secret()     && 'AYAPAY_SECRET',
       ].filter(Boolean).join(', ')
-      return { ok: false, configured: false, reason: `missing env: ${missing}` }
+      return { ok: false, configured: false, detail: `missing env: ${missing}` }
     }
     const mode = isSandbox() ? 'sandbox' : 'production'
     return { ok: true, configured: true, detail: `credentials present, ${mode}` }

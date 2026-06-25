@@ -64,16 +64,25 @@ async function sbFetch(sb, path, options = {}) {
   return { ok: res.ok, status: res.status, data }
 }
 
-async function fetchQueued(sb) {
+async function claimBatch(sb, batchSize = BATCH_LIMIT) {
+  // Atomic claim via FOR UPDATE SKIP LOCKED — prevents concurrent workers from double-claiming rows
   const r = await sbFetch(sb,
-    `/rest/v1/supermega_pipeline_actions?status=eq.queued&order=created_at.asc&limit=${BATCH_LIMIT}`,
-    { method: 'GET', headers: { Prefer: 'return=representation' } }
+    `/rest/v1/rpc/claim_queued_actions`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ batch_size: batchSize }),
+      headers: { Prefer: 'return=representation' },
+    }
   )
   if (!r.ok) return { status: 'error', reason: `supabase_${r.status}`, data: r.data }
   return { status: 'ready', rows: Array.isArray(r.data) ? r.data : [] }
 }
 
 async function updateAction(sb, id, patch) {
+  if (!id) {
+    console.warn('[action-runner] updateAction skipped: missing row id')
+    return
+  }
   const r = await sbFetch(sb,
     `/rest/v1/supermega_pipeline_actions?id=eq.${encodeURIComponent(id)}`,
     { method: 'PATCH', body: JSON.stringify({ ...patch, updated_at: new Date().toISOString() }) }
@@ -210,7 +219,7 @@ async function dispatchSnooze(sb, row) {
 }
 
 async function processRow(sb, row) {
-  await updateAction(sb, row.id, { status: 'processing' })
+  // Row already claimed as 'processing' by claimBatch (atomic RPC) — no separate PATCH needed
 
   let result
   try {
@@ -238,12 +247,12 @@ async function processRow(sb, row) {
     result = { status: 'error', reason: text(e?.message) || 'dispatch_threw' }
   }
 
-  const finalStatus = result?.status === 'ready' || result?.status === 'skipped' ? 'done' : 'error'
+  const finalStatus = result?.status === 'ready' || result?.status === 'skipped' ? 'done' : 'failed'
   await updateAction(sb, row.id, {
     status: finalStatus,
     result,
     processed_at: new Date().toISOString(),
-    error: finalStatus === 'error' ? text(result?.reason) : null,
+    error: finalStatus === 'failed' ? text(result?.reason) : null,
   })
 
   return { id: row.id, action_type: row.action_type, status: finalStatus, result }
@@ -285,7 +294,7 @@ module.exports = async function handler(req, res) {
     return
   }
 
-  const queued = await fetchQueued(sb)
+  const queued = await claimBatch(sb)
   if (queued.status !== 'ready') {
     json(res, 200, { status: 'blocked', reason: 'fetch_failed', detail: queued })
     return
@@ -306,7 +315,7 @@ module.exports = async function handler(req, res) {
     status: 'ready',
     processed: results.length,
     done: results.filter((r) => r.status === 'done').length,
-    errors: results.filter((r) => r.status === 'error').length,
+    errors: results.filter((r) => r.status === 'failed').length,
     results,
   })
 }

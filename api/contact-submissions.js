@@ -961,13 +961,13 @@ module.exports = async function handler(req, res) {
     const intakeSecret = text(process.env.SUPERMEGA_INTAKE_SECRET)
     const intakeUrl = text(process.env.SUPERMEGA_OPS_INTAKE_URL) || 'https://supermega-machine.vercel.app/api/intake'
     if (!intakeSecret) return
+    if (intakeUrl && !intakeUrl.startsWith('https://supermega-machine.vercel.app')) return
     try {
       await fetch(intakeUrl, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'content-type': 'application/json', 'Authorization': `Bearer ${intakeSecret}` },
         signal: AbortSignal.timeout(5000),
         body: JSON.stringify({
-          secret: intakeSecret,
           source: 'website',
           external_id: record.lead_id,
           name: record.name,

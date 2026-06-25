@@ -28,7 +28,7 @@ import { register } from './registry.mjs'
  */
 export async function send(url, payload, { secret, signatureHeader = 'X-Supermega-Signature', extraHeaders = {}, timeoutMs = 8000 } = {}) {
   const target = url || process.env.WEBHOOK_DEFAULT_URL
-  if (!target) throw new Error('webhook_no_url')
+  if (!target) return { ok: false, reason: 'webhook_no_url' }
   const body = JSON.stringify(payload)
   const sigSecret = secret || process.env.WEBHOOK_HMAC_SECRET || ''
   const headers = {
@@ -47,7 +47,7 @@ export async function send(url, payload, { secret, signatureHeader = 'X-Supermeg
     signal: AbortSignal.timeout(timeoutMs),
   })
   const resBody = await res.text().catch(() => '')
-  if (!res.ok) throw new Error(`webhook_${res.status}: ${resBody.slice(0, 200)}`)
+  if (!res.ok) return { ok: false, reason: `webhook_${res.status}: ${resBody.slice(0, 200)}` }
   return { ok: true, status: res.status, body: resBody.slice(0, 500) }
 }
 

@@ -15,7 +15,7 @@ function isAllowedOrigin(origin) {
   if (!origin) return false
   if (ALLOWED_ORIGINS.includes(origin)) return true
   if (/^https?:\/\/localhost(:\d+)?$/.test(origin)) return true
-  if (/\.vercel\.app$/.test(origin)) return true
+  if (/^https:\/\/supermega-[a-z0-9]+-swanhtet01s-projects\.vercel\.app$/.test(origin)) return true
   return false
 }
 
@@ -40,7 +40,7 @@ async function aiScope(workflow, name, company) {
       headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
       signal: AbortSignal.timeout(8000),
       body: JSON.stringify({
-        model: 'claude-haiku-4-5',
+        model: 'claude-haiku-4-5-20251022',
         max_tokens: 300,
         messages: [{
           role: 'user',

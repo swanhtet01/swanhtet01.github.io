@@ -541,6 +541,7 @@ async function sendBrief(run) {
       subject: `SuperMega owner brief - ${run.local_date}`,
       html: emailHtml(run),
     }),
+    signal: AbortSignal.timeout(8000),
   })
   const body = await response.text().catch(() => '')
   if (response.ok) {
@@ -557,6 +558,15 @@ async function sendBrief(run) {
 
 module.exports = async function handler(req, res) {
   const url = new URL(req.url || '/api/cron/sales-daily', defaultBaseUrl)
+
+  if (!isAuthorized(req)) {
+    json(res, expectedSecret() ? 401 : 503, {
+      status: 'error',
+      reason: expectedSecret() ? 'unauthorized' : 'cron_secret_not_configured',
+      endpoint: 'sales-daily',
+    })
+    return
+  }
 
   if (url.pathname.endsWith('/status')) {
     const config = supabaseConfig()
@@ -580,15 +590,6 @@ module.exports = async function handler(req, res) {
       email_delivery: envText('RESEND_API_KEY') ? 'configured' : 'not_configured',
       email_enabled: envFlag('SUPERMEGA_SALES_DAILY_EMAIL_ENABLED', false),
       email_required: envFlag('SUPERMEGA_SALES_DAILY_EMAIL_ENABLED', false) && text(process.env.SUPERMEGA_REQUIRE_SALES_DAILY_EMAIL) === '1',
-    })
-    return
-  }
-
-  if (!isAuthorized(req)) {
-    json(res, expectedSecret() ? 401 : 503, {
-      status: 'error',
-      reason: expectedSecret() ? 'unauthorized' : 'cron_secret_not_configured',
-      endpoint: 'sales-daily',
     })
     return
   }
