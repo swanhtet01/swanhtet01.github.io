@@ -2452,6 +2452,17 @@ ${unicornHeader}
         </section>
 
         <section class="section">
+          <div style="border:1px solid var(--line);border-radius:24px;padding:clamp(24px,4vw,40px);background:linear-gradient(135deg, rgba(194,96,63,0.06), rgba(201,162,75,0.05));">
+            <div class="eyebrow" style="color:#c2603f">The part global software can't copy</div>
+            <h2 style="margin:8px 0 12px">Wired into Myanmar's own rails.</h2>
+            <p style="max-width:60ch;color:var(--muted);line-height:1.6;margin:0 0 20px">KBZPay, Wave Money, AYA Pay, CB Pay, MMQR, the live CBM exchange rate, and Viber are built in — not bolted on. 31 connectors in total. An agent can read a Viber thread, total it in MMK at today's rate, and send a payment request — in one pipeline. No international SaaS reads these.</p>
+            <div style="display:flex;flex-wrap:wrap;gap:8px" aria-label="Myanmar-native connectors">
+              ${['KBZPay','Wave Money','AYA Pay','CB Pay','MMQR','CBM rate','Viber','+24 more'].map((r,i)=>`<span style="display:inline-flex;align-items:center;border:1px solid ${i===7?'rgba(201,162,75,0.5)':'var(--line)'};border-radius:999px;padding:7px 14px;font-size:13px;font-weight:850;letter-spacing:-0.01em;color:${i===7?'#9a7d2f':'var(--ink)'};background:${i===7?'rgba(201,162,75,0.10)':'var(--paper)'}">${r}</span>`).join('')}
+            </div>
+          </div>
+        </section>
+
+        <section class="section">
           <h2>How it works</h2>
           <div class="how-steps">
             <div class="how-step"><n>1</n><strong>Send one source</strong><span>A file, Viber export, Gmail chain, or spreadsheet — we start from data you already have, not a blank template.</span></div>
