@@ -59,12 +59,12 @@ create table if not exists public.supermega_graduation (
 -- AI gateway tables (token tracking + response cache)
 create table if not exists public.supermega_token_ledger (
   tenant_id  text not null,
-  window     text not null,
+  "window"   text not null,   -- quoted: `window` is a reserved keyword in Postgres
   in_tokens  bigint default 0,
   out_tokens bigint default 0,
   calls      bigint default 0,
   updated_at timestamptz default now(),
-  primary key (tenant_id, window)
+  primary key (tenant_id, "window")
 );
 
 create table if not exists public.supermega_ai_cache (

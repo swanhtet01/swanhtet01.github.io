@@ -48,7 +48,7 @@ async function ensurePgTables() {
     create table if not exists supermega_console_projects (id text primary key, client_id text, lead_id text, offer text, scope_summary text, price_mmk bigint, deposit_status text default 'unpaid', deposit_method text, status text default 'scoping', live_url text, created_at timestamptz default now());
     create table if not exists supermega_console_deals (id text primary key, lead_id text, project_id text, packet jsonb, status text default 'draft', created_at timestamptz default now());
     create table if not exists supermega_console_activity (id text primary key, at timestamptz default now(), kind text, summary text, ref text);
-    create table if not exists supermega_token_ledger (tenant_id text not null, window text not null, in_tokens bigint default 0, out_tokens bigint default 0, calls bigint default 0, updated_at timestamptz default now(), primary key (tenant_id, window));
+    create table if not exists supermega_token_ledger (tenant_id text not null, "window" text not null, in_tokens bigint default 0, out_tokens bigint default 0, calls bigint default 0, updated_at timestamptz default now(), primary key (tenant_id, "window"));
     create table if not exists supermega_ai_cache (cache_key text primary key, payload jsonb not null, created_at timestamptz default now());
     create table if not exists supermega_graduation (signature text primary key, label text, count int not null default 1, sources jsonb default '[]'::jsonb, modules jsonb default '[]'::jsonb, productized boolean not null default false, graduated_at timestamptz, updated_at timestamptz default now());
     create table if not exists supermega_build_modules (id text primary key, project_id text, signature text, modules jsonb default '[]'::jsonb, shipped_at timestamptz default now());
@@ -213,7 +213,7 @@ export async function getTokenUsage(tenantId, window) {
   }
   if (mode === 'postgres') {
     await ensurePgTables()
-    const r = await q('select tenant_id, window, in_tokens, out_tokens, calls from supermega_token_ledger where tenant_id=$1 and window=$2 limit 1', [tenantId, window])
+    const r = await q('select tenant_id, "window", in_tokens, out_tokens, calls from supermega_token_ledger where tenant_id=$1 and "window"=$2 limit 1', [tenantId, window])
     return r[0] ? { ...empty, ...r[0] } : empty
   }
   return mem.tokenLedger.get(`${tenantId}::${window}`) || empty
@@ -232,14 +232,14 @@ export async function addTokenUsage(tenantId, window, { inTokens = 0, outTokens 
   if (mode === 'postgres') {
     await ensurePgTables()
     const r = await q(
-      `insert into supermega_token_ledger (tenant_id, window, in_tokens, out_tokens, calls, updated_at)
+      `insert into supermega_token_ledger (tenant_id, "window", in_tokens, out_tokens, calls, updated_at)
        values ($1,$2,$3,$4,$5, now())
-       on conflict (tenant_id, window) do update set
+       on conflict (tenant_id, "window") do update set
          in_tokens = supermega_token_ledger.in_tokens + excluded.in_tokens,
          out_tokens = supermega_token_ledger.out_tokens + excluded.out_tokens,
          calls = supermega_token_ledger.calls + excluded.calls,
          updated_at = now()
-       returning tenant_id, window, in_tokens, out_tokens, calls`,
+       returning tenant_id, "window", in_tokens, out_tokens, calls`,
       [tenantId, window, inTokens, outTokens, calls],
     )
     return r[0] || null
