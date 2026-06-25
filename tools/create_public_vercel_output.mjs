@@ -1120,12 +1120,12 @@ const publicCardHtml = `<!doctype html>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="robots" content="index,follow" />
     <title>Swan Htet | SUPERMEGA.dev</title>
-    <meta name="description" content="Swan Htet builds simple AI work tools for business teams." />
+    <meta name="description" content="Swan Htet — founder of SUPERMEGA.dev. Custom software for Myanmar businesses, starting from your real data. Priced in MMK." />
     <link rel="canonical" href="https://supermega.dev/card/" />
     <meta property="og:type" content="profile" />
     <meta property="og:site_name" content="SUPERMEGA.dev" />
     <meta property="og:title" content="Swan Htet | SUPERMEGA.dev" />
-    <meta property="og:description" content="Swan Htet builds simple AI work tools for business teams." />
+    <meta property="og:description" content="Custom software for Myanmar businesses — starting from your real data. Priced in MMK. Built in weeks. Yours to keep." />
     <meta property="og:url" content="https://supermega.dev/card/" />
     <meta property="og:image" content="https://supermega.dev/site/social/supermega-portal-card.png" />
     <meta name="twitter:card" content="summary_large_image" />
@@ -1133,12 +1133,14 @@ const publicCardHtml = `<!doctype html>
     <meta name="theme-color" content="#07111f" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" />
     <style>
-      :root { color-scheme: dark; --bg: #07111f; --text: #f7fbff; --muted: #a8b8ca; --cyan: #64efff; --blue: #4f8cff; --ink: #06101d; }
+      @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=swap');
+      :root { color-scheme: dark; --bg: #06101c; --text: #f7fbff; --muted: #a8b8ca; --cyan: #64efff; --blue: #4f8cff; --ink: #06101d; }
       * { box-sizing: border-box; }
-      body { margin: 0; min-height: 100svh; display: grid; place-items: center; padding: 24px; background-color: #07111f; background-image: radial-gradient(circle at 76% 22%, rgba(100,239,255,0.2), transparent 24rem), radial-gradient(circle at 6% 88%, rgba(79,140,255,0.18), transparent 26rem), linear-gradient(135deg, #07111f, #030710 70%); color: var(--text); font-family: "Aptos", "Segoe UI Variable", "Segoe UI", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+      body { margin: 0; min-height: 100svh; display: grid; place-items: center; padding: 24px; background-color: #06101c; background-image: radial-gradient(ellipse at 78% 18%, rgba(100,239,255,0.22), transparent 26rem), radial-gradient(ellipse at 5% 86%, rgba(79,140,255,0.2), transparent 28rem), radial-gradient(ellipse at 50% 50%, rgba(30,50,120,0.15), transparent 50rem), linear-gradient(160deg, #06101c, #020810 70%); color: var(--text); font-family: "Inter", "Aptos", "Segoe UI Variable", "Segoe UI", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
       a { color: inherit; text-decoration: none; }
-      .card { position: relative; overflow: hidden; width: min(980px, 100%); min-height: min(660px, calc(100svh - 48px)); display: flex; align-items: center; border: 1px solid rgba(217,247,255,0.14); border-radius: clamp(28px, 5vw, 54px); background: linear-gradient(135deg, rgba(255,255,255,0.08), rgba(255,255,255,0.035)); box-shadow: inset 0 1px 0 rgba(255,255,255,0.12), 0 42px 120px rgba(0,0,0,0.38); padding: clamp(28px, 7vw, 78px); }
-      .card::before { content: "SUPERMEGA"; position: absolute; right: -5%; bottom: 0; color: transparent; -webkit-text-stroke: 1.5px rgba(247,251,255,0.045); font-size: clamp(68px, 16vw, 190px); font-weight: 950; letter-spacing: -0.1em; line-height: 0.8; }
+      .card { position: relative; overflow: hidden; width: min(1020px, 100%); min-height: min(680px, calc(100svh - 48px)); display: flex; align-items: center; border: 1px solid rgba(217,247,255,0.16); border-radius: clamp(28px, 5vw, 60px); background: linear-gradient(135deg, rgba(255,255,255,0.09) 0%, rgba(255,255,255,0.04) 100%); box-shadow: inset 0 1px 0 rgba(255,255,255,0.14), inset 0 -1px 0 rgba(255,255,255,0.04), 0 50px 130px rgba(0,0,0,0.45), 0 8px 32px rgba(0,0,0,0.22); padding: clamp(32px, 7vw, 84px); backdrop-filter: blur(2px); }
+      .card::before { content: "SUPERMEGA"; position: absolute; right: -4%; bottom: -2%; color: transparent; -webkit-text-stroke: 1px rgba(247,251,255,0.038); font-size: clamp(72px, 17vw, 200px); font-weight: 900; letter-spacing: -0.1em; line-height: 0.8; pointer-events: none; }
+      .card::after { content: ""; position: absolute; top: 0; right: 0; width: 55%; height: 100%; background: radial-gradient(ellipse at 80% 30%, rgba(100,239,255,0.07), transparent 60%); pointer-events: none; }
       .content { position: relative; max-width: 690px; }
       .brand { display: inline-flex; align-items: center; gap: 12px; color: var(--cyan); font-size: 12px; font-weight: 950; letter-spacing: 0.22em; text-transform: uppercase; }
       .mark { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 14px; overflow: hidden; background: #07111f; border: 1px solid rgba(255,255,255,0.16); }
@@ -1161,13 +1163,15 @@ const publicCardHtml = `<!doctype html>
       <section class="content">
         <a class="brand" href="/" aria-label="SUPERMEGA.dev home"><span class="mark"><img src="/favicon.svg?v=supermega-atelier-20260623" alt="" /></span><span>SUPERMEGA.dev</span></a>
         <h1>Swan Htet</h1>
-        <p class="role">Founder</p>
+        <p class="role">Founder — custom software for Myanmar business</p>
+        <p class="pitch">I build the software your team actually needs — starting from your real data. Priced in MMK. Done in weeks.</p>
         <div class="details">
           <a href="mailto:swanhtet@supermega.dev">swanhtet@supermega.dev</a>
           <a href="tel:+9595000721">+95 9 500 0721</a>
         </div>
         <div class="actions">
-          <a class="button" href="${activeCardContactPath}">Website</a>
+          <a class="button" href="${activeCardContactPath}">supermega.dev</a>
+          <a class="button secondary" href="https://www.linkedin.com/in/theswanhtet" rel="noreferrer" target="_blank">LinkedIn</a>
         </div>
       </section>
     </main>
