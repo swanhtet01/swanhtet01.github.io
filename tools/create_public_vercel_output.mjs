@@ -130,6 +130,16 @@ function normalizePublicProductNames(content) {
     .replace(/\/site\/shots\/product-factory-maintenance-quality-app\.svg|\/site\/shots\/product-factory-operations-app\.svg|\/site\/shots\/product-factory-issue-maintenance-tracker\.svg/g, '/site/shots/product-factory-issues-maintenance-quality.svg')
     .replace(/\/site\/shots\/product-restaurant-pos-inventory-app\.svg|\/site\/shots\/product-restaurant-pos-app\.svg|\/site\/shots\/product-restaurant-pos-stock-tracker\.svg/g, '/site/shots/product-restaurant-pos-menu-inventory.svg')
     .replace(/Back Office (?:Back Office )+Workflow Desk/g, 'Back Office Workflow Desk')
+    // FINAL CANONICALIZATION — collapse every legacy/variant product name to the only 3 public
+    // names (CEO-ratified, pricing.json taxonomy: DeskPOS · Factory & Operations App · Custom
+    // Solutions & AI Agents). Runs last so nothing slips through, on every normalized page.
+    .replace(/Restaurant POS \+ Inventory|Restaurant POS and Inventory/g, 'DeskPOS')
+    .replace(/DeskPOS\s*[—–-]\s*Point of Sale/g, 'DeskPOS')
+    .replace(/Factory Operations App/g, 'Factory & Operations App')
+    .replace(/Document Extraction Ledger/g, 'Custom Solutions & AI Agents')
+    .replace(/Back Office AI Desk|Back Office Workflow Desk/g, 'Custom Solutions & AI Agents')
+    // Retire the old tagline everywhere it still renders → the one CEO-ratified line.
+    .replace(/Cast real work into software\./g, 'Stop running your business on Viber & Excel.')
 }
 
 const publicMachineHtml = `<!doctype html>
@@ -2445,9 +2455,9 @@ ${unicornHeader}
               <img class="founder-photo" src="/site/social/swan-htet.jpg" alt="Swan Htet — founder, SUPERMEGA.dev" loading="lazy" decoding="async" />
             </div>
             <div class="founder-copy">
-              <p class="founder-quote">"Most businesses I work with in Yangon already have a system. It's just running across a Viber group, a shared Excel no one fully trusts, and one person who holds the whole thing in their head."</p>
-              <p>Last year a manufacturer I know brought me a problem: 300+ warranty claims buried in 18 months of Gmail threads. No owner column, no days-open figure, no way to know what was overdue without reading every email. I pulled the full export, mapped it into a ledger with owner and days-open, and built a brief the ops team runs every Monday. Three weeks. One payment. They own it — no subscription, no vendor to call if something changes.</p>
-              <p>I'm Yangon-based and I work on one project at a time. Before I ask for any money, I show you the first useful screen built from your actual data. If it doesn't feel immediately worth it after that, we stop there.</p>
+              <p class="founder-quote">"Most businesses I work with in Yangon already have a system. It's just spread across a Viber group, a shared Excel no one fully trusts, and one person who holds the whole thing in their head. I build the software that replaces that."</p>
+              <p>I started SUPERMEGA because this kept showing up everywhere — factories, distributors, shops all running real operations on improvised tools. A manufacturer I work with came to me with 300+ warranty claims buried in 18 months of Gmail. No owner column. No way to know what was overdue without reading every thread from scratch. I built the ledger and a Monday brief the ops team now runs without thinking. Three weeks. One payment. They own it — no subscription, no vendor to call when something needs updating.</p>
+              <p>I take one project at a time. Before you pay anything, I build the first screen from your actual data — not a mockup, not sample data. If it doesn't feel immediately worth it, we stop there. No hard sell, no proposal to sit on.</p>
               <div class="founder-sig">
                 <strong>Swan Htet</strong>
                 <span>Founder, SUPERMEGA.dev</span>
@@ -3236,8 +3246,10 @@ const config = {
       dest: '/machine/index.html',
     },
     {
+      // /ai-agents/ retired — redirect to Products (AI Operator lives there now).
       src: '^/ai-agents/?$',
-      dest: '/ai-agents/index.html',
+      status: 308,
+      headers: { Location: '/products/' },
     },
     {
       src: '^/pricing/?$',
