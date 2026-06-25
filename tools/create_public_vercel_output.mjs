@@ -3336,7 +3336,7 @@ async function copyPublicStatic(source, destination, rootSource = source) {
 }
 
 async function prunePublicStaticRoot() {
-  const allowedRootDirs = new Set(['assets', 'site', 'social', 'products', 'start', 'contact', 'offers', 'work', 'machine', 'card', 'c', 'demo', 'ai-agents'])
+  const allowedRootDirs = new Set(['assets', 'site', 'social', 'products', 'start', 'contact', 'offers', 'work', 'machine', 'card', 'c', 'demo', 'ai-agents', 'privacy'])
   for (const entry of await readdir(staticDir, { withFileTypes: true }).catch(() => [])) {
     if (!entry.isDirectory() || allowedRootDirs.has(entry.name)) continue
     await rm(resolve(staticDir, entry.name), { recursive: true, force: true, maxRetries: 8, retryDelay: 250 })
@@ -3942,6 +3942,77 @@ ${publicLanguageToggleScript}
 </html>`
 await mkdir(resolve(staticDir, 'work'), { recursive: true })
 await writeFile(resolve(staticDir, 'work', 'index.html'), normalizePublicProductNames(publicWorkHtml), 'utf8')
+const unicornPrivacyHtml = `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="index,follow" />
+  <title>Privacy Policy | SUPERMEGA.dev</title>
+  <meta name="description" content="SUPERMEGA.dev privacy policy — how we handle your data when you contact us or use our software." />
+  ${unicornSocialMeta({ title: 'Privacy Policy | SUPERMEGA.dev', description: 'How SUPERMEGA.dev handles your data when you contact us or use our software.', url: 'https://supermega.dev/privacy/' })}
+  <meta name="theme-color" content="#f4efe6" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" />
+  <style>${unicornShellStyle}</style>
+</head>
+<body>
+<div class="wrap">
+  <script>(function(){try{var t=localStorage.getItem('sm-theme');if(!t){t=(window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light';}document.documentElement.setAttribute('data-theme',t);}catch(e){}})();</script>
+  <header>
+    <a class="brand" href="/" aria-label="SUPERMEGA.dev home">
+      <span class="mark"><svg viewBox="0 0 64 64" width="100%" height="100%" fill="none" aria-hidden="true"><g stroke="#D97757" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M35.8 10.3 A22 22 0 1 1 28.2 10.3"/><path d="M22 45 L22 26 L32 38 L42 26 L42 45" stroke-width="4"/></g><path d="M32 34.5 L33.2 37 L35.5 38 L33.2 39 L32 41.5 L30.8 39 L28.5 38 L30.8 37 Z" fill="#C9A24B"/><path d="M32 7.6 L32.9 9.7 L35 10.3 L32.9 10.9 L32 13 L31.1 10.9 L29 10.3 L31.1 9.7 Z" fill="#C9A24B"/></svg></span>
+      <span class="brand-text"><strong>SUPERMEGA.dev</strong><small>Business apps for real work</small></span>
+    </a>
+    <nav class="nav" aria-label="Primary">
+      <button class="btn secondary theme-toggle" type="button" aria-label="Toggle dark mode" onclick="var r=document.documentElement,n=r.getAttribute('data-theme')==='dark'?'light':'dark';r.setAttribute('data-theme',n);try{localStorage.setItem('sm-theme',n)}catch(e){}"></button>
+      <a class="btn secondary optional-nav" href="/products/">Products</a>
+      <a class="btn secondary" href="/demo/">Demos</a>
+      <a class="btn secondary" href="/offers/">Pricing</a>
+      <a class="btn primary" href="/contact/">Contact</a>
+    </nav>
+  </header>
+  <main>
+    <section style="padding: clamp(28px,5vw,64px) 0 clamp(40px,7vw,80px); max-width: 720px;">
+      <div class="eyebrow">Privacy</div>
+      <h1 style="margin-bottom: 28px;">Privacy Policy</h1>
+      <p style="margin-bottom: 10px; font-size: 14px; color: var(--muted);">Last updated: June 2026</p>
+
+      <h2 style="font-size: clamp(22px,3vw,30px); margin: 32px 0 12px;">What we collect</h2>
+      <p>When you submit the contact form or reach us directly, we collect your name, email address, phone number, business name, and anything you describe about your workflow. We use this to reply and, if you become a client, to scope and build your project.</p>
+
+      <h2 style="font-size: clamp(22px,3vw,30px); margin: 32px 0 12px;">How we use it</h2>
+      <p>We use your contact details only to respond to your enquiry and to deliver the agreed work. We do not sell, trade, or rent your information to third parties. We do not send marketing email without your consent.</p>
+
+      <h2 style="font-size: clamp(22px,3vw,30px); margin: 32px 0 12px;">Where it is stored</h2>
+      <p>Enquiry data is stored in a private Supabase database (hosted by Supabase Inc., US region). Access is restricted to the SUPERMEGA.dev team. Data is encrypted in transit (TLS) and at rest.</p>
+
+      <h2 style="font-size: clamp(22px,3vw,30px); margin: 32px 0 12px;">Cookies and analytics</h2>
+      <p>This site does not use third-party analytics or advertising cookies. We do not use Google Analytics, Meta Pixel, or any tracking scripts. The only persistent storage is a theme preference (light/dark) saved locally in your browser.</p>
+
+      <h2 style="font-size: clamp(22px,3vw,30px); margin: 32px 0 12px;">Your rights</h2>
+      <p>You can request that we delete your contact record at any time. Email <a href="mailto:swanhtet@supermega.dev" style="color:var(--blue)">swanhtet@supermega.dev</a> and we will remove it within 7 days.</p>
+
+      <h2 style="font-size: clamp(22px,3vw,30px); margin: 32px 0 12px;">Contact</h2>
+      <p>Questions about this policy: <a href="mailto:swanhtet@supermega.dev" style="color:var(--blue)">swanhtet@supermega.dev</a> · Swan Htet, Founder, SUPERMEGA.dev, Yangon, Myanmar.</p>
+    </section>
+  </main>
+  <footer>
+    <span>© 2026 SUPERMEGA.dev — custom business software for Myanmar. Built from your real data.</span>
+    <span class="footer-links">
+      <a href="mailto:swanhtet@supermega.dev">swanhtet@supermega.dev</a>
+      <a href="tel:+9595000721">+95 9 500 0721</a>
+      <a href="/products/">Products</a>
+      <a href="/demo/">Demos</a>
+      <a href="/offers/">Pricing</a>
+      <a href="/contact/">Contact</a>
+    </span>
+  </footer>
+</div>
+${publicLanguageToggleScript}
+</body>
+</html>`
+await mkdir(resolve(staticDir, 'privacy'), { recursive: true })
+await writeFile(resolve(staticDir, 'privacy', 'index.html'), unicornPrivacyHtml, 'utf8')
 await mkdir(resolve(staticDir, 'machine'), { recursive: true })
 await writeFile(resolve(staticDir, 'machine', 'index.html'), normalizePublicProductNames(publicMachineHtml), 'utf8')
 // Demo hub (source lives in C:/sm-site, outside OneDrive) served at /demo/
@@ -3949,7 +4020,7 @@ await mkdir(resolve(staticDir, 'demo'), { recursive: true })
 await cp('C:/sm-site/supermega-demo/index.html', resolve(staticDir, 'demo', 'index.html'), { force: true }).catch(() => undefined)
 await cp('C:/sm-site/supermega-demo/favicon.svg', resolve(staticDir, 'demo', 'favicon.svg'), { force: true }).catch(() => undefined)
 await writeFile(resolve(staticDir, 'robots.txt'), 'User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /app/\nDisallow: /clients/\nDisallow: /machine/\nSitemap: https://supermega.dev/sitemap.xml\n', 'utf8')
-await writeFile(resolve(staticDir, 'sitemap.xml'), '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url><loc>https://supermega.dev/</loc><changefreq>weekly</changefreq><priority>1.0</priority></url>\n  <url><loc>https://supermega.dev/products/</loc><changefreq>weekly</changefreq><priority>0.9</priority></url>\n  <url><loc>https://supermega.dev/offers/</loc><changefreq>weekly</changefreq><priority>0.95</priority></url>\n  <url><loc>https://supermega.dev/work/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>\n  <url><loc>https://supermega.dev/contact/</loc><changefreq>monthly</changefreq><priority>0.9</priority></url>\n  <url><loc>https://supermega.dev/card/</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>\n</urlset>\n', 'utf8')
+await writeFile(resolve(staticDir, 'sitemap.xml'), '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url><loc>https://supermega.dev/</loc><changefreq>weekly</changefreq><priority>1.0</priority></url>\n  <url><loc>https://supermega.dev/products/</loc><changefreq>weekly</changefreq><priority>0.9</priority></url>\n  <url><loc>https://supermega.dev/offers/</loc><changefreq>weekly</changefreq><priority>0.95</priority></url>\n  <url><loc>https://supermega.dev/work/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>\n  <url><loc>https://supermega.dev/contact/</loc><changefreq>monthly</changefreq><priority>0.9</priority></url>\n  <url><loc>https://supermega.dev/card/</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>\n  <url><loc>https://supermega.dev/privacy/</loc><changefreq>yearly</changefreq><priority>0.3</priority></url>\n</urlset>\n', 'utf8')
 await writeFile(
   resolve(staticDir, 'sw.js'),
   `const CACHE_VERSION = 'supermega-public-clean-20260522'
