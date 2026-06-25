@@ -138,8 +138,9 @@ function normalizePublicProductNames(content) {
     .replace(/Factory Operations App/g, 'Factory & Operations App')
     .replace(/Document Extraction Ledger/g, 'Custom Solutions & AI Agents')
     .replace(/Back Office AI Desk|Back Office Workflow Desk/g, 'Custom Solutions & AI Agents')
-    // Retire the old tagline everywhere it still renders → the one CEO-ratified line.
-    .replace(/Cast real work into software\./g, 'Stop running your business on Viber & Excel.')
+    // Retire the old tagline. Header sub-mark → clean wordmark; every other use → the one CEO line.
+    .replace(/<small>Cast real work into software<\/small>/g, '')
+    .replace(/Cast real work into software\.?/g, 'Stop running your business on Viber & Excel.')
 }
 
 const publicMachineHtml = `<!doctype html>
@@ -1075,7 +1076,7 @@ function renderPublicPricingHtml() {
       <header>
         <a class="brand" href="/" aria-label="SUPERMEGA.dev home">
           <span class="mark"><svg viewBox="0 0 64 64" width="100%" height="100%" fill="none" aria-hidden="true"><g stroke="#D97757" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M35.8 10.3 A22 22 0 1 1 28.2 10.3"/><path d="M22 45 L22 26 L32 38 L42 26 L42 45" stroke-width="4"/></g><path d="M32 34.5 L33.2 37 L35.5 38 L33.2 39 L32 41.5 L30.8 39 L28.5 38 L30.8 37 Z" fill="#C9A24B"/><path d="M32 7.6 L32.9 9.7 L35 10.3 L32.9 10.9 L32 13 L31.1 10.9 L29 10.3 L31.1 9.7 Z" fill="#C9A24B"/></svg></span>
-          <span class="brand-text"><strong>SUPERMEGA.dev</strong><small>Cast real work into software</small></span>
+          <span class="brand-text"><strong>SUPERMEGA.dev</strong></span>
         </a>
         <nav class="nav" aria-label="Primary">
           <a class="btn secondary" href="/products/">Products</a>
@@ -1651,7 +1652,7 @@ const unicornHeader = `
       <header>
         <a class="brand" href="/" aria-label="SUPERMEGA.dev home">
           <span class="mark"><svg viewBox="0 0 64 64" width="100%" height="100%" fill="none" aria-hidden="true"><g stroke="#D97757" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M35.8 10.3 A22 22 0 1 1 28.2 10.3"/><path d="M22 45 L22 26 L32 38 L42 26 L42 45" stroke-width="4"/></g><path d="M32 34.5 L33.2 37 L35.5 38 L33.2 39 L32 41.5 L30.8 39 L28.5 38 L30.8 37 Z" fill="#C9A24B"/><path d="M32 7.6 L32.9 9.7 L35 10.3 L32.9 10.9 L32 13 L31.1 10.9 L29 10.3 L31.1 9.7 Z" fill="#C9A24B"/></svg></span>
-          <span class="brand-text"><strong>SUPERMEGA.dev</strong><small>Cast real work into software</small></span>
+          <span class="brand-text"><strong>SUPERMEGA.dev</strong></span>
         </a>
         <nav class="nav" aria-label="Primary">
           <button class="btn secondary theme-toggle" type="button" aria-label="Toggle dark mode" onclick="var r=document.documentElement,n=r.getAttribute('data-theme')==='dark'?'light':'dark';r.setAttribute('data-theme',n);try{localStorage.setItem('sm-theme',n)}catch(e){}"></button>
@@ -4019,7 +4020,7 @@ const unicornPrivacyHtml = `<!doctype html>
   <header>
     <a class="brand" href="/" aria-label="SUPERMEGA.dev home">
       <span class="mark"><svg viewBox="0 0 64 64" width="100%" height="100%" fill="none" aria-hidden="true"><g stroke="#D97757" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M35.8 10.3 A22 22 0 1 1 28.2 10.3"/><path d="M22 45 L22 26 L32 38 L42 26 L42 45" stroke-width="4"/></g><path d="M32 34.5 L33.2 37 L35.5 38 L33.2 39 L32 41.5 L30.8 39 L28.5 38 L30.8 37 Z" fill="#C9A24B"/><path d="M32 7.6 L32.9 9.7 L35 10.3 L32.9 10.9 L32 13 L31.1 10.9 L29 10.3 L31.1 9.7 Z" fill="#C9A24B"/></svg></span>
-      <span class="brand-text"><strong>SUPERMEGA.dev</strong><small>Cast real work into software</small></span>
+      <span class="brand-text"><strong>SUPERMEGA.dev</strong></span>
     </a>
     <nav class="nav" aria-label="Primary">
       <button class="btn secondary theme-toggle" type="button" aria-label="Toggle dark mode" onclick="var r=document.documentElement,n=r.getAttribute('data-theme')==='dark'?'light':'dark';r.setAttribute('data-theme',n);try{localStorage.setItem('sm-theme',n)}catch(e){}"></button>
