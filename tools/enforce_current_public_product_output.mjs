@@ -59,7 +59,7 @@ const requiredProductShotPaths = [
   'site/shots/live-demo-industrial-os.png',
 ]
 
-assertIncludes('home', home, ['<title>SUPERMEGA.dev — Custom Software for Myanmar Business</title>', 'Stop running your business on Viber.'])
+assertIncludes('home', home, ['<title>SUPERMEGA.dev — Custom Software for Myanmar Business</title>', 'Your real work, turned into software.'])
 assertIncludes('products', products, [
   '<title>Products | SUPERMEGA.dev</title>',
 ])

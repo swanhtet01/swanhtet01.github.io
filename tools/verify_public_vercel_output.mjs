@@ -538,7 +538,7 @@ const homeHtml = readFileSync(resolve(staticDir, 'index.html'), 'utf8')
 const productsHtml = readFileSync(resolve(staticDir, 'products/index.html'), 'utf8')
 for (const token of [
   '<title>SUPERMEGA.dev — Custom Software for Myanmar Business</title>',
-  'Stop running your business on Viber.',
+  'Your real work, turned into software.',
 ]) {
   if (!homeHtml.includes(token)) fail('public_shell_contract_missing', { token })
 }

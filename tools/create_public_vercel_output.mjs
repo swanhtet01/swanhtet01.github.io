@@ -2390,7 +2390,7 @@ ${unicornHeader}
         <section class="poster">
           <div class="copy">
             <div class="eyebrow">Starts from your real data · Built to last · Yours to keep</div>
-            <h1>Stop running your business on Viber.</h1>
+            <h1>Your real work, turned into software.</h1>
             <p>Most businesses we work with already have a system — it's spread across a group chat, a shared Excel, and someone's memory. We pull that out, structure it, and give you software you actually own. From 2,500,000 MMK. Delivered in weeks.</p>
             <div class="cta">
               <a class="btn primary" href="/contact/">Share one workflow</a>
@@ -3593,7 +3593,7 @@ const productDetailDocs = [
   {
     slug: 'back-office',
     displayName: 'Back Office AI Desk',
-    eyebrow: 'Back office · Upcoming',
+    eyebrow: 'Back office · Pilot available',
     headline: 'An AI helper for one back-office job — it drafts, you approve',
     subhead: 'Takes one recurring task you already do by hand — the daily close audit, reorder watch, or supplier follow-up — and prepares the work for you each day. Every finding and message is held in a review queue. Nothing is sent, posted, or changed until you press approve.',
     shot: '/site/shots/live-demo-agent-builder.png',
