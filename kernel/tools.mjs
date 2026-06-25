@@ -5,6 +5,7 @@ import connectors from './connectors/index.mjs'
 import infraHttp from './connectors/infra-http.mjs'
 import gmail from './connectors/data-gmail.mjs'
 import store from './store.mjs'
+import cbm from './connectors/data-cbm-rate.mjs'
 
 export const TOOLS = {
   platform_status: {
@@ -27,6 +28,12 @@ export const TOOLS = {
       const body = typeof r.body === 'string' ? r.body.slice(0, 2000) : r.body
       return { status: r.status || 0, ok: Boolean(r.ok), body, reason: r.reason }
     },
+  },
+  fx_rate: {
+    description: 'Latest Central Bank of Myanmar reference exchange rates (MMK per USD, EUR, SGD, and others). Read-only; no args.',
+    input_schema: { type: 'object', properties: {}, additionalProperties: false },
+    available: () => true,
+    run: async () => { const r = await cbm.getRates(); return r.ok ? { rates: r.rates, source: r.source, timestamp: r.timestamp } : { ok: false, reason: r.reason } },
   },
   leads_overview: {
     description: 'Overview of inbound leads from the SuperMega CRM: total count, breakdown by stage, and the most recent few (name, company, stage, score). Read-only.',
