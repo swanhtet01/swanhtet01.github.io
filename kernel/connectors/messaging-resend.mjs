@@ -55,13 +55,12 @@ async function send({ to, subject, html, text, from, fromName, replyTo, cc, bcc 
 
 async function health() {
   const key = getKey()
-  if (!key) return { ok: false, configured: false, reason: 'RESEND_API_KEY not set' }
+  if (!key) return { ok: false, detail: 'RESEND_API_KEY not set' }
   try {
-    // Light check: verify the key is syntactically valid (re_... prefix) without making a real API call
-    if (!key.startsWith('re_')) return { ok: false, configured: false, reason: 'RESEND_API_KEY format invalid (expected re_...)' }
-    return { ok: true, configured: true, from: getFrom() }
+    if (!key.startsWith('re_')) return { ok: false, detail: 'RESEND_API_KEY format invalid (expected re_...)' }
+    return { ok: true, detail: `from: ${getFrom()}` }
   } catch (err) {
-    return { ok: false, configured: true, reason: String(err.message).slice(0, 100) }
+    return { ok: false, detail: String(err.message).slice(0, 100) }
   }
 }
 

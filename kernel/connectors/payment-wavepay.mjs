@@ -134,6 +134,31 @@ export async function queryPayment({ orderId } = {}) {
   }
 }
 
+// ─── notify verification ────────────────────────────────────────────────────
+
+/**
+ * verifyNotify — verify an incoming WavePay IPN callback.
+ * WavePay sends: merchant_id, store_id, order_id, amount, status, request_id, hash
+ * Hash: SHA-256 of merchant_id + store_id + order_id + amount + secret_key
+ * @param {object} body  parsed JSON body from the callback POST
+ * @returns {{ ok:boolean, payload?:object, reason?:string }}
+ */
+export function verifyNotify(body) {
+  try {
+    if (!body || typeof body !== 'object') return { ok: false, reason: 'invalid_payload' }
+    if (!configured()) return { ok: false, reason: 'wavepay_not_configured' }
+    const incomingHash = String(body.hash || '')
+    if (!incomingHash) return { ok: false, reason: 'missing_hash' }
+    const expected = sign(body.order_id, body.amount)
+    const a = Buffer.from(incomingHash.padEnd(64, '\0'))
+    const b = Buffer.from(expected.padEnd(64, '\0'))
+    if (!crypto.timingSafeEqual(a, b)) return { ok: false, reason: 'signature_mismatch' }
+    return { ok: true, payload: body }
+  } catch (e) {
+    return { ok: false, reason: String(e.message).slice(0, 120) }
+  }
+}
+
 // ─── connector object ────────────────────────────────────────────────────────
 
 export const paymentWavepay = {

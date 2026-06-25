@@ -153,6 +153,30 @@ export async function queryPayment({ orderId } = {}) {
   }
 }
 
+// ─── notify verification ────────────────────────────────────────────────────
+
+/**
+ * verifyNotify — verify an incoming KBZPay IPN callback.
+ * @param {object} body  parsed JSON body from the callback POST
+ * @returns {{ ok:boolean, payload?:object, reason?:string }}
+ */
+export function verifyNotify(body) {
+  try {
+    if (!body || typeof body !== 'object') return { ok: false, reason: 'invalid_payload' }
+    const secret = appSecret()
+    if (!secret) return { ok: false, reason: 'kbzpay_not_configured' }
+    const incomingSign = String(body.sign || '')
+    if (!incomingSign) return { ok: false, reason: 'missing_sign' }
+    const expected = sign({ ...body })
+    const a = Buffer.from(incomingSign.padEnd(64, '\0'))
+    const b = Buffer.from(expected.padEnd(64, '\0'))
+    if (!crypto.timingSafeEqual(a, b)) return { ok: false, reason: 'signature_mismatch' }
+    return { ok: true, payload: body }
+  } catch (e) {
+    return { ok: false, reason: String(e.message).slice(0, 120) }
+  }
+}
+
 // ─── connector object ────────────────────────────────────────────────────────
 
 export const paymentKbzpay = {

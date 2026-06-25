@@ -18,8 +18,12 @@ export const aiGateway = {
   // Cheap by design: a real ping costs tokens on every console load. Configured == healthy.
   // (To upgrade to a live ping later: call gateway.complete({ tier:'bulk', maxTokens:1, ... }).)
   async health() {
-    if (!configured()) return { ok: false, detail: 'missing ANTHROPIC_API_KEY' }
-    return { ok: true, detail: `configured (tiers: ${Object.keys(gateway.TIERS).join('/')})` }
+    try {
+      if (!configured()) return { ok: false, detail: 'missing ANTHROPIC_API_KEY' }
+      return { ok: true, detail: `configured (tiers: ${Object.keys(gateway.TIERS).join('/')})` }
+    } catch (err) {
+      return { ok: false, detail: String(err.message).slice(0, 100) }
+    }
   },
 }
 
