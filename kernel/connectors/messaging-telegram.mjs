@@ -53,15 +53,19 @@ async function telegram(method, body) {
  * @returns {Promise<{ ok:boolean, messageId:number, chatId:(string|number) }>}
  */
 export async function send(text, { parseMode, chatId, disablePreview = true } = {}) {
-  if (!configured()) throw new Error('telegram_not_configured')
+  if (!configured()) return { ok: false, reason: 'telegram_not_configured' }
   const target = String(chatId || defaultChatId()).trim()
-  if (!target) throw new Error('telegram_missing_chat_id')
+  if (!target) return { ok: false, reason: 'telegram_missing_chat_id' }
   const message = String(text || '').trim()
-  if (!message) throw new Error('telegram_empty_text')
+  if (!message) return { ok: false, reason: 'telegram_empty_text' }
   const body = { chat_id: target, text: message.slice(0, 4096), disable_web_page_preview: disablePreview }
   if (parseMode) body.parse_mode = parseMode
-  const result = await telegram('sendMessage', body)
-  return { ok: true, messageId: result?.message_id, chatId: target }
+  try {
+    const result = await telegram('sendMessage', body)
+    return { ok: true, messageId: result?.message_id, chatId: target }
+  } catch (e) {
+    return { ok: false, reason: String(e?.message || 'telegram_error').slice(0, 200) }
+  }
 }
 
 const configuredFn = configured // alias for clarity in the connector object below

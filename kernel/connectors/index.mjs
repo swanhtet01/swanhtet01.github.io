@@ -36,6 +36,7 @@ import './data-notion.mjs'
 import './commerce-shopify.mjs'
 import './data-cbm-rate.mjs'
 import './ai-gemini.mjs'
+import './infra-http.mjs'
 
 export * from './registry.mjs'
 export default registry

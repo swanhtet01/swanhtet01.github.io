@@ -2221,12 +2221,13 @@ ${unicornHeader}
               <div class="connector-grid">
                 <div class="connector-chip">Supabase</div>
                 <div class="connector-chip">Webhook</div>
+                <div class="connector-chip">Generic HTTP</div>
                 <div class="connector-chip">Google Gemini</div>
                 <div class="connector-chip">AI Gateway</div>
               </div>
             </div>
           </div>
-          <p class="connector-note">Most clients start with two or three connectors — that's enough to scope and build the first agent.</p>
+          <p class="connector-note">29 connectors wired in. Most clients start with two or three — that's enough to scope and build the first agent.</p>
         </section>
 
         <section class="section agent-proof">

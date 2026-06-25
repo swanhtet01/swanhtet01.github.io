@@ -36,18 +36,22 @@ function basicAuth() {
  * @returns {Promise<{ ok:boolean, sid:string }>}
  */
 export async function send(to, text) {
-  if (!configured()) throw new Error('sms_not_configured')
-  if (!to) throw new Error('sms_missing_to')
+  if (!configured()) return { ok: false, reason: 'sms_not_configured' }
+  if (!to) return { ok: false, reason: 'sms_missing_to' }
   const body = new URLSearchParams({ To: to, From: from(), Body: String(text || '').slice(0, 1600) })
-  const res = await fetch(`${BASE}/Accounts/${sid()}/Messages.json`, {
-    method: 'POST',
-    headers: { Authorization: basicAuth(), 'content-type': 'application/x-www-form-urlencoded' },
-    body,
-    signal: AbortSignal.timeout(10000),
-  })
-  const json = await res.json().catch(() => ({}))
-  if (!res.ok) throw new Error(`twilio_${res.status}: ${json?.message || ''}`.slice(0, 200))
-  return { ok: true, sid: json.sid }
+  try {
+    const res = await fetch(`${BASE}/Accounts/${sid()}/Messages.json`, {
+      method: 'POST',
+      headers: { Authorization: basicAuth(), 'content-type': 'application/x-www-form-urlencoded' },
+      body,
+      signal: AbortSignal.timeout(10000),
+    })
+    const json = await res.json().catch(() => ({}))
+    if (!res.ok) return { ok: false, reason: `twilio_${res.status}: ${json?.message || ''}`.slice(0, 200) }
+    return { ok: true, sid: json.sid }
+  } catch (e) {
+    return { ok: false, reason: String(e?.message || 'sms_error').slice(0, 200) }
+  }
 }
 
 export const messagingSms = {

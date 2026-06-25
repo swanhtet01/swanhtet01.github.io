@@ -9,7 +9,9 @@
 import store from '../store.mjs'
 import { register } from './registry.mjs'
 
-const configured = () => store.mode === 'supabase'
+const supabaseUrl = () => String(process.env.SUPABASE_URL || '').replace(/\/$/, '')
+const supabaseKey = () => String(process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY || '').trim()
+const configured = () => Boolean(supabaseUrl() && supabaseKey())
 
 export const dataSupabase = {
   key: 'data-supabase',

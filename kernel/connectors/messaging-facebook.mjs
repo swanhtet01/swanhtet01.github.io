@@ -34,25 +34,29 @@ const configured = () => Boolean(token())
  */
 export async function send(text, { recipientId } = {}) {
   const t = token()
-  if (!t) throw new Error('facebook_not_configured')
+  if (!t) return { ok: false, reason: 'facebook_not_configured' }
   const target = String(recipientId || defaultRecipientId()).trim()
-  if (!target) throw new Error('facebook_missing_recipient_id')
+  if (!target) return { ok: false, reason: 'facebook_missing_recipient_id' }
   const message = String(text || '').trim()
-  if (!message) throw new Error('facebook_empty_text')
+  if (!message) return { ok: false, reason: 'facebook_empty_text' }
 
-  // Token in Authorization header, not the URL query string (URLs leak into proxy/access/SDK logs).
-  const res = await fetch(`${BASE}/me/messages`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', authorization: `Bearer ${t}` },
-    body: JSON.stringify({ recipient: { id: target }, message: { text: message.slice(0, 2000) } }),
-    signal: AbortSignal.timeout(8000),
-  })
-  const json = await res.json().catch(() => ({}))
-  if (!res.ok || json.error) {
-    const detail = (json.error && json.error.message) || String(res.status)
-    throw new Error(`facebook_${res.status}: ${detail}`.slice(0, 200))
+  try {
+    // Token in Authorization header, not the URL query string (URLs leak into proxy/access/SDK logs).
+    const res = await fetch(`${BASE}/me/messages`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${t}` },
+      body: JSON.stringify({ recipient: { id: target }, message: { text: message.slice(0, 2000) } }),
+      signal: AbortSignal.timeout(8000),
+    })
+    const json = await res.json().catch(() => ({}))
+    if (!res.ok || json.error) {
+      const detail = (json.error && json.error.message) || String(res.status)
+      return { ok: false, reason: `facebook_${res.status}: ${detail}`.slice(0, 200) }
+    }
+    return { ok: true, messageId: json.message_id, recipientId: target }
+  } catch (e) {
+    return { ok: false, reason: String(e?.message || 'facebook_error').slice(0, 200) }
   }
-  return { ok: true, messageId: json.message_id, recipientId: target }
 }
 
 export const messagingFacebook = {

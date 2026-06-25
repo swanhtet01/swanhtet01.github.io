@@ -41,40 +41,44 @@ const configured      = () => Boolean(token() && phoneNumberId())
  */
 export async function send(text, { to, recipientPhone } = {}) {
   const t = token()
-  if (!t) throw new Error('whatsapp_not_configured: missing WHATSAPP_ACCESS_TOKEN')
+  if (!t) return { ok: false, reason: 'whatsapp_not_configured: missing WHATSAPP_ACCESS_TOKEN' }
   const id = phoneNumberId()
-  if (!id) throw new Error('whatsapp_not_configured: missing WHATSAPP_PHONE_NUMBER_ID')
+  if (!id) return { ok: false, reason: 'whatsapp_not_configured: missing WHATSAPP_PHONE_NUMBER_ID' }
 
   const target = String(to || recipientPhone || defaultRecipient()).trim()
-  if (!target) throw new Error('whatsapp_missing_recipient: pass to/recipientPhone or set WHATSAPP_DEFAULT_RECIPIENT')
+  if (!target) return { ok: false, reason: 'whatsapp_missing_recipient: pass to/recipientPhone or set WHATSAPP_DEFAULT_RECIPIENT' }
 
   const message = String(text || '').trim()
-  if (!message) throw new Error('whatsapp_empty_text')
+  if (!message) return { ok: false, reason: 'whatsapp_empty_text' }
 
-  const res = await fetch(`${BASE}/${encodeURIComponent(id)}/messages`, {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      'authorization': `Bearer ${t}`,
-    },
-    body: JSON.stringify({
-      messaging_product: 'whatsapp',
-      recipient_type:    'individual',
-      to:                target,
-      type:              'text',
-      text:              { body: message.slice(0, 4096) },
-    }),
-    signal: AbortSignal.timeout(8000),
-  })
+  try {
+    const res = await fetch(`${BASE}/${encodeURIComponent(id)}/messages`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'authorization': `Bearer ${t}`,
+      },
+      body: JSON.stringify({
+        messaging_product: 'whatsapp',
+        recipient_type:    'individual',
+        to:                target,
+        type:              'text',
+        text:              { body: message.slice(0, 4096) },
+      }),
+      signal: AbortSignal.timeout(8000),
+    })
 
-  const json = await res.json().catch(() => ({}))
-  if (!res.ok || json.error) {
-    const detail = (json.error && json.error.message) || String(res.status)
-    throw new Error(`whatsapp_${res.status}: ${detail}`.slice(0, 200))
+    const json = await res.json().catch(() => ({}))
+    if (!res.ok || json.error) {
+      const detail = (json.error && json.error.message) || String(res.status)
+      return { ok: false, reason: `whatsapp_${res.status}: ${detail}`.slice(0, 200) }
+    }
+
+    const messageId = (json.messages && json.messages[0] && json.messages[0].id) || json.message_id || null
+    return { ok: true, messageId, to: target }
+  } catch (e) {
+    return { ok: false, reason: String(e?.message || 'whatsapp_error').slice(0, 200) }
   }
-
-  const messageId = (json.messages && json.messages[0] && json.messages[0].id) || json.message_id || null
-  return { ok: true, messageId, to: target }
 }
 
 export const messagingWhatsapp = {
