@@ -128,7 +128,7 @@ module.exports = async function handler(request, response) {
   if (body.company_url) { response.status(200).json({ ok: true }); return }
 
   // Cap field sizes — bound input that flows into email, Telegram, and the AI prompt
-  const cap = (v, n) => (typeof v === 'string' ? v.slice(0, n) : v)
+  const cap = (v, n) => (typeof v === 'string' ? v.trim().slice(0, n) : '')
   const name = cap(body.name, 200)
   const email = cap(body.email, 320)
   const phone = cap(body.phone, 60)
@@ -136,7 +136,11 @@ module.exports = async function handler(request, response) {
   const workflow = cap(body.workflow, 5000)
   const source_url = cap(body.source_url, 2000)
   if (!name || !email || !workflow) {
-    response.status(400).json({ error: 'name, email, and workflow are required' })
+    response.status(400).json({ ok: false, error: 'name, email, and workflow are required' })
+    return
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) {
+    response.status(400).json({ ok: false, error: 'valid email required' })
     return
   }
 
