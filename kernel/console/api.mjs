@@ -68,10 +68,11 @@ export async function handle({ method, path, query = {}, body = {}, headers = {}
         } catch (e) { if (String(e.message) === 'leads_from_site') return bad(400, 'leads_from_site'); throw e }
       }
       if (method === 'PATCH' && seg[1] && !seg[2]) {
+        // store.updateLead maps: stage→lead_stage, score→lead_score only.
+        // Sending any other field produces an empty dbPatch and returns null.
         const patch = {}
         if (body.stage) patch.stage = String(body.stage).slice(0, 40)
-        if (body.contact != null) patch.contact = String(body.contact).slice(0, 200)
-        if (body.company != null) patch.company = String(body.company).slice(0, 200)
+        if (body.score != null) patch.score = Number(body.score) || 0
         if (!Object.keys(patch).length) return bad(400, 'no_patchable_fields')
         const lead = await store.updateLead(seg[1], patch)
         if (!lead) return bad(404, 'lead_not_found')
