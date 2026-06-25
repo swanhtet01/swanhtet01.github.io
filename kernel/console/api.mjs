@@ -228,6 +228,9 @@ export async function handle({ method, path, query = {}, body = {}, headers = {}
       const deposit = Math.round(usd * 0.5) // 50% deposit
       const currency = String(body.currency || 'usd').toLowerCase()
       const result = await stripe.createCheckout({ amount: deposit, currency, ref: project.id, description: `SuperMega deposit — ${project.offer || 'build'} (50%)` })
+      // createCheckout returns { ok:false, reason } on bad-amount / API error — it does NOT throw.
+      // Don't log "checkout created" or hand back an undefined URL when the session wasn't created.
+      if (!result || !result.ok) return bad(502, result?.reason || 'stripe_checkout_failed')
       log('payment', `Stripe checkout created: $${deposit} for project ${project.offer}`, project.id)
       return ok({ ok: true, url: result.url, session_id: result.id, amount_usd: deposit, ref: project.id })
     }
