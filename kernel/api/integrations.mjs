@@ -9,15 +9,23 @@
 
 import connectors from '../connectors/index.mjs'
 import store from '../store.mjs'
+import crypto from 'node:crypto'
 
 const OPS_KEY = (process.env.SUPERMEGA_OPS_KEY || '').trim()
+function constantTimeEqual(a, b) {
+  const ha = crypto.createHash('sha256').update(String(a)).digest()
+  const hb = crypto.createHash('sha256').update(String(b)).digest()
+  return crypto.timingSafeEqual(ha, hb)
+}
 
 /**
  * handleIntegrations — host-agnostic, same {method,path,query,body,headers} -> {status,json}
  * contract as console/api.mjs's handle(), so the dev server / a Vercel function can both call it.
  */
 export async function handleIntegrations({ method = 'GET', headers = {} } = {}) {
-  if (OPS_KEY && String(headers['x-ops-key'] || '') !== OPS_KEY) return { status: 401, json: { ok: false, reason: 'unauthorized' } }
+  // Fail CLOSED: missing/blank ops key denies all (don't leak the integrations inventory unauthenticated).
+  if (!OPS_KEY) return { status: 503, json: { ok: false, reason: 'ops_key_not_configured' } }
+  if (!constantTimeEqual(String(headers['x-ops-key'] || ''), OPS_KEY)) return { status: 401, json: { ok: false, reason: 'unauthorized' } }
   if (method !== 'GET') return { status: 405, json: { ok: false, reason: 'method_not_allowed' } }
   try {
     const report = await connectors.healthAll()

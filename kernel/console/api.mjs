@@ -5,8 +5,16 @@ import store from '../store.mjs'
 import { generateDeal } from './deal.mjs'
 import { onDealSaved, onProjectShipped } from './graduation.mjs'
 import connectors from '../connectors/index.mjs'
+import crypto from 'node:crypto'
 
 const OPS_KEY = (process.env.SUPERMEGA_OPS_KEY || '').trim()
+// Constant-time, length-safe equality (hash both to fixed-width digests so timingSafeEqual
+// never throws on unequal lengths and no length is leaked via timing).
+function constantTimeEqual(a, b) {
+  const ha = crypto.createHash('sha256').update(String(a)).digest()
+  const hb = crypto.createHash('sha256').update(String(b)).digest()
+  return crypto.timingSafeEqual(ha, hb)
+}
 const PROJECT_STATUSES = ['scoping', 'deposit', 'building', 'live', 'care']
 const DEAL_STATUSES = ['draft', 'approved', 'sent']
 // USD anchors per offer (mirrors /offers/). Deposit = 50%. care-plan is monthly (MRR).
@@ -20,7 +28,9 @@ const log = (kind, summary, ref) => store.logActivity({ kind, summary, ref }).ca
 
 /** @param {{method:string, path:string, query?:object, body?:object, headers?:object}} req */
 export async function handle({ method, path, query = {}, body = {}, headers = {} }) {
-  if (OPS_KEY && String(headers['x-ops-key'] || '') !== OPS_KEY) return bad(401, 'unauthorized')
+  // Fail CLOSED: a missing/blank ops key must DENY all requests — never authenticate everyone.
+  if (!OPS_KEY) return bad(503, 'ops_key_not_configured')
+  if (!constantTimeEqual(String(headers['x-ops-key'] || ''), OPS_KEY)) return bad(401, 'unauthorized')
   const seg = path.replace(/^\/api\//, '').replace(/\/+$/, '').split('/')
 
   try {

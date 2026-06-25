@@ -51,12 +51,16 @@ async function gmailFetch(method, path, { query, body, subject } = {}) {
 
 // Build a base64url RFC-2822 message. Plain-text only (sufficient for transactional mail).
 function buildRawMessage({ to, subject, text, from, cc, bcc }) {
+  // SECURITY (CWE-93): strip CR/LF + tab from every header VALUE so untrusted inputs (e.g. a lead
+  // name flowing into Subject) cannot inject extra headers like a silent Bcc.
+  const h = (v) => { const s = String(v == null ? '' : v); let o = ''; for (let i = 0; i < s.length; i += 1) o += s.charCodeAt(i) < 32 ? ' ' : s[i]; return o.trim(); }
+  const list = (v) => (Array.isArray(v) ? v.map(h).filter(Boolean).join(', ') : h(v))
   const headers = []
-  if (from) headers.push(`From: ${from}`)
-  headers.push(`To: ${Array.isArray(to) ? to.join(', ') : to}`)
-  if (cc) headers.push(`Cc: ${Array.isArray(cc) ? cc.join(', ') : cc}`)
-  if (bcc) headers.push(`Bcc: ${Array.isArray(bcc) ? bcc.join(', ') : bcc}`)
-  headers.push(`Subject: ${subject || ''}`)
+  if (from) headers.push(`From: ${h(from)}`)
+  headers.push(`To: ${list(to)}`)
+  if (cc) headers.push(`Cc: ${list(cc)}`)
+  if (bcc) headers.push(`Bcc: ${list(bcc)}`)
+  headers.push(`Subject: ${h(subject)}`)
   headers.push('MIME-Version: 1.0')
   headers.push('Content-Type: text/plain; charset="UTF-8"')
   const mime = `${headers.join('\r\n')}\r\n\r\n${text || ''}`
