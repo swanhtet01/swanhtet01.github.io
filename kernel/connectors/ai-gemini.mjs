@@ -45,9 +45,11 @@ export async function generate({ prompt, model = 'gemini-1.5-flash', media = [],
       generationConfig: { maxOutputTokens: maxTokens, temperature },
     }
 
-    const res = await fetch(`${BASE}/${model}:generateContent?key=${API_KEY()}`, {
+    // Key goes in the x-goog-api-key HEADER, never the URL query string — URLs get logged by proxies,
+    // Vercel access logs, and error trackers, which would leak the Gemini key. (Gemini supports both.)
+    const res = await fetch(`${BASE}/${model}:generateContent`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: { 'content-type': 'application/json', 'x-goog-api-key': API_KEY() },
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(TIMEOUT),
     })

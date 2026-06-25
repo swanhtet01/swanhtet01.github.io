@@ -8,10 +8,11 @@
 // category 'infra' · always configured (no env vars required — it's a generic client).
 //
 // Security model:
-//   - Only HTTPS URLs allowed (blocks SSRF against internal services via http://).
+//   - HTTPS only, and the host (plus EVERY redirect hop) must not resolve to a private/loopback/
+//     link-local/CGNAT/cloud-metadata address — SSRF-hardened against DNS-rebinding + redirect bypass.
 //   - Request bodies capped at 512 KB.
 //   - Response bodies capped at 512 KB.
-//   - Redirects capped at 5.
+//   - Redirects manually followed + re-validated, capped at 5.
 //   - Timeout: configurable, max 30 s, default 10 s.
 //   - No credentials stored — callers pass Authorization headers per-call.
 //
@@ -22,19 +23,47 @@
 //   health()         -> { ok, detail }
 
 import { register } from './registry.mjs'
+import { isIP } from 'node:net'
+import dns from 'node:dns/promises'
 
 const MAX_BODY_BYTES = 512 * 1024 // 512 KB
 const MAX_TIMEOUT_MS = 30_000
 const DEFAULT_TIMEOUT_MS = 10_000
 
-function assertHttps(url) {
-  try {
-    const u = new URL(url)
-    if (u.protocol !== 'https:') return 'only https:// URLs are allowed'
-    return null
-  } catch {
-    return 'invalid URL'
+// --- SSRF defense ---------------------------------------------------------------------------------
+// Reject private / loopback / link-local / CGNAT / cloud-metadata addresses — including when a public
+// hostname RESOLVES to one (DNS-rebinding). Re-checked on every redirect hop in request().
+function ipToLong(ip) { return ip.split('.').reduce((a, o) => ((a << 8) | (parseInt(o, 10) & 255)) >>> 0, 0) >>> 0 }
+function inV4(ip, cidr) {
+  const [base, bits] = cidr.split('/')
+  const mask = Number(bits) === 0 ? 0 : (~0 << (32 - Number(bits))) >>> 0
+  return (ipToLong(ip) & mask) === (ipToLong(base) & mask)
+}
+const V4_BLOCKED = ['0.0.0.0/8', '10.0.0.0/8', '100.64.0.0/10', '127.0.0.0/8', '169.254.0.0/16', '172.16.0.0/12', '192.0.0.0/24', '192.168.0.0/16', '198.18.0.0/15', '224.0.0.0/4', '240.0.0.0/4']
+function isBlockedIp(ip) {
+  const v = isIP(ip)
+  if (v === 4) return V4_BLOCKED.some((c) => inV4(ip, c))
+  if (v === 6) {
+    const lo = ip.toLowerCase().replace(/^\[|\]$/g, '')
+    if (lo === '::1' || lo === '::') return true
+    if (/^f[cd]/.test(lo)) return true        // fc00::/7 unique-local
+    if (/^fe[89ab]/.test(lo)) return true     // fe80::/10 link-local
+    const m = lo.match(/(?:::ffff:)(\d+\.\d+\.\d+\.\d+)$/); if (m) return isBlockedIp(m[1]) // v4-mapped
+    return false
   }
+  return false
+}
+export async function validateUrl(url) {
+  let u
+  try { u = new URL(url) } catch { return 'invalid URL' }
+  if (u.protocol !== 'https:') return 'only https:// URLs are allowed'
+  const host = u.hostname.replace(/^\[|\]$/g, '')
+  if (isIP(host)) return isBlockedIp(host) ? 'blocked private/loopback/link-local address' : null
+  try {
+    const addrs = await dns.lookup(host, { all: true })
+    if (!addrs.length || addrs.some((a) => isBlockedIp(a.address))) return 'hostname resolves to a blocked address'
+  } catch { return 'dns resolution failed' }
+  return null
 }
 
 function clampTimeout(t) {
@@ -53,7 +82,7 @@ function clampTimeout(t) {
  * @returns {Promise<{ ok:boolean, status:number, headers:object, body:any, text:string, reason?:string }>}
  */
 export async function request({ url, method = 'GET', headers = {}, body, timeout } = {}) {
-  const urlErr = assertHttps(url)
+  const urlErr = await validateUrl(url)
   if (urlErr) return { ok: false, reason: `http_invalid_url: ${urlErr}` }
 
   const ms = clampTimeout(timeout)
@@ -74,13 +103,28 @@ export async function request({ url, method = 'GET', headers = {}, body, timeout
   }
 
   try {
-    const res = await fetch(url, {
-      method: String(method).toUpperCase(),
-      headers: reqHeaders,
-      body: reqBody,
-      redirect: 'follow',
-      signal: AbortSignal.timeout(ms),
-    })
+    // Manual redirect handling: re-validate every hop's URL so a public host can't 30x us into the
+    // internal network (the classic SSRF-via-redirect bypass). Body is only sent on the first hop.
+    let currentUrl = url
+    let res
+    for (let hop = 0; ; hop++) {
+      res = await fetch(currentUrl, {
+        method: String(method).toUpperCase(),
+        headers: reqHeaders,
+        body: hop === 0 ? reqBody : undefined,
+        redirect: 'manual',
+        signal: AbortSignal.timeout(ms),
+      })
+      if (res.status >= 300 && res.status < 400 && res.headers.get('location')) {
+        if (hop >= 5) return { ok: false, reason: 'http_too_many_redirects' }
+        const next = new URL(res.headers.get('location'), currentUrl).toString()
+        const hopErr = await validateUrl(next)
+        if (hopErr) return { ok: false, reason: `http_redirect_blocked: ${hopErr}` }
+        currentUrl = next
+        continue
+      }
+      break
+    }
 
     // Safely read response body — cap at MAX_BODY_BYTES
     let text = ''
