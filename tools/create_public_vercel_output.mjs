@@ -2156,19 +2156,19 @@ ${unicornHeader}
               <div class="s-time">3–5 days</div>
               <h3>Email Intelligence Agent</h3>
               <p>Reads your inbox, surfaces what needs action, writes reply drafts. You approve before anything sends.</p>
-              <a class="btn secondary" href="/contact/?package=agent-email">Talk to us →</a>
+              <a class="btn secondary" href="/contact/?package=agent-email">Commission this agent</a>
             </div>
             <div class="sprint-card">
               <div class="s-time">3–5 days</div>
               <h3>Drive Document Processor</h3>
               <p>A file lands in your Drive. AI pulls the key fields and updates your Sheet automatically — no re-typing.</p>
-              <a class="btn secondary" href="/contact/?package=agent-drive">Talk to us →</a>
+              <a class="btn secondary" href="/contact/?package=agent-drive">Commission this agent</a>
             </div>
             <div class="sprint-card">
               <div class="s-time">1–2 days</div>
               <h3>Scheduled Digest Agent</h3>
               <p>Daily or weekly AI summary of what matters, delivered to your inbox. Set it once, it runs itself.</p>
-              <a class="btn secondary" href="/contact/?package=agent-digest">Talk to us →</a>
+              <a class="btn secondary" href="/contact/?package=agent-digest">Start in 2 days</a>
             </div>
           </div>
         </section>
@@ -2230,6 +2230,18 @@ ${unicornHeader}
             </div>
           </div>
           <p class="connector-note">31 connectors wired in. Most clients start with two or three — that's enough to scope and build the first agent.</p>
+        </section>
+
+        <section class="section">
+          <div class="eyebrow">Technical architecture</div>
+          <h2>Why this works when other platforms don't</h2>
+          <p style="color:var(--muted);max-width:56ch;margin-bottom:32px">Most "AI tools" are wrappers over a single API. SuperMega is a kernel — a shared data spine, an action bus, and 31 pre-wired connectors that agents can combine to build real workflows from your actual data.</p>
+          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px">
+            <div class="output"><strong>31 connectors, pre-wired</strong><span style="color:var(--muted);display:block;margin-top:6px;font-size:15px">Including Myanmar-native rails — KBZ Pay, Wave Pay, AYA Pay, CB Pay, MMQR, CBM Rate, and Viber. No international platform has these. An agent can read a Gmail thread, calculate in MMK at today's rate, and send a Viber alert — in one pipeline.</span></div>
+            <div class="output"><strong>Multi-model AI kernel</strong><span style="color:var(--muted);display:block;margin-top:6px;font-size:15px">Claude, Gemini, and GPT-4o in one registry. Each agent call routes to the right model by task and cost. Drafting an email reply uses a cheap fast model. Classifying 500 warranty claims uses the most accurate one.</span></div>
+            <div class="output"><strong>Approval-gated action bus</strong><span style="color:var(--muted);display:block;margin-top:6px;font-size:15px">Agents prepare work. You approve. Every money, send, and access action requires a human decision. The pipeline persists every action to a ledger — nothing happens silently, nothing repeats without cause.</span></div>
+            <div class="output"><strong>Real-data, first call</strong><span style="color:var(--muted);display:block;margin-top:6px;font-size:15px">We connect to your actual Gmail, Drive, Sheets, and database on the first day. Not demo data, not sample exports. The first output is built from your real inputs so the price and timeline are accurate before any deposit.</span></div>
+          </div>
         </section>
 
         <section class="section agent-proof">
@@ -2398,7 +2410,7 @@ ${unicornHeader}
         </section>
 
         <div class="proof-strip section">
-          <div class="strip-item"><strong>Live now</strong><span>Try DeskPOS free</span></div>
+          <a href="https://pos.supermega.dev/" target="_blank" rel="noopener" class="strip-item"><strong>Live now</strong><span>Try DeskPOS free ↗</span></a>
           <div class="strip-item"><strong>From 2,500,000 MMK</strong><span>Paid once, no monthly fee</span></div>
           <div class="strip-item"><strong>You own it</strong><span>No per-seat fees, ever</span></div>
           <div class="strip-item"><strong>Delivered in weeks</strong><span>Not months</span></div>
@@ -2663,6 +2675,7 @@ ${unicornHeader}
           <a href="mailto:swanhtet@supermega.dev">swanhtet@supermega.dev</a>
           <a href="tel:+9595000721">+95 9 500 0721</a>
           <a href="https://www.linkedin.com/in/theswanhtet" rel="noreferrer" target="_blank">LinkedIn</a>
+          <a href="/contact/">Contact</a>
         </span>
       </footer>
     </div>
@@ -2773,7 +2786,7 @@ ${unicornHeader}
             <div class="form-row">
               <label>Name<input autocomplete="name" name="name" required /></label>
               <label>Work email<input autocomplete="email" name="email" required type="email" /></label>
-              <label class="optional-phone">Phone / WhatsApp<input autocomplete="tel" name="phone" type="tel" /></label>
+              <label class="optional-mobile">Phone / WhatsApp<input autocomplete="tel" name="phone" type="tel" /></label>
               <label>Company<input autocomplete="organization" name="company" required /></label>
               <div class="wide selected-path" data-selected-path hidden><small>Selected</small><strong>General enquiry</strong><span class="selected-price" data-selected-price hidden></span><span class="selected-next" data-selected-next hidden></span></div>
               <label class="wide file-label">Upload files<input data-file-picker multiple name="source_files" type="file" /><span class="upload-list" data-upload-list></span></label>
@@ -3842,7 +3855,16 @@ ${unicornHeader}
           <p class="of-note">Starting "from" prices in MMK. Final scope and price confirmed on a short call. Fixed-scope with clear revision caps; 50% deposit to start, payment method confirmed on first call.</p>
         </section>
 
-
+        <section class="section">
+          <div class="eyebrow">How it works</div>
+          <h2>From one workflow to a running system</h2>
+          <div class="pd-steps">
+            <div class="pd-step"><strong>1. Send one workflow</strong><span>Share one file, screenshot, email chain, or chat export. That's enough to scope the first screen.</span></div>
+            <div class="pd-step"><strong>2. Scope call (free)</strong><span>We review your source, show you the first screen, and confirm the price. No payment, no access required.</span></div>
+            <div class="pd-step"><strong>3. 50% deposit to start</strong><span>Fixed-scope, fixed price. The second 50% is due when the system is live and you're satisfied.</span></div>
+            <div class="pd-step"><strong>4. Delivered in weeks</strong><span>A running system at a real URL. You own it outright — no monthly fees, no vendor lock-in.</span></div>
+          </div>
+        </section>
 
         <section class="section">
           <div class="final">
@@ -3949,6 +3971,7 @@ ${unicornHeader}
               <a class="btn secondary" href="/demo/">See live demos</a>
               <a class="btn secondary" href="/offers/">Pricing</a>
             </div>
+            <p class="hero-tagline">Cast real work into software.</p>
           </div>
         </section>
 
@@ -4014,7 +4037,7 @@ const unicornPrivacyHtml = `<!doctype html>
   <header>
     <a class="brand" href="/" aria-label="SUPERMEGA.dev home">
       <span class="mark"><svg viewBox="0 0 64 64" width="100%" height="100%" fill="none" aria-hidden="true"><g stroke="#D97757" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M35.8 10.3 A22 22 0 1 1 28.2 10.3"/><path d="M22 45 L22 26 L32 38 L42 26 L42 45" stroke-width="4"/></g><path d="M32 34.5 L33.2 37 L35.5 38 L33.2 39 L32 41.5 L30.8 39 L28.5 38 L30.8 37 Z" fill="#C9A24B"/><path d="M32 7.6 L32.9 9.7 L35 10.3 L32.9 10.9 L32 13 L31.1 10.9 L29 10.3 L31.1 9.7 Z" fill="#C9A24B"/></svg></span>
-      <span class="brand-text"><strong>SUPERMEGA.dev</strong><small>Business apps for real work</small></span>
+      <span class="brand-text"><strong>SUPERMEGA.dev</strong><small>Cast real work into software</small></span>
     </a>
     <nav class="nav" aria-label="Primary">
       <button class="btn secondary theme-toggle" type="button" aria-label="Toggle dark mode" onclick="var r=document.documentElement,n=r.getAttribute('data-theme')==='dark'?'light':'dark';r.setAttribute('data-theme',n);try{localStorage.setItem('sm-theme',n)}catch(e){}"></button>

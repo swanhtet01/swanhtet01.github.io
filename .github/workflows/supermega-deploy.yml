@@ -1,0 +1,44 @@
+name: SuperMega Platform — Build & Deploy
+
+# Autonomous deploy pipeline for supermega-platform (supermega.dev).
+# Triggers on push to main or the console/kernel-fixes branch.
+# Requires VERCEL_TOKEN secret in GitHub repo settings.
+# Set via: Settings → Secrets and variables → Actions → New repository secret
+#   VERCEL_TOKEN  — from vercel.com/account/tokens (scope: full account)
+on:
+  push:
+    branches:
+      - main
+      - 'console/**'
+  workflow_dispatch:
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    # Only auto-deploy main; feature branches build + verify but don't promote to prod
+    environment: ${{ github.ref == 'refs/heads/main' && 'production' || 'preview' }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Build public output
+        working-directory: .
+        run: node tools/create_public_vercel_output.mjs
+
+      - name: Verify build gate
+        working-directory: .
+        run: node tools/verify_public_vercel_output.mjs
+
+      - name: Deploy to Vercel (production)
+        if: github.ref == 'refs/heads/main'
+        run: npx vercel deploy --prebuilt --prod --yes --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Deploy to Vercel (preview)
+        if: github.ref != 'refs/heads/main'
+        run: npx vercel deploy --prebuilt --yes --token=${{ secrets.VERCEL_TOKEN }}
