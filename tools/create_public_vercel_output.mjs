@@ -1645,6 +1645,7 @@ const unicornHeader = `
         <nav class="nav" aria-label="Primary">
           <button class="btn secondary theme-toggle" type="button" aria-label="Toggle dark mode" onclick="var r=document.documentElement,n=r.getAttribute('data-theme')==='dark'?'light':'dark';r.setAttribute('data-theme',n);try{localStorage.setItem('sm-theme',n)}catch(e){}"></button>
           <a class="btn secondary optional-nav" href="/products/">Products</a>
+          <a class="btn secondary optional-nav" href="/ai-agents/">AI Agents</a>
           <a class="btn secondary" href="/demo/">Demos</a>
           <a class="btn secondary" href="/offers/">Pricing</a>
           <a class="btn primary" href="/contact/">Contact</a>
@@ -2192,8 +2193,11 @@ ${unicornHeader}
             <div class="connector-chip">LINE Notify</div>
             <div class="connector-chip">AYA Pay</div>
             <div class="connector-chip">CB Pay</div>
+            <div class="connector-chip">CBM Rate</div>
+            <div class="connector-chip">Google Gemini</div>
+            <div class="connector-chip">AI Gateway</div>
           </div>
-          <p class="connector-note">25 connectors wired in. Most clients start with two or three — that's enough to scope and build the first agent.</p>
+          <p class="connector-note">28 connectors wired in. Most clients start with two or three — that's enough to scope and build the first agent.</p>
         </section>
 
         <section class="section agent-proof">
@@ -2688,7 +2692,7 @@ const unicornContactHtml = `<!doctype html>
         textarea { min-height: 64px; }
         .contact-main h1 { font-size: clamp(48px, 14vw, 66px); margin-bottom: 10px; }
         .contact-main p { font-size: 16px; line-height: 1.32; }
-        .optional-phone, .optional-mobile { display: none; }
+        .optional-mobile { display: none; }
         .selected-path, .file-label { display: none; }
         button { min-height: 44px; padding: 12px 16px; }
         .policy { font-size: 12px; line-height: 1.25; }
@@ -3091,6 +3095,10 @@ const config = {
       dest: '/api/health.js',
     },
     {
+      src: '^/api/lead$',
+      dest: '/api/lead.js',
+    },
+    {
       src: '^/api/(.*)$',
       dest: '/api/not-found.js',
     },
@@ -3216,7 +3224,7 @@ const config = {
   ],
 }
 
-async function writeNodeFunction(name) {
+async function writeNodeFunction(name, opts = {}) {
   const functionDir = resolve(functionsDir, `${name}.func`)
   await mkdir(resolve(functionDir, 'api'), { recursive: true })
   await cp(resolve(root, 'api', name), resolve(functionDir, 'api', name), { force: true })
@@ -3267,6 +3275,7 @@ async function writeNodeFunction(name) {
         shouldAddHelpers: true,
         shouldAddSourcemapSupport: false,
         awsLambdaHandler: '',
+        ...(opts.maxDuration ? { maxDuration: opts.maxDuration } : {}),
       },
       null,
       2,
@@ -4023,7 +4032,7 @@ await mkdir(resolve(staticDir, 'demo'), { recursive: true })
 await cp('C:/sm-site/supermega-demo/index.html', resolve(staticDir, 'demo', 'index.html'), { force: true }).catch(() => undefined)
 await cp('C:/sm-site/supermega-demo/favicon.svg', resolve(staticDir, 'demo', 'favicon.svg'), { force: true }).catch(() => undefined)
 await writeFile(resolve(staticDir, 'robots.txt'), 'User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /app/\nDisallow: /clients/\nDisallow: /machine/\nSitemap: https://supermega.dev/sitemap.xml\n', 'utf8')
-await writeFile(resolve(staticDir, 'sitemap.xml'), '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url><loc>https://supermega.dev/</loc><changefreq>weekly</changefreq><priority>1.0</priority></url>\n  <url><loc>https://supermega.dev/products/</loc><changefreq>weekly</changefreq><priority>0.9</priority></url>\n  <url><loc>https://supermega.dev/offers/</loc><changefreq>weekly</changefreq><priority>0.95</priority></url>\n  <url><loc>https://supermega.dev/work/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>\n  <url><loc>https://supermega.dev/contact/</loc><changefreq>monthly</changefreq><priority>0.9</priority></url>\n  <url><loc>https://supermega.dev/card/</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>\n  <url><loc>https://supermega.dev/privacy/</loc><changefreq>yearly</changefreq><priority>0.3</priority></url>\n</urlset>\n', 'utf8')
+await writeFile(resolve(staticDir, 'sitemap.xml'), '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url><loc>https://supermega.dev/</loc><changefreq>weekly</changefreq><priority>1.0</priority></url>\n  <url><loc>https://supermega.dev/products/</loc><changefreq>weekly</changefreq><priority>0.9</priority></url>\n  <url><loc>https://supermega.dev/products/pos/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>\n  <url><loc>https://supermega.dev/products/factory/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>\n  <url><loc>https://supermega.dev/products/documents/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>\n  <url><loc>https://supermega.dev/products/back-office/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>\n  <url><loc>https://supermega.dev/ai-agents/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>\n  <url><loc>https://supermega.dev/offers/</loc><changefreq>weekly</changefreq><priority>0.95</priority></url>\n  <url><loc>https://supermega.dev/work/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>\n  <url><loc>https://supermega.dev/contact/</loc><changefreq>monthly</changefreq><priority>0.9</priority></url>\n  <url><loc>https://supermega.dev/card/</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>\n  <url><loc>https://supermega.dev/privacy/</loc><changefreq>yearly</changefreq><priority>0.3</priority></url>\n</urlset>\n', 'utf8')
 await writeFile(
   resolve(staticDir, 'sw.js'),
   `const CACHE_VERSION = 'supermega-public-clean-20260522'
@@ -4050,9 +4059,10 @@ await writeNodeFunction('commercial-control.js')
 await writeNodeFunction('pipeline-control.js')
 await writeNodeFunction('checkout-start.js')
 await writeNodeFunction('product-activation.js')
-await writeNodeFunction('sales-daily.js')
+await writeNodeFunction('sales-daily.js', { maxDuration: 25 })
 await writeNodeFunction('telegram-webhook.js')
-await writeNodeFunction('action-runner.js')
+await writeNodeFunction('action-runner.js', { maxDuration: 25 })
+await writeNodeFunction('lead.js')
 await writeNodeFunction('not-found.js')
 await writeNodeFunction('public-app-handoff.js')
 await removePrivateRootFunctions()

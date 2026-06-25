@@ -34,6 +34,8 @@ import './payment-cbpay.mjs'
 import './messaging-teams.mjs'
 import './data-notion.mjs'
 import './commerce-shopify.mjs'
+import './data-cbm-rate.mjs'
+import './ai-gemini.mjs'
 
 export * from './registry.mjs'
 export default registry
