@@ -1065,7 +1065,7 @@ function renderPublicPricingHtml() {
       <header>
         <a class="brand" href="/" aria-label="SUPERMEGA.dev home">
           <span class="mark"><svg viewBox="0 0 64 64" width="100%" height="100%" fill="none" aria-hidden="true"><g stroke="#D97757" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M35.8 10.3 A22 22 0 1 1 28.2 10.3"/><path d="M22 45 L22 26 L32 38 L42 26 L42 45" stroke-width="4"/></g><path d="M32 34.5 L33.2 37 L35.5 38 L33.2 39 L32 41.5 L30.8 39 L28.5 38 L30.8 37 Z" fill="#C9A24B"/><path d="M32 7.6 L32.9 9.7 L35 10.3 L32.9 10.9 L32 13 L31.1 10.9 L29 10.3 L31.1 9.7 Z" fill="#C9A24B"/></svg></span>
-          <span class="brand-text"><strong>SUPERMEGA.dev</strong><small>Business apps for real work</small></span>
+          <span class="brand-text"><strong>SUPERMEGA.dev</strong><small>Cast real work into software</small></span>
         </a>
         <nav class="nav" aria-label="Primary">
           <a class="btn secondary" href="/products/">Products</a>
@@ -1600,6 +1600,7 @@ const unicornShellStyle = `
       :root { --gilt: #C9A24B; }
       .reveal { opacity: 0; transform: translateY(18px); transition: opacity .66s cubic-bezier(.22,1,.36,1), transform .66s cubic-bezier(.22,1,.36,1); }
       .reveal.in { opacity: 1; transform: none; }
+      .hero-tagline { font-family: var(--font-serif); font-style: italic; color: var(--blue); font-size: clamp(15px, 1.4vw, 17px); margin-top: 20px; letter-spacing: -0.01em; opacity: 0.88; max-width: 28ch; }
       a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, summary:focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; }
       .btn.primary:focus-visible, .theme-toggle:focus-visible { outline-color: var(--ink); }
       @media (prefers-reduced-motion: reduce) { html, .product-shot-gallery { scroll-behavior: auto; } .reveal, .copy, .product-stage { animation: none !important; transition: none !important; opacity: 1 !important; transform: none !important; } }
@@ -1619,7 +1620,7 @@ const unicornShellStyle = `
       }
       :root[data-theme="dark"] body::before { background-image: linear-gradient(rgba(243,239,230,0.045) 1px, transparent 1px), linear-gradient(90deg, rgba(243,239,230,0.045) 1px, transparent 1px); }
       :root[data-theme="dark"] .btn, :root[data-theme="dark"] button { background: rgba(243,239,230,0.06); }
-      :root[data-theme="dark"] .btn.primary, :root[data-theme="dark"] button { color: #fff; background: linear-gradient(135deg, #b1542f, #cc6e48); }
+      :root[data-theme="dark"] .btn.primary, :root[data-theme="dark"] button { color: #fff; background: linear-gradient(135deg, #cc6e48, #d97757); box-shadow: 0 18px 40px rgba(217, 119, 87, 0.28); }
       :root[data-theme="dark"] .output, :root[data-theme="dark"] .feature, :root[data-theme="dark"] .proof-card, :root[data-theme="dark"] .case, :root[data-theme="dark"] .proof-system, :root[data-theme="dark"] .final, :root[data-theme="dark"] .home-shot-card, :root[data-theme="dark"] .browser, :root[data-theme="dark"] .proof, :root[data-theme="dark"] .upgrade-card, :root[data-theme="dark"] .shell-card, :root[data-theme="dark"] .setup-card, :root[data-theme="dark"] .market-card, :root[data-theme="dark"] form, :root[data-theme="dark"] .feature-pills span, :root[data-theme="dark"] .chip, :root[data-theme="dark"] .metric, :root[data-theme="dark"] .proof-step, :root[data-theme="dark"] footer .footer-links a {
         background: rgba(243,239,230,0.05); border-color: rgba(243,239,230,0.12);
       }
@@ -1640,7 +1641,7 @@ const unicornHeader = `
       <header>
         <a class="brand" href="/" aria-label="SUPERMEGA.dev home">
           <span class="mark"><svg viewBox="0 0 64 64" width="100%" height="100%" fill="none" aria-hidden="true"><g stroke="#D97757" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M35.8 10.3 A22 22 0 1 1 28.2 10.3"/><path d="M22 45 L22 26 L32 38 L42 26 L42 45" stroke-width="4"/></g><path d="M32 34.5 L33.2 37 L35.5 38 L33.2 39 L32 41.5 L30.8 39 L28.5 38 L30.8 37 Z" fill="#C9A24B"/><path d="M32 7.6 L32.9 9.7 L35 10.3 L32.9 10.9 L32 13 L31.1 10.9 L29 10.3 L31.1 9.7 Z" fill="#C9A24B"/></svg></span>
-          <span class="brand-text"><strong>SUPERMEGA.dev</strong><small>Business apps for real work</small></span>
+          <span class="brand-text"><strong>SUPERMEGA.dev</strong><small>Cast real work into software</small></span>
         </a>
         <nav class="nav" aria-label="Primary">
           <button class="btn secondary theme-toggle" type="button" aria-label="Toggle dark mode" onclick="var r=document.documentElement,n=r.getAttribute('data-theme')==='dark'?'light':'dark';r.setAttribute('data-theme',n);try{localStorage.setItem('sm-theme',n)}catch(e){}"></button>
@@ -1651,7 +1652,7 @@ const unicornHeader = `
           <a class="btn primary" href="/contact/">Contact</a>
         </nav>
       </header>
-      <script>(function(){if(window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches)return;if(!('IntersectionObserver'in window))return;var io=new IntersectionObserver(function(es){es.forEach(function(e){if(e.isIntersecting){e.target.classList.add('in');io.unobserve(e.target);}});},{rootMargin:'0px 0px -8% 0px',threshold:0.06});addEventListener('DOMContentLoaded',function(){document.querySelectorAll('.section').forEach(function(el){if(el.getBoundingClientRect().top>window.innerHeight*0.9){el.classList.add('reveal');io.observe(el);}});});})();</script>`
+      <script>(function(){if(window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches)return;if(!('IntersectionObserver'in window))return;var io=new IntersectionObserver(function(es){es.forEach(function(e){if(e.isIntersecting){e.target.classList.add('in');io.unobserve(e.target);}});},{rootMargin:'0px 0px -8% 0px',threshold:0.06});addEventListener('DOMContentLoaded',function(){document.querySelectorAll('.section,.product-stage,.proof-card,.output,.uvp-card,.how-step,.home-shot-card,.sprint-card,.of-card').forEach(function(el){if(el.getBoundingClientRect().top>window.innerHeight*0.9){el.classList.add('reveal');io.observe(el);}});});})();</script>`
 
 const productRequestLinks = {
   workflow: '/contact/?package=back-office-workflow-desk',
@@ -2110,7 +2111,8 @@ const unicornAiAgentsHtml = `<!doctype html>
       .agent-hero { padding: clamp(56px,10vw,96px) 0 0; text-align: center; }
       .agent-hero .eyebrow { margin-bottom: 18px; }
       .agent-hero h1 { font-family: 'Fraunces', Georgia, serif; font-size: clamp(38px,6vw,72px); line-height: .95; letter-spacing: -.04em; max-width: 14ch; margin: 0 auto 24px; }
-      .agent-hero p { max-width: 46ch; margin: 0 auto 36px; color: var(--muted); font-size: clamp(16px,1.5vw,19px); line-height: 1.6; }
+      .agent-hero p:not(.hero-tagline) { max-width: 46ch; margin: 0 auto 36px; color: var(--muted); font-size: clamp(16px,1.5vw,19px); line-height: 1.6; }
+      .agent-hero .hero-tagline { margin: 16px auto 0; text-align: center; }
       .sprint-grid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 20px; margin-top: 48px; }
       .sprint-card { border: 1px solid var(--line); border-radius: 18px; padding: 28px; background: rgba(255,255,255,0.55); display: flex; flex-direction: column; gap: 14px; }
       .sprint-card .s-time { font-size: 12px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--blue); }
@@ -2118,16 +2120,22 @@ const unicornAiAgentsHtml = `<!doctype html>
       .sprint-card p { font-size: 15px; color: var(--muted); line-height: 1.55; margin: 0; flex: 1; }
       .sprint-card .btn { align-self: flex-start; }
       .connector-section h2 { margin-bottom: 8px; }
-      .connector-section .section-sub { color: var(--muted); font-size: 15px; margin-bottom: 24px; max-width: 52ch; }
-      .connector-grid { display: flex; flex-wrap: wrap; gap: 10px; }
-      .connector-chip { border: 1px solid var(--line); border-radius: 100px; padding: 7px 16px; font-size: 13px; font-weight: 500; color: var(--muted); background: rgba(255,255,255,0.55); }
-      .connector-note { margin-top: 18px; font-size: 14px; color: var(--muted); max-width: 52ch; }
+      .connector-section .section-sub { color: var(--muted); font-size: 15px; margin-bottom: 28px; max-width: 52ch; }
+      .connector-groups { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 24px; }
+      .connector-group { display: grid; gap: 10px; }
+      .connector-group-label { font-size: 11px; font-weight: 950; letter-spacing: 0.16em; text-transform: uppercase; color: var(--blue); }
+      .connector-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+      .connector-chip { border: 1px solid var(--line); border-radius: 100px; padding: 6px 14px; font-size: 13px; font-weight: 500; color: var(--muted); background: rgba(255,255,255,0.55); transition: background 180ms ease, color 180ms ease; }
+      .connector-chip:hover { background: var(--blue-soft); color: var(--blue); border-color: rgba(194,96,63,0.28); }
+      .connector-note { margin-top: 28px; font-size: 14px; color: var(--muted); max-width: 52ch; }
+      @media (max-width: 880px) { .connector-groups { grid-template-columns: 1fr; gap: 20px; } }
       .agent-proof { margin: 64px auto 0; max-width: 600px; text-align: center; }
       .agent-proof blockquote { font-family: 'Fraunces', Georgia, serif; font-size: clamp(17px,2vw,22px); font-style: italic; line-height: 1.45; color: var(--ink); border-left: 3px solid var(--blue); padding-left: 20px; text-align: left; margin: 0 0 20px; }
       .agent-proof cite { font-size: 14px; color: var(--muted); display: block; margin-top: 8px; }
       @media (max-width: 880px) { .sprint-grid { grid-template-columns: 1fr; } }
       :root[data-theme="dark"] .sprint-card { background: rgba(243,239,230,0.05); }
       :root[data-theme="dark"] .connector-chip { background: rgba(243,239,230,0.05); border-color: rgba(243,239,230,0.12); }
+      :root[data-theme="dark"] .connector-chip:hover { background: rgba(217,119,87,0.12); color: #D97757; border-color: rgba(217,119,87,0.28); }
     </style>
   </head>
   <body>
@@ -2137,8 +2145,9 @@ ${unicornHeader}
         <section class="agent-hero section">
           <div class="eyebrow">Sprint builds · 1–5 days · Yours to keep</div>
           <h1>An AI agent for your exact job.</h1>
-          <p>Tell us the one thing eating your team's time. We'll build an agent that reads your real inputs, drafts the work, and waits for your sign-off before anything sends or saves.</p>
+          <p>Tell us the one task eating your team's time. We build an agent that reads your real data — Gmail, Drive, Sheets, Viber — drafts the work, and holds for your sign-off before anything moves.</p>
           <div class="cta"><a class="btn primary" href="/contact/?package=agent">Commission a build</a><a class="btn secondary" href="/offers/">See pricing</a></div>
+          <p class="hero-tagline">Cast real work into software.</p>
         </section>
 
         <section class="section">
@@ -2166,38 +2175,58 @@ ${unicornHeader}
 
         <section class="section connector-section">
           <h2>Reads from where your data actually lives.</h2>
-          <p class="section-sub">Every agent is wired to real connectors — not API mocks. We plug into what your team already uses and route the output wherever you need it.</p>
-          <div class="connector-grid">
-            <div class="connector-chip">Gmail</div>
-            <div class="connector-chip">Google Drive</div>
-            <div class="connector-chip">Google Sheets</div>
-            <div class="connector-chip">Google Calendar</div>
-            <div class="connector-chip">Telegram</div>
-            <div class="connector-chip">Viber</div>
-            <div class="connector-chip">WhatsApp</div>
-            <div class="connector-chip">Slack</div>
-            <div class="connector-chip">Line</div>
-            <div class="connector-chip">Facebook</div>
-            <div class="connector-chip">SMS</div>
-            <div class="connector-chip">Email (Resend)</div>
-            <div class="connector-chip">Stripe</div>
-            <div class="connector-chip">WavePay</div>
-            <div class="connector-chip">KBZPay</div>
-            <div class="connector-chip">MMQR</div>
-            <div class="connector-chip">OnePay</div>
-            <div class="connector-chip">Supabase</div>
-            <div class="connector-chip">Webhook</div>
-            <div class="connector-chip">Microsoft Teams</div>
-            <div class="connector-chip">Notion</div>
-            <div class="connector-chip">Shopify</div>
-            <div class="connector-chip">LINE Notify</div>
-            <div class="connector-chip">AYA Pay</div>
-            <div class="connector-chip">CB Pay</div>
-            <div class="connector-chip">CBM Rate</div>
-            <div class="connector-chip">Google Gemini</div>
-            <div class="connector-chip">AI Gateway</div>
+          <p class="section-sub">Every agent is wired to real connectors — not mocks. We plug into what your team already uses, and route output wherever you need it. 28 connectors wired in.</p>
+          <div class="connector-groups">
+            <div class="connector-group">
+              <div class="connector-group-label">Work data</div>
+              <div class="connector-grid">
+                <div class="connector-chip">Gmail</div>
+                <div class="connector-chip">Google Drive</div>
+                <div class="connector-chip">Google Sheets</div>
+                <div class="connector-chip">Google Calendar</div>
+                <div class="connector-chip">Notion</div>
+                <div class="connector-chip">Shopify</div>
+              </div>
+            </div>
+            <div class="connector-group">
+              <div class="connector-group-label">Messaging</div>
+              <div class="connector-grid">
+                <div class="connector-chip">Telegram</div>
+                <div class="connector-chip">Viber</div>
+                <div class="connector-chip">WhatsApp</div>
+                <div class="connector-chip">Line</div>
+                <div class="connector-chip">LINE Notify</div>
+                <div class="connector-chip">Facebook</div>
+                <div class="connector-chip">Slack</div>
+                <div class="connector-chip">Microsoft Teams</div>
+                <div class="connector-chip">SMS</div>
+                <div class="connector-chip">Email (Resend)</div>
+              </div>
+            </div>
+            <div class="connector-group">
+              <div class="connector-group-label">Payments</div>
+              <div class="connector-grid">
+                <div class="connector-chip">KBZPay</div>
+                <div class="connector-chip">WavePay</div>
+                <div class="connector-chip">AYA Pay</div>
+                <div class="connector-chip">CB Pay</div>
+                <div class="connector-chip">MMQR</div>
+                <div class="connector-chip">OnePay</div>
+                <div class="connector-chip">Stripe</div>
+                <div class="connector-chip">CBM Rate</div>
+              </div>
+            </div>
+            <div class="connector-group">
+              <div class="connector-group-label">Infrastructure</div>
+              <div class="connector-grid">
+                <div class="connector-chip">Supabase</div>
+                <div class="connector-chip">Webhook</div>
+                <div class="connector-chip">Google Gemini</div>
+                <div class="connector-chip">AI Gateway</div>
+              </div>
+            </div>
           </div>
-          <p class="connector-note">28 connectors wired in. Most clients start with two or three — that's enough to scope and build the first agent.</p>
+          <p class="connector-note">Most clients start with two or three connectors — that's enough to scope and build the first agent.</p>
         </section>
 
         <section class="section agent-proof">
@@ -2300,10 +2329,11 @@ const unicornPublicShellHtml = `<!doctype html>
       .proof-strip > div { padding: 18px 22px; border-right: 1px solid var(--line); }
       .proof-strip > div:last-child { border-right: 0; }
       :root[data-theme="dark"] .proof-strip > div { border-color: rgba(243,239,230,0.1); }
-      .proof-strip strong { display: block; font-size: 22px; letter-spacing: -0.03em; }
+      .proof-strip strong { display: block; font-family: var(--font-serif); font-size: 22px; letter-spacing: -0.03em; }
       .proof-strip span { display: block; margin-top: 4px; color: var(--muted); font-size: 13px; line-height: 1.4; }
       .proof-strip a { color: inherit; text-decoration: none; }
       .proof-strip a:hover strong { color: var(--blue); }
+      .hero-tagline { font-family: var(--font-serif); font-style: italic; color: var(--blue); font-size: clamp(15px, 1.4vw, 17px); margin-top: 22px; letter-spacing: -0.01em; opacity: 0.9; }
       .uvp-grid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 14px; margin-top: 24px; }
       .uvp-card { border: 1px solid var(--line); border-radius: 18px; padding: 22px; background: rgba(255,255,255,0.5); }
       :root[data-theme="dark"] .uvp-card { background: rgba(243,239,230,0.05); }
@@ -2352,6 +2382,7 @@ ${unicornHeader}
               <a class="btn secondary" href="/demo/">See live demos</a>
               <a class="btn secondary" href="/offers/">See pricing</a>
             </div>
+            <p class="hero-tagline">Cast real work into software.</p>
           </div>
           <aside class="product-stage" aria-label="DeskPOS live product — point-of-sale for Myanmar shops">
             <img class="hero-img" src="/site/shots/live-product-restaurant-pos-menu-inventory.png?v=${publicShotVersion}" alt="DeskPOS — live point of sale system" loading="eager" decoding="async" />
@@ -2364,10 +2395,10 @@ ${unicornHeader}
         </section>
 
         <div class="proof-strip section">
-          <div class="strip-item"><b>Live now</b><span>Try DeskPOS free</span></div>
-          <div class="strip-item"><b>From 2,500,000 MMK</b><span>Paid once, no monthly fee</span></div>
-          <div class="strip-item"><b>You own it</b><span>No per-seat fees, ever</span></div>
-          <div class="strip-item"><b>Delivered in weeks</b><span>Not months</span></div>
+          <div class="strip-item"><strong>Live now</strong><span>Try DeskPOS free</span></div>
+          <div class="strip-item"><strong>From 2,500,000 MMK</strong><span>Paid once, no monthly fee</span></div>
+          <div class="strip-item"><strong>You own it</strong><span>No per-seat fees, ever</span></div>
+          <div class="strip-item"><strong>Delivered in weeks</strong><span>Not months</span></div>
         </div>
 
 
@@ -2544,6 +2575,7 @@ ${unicornHeader}
               <a class="btn secondary" href="/demo/">See live demos</a>
               <a class="btn secondary" href="/offers/">Pricing</a>
             </div>
+            <p class="hero-tagline">Cast real work into software.</p>
           </div>
           <aside class="product-stage">
             <div class="browser">
@@ -3631,6 +3663,7 @@ ${unicornHeader}
               <a class="btn secondary" href="/offers/">See pricing</a>
               <a class="btn secondary optional-nav" href="/products/">All products</a>
             </div>
+            <p class="hero-tagline">Cast real work into software.</p>
           </div>
           <aside class="product-stage">
             <img class="pd-shot" src="${p.shot}" alt="${p.displayName.replace(/"/g, '&quot;')} product screen" loading="eager" decoding="async" />
@@ -3782,11 +3815,12 @@ ${unicornHeader}
           <div class="copy">
             <div class="eyebrow">Pricing</div>
             <h1>You own it. No per-seat bill, ever.</h1>
-            <p>We build the exact version that fits how your business actually works — and you keep it outright. Starting prices in MMK below; exact quote after one short call.</p>
+            <p>We build the exact version that fits how your business actually works — and you keep it outright. One payment, no ongoing vendor fees. Starting prices in MMK; final quote after one short call.</p>
             <div class="cta">
               <a class="btn primary" href="/contact/?package=build">Get a quote</a>
               <a class="btn secondary" href="/demo/">See live demos</a>
             </div>
+            <p class="hero-tagline">Cast real work into software.</p>
           </div>
         </section>
 
