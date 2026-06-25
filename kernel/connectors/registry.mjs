@@ -30,6 +30,11 @@ export const CATEGORIES = ['payment', 'messaging', 'data', 'ai', 'integration', 
 
 const registry = new Map() // key -> Connector
 
+// Connectors that failed validation at register() — surfaced by healthAll() so a malformed adapter
+// is VISIBLE without taking down the whole registry (and /api/integrations) at import. See the
+// CATEGORIES note above: a bad category used to throw at import and break the entire console twice.
+export const registrationErrors = []
+
 /** Validate the minimal shape so a malformed adapter fails loudly at register-time, not in prod. */
 function assertConnector(c) {
   if (!c || typeof c !== 'object') throw new Error('connector_must_be_object')
@@ -42,11 +47,20 @@ function assertConnector(c) {
 
 /**
  * register — add a connector. Idempotent on key (re-registering replaces, so hot-reload is safe).
+ * RESILIENT: a malformed adapter is recorded in registrationErrors and skipped — it does NOT throw,
+ * so one bad connector can never crash the import chain / the rest of the fleet / the console API.
  * @param {Connector} connector
- * @returns {Connector}
+ * @returns {Connector|null}
  */
 export function register(connector) {
-  assertConnector(connector)
+  try {
+    assertConnector(connector)
+  } catch (e) {
+    const detail = String((e && e.message) || 'register_error').slice(0, 200)
+    registrationErrors.push({ key: (connector && connector.key) || '(unknown)', detail })
+    console.error('[connectors] register skipped —', detail)
+    return null
+  }
   registry.set(connector.key, connector)
   return connector
 }
@@ -114,9 +128,10 @@ export async function healthAll({ timeoutMs = 4000 } = {}) {
     const inCat = connectors.filter((c) => c.category === cat)
     byCat[cat] = { total: inCat.length, configured: inCat.filter((c) => c.configured).length, healthy: inCat.filter((c) => c.ok).length }
   }
-  // ok = every CONFIGURED connector is healthy. Unconfigured ones are expected (not yet wired).
-  const ok = connectors.filter((c) => c.configured).every((c) => c.ok)
-  return { ok, counts, byCategory: byCat, connectors }
+  // ok = every CONFIGURED connector is healthy AND no adapter failed to register.
+  // Unconfigured connectors are expected (not yet wired); a registration error is a real deploy fault.
+  const ok = registrationErrors.length === 0 && connectors.filter((c) => c.configured).every((c) => c.ok)
+  return { ok, counts: { ...counts, registrationErrors: registrationErrors.length }, byCategory: byCat, connectors, registrationErrors }
 }
 
-export default { CATEGORIES, register, list, byCategory, get, healthAll }
+export default { CATEGORIES, register, list, byCategory, get, healthAll, registrationErrors }
