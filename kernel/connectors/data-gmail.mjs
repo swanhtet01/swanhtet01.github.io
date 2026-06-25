@@ -19,7 +19,7 @@
 //   search(query, { maxResults })               -> { messages, resultSizeEstimate }
 
 import { register } from './registry.mjs'
-import { credsConfigured, readServiceAccount, getAccessToken } from './_google-auth.mjs'
+import { credsConfigured, saConfigured, readServiceAccount, getAccessToken } from './_google-auth.mjs'
 
 const API = 'https://gmail.googleapis.com/gmail/v1/users/me'
 // send + read. (gmail.send alone can't search; gmail.readonly can't send — request both.)
@@ -119,7 +119,13 @@ export const dataGmail = {
   // Without GOOGLE_WORKSPACE_SUBJECT we can't truly act, so report that clearly but don't hard-fail
   // the page on a missing optional — surface it as a detail.
   async health() {
-    if (!configured()) return { ok: false, detail: 'missing GOOGLE_SERVICE_ACCOUNT_JSON / GOOGLE_APPLICATION_CREDENTIALS' }
+    if (!configured()) return { ok: false, detail: 'missing GOOGLE_OAUTH_* or GOOGLE_SERVICE_ACCOUNT_JSON / GOOGLE_APPLICATION_CREDENTIALS' }
+    // OAuth user-credential mode (no service account): the token already acts AS the authorized
+    // user — no GOOGLE_WORKSPACE_SUBJECT impersonation needed. Just mint a token to prove it.
+    if (!saConfigured()) {
+      try { await getAccessToken(SCOPES); return { ok: true, detail: 'auth ok (OAuth user creds)' } }
+      catch (e) { return { ok: false, detail: String(e.message || 'google_token_error').slice(0, 160) } }
+    }
     const sa = readServiceAccount()
     if (!sa) return { ok: false, detail: 'google creds present but unparseable (need client_email + private_key)' }
     const sub = subjectEnv()

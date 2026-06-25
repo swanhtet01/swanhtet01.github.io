@@ -20,7 +20,7 @@
 //   listEvents({ calendarId, maxResults, timeMin }) -> { items }
 
 import { register } from './registry.mjs'
-import { credsConfigured, readServiceAccount, getAccessToken } from './_google-auth.mjs'
+import { credsConfigured, saConfigured, readServiceAccount, getAccessToken } from './_google-auth.mjs'
 
 const API = 'https://www.googleapis.com/calendar/v3'
 const SCOPES = ['https://www.googleapis.com/auth/calendar.events']
@@ -115,7 +115,11 @@ export const dataCalendar = {
   configured,
   // Cheap probe: creds must parse + Google accepts the JWT for the calendar scope.
   async health() {
-    if (!configured()) return { ok: false, detail: 'missing GOOGLE_SERVICE_ACCOUNT_JSON / GOOGLE_APPLICATION_CREDENTIALS' }
+    if (!configured()) return { ok: false, detail: 'missing GOOGLE_OAUTH_* or GOOGLE_SERVICE_ACCOUNT_JSON / GOOGLE_APPLICATION_CREDENTIALS' }
+    if (!saConfigured()) {
+      try { await getAccessToken(SCOPES); return { ok: true, detail: 'auth ok (OAuth user creds)' } }
+      catch (e) { return { ok: false, detail: String(e.message || 'google_token_error').slice(0, 160) } }
+    }
     const sa = readServiceAccount()
     if (!sa) return { ok: false, detail: 'google creds present but unparseable (need client_email + private_key)' }
     try {

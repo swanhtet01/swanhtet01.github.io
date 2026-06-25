@@ -18,7 +18,7 @@
 //   appendRow(spreadsheetId, range, values)  -> { updates }            (append a row)
 
 import { register } from './registry.mjs'
-import { credsConfigured, readServiceAccount, getAccessToken } from './_google-auth.mjs'
+import { credsConfigured, saConfigured, readServiceAccount, getAccessToken } from './_google-auth.mjs'
 
 const API = 'https://sheets.googleapis.com/v4/spreadsheets'
 // Read/write values needs the full spreadsheets scope (readonly is insufficient for append).
@@ -93,7 +93,11 @@ export const dataSheets = {
   // Cheap probe: mint an access token for the Sheets scope. Proves the creds parse + Google accepts
   // the JWT, without touching any particular spreadsheet (we don't know an id at probe time).
   async health() {
-    if (!configured()) return { ok: false, detail: 'missing GOOGLE_SERVICE_ACCOUNT_JSON / GOOGLE_APPLICATION_CREDENTIALS' }
+    if (!configured()) return { ok: false, detail: 'missing GOOGLE_OAUTH_* or GOOGLE_SERVICE_ACCOUNT_JSON / GOOGLE_APPLICATION_CREDENTIALS' }
+    if (!saConfigured()) {
+      try { await getAccessToken(SCOPES); return { ok: true, detail: 'auth ok (OAuth user creds)' } }
+      catch (e) { return { ok: false, detail: String(e.message || 'google_token_error').slice(0, 160) } }
+    }
     const sa = readServiceAccount()
     if (!sa) return { ok: false, detail: 'google creds present but unparseable (need client_email + private_key)' }
     try {
