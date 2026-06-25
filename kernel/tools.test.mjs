@@ -34,3 +34,12 @@ test('runTool never throws — a failing tool returns a structured error', async
   assert.equal(r.ok, true) // run() returns the tool's structured result...
   assert.equal(r.data.ok, false) // ...and the SSRF guard blocked it
 })
+
+test('store-backed read tools run (leads + pipeline overview)', async () => {
+  const a = await runTool('leads_overview', { limit: 3 })
+  assert.equal(a.ok, true)
+  assert.ok('total' in a.data && a.data.byStage)
+  const b = await runTool('pipeline_overview', {})
+  assert.equal(b.ok, true)
+  assert.ok('projects' in b.data && 'deals' in b.data)
+})

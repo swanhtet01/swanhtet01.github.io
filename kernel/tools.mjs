@@ -4,6 +4,7 @@
 import connectors from './connectors/index.mjs'
 import infraHttp from './connectors/infra-http.mjs'
 import gmail from './connectors/data-gmail.mjs'
+import store from './store.mjs'
 
 export const TOOLS = {
   platform_status: {
@@ -25,6 +26,30 @@ export const TOOLS = {
       const r = await infraHttp.get(String(url || ''))
       const body = typeof r.body === 'string' ? r.body.slice(0, 2000) : r.body
       return { status: r.status || 0, ok: Boolean(r.ok), body, reason: r.reason }
+    },
+  },
+  leads_overview: {
+    description: 'Overview of inbound leads from the SuperMega CRM: total count, breakdown by stage, and the most recent few (name, company, stage, score). Read-only.',
+    input_schema: { type: 'object', properties: { limit: { type: 'number', description: 'how many recent leads to include (default 5, max 20)' } }, additionalProperties: false },
+    available: () => true,
+    run: async ({ limit = 5 } = {}) => {
+      const leads = await store.listLeads(200)
+      const byStage = {}
+      for (const l of leads) byStage[l.stage || 'new'] = (byStage[l.stage || 'new'] || 0) + 1
+      const n = Math.max(1, Math.min(20, Number(limit) || 5))
+      const recent = leads.slice(0, n).map((l) => ({ name: l.name, company: l.company, stage: l.stage, score: l.score }))
+      return { total: leads.length, byStage, recent }
+    },
+  },
+  pipeline_overview: {
+    description: 'Overview of the sales pipeline: project counts by status, number of saved deals, and recent activity log. Read-only.',
+    input_schema: { type: 'object', properties: {}, additionalProperties: false },
+    available: () => true,
+    run: async () => {
+      const [projects, deals, activity] = await Promise.all([store.listProjects(), store.listDeals(), store.listActivity(8)])
+      const byStatus = {}
+      for (const p of projects) byStatus[p.status || '?'] = (byStatus[p.status || '?'] || 0) + 1
+      return { projects: projects.length, byStatus, deals: deals.length, recentActivity: (activity || []).map((a) => ({ kind: a.kind, summary: a.summary })) }
     },
   },
   gmail_count: {
