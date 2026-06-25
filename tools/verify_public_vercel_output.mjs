@@ -593,6 +593,16 @@ for (const entry of walkHtmlFiles(staticDir)) {
     const at = html.indexOf(dollarPriceMatch[0])
     fail('usd_dollar_price_found', { entry, context: html.slice(Math.max(0, at - 15), at + 20) })
   }
+  // Also ban the literal "USD" token on public marketing surfaces — the "$\d" guard alone missed
+  // "...bank transfer (MMK or USD)." because there was no digit. Machine ops page is exempt (it
+  // surfaces an internal "Real MRR: USD 0" line, not a public price).
+  if (entry !== 'machine/index.html') {
+    const usdWord = html.match(/\bUSD\b/)
+    if (usdWord) {
+      const at = html.search(/\bUSD\b/)
+      fail('usd_word_found', { entry, context: html.slice(Math.max(0, at - 20), at + 12) })
+    }
+  }
   // No Starter/Pro/Operator pricing-tier naming on the /offers/ pricing surface (canon: 2 honest tiers, no
   // such names). Scoped to /offers/ so legitimate product copy/labels elsewhere ("Operator tablet flows",
   // the "Operator Builder" screenshot label) aren't flagged — /offers/ carries no such product labels.

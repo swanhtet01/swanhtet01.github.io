@@ -1149,47 +1149,57 @@ const publicCardHtml = `<!doctype html>
     <meta property="og:image" content="https://supermega.dev/site/social/supermega-portal-card.png" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:image" content="https://supermega.dev/site/social/supermega-portal-card.png" />
-    <meta name="theme-color" content="#07111f" />
+    <meta name="theme-color" content="#1b1815" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" />
     <style>
-      @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=swap');
-      :root { color-scheme: dark; --bg: #06101c; --text: #f7fbff; --muted: #a8b8ca; --cyan: #64efff; --blue: #4f8cff; --ink: #06101d; }
+      @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;500;700;900&display=swap');
+      :root { color-scheme: light dark; --cream:#f7f4ec; --paper:#fffdf8; --ink:#2a241c; --muted:#6b6052; --clay:#c2603f; --gilt:#c9a24b; --line:rgba(42,36,28,0.12); --bg:#1b1815; }
       * { box-sizing: border-box; }
-      body { margin: 0; min-height: 100svh; display: grid; place-items: center; padding: 24px; background-color: #06101c; background-image: radial-gradient(ellipse at 78% 18%, rgba(100,239,255,0.22), transparent 26rem), radial-gradient(ellipse at 5% 86%, rgba(79,140,255,0.2), transparent 28rem), radial-gradient(ellipse at 50% 50%, rgba(30,50,120,0.15), transparent 50rem), linear-gradient(160deg, #06101c, #020810 70%); color: var(--text); font-family: "Inter", "Aptos", "Segoe UI Variable", "Segoe UI", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+      body { margin: 0; min-height: 100svh; display: grid; place-items: center; padding: 24px; background-color: #1b1815; background-image: radial-gradient(ellipse at 80% 12%, rgba(201,162,75,0.13), transparent 30rem), radial-gradient(ellipse at 8% 88%, rgba(194,96,63,0.15), transparent 30rem), linear-gradient(160deg, #1f1b17, #13110e 75%); color: var(--ink); font-family: "Inter", "Segoe UI", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
       a { color: inherit; text-decoration: none; }
-      .card { position: relative; overflow: hidden; width: min(1020px, 100%); min-height: min(680px, calc(100svh - 48px)); display: flex; align-items: center; border: 1px solid rgba(217,247,255,0.16); border-radius: clamp(28px, 5vw, 60px); background: linear-gradient(135deg, rgba(255,255,255,0.09) 0%, rgba(255,255,255,0.04) 100%); box-shadow: inset 0 1px 0 rgba(255,255,255,0.14), inset 0 -1px 0 rgba(255,255,255,0.04), 0 50px 130px rgba(0,0,0,0.45), 0 8px 32px rgba(0,0,0,0.22); padding: clamp(32px, 7vw, 84px); backdrop-filter: blur(2px); }
-      .card::before { content: "SUPERMEGA"; position: absolute; right: -4%; bottom: -2%; color: transparent; -webkit-text-stroke: 1px rgba(247,251,255,0.038); font-size: clamp(72px, 17vw, 200px); font-weight: 900; letter-spacing: -0.1em; line-height: 0.8; pointer-events: none; }
-      .card::after { content: ""; position: absolute; top: 0; right: 0; width: 55%; height: 100%; background: radial-gradient(ellipse at 80% 30%, rgba(100,239,255,0.07), transparent 60%); pointer-events: none; }
-      .content { position: relative; max-width: 690px; }
-      .brand { display: inline-flex; align-items: center; gap: 12px; color: var(--cyan); font-size: 12px; font-weight: 950; letter-spacing: 0.22em; text-transform: uppercase; }
-      .mark { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 14px; overflow: hidden; background: #07111f; border: 1px solid rgba(255,255,255,0.16); }
+      .card { position: relative; overflow: hidden; width: min(980px, 100%); min-height: min(640px, calc(100svh - 48px)); display: flex; align-items: center; gap: clamp(28px, 5vw, 60px); border: 1px solid var(--line); border-radius: clamp(28px, 5vw, 52px); background: linear-gradient(158deg, var(--paper) 0%, var(--cream) 100%); box-shadow: 0 50px 130px rgba(0,0,0,0.5), 0 8px 32px rgba(0,0,0,0.26); padding: clamp(32px, 6vw, 68px); }
+      .card::before { content: "SUPERMEGA"; position: absolute; right: -3%; bottom: -4%; color: transparent; -webkit-text-stroke: 1px rgba(42,36,28,0.05); font-size: clamp(60px, 14vw, 168px); font-weight: 900; letter-spacing: -0.1em; line-height: 0.8; pointer-events: none; }
+      .photo-col { flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; gap: 14px; position: relative; }
+      .avatar { width: clamp(148px, 22vw, 216px); height: clamp(148px, 22vw, 216px); border-radius: 50%; object-fit: cover; border: 3px solid var(--paper); box-shadow: 0 16px 40px rgba(42,36,28,0.3), 0 0 0 1px var(--line); }
+      .qr { width: 104px; height: 104px; border-radius: 14px; background: var(--paper); border: 1px solid var(--line); padding: 7px; box-shadow: 0 6px 16px rgba(42,36,28,0.12); }
+      .qr-label { font-size: 10.5px; font-weight: 900; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); margin-top: -4px; }
+      .content { position: relative; flex: 1 1 auto; min-width: 0; max-width: 560px; }
+      .brand { display: inline-flex; align-items: center; gap: 10px; color: var(--clay); font-size: 11px; font-weight: 950; letter-spacing: 0.22em; text-transform: uppercase; }
+      .mark { display: grid; place-items: center; width: 38px; height: 38px; border-radius: 12px; overflow: hidden; background: var(--bg); border: 1px solid var(--line); }
       .mark img { width: 100%; height: 100%; display: block; }
-      h1 { margin: 28px 0 10px; font-size: clamp(74px, 16vw, 154px); line-height: 0.8; letter-spacing: -0.1em; }
-      .role { margin: 0 0 18px; color: var(--cyan); font-size: clamp(18px, 3vw, 24px); font-weight: 850; }
-      .event { display: inline-flex; margin-top: 22px; border: 1px solid rgba(100,239,255,0.2); border-radius: 999px; padding: 9px 12px; color: rgba(247,251,255,0.78); background: rgba(100,239,255,0.06); font-size: 12px; font-weight: 850; letter-spacing: 0.08em; text-transform: uppercase; }
-      .pitch { max-width: 36rem; margin: 0 0 30px; color: rgba(247,251,255,0.84); font-size: clamp(20px, 3vw, 28px); line-height: 1.22; font-weight: 760; letter-spacing: -0.035em; }
-      .details { display: grid; gap: 10px; margin-bottom: 28px; }
-      .details a { width: fit-content; color: var(--text); font-size: clamp(18px, 3vw, 26px); font-weight: 850; }
-      .details a:hover { color: var(--cyan); }
+      h1 { font-family: "Fraunces", Georgia, serif; margin: 18px 0 6px; font-size: clamp(48px, 8vw, 84px); line-height: 0.92; letter-spacing: -0.02em; font-weight: 600; color: var(--ink); }
+      .role { margin: 0 0 16px; color: var(--clay); font-size: clamp(16px, 2.4vw, 20px); font-weight: 850; }
+      .pitch { max-width: 34rem; margin: 0 0 26px; color: var(--muted); font-size: clamp(17px, 2.2vw, 21px); line-height: 1.42; font-weight: 500; }
+      .details { display: grid; gap: 8px; margin-bottom: 26px; }
+      .details a { width: fit-content; color: var(--ink); font-size: clamp(16px, 2vw, 20px); font-weight: 850; }
+      .details a:hover { color: var(--clay); }
       .actions { display: flex; flex-wrap: wrap; gap: 10px; }
-      .button { display: inline-flex; align-items: center; justify-content: center; min-height: 54px; border-radius: 999px; padding: 0 22px; background: linear-gradient(135deg, var(--cyan), var(--blue)); color: var(--ink); font-weight: 950; box-shadow: 0 22px 60px rgba(79,140,255,0.28); }
-      .button.secondary { border: 1px solid rgba(247,251,255,0.16); background: rgba(255,255,255,0.06); color: var(--text); box-shadow: none; }
-      @media (max-width: 560px) { body { padding: 14px; } .card { align-items: flex-end; min-height: calc(100svh - 28px); padding: 28px; border-radius: 30px; } h1 { font-size: clamp(72px, 22vw, 104px); } .pitch { font-size: 20px; } .details a { font-size: 18px; } }
+      .button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 50px; border-radius: 999px; padding: 0 22px; font-weight: 900; font-size: 15px; }
+      .button.primary { background: linear-gradient(135deg, var(--clay), #a84e30); color: #fff; box-shadow: 0 18px 44px rgba(194,96,63,0.3); }
+      .button.viber { background: #7360F2; color: #fff; box-shadow: 0 18px 44px rgba(115,96,242,0.28); }
+      .button.secondary { border: 1px solid var(--line); background: var(--paper); color: var(--ink); }
+      @media (max-width: 760px) { body { padding: 14px; } .card { flex-direction: column; text-align: center; align-items: center; min-height: calc(100svh - 28px); padding: 38px 26px; gap: 22px; border-radius: 32px; } .content { display: flex; flex-direction: column; align-items: center; } .details a, .pitch { margin-left: auto; margin-right: auto; } .actions { justify-content: center; } .qr, .qr-label { display: none; } }
     </style>
   </head>
   <body>
     <main class="card" aria-label="Swan Htet contact card">
+      <div class="photo-col">
+        <img class="avatar" src="/site/social/swan-htet.jpg" alt="Swan Htet, founder of SUPERMEGA.dev" width="216" height="216" />
+        <img class="qr" src="/site/social/supermega-contact-qr.png" alt="QR code linking to supermega.dev" width="104" height="104" loading="lazy" />
+        <span class="qr-label">Scan to visit</span>
+      </div>
       <section class="content">
         <a class="brand" href="/" aria-label="SUPERMEGA.dev home"><span class="mark"><img src="/favicon.svg?v=supermega-atelier-20260623" alt="" /></span><span>SUPERMEGA.dev</span></a>
         <h1>Swan Htet</h1>
         <p class="role">Founder — custom software for Myanmar business</p>
-        <p class="pitch">I build the software your team actually needs — starting from your real data. Priced in MMK. Done in weeks.</p>
+        <p class="pitch">I build the software your team actually needs — starting from your real data. Priced in MMK. Built in weeks. Yours to keep.</p>
         <div class="details">
           <a href="mailto:swanhtet@supermega.dev">swanhtet@supermega.dev</a>
           <a href="tel:+9595000721">+95 9 500 0721</a>
         </div>
         <div class="actions">
-          <a class="button" href="${activeCardContactPath}">supermega.dev</a>
+          <a class="button viber" href="viber://chat?number=%2B9595000721" aria-label="Chat on Viber"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 0C5.376 0 0 5.376 0 12s5.376 12 12 12 12-5.376 12-12S18.624 0 12 0zm5.568 16.8c-.24.576-.96 1.056-1.608 1.2-.432.096-.984.168-2.856-.624-2.4-.984-3.936-3.432-4.056-3.6-.12-.168-.984-1.32-.984-2.52s.624-1.776 1.2-1.776c.216 0 .624.024.84.576.144.36.384.984.432 1.128.12.288.024.624-.12.84l-.384.48c-.12.168-.24.36-.12.696.576 1.44 1.872 2.376 3.48 3.024.264.096.456.048.624-.144l.528-.624c.192-.24.432-.264.696-.168.648.264 1.56.648 1.8.744.288.12.48.168.528.288.048.192.048.864-.192 1.296zm.12-4.848c-.072 0-.12-.024-.12-.096-.264-2.952-2.496-5.136-5.424-5.4-.072-.024-.12-.072-.12-.144v-.528c0-.072.048-.12.12-.12 3.336.288 5.976 2.904 6.264 6.168 0 .072-.048.12-.12.12h-.6zm-1.464-1.584c-.072 0-.144-.024-.144-.12-.216-1.68-1.536-3-3.216-3.24-.072 0-.12-.072-.12-.144v-.528c0-.072.048-.12.12-.12 2.016.264 3.624 1.848 3.888 3.864 0 .072-.048.12-.12.12h-.408zm-1.272-1.584c-.072 0-.12-.048-.12-.12-.144-.792-.768-1.416-1.56-1.56-.072-.024-.12-.072-.12-.144v-.528c0-.072.048-.12.12-.12 1.128.168 2.016 1.032 2.184 2.16 0 .072-.048.12-.12.12h-.384z"/></svg>Viber</a>
+          <a class="button primary" href="${activeCardContactPath}">supermega.dev</a>
           <a class="button secondary" href="https://www.linkedin.com/in/theswanhtet" rel="noreferrer" target="_blank">LinkedIn</a>
         </div>
       </section>
@@ -2405,6 +2415,7 @@ ${unicornHeader}
             <p>Most businesses we work with already have a system — it's spread across a group chat, a shared Excel, and someone's memory. We pull that out, structure it, and give you software you actually own. From 2,500,000 MMK. Delivered in weeks.</p>
             <div class="cta">
               <a class="btn primary" href="/contact/">Share one workflow</a>
+              <a class="btn secondary" href="viber://chat?number=%2B9595000721" style="background:#7360F2;border-color:#5b46d6;color:#fff" aria-label="Chat with us on Viber">Chat on Viber</a>
               <a class="btn secondary" href="/demo/">See live demos</a>
               <a class="btn secondary" href="/offers/">See pricing</a>
             </div>
@@ -2798,17 +2809,17 @@ ${unicornHeader}
             <div class="next-card" data-next-card hidden><strong>Saved</strong><span>We review the workflow and reply with the first app to build. Nothing changes without approval.</span></div>
           </form>
         </section>
-        <section aria-label="Direct contact options" style="margin-top:32px;padding-top:24px;border-top:1px solid rgba(255,255,255,0.1)">
-          <p style="font-size:14px;color:rgba(247,251,255,0.6);margin:0 0 16px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase">Or reach us directly</p>
-          <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center">
-            <a href="viber://chat?number=%2B9595000721" style="display:inline-flex;align-items:center;gap:8px;background:rgba(115,74,192,0.18);border:1px solid rgba(115,74,192,0.35);color:#c9a4ff;padding:10px 18px;border-radius:10px;font-size:15px;font-weight:700;text-decoration:none;letter-spacing:-0.01em" aria-label="Chat on Viber">
+        <section aria-label="Direct contact options" style="margin-top:32px;padding-top:24px;border-top:1px solid var(--line)">
+          <p style="font-size:13px;color:var(--muted);margin:0 0 14px;font-weight:850;letter-spacing:0.08em;text-transform:uppercase">Or reach us directly</p>
+          <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center">
+            <a href="viber://chat?number=%2B9595000721" style="display:inline-flex;align-items:center;gap:8px;background:#7360F2;border:1px solid #5b46d6;color:#fff;padding:11px 18px;border-radius:12px;font-size:15px;font-weight:850;text-decoration:none;letter-spacing:-0.01em" aria-label="Chat on Viber">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 0C5.376 0 0 5.376 0 12s5.376 12 12 12 12-5.376 12-12S18.624 0 12 0zm5.568 16.8c-.24.576-.96 1.056-1.608 1.2-.432.096-.984.168-2.856-.624-2.4-.984-3.936-3.432-4.056-3.6-.12-.168-.984-1.32-.984-2.52s.624-1.776 1.2-1.776c.216 0 .624.024.84.576.144.36.384.984.432 1.128.12.288.024.624-.12.84l-.384.48c-.12.168-.24.36-.12.696.576 1.44 1.872 2.376 3.48 3.024.264.096.456.048.624-.144l.528-.624c.192-.24.432-.264.696-.168.648.264 1.56.648 1.8.744.288.12.48.168.528.288.048.192.048.864-.192 1.296zm.12-4.848c-.072 0-.12-.024-.12-.096-.264-2.952-2.496-5.136-5.424-5.4-.072-.024-.12-.072-.12-.144v-.528c0-.072.048-.12.12-.12 3.336.288 5.976 2.904 6.264 6.168 0 .072-.048.12-.12.12h-.6zm-1.464-1.584c-.072 0-.144-.024-.144-.12-.216-1.68-1.536-3-3.216-3.24-.072 0-.12-.072-.12-.144v-.528c0-.072.048-.12.12-.12 2.016.264 3.624 1.848 3.888 3.864 0 .072-.048.12-.12.12h-.408zm-1.272-1.584c-.072 0-.12-.048-.12-.12-.144-.792-.768-1.416-1.56-1.56-.072-.024-.12-.072-.12-.144v-.528c0-.072.048-.12.12-.12 1.128.168 2.016 1.032 2.184 2.16 0 .072-.048.12-.12.12h-.384z"/></svg>
-              Viber
+              Chat on Viber
             </a>
-            <a href="mailto:swanhtet@supermega.dev" style="display:inline-flex;align-items:center;gap:8px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.14);color:rgba(247,251,255,0.84);padding:10px 18px;border-radius:10px;font-size:15px;font-weight:700;text-decoration:none">
+            <a href="mailto:swanhtet@supermega.dev" style="display:inline-flex;align-items:center;gap:8px;background:transparent;border:1px solid var(--line);color:var(--ink);padding:11px 18px;border-radius:12px;font-size:15px;font-weight:750;text-decoration:none">
               swanhtet@supermega.dev
             </a>
-            <a href="tel:+9595000721" style="display:inline-flex;align-items:center;gap:8px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.14);color:rgba(247,251,255,0.84);padding:10px 18px;border-radius:10px;font-size:15px;font-weight:700;text-decoration:none">
+            <a href="tel:+9595000721" style="display:inline-flex;align-items:center;gap:8px;background:transparent;border:1px solid var(--line);color:var(--ink);padding:11px 18px;border-radius:12px;font-size:15px;font-weight:750;text-decoration:none">
               +95 9 500 0721
             </a>
           </div>
@@ -3853,7 +3864,7 @@ ${unicornHeader}
         <section class="section">
           <div class="trust-note" style="margin-top:24px;padding:20px 24px;border:1px solid var(--line);border-radius:16px;background:rgba(255,255,255,0.5);max-width:640px;">
             <strong style="display:block;font-size:15px;letter-spacing:-0.02em;margin-bottom:8px;">Our guarantee</strong>
-            <p style="font-size:14px;color:var(--muted);margin:0;line-height:1.55;">If we haven't delivered a working first screen within 14 days of your deposit, we refund in full. We accept KBZPay, AYA Pay, Wave Money, and bank transfer (MMK or USD).</p>
+            <p style="font-size:14px;color:var(--muted);margin:0;line-height:1.55;">If we haven't delivered a working first screen within 14 days of your deposit, we refund in full. We accept KBZPay, AYA Pay, Wave Money, and bank transfer.</p>
           </div>
         </section>
 
