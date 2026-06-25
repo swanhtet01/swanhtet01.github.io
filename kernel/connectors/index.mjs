@@ -24,6 +24,7 @@ import './messaging-viber.mjs'
 import './messaging-line.mjs'
 import './messaging-facebook.mjs'
 import './messaging-whatsapp.mjs'
+import './messaging-sms.mjs'
 import './payment-onepay.mjs'
 
 export * from './registry.mjs'
