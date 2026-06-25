@@ -61,6 +61,12 @@ export default async function handler(req, res) {
   // Hook: add order reconciliation here when you have a payment ledger.
   // e.g. update subscriptions.status = 'active' where kbzpay_order_id = orderId
   // and status === 'PAY_SUCCESS'.
+  // SECURITY (required when wiring the ledger — signature is verified above, but the ledger MUST also):
+  //   1. Idempotency — process each trade_no ONCE (KBZPay retries IPNs; a non-idempotent ledger
+  //      double-credits on retry).
+  //   2. Amount check — confirm total_amount === the order's expected amount (the sig binds amount,
+  //      but verify it matches what was actually charged, not just that it's internally consistent).
+  //   3. Status gate — only act on the explicit success status; never on UNKNOWN/missing/failed.
 
   res.status(200).json({ return_code: 'SUCCESS', return_msg: 'OK' })
 }

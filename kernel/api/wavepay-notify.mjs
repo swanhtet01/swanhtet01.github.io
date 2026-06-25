@@ -59,6 +59,12 @@ export default async function handler(req, res) {
   // Hook: add order reconciliation here when you have a payment ledger.
   // e.g. update subscriptions.status = 'active' where wavepay_order_id = orderId
   // and status === 'SUCCESS'.
+  // SECURITY (required when wiring the ledger — hash is verified above, but the ledger MUST also):
+  //   1. Idempotency — process each request_id/order_id ONCE (IPNs are retried; non-idempotent
+  //      reconciliation double-credits on retry).
+  //   2. Amount check — confirm amount === the order's expected amount (the hash binds amount, but
+  //      verify it matches what was actually charged).
+  //   3. Status gate — only act on the explicit 'SUCCESS' status; never on UNKNOWN/missing/failed.
 
   res.status(200).json({ ok: true })
 }
