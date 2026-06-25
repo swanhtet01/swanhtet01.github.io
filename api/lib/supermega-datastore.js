@@ -49,14 +49,18 @@ function datastoreStatus() {
 }
 
 function pgSslConfig(connectionString) {
+  // Strict cert verification is opt-in via PG_SSL_STRICT=1. Flipping it blind can break the connection
+  // if the provider cert isn't chained to the system roots, so the default preserves existing behavior
+  // (no outage risk); enable strict after validating against the live DB. Localhost/sslmode=disable → no SSL.
+  const strict = String(process.env.PG_SSL_STRICT || '') === '1'
   try {
     const url = new URL(connectionString)
     if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') return false
     if (url.searchParams.get('sslmode') === 'disable') return false
   } catch {
-    return { rejectUnauthorized: false }
+    return { rejectUnauthorized: strict }
   }
-  return { rejectUnauthorized: false }
+  return { rejectUnauthorized: strict }
 }
 
 // Strip sslmode from the connection string URL so pg-connection-string doesn't emit
@@ -73,45 +77,39 @@ function stripSslMode(connectionString) {
   }
 }
 
-async function query(sql, params = []) {
+// Pooled Postgres — ONE pool per warm instance. Previously this opened new Client()+connect()+end()
+// on EVERY query (a TCP+TLS handshake per call; pipelineSnapshot fired 6 per request → connection
+// exhaustion under any concurrency). The pool removes the per-query handshake and bounds connections.
+let _pool
+let _poolTried = false
+function getPool() {
+  if (_poolTried) return _pool
+  _poolTried = true
   const connectionString = postgresConnectionString()
-  if (!connectionString) {
-    return { status: 'skipped', reason: 'postgres_not_configured' }
-  }
-
-  let Client
-  try {
-    ;({ Client } = require('pg'))
-  } catch (error) {
-    return {
-      status: 'error',
-      reason: 'pg_dependency_missing',
-      detail: error.message || String(error),
-    }
-  }
-
-  const client = new Client({
+  if (!connectionString) { _pool = null; return null }
+  let Pool
+  try { ({ Pool } = require('pg')) } catch { _pool = null; return null }
+  _pool = new Pool({
     connectionString: stripSslMode(connectionString),
     ssl: pgSslConfig(connectionString),
+    max: 3,
+    idleTimeoutMillis: 10_000,
+    connectionTimeoutMillis: 8_000,
   })
+  _pool.on('error', () => { /* swallow idle-client errors so a dropped backend conn can't crash the fn */ })
+  return _pool
+}
 
+async function query(sql, params = []) {
+  const connectionString = postgresConnectionString()
+  if (!connectionString) return { status: 'skipped', reason: 'postgres_not_configured' }
+  const pool = getPool()
+  if (!pool) return { status: 'error', reason: 'pg_dependency_missing' }
   try {
-    await client.connect()
-    const result = await client.query(sql, params)
-    return {
-      status: 'ready',
-      rows: result.rows || [],
-      rowCount: result.rowCount || 0,
-    }
+    const result = await pool.query(sql, params)
+    return { status: 'ready', rows: result.rows || [], rowCount: result.rowCount || 0 }
   } catch (error) {
-    return {
-      status: 'error',
-      reason: error.message || 'postgres_query_failed',
-      code: error.code || null,
-      detail: error.detail || null,
-    }
-  } finally {
-    await client.end().catch(() => {})
+    return { status: 'error', reason: error.message || 'postgres_query_failed', code: error.code || null, detail: error.detail || null }
   }
 }
 

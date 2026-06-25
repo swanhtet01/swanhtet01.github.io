@@ -411,4 +411,14 @@ export async function recordPaymentEvent(provider, eventId, meta = {}) {
   return { fresh: true }
 }
 
-export default { mode, listLeads, getLead, insertLead, updateLead, listClients, listProjects, createClient, createProject, updateProject, getProject, markDepositPaid, convertedLeadIds, saveDeal, listDeals, updateDeal, logActivity, listActivity, getTokenUsage, addTokenUsage, getCachedResponse, putCachedResponse, recordPaymentEvent, bumpGraduation, recordBuildModules, listGraduation }
+// Lightweight reachability probe for the status endpoint. Bounded; never throws.
+export async function ping() {
+  if (mode === 'memory') return { ok: true, mode, detail: 'in-memory (no external DB)' }
+  try {
+    if (mode === 'supabase') { await rest('GET', 'supermega_leads?select=lead_id&limit=1'); return { ok: true, mode } }
+    if (mode === 'postgres') { await q('select 1'); return { ok: true, mode } }
+  } catch (e) { return { ok: false, mode, detail: String((e && e.message) || 'ping_failed').slice(0, 120) } }
+  return { ok: false, mode, detail: 'unknown_mode' }
+}
+
+export default { mode, listLeads, getLead, insertLead, updateLead, listClients, listProjects, createClient, createProject, updateProject, getProject, markDepositPaid, convertedLeadIds, saveDeal, listDeals, updateDeal, logActivity, listActivity, getTokenUsage, addTokenUsage, getCachedResponse, putCachedResponse, recordPaymentEvent, ping, bumpGraduation, recordBuildModules, listGraduation }
