@@ -76,10 +76,46 @@ export async function getLead(id) {
   return mem.lead.get(id) || null
 }
 export async function insertLead(l) {
-  if (mode !== 'memory') throw new Error('leads_from_site') // leads come from the public form, not manual entry
-  const rec = { id: randomUUID(), created_at: new Date().toISOString(), status: 'new', score: 0, ...l }
-  mem.lead.set(rec.id, rec)
-  return rec
+  // Maps logical field names → supermega_leads column names (shared with the website contact form table).
+  const rec = {
+    lead_id:           String(l.id || randomUUID()),
+    source:            String(l.source || 'manual').slice(0, 40),
+    name:              String(l.name || '').slice(0, 200),
+    email:             String(l.contact || l.email || '').slice(0, 200),
+    company:           String(l.company || '').slice(0, 200),
+    requested_package: String(l.package || '').slice(0, 80),
+    goal:              String(l.message || '').slice(0, 4000),
+    lead_score:        Number(l.score) || 0,
+    lead_stage:        String(l.stage || 'new').slice(0, 40),
+    submitted_at:      l.created_at || new Date().toISOString(),
+  }
+  if (mode === 'supabase') {
+    // Upsert on lead_id — cron may push the same lead multiple times; merge wins.
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/supermega_leads`, {
+      method: 'POST',
+      headers: { apikey: SUPABASE_KEY, authorization: `Bearer ${SUPABASE_KEY}`, 'content-type': 'application/json', prefer: 'resolution=merge-duplicates,return=representation' },
+      body: JSON.stringify(rec),
+    })
+    if (!res.ok) { const t = await res.text().catch(() => ''); throw new Error(`supabase_${res.status}: ${t.slice(0, 140)}`) }
+    const rows = await res.json().catch(() => [])
+    return rows[0] ? mapLead(rows[0]) : mapLead(rec)
+  }
+  if (mode === 'postgres') {
+    const r = await q(
+      `insert into public.supermega_leads (lead_id,source,name,email,company,requested_package,goal,lead_score,lead_stage,submitted_at)
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+       on conflict (lead_id) do update
+         set source=excluded.source, name=excluded.name, email=excluded.email,
+             lead_score=excluded.lead_score, lead_stage=excluded.lead_stage
+       returning ${LEAD_COLS}`,
+      [rec.lead_id, rec.source, rec.name, rec.email, rec.company, rec.requested_package, rec.goal, rec.lead_score, rec.lead_stage, rec.submitted_at]
+    )
+    return r[0] ? mapLead(r[0]) : null
+  }
+  // memory mode
+  const memRec = mapLead(rec)
+  mem.lead.set(memRec.id, memRec)
+  return memRec
 }
 export async function updateLead(id, patch) {
   // Maps the store's field names (stage, score) to the DB column names (lead_stage, lead_score)
