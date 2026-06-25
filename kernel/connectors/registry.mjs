@@ -9,7 +9,7 @@
 // Zero dependencies (matches gateway.mjs / store.mjs). ESM. See ../../PLATFORM.md.
 
 /**
- * @typedef {'payment'|'messaging'|'data'|'ai'} ConnectorCategory
+ * @typedef {'payment'|'messaging'|'data'|'ai'|'integration'} ConnectorCategory
  *
  * @typedef {object} Connector
  * @property {string} key                 stable id, e.g. 'payment-stripe' (unique in the registry)
@@ -20,7 +20,7 @@
  * @property {string} [docs]              optional pointer to where the real impl lives
  */
 
-export const CATEGORIES = ['payment', 'messaging', 'data', 'ai']
+export const CATEGORIES = ['payment', 'messaging', 'data', 'ai', 'integration']
 
 const registry = new Map() // key -> Connector
 
