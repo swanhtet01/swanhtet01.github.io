@@ -2196,62 +2196,24 @@ ${unicornHeader}
         </section>
 
         <section class="section connector-section">
-          <h2>Reads from where your data actually lives.</h2>
-          <p class="section-sub">We connect to the tools your team already uses, and route the output wherever you need it — Gmail, Viber, LINE, Sheets, KBZPay, and more. 36 connectors available.</p>
-          <div class="connector-groups">
-            <div class="connector-group">
-              <div class="connector-group-label">Work data</div>
-              <div class="connector-grid">
-                <div class="connector-chip">Gmail</div>
-                <div class="connector-chip">Google Drive</div>
-                <div class="connector-chip">Google Sheets</div>
-                <div class="connector-chip">Google Calendar</div>
-                <div class="connector-chip">Notion</div>
-                <div class="connector-chip">Shopify</div>
-              </div>
-            </div>
-            <div class="connector-group">
-              <div class="connector-group-label">Messaging</div>
-              <div class="connector-grid">
-                <div class="connector-chip">Telegram</div>
-                <div class="connector-chip">Viber</div>
-                <div class="connector-chip">WhatsApp</div>
-                <div class="connector-chip">Line</div>
-                <div class="connector-chip">LINE Notify</div>
-                <div class="connector-chip">Facebook</div>
-                <div class="connector-chip">Slack</div>
-                <div class="connector-chip">Microsoft Teams</div>
-                <div class="connector-chip">SMS</div>
-                <div class="connector-chip">Email (Resend)</div>
-              </div>
-            </div>
-            <div class="connector-group">
-              <div class="connector-group-label">Payments</div>
-              <div class="connector-grid">
-                <div class="connector-chip">KBZPay</div>
-                <div class="connector-chip">WavePay</div>
-                <div class="connector-chip">AYA Pay</div>
-                <div class="connector-chip">CB Pay</div>
-                <div class="connector-chip">MMQR</div>
-                <div class="connector-chip">OnePay</div>
-                <div class="connector-chip">Stripe</div>
-                <div class="connector-chip">CBM Rate</div>
-              </div>
-            </div>
-            <div class="connector-group">
-              <div class="connector-group-label">Infrastructure</div>
-              <div class="connector-grid">
-                <div class="connector-chip">Supabase</div>
-                <div class="connector-chip">Airtable</div>
-                <div class="connector-chip">Webhook</div>
-                <div class="connector-chip">Generic HTTP</div>
-                <div class="connector-chip">OpenAI (GPT)</div>
-                <div class="connector-chip">Google Gemini</div>
-                <div class="connector-chip">AI Gateway</div>
-              </div>
+          <h2>One kernel, wired into 36 real systems.</h2>
+          <p class="section-sub">Agents read from the tools your team already uses and act through rails you already trust — including Myanmar-native ones no global platform has. Pick two or three to scope your first agent.</p>
+          <div style="border:1px solid rgba(201,162,75,0.45);border-radius:18px;background:linear-gradient(135deg, rgba(201,162,75,0.12), rgba(194,96,63,0.06));padding:16px 20px;margin-bottom:20px">
+            <div class="connector-group-label" style="color:#9a7d2f">★ Myanmar-native rails — built in, no global SaaS has these · 8</div>
+            <div class="connector-grid" style="margin-top:10px">
+              ${['KBZPay','WavePay','AYA Pay','CB Pay','OnePay','MMQR','CBM Rate','Viber'].map((n) => `<div class="connector-chip" style="border-color:rgba(201,162,75,0.55);background:rgba(201,162,75,0.14);color:#7a6320;font-weight:850">${n}</div>`).join('')}
             </div>
           </div>
-          <p class="connector-note">36 connectors available. Most clients start with two or three — that's enough to scope and build the first agent.</p>
+          <div class="connector-groups">
+            ${[
+              ['Messaging & notify', ['Telegram', 'WhatsApp Business', 'LINE', 'LINE Notify', 'Facebook Messenger', 'Slack', 'Microsoft Teams', 'Discord', 'SMS (Twilio)', 'Email (Resend)']],
+              ['Data & work', ['Gmail', 'Google Drive', 'Google Sheets', 'Google Calendar', 'Notion', 'Airtable', 'HubSpot', 'Supabase']],
+              ['AI models', ['Claude (gateway)', 'Anthropic (Claude)', 'OpenAI (GPT)', 'Google Gemini', 'OpenRouter']],
+              ['Commerce', ['Shopify', 'WooCommerce']],
+              ['Payments (global) & integration', ['Stripe', 'Generic Webhook', 'Generic HTTP']],
+            ].map(([label, items]) => `<div class="connector-group"><div class="connector-group-label">${label} · ${items.length}</div><div class="connector-grid">${items.map((n) => `<div class="connector-chip">${n}</div>`).join('')}</div></div>`).join('')}
+          </div>
+          <p class="connector-note">36 connectors live in the kernel today — and adding the next one is a single adapter file, not a rebuild. That's the architecture: it scales by addition, never by replacing what works. Most clients start with two or three.</p>
         </section>
 
         <section class="section">
@@ -2413,7 +2375,7 @@ ${unicornHeader}
           <div class="copy">
             <div class="eyebrow">Starts from your real data · Built to last · Yours to keep</div>
             <h1>Your real work, turned into software.</h1>
-            <p lang="my" style="font-size:clamp(15px,2vw,18px);color:var(--clay);font-weight:800;margin:2px 0 14px;line-height:1.5">သင်လုပ်နေတဲ့ အလုပ်ကို သင်ပိုင်ဆိုင်တဲ့ ဆော့ဖ်ဝဲဖြစ်အောင် တည်ဆောက်ပေးပါတယ်။</p>
+            <p lang="my" style="font-size:clamp(15px,2vw,18px);color:var(--clay);font-weight:800;margin:2px 0 14px;line-height:1.5">သင့်လုပ်ငန်းရဲ့ အလုပ်အကိုင်တွေကို သင်ကိုယ်တိုင် ပိုင်ဆိုင်တဲ့ ဆော့ဖ်ဝဲအဖြစ် တည်ဆောက်ပေးပါတယ်။</p>
             <p>Most businesses we work with already have a system — it's spread across a group chat, a shared Excel, and someone's memory. We pull that out, structure it, and give you software you actually own. From 2,500,000 MMK. Delivered in weeks.</p>
             <div class="cta">
               <a class="btn primary" href="/contact/">Share one workflow</a>
