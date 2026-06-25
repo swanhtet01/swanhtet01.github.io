@@ -2197,7 +2197,7 @@ ${unicornHeader}
 
         <section class="section connector-section">
           <h2>Reads from where your data actually lives.</h2>
-          <p class="section-sub">We connect to the tools your team already uses, and route the output wherever you need it — Gmail, Viber, LINE, Sheets, KBZPay, and more. 31 connectors available.</p>
+          <p class="section-sub">We connect to the tools your team already uses, and route the output wherever you need it — Gmail, Viber, LINE, Sheets, KBZPay, and more. 36 connectors available.</p>
           <div class="connector-groups">
             <div class="connector-group">
               <div class="connector-group-label">Work data</div>
@@ -2251,15 +2251,15 @@ ${unicornHeader}
               </div>
             </div>
           </div>
-          <p class="connector-note">31 connectors available. Most clients start with two or three — that's enough to scope and build the first agent.</p>
+          <p class="connector-note">36 connectors available. Most clients start with two or three — that's enough to scope and build the first agent.</p>
         </section>
 
         <section class="section">
           <div class="eyebrow">Technical architecture</div>
           <h2>Why this works when other platforms don't</h2>
-          <p style="color:var(--muted);max-width:56ch;margin-bottom:32px">Most "AI tools" are wrappers over a single API. SuperMega is a kernel — a shared data spine, an action bus, and 31 pre-wired connectors that agents can combine to build real workflows from your actual data.</p>
+          <p style="color:var(--muted);max-width:56ch;margin-bottom:32px">Most "AI tools" are wrappers over a single API. SuperMega is a kernel — a shared data spine, an action bus, and 36 pre-wired connectors that agents can combine to build real workflows from your actual data.</p>
           <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px">
-            <div class="output"><strong>31 connectors, pre-wired</strong><span style="color:var(--muted);display:block;margin-top:6px;font-size:15px">Including Myanmar-native rails — KBZ Pay, Wave Pay, AYA Pay, CB Pay, MMQR, CBM Rate, and Viber. No international platform has these. An agent can read a Gmail thread, calculate in MMK at today's rate, and send a Viber alert — in one pipeline.</span></div>
+            <div class="output"><strong>36 connectors, pre-wired</strong><span style="color:var(--muted);display:block;margin-top:6px;font-size:15px">Including Myanmar-native rails — KBZ Pay, Wave Pay, AYA Pay, CB Pay, MMQR, CBM Rate, and Viber. No international platform has these. An agent can read a Gmail thread, calculate in MMK at today's rate, and send a Viber alert — in one pipeline.</span></div>
             <div class="output"><strong>Multi-model AI kernel</strong><span style="color:var(--muted);display:block;margin-top:6px;font-size:15px">Claude, Gemini, and GPT-4o in one registry. Each agent call routes to the right model by task and cost. Drafting an email reply uses a cheap fast model. Classifying 500 warranty claims uses the most accurate one.</span></div>
             <div class="output"><strong>Approval-gated action bus</strong><span style="color:var(--muted);display:block;margin-top:6px;font-size:15px">Agents prepare work. You approve. Every money, send, and access action requires a human decision. The pipeline persists every action to a ledger — nothing happens silently, nothing repeats without cause.</span></div>
             <div class="output"><strong>Real-data, first call</strong><span style="color:var(--muted);display:block;margin-top:6px;font-size:15px">We connect to your actual Gmail, Drive, Sheets, and database on the first day. Not demo data, not sample exports. The first output is built from your real inputs so the price and timeline are accurate before any deposit.</span></div>
@@ -2457,7 +2457,7 @@ ${unicornHeader}
           <div style="border:1px solid var(--line);border-radius:24px;padding:clamp(24px,4vw,40px);background:linear-gradient(135deg, rgba(194,96,63,0.06), rgba(201,162,75,0.05));">
             <div class="eyebrow" style="color:#c2603f">The part global software can't copy</div>
             <h2 style="margin:8px 0 12px">Wired into Myanmar's own rails.</h2>
-            <p style="max-width:60ch;color:var(--muted);line-height:1.6;margin:0 0 20px">KBZPay, Wave Money, AYA Pay, CB Pay, MMQR, the live CBM exchange rate, and Viber are built in — not bolted on. 31 connectors in total. An agent can read a Viber thread, total it in MMK at today's rate, and send a payment request — in one pipeline. No international SaaS reads these.</p>
+            <p style="max-width:60ch;color:var(--muted);line-height:1.6;margin:0 0 20px">KBZPay, Wave Money, AYA Pay, CB Pay, MMQR, the live CBM exchange rate, and Viber are built in — not bolted on. 36 connectors in total. An agent can read a Viber thread, total it in MMK at today's rate, and send a payment request — in one pipeline. No international SaaS reads these.</p>
             <div style="display:flex;flex-wrap:wrap;gap:8px" aria-label="Myanmar-native connectors">
               ${['KBZPay','Wave Money','AYA Pay','CB Pay','MMQR','CBM rate','Viber','+24 more'].map((r,i)=>`<span style="display:inline-flex;align-items:center;border:1px solid ${i===7?'rgba(201,162,75,0.5)':'var(--line)'};border-radius:999px;padding:7px 14px;font-size:13px;font-weight:850;letter-spacing:-0.01em;color:${i===7?'#9a7d2f':'var(--ink)'};background:${i===7?'rgba(201,162,75,0.10)':'var(--paper)'}">${r}</span>`).join('')}
             </div>
