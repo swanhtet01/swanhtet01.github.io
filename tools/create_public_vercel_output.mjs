@@ -3171,8 +3171,7 @@ const config = {
     },
     {
       src: '^/work/?$',
-      status: 308,
-      headers: { Location: '/demo/' },
+      dest: '/work/index.html',
     },
     {
       src: '^/(?:site/.*|favicon\\.svg|favicon-[0-9]+\\.png|apple-touch-icon\\.png|vite\\.svg|site\\.webmanifest)$',
