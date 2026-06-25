@@ -168,9 +168,9 @@ module.exports = async function handler(req, res) {
   }
   {
     const sigHeader = text(req.headers['x-telegram-bot-api-secret-token'])
-    const a = Buffer.from(sigHeader)
-    const b = Buffer.from(webhookSecret)
-    const valid = a.length === b.length && crypto.timingSafeEqual(a, b)
+    const a = crypto.createHash('sha256').update(sigHeader).digest()
+    const b = crypto.createHash('sha256').update(webhookSecret).digest()
+    const valid = crypto.timingSafeEqual(a, b)
     if (!valid) {
       json(res, 401, { status: 'error', reason: 'invalid_secret' })
       return

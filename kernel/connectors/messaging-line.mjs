@@ -29,6 +29,7 @@ async function linePost(path, body) {
       'content-type': 'application/json',
     },
     body: JSON.stringify(body),
+    signal: AbortSignal.timeout(8000),
   })
   const json = await r.json().catch(() => ({}))
   if (!r.ok) {

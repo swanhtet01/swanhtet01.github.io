@@ -33,6 +33,7 @@ async function sheetsFetch(method, path, { query, body, subject } = {}) {
     method,
     headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
     body: body ? JSON.stringify(body) : undefined,
+    signal: AbortSignal.timeout(10000),
   })
   const json = await res.json().catch(() => ({}))
   if (!res.ok) {

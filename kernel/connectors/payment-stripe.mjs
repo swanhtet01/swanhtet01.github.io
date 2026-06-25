@@ -45,6 +45,7 @@ async function stripe(method, path, params, idempotencyKey) {
     method,
     headers,
     body: params ? formEncode(params) : undefined,
+    signal: AbortSignal.timeout(10000),
   })
   const json = await res.json().catch(() => ({}))
   if (!res.ok) {

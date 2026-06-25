@@ -54,6 +54,7 @@ async function driveFetch(method, path, { query, body, base = DRIVE } = {}) {
     method,
     headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
     body: body ? JSON.stringify(body) : undefined,
+    signal: AbortSignal.timeout(10000),
   })
   const json = await res.json().catch(() => ({}))
   if (!res.ok) {
@@ -84,6 +85,7 @@ async function driveUpload({ method, fileId, metadata, content, mimeType, conver
     method,
     headers: { authorization: `Bearer ${token}`, 'content-type': `multipart/related; boundary=${boundary}` },
     body,
+    signal: AbortSignal.timeout(15000),
   })
   const json = await res.json().catch(() => ({}))
   if (!res.ok) {

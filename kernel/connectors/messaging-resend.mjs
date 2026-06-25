@@ -43,14 +43,19 @@ async function send({ to, subject, html, text, from, fromName, replyTo, cc, bcc 
   if (cc) body.cc = Array.isArray(cc) ? cc : [cc]
   if (bcc) body.bcc = Array.isArray(bcc) ? bcc : [bcc]
 
-  const res = await fetch(`${API}/emails`, {
-    method: 'POST',
-    headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' },
-    body: JSON.stringify(body),
-  })
-  const json = await res.json().catch(() => ({}))
-  if (!res.ok) throw new Error(`resend_${res.status}: ${json?.message || json?.name || ''}`.slice(0, 200))
-  return { id: json.id }
+  try {
+    const res = await fetch(`${API}/emails`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(8000),
+    })
+    const json = await res.json().catch(() => ({}))
+    if (!res.ok) return { ok: false, reason: `resend_${res.status}: ${json?.message || json?.name || ''}`.slice(0, 200) }
+    return { ok: true, id: json.id }
+  } catch (e) {
+    return { ok: false, reason: String(e?.message || 'resend_timeout').slice(0, 200) }
+  }
 }
 
 async function health() {

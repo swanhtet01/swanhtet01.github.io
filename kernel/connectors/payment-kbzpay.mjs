@@ -60,6 +60,7 @@ async function kbzRequest(endpoint, payload) {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(signed),
+    signal: AbortSignal.timeout(10000),
   })
   const json = await res.json().catch(() => ({}))
   if (!res.ok) {
