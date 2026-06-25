@@ -21,8 +21,10 @@ import './payment-wavepay.mjs'
 import './messaging-resend.mjs'
 import './messaging-telegram.mjs'
 import './messaging-viber.mjs'
+import './messaging-line.mjs'
 import './messaging-facebook.mjs'
 import './messaging-whatsapp.mjs'
+import './payment-onepay.mjs'
 
 export * from './registry.mjs'
 export default registry
