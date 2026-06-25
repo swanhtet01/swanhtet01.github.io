@@ -8,11 +8,14 @@
 const API_URL = 'https://api.anthropic.com/v1/messages'
 const API_VERSION = '2023-06-01'
 
-// Model tiers — change the model here, every caller follows. Claude primary.
+// Model tiers — change the model here, every caller follows. Claude primary, with a cross-PROVIDER
+// fallback model (routed via OpenRouter) used only when Anthropic itself is unreachable, so a Claude
+// outage doesn't take down every build agent / Deal Desk / operator. fallbackModel is a NON-Anthropic
+// model on purpose (provider independence). Override per tier via env if needed.
 export const TIERS = {
-  bulk: { model: 'claude-haiku-4-5-20251001', maxTokens: 1024 }, // classification, extraction, cheap volume
-  reason: { model: 'claude-sonnet-4-6', maxTokens: 4096 }, // scoping, drafting — most work
-  deep: { model: 'claude-opus-4-8', maxTokens: 8192 }, // hard build reasoning
+  bulk: { model: 'claude-haiku-4-5-20251001', maxTokens: 1024, fallbackModel: process.env.SUPERMEGA_OR_MODEL_BULK || 'openai/gpt-4o-mini' }, // classification, extraction, cheap volume
+  reason: { model: 'claude-sonnet-4-6', maxTokens: 4096, fallbackModel: process.env.SUPERMEGA_OR_MODEL_REASON || 'openai/gpt-4o' }, // scoping, drafting — most work
+  deep: { model: 'claude-opus-4-8', maxTokens: 8192, fallbackModel: process.env.SUPERMEGA_OR_MODEL_DEEP || 'openai/gpt-4o' }, // hard build reasoning
 }
 const FALLBACK = { deep: 'reason', reason: 'bulk', bulk: null }
 
@@ -102,24 +105,91 @@ export async function monthlyUsageFor(clientId) {
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+const firstEnv = (names) => { for (const n of names) { const v = String(process.env[n] || '').trim(); if (v) return v } return '' }
+// Flatten an Anthropic-style message content (string | content-block[]) to plain text for OpenAI-shaped APIs.
+function flattenContent(content) {
+  if (typeof content === 'string') return content
+  if (Array.isArray(content)) return content.map((b) => (typeof b === 'string' ? b : b?.text || '')).join('\n')
+  return String(content ?? '')
+}
+function providerError(name, status, detail) {
+  const err = new Error(`${name}_${status}`)
+  err.status = status
+  err.detail = String(detail || '').slice(0, 200)
+  return err
+}
 
-async function callAnthropic(body, signal) {
-  const key = process.env.ANTHROPIC_API_KEY || process.env.CLAUDE_API_KEY
-  if (!key) throw new Error('gateway_missing_api_key')
-  const res = await fetch(API_URL, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', 'x-api-key': key, 'anthropic-version': API_VERSION },
-    body: JSON.stringify(body),
-    signal,
-  })
-  if (!res.ok) {
-    const detail = await res.text().catch(() => '')
-    const err = new Error(`anthropic_${res.status}`)
-    err.status = res.status
-    err.detail = detail
-    throw err
-  }
-  return res.json()
+// --- Provider adapters ----------------------------------------------------------------------------
+// Each adapter takes a normalized request and returns { text?, data?, usage:{input_tokens,output_tokens}, model }
+// or throws (err.status set for retry/failover classification; err.noKey=true → provider unavailable).
+
+const ANTHROPIC = {
+  name: 'anthropic',
+  available: () => Boolean(firstEnv(['ANTHROPIC_API_KEY', 'CLAUDE_API_KEY'])),
+  async call({ tierDef, system, messages, tool, maxTokens }, signal) {
+    const key = firstEnv(['ANTHROPIC_API_KEY', 'CLAUDE_API_KEY'])
+    if (!key) { const e = new Error('anthropic_no_key'); e.noKey = true; throw e }
+    const body = {
+      model: tierDef.model, max_tokens: maxTokens || tierDef.maxTokens, system, messages,
+      ...(tool ? { tools: [tool], tool_choice: { type: 'tool', name: 'emit' } } : {}),
+    }
+    const res = await fetch(API_URL, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-api-key': key, 'anthropic-version': API_VERSION },
+      body: JSON.stringify(body), signal,
+    })
+    if (!res.ok) throw providerError('anthropic', res.status, await res.text().catch(() => ''))
+    const json = await res.json()
+    if (tool) {
+      const block = (json.content || []).find((b) => b.type === 'tool_use' && b.name === 'emit')
+      if (!block) throw new Error('gateway_no_tool_output')
+      return { data: block.input, usage: json.usage, model: tierDef.model }
+    }
+    const text = (json.content || []).filter((b) => b.type === 'text').map((b) => b.text).join('').trim()
+    return { text, usage: json.usage, model: tierDef.model }
+  },
+}
+
+// OpenRouter — OpenAI-compatible, routes to a NON-Anthropic model so it survives a Claude outage.
+const OPENROUTER = {
+  name: 'openrouter',
+  available: () => Boolean(firstEnv(['OPENROUTER_API_KEY'])),
+  async call({ tierDef, system, messages, tool, maxTokens }, signal) {
+    const key = firstEnv(['OPENROUTER_API_KEY'])
+    if (!key) { const e = new Error('openrouter_no_key'); e.noKey = true; throw e }
+    const model = tierDef.fallbackModel
+    const oaMessages = [
+      ...(system ? [{ role: 'system', content: system }] : []),
+      ...messages.map((m) => ({ role: m.role, content: flattenContent(m.content) })),
+    ]
+    const body = {
+      model, max_tokens: maxTokens || tierDef.maxTokens, messages: oaMessages,
+      ...(tool ? { tools: [{ type: 'function', function: { name: 'emit', description: tool.description, parameters: tool.input_schema } }], tool_choice: { type: 'function', function: { name: 'emit' } } } : {}),
+    }
+    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${key}`, 'HTTP-Referer': 'https://supermega.dev', 'X-Title': 'SuperMega' },
+      body: JSON.stringify(body), signal,
+    })
+    if (!res.ok) throw providerError('openrouter', res.status, await res.text().catch(() => ''))
+    const json = await res.json()
+    const u = json.usage || {}
+    const usage = { input_tokens: u.prompt_tokens || 0, output_tokens: u.completion_tokens || 0 }
+    const msg = json.choices?.[0]?.message || {}
+    if (tool) {
+      const call = (msg.tool_calls || [])[0]
+      if (!call?.function?.arguments) throw new Error('gateway_no_tool_output')
+      let data; try { data = JSON.parse(call.function.arguments) } catch { throw new Error('gateway_bad_tool_json') }
+      return { data, usage, model }
+    }
+    return { text: String(msg.content || '').trim(), usage, model }
+  },
+}
+
+// Ordered provider chain — Anthropic primary, OpenRouter failover. Only providers with a key configured
+// are included, so with no OPENROUTER_API_KEY the behavior is identical to before (Anthropic-only).
+export function providerChain() {
+  return [ANTHROPIC, OPENROUTER].filter((p) => p.available())
 }
 
 /**
@@ -176,45 +246,45 @@ export async function complete(o) {
     ? { name: 'emit', description: 'Return the result in this exact shape.', input_schema: schema }
     : null
 
+  const startTier = tier
+  const providers = providerChain()
+  if (!providers.length) throw new Error('gateway_missing_api_key')
+
+  // Try each provider in turn (Anthropic, then OpenRouter failover). Within a provider, retry with
+  // exponential backoff + jitter on transient errors and drop a tier on a later attempt. When a
+  // provider is exhausted (or its auth is broken), fall over to the next provider in the chain.
   let lastErr
-  for (let attempt = 0; attempt < 4; attempt++) {
-    const t = TIERS[tier]
-    const controller = new AbortController()
-    const timer = setTimeout(() => controller.abort(), timeoutMs)
-    try {
-      const body = {
-        model: t.model,
-        max_tokens: maxTokens || t.maxTokens,
-        system,
-        messages,
-        ...(tool ? { tools: [tool], tool_choice: { type: 'tool', name: 'emit' } } : {}),
+  for (const provider of providers) {
+    let curTier = startTier
+    for (let attempt = 0; attempt < 4; attempt++) {
+      const tierDef = TIERS[curTier]
+      const controller = new AbortController()
+      const timer = setTimeout(() => controller.abort(), timeoutMs)
+      try {
+        const r = await provider.call({ tierDef, system, messages, tool, maxTokens }, controller.signal)
+        clearTimeout(timer)
+        await recordUsage(clientId, r.usage)
+        const out = tool
+          ? { data: r.data, usage: r.usage, model: r.model, tier: curTier, provider: provider.name }
+          : { text: r.text, usage: r.usage, model: r.model, tier: curTier, provider: provider.name }
+        cache.set(key, out)
+        if (store?.putCachedResponse) { try { await store.putCachedResponse(key, out) } catch { /* best-effort */ } }
+        return out
+      } catch (err) {
+        clearTimeout(timer)
+        lastErr = err
+        if (err.noKey) break // provider unusable → next provider
+        if (err.status === 401 || err.status === 403) break // this provider's auth is broken → next provider
+        // Other 4xx (bad request) is a request problem — failing over won't help.
+        if (err.status && err.status >= 400 && err.status < 500 && err.status !== 429) throw err
+        // Retriable (429 / 5xx / timeout / network): back off with jitter, drop a tier on a later try.
+        await sleep(400 * (attempt + 1) ** 2 + Math.floor(Math.random() * 250))
+        if (attempt === 2 && FALLBACK[curTier]) curTier = FALLBACK[curTier]
       }
-      const json = await callAnthropic(body, controller.signal)
-      clearTimeout(timer)
-      await recordUsage(clientId, json.usage)
-      let out
-      if (tool) {
-        const block = (json.content || []).find((b) => b.type === 'tool_use' && b.name === 'emit')
-        if (!block) throw new Error('gateway_no_tool_output')
-        out = { data: block.input, usage: json.usage, model: t.model, tier }
-      } else {
-        const text = (json.content || []).filter((b) => b.type === 'text').map((b) => b.text).join('').trim()
-        out = { text, usage: json.usage, model: t.model, tier }
-      }
-      cache.set(key, out)
-      if (store?.putCachedResponse) { try { await store.putCachedResponse(key, out) } catch { /* best-effort */ } }
-      return out
-    } catch (err) {
-      clearTimeout(timer)
-      lastErr = err
-      // Overloaded / rate-limited / timeout -> back off, then drop a tier on a later try.
-      const retriable = err.status === 429 || err.status === 503 || err.status === 529 || err.name === 'AbortError'
-      if (!retriable && err.status && err.status < 500) break
-      await sleep(400 * (attempt + 1) ** 2)
-      if (attempt === 2 && FALLBACK[tier]) tier = FALLBACK[tier]
     }
+    // provider exhausted → fall through to the next provider in the chain
   }
   throw lastErr || new Error('gateway_failed')
 }
 
-export default { complete, stripInjectionFrames, usageFor, monthlyUsageFor, TIERS }
+export default { complete, stripInjectionFrames, usageFor, monthlyUsageFor, providerChain, TIERS }
