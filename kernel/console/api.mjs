@@ -67,6 +67,17 @@ export async function handle({ method, path, query = {}, body = {}, headers = {}
           return ok({ ok: true, lead })
         } catch (e) { if (String(e.message) === 'leads_from_site') return bad(400, 'leads_from_site'); throw e }
       }
+      if (method === 'PATCH' && seg[1] && !seg[2]) {
+        const patch = {}
+        if (body.stage) patch.stage = String(body.stage).slice(0, 40)
+        if (body.contact != null) patch.contact = String(body.contact).slice(0, 200)
+        if (body.company != null) patch.company = String(body.company).slice(0, 200)
+        if (!Object.keys(patch).length) return bad(400, 'no_patchable_fields')
+        const lead = await store.updateLead(seg[1], patch)
+        if (!lead) return bad(404, 'lead_not_found')
+        if (patch.stage) log('pipeline', `Lead stage → ${patch.stage}`, seg[1])
+        return ok({ ok: true, lead })
+      }
       if (method === 'POST' && seg[1] && !seg[2] && query.action === 'convert') {
         const lead = await store.getLead(seg[1])
         if (!lead) return bad(404, 'lead_not_found')
