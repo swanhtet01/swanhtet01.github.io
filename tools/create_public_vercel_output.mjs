@@ -3374,7 +3374,7 @@ for (const filename of requiredPublicSiteJsonFiles) {
 }
 await mkdir(resolve(staticDir, 'site', 'shots'), { recursive: true })
 await mkdir(resolve(staticDir, 'site', 'social'), { recursive: true })
-for (const filename of ['supermega-portal-card.png', 'supermega-contact-qr.png']) {
+for (const filename of ['supermega-portal-card.png', 'supermega-contact-qr.png', 'swan-htet.jpg']) {
   await cp(resolve(root, 'showroom', 'public', 'social', filename), resolve(staticDir, 'site', 'social', filename), { force: true })
 }
 const publicShotCopies = [
