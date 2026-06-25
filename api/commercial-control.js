@@ -1,10 +1,17 @@
-﻿const datastore = require('./lib/supermega-datastore')
+﻿const crypto = require('crypto')
+const datastore = require('./lib/supermega-datastore')
+
+function safeEqual(a, b) {
+  const ha = crypto.createHash('sha256').update(String(a)).digest()
+  const hb = crypto.createHash('sha256').update(String(b)).digest()
+  return crypto.timingSafeEqual(ha, hb)
+}
 
 function json(res, statusCode, payload) {
   res.statusCode = statusCode
   res.setHeader('Content-Type', 'application/json; charset=utf-8')
   res.setHeader('Cache-Control', 'no-store')
-  res.setHeader('Access-Control-Allow-Origin', '*')
+  res.setHeader('Access-Control-Allow-Origin', process.env.SUPERMEGA_CONSOLE_URL || 'https://supermega.dev')
   res.end(JSON.stringify(payload))
 }
 
@@ -152,15 +159,15 @@ module.exports = async function handler(req, res) {
     return
   }
 
-  // Auth guard — always enforced; returns 401 if key not configured
+  // Auth guard — always enforced; fail-closed (503 if key not configured)
   const opsKey = process.env.SUPERMEGA_OPS_KEY
   if (!opsKey) {
-    json(res, 401, { status: 'error', reason: 'ops_key_not_configured' })
+    json(res, 503, { status: 'error', reason: 'ops_key_not_configured' })
     return
   }
   const authHeader = req.headers['authorization'] || ''
   const provided = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : ''
-  if (provided !== opsKey) {
+  if (!safeEqual(provided, opsKey)) {
     json(res, 401, { status: 'error', reason: 'unauthorized' })
     return
   }

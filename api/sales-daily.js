@@ -254,7 +254,7 @@ function leadAutopilotActions(lead = {}) {
     lead_id: leadId,
     task_id: taskId,
     run_id: null,
-    status: 'open',
+    status: 'queued',
     owner: envText('SUPERMEGA_SALES_NOTIFY_EMAIL', 'SUPERMEGA_CONTACT_NOTIFY_EMAIL') || defaultNotifyEmail,
     due_at: dueAt,
     evidence_url: '',

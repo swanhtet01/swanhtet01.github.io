@@ -2215,6 +2215,8 @@ ${unicornHeader}
           <a href="/products/">Products</a>
           <a href="/demo/">Demos</a>
           <a href="/offers/">Pricing</a>
+          <a href="/contact/">Contact</a>
+          <a href="/privacy/">Privacy</a>
           <a href="https://www.linkedin.com/in/theswanhtet" rel="noreferrer" target="_blank">LinkedIn</a>
         </span>
       </footer>
@@ -3691,7 +3693,7 @@ for (const detailDoc of productDetailDocs) {
   await writeFile(resolve(staticDir, 'products', detailDoc.slug, 'index.html'), normalizePublicProductNames(buildProductDetailHtml(detailDoc)), 'utf8')
 }
 
-// Offers / pricing — the revenue surface. Public "from" anchors (USD primary, MMK derived at the ~4,800 market rate).
+// Offers / pricing — the revenue surface. Public "from" prices in MMK only, read from pricing.json. Rate: 4,300 MMK/USD (canonical). No USD on public pages.
 const publicOffers = [
   {
     slug: 'tool-week', name: pricingServiceByKey['tool-week'].name, mmkDisplay: serviceMmk('tool-week'),
@@ -3744,6 +3746,8 @@ const publicOffersHtml = `<!doctype html>
     <meta property="og:url" content="https://supermega.dev/offers/" />
     <meta property="og:image" content="https://supermega.dev/site/social/supermega-portal-card.png" />
     <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Pricing — custom software, priced in MMK" />
+    <meta name="twitter:description" content="Clear starting prices for tools, dashboards, AI agents, and full systems. Built for Myanmar, yours to keep." />
     <meta name="twitter:image" content="https://supermega.dev/site/social/supermega-portal-card.png" />
     <style>${unicornShellStyle}
       .of-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px,1fr)); gap: 16px; margin-top: 24px; align-items: stretch; }

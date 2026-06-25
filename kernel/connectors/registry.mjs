@@ -86,7 +86,7 @@ async function probe(c, timeoutMs) {
       Promise.resolve().then(() => c.health()),
       new Promise((_, rej) => setTimeout(() => rej(new Error('health_timeout')), timeoutMs)),
     ])
-    return { ...base, ok: Boolean(r && r.ok), detail: (r && r.detail) || (r && r.ok ? 'ok' : 'unhealthy') }
+    return { ...base, ok: Boolean(r && r.ok), detail: (r && (r.detail || r.reason)) || (r && r.ok ? 'ok' : 'unhealthy') }
   } catch (e) {
     return { ...base, ok: false, detail: String((e && e.message) || 'health_error').slice(0, 160) }
   }

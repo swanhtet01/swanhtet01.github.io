@@ -391,7 +391,7 @@ function pipelineActionPayload(record) {
     lead_id: record.lead_id,
     task_id: record.task_id,
     action_type: 'lead_followup',
-    status: 'open',
+    status: 'queued',
     priority: record.lead_score >= 75 ? 'high' : record.lead_score >= 50 ? 'medium' : 'low',
     owner: record.owner || 'Revenue Pod',
     title: `Follow up ${record.company || record.name || record.email}`,
@@ -688,6 +688,7 @@ async function sendEmail({ record }) {
         html,
         ...(replyTo.includes('@') ? { reply_to: [replyTo] } : {}),
       }),
+      signal: AbortSignal.timeout(8000),
     })
 
     const bodyText = await response.text()
@@ -720,40 +721,45 @@ async function sendConfirmationEmail({ record }) {
     return { status: 'skipped', reason: 'confirmation_unavailable' }
   }
 
-  const response = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      from: fromCandidates()[0],
-      to: [record.email],
-      subject: 'SuperMega request received',
-      html: `
-        <div style="font-family:Arial,sans-serif;line-height:1.55;color:#0f172a">
-          <h2 style="margin:0 0 16px">We received your SuperMega request.</h2>
-          <p style="margin:0 0 12px">Hi ${escapeHtml(record.name)},</p>
-          <p style="margin:0 0 12px">Your request for ${escapeHtml(record.company)} was captured. We will reply by email with the next step.</p>
-          <p style="margin:0 0 12px"><strong>Lead:</strong> ${escapeHtml(record.lead_id)}</p>
-          <p style="margin:0">Best,<br/>SUPERMEGA.dev</p>
-        </div>
-      `,
-    }),
-  })
-
-  if (!response.ok) {
-    return { status: 'error', reason: `resend_${response.status}`, to: record.email }
-  }
-
-  const bodyText = await response.text()
-  let body = {}
   try {
-    body = bodyText ? JSON.parse(bodyText) : {}
+    const response = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        from: fromCandidates()[0],
+        to: [record.email],
+        subject: 'SuperMega request received',
+        html: `
+          <div style="font-family:Arial,sans-serif;line-height:1.55;color:#0f172a">
+            <h2 style="margin:0 0 16px">We received your SuperMega request.</h2>
+            <p style="margin:0 0 12px">Hi ${escapeHtml(record.name)},</p>
+            <p style="margin:0 0 12px">Your request for ${escapeHtml(record.company)} was captured. We will reply by email with the next step.</p>
+            <p style="margin:0 0 12px"><strong>Lead:</strong> ${escapeHtml(record.lead_id)}</p>
+            <p style="margin:0">Best,<br/>SUPERMEGA.dev</p>
+          </div>
+        `,
+      }),
+      signal: AbortSignal.timeout(8000),
+    })
+
+    if (!response.ok) {
+      return { status: 'error', reason: `resend_${response.status}`, to: record.email }
+    }
+
+    const bodyText = await response.text()
+    let body = {}
+    try {
+      body = bodyText ? JSON.parse(bodyText) : {}
+    } catch {
+      body = { raw: bodyText }
+    }
+    return { status: 'ready', email_id: text(body.id), to: record.email }
   } catch {
-    body = { raw: bodyText }
+    return { status: 'error', reason: 'confirmation_timeout', to: record.email }
   }
-  return { status: 'ready', email_id: text(body.id), to: record.email }
 }
 
 async function postLeadWebhook({ record }) {
@@ -773,6 +779,7 @@ async function postLeadWebhook({ record }) {
       method: 'POST',
       headers,
       body: JSON.stringify({ event: 'contact.created', record }),
+      signal: AbortSignal.timeout(8000),
     })
     await response.text()
     // Do not echo raw upstream webhook response back to the client.
