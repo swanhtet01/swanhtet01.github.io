@@ -2190,7 +2190,7 @@ ${unicornHeader}
             <div class="connector-chip">Notion</div>
             <div class="connector-chip">Shopify</div>
           </div>
-          <p class="connector-note">23 connectors wired in. Most clients start with two or three — that's enough to scope and build the first agent.</p>
+          <p class="connector-note">25 connectors wired in. Most clients start with two or three — that's enough to scope and build the first agent.</p>
         </section>
 
         <section class="section agent-proof">
@@ -2284,7 +2284,7 @@ const unicornPublicShellHtml = `<!doctype html>
     <meta name="twitter:title" content="Custom business software, built for Myanmar | SUPERMEGA.dev" />
     <meta name="twitter:description" content="Custom software built from your real data. From 2,500,000 MMK, delivered in weeks, yours to keep." />
     <meta name="twitter:image" content="https://supermega.dev/site/social/supermega-portal-card.png" />
-    <script type="application/ld+json">{"@context":"https://schema.org","@type":"Organization","name":"SUPERMEGA.dev","url":"https://supermega.dev/","logo":"https://supermega.dev/favicon.svg","description":"Custom business software at SaaS prices, AI-native, built for Myanmar SMBs and factories. POS, factory operations, dashboards, AI agents, and more.","email":"swanhtet@supermega.dev","telephone":"+95-9-500-0721","sameAs":["https://www.linkedin.com/in/theswanhtet"]}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"Organization","name":"SUPERMEGA.dev","url":"https://supermega.dev/","logo":"https://supermega.dev/favicon.svg","description":"Custom AI-native business software for Myanmar SMBs and factories. POS, factory operations, dashboards, AI agents, and more.","email":"swanhtet@supermega.dev","telephone":"+95-9-500-0721","sameAs":["https://www.linkedin.com/in/theswanhtet"]}</script>
     <style>${unicornShellStyle}
       /* Homepage extras */
       .proof-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px,1fr)); margin-top: 44px; border: 1px solid var(--line); border-radius: 18px; overflow: hidden; }
@@ -2390,9 +2390,9 @@ ${unicornHeader}
               <img class="founder-photo" src="/site/social/swan-htet.jpg" alt="Swan Htet — founder, SUPERMEGA.dev" loading="lazy" decoding="async" />
             </div>
             <div class="founder-copy">
-              <p class="founder-quote">"Your data isn't the problem. It's that it's still spread across three Viber groups, a shared Excel no one fully trusts, and one person's memory."</p>
-              <p>A Yangon manufacturer I work with had 300+ warranty claims buried in eighteen months of Gmail threads — no owner column, no days-open figure, no way to know what was overdue without opening every email. We pulled the export, structured it into a ledger with owner and days-open, and built a brief the ops team runs every Monday. Three weeks. One payment. They own it outright.</p>
-              <p>I work on one project at a time. Before I ask for a deposit, I send you the first useful screen built from your own data — so you can judge whether this is worth continuing before anything is decided. If that isn't immediately useful, we stop.</p>
+              <p class="founder-quote">"Most businesses I work with in Yangon already have a system. It's just running across a Viber group, a shared Excel no one fully trusts, and one person who holds the whole thing in their head."</p>
+              <p>Last year a manufacturer I know brought me a problem: 300+ warranty claims buried in 18 months of Gmail threads. No owner column, no days-open figure, no way to know what was overdue without reading every email. I pulled the full export, mapped it into a ledger with owner and days-open, and built a brief the ops team runs every Monday. Three weeks. One payment. They own it — no subscription, no vendor to call if something changes.</p>
+              <p>I'm Yangon-based and I work on one project at a time. Before I ask for any money, I show you the first useful screen built from your actual data. If it doesn't feel immediately worth it after that, we stop there.</p>
               <div class="founder-sig">
                 <strong>Swan Htet</strong>
                 <span>Founder, SUPERMEGA.dev</span>
@@ -3766,7 +3766,7 @@ ${unicornHeader}
           <div class="copy">
             <div class="eyebrow">Pricing</div>
             <h1>You own it. No per-seat bill, ever.</h1>
-            <p>Most Myanmar businesses run on foreign SaaS priced for someone else's workflow. We build the exact version that fits yours — and you keep it outright. Starting prices in MMK below; exact quote after one short call.</p>
+            <p>We build the exact version that fits how your business actually works — and you keep it outright. Starting prices in MMK below; exact quote after one short call.</p>
             <div class="cta">
               <a class="btn primary" href="/contact/?package=build">Get a quote</a>
               <a class="btn secondary" href="/demo/">See live demos</a>
