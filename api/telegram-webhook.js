@@ -142,10 +142,13 @@ module.exports = async function handler(req, res) {
     })
   }
 
-  // Verify webhook secret if configured
+  // Verify webhook secret — timing-safe comparison to prevent brute-force timing attacks
   if (webhookSecret) {
     const sigHeader = text(req.headers['x-telegram-bot-api-secret-token'])
-    if (sigHeader !== webhookSecret) {
+    const a = Buffer.from(sigHeader.padEnd(webhookSecret.length))
+    const b = Buffer.from(webhookSecret.padStart(sigHeader.length))
+    const safe = a.length === b.length && crypto.timingSafeEqual(a, b)
+    if (!safe) {
       json(res, 401, { status: 'error', reason: 'invalid_secret' })
       return
     }

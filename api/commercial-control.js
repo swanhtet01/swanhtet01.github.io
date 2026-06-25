@@ -152,15 +152,17 @@ module.exports = async function handler(req, res) {
     return
   }
 
-  // Auth guard — enforced only when SUPERMEGA_OPS_KEY is configured in env
+  // Auth guard — always enforced; returns 401 if key not configured
   const opsKey = process.env.SUPERMEGA_OPS_KEY
-  if (opsKey) {
-    const authHeader = req.headers['authorization'] || ''
-    const provided = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : ''
-    if (provided !== opsKey) {
-      json(res, 401, { status: 'error', reason: 'unauthorized' })
-      return
-    }
+  if (!opsKey) {
+    json(res, 401, { status: 'error', reason: 'ops_key_not_configured' })
+    return
+  }
+  const authHeader = req.headers['authorization'] || ''
+  const provided = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : ''
+  if (provided !== opsKey) {
+    json(res, 401, { status: 'error', reason: 'unauthorized' })
+    return
   }
 
   if (req.method !== 'GET') {

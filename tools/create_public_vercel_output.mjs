@@ -2125,8 +2125,8 @@ const unicornPublicShellHtml = `<!doctype html>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="robots" content="index,follow" />
-    <title>Custom business software, built for Myanmar | SUPERMEGA.dev</title>
-    <meta name="description" content="Custom software at SaaS prices — AI-native builds from 2,500,000 MMK for Myanmar shops, factories, and distributors. You own it. No per-seat fees. KBZPay, MMQR, offline-ready." />
+    <title>SUPERMEGA.dev — Custom Software for Myanmar Business</title>
+    <meta name="description" content="We build custom software for Myanmar factories, distributors, and service businesses — starting from your real data. From 2,500,000 MMK. Delivered in weeks. Yours to keep." />
     <meta name="theme-color" content="#f4efe6" />
     <link rel="canonical" href="https://supermega.dev/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" />
@@ -2165,11 +2165,25 @@ const unicornPublicShellHtml = `<!doctype html>
       .how-step span { display: block; margin-top: 7px; color: var(--muted); font-size: 14px; line-height: 1.5; }
       .hero-img { width: 100%; display: block; border-radius: 16px; border: 1px solid rgba(42,36,28,0.12); box-shadow: var(--shadow); background: #f5f1e8; }
       :root[data-theme="dark"] .hero-img { border-color: rgba(243,239,230,0.14); }
+      /* Founder section */
+      .founder-inner { display: grid; grid-template-columns: 220px 1fr; gap: 48px; align-items: start; }
+      .founder-photo-wrap { position: sticky; top: 24px; }
+      .founder-photo { width: 100%; border-radius: 16px; border: 1px solid rgba(42,36,28,0.12); box-shadow: var(--shadow); display: block; }
+      :root[data-theme="dark"] .founder-photo { border-color: rgba(243,239,230,0.14); }
+      .founder-quote { font-family: 'Fraunces', Georgia, serif; font-size: clamp(18px,2.2vw,22px); line-height: 1.45; color: var(--ink); font-style: italic; margin: 0 0 20px; border-left: 3px solid var(--blue); padding-left: 20px; }
+      .founder-copy p { color: var(--muted); line-height: 1.65; margin: 0 0 14px; }
+      .founder-sig { margin-top: 24px; display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
+      .founder-sig strong { font-size: 16px; letter-spacing: -0.02em; }
+      .founder-sig span { font-size: 14px; color: var(--muted); }
+      .founder-linkedin { font-size: 14px; font-weight: 600; color: var(--blue); text-decoration: none; }
+      .founder-linkedin:hover { text-decoration: underline; }
       @media (max-width: 880px) {
         .how-steps { grid-template-columns: 1fr 1fr; }
         .proof-strip { grid-template-columns: 1fr 1fr; }
         .proof-strip > div { border-right: 0; border-bottom: 1px solid var(--line); }
         .proof-strip > div:last-child { border-bottom: 0; }
+        .founder-inner { grid-template-columns: 1fr; gap: 28px; }
+        .founder-photo-wrap { position: static; max-width: 180px; }
       }
     </style>
   </head>
@@ -2179,13 +2193,13 @@ ${unicornHeader}
       <main>
         <section class="poster">
           <div class="copy">
-            <div class="eyebrow">AI-native · Myanmar-built · Yours to keep</div>
-            <h1>Custom software at SaaS prices.</h1>
-            <p>We build the exact software your business needs — not a generic SaaS product built for someone else. AI-native, made for how you actually work, and yours forever. No per-seat tax that grows when you hire.</p>
+            <div class="eyebrow">Extraction-first · Myanmar-built · Yours to keep</div>
+            <h1>Stop running your business on Viber.</h1>
+            <p>Most businesses we work with already have a system — it's spread across a group chat, a shared Excel, and someone's memory. We pull that out, structure it, and give you software you actually own. From 2,500,000 MMK. Delivered in weeks.</p>
             <div class="cta">
-              <a class="btn primary" href="/offers/">See pricing</a>
+              <a class="btn primary" href="/contact/">Share one workflow</a>
               <a class="btn secondary" href="/demo/">See live demos</a>
-              <a class="btn secondary" href="/contact/">Talk to us</a>
+              <a class="btn secondary" href="/offers/">See pricing</a>
             </div>
           </div>
           <aside class="product-stage" aria-label="DeskPOS live product — point-of-sale for Myanmar shops">
@@ -2270,6 +2284,24 @@ ${unicornHeader}
           </div>
         </section>
 
+        <section class="section founder-section" id="founder">
+          <div class="founder-inner">
+            <div class="founder-photo-wrap">
+              <img class="founder-photo" src="/social/swan-htet.jpg" alt="Swan Htet — founder, SUPERMEGA.dev" loading="lazy" decoding="async" />
+            </div>
+            <div class="founder-copy">
+              <p class="founder-quote">"Most of the businesses I work with already have a system — it's just spread across a Viber group, a shared Excel, and someone's memory."</p>
+              <p>A Yangon-based manufacturer came to me with 300+ warranty claims buried in a Gmail chain. No structure, no owner column, no way to see which ones were overdue. We extracted the whole thing, built a tracked ledger, and turned it into a weekly brief the ops team could actually act on. Took three weeks. The client owns it — no monthly SaaS fee.</p>
+              <p>That's the work. Send me the messiest thing in your business. We'll make it into a system — in MMK, in weeks, yours to keep.</p>
+              <div class="founder-sig">
+                <strong>Swan Htet</strong>
+                <span>Founder, SUPERMEGA.dev</span>
+                <a class="founder-linkedin" href="https://www.linkedin.com/in/theswanhtet" target="_blank" rel="noopener noreferrer">LinkedIn →</a>
+              </div>
+            </div>
+          </div>
+        </section>
+
         <section class="section">
           <div class="final">
             <div><h2>Tell us the one thing to fix first.</h2></div>
@@ -2281,7 +2313,7 @@ ${unicornHeader}
         </section>
       </main>
       <footer>
-        <span>SUPERMEGA.dev — custom business software at SaaS prices.</span>
+        <span>SUPERMEGA.dev — custom business software for Myanmar. Built from your real data.</span>
         <span class="footer-links">
           <a href="mailto:swanhtet@supermega.dev">swanhtet@supermega.dev</a>
           <a href="tel:+9595000721">+95 9 500 0721</a>
@@ -2893,8 +2925,16 @@ const config = {
       dest: '/api/campaign-clicks.js',
     },
     {
+      src: '^/api/commercial-control$',
+      dest: '/api/commercial-control.js',
+    },
+    {
       src: '^/api/commercial-control/status$',
       dest: '/api/commercial-control.js',
+    },
+    {
+      src: '^/api/telegram-webhook$',
+      dest: '/api/telegram-webhook.js',
     },
     {
       src: '^/api/pipeline-control/status$',
@@ -3777,7 +3817,7 @@ ${unicornHeader}
         </section>
       </main>
       <footer>
-        <span>SUPERMEGA.dev — custom business software at SaaS prices.</span>
+        <span>SUPERMEGA.dev — custom business software for Myanmar. Built from your real data.</span>
         <span class="footer-links">
           <a href="mailto:swanhtet@supermega.dev">swanhtet@supermega.dev</a>
           <a href="/products/">Products</a>
@@ -3826,6 +3866,7 @@ await writeNodeFunction('pipeline-control.js')
 await writeNodeFunction('checkout-start.js')
 await writeNodeFunction('product-activation.js')
 await writeNodeFunction('sales-daily.js')
+await writeNodeFunction('telegram-webhook.js')
 await writeNodeFunction('not-found.js')
 await writeNodeFunction('public-app-handoff.js')
 await removePrivateRootFunctions()

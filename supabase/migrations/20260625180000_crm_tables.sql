@@ -1,6 +1,7 @@
 -- SuperMega CRM + pipeline tables
 -- Apply in Supabase SQL editor: ojoeqrghsfvrvqlxjnnz.supabase.co
--- Safe to re-run (idempotent).
+-- NOTE: supermega_pipeline_actions is replaced (DROP + CREATE) to unify sales + Telegram schemas.
+-- This is safe on first run. On re-run it wipes queued actions — only re-run if you need to reset.
 
 -- 1. supermega_leads — one row per contact-form submission / qualified lead
 create table if not exists public.supermega_leads (
