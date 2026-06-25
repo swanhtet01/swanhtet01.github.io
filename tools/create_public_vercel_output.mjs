@@ -2457,6 +2457,8 @@ ${unicornHeader}
           <div style="border:1px solid var(--line);border-radius:28px;padding:clamp(22px,4vw,40px);background:linear-gradient(135deg, rgba(194,96,63,0.055), rgba(201,162,75,0.05));">
             <div class="eyebrow" style="color:#c2603f">The part global software can't copy</div>
             <h2 style="margin:8px 0 20px;max-width:20ch">One kernel. 36 connectors. Your data, structured.</h2>
+            <style>.lk-stage{margin:0 -6px}@media(max-width:680px){.lk-stage{overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:8px;scrollbar-width:thin}.lk-stage svg{min-width:600px}}</style>
+            <div class="lk-stage" role="group" aria-label="Scroll to view the full kernel diagram">
             <svg viewBox="0 0 960 400" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="lk-t lk-d" style="width:100%;height:auto;display:block;max-width:920px;margin:0 auto" font-family="Inter, system-ui, sans-serif">
               <title id="lk-t">The SUPERMEGA kernel: your data flows in, the kernel structures it, approved actions flow out</title>
               <desc id="lk-d">Data sources (Gmail, Viber, Drive, Sheets, Telegram) feed a central kernel of 36 connectors; approved actions flow out (KBZPay request, MMK total at the CBM rate, Viber alert, approval queue, audit-linked record). Myanmar-native rails are highlighted in gold.</desc>
@@ -2515,9 +2517,34 @@ ${unicornHeader}
                 <rect class="lk-pill" x="748" y="300" width="188" height="46" rx="23"/><text class="lk-pl" x="772" y="322">Audit-linked</text><text class="lk-ps" x="772" y="336">every number traceable</text>
               </g>
             </svg>
+            </div>
             <p style="max-width:64ch;color:var(--muted);line-height:1.6;margin:18px auto 0;text-align:center">SUPERMEGA reads the tools your team already uses, structures the work in one kernel, and acts only when you approve. <strong style="color:#9a7d2f">Myanmar-native rails — KBZPay, Wave, AYA, CB Pay, MMQR, the live CBM rate, and Viber — are built in. No global SaaS has them.</strong></p>
           </div>
         </section>
+
+        <style>
+          @media (prefers-reduced-motion: no-preference){
+            html.sm-js .section{opacity:0;transform:translateY(18px);transition:opacity .7s cubic-bezier(.2,.7,.2,1), transform .7s cubic-bezier(.2,.7,.2,1)}
+            html.sm-js .section.sm-in{opacity:1;transform:none}
+          }
+          .uvp-card,.how-step,.strip-item{transition:transform .2s ease, box-shadow .2s ease}
+          .uvp-card:hover,.how-step:hover{transform:translateY(-2px)}
+          a:focus-visible,.btn:focus-visible,button:focus-visible{outline:2px solid #c2603f;outline-offset:3px;border-radius:10px}
+        </style>
+        <script>
+          (function(){
+            var d=document, root=d.documentElement;
+            root.classList.add('sm-js');
+            function reveal(){
+              var secs=[].slice.call(d.querySelectorAll('.section'));
+              if(!('IntersectionObserver' in window)){secs.forEach(function(s){s.classList.add('sm-in')});return}
+              var io=new IntersectionObserver(function(es){es.forEach(function(en){if(en.isIntersecting){en.target.classList.add('sm-in');io.unobserve(en.target)}})},{threshold:.08,rootMargin:'0px 0px -8% 0px'});
+              secs.forEach(function(s){io.observe(s)});
+              setTimeout(function(){secs.forEach(function(s){s.classList.add('sm-in')})},1400);
+            }
+            if(d.readyState!=='loading')reveal();else d.addEventListener('DOMContentLoaded',reveal);
+          })();
+        </script>
 
         <section class="section">
           <h2>How it works</h2>
