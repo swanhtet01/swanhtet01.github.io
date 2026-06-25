@@ -2384,12 +2384,12 @@ ${unicornHeader}
         <section class="poster">
           <div class="copy">
             <div class="eyebrow">What we build</div>
-            <h1>Systems we build, shaped to your work.</h1>
-            <p>We're a custom studio — there's no fixed catalog. DeskPOS is live to try right now; everything else we build to fit how you actually work. Tell us the one thing to fix first.</p>
+            <h1>Built for Myanmar. Yours to keep.</h1>
+            <p>We're a custom studio — no fixed catalog. Pick one workflow that's hurting you right now. We return the first working screen before you approve anything bigger. KBZPay · MMQR · offline-ready out of the box.</p>
             <div class="cta">
-              <a class="btn primary" href="/offers/">See pricing</a>
+              <a class="btn primary" href="/contact/">Tell us what to fix</a>
               <a class="btn secondary" href="/demo/">See live demos</a>
-              <a class="btn secondary" href="/contact/">Talk to us</a>
+              <a class="btn secondary" href="/offers/">Pricing</a>
             </div>
           </div>
           <aside class="product-stage">
