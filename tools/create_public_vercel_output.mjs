@@ -3356,10 +3356,14 @@ const config = {
       dest: '/machine/index.html',
     },
     {
-      // /ai-agents/ retired — redirect to Products (AI Operator lives there now).
+      // /ai-agents/ serves its real page (kernel story + connector catalogue + Myanmar-rails moat).
+      // Un-retired 2026-06-26: the page is generated, nav-linked sitewide, in the sitemap, and
+      // self-canonical, so the prior 308->/products/ left all those signals pointing at a redirect
+      // (flagged high-severity by live QA). Serving the page resolves it in the value-preserving
+      // direction. NOTE for Technical: if full retirement was intended instead, revert this and also
+      // drop the /ai-agents/ nav link + sitemap entry + self-canonical so the signals agree.
       src: '^/ai-agents/?$',
-      status: 308,
-      headers: { Location: '/products/' },
+      dest: '/ai-agents/index.html',
     },
     {
       src: '^/pricing/?$',
