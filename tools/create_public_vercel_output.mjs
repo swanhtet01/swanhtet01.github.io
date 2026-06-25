@@ -1091,7 +1091,7 @@ function renderPublicPricingHtml() {
             <p>Send one real source. We map the first useful app, the owner decision, the safety boundary, and the acceptance test.</p>
             <div class="cta">
               <a class="btn primary" href="/contact/?source=start-page">Send a source</a>
-              <a class="btn secondary" href="viber://chat?number=%2B9595000721" style="background:#7360F2;border-color:#5b46d6;color:#fff" aria-label="Chat with us on Viber">Chat on Viber</a>
+              <a class="btn secondary" href="viber://chat?number=%2B9595000721" aria-label="Chat with us on Viber">Chat on Viber</a>
               <a class="btn secondary" href="/products/">See products</a>
             </div>
           </div>
@@ -1177,7 +1177,7 @@ const publicCardHtml = `<!doctype html>
       .actions { display: flex; flex-wrap: wrap; gap: 10px; }
       .button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 50px; border-radius: 999px; padding: 0 22px; font-weight: 900; font-size: 15px; }
       .button.primary { background: linear-gradient(135deg, var(--clay), #a84e30); color: #fff; box-shadow: 0 18px 44px rgba(194,96,63,0.3); }
-      .button.viber { background: #7360F2; color: #fff; box-shadow: 0 18px 44px rgba(115,96,242,0.28); }
+      .button.viber { background: var(--blue, #c2603f); color: #fff; box-shadow: 0 18px 44px rgba(194,96,63,0.28); }
       .button.secondary { border: 1px solid var(--line); background: var(--paper); color: var(--ink); }
       @media (max-width: 760px) { body { padding: 14px; } .card { flex-direction: column; text-align: center; align-items: center; min-height: calc(100svh - 28px); padding: 38px 26px; gap: 22px; border-radius: 32px; } .content { display: flex; flex-direction: column; align-items: center; } .details a, .pitch { margin-left: auto; margin-right: auto; } .actions { justify-content: center; } .qr, .qr-label { display: none; } }
     </style>
@@ -2417,7 +2417,7 @@ ${unicornHeader}
             <p>Most businesses we work with already have a system — it's spread across a group chat, a shared Excel, and someone's memory. We pull that out, structure it, and give you software you actually own. From 2,500,000 MMK. Delivered in weeks.</p>
             <div class="cta">
               <a class="btn primary" href="/contact/">Share one workflow</a>
-              <a class="btn secondary" href="viber://chat?number=%2B9595000721" style="background:#7360F2;border-color:#5b46d6;color:#fff" aria-label="Chat with us on Viber">Chat on Viber</a>
+              <a class="btn secondary" href="viber://chat?number=%2B9595000721" aria-label="Chat with us on Viber">Chat on Viber</a>
               <a class="btn secondary" href="/demo/">See live demos</a>
               <a class="btn secondary" href="/offers/">See pricing</a>
             </div>
@@ -2826,7 +2826,7 @@ ${unicornHeader}
         <section aria-label="Direct contact options" style="margin-top:32px;padding-top:24px;border-top:1px solid var(--line)">
           <p style="font-size:13px;color:var(--muted);margin:0 0 14px;font-weight:850;letter-spacing:0.08em;text-transform:uppercase">Or reach us directly</p>
           <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center">
-            <a href="viber://chat?number=%2B9595000721" style="display:inline-flex;align-items:center;gap:8px;background:#7360F2;border:1px solid #5b46d6;color:#fff;padding:11px 18px;border-radius:12px;font-size:15px;font-weight:850;text-decoration:none;letter-spacing:-0.01em" aria-label="Chat on Viber">
+            <a href="viber://chat?number=%2B9595000721" style="display:inline-flex;align-items:center;gap:8px;background:transparent;border:1px solid var(--line);color:var(--ink);padding:11px 18px;border-radius:12px;font-size:15px;font-weight:850;text-decoration:none;letter-spacing:-0.01em" aria-label="Chat on Viber">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 0C5.376 0 0 5.376 0 12s5.376 12 12 12 12-5.376 12-12S18.624 0 12 0zm5.568 16.8c-.24.576-.96 1.056-1.608 1.2-.432.096-.984.168-2.856-.624-2.4-.984-3.936-3.432-4.056-3.6-.12-.168-.984-1.32-.984-2.52s.624-1.776 1.2-1.776c.216 0 .624.024.84.576.144.36.384.984.432 1.128.12.288.024.624-.12.84l-.384.48c-.12.168-.24.36-.12.696.576 1.44 1.872 2.376 3.48 3.024.264.096.456.048.624-.144l.528-.624c.192-.24.432-.264.696-.168.648.264 1.56.648 1.8.744.288.12.48.168.528.288.048.192.048.864-.192 1.296zm.12-4.848c-.072 0-.12-.024-.12-.096-.264-2.952-2.496-5.136-5.424-5.4-.072-.024-.12-.072-.12-.144v-.528c0-.072.048-.12.12-.12 3.336.288 5.976 2.904 6.264 6.168 0 .072-.048.12-.12.12h-.6zm-1.464-1.584c-.072 0-.144-.024-.144-.12-.216-1.68-1.536-3-3.216-3.24-.072 0-.12-.072-.12-.144v-.528c0-.072.048-.12.12-.12 2.016.264 3.624 1.848 3.888 3.864 0 .072-.048.12-.12.12h-.408zm-1.272-1.584c-.072 0-.12-.048-.12-.12-.144-.792-.768-1.416-1.56-1.56-.072-.024-.12-.072-.12-.144v-.528c0-.072.048-.12.12-.12 1.128.168 2.016 1.032 2.184 2.16 0 .072-.048.12-.12.12h-.384z"/></svg>
               Chat on Viber
             </a>
@@ -3843,7 +3843,7 @@ ${unicornHeader}
             <p>We build the exact version that fits how your business actually works — and you keep it outright. One payment, no ongoing vendor fees. Starting prices in MMK; final quote after one short call.</p>
             <div class="cta">
               <a class="btn primary" href="/contact/?package=build">Get a quote</a>
-              <a class="btn secondary" href="viber://chat?number=%2B9595000721" style="background:#7360F2;border-color:#5b46d6;color:#fff" aria-label="Chat with us on Viber">Chat on Viber</a>
+              <a class="btn secondary" href="viber://chat?number=%2B9595000721" aria-label="Chat with us on Viber">Chat on Viber</a>
               <a class="btn secondary" href="/demo/">See live demos</a>
             </div>
             <p class="hero-tagline">Cast real work into software.</p>
