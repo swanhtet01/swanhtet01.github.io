@@ -5,15 +5,17 @@
     "api/stripe-webhook.mjs": { "maxDuration": 15 },
     "api/kbzpay-notify.mjs": { "maxDuration": 10 },
     "api/wavepay-notify.mjs": { "maxDuration": 10 },
-    "api/status.mjs": { "maxDuration": 10 }
+    "api/status.mjs": { "maxDuration": 10 },
+    "api/operator.mjs": { "maxDuration": 45 }
   },
   "routes": [
     { "src": "/api/stripe-webhook", "dest": "/api/stripe-webhook" },
     { "src": "/api/kbzpay-notify", "dest": "/api/kbzpay-notify" },
     { "src": "/api/wavepay-notify", "dest": "/api/wavepay-notify" },
     { "src": "/api/status", "dest": "/api/status" },
+    { "src": "/api/operator", "dest": "/api/operator" },
     { "src": "/api/(.*)", "dest": "/api/index" },
-    { "src": "/status", "dest": "/public/status.html" },
+    { "src": "/status", "dest": "/status.html" },
     { "src": "/(.*)", "dest": "/public/$1" }
   ]
 }
