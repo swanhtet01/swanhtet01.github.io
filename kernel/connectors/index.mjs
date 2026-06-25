@@ -39,6 +39,11 @@ import './ai-gemini.mjs'
 import './ai-openai.mjs'
 import './infra-http.mjs'
 import './data-airtable.mjs'
+import './ai-anthropic.mjs'
+import './ai-openrouter.mjs'
+import './messaging-discord.mjs'
+import './commerce-woocommerce.mjs'
+import './data-hubspot.mjs'
 
 export * from './registry.mjs'
 export default registry

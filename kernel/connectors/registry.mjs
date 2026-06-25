@@ -23,8 +23,10 @@
 // NOTE: keep this in sync with any connector's `category`. A connector declaring a
 // category NOT in this list throws connector_bad_category at register() time, which runs
 // at import — taking down the ENTIRE registry and /api/integrations (the whole console
-// API). 'commerce' was added for commerce-shopify; 'integration' for integration-webhook.
-export const CATEGORIES = ['payment', 'messaging', 'data', 'ai', 'integration', 'commerce']
+// API). 'commerce' was added for commerce-shopify; 'integration' for integration-webhook;
+// 'infra' for infra-http (whose 'infra' category was previously missing here, which threw
+// at import and broke the whole registry — added 2026-06-26).
+export const CATEGORIES = ['payment', 'messaging', 'data', 'ai', 'integration', 'commerce', 'infra']
 
 const registry = new Map() // key -> Connector
 
