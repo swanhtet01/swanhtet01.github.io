@@ -67,24 +67,28 @@ async function stripe(method, path, params, idempotencyKey) {
  * @returns {Promise<{ id:string, url:string, ref:string|null }>}
  */
 export async function createCheckout({ amount, currency = 'usd', ref = null, description } = {}) {
-  if (!configured()) throw new Error('stripe_not_configured')
+  if (!configured()) return { ok: false, reason: 'stripe_not_configured' }
   const cents = Math.round(Number(amount) * 100)
-  if (!Number.isFinite(cents) || cents <= 0) throw new Error('stripe_bad_amount')
-  const params = {
-    mode: 'payment',
-    success_url: process.env.STRIPE_SUCCESS_URL || 'https://supermega.dev/thanks?session_id={CHECKOUT_SESSION_ID}',
-    cancel_url: process.env.STRIPE_CANCEL_URL || 'https://supermega.dev/offers',
-    'line_items[0][quantity]': 1,
-    'line_items[0][price_data][currency]': currency,
-    'line_items[0][price_data][unit_amount]': cents,
-    'line_items[0][price_data][product_data][name]': description || (ref ? `SuperMega ${ref}` : 'SuperMega'),
+  if (!Number.isFinite(cents) || cents <= 0) return { ok: false, reason: 'stripe_bad_amount' }
+  try {
+    const params = {
+      mode: 'payment',
+      success_url: process.env.STRIPE_SUCCESS_URL || 'https://supermega.dev/thanks?session_id={CHECKOUT_SESSION_ID}',
+      cancel_url: process.env.STRIPE_CANCEL_URL || 'https://supermega.dev/offers',
+      'line_items[0][quantity]': 1,
+      'line_items[0][price_data][currency]': currency,
+      'line_items[0][price_data][unit_amount]': cents,
+      'line_items[0][price_data][product_data][name]': description || (ref ? `SuperMega ${ref}` : 'SuperMega'),
+    }
+    if (ref) params['metadata[ref]'] = String(ref).slice(0, 200)
+    // Idempotent on ref+amount+currency so a double-click reuses the session, but a RE-PRICED ref
+    // (changed amount) yields a NEW session instead of Stripe replaying/erroring on the old amount.
+    const idem = ref ? `checkout_${ref}_${cents}_${currency}` : `checkout_${crypto.randomUUID()}`
+    const session = await stripe('POST', '/checkout/sessions', params, idem)
+    return { ok: true, id: session.id, url: session.url, ref }
+  } catch (e) {
+    return { ok: false, reason: String(e?.message || 'stripe_checkout_error').slice(0, 200) }
   }
-  if (ref) params['metadata[ref]'] = String(ref).slice(0, 200)
-  // Idempotent on ref+amount+currency so a double-click reuses the session, but a RE-PRICED ref
-  // (changed amount) yields a NEW session instead of Stripe replaying/erroring on the old amount.
-  const idem = ref ? `checkout_${ref}_${cents}_${currency}` : `checkout_${crypto.randomUUID()}`
-  const session = await stripe('POST', '/checkout/sessions', params, idem)
-  return { id: session.id, url: session.url, ref }
 }
 
 // Tracks webhook event ids we've already processed (per warm instance) so re-deliveries are no-ops.

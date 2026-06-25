@@ -198,8 +198,8 @@ module.exports = async function handler(req, res) {
     const msgText = text(message.text)
     const msgId = message.message_id
 
-    // Whitelist: only respond to the configured owner chat
-    if (ownerChatId && chatId !== ownerChatId && fromId !== ownerChatId) return
+    // Whitelist: check chat ID only — fromId is the sender, not the room
+    if (ownerChatId && chatId !== ownerChatId) return
 
     const { intent, args } = parseIntent(msgText)
 

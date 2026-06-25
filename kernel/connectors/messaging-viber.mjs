@@ -75,12 +75,12 @@ export const messagingViber = {
   docs: 'kernel/connectors/messaging-viber.mjs',
   configured: configuredFn,
   async health() {
-    if (!configured()) return { ok: false, configured: false, reason: 'missing VIBER_AUTH_TOKEN' }
+    if (!configured()) return { ok: false, detail: 'missing VIBER_AUTH_TOKEN' }
     try {
       const info = await viber('get_account_info', {})
-      return { ok: true, configured: true, name: info?.name || botName(), uri: info?.uri || '' }
+      return { ok: true, name: info?.name || botName(), uri: info?.uri || '' }
     } catch (e) {
-      return { ok: false, configured: true, reason: String(e.message || 'viber_error').slice(0, 160) }
+      return { ok: false, detail: String(e.message || 'viber_error').slice(0, 160) }
     }
   },
   send,
