@@ -2189,6 +2189,9 @@ ${unicornHeader}
             <div class="connector-chip">Microsoft Teams</div>
             <div class="connector-chip">Notion</div>
             <div class="connector-chip">Shopify</div>
+            <div class="connector-chip">LINE Notify</div>
+            <div class="connector-chip">AYA Pay</div>
+            <div class="connector-chip">CB Pay</div>
           </div>
           <p class="connector-note">25 connectors wired in. Most clients start with two or three — that's enough to scope and build the first agent.</p>
         </section>
