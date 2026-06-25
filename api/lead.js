@@ -31,6 +31,28 @@ function leadId() {
   return 'LEAD-' + crypto.randomBytes(5).toString('hex').toUpperCase()
 }
 
+// Denial-of-wallet guard: this endpoint calls a paid AI API, so throttle per client IP.
+// Best-effort (per-instance) — pair with a Vercel WAF/Redis rule for a hard cross-instance cap.
+const RL_WINDOW_MS = 15 * 60 * 1000
+const RL_MAX = 12
+const rlStore = (globalThis.__supermegaLeadRL = globalThis.__supermegaLeadRL || new Map())
+function clientIp(request) {
+  // Prefer x-real-ip (Vercel's trusted client IP). XFF left-most is client-spoofable, so if we must
+  // use XFF take the LAST hop (closest to the platform), never xff[0].
+  const xri = String(request.headers['x-real-ip'] || '').trim()
+  if (xri) return xri
+  const xff = String(request.headers['x-forwarded-for'] || '').split(',').map((s) => s.trim()).filter(Boolean)
+  return xff.length ? xff[xff.length - 1] : 'unknown'
+}
+function rateLimited(ip) {
+  const now = Date.now()
+  const rec = rlStore.get(ip)
+  if (!rec || now > rec.reset) { rlStore.set(ip, { count: 1, reset: now + RL_WINDOW_MS }); return false }
+  rec.count += 1
+  if (rlStore.size > 5000) { for (const [k, v] of rlStore) if (now > v.reset) rlStore.delete(k) }
+  return rec.count > RL_MAX
+}
+
 async function aiScope(workflow, name, company) {
   const key = process.env.ANTHROPIC_API_KEY
   if (!key) return null
@@ -111,6 +133,11 @@ module.exports = async function handler(request, response) {
   setCors(response, origin)
   if (request.method === 'OPTIONS') { response.status(204).end(); return }
   if (request.method !== 'POST') { response.status(405).json({ error: 'POST only' }); return }
+
+  // Reject cross-site abuse: a present-but-disallowed Origin is a browser request from a page we don't
+  // control. (Non-browser callers send no Origin → bounded by the per-IP rate limit below.)
+  if (origin && !isAllowedOrigin(origin)) { response.status(403).json({ ok: false, error: 'forbidden_origin' }); return }
+  if (rateLimited(clientIp(request))) { response.status(429).json({ ok: false, error: 'rate_limited' }); return }
 
   let body
   try {

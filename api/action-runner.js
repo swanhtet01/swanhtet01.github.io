@@ -140,6 +140,13 @@ async function dispatchDraftReply(sb, row) {
 }
 
 async function dispatchSendReply(sb, row) {
+  // Human-in-the-loop guarantee: send_reply NEVER auto-sends. It dispatches an outbound email to a
+  // lead ONLY when the action row was explicitly approved (the approval flow must set
+  // approval_state='approved'). An unapproved row — e.g. one queued straight from a Telegram message —
+  // is skipped, never sent. This closes the "Telegram message → autonomous email" vector.
+  const approved = row.approval_state === 'approved' || row.approved === true || Boolean(row.approved_at)
+  if (!approved) return { status: 'skipped', reason: 'awaiting_approval' }
+
   const apiKey = text(process.env.RESEND_API_KEY)
   if (!apiKey) return { status: 'skipped', reason: 'resend_not_configured' }
 
@@ -259,13 +266,8 @@ async function processRow(sb, row) {
 }
 
 module.exports = async function handler(req, res) {
-  const sb = supabase()
-  if (!sb) {
-    json(res, 200, { status: 'blocked', reason: 'supabase_not_configured' })
-    return
-  }
-
-  // Auth
+  // Auth FIRST — never leak backend-config state (e.g. "supabase_not_configured") to an
+  // unauthenticated caller. The auth gate must be the first thing every request hits.
   const authHeader = text(req.headers['authorization'])
   const provided = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : ''
 
@@ -291,6 +293,13 @@ module.exports = async function handler(req, res) {
     }
   } else {
     json(res, 405, { status: 'error', reason: 'method_not_allowed' })
+    return
+  }
+
+  // Backend-config check AFTER auth, so anonymous callers can't probe whether Supabase is configured.
+  const sb = supabase()
+  if (!sb) {
+    json(res, 200, { status: 'blocked', reason: 'supabase_not_configured' })
     return
   }
 

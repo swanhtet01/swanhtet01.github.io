@@ -210,8 +210,11 @@ module.exports = async function handler(req, res) {
     const msgText = text(message.text)
     const msgId = message.message_id
 
-    // Whitelist: check chat ID only — fromId is the sender, not the room
-    if (ownerChatId && chatId !== ownerChatId) return
+    // Whitelist (defense-in-depth on top of the webhook-secret check): the configured owner chat is
+    // REQUIRED. Fail CLOSED when TELEGRAM_CHAT_ID is unset — otherwise any chat that learned the webhook
+    // secret could queue actions. (send_reply is additionally gated on explicit approval in action-runner.)
+    if (!ownerChatId) { console.warn('[telegram-webhook] TELEGRAM_CHAT_ID unset — refusing to process (fail-closed)'); return }
+    if (chatId !== ownerChatId) return
 
     const { intent, args } = parseIntent(msgText)
 
