@@ -360,6 +360,7 @@ function leadLedgerPayload(record) {
     source: record.source,
     name: record.name,
     email: record.email,
+    phone: record.phone,
     company: record.company,
     workflow: record.workflow,
     requested_package: record.requested_package,

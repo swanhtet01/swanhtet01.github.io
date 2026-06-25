@@ -11,6 +11,7 @@ create table if not exists public.supermega_leads (
   source          text not null default 'website',
   name            text,
   email           text,
+  phone           text,
   company         text,
   workflow        text,
   requested_package text,
