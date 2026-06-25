@@ -1091,6 +1091,7 @@ function renderPublicPricingHtml() {
             <p>Send one real source. We map the first useful app, the owner decision, the safety boundary, and the acceptance test.</p>
             <div class="cta">
               <a class="btn primary" href="/contact/?source=start-page">Send a source</a>
+              <a class="btn secondary" href="viber://chat?number=%2B9595000721" style="background:#7360F2;border-color:#5b46d6;color:#fff" aria-label="Chat with us on Viber">Chat on Viber</a>
               <a class="btn secondary" href="/products/">See products</a>
             </div>
           </div>
@@ -1362,7 +1363,7 @@ const unicornShellStyle = `
       .screen-row span { color: var(--muted); font-size: 12px; font-weight: 850; }
       .screen-row em { border-radius: 999px; padding: 6px 9px; background: #07111f; color: #fff; font-style: normal; font-size: 11px; }
       .product-ui { display: grid; gap: 14px; aspect-ratio: 16 / 10.4; padding: clamp(18px, 3vw, 30px); background: radial-gradient(circle at top right, rgba(217,119,87,.16), transparent 34%), linear-gradient(135deg, #fffaf0, #f6efe4); color: var(--ink); }
-      .product-ui.dark { background: radial-gradient(circle at top right, rgba(60,220,185,.22), transparent 32%), linear-gradient(135deg, #081522, #132033); color: #f8fbff; }
+      .product-ui.dark { background: radial-gradient(circle at top right, rgba(217,119,87,.20), transparent 38%), linear-gradient(135deg, #221c17, #2c2620); color: #f8f4ec; }
       .product-ui.retail { background: radial-gradient(circle at top right, rgba(255,184,80,.24), transparent 34%), linear-gradient(135deg, #fff8eb, #f5fbff); }
       .app-frame { display: grid; grid-template-rows: auto 1fr; gap: 14px; height: 100%; min-height: 0; }
       .app-topbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; border: 1px solid rgba(13,17,23,.10); border-radius: 18px; padding: 10px 12px; background: rgba(255,255,255,.72); }
@@ -2412,6 +2413,7 @@ ${unicornHeader}
           <div class="copy">
             <div class="eyebrow">Starts from your real data · Built to last · Yours to keep</div>
             <h1>Your real work, turned into software.</h1>
+            <p lang="my" style="font-size:clamp(15px,2vw,18px);color:var(--clay);font-weight:800;margin:2px 0 14px;line-height:1.5">သင်လုပ်နေတဲ့ အလုပ်ကို သင်ပိုင်ဆိုင်တဲ့ ဆော့ဖ်ဝဲဖြစ်အောင် တည်ဆောက်ပေးပါတယ်။</p>
             <p>Most businesses we work with already have a system — it's spread across a group chat, a shared Excel, and someone's memory. We pull that out, structure it, and give you software you actually own. From 2,500,000 MMK. Delivered in weeks.</p>
             <div class="cta">
               <a class="btn primary" href="/contact/">Share one workflow</a>
@@ -2475,7 +2477,7 @@ ${unicornHeader}
         <section class="section founder-section" id="founder">
           <div class="founder-inner">
             <div class="founder-photo-wrap">
-              <img class="founder-photo" src="/site/social/swan-htet.jpg" alt="Swan Htet — founder, SUPERMEGA.dev" loading="lazy" decoding="async" />
+              <img class="founder-photo" src="/site/social/swan-htet.jpg" alt="Swan Htet — founder, SUPERMEGA.dev" width="220" height="220" loading="lazy" decoding="async" />
             </div>
             <div class="founder-copy">
               <p class="founder-quote">"Every Myanmar business I've sat with has the same look when I ask them how they track their warranty claims — or their orders, or their suppliers. A slight pause, then: 'We have a system.' And they do. It's just split across a Viber group, a notebook on someone's desk, and one person who would be impossible to replace if they ever left."</p>
@@ -2524,13 +2526,13 @@ const unicornProductsHtml = `<!doctype html>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="robots" content="index,follow" />
     <title>Products | SUPERMEGA.dev</title>
-    <meta name="description" content="SUPERMEGA.dev products for Myanmar shops, factories, and restaurants: DeskPOS, Factory Operations, Document Extraction Ledger, and the Back Office AI Desk — built from your real data." />
+    <meta name="description" content="SUPERMEGA.dev products for Myanmar shops, factories, and restaurants: DeskPOS, the Factory & Operations App, and Custom Solutions & AI Agents — built from your real data." />
     <meta name="theme-color" content="#f4efe6" />
     <link rel="canonical" href="https://supermega.dev/products/" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="SUPERMEGA.dev" />
     <meta property="og:title" content="SUPERMEGA.dev products — software for Myanmar shops, factories, and restaurants" />
-    <meta property="og:description" content="DeskPOS, Factory Operations, the Document Extraction Ledger, and the Back Office AI Desk — built from real work." />
+    <meta property="og:description" content="DeskPOS, the Factory & Operations App, and Custom Solutions & AI Agents — built from real work." />
     <meta property="og:url" content="https://supermega.dev/products/" />
     <meta property="og:image" content="https://supermega.dev/site/social/supermega-portal-card.png" />
     <meta name="twitter:card" content="summary_large_image" />
@@ -2816,6 +2818,7 @@ ${unicornHeader}
             <input autocomplete="off" name="website" style="display:none" tabindex="-1" />
             <button type="submit">Send request</button>
             <p class="policy">No account or data connection before you approve the first step.</p>
+            <p class="policy" style="border-top:1px solid var(--line);margin-top:10px;padding-top:10px"><strong style="color:var(--clay)">14-day money-back guarantee.</strong> KBZPay · AYA Pay · Wave Money · bank transfer. 50% deposit, fully refundable.</p>
             <p class="form-status" data-lead-status aria-live="polite"></p>
             <div class="next-card" data-next-card hidden><strong>Saved</strong><span>We review the workflow and reply with the first app to build. Nothing changes without approval.</span></div>
           </form>
@@ -3840,6 +3843,7 @@ ${unicornHeader}
             <p>We build the exact version that fits how your business actually works — and you keep it outright. One payment, no ongoing vendor fees. Starting prices in MMK; final quote after one short call.</p>
             <div class="cta">
               <a class="btn primary" href="/contact/?package=build">Get a quote</a>
+              <a class="btn secondary" href="viber://chat?number=%2B9595000721" style="background:#7360F2;border-color:#5b46d6;color:#fff" aria-label="Chat with us on Viber">Chat on Viber</a>
               <a class="btn secondary" href="/demo/">See live demos</a>
             </div>
             <p class="hero-tagline">Cast real work into software.</p>
@@ -4032,6 +4036,7 @@ const unicornPrivacyHtml = `<!doctype html>
   <title>Privacy Policy | SUPERMEGA.dev</title>
   <meta name="description" content="SUPERMEGA.dev privacy policy — how we handle your data when you contact us or use our software." />
   ${unicornSocialMeta({ title: 'Privacy Policy | SUPERMEGA.dev', description: 'How SUPERMEGA.dev handles your data when you contact us or use our software.', url: 'https://supermega.dev/privacy/' })}
+  <link rel="canonical" href="https://supermega.dev/privacy/" />
   <meta name="theme-color" content="#f4efe6" />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" />
   <style>${unicornShellStyle}</style>
