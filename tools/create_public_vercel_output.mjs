@@ -2403,7 +2403,7 @@ const unicornProductsHtml = `<!doctype html>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="robots" content="index,follow" />
     <title>Products | SUPERMEGA.dev</title>
-    <meta name="description" content="SUPERMEGA.dev products for Myanmar shops, factories, and restaurants: DeskPOS (KBZPay/MMQR, offline), Factory Operations, the Document Extraction Ledger, and the Back Office Workflow Desk — built from real work." />
+    <meta name="description" content="SUPERMEGA.dev products for Myanmar shops, factories, and restaurants: DeskPOS, Factory Operations, Document Extraction Ledger, and the Back Office Workflow Desk — built from your real data." />
     <meta name="theme-color" content="#f4efe6" />
     <link rel="canonical" href="https://supermega.dev/products/" />
     <meta property="og:type" content="website" />
@@ -2496,7 +2496,7 @@ ${unicornHeader}
           <div class="copy">
             <div class="eyebrow">What we build</div>
             <h1>Built for Myanmar. Yours to keep.</h1>
-            <p>We're a custom studio — no fixed catalog. Pick one workflow that's hurting you right now. We return the first working screen before you approve anything bigger. KBZPay · MMQR · offline-ready out of the box.</p>
+            <p>We're a custom studio — no fixed catalog. Pick one workflow that's hurting you right now. We return the first working screen before you approve anything bigger.</p>
             <div class="cta">
               <a class="btn primary" href="/contact/">Tell us what to fix</a>
               <a class="btn secondary" href="/demo/">See live demos</a>
@@ -2574,7 +2574,7 @@ ${unicornHeader}
             <div>
               <div class="eyebrow">Start small</div>
               <h2>Tell us the one thing to fix first.</h2>
-              <p>We reply with what we'd build first, the price, and the timeline. Fixed scope, 50% deposit by KBZPay or MMQR to start.</p>
+              <p>We reply with what we'd build first, the price, and the timeline. Fixed scope, 50% deposit to start.</p>
             </div>
             <div style="display:flex;gap:12px;flex-wrap:wrap"><a class="btn primary" href="/contact/?package=build">Book a build</a><a class="btn secondary" href="/offers/">See pricing</a></div>
           </div>
@@ -3743,7 +3743,7 @@ ${unicornHeader}
               <a class="btn ${o.flagship ? 'primary' : 'secondary'}" href="/contact/?package=${o.slug}">${o.cta}</a>
             </div>`).join('')}
           </div>
-          <p class="of-note">Starting "from" prices in MMK. Final scope and price confirmed on a short call. Fixed-scope with clear revision caps; 50% deposit to start via KBZPay, MMQR, cash, or card.</p>
+          <p class="of-note">Starting "from" prices in MMK. Final scope and price confirmed on a short call. Fixed-scope with clear revision caps; 50% deposit to start, payment method confirmed on first call.</p>
         </section>
 
 

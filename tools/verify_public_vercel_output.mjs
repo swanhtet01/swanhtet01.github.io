@@ -537,8 +537,8 @@ for (const [label, text] of [
 const homeHtml = readFileSync(resolve(staticDir, 'index.html'), 'utf8')
 const productsHtml = readFileSync(resolve(staticDir, 'products/index.html'), 'utf8')
 for (const token of [
-  '<title>Custom business software, built for Myanmar | SUPERMEGA.dev</title>',
-  '<h2>What we build</h2>',
+  '<title>SUPERMEGA.dev — Custom Software for Myanmar Business</title>',
+  'Stop running your business on Viber.',
 ]) {
   if (!homeHtml.includes(token)) fail('public_shell_contract_missing', { token })
 }
