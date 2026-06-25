@@ -18,7 +18,10 @@ function constantTimeEqual(a, b) {
 const PROJECT_STATUSES = ['scoping', 'deposit', 'building', 'live', 'care']
 const DEAL_STATUSES = ['draft', 'approved', 'sent']
 // USD anchors per offer (mirrors /offers/). Deposit = 50%. care-plan is monthly (MRR).
-const OFFER_USD = { 'tool-week': 600, dashboard: 1800, 'ai-agent': 2500, 'design-ship': 6000, build: 1800 }
+// care-plan = 79 (Care-Lite/mo) is required by mrrUsd below — without it OFFER_USD['care-plan']
+// is undefined → mrrUsd NaN. The public console PRICE table MUST mirror these exactly so the
+// displayed deposit equals the Stripe charge for the same offer.
+const OFFER_USD = { 'tool-week': 600, dashboard: 1800, 'ai-agent': 2500, 'design-ship': 6000, build: 1800, 'care-plan': 79 }
 const priceOf = (offer) => OFFER_USD[offer] || OFFER_USD.build
 const aiConfigured = () => Boolean(process.env.ANTHROPIC_API_KEY || process.env.CLAUDE_API_KEY)
 

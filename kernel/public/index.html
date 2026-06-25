@@ -212,7 +212,10 @@ async function loadLeads(){
 
 const P_COLS=[['scoping','Scoping'],['deposit','Deposit'],['building','Building'],['live','Live'],['care','Care']]
 const P_NEXT={scoping:'deposit',deposit:'building',building:'live',live:'care'}
-const PRICE={'tool-week':600,dashboard:1500,'ai-agent':2500,'design-ship':6000,'care-plan':300,build:2000}
+// MUST mirror OFFER_USD in console/api.mjs EXACTLY — this only displays the price/deposit;
+// the Stripe charge uses OFFER_USD. dashboard 1800, build 1800, care-plan 79 (was 1500/2000/300,
+// which are prices pricing.json explicitly KILLED and made the console misquote vs the charge).
+const PRICE={'tool-week':600,dashboard:1800,'ai-agent':2500,'design-ship':6000,'care-plan':79,build:1800}
 async function loadProjects(){
   const box=$('#pipeline');box.innerHTML='<div class="loading-pulse">Loading pipeline…</div>'
   let pr,dl
