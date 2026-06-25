@@ -2111,7 +2111,7 @@ const unicornAiAgentsHtml = `<!doctype html>
       .agent-hero h1 { font-family: 'Fraunces', Georgia, serif; font-size: clamp(38px,6vw,72px); line-height: .95; letter-spacing: -.04em; max-width: 14ch; margin: 0 auto 24px; }
       .agent-hero p { max-width: 46ch; margin: 0 auto 36px; color: var(--muted); font-size: clamp(16px,1.5vw,19px); line-height: 1.6; }
       .sprint-grid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 20px; margin-top: 48px; }
-      .sprint-card { border: 1px solid var(--line); border-radius: 18px; padding: 28px; background: var(--surface); display: flex; flex-direction: column; gap: 14px; }
+      .sprint-card { border: 1px solid var(--line); border-radius: 18px; padding: 28px; background: rgba(255,255,255,0.55); display: flex; flex-direction: column; gap: 14px; }
       .sprint-card .s-time { font-size: 12px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--blue); }
       .sprint-card h3 { font-size: 20px; letter-spacing: -.02em; margin: 0; }
       .sprint-card p { font-size: 15px; color: var(--muted); line-height: 1.55; margin: 0; flex: 1; }
@@ -2119,12 +2119,14 @@ const unicornAiAgentsHtml = `<!doctype html>
       .connector-section h2 { margin-bottom: 8px; }
       .connector-section .section-sub { color: var(--muted); font-size: 15px; margin-bottom: 24px; max-width: 52ch; }
       .connector-grid { display: flex; flex-wrap: wrap; gap: 10px; }
-      .connector-chip { border: 1px solid var(--line); border-radius: 100px; padding: 7px 16px; font-size: 13px; font-weight: 500; color: var(--muted); background: var(--surface); }
+      .connector-chip { border: 1px solid var(--line); border-radius: 100px; padding: 7px 16px; font-size: 13px; font-weight: 500; color: var(--muted); background: rgba(255,255,255,0.55); }
       .connector-note { margin-top: 18px; font-size: 14px; color: var(--muted); max-width: 52ch; }
       .agent-proof { margin: 64px auto 0; max-width: 600px; text-align: center; }
       .agent-proof blockquote { font-family: 'Fraunces', Georgia, serif; font-size: clamp(17px,2vw,22px); font-style: italic; line-height: 1.45; color: var(--ink); border-left: 3px solid var(--blue); padding-left: 20px; text-align: left; margin: 0 0 20px; }
       .agent-proof cite { font-size: 14px; color: var(--muted); display: block; margin-top: 8px; }
       @media (max-width: 880px) { .sprint-grid { grid-template-columns: 1fr; } }
+      :root[data-theme="dark"] .sprint-card { background: rgba(243,239,230,0.05); }
+      :root[data-theme="dark"] .connector-chip { background: rgba(243,239,230,0.05); border-color: rgba(243,239,230,0.12); }
     </style>
   </head>
   <body>
