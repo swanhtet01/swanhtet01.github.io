@@ -8,6 +8,7 @@
 // POST /api/stripe-webhook
 // Env: STRIPE_WEBHOOK_SECRET (required for production), STRIPE_SECRET_KEY (required)
 import { verifyWebhook, reconcile } from '../connectors/payment-stripe.mjs'
+import { captureError } from '../alert.mjs'
 
 export const config = { api: { bodyParser: false } }
 
@@ -43,6 +44,8 @@ export default async function handler(req, res) {
   // Genuine persistence error → 5xx so Stripe RETRIES (don't silently ack money we failed to record).
   // Everything else (handled / ignored / duplicate / amount-mismatch) is a definitive ack → 200.
   if (settled.ok === false) {
+    // Alert — a verified payment we failed to persist is the highest-severity money event.
+    await captureError('stripe-webhook reconcile failed', settled.detail, { event: result.event?.id || '?', type: result.event?.type || '?' }).catch(() => {})
     res.status(500).json({ ok: false, reason: settled.detail || 'reconcile_failed' })
     return
   }

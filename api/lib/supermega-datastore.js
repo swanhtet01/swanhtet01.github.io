@@ -332,9 +332,22 @@ async function pipelineSnapshot({ since24h, since7d }) {
   }
 }
 
+// Lightweight reachability probe for health endpoints (uses the pool + query's bounded timeout).
+async function ping() {
+  if (!postgresConfigured()) return { ok: true, reachable: false, configured: false, detail: 'no_db_configured' }
+  try {
+    const r = await query('select 1')
+    if (r.status === 'ready') return { ok: true, reachable: true, configured: true }
+    return { ok: false, reachable: false, configured: true, detail: r.reason || 'query_failed' }
+  } catch (e) {
+    return { ok: false, reachable: false, configured: true, detail: String((e && e.message) || 'ping_error').slice(0, 120) }
+  }
+}
+
 module.exports = {
   datastoreStatus,
   postgresConfigured,
+  ping,
   query,
   saveLeadLedger,
   savePipelineAction,

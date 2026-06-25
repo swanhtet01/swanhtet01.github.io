@@ -18,6 +18,7 @@
 import crypto from 'node:crypto'
 import { register } from './registry.mjs'
 import store from '../store.mjs'
+import { captureError } from '../alert.mjs'
 
 const API = 'https://api.stripe.com/v1'
 const secret = () => String(process.env.STRIPE_SECRET_KEY || '').trim()
@@ -144,6 +145,8 @@ export async function reconcile(event) {
       const gotCur = String(obj.currency || '').toLowerCase()
       if (gotCents !== expectedCents || (expCur && gotCur !== expCur)) {
         await store.logActivity({ kind: 'deposit_mismatch', summary: `Stripe amount mismatch${ref ? ` (${ref})` : ''}: got ${gotCents} ${gotCur}, expected ${expectedCents} ${expCur}`, ref }).catch(() => null)
+        // Alert — a settled amount that doesn't match the quote can indicate a replay/tamper attempt.
+        await captureError('stripe amount mismatch (possible replay)', `${ref || '?'}: got ${gotCents} ${gotCur}, expected ${expectedCents} ${expCur}`).catch(() => {})
         return { ok: true, handled: true, ref, paid: false, mismatch: true }
       }
     }

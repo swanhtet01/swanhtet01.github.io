@@ -23,7 +23,8 @@ const FALLBACK = { deep: 'reason', reason: 'bulk', bulk: null }
 // the data spine (store.mjs) when credentials are present, so caps + caching survive cold starts and
 // span every instance. The store is imported lazily so memory-mode/dev with no deps still works.
 const ledger = new Map() // clientId -> { inTokens, outTokens, calls } (this instance, current process life)
-const cache = new Map() // cacheKey -> { text, data, usage }
+const cache = new Map() // cacheKey -> { ...out, _exp }
+const CACHE_TTL_MS = Number(process.env.SUPERMEGA_AI_CACHE_TTL_MS || 3_600_000) // 1h default; keys are tenant-scoped
 const DEFAULT_CAP_TOKENS = Number(process.env.SUPERMEGA_CLIENT_TOKEN_CAP || 2_000_000)
 
 // Persistent ledger/cache toggle. On by default; set SUPERMEGA_GATEWAY_PERSIST=0 to force pure in-memory.
@@ -229,14 +230,21 @@ export async function complete(o) {
     if (used.total >= softAt && FALLBACK[tier]) tier = FALLBACK[tier]
   }
 
-  const key = o.cacheKey || hash(JSON.stringify({ system, messages, tier, schema: schema?.title || !!schema }))
-  if (cache.has(key)) return { ...cache.get(key), cached: true }
+  // Tenant-scoped (clientId in the key) + TTL-bounded, so tenants never share a cached response and a
+  // stale entry can't live forever.
+  const key = o.cacheKey || hash(JSON.stringify({ system, messages, tier, schema: schema?.title || !!schema, clientId: clientId || '' }))
+  const nowMs = Date.now()
+  const fresh = (v) => v && (!v._exp || nowMs < v._exp)
+  const unwrap = (v) => { const { _exp, ...out } = v; return { ...out, cached: true } }
+  const memHit = cache.get(key)
+  if (fresh(memHit)) return unwrap(memHit)
+  if (memHit) cache.delete(key) // expired
   // Shared cache: a hit on another instance still saves the spend.
   const store = await spine()
   if (store?.getCachedResponse) {
     try {
       const hit = await store.getCachedResponse(key)
-      if (hit) { cache.set(key, hit); return { ...hit, cached: true } }
+      if (fresh(hit)) { cache.set(key, hit); return unwrap(hit) }
     } catch { /* cache is best-effort; fall through to a live call */ }
   }
 
@@ -267,8 +275,9 @@ export async function complete(o) {
         const out = tool
           ? { data: r.data, usage: r.usage, model: r.model, tier: curTier, provider: provider.name }
           : { text: r.text, usage: r.usage, model: r.model, tier: curTier, provider: provider.name }
-        cache.set(key, out)
-        if (store?.putCachedResponse) { try { await store.putCachedResponse(key, out) } catch { /* best-effort */ } }
+        const cached = { ...out, _exp: Date.now() + CACHE_TTL_MS }
+        cache.set(key, cached)
+        if (store?.putCachedResponse) { try { await store.putCachedResponse(key, cached) } catch { /* best-effort */ } }
         return out
       } catch (err) {
         clearTimeout(timer)
