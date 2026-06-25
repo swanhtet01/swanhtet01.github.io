@@ -67,13 +67,16 @@ export async function readRange(spreadsheetId, range, { subject } = {}) {
  * @param {string} [o.subject]
  * @returns {Promise<{ updates:object }>}
  */
-export async function appendRow(spreadsheetId, range, values, { subject } = {}) {
+export async function appendRow(spreadsheetId, range, values, { subject, raw = false } = {}) {
   if (!configured()) throw new Error('sheets_not_configured')
   if (!spreadsheetId || !range || !values) throw new Error('sheets_missing_args')
   // Normalize a flat row into the [[...]] shape Sheets expects.
   const rows = Array.isArray(values[0]) ? values : [values]
+  // SECURITY: USER_ENTERED makes Sheets interpret values starting with = + - @ as formulas (CSV/
+  // formula injection when mirroring untrusted data, e.g. a lead's name, to a human-facing sheet).
+  // Callers writing externally-sourced data should pass { raw: true } to disable formula evaluation.
   const json = await sheetsFetch('POST', `/${encodeURIComponent(spreadsheetId)}/values/${encodeURIComponent(range)}:append`, {
-    query: { valueInputOption: 'USER_ENTERED', insertDataOption: 'INSERT_ROWS' },
+    query: { valueInputOption: raw ? 'RAW' : 'USER_ENTERED', insertDataOption: 'INSERT_ROWS' },
     body: { values: rows },
     subject,
   })

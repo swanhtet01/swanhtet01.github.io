@@ -79,8 +79,9 @@ export async function createCheckout({ amount, currency = 'usd', ref = null, des
     'line_items[0][price_data][product_data][name]': description || (ref ? `SuperMega ${ref}` : 'SuperMega'),
   }
   if (ref) params['metadata[ref]'] = String(ref).slice(0, 200)
-  // Idempotent on ref so a double-click doesn't create two sessions for the same project.
-  const idem = ref ? `checkout_${ref}` : `checkout_${crypto.randomUUID()}`
+  // Idempotent on ref+amount+currency so a double-click reuses the session, but a RE-PRICED ref
+  // (changed amount) yields a NEW session instead of Stripe replaying/erroring on the old amount.
+  const idem = ref ? `checkout_${ref}_${cents}_${currency}` : `checkout_${crypto.randomUUID()}`
   const session = await stripe('POST', '/checkout/sessions', params, idem)
   return { id: session.id, url: session.url, ref }
 }
@@ -112,22 +113,28 @@ export async function reconcile(event) {
       return { ok: true, handled: false, detail: `ignored:${type || 'unknown'}` }
     }
     if (event.id && reconciledEvents.has(event.id)) return { ok: true, handled: true, duplicate: true }
+    // Mark reconciled BEFORE the awaits below. verifyWebhook fires reconcile() fire-and-forget AND the
+    // HTTP handler awaits reconcile() too, so on first delivery two calls race past the has-check.
+    // Marking here makes the second return early instead of double-logging the deposit.
+    if (event.id) reconciledEvents.add(event.id)
 
     const obj = (event.data && event.data.object) || {}
     const ref = (obj.metadata && obj.metadata.ref) || null
-    // Only treat it as paid when Stripe says so (defensive — async flows can fire on 'unpaid').
-    const paid = obj.payment_status === 'paid' || obj.status === 'complete'
+    // Treat as paid ONLY on a settled payment_status — NOT on session status 'complete', which can
+    // be 'unpaid' for async/delayed methods (those settle later via checkout.session.async_payment_succeeded).
+    const paid = obj.payment_status === 'paid' || obj.payment_status === 'no_payment_required'
 
-    if (ref && paid) {
-      // Mark the matching project's deposit paid. updateProject is a no-op if the id doesn't exist
-      // in the active store mode, so this is safe even when ref points at a non-project reference.
-      await store.updateProject(String(ref), { deposit_status: 'paid', deposit_method: 'stripe' }).catch(() => null)
+    if (paid) {
+      if (ref) {
+        // updateProject is a no-op if the id doesn't exist in the active store mode — safe.
+        await store.updateProject(String(ref), { deposit_status: 'paid', deposit_method: 'stripe' }).catch(() => null)
+      }
+      // Log the CONFIRMED payment only when funds actually settled (best-effort; never throws).
+      await store.logActivity({ kind: 'deposit', summary: `Stripe payment confirmed${ref ? ` (${ref})` : ''}`, ref })
     }
-    // Always log the confirmed payment (best-effort; logActivity never throws).
-    await store.logActivity({ kind: 'deposit', summary: `Stripe payment confirmed${ref ? ` (${ref})` : ''}`, ref })
 
     if (event.id) reconciledEvents.add(event.id)
-    return { ok: true, handled: true, ref, duplicate: false }
+    return { ok: true, handled: true, ref, paid, duplicate: false }
   } catch (e) {
     return { ok: false, handled: false, detail: String((e && e.message) || 'reconcile_error').slice(0, 160) }
   }

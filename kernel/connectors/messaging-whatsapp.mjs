@@ -93,9 +93,10 @@ export const messagingWhatsapp = {
     const id = phoneNumberId()
     if (!id) return { ok: false, detail: 'missing WHATSAPP_PHONE_NUMBER_ID' }
     try {
+      // Token in Authorization header (matches send()), not the URL — URLs leak into logs.
       const res = await fetch(
-        `${BASE}/${encodeURIComponent(id)}?fields=verified_name,status&access_token=${encodeURIComponent(t)}`,
-        { signal: AbortSignal.timeout(8000) },
+        `${BASE}/${encodeURIComponent(id)}?fields=verified_name,status`,
+        { headers: { authorization: `Bearer ${t}` }, signal: AbortSignal.timeout(8000) },
       )
       const json = await res.json().catch(() => ({}))
       if (!res.ok || json.error) {

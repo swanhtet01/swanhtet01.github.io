@@ -40,9 +40,10 @@ export async function send(text, { recipientId } = {}) {
   const message = String(text || '').trim()
   if (!message) throw new Error('facebook_empty_text')
 
-  const res = await fetch(`${BASE}/me/messages?access_token=${encodeURIComponent(t)}`, {
+  // Token in Authorization header, not the URL query string (URLs leak into proxy/access/SDK logs).
+  const res = await fetch(`${BASE}/me/messages`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', authorization: `Bearer ${t}` },
     body: JSON.stringify({ recipient: { id: target }, message: { text: message.slice(0, 2000) } }),
     signal: AbortSignal.timeout(8000),
   })
@@ -65,7 +66,8 @@ export const messagingFacebook = {
     const t = token()
     if (!t) return { ok: false, detail: 'missing FACEBOOK_PAGE_ACCESS_TOKEN' }
     try {
-      const res = await fetch(`${BASE}/me?fields=name,id&access_token=${encodeURIComponent(t)}`, {
+      const res = await fetch(`${BASE}/me?fields=name,id`, {
+        headers: { authorization: `Bearer ${t}` },
         signal: AbortSignal.timeout(8000),
       })
       const json = await res.json().catch(() => ({}))

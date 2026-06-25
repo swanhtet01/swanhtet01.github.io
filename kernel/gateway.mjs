@@ -89,9 +89,13 @@ export async function monthlyUsageFor(clientId) {
   if (store?.getTokenUsage) {
     try {
       const r = await store.getTokenUsage(clientId, window)
-      const inTokens = Number(r.in_tokens) || 0
-      const outTokens = Number(r.out_tokens) || 0
-      return { inTokens, outTokens, calls: Number(r.calls) || 0, total: inTokens + outTokens, window, source: 'spine' }
+      // Never UNDER-count: if persisted writes silently failed (addTokenUsage swallows errors), this
+      // instance's in-memory tally can exceed a stale-low spine read. Take the max so the spend cap
+      // can only over-count, never under-count — fail CLOSED for the cost safety net.
+      const inTokens = Math.max(Number(r.in_tokens) || 0, Number(local.inTokens) || 0)
+      const outTokens = Math.max(Number(r.out_tokens) || 0, Number(local.outTokens) || 0)
+      const calls = Math.max(Number(r.calls) || 0, Number(local.calls) || 0)
+      return { inTokens, outTokens, calls, total: inTokens + outTokens, window, source: 'spine+local-max' }
     } catch { /* fall through to in-memory */ }
   }
   return { ...local, total: local.inTokens + local.outTokens, window, source: 'memory' }
