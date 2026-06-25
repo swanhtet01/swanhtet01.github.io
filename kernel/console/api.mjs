@@ -205,6 +205,10 @@ export async function handle({ method, path, query = {}, body = {}, headers = {}
         ].filter(Boolean).join('\n')
         const text = p.outreach_en || p.headline || ''
         const sent = await resend.send({ to, subject, html, text })
+        // resend.send() returns { ok:false, reason } on failure — it does NOT throw. Do NOT mark the
+        // deal 'sent' or log success unless the email actually went out. The whole console is built on
+        // the draft→approve→SEND integrity guarantee; a silent "sent" on a failed send breaks it.
+        if (!sent || !sent.ok) return bad(502, sent?.reason || 'email_send_failed')
         const updated = await store.updateDeal(seg[1], { status: 'sent' })
         log('outreach', `Email sent to ${to.slice(0, 80)}: "${String(p.headline || '').slice(0, 60)}"`, deal.id)
         return ok({ ok: true, email_id: sent.id, to, deal: updated })

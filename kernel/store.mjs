@@ -52,12 +52,13 @@ async function ensurePgTables() {
     create table if not exists supermega_ai_cache (cache_key text primary key, payload jsonb not null, created_at timestamptz default now());
     create table if not exists supermega_graduation (signature text primary key, label text, count int not null default 1, sources jsonb default '[]'::jsonb, modules jsonb default '[]'::jsonb, productized boolean not null default false, graduated_at timestamptz, updated_at timestamptz default now());
     create table if not exists supermega_build_modules (id text primary key, project_id text, signature text, modules jsonb default '[]'::jsonb, shipped_at timestamptz default now());
+    create table if not exists supermega_payment_events (provider text not null, event_id text not null, project_ref text, amount_total bigint, currency text, at timestamptz default now(), primary key (provider, event_id));
   `).then(() => true)
   return tablesReady
 }
 
 // ---------- in-memory fallback ----------
-const mem = { lead: new Map(), client: new Map(), project: new Map(), deal: new Map(), activity: new Map(), tokenLedger: new Map(), aiCache: new Map(), graduation: new Map(), buildModules: new Map() }
+const mem = { lead: new Map(), client: new Map(), project: new Map(), deal: new Map(), activity: new Map(), tokenLedger: new Map(), aiCache: new Map(), graduation: new Map(), buildModules: new Map(), paymentEvents: new Set() }
 const memSort = (rows) => rows.sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))
 
 // ---------- leads (real supermega_leads) ----------
@@ -155,6 +156,22 @@ export async function updateProject(id, patch) {
     return (await q(`update supermega_console_projects set ${set} where id=$1 returning *`, [id, ...keys.map((k) => patch[k])]))[0] || null
   }
   const cur = mem.project.get(id); if (!cur) return null; const next = { ...cur, ...patch }; mem.project.set(id, next); return next
+}
+// Fetch a single project by id (used by the payment reconcile path for amount/status checks).
+export async function getProject(id) {
+  if (!id) return null
+  if (mode === 'supabase') { const r = await rest('GET', `supermega_console_projects?id=eq.${encodeURIComponent(id)}&limit=1`); return r[0] || null }
+  if (mode === 'postgres') { await ensurePgTables(); return (await q('select * from supermega_console_projects where id=$1 limit 1', [id]))[0] || null }
+  return mem.project.get(id) || null
+}
+// Conditionally flip a project's deposit to 'paid' ONLY if it is currently 'unpaid'.
+// Idempotent: a replay / double-delivery finds it already paid and returns null (no re-flip, no double activity).
+// Returns the updated row if it actually flipped, or null if already paid / not found.
+export async function markDepositPaid(id, { method = null } = {}) {
+  if (!id) return null
+  if (mode === 'supabase') { const r = await rest('PATCH', `supermega_console_projects?id=eq.${encodeURIComponent(id)}&deposit_status=eq.unpaid`, { deposit_status: 'paid', deposit_method: method }); return r?.[0] || null }
+  if (mode === 'postgres') { await ensurePgTables(); return (await q(`update supermega_console_projects set deposit_status='paid', deposit_method=$2 where id=$1 and deposit_status='unpaid' returning *`, [id, method]))[0] || null }
+  const cur = mem.project.get(id); if (!cur || cur.deposit_status === 'paid') return null; const next = { ...cur, deposit_status: 'paid', deposit_method: method }; mem.project.set(id, next); return next
 }
 export async function convertedLeadIds() {
   if (mode === 'supabase') return [...new Set((await rest('GET', 'supermega_console_projects?select=lead_id&lead_id=not.is.null')).map((r) => r.lead_id))]
@@ -355,4 +372,43 @@ export async function listGraduation(limit = 100) {
   } catch { return [] }
 }
 
-export default { mode, listLeads, getLead, insertLead, updateLead, listClients, listProjects, createClient, createProject, updateProject, convertedLeadIds, saveDeal, listDeals, updateDeal, logActivity, listActivity, getTokenUsage, addTokenUsage, getCachedResponse, putCachedResponse, bumpGraduation, recordBuildModules, listGraduation }
+// ---------- payment-event idempotency (webhook / IPN dedup) ----------
+// recordPaymentEvent returns { fresh } — true ONLY the first time a (provider,event_id) pair is seen,
+// so a re-delivered/replayed webhook is a no-op. Durable across instances when the
+// supermega_payment_events table exists (postgres always; supabase after running supabase/payment-events.sql).
+// If the table is missing in supabase mode it falls back to a per-instance in-memory Set — same protection
+// as the previous in-connector Set, i.e. NO regression — and warns once so the gap is visible.
+let warnedPaymentEventsTable = false
+export async function recordPaymentEvent(provider, eventId, meta = {}) {
+  const p = String(provider || '').slice(0, 40)
+  const e = String(eventId || '').slice(0, 200)
+  if (!p || !e) return { fresh: false }
+  const amount = Number.isFinite(Number(meta.amount)) ? Number(meta.amount) : null
+  if (mode === 'postgres') {
+    try {
+      await ensurePgTables()
+      const r = await q(
+        `insert into supermega_payment_events (provider, event_id, project_ref, amount_total, currency)
+         values ($1,$2,$3,$4,$5) on conflict (provider, event_id) do nothing returning event_id`,
+        [p, e, meta.ref || null, amount, meta.currency || null],
+      )
+      return { fresh: r.length > 0 }
+    } catch { /* fall through to in-memory */ }
+  } else if (mode === 'supabase') {
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/supermega_payment_events?on_conflict=provider,event_id`, {
+        method: 'POST',
+        headers: { apikey: SUPABASE_KEY, authorization: `Bearer ${SUPABASE_KEY}`, 'content-type': 'application/json', prefer: 'resolution=ignore-duplicates,return=representation' },
+        body: JSON.stringify({ provider: p, event_id: e, project_ref: meta.ref || null, amount_total: amount, currency: meta.currency || null }),
+      })
+      if (res.ok) { const rows = await res.json().catch(() => []); return { fresh: Array.isArray(rows) && rows.length > 0 } }
+      if (!warnedPaymentEventsTable) { warnedPaymentEventsTable = true; console.warn('[store] supermega_payment_events unavailable (run supabase/payment-events.sql) — using per-instance dedup') }
+    } catch { /* fall through to in-memory */ }
+  }
+  const memKey = `${p}::${e}`
+  if (mem.paymentEvents.has(memKey)) return { fresh: false }
+  mem.paymentEvents.add(memKey)
+  return { fresh: true }
+}
+
+export default { mode, listLeads, getLead, insertLead, updateLead, listClients, listProjects, createClient, createProject, updateProject, getProject, markDepositPaid, convertedLeadIds, saveDeal, listDeals, updateDeal, logActivity, listActivity, getTokenUsage, addTokenUsage, getCachedResponse, putCachedResponse, recordPaymentEvent, bumpGraduation, recordBuildModules, listGraduation }

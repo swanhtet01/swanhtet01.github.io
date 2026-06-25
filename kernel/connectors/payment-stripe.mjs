@@ -81,6 +81,10 @@ export async function createCheckout({ amount, currency = 'usd', ref = null, des
       'line_items[0][price_data][product_data][name]': description || (ref ? `SuperMega ${ref}` : 'SuperMega'),
     }
     if (ref) params['metadata[ref]'] = String(ref).slice(0, 200)
+    // Bind the expected charge into session metadata so the webhook can verify amount/currency
+    // integrity. Metadata is covered by Stripe's event signature, so a replayer cannot alter it.
+    params['metadata[expected_cents]'] = cents
+    params['metadata[currency]'] = currency
     // Idempotent on ref+amount+currency so a double-click reuses the session, but a RE-PRICED ref
     // (changed amount) yields a NEW session instead of Stripe replaying/erroring on the old amount.
     const idem = ref ? `checkout_${ref}_${cents}_${currency}` : `checkout_${crypto.randomUUID()}`
@@ -96,18 +100,17 @@ export async function createCheckout({ amount, currency = 'usd', ref = null, des
 // cold starts and is shared across instances — same caveat as the gateway's in-memory ledger.
 const seenEvents = new Set()
 
-// Events we've already reconciled into the store (per warm instance), so a re-delivery doesn't
-// double-log even if it slips past the seenEvents check (e.g. reconcile() called directly).
-const reconciledEvents = new Set()
-
 /**
- * reconcile — record a verified Stripe event into the data spine, idempotently. On a completed
- * checkout we mark the referenced project's deposit as paid and append an activity row. Best-effort:
- * any store error is swallowed and returned in the result so the webhook still 200s (Stripe retries
- * are then a no-op via the idempotency guards). Safe to call with any verified event — non-payment
- * events are ignored.
+ * reconcile — record a verified Stripe event into the data spine, IDEMPOTENTLY and with AMOUNT
+ * integrity. Enterprise-hardened:
+ *  - Persistent dedup via store.recordPaymentEvent (survives serverless cold starts / many instances).
+ *  - Amount/currency verified against the value bound into the session metadata at creation (which is
+ *    covered by Stripe's signature → a replayer cannot reuse a small payment's event for a big project).
+ *  - Conditional mark-paid (store.markDepositPaid only flips an 'unpaid' project) so a re-delivery never
+ *    re-flips state or double-logs the deposit.
+ * Returns ok:false ONLY on a genuine persistence error so the HTTP handler can 5xx → Stripe retries.
  * @param {object} event  the parsed, signature-verified Stripe event
- * @returns {Promise<{ ok:boolean, handled:boolean, ref?:string|null, duplicate?:boolean, detail?:string }>}
+ * @returns {Promise<{ ok:boolean, handled:boolean, ref?:string|null, paid?:boolean, duplicate?:boolean, mismatch?:boolean, detail?:string }>}
  */
 export async function reconcile(event) {
   try {
@@ -117,29 +120,43 @@ export async function reconcile(event) {
     if (type !== 'checkout.session.completed' && type !== 'checkout.session.async_payment_succeeded') {
       return { ok: true, handled: false, detail: `ignored:${type || 'unknown'}` }
     }
-    if (event.id && reconciledEvents.has(event.id)) return { ok: true, handled: true, duplicate: true }
-    // Mark reconciled BEFORE the awaits below. verifyWebhook fires reconcile() fire-and-forget AND the
-    // HTTP handler awaits reconcile() too, so on first delivery two calls race past the has-check.
-    // Marking here makes the second return early instead of double-logging the deposit.
-    if (event.id) reconciledEvents.add(event.id)
 
     const obj = (event.data && event.data.object) || {}
     const ref = (obj.metadata && obj.metadata.ref) || null
-    // Treat as paid ONLY on a settled payment_status — NOT on session status 'complete', which can
-    // be 'unpaid' for async/delayed methods (those settle later via checkout.session.async_payment_succeeded).
+    // Treat as paid ONLY on a settled payment_status — NOT session status 'complete' (can be 'unpaid'
+    // for async/delayed methods, which settle later via checkout.session.async_payment_succeeded).
     const paid = obj.payment_status === 'paid' || obj.payment_status === 'no_payment_required'
 
-    if (paid) {
-      if (ref) {
-        // updateProject is a no-op if the id doesn't exist in the active store mode — safe.
-        await store.updateProject(String(ref), { deposit_status: 'paid', deposit_method: 'stripe' }).catch(() => null)
-      }
-      // Log the CONFIRMED payment only when funds actually settled (best-effort; never throws).
-      await store.logActivity({ kind: 'deposit', summary: `Stripe payment confirmed${ref ? ` (${ref})` : ''}`, ref })
+    // Persistent idempotency: only the FIRST delivery of this event id does any work.
+    if (event.id) {
+      const dedup = await store.recordPaymentEvent('stripe', event.id, { ref, amount: obj.amount_total, currency: obj.currency })
+      if (!dedup.fresh) return { ok: true, handled: true, ref, duplicate: true }
     }
 
-    if (event.id) reconciledEvents.add(event.id)
-    return { ok: true, handled: true, ref, paid, duplicate: false }
+    if (!paid) return { ok: true, handled: true, ref, paid: false }
+
+    // Amount/currency integrity: compare the settled total against what this ref was quoted (bound into
+    // metadata at checkout creation). If it doesn't match, do NOT mark paid — log and ack (no retry).
+    const expectedCents = Number(obj.metadata?.expected_cents)
+    if (Number.isFinite(expectedCents) && expectedCents > 0) {
+      const gotCents = Number(obj.amount_total)
+      const expCur = String(obj.metadata?.currency || '').toLowerCase()
+      const gotCur = String(obj.currency || '').toLowerCase()
+      if (gotCents !== expectedCents || (expCur && gotCur !== expCur)) {
+        await store.logActivity({ kind: 'deposit_mismatch', summary: `Stripe amount mismatch${ref ? ` (${ref})` : ''}: got ${gotCents} ${gotCur}, expected ${expectedCents} ${expCur}`, ref }).catch(() => null)
+        return { ok: true, handled: true, ref, paid: false, mismatch: true }
+      }
+    }
+
+    // Conditional, idempotent flip — only marks (and only logs) when it actually transitions unpaid→paid.
+    if (ref) {
+      const flipped = await store.markDepositPaid(String(ref), { method: 'stripe' })
+      if (flipped) await store.logActivity({ kind: 'deposit', summary: `Stripe payment confirmed (${ref})`, ref }).catch(() => null)
+      return { ok: true, handled: true, ref, paid: true, alreadyPaid: !flipped }
+    }
+    // Paid event with no project ref — record it once (dedup above already gated this to first delivery).
+    await store.logActivity({ kind: 'deposit', summary: 'Stripe payment confirmed (no ref)', ref: null }).catch(() => null)
+    return { ok: true, handled: true, ref: null, paid: true }
   } catch (e) {
     return { ok: false, handled: false, detail: String((e && e.message) || 'reconcile_error').slice(0, 160) }
   }
@@ -186,12 +203,9 @@ export function verifyWebhook(rawBody, sig, { toleranceSec = 300 } = {}) {
   if (event.id && seenEvents.has(event.id)) return { ok: true, duplicate: true, event }
   if (event.id) seenEvents.add(event.id)
 
-  // Reconcile the verified event into the data spine. Fire-and-forget so verifyWebhook stays
-  // synchronous (callers depend on the sync signature) — reconcile() is internally best-effort and
-  // never throws. Callers that want to await settlement can call reconcile(event) directly with the
-  // returned event. Idempotent: re-deliveries are caught by seenEvents above and reconciledEvents.
-  Promise.resolve().then(() => reconcile(event)).catch(() => {})
-
+  // NOTE: reconcile() is intentionally NOT called here. The HTTP handler awaits reconcile(event) exactly
+  // once, so a persistence failure can return 5xx → Stripe retries. Running it here too would double-run
+  // on first delivery (the bug this replaces). verifyWebhook stays a pure signature/parse step.
   return { ok: true, event, duplicate: false }
 }
 

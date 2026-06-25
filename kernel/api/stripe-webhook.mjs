@@ -38,7 +38,13 @@ export default async function handler(req, res) {
     res.status(400).json({ ok: false, reason: result.reason || 'invalid_signature' })
     return
   }
-  // Await reconciliation so the activity log is flushed before we 200.
+  // Await reconciliation so the deposit state + activity log are durably committed before we 200.
   const settled = await reconcile(result.event)
-  res.status(200).json({ ok: true, duplicate: result.duplicate, handled: settled.handled, ref: settled.ref })
+  // Genuine persistence error → 5xx so Stripe RETRIES (don't silently ack money we failed to record).
+  // Everything else (handled / ignored / duplicate / amount-mismatch) is a definitive ack → 200.
+  if (settled.ok === false) {
+    res.status(500).json({ ok: false, reason: settled.detail || 'reconcile_failed' })
+    return
+  }
+  res.status(200).json({ ok: true, duplicate: result.duplicate || settled.duplicate || false, handled: settled.handled, ref: settled.ref, mismatch: settled.mismatch || false })
 }
