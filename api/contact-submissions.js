@@ -699,7 +699,8 @@ async function sendEmail({ record }) {
       return { status: 'ready', email_id: text(body.id), to: notifyEmail, from }
     }
 
-    lastError = { status: 'error', reason: `resend_${response.status}`, detail: body, from, to: notifyEmail }
+    // Do not echo raw upstream provider response back to the client.
+    lastError = { status: 'error', reason: `resend_${response.status}`, from, to: notifyEmail }
     if (response.status !== 403) break
   }
 
@@ -770,8 +771,9 @@ async function postLeadWebhook({ record }) {
       headers,
       body: JSON.stringify({ event: 'contact.created', record }),
     })
-    const body = await response.text()
-    return response.ok ? { status: 'ready', code: response.status } : { status: 'error', reason: `webhook_${response.status}`, detail: body.slice(0, 500) }
+    await response.text()
+    // Do not echo raw upstream webhook response back to the client.
+    return response.ok ? { status: 'ready', code: response.status } : { status: 'error', reason: `webhook_${response.status}` }
   } catch (error) {
     return { status: 'error', reason: error.message || 'webhook_failed' }
   }
@@ -1012,10 +1014,12 @@ module.exports = async function handler(req, res) {
     return
   }
 
+  // Do not echo the submitter's own IP/User-Agent back in the response body.
+  const { ip_hint, user_agent, ...publicSubmission } = record
   json(res, 200, {
     status: 'ready',
     message: 'Submission routed.',
-    submission: record,
+    submission: publicSubmission,
     onboarding: onboardingPlan(record),
     delivery,
     ledger,

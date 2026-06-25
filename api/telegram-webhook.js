@@ -122,23 +122,51 @@ module.exports = async function handler(req, res) {
     return
   }
 
-  // Read body
+  // Read body (cap size — Telegram updates are small; reject oversized payloads)
+  const MAX_BODY_BYTES = 1024 * 1024 // 1 MB
   let rawBody = ''
   if (typeof req.body === 'string') {
     rawBody = req.body
   } else if (req.body && typeof req.body === 'object') {
     rawBody = JSON.stringify(req.body)
   } else {
-    await new Promise((resolve, reject) => {
-      const chunks = []
-      req.on('data', (c) => chunks.push(c))
-      req.on('end', () => { rawBody = Buffer.concat(chunks).toString('utf8'); resolve() })
-      req.on('error', reject)
-    })
+    try {
+      await new Promise((resolve, reject) => {
+        const chunks = []
+        let size = 0
+        req.on('data', (c) => {
+          size += c.length
+          if (size > MAX_BODY_BYTES) {
+            reject(new Error('payload_too_large'))
+            return
+          }
+          chunks.push(c)
+        })
+        req.on('end', () => { rawBody = Buffer.concat(chunks).toString('utf8'); resolve() })
+        req.on('error', reject)
+      })
+    } catch (e) {
+      if (text(e?.message) === 'payload_too_large') {
+        json(res, 413, { status: 'error', reason: 'payload_too_large' })
+        return
+      }
+      json(res, 400, { status: 'error', reason: 'invalid_body' })
+      return
+    }
+  }
+  if (Buffer.byteLength(rawBody) > MAX_BODY_BYTES) {
+    json(res, 413, { status: 'error', reason: 'payload_too_large' })
+    return
   }
 
-  // Verify webhook secret — constant-time comparison prevents timing oracle attacks
-  if (webhookSecret) {
+  // Verify webhook secret — fail CLOSED: the secret MUST be configured, and the
+  // request MUST present a matching token. Constant-time comparison prevents
+  // timing oracle attacks.
+  if (!webhookSecret) {
+    json(res, 503, { status: 'error', reason: 'webhook_secret_not_configured' })
+    return
+  }
+  {
     const sigHeader = text(req.headers['x-telegram-bot-api-secret-token'])
     const a = Buffer.from(sigHeader)
     const b = Buffer.from(webhookSecret)

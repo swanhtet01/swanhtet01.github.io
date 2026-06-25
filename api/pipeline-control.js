@@ -1,4 +1,11 @@
-﻿const datastore = require('./lib/supermega-datastore')
+﻿const crypto = require('crypto')
+const datastore = require('./lib/supermega-datastore')
+
+function safeEqual(a, b) {
+  const aHash = crypto.createHash('sha256').update(String(a)).digest()
+  const bHash = crypto.createHash('sha256').update(String(b)).digest()
+  return crypto.timingSafeEqual(aHash, bHash)
+}
 
 function json(res, statusCode, payload) {
   res.statusCode = statusCode
@@ -166,15 +173,17 @@ module.exports = async function handler(req, res) {
     return
   }
 
-  // Auth guard — enforced only when SUPERMEGA_OPS_KEY is configured in env
-  const opsKey = process.env.SUPERMEGA_OPS_KEY
-  if (opsKey) {
-    const authHeader = req.headers['authorization'] || ''
-    const provided = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : ''
-    if (provided !== opsKey) {
-      json(res, 401, { status: 'error', reason: 'unauthorized' })
-      return
-    }
+  // Auth guard — fail closed: deny if the ops key is unset, then require a match
+  const opsKey = text(process.env.SUPERMEGA_OPS_KEY)
+  if (!opsKey) {
+    json(res, 503, { status: 'error', reason: 'auth_not_configured' })
+    return
+  }
+  const authHeader = req.headers['authorization'] || ''
+  const provided = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : ''
+  if (!provided || !safeEqual(provided, opsKey)) {
+    json(res, 401, { status: 'error', reason: 'unauthorized' })
+    return
   }
 
   if (req.method !== 'GET') {

@@ -1,5 +1,14 @@
 ﻿const { existsSync, readFileSync } = require('fs')
 const { join, resolve } = require('path')
+const { createHash, timingSafeEqual } = require('crypto')
+
+// Constant-time secret comparison. Hashes both sides to fixed-length buffers so
+// timingSafeEqual never throws on length mismatch and no length is leaked.
+function safeEqual(a, b) {
+  const ah = createHash('sha256').update(String(a)).digest()
+  const bh = createHash('sha256').update(String(b)).digest()
+  return timingSafeEqual(ah, bh)
+}
 
 function json(res, statusCode, payload) {
   res.statusCode = statusCode
@@ -84,15 +93,18 @@ module.exports = function handler(req, res) {
     return
   }
 
-  // Auth guard — enforced only when SUPERMEGA_OPS_KEY is configured in env
-  const opsKey = process.env.SUPERMEGA_OPS_KEY
-  if (opsKey) {
-    const authHeader = req.headers['authorization'] || ''
-    const provided = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : ''
-    if (provided !== opsKey) {
-      json(res, 401, { status: 'error', reason: 'unauthorized' })
-      return
-    }
+  // Auth guard — fail CLOSED. Deny when the ops key is unset (misconfiguration)
+  // and require a constant-time match when it is set.
+  const opsKey = text(process.env.SUPERMEGA_OPS_KEY)
+  if (!opsKey) {
+    json(res, 503, { status: 'error', reason: 'auth_not_configured' })
+    return
+  }
+  const authHeader = req.headers['authorization'] || ''
+  const provided = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : ''
+  if (!provided || !safeEqual(provided, opsKey)) {
+    json(res, 401, { status: 'error', reason: 'unauthorized' })
+    return
   }
 
   if (req.method !== 'GET') {
