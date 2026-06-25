@@ -965,6 +965,7 @@ module.exports = async function handler(req, res) {
       await fetch(intakeUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        signal: AbortSignal.timeout(5000),
         body: JSON.stringify({
           secret: intakeSecret,
           source: 'website',

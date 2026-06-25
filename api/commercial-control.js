@@ -46,6 +46,7 @@ async function supabaseFetch(path, options = {}) {
   }
 
   const response = await fetch(`${config.url}${path}`, {
+    method: 'GET',
     headers: {
       apikey: config.serviceRoleKey,
       Authorization: `Bearer ${config.serviceRoleKey}`,
