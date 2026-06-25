@@ -458,6 +458,7 @@ async function saveLeadLedger({ record }) {
         Prefer: 'return=minimal',
       },
       body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(8000),
     })
 
     if (response.ok) {
@@ -515,6 +516,7 @@ async function savePipelineAction({ record }) {
         Prefer: 'return=minimal',
       },
       body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(8000),
     })
 
     if (response.ok) {

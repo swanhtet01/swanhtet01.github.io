@@ -2190,7 +2190,7 @@ ${unicornHeader}
             <div class="connector-chip">Notion</div>
             <div class="connector-chip">Shopify</div>
           </div>
-          <p class="connector-note">22 connectors wired in. Most clients start with two or three — that's enough to scope and build the first agent.</p>
+          <p class="connector-note">23 connectors wired in. Most clients start with two or three — that's enough to scope and build the first agent.</p>
         </section>
 
         <section class="section agent-proof">
@@ -2363,14 +2363,14 @@ ${unicornHeader}
 
 
         <section class="section">
-          <h2>Why custom beats SaaS</h2>
+          <h2>What we actually build</h2>
           <div class="uvp-grid">
-            <div class="uvp-card"><strong>You own it.</strong><span>No per-seat tax that grows when you hire. No vendor that can switch it off. The software is yours to keep.</span></div>
-            <div class="uvp-card"><strong>The exact thing.</strong><span>Built around how you actually work — not the average workflow some other company built a template for.</span></div>
-            <div class="uvp-card"><strong>AI-native.</strong><span>Reads from Gmail, Telegram, Drive, Sheets, Viber — 22 connectors wired in — drafts the next step, and waits for your sign-off. Not a chatbot bolted on.</span></div>
-            <div class="uvp-card"><strong>Built for real conditions.</strong><span>Works when the internet drops. Handles your local data formats. Runs fast on the hardware you already own.</span></div>
-            <div class="uvp-card"><strong>Traceable output.</strong><span>Every extracted record links to the source document, chat, or file it came from. Nothing is invented — every figure can be checked.</span></div>
-            <div class="uvp-card"><strong>You approve every step.</strong><span>AI drafts the next action; you decide whether it sends, saves, or charges. Nothing acts without sign-off.</span></div>
+            <div class="uvp-card"><strong>You own it.</strong><span>No per-seat fees that grow when you hire. No vendor who can switch it off. The software is yours to keep.</span></div>
+            <div class="uvp-card"><strong>Built around how you work.</strong><span>Not a generic template — built from your actual data, your team's real workflow.</span></div>
+            <div class="uvp-card"><strong>Reads your existing data.</strong><span>Gmail, Viber, Drive, Sheets, Telegram — we pull structure from what you already have. No migration, no manual entry.</span></div>
+            <div class="uvp-card"><strong>Works in Myanmar conditions.</strong><span>Handles Burmese text, local number formats, and spotty internet. Runs fast on the hardware you already own.</span></div>
+            <div class="uvp-card"><strong>Every number is traceable.</strong><span>Every extracted record links to the source chat, email, or file it came from. Nothing is made up.</span></div>
+            <div class="uvp-card"><strong>You approve every action.</strong><span>AI drafts the next step; you decide whether it sends, saves, or posts. Nothing acts without your sign-off.</span></div>
           </div>
         </section>
 
@@ -2390,9 +2390,9 @@ ${unicornHeader}
               <img class="founder-photo" src="/site/social/swan-htet.jpg" alt="Swan Htet — founder, SUPERMEGA.dev" loading="lazy" decoding="async" />
             </div>
             <div class="founder-copy">
-              <p class="founder-quote">"Most of the businesses I work with already have a system — it's just spread across a Viber group, a shared Excel, and someone's memory."</p>
-              <p>A Yangon-based manufacturer came to me with 300+ warranty claims buried in a Gmail chain. No structure, no owner column, no way to see which ones were overdue. We extracted the whole thing, built a tracked ledger, and turned it into a weekly brief the ops team could actually act on. Took three weeks. The client owns it — no monthly SaaS fee.</p>
-              <p>That's the work. Send me the messiest thing in your business. We'll make it into a system — in MMK, in weeks, yours to keep.</p>
+              <p class="founder-quote">"Your data isn't the problem. It's that it's still spread across three Viber groups, a shared Excel no one fully trusts, and one person's memory."</p>
+              <p>A Yangon manufacturer I work with had 300+ warranty claims buried in eighteen months of Gmail threads — no owner column, no days-open figure, no way to know what was overdue without opening every email. We pulled the export, structured it into a ledger with owner and days-open, and built a brief the ops team runs every Monday. Three weeks. One payment. They own it outright.</p>
+              <p>I work on one project at a time. Before I ask for a deposit, I send you the first useful screen built from your own data — so you can judge whether this is worth continuing before anything is decided. If that isn't immediately useful, we stop.</p>
               <div class="founder-sig">
                 <strong>Swan Htet</strong>
                 <span>Founder, SUPERMEGA.dev</span>
@@ -2549,7 +2549,7 @@ ${unicornHeader}
               <div class="eyebrow">Main offer</div>
               <h2>Custom Workflow App.</h2>
               <p>For repeated work stuck in email, spreadsheets, folders, chat, or forms.</p>
-              <div class="chips"><span class="chip">Source capture</span><span class="chip">Source intake</span><span class="chip">Work queue</span><span class="chip">Owner review</span><span class="chip">Proof pack</span></div>
+              <div class="chips"><span class="chip">Daily ledger</span><span class="chip">Owner assigned</span><span class="chip">Status tracked</span><span class="chip">Overdue flagged</span><span class="chip">Source linked</span></div>
               <div class="use"><strong>First result</strong><span>A daily screen with source, owner, status, proof, and next action.</span></div>
               <a class="btn primary" href="/products/documents/">See details</a>
             </div>
