@@ -13,6 +13,7 @@
     { "src": "/api/wavepay-notify", "dest": "/api/wavepay-notify" },
     { "src": "/api/status", "dest": "/api/status" },
     { "src": "/api/(.*)", "dest": "/api/index" },
+    { "src": "/status", "dest": "/public/status.html" },
     { "src": "/(.*)", "dest": "/public/$1" }
   ]
 }
