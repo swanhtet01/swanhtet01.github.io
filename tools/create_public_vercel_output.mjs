@@ -1644,8 +1644,7 @@ const unicornHeader = `
         </a>
         <nav class="nav" aria-label="Primary">
           <button class="btn secondary theme-toggle" type="button" aria-label="Toggle dark mode" onclick="var r=document.documentElement,n=r.getAttribute('data-theme')==='dark'?'light':'dark';r.setAttribute('data-theme',n);try{localStorage.setItem('sm-theme',n)}catch(e){}"></button>
-          <a class="btn secondary optional-nav" href="/#products">What we build</a>
-          <a class="btn secondary" href="/work/">Work</a>
+          <a class="btn secondary optional-nav" href="/products/">Products</a>
           <a class="btn secondary" href="/demo/">Demos</a>
           <a class="btn secondary" href="/offers/">Pricing</a>
           <a class="btn primary" href="/contact/">Contact</a>
@@ -2134,14 +2133,14 @@ const unicornPublicShellHtml = `<!doctype html>
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="SUPERMEGA.dev" />
     <meta property="og:title" content="Custom business software, built for Myanmar | SUPERMEGA.dev" />
-    <meta property="og:description" content="Custom software at SaaS prices — AI-native, made for how you work, yours to keep. Builds from 2,500,000 MMK. KBZPay · MMQR · MY/EN · offline." />
+    <meta property="og:description" content="We build custom software from your real data — Viber threads, Excel, Gmail — and hand you a running system in weeks. From 2,500,000 MMK. Yours to keep." />
     <meta property="og:url" content="https://supermega.dev/" />
     <meta property="og:image" content="https://supermega.dev/site/social/supermega-portal-card.png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Custom business software, built for Myanmar | SUPERMEGA.dev" />
-    <meta name="twitter:description" content="Custom software at SaaS prices. AI-native builds from 2,500,000 MMK. KBZPay · MMQR · MY/EN · offline." />
+    <meta name="twitter:description" content="Custom software built from your real data. From 2,500,000 MMK, delivered in weeks, yours to keep." />
     <meta name="twitter:image" content="https://supermega.dev/site/social/supermega-portal-card.png" />
     <script type="application/ld+json">{"@context":"https://schema.org","@type":"Organization","name":"SUPERMEGA.dev","url":"https://supermega.dev/","logo":"https://supermega.dev/favicon.svg","description":"Custom business software at SaaS prices, AI-native, built for Myanmar SMBs and factories. POS, factory operations, dashboards, AI agents, and more.","email":"swanhtet@supermega.dev","telephone":"+95-9-500-0721","sameAs":["https://www.linkedin.com/in/theswanhtet"]}</script>
     <style>${unicornShellStyle}
@@ -2203,66 +2202,22 @@ ${unicornHeader}
             </div>
           </div>
           <aside class="product-stage" aria-label="DeskPOS live product — point-of-sale for Myanmar shops">
-            <img class="hero-img" src="/site/shots/live-product-restaurant-pos-menu-inventory.png?v=${publicShotVersion}" alt="DeskPOS — point of sale, KBZPay, MMQR, daily close" loading="eager" decoding="async" />
+            <img class="hero-img" src="/site/shots/live-product-restaurant-pos-menu-inventory.png?v=${publicShotVersion}" alt="DeskPOS — live point of sale system" loading="eager" decoding="async" />
             <div class="proof-line" aria-label="What the software does">
               <div class="proof"><b>Live</b><span>pos.supermega.dev</span></div>
-              <div class="proof"><b>Payment</b><span>KBZPay · MMQR · cash</span></div>
-              <div class="proof"><b>Works</b><span>Offline-ready</span></div>
+              <div class="proof"><b>First order</b><span>in 5 min</span></div>
+              <div class="proof"><b>Yours to keep</b><span>One-time payment</span></div>
             </div>
           </aside>
         </section>
 
         <div class="proof-strip section">
-          <a href="https://pos.supermega.dev/" target="_blank" rel="noopener noreferrer"><div><strong>Live now</strong><span>Try DeskPOS free — no signup</span></div></a>
-          <div><strong>From 2,500,000 MMK</strong><span>Paid once — not a subscription</span></div>
-          <div><strong>You own it</strong><span>No per-seat fees, ever</span></div>
-          <div><strong>Offline-ready</strong><span>Keeps working when the internet drops</span></div>
+          <div class="strip-item"><b>Live now</b><span>Try DeskPOS free</span></div>
+          <div class="strip-item"><b>From 2,500,000 MMK</b><span>Paid once, no monthly fee</span></div>
+          <div class="strip-item"><b>You own it</b><span>No per-seat fees, ever</span></div>
+          <div class="strip-item"><b>Delivered in weeks</b><span>Not months</span></div>
         </div>
 
-        <section class="section product-library" id="products">
-          <div class="product-library-head">
-            <h2>What we build</h2>
-          </div>
-          <p style="max-width:48rem;color:var(--muted);margin:-4px 0 2px;line-height:1.55">We're a custom studio — no fixed catalog. DeskPOS is live to try right now; the rest are the kinds of systems we build to fit how you actually work.</p>
-          <div class="outputs">
-            <article class="output" id="build-app-from-workflow">
-              <div class="output-copy">
-                <h3>Document Extraction Ledger</h3>
-                <p>Emails, chat photos, and scanned forms become one clean, reviewable record — with owners, statuses, and a source link on every row.</p>
-                <div class="feature-pills"><span>Intake</span><span>Queue</span><span>Proof</span></div>
-                <div class="cta"><a class="btn primary" href="/products/documents/">See details</a><a class="btn secondary" href="${productRequestLinks.workflow}">Contact</a></div>
-              </div>
-              ${workflowProductMedia}
-            </article>
-            <article class="output" id="factory-issues-maintenance-quality">
-              <div class="output-copy">
-                <h3>Factory Operations App</h3>
-                <p>Production, quality inspections, defect tracking, CAPA, and maintenance work orders — one system for the floor, the QC manager, and the CEO brief.</p>
-                <div class="feature-pills"><span>Production</span><span>Quality</span><span>CAPA</span></div>
-                <div class="cta"><a class="btn primary" href="/products/factory/">See details</a><a class="btn secondary" href="${productRequestLinks.factory}">Contact</a></div>
-              </div>
-              ${factoryProductMedia}
-            </article>
-            <article class="output" id="restaurant-pos-menu-inventory">
-              <div class="output-copy">
-                <h3>DeskPOS — Point of Sale</h3>
-                <p>Ring up orders, take KBZPay / AYA Pay / MMQR / cash, track stock, and close the day with a cash-up the owner can trust. Works offline.</p>
-                <div class="feature-pills"><span>Orders</span><span>Payments</span><span>Daily close</span></div>
-                <div class="cta"><a class="btn primary" href="/products/pos/">See details</a><a class="btn secondary" href="https://pos.supermega.dev/" target="_blank" rel="noopener">Try it live ↗</a></div>
-              </div>
-              ${restaurantProductMedia}
-            </article>
-            <article class="output" id="back-office-ai-desk">
-              <div class="output-copy">
-                <h3>Back Office AI Desk</h3>
-                <p>An AI helper scoped to one recurring job — daily close audit, reorder watch, or supplier follow-up. It drafts; you approve. Nothing acts on its own.</p>
-                <div class="feature-pills"><span>Draft</span><span>Approve</span><span>Log</span></div>
-                <div class="cta"><a class="btn primary" href="/products/back-office/">See details</a><a class="btn secondary" href="${productRequestLinks.agentops}">Contact</a></div>
-              </div>
-              ${agentOpsProductMedia}
-            </article>
-          </div>
-        </section>
 
         <section class="section">
           <h2>Why custom beats SaaS</h2>
@@ -2270,7 +2225,7 @@ ${unicornHeader}
             <div class="uvp-card"><strong>You own it.</strong><span>No per-seat tax that grows when you hire. No vendor that can switch it off. The software is yours to keep.</span></div>
             <div class="uvp-card"><strong>The exact thing.</strong><span>Built around how you actually work — not the average workflow some other company built a template for.</span></div>
             <div class="uvp-card"><strong>AI-native.</strong><span>AI is the substrate: every build can read messy real inputs, draft the next step, and explain itself. Not a chatbot bolted on.</span></div>
-            <div class="uvp-card"><strong>Built for Myanmar.</strong><span>MMK, KBZPay / MMQR, MY/EN bilingual, works when the power and the internet don't. Made here, for here.</span></div>
+            <div class="uvp-card"><strong>Built for real conditions.</strong><span>Works when the internet drops. Handles your local data formats. Runs fast on the hardware you already own.</span></div>
           </div>
         </section>
 
@@ -2278,7 +2233,7 @@ ${unicornHeader}
           <h2>How it works</h2>
           <div class="how-steps">
             <div class="how-step"><n>1</n><strong>Scope</strong><span>One short call. We agree exactly what ships and what is out of scope — fixed, no open-ended hours.</span></div>
-            <div class="how-step"><n>2</n><strong>Deposit</strong><span>50% to start — KBZPay, MMQR, cash, or card. Keeps both sides honest.</span></div>
+            <div class="how-step"><n>2</n><strong>Deposit</strong><span>50% to start. Keeps both sides honest.</span></div>
             <div class="how-step"><n>3</n><strong>Ship</strong><span>We build it and hand you a running thing at a live URL. Not a folder of files.</span></div>
             <div class="how-step"><n>4</n><strong>Care</strong><span>Optional monthly plan keeps it running and improving. Or take it and go.</span></div>
           </div>
@@ -3306,31 +3261,31 @@ const productDetailDocs = [
     displayName: 'DeskPOS — Point of Sale',
     eyebrow: 'Point of sale',
     headline: 'Ring up sales, take any payment, and close the day with proof',
-    subhead: 'The counter app for Myanmar spas, salons, retail shops, cafes, restaurants, and repair counters. Take cash, KBZPay, AYA Pay, and MMQR; track stock and bookings; and close every day with a clean cash-up the owner can trust — even when the internet drops.',
+    subhead: 'The counter app for spas, salons, retail shops, cafes, restaurants, and repair counters. Take cash or any digital payment; track stock and bookings; and close every day with a clean cash-up the owner can trust — even when the internet drops.',
     shot: '/site/shots/live-product-restaurant-pos-menu-inventory.png',
     whatItDoes: [
-      'Rings up orders fast on a phone, tablet, or counter screen, in MMK',
-      'Takes cash, KBZPay, AYA Pay, and MMQR, and keeps the payment slip against each order',
+      'Rings up orders fast on a phone, tablet, or counter screen',
+      'Takes cash and digital payments, and keeps the payment slip against each order',
       'Reconciles the day’s payments by method and flags anything still missing proof',
       'Counts the cash drawer and shows the variance against expected sales',
       'Tracks stock with low-stock alerts and logs waste and prep notes',
       'Keeps working offline and syncs the moment the connection returns',
     ],
     howItWorks: [
-      { step: 'Ring up the order', detail: 'Staff add items and take payment — cash, KBZPay, AYA Pay, or MMQR — and attach the slip. Stock and the running day total update on the spot.' },
+      { step: 'Ring up the order', detail: 'Staff add items and take payment — cash or any digital method — and attach the slip. Stock and the running day total update on the spot.' },
       { step: 'Match payments through the day', detail: 'Each payment is lined up against its order and anything still needing a slip is flagged, so reconciliation is mostly done before close.' },
       { step: 'Close the day', detail: 'Count the drawer, clear any variance and stock exceptions, and the owner digest goes out. The day closes with a record that holds up tomorrow.' },
     ],
     features: [
-      { title: 'Fast counter checkout', desc: 'Add items, apply a discount, and take payment in a few taps — built for a busy counter on a phone or tablet, prices in MMK.' },
-      { title: 'Every payment method, with proof', desc: 'Cash, KBZPay, AYA Pay, and MMQR on one screen. Each order keeps its slip and reference, so a payment has evidence behind it.' },
+      { title: 'Fast counter checkout', desc: 'Add items, apply a discount, and take payment in a few taps — built for a busy counter on a phone or tablet.' },
+      { title: 'Every payment method, with proof', desc: 'Cash and digital payments on one screen. Each order keeps its slip and reference, so a payment has evidence behind it.' },
       { title: 'Daily close and cash-up', desc: 'Payments reconciled by method, the drawer counted against expected cash, variance shown clearly. Nothing closes until gaps are explained.' },
       { title: 'Stock and low-stock alerts', desc: 'Sales draw down stock as they happen; items below their reorder point surface on the close, alongside waste and prep notes.' },
       { title: 'Works offline', desc: 'Sales, payments, and notes save on the device first and sync when the connection returns — a dropped line never stops the counter.' },
       { title: 'Owner daily digest', desc: 'At close the owner gets a one-line summary: sales, top items, cash variance, and anything still needing proof.' },
     ],
-    proofPoint: 'Live and in use — try the full point-of-sale, payments, and daily-close flow with realistic Myanmar shop data at pos.supermega.dev, no signup required.',
-    whoFor: 'Owners and counter staff at Myanmar spas, salons, retail shops, cafes, restaurants, and repair counters — especially operators who want a clean daily close and payment proof without migrating to a heavy POS.',
+    proofPoint: 'Live and in use — try the full point-of-sale, payments, and daily-close flow at pos.supermega.dev, no signup required.',
+    whoFor: 'Owners and counter staff at spas, salons, retail shops, cafes, restaurants, and repair counters — especially operators who want a clean daily close and payment proof without migrating to a heavy POS.',
     primaryCta: { label: 'Open the live demo', href: 'https://pos.supermega.dev/' },
   },
   {
@@ -3349,7 +3304,7 @@ const productDetailDocs = [
       'Gives the plant manager and CEO a daily brief: reject rate, top defects, lines over target, overdue actions',
     ],
     howItWorks: [
-      { step: 'Capture on the floor', detail: 'Inspectors and operators record inspections, grades, defects, downtime, and work orders on a tablet or phone — bilingual, with photos, working even when the WiFi drops.' },
+      { step: 'Capture on the floor', detail: 'Inspectors and operators record inspections, grades, defects, downtime, and work orders on a tablet or phone — with photos, working even when the WiFi drops.' },
       { step: 'Link and surface', detail: 'Each record ties back to the batch, line, operator, and shift, so the board shows the live reject rate, a defect Pareto, and the incidents that need attention now.' },
       { step: 'Close the loop', detail: 'Defects become 5W1H incidents and owned CAPA; machine issues become work orders. Managers track them to verified closure and read one daily brief.' },
     ],
@@ -3359,7 +3314,7 @@ const productDetailDocs = [
       { title: 'Defect tracking on your taxonomy', desc: 'Defects are logged against your actual categories and product models. A Pareto view shows the few defects driving most loss; a spike alert fires on repeat defects in the same window.' },
       { title: 'DQMS: incidents, 5W1H, CAPA', desc: 'Every flagged unit becomes a structured incident and opens a corrective/preventive action with an owner and due date. Nothing auto-closes — full audit trail.' },
       { title: 'Maintenance work orders', desc: 'When a machine goes down or drifts out of spec, raise a work order from the same screen, assign it, and track it to completion.' },
-      { title: 'Plant-manager and CEO brief', desc: 'One daily summary — reject rate against target, top defects, lines over target, downtime, overdue CAPA — bilingual English and Burmese.' },
+      { title: 'Plant-manager and CEO brief', desc: 'One daily summary — reject rate against target, top defects, lines over target, downtime, overdue CAPA.' },
     ],
     proofPoint: 'We build it around your real factory operations — your line targets, defect taxonomy, grading rules, downtime reasons, and CAPA owners. We stand up the first working version in a few working days once we have your taxonomy and a sample of real records.',
     whoFor: 'Discrete manufacturers that still run on log books and Excel — for QC managers, production supervisors, maintenance leads, and the plant manager who needs one honest picture of the floor.',
@@ -3390,10 +3345,10 @@ const productDetailDocs = [
       { title: 'Source and proof trail', desc: 'Each row links back to the exact email or message it came from, with the matched text highlighted. Show where any number came from in one click.' },
       { title: 'Approvals before it is recorded', desc: 'Decisions from the right person are captured as an explicit step, with who decided and when, so the ledger reflects real sign-off.' },
       { title: 'Confidence checks, not blind guesses', desc: 'Clear reads go straight through; anything uncertain is held for a person to confirm. You see the confidence on every field.' },
-      { title: 'Built for your formats', desc: 'Tuned to your own document shapes, Burmese business names, MMK amounts, and KBZPay / MMQR references — and exports clean CSV.' },
+      { title: 'Built for your formats', desc: 'Tuned to your own document shapes, business names, amounts, and payment references — and exports clean CSV.' },
     ],
-    proofPoint: 'We turn messy operating records — hundreds of emails, chat threads, and scanned forms — into one structured ledger of reviewable claims, decisions, owners, and source-linked evidence. We build yours around your real document shapes, Burmese business names, and MMK / MMQR references.',
-    whoFor: 'Myanmar shops, factories, and distributors whose real work arrives as emails, chat messages, and photos — and the office staff who today re-key all of it into spreadsheets by hand.',
+    proofPoint: 'We turn messy operating records — hundreds of emails, chat threads, and scanned forms — into one structured ledger of reviewable claims, decisions, owners, and source-linked evidence. We build yours around your real document shapes and naming conventions.',
+    whoFor: 'Shops, factories, and distributors whose real work arrives as emails, chat messages, and photos — and the office staff who today re-key all of it into spreadsheets by hand.',
     primaryCta: { label: 'Talk to us about your documents', href: '/contact/' },
   },
   {
@@ -3404,7 +3359,7 @@ const productDetailDocs = [
     subhead: 'Takes one recurring task you already do by hand — the daily close audit, reorder watch, or supplier follow-up — and prepares the work for you each day. Every finding and message is held in a review queue. Nothing is sent, posted, or changed until you press approve.',
     shot: '/site/shots/live-demo-agent-builder.png',
     whatItDoes: [
-      'Reads the source you already have — register Z-reports, KBZPay/MMQR settlement exports, a stock sheet — and prepares one job',
+      'Reads the source you already have — register Z-reports, settlement exports, a stock sheet — and prepares one job',
       'Drafts findings and suggested next steps, ranked by money at risk, instead of doing anything on its own',
       'Holds every draft in an approval queue: approve, edit, or dismiss, one at a time',
       'Keeps sends, edits, refunds, and anything customer-facing blocked until you say so',
@@ -3424,7 +3379,7 @@ const productDetailDocs = [
       { title: 'Weekly value report', desc: 'A short weekly report shows findings raised, money flagged, and time saved — so the desk has to keep proving it is worth keeping.' },
     ],
     proofPoint: 'Built on a strict draft-only boundary: sends, writes, payments, credentials, and customer-impacting decisions stay blocked until you approve them, and every run is logged. This is an early product — we set up the first desk in 4–5 working days once the job, examples, and blocked actions are agreed.',
-    whoFor: 'Shop, restaurant, and factory owners and their operations managers in Myanmar who do the same back-office check every day by hand and want a careful AI helper that prepares the work but never acts without approval.',
+    whoFor: 'Shop, restaurant, and factory owners and their operations managers who do the same back-office check every day by hand and want a careful AI helper that prepares the work but never acts without approval.',
     primaryCta: { label: 'Talk to us about a pilot', href: '/contact/?package=back-office-workflow-desk' },
   },
 ]
@@ -3657,30 +3612,7 @@ ${unicornHeader}
           <p class="of-note">Starting "from" prices in MMK. Final scope and price confirmed on a short call. Fixed-scope with clear revision caps; 50% deposit to start via KBZPay, MMQR, cash, or card.</p>
         </section>
 
-        <section class="section">
-          <h2>By product</h2>
-          <p class="of-note" style="margin-top:6px">Two ways to look at the same work. DeskPOS is a shipped product you can try today; Factory &amp; Operations and Custom Solutions are built to order for your business.</p>
-          <div class="of-grid">
-            ${publicProductTiers.map((p) => `<div class="of-card">
-              <h3>${p.name}</h3>
-              <p class="of-who">${p.buildToOrder ? 'Build-to-order — shaped to your business.' : 'Live product — try it today.'}</p>
-              <ul class="of-gets">${p.tiers.map((t) => `<li><strong>${t.tierName}</strong> — ${t.price}</li>`).join('')}</ul>
-              <div class="of-spacer"></div>
-              <a class="btn secondary" href="/contact/?package=build">Talk to us</a>
-            </div>`).join('')}
-          </div>
-        </section>
 
-        <section class="section">
-          <h2>How we work</h2>
-          <p class="of-note" style="margin-top:6px">One-time build, yours to keep. No per-seat tax that climbs every time you hire — pay once, own it, take it and go.</p>
-          <div class="pd-steps">
-            <div class="pd-step"><n>1</n><strong>Scope</strong><span>One short call. We agree exactly what ships and what's out of scope — no open-ended hours.</span></div>
-            <div class="pd-step"><n>2</n><strong>Deposit</strong><span>50% to start — KBZPay, MMQR, cash, or card. The local norm, and it keeps us both honest.</span></div>
-            <div class="pd-step"><n>3</n><strong>Ship</strong><span>We build it AI-native and hand you a running thing at a live URL — not a folder of files.</span></div>
-            <div class="pd-step"><n>4</n><strong>Care</strong><span>Optional monthly plan keeps it running and improving as your business grows. Or take it and go — it's yours.</span></div>
-          </div>
-        </section>
 
         <section class="section">
           <div class="final">
