@@ -866,6 +866,12 @@ module.exports = async function handler(req, res) {
         primary_datastore: datastore.datastoreStatus(),
         fallback_queue: fallbackQueueStatus(),
         management_mode: databaseConfigured() ? 'database_queue' : 'email_fallback',
+        setup_checklist: {
+          resend_api_key: Boolean(envText('RESEND_API_KEY')) ? 'configured' : 'missing — contact form email will not send',
+          supabase: (envText('SUPABASE_URL') && envText('SUPABASE_SERVICE_ROLE_KEY')) ? 'configured' : 'missing — leads will not be saved to DB',
+          telegram: envText('TELEGRAM_BOT_TOKEN') ? 'configured' : 'missing — no Telegram alerts on new leads',
+          ops_key: Boolean(envText('SUPERMEGA_OPS_KEY')) ? 'configured' : 'missing — commercial-control and action-runner are blocked',
+        },
       })
       return
     }

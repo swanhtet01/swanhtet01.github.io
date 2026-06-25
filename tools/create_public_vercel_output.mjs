@@ -2074,6 +2074,115 @@ const restaurantProductMedia = productMediaStack(restaurantProductUi, restaurant
 const agentOpsProductMedia = productMediaStack('', agentOpsProductGallery)
 
 const publicLanguageToggleScript = ''
+
+function unicornSocialMeta({ title, description, url }) {
+  const t = String(title || '').replace(/"/g, '&quot;')
+  const d = String(description || '').replace(/"/g, '&quot;')
+  const u = String(url || '')
+  return `<meta property="og:type" content="website" />
+    <meta property="og:site_name" content="SUPERMEGA.dev" />
+    <meta property="og:title" content="${t}" />
+    <meta property="og:description" content="${d}" />
+    <meta property="og:url" content="${u}" />
+    <meta property="og:image" content="https://supermega.dev/site/social/supermega-portal-card.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="${t}" />
+    <meta name="twitter:description" content="${d}" />
+    <meta name="twitter:image" content="https://supermega.dev/site/social/supermega-portal-card.png" />`
+}
+
+const unicornAiAgentsHtml = `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="index,follow" />
+    <title>AI Agents in Days | SUPERMEGA.dev</title>
+    <meta name="description" content="Commission an AI agent built around your real workflow. Deposit today, running in 1–5 days. Yours to keep." />
+    <meta name="theme-color" content="#f4efe6" />
+    <link rel="canonical" href="https://supermega.dev/ai-agents/" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" />
+    ${unicornSocialMeta({ title: 'AI Agents in Days | SUPERMEGA.dev', description: 'Commission an AI agent built around your real workflow. Deposit today, running in 1–5 days.', url: 'https://supermega.dev/ai-agents/' })}
+    <style>${unicornShellStyle}
+      .agent-hero { padding: clamp(56px,10vw,96px) 0 0; text-align: center; }
+      .agent-hero .eyebrow { margin-bottom: 18px; }
+      .agent-hero h1 { font-family: 'Fraunces', Georgia, serif; font-size: clamp(38px,6vw,72px); line-height: .95; letter-spacing: -.04em; max-width: 14ch; margin: 0 auto 24px; }
+      .agent-hero p { max-width: 46ch; margin: 0 auto 36px; color: var(--muted); font-size: clamp(16px,1.5vw,19px); line-height: 1.6; }
+      .sprint-grid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 20px; margin-top: 48px; }
+      .sprint-card { border: 1px solid var(--line); border-radius: 18px; padding: 28px; background: var(--surface); display: flex; flex-direction: column; gap: 14px; }
+      .sprint-card .s-icon { font-size: 28px; }
+      .sprint-card .s-time { font-size: 12px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--blue); }
+      .sprint-card h3 { font-size: 20px; letter-spacing: -.02em; margin: 0; }
+      .sprint-card p { font-size: 15px; color: var(--muted); line-height: 1.55; margin: 0; flex: 1; }
+      .sprint-card .btn { align-self: flex-start; }
+      .agent-proof { margin: 64px auto 0; max-width: 600px; text-align: center; }
+      .agent-proof blockquote { font-family: 'Fraunces', Georgia, serif; font-size: clamp(17px,2vw,22px); font-style: italic; line-height: 1.45; color: var(--ink); border-left: 3px solid var(--blue); padding-left: 20px; text-align: left; margin: 0 0 20px; }
+      .agent-proof cite { font-size: 14px; color: var(--muted); display: block; margin-top: 8px; }
+      @media (max-width: 880px) { .sprint-grid { grid-template-columns: 1fr; } }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+${unicornHeader}
+      <main>
+        <section class="agent-hero section">
+          <div class="eyebrow">Sprint builds · 1–5 days · Yours to keep</div>
+          <h1>An AI agent for your exact job.</h1>
+          <p>Tell us the one thing eating your team's time. We'll build an agent that reads your real inputs, drafts the work, and waits for your sign-off before anything sends or saves.</p>
+          <div class="cta"><a class="btn primary" href="/contact/?package=agent">Commission a build</a><a class="btn secondary" href="/offers/">See pricing</a></div>
+        </section>
+
+        <section class="section">
+          <div class="sprint-grid">
+            <div class="sprint-card">
+              <div class="s-icon">📧</div>
+              <div class="s-time">3–5 days</div>
+              <h3>Email Intelligence Agent</h3>
+              <p>Reads your inbox, surfaces what needs action, writes reply drafts. You approve before anything sends.</p>
+              <a class="btn secondary" href="/contact/?package=agent-email">Talk to us →</a>
+            </div>
+            <div class="sprint-card">
+              <div class="s-icon">📁</div>
+              <div class="s-time">3–5 days</div>
+              <h3>Drive Document Processor</h3>
+              <p>A file lands in your Drive. AI pulls the key fields and updates your Sheet automatically — no re-typing.</p>
+              <a class="btn secondary" href="/contact/?package=agent-drive">Talk to us →</a>
+            </div>
+            <div class="sprint-card">
+              <div class="s-icon">📨</div>
+              <div class="s-time">1–2 days</div>
+              <h3>Scheduled Digest Agent</h3>
+              <p>Daily or weekly AI summary of what matters, delivered to your inbox. Set it once, it runs itself.</p>
+              <a class="btn secondary" href="/contact/?package=agent-digest">Talk to us →</a>
+            </div>
+          </div>
+        </section>
+
+        <section class="section agent-proof">
+          <blockquote>"We had 300+ warranty claims buried in a Gmail chain. Three weeks later we had a tracked ledger with owners and statuses on every row."</blockquote>
+          <cite>— Real client project, Yangon-based manufacturer</cite>
+          <div class="cta" style="justify-content:center;margin-top:28px">
+            <a class="btn primary" href="/contact/?package=agent">Start with one agent</a>
+          </div>
+        </section>
+      </main>
+      <footer>
+        <span>SUPERMEGA.dev — custom business software for Myanmar. Built from your real data.</span>
+        <span class="footer-links">
+          <a href="mailto:swanhtet@supermega.dev">swanhtet@supermega.dev</a>
+          <a href="/products/">Products</a>
+          <a href="/demo/">Demos</a>
+          <a href="/offers/">Pricing</a>
+          <a href="https://www.linkedin.com/in/theswanhtet" rel="noreferrer" target="_blank">LinkedIn</a>
+        </span>
+      </footer>
+    </div>
+${publicLanguageToggleScript}
+  </body>
+</html>`
+
 const productCarouselScript = `
     <script>
       document.querySelectorAll('[data-carousel]').forEach((carousel) => {
@@ -3022,6 +3131,15 @@ const config = {
       dest: '/machine/index.html',
     },
     {
+      src: '^/ai-agents/?$',
+      dest: '/ai-agents/index.html',
+    },
+    {
+      src: '^/pricing/?$',
+      status: 308,
+      headers: { Location: '/offers/' },
+    },
+    {
       src: '^/work/?$',
       status: 308,
       headers: { Location: '/demo/' },
@@ -3175,7 +3293,7 @@ async function copyPublicStatic(source, destination, rootSource = source) {
 }
 
 async function prunePublicStaticRoot() {
-  const allowedRootDirs = new Set(['assets', 'site', 'social', 'products', 'start', 'contact', 'offers', 'work', 'machine', 'card', 'c', 'demo'])
+  const allowedRootDirs = new Set(['assets', 'site', 'social', 'products', 'start', 'contact', 'offers', 'work', 'machine', 'card', 'c', 'demo', 'ai-agents'])
   for (const entry of await readdir(staticDir, { withFileTypes: true }).catch(() => [])) {
     if (!entry.isDirectory() || allowedRootDirs.has(entry.name)) continue
     await rm(resolve(staticDir, entry.name), { recursive: true, force: true, maxRetries: 8, retryDelay: 250 })
@@ -3656,6 +3774,8 @@ await mkdir(resolve(staticDir, 'contact'), { recursive: true })
 await writeFile(resolve(staticDir, 'contact', 'index.html'), normalizePublicProductNames(collapsedContactHtml), 'utf8')
 await mkdir(resolve(staticDir, 'offers'), { recursive: true })
 await writeFile(resolve(staticDir, 'offers', 'index.html'), normalizePublicProductNames(publicOffersHtml), 'utf8')
+await mkdir(resolve(staticDir, 'ai-agents'), { recursive: true })
+await writeFile(resolve(staticDir, 'ai-agents', 'index.html'), unicornAiAgentsHtml)
 
 // Work / case studies — public proof. Honest, de-identified real builds (live products + client systems).
 const publicWorkCases = [
