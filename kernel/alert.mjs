@@ -24,4 +24,20 @@ export async function captureError(context, detail, meta = {}) {
   } catch { return false }
 }
 
-export default { captureError }
+// Plain best-effort notification (no error framing) to the owner's own Telegram. Never throws.
+export async function notify(text) {
+  const token = String(process.env.TELEGRAM_BOT_TOKEN || '').trim()
+  const chat = String(process.env.TELEGRAM_ALERT_CHAT_ID || process.env.TELEGRAM_CHAT_ID || '').trim()
+  if (!token || !chat) return false
+  try {
+    await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ chat_id: chat, text: String(text || '').slice(0, 3500), disable_web_page_preview: true }),
+      signal: AbortSignal.timeout(6000),
+    })
+    return true
+  } catch { return false }
+}
+
+export default { captureError, notify }

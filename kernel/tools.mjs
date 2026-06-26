@@ -6,6 +6,7 @@ import infraHttp from './connectors/infra-http.mjs'
 import gmail from './connectors/data-gmail.mjs'
 import store from './store.mjs'
 import cbm from './connectors/data-cbm-rate.mjs'
+import sheets from './connectors/data-sheets.mjs'
 
 export const TOOLS = {
   platform_status: {
@@ -66,6 +67,16 @@ export const TOOLS = {
     run: async ({ query }) => {
       const r = await gmail.search(String(query || ''), { maxResults: 1 })
       return { query: String(query || ''), approxCount: r.resultSizeEstimate || 0 }
+    },
+  },
+  sheets_read: {
+    description: 'Read a range of cells from a Google Sheet the service account can access (the sheet must be shared with it). Args: spreadsheet_id (from the sheet URL) + range (A1 notation, e.g. "Sheet1!A1:F50"). Returns the rows. Read-only — never writes.',
+    input_schema: { type: 'object', properties: { spreadsheet_id: { type: 'string' }, range: { type: 'string', description: 'A1 notation, e.g. Sheet1!A1:F50' } }, required: ['spreadsheet_id', 'range'], additionalProperties: false },
+    available: () => { try { return sheets.configured() } catch { return false } },
+    run: async ({ spreadsheet_id, range }) => {
+      const r = await sheets.readRange(String(spreadsheet_id || ''), String(range || ''))
+      const values = (r.values || []).slice(0, 50).map((row) => (Array.isArray(row) ? row.slice(0, 20) : row))
+      return { range: r.range, rows: values.length, values }
     },
   },
 }
