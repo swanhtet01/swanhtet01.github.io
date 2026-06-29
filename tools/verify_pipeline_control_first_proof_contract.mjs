@@ -76,6 +76,15 @@ assert.ok(action.first_proof.proof_delivery_packet.includes('## Acceptance test 
 assert.ok(action.first_proof.pilot_close_packet.includes('# Daily Intelligence Brief Agent pilot close packet'))
 assert.ok(action.first_proof.pilot_close_packet.includes('Price hint: 11,000,000 MMK setup'))
 assert.ok(action.first_proof.pilot_close_packet.includes('Confirm pilot scope and price'))
+assert.equal(action.first_proof.pilot_order_room.status, 'draft_owner_approval_required')
+assert.equal(action.first_proof.pilot_order_room.payment_state, 'payment_proof_required')
+assert.equal(action.first_proof.pilot_order_room.order_state, 'order_not_started')
+assert.ok(action.first_proof.pilot_order_room.payment_request_draft.includes('PAYMENT_LINK_REQUIRED_AFTER_OWNER_APPROVAL'))
+assert.ok(action.first_proof.pilot_order_room.payment_request_draft.includes('Do not claim real MRR until payment proof is recorded.'))
+assert.ok(action.first_proof.pilot_order_room.payment_proof_ledger_csv.includes('"payment_proof_required"'))
+assert.ok(action.first_proof.pilot_order_room.order_room_ledger_csv.includes('"order_not_started"'))
+assert.ok(action.first_proof.pilot_order_room.order_room_ledger_csv.includes('"real_mrr_delta"'))
+assert.ok(action.first_proof.pilot_order_room.pilot_start_checklist.includes('Payment proof is attached to the payment-proof ledger.'))
 assert.ok(!JSON.stringify(action).includes('owner@example.com'))
 
 console.log(
@@ -89,6 +98,7 @@ console.log(
       buyer_reply_draft: 'ready',
       proof_delivery_packet: 'ready',
       pilot_close_packet: 'ready',
+      pilot_order_room: 'ready',
     },
     null,
     2,

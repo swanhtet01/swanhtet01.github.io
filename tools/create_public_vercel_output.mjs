@@ -4640,6 +4640,46 @@ const publicOperatorConsoleHtml = `<!doctype html>
               '## Close message',
               'If this first proof is useful, I can turn it into the working Daily Intelligence Brief Agent pilot. The current price hint is 11,000,000 MMK setup. I will keep the first production run approval-only and show source trace for the important outputs.'
             ].join('\\n'),
+            pilot_order_room:{
+              status:'draft_owner_approval_required',
+              payment_state:'payment_proof_required',
+              order_state:'order_not_started',
+              payment_request_draft:[
+                '# Daily Intelligence Brief Agent payment request draft',
+                '',
+                'Status: draft - owner approval required before sending',
+                'Lead: SAMPLE-SETUP',
+                'Pilot amount: 11,000,000 MMK setup',
+                'Payment route: PAYMENT_LINK_REQUIRED_AFTER_OWNER_APPROVAL',
+                '',
+                '## Buyer message',
+                'Approved scope: turn the first proof into the working Daily Intelligence Brief Agent pilot.',
+                'Amount to approve: 11,000,000 MMK setup.',
+                'I will start the pilot only after payment route approval and payment proof are attached to the order room.',
+                '',
+                '## Guardrails',
+                '- Do not send this request until owner approves the scope and payment route.',
+                '- Do not create a live payment link or checkout session from this packet.',
+                '- Do not start the private workspace until payment proof is attached.',
+                '- Do not claim real MRR until payment proof is recorded.'
+              ].join('\\n'),
+              payment_proof_ledger_csv:[
+                '"lead_id","template_id","amount_hint","payment_route","payment_status","payment_proof","real_mrr_delta","next_step"',
+                '"SAMPLE-SETUP","daily-intelligence-brief","11,000,000 MMK setup","PAYMENT_LINK_REQUIRED_AFTER_OWNER_APPROVAL","payment_proof_required","attach_receipt_or_transfer_reference","0","owner_approval_before_payment_request"'
+              ].join('\\n'),
+              order_room_ledger_csv:[
+                '"lead_id","template_id","order_status","scope_status","payment_status","workspace_status","start_permission","real_mrr_delta","next_step"',
+                '"SAMPLE-SETUP","daily-intelligence-brief","order_not_started","scope_approval_required","payment_proof_required","not_created_until_payment_proof","owner_approval_required","0","confirm_scope_price_and_payment_proof"'
+              ].join('\\n'),
+              pilot_start_checklist:[
+                'Buyer confirms the first proof is useful.',
+                'Owner confirms pilot scope and MMK price.',
+                'Owner approves payment route before any payment request is sent.',
+                'Payment proof is attached to the payment-proof ledger.',
+                'Private operator workspace is created only after payment proof.',
+                'First production run remains approval-only until accepted.'
+              ]
+            },
             approval_required:true,
             human_gate:'owner approval before send/write/payment actions'
           }
@@ -4673,6 +4713,16 @@ const publicOperatorConsoleHtml = `<!doctype html>
       if(!proof || !proof.pilot_close_packet)return '';
       const id = 'pilot-close-'+index;
       return '<div class="operator-proof-section"><span>Pilot close packet</span><textarea class="operator-reply" id="'+id+'" readonly>'+esc(proof.pilot_close_packet)+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+id+'">Copy pilot packet</button></div>';
+    }
+    function pilotOrderRoom(proof, index){
+      const room = proof && proof.pilot_order_room;
+      if(!room)return '';
+      const paymentId = 'payment-request-'+index;
+      const paymentLedgerId = 'payment-proof-ledger-'+index;
+      const orderLedgerId = 'order-room-ledger-'+index;
+      const checklistId = 'pilot-start-checklist-'+index;
+      const checklist = (room.pilot_start_checklist || []).filter(Boolean).map(function(item){return '- [ ] '+item}).join('\\n');
+      return '<div class="operator-proof-section operator-order-room"><span>Paid pilot order room</span><div class="operator-meta"><span class="operator-chip">'+esc(room.status || 'draft_owner_approval_required')+'</span><span class="operator-chip">'+esc(room.payment_state || 'payment_proof_required')+'</span><span class="operator-chip">'+esc(room.order_state || 'order_not_started')+'</span></div><textarea class="operator-reply" id="'+paymentId+'" readonly>'+esc(room.payment_request_draft || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+paymentId+'">Copy payment request</button><textarea class="operator-reply" id="'+paymentLedgerId+'" readonly>'+esc(room.payment_proof_ledger_csv || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+paymentLedgerId+'">Copy payment ledger</button><textarea class="operator-reply" id="'+orderLedgerId+'" readonly>'+esc(room.order_room_ledger_csv || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+orderLedgerId+'">Copy order ledger</button><textarea class="operator-reply" id="'+checklistId+'" readonly>'+esc(checklist)+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+checklistId+'">Copy pilot start checklist</button></div>';
     }
     function legacyCopy(el){
       el.focus();
@@ -4709,7 +4759,7 @@ const publicOperatorConsoleHtml = `<!doctype html>
       if(!actions.length){actionsEl.innerHTML = '<div class="operator-item">No recent actions.</div>';return}
       actionsEl.innerHTML = actions.map(function(action,index){
         const proof = action.first_proof;
-        const proofHtml = proof ? '<div class="operator-proof"><strong>'+esc(proof.title || 'First proof')+'</strong><div class="operator-meta"><span class="operator-chip">'+esc(proof.status)+'</span><span class="operator-chip">'+esc(proof.template_id)+'</span><span class="operator-chip">'+esc(proof.human_gate)+'</span></div><div>'+esc(proof.first_proof_target || '')+'</div>'+proofStarterLink(proof)+proofList('Checklist',proof.checklist)+proofList('Acceptance tests',proof.acceptance_tests)+proofBuyerReply(proof,index)+proofDeliveryPacket(proof,index)+pilotClosePacket(proof,index)+'</div>' : '';
+        const proofHtml = proof ? '<div class="operator-proof"><strong>'+esc(proof.title || 'First proof')+'</strong><div class="operator-meta"><span class="operator-chip">'+esc(proof.status)+'</span><span class="operator-chip">'+esc(proof.template_id)+'</span><span class="operator-chip">'+esc(proof.human_gate)+'</span></div><div>'+esc(proof.first_proof_target || '')+'</div>'+proofStarterLink(proof)+proofList('Checklist',proof.checklist)+proofList('Acceptance tests',proof.acceptance_tests)+proofBuyerReply(proof,index)+proofDeliveryPacket(proof,index)+pilotClosePacket(proof,index)+pilotOrderRoom(proof,index)+'</div>' : '';
         return '<article class="operator-item"><strong>'+esc(action.title || action.action_type)+'</strong><div class="operator-meta"><span class="operator-chip">'+esc(action.status)+'</span><span class="operator-chip">'+esc(action.priority)+'</span><span class="operator-chip">'+esc(action.approval_state)+'</span><span>'+esc(action.lead_id)+'</span></div><div>'+esc(action.next_step || '')+'</div>'+proofHtml+'</article>';
       }).join('');
       actionsEl.querySelectorAll('[data-copy-target]').forEach(function(button){button.addEventListener('click',function(){copyDraft(button.getAttribute('data-copy-target'))})});

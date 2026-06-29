@@ -36,6 +36,10 @@ function list(value) {
     .filter(Boolean)
 }
 
+function csvCell(value) {
+  return `"${text(value).replace(/"/g, '""')}"`
+}
+
 function envText(...names) {
   for (const name of names) {
     const value = text(process.env[name])
@@ -89,6 +93,7 @@ function firstProofPacket(row) {
   const firstProofTarget = text(result.first_proof_target) || text(task.first_proof_target) || text(payload.first_proof_target)
   const priceHint = text(task.price_hint) || text(payload.price_hint) || 'quote after proof review'
   const nextStep = text(row.next_step) || 'Share one approved sample source so we can build the first proof.'
+  const leadId = text(row.lead_id) || 'not set'
   const sourceTrace = list(task.source_trace || payload.source_trace)
   if (starterKitUrl) sourceTrace.push(`Starter kit: ${starterKitUrl}`)
   if (text(row.lead_id)) sourceTrace.push(`Lead: ${text(row.lead_id)}`)
@@ -110,7 +115,7 @@ function firstProofPacket(row) {
     `# ${templateName || 'SUPERMEGA agent'} first proof`,
     '',
     `Status: draft - review before sending`,
-    `Lead: ${text(row.lead_id) || 'not set'}`,
+    `Lead: ${leadId}`,
     `First proof target: ${firstProofTarget || 'not set'}`,
     '',
     '## Result',
@@ -128,7 +133,7 @@ function firstProofPacket(row) {
   const pilotClosePacket = [
     `# ${templateName || 'SUPERMEGA agent'} pilot close packet`,
     '',
-    `Lead: ${text(row.lead_id) || 'not set'}`,
+    `Lead: ${leadId}`,
     `Pilot offer: turn the approved first proof into a working owner-triggered workflow.`,
     `Price hint: ${priceHint}`,
     '',
@@ -146,6 +151,66 @@ function firstProofPacket(row) {
     '## Close message',
     `If this first proof is useful, I can turn it into the working ${templateName || 'SUPERMEGA agent'} pilot. The current price hint is ${priceHint}. I will keep the first production run approval-only and show source trace for the important outputs.`,
   ].join('\n')
+  const paymentRequestDraft = [
+    `# ${templateName || 'SUPERMEGA agent'} payment request draft`,
+    '',
+    'Status: draft - owner approval required before sending',
+    `Lead: ${leadId}`,
+    `Pilot amount: ${priceHint}`,
+    'Payment route: PAYMENT_LINK_REQUIRED_AFTER_OWNER_APPROVAL',
+    '',
+    '## Buyer message',
+    `Approved scope: turn the first proof into the working ${templateName || 'SUPERMEGA agent'} pilot.`,
+    `Amount to approve: ${priceHint}.`,
+    'I will start the pilot only after payment route approval and payment proof are attached to the order room.',
+    '',
+    '## Guardrails',
+    '- Do not send this request until owner approves the scope and payment route.',
+    '- Do not create a live payment link or checkout session from this packet.',
+    '- Do not start the private workspace until payment proof is attached.',
+    '- Do not claim real MRR until payment proof is recorded.',
+  ].join('\n')
+  const paymentProofLedgerCsv = [
+    ['lead_id', 'template_id', 'amount_hint', 'payment_route', 'payment_status', 'payment_proof', 'real_mrr_delta', 'next_step'].map(csvCell).join(','),
+    [
+      leadId,
+      templateId || 'not set',
+      priceHint,
+      'PAYMENT_LINK_REQUIRED_AFTER_OWNER_APPROVAL',
+      'payment_proof_required',
+      'attach_receipt_or_transfer_reference',
+      '0',
+      'owner_approval_before_payment_request',
+    ]
+      .map(csvCell)
+      .join(','),
+  ].join('\n')
+  const orderRoomLedgerCsv = [
+    ['lead_id', 'template_id', 'order_status', 'scope_status', 'payment_status', 'workspace_status', 'start_permission', 'real_mrr_delta', 'next_step']
+      .map(csvCell)
+      .join(','),
+    [
+      leadId,
+      templateId || 'not set',
+      'order_not_started',
+      'scope_approval_required',
+      'payment_proof_required',
+      'not_created_until_payment_proof',
+      'owner_approval_required',
+      '0',
+      'confirm_scope_price_and_payment_proof',
+    ]
+      .map(csvCell)
+      .join(','),
+  ].join('\n')
+  const pilotStartChecklist = [
+    'Buyer confirms the first proof is useful.',
+    'Owner confirms pilot scope and MMK price.',
+    'Owner approves payment route before any payment request is sent.',
+    'Payment proof is attached to the payment-proof ledger.',
+    'Private operator workspace is created only after payment proof.',
+    'First production run remains approval-only until accepted.',
+  ]
 
   return {
     status: isBrief ? 'operator_brief_ready' : 'queued_for_runner',
@@ -159,6 +224,15 @@ function firstProofPacket(row) {
     buyer_reply_draft: buyerReplyDraft,
     proof_delivery_packet: proofDeliveryPacket,
     pilot_close_packet: pilotClosePacket,
+    pilot_order_room: {
+      status: 'draft_owner_approval_required',
+      payment_state: 'payment_proof_required',
+      order_state: 'order_not_started',
+      payment_request_draft: paymentRequestDraft,
+      payment_proof_ledger_csv: paymentProofLedgerCsv,
+      order_room_ledger_csv: orderRoomLedgerCsv,
+      pilot_start_checklist: pilotStartChecklist,
+    },
     approval_required: result.approval_required !== undefined ? result.approval_required !== false : task.approval_required !== false,
     human_gate: text(result.human_gate) || text(task.human_gate) || 'owner approval before send/write/payment actions',
   }

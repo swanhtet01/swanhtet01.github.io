@@ -177,18 +177,19 @@ try {
         hasBuyerReplyRenderer: html.includes('proofBuyerReply') && html.includes('Copy buyer reply'),
         hasProofDeliveryRenderer: html.includes('proofDeliveryPacket') && html.includes('Copy proof packet'),
         hasPilotCloseRenderer: html.includes('pilotClosePacket') && html.includes('Copy pilot packet'),
+        hasPilotOrderRoomRenderer: html.includes('pilotOrderRoom') && html.includes('Copy payment request'),
         hasSampleData: html.includes('samplePipelineData') && html.includes('No lead was created'),
         overflowX: Math.max(0, document.documentElement.scrollWidth - document.documentElement.clientWidth),
       }
     })
     if (operator.title !== 'Operator Console | SUPERMEGA.dev') fail('operator_title_not_current', { viewport: viewport.name, operator })
     if (!operator.opsKeyVisible || !operator.sampleVisible || !operator.refreshVisible || !operator.runnerVisible) fail('operator_controls_missing', { viewport: viewport.name, operator })
-    if (!operator.hasStarterKitRenderer || !operator.hasChecklistRenderer || !operator.hasAcceptanceRenderer || !operator.hasBuyerReplyRenderer || !operator.hasProofDeliveryRenderer || !operator.hasPilotCloseRenderer || !operator.hasSampleData) fail('operator_first_proof_renderer_missing', { viewport: viewport.name, operator })
+    if (!operator.hasStarterKitRenderer || !operator.hasChecklistRenderer || !operator.hasAcceptanceRenderer || !operator.hasBuyerReplyRenderer || !operator.hasProofDeliveryRenderer || !operator.hasPilotCloseRenderer || !operator.hasPilotOrderRoomRenderer || !operator.hasSampleData) fail('operator_first_proof_renderer_missing', { viewport: viewport.name, operator })
     if (operator.overflowX > 0) fail('operator_horizontal_overflow', { viewport: viewport.name, operator })
     await page.click('#load-sample')
     await expectCopy(
       page,
-      ['Sample Daily Intelligence Brief first proof', 'Open starter kit', 'Checklist', 'Acceptance tests', 'Buyer reply draft', 'Copy buyer reply', 'Proof delivery packet', 'Copy proof packet', 'Pilot close packet', 'Copy pilot packet', 'No lead was created'],
+      ['Sample Daily Intelligence Brief first proof', 'Open starter kit', 'Checklist', 'Acceptance tests', 'Buyer reply draft', 'Copy buyer reply', 'Proof delivery packet', 'Copy proof packet', 'Pilot close packet', 'Copy pilot packet', 'Paid pilot order room', 'Copy payment request', 'Copy payment ledger', 'Copy order ledger', 'Copy pilot start checklist', 'No lead was created'],
       'operator_sample_packet',
       viewport.name,
     )
@@ -199,6 +200,10 @@ try {
       buyerReply: document.querySelector('#operator-actions #buyer-reply-0')?.value || '',
       proofPacket: document.querySelector('#operator-actions #proof-delivery-0')?.value || '',
       pilotPacket: document.querySelector('#operator-actions #pilot-close-0')?.value || '',
+      paymentRequest: document.querySelector('#operator-actions #payment-request-0')?.value || '',
+      paymentLedger: document.querySelector('#operator-actions #payment-proof-ledger-0')?.value || '',
+      orderLedger: document.querySelector('#operator-actions #order-room-ledger-0')?.value || '',
+      pilotStartChecklist: document.querySelector('#operator-actions #pilot-start-checklist-0')?.value || '',
       copyButtons: document.querySelectorAll('#operator-actions .operator-copy').length,
       overflowX: Math.max(0, document.documentElement.scrollWidth - document.documentElement.clientWidth),
     }))
@@ -208,7 +213,11 @@ try {
     if (!operatorSample.buyerReply.includes('Please send one approved sample source')) fail('operator_sample_buyer_reply_missing', { viewport: viewport.name, operatorSample })
     if (!operatorSample.proofPacket.includes('## Acceptance test status')) fail('operator_sample_proof_packet_missing', { viewport: viewport.name, operatorSample })
     if (!operatorSample.pilotPacket.includes('Price hint: 11,000,000 MMK setup')) fail('operator_sample_pilot_packet_missing', { viewport: viewport.name, operatorSample })
-    if (operatorSample.copyButtons < 3) fail('operator_sample_copy_missing', { viewport: viewport.name, operatorSample })
+    if (!operatorSample.paymentRequest.includes('PAYMENT_LINK_REQUIRED_AFTER_OWNER_APPROVAL')) fail('operator_sample_payment_request_missing', { viewport: viewport.name, operatorSample })
+    if (!operatorSample.paymentLedger.includes('payment_proof_required')) fail('operator_sample_payment_ledger_missing', { viewport: viewport.name, operatorSample })
+    if (!operatorSample.orderLedger.includes('order_not_started')) fail('operator_sample_order_ledger_missing', { viewport: viewport.name, operatorSample })
+    if (!operatorSample.pilotStartChecklist.includes('Payment proof is attached to the payment-proof ledger.')) fail('operator_sample_start_checklist_missing', { viewport: viewport.name, operatorSample })
+    if (operatorSample.copyButtons < 7) fail('operator_sample_copy_missing', { viewport: viewport.name, operatorSample })
     const copyButton = page.locator('#operator-actions .operator-copy').first()
     await copyButton.scrollIntoViewIfNeeded()
     await copyButton.click({ force: true })
@@ -236,6 +245,15 @@ try {
     }, { timeout: 5000 }).catch(() => undefined)
     const pilotCopyStatus = await page.locator('#operator-status').innerText({ timeout: 5000 }).catch(() => '')
     if (!pilotCopyStatus.includes('pilot-close-0') || !pilotCopyStatus.includes('Text copied')) fail('operator_sample_pilot_copy_failed', { viewport: viewport.name, pilotCopyStatus })
+    const paymentCopyButton = page.locator('#operator-actions .operator-copy').nth(3)
+    await paymentCopyButton.scrollIntoViewIfNeeded()
+    await paymentCopyButton.click({ force: true })
+    await page.waitForFunction(() => {
+      const value = document.querySelector('#operator-status')?.textContent || ''
+      return value.includes('payment-request-0') || value.includes('copy_failed')
+    }, { timeout: 5000 }).catch(() => undefined)
+    const paymentCopyStatus = await page.locator('#operator-status').innerText({ timeout: 5000 }).catch(() => '')
+    if (!paymentCopyStatus.includes('payment-request-0') || !paymentCopyStatus.includes('Text copied')) fail('operator_sample_payment_copy_failed', { viewport: viewport.name, paymentCopyStatus })
     if (operatorSample.overflowX > 0) fail('operator_sample_horizontal_overflow', { viewport: viewport.name, operatorSample })
     if (consoleMessages.length) fail('console_messages', { viewport: viewport.name, consoleMessages })
 
