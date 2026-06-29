@@ -549,6 +549,9 @@ for (const [label, text] of [
 const homeHtml = readFileSync(resolve(staticDir, 'index.html'), 'utf8')
 const productsHtml = readFileSync(resolve(staticDir, 'products/index.html'), 'utf8')
 const contactHtml = readFileSync(resolve(staticDir, 'contact/index.html'), 'utf8')
+const operatorHtmlPath = resolve(staticDir, 'operator/index.html')
+if (!existsSync(operatorHtmlPath)) fail('public_operator_console_missing')
+const operatorHtml = readFileSync(operatorHtmlPath, 'utf8')
 const contactFunctionPath = resolve(functionsDir, 'api/contact-submissions.js.func/api/contact-submissions.js')
 if (!existsSync(contactFunctionPath)) fail('public_contact_function_missing')
 const contactFunctionSource = readFileSync(contactFunctionPath, 'utf8')
@@ -587,6 +590,17 @@ for (const token of [
   '/products/pos/',
 ]) {
   if (!productsHtml.includes(token)) fail('public_products_contract_missing', { token })
+}
+for (const token of [
+  'noindex,nofollow',
+  'Operator Console',
+  'id="ops-key"',
+  '/api/pipeline-control/status',
+  '/api/action-runner',
+  'first_proof',
+  'Run queue now',
+]) {
+  if (!operatorHtml.includes(token)) fail('public_operator_console_contract_missing', { token })
 }
 const publicAgentTemplateContract = [
   ['deskpos-quickstart', 'DeskPOS Quickstart'],

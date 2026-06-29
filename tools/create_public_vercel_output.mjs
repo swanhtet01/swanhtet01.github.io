@@ -3604,7 +3604,7 @@ async function copyPublicStatic(source, destination, rootSource = source) {
 }
 
 async function prunePublicStaticRoot() {
-  const allowedRootDirs = new Set(['assets', 'site', 'social', 'products', 'agent-templates', 'start', 'contact', 'offers', 'work', 'machine', 'card', 'c', 'demo', 'ai-agents', 'privacy'])
+  const allowedRootDirs = new Set(['assets', 'site', 'social', 'products', 'agent-templates', 'start', 'contact', 'offers', 'work', 'operator', 'machine', 'card', 'c', 'demo', 'ai-agents', 'privacy'])
   for (const entry of await readdir(staticDir, { withFileTypes: true }).catch(() => [])) {
     if (!entry.isDirectory() || allowedRootDirs.has(entry.name)) continue
     await rm(resolve(staticDir, entry.name), { recursive: true, force: true, maxRetries: 8, retryDelay: 250 })
@@ -4327,6 +4327,115 @@ ${publicLanguageToggleScript}
 </html>`
 await mkdir(resolve(staticDir, 'work'), { recursive: true })
 await writeFile(resolve(staticDir, 'work', 'index.html'), normalizePublicProductNames(publicWorkHtml), 'utf8')
+const publicOperatorConsoleHtml = `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="noindex,nofollow" />
+  <title>Operator Console | SUPERMEGA.dev</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" />
+  <style>${unicornShellStyle}
+    .operator-main{padding:clamp(24px,4vw,48px) 0 72px}
+    .operator-grid{display:grid;grid-template-columns:minmax(280px,.9fr) minmax(320px,1.4fr);gap:18px;align-items:start}
+    .operator-panel{border:1px solid var(--line);background:var(--paper);padding:18px}
+    .operator-panel h2{font-size:18px;margin:0 0 12px}
+    .operator-stack{display:grid;gap:12px}
+    .operator-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+    .operator-input{width:100%;min-height:42px;border:1px solid var(--line);background:transparent;color:var(--ink);padding:10px 12px;font:inherit}
+    .operator-kpis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+    .operator-kpi{border:1px solid var(--line);padding:12px;background:color-mix(in srgb,var(--paper) 92%,var(--ink) 8%)}
+    .operator-kpi strong{display:block;font-size:24px;line-height:1}
+    .operator-list{display:grid;gap:10px}
+    .operator-item{border:1px solid var(--line);padding:14px;background:transparent}
+    .operator-meta{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0;color:var(--muted);font-size:13px}
+    .operator-chip{border:1px solid var(--line);padding:3px 7px}
+    .operator-proof{margin-top:10px;padding-top:10px;border-top:1px solid var(--line)}
+    .operator-proof ul{margin:8px 0 0;padding-left:18px}
+    .operator-output{white-space:pre-wrap;overflow:auto;max-height:240px;border:1px solid var(--line);padding:12px;font-size:13px;background:color-mix(in srgb,var(--paper) 90%,var(--ink) 10%)}
+    @media(max-width:840px){.operator-grid{grid-template-columns:1fr}.operator-kpis{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <script>(function(){try{var t=localStorage.getItem('sm-theme');if(!t){t=(window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light';}document.documentElement.setAttribute('data-theme',t);}catch(e){}})();</script>
+    ${unicornHeader}
+    <main class="operator-main">
+      <section class="operator-grid">
+        <div class="operator-panel operator-stack">
+          <div>
+            <div class="eyebrow">Private</div>
+            <h1>Operator Console</h1>
+          </div>
+          <label class="operator-stack">
+            <span>Ops key</span>
+            <input id="ops-key" class="operator-input" type="password" autocomplete="off" placeholder="Paste SUPERMEGA_OPS_KEY" />
+          </label>
+          <div class="operator-row">
+            <button id="save-key" class="btn secondary" type="button">Save key</button>
+            <button id="refresh" class="btn primary" type="button">Refresh queue</button>
+            <button id="run-runner" class="btn secondary" type="button">Run queue now</button>
+          </div>
+          <div class="operator-output" id="operator-status">No data loaded.</div>
+        </div>
+        <div class="operator-panel operator-stack">
+          <div class="operator-kpis" id="operator-kpis"></div>
+          <div class="operator-list" id="operator-actions"></div>
+        </div>
+      </section>
+    </main>
+  </div>
+  <script>
+    const keyInput = document.getElementById('ops-key');
+    const statusBox = document.getElementById('operator-status');
+    const actionsEl = document.getElementById('operator-actions');
+    const kpisEl = document.getElementById('operator-kpis');
+    keyInput.value = sessionStorage.getItem('supermega_ops_key') || '';
+    function esc(value){return String(value == null ? '' : value).replace(/[&<>"']/g,function(ch){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]})}
+    function token(){return keyInput.value.trim()}
+    function authHeaders(){return {accept:'application/json',authorization:'Bearer '+token()}}
+    function setStatus(value){statusBox.textContent = typeof value === 'string' ? value : JSON.stringify(value,null,2)}
+    function renderKpis(data){
+      const metrics = data.metrics || {};
+      kpisEl.innerHTML = [
+        ['Open actions', metrics.open_action_count ?? data.approval_inbox?.pending_count ?? '-'],
+        ['Recent leads', metrics.recent_lead_count ?? '-'],
+        ['Recent actions', metrics.recent_action_count ?? '-'],
+      ].map(function(row){return '<div class="operator-kpi"><span>'+esc(row[0])+'</span><strong>'+esc(row[1])+'</strong></div>'}).join('');
+    }
+    function renderActions(data){
+      const actions = data.recent_actions || [];
+      if(!actions.length){actionsEl.innerHTML = '<div class="operator-item">No recent actions.</div>';return}
+      actionsEl.innerHTML = actions.map(function(action){
+        const proof = action.first_proof;
+        const proofHtml = proof ? '<div class="operator-proof"><strong>'+esc(proof.title || 'First proof')+'</strong><div class="operator-meta"><span class="operator-chip">'+esc(proof.status)+'</span><span class="operator-chip">'+esc(proof.template_id)+'</span><span class="operator-chip">'+esc(proof.human_gate)+'</span></div><div>'+esc(proof.first_proof_target || '')+'</div><ul>'+((proof.acceptance_tests||[]).slice(0,4).map(function(item){return '<li>'+esc(item)+'</li>'}).join(''))+'</ul></div>' : '';
+        return '<article class="operator-item"><strong>'+esc(action.title || action.action_type)+'</strong><div class="operator-meta"><span class="operator-chip">'+esc(action.status)+'</span><span class="operator-chip">'+esc(action.priority)+'</span><span class="operator-chip">'+esc(action.approval_state)+'</span><span>'+esc(action.lead_id)+'</span></div><div>'+esc(action.next_step || '')+'</div>'+proofHtml+'</article>';
+      }).join('');
+    }
+    async function refresh(){
+      if(!token()){setStatus('Paste the ops key first.');return}
+      setStatus('Loading pipeline-control...');
+      const response = await fetch('/api/pipeline-control/status',{headers:authHeaders(),cache:'no-store'});
+      const data = await response.json().catch(function(){return {status:'error',reason:'invalid_json',code:response.status}});
+      if(!response.ok){setStatus(data);return}
+      renderKpis(data); renderActions(data); setStatus(data);
+    }
+    async function runRunner(){
+      if(!token()){setStatus('Paste the ops key first.');return}
+      setStatus('Running action-runner...');
+      const response = await fetch('/api/action-runner',{method:'POST',headers:authHeaders(),cache:'no-store'});
+      const data = await response.json().catch(function(){return {status:'error',reason:'invalid_json',code:response.status}});
+      setStatus(data);
+      if(response.ok) await refresh();
+    }
+    document.getElementById('save-key').addEventListener('click',function(){sessionStorage.setItem('supermega_ops_key',token());setStatus('Ops key saved for this browser tab.')});
+    document.getElementById('refresh').addEventListener('click',refresh);
+    document.getElementById('run-runner').addEventListener('click',runRunner);
+  </script>
+</body>
+</html>`
+await mkdir(resolve(staticDir, 'operator'), { recursive: true })
+await writeFile(resolve(staticDir, 'operator', 'index.html'), publicOperatorConsoleHtml, 'utf8')
 const unicornPrivacyHtml = `<!doctype html>
 <html lang="en">
 <head>
@@ -4407,7 +4516,7 @@ await writeFile(resolve(staticDir, 'card', 'index.html'), publicCardHtml, 'utf8'
 await mkdir(resolve(staticDir, 'demo'), { recursive: true })
 await cp('C:/sm-site/supermega-demo/index.html', resolve(staticDir, 'demo', 'index.html'), { force: true }).catch(() => undefined)
 await cp('C:/sm-site/supermega-demo/favicon.svg', resolve(staticDir, 'demo', 'favicon.svg'), { force: true }).catch(() => undefined)
-await writeFile(resolve(staticDir, 'robots.txt'), 'User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /app/\nDisallow: /clients/\nDisallow: /machine/\nSitemap: https://supermega.dev/sitemap.xml\n', 'utf8')
+await writeFile(resolve(staticDir, 'robots.txt'), 'User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /app/\nDisallow: /clients/\nDisallow: /machine/\nDisallow: /operator/\nSitemap: https://supermega.dev/sitemap.xml\n', 'utf8')
 await writeFile(resolve(staticDir, 'sitemap.xml'), '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url><loc>https://supermega.dev/</loc><changefreq>weekly</changefreq><priority>1.0</priority></url>\n  <url><loc>https://supermega.dev/products/</loc><changefreq>weekly</changefreq><priority>0.9</priority></url>\n  <url><loc>https://supermega.dev/products/pos/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>\n  <url><loc>https://supermega.dev/products/factory/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>\n  <url><loc>https://supermega.dev/products/documents/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>\n  <url><loc>https://supermega.dev/ai-agents/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>\n  <url><loc>https://supermega.dev/agent-templates/</loc><changefreq>weekly</changefreq><priority>0.85</priority></url>\n  <url><loc>https://supermega.dev/agent-templates/deskpos-quickstart/</loc><changefreq>weekly</changefreq><priority>0.72</priority></url>\n  <url><loc>https://supermega.dev/agent-templates/chat-ledger/</loc><changefreq>weekly</changefreq><priority>0.72</priority></url>\n  <url><loc>https://supermega.dev/agent-templates/inbox-calendar-operator/</loc><changefreq>weekly</changefreq><priority>0.72</priority></url>\n  <url><loc>https://supermega.dev/agent-templates/daily-intelligence-brief/</loc><changefreq>weekly</changefreq><priority>0.72</priority></url>\n  <url><loc>https://supermega.dev/agent-templates/factory-ops-ledger/</loc><changefreq>weekly</changefreq><priority>0.72</priority></url>\n  <url><loc>https://supermega.dev/agent-templates/data-clean-report-agent/</loc><changefreq>weekly</changefreq><priority>0.72</priority></url>\n  <url><loc>https://supermega.dev/offers/</loc><changefreq>weekly</changefreq><priority>0.95</priority></url>\n  <url><loc>https://supermega.dev/work/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>\n  <url><loc>https://supermega.dev/contact/</loc><changefreq>monthly</changefreq><priority>0.9</priority></url>\n  <url><loc>https://supermega.dev/card/</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>\n  <url><loc>https://supermega.dev/privacy/</loc><changefreq>yearly</changefreq><priority>0.3</priority></url>\n</urlset>\n', 'utf8')
 await writeFile(
   resolve(staticDir, 'sw.js'),
