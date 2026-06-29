@@ -341,6 +341,118 @@ function databaseConfigured() {
   return datastore.postgresConfigured()
 }
 
+function deskposPipelineTarget() {
+  return envText('DESKPOS_PIPELINE_URL') || 'https://pos.supermega.dev/api/pipeline-leads'
+}
+
+function deskposPipelineStatus() {
+  return {
+    status: 'ready',
+    mode: 'public_contact_to_deskpos_queue',
+    target: deskposPipelineTarget(),
+  }
+}
+
+function isSafeDeskposPipelineUrl(value) {
+  try {
+    const url = new URL(value)
+    return (
+      url.protocol === 'https:' &&
+      url.pathname === '/api/pipeline-leads' &&
+      ['pos.supermega.dev', 'spa-desk-pilot.vercel.app'].includes(url.hostname)
+    )
+  } catch {
+    return false
+  }
+}
+
+function isDeskposLead(record) {
+  const productText = [
+    record.requested_package,
+    record.public_package,
+    record.product_area,
+    record.first_output,
+    record.workflow,
+    record.page_path,
+    record.source_url,
+  ].join(' ').toLowerCase()
+  return /deskpos|point of sale|pos \+ inventory|restaurant pos|restaurant-pos|storedesk|counterline|counter app|service-desk-pos|easypos/.test(productText)
+}
+
+function deskposVertical(record) {
+  const blob = [
+    record.company,
+    record.requested_package,
+    record.product_area,
+    record.workflow,
+    record.goal,
+    record.data,
+  ].join(' ').toLowerCase()
+  for (const [vertical, pattern] of [
+    ['spa', /\bspa\b/],
+    ['salon', /\bsalon\b/],
+    ['retail', /\b(retail|shop|store)\b/],
+    ['cafe', /\b(cafe|coffee)\b/],
+    ['restaurant', /\b(restaurant|bar|food|menu)\b/],
+    ['clinic', /\bclinic\b/],
+    ['gym', /\bgym\b/],
+    ['pharmacy', /\bpharmacy\b/],
+    ['school', /\bschool\b/],
+    ['laundry', /\blaundry\b/],
+    ['repair', /\brepair\b/],
+  ]) {
+    if (pattern.test(blob)) return vertical
+  }
+  return 'other'
+}
+
+function deskposPipelinePayload(record) {
+  return {
+    businessName: record.company || record.name,
+    contact: [record.email, record.phone].filter(Boolean).join(' / '),
+    notes: truncate([
+      record.lead_id ? `Lead ${record.lead_id}` : '',
+      record.requested_package,
+      record.goal,
+      record.source_links ? `Source: ${record.source_links}` : '',
+    ].filter(Boolean).join(' | '), 500),
+    source: 'supermega-public-site',
+    stage: 'lead',
+    submittedAt: record.submitted_at,
+    vertical: deskposVertical(record),
+  }
+}
+
+async function forwardDeskposPipeline({ record }) {
+  if (!isDeskposLead(record)) {
+    return { status: 'skipped', reason: 'not_deskpos_lead' }
+  }
+  const target = deskposPipelineTarget()
+  if (!isSafeDeskposPipelineUrl(target)) {
+    return { status: 'skipped', reason: 'unsafe_deskpos_pipeline_url' }
+  }
+  try {
+    const response = await fetch(target, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      signal: AbortSignal.timeout(5000),
+      body: JSON.stringify(deskposPipelinePayload(record)),
+    })
+    const body = await response.json().catch(() => ({}))
+    if (!response.ok || body.accepted === false) {
+      return { status: 'error', reason: `deskpos_${response.status}`, target }
+    }
+    return {
+      status: 'ready',
+      target,
+      lead_count: body.leadCount ?? null,
+      deskpos_lead_id: body.lead?.id || null,
+    }
+  } catch (error) {
+    return { status: 'error', reason: text(error?.message) || 'deskpos_forward_failed', target }
+  }
+}
+
 function fallbackQueueStatus() {
   const emailConfigured = Boolean(envText('RESEND_API_KEY'))
   const webhookConfigured = Boolean(envText('SUPERMEGA_LEAD_WEBHOOK_URL'))
@@ -875,6 +987,7 @@ module.exports = async function handler(req, res) {
         ledger_table: 'supermega_leads',
         pipeline_actions: pipelineActionStatus(),
         pipeline_actions_table: 'supermega_pipeline_actions',
+        deskpos_pipeline: deskposPipelineStatus(),
         primary_datastore: datastore.datastoreStatus(),
         fallback_queue: fallbackQueueStatus(),
         management_mode: databaseConfigured() ? 'database_queue' : 'email_fallback',
@@ -947,7 +1060,10 @@ module.exports = async function handler(req, res) {
   const record = buildLeadRecord({ leadId, taskId, payload: { ...payload, name, email, company, goal }, req })
   const ledger = await saveLeadLedger({ record })
   const pipelineAction = await savePipelineAction({ record })
-  const webhook = await postLeadWebhook({ record })
+  const [webhook, deskposPipeline] = await Promise.all([
+    postLeadWebhook({ record }),
+    forwardDeskposPipeline({ record }),
+  ])
   const [delivery, confirmation, telegram, sheets] = await Promise.all([
     sendEmail({ record }),
     sendConfirmationEmail({ record }),
@@ -1035,6 +1151,7 @@ module.exports = async function handler(req, res) {
     delivery,
     ledger,
     pipeline_action: pipelineAction,
+    deskpos_pipeline: deskposPipeline,
     webhook,
     confirmation,
     telegram,
@@ -1045,6 +1162,7 @@ module.exports = async function handler(req, res) {
       email_routed_count: delivery.status === 'ready' ? 1 : 0,
       management_mode: ledger.status === 'ready' && pipelineAction.status === 'ready' ? 'database_queue' : 'email_fallback',
       datastore: ledger.adapter || pipelineAction.adapter || 'email_fallback',
+      deskpos: deskposPipeline,
       workspace_id: 'public-site',
       lead_id: leadId,
       task_id: taskId,
