@@ -30,10 +30,21 @@ const config = JSON.parse(readFileSync(configPath, 'utf8'))
 const routes = new Map((config.routes || []).filter((route) => route.src).map((route) => [route.src, route.dest || route.status || route.headers?.Location]))
 
 for (const [src, dest] of [
+  ['^/api/action-runner$', '/api/action-runner.js'],
   ['^/api/contact-submissions$', '/api/contact-submissions.js'],
   ['^/api/contact-submissions/status$', '/api/contact-submissions.js'],
+  ['^/api/pipeline-control$', '/api/pipeline-control.js'],
+  ['^/api/pipeline-control/status$', '/api/pipeline-control.js'],
 ]) {
   if (routes.get(src) !== dest) fail('route_contract_missing', { src, expected: dest, actual: routes.get(src) })
+}
+
+for (const [path, schedule] of [
+  ['/api/cron/sales-daily', '30 2 * * *'],
+  ['/api/action-runner', '*/5 * * * *'],
+]) {
+  const cron = (config.crons || []).find((entry) => entry.path === path)
+  if (cron?.schedule !== schedule) fail('cron_contract_missing', { path, expected: schedule, actual: cron })
 }
 
 const productsRoute = (config.routes || []).find((route) => route.src === '^/products/?$')
