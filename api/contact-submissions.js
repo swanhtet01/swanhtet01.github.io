@@ -526,6 +526,7 @@ function pipelineActionPayload(record) {
       template_status: record.template_status,
       template_source_category: record.template_source_category,
       template_source_area: record.template_source_area,
+      starter_kit_url: record.starter_kit_url,
       price_hint: record.price_hint,
       source_file_count: record.source_file_count,
       public_package: record.public_package,
@@ -673,6 +674,7 @@ function buildLeadRecord({ leadId, taskId, payload, req }) {
   const templateStatus = truncate(payload.template_status, 80)
   const templateSourceCategory = truncate(payload.template_source_category, 120)
   const templateSourceArea = truncate(payload.template_source_area, 160)
+  const starterKitUrl = truncate(payload.starter_kit_url, 240)
   const priceHint = truncate(payload.price_hint, 120)
   const sourceFileNames = truncate(payload.source_file_names, 1200)
   const sourceFileCount = truncate(payload.source_file_count, 20)
@@ -687,6 +689,7 @@ function buildLeadRecord({ leadId, taskId, payload, req }) {
     templateStatus ? `Template status: ${templateStatus}` : '',
     templateSourceCategory ? `Template source category: ${templateSourceCategory}` : '',
     templateSourceArea ? `Template source area: ${templateSourceArea}` : '',
+    starterKitUrl ? `Starter kit: ${starterKitUrl}` : '',
     priceHint ? `Price hint: ${priceHint}` : '',
     publicPackage ? `Public package: ${publicPackage}` : '',
     firstProofTarget ? `First proof target: ${firstProofTarget}` : '',
@@ -720,6 +723,7 @@ function buildLeadRecord({ leadId, taskId, payload, req }) {
     template_status: templateStatus,
     template_source_category: templateSourceCategory,
     template_source_area: templateSourceArea,
+    starter_kit_url: starterKitUrl,
     price_hint: priceHint,
     first_proof_target: firstProofTarget,
     acceptance_tests: acceptanceTests,
@@ -770,6 +774,7 @@ function emailRows(record) {
     ['Public package', record.public_package],
     ['Template', record.template_id],
     ['Template source', [record.template_source_category, record.template_source_area].filter(Boolean).join(' / ')],
+    ['Starter kit', record.starter_kit_url],
     ['Price hint', record.price_hint],
     ['First proof target', record.first_proof_target],
     ['Acceptance tests', record.acceptance_tests],
@@ -1116,9 +1121,11 @@ module.exports = async function handler(req, res) {
           company: record.company,
           business_type: record.template_source_category || record.product_area || record.requested_package || 'inbound',
           template_id: record.template_id,
+          starter_kit_url: record.starter_kit_url,
           price_hint: record.price_hint,
           workflow: truncate([
             record.template_id ? `Template: ${record.template_id}` : '',
+            record.starter_kit_url ? `Starter kit: ${record.starter_kit_url}` : '',
             record.requested_package ? `Package: ${record.requested_package}` : '',
             record.first_proof_target ? `First proof: ${record.first_proof_target}` : '',
             record.price_hint ? `Price hint: ${record.price_hint}` : '',

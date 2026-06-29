@@ -561,6 +561,12 @@ const publicAgentTemplateContract = [
   ['data-clean-report-agent', 'Data Cleanup & Reporting Agent'],
 ]
 const htmlEscaped = (value) => String(value).replace(/&/g, '&amp;')
+const starterKitIndexPath = resolve(staticDir, 'site/agent-templates/index.json')
+if (!existsSync(starterKitIndexPath)) fail('public_agent_template_starter_index_missing')
+const starterKitIndex = JSON.parse(readFileSync(starterKitIndexPath, 'utf8'))
+if (!Array.isArray(starterKitIndex.templates) || starterKitIndex.templates.length !== publicAgentTemplateContract.length) {
+  fail('public_agent_template_starter_index_wrong_size', { count: starterKitIndex.templates?.length })
+}
 for (const [id, name] of publicAgentTemplateContract) {
   if (!productsHtml.includes(id) || (!productsHtml.includes(name) && !productsHtml.includes(htmlEscaped(name)))) {
     fail('public_agent_template_missing_from_products', { id, name })
@@ -568,8 +574,24 @@ for (const [id, name] of publicAgentTemplateContract) {
   if (!contactHtml.includes(id)) {
     fail('public_agent_template_missing_from_contact_router', { id })
   }
+  const starterJsonPath = resolve(staticDir, 'site/agent-templates', `${id}.json`)
+  const starterMarkdownPath = resolve(staticDir, 'site/agent-templates', `${id}.md`)
+  if (!existsSync(starterJsonPath) || !existsSync(starterMarkdownPath)) {
+    fail('public_agent_template_starter_missing', { id })
+  }
+  const starter = JSON.parse(readFileSync(starterJsonPath, 'utf8'))
+  if (
+    starter.id !== id ||
+    !Array.isArray(starter.first_run_workflow) ||
+    starter.first_run_workflow.length < 4 ||
+    !Array.isArray(starter.acceptance_tests) ||
+    starter.acceptance_tests.length < 4 ||
+    starter.contact_url !== `/contact/?template=${id}`
+  ) {
+    fail('public_agent_template_starter_contract_missing', { id })
+  }
 }
-for (const token of ['AI agent templates', 'name="template_id"', "search.get('template')"]) {
+for (const token of ['AI agent templates', 'name="template_id"', 'name="starter_kit_url"', "search.get('template')", '/site/agent-templates/daily-intelligence-brief.json']) {
   if (!productsHtml.includes(token) && !contactHtml.includes(token)) {
     fail('public_agent_template_contract_missing', { token })
   }

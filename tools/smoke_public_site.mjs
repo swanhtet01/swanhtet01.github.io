@@ -78,7 +78,7 @@ try {
   await open(page, '/products/')
   await expectBodyIncludes(
     page,
-    ['AI agent templates', 'DeskPOS Quickstart', 'Daily Intelligence Brief Agent', 'Factory Ops Ledger', 'DeskPOS'],
+    ['AI agent templates', 'DeskPOS Quickstart', 'Daily Intelligence Brief Agent', 'Factory Ops Ledger', 'View starter kit JSON', 'DeskPOS'],
     'products_key_labels',
   )
   const products = await page.evaluate(() => ({
@@ -102,9 +102,11 @@ try {
       document.querySelector('.selected-path strong')?.textContent?.trim() ||
       document.querySelector('[data-selected-path] strong')?.textContent?.trim() ||
       '',
+    starterKitUrl: document.querySelector('input[name="starter_kit_url"]')?.value || '',
     submitVisible: Boolean(document.querySelector('button[type="submit"]')?.getBoundingClientRect().height),
   }))
   if (templateContact.selected !== 'Daily Intelligence Brief Agent') fail('template_contact_selection_wrong', { templateContact })
+  if (templateContact.starterKitUrl !== '/site/agent-templates/daily-intelligence-brief.json') fail('template_contact_starter_kit_missing', { templateContact })
   if (!templateContact.submitVisible) fail('template_contact_submit_missing', { templateContact })
 
   await open(page, '/contact/')
@@ -123,6 +125,15 @@ if (!statusResponse.ok || statusBody.status !== 'ready') {
   fail('contact_status_not_ready', { status_code: statusResponse.status, statusBody })
 }
 
+const starterResponse = await fetch(`${baseUrl}/site/agent-templates/daily-intelligence-brief.json`, {
+  headers: { accept: 'application/json', 'user-agent': 'supermega-public-smoke/2.0' },
+  signal: AbortSignal.timeout(timeoutMs),
+})
+const starterBody = await starterResponse.json().catch(() => ({}))
+if (!starterResponse.ok || starterBody.id !== 'daily-intelligence-brief' || !Array.isArray(starterBody.acceptance_tests)) {
+  fail('starter_kit_not_ready', { status_code: starterResponse.status, starterBody })
+}
+
 console.log(
   JSON.stringify(
     {
@@ -135,6 +146,7 @@ console.log(
         '/contact/',
       ],
       contact_api: statusBody.status,
+      starter_kit: starterBody.id,
     },
     null,
     2,

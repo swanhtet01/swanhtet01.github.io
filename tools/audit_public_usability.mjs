@@ -94,15 +94,17 @@ try {
 
     await open(page, `${baseUrl}/products/`, viewport.name)
     await page.locator('#agent-templates').scrollIntoViewIfNeeded()
-    await expectCopy(page, ['AI agent templates', ...expectedTemplates], 'products_templates', viewport.name)
+    await expectCopy(page, ['AI agent templates', 'View starter kit JSON', ...expectedTemplates], 'products_templates', viewport.name)
     const products = await page.evaluate(() => ({
       title: document.title,
       templateCards: document.querySelectorAll('#agent-templates .template-card').length,
       templateLinks: document.querySelectorAll('#agent-templates a[href*="/contact/?template="]').length,
+      starterKitLinks: document.querySelectorAll('#agent-templates a[href*="/site/agent-templates/"]').length,
       overflowX: Math.max(0, document.documentElement.scrollWidth - document.documentElement.clientWidth),
     }))
     if (products.templateCards !== expectedTemplates.length) fail('template_cards_missing', { viewport: viewport.name, products })
     if (products.templateLinks !== expectedTemplates.length) fail('template_links_missing', { viewport: viewport.name, products })
+    if (products.starterKitLinks !== expectedTemplates.length) fail('starter_kit_links_missing', { viewport: viewport.name, products })
     if (products.overflowX > 0) fail('products_horizontal_overflow', { viewport: viewport.name, products })
 
     const productsShot = resolve(outputDir, `supermega-agent-templates-${viewport.name}.png`)
@@ -125,12 +127,14 @@ try {
         document.querySelector('[data-selected-path] strong')?.textContent?.trim() ||
         '',
       templateId: document.querySelector('input[name="template_id"]')?.value || '',
+      starterKitUrl: document.querySelector('input[name="starter_kit_url"]')?.value || '',
       productArea: document.querySelector('input[name="product_area"]')?.value || '',
       overflowX: Math.max(0, document.documentElement.scrollWidth - document.documentElement.clientWidth),
     }))
     if (contact.headline !== 'Start with this template.') fail('contact_headline_not_current', { viewport: viewport.name, contact })
     if (contact.selectedPackage !== 'Daily Intelligence Brief Agent') fail('contact_template_not_selected', { viewport: viewport.name, contact })
     if (contact.templateId !== 'daily-intelligence-brief') fail('contact_template_id_missing', { viewport: viewport.name, contact })
+    if (contact.starterKitUrl !== '/site/agent-templates/daily-intelligence-brief.json') fail('contact_starter_kit_url_missing', { viewport: viewport.name, contact })
     if (!contact.submitVisible) fail('contact_submit_not_visible', { viewport: viewport.name, contact })
     if (contact.overflowX > 0) fail('contact_horizontal_overflow', { viewport: viewport.name, contact })
     if (consoleMessages.length) fail('console_messages', { viewport: viewport.name, consoleMessages })
