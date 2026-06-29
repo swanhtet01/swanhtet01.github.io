@@ -599,6 +599,9 @@ for (const token of [
   '/api/action-runner',
   'first_proof',
   'Run queue now',
+  'Open starter kit',
+  "proofList('Checklist'",
+  "proofList('Acceptance tests'",
 ]) {
   if (!operatorHtml.includes(token)) fail('public_operator_console_contract_missing', { token })
 }

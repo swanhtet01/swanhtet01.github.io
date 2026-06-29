@@ -4493,6 +4493,9 @@ const publicOperatorConsoleHtml = `<!doctype html>
     .operator-meta{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0;color:var(--muted);font-size:13px}
     .operator-chip{border:1px solid var(--line);padding:3px 7px}
     .operator-proof{margin-top:10px;padding-top:10px;border-top:1px solid var(--line)}
+    .operator-proof-link{display:inline-flex;margin-top:10px;color:var(--ink);font-weight:900;text-decoration:underline;text-underline-offset:3px}
+    .operator-proof-section{margin-top:10px}
+    .operator-proof-section span{display:block;color:var(--muted);font-size:12px;font-weight:950;letter-spacing:.1em;text-transform:uppercase}
     .operator-proof ul{margin:8px 0 0;padding-left:18px}
     .operator-output{white-space:pre-wrap;overflow:auto;max-height:240px;border:1px solid var(--line);padding:12px;font-size:13px;background:color-mix(in srgb,var(--paper) 90%,var(--ink) 10%)}
     @media(max-width:840px){.operator-grid{grid-template-columns:1fr}.operator-kpis{grid-template-columns:1fr}}
@@ -4537,6 +4540,15 @@ const publicOperatorConsoleHtml = `<!doctype html>
     function token(){return keyInput.value.trim()}
     function authHeaders(){return {accept:'application/json',authorization:'Bearer '+token()}}
     function setStatus(value){statusBox.textContent = typeof value === 'string' ? value : JSON.stringify(value,null,2)}
+    function proofList(title, items){
+      const values = (items || []).filter(Boolean).slice(0,6);
+      if(!values.length)return '';
+      return '<div class="operator-proof-section"><span>'+esc(title)+'</span><ul>'+values.map(function(item){return '<li>'+esc(item)+'</li>'}).join('')+'</ul></div>';
+    }
+    function proofStarterLink(proof){
+      if(!proof || !proof.starter_kit_url)return '';
+      return '<a class="operator-proof-link" href="'+esc(proof.starter_kit_url)+'" target="_blank" rel="noreferrer">Open starter kit</a>';
+    }
     function renderKpis(data){
       const metrics = data.metrics || {};
       kpisEl.innerHTML = [
@@ -4550,7 +4562,7 @@ const publicOperatorConsoleHtml = `<!doctype html>
       if(!actions.length){actionsEl.innerHTML = '<div class="operator-item">No recent actions.</div>';return}
       actionsEl.innerHTML = actions.map(function(action){
         const proof = action.first_proof;
-        const proofHtml = proof ? '<div class="operator-proof"><strong>'+esc(proof.title || 'First proof')+'</strong><div class="operator-meta"><span class="operator-chip">'+esc(proof.status)+'</span><span class="operator-chip">'+esc(proof.template_id)+'</span><span class="operator-chip">'+esc(proof.human_gate)+'</span></div><div>'+esc(proof.first_proof_target || '')+'</div><ul>'+((proof.acceptance_tests||[]).slice(0,4).map(function(item){return '<li>'+esc(item)+'</li>'}).join(''))+'</ul></div>' : '';
+        const proofHtml = proof ? '<div class="operator-proof"><strong>'+esc(proof.title || 'First proof')+'</strong><div class="operator-meta"><span class="operator-chip">'+esc(proof.status)+'</span><span class="operator-chip">'+esc(proof.template_id)+'</span><span class="operator-chip">'+esc(proof.human_gate)+'</span></div><div>'+esc(proof.first_proof_target || '')+'</div>'+proofStarterLink(proof)+proofList('Checklist',proof.checklist)+proofList('Acceptance tests',proof.acceptance_tests)+'</div>' : '';
         return '<article class="operator-item"><strong>'+esc(action.title || action.action_type)+'</strong><div class="operator-meta"><span class="operator-chip">'+esc(action.status)+'</span><span class="operator-chip">'+esc(action.priority)+'</span><span class="operator-chip">'+esc(action.approval_state)+'</span><span>'+esc(action.lead_id)+'</span></div><div>'+esc(action.next_step || '')+'</div>'+proofHtml+'</article>';
       }).join('');
     }

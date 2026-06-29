@@ -160,9 +160,29 @@ try {
     if (contact.starterKitUrl !== '/site/agent-templates/daily-intelligence-brief.json') fail('contact_starter_kit_url_missing', { viewport: viewport.name, contact })
     if (!contact.submitVisible) fail('contact_submit_not_visible', { viewport: viewport.name, contact })
     if (contact.overflowX > 0) fail('contact_horizontal_overflow', { viewport: viewport.name, contact })
+
+    await open(page, `${baseUrl}/operator/`, viewport.name)
+    await expectCopy(page, ['Operator Console', 'Ops key', 'Refresh queue', 'Run queue now'], 'operator_console', viewport.name)
+    const operator = await page.evaluate(() => {
+      const html = document.documentElement.innerHTML
+      return {
+        title: document.title,
+        opsKeyVisible: Boolean(document.querySelector('#ops-key')?.getBoundingClientRect().height),
+        refreshVisible: Boolean(document.querySelector('#refresh')?.getBoundingClientRect().height),
+        runnerVisible: Boolean(document.querySelector('#run-runner')?.getBoundingClientRect().height),
+        hasStarterKitRenderer: html.includes('Open starter kit'),
+        hasChecklistRenderer: html.includes("proofList('Checklist'"),
+        hasAcceptanceRenderer: html.includes("proofList('Acceptance tests'"),
+        overflowX: Math.max(0, document.documentElement.scrollWidth - document.documentElement.clientWidth),
+      }
+    })
+    if (operator.title !== 'Operator Console | SUPERMEGA.dev') fail('operator_title_not_current', { viewport: viewport.name, operator })
+    if (!operator.opsKeyVisible || !operator.refreshVisible || !operator.runnerVisible) fail('operator_controls_missing', { viewport: viewport.name, operator })
+    if (!operator.hasStarterKitRenderer || !operator.hasChecklistRenderer || !operator.hasAcceptanceRenderer) fail('operator_first_proof_renderer_missing', { viewport: viewport.name, operator })
+    if (operator.overflowX > 0) fail('operator_horizontal_overflow', { viewport: viewport.name, operator })
     if (consoleMessages.length) fail('console_messages', { viewport: viewport.name, consoleMessages })
 
-    results.checks[viewport.name] = { home, products, setup, contact }
+    results.checks[viewport.name] = { home, products, setup, contact, operator }
     await page.close()
   }
 
