@@ -294,7 +294,7 @@ function renderPublicAgentTemplateCards() {
                 <span>First proof: ${escapeHtml(template.firstProof)}</span>
                 <ul>${inputs}</ul>
                 <a class="btn secondary" href="/contact/?template=${encodeURIComponent(template.id)}">Start this template</a>
-                <a class="link" href="/site/agent-templates/${encodeURIComponent(template.id)}.json">View starter kit JSON</a>
+                <a class="link" href="/agent-templates/${encodeURIComponent(template.id)}/">View setup kit</a>
               </article>`
     })
     .join('\n')
@@ -3604,7 +3604,7 @@ async function copyPublicStatic(source, destination, rootSource = source) {
 }
 
 async function prunePublicStaticRoot() {
-  const allowedRootDirs = new Set(['assets', 'site', 'social', 'products', 'start', 'contact', 'offers', 'work', 'machine', 'card', 'c', 'demo', 'ai-agents', 'privacy'])
+  const allowedRootDirs = new Set(['assets', 'site', 'social', 'products', 'agent-templates', 'start', 'contact', 'offers', 'work', 'machine', 'card', 'c', 'demo', 'ai-agents', 'privacy'])
   for (const entry of await readdir(staticDir, { withFileTypes: true }).catch(() => [])) {
     if (!entry.isDirectory() || allowedRootDirs.has(entry.name)) continue
     await rm(resolve(staticDir, entry.name), { recursive: true, force: true, maxRetries: 8, retryDelay: 250 })
@@ -3922,9 +3922,133 @@ ${publicLanguageToggleScript}
   </body>
 </html>`
 }
+
+function renderKitList(items) {
+  return items.map((item) => `<li>${escapeHtml(item)}</li>`).join('')
+}
+
+function buildAgentTemplatePageHtml(kit) {
+  return `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="index,follow" />
+    <title>${escapeHtml(kit.name)} setup kit | SUPERMEGA.dev</title>
+    <meta name="description" content="${escapeHtml(kit.offer.promise)}" />
+    <meta name="theme-color" content="#f4efe6" />
+    <link rel="canonical" href="https://supermega.dev/agent-templates/${escapeHtml(kit.id)}/" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" />
+    <style>${unicornShellStyle}
+      .kit-hero { min-height: auto; grid-template-columns: minmax(0, 1.05fr) minmax(320px, .95fr); }
+      .kit-panel { border: 1px solid var(--line); border-radius: 22px; padding: clamp(18px, 3vw, 28px); background: rgba(255,255,255,.58); box-shadow: var(--shadow); }
+      .kit-panel strong { display: block; color: var(--ink); font-size: 15px; }
+      .kit-panel span { display: block; margin-top: 6px; color: var(--muted); font-size: 14px; line-height: 1.45; }
+      .kit-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-top: 22px; }
+      .kit-card { border: 1px solid var(--line); border-radius: 18px; padding: 18px; background: rgba(255,255,255,.52); }
+      .kit-card h3 { margin: 0 0 10px; font-size: 19px; letter-spacing: -.03em; }
+      .kit-card li { margin: 8px 0; color: var(--muted); font-weight: 760; line-height: 1.4; }
+      .kit-json { font-size: 12px; color: var(--blue); font-weight: 900; text-decoration: none; }
+      @media (max-width: 880px) { .kit-hero, .kit-grid { grid-template-columns: 1fr; } }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+${unicornHeader}
+      <main>
+        <section class="poster kit-hero">
+          <div class="copy">
+            <div class="eyebrow">Setup kit / ${escapeHtml(kit.status)}</div>
+            <h1>${escapeHtml(kit.name)}</h1>
+            <p>${escapeHtml(kit.offer.promise)}</p>
+            <div class="cta">
+              <a class="btn primary" href="${escapeHtml(kit.contact_url)}">Start this template</a>
+              <a class="btn secondary" href="/agent-templates/">All setup kits</a>
+            </div>
+          </div>
+          <aside class="kit-panel">
+            <strong>Buyer</strong><span>${escapeHtml(kit.buyer)}</span>
+            <strong style="margin-top:16px">Price hint</strong><span>${escapeHtml(kit.offer.price_hint)}</span>
+            <strong style="margin-top:16px">First proof</strong><span>${escapeHtml(kit.offer.first_proof)}</span>
+            <strong style="margin-top:16px">Deployment mode</strong><span>${escapeHtml(kit.deployment_mode.first_run)} first, then ${escapeHtml(kit.deployment_mode.production)}.</span>
+          </aside>
+        </section>
+        <section class="section">
+          <div class="kit-grid">
+            <article class="kit-card"><h3>Setup inputs</h3><ul>${renderKitList(kit.intake_schema.setup_inputs)}</ul></article>
+            <article class="kit-card"><h3>Sample sources</h3><ul>${renderKitList(kit.intake_schema.sample_sources)}</ul></article>
+            <article class="kit-card"><h3>First run workflow</h3><ol>${renderKitList(kit.first_run_workflow)}</ol></article>
+            <article class="kit-card"><h3>Outputs</h3><ul>${renderKitList(kit.outputs)}</ul></article>
+          </div>
+        </section>
+        <section class="section">
+          <h2>Acceptance tests</h2>
+          <div class="kit-card"><ul>${renderKitList(kit.acceptance_tests)}</ul></div>
+          <p style="margin-top:14px"><a class="kit-json" href="/site/agent-templates/${escapeHtml(kit.id)}.json">Agent-readable JSON</a></p>
+        </section>
+      </main>
+      <footer><span>SUPERMEGA.dev setup kit.</span><span class="footer-links"><a href="/products/">Products</a><a href="/contact/">Contact</a></span></footer>
+    </div>
+${publicLanguageToggleScript}
+  </body>
+</html>`
+}
+
+function buildAgentTemplateIndexHtml() {
+  const cards = publicAgentTemplateStarterKits
+    .map(
+      (kit) => `<article class="kit-card"><h3>${escapeHtml(kit.name)}</h3><p>${escapeHtml(kit.offer.first_proof)}</p><strong>${escapeHtml(kit.offer.price_hint)}</strong><div class="cta" style="margin-top:14px"><a class="btn secondary" href="/agent-templates/${escapeHtml(kit.id)}/">View setup kit</a><a class="btn secondary" href="${escapeHtml(kit.contact_url)}">Start</a></div></article>`,
+    )
+    .join('')
+  return `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="index,follow" />
+    <title>AI Agent Setup Kits | SUPERMEGA.dev</title>
+    <meta name="description" content="Practical setup kits for SUPERMEGA.dev AI-agent templates." />
+    <link rel="canonical" href="https://supermega.dev/agent-templates/" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" />
+    <style>${unicornShellStyle}
+      .kit-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+      .kit-card { border: 1px solid var(--line); border-radius: 18px; padding: 18px; background: rgba(255,255,255,.55); }
+      .kit-card h3 { margin: 0; font-size: 20px; letter-spacing: -.03em; }
+      .kit-card p { margin-top: 10px; font-size: 14px; color: var(--muted); }
+      .kit-card strong { display:block; margin-top: 10px; }
+      @media (max-width: 980px) { .kit-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+      @media (max-width: 620px) { .kit-grid { grid-template-columns: 1fr; } }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+${unicornHeader}
+      <main>
+        <section class="poster" style="min-height:auto">
+          <div class="copy">
+            <div class="eyebrow">AI agent setup kits</div>
+            <h1>Start from a working template.</h1>
+            <p>Each kit defines the buyer, sample inputs, first proof, workflow, outputs, and acceptance tests before any client system is connected.</p>
+          </div>
+        </section>
+        <section class="section"><div class="kit-grid">${cards}</div></section>
+      </main>
+      <footer><span>SUPERMEGA.dev setup kits.</span><span class="footer-links"><a href="/products/">Products</a><a href="/contact/">Contact</a></span></footer>
+    </div>
+${publicLanguageToggleScript}
+  </body>
+</html>`
+}
+
 for (const detailDoc of productDetailDocs) {
   await mkdir(resolve(staticDir, 'products', detailDoc.slug), { recursive: true })
   await writeFile(resolve(staticDir, 'products', detailDoc.slug, 'index.html'), normalizePublicProductNames(buildProductDetailHtml(detailDoc)), 'utf8')
+}
+await mkdir(resolve(staticDir, 'agent-templates'), { recursive: true })
+await writeFile(resolve(staticDir, 'agent-templates', 'index.html'), normalizePublicProductNames(buildAgentTemplateIndexHtml()), 'utf8')
+for (const kit of publicAgentTemplateStarterKits) {
+  await mkdir(resolve(staticDir, 'agent-templates', kit.id), { recursive: true })
+  await writeFile(resolve(staticDir, 'agent-templates', kit.id, 'index.html'), normalizePublicProductNames(buildAgentTemplatePageHtml(kit)), 'utf8')
 }
 
 // Offers / pricing — the revenue surface. Public "from" prices in MMK only, read from pricing.json. Rate: 4,300 MMK/USD (canonical). No USD on public pages.
@@ -4284,7 +4408,7 @@ await mkdir(resolve(staticDir, 'demo'), { recursive: true })
 await cp('C:/sm-site/supermega-demo/index.html', resolve(staticDir, 'demo', 'index.html'), { force: true }).catch(() => undefined)
 await cp('C:/sm-site/supermega-demo/favicon.svg', resolve(staticDir, 'demo', 'favicon.svg'), { force: true }).catch(() => undefined)
 await writeFile(resolve(staticDir, 'robots.txt'), 'User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /app/\nDisallow: /clients/\nDisallow: /machine/\nSitemap: https://supermega.dev/sitemap.xml\n', 'utf8')
-await writeFile(resolve(staticDir, 'sitemap.xml'), '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url><loc>https://supermega.dev/</loc><changefreq>weekly</changefreq><priority>1.0</priority></url>\n  <url><loc>https://supermega.dev/products/</loc><changefreq>weekly</changefreq><priority>0.9</priority></url>\n  <url><loc>https://supermega.dev/products/pos/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>\n  <url><loc>https://supermega.dev/products/factory/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>\n  <url><loc>https://supermega.dev/products/documents/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>\n  <url><loc>https://supermega.dev/ai-agents/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>\n  <url><loc>https://supermega.dev/offers/</loc><changefreq>weekly</changefreq><priority>0.95</priority></url>\n  <url><loc>https://supermega.dev/work/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>\n  <url><loc>https://supermega.dev/contact/</loc><changefreq>monthly</changefreq><priority>0.9</priority></url>\n  <url><loc>https://supermega.dev/card/</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>\n  <url><loc>https://supermega.dev/privacy/</loc><changefreq>yearly</changefreq><priority>0.3</priority></url>\n</urlset>\n', 'utf8')
+await writeFile(resolve(staticDir, 'sitemap.xml'), '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url><loc>https://supermega.dev/</loc><changefreq>weekly</changefreq><priority>1.0</priority></url>\n  <url><loc>https://supermega.dev/products/</loc><changefreq>weekly</changefreq><priority>0.9</priority></url>\n  <url><loc>https://supermega.dev/products/pos/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>\n  <url><loc>https://supermega.dev/products/factory/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>\n  <url><loc>https://supermega.dev/products/documents/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>\n  <url><loc>https://supermega.dev/ai-agents/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>\n  <url><loc>https://supermega.dev/agent-templates/</loc><changefreq>weekly</changefreq><priority>0.85</priority></url>\n  <url><loc>https://supermega.dev/agent-templates/deskpos-quickstart/</loc><changefreq>weekly</changefreq><priority>0.72</priority></url>\n  <url><loc>https://supermega.dev/agent-templates/chat-ledger/</loc><changefreq>weekly</changefreq><priority>0.72</priority></url>\n  <url><loc>https://supermega.dev/agent-templates/inbox-calendar-operator/</loc><changefreq>weekly</changefreq><priority>0.72</priority></url>\n  <url><loc>https://supermega.dev/agent-templates/daily-intelligence-brief/</loc><changefreq>weekly</changefreq><priority>0.72</priority></url>\n  <url><loc>https://supermega.dev/agent-templates/factory-ops-ledger/</loc><changefreq>weekly</changefreq><priority>0.72</priority></url>\n  <url><loc>https://supermega.dev/agent-templates/data-clean-report-agent/</loc><changefreq>weekly</changefreq><priority>0.72</priority></url>\n  <url><loc>https://supermega.dev/offers/</loc><changefreq>weekly</changefreq><priority>0.95</priority></url>\n  <url><loc>https://supermega.dev/work/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>\n  <url><loc>https://supermega.dev/contact/</loc><changefreq>monthly</changefreq><priority>0.9</priority></url>\n  <url><loc>https://supermega.dev/card/</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>\n  <url><loc>https://supermega.dev/privacy/</loc><changefreq>yearly</changefreq><priority>0.3</priority></url>\n</urlset>\n', 'utf8')
 await writeFile(
   resolve(staticDir, 'sw.js'),
   `const CACHE_VERSION = 'supermega-public-clean-20260522'

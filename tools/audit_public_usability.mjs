@@ -94,12 +94,12 @@ try {
 
     await open(page, `${baseUrl}/products/`, viewport.name)
     await page.locator('#agent-templates').scrollIntoViewIfNeeded()
-    await expectCopy(page, ['AI agent templates', 'View starter kit JSON', ...expectedTemplates], 'products_templates', viewport.name)
+    await expectCopy(page, ['AI agent templates', 'View setup kit', ...expectedTemplates], 'products_templates', viewport.name)
     const products = await page.evaluate(() => ({
       title: document.title,
       templateCards: document.querySelectorAll('#agent-templates .template-card').length,
       templateLinks: document.querySelectorAll('#agent-templates a[href*="/contact/?template="]').length,
-      starterKitLinks: document.querySelectorAll('#agent-templates a[href*="/site/agent-templates/"]').length,
+      starterKitLinks: document.querySelectorAll('#agent-templates a[href*="/agent-templates/"]').length,
       overflowX: Math.max(0, document.documentElement.scrollWidth - document.documentElement.clientWidth),
     }))
     if (products.templateCards !== expectedTemplates.length) fail('template_cards_missing', { viewport: viewport.name, products })

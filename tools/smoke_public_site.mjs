@@ -78,7 +78,7 @@ try {
   await open(page, '/products/')
   await expectBodyIncludes(
     page,
-    ['AI agent templates', 'DeskPOS Quickstart', 'Daily Intelligence Brief Agent', 'Factory Ops Ledger', 'View starter kit JSON', 'DeskPOS'],
+    ['AI agent templates', 'DeskPOS Quickstart', 'Daily Intelligence Brief Agent', 'Factory Ops Ledger', 'View setup kit', 'DeskPOS'],
     'products_key_labels',
   )
   const products = await page.evaluate(() => ({
@@ -88,6 +88,13 @@ try {
   }))
   if (products.contactLinks < 1) fail('products_contact_link_missing', { products })
   if (products.overflowX > 0) fail('products_horizontal_overflow', { products })
+
+  await open(page, '/agent-templates/daily-intelligence-brief/')
+  await expectBodyIncludes(
+    page,
+    ['Daily Intelligence Brief Agent', 'Setup inputs', 'First run workflow', 'Acceptance tests', 'Start this template'],
+    'template_setup_page',
+  )
 
   await open(page, '/contact/?template=daily-intelligence-brief')
   await expectBodyIncludes(
@@ -142,6 +149,7 @@ console.log(
       pages: [
         '/',
         '/products/',
+        '/agent-templates/daily-intelligence-brief/',
         '/contact/?template=daily-intelligence-brief',
         '/contact/',
       ],
