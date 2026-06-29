@@ -98,18 +98,41 @@ try {
     const products = await page.evaluate(() => ({
       title: document.title,
       templateCards: document.querySelectorAll('#agent-templates .template-card').length,
-      templateLinks: document.querySelectorAll('#agent-templates a[href*="/contact/?template="]').length,
-      starterKitLinks: document.querySelectorAll('#agent-templates a[href*="/agent-templates/"]').length,
+      templateSetupLinks: document.querySelectorAll('#agent-templates a[href$="/setup/"]').length,
+      starterKitLinks: document.querySelectorAll('#agent-templates a.link[href^="/agent-templates/"]').length,
       overflowX: Math.max(0, document.documentElement.scrollWidth - document.documentElement.clientWidth),
     }))
     if (products.templateCards !== expectedTemplates.length) fail('template_cards_missing', { viewport: viewport.name, products })
-    if (products.templateLinks !== expectedTemplates.length) fail('template_links_missing', { viewport: viewport.name, products })
+    if (products.templateSetupLinks !== expectedTemplates.length) fail('template_setup_links_missing', { viewport: viewport.name, products })
     if (products.starterKitLinks !== expectedTemplates.length) fail('starter_kit_links_missing', { viewport: viewport.name, products })
     if (products.overflowX > 0) fail('products_horizontal_overflow', { viewport: viewport.name, products })
 
     const productsShot = resolve(outputDir, `supermega-agent-templates-${viewport.name}.png`)
     await page.locator('#agent-templates').screenshot({ path: productsShot, animations: 'disabled' })
     results.screenshots[`agent_templates_${viewport.name}`] = productsShot
+
+    await open(page, `${baseUrl}/agent-templates/daily-intelligence-brief/setup/`, viewport.name)
+    await expectCopy(
+      page,
+      ['Set up Daily Intelligence Brief Agent.', 'First proof', 'Send setup request'],
+      'template_setup',
+      viewport.name,
+    )
+    const setup = await page.evaluate(() => ({
+      title: document.title,
+      templateId: document.querySelector('input[name="template_id"]')?.value || '',
+      starterKitUrl: document.querySelector('input[name="starter_kit_url"]')?.value || '',
+      firstProofTarget: document.querySelector('input[name="first_proof_target"]')?.value || '',
+      formAction: document.querySelector('[data-agent-template-setup]')?.getAttribute('action') || '',
+      submitVisible: Boolean(document.querySelector('[data-agent-template-setup] button[type="submit"]')?.getBoundingClientRect().height),
+      overflowX: Math.max(0, document.documentElement.scrollWidth - document.documentElement.clientWidth),
+    }))
+    if (setup.templateId !== 'daily-intelligence-brief') fail('setup_template_id_missing', { viewport: viewport.name, setup })
+    if (setup.starterKitUrl !== '/site/agent-templates/daily-intelligence-brief.json') fail('setup_starter_kit_url_missing', { viewport: viewport.name, setup })
+    if (!setup.firstProofTarget.includes('One-page morning brief')) fail('setup_first_proof_missing', { viewport: viewport.name, setup })
+    if (setup.formAction !== '/api/contact-submissions') fail('setup_form_action_wrong', { viewport: viewport.name, setup })
+    if (!setup.submitVisible) fail('setup_submit_not_visible', { viewport: viewport.name, setup })
+    if (setup.overflowX > 0) fail('setup_horizontal_overflow', { viewport: viewport.name, setup })
 
     await open(page, `${baseUrl}/contact/?template=daily-intelligence-brief`, viewport.name)
     await expectCopy(
@@ -139,7 +162,7 @@ try {
     if (contact.overflowX > 0) fail('contact_horizontal_overflow', { viewport: viewport.name, contact })
     if (consoleMessages.length) fail('console_messages', { viewport: viewport.name, consoleMessages })
 
-    results.checks[viewport.name] = { home, products, contact }
+    results.checks[viewport.name] = { home, products, setup, contact }
     await page.close()
   }
 

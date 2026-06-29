@@ -141,6 +141,9 @@ export function buildAgentTemplateStarterKit(template) {
     name: template.name,
     status: template.status,
     buyer: template.buyer,
+    product_area: template.productArea,
+    source_category: template.sourceCategory,
+    source_area: template.sourceArea,
     offer: {
       promise: template.promise,
       price_hint: template.pricingLabel,
@@ -167,6 +170,7 @@ export function buildAgentTemplateStarterKit(template) {
       human_gate: 'owner approval before send/write/payment actions',
     },
     contact_url: `/contact/?template=${template.id}`,
+    setup_url: `/agent-templates/${template.id}/setup/`,
   }
 }
 
@@ -210,5 +214,7 @@ ${kit.outputs.map((item) => `- ${item}`).join('\n')}
 ${kit.acceptance_tests.map((item) => `- ${item}`).join('\n')}
 
 Contact URL: ${kit.contact_url}
+
+Setup URL: ${kit.setup_url}
 `
 }

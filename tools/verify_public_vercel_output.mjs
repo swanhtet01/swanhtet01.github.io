@@ -633,29 +633,49 @@ for (const [id, name] of publicAgentTemplateContract) {
   const starterJsonPath = resolve(staticDir, 'site/agent-templates', `${id}.json`)
   const starterMarkdownPath = resolve(staticDir, 'site/agent-templates', `${id}.md`)
   const starterPagePath = resolve(staticDir, 'agent-templates', id, 'index.html')
+  const starterSetupPath = resolve(staticDir, 'agent-templates', id, 'setup', 'index.html')
   if (!existsSync(starterJsonPath) || !existsSync(starterMarkdownPath)) {
     fail('public_agent_template_starter_missing', { id })
   }
   if (!existsSync(starterPagePath)) {
     fail('public_agent_template_page_missing', { id })
   }
+  if (!existsSync(starterSetupPath)) {
+    fail('public_agent_template_setup_page_missing', { id })
+  }
   const starter = JSON.parse(readFileSync(starterJsonPath, 'utf8'))
   const starterPageHtml = readFileSync(starterPagePath, 'utf8')
+  const starterSetupHtml = readFileSync(starterSetupPath, 'utf8')
   if (
     starter.id !== id ||
     !Array.isArray(starter.first_run_workflow) ||
     starter.first_run_workflow.length < 4 ||
     !Array.isArray(starter.acceptance_tests) ||
     starter.acceptance_tests.length < 4 ||
-    starter.contact_url !== `/contact/?template=${id}`
+    starter.contact_url !== `/contact/?template=${id}` ||
+    starter.setup_url !== `/agent-templates/${id}/setup/`
   ) {
     fail('public_agent_template_starter_contract_missing', { id })
   }
   if (!starterPageHtml.includes(name) && !starterPageHtml.includes(htmlEscaped(name))) {
     fail('public_agent_template_page_contract_missing', { id, name })
   }
+  for (const token of [
+    'data-agent-template-setup',
+    '/api/contact-submissions',
+    `name="template_id" value="${id}"`,
+    'name="starter_kit_url"',
+    'name="first_proof_target"',
+    'name="acceptance_tests"',
+    'Send setup request',
+    'first-proof build',
+  ]) {
+    if (!starterSetupHtml.includes(token)) {
+      fail('public_agent_template_setup_contract_missing', { id, token })
+    }
+  }
 }
-for (const token of ['AI agent templates', 'View setup kit', 'name="template_id"', 'name="starter_kit_url"', "search.get('template')", '/site/agent-templates/daily-intelligence-brief.json']) {
+for (const token of ['AI agent templates', 'View setup kit', 'name="template_id"', 'name="starter_kit_url"', "search.get('template')", '/site/agent-templates/daily-intelligence-brief.json', '/agent-templates/daily-intelligence-brief/setup/']) {
   if (!productsHtml.includes(token) && !contactHtml.includes(token)) {
     fail('public_agent_template_contract_missing', { token })
   }

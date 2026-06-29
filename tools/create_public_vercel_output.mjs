@@ -293,7 +293,7 @@ function renderPublicAgentTemplateCards() {
                 <strong>${escapeHtml(template.pricingLabel)}</strong>
                 <span>First proof: ${escapeHtml(template.firstProof)}</span>
                 <ul>${inputs}</ul>
-                <a class="btn secondary" href="/contact/?template=${encodeURIComponent(template.id)}">Start this template</a>
+                <a class="btn secondary" href="/agent-templates/${encodeURIComponent(template.id)}/setup/">Start this template</a>
                 <a class="link" href="/agent-templates/${encodeURIComponent(template.id)}/">View setup kit</a>
               </article>`
     })
@@ -3927,6 +3927,10 @@ function renderKitList(items) {
   return items.map((item) => `<li>${escapeHtml(item)}</li>`).join('')
 }
 
+function formHidden(name, value) {
+  return `<input type="hidden" name="${escapeHtml(name)}" value="${escapeHtml(value || '')}" />`
+}
+
 function buildAgentTemplatePageHtml(kit) {
   return `<!doctype html>
 <html lang="en">
@@ -3962,7 +3966,7 @@ ${unicornHeader}
             <h1>${escapeHtml(kit.name)}</h1>
             <p>${escapeHtml(kit.offer.promise)}</p>
             <div class="cta">
-              <a class="btn primary" href="${escapeHtml(kit.contact_url)}">Start this template</a>
+              <a class="btn primary" href="${escapeHtml(kit.setup_url)}">Start this template</a>
               <a class="btn secondary" href="/agent-templates/">All setup kits</a>
             </div>
           </div>
@@ -3994,10 +3998,146 @@ ${publicLanguageToggleScript}
 </html>`
 }
 
+function buildAgentTemplateSetupHtml(kit) {
+  const hiddenFields = [
+    ['workflow', kit.name],
+    ['first_output', kit.offer.first_proof],
+    ['requested_package', kit.name],
+    ['public_package', kit.name],
+    ['product_area', kit.product_area],
+    ['template_id', kit.id],
+    ['template_status', kit.status],
+    ['template_source_category', kit.source_category],
+    ['template_source_area', kit.source_area],
+    ['starter_kit_url', `/site/agent-templates/${kit.id}.json`],
+    ['first_proof_target', kit.offer.first_proof],
+    ['price_hint', kit.offer.price_hint],
+    ['acceptance_tests', kit.acceptance_tests.join('\n')],
+    ['first_step', `Produce first proof: ${kit.offer.first_proof}`],
+    ['onboarding_stage', 'source_review'],
+    ['access_policy', 'approval_required'],
+    ['workspace_status', 'not_created_until_approved'],
+    ['management_owner', 'swanhtet@supermega.dev'],
+    ['team', 'Owner or first operating team'],
+    ['urgency', 'This week'],
+    ['data', `Template setup: ${kit.id} | ${kit.offer.promise}`],
+    ['source_url', `https://supermega.dev${kit.setup_url}`],
+    ['page_path', kit.setup_url],
+    ['utm_campaign', 'agent_template_setup'],
+  ]
+  return `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="index,follow" />
+    <title>Set up ${escapeHtml(kit.name)} | SUPERMEGA.dev</title>
+    <meta name="description" content="Start ${escapeHtml(kit.name)} with one goal and one source sample." />
+    <link rel="canonical" href="https://supermega.dev${escapeHtml(kit.setup_url)}" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" />
+    <style>${unicornShellStyle}
+      .setup-main { display:grid; grid-template-columns:minmax(0,.82fr) minmax(320px,1.18fr); gap:clamp(22px,5vw,58px); align-items:start; padding:clamp(22px,5vw,58px) 0 72px; }
+      .setup-card { border:1px solid var(--line); border-radius:24px; padding:clamp(18px,3vw,28px); background:rgba(255,255,255,.58); box-shadow:var(--shadow); }
+      .setup-form { display:grid; gap:12px; }
+      .setup-row { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+      .setup-form label { display:grid; gap:6px; color:var(--muted); font-size:12px; font-weight:950; letter-spacing:.12em; text-transform:uppercase; }
+      .setup-form input,.setup-form textarea { width:100%; border:1px solid var(--line); border-radius:14px; background:rgba(255,250,241,.88); color:var(--ink); padding:11px 12px; font:inherit; outline:none; }
+      .setup-form textarea { min-height:110px; resize:vertical; }
+      .setup-form input:focus,.setup-form textarea:focus { border-color:rgba(194,96,63,.55); box-shadow:0 0 0 4px rgba(194,96,63,.10); }
+      .setup-proof { display:grid; gap:10px; margin-top:18px; }
+      .setup-proof li { margin:7px 0; color:var(--muted); font-weight:780; line-height:1.4; }
+      .setup-status { min-height:20px; color:var(--muted); font-size:13px; font-weight:850; }
+      .setup-success { display:none; border:1px solid rgba(13,148,136,.28); background:rgba(13,148,136,.08); border-radius:18px; padding:14px; color:var(--ink); }
+      .setup-success[data-show="true"] { display:block; }
+      @media(max-width:880px){.setup-main,.setup-row{grid-template-columns:1fr}.setup-main{padding-top:18px}.setup-card{border-radius:20px;padding:14px}}
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+${unicornHeader}
+      <main class="setup-main">
+        <section>
+          <div class="eyebrow">Agent setup</div>
+          <h1>Set up ${escapeHtml(kit.name)}.</h1>
+          <p>${escapeHtml(kit.offer.promise)}</p>
+          <div class="setup-card setup-proof">
+            <strong>First proof</strong>
+            <span>${escapeHtml(kit.offer.first_proof)}</span>
+            <strong>What we need</strong>
+            <ul>${renderKitList(kit.intake_schema.setup_inputs)}</ul>
+            <strong>Accepted samples</strong>
+            <ul>${renderKitList(kit.intake_schema.sample_sources)}</ul>
+          </div>
+        </section>
+        <section class="setup-card">
+          <form class="setup-form" data-agent-template-setup method="post" action="/api/contact-submissions">
+            ${hiddenFields.map(([name, value]) => formHidden(name, value)).join('\n            ')}
+            <input autocomplete="off" name="website" style="display:none" tabindex="-1" />
+            <div class="setup-row">
+              <label>Name<input name="name" autocomplete="name" required /></label>
+              <label>Email<input name="email" autocomplete="email" type="email" required /></label>
+              <label>Company<input name="company" autocomplete="organization" required /></label>
+              <label>Phone / chat<input name="phone" autocomplete="tel" /></label>
+            </div>
+            <label>Goal<textarea name="goal" required placeholder="What decision, report, ledger, reply, or daily action should this agent produce first?"></textarea></label>
+            <label>Sample sources<textarea name="source_links" required placeholder="${escapeHtml(kit.intake_schema.sample_sources.join(', '))}"></textarea></label>
+            <label>Rules and blockers<textarea name="launch_blockers" placeholder="Anything it must never do without approval, source access limits, formats, languages, or edge cases."></textarea></label>
+            <button type="submit">Send setup request</button>
+            <p class="setup-status" data-setup-status aria-live="polite"></p>
+            <div class="setup-success" data-setup-success>
+              <strong>Setup request saved.</strong>
+              <p>It is now queued for a first-proof build. The operator console will show the checklist, acceptance tests, and approval boundary.</p>
+            </div>
+          </form>
+        </section>
+      </main>
+      <footer><span>SUPERMEGA.dev agent setup.</span><span class="footer-links"><a href="/agent-templates/${escapeHtml(kit.id)}/">Setup kit</a><a href="/contact/?template=${escapeHtml(kit.id)}">Contact route</a></span></footer>
+    </div>
+${publicLanguageToggleScript}
+    <script>
+      const form = document.querySelector('[data-agent-template-setup]');
+      const statusEl = document.querySelector('[data-setup-status]');
+      const successEl = document.querySelector('[data-setup-success]');
+      const esc = (value) => String(value || '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+      const setHidden = (name, value) => { const input = form.querySelector('[name="' + name + '"]'); if (input) input.value = value || ''; };
+      const search = new URLSearchParams(window.location.search);
+      setHidden('source_url', window.location.href);
+      setHidden('page_path', window.location.pathname + window.location.search);
+      setHidden('referrer', document.referrer || '');
+      for (const key of ['utm_source', 'utm_medium', 'utm_content', 'utm_term']) setHidden(key, search.get(key) || '');
+      if (search.get('utm_campaign')) setHidden('utm_campaign', search.get('utm_campaign'));
+      form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        statusEl.textContent = 'Saving setup request...';
+        successEl.dataset.show = 'false';
+        const button = form.querySelector('button[type="submit"]');
+        button.disabled = true;
+        try {
+          const response = await fetch('/api/contact-submissions', {
+            method: 'POST',
+            headers: { 'accept': 'application/json', 'x-supermega-response': 'json' },
+            body: new FormData(form),
+          });
+          const payload = await response.json().catch(() => ({}));
+          if (!response.ok || payload.status === 'error') throw new Error(payload.reason || 'setup_request_failed');
+          statusEl.textContent = 'Saved: ' + esc(payload.lead_id || payload.task_id || 'queued');
+          successEl.dataset.show = 'true';
+          form.reset();
+        } catch (error) {
+          statusEl.textContent = 'Could not save. Email swanhtet@supermega.dev or try again. ' + String(error.message || error).slice(0, 90);
+        } finally {
+          button.disabled = false;
+        }
+      });
+    </script>
+  </body>
+</html>`
+}
+
 function buildAgentTemplateIndexHtml() {
   const cards = publicAgentTemplateStarterKits
     .map(
-      (kit) => `<article class="kit-card"><h3>${escapeHtml(kit.name)}</h3><p>${escapeHtml(kit.offer.first_proof)}</p><strong>${escapeHtml(kit.offer.price_hint)}</strong><div class="cta" style="margin-top:14px"><a class="btn secondary" href="/agent-templates/${escapeHtml(kit.id)}/">View setup kit</a><a class="btn secondary" href="${escapeHtml(kit.contact_url)}">Start</a></div></article>`,
+      (kit) => `<article class="kit-card"><h3>${escapeHtml(kit.name)}</h3><p>${escapeHtml(kit.offer.first_proof)}</p><strong>${escapeHtml(kit.offer.price_hint)}</strong><div class="cta" style="margin-top:14px"><a class="btn secondary" href="/agent-templates/${escapeHtml(kit.id)}/">View setup kit</a><a class="btn secondary" href="${escapeHtml(kit.setup_url)}">Start</a></div></article>`,
     )
     .join('')
   return `<!doctype html>
@@ -4049,6 +4189,8 @@ await writeFile(resolve(staticDir, 'agent-templates', 'index.html'), normalizePu
 for (const kit of publicAgentTemplateStarterKits) {
   await mkdir(resolve(staticDir, 'agent-templates', kit.id), { recursive: true })
   await writeFile(resolve(staticDir, 'agent-templates', kit.id, 'index.html'), normalizePublicProductNames(buildAgentTemplatePageHtml(kit)), 'utf8')
+  await mkdir(resolve(staticDir, 'agent-templates', kit.id, 'setup'), { recursive: true })
+  await writeFile(resolve(staticDir, 'agent-templates', kit.id, 'setup', 'index.html'), normalizePublicProductNames(buildAgentTemplateSetupHtml(kit)), 'utf8')
 }
 
 // Offers / pricing — the revenue surface. Public "from" prices in MMK only, read from pricing.json. Rate: 4,300 MMK/USD (canonical). No USD on public pages.
