@@ -24,6 +24,31 @@ const CLAUDE_TIMEOUT_MS = 12000
 
 function text(v) { return String(v || '').trim() }
 
+function parsePayload(value) {
+  if (!value) return {}
+  if (typeof value === 'object') return value
+  try {
+    const parsed = JSON.parse(String(value))
+    return parsed && typeof parsed === 'object' ? parsed : {}
+  } catch {
+    return {}
+  }
+}
+
+function lines(items) {
+  return (Array.isArray(items) ? items : [])
+    .map((item) => text(item))
+    .filter(Boolean)
+}
+
+function numbered(items) {
+  return lines(items).map((item, index) => `${index + 1}. ${item}`).join('\n')
+}
+
+function bulleted(items) {
+  return lines(items).map((item) => `- ${item}`).join('\n')
+}
+
 // Constant-time secret comparison. Hashing both sides to a fixed-size digest
 // avoids leaking length and lets timingSafeEqual compare equal-length buffers.
 function safeEqual(a, b) {
@@ -116,6 +141,11 @@ async function dispatchDraftReply(sb, row) {
     return { status: 'error', reason: 'lead_not_found', lead_id: row.lead_id }
   }
 
+  const proofBrief = renderFirstProofBrief(row, lead)
+  if (proofBrief.status === 'ready') {
+    return proofBrief
+  }
+
   const subject = `Re: ${text(lead.company) || text(lead.name) || 'Your SuperMega request'}`
   const body = [
     `Hi ${text(lead.name) || 'there'},`,
@@ -137,6 +167,65 @@ async function dispatchDraftReply(sb, row) {
 
   // Optionally persist to a draft column in the action row — result stores the draft
   return { status: 'ready', draft }
+}
+
+function renderFirstProofBrief(row, lead = {}) {
+  const payload = parsePayload(row.payload)
+  const task = parsePayload(payload.first_proof_task)
+  if (task.type !== 'first_proof_build') {
+    return { status: 'skipped', reason: 'no_first_proof_task' }
+  }
+
+  const templateName = text(task.template_name) || text(payload.public_package) || text(payload.requested_package) || text(task.template_id) || 'SUPERMEGA template'
+  const company = text(lead.company) || text(lead.name) || text(row.lead_id) || 'new lead'
+  const proofTarget = text(task.first_proof_target) || text(payload.first_proof_target) || 'First useful proof'
+  const checklist = lines(task.checklist)
+  const acceptanceTests = lines(task.acceptance_tests)
+  const starterKit = text(task.starter_kit_url) || text(payload.starter_kit_url)
+  const humanGate = text(task.human_gate) || 'owner approval before send/write/payment actions'
+  const operatorBrief = text(task.operator_brief) || `${templateName} first proof for ${company}.\nFirst proof: ${proofTarget}.`
+  const sourceTrace = lines(task.source_trace || payload.source_trace)
+  if (starterKit) sourceTrace.push(`Starter kit: ${starterKit}`)
+  if (text(row.lead_id)) sourceTrace.push(`Lead record: ${text(row.lead_id)}`)
+  if (text(lead.email)) sourceTrace.push(`Buyer email: ${text(lead.email)}`)
+  const body = [
+    `# ${templateName} first proof`,
+    '',
+    `Lead: ${text(row.lead_id)}`,
+    `Company: ${company}`,
+    `Template: ${text(task.template_id) || text(payload.template_id) || 'not set'}`,
+    starterKit ? `Starter kit: ${starterKit}` : '',
+    `First proof: ${proofTarget}`,
+    '',
+    '## Operator brief',
+    operatorBrief,
+    '',
+    '## Checklist',
+    numbered(checklist),
+    '',
+    '## Acceptance tests',
+    bulleted(acceptanceTests),
+    '',
+    '## Source trace',
+    bulleted(sourceTrace),
+    '',
+    '## Approval boundary',
+    `Do not send, write, charge, or edit live business records without owner approval. Human gate: ${humanGate}.`,
+  ].filter((part) => part !== '').join('\n')
+
+  return {
+    status: 'ready',
+    type: 'first_proof_operator_brief',
+    template_id: text(task.template_id) || text(payload.template_id),
+    title: `${templateName} first proof for ${company}`,
+    body,
+    checklist,
+    acceptance_tests: acceptanceTests,
+    starter_kit_url: starterKit,
+    first_proof_target: proofTarget,
+    approval_required: task.approval_required !== false,
+    human_gate: humanGate,
+  }
 }
 
 async function dispatchSendReply(sb, row) {
@@ -265,7 +354,7 @@ async function processRow(sb, row) {
   return { id: row.id, action_type: row.action_type, status: finalStatus, result }
 }
 
-module.exports = async function handler(req, res) {
+async function handler(req, res) {
   // Auth FIRST — never leak backend-config state (e.g. "supabase_not_configured") to an
   // unauthenticated caller. The auth gate must be the first thing every request hits.
   const authHeader = text(req.headers['authorization'])
@@ -328,3 +417,9 @@ module.exports = async function handler(req, res) {
     results,
   })
 }
+
+handler.__test = {
+  renderFirstProofBrief,
+}
+
+module.exports = handler
