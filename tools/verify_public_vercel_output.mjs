@@ -549,7 +549,7 @@ for (const token of ['buildFirstProofTaskPayload', 'first_proof_task', 'owner ap
 const actionRunnerFunctionPath = resolve(functionsDir, 'api/action-runner.js.func/api/action-runner.js')
 if (!existsSync(actionRunnerFunctionPath)) fail('public_action_runner_function_missing')
 const actionRunnerFunctionSource = readFileSync(actionRunnerFunctionPath, 'utf8')
-for (const token of ['renderFirstProofBrief', 'first_proof_operator_brief', 'Source trace', 'Do not send, write, charge, or edit live business records']) {
+for (const token of ['renderFirstProofBrief', 'first_proof_operator_brief', 'Source trace', 'Do not send, write, charge, or edit live business records', 'claimPostgresBatch', 'vercel_postgres_neon']) {
   if (!actionRunnerFunctionSource.includes(token)) {
     fail('public_action_runner_first_proof_contract_missing', { token })
   }

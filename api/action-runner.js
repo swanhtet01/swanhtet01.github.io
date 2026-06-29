@@ -17,6 +17,7 @@
 //   RESEND_API_KEY — required for send_reply dispatch
 
 const crypto = require('crypto')
+const datastore = require('./lib/supermega-datastore')
 
 const BATCH_LIMIT = 10
 const SUPABASE_TIMEOUT_MS = 8000
@@ -89,7 +90,7 @@ async function sbFetch(sb, path, options = {}) {
   return { ok: res.ok, status: res.status, data }
 }
 
-async function claimBatch(sb, batchSize = BATCH_LIMIT) {
+async function claimSupabaseBatch(sb, batchSize = BATCH_LIMIT) {
   // Atomic claim via FOR UPDATE SKIP LOCKED — prevents concurrent workers from double-claiming rows
   const r = await sbFetch(sb,
     `/rest/v1/rpc/claim_queued_actions`,
@@ -100,10 +101,10 @@ async function claimBatch(sb, batchSize = BATCH_LIMIT) {
     }
   )
   if (!r.ok) return { status: 'error', reason: `supabase_${r.status}`, data: r.data }
-  return { status: 'ready', rows: Array.isArray(r.data) ? r.data : [] }
+  return { status: 'ready', adapter: 'supabase_rest', rows: Array.isArray(r.data) ? r.data : [] }
 }
 
-async function updateAction(sb, id, patch) {
+async function updateSupabaseAction(sb, id, patch) {
   if (!id) {
     console.warn('[action-runner] updateAction skipped: missing row id')
     return
@@ -116,7 +117,7 @@ async function updateAction(sb, id, patch) {
   return r
 }
 
-async function updateLead(sb, leadId, patch) {
+async function updateSupabaseLead(sb, leadId, patch) {
   if (!leadId) return { status: 'skipped', reason: 'no_lead_id' }
   const r = await sbFetch(sb,
     `/rest/v1/supermega_leads?lead_id=eq.${encodeURIComponent(leadId)}`,
@@ -125,7 +126,7 @@ async function updateLead(sb, leadId, patch) {
   return r.ok ? { status: 'ready' } : { status: 'error', code: r.status }
 }
 
-async function fetchLead(sb, leadId) {
+async function fetchSupabaseLead(sb, leadId) {
   if (!leadId) return null
   const r = await sbFetch(sb,
     `/rest/v1/supermega_leads?lead_id=eq.${encodeURIComponent(leadId)}&limit=1`,
@@ -135,8 +136,142 @@ async function fetchLead(sb, leadId) {
   return r.data[0]
 }
 
-async function dispatchDraftReply(sb, row) {
-  const lead = await fetchLead(sb, row.lead_id)
+function postgresStore() {
+  return datastore.postgresConfigured() ? { mode: 'postgres', adapter: 'vercel_postgres_neon' } : null
+}
+
+function supabaseStore() {
+  const sb = supabase()
+  return sb ? { mode: 'supabase', adapter: 'supabase_rest', sb } : null
+}
+
+async function claimPostgresBatch(batchSize = BATCH_LIMIT) {
+  const result = await datastore.query(
+    `
+      update public.supermega_pipeline_actions a
+      set
+        status = 'processing',
+        updated_at = now()
+      where a.id in (
+        select s.id
+        from public.supermega_pipeline_actions s
+        where s.status = 'queued'
+        order by s.created_at asc
+        limit $1
+        for update skip locked
+      )
+      returning
+        a.id,
+        a.lead_id,
+        a.action_type,
+        a.payload,
+        a.status,
+        a.created_at,
+        a.action_id,
+        a.task_id,
+        a.run_id,
+        a.priority,
+        a.owner,
+        a.title,
+        a.next_step,
+        a.due_at,
+        a.approval_required,
+        a.approval_state,
+        a.notification_channel,
+        a.notification_status,
+        a.chat_id,
+        a.message_id,
+        a.args,
+        a.raw_text,
+        a.source,
+        a.result
+    `,
+    [batchSize],
+  )
+  if (result.status !== 'ready') {
+    return { status: 'error', reason: 'postgres_claim_failed', detail: result }
+  }
+  return { status: 'ready', adapter: 'vercel_postgres_neon', rows: result.rows || [] }
+}
+
+async function updatePostgresAction(id, patch) {
+  if (!id) {
+    console.warn('[action-runner] updateAction skipped: missing row id')
+    return { status: 'skipped', reason: 'missing_row_id' }
+  }
+  return datastore.query(
+    `
+      update public.supermega_pipeline_actions
+      set
+        status = $2,
+        result = $3::jsonb,
+        processed_at = $4::timestamptz,
+        error = $5,
+        updated_at = now()
+      where id = $1
+    `,
+    [
+      id,
+      patch.status,
+      JSON.stringify(patch.result ?? null),
+      patch.processed_at || new Date().toISOString(),
+      patch.error || null,
+    ],
+  )
+}
+
+async function updatePostgresLead(leadId, patch) {
+  if (!leadId) return { status: 'skipped', reason: 'no_lead_id' }
+  const result = await datastore.query(
+    `
+      update public.supermega_leads
+      set
+        status = coalesce($2, status),
+        next_step = coalesce($3, next_step)
+      where lead_id = $1
+    `,
+    [leadId, patch.status || null, patch.next_step || null],
+  )
+  return result.status === 'ready' ? { status: 'ready' } : result
+}
+
+async function fetchPostgresLead(leadId) {
+  if (!leadId) return null
+  const result = await datastore.query(
+    `
+      select lead_id, name, email, company, goal, workflow, requested_package, status, next_step
+      from public.supermega_leads
+      where lead_id = $1
+      limit 1
+    `,
+    [leadId],
+  )
+  if (result.status !== 'ready' || !result.rows?.length) return null
+  return result.rows[0]
+}
+
+async function claimBatch(store, batchSize = BATCH_LIMIT) {
+  if (store.mode === 'postgres') return claimPostgresBatch(batchSize)
+  return claimSupabaseBatch(store.sb, batchSize)
+}
+
+async function updateAction(store, id, patch) {
+  if (store.mode === 'postgres') return updatePostgresAction(id, patch)
+  return updateSupabaseAction(store.sb, id, patch)
+}
+
+async function updateLead(store, leadId, patch) {
+  if (store.mode === 'postgres') return updatePostgresLead(leadId, patch)
+  return updateSupabaseLead(store.sb, leadId, patch)
+}
+
+async function fetchLead(store, leadId) {
+  if (store.mode === 'postgres') return fetchPostgresLead(leadId)
+  return fetchSupabaseLead(store.sb, leadId)
+}
+
+async function dispatchDraftReply(store, row) {
+  const lead = await fetchLead(store, row.lead_id)
   if (!lead) {
     return { status: 'error', reason: 'lead_not_found', lead_id: row.lead_id }
   }
@@ -228,7 +363,7 @@ function renderFirstProofBrief(row, lead = {}) {
   }
 }
 
-async function dispatchSendReply(sb, row) {
+async function dispatchSendReply(store, row) {
   // Human-in-the-loop guarantee: send_reply NEVER auto-sends. It dispatches an outbound email to a
   // lead ONLY when the action row was explicitly approved (the approval flow must set
   // approval_state='approved'). An unapproved row — e.g. one queued straight from a Telegram message —
@@ -239,7 +374,7 @@ async function dispatchSendReply(sb, row) {
   const apiKey = text(process.env.RESEND_API_KEY)
   if (!apiKey) return { status: 'skipped', reason: 'resend_not_configured' }
 
-  const lead = await fetchLead(sb, row.lead_id)
+  const lead = await fetchLead(store, row.lead_id)
   if (!lead) return { status: 'error', reason: 'lead_not_found', lead_id: row.lead_id }
 
   const to = text(lead.email)
@@ -263,7 +398,7 @@ async function dispatchSendReply(sb, row) {
     })
     const data = await res.json().catch(() => null)
     if (!res.ok) return { status: 'error', reason: 'resend_error', code: res.status, data }
-    await updateLead(sb, row.lead_id, { status: 'replied' })
+    await updateLead(store, row.lead_id, { status: 'replied' })
     return { status: 'ready', email_id: data?.id, to }
   } catch (e) {
     return { status: 'error', reason: text(e?.message) || 'resend_timeout' }
@@ -302,19 +437,19 @@ async function dispatchFreeform(row) {
   }
 }
 
-async function dispatchMarkDone(sb, row) {
+async function dispatchMarkDone(store, row) {
   const leadId = row.lead_id || (row.args || '').trim()
-  return updateLead(sb, leadId, { status: 'done' })
+  return updateLead(store, leadId, { status: 'done' })
 }
 
-async function dispatchSnooze(sb, row) {
+async function dispatchSnooze(store, row) {
   const leadId = row.lead_id || (row.args || '').trim()
   const snoozedUntil = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
   // Store snooze in payload jsonb since snoozed_until column may not exist yet
-  return updateLead(sb, leadId, { status: 'snoozed', next_step: `Snoozed until ${snoozedUntil}` })
+  return updateLead(store, leadId, { status: 'snoozed', next_step: `Snoozed until ${snoozedUntil}` })
 }
 
-async function processRow(sb, row) {
+async function processRow(store, row) {
   // Row already claimed as 'processing' by claimBatch (atomic RPC) — no separate PATCH needed
 
   let result
@@ -322,19 +457,19 @@ async function processRow(sb, row) {
     switch (row.action_type) {
       case 'lead_followup':
       case 'draft_reply':
-        result = await dispatchDraftReply(sb, row)
+        result = await dispatchDraftReply(store, row)
         break
       case 'send_reply':
-        result = await dispatchSendReply(sb, row)
+        result = await dispatchSendReply(store, row)
         break
       case 'freeform':
         result = await dispatchFreeform(row)
         break
       case 'mark_done':
-        result = await dispatchMarkDone(sb, row)
+        result = await dispatchMarkDone(store, row)
         break
       case 'snooze':
-        result = await dispatchSnooze(sb, row)
+        result = await dispatchSnooze(store, row)
         break
       default:
         result = { status: 'error', reason: 'unknown_action_type', type: row.action_type }
@@ -344,7 +479,7 @@ async function processRow(sb, row) {
   }
 
   const finalStatus = result?.status === 'ready' || result?.status === 'skipped' ? 'done' : 'failed'
-  await updateAction(sb, row.id, {
+  await updateAction(store, row.id, {
     status: finalStatus,
     result,
     processed_at: new Date().toISOString(),
@@ -385,32 +520,43 @@ async function handler(req, res) {
     return
   }
 
-  // Backend-config check AFTER auth, so anonymous callers can't probe whether Supabase is configured.
-  const sb = supabase()
-  if (!sb) {
-    json(res, 200, { status: 'blocked', reason: 'supabase_not_configured' })
+  // Backend-config check AFTER auth, so anonymous callers can't probe whether a queue is configured.
+  let store = postgresStore() || supabaseStore()
+  if (!store) {
+    json(res, 200, { status: 'blocked', reason: 'queue_not_configured' })
     return
   }
 
-  const queued = await claimBatch(sb)
+  let queued = await claimBatch(store)
+  if (queued.status !== 'ready' && store.mode === 'postgres') {
+    const fallback = supabaseStore()
+    if (fallback) {
+      const fallbackQueued = await claimBatch(fallback)
+      if (fallbackQueued.status === 'ready') {
+        store = fallback
+        queued = { ...fallbackQueued, primary_error: queued }
+      }
+    }
+  }
   if (queued.status !== 'ready') {
-    json(res, 200, { status: 'blocked', reason: 'fetch_failed', detail: queued })
+    json(res, 200, { status: 'blocked', reason: 'fetch_failed', adapter: store.adapter, detail: queued })
     return
   }
 
   if (!queued.rows.length) {
-    json(res, 200, { status: 'ready', processed: 0, message: 'no_queued_actions' })
+    json(res, 200, { status: 'ready', adapter: store.adapter, processed: 0, message: 'no_queued_actions' })
     return
   }
 
   const results = []
   for (const row of queued.rows) {
-    const r = await processRow(sb, row)
+    const r = await processRow(store, row)
     results.push(r)
   }
 
   json(res, 200, {
     status: 'ready',
+    adapter: store.adapter,
     processed: results.length,
     done: results.filter((r) => r.status === 'done').length,
     errors: results.filter((r) => r.status === 'failed').length,
@@ -420,6 +566,10 @@ async function handler(req, res) {
 
 handler.__test = {
   renderFirstProofBrief,
+  claimPostgresBatch,
+  updatePostgresAction,
+  fetchPostgresLead,
+  claimSupabaseBatch,
 }
 
 module.exports = handler
