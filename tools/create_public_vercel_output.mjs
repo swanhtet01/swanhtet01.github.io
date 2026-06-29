@@ -4619,6 +4619,27 @@ const publicOperatorConsoleHtml = `<!doctype html>
               '## Approval request',
               'Please confirm whether this first proof matches the workflow. I will not send messages, write records, connect accounts, or take payment actions without owner approval.'
             ].join('\\n'),
+            pilot_close_packet:[
+              '# Daily Intelligence Brief Agent pilot close packet',
+              '',
+              'Lead: SAMPLE-SETUP',
+              'Pilot offer: turn the approved first proof into a working owner-triggered workflow.',
+              'Price hint: 11,000,000 MMK setup',
+              '',
+              '## Scope',
+              '- Build around the approved first proof: One-page morning brief with what changed, why it matters, and exact follow-up actions.',
+              '- Use only buyer-approved source samples, connectors, and accounts.',
+              '- Keep external sends, production writes, account connections, and payment actions approval-only.',
+              '- Deliver a private operator workspace, source trace, and acceptance-test checklist.',
+              '',
+              '## Buyer approval needed',
+              '- Confirm the first proof is useful.',
+              '- Confirm source access and approval boundary.',
+              '- Confirm pilot scope and price before any paid build starts.',
+              '',
+              '## Close message',
+              'If this first proof is useful, I can turn it into the working Daily Intelligence Brief Agent pilot. The current price hint is 11,000,000 MMK setup. I will keep the first production run approval-only and show source trace for the important outputs.'
+            ].join('\\n'),
             approval_required:true,
             human_gate:'owner approval before send/write/payment actions'
           }
@@ -4647,6 +4668,11 @@ const publicOperatorConsoleHtml = `<!doctype html>
       if(!proof || !proof.proof_delivery_packet)return '';
       const id = 'proof-delivery-'+index;
       return '<div class="operator-proof-section"><span>Proof delivery packet</span><textarea class="operator-reply" id="'+id+'" readonly>'+esc(proof.proof_delivery_packet)+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+id+'">Copy proof packet</button></div>';
+    }
+    function pilotClosePacket(proof, index){
+      if(!proof || !proof.pilot_close_packet)return '';
+      const id = 'pilot-close-'+index;
+      return '<div class="operator-proof-section"><span>Pilot close packet</span><textarea class="operator-reply" id="'+id+'" readonly>'+esc(proof.pilot_close_packet)+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+id+'">Copy pilot packet</button></div>';
     }
     function legacyCopy(el){
       el.focus();
@@ -4683,7 +4709,7 @@ const publicOperatorConsoleHtml = `<!doctype html>
       if(!actions.length){actionsEl.innerHTML = '<div class="operator-item">No recent actions.</div>';return}
       actionsEl.innerHTML = actions.map(function(action,index){
         const proof = action.first_proof;
-        const proofHtml = proof ? '<div class="operator-proof"><strong>'+esc(proof.title || 'First proof')+'</strong><div class="operator-meta"><span class="operator-chip">'+esc(proof.status)+'</span><span class="operator-chip">'+esc(proof.template_id)+'</span><span class="operator-chip">'+esc(proof.human_gate)+'</span></div><div>'+esc(proof.first_proof_target || '')+'</div>'+proofStarterLink(proof)+proofList('Checklist',proof.checklist)+proofList('Acceptance tests',proof.acceptance_tests)+proofBuyerReply(proof,index)+proofDeliveryPacket(proof,index)+'</div>' : '';
+        const proofHtml = proof ? '<div class="operator-proof"><strong>'+esc(proof.title || 'First proof')+'</strong><div class="operator-meta"><span class="operator-chip">'+esc(proof.status)+'</span><span class="operator-chip">'+esc(proof.template_id)+'</span><span class="operator-chip">'+esc(proof.human_gate)+'</span></div><div>'+esc(proof.first_proof_target || '')+'</div>'+proofStarterLink(proof)+proofList('Checklist',proof.checklist)+proofList('Acceptance tests',proof.acceptance_tests)+proofBuyerReply(proof,index)+proofDeliveryPacket(proof,index)+pilotClosePacket(proof,index)+'</div>' : '';
         return '<article class="operator-item"><strong>'+esc(action.title || action.action_type)+'</strong><div class="operator-meta"><span class="operator-chip">'+esc(action.status)+'</span><span class="operator-chip">'+esc(action.priority)+'</span><span class="operator-chip">'+esc(action.approval_state)+'</span><span>'+esc(action.lead_id)+'</span></div><div>'+esc(action.next_step || '')+'</div>'+proofHtml+'</article>';
       }).join('');
       actionsEl.querySelectorAll('[data-copy-target]').forEach(function(button){button.addEventListener('click',function(){copyDraft(button.getAttribute('data-copy-target'))})});

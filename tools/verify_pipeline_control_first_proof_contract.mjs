@@ -35,6 +35,7 @@ const action = internals.safeAction({
       template_id: 'daily-intelligence-brief',
       template_name: 'Daily Intelligence Brief Agent',
       starter_kit_url: '/site/agent-templates/daily-intelligence-brief.json',
+      price_hint: '11,000,000 MMK setup',
       first_proof_target: 'One-page morning brief with what changed and what to do next.',
       checklist: ['Open starter kit', 'Review buyer goal', 'Build first proof'],
       acceptance_tests: ['Shows source trace', 'Approval-only external actions', 'Uses approved sample sources'],
@@ -72,6 +73,9 @@ assert.ok(action.first_proof.buyer_reply_draft.includes('will not send messages'
 assert.ok(action.first_proof.proof_delivery_packet.includes('# Daily Intelligence Brief Agent first proof'))
 assert.ok(action.first_proof.proof_delivery_packet.includes('## Source trace'))
 assert.ok(action.first_proof.proof_delivery_packet.includes('## Acceptance test status'))
+assert.ok(action.first_proof.pilot_close_packet.includes('# Daily Intelligence Brief Agent pilot close packet'))
+assert.ok(action.first_proof.pilot_close_packet.includes('Price hint: 11,000,000 MMK setup'))
+assert.ok(action.first_proof.pilot_close_packet.includes('Confirm pilot scope and price'))
 assert.ok(!JSON.stringify(action).includes('owner@example.com'))
 
 console.log(
@@ -84,6 +88,7 @@ console.log(
       acceptance_tests: action.first_proof.acceptance_tests.length,
       buyer_reply_draft: 'ready',
       proof_delivery_packet: 'ready',
+      pilot_close_packet: 'ready',
     },
     null,
     2,

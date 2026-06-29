@@ -87,6 +87,7 @@ function firstProofPacket(row) {
   const templateName = text(task.template_name) || text(payload.public_package) || text(payload.requested_package) || templateId
   const starterKitUrl = text(result.starter_kit_url) || text(task.starter_kit_url) || text(payload.starter_kit_url)
   const firstProofTarget = text(result.first_proof_target) || text(task.first_proof_target) || text(payload.first_proof_target)
+  const priceHint = text(task.price_hint) || text(payload.price_hint) || 'quote after proof review'
   const nextStep = text(row.next_step) || 'Share one approved sample source so we can build the first proof.'
   const sourceTrace = list(task.source_trace || payload.source_trace)
   if (starterKitUrl) sourceTrace.push(`Starter kit: ${starterKitUrl}`)
@@ -124,6 +125,27 @@ function firstProofPacket(row) {
     '## Approval request',
     'Please confirm whether this first proof matches the workflow. I will not send messages, write records, connect accounts, or take payment actions without owner approval.',
   ].join('\n')
+  const pilotClosePacket = [
+    `# ${templateName || 'SUPERMEGA agent'} pilot close packet`,
+    '',
+    `Lead: ${text(row.lead_id) || 'not set'}`,
+    `Pilot offer: turn the approved first proof into a working owner-triggered workflow.`,
+    `Price hint: ${priceHint}`,
+    '',
+    '## Scope',
+    `- Build around the approved first proof: ${firstProofTarget || 'not set'}`,
+    '- Use only buyer-approved source samples, connectors, and accounts.',
+    '- Keep external sends, production writes, account connections, and payment actions approval-only.',
+    '- Deliver a private operator workspace, source trace, and acceptance-test checklist.',
+    '',
+    '## Buyer approval needed',
+    '- Confirm the first proof is useful.',
+    '- Confirm source access and approval boundary.',
+    '- Confirm pilot scope and price before any paid build starts.',
+    '',
+    '## Close message',
+    `If this first proof is useful, I can turn it into the working ${templateName || 'SUPERMEGA agent'} pilot. The current price hint is ${priceHint}. I will keep the first production run approval-only and show source trace for the important outputs.`,
+  ].join('\n')
 
   return {
     status: isBrief ? 'operator_brief_ready' : 'queued_for_runner',
@@ -136,6 +158,7 @@ function firstProofPacket(row) {
     acceptance_tests: acceptanceTests,
     buyer_reply_draft: buyerReplyDraft,
     proof_delivery_packet: proofDeliveryPacket,
+    pilot_close_packet: pilotClosePacket,
     approval_required: result.approval_required !== undefined ? result.approval_required !== false : task.approval_required !== false,
     human_gate: text(result.human_gate) || text(task.human_gate) || 'owner approval before send/write/payment actions',
   }
