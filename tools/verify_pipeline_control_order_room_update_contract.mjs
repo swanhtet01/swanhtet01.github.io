@@ -139,6 +139,11 @@ try {
   assert.equal(body.order_room_state.payment_proof_reference, 'KBZ transfer screenshot 123')
   assert.equal(body.action.first_proof.pilot_order_room.state.payment_proof_state, 'proof_attached')
   assert.equal(body.action.first_proof.pilot_order_room.state.real_mrr_delta, 0)
+  assert.equal(body.action.first_proof.pilot_order_room.private_workspace_manifest.status, 'ready_to_create_private_workspace')
+  assert.equal(body.action.first_proof.pilot_order_room.private_workspace_manifest.create_workspace_allowed, true)
+  assert.equal(body.action.first_proof.pilot_order_room.private_workspace_manifest.real_mrr_delta, 0)
+  assert.ok(body.action.first_proof.pilot_order_room.private_workspace_handoff_packet.includes('First run mode: approval_only'))
+  assert.ok(body.action.first_proof.pilot_order_room.first_run_queue_csv.includes('"owner_acceptance_review"'))
 
   const unauthorized = await callHandler({ headers: { authorization: 'Bearer wrong' }, body: '{}' })
   assert.equal(unauthorized.statusCode, 401)
@@ -151,6 +156,7 @@ try {
         audit: 'pipeline-control-order-room-update',
         update_status: body.status,
         payment_proof_state: body.order_room_state.payment_proof_state,
+        private_workspace_manifest: body.action.first_proof.pilot_order_room.private_workspace_manifest.status,
         real_mrr_delta: body.order_room_state.real_mrr_delta,
         unauthorized_status: unauthorized.statusCode,
       },

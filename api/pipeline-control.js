@@ -66,6 +66,15 @@ function csvCell(value) {
   return `"${text(value).replace(/"/g, '""')}"`
 }
 
+function slugPart(value, fallback = 'pilot') {
+  const slug = text(value)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 48)
+  return slug || fallback
+}
+
 function oneOf(value, allowed, fallback) {
   const normalized = text(value)
   return allowed.includes(normalized) ? normalized : fallback
@@ -95,6 +104,79 @@ function buildOrderRoomState(payload = {}) {
     updated_by: 'operator_console',
     updated_at: new Date().toISOString(),
     guardrails: ['owner_approval_before_payment_request', 'no_workspace_before_payment_proof', 'no_revenue_claim_without_payment_proof'],
+  }
+}
+
+function workspaceActivationStatus(state = {}) {
+  const scopeApproved = state.scope_approval_state === 'approved' && state.price_approval_state === 'approved'
+  const paymentReady = state.payment_route_state === 'approved' && ['approved_to_send', 'sent'].includes(state.payment_request_state)
+  const proofReady = state.payment_proof_state === 'proof_attached'
+  if (scopeApproved && paymentReady && proofReady) return 'ready_to_create_private_workspace'
+  if (!scopeApproved) return 'blocked_until_scope_and_price_approved'
+  if (!paymentReady) return 'blocked_until_payment_request_sent'
+  return 'blocked_until_payment_proof'
+}
+
+function buildPrivateWorkspaceManifest(input = {}) {
+  const state = input.state || {}
+  const activationStatus = workspaceActivationStatus(state)
+  const leadId = text(input.leadId) || 'not set'
+  const templateId = text(input.templateId) || 'custom-agent'
+  const workspaceSlug = `pilot-${slugPart(templateId, 'agent')}-${slugPart(leadId, 'lead')}`.slice(0, 72)
+  const createWorkspaceAllowed = activationStatus === 'ready_to_create_private_workspace'
+  const modules = [
+    'buyer_goal',
+    'approved_sources',
+    'source_trace',
+    'first_run_queue',
+    'approval_log',
+    'delivery_packet',
+  ]
+  const firstRunQueue = [
+    {
+      step_id: 'import_approved_sources',
+      title: 'Import only buyer-approved sample sources',
+      owner: 'Revenue Pod',
+      external_action_state: 'manual_owner_approved',
+      evidence_required: 'source_trace',
+    },
+    {
+      step_id: 'build_first_production_run',
+      title: `Build the first approval-only ${text(input.templateName) || 'agent'} run`,
+      owner: 'Delivery Pod',
+      external_action_state: 'not_sent',
+      evidence_required: 'first_run_output',
+    },
+    {
+      step_id: 'owner_acceptance_review',
+      title: 'Collect owner acceptance before live connector writes or sends',
+      owner: 'Founder',
+      external_action_state: 'approval_required',
+      evidence_required: 'acceptance_checklist',
+    },
+  ]
+  return {
+    status: activationStatus,
+    workspace_slug: workspaceSlug,
+    lead_id: leadId,
+    template_id: templateId,
+    template_name: text(input.templateName) || null,
+    starter_kit_url: text(input.starterKitUrl) || null,
+    first_proof_target: text(input.firstProofTarget) || null,
+    price_hint: text(input.priceHint) || 'quote after proof review',
+    create_workspace_allowed: createWorkspaceAllowed,
+    private_workspace_state: createWorkspaceAllowed ? state.private_workspace_state || 'ready_after_payment_proof' : 'not_created_until_payment_proof',
+    payment_proof_reference: createWorkspaceAllowed ? text(state.payment_proof_reference) || 'OWNER_PROOF_REFERENCE_REQUIRED' : 'required_before_workspace',
+    first_run_mode: 'approval_only',
+    real_mrr_delta: 0,
+    modules,
+    first_run_queue: firstRunQueue,
+    guardrails: [
+      'create_private_workspace_only_after_payment_proof',
+      'first_production_run_is_approval_only',
+      'no_connector_writes_without_owner_acceptance',
+      'no_real_mrr_claim_without_payment_proof',
+    ],
   }
 }
 
@@ -154,6 +236,18 @@ function firstProofPacket(row) {
   const leadId = text(row.lead_id) || 'not set'
   const sourceTrace = list(task.source_trace || payload.source_trace)
   const persistedOrderRoomState = parseJsonObject(result.pilot_order_room_state || payload.pilot_order_room_state)
+  const orderRoomState = Object.keys(persistedOrderRoomState).length
+    ? persistedOrderRoomState
+    : {
+        status: 'not_persisted',
+        scope_approval_state: 'pending',
+        price_approval_state: 'pending',
+        payment_route_state: 'not_approved',
+        payment_request_state: 'not_sent',
+        payment_proof_state: 'payment_proof_required',
+        private_workspace_state: 'not_created_until_payment_proof',
+        real_mrr_delta: 0,
+      }
   if (starterKitUrl) sourceTrace.push(`Starter kit: ${starterKitUrl}`)
   if (text(row.lead_id)) sourceTrace.push(`Lead: ${text(row.lead_id)}`)
   const buyerReplyDraft = [
@@ -370,6 +464,53 @@ function firstProofPacket(row) {
     null,
     2,
   )
+  const privateWorkspaceManifest = buildPrivateWorkspaceManifest({
+    leadId,
+    templateId,
+    templateName,
+    starterKitUrl,
+    firstProofTarget,
+    priceHint,
+    state: orderRoomState,
+  })
+  const privateWorkspaceHandoffPacket = [
+    `# ${templateName || 'SUPERMEGA agent'} private pilot workspace`,
+    '',
+    `Status: ${privateWorkspaceManifest.status}`,
+    `Workspace slug: ${privateWorkspaceManifest.workspace_slug}`,
+    `Lead: ${leadId}`,
+    `Template: ${templateId || 'not set'}`,
+    `First run mode: ${privateWorkspaceManifest.first_run_mode}`,
+    `Create workspace allowed: ${privateWorkspaceManifest.create_workspace_allowed ? 'yes' : 'no'}`,
+    `Payment proof: ${privateWorkspaceManifest.payment_proof_reference}`,
+    `Real MRR delta: ${privateWorkspaceManifest.real_mrr_delta}`,
+    '',
+    '## Modules',
+    privateWorkspaceManifest.modules.map((item) => `- ${item}`).join('\n'),
+    '',
+    '## First run queue',
+    privateWorkspaceManifest.first_run_queue.map((item) => `- [ ] ${item.step_id}: ${item.title} (${item.external_action_state})`).join('\n'),
+    '',
+    '## Guardrails',
+    privateWorkspaceManifest.guardrails.map((item) => `- ${item}`).join('\n'),
+  ].join('\n')
+  const firstRunQueueCsv = [
+    ['workspace_slug', 'lead_id', 'step_id', 'title', 'owner', 'external_action_state', 'evidence_required', 'real_mrr_delta'].map(csvCell).join(','),
+    ...privateWorkspaceManifest.first_run_queue.map((item) =>
+      [
+        privateWorkspaceManifest.workspace_slug,
+        leadId,
+        item.step_id,
+        item.title,
+        item.owner,
+        item.external_action_state,
+        item.evidence_required,
+        '0',
+      ]
+        .map(csvCell)
+        .join(','),
+    ),
+  ].join('\n')
 
   return {
     status: isBrief ? 'operator_brief_ready' : 'queued_for_runner',
@@ -394,14 +535,11 @@ function firstProofPacket(row) {
       owner_activation_packet: ownerActivationPacket,
       owner_action_queue_csv: ownerActionQueueCsv,
       activation_summary_json: activationSummaryJson,
-      state: Object.keys(persistedOrderRoomState).length ? persistedOrderRoomState : {
-        status: 'not_persisted',
-        scope_approval_state: 'pending',
-        payment_request_state: 'not_sent',
-        payment_proof_state: 'payment_proof_required',
-        private_workspace_state: 'not_created_until_payment_proof',
-        real_mrr_delta: 0,
-      },
+      private_workspace_manifest: privateWorkspaceManifest,
+      private_workspace_manifest_json: JSON.stringify(privateWorkspaceManifest, null, 2),
+      private_workspace_handoff_packet: privateWorkspaceHandoffPacket,
+      first_run_queue_csv: firstRunQueueCsv,
+      state: orderRoomState,
     },
     approval_required: result.approval_required !== undefined ? result.approval_required !== false : task.approval_required !== false,
     human_gate: text(result.human_gate) || text(task.human_gate) || 'owner approval before send/write/payment actions',
@@ -837,6 +975,7 @@ async function handler(req, res) {
 
 handler.__test = {
   buildOrderRoomState,
+  buildPrivateWorkspaceManifest,
   firstProofPacket,
   safeAction,
   updateOrderRoomState,

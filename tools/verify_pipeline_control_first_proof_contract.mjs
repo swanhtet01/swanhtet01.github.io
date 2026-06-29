@@ -16,6 +16,9 @@ if (typeof internals.safeAction !== 'function') {
 if (typeof internals.buildOrderRoomState !== 'function') {
   fail('pipeline_control_order_room_state_builder_missing')
 }
+if (typeof internals.buildPrivateWorkspaceManifest !== 'function') {
+  fail('pipeline_control_private_workspace_manifest_builder_missing')
+}
 
 const persistedState = internals.buildOrderRoomState({
   action_id: 'TASK-TEST123',
@@ -36,6 +39,15 @@ const blockedWorkspaceState = internals.buildOrderRoomState({
 })
 assert.equal(blockedWorkspaceState.private_workspace_state, 'not_created_until_payment_proof')
 assert.equal(blockedWorkspaceState.real_mrr_delta, 0)
+const blockedManifest = internals.buildPrivateWorkspaceManifest({
+  leadId: 'LEAD-TEST123',
+  templateId: 'daily-intelligence-brief',
+  templateName: 'Daily Intelligence Brief Agent',
+  state: blockedWorkspaceState,
+})
+assert.equal(blockedManifest.status, 'blocked_until_scope_and_price_approved')
+assert.equal(blockedManifest.create_workspace_allowed, false)
+assert.equal(blockedManifest.real_mrr_delta, 0)
 
 const action = internals.safeAction({
   action_id: 'TASK-TEST123',
@@ -120,6 +132,16 @@ assert.equal(action.first_proof.pilot_order_room.state.payment_proof_state, 'pro
 assert.equal(action.first_proof.pilot_order_room.state.private_workspace_state, 'created_after_payment_proof')
 assert.equal(action.first_proof.pilot_order_room.state.payment_proof_reference, 'KBZ transfer screenshot 123')
 assert.equal(action.first_proof.pilot_order_room.state.real_mrr_delta, 0)
+assert.equal(action.first_proof.pilot_order_room.private_workspace_manifest.status, 'ready_to_create_private_workspace')
+assert.equal(action.first_proof.pilot_order_room.private_workspace_manifest.create_workspace_allowed, true)
+assert.equal(action.first_proof.pilot_order_room.private_workspace_manifest.first_run_mode, 'approval_only')
+assert.equal(action.first_proof.pilot_order_room.private_workspace_manifest.real_mrr_delta, 0)
+assert.ok(action.first_proof.pilot_order_room.private_workspace_manifest.workspace_slug.includes('daily-intelligence-brief'))
+assert.ok(action.first_proof.pilot_order_room.private_workspace_manifest_json.includes('"first_run_mode": "approval_only"'))
+assert.ok(action.first_proof.pilot_order_room.private_workspace_handoff_packet.includes('private pilot workspace'))
+assert.ok(action.first_proof.pilot_order_room.private_workspace_handoff_packet.includes('Create workspace allowed: yes'))
+assert.ok(action.first_proof.pilot_order_room.first_run_queue_csv.includes('"import_approved_sources"'))
+assert.ok(action.first_proof.pilot_order_room.first_run_queue_csv.includes('"0"'))
 assert.ok(!JSON.stringify(action).includes('owner@example.com'))
 
 console.log(
@@ -134,6 +156,7 @@ console.log(
       proof_delivery_packet: 'ready',
       pilot_close_packet: 'ready',
       pilot_order_room: 'ready',
+      private_workspace_manifest: action.first_proof.pilot_order_room.private_workspace_manifest.status,
     },
     null,
     2,

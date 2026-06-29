@@ -4725,6 +4725,75 @@ const publicOperatorConsoleHtml = `<!doctype html>
                 real_mrr_delta:0,
                 guardrails:['owner_approval_before_payment_request','no_live_payment_link_in_packet','no_workspace_before_payment_proof','no_revenue_claim_without_payment_proof']
               },null,2),
+              private_workspace_manifest:{
+                status:'blocked_until_payment_proof',
+                workspace_slug:'pilot-daily-intelligence-brief-sample-setup',
+                lead_id:'SAMPLE-SETUP',
+                template_id:'daily-intelligence-brief',
+                template_name:'Daily Intelligence Brief Agent',
+                starter_kit_url:'/site/agent-templates/daily-intelligence-brief.json',
+                first_proof_target:'One-page morning brief with what changed, why it matters, and exact follow-up actions.',
+                price_hint:'11,000,000 MMK setup',
+                create_workspace_allowed:false,
+                private_workspace_state:'not_created_until_payment_proof',
+                payment_proof_reference:'required_before_workspace',
+                first_run_mode:'approval_only',
+                real_mrr_delta:0,
+                modules:['buyer_goal','approved_sources','source_trace','first_run_queue','approval_log','delivery_packet'],
+                first_run_queue:[
+                  {step_id:'import_approved_sources',title:'Import only buyer-approved sample sources',owner:'Revenue Pod',external_action_state:'manual_owner_approved',evidence_required:'source_trace'},
+                  {step_id:'build_first_production_run',title:'Build the first approval-only Daily Intelligence Brief Agent run',owner:'Delivery Pod',external_action_state:'not_sent',evidence_required:'first_run_output'},
+                  {step_id:'owner_acceptance_review',title:'Collect owner acceptance before live connector writes or sends',owner:'Founder',external_action_state:'approval_required',evidence_required:'acceptance_checklist'}
+                ],
+                guardrails:['create_private_workspace_only_after_payment_proof','first_production_run_is_approval_only','no_connector_writes_without_owner_acceptance','no_real_mrr_claim_without_payment_proof']
+              },
+              private_workspace_manifest_json:JSON.stringify({
+                status:'blocked_until_payment_proof',
+                workspace_slug:'pilot-daily-intelligence-brief-sample-setup',
+                lead_id:'SAMPLE-SETUP',
+                template_id:'daily-intelligence-brief',
+                first_run_mode:'approval_only',
+                create_workspace_allowed:false,
+                real_mrr_delta:0,
+                guardrails:['create_private_workspace_only_after_payment_proof','first_production_run_is_approval_only','no_connector_writes_without_owner_acceptance','no_real_mrr_claim_without_payment_proof']
+              },null,2),
+              private_workspace_handoff_packet:[
+                '# Daily Intelligence Brief Agent private pilot workspace',
+                '',
+                'Status: blocked_until_payment_proof',
+                'Workspace slug: pilot-daily-intelligence-brief-sample-setup',
+                'Lead: SAMPLE-SETUP',
+                'Template: daily-intelligence-brief',
+                'First run mode: approval_only',
+                'Create workspace allowed: no',
+                'Payment proof: required_before_workspace',
+                'Real MRR delta: 0',
+                '',
+                '## Modules',
+                '- buyer_goal',
+                '- approved_sources',
+                '- source_trace',
+                '- first_run_queue',
+                '- approval_log',
+                '- delivery_packet',
+                '',
+                '## First run queue',
+                '- [ ] import_approved_sources: Import only buyer-approved sample sources (manual_owner_approved)',
+                '- [ ] build_first_production_run: Build the first approval-only Daily Intelligence Brief Agent run (not_sent)',
+                '- [ ] owner_acceptance_review: Collect owner acceptance before live connector writes or sends (approval_required)',
+                '',
+                '## Guardrails',
+                '- create_private_workspace_only_after_payment_proof',
+                '- first_production_run_is_approval_only',
+                '- no_connector_writes_without_owner_acceptance',
+                '- no_real_mrr_claim_without_payment_proof'
+              ].join('\\n'),
+              first_run_queue_csv:[
+                '"workspace_slug","lead_id","step_id","title","owner","external_action_state","evidence_required","real_mrr_delta"',
+                '"pilot-daily-intelligence-brief-sample-setup","SAMPLE-SETUP","import_approved_sources","Import only buyer-approved sample sources","Revenue Pod","manual_owner_approved","source_trace","0"',
+                '"pilot-daily-intelligence-brief-sample-setup","SAMPLE-SETUP","build_first_production_run","Build the first approval-only Daily Intelligence Brief Agent run","Delivery Pod","not_sent","first_run_output","0"',
+                '"pilot-daily-intelligence-brief-sample-setup","SAMPLE-SETUP","owner_acceptance_review","Collect owner acceptance before live connector writes or sends","Founder","approval_required","acceptance_checklist","0"'
+              ].join('\\n'),
               state:{
                 status:'not_persisted',
                 scope_approval_state:'pending',
@@ -4780,13 +4849,16 @@ const publicOperatorConsoleHtml = `<!doctype html>
       const activationId = 'owner-activation-packet-'+index;
       const actionQueueId = 'owner-action-queue-'+index;
       const activationJsonId = 'activation-summary-'+index;
+      const workspaceManifestId = 'workspace-manifest-'+index;
+      const workspaceHandoffId = 'workspace-handoff-'+index;
+      const firstRunQueueId = 'first-run-queue-'+index;
       const state = room.state || {};
       const actionId = action && action.action_id || '';
       const leadId = action && action.lead_id || '';
       const checklist = (room.pilot_start_checklist || []).filter(Boolean).map(function(item){return '- [ ] '+item}).join('\\n');
       const stateChips = '<div class="operator-meta"><span class="operator-chip">'+esc(state.scope_approval_state || 'pending')+'</span><span class="operator-chip">'+esc(state.payment_request_state || 'not_sent')+'</span><span class="operator-chip">'+esc(state.payment_proof_state || 'payment_proof_required')+'</span><span class="operator-chip">'+esc(state.private_workspace_state || 'not_created_until_payment_proof')+'</span><span class="operator-chip">MRR '+esc(state.real_mrr_delta ?? 0)+'</span></div>';
       const stateButtons = '<div class="operator-row"><button class="btn secondary operator-state" type="button" data-state-command="approve_scope" data-action-id="'+esc(actionId)+'" data-lead-id="'+esc(leadId)+'">Save scope approval</button><button class="btn secondary operator-state" type="button" data-state-command="approve_payment_request" data-action-id="'+esc(actionId)+'" data-lead-id="'+esc(leadId)+'">Save payment request approval</button><button class="btn secondary operator-state" type="button" data-state-command="mark_payment_sent" data-action-id="'+esc(actionId)+'" data-lead-id="'+esc(leadId)+'">Save payment request sent</button><button class="btn secondary operator-state" type="button" data-state-command="attach_payment_proof" data-action-id="'+esc(actionId)+'" data-lead-id="'+esc(leadId)+'">Save payment proof</button><button class="btn secondary operator-state" type="button" data-state-command="mark_workspace_created" data-action-id="'+esc(actionId)+'" data-lead-id="'+esc(leadId)+'">Save workspace created</button></div>';
-      return '<div class="operator-proof-section operator-order-room"><span>Paid pilot order room</span><div class="operator-meta"><span class="operator-chip">'+esc(room.status || 'draft_owner_approval_required')+'</span><span class="operator-chip">'+esc(room.payment_state || 'payment_proof_required')+'</span><span class="operator-chip">'+esc(room.order_state || 'order_not_started')+'</span></div>'+stateChips+stateButtons+'<textarea class="operator-reply" id="'+paymentId+'" readonly>'+esc(room.payment_request_draft || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+paymentId+'">Copy payment request</button><textarea class="operator-reply" id="'+paymentLedgerId+'" readonly>'+esc(room.payment_proof_ledger_csv || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+paymentLedgerId+'">Copy payment ledger</button><textarea class="operator-reply" id="'+orderLedgerId+'" readonly>'+esc(room.order_room_ledger_csv || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+orderLedgerId+'">Copy order ledger</button><textarea class="operator-reply" id="'+checklistId+'" readonly>'+esc(checklist)+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+checklistId+'">Copy pilot start checklist</button><textarea class="operator-reply" id="'+activationId+'" readonly>'+esc(room.owner_activation_packet || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+activationId+'">Copy owner activation packet</button><textarea class="operator-reply" id="'+actionQueueId+'" readonly>'+esc(room.owner_action_queue_csv || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+actionQueueId+'">Copy owner action queue</button><textarea class="operator-reply" id="'+activationJsonId+'" readonly>'+esc(room.activation_summary_json || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+activationJsonId+'">Copy activation JSON</button></div>';
+      return '<div class="operator-proof-section operator-order-room"><span>Paid pilot order room</span><div class="operator-meta"><span class="operator-chip">'+esc(room.status || 'draft_owner_approval_required')+'</span><span class="operator-chip">'+esc(room.payment_state || 'payment_proof_required')+'</span><span class="operator-chip">'+esc(room.order_state || 'order_not_started')+'</span></div>'+stateChips+stateButtons+'<textarea class="operator-reply" id="'+paymentId+'" readonly>'+esc(room.payment_request_draft || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+paymentId+'">Copy payment request</button><textarea class="operator-reply" id="'+paymentLedgerId+'" readonly>'+esc(room.payment_proof_ledger_csv || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+paymentLedgerId+'">Copy payment ledger</button><textarea class="operator-reply" id="'+orderLedgerId+'" readonly>'+esc(room.order_room_ledger_csv || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+orderLedgerId+'">Copy order ledger</button><textarea class="operator-reply" id="'+checklistId+'" readonly>'+esc(checklist)+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+checklistId+'">Copy pilot start checklist</button><textarea class="operator-reply" id="'+activationId+'" readonly>'+esc(room.owner_activation_packet || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+activationId+'">Copy owner activation packet</button><textarea class="operator-reply" id="'+actionQueueId+'" readonly>'+esc(room.owner_action_queue_csv || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+actionQueueId+'">Copy owner action queue</button><textarea class="operator-reply" id="'+activationJsonId+'" readonly>'+esc(room.activation_summary_json || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+activationJsonId+'">Copy activation JSON</button><textarea class="operator-reply" id="'+workspaceManifestId+'" readonly>'+esc(room.private_workspace_manifest_json || JSON.stringify(room.private_workspace_manifest || {},null,2))+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+workspaceManifestId+'">Copy workspace manifest</button><textarea class="operator-reply" id="'+workspaceHandoffId+'" readonly>'+esc(room.private_workspace_handoff_packet || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+workspaceHandoffId+'">Copy workspace handoff</button><textarea class="operator-reply" id="'+firstRunQueueId+'" readonly>'+esc(room.first_run_queue_csv || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+firstRunQueueId+'">Copy first run queue</button></div>';
     }
     function legacyCopy(el){
       el.focus();
