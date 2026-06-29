@@ -33,6 +33,8 @@ for (const [src, dest] of [
   ['^/api/action-runner$', '/api/action-runner.js'],
   ['^/api/contact-submissions$', '/api/contact-submissions.js'],
   ['^/api/contact-submissions/status$', '/api/contact-submissions.js'],
+  ['^/api/checkout-start$', '/api/checkout-start.js'],
+  ['^/api/checkout-start/status$', '/api/checkout-start.js'],
   ['^/api/pipeline-control$', '/api/pipeline-control.js'],
   ['^/api/pipeline-control/status$', '/api/pipeline-control.js'],
 ]) {
@@ -590,6 +592,19 @@ for (const token of [
   '/products/pos/',
 ]) {
   if (!productsHtml.includes(token)) fail('public_products_contract_missing', { token })
+}
+const checkoutFunctionPath = resolve(functionsDir, 'api/checkout-start.js.func/api/checkout-start.js')
+if (!existsSync(checkoutFunctionPath)) fail('public_checkout_function_missing')
+const checkoutFunctionSource = readFileSync(checkoutFunctionPath, 'utf8')
+for (const token of ['2,500,000 MMK', '8,000,000 MMK', '11,000,000 MMK', 'Custom Solutions & AI Agents', 'DeskPOS']) {
+  if (!checkoutFunctionSource.includes(token)) {
+    fail('public_checkout_mmk_contract_missing', { token })
+  }
+}
+for (const retired of ['USD ', '$1', 'Custom Workflow App']) {
+  if (checkoutFunctionSource.includes(retired)) {
+    fail('public_checkout_retired_pricing_or_product_found', { retired })
+  }
 }
 for (const token of [
   'noindex,nofollow',
