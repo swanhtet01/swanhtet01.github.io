@@ -211,6 +211,106 @@ function firstProofPacket(row) {
     'Private operator workspace is created only after payment proof.',
     'First production run remains approval-only until accepted.',
   ]
+  const ownerActivationPacket = [
+    `# ${templateName || 'SUPERMEGA agent'} owner activation packet`,
+    '',
+    'Status: draft - owner approval required',
+    `Lead: ${leadId}`,
+    `Pilot amount: ${priceHint}`,
+    'Payment surface: Payment Links first; Checkout Sessions only if app checkout is needed.',
+    'Checkout endpoint: /api/checkout-start',
+    'Live payment link: PAYMENT_LINK_REQUIRED_AFTER_OWNER_APPROVAL',
+    'Real MRR delta: 0 until payment proof is recorded.',
+    '',
+    '## Owner action queue',
+    '1. Approve first proof usefulness and pilot scope.',
+    '2. Approve the MMK price and payment route.',
+    '3. Create or paste the owner-approved payment link or manual invoice.',
+    '4. Send the payment request only after owner approval.',
+    '5. Attach receipt, transfer reference, or payment screenshot to the payment-proof ledger.',
+    '6. Create the private pilot workspace only after payment proof exists.',
+    '7. Run the first production job approval-only until accepted.',
+    '',
+    '## Stop conditions',
+    '- No payment request if scope is not approved.',
+    '- No live payment link in this packet.',
+    '- No private workspace before payment proof.',
+    '- No revenue claim before payment proof.',
+  ].join('\n')
+  const ownerActionQueueCsv = [
+    ['lead_id', 'action_id', 'owner_action', 'approval_state', 'external_action_state', 'payment_state', 'workspace_state', 'real_mrr_delta', 'evidence_required']
+      .map(csvCell)
+      .join(','),
+    [
+      leadId,
+      'approve_scope_price',
+      'Approve first proof, pilot scope, MMK price, and payment route',
+      'owner_approval_required',
+      'not_sent',
+      'not_requested',
+      'not_created',
+      '0',
+      'approved_scope_and_price',
+    ]
+      .map(csvCell)
+      .join(','),
+    [
+      leadId,
+      'send_payment_request',
+      'Send owner-approved payment request',
+      'owner_approval_required',
+      'not_sent',
+      'payment_link_required_after_owner_approval',
+      'not_created',
+      '0',
+      'owner_approved_payment_route',
+    ]
+      .map(csvCell)
+      .join(','),
+    [
+      leadId,
+      'attach_payment_proof',
+      'Attach payment proof before pilot start',
+      'owner_approval_required',
+      'not_sent',
+      'payment_proof_required',
+      'not_created',
+      '0',
+      'receipt_transfer_reference_or_screenshot',
+    ]
+      .map(csvCell)
+      .join(','),
+    [
+      leadId,
+      'start_private_pilot_workspace',
+      'Create private pilot workspace and run approval-only first job',
+      'owner_approval_required',
+      'not_sent',
+      'payment_proof_required',
+      'not_created_until_payment_proof',
+      '0',
+      'payment_proof_and_acceptance_checklist',
+    ]
+      .map(csvCell)
+      .join(','),
+  ].join('\n')
+  const activationSummaryJson = JSON.stringify(
+    {
+      status: 'owner_activation_ready_draft_only',
+      lead_id: leadId,
+      template_id: templateId || null,
+      price_hint: priceHint,
+      checkout_endpoint: '/api/checkout-start',
+      live_payment_link: 'PAYMENT_LINK_REQUIRED_AFTER_OWNER_APPROVAL',
+      checkout_session_state: 'not_created',
+      payment_proof_state: 'payment_proof_required',
+      private_workspace_state: 'not_created_until_payment_proof',
+      real_mrr_delta: 0,
+      guardrails: ['owner_approval_before_payment_request', 'no_live_payment_link_in_packet', 'no_workspace_before_payment_proof', 'no_revenue_claim_without_payment_proof'],
+    },
+    null,
+    2,
+  )
 
   return {
     status: isBrief ? 'operator_brief_ready' : 'queued_for_runner',
@@ -232,6 +332,9 @@ function firstProofPacket(row) {
       payment_proof_ledger_csv: paymentProofLedgerCsv,
       order_room_ledger_csv: orderRoomLedgerCsv,
       pilot_start_checklist: pilotStartChecklist,
+      owner_activation_packet: ownerActivationPacket,
+      owner_action_queue_csv: ownerActionQueueCsv,
+      activation_summary_json: activationSummaryJson,
     },
     approval_required: result.approval_required !== undefined ? result.approval_required !== false : task.approval_required !== false,
     human_gate: text(result.human_gate) || text(task.human_gate) || 'owner approval before send/write/payment actions',

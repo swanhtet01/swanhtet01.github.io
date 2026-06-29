@@ -85,6 +85,12 @@ assert.ok(action.first_proof.pilot_order_room.payment_proof_ledger_csv.includes(
 assert.ok(action.first_proof.pilot_order_room.order_room_ledger_csv.includes('"order_not_started"'))
 assert.ok(action.first_proof.pilot_order_room.order_room_ledger_csv.includes('"real_mrr_delta"'))
 assert.ok(action.first_proof.pilot_order_room.pilot_start_checklist.includes('Payment proof is attached to the payment-proof ledger.'))
+assert.ok(action.first_proof.pilot_order_room.owner_activation_packet.includes('owner activation packet'))
+assert.ok(action.first_proof.pilot_order_room.owner_activation_packet.includes('Real MRR delta: 0 until payment proof is recorded.'))
+assert.ok(action.first_proof.pilot_order_room.owner_action_queue_csv.includes('"approve_scope_price"'))
+assert.ok(action.first_proof.pilot_order_room.owner_action_queue_csv.includes('"start_private_pilot_workspace"'))
+assert.ok(action.first_proof.pilot_order_room.activation_summary_json.includes('"real_mrr_delta": 0'))
+assert.ok(action.first_proof.pilot_order_room.activation_summary_json.includes('no_revenue_claim_without_payment_proof'))
 assert.ok(!JSON.stringify(action).includes('owner@example.com'))
 
 console.log(

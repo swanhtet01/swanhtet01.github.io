@@ -4678,7 +4678,53 @@ const publicOperatorConsoleHtml = `<!doctype html>
                 'Payment proof is attached to the payment-proof ledger.',
                 'Private operator workspace is created only after payment proof.',
                 'First production run remains approval-only until accepted.'
-              ]
+              ],
+              owner_activation_packet:[
+                '# Daily Intelligence Brief Agent owner activation packet',
+                '',
+                'Status: draft - owner approval required',
+                'Lead: SAMPLE-SETUP',
+                'Pilot amount: 11,000,000 MMK setup',
+                'Payment surface: Payment Links first; Checkout Sessions only if app checkout is needed.',
+                'Checkout endpoint: /api/checkout-start',
+                'Live payment link: PAYMENT_LINK_REQUIRED_AFTER_OWNER_APPROVAL',
+                'Real MRR delta: 0 until payment proof is recorded.',
+                '',
+                '## Owner action queue',
+                '1. Approve first proof usefulness and pilot scope.',
+                '2. Approve the MMK price and payment route.',
+                '3. Create or paste the owner-approved payment link or manual invoice.',
+                '4. Send the payment request only after owner approval.',
+                '5. Attach receipt, transfer reference, or payment screenshot to the payment-proof ledger.',
+                '6. Create the private pilot workspace only after payment proof exists.',
+                '7. Run the first production job approval-only until accepted.',
+                '',
+                '## Stop conditions',
+                '- No payment request if scope is not approved.',
+                '- No live payment link in this packet.',
+                '- No private workspace before payment proof.',
+                '- No revenue claim before payment proof.'
+              ].join('\\n'),
+              owner_action_queue_csv:[
+                '"lead_id","action_id","owner_action","approval_state","external_action_state","payment_state","workspace_state","real_mrr_delta","evidence_required"',
+                '"SAMPLE-SETUP","approve_scope_price","Approve first proof, pilot scope, MMK price, and payment route","owner_approval_required","not_sent","not_requested","not_created","0","approved_scope_and_price"',
+                '"SAMPLE-SETUP","send_payment_request","Send owner-approved payment request","owner_approval_required","not_sent","payment_link_required_after_owner_approval","not_created","0","owner_approved_payment_route"',
+                '"SAMPLE-SETUP","attach_payment_proof","Attach payment proof before pilot start","owner_approval_required","not_sent","payment_proof_required","not_created","0","receipt_transfer_reference_or_screenshot"',
+                '"SAMPLE-SETUP","start_private_pilot_workspace","Create private pilot workspace and run approval-only first job","owner_approval_required","not_sent","payment_proof_required","not_created_until_payment_proof","0","payment_proof_and_acceptance_checklist"'
+              ].join('\\n'),
+              activation_summary_json:JSON.stringify({
+                status:'owner_activation_ready_draft_only',
+                lead_id:'SAMPLE-SETUP',
+                template_id:'daily-intelligence-brief',
+                price_hint:'11,000,000 MMK setup',
+                checkout_endpoint:'/api/checkout-start',
+                live_payment_link:'PAYMENT_LINK_REQUIRED_AFTER_OWNER_APPROVAL',
+                checkout_session_state:'not_created',
+                payment_proof_state:'payment_proof_required',
+                private_workspace_state:'not_created_until_payment_proof',
+                real_mrr_delta:0,
+                guardrails:['owner_approval_before_payment_request','no_live_payment_link_in_packet','no_workspace_before_payment_proof','no_revenue_claim_without_payment_proof']
+              },null,2)
             },
             approval_required:true,
             human_gate:'owner approval before send/write/payment actions'
@@ -4721,8 +4767,11 @@ const publicOperatorConsoleHtml = `<!doctype html>
       const paymentLedgerId = 'payment-proof-ledger-'+index;
       const orderLedgerId = 'order-room-ledger-'+index;
       const checklistId = 'pilot-start-checklist-'+index;
+      const activationId = 'owner-activation-packet-'+index;
+      const actionQueueId = 'owner-action-queue-'+index;
+      const activationJsonId = 'activation-summary-'+index;
       const checklist = (room.pilot_start_checklist || []).filter(Boolean).map(function(item){return '- [ ] '+item}).join('\\n');
-      return '<div class="operator-proof-section operator-order-room"><span>Paid pilot order room</span><div class="operator-meta"><span class="operator-chip">'+esc(room.status || 'draft_owner_approval_required')+'</span><span class="operator-chip">'+esc(room.payment_state || 'payment_proof_required')+'</span><span class="operator-chip">'+esc(room.order_state || 'order_not_started')+'</span></div><textarea class="operator-reply" id="'+paymentId+'" readonly>'+esc(room.payment_request_draft || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+paymentId+'">Copy payment request</button><textarea class="operator-reply" id="'+paymentLedgerId+'" readonly>'+esc(room.payment_proof_ledger_csv || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+paymentLedgerId+'">Copy payment ledger</button><textarea class="operator-reply" id="'+orderLedgerId+'" readonly>'+esc(room.order_room_ledger_csv || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+orderLedgerId+'">Copy order ledger</button><textarea class="operator-reply" id="'+checklistId+'" readonly>'+esc(checklist)+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+checklistId+'">Copy pilot start checklist</button></div>';
+      return '<div class="operator-proof-section operator-order-room"><span>Paid pilot order room</span><div class="operator-meta"><span class="operator-chip">'+esc(room.status || 'draft_owner_approval_required')+'</span><span class="operator-chip">'+esc(room.payment_state || 'payment_proof_required')+'</span><span class="operator-chip">'+esc(room.order_state || 'order_not_started')+'</span></div><textarea class="operator-reply" id="'+paymentId+'" readonly>'+esc(room.payment_request_draft || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+paymentId+'">Copy payment request</button><textarea class="operator-reply" id="'+paymentLedgerId+'" readonly>'+esc(room.payment_proof_ledger_csv || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+paymentLedgerId+'">Copy payment ledger</button><textarea class="operator-reply" id="'+orderLedgerId+'" readonly>'+esc(room.order_room_ledger_csv || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+orderLedgerId+'">Copy order ledger</button><textarea class="operator-reply" id="'+checklistId+'" readonly>'+esc(checklist)+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+checklistId+'">Copy pilot start checklist</button><textarea class="operator-reply" id="'+activationId+'" readonly>'+esc(room.owner_activation_packet || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+activationId+'">Copy owner activation packet</button><textarea class="operator-reply" id="'+actionQueueId+'" readonly>'+esc(room.owner_action_queue_csv || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+actionQueueId+'">Copy owner action queue</button><textarea class="operator-reply" id="'+activationJsonId+'" readonly>'+esc(room.activation_summary_json || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+activationJsonId+'">Copy activation JSON</button></div>';
     }
     function legacyCopy(el){
       el.focus();

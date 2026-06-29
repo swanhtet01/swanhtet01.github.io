@@ -177,7 +177,7 @@ try {
         hasBuyerReplyRenderer: html.includes('proofBuyerReply') && html.includes('Copy buyer reply'),
         hasProofDeliveryRenderer: html.includes('proofDeliveryPacket') && html.includes('Copy proof packet'),
         hasPilotCloseRenderer: html.includes('pilotClosePacket') && html.includes('Copy pilot packet'),
-        hasPilotOrderRoomRenderer: html.includes('pilotOrderRoom') && html.includes('Copy payment request'),
+        hasPilotOrderRoomRenderer: html.includes('pilotOrderRoom') && html.includes('Copy payment request') && html.includes('Copy owner activation packet'),
         hasSampleData: html.includes('samplePipelineData') && html.includes('No lead was created'),
         overflowX: Math.max(0, document.documentElement.scrollWidth - document.documentElement.clientWidth),
       }
@@ -189,7 +189,7 @@ try {
     await page.click('#load-sample')
     await expectCopy(
       page,
-      ['Sample Daily Intelligence Brief first proof', 'Open starter kit', 'Checklist', 'Acceptance tests', 'Buyer reply draft', 'Copy buyer reply', 'Proof delivery packet', 'Copy proof packet', 'Pilot close packet', 'Copy pilot packet', 'Paid pilot order room', 'Copy payment request', 'Copy payment ledger', 'Copy order ledger', 'Copy pilot start checklist', 'No lead was created'],
+      ['Sample Daily Intelligence Brief first proof', 'Open starter kit', 'Checklist', 'Acceptance tests', 'Buyer reply draft', 'Copy buyer reply', 'Proof delivery packet', 'Copy proof packet', 'Pilot close packet', 'Copy pilot packet', 'Paid pilot order room', 'Copy payment request', 'Copy payment ledger', 'Copy order ledger', 'Copy pilot start checklist', 'Copy owner activation packet', 'Copy owner action queue', 'Copy activation JSON', 'No lead was created'],
       'operator_sample_packet',
       viewport.name,
     )
@@ -204,6 +204,9 @@ try {
       paymentLedger: document.querySelector('#operator-actions #payment-proof-ledger-0')?.value || '',
       orderLedger: document.querySelector('#operator-actions #order-room-ledger-0')?.value || '',
       pilotStartChecklist: document.querySelector('#operator-actions #pilot-start-checklist-0')?.value || '',
+      ownerActivationPacket: document.querySelector('#operator-actions #owner-activation-packet-0')?.value || '',
+      ownerActionQueue: document.querySelector('#operator-actions #owner-action-queue-0')?.value || '',
+      activationSummary: document.querySelector('#operator-actions #activation-summary-0')?.value || '',
       copyButtons: document.querySelectorAll('#operator-actions .operator-copy').length,
       overflowX: Math.max(0, document.documentElement.scrollWidth - document.documentElement.clientWidth),
     }))
@@ -217,7 +220,10 @@ try {
     if (!operatorSample.paymentLedger.includes('payment_proof_required')) fail('operator_sample_payment_ledger_missing', { viewport: viewport.name, operatorSample })
     if (!operatorSample.orderLedger.includes('order_not_started')) fail('operator_sample_order_ledger_missing', { viewport: viewport.name, operatorSample })
     if (!operatorSample.pilotStartChecklist.includes('Payment proof is attached to the payment-proof ledger.')) fail('operator_sample_start_checklist_missing', { viewport: viewport.name, operatorSample })
-    if (operatorSample.copyButtons < 7) fail('operator_sample_copy_missing', { viewport: viewport.name, operatorSample })
+    if (!operatorSample.ownerActivationPacket.includes('Real MRR delta: 0 until payment proof is recorded.')) fail('operator_sample_owner_activation_missing', { viewport: viewport.name, operatorSample })
+    if (!operatorSample.ownerActionQueue.includes('start_private_pilot_workspace')) fail('operator_sample_owner_queue_missing', { viewport: viewport.name, operatorSample })
+    if (!operatorSample.activationSummary.includes('"real_mrr_delta": 0')) fail('operator_sample_activation_summary_missing', { viewport: viewport.name, operatorSample })
+    if (operatorSample.copyButtons < 10) fail('operator_sample_copy_missing', { viewport: viewport.name, operatorSample })
     const copyButton = page.locator('#operator-actions .operator-copy').first()
     await copyButton.scrollIntoViewIfNeeded()
     await copyButton.click({ force: true })
@@ -254,6 +260,15 @@ try {
     }, { timeout: 5000 }).catch(() => undefined)
     const paymentCopyStatus = await page.locator('#operator-status').innerText({ timeout: 5000 }).catch(() => '')
     if (!paymentCopyStatus.includes('payment-request-0') || !paymentCopyStatus.includes('Text copied')) fail('operator_sample_payment_copy_failed', { viewport: viewport.name, paymentCopyStatus })
+    const activationCopyButton = page.locator('#operator-actions .operator-copy').nth(7)
+    await activationCopyButton.scrollIntoViewIfNeeded()
+    await activationCopyButton.click({ force: true })
+    await page.waitForFunction(() => {
+      const value = document.querySelector('#operator-status')?.textContent || ''
+      return value.includes('owner-activation-packet-0') || value.includes('copy_failed')
+    }, { timeout: 5000 }).catch(() => undefined)
+    const activationCopyStatus = await page.locator('#operator-status').innerText({ timeout: 5000 }).catch(() => '')
+    if (!activationCopyStatus.includes('owner-activation-packet-0') || !activationCopyStatus.includes('Text copied')) fail('operator_sample_activation_copy_failed', { viewport: viewport.name, activationCopyStatus })
     if (operatorSample.overflowX > 0) fail('operator_sample_horizontal_overflow', { viewport: viewport.name, operatorSample })
     if (consoleMessages.length) fail('console_messages', { viewport: viewport.name, consoleMessages })
 
