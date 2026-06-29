@@ -555,7 +555,7 @@ const operatorHtml = readFileSync(operatorHtmlPath, 'utf8')
 const contactFunctionPath = resolve(functionsDir, 'api/contact-submissions.js.func/api/contact-submissions.js')
 if (!existsSync(contactFunctionPath)) fail('public_contact_function_missing')
 const contactFunctionSource = readFileSync(contactFunctionPath, 'utf8')
-for (const token of ['buildFirstProofTaskPayload', 'first_proof_task', 'owner approval before send/write/payment actions']) {
+for (const token of ['buildFirstProofTaskPayload', 'first_proof_task', 'owner approval before send/write/payment actions', 'New setup lead -', 'Operator:']) {
   if (!contactFunctionSource.includes(token)) {
     fail('public_contact_proof_task_contract_missing', { token })
   }

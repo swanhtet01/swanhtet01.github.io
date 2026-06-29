@@ -10,7 +10,11 @@ function fail(message, extra = {}) {
 }
 
 const internals = handler.__test || {}
-if (typeof internals.buildFirstProofTaskPayload !== 'function' || typeof internals.pipelineActionPayload !== 'function') {
+if (
+  typeof internals.buildFirstProofTaskPayload !== 'function' ||
+  typeof internals.pipelineActionPayload !== 'function' ||
+  typeof internals.telegramLeadMessage !== 'function'
+) {
   fail('contact_submission_test_exports_missing')
 }
 
@@ -40,6 +44,7 @@ const record = {
   access_policy: 'approval_required',
   workspace_status: 'not_created_until_approved',
   source_links: 'https://drive.example/sample-folder',
+  page_path: '/agent-templates/daily-intelligence-brief/setup/',
   source_file_count: '2',
   lead_score: 85,
   lead_stage: 'hot',
@@ -71,6 +76,14 @@ assert.equal(action.payload.first_proof_task.template_id, 'daily-intelligence-br
 assert.equal(action.payload.first_proof_task.operator_brief, proofTask.operator_brief)
 assert.deepEqual(action.payload.first_proof_task.acceptance_tests, proofTask.acceptance_tests)
 
+const alert = internals.telegramLeadMessage(record)
+assert.ok(alert.includes('New setup lead - LEAD-TEST123'))
+assert.ok(alert.includes('First proof: One-page morning brief'))
+assert.ok(alert.includes('Starter kit: https://supermega.dev/site/agent-templates/daily-intelligence-brief.json'))
+assert.ok(alert.includes('Setup page: https://supermega.dev/agent-templates/daily-intelligence-brief/setup/'))
+assert.ok(alert.includes('Operator: https://supermega.dev/operator/'))
+assert.ok(!alert.includes('🔔'))
+
 console.log(
   JSON.stringify(
     {
@@ -79,6 +92,7 @@ console.log(
       template_id: proofTask.template_id,
       checklist_items: proofTask.checklist.length,
       acceptance_tests: proofTask.acceptance_tests.length,
+      owner_alert: 'first_proof_ready',
     },
     null,
     2,

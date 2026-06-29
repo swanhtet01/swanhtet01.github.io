@@ -126,6 +126,17 @@ function escapeHtml(value) {
     .replace(/'/g, '&#39;')
 }
 
+function absolutePublicUrl(value) {
+  const raw = text(value)
+  if (!raw) return ''
+  if (/^https?:\/\//i.test(raw)) return raw
+  return `https://supermega.dev${raw.startsWith('/') ? raw : `/${raw}`}`
+}
+
+function operatorConsoleUrl() {
+  return envText('SUPERMEGA_OPERATOR_URL', 'SUPERMEGA_CONSOLE_URL') || 'https://supermega.dev/operator/'
+}
+
 function allowedOrigins() {
   return String(process.env.SUPERMEGA_ALLOWED_ORIGINS || defaultAllowedOrigins)
     .split(',')
@@ -839,6 +850,8 @@ function emailRows(record) {
     ['Template', record.template_id],
     ['Template source', [record.template_source_category, record.template_source_area].filter(Boolean).join(' / ')],
     ['Starter kit', record.starter_kit_url],
+    ['Operator console', operatorConsoleUrl()],
+    ['Owner action', 'Open the operator console, run the queue, then produce the first proof before any external send/write/payment action.'],
     ['Price hint', record.price_hint],
     ['First proof target', record.first_proof_target],
     ['Acceptance tests', record.acceptance_tests],
@@ -1001,18 +1014,25 @@ function telegramLeadMessage(record) {
   const goal = (record.goal || record.workflow || '').slice(0, 280)
   const score = record.lead_score || 0
   const pkg = record.requested_package || ''
-  const consoleUrl = text(process.env.SUPERMEGA_CONSOLE_URL)
+  const proofTarget = record.first_proof_target || record.first_output || record.requested_package || 'First useful proof'
+  const starterKitUrl = absolutePublicUrl(record.starter_kit_url)
+  const setupUrl = absolutePublicUrl(record.page_path || record.source_url)
+  const consoleUrl = operatorConsoleUrl()
   const sheetUrl = text(process.env.SUPERMEGA_LEAD_SHEET_URL)
-  const link = sheetUrl || consoleUrl
   return [
-    `🔔 New lead — ${record.lead_id}`,
-    `👤 ${record.name} · ${company}`,
-    `📧 ${record.email}${record.phone ? ' · ' + record.phone : ''}`,
-    pkg && pkg !== 'General enquiry' ? `📦 ${pkg}` : '',
-    `⭐ Score ${score} · ${record.lead_stage || 'needs_discovery'}`,
-    `💬 ${goal}`,
-    `→ ${record.next_step || 'Review and reply.'}`,
-    link ? `🔗 ${link}` : '',
+    `New setup lead - ${record.lead_id}`,
+    `Buyer: ${record.name} - ${company}`,
+    `Contact: ${record.email}${record.phone ? ' / ' + record.phone : ''}`,
+    pkg && pkg !== 'General enquiry' ? `Package: ${pkg}` : '',
+    record.template_id ? `Template: ${record.template_id}` : '',
+    `Score: ${score} - ${record.lead_stage || 'needs_discovery'}`,
+    `Goal: ${goal}`,
+    `First proof: ${proofTarget}`,
+    starterKitUrl ? `Starter kit: ${starterKitUrl}` : '',
+    setupUrl ? `Setup page: ${setupUrl}` : '',
+    `Operator: ${consoleUrl}`,
+    sheetUrl ? `Sheet: ${sheetUrl}` : '',
+    `Next: ${record.next_step || 'Open operator console and build the first proof.'}`,
   ].filter(Boolean).join('\n')
 }
 
@@ -1285,6 +1305,8 @@ async function handler(req, res) {
 handler.__test = {
   buildFirstProofTaskPayload,
   pipelineActionPayload,
+  telegramLeadMessage,
+  operatorConsoleUrl,
 }
 
 module.exports = handler
