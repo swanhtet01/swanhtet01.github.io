@@ -554,6 +554,14 @@ for (const token of ['renderFirstProofBrief', 'first_proof_operator_brief', 'Sou
     fail('public_action_runner_first_proof_contract_missing', { token })
   }
 }
+const pipelineControlFunctionPath = resolve(functionsDir, 'api/pipeline-control.js.func/api/pipeline-control.js')
+if (!existsSync(pipelineControlFunctionPath)) fail('public_pipeline_control_function_missing')
+const pipelineControlFunctionSource = readFileSync(pipelineControlFunctionPath, 'utf8')
+for (const token of ['firstProofPacket', 'first_proof', 'operator_brief_ready', 'starter_kit_url']) {
+  if (!pipelineControlFunctionSource.includes(token)) {
+    fail('public_pipeline_control_first_proof_contract_missing', { token })
+  }
+}
 for (const token of [
   '<title>SUPERMEGA.dev — Custom Software for Myanmar Business</title>',
   'Your real work, turned into software.',

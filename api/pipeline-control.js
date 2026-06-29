@@ -19,6 +19,23 @@ function text(value) {
   return String(value || '').trim()
 }
 
+function parseJsonObject(value) {
+  if (!value) return {}
+  if (typeof value === 'object' && !Array.isArray(value)) return value
+  try {
+    const parsed = JSON.parse(String(value))
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {}
+  } catch {
+    return {}
+  }
+}
+
+function list(value) {
+  return (Array.isArray(value) ? value : [])
+    .map((item) => text(item))
+    .filter(Boolean)
+}
+
 function envText(...names) {
   for (const name of names) {
     const value = text(process.env[name])
@@ -56,7 +73,37 @@ function safeLead(row) {
   }
 }
 
+function firstProofPacket(row) {
+  const payload = parseJsonObject(row.payload)
+  const result = parseJsonObject(row.result)
+  const task = parseJsonObject(payload.first_proof_task)
+  const isTask = task.type === 'first_proof_build'
+  const isBrief = result.type === 'first_proof_operator_brief'
+  if (!isTask && !isBrief) return null
+
+  const checklist = list(result.checklist).length ? list(result.checklist) : list(task.checklist)
+  const acceptanceTests = list(result.acceptance_tests).length ? list(result.acceptance_tests) : list(task.acceptance_tests)
+  const templateId = text(result.template_id) || text(task.template_id) || text(payload.template_id)
+  const templateName = text(task.template_name) || text(payload.public_package) || text(payload.requested_package) || templateId
+  const starterKitUrl = text(result.starter_kit_url) || text(task.starter_kit_url) || text(payload.starter_kit_url)
+  const firstProofTarget = text(result.first_proof_target) || text(task.first_proof_target) || text(payload.first_proof_target)
+
+  return {
+    status: isBrief ? 'operator_brief_ready' : 'queued_for_runner',
+    template_id: templateId || null,
+    template_name: templateName || null,
+    starter_kit_url: starterKitUrl || null,
+    first_proof_target: firstProofTarget || null,
+    title: text(result.title) || (templateName && row.lead_id ? `${templateName} first proof for ${row.lead_id}` : 'First proof task'),
+    checklist,
+    acceptance_tests: acceptanceTests,
+    approval_required: result.approval_required !== undefined ? result.approval_required !== false : task.approval_required !== false,
+    human_gate: text(result.human_gate) || text(task.human_gate) || 'owner approval before send/write/payment actions',
+  }
+}
+
 function safeAction(row) {
+  const firstProof = firstProofPacket(row)
   return {
     action_id: row.action_id || null,
     lead_id: row.lead_id || null,
@@ -72,6 +119,7 @@ function safeAction(row) {
     notification_channel: row.notification_channel || 'email',
     notification_status: row.notification_status || 'queued',
     created_at: row.created_at || null,
+    first_proof: firstProof,
   }
 }
 
@@ -163,7 +211,7 @@ async function supabaseFetch(config, path, options = {}) {
   }
 }
 
-module.exports = async function handler(req, res) {
+async function handler(req, res) {
   if (req.method === 'OPTIONS') {
     res.statusCode = 204
     res.setHeader('Access-Control-Allow-Origin', '*')
@@ -313,7 +361,7 @@ module.exports = async function handler(req, res) {
     const since7d = encodeURIComponent(isoHoursAgo(24 * 7))
     const [latestLeads, latestActions, pendingActions, lead24h, lead7d, latestRuns] = await Promise.all([
       supabaseFetch(config, '/rest/v1/supermega_leads?select=lead_id,task_id,submitted_at,requested_package,lead_score,lead_stage,status,next_step&order=submitted_at.desc&limit=5'),
-      supabaseFetch(config, '/rest/v1/supermega_pipeline_actions?select=action_id,lead_id,task_id,action_type,status,priority,owner,title,next_step,approval_required,approval_state,notification_channel,notification_status,created_at&order=created_at.desc&limit=8'),
+      supabaseFetch(config, '/rest/v1/supermega_pipeline_actions?select=action_id,lead_id,task_id,action_type,status,priority,owner,title,next_step,approval_required,approval_state,notification_channel,notification_status,payload,result,created_at&order=created_at.desc&limit=8'),
       supabaseFetch(config, '/rest/v1/supermega_pipeline_actions?select=action_id&status=neq.done&limit=1', { count: true }),
       supabaseFetch(config, `/rest/v1/supermega_leads?select=lead_id&submitted_at=gte.${since24h}&limit=1`, { count: true }),
       supabaseFetch(config, `/rest/v1/supermega_leads?select=lead_id&submitted_at=gte.${since7d}&limit=1`, { count: true }),
@@ -415,3 +463,10 @@ module.exports = async function handler(req, res) {
     })
   }
 }
+
+handler.__test = {
+  firstProofPacket,
+  safeAction,
+}
+
+module.exports = handler

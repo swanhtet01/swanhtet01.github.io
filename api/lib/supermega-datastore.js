@@ -291,7 +291,7 @@ async function pipelineSnapshot({ since24h, since7d }) {
     query(
       `
         select action_id, lead_id, task_id, action_type, status, priority, owner, title, next_step,
-          approval_required, approval_state, notification_channel, notification_status, created_at
+          approval_required, approval_state, notification_channel, notification_status, payload, result, created_at
         from public.supermega_pipeline_actions
         order by created_at desc
         limit 8
