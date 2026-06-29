@@ -66,6 +66,9 @@ assert.equal(action.first_proof.human_gate, 'owner approval before send/write/pa
 assert.ok(action.first_proof.title.includes('Daily Intelligence Brief Agent'))
 assert.ok(action.first_proof.checklist.length >= 3)
 assert.ok(action.first_proof.acceptance_tests.length >= 3)
+assert.ok(action.first_proof.buyer_reply_draft.includes('Hi there,'))
+assert.ok(action.first_proof.buyer_reply_draft.includes('First proof: One-page morning brief'))
+assert.ok(action.first_proof.buyer_reply_draft.includes('will not send messages'))
 assert.ok(!JSON.stringify(action).includes('owner@example.com'))
 
 console.log(
@@ -76,6 +79,7 @@ console.log(
       template_id: action.first_proof.template_id,
       checklist_items: action.first_proof.checklist.length,
       acceptance_tests: action.first_proof.acceptance_tests.length,
+      buyer_reply_draft: 'ready',
     },
     null,
     2,

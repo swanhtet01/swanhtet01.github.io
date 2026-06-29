@@ -571,7 +571,7 @@ for (const token of ['renderFirstProofBrief', 'first_proof_operator_brief', 'Sou
 const pipelineControlFunctionPath = resolve(functionsDir, 'api/pipeline-control.js.func/api/pipeline-control.js')
 if (!existsSync(pipelineControlFunctionPath)) fail('public_pipeline_control_function_missing')
 const pipelineControlFunctionSource = readFileSync(pipelineControlFunctionPath, 'utf8')
-for (const token of ['firstProofPacket', 'first_proof', 'operator_brief_ready', 'starter_kit_url']) {
+for (const token of ['firstProofPacket', 'first_proof', 'operator_brief_ready', 'starter_kit_url', 'buyer_reply_draft']) {
   if (!pipelineControlFunctionSource.includes(token)) {
     fail('public_pipeline_control_first_proof_contract_missing', { token })
   }
@@ -603,6 +603,8 @@ for (const token of [
   'first_proof',
   'Run queue now',
   'Open starter kit',
+  'Copy buyer reply',
+  'proofBuyerReply',
   "proofList('Checklist'",
   "proofList('Acceptance tests'",
 ]) {

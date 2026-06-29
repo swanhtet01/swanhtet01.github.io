@@ -4497,6 +4497,7 @@ const publicOperatorConsoleHtml = `<!doctype html>
     .operator-proof-section{margin-top:10px}
     .operator-proof-section span{display:block;color:var(--muted);font-size:12px;font-weight:950;letter-spacing:.1em;text-transform:uppercase}
     .operator-proof ul{margin:8px 0 0;padding-left:18px}
+    .operator-reply{width:100%;min-height:150px;margin-top:8px;border:1px solid var(--line);background:color-mix(in srgb,var(--paper) 93%,var(--ink) 7%);color:var(--ink);padding:10px;font:inherit;font-size:13px;line-height:1.45;resize:vertical}
     .operator-output{white-space:pre-wrap;overflow:auto;max-height:240px;border:1px solid var(--line);padding:12px;font-size:13px;background:color-mix(in srgb,var(--paper) 90%,var(--ink) 10%)}
     @media(max-width:840px){.operator-grid{grid-template-columns:1fr}.operator-kpis{grid-template-columns:1fr}}
   </style>
@@ -4581,6 +4582,20 @@ const publicOperatorConsoleHtml = `<!doctype html>
               'Includes source trace for important claims.',
               'Keeps external actions approval-only.'
             ],
+            buyer_reply_draft:[
+              'Hi there,',
+              '',
+              'I can start with the Daily Intelligence Brief Agent first proof.',
+              '',
+              'First proof: One-page morning brief with what changed, why it matters, and exact follow-up actions.',
+              '',
+              'Please send one approved sample source: a file, screenshot, export, folder link, or email thread that represents the workflow. I will use it only to prepare the first proof and will not send messages, write records, connect accounts, or take payment actions without owner approval.',
+              '',
+              'Next step: Review source notes, open the starter kit, then produce the one-page brief.',
+              '',
+              'Swan',
+              'SUPERMEGA.dev'
+            ].join('\\n'),
             approval_required:true,
             human_gate:'owner approval before send/write/payment actions'
           }
@@ -4600,6 +4615,33 @@ const publicOperatorConsoleHtml = `<!doctype html>
       if(!proof || !proof.starter_kit_url)return '';
       return '<a class="operator-proof-link" href="'+esc(proof.starter_kit_url)+'" target="_blank" rel="noreferrer">Open starter kit</a>';
     }
+    function proofBuyerReply(proof, index){
+      if(!proof || !proof.buyer_reply_draft)return '';
+      const id = 'buyer-reply-'+index;
+      return '<div class="operator-proof-section"><span>Buyer reply draft</span><textarea class="operator-reply" id="'+id+'" readonly>'+esc(proof.buyer_reply_draft)+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+id+'">Copy buyer reply</button></div>';
+    }
+    function legacyCopy(el){
+      el.focus();
+      el.select();
+      const ok = document.execCommand('copy');
+      if(window.getSelection) window.getSelection().removeAllRanges();
+      return ok;
+    }
+    async function copyDraft(id){
+      const el = document.getElementById(id);
+      if(!el)return;
+      const value = el.value || el.textContent || '';
+      try{
+        if(navigator.clipboard && window.isSecureContext){await navigator.clipboard.writeText(value);}
+        else if(!legacyCopy(el)){throw new Error('legacy_copy_failed');}
+        setStatus({status:'copied', target:id, note:'Buyer reply copied. Review before sending.'});
+      }catch(error){
+        try{
+          if(legacyCopy(el)){setStatus({status:'copied', target:id, note:'Buyer reply copied. Review before sending.'});return;}
+        }catch(fallbackError){}
+        setStatus({status:'copy_failed', target:id, reason:String(error.message||error)});
+      }
+    }
     function renderKpis(data){
       const metrics = data.metrics || {};
       kpisEl.innerHTML = [
@@ -4611,11 +4653,12 @@ const publicOperatorConsoleHtml = `<!doctype html>
     function renderActions(data){
       const actions = data.recent_actions || [];
       if(!actions.length){actionsEl.innerHTML = '<div class="operator-item">No recent actions.</div>';return}
-      actionsEl.innerHTML = actions.map(function(action){
+      actionsEl.innerHTML = actions.map(function(action,index){
         const proof = action.first_proof;
-        const proofHtml = proof ? '<div class="operator-proof"><strong>'+esc(proof.title || 'First proof')+'</strong><div class="operator-meta"><span class="operator-chip">'+esc(proof.status)+'</span><span class="operator-chip">'+esc(proof.template_id)+'</span><span class="operator-chip">'+esc(proof.human_gate)+'</span></div><div>'+esc(proof.first_proof_target || '')+'</div>'+proofStarterLink(proof)+proofList('Checklist',proof.checklist)+proofList('Acceptance tests',proof.acceptance_tests)+'</div>' : '';
+        const proofHtml = proof ? '<div class="operator-proof"><strong>'+esc(proof.title || 'First proof')+'</strong><div class="operator-meta"><span class="operator-chip">'+esc(proof.status)+'</span><span class="operator-chip">'+esc(proof.template_id)+'</span><span class="operator-chip">'+esc(proof.human_gate)+'</span></div><div>'+esc(proof.first_proof_target || '')+'</div>'+proofStarterLink(proof)+proofList('Checklist',proof.checklist)+proofList('Acceptance tests',proof.acceptance_tests)+proofBuyerReply(proof,index)+'</div>' : '';
         return '<article class="operator-item"><strong>'+esc(action.title || action.action_type)+'</strong><div class="operator-meta"><span class="operator-chip">'+esc(action.status)+'</span><span class="operator-chip">'+esc(action.priority)+'</span><span class="operator-chip">'+esc(action.approval_state)+'</span><span>'+esc(action.lead_id)+'</span></div><div>'+esc(action.next_step || '')+'</div>'+proofHtml+'</article>';
       }).join('');
+      actionsEl.querySelectorAll('[data-copy-target]').forEach(function(button){button.addEventListener('click',function(){copyDraft(button.getAttribute('data-copy-target'))})});
     }
     async function refresh(){
       if(!token()){setStatus('Paste the ops key first.');return}

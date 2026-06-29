@@ -87,6 +87,21 @@ function firstProofPacket(row) {
   const templateName = text(task.template_name) || text(payload.public_package) || text(payload.requested_package) || templateId
   const starterKitUrl = text(result.starter_kit_url) || text(task.starter_kit_url) || text(payload.starter_kit_url)
   const firstProofTarget = text(result.first_proof_target) || text(task.first_proof_target) || text(payload.first_proof_target)
+  const nextStep = text(row.next_step) || 'Share one approved sample source so we can build the first proof.'
+  const buyerReplyDraft = [
+    `Hi ${text(payload.name) || 'there'},`,
+    '',
+    `I can start with the ${templateName || 'SUPERMEGA agent'} first proof.`,
+    '',
+    `First proof: ${firstProofTarget || 'one useful output from your approved source sample'}.`,
+    '',
+    `Please send one approved sample source: a file, screenshot, export, folder link, or email thread that represents the workflow. I will use it only to prepare the first proof and will not send messages, write records, connect accounts, or take payment actions without owner approval.`,
+    '',
+    `Next step: ${nextStep}`,
+    '',
+    'Swan',
+    'SUPERMEGA.dev',
+  ].join('\n')
 
   return {
     status: isBrief ? 'operator_brief_ready' : 'queued_for_runner',
@@ -97,6 +112,7 @@ function firstProofPacket(row) {
     title: text(result.title) || (templateName && row.lead_id ? `${templateName} first proof for ${row.lead_id}` : 'First proof task'),
     checklist,
     acceptance_tests: acceptanceTests,
+    buyer_reply_draft: buyerReplyDraft,
     approval_required: result.approval_required !== undefined ? result.approval_required !== false : task.approval_required !== false,
     human_gate: text(result.human_gate) || text(task.human_gate) || 'owner approval before send/write/payment actions',
   }

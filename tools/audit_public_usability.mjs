@@ -174,18 +174,19 @@ try {
         hasStarterKitRenderer: html.includes('Open starter kit'),
         hasChecklistRenderer: html.includes("proofList('Checklist'"),
         hasAcceptanceRenderer: html.includes("proofList('Acceptance tests'"),
+        hasBuyerReplyRenderer: html.includes('proofBuyerReply') && html.includes('Copy buyer reply'),
         hasSampleData: html.includes('samplePipelineData') && html.includes('No lead was created'),
         overflowX: Math.max(0, document.documentElement.scrollWidth - document.documentElement.clientWidth),
       }
     })
     if (operator.title !== 'Operator Console | SUPERMEGA.dev') fail('operator_title_not_current', { viewport: viewport.name, operator })
     if (!operator.opsKeyVisible || !operator.sampleVisible || !operator.refreshVisible || !operator.runnerVisible) fail('operator_controls_missing', { viewport: viewport.name, operator })
-    if (!operator.hasStarterKitRenderer || !operator.hasChecklistRenderer || !operator.hasAcceptanceRenderer || !operator.hasSampleData) fail('operator_first_proof_renderer_missing', { viewport: viewport.name, operator })
+    if (!operator.hasStarterKitRenderer || !operator.hasChecklistRenderer || !operator.hasAcceptanceRenderer || !operator.hasBuyerReplyRenderer || !operator.hasSampleData) fail('operator_first_proof_renderer_missing', { viewport: viewport.name, operator })
     if (operator.overflowX > 0) fail('operator_horizontal_overflow', { viewport: viewport.name, operator })
     await page.click('#load-sample')
     await expectCopy(
       page,
-      ['Sample Daily Intelligence Brief first proof', 'Open starter kit', 'Checklist', 'Acceptance tests', 'No lead was created'],
+      ['Sample Daily Intelligence Brief first proof', 'Open starter kit', 'Checklist', 'Acceptance tests', 'Buyer reply draft', 'Copy buyer reply', 'No lead was created'],
       'operator_sample_packet',
       viewport.name,
     )
@@ -193,11 +194,24 @@ try {
       renderedActions: document.querySelectorAll('#operator-actions .operator-item').length,
       sampleStatus: document.querySelector('#operator-status')?.textContent || '',
       starterLink: document.querySelector('#operator-actions .operator-proof-link')?.getAttribute('href') || '',
+      buyerReply: document.querySelector('#operator-actions .operator-reply')?.value || '',
+      copyVisible: Boolean(document.querySelector('#operator-actions .operator-copy')?.getBoundingClientRect().height),
       overflowX: Math.max(0, document.documentElement.scrollWidth - document.documentElement.clientWidth),
     }))
     if (operatorSample.renderedActions !== 1) fail('operator_sample_action_missing', { viewport: viewport.name, operatorSample })
     if (!operatorSample.sampleStatus.includes('sample_loaded')) fail('operator_sample_status_missing', { viewport: viewport.name, operatorSample })
     if (operatorSample.starterLink !== '/site/agent-templates/daily-intelligence-brief.json') fail('operator_sample_starter_link_missing', { viewport: viewport.name, operatorSample })
+    if (!operatorSample.buyerReply.includes('Please send one approved sample source')) fail('operator_sample_buyer_reply_missing', { viewport: viewport.name, operatorSample })
+    if (!operatorSample.copyVisible) fail('operator_sample_copy_missing', { viewport: viewport.name, operatorSample })
+    const copyButton = page.locator('#operator-actions .operator-copy').first()
+    await copyButton.scrollIntoViewIfNeeded()
+    await copyButton.click({ force: true })
+    await page.waitForFunction(() => {
+      const value = document.querySelector('#operator-status')?.textContent || ''
+      return value.includes('Buyer reply copied') || value.includes('copy_failed')
+    }, { timeout: 5000 }).catch(() => undefined)
+    const copyStatus = await page.locator('#operator-status').innerText({ timeout: 5000 }).catch(() => '')
+    if (!copyStatus.includes('Buyer reply copied')) fail('operator_sample_copy_failed', { viewport: viewport.name, copyStatus })
     if (operatorSample.overflowX > 0) fail('operator_sample_horizontal_overflow', { viewport: viewport.name, operatorSample })
     if (consoleMessages.length) fail('console_messages', { viewport: viewport.name, consoleMessages })
 
