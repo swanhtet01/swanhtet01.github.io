@@ -4518,6 +4518,7 @@ const publicOperatorConsoleHtml = `<!doctype html>
           </label>
           <div class="operator-row">
             <button id="save-key" class="btn secondary" type="button">Save key</button>
+            <button id="load-sample" class="btn secondary" type="button">Load sample proof</button>
             <button id="refresh" class="btn primary" type="button">Refresh queue</button>
             <button id="run-runner" class="btn secondary" type="button">Run queue now</button>
           </div>
@@ -4540,10 +4541,60 @@ const publicOperatorConsoleHtml = `<!doctype html>
     function token(){return keyInput.value.trim()}
     function authHeaders(){return {accept:'application/json',authorization:'Bearer '+token()}}
     function setStatus(value){statusBox.textContent = typeof value === 'string' ? value : JSON.stringify(value,null,2)}
+    function samplePipelineData(){
+      return {
+        status:'ready',
+        runtime_status:'sample_only',
+        metrics:{open_action_count:1,recent_lead_count:1,recent_action_count:1},
+        approval_inbox:{status:'sample',pending_count:1},
+        recent_actions:[{
+          action_id:'SAMPLE-FIRST-PROOF',
+          lead_id:'SAMPLE-SETUP',
+          task_id:'SAMPLE-FIRST-PROOF',
+          action_type:'lead_followup',
+          status:'queued',
+          priority:'high',
+          owner:'Revenue Pod',
+          title:'Sample Daily Intelligence Brief first proof',
+          next_step:'Review source notes, open the starter kit, then produce the one-page brief.',
+          approval_required:true,
+          approval_state:'pending',
+          notification_channel:'console',
+          notification_status:'sample',
+          first_proof:{
+            status:'queued_for_runner',
+            template_id:'daily-intelligence-brief',
+            template_name:'Daily Intelligence Brief Agent',
+            starter_kit_url:'/site/agent-templates/daily-intelligence-brief.json',
+            first_proof_target:'One-page morning brief with what changed, why it matters, and exact follow-up actions.',
+            title:'Daily Intelligence Brief Agent first proof for sample buyer',
+            checklist:[
+              'Open starter kit and confirm buyer inputs.',
+              'Review sample source links and missing source notes.',
+              'Draft the one-page morning brief with source trace.',
+              'Mark any missing access before asking for approval.',
+              'Do not send or change business records without owner approval.'
+            ],
+            acceptance_tests:[
+              'Shows what changed, why it matters, and exact follow-up actions.',
+              'Uses only approved sample sources.',
+              'Includes source trace for important claims.',
+              'Keeps external actions approval-only.'
+            ],
+            approval_required:true,
+            human_gate:'owner approval before send/write/payment actions'
+          }
+        }]
+      };
+    }
     function proofList(title, items){
       const values = (items || []).filter(Boolean).slice(0,6);
       if(!values.length)return '';
       return '<div class="operator-proof-section"><span>'+esc(title)+'</span><ul>'+values.map(function(item){return '<li>'+esc(item)+'</li>'}).join('')+'</ul></div>';
+    }
+    function loadSample(){
+      const data = samplePipelineData();
+      renderKpis(data); renderActions(data); setStatus({status:'sample_loaded', note:'No lead was created. This is a no-write first-proof demo packet.'});
     }
     function proofStarterLink(proof){
       if(!proof || !proof.starter_kit_url)return '';
@@ -4583,6 +4634,7 @@ const publicOperatorConsoleHtml = `<!doctype html>
       if(response.ok) await refresh();
     }
     document.getElementById('save-key').addEventListener('click',function(){sessionStorage.setItem('supermega_ops_key',token());setStatus('Ops key saved for this browser tab.')});
+    document.getElementById('load-sample').addEventListener('click',loadSample);
     document.getElementById('refresh').addEventListener('click',refresh);
     document.getElementById('run-runner').addEventListener('click',runRunner);
   </script>

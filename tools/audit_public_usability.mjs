@@ -162,27 +162,46 @@ try {
     if (contact.overflowX > 0) fail('contact_horizontal_overflow', { viewport: viewport.name, contact })
 
     await open(page, `${baseUrl}/operator/`, viewport.name)
-    await expectCopy(page, ['Operator Console', 'Ops key', 'Refresh queue', 'Run queue now'], 'operator_console', viewport.name)
+    await expectCopy(page, ['Operator Console', 'Ops key', 'Load sample proof', 'Refresh queue', 'Run queue now'], 'operator_console', viewport.name)
     const operator = await page.evaluate(() => {
       const html = document.documentElement.innerHTML
       return {
         title: document.title,
         opsKeyVisible: Boolean(document.querySelector('#ops-key')?.getBoundingClientRect().height),
+        sampleVisible: Boolean(document.querySelector('#load-sample')?.getBoundingClientRect().height),
         refreshVisible: Boolean(document.querySelector('#refresh')?.getBoundingClientRect().height),
         runnerVisible: Boolean(document.querySelector('#run-runner')?.getBoundingClientRect().height),
         hasStarterKitRenderer: html.includes('Open starter kit'),
         hasChecklistRenderer: html.includes("proofList('Checklist'"),
         hasAcceptanceRenderer: html.includes("proofList('Acceptance tests'"),
+        hasSampleData: html.includes('samplePipelineData') && html.includes('No lead was created'),
         overflowX: Math.max(0, document.documentElement.scrollWidth - document.documentElement.clientWidth),
       }
     })
     if (operator.title !== 'Operator Console | SUPERMEGA.dev') fail('operator_title_not_current', { viewport: viewport.name, operator })
-    if (!operator.opsKeyVisible || !operator.refreshVisible || !operator.runnerVisible) fail('operator_controls_missing', { viewport: viewport.name, operator })
-    if (!operator.hasStarterKitRenderer || !operator.hasChecklistRenderer || !operator.hasAcceptanceRenderer) fail('operator_first_proof_renderer_missing', { viewport: viewport.name, operator })
+    if (!operator.opsKeyVisible || !operator.sampleVisible || !operator.refreshVisible || !operator.runnerVisible) fail('operator_controls_missing', { viewport: viewport.name, operator })
+    if (!operator.hasStarterKitRenderer || !operator.hasChecklistRenderer || !operator.hasAcceptanceRenderer || !operator.hasSampleData) fail('operator_first_proof_renderer_missing', { viewport: viewport.name, operator })
     if (operator.overflowX > 0) fail('operator_horizontal_overflow', { viewport: viewport.name, operator })
+    await page.click('#load-sample')
+    await expectCopy(
+      page,
+      ['Sample Daily Intelligence Brief first proof', 'Open starter kit', 'Checklist', 'Acceptance tests', 'No lead was created'],
+      'operator_sample_packet',
+      viewport.name,
+    )
+    const operatorSample = await page.evaluate(() => ({
+      renderedActions: document.querySelectorAll('#operator-actions .operator-item').length,
+      sampleStatus: document.querySelector('#operator-status')?.textContent || '',
+      starterLink: document.querySelector('#operator-actions .operator-proof-link')?.getAttribute('href') || '',
+      overflowX: Math.max(0, document.documentElement.scrollWidth - document.documentElement.clientWidth),
+    }))
+    if (operatorSample.renderedActions !== 1) fail('operator_sample_action_missing', { viewport: viewport.name, operatorSample })
+    if (!operatorSample.sampleStatus.includes('sample_loaded')) fail('operator_sample_status_missing', { viewport: viewport.name, operatorSample })
+    if (operatorSample.starterLink !== '/site/agent-templates/daily-intelligence-brief.json') fail('operator_sample_starter_link_missing', { viewport: viewport.name, operatorSample })
+    if (operatorSample.overflowX > 0) fail('operator_sample_horizontal_overflow', { viewport: viewport.name, operatorSample })
     if (consoleMessages.length) fail('console_messages', { viewport: viewport.name, consoleMessages })
 
-    results.checks[viewport.name] = { home, products, setup, contact, operator }
+    results.checks[viewport.name] = { home, products, setup, contact, operator, operatorSample }
     await page.close()
   }
 
