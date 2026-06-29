@@ -13,6 +13,29 @@ const internals = handler.__test || {}
 if (typeof internals.safeAction !== 'function') {
   fail('pipeline_control_safe_action_missing')
 }
+if (typeof internals.buildOrderRoomState !== 'function') {
+  fail('pipeline_control_order_room_state_builder_missing')
+}
+
+const persistedState = internals.buildOrderRoomState({
+  action_id: 'TASK-TEST123',
+  lead_id: 'LEAD-TEST123',
+  scope_approval_state: 'approved',
+  price_approval_state: 'approved',
+  payment_route_state: 'approved',
+  payment_request_state: 'approved_to_send',
+  payment_proof_state: 'proof_attached',
+  private_workspace_state: 'created_after_payment_proof',
+  payment_proof_reference: 'KBZ transfer screenshot 123',
+  owner_note: 'Start the pilot after receipt review.',
+  real_mrr_delta: 11000000,
+})
+const blockedWorkspaceState = internals.buildOrderRoomState({
+  payment_proof_state: 'payment_proof_required',
+  private_workspace_state: 'created_after_payment_proof',
+})
+assert.equal(blockedWorkspaceState.private_workspace_state, 'not_created_until_payment_proof')
+assert.equal(blockedWorkspaceState.real_mrr_delta, 0)
 
 const action = internals.safeAction({
   action_id: 'TASK-TEST123',
@@ -54,6 +77,7 @@ const action = internals.safeAction({
     first_proof_target: 'One-page morning brief with what changed and what to do next.',
     approval_required: true,
     human_gate: 'owner approval before send/write/payment actions',
+    pilot_order_room_state: persistedState,
     body: 'Internal raw operator body with Buyer email: owner@example.com',
   },
 })
@@ -91,6 +115,11 @@ assert.ok(action.first_proof.pilot_order_room.owner_action_queue_csv.includes('"
 assert.ok(action.first_proof.pilot_order_room.owner_action_queue_csv.includes('"start_private_pilot_workspace"'))
 assert.ok(action.first_proof.pilot_order_room.activation_summary_json.includes('"real_mrr_delta": 0'))
 assert.ok(action.first_proof.pilot_order_room.activation_summary_json.includes('no_revenue_claim_without_payment_proof'))
+assert.equal(action.first_proof.pilot_order_room.state.scope_approval_state, 'approved')
+assert.equal(action.first_proof.pilot_order_room.state.payment_proof_state, 'proof_attached')
+assert.equal(action.first_proof.pilot_order_room.state.private_workspace_state, 'created_after_payment_proof')
+assert.equal(action.first_proof.pilot_order_room.state.payment_proof_reference, 'KBZ transfer screenshot 123')
+assert.equal(action.first_proof.pilot_order_room.state.real_mrr_delta, 0)
 assert.ok(!JSON.stringify(action).includes('owner@example.com'))
 
 console.log(

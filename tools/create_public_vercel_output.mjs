@@ -4724,7 +4724,17 @@ const publicOperatorConsoleHtml = `<!doctype html>
                 private_workspace_state:'not_created_until_payment_proof',
                 real_mrr_delta:0,
                 guardrails:['owner_approval_before_payment_request','no_live_payment_link_in_packet','no_workspace_before_payment_proof','no_revenue_claim_without_payment_proof']
-              },null,2)
+              },null,2),
+              state:{
+                status:'not_persisted',
+                scope_approval_state:'pending',
+                price_approval_state:'pending',
+                payment_route_state:'not_approved',
+                payment_request_state:'not_sent',
+                payment_proof_state:'payment_proof_required',
+                private_workspace_state:'not_created_until_payment_proof',
+                real_mrr_delta:0
+              }
             },
             approval_required:true,
             human_gate:'owner approval before send/write/payment actions'
@@ -4760,7 +4770,7 @@ const publicOperatorConsoleHtml = `<!doctype html>
       const id = 'pilot-close-'+index;
       return '<div class="operator-proof-section"><span>Pilot close packet</span><textarea class="operator-reply" id="'+id+'" readonly>'+esc(proof.pilot_close_packet)+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+id+'">Copy pilot packet</button></div>';
     }
-    function pilotOrderRoom(proof, index){
+    function pilotOrderRoom(action, proof, index){
       const room = proof && proof.pilot_order_room;
       if(!room)return '';
       const paymentId = 'payment-request-'+index;
@@ -4770,8 +4780,13 @@ const publicOperatorConsoleHtml = `<!doctype html>
       const activationId = 'owner-activation-packet-'+index;
       const actionQueueId = 'owner-action-queue-'+index;
       const activationJsonId = 'activation-summary-'+index;
+      const state = room.state || {};
+      const actionId = action && action.action_id || '';
+      const leadId = action && action.lead_id || '';
       const checklist = (room.pilot_start_checklist || []).filter(Boolean).map(function(item){return '- [ ] '+item}).join('\\n');
-      return '<div class="operator-proof-section operator-order-room"><span>Paid pilot order room</span><div class="operator-meta"><span class="operator-chip">'+esc(room.status || 'draft_owner_approval_required')+'</span><span class="operator-chip">'+esc(room.payment_state || 'payment_proof_required')+'</span><span class="operator-chip">'+esc(room.order_state || 'order_not_started')+'</span></div><textarea class="operator-reply" id="'+paymentId+'" readonly>'+esc(room.payment_request_draft || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+paymentId+'">Copy payment request</button><textarea class="operator-reply" id="'+paymentLedgerId+'" readonly>'+esc(room.payment_proof_ledger_csv || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+paymentLedgerId+'">Copy payment ledger</button><textarea class="operator-reply" id="'+orderLedgerId+'" readonly>'+esc(room.order_room_ledger_csv || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+orderLedgerId+'">Copy order ledger</button><textarea class="operator-reply" id="'+checklistId+'" readonly>'+esc(checklist)+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+checklistId+'">Copy pilot start checklist</button><textarea class="operator-reply" id="'+activationId+'" readonly>'+esc(room.owner_activation_packet || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+activationId+'">Copy owner activation packet</button><textarea class="operator-reply" id="'+actionQueueId+'" readonly>'+esc(room.owner_action_queue_csv || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+actionQueueId+'">Copy owner action queue</button><textarea class="operator-reply" id="'+activationJsonId+'" readonly>'+esc(room.activation_summary_json || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+activationJsonId+'">Copy activation JSON</button></div>';
+      const stateChips = '<div class="operator-meta"><span class="operator-chip">'+esc(state.scope_approval_state || 'pending')+'</span><span class="operator-chip">'+esc(state.payment_request_state || 'not_sent')+'</span><span class="operator-chip">'+esc(state.payment_proof_state || 'payment_proof_required')+'</span><span class="operator-chip">'+esc(state.private_workspace_state || 'not_created_until_payment_proof')+'</span><span class="operator-chip">MRR '+esc(state.real_mrr_delta ?? 0)+'</span></div>';
+      const stateButtons = '<div class="operator-row"><button class="btn secondary operator-state" type="button" data-state-command="approve_scope" data-action-id="'+esc(actionId)+'" data-lead-id="'+esc(leadId)+'">Save scope approval</button><button class="btn secondary operator-state" type="button" data-state-command="approve_payment_request" data-action-id="'+esc(actionId)+'" data-lead-id="'+esc(leadId)+'">Save payment request approval</button><button class="btn secondary operator-state" type="button" data-state-command="mark_payment_sent" data-action-id="'+esc(actionId)+'" data-lead-id="'+esc(leadId)+'">Save payment request sent</button><button class="btn secondary operator-state" type="button" data-state-command="attach_payment_proof" data-action-id="'+esc(actionId)+'" data-lead-id="'+esc(leadId)+'">Save payment proof</button><button class="btn secondary operator-state" type="button" data-state-command="mark_workspace_created" data-action-id="'+esc(actionId)+'" data-lead-id="'+esc(leadId)+'">Save workspace created</button></div>';
+      return '<div class="operator-proof-section operator-order-room"><span>Paid pilot order room</span><div class="operator-meta"><span class="operator-chip">'+esc(room.status || 'draft_owner_approval_required')+'</span><span class="operator-chip">'+esc(room.payment_state || 'payment_proof_required')+'</span><span class="operator-chip">'+esc(room.order_state || 'order_not_started')+'</span></div>'+stateChips+stateButtons+'<textarea class="operator-reply" id="'+paymentId+'" readonly>'+esc(room.payment_request_draft || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+paymentId+'">Copy payment request</button><textarea class="operator-reply" id="'+paymentLedgerId+'" readonly>'+esc(room.payment_proof_ledger_csv || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+paymentLedgerId+'">Copy payment ledger</button><textarea class="operator-reply" id="'+orderLedgerId+'" readonly>'+esc(room.order_room_ledger_csv || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+orderLedgerId+'">Copy order ledger</button><textarea class="operator-reply" id="'+checklistId+'" readonly>'+esc(checklist)+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+checklistId+'">Copy pilot start checklist</button><textarea class="operator-reply" id="'+activationId+'" readonly>'+esc(room.owner_activation_packet || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+activationId+'">Copy owner activation packet</button><textarea class="operator-reply" id="'+actionQueueId+'" readonly>'+esc(room.owner_action_queue_csv || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+actionQueueId+'">Copy owner action queue</button><textarea class="operator-reply" id="'+activationJsonId+'" readonly>'+esc(room.activation_summary_json || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+activationJsonId+'">Copy activation JSON</button></div>';
     }
     function legacyCopy(el){
       el.focus();
@@ -4795,6 +4810,30 @@ const publicOperatorConsoleHtml = `<!doctype html>
         setStatus({status:'copy_failed', target:id, reason:String(error.message||error)});
       }
     }
+    function statePatch(command){
+      const patches = {
+        approve_scope:{scope_approval_state:'approved',price_approval_state:'approved'},
+        approve_payment_request:{scope_approval_state:'approved',price_approval_state:'approved',payment_route_state:'approved',payment_request_state:'approved_to_send'},
+        mark_payment_sent:{scope_approval_state:'approved',price_approval_state:'approved',payment_route_state:'approved',payment_request_state:'sent'},
+        attach_payment_proof:{scope_approval_state:'approved',price_approval_state:'approved',payment_route_state:'approved',payment_request_state:'sent',payment_proof_state:'proof_attached',private_workspace_state:'ready_after_payment_proof',payment_proof_reference:'OWNER_PROOF_REFERENCE_REQUIRED'},
+        mark_workspace_created:{scope_approval_state:'approved',price_approval_state:'approved',payment_route_state:'approved',payment_request_state:'sent',payment_proof_state:'proof_attached',private_workspace_state:'created_after_payment_proof',payment_proof_reference:'OWNER_PROOF_REFERENCE_REQUIRED'}
+      };
+      return patches[command] || {};
+    }
+    async function persistOrderRoomState(button){
+      if(!token()){setStatus('Paste the ops key first.');return}
+      const command = button.getAttribute('data-state-command') || '';
+      const payload = Object.assign({
+        operation:'update_order_room',
+        action_id:button.getAttribute('data-action-id') || '',
+        lead_id:button.getAttribute('data-lead-id') || ''
+      },statePatch(command));
+      setStatus({status:'saving_order_room_state', command});
+      const response = await fetch('/api/pipeline-control',{method:'POST',headers:Object.assign({},authHeaders(),{'content-type':'application/json'}),body:JSON.stringify(payload),cache:'no-store'});
+      const data = await response.json().catch(function(){return {status:'error',reason:'invalid_json',code:response.status}});
+      setStatus(data);
+      if(response.ok) await refresh();
+    }
     function renderKpis(data){
       const metrics = data.metrics || {};
       kpisEl.innerHTML = [
@@ -4808,10 +4847,11 @@ const publicOperatorConsoleHtml = `<!doctype html>
       if(!actions.length){actionsEl.innerHTML = '<div class="operator-item">No recent actions.</div>';return}
       actionsEl.innerHTML = actions.map(function(action,index){
         const proof = action.first_proof;
-        const proofHtml = proof ? '<div class="operator-proof"><strong>'+esc(proof.title || 'First proof')+'</strong><div class="operator-meta"><span class="operator-chip">'+esc(proof.status)+'</span><span class="operator-chip">'+esc(proof.template_id)+'</span><span class="operator-chip">'+esc(proof.human_gate)+'</span></div><div>'+esc(proof.first_proof_target || '')+'</div>'+proofStarterLink(proof)+proofList('Checklist',proof.checklist)+proofList('Acceptance tests',proof.acceptance_tests)+proofBuyerReply(proof,index)+proofDeliveryPacket(proof,index)+pilotClosePacket(proof,index)+pilotOrderRoom(proof,index)+'</div>' : '';
+        const proofHtml = proof ? '<div class="operator-proof"><strong>'+esc(proof.title || 'First proof')+'</strong><div class="operator-meta"><span class="operator-chip">'+esc(proof.status)+'</span><span class="operator-chip">'+esc(proof.template_id)+'</span><span class="operator-chip">'+esc(proof.human_gate)+'</span></div><div>'+esc(proof.first_proof_target || '')+'</div>'+proofStarterLink(proof)+proofList('Checklist',proof.checklist)+proofList('Acceptance tests',proof.acceptance_tests)+proofBuyerReply(proof,index)+proofDeliveryPacket(proof,index)+pilotClosePacket(proof,index)+pilotOrderRoom(action,proof,index)+'</div>' : '';
         return '<article class="operator-item"><strong>'+esc(action.title || action.action_type)+'</strong><div class="operator-meta"><span class="operator-chip">'+esc(action.status)+'</span><span class="operator-chip">'+esc(action.priority)+'</span><span class="operator-chip">'+esc(action.approval_state)+'</span><span>'+esc(action.lead_id)+'</span></div><div>'+esc(action.next_step || '')+'</div>'+proofHtml+'</article>';
       }).join('');
       actionsEl.querySelectorAll('[data-copy-target]').forEach(function(button){button.addEventListener('click',function(){copyDraft(button.getAttribute('data-copy-target'))})});
+      actionsEl.querySelectorAll('[data-state-command]').forEach(function(button){button.addEventListener('click',function(){persistOrderRoomState(button)})});
     }
     async function refresh(){
       if(!token()){setStatus('Paste the ops key first.');return}

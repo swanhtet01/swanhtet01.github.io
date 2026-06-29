@@ -15,6 +15,32 @@ function json(res, statusCode, payload) {
   res.end(JSON.stringify(payload))
 }
 
+function readBody(req) {
+  return new Promise((resolve, reject) => {
+    let raw = ''
+    req.on('data', (chunk) => {
+      raw += chunk
+      if (raw.length > 50000) {
+        reject(new Error('request_too_large'))
+        req.destroy()
+      }
+    })
+    req.on('end', () => {
+      if (!raw.trim()) {
+        resolve({})
+        return
+      }
+      try {
+        const parsed = JSON.parse(raw)
+        resolve(parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {})
+      } catch {
+        reject(new Error('invalid_json'))
+      }
+    })
+    req.on('error', reject)
+  })
+}
+
 function text(value) {
   return String(value || '').trim()
 }
@@ -38,6 +64,38 @@ function list(value) {
 
 function csvCell(value) {
   return `"${text(value).replace(/"/g, '""')}"`
+}
+
+function oneOf(value, allowed, fallback) {
+  const normalized = text(value)
+  return allowed.includes(normalized) ? normalized : fallback
+}
+
+function buildOrderRoomState(payload = {}) {
+  const paymentProofState = oneOf(payload.payment_proof_state, ['payment_proof_required', 'proof_attached'], 'payment_proof_required')
+  const requestedWorkspaceState = oneOf(
+    payload.private_workspace_state || payload.workspace_state,
+    ['not_created_until_payment_proof', 'ready_after_payment_proof', 'created_after_payment_proof'],
+    paymentProofState === 'proof_attached' ? 'ready_after_payment_proof' : 'not_created_until_payment_proof',
+  )
+  const workspaceState = paymentProofState === 'proof_attached' ? requestedWorkspaceState : 'not_created_until_payment_proof'
+  return {
+    status: 'persisted_order_room_state',
+    action_id: text(payload.action_id) || null,
+    lead_id: text(payload.lead_id) || null,
+    scope_approval_state: oneOf(payload.scope_approval_state, ['pending', 'approved', 'blocked'], 'pending'),
+    price_approval_state: oneOf(payload.price_approval_state, ['pending', 'approved', 'blocked'], 'pending'),
+    payment_route_state: oneOf(payload.payment_route_state, ['not_approved', 'approved'], 'not_approved'),
+    payment_request_state: oneOf(payload.payment_request_state, ['not_sent', 'approved_to_send', 'sent'], 'not_sent'),
+    payment_proof_state: paymentProofState,
+    private_workspace_state: workspaceState,
+    payment_proof_reference: text(payload.payment_proof_reference).slice(0, 240),
+    owner_note: text(payload.owner_note).slice(0, 500),
+    real_mrr_delta: 0,
+    updated_by: 'operator_console',
+    updated_at: new Date().toISOString(),
+    guardrails: ['owner_approval_before_payment_request', 'no_workspace_before_payment_proof', 'no_revenue_claim_without_payment_proof'],
+  }
 }
 
 function envText(...names) {
@@ -95,6 +153,7 @@ function firstProofPacket(row) {
   const nextStep = text(row.next_step) || 'Share one approved sample source so we can build the first proof.'
   const leadId = text(row.lead_id) || 'not set'
   const sourceTrace = list(task.source_trace || payload.source_trace)
+  const persistedOrderRoomState = parseJsonObject(result.pilot_order_room_state || payload.pilot_order_room_state)
   if (starterKitUrl) sourceTrace.push(`Starter kit: ${starterKitUrl}`)
   if (text(row.lead_id)) sourceTrace.push(`Lead: ${text(row.lead_id)}`)
   const buyerReplyDraft = [
@@ -335,6 +394,14 @@ function firstProofPacket(row) {
       owner_activation_packet: ownerActivationPacket,
       owner_action_queue_csv: ownerActionQueueCsv,
       activation_summary_json: activationSummaryJson,
+      state: Object.keys(persistedOrderRoomState).length ? persistedOrderRoomState : {
+        status: 'not_persisted',
+        scope_approval_state: 'pending',
+        payment_request_state: 'not_sent',
+        payment_proof_state: 'payment_proof_required',
+        private_workspace_state: 'not_created_until_payment_proof',
+        real_mrr_delta: 0,
+      },
     },
     approval_required: result.approval_required !== undefined ? result.approval_required !== false : task.approval_required !== false,
     human_gate: text(result.human_gate) || text(task.human_gate) || 'owner approval before send/write/payment actions',
@@ -401,6 +468,50 @@ function recommendedDatastores() {
   ]
 }
 
+async function updateOrderRoomState(payload) {
+  const actionId = text(payload.action_id)
+  const leadId = text(payload.lead_id)
+  if (!actionId && !leadId) return { status: 'error', reason: 'missing_action_or_lead_id' }
+  if (!datastore.postgresConfigured()) return { status: 'error', reason: 'postgres_not_configured' }
+
+  const state = buildOrderRoomState({ ...payload, action_id: actionId, lead_id: leadId })
+  const result = await datastore.query(
+    `
+      with target as (
+        select id
+        from public.supermega_pipeline_actions
+        where (($1 <> '' and action_id = $1) or ($1 = '' and $2 <> '' and lead_id = $2))
+        order by created_at desc
+        limit 1
+      )
+      update public.supermega_pipeline_actions a
+      set
+        result = jsonb_set(coalesce(a.result, '{}'::jsonb), '{pilot_order_room_state}', $3::jsonb, true),
+        approval_state = case
+          when ($3::jsonb ->> 'scope_approval_state') = 'approved'
+           and ($3::jsonb ->> 'price_approval_state') = 'approved'
+          then 'approved'
+          else a.approval_state
+        end,
+        updated_at = now()
+      where a.id in (select id from target)
+      returning
+        a.action_id, a.lead_id, a.task_id, a.action_type, a.status, a.priority, a.owner,
+        a.title, a.next_step, a.approval_required, a.approval_state,
+        a.notification_channel, a.notification_status, a.payload, a.result, a.created_at
+    `,
+    [actionId, leadId, JSON.stringify(state)],
+  )
+  if (result.status !== 'ready') return { ...result, state }
+  if (!result.rows.length) return { status: 'error', reason: 'action_not_found', state }
+  return {
+    status: 'ready',
+    adapter: 'vercel_postgres_neon',
+    action: safeAction(result.rows[0]),
+    order_room_state: state,
+  }
+}
+
 function primaryDatabaseStatus(result) {
   if (!result || result.status === 'ready') {
     return { status: 'ready' }
@@ -454,7 +565,7 @@ async function handler(req, res) {
   if (req.method === 'OPTIONS') {
     res.statusCode = 204
     res.setHeader('Access-Control-Allow-Origin', '*')
-    res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS')
+    res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization')
     res.end()
     return
@@ -470,6 +581,27 @@ async function handler(req, res) {
   const provided = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : ''
   if (!provided || !safeEqual(provided, opsKey)) {
     json(res, 401, { status: 'error', reason: 'unauthorized' })
+    return
+  }
+
+  if (req.method === 'POST') {
+    let payload
+    try {
+      payload = await readBody(req)
+    } catch (error) {
+      json(res, 400, { status: 'error', reason: error.message || 'invalid_request' })
+      return
+    }
+    if (text(payload.operation) !== 'update_order_room') {
+      json(res, 400, { status: 'error', reason: 'unsupported_operation' })
+      return
+    }
+    const updated = await updateOrderRoomState(payload)
+    json(res, updated.status === 'ready' ? 200 : updated.reason === 'action_not_found' ? 404 : 503, {
+      endpoint: 'pipeline-control',
+      operation: 'update_order_room',
+      ...updated,
+    })
     return
   }
 
@@ -704,8 +836,10 @@ async function handler(req, res) {
 }
 
 handler.__test = {
+  buildOrderRoomState,
   firstProofPacket,
   safeAction,
+  updateOrderRoomState,
 }
 
 module.exports = handler
