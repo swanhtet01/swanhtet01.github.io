@@ -277,6 +277,7 @@ function leadScore(payload) {
   if (goal.match(/\b(approval|operations|workflow|files|spreadsheet|crm|erp|portal|manager|team|data|ai|meter|sensor|machine|energy|digital twin)\b/i)) score += 15
   if (text(payload.source_file_names) || Number(payload.source_file_count || 0) > 0) score += 10
   if (text(payload.requested_package) || text(payload.public_package) || text(payload.workflow)) score += 10
+  if (text(payload.template_id)) score += 5
   if (text(payload.first_proof_target) || text(payload.acceptance_tests)) score += 5
   if (text(payload.utm_campaign)) score += 5
   return Math.max(0, Math.min(score, 100))
@@ -521,6 +522,11 @@ function pipelineActionPayload(record) {
       requested_package: record.requested_package,
       first_output: record.first_output,
       product_area: record.product_area,
+      template_id: record.template_id,
+      template_status: record.template_status,
+      template_source_category: record.template_source_category,
+      template_source_area: record.template_source_area,
+      price_hint: record.price_hint,
       source_file_count: record.source_file_count,
       public_package: record.public_package,
       first_proof_target: record.first_proof_target,
@@ -663,6 +669,11 @@ function buildLeadRecord({ leadId, taskId, payload, req }) {
   const automationBoundary = truncate(payload.automation_boundary, 700)
   const firstOutput = truncate(payload.requested_package, 120) || truncate(payload.first_output, 120) || truncate(payload.workflow, 120) || 'First useful output'
   const productArea = truncate(payload.product_area, 160)
+  const templateId = truncate(payload.template_id, 100)
+  const templateStatus = truncate(payload.template_status, 80)
+  const templateSourceCategory = truncate(payload.template_source_category, 120)
+  const templateSourceArea = truncate(payload.template_source_area, 160)
+  const priceHint = truncate(payload.price_hint, 120)
   const sourceFileNames = truncate(payload.source_file_names, 1200)
   const sourceFileCount = truncate(payload.source_file_count, 20)
   const onboardingStage = truncate(payload.onboarding_stage, 80) || 'source_review'
@@ -672,6 +683,11 @@ function buildLeadRecord({ leadId, taskId, payload, req }) {
   const team = truncate(payload.team, 500) || truncate(payload.first_team, 500) || truncate(payload.team_size, 500)
   const intakeData = [
     truncate(payload.data, 500),
+    templateId ? `Template: ${templateId}` : '',
+    templateStatus ? `Template status: ${templateStatus}` : '',
+    templateSourceCategory ? `Template source category: ${templateSourceCategory}` : '',
+    templateSourceArea ? `Template source area: ${templateSourceArea}` : '',
+    priceHint ? `Price hint: ${priceHint}` : '',
     publicPackage ? `Public package: ${publicPackage}` : '',
     firstProofTarget ? `First proof target: ${firstProofTarget}` : '',
     acceptanceTests ? `Acceptance tests: ${acceptanceTests}` : '',
@@ -700,6 +716,11 @@ function buildLeadRecord({ leadId, taskId, payload, req }) {
     public_package: publicPackage,
     first_output: firstOutput,
     product_area: productArea,
+    template_id: templateId,
+    template_status: templateStatus,
+    template_source_category: templateSourceCategory,
+    template_source_area: templateSourceArea,
+    price_hint: priceHint,
     first_proof_target: firstProofTarget,
     acceptance_tests: acceptanceTests,
     launch_blockers: launchBlockers,
@@ -747,6 +768,9 @@ function emailRows(record) {
     ['Company', record.company],
     ['First output', record.first_output || record.requested_package],
     ['Public package', record.public_package],
+    ['Template', record.template_id],
+    ['Template source', [record.template_source_category, record.template_source_area].filter(Boolean).join(' / ')],
+    ['Price hint', record.price_hint],
     ['First proof target', record.first_proof_target],
     ['Acceptance tests', record.acceptance_tests],
     ['Launch blockers', record.launch_blockers],
@@ -1090,7 +1114,17 @@ module.exports = async function handler(req, res) {
           email: record.email,
           phone: record.phone,
           company: record.company,
-          workflow: truncate(record.goal || goal || '', 2400),
+          business_type: record.template_source_category || record.product_area || record.requested_package || 'inbound',
+          template_id: record.template_id,
+          price_hint: record.price_hint,
+          workflow: truncate([
+            record.template_id ? `Template: ${record.template_id}` : '',
+            record.requested_package ? `Package: ${record.requested_package}` : '',
+            record.first_proof_target ? `First proof: ${record.first_proof_target}` : '',
+            record.price_hint ? `Price hint: ${record.price_hint}` : '',
+            record.goal || goal || '',
+            record.data || '',
+          ].filter(Boolean).join('\n'), 2400),
         }),
       })
     } catch (err) {

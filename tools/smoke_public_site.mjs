@@ -55,13 +55,17 @@ const page = await browser.newPage({ viewport: { width: 1440, height: 980 } })
 try {
   await open(page, '/')
   await page.locator('#products').scrollIntoViewIfNeeded()
-  await expectBodyIncludes(page, ['DeskPOS', 'Document Extraction Ledger', 'Factory & Operations'], 'home_product_labels')
+  await expectBodyIncludes(
+    page,
+    ['What we actually build', 'You own it.', 'Built around how you work.', 'Reads your existing data.'],
+    'home_product_anchor',
+  )
 
   const home = await page.evaluate(() => ({
     headline: document.querySelector('h1')?.textContent?.trim() || '',
     productsHeading: document.querySelector('#products h2')?.textContent?.trim() || '',
     contactLinks: document.querySelectorAll('a[href*="/contact/"]').length,
-    productBlocks: document.querySelectorAll('#products [id][class*="product"]').length || document.querySelectorAll('#products article').length,
+    productBlocks: document.querySelectorAll('#products .uvp-card').length,
     overflowX: Math.max(0, document.documentElement.scrollWidth - document.documentElement.clientWidth),
   }))
 
@@ -74,7 +78,7 @@ try {
   await open(page, '/products/')
   await expectBodyIncludes(
     page,
-    ['Document Extraction Ledger', 'DeskPOS'],
+    ['AI agent templates', 'DeskPOS Quickstart', 'Daily Intelligence Brief Agent', 'Factory Ops Ledger', 'DeskPOS'],
     'products_key_labels',
   )
   const products = await page.evaluate(() => ({
@@ -85,9 +89,13 @@ try {
   if (products.contactLinks < 1) fail('products_contact_link_missing', { products })
   if (products.overflowX > 0) fail('products_horizontal_overflow', { products })
 
-  await open(page, '/contact/?package=document-extraction-ledger')
-  await expectBodyIncludes(page, ['Send one workflow.', 'Document Extraction Ledger', 'Send request'], 'document_ledger_contact')
-  const documentContact = await page.evaluate(() => ({
+  await open(page, '/contact/?template=daily-intelligence-brief')
+  await expectBodyIncludes(
+    page,
+    ['Start with this template.', 'Daily Intelligence Brief Agent', '11,000,000 MMK setup', 'Send request'],
+    'template_contact',
+  )
+  const templateContact = await page.evaluate(() => ({
     headline: document.querySelector('h1')?.textContent?.trim() || '',
     selected:
       document.querySelector('.sm-selected-package strong')?.textContent?.trim() ||
@@ -96,19 +104,8 @@ try {
       '',
     submitVisible: Boolean(document.querySelector('button[type="submit"]')?.getBoundingClientRect().height),
   }))
-  if (documentContact.selected !== 'Document Extraction Ledger') fail('document_ledger_contact_selection_wrong', { documentContact })
-  if (!documentContact.submitVisible) fail('document_ledger_contact_submit_missing', { documentContact })
-
-  await open(page, '/contact/?package=back-office-workflow-desk')
-  await expectBodyIncludes(page, ['Send one workflow.', 'Back Office Workflow Desk', 'Send request'], 'workflow_desk_contact')
-  const workflowContact = await page.evaluate(() => ({
-    selected:
-      document.querySelector('.sm-selected-package strong')?.textContent?.trim() ||
-      document.querySelector('.selected-path strong')?.textContent?.trim() ||
-      document.querySelector('[data-selected-path] strong')?.textContent?.trim() ||
-      '',
-  }))
-  if (workflowContact.selected !== 'Back Office Workflow Desk') fail('workflow_desk_contact_selection_wrong', { workflowContact })
+  if (templateContact.selected !== 'Daily Intelligence Brief Agent') fail('template_contact_selection_wrong', { templateContact })
+  if (!templateContact.submitVisible) fail('template_contact_submit_missing', { templateContact })
 
   await open(page, '/contact/')
   await expectBodyIncludes(page, ['Send one workflow.', 'Send request'], 'general_contact')
@@ -134,9 +131,8 @@ console.log(
       pages: [
         '/',
         '/products/',
-        '/contact/?package=document-extraction-ledger',
-        '/contact/?package=back-office-workflow-desk',
-        '/contact/?package=agency-client-operator',
+        '/contact/?template=daily-intelligence-brief',
+        '/contact/',
       ],
       contact_api: statusBody.status,
     },

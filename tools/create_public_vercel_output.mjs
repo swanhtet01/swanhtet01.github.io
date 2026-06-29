@@ -5,11 +5,16 @@ import { dirname, relative, resolve } from 'node:path'
 const root = process.cwd()
 const pricing = JSON.parse(readFileSync(resolve(root, 'pricing.json'), 'utf8'))
 const pricingServiceByKey = Object.fromEntries((pricing.services || []).map((s) => [s.key, s]))
+const pricingProductByKey = Object.fromEntries((pricing.products || []).map((p) => [p.key, p]))
 const mmk = (raw) => {
   const value = String(raw || '').trim()
   return /MMK/i.test(value) ? value : `${value} MMK`
 }
 const serviceMmk = (key) => mmk(pricingServiceByKey[key]?.mmk)
+const productTierMmk = (productKey, tierName) => {
+  const value = pricingProductByKey[productKey]?.tiers?.[tierName]
+  return value ? mmk(value) : ''
+}
 const outputDir = resolve(root, '.vercel', 'output')
 const staticDir = resolve(outputDir, 'static')
 const functionsDir = resolve(outputDir, 'functions', 'api')
@@ -277,6 +282,145 @@ const publicProductIdSet = new Set(publicProductIds)
 function publicProductName(id, fallback) {
   const normalizedId = String(id || '').replace(/-proof-pack$/, '')
   return publicToolCopy[normalizedId]?.name || fallback
+}
+
+const publicAgentTemplates = [
+  {
+    id: 'deskpos-quickstart',
+    name: 'DeskPOS Quickstart',
+    status: 'live',
+    buyer: 'Spa, salon, retail, cafe, repair, clinic, gym, or tuition owner',
+    promise: 'Private POS setup with sales, bookings, payments, receipts, stock, customers, and daily close actions.',
+    firstProof: 'Working checkout, booking flow, MMQR receipt, and daily close insight on their starting catalog.',
+    setupInputs: ['Business type', 'Menu or product list', 'Staff list', 'Wallet name', 'Logo and hours'],
+    pricingLabel: `${productTierMmk('deskpos', 'Counter')} setup`,
+    sourceCategory: 'spa',
+    sourceArea: 'Yangon, Myanmar',
+    contactPackage: 'DeskPOS Quickstart',
+    productArea: 'DeskPOS',
+    placeholder: 'Tell us your shop type, service/product list, payment wallet, staff, and what you need to close daily.',
+    next: 'Next: we configure a private shop link and prove one real sale and closeout flow.',
+  },
+  {
+    id: 'chat-ledger',
+    name: 'Viber / WhatsApp Business Ledger',
+    status: 'build-ready',
+    buyer: 'Distributor, wholesaler, home business, or service owner selling through chat',
+    promise: 'Turn messy chat orders into customers, open balances, invoices, delivery status, and follow-up tasks.',
+    firstProof: 'Clean table of recent orders, who owes money, and which customers need follow-up today.',
+    setupInputs: ['Chat export or screenshots', 'Product list', 'Payment rules', 'Delivery areas', 'Customer names'],
+    pricingLabel: `${serviceMmk('dashboard')} setup`,
+    sourceCategory: 'wholesale',
+    sourceArea: 'Yangon, Myanmar',
+    contactPackage: 'Viber / WhatsApp Business Ledger',
+    productArea: 'Custom Solutions & AI Agents',
+    placeholder: 'Paste ten recent chat orders or describe the chat workflow: orders, payment, delivery, and follow-up.',
+    next: 'Next: we extract one owner ledger from sample chats before building a repeatable flow.',
+  },
+  {
+    id: 'inbox-calendar-operator',
+    name: 'Inbox & Calendar Operator',
+    status: 'build-ready',
+    buyer: 'Founder, clinic admin, school operator, importer, or executive assistant',
+    promise: 'Read-only assistant that turns email and calendar context into drafts, prep notes, reminders, and approvals.',
+    firstProof: 'Morning action brief with drafted replies, meeting prep, and follow-up tasks waiting for approval.',
+    setupInputs: ['Gmail scope', 'Calendar scope', 'Reply examples', 'Important contacts', 'Escalation rules'],
+    pricingLabel: `${serviceMmk('ai-agent')} setup`,
+    sourceCategory: 'clinic',
+    sourceArea: 'Yangon, Myanmar',
+    contactPackage: 'Inbox & Calendar Operator',
+    productArea: 'Custom Solutions & AI Agents',
+    placeholder: 'Describe the inbox/calendar work that repeats every day, who approves replies, and what must stay read-only first.',
+    next: 'Next: we start read-only and produce one daily action brief before any send action exists.',
+  },
+  {
+    id: 'daily-intelligence-brief',
+    name: 'Daily Intelligence Brief Agent',
+    status: 'build-ready',
+    buyer: 'Importer, trader, factory owner, agency, or executive team',
+    promise: 'Start-of-day operating brief that watches chosen sources, flags changes, and turns signals into decisions.',
+    firstProof: 'One-page morning brief with what changed, why it matters, and exact follow-up actions.',
+    setupInputs: ['Watchlist sources', 'Companies or keywords', 'Inbox labels', 'Decision categories', 'Send time'],
+    pricingLabel: `${serviceMmk('ai-agent')} setup`,
+    sourceCategory: 'import export company',
+    sourceArea: 'Yangon, Myanmar',
+    contactPackage: 'Daily Intelligence Brief Agent',
+    productArea: 'Custom Solutions & AI Agents',
+    placeholder: 'List the sources, companies, inbox labels, or keywords you need watched, and what decisions the brief should support.',
+    next: 'Next: we deliver one read-only brief and tune the signal list before automating delivery.',
+  },
+  {
+    id: 'factory-ops-ledger',
+    name: 'Factory Ops Ledger',
+    status: 'build-ready',
+    buyer: 'Small or mid-size factory using Excel, PDF, email, chat, and paper records',
+    promise: 'Plant ledger that turns production, quality, maintenance, receiving, and CAPA logs into one risk queue.',
+    firstProof: 'Dashboard showing production, quality claims, open issues, and the top risks to review today.',
+    setupInputs: ['Daily production file', 'Quality records', 'Line or machine list', 'Maintenance log', 'Roles'],
+    pricingLabel: `${productTierMmk('factory', 'Operations build')} setup`,
+    sourceCategory: 'factory',
+    sourceArea: 'Yangon, Myanmar',
+    contactPackage: 'Factory Ops Ledger',
+    productArea: 'Factory & Operations App',
+    placeholder: 'Paste or describe the production, quality, maintenance, or issue files that should become one plant ledger.',
+    next: 'Next: we build a read-only plant dashboard before changing staff workflows.',
+  },
+  {
+    id: 'data-clean-report-agent',
+    name: 'Data Cleanup & Reporting Agent',
+    status: 'build-ready',
+    buyer: 'Accountant, operations manager, or owner receiving messy files every week',
+    promise: 'Repeatable agent that cleans files, validates columns, explains exceptions, and outputs a trusted report.',
+    firstProof: 'One messy file cleaned into the target table with exceptions highlighted and a short summary report.',
+    setupInputs: ['Sample files', 'Target report', 'Validation rules', 'Exception examples', 'Export destination'],
+    pricingLabel: `${serviceMmk('tool-week')} setup`,
+    sourceCategory: 'accounting firm',
+    sourceArea: 'Yangon, Myanmar',
+    contactPackage: 'Data Cleanup & Reporting Agent',
+    productArea: 'Custom Solutions & AI Agents',
+    placeholder: 'Paste or describe the messy weekly file, target report format, validation rules, and export destination.',
+    next: 'Next: we clean one real file and show the repeatable rule set before expanding.',
+  },
+]
+
+function renderPublicAgentTemplateCards() {
+  return publicAgentTemplates
+    .map((template) => {
+      const inputs = template.setupInputs.slice(0, 4).map((input) => `<li>${escapeHtml(input)}</li>`).join('')
+      return `<article class="template-card" id="${escapeHtml(template.id)}">
+                <small>${escapeHtml(template.status)} / ${escapeHtml(template.sourceCategory)}</small>
+                <h3>${escapeHtml(template.name)}</h3>
+                <p>${escapeHtml(template.promise)}</p>
+                <strong>${escapeHtml(template.pricingLabel)}</strong>
+                <span>First proof: ${escapeHtml(template.firstProof)}</span>
+                <ul>${inputs}</ul>
+                <a class="btn secondary" href="/contact/?template=${encodeURIComponent(template.id)}">Start this template</a>
+              </article>`
+    })
+    .join('\n')
+}
+
+function contactTemplatePackagesJson() {
+  const packages = Object.fromEntries(
+    publicAgentTemplates.map((template) => [
+      template.id,
+      {
+        id: template.id,
+        name: template.contactPackage,
+        heading: 'Start with this template.',
+        lead: `${template.name} - ${template.pricingLabel}. ${template.buyer}.`,
+        placeholder: template.placeholder,
+        price: template.pricingLabel,
+        firstProof: template.firstProof,
+        productArea: template.productArea,
+        sourceCategory: template.sourceCategory,
+        sourceArea: template.sourceArea,
+        status: template.status,
+        next: template.next,
+      },
+    ]),
+  )
+  return JSON.stringify(packages).replaceAll('<', '\\u003c')
 }
 
 function renderToolCards(products) {
@@ -2403,7 +2547,7 @@ ${unicornHeader}
         </div>
 
 
-        <section class="section">
+        <section class="section" id="products">
           <h2>What we actually build</h2>
           <div class="uvp-grid">
             <div class="uvp-card"><strong>You own it.</strong><span>No per-seat fees that grow when you hire. No vendor who can switch it off. The software is yours to keep.</span></div>
@@ -2633,9 +2777,17 @@ const unicornProductsHtml = `<!doctype html>
       .tool-card { border: 1px solid var(--line); border-radius: 24px; padding: 18px; background: rgba(255,255,255,0.58); }
       .tool-card h3 { margin-top: 8px; font-size: 20px; letter-spacing: -0.04em; }
       .tool-card p { margin-top: 10px; font-size: 14px; }
+      .template-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 20px; }
+      .template-card { display: grid; gap: 10px; border: 1px solid var(--line); border-radius: 24px; padding: 18px; background: rgba(255,255,255,0.62); box-shadow: 0 18px 54px rgba(13,17,23,0.08); }
+      .template-card small { color: var(--blue); font-size: 10px; font-weight: 950; letter-spacing: .13em; text-transform: uppercase; }
+      .template-card h3 { margin: 0; font-size: 22px; line-height: 1.04; letter-spacing: -0.04em; }
+      .template-card p, .template-card span, .template-card li { color: var(--muted); font-size: 13px; font-weight: 780; line-height: 1.35; }
+      .template-card strong { color: var(--ink); font-size: 15px; letter-spacing: -0.02em; }
+      .template-card ul { margin: 0; padding-left: 18px; }
+      .template-card .btn { width: fit-content; min-height: 42px; padding: 0 14px; font-size: 13px; }
       @media (max-width: 980px) {
         .shell { grid-template-columns: 1fr; }
-        .shell-grid, .setup, .tool-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .shell-grid, .setup, .tool-grid, .template-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         .market-card { grid-template-columns: 1fr; }
       }
       @media (max-width: 880px) {
@@ -2643,7 +2795,7 @@ const unicornProductsHtml = `<!doctype html>
         .feature img { border-left: 0; border-top: 1px solid var(--line); min-height: auto; aspect-ratio: 16 / 10; }
       }
       @media (max-width: 620px) {
-        .shell-grid, .setup, .tool-grid { grid-template-columns: 1fr; }
+        .shell-grid, .setup, .tool-grid, .template-grid { grid-template-columns: 1fr; }
       }
     </style>
     <script>
@@ -2723,6 +2875,15 @@ ${unicornHeader}
 
         </section>
 
+
+        <section class="section" id="agent-templates" aria-label="AI agent templates">
+          <div class="eyebrow">AI agent templates</div>
+          <h2>Start with one useful worker.</h2>
+          <p>Pick a template, send one source sample, and we return the first proof before anything is connected, sent, billed, or changed.</p>
+          <div class="template-grid">
+${renderPublicAgentTemplateCards()}
+          </div>
+        </section>
 
         <section class="section">
           <div class="final">
@@ -2849,6 +3010,13 @@ ${unicornHeader}
             <input type="hidden" name="source_file_names" value="" />
             <input type="hidden" name="source_file_count" value="0" />
             <input type="hidden" name="product_area" value="General enquiry" />
+            <input type="hidden" name="public_package" value="" />
+            <input type="hidden" name="template_id" value="" />
+            <input type="hidden" name="template_status" value="" />
+            <input type="hidden" name="template_source_category" value="" />
+            <input type="hidden" name="template_source_area" value="" />
+            <input type="hidden" name="first_proof_target" value="" />
+            <input type="hidden" name="price_hint" value="" />
             <div class="form-row">
               <label>Name<input autocomplete="name" name="name" required /></label>
               <label>Work email<input autocomplete="email" name="email" required type="email" /></label>
@@ -2920,6 +3088,7 @@ ${publicLanguageToggleScript}
           }
         };
         if (filePicker) filePicker.addEventListener('change', syncFiles);
+        const templatePackages = ${contactTemplatePackagesJson()};
         const packageAliases = {
         'ai-workflow-desk': 'document-extraction-ledger',
         'workdesk': 'back-office-workflow-desk',
@@ -3007,14 +3176,34 @@ ${publicLanguageToggleScript}
             placeholder: 'Paste the menu, payment proof, stock note, order export, or daily close source.'
           }
         };
-        const requestedPackage = search.get('tool') || search.get('package') || '';
-        const selectedPackage = packages[packageAliases[requestedPackage] || requestedPackage || ''];
+        const requestedTemplate = search.get('template') || search.get('agent_template') || '';
+        const selectedTemplate = templatePackages[requestedTemplate] || templatePackages[search.get('tool') || ''] || null;
+        const requestedPackage = selectedTemplate ? '' : (search.get('tool') || search.get('package') || '');
+        const selectedPackage = selectedTemplate || packages[packageAliases[requestedPackage] || requestedPackage || ''];
         if (selectedPackage) {
           set('workflow', selectedPackage.name);
           set('requested_package', selectedPackage.name);
           set('first_output', selectedPackage.name);
-          set('product_area', selectedPackage.name);
-          set('first_step', 'Review the source and reply with the first useful app.');
+          set('product_area', selectedPackage.productArea || selectedPackage.name);
+          set('public_package', selectedPackage.name);
+          set('first_step', selectedPackage.firstProof ? 'Produce first proof: ' + selectedPackage.firstProof : 'Review the source and reply with the first useful app.');
+          if (selectedTemplate) {
+            set('template_id', selectedTemplate.id);
+            set('template_status', selectedTemplate.status);
+            set('template_source_category', selectedTemplate.sourceCategory);
+            set('template_source_area', selectedTemplate.sourceArea);
+            set('first_proof_target', selectedTemplate.firstProof);
+            set('price_hint', selectedTemplate.price);
+            set('utm_campaign', search.get('utm_campaign') || 'agent_template_intake');
+            set('data', [
+              'Template intake: ' + selectedTemplate.id,
+              'Template status: ' + selectedTemplate.status,
+              'First proof: ' + selectedTemplate.firstProof,
+              'Source category: ' + selectedTemplate.sourceCategory,
+              'Source area: ' + selectedTemplate.sourceArea,
+              'Price hint: ' + selectedTemplate.price
+            ].join(' | '));
+          }
           const selectedBox = document.querySelector('[data-selected-path]');
           if (selectedBox) selectedBox.hidden = false;
           const selectedPath = selectedBox && selectedBox.querySelector('strong');

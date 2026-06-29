@@ -536,6 +536,7 @@ for (const [label, text] of [
 
 const homeHtml = readFileSync(resolve(staticDir, 'index.html'), 'utf8')
 const productsHtml = readFileSync(resolve(staticDir, 'products/index.html'), 'utf8')
+const contactHtml = readFileSync(resolve(staticDir, 'contact/index.html'), 'utf8')
 for (const token of [
   '<title>SUPERMEGA.dev — Custom Software for Myanmar Business</title>',
   'Your real work, turned into software.',
@@ -550,6 +551,28 @@ for (const token of [
   '/products/pos/',
 ]) {
   if (!productsHtml.includes(token)) fail('public_products_contract_missing', { token })
+}
+const publicAgentTemplateContract = [
+  ['deskpos-quickstart', 'DeskPOS Quickstart'],
+  ['chat-ledger', 'Viber / WhatsApp Business Ledger'],
+  ['inbox-calendar-operator', 'Inbox & Calendar Operator'],
+  ['daily-intelligence-brief', 'Daily Intelligence Brief Agent'],
+  ['factory-ops-ledger', 'Factory Ops Ledger'],
+  ['data-clean-report-agent', 'Data Cleanup & Reporting Agent'],
+]
+const htmlEscaped = (value) => String(value).replace(/&/g, '&amp;')
+for (const [id, name] of publicAgentTemplateContract) {
+  if (!productsHtml.includes(id) || (!productsHtml.includes(name) && !productsHtml.includes(htmlEscaped(name)))) {
+    fail('public_agent_template_missing_from_products', { id, name })
+  }
+  if (!contactHtml.includes(id)) {
+    fail('public_agent_template_missing_from_contact_router', { id })
+  }
+}
+for (const token of ['AI agent templates', 'name="template_id"', "search.get('template')"]) {
+  if (!productsHtml.includes(token) && !contactHtml.includes(token)) {
+    fail('public_agent_template_contract_missing', { token })
+  }
 }
 // Guard against re-introducing speculative/non-sellable product names on the public products page.
 for (const banned of ['AI-worker paid pilots', 'Agency Client Operator', 'Agent App Control Room', 'Custom Agent Workcell', 'Social Commerce Inbox Operator']) {

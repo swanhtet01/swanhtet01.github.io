@@ -4,6 +4,10 @@
 venv
 showroom/node_modules
 showroom/dist
+api_app.py
+requirements.txt
+pyproject.toml
+uv.lock
 assets
 command-center
 hyper_unicorn
