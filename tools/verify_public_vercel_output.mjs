@@ -5,6 +5,7 @@ import './enforce_current_public_product_output.mjs'
 const root = process.cwd()
 const outputRoot = resolve(root, '.vercel', 'output')
 const staticDir = resolve(outputRoot, 'static')
+const functionsDir = resolve(outputRoot, 'functions')
 
 function fail(message, extra = {}) {
   console.error(JSON.stringify({ status: 'error', message, ...extra }, null, 2))
@@ -537,6 +538,14 @@ for (const [label, text] of [
 const homeHtml = readFileSync(resolve(staticDir, 'index.html'), 'utf8')
 const productsHtml = readFileSync(resolve(staticDir, 'products/index.html'), 'utf8')
 const contactHtml = readFileSync(resolve(staticDir, 'contact/index.html'), 'utf8')
+const contactFunctionPath = resolve(functionsDir, 'api/contact-submissions.js.func/api/contact-submissions.js')
+if (!existsSync(contactFunctionPath)) fail('public_contact_function_missing')
+const contactFunctionSource = readFileSync(contactFunctionPath, 'utf8')
+for (const token of ['buildFirstProofTaskPayload', 'first_proof_task', 'owner approval before send/write/payment actions']) {
+  if (!contactFunctionSource.includes(token)) {
+    fail('public_contact_proof_task_contract_missing', { token })
+  }
+}
 for (const token of [
   '<title>SUPERMEGA.dev — Custom Software for Myanmar Business</title>',
   'Your real work, turned into software.',

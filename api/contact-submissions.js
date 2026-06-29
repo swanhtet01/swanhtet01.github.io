@@ -498,7 +498,70 @@ function leadLedgerPayload(record) {
   }
 }
 
+function listFromText(value) {
+  return text(value)
+    .split(/\r?\n|[|;]/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+}
+
+function defaultProofAcceptanceTests(record) {
+  return [
+    `Produces: ${record.first_proof_target || record.first_output || record.requested_package || 'First useful output'}`,
+    'Uses only approved sample sources on the first run.',
+    'Shows source trace for every important number, record, or recommendation.',
+    'Keeps every external action in approval-only mode until the owner signs off.',
+  ]
+}
+
+function buildFirstProofTaskPayload(record) {
+  const acceptanceTests = listFromText(record.acceptance_tests)
+  const proofTarget = record.first_proof_target || record.first_output || record.requested_package || 'First useful output'
+  const starterKitUrl = record.starter_kit_url || (record.template_id ? `/site/agent-templates/${record.template_id}.json` : '')
+  const templateName = record.public_package || record.requested_package || record.template_id || 'Custom SUPERMEGA template'
+  const sourceSummary = [
+    record.source_links ? `source links: ${record.source_links}` : '',
+    record.source_file_count ? `file count: ${record.source_file_count}` : '',
+    record.source_file_names ? `files: ${record.source_file_names}` : '',
+  ].filter(Boolean).join('; ')
+  const operatorBrief = [
+    `${templateName} first proof for ${record.company || record.name || record.email}.`,
+    `Goal: ${record.goal || 'Confirm the workflow and produce the first proof.'}`,
+    `First proof: ${proofTarget}.`,
+    starterKitUrl ? `Starter kit: ${starterKitUrl}.` : '',
+    sourceSummary ? `Sources: ${sourceSummary}.` : 'Sources: request the minimum sample sources before building.',
+    `Boundary: ${record.automation_boundary || 'Approval required before external sends, connector writes, payment actions, or live record edits.'}`,
+  ].filter(Boolean).join('\n')
+
+  return {
+    type: 'first_proof_build',
+    status: 'queued',
+    template_id: record.template_id || '',
+    template_status: record.template_status || '',
+    template_name: templateName,
+    starter_kit_url: starterKitUrl,
+    product_area: record.product_area || '',
+    source_category: record.template_source_category || '',
+    source_area: record.template_source_area || '',
+    price_hint: record.price_hint || '',
+    first_proof_target: proofTarget,
+    operator_brief: truncate(operatorBrief, 2200),
+    checklist: [
+      starterKitUrl ? `Open starter kit: ${starterKitUrl}` : 'Confirm the selected template and starter kit.',
+      'Review buyer goal, company context, source links, and attached file manifest.',
+      'Request the smallest missing sample needed to prove the first output.',
+      `Build the first proof: ${proofTarget}`,
+      'Return the proof with source trace, acceptance-test status, and exact next approval request.',
+      'Do not send, write, charge, or edit live business records without owner approval.',
+    ],
+    acceptance_tests: acceptanceTests.length ? acceptanceTests : defaultProofAcceptanceTests(record),
+    approval_required: true,
+    human_gate: 'owner approval before send/write/payment actions',
+  }
+}
+
 function pipelineActionPayload(record) {
+  const firstProofTask = buildFirstProofTaskPayload(record)
   return {
     action_id: record.task_id,
     lead_id: record.lead_id,
@@ -539,6 +602,7 @@ function pipelineActionPayload(record) {
       utm_source: record.utm_source,
       utm_medium: record.utm_medium,
       utm_campaign: record.utm_campaign,
+      first_proof_task: firstProofTask,
     },
   }
 }
@@ -991,7 +1055,7 @@ async function appendToGoogleSheet({ record }) {
   }
 }
 
-module.exports = async function handler(req, res) {
+async function handler(req, res) {
   cors(req, res)
   const pathname = new URL(req.url || '/api/contact-submissions', 'https://supermega.dev').pathname
 
@@ -1217,3 +1281,10 @@ module.exports = async function handler(req, res) {
     },
   })
 }
+
+handler.__test = {
+  buildFirstProofTaskPayload,
+  pipelineActionPayload,
+}
+
+module.exports = handler
