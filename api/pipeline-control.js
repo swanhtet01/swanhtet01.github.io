@@ -88,6 +88,9 @@ function firstProofPacket(row) {
   const starterKitUrl = text(result.starter_kit_url) || text(task.starter_kit_url) || text(payload.starter_kit_url)
   const firstProofTarget = text(result.first_proof_target) || text(task.first_proof_target) || text(payload.first_proof_target)
   const nextStep = text(row.next_step) || 'Share one approved sample source so we can build the first proof.'
+  const sourceTrace = list(task.source_trace || payload.source_trace)
+  if (starterKitUrl) sourceTrace.push(`Starter kit: ${starterKitUrl}`)
+  if (text(row.lead_id)) sourceTrace.push(`Lead: ${text(row.lead_id)}`)
   const buyerReplyDraft = [
     `Hi ${text(payload.name) || 'there'},`,
     '',
@@ -102,6 +105,25 @@ function firstProofPacket(row) {
     'Swan',
     'SUPERMEGA.dev',
   ].join('\n')
+  const proofDeliveryPacket = [
+    `# ${templateName || 'SUPERMEGA agent'} first proof`,
+    '',
+    `Status: draft - review before sending`,
+    `Lead: ${text(row.lead_id) || 'not set'}`,
+    `First proof target: ${firstProofTarget || 'not set'}`,
+    '',
+    '## Result',
+    '[Paste the first useful output here after reviewing the approved source sample.]',
+    '',
+    '## Source trace',
+    sourceTrace.length ? sourceTrace.map((item) => `- ${item}`).join('\n') : '- Add the approved source sample, file, screenshot, export, folder link, or email thread used.',
+    '',
+    '## Acceptance test status',
+    acceptanceTests.length ? acceptanceTests.map((item) => `- [ ] ${item}`).join('\n') : '- [ ] Shows the requested first proof with source trace.',
+    '',
+    '## Approval request',
+    'Please confirm whether this first proof matches the workflow. I will not send messages, write records, connect accounts, or take payment actions without owner approval.',
+  ].join('\n')
 
   return {
     status: isBrief ? 'operator_brief_ready' : 'queued_for_runner',
@@ -113,6 +135,7 @@ function firstProofPacket(row) {
     checklist,
     acceptance_tests: acceptanceTests,
     buyer_reply_draft: buyerReplyDraft,
+    proof_delivery_packet: proofDeliveryPacket,
     approval_required: result.approval_required !== undefined ? result.approval_required !== false : task.approval_required !== false,
     human_gate: text(result.human_gate) || text(task.human_gate) || 'owner approval before send/write/payment actions',
   }

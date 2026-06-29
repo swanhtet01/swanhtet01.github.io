@@ -69,6 +69,9 @@ assert.ok(action.first_proof.acceptance_tests.length >= 3)
 assert.ok(action.first_proof.buyer_reply_draft.includes('Hi there,'))
 assert.ok(action.first_proof.buyer_reply_draft.includes('First proof: One-page morning brief'))
 assert.ok(action.first_proof.buyer_reply_draft.includes('will not send messages'))
+assert.ok(action.first_proof.proof_delivery_packet.includes('# Daily Intelligence Brief Agent first proof'))
+assert.ok(action.first_proof.proof_delivery_packet.includes('## Source trace'))
+assert.ok(action.first_proof.proof_delivery_packet.includes('## Acceptance test status'))
 assert.ok(!JSON.stringify(action).includes('owner@example.com'))
 
 console.log(
@@ -80,6 +83,7 @@ console.log(
       checklist_items: action.first_proof.checklist.length,
       acceptance_tests: action.first_proof.acceptance_tests.length,
       buyer_reply_draft: 'ready',
+      proof_delivery_packet: 'ready',
     },
     null,
     2,

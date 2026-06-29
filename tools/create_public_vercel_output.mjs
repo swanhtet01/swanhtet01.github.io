@@ -4596,6 +4596,29 @@ const publicOperatorConsoleHtml = `<!doctype html>
               'Swan',
               'SUPERMEGA.dev'
             ].join('\\n'),
+            proof_delivery_packet:[
+              '# Daily Intelligence Brief Agent first proof',
+              '',
+              'Status: draft - review before sending',
+              'Lead: SAMPLE-SETUP',
+              'First proof target: One-page morning brief with what changed, why it matters, and exact follow-up actions.',
+              '',
+              '## Result',
+              '[Paste the first useful output here after reviewing the approved source sample.]',
+              '',
+              '## Source trace',
+              '- Starter kit: /site/agent-templates/daily-intelligence-brief.json',
+              '- Lead: SAMPLE-SETUP',
+              '',
+              '## Acceptance test status',
+              '- [ ] Shows what changed, why it matters, and exact follow-up actions.',
+              '- [ ] Uses only approved sample sources.',
+              '- [ ] Includes source trace for important claims.',
+              '- [ ] Keeps external actions approval-only.',
+              '',
+              '## Approval request',
+              'Please confirm whether this first proof matches the workflow. I will not send messages, write records, connect accounts, or take payment actions without owner approval.'
+            ].join('\\n'),
             approval_required:true,
             human_gate:'owner approval before send/write/payment actions'
           }
@@ -4620,6 +4643,11 @@ const publicOperatorConsoleHtml = `<!doctype html>
       const id = 'buyer-reply-'+index;
       return '<div class="operator-proof-section"><span>Buyer reply draft</span><textarea class="operator-reply" id="'+id+'" readonly>'+esc(proof.buyer_reply_draft)+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+id+'">Copy buyer reply</button></div>';
     }
+    function proofDeliveryPacket(proof, index){
+      if(!proof || !proof.proof_delivery_packet)return '';
+      const id = 'proof-delivery-'+index;
+      return '<div class="operator-proof-section"><span>Proof delivery packet</span><textarea class="operator-reply" id="'+id+'" readonly>'+esc(proof.proof_delivery_packet)+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+id+'">Copy proof packet</button></div>';
+    }
     function legacyCopy(el){
       el.focus();
       el.select();
@@ -4634,10 +4662,10 @@ const publicOperatorConsoleHtml = `<!doctype html>
       try{
         if(navigator.clipboard && window.isSecureContext){await navigator.clipboard.writeText(value);}
         else if(!legacyCopy(el)){throw new Error('legacy_copy_failed');}
-        setStatus({status:'copied', target:id, note:'Buyer reply copied. Review before sending.'});
+        setStatus({status:'copied', target:id, note:'Text copied. Review before sending.'});
       }catch(error){
         try{
-          if(legacyCopy(el)){setStatus({status:'copied', target:id, note:'Buyer reply copied. Review before sending.'});return;}
+          if(legacyCopy(el)){setStatus({status:'copied', target:id, note:'Text copied. Review before sending.'});return;}
         }catch(fallbackError){}
         setStatus({status:'copy_failed', target:id, reason:String(error.message||error)});
       }
@@ -4655,7 +4683,7 @@ const publicOperatorConsoleHtml = `<!doctype html>
       if(!actions.length){actionsEl.innerHTML = '<div class="operator-item">No recent actions.</div>';return}
       actionsEl.innerHTML = actions.map(function(action,index){
         const proof = action.first_proof;
-        const proofHtml = proof ? '<div class="operator-proof"><strong>'+esc(proof.title || 'First proof')+'</strong><div class="operator-meta"><span class="operator-chip">'+esc(proof.status)+'</span><span class="operator-chip">'+esc(proof.template_id)+'</span><span class="operator-chip">'+esc(proof.human_gate)+'</span></div><div>'+esc(proof.first_proof_target || '')+'</div>'+proofStarterLink(proof)+proofList('Checklist',proof.checklist)+proofList('Acceptance tests',proof.acceptance_tests)+proofBuyerReply(proof,index)+'</div>' : '';
+        const proofHtml = proof ? '<div class="operator-proof"><strong>'+esc(proof.title || 'First proof')+'</strong><div class="operator-meta"><span class="operator-chip">'+esc(proof.status)+'</span><span class="operator-chip">'+esc(proof.template_id)+'</span><span class="operator-chip">'+esc(proof.human_gate)+'</span></div><div>'+esc(proof.first_proof_target || '')+'</div>'+proofStarterLink(proof)+proofList('Checklist',proof.checklist)+proofList('Acceptance tests',proof.acceptance_tests)+proofBuyerReply(proof,index)+proofDeliveryPacket(proof,index)+'</div>' : '';
         return '<article class="operator-item"><strong>'+esc(action.title || action.action_type)+'</strong><div class="operator-meta"><span class="operator-chip">'+esc(action.status)+'</span><span class="operator-chip">'+esc(action.priority)+'</span><span class="operator-chip">'+esc(action.approval_state)+'</span><span>'+esc(action.lead_id)+'</span></div><div>'+esc(action.next_step || '')+'</div>'+proofHtml+'</article>';
       }).join('');
       actionsEl.querySelectorAll('[data-copy-target]').forEach(function(button){button.addEventListener('click',function(){copyDraft(button.getAttribute('data-copy-target'))})});
