@@ -1,0 +1,10 @@
+{
+    "app_host":  "pos.supermega.dev",
+    "deployment_id":  "dpl_77HEPkEPjmmyBVmA4f7rTGqt1P3Q",
+    "deployment_url":  "https://supermega-d796hje1l-swanhtet01s-projects.vercel.app",
+    "backend":  "api_app.py",
+    "backend_verified_by":  "vercel inspect + public /pos/login + public /api/health + POS host smoke + POS sales handoff smoke + DB diagnostic + POS enterprise strict smoke",
+    "verified_at":  "2026-06-23T08:23:42.2379849Z",
+    "project":  "supermega-app",
+    "reason":  "Legacy supermega-app POS lock retained only so guard_pos_alias.ps1 can fail closed. Superseded 2026-06-29: pos.supermega.dev is owned by spa-desk-pilot/DeskPOS and must not be repaired back to supermega-app."
+}

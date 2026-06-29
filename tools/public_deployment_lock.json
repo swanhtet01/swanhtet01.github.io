@@ -1,0 +1,11 @@
+{
+    "public_host":  "supermega-public-htzyehnk2-swanhtet01s-projects.vercel.app",
+    "deployment_id":  "dpl_XijAUjDWmFkFBUzGa6aXfCkqDPq1",
+    "locked_at":  "2026-06-29T07:01:09.8516364Z",
+    "domains":  [
+                    "supermega.dev",
+                    "www.supermega.dev"
+                ],
+    "project":  "supermega-public",
+    "reason":  "Separated public project deployment verified and attached to public domains."
+}

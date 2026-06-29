@@ -1,0 +1,59 @@
+{
+  "version": 1,
+  "updated_at": "2026-04-30",
+  "current_public_lock": "tools/public_deployment_lock.json",
+  "desired_projects": [
+    {
+      "key": "public",
+      "project": "supermega-public",
+      "purpose": "External sales site, contact intake, and public trust surface.",
+      "domains": ["supermega.dev", "www.supermega.dev"],
+      "build_mode": "public-static",
+      "deploy_script": "npm run vercel:deploy:public:prod",
+      "repair_script": "npm run vercel:alias:public",
+      "required_checks": ["npm run qa:public-live"]
+    },
+    {
+      "key": "app",
+      "project": "supermega-app",
+      "purpose": "Internal operator workspace, portal builder, and authenticated app shell.",
+      "domains": ["app.supermega.dev"],
+      "build_mode": "app-python",
+      "deploy_script": "npm run vercel:deploy:app:prod",
+      "required_checks": ["npm run smoke:domains"]
+    },
+    {
+      "key": "pos",
+      "project": "spa-desk-pilot",
+      "purpose": "DeskPOS client-facing POS product, onboarding links, and operator console for restaurant, spa, retail, and service pilots.",
+      "domains": ["pos.supermega.dev"],
+      "build_mode": "deskpos-vite",
+      "deploy_script": "cd ..\\..\\spa-desk-pilot && npx vercel --prod --yes",
+      "repair_script": "cd ..\\..\\spa-desk-pilot && npx vercel alias set <latest-spa-desk-pilot-deployment> pos.supermega.dev",
+      "required_checks": ["npx vercel inspect https://pos.supermega.dev", "fetch https://pos.supermega.dev"]
+    },
+    {
+      "key": "ytf",
+      "project": "supermega-ytf",
+      "purpose": "Yangon Tyre client portal and client-specific operating system.",
+      "domains": ["ytf.supermega.dev"],
+      "build_mode": "ytf-python",
+      "deploy_script": "npm run vercel:deploy:ytf",
+      "required_checks": ["npm run qa:ytf"]
+    }
+  ],
+  "future_templates": [
+    {
+      "key": "client",
+      "project_pattern": "supermega-client-{slug}",
+      "domain_pattern": "{slug}.supermega.dev",
+      "purpose": "Dedicated client portal created from the tenant template."
+    },
+    {
+      "key": "side-job",
+      "project_pattern": "supermega-lab-{slug}",
+      "domain_pattern": "{slug}.supermega.dev",
+      "purpose": "Small sellable product experiments promoted only after intake, QA, and support path exist."
+    }
+  ]
+}
