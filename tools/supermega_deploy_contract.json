@@ -34,12 +34,12 @@
     },
     {
       "key": "ytf",
-      "project": "supermega-ytf",
-      "purpose": "Yangon Tyre client portal and client-specific operating system.",
+      "project": "ytf-app",
+      "purpose": "Yangon Tyre operating intelligence app, data entry APIs, and client-specific operating surface.",
       "domains": ["ytf.supermega.dev"],
-      "build_mode": "ytf-python",
-      "deploy_script": "npm run vercel:deploy:ytf",
-      "required_checks": ["npm run qa:ytf"]
+      "build_mode": "ytf-vite-functions",
+      "deploy_script": "cd ..\\..\\ytf-app && npx vercel --prod --yes",
+      "required_checks": ["npx vercel inspect https://ytf.supermega.dev", "fetch https://ytf.supermega.dev"]
     }
   ],
   "future_templates": [
