@@ -391,6 +391,201 @@ function renderFirstProofBrief(row, lead = {}) {
   }
 }
 
+function mergedLeadFromRow(row, fetchedLead = {}) {
+  const payload = parsePayload(row.payload)
+  const payloadLead = parsePayload(payload.lead)
+  return {
+    ...payloadLead,
+    ...Object.fromEntries(Object.entries(fetchedLead || {}).filter(([, value]) => text(value))),
+    lead_id: text(fetchedLead?.lead_id || payloadLead.lead_id || row.lead_id),
+  }
+}
+
+function offerFromRow(row) {
+  const payload = parsePayload(row.payload)
+  return parsePayload(payload.offer)
+}
+
+function renderSourceRequestPacket(row, lead = {}) {
+  const payload = parsePayload(row.payload)
+  const offer = offerFromRow(row)
+  const packageName = text(offer.package || lead.requested_package || payload.requested_package) || 'SuperMega workflow'
+  const sourceRequest = text(offer.source_request || row.next_step) || 'Ask for one approved source sample.'
+  const firstOutput = text(offer.first_output) || 'One useful workflow screen with source, owner, status, and next action.'
+  const buyer = text(lead.company || lead.name || lead.lead_id || row.lead_id) || 'buyer'
+  const packet = [
+    `# ${packageName} source request packet`,
+    '',
+    'Status: internal_draft_ready',
+    `Lead: ${text(row.lead_id || lead.lead_id) || 'not set'}`,
+    `Buyer: ${buyer}`,
+    `Package: ${packageName}`,
+    'External send state: blocked_until_owner_approval',
+    'Payment or connector state: blocked_until_owner_approval',
+    '',
+    '## Source sample to request',
+    sourceRequest,
+    '',
+    '## Why this source matters',
+    `It lets SuperMega prepare the first proof: ${firstOutput}`,
+    '',
+    '## Draft buyer ask',
+    `Please send one current screenshot, sheet, export, file, or thread that shows this workflow. I will use it only to prepare the first proof and will not connect accounts, send messages, write records, or request payment without owner approval.`,
+    '',
+    '## Guardrails',
+    '- Internal draft only.',
+    '- No external send from the runner.',
+    '- No payment request, connector access, or production write.',
+    '- Owner approval required before the buyer sees this message.',
+  ].join('\n')
+  return {
+    status: 'ready',
+    type: 'source_request_packet',
+    lead_id: text(row.lead_id || lead.lead_id) || null,
+    package_name: packageName,
+    source_request: sourceRequest,
+    first_output: firstOutput,
+    packet,
+    external_action_state: 'blocked_until_owner_approval',
+    payment_or_connector_state: 'blocked_until_owner_approval',
+    approval_required: true,
+    sent: false,
+    guardrails: [
+      'internal_draft_only',
+      'no_external_send_from_runner',
+      'owner_approval_before_buyer_message',
+      'no_payment_or_connector_without_owner_approval',
+    ],
+  }
+}
+
+function renderOfferPacket(row, lead = {}) {
+  const payload = parsePayload(row.payload)
+  const offer = offerFromRow(row)
+  const packageName = text(offer.package || lead.requested_package || payload.requested_package) || 'SuperMega workflow'
+  const firstOutput = text(offer.first_output) || 'One useful workflow screen with source, owner, status, and next action.'
+  const priceBand = text(offer.price_band) || 'Scope first; build starts only after source, access, and approval boundary are confirmed.'
+  const sourceRequest = text(offer.source_request) || 'Ask for one approved source sample.'
+  const buyer = text(lead.company || lead.name || lead.lead_id || row.lead_id) || 'buyer'
+  const packet = [
+    `# ${packageName} offer packet`,
+    '',
+    'Status: internal_offer_packet_ready',
+    `Lead: ${text(row.lead_id || lead.lead_id) || 'not set'}`,
+    `Buyer: ${buyer}`,
+    `Workflow signal: ${text(lead.workflow || lead.goal || lead.next_step) || 'source sample required'}`,
+    '',
+    '## First useful output',
+    firstOutput,
+    '',
+    '## Setup boundary',
+    priceBand,
+    '',
+    '## Required source',
+    sourceRequest,
+    '',
+    '## Owner approval checklist',
+    '- Confirm first output matches buyer pain.',
+    '- Confirm source request is safe and specific.',
+    '- Confirm price/scope before payment request.',
+    '- Confirm no connector or production write is needed for the first proof.',
+    '',
+    '## Guardrails',
+    '- Offer packet is internal until founder approval.',
+    '- No live payment link is created here.',
+    '- No account connection or production workspace starts from this packet.',
+    '- Revenue remains 0 until payment proof exists.',
+  ].join('\n')
+  return {
+    status: 'ready',
+    type: 'offer_packet',
+    lead_id: text(row.lead_id || lead.lead_id) || null,
+    package_name: packageName,
+    first_output: firstOutput,
+    price_band: priceBand,
+    source_request: sourceRequest,
+    packet,
+    external_action_state: 'blocked_until_owner_approval',
+    payment_or_connector_state: 'blocked_until_owner_approval',
+    real_mrr_delta: 0,
+    approval_required: true,
+    sent: false,
+    guardrails: [
+      'internal_offer_packet_only',
+      'no_live_payment_link',
+      'no_workspace_before_payment_proof',
+      'no_revenue_claim_without_payment_proof',
+    ],
+  }
+}
+
+function renderBuyerReplyDraft(row, lead = {}) {
+  const payload = parsePayload(row.payload)
+  const offer = offerFromRow(row)
+  const packageName = text(offer.package || lead.requested_package || payload.requested_package) || 'SuperMega workflow'
+  const firstOutput = text(offer.first_output) || 'one useful workflow screen'
+  const sourceRequest = text(offer.source_request || row.next_step) || 'one approved source sample'
+  const name = text(lead.name) || 'there'
+  const to = text(lead.email) || null
+  const subject = `Re: ${packageName}`
+  const body = [
+    `Hi ${name},`,
+    '',
+    `I can start with a ${packageName} first proof.`,
+    '',
+    `First useful output: ${firstOutput}`,
+    '',
+    `Please send ${sourceRequest}. I will use it only to prepare the first proof.`,
+    '',
+    'I will not connect accounts, send external messages, write production records, create a payment request, or start a private workspace without owner approval.',
+    '',
+    'Swan',
+    'SUPERMEGA.dev',
+  ].join('\n')
+  return {
+    status: 'ready',
+    type: 'buyer_reply_draft',
+    lead_id: text(row.lead_id || lead.lead_id) || null,
+    to,
+    subject,
+    body,
+    draft: { to, subject, body, status: 'draft' },
+    external_action_state: 'draft_only_until_owner_approval',
+    payment_or_connector_state: 'blocked_until_owner_approval',
+    approval_required: true,
+    sent: false,
+    guardrails: [
+      'draft_only_no_send',
+      'owner_approval_before_external_send',
+      'no_payment_or_connector_without_owner_approval',
+    ],
+  }
+}
+
+function renderSalesAutopilotDraft(row, fetchedLead = {}) {
+  const lead = mergedLeadFromRow(row, fetchedLead)
+  switch (row.action_type) {
+    case 'source_request':
+      return renderSourceRequestPacket(row, lead)
+    case 'offer_packet':
+      return renderOfferPacket(row, lead)
+    case 'reply_draft':
+      return renderBuyerReplyDraft(row, lead)
+    default:
+      return { status: 'skipped', reason: 'not_sales_autopilot_action', action_type: row.action_type }
+  }
+}
+
+async function dispatchSalesAutopilotDraft(store, row) {
+  let lead = null
+  try {
+    lead = await fetchLead(store, row.lead_id)
+  } catch {
+    lead = null
+  }
+  return renderSalesAutopilotDraft(row, lead || {})
+}
+
 async function dispatchSendReply(store, row) {
   // Human-in-the-loop guarantee: send_reply NEVER auto-sends. It dispatches an outbound email to a
   // lead ONLY when the action row was explicitly approved (the approval flow must set
@@ -486,6 +681,11 @@ async function processRow(store, row) {
       case 'lead_followup':
       case 'draft_reply':
         result = await dispatchDraftReply(store, row)
+        break
+      case 'source_request':
+      case 'offer_packet':
+      case 'reply_draft':
+        result = await dispatchSalesAutopilotDraft(store, row)
         break
       case 'send_reply':
         result = await dispatchSendReply(store, row)
@@ -594,6 +794,10 @@ async function handler(req, res) {
 
 handler.__test = {
   renderFirstProofBrief,
+  renderSalesAutopilotDraft,
+  renderSourceRequestPacket,
+  renderOfferPacket,
+  renderBuyerReplyDraft,
   claimPostgresBatch,
   updatePostgresAction,
   fetchPostgresLead,

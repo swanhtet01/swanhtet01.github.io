@@ -565,7 +565,7 @@ for (const token of ['buildSolutionRoute', 'autopilot_solution_router', 'solutio
 const actionRunnerFunctionPath = resolve(functionsDir, 'api/action-runner.js.func/api/action-runner.js')
 if (!existsSync(actionRunnerFunctionPath)) fail('public_action_runner_function_missing')
 const actionRunnerFunctionSource = readFileSync(actionRunnerFunctionPath, 'utf8')
-for (const token of ['renderFirstProofBrief', 'first_proof_operator_brief', 'Solution route', 'solution_route_packet', 'Implementation blueprint', 'implementation_blueprint_packet', 'Client kickoff pack', 'client_kickoff_packet', 'Intake job', 'intake_job_packet', 'Source trace', 'Do not send, write, charge, or edit live business records', 'claimPostgresBatch', 'vercel_postgres_neon']) {
+for (const token of ['renderFirstProofBrief', 'first_proof_operator_brief', 'Solution route', 'solution_route_packet', 'Implementation blueprint', 'implementation_blueprint_packet', 'Client kickoff pack', 'client_kickoff_packet', 'Intake job', 'intake_job_packet', 'Source trace', 'Do not send, write, charge, or edit live business records', 'renderSalesAutopilotDraft', 'source_request_packet', 'offer_packet', 'buyer_reply_draft', 'draft_only_no_send', 'owner_approval_before_external_send', 'no_revenue_claim_without_payment_proof', 'claimPostgresBatch', 'vercel_postgres_neon']) {
   if (!actionRunnerFunctionSource.includes(token)) {
     fail('public_action_runner_first_proof_contract_missing', { token })
   }
