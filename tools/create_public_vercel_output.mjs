@@ -17,6 +17,7 @@ const outputDir = resolve(root, '.vercel', 'output')
 const staticDir = resolve(outputDir, 'static')
 const functionsDir = resolve(outputDir, 'functions', 'api')
 const nodeFunctionDependencies = [
+  '@vercel/blob',
   'pg',
   'pg-cloudflare',
   'pg-connection-string',
@@ -3497,8 +3498,17 @@ async function writeNodeFunction(name, opts = {}) {
   }
   await mkdir(resolve(functionDir, 'node_modules'), { recursive: true })
   await mkdir(resolve(functionDir, 'api', 'node_modules'), { recursive: true })
-  for (const dependency of nodeFunctionDependencies) {
+  const copiedDependencies = new Set()
+  const copyNodeDependency = async (dependency) => {
+    if (copiedDependencies.has(dependency)) return
+    copiedDependencies.add(dependency)
     const sourceDependency = resolve(root, 'node_modules', dependency)
+    try {
+      await stat(sourceDependency)
+    } catch (error) {
+      if (error?.code === 'ENOENT') return
+      throw error
+    }
     await Promise.all([
       cp(sourceDependency, resolve(functionDir, 'node_modules', dependency), {
         recursive: true,
@@ -3508,10 +3518,23 @@ async function writeNodeFunction(name, opts = {}) {
         recursive: true,
         force: true,
       }),
-    ]).catch((error) => {
+    ])
+    try {
+      const packageJson = JSON.parse(await readFile(resolve(sourceDependency, 'package.json'), 'utf8'))
+      const childDependencies = Object.keys({
+        ...(packageJson.dependencies || {}),
+        ...(packageJson.optionalDependencies || {}),
+      })
+      for (const childDependency of childDependencies) {
+        await copyNodeDependency(childDependency)
+      }
+    } catch (error) {
       if (error?.code === 'ENOENT') return
       throw error
-    })
+    }
+  }
+  for (const dependency of nodeFunctionDependencies) {
+    await copyNodeDependency(dependency)
   }
   await writeFile(
     resolve(functionDir, 'package.json'),
@@ -4564,6 +4587,7 @@ const publicOperatorConsoleHtml = `<!doctype html>
         runtime_status:'sample_only',
         metrics:{open_action_count:2,recent_lead_count:1,recent_action_count:2,proof_backed_mrr_mmk:900000,bank_verified_mrr_mmk:0,bank_unverified_mrr_mmk:900000},
         approval_inbox:{status:'sample',pending_count:1},
+        approval_ledger:{status:'sample_private_ledger',adapter:'vercel_blob',access:'private',sdk:'sample',recent:[{decision:'pending',title:'Sample Daily Intelligence Brief source request approval',recorded_at:'SAMPLE-RECORDED-AT',approval_reference:'SAMPLE-OWNER-REVIEW'}]},
         revenue_proof_board:{
           status:'ready',
           board_type:'revenue_proof_board',
@@ -5729,16 +5753,20 @@ const publicOperatorConsoleHtml = `<!doctype html>
     }
     function renderAutopilotCommandBoard(data){
       const board = data.autopilot_command_board || {};
+      const ledger = data.approval_ledger || {};
       if(!board.status){
         commandBoardEl.innerHTML = '<span>Autopilot command board</span><div>No command queue loaded.</div>';
         return;
       }
       const commands = (board.commands || []).slice(0,5);
       const commandList = commands.length ? '<ul>'+commands.map(function(command){return '<li><strong>'+esc(command.priority || 'medium')+'</strong> '+esc(command.lane || 'operator_review')+' - '+esc(command.title || '')+'<br><span>'+esc(command.suggested_action || '')+'</span></li>'}).join('')+'</ul>' : '<div>No commands ready.</div>';
+      const ledgerRecent = (ledger.recent || []).slice(0,3);
+      const ledgerList = ledgerRecent.length ? '<ul>'+ledgerRecent.map(function(item){return '<li><strong>'+esc(item.decision || item.status || 'record')+'</strong> '+esc(item.title || item.package_name || item.action_id || item.lead_id || '')+'<br><span>'+esc(item.recorded_at || item.approval_reference || '')+'</span></li>'}).join('')+'</ul>' : '<div>No approval ledger records loaded.</div>';
       commandBoardEl.innerHTML = [
         '<span>Autopilot command board</span>',
-        '<div class="operator-meta"><span class="operator-chip">'+esc(board.status || 'ready')+'</span><span class="operator-chip">'+esc(board.mode || 'approval_gated_autopilot')+'</span><span class="operator-chip">commands '+esc(board.command_count ?? commands.length)+'</span><span class="operator-chip">internal '+esc(board.internal_autorun_count ?? 0)+'</span><span class="operator-chip">owner gates '+esc(board.owner_approval_count ?? 0)+'</span></div>',
+        '<div class="operator-meta"><span class="operator-chip">'+esc(board.status || 'ready')+'</span><span class="operator-chip">'+esc(board.mode || 'approval_gated_autopilot')+'</span><span class="operator-chip">commands '+esc(board.command_count ?? commands.length)+'</span><span class="operator-chip">internal '+esc(board.internal_autorun_count ?? 0)+'</span><span class="operator-chip">owner gates '+esc(board.owner_approval_count ?? 0)+'</span><span class="operator-chip">approval ledger '+esc(ledger.status || 'not_configured')+'</span></div>',
         '<div class="operator-proof-section"><span>Top money commands</span>'+commandList+'</div>',
+        '<div class="operator-proof-section" id="approval-ledger"><span>Approval fallback ledger</span><div class="operator-meta"><span class="operator-chip">'+esc(ledger.adapter || 'vercel_blob')+'</span><span class="operator-chip">'+esc(ledger.access || 'private')+'</span><span class="operator-chip">'+esc(ledger.sdk || ledger.reason || 'status')+'</span></div>'+ledgerList+'</div>',
         '<div class="operator-proof-section"><span>Autopilot command queue</span><textarea class="operator-reply" id="autopilot-command-queue" readonly>'+esc(board.command_queue_csv || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="autopilot-command-queue">Copy autopilot command queue</button></div>',
         '<div class="operator-proof-section"><span>Autopilot daily brief</span><textarea class="operator-reply" id="autopilot-daily-brief" readonly>'+esc(board.operator_brief_markdown || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="autopilot-daily-brief">Copy autopilot daily brief</button></div>'
       ].join('');

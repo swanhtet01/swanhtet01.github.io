@@ -4,7 +4,14 @@ import { createRequire } from 'node:module'
 const require = createRequire(import.meta.url)
 const handler = require('../api/pipeline-control.js')
 
-const { autopilotDraftFromPayload, buildAutopilotDraftApprovalRecord, safeAction } = handler.__test
+const {
+  autopilotApprovalLedgerStatus,
+  autopilotDraftFromPayload,
+  buildAutopilotApprovalLedgerRecord,
+  buildAutopilotDraftApprovalRecord,
+  safeAction,
+  writeAutopilotApprovalLedger,
+} = handler.__test
 
 const draft = {
   status: 'ready',
@@ -76,6 +83,35 @@ assert.equal(fallbackDraft.external_action_state, 'blocked_until_owner_approval'
 assert.equal(fallbackDraft.payment_or_connector_state, 'blocked_until_owner_approval')
 assert.equal(fallbackDraft.sent, false)
 assert.equal(fallbackDraft.real_mrr_delta, 0)
+
+const ledgerRecord = buildAutopilotApprovalLedgerRecord({
+  approval,
+  draft,
+  blocker: { status: 'error', provider: 'vercel_postgres_neon', adapter: 'pg', reason: 'vercel_postgres_query_failed', detail: 'quota exceeded' },
+  fallbackDelivery: { status: 'ready', adapter: 'email_fallback' },
+})
+assert.equal(ledgerRecord.status, 'autopilot_approval_ledger_recorded')
+assert.equal(ledgerRecord.ledger_type, 'owner_approval_fallback')
+assert.equal(ledgerRecord.decision, 'approved')
+assert.equal(ledgerRecord.sent, false)
+assert.equal(ledgerRecord.real_mrr_delta, 0)
+assert.equal(ledgerRecord.primary_database.reason, 'vercel_postgres_query_failed')
+assert.equal(ledgerRecord.notification.adapter, 'email_fallback')
+assert.ok(ledgerRecord.guardrails.includes('private_internal_ledger'))
+assert.ok(ledgerRecord.guardrails.includes('no_mrr_delta_without_payment_proof'))
+
+const ledgerStatus = autopilotApprovalLedgerStatus()
+assert.equal(ledgerStatus.adapter, 'vercel_blob')
+assert.equal(ledgerStatus.access, 'private')
+
+const missingBlobWrite = await writeAutopilotApprovalLedger({
+  approval,
+  draft,
+  blocker: { status: 'error', reason: 'postgres_not_configured' },
+  fallbackDelivery: { status: 'error', reason: 'resend_not_configured' },
+}, { blobSdk: null })
+assert.equal(missingBlobWrite.status, 'skipped')
+assert.equal(missingBlobWrite.adapter, 'vercel_blob')
 
 const missingReference = buildAutopilotDraftApprovalRecord({ decision: 'approved' }, draft)
 assert.equal(missingReference.status, 'error')

@@ -1262,6 +1262,181 @@ function autopilotDraftFromPayload(payload = {}) {
   }
 }
 
+function autopilotApprovalLedgerPrefix() {
+  return text(process.env.SUPERMEGA_AUTOPILOT_APPROVAL_LEDGER_PREFIX) || 'supermega/autopilot-approvals'
+}
+
+function loadBlobSdk() {
+  try {
+    return require('@vercel/blob')
+  } catch {
+    return null
+  }
+}
+
+function blobTokenLikelyConfigured() {
+  return Boolean(envText('BLOB_READ_WRITE_TOKEN') || (envText('VERCEL_OIDC_TOKEN') && envText('BLOB_STORE_ID')))
+}
+
+function autopilotApprovalLedgerStatus() {
+  const sdk = loadBlobSdk()
+  const tokenConfigured = blobTokenLikelyConfigured()
+  return {
+    status: sdk && tokenConfigured ? 'ready' : 'not_configured',
+    adapter: 'vercel_blob',
+    prefix: autopilotApprovalLedgerPrefix(),
+    sdk: sdk ? 'available' : 'missing',
+    token: tokenConfigured ? 'configured_or_oidc' : 'missing',
+    access: 'private',
+    purpose: 'Durable fallback ledger for owner-approved autopilot draft decisions when SQL is degraded.',
+  }
+}
+
+function buildAutopilotApprovalLedgerRecord({ approval, draft, blocker, fallbackDelivery }) {
+  const recordedAt = text(approval.recorded_at) || new Date().toISOString()
+  return {
+    status: 'autopilot_approval_ledger_recorded',
+    ledger_type: 'owner_approval_fallback',
+    recorded_at: recordedAt,
+    action_id: text(approval.action_id),
+    lead_id: text(approval.lead_id || draft.lead_id),
+    decision: text(approval.decision),
+    approval_reference: text(approval.approval_reference),
+    operator_note: text(approval.operator_note),
+    draft_type: text(approval.draft_type || draft.type),
+    package_name: text(approval.package_name || draft.package_name),
+    title: text(approval.title || draft.title || draft.package_name),
+    draft_packet: text(draft.packet || draft.body),
+    external_action_state: text(approval.external_action_state),
+    payment_or_connector_state: text(approval.payment_or_connector_state),
+    approved_to_send: approval.approved_to_send === true,
+    sent: false,
+    real_mrr_delta: 0,
+    primary_database: {
+      status: text(blocker?.status),
+      provider: text(blocker?.provider),
+      adapter: text(blocker?.adapter),
+      code: text(blocker?.code),
+      reason: text(blocker?.reason),
+      detail: text(blocker?.detail),
+    },
+    notification: {
+      status: text(fallbackDelivery?.status),
+      adapter: text(fallbackDelivery?.adapter),
+      reason: text(fallbackDelivery?.reason),
+    },
+    guardrails: [
+      'private_internal_ledger',
+      'runner_does_not_send',
+      'manual_owner_send_only_after_review',
+      'no_payment_or_connector_change_from_draft_approval',
+      'no_mrr_delta_without_payment_proof',
+    ],
+  }
+}
+
+function ledgerPathForApproval(record) {
+  const date = text(record.recorded_at).slice(0, 10) || new Date().toISOString().slice(0, 10)
+  const idPart = slugPart(record.action_id || record.lead_id || record.draft_type || 'approval', 'approval')
+  const nonce = crypto.randomUUID ? crypto.randomUUID() : crypto.randomBytes(8).toString('hex')
+  return `${autopilotApprovalLedgerPrefix()}/${date}/${date}-${idPart}-${nonce}.json`
+}
+
+async function writeAutopilotApprovalLedger({ approval, draft, blocker, fallbackDelivery }, opts = {}) {
+  const sdk = Object.prototype.hasOwnProperty.call(opts, 'blobSdk') ? opts.blobSdk : loadBlobSdk()
+  if (!sdk || typeof sdk.put !== 'function') {
+    return { status: 'skipped', adapter: 'vercel_blob', reason: 'blob_sdk_missing', access: 'private' }
+  }
+  if (!blobTokenLikelyConfigured()) {
+    return { status: 'skipped', adapter: 'vercel_blob', reason: 'blob_token_not_configured', access: 'private' }
+  }
+  const record = buildAutopilotApprovalLedgerRecord({ approval, draft, blocker, fallbackDelivery })
+  const pathname = ledgerPathForApproval(record)
+  try {
+    const saved = await sdk.put(pathname, JSON.stringify(record, null, 2), {
+      access: 'private',
+      addRandomSuffix: false,
+      allowOverwrite: false,
+      contentType: 'application/json',
+    })
+    return {
+      status: 'ready',
+      adapter: 'vercel_blob',
+      access: 'private',
+      pathname: text(saved.pathname || pathname),
+      uploaded_at: record.recorded_at,
+      decision: record.decision,
+      sent: false,
+      real_mrr_delta: 0,
+    }
+  } catch (error) {
+    return {
+      status: 'error',
+      adapter: 'vercel_blob',
+      reason: 'blob_ledger_write_failed',
+      detail: text(error && error.message).slice(0, 180),
+      access: 'private',
+    }
+  }
+}
+
+async function readAutopilotApprovalLedger(limit = 5, opts = {}) {
+  const sdk = Object.prototype.hasOwnProperty.call(opts, 'blobSdk') ? opts.blobSdk : loadBlobSdk()
+  if (!sdk || typeof sdk.list !== 'function' || typeof sdk.get !== 'function') {
+    return { ...autopilotApprovalLedgerStatus(), recent: [], reason: 'blob_sdk_missing' }
+  }
+  if (!blobTokenLikelyConfigured()) {
+    return { ...autopilotApprovalLedgerStatus(), recent: [], reason: 'blob_token_not_configured' }
+  }
+  const boundedLimit = Math.max(1, Math.min(Number(limit) || 5, 20))
+  try {
+    const listed = await sdk.list({ prefix: `${autopilotApprovalLedgerPrefix()}/`, limit: boundedLimit })
+    const blobs = Array.isArray(listed.blobs) ? listed.blobs : []
+    const recent = []
+    for (const blob of blobs) {
+      const pathname = text(blob.pathname)
+      if (!pathname) continue
+      try {
+        const got = await sdk.get(pathname, { access: 'private' })
+        const body = got?.stream ? await new Response(got.stream).text() : ''
+        const record = parseJsonObject(body)
+        if (Object.keys(record).length) {
+          recent.push({
+            action_id: text(record.action_id),
+            lead_id: text(record.lead_id),
+            decision: text(record.decision),
+            approval_reference: text(record.approval_reference),
+            draft_type: text(record.draft_type),
+            package_name: text(record.package_name),
+            title: text(record.title),
+            recorded_at: text(record.recorded_at),
+            external_action_state: text(record.external_action_state),
+            payment_or_connector_state: text(record.payment_or_connector_state),
+            sent: record.sent === true,
+            real_mrr_delta: moneyAmount(record.real_mrr_delta),
+          })
+        }
+      } catch {
+        recent.push({ pathname, status: 'unreadable_private_blob' })
+      }
+    }
+    return {
+      ...autopilotApprovalLedgerStatus(),
+      status: 'ready',
+      recent_count: recent.length,
+      recent,
+    }
+  } catch (error) {
+    return {
+      ...autopilotApprovalLedgerStatus(),
+      status: 'error',
+      reason: 'blob_ledger_read_failed',
+      detail: text(error && error.message).slice(0, 180),
+      recent: [],
+    }
+  }
+}
+
 async function sendAutopilotDraftApprovalEmail({ approval, draft, blocker }) {
   const apiKey = envText('RESEND_API_KEY')
   if (!apiKey) return { status: 'error', reason: 'resend_not_configured' }
@@ -2272,8 +2447,85 @@ async function recordAutopilotDraftApproval(payload) {
   const actionId = text(payload.action_id)
   const leadId = text(payload.lead_id)
   if (!actionId && !leadId) return { status: 'error', reason: 'missing_action_or_lead_id' }
-  if (!datastore.postgresConfigured()) return { status: 'error', reason: 'postgres_not_configured' }
   const allowedTypes = ['source_request_packet', 'offer_packet', 'buyer_reply_draft']
+
+  const fallbackFromPayload = async (blocker) => {
+    const fallbackDraft = autopilotDraftFromPayload(payload)
+    if (!allowedTypes.includes(text(fallbackDraft.type)) || (!fallbackDraft.packet && !fallbackDraft.body && !fallbackDraft.title && !fallbackDraft.package_name)) {
+      return {
+        ...blocker,
+        fallback: {
+          status: 'error',
+          reason: 'autopilot_draft_not_found',
+        },
+      }
+    }
+    const approval = buildAutopilotDraftApprovalRecord({ ...payload, action_id: actionId, lead_id: leadId || fallbackDraft.lead_id }, fallbackDraft)
+    if (approval.status === 'error') return approval
+    const fallbackDelivery = await sendAutopilotDraftApprovalEmail({ approval, draft: fallbackDraft, blocker })
+    const approvalLedger = await writeAutopilotApprovalLedger({ approval, draft: fallbackDraft, blocker, fallbackDelivery })
+    if (fallbackDelivery.status !== 'ready' && approvalLedger.status !== 'ready') {
+      return {
+        ...blocker,
+        fallback_delivery: fallbackDelivery,
+        approval_ledger: approvalLedger,
+        autopilot_draft_approval: approval,
+      }
+    }
+    const approvalState = approval.decision === 'approved' ? 'approved' : 'changes_requested'
+    const nextStep =
+      approval.decision === 'approved'
+        ? 'Fallback recorded approval. Manual owner send is still required; record real revenue only after payment proof.'
+        : 'Fallback recorded requested changes. Revise the draft before any buyer-visible send.'
+    return {
+      status: 'ready',
+      adapter: approvalLedger.status === 'ready' && fallbackDelivery.status === 'ready'
+        ? 'email_and_blob_fallback'
+        : approvalLedger.status === 'ready'
+          ? 'blob_fallback'
+          : 'email_fallback',
+      primary_database: {
+        status: blocker.status || null,
+        provider: blocker.provider || null,
+        adapter: blocker.adapter || null,
+        code: blocker.code || null,
+        reason: blocker.reason || null,
+        detail: blocker.detail || null,
+      },
+      fallback_delivery: fallbackDelivery,
+      approval_ledger: approvalLedger,
+      action: safeAction({
+        action_id: actionId || null,
+        lead_id: leadId || fallbackDraft.lead_id || null,
+        action_type: 'autopilot_draft_approval',
+        status: 'open',
+        priority: 'high',
+        owner: 'Revenue Pod',
+        title: fallbackDraft.title || fallbackDraft.package_name || 'Autopilot draft approval',
+        next_step: nextStep,
+        approval_required: true,
+        approval_state: approvalState,
+        notification_channel: approvalLedger.status === 'ready' ? 'blob_and_email_fallback' : 'email_fallback',
+        notification_status: fallbackDelivery.status === 'ready' ? 'sent_to_owner_ledger' : 'ledger_recorded_no_email',
+        result: {
+          ...fallbackDraft,
+          status: 'ready',
+          autopilot_draft_approval: approval,
+        },
+        created_at: new Date().toISOString(),
+      }),
+      autopilot_draft_approval: approval,
+    }
+  }
+
+  if (!datastore.postgresConfigured()) {
+    return fallbackFromPayload({
+      status: 'error',
+      reason: 'postgres_not_configured',
+      provider: 'vercel_postgres_neon',
+      adapter: 'pg',
+    })
+  }
 
   const current = await datastore.query(
     `
@@ -2289,65 +2541,7 @@ async function recordAutopilotDraftApproval(payload) {
     [actionId, leadId],
   )
   if (current.status !== 'ready') {
-    const fallbackDraft = autopilotDraftFromPayload(payload)
-    if (!allowedTypes.includes(text(fallbackDraft.type)) || (!fallbackDraft.packet && !fallbackDraft.body && !fallbackDraft.title && !fallbackDraft.package_name)) {
-      return {
-        ...current,
-        fallback: {
-          status: 'error',
-          reason: 'autopilot_draft_not_found',
-        },
-      }
-    }
-    const approval = buildAutopilotDraftApprovalRecord({ ...payload, action_id: actionId, lead_id: leadId || fallbackDraft.lead_id }, fallbackDraft)
-    if (approval.status === 'error') return approval
-    const fallbackDelivery = await sendAutopilotDraftApprovalEmail({ approval, draft: fallbackDraft, blocker: current })
-    if (fallbackDelivery.status !== 'ready') {
-      return {
-        ...current,
-        fallback_delivery: fallbackDelivery,
-        autopilot_draft_approval: approval,
-      }
-    }
-    const approvalState = approval.decision === 'approved' ? 'approved' : 'changes_requested'
-    const nextStep =
-      approval.decision === 'approved'
-        ? 'Email fallback recorded approval. Manual owner send is still required; record real revenue only after payment proof.'
-        : 'Email fallback recorded requested changes. Revise the draft before any buyer-visible send.'
-    return {
-      status: 'ready',
-      adapter: 'email_fallback',
-      primary_database: {
-        status: current.status,
-        provider: current.provider || null,
-        adapter: current.adapter || null,
-        code: current.code || null,
-        reason: current.reason || null,
-        detail: current.detail || null,
-      },
-      fallback_delivery: fallbackDelivery,
-      action: safeAction({
-        action_id: actionId || null,
-        lead_id: leadId || fallbackDraft.lead_id || null,
-        action_type: 'autopilot_draft_approval',
-        status: 'open',
-        priority: 'high',
-        owner: 'Revenue Pod',
-        title: fallbackDraft.title || fallbackDraft.package_name || 'Autopilot draft approval',
-        next_step: nextStep,
-        approval_required: true,
-        approval_state: approvalState,
-        notification_channel: 'email_fallback',
-        notification_status: 'sent_to_owner_ledger',
-        result: {
-          ...fallbackDraft,
-          status: 'ready',
-          autopilot_draft_approval: approval,
-        },
-        created_at: new Date().toISOString(),
-      }),
-      autopilot_draft_approval: approval,
-    }
+    return fallbackFromPayload(current)
   }
   if (!current.rows.length) return { status: 'error', reason: 'action_not_found' }
 
@@ -2385,7 +2579,31 @@ async function recordAutopilotDraftApproval(payload) {
     `,
     [row.id, JSON.stringify(approval), approvalState, nextStep],
   )
-  if (updated.status !== 'ready') return { ...updated, autopilot_draft_approval: approval }
+  if (updated.status !== 'ready') {
+    const fallbackDelivery = await sendAutopilotDraftApprovalEmail({ approval, draft: result, blocker: updated })
+    const approvalLedger = await writeAutopilotApprovalLedger({ approval, draft: result, blocker: updated, fallbackDelivery })
+    if (fallbackDelivery.status === 'ready' || approvalLedger.status === 'ready') {
+      return {
+        status: 'ready',
+        adapter: approvalLedger.status === 'ready' && fallbackDelivery.status === 'ready'
+          ? 'email_and_blob_fallback'
+          : approvalLedger.status === 'ready'
+            ? 'blob_fallback'
+            : 'email_fallback',
+        primary_database: updated,
+        fallback_delivery: fallbackDelivery,
+        approval_ledger: approvalLedger,
+        action: safeAction({
+          ...row,
+          approval_state: approvalState,
+          notification_status: fallbackDelivery.status === 'ready' ? 'sent_to_owner_ledger' : 'ledger_recorded_no_email',
+          result: { ...result, autopilot_draft_approval: approval },
+        }),
+        autopilot_draft_approval: approval,
+      }
+    }
+    return { ...updated, fallback_delivery: fallbackDelivery, approval_ledger: approvalLedger, autopilot_draft_approval: approval }
+  }
   if (!updated.rows.length) return { status: 'error', reason: 'action_not_found', autopilot_draft_approval: approval }
   return {
     status: 'ready',
@@ -3521,6 +3739,7 @@ async function handler(req, res) {
     const snapshot = await datastore.pipelineSnapshot({ since24h, since7d })
     if (snapshot.status !== 'ready') {
       const fallback = fallbackQueue()
+      const approvalLedger = await readAutopilotApprovalLedger(5)
       json(res, 200, {
         status: 'ready',
         runtime_status: fallback.status === 'ready' ? 'degraded' : 'blocked',
@@ -3528,8 +3747,9 @@ async function handler(req, res) {
         contract,
         primary_database: primaryDatabaseStatus(snapshot),
         fallback_queue: fallback,
+        approval_ledger: approvalLedger,
         approval_inbox: {
-          status: fallback.status === 'ready' ? 'email_fallback' : 'blocked',
+          status: approvalLedger.status === 'ready' ? 'ledger_fallback' : fallback.status === 'ready' ? 'email_fallback' : 'blocked',
           pending_count: null,
           next_action: {
             action_type: 'operator_review',
@@ -3564,6 +3784,7 @@ async function handler(req, res) {
     const nextAction = actions.find((action) => action.approval_state === 'pending') || actions[0] || null
     const proofBoard = revenueProofBoard(actions)
     const autopilotBoard = autopilotCommandBoard({ actions, leads, proofBoard, latestRuns: snapshot.latestRuns })
+    const approvalLedger = await readAutopilotApprovalLedger(5)
 
     json(res, 200, {
       status: 'ready',
@@ -3601,6 +3822,7 @@ async function handler(req, res) {
         human_review_required: true,
       },
       fallback_queue: fallbackQueue(),
+      approval_ledger: approvalLedger,
       durable_queue: {
         status: 'ready',
         public_daily_cron: '/api/cron/sales-daily',
@@ -3617,6 +3839,7 @@ async function handler(req, res) {
   }
 
   if (!config.url || !config.serviceRoleKey) {
+    const approvalLedger = await readAutopilotApprovalLedger(5)
     json(res, 200, {
       status: 'ready',
       runtime_status: 'not_configured',
@@ -3624,6 +3847,7 @@ async function handler(req, res) {
       contract,
       primary_database: datastore.datastoreStatus(),
       fallback_queue: fallbackQueue(),
+      approval_ledger: approvalLedger,
       recommended_datastores: recommendedDatastores(),
       blockers: ['Provision Neon Postgres in the Vercel Marketplace, set POSTGRES_URL or DATABASE_URL, then run npm run db:lead-ledger:schema.'],
     })
@@ -3646,6 +3870,7 @@ async function handler(req, res) {
     if (blocked) {
       const fallbackDatabase = primaryDatabaseStatus(blocked)
       const fallback = fallbackQueue()
+      const approvalLedger = await readAutopilotApprovalLedger(5)
       json(res, 200, {
         status: 'ready',
         runtime_status: fallback.status === 'ready' ? 'degraded' : 'blocked',
@@ -3654,8 +3879,9 @@ async function handler(req, res) {
         primary_database: datastore.datastoreStatus(),
         fallback_database: fallbackDatabase,
         fallback_queue: fallback,
+        approval_ledger: approvalLedger,
         approval_inbox: {
-          status: fallback.status === 'ready' ? 'email_fallback' : 'blocked',
+          status: approvalLedger.status === 'ready' ? 'ledger_fallback' : fallback.status === 'ready' ? 'email_fallback' : 'blocked',
           pending_count: null,
           next_action: {
             action_type: 'operator_review',
@@ -3690,6 +3916,7 @@ async function handler(req, res) {
     const nextAction = actions.find((action) => action.approval_state === 'pending') || actions[0] || null
     const proofBoard = revenueProofBoard(actions)
     const autopilotBoard = autopilotCommandBoard({ actions, leads, proofBoard, latestRuns: latestRuns.data })
+    const approvalLedger = await readAutopilotApprovalLedger(5)
 
     json(res, 200, {
       status: 'ready',
@@ -3722,6 +3949,7 @@ async function handler(req, res) {
         human_review_required: true,
       },
       fallback_queue: fallbackQueue(),
+      approval_ledger: approvalLedger,
       durable_queue: {
         status: 'ready',
         public_daily_cron: '/api/cron/sales-daily',
@@ -3735,12 +3963,14 @@ async function handler(req, res) {
       recent_sales_runs: latestRuns.data,
     })
   } catch (error) {
+    const approvalLedger = await readAutopilotApprovalLedger(5)
     json(res, 200, {
       status: 'ready',
       runtime_status: 'blocked',
       endpoint: 'pipeline-control',
       contract,
       fallback_queue: fallbackQueue(),
+      approval_ledger: approvalLedger,
       recommended_datastores: recommendedDatastores(),
       reason: 'pipeline_control_failed',
       detail: text(error?.message).slice(0, 180),
@@ -3751,6 +3981,7 @@ async function handler(req, res) {
 handler.__test = {
   buildConnectorPolicyRecord,
   buildAutopilotDraftApprovalRecord,
+  buildAutopilotApprovalLedgerRecord,
   buildCustomerSuccessDeskPack,
   buildEnterpriseDeliveryPack,
   buildOrderRoomState,
@@ -3762,6 +3993,8 @@ handler.__test = {
   firstProofPacket,
   autopilotCommandBoard,
   autopilotDraftFromPayload,
+  autopilotApprovalLedgerStatus,
+  readAutopilotApprovalLedger,
   prepareFirstRunAcceptance,
   prepareCustomerSuccessDesk,
   prepareEnterpriseDeliveryPack,
@@ -3775,6 +4008,7 @@ handler.__test = {
   safeAction,
   startPrivateWorkspace,
   updateOrderRoomState,
+  writeAutopilotApprovalLedger,
 }
 
 module.exports = handler
