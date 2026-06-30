@@ -1651,6 +1651,28 @@ function firstProofPacket(row) {
 
 function safeAction(row) {
   const firstProof = firstProofPacket(row)
+  const result = parseJsonObject(row.result)
+  const autopilotDraftTypes = ['source_request_packet', 'offer_packet', 'buyer_reply_draft']
+  const autopilotDraft = autopilotDraftTypes.includes(text(result.type))
+    ? {
+        status: text(result.status) || 'ready',
+        type: text(result.type),
+        package_name: text(result.package_name),
+        lead_id: text(result.lead_id || row.lead_id),
+        title: text(result.title || row.title || result.package_name || row.action_type),
+        packet: text(result.packet),
+        subject: text(result.subject),
+        body: text(result.body),
+        source_request: text(result.source_request),
+        first_output: text(result.first_output),
+        external_action_state: text(result.external_action_state) || 'blocked_until_owner_approval',
+        payment_or_connector_state: text(result.payment_or_connector_state) || 'blocked_until_owner_approval',
+        real_mrr_delta: moneyAmount(result.real_mrr_delta),
+        approval_required: result.approval_required !== false,
+        sent: result.sent === true,
+        guardrails: list(result.guardrails),
+      }
+    : null
   return {
     action_id: row.action_id || null,
     lead_id: row.lead_id || null,
@@ -1667,6 +1689,7 @@ function safeAction(row) {
     notification_status: row.notification_status || 'queued',
     created_at: row.created_at || null,
     first_proof: firstProof,
+    autopilot_draft: autopilotDraft,
   }
 }
 

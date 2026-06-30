@@ -4562,7 +4562,7 @@ const publicOperatorConsoleHtml = `<!doctype html>
       return {
         status:'ready',
         runtime_status:'sample_only',
-        metrics:{open_action_count:1,recent_lead_count:1,recent_action_count:1,proof_backed_mrr_mmk:900000,bank_verified_mrr_mmk:0,bank_unverified_mrr_mmk:900000},
+        metrics:{open_action_count:2,recent_lead_count:1,recent_action_count:2,proof_backed_mrr_mmk:900000,bank_verified_mrr_mmk:0,bank_unverified_mrr_mmk:900000},
         approval_inbox:{status:'sample',pending_count:1},
         revenue_proof_board:{
           status:'ready',
@@ -5297,6 +5297,60 @@ const publicOperatorConsoleHtml = `<!doctype html>
             approval_required:true,
             human_gate:'owner approval before send/write/payment actions'
           }
+        },{
+          action_id:'AUTO-SAMPLE-SOURCE',
+          lead_id:'SAMPLE-SETUP',
+          task_id:'AUTO-SAMPLE-SOURCE',
+          action_type:'source_request',
+          status:'done',
+          priority:'high',
+          owner:'Revenue Pod',
+          title:'Autopilot draft: source request',
+          next_step:'Review the source request packet and send only after owner approval.',
+          approval_required:true,
+          approval_state:'pending',
+          notification_channel:'internal_queue',
+          notification_status:'queued',
+          autopilot_draft:{
+            status:'ready',
+            type:'source_request_packet',
+            package_name:'Daily Intelligence Brief Agent',
+            lead_id:'SAMPLE-SETUP',
+            title:'Daily Intelligence Brief Agent source request packet',
+            packet:[
+              '# Daily Intelligence Brief Agent source request packet',
+              '',
+              'Status: internal_draft_ready',
+              'Lead: SAMPLE-SETUP',
+              'Buyer: Sample buyer',
+              'Package: Daily Intelligence Brief Agent',
+              'External send state: blocked_until_owner_approval',
+              'Payment or connector state: blocked_until_owner_approval',
+              '',
+              '## Source sample to request',
+              'Ask for one supplier email thread, shipment sheet, or Viber update sample.',
+              '',
+              '## Why this source matters',
+              'It lets SuperMega prepare the first proof: one owner-ready morning brief with source trace and exact follow-up actions.',
+              '',
+              '## Draft buyer ask',
+              'Please send one current screenshot, sheet, export, file, or thread that shows this workflow. I will use it only to prepare the first proof and will not connect accounts, send messages, write records, or request payment without owner approval.',
+              '',
+              '## Guardrails',
+              '- Internal draft only.',
+              '- No external send from the runner.',
+              '- No payment request, connector access, or production write.',
+              '- Owner approval required before the buyer sees this message.'
+            ].join('\\n'),
+            source_request:'Ask for one supplier email thread, shipment sheet, or Viber update sample.',
+            first_output:'One owner-ready morning brief with source trace and exact follow-up actions.',
+            external_action_state:'blocked_until_owner_approval',
+            payment_or_connector_state:'blocked_until_owner_approval',
+            real_mrr_delta:0,
+            approval_required:true,
+            sent:false,
+            guardrails:['Internal draft only','No external send from the runner','Owner approval before buyer message','No payment or connector access without owner approval']
+          }
         }]
       };
     }
@@ -5698,13 +5752,31 @@ const publicOperatorConsoleHtml = `<!doctype html>
         ['Commands', metrics.autopilot_command_count ?? commandBoard.command_count ?? 0],
       ].map(function(row){return '<div class="operator-kpi"><span>'+esc(row[0])+'</span><strong>'+esc(row[1])+'</strong></div>'}).join('');
     }
+    function salesAutopilotDraft(action,index){
+      const draft = action && action.autopilot_draft;
+      if(!draft || !draft.type)return '';
+      const id = 'sales-autopilot-draft-'+index;
+      const body = draft.packet || draft.body || '';
+      const guardrails = (draft.guardrails || []).slice(0,4);
+      const subject = draft.subject ? '<div class="operator-proof-section"><span>Subject</span><div>'+esc(draft.subject)+'</div></div>' : '';
+      return [
+        '<div class="operator-proof operator-sales-draft">',
+          '<strong>Autopilot draft artifact</strong>',
+          '<div class="operator-meta"><span class="operator-chip">'+esc(draft.type)+'</span><span class="operator-chip">'+esc(draft.external_action_state || 'blocked_until_owner_approval')+'</span><span class="operator-chip">'+esc(draft.payment_or_connector_state || 'blocked_until_owner_approval')+'</span><span class="operator-chip">sent '+esc(draft.sent === true ? 'yes' : 'no')+'</span><span class="operator-chip">MRR '+esc(draft.real_mrr_delta ?? 0)+'</span></div>',
+          '<div>'+esc(draft.package_name || draft.title || action.title || '')+'</div>',
+          subject,
+          body ? '<div class="operator-proof-section"><span>Draft body</span><textarea class="operator-reply" id="'+id+'" readonly>'+esc(body)+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+id+'">Copy autopilot draft</button></div>' : '',
+          guardrails.length ? '<div class="operator-proof-section"><span>Guardrails</span><ul>'+guardrails.map(function(item){return '<li>'+esc(item)+'</li>'}).join('')+'</ul></div>' : '',
+        '</div>'
+      ].join('');
+    }
     function renderActions(data){
       const actions = data.recent_actions || [];
       if(!actions.length){actionsEl.innerHTML = '<div class="operator-item">No recent actions.</div>';return}
       actionsEl.innerHTML = actions.map(function(action,index){
         const proof = action.first_proof;
         const proofHtml = proof ? '<div class="operator-proof"><strong>'+esc(proof.title || 'First proof')+'</strong><div class="operator-meta"><span class="operator-chip">'+esc(proof.status)+'</span><span class="operator-chip">'+esc(proof.template_id)+'</span><span class="operator-chip">'+esc(proof.human_gate)+'</span></div><div>'+esc(proof.first_proof_target || '')+'</div>'+proofStarterLink(proof)+proofSolutionRoute(proof,index)+proofImplementationBlueprint(proof,index)+proofIntakeJob(proof,index)+proofClientKickoff(proof,index)+proofList('Checklist',proof.checklist)+proofList('Acceptance tests',proof.acceptance_tests)+proofBuyerReply(proof,index)+proofDeliveryPacket(proof,index)+pilotClosePacket(proof,index)+pilotOrderRoom(action,proof,index)+'</div>' : '';
-        return '<article class="operator-item"><strong>'+esc(action.title || action.action_type)+'</strong><div class="operator-meta"><span class="operator-chip">'+esc(action.status)+'</span><span class="operator-chip">'+esc(action.priority)+'</span><span class="operator-chip">'+esc(action.approval_state)+'</span><span>'+esc(action.lead_id)+'</span></div><div>'+esc(action.next_step || '')+'</div>'+proofHtml+'</article>';
+        return '<article class="operator-item"><strong>'+esc(action.title || action.action_type)+'</strong><div class="operator-meta"><span class="operator-chip">'+esc(action.status)+'</span><span class="operator-chip">'+esc(action.priority)+'</span><span class="operator-chip">'+esc(action.approval_state)+'</span><span>'+esc(action.lead_id)+'</span></div><div>'+esc(action.next_step || '')+'</div>'+salesAutopilotDraft(action,index)+proofHtml+'</article>';
       }).join('');
       actionsEl.querySelectorAll('[data-copy-target]').forEach(function(button){button.addEventListener('click',function(){copyDraft(button.getAttribute('data-copy-target'))})});
       actionsEl.querySelectorAll('[data-state-command]').forEach(function(button){button.addEventListener('click',function(){persistOrderRoomState(button)})});
