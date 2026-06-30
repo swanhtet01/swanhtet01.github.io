@@ -191,6 +191,7 @@ try {
         hasWorkspaceHandoffRenderer: html.includes('Copy workspace manifest') && html.includes('Copy workspace handoff') && html.includes('Copy first run queue') && html.includes('Create private workspace') && html.includes('startPrivateWorkspace') && html.includes('Prepare first-run acceptance') && html.includes('prepareFirstRunAcceptance') && html.includes('Record owner accepted') && html.includes('recordOwnerAcceptance') && html.includes('Record connector policy') && html.includes('recordConnectorPolicy') && html.includes('Prepare autopilot approval queue') && html.includes('prepareProductionApprovalQueue') && html.includes('Prepare enterprise delivery pack') && html.includes('prepareEnterpriseDeliveryPack'),
         hasCustomerSuccessRenderer: html.includes('Prepare customer success desk') && html.includes('prepareCustomerSuccessDesk') && html.includes('Copy customer success desk') && html.includes('Copy support ticket queue') && html.includes('Copy renewal queue') && html.includes('Copy client update draft'),
         hasRetainerGrowthRenderer: html.includes('Prepare retainer growth offer') && html.includes('prepareRetainerGrowthOffer') && html.includes('Copy retainer growth offer') && html.includes('Copy retainer options') && html.includes('Copy retainer invoice draft') && html.includes('Copy retainer email draft'),
+        hasRetainerPaymentRenderer: html.includes('Record retainer payment proof') && html.includes('recordRetainerPaymentProof') && html.includes('Copy retainer payment record') && html.includes('Copy retainer payment ledger') && html.includes('Copy MRR summary'),
         hasOrderRoomPersistenceControls: html.includes('persistOrderRoomState') && html.includes('Save scope approval') && html.includes('Save payment proof'),
         hasSampleData: html.includes('samplePipelineData') && html.includes('No lead was created'),
         overflowX: Math.max(0, document.documentElement.scrollWidth - document.documentElement.clientWidth),
@@ -198,12 +199,12 @@ try {
     })
     if (operator.title !== 'Operator Console | SUPERMEGA.dev') fail('operator_title_not_current', { viewport: viewport.name, operator })
     if (!operator.opsKeyVisible || !operator.sampleVisible || !operator.refreshVisible || !operator.runnerVisible) fail('operator_controls_missing', { viewport: viewport.name, operator })
-    if (!operator.hasStarterKitRenderer || !operator.hasSolutionRouteRenderer || !operator.hasImplementationBlueprintRenderer || !operator.hasIntakeJobRenderer || !operator.hasClientKickoffRenderer || !operator.hasChecklistRenderer || !operator.hasAcceptanceRenderer || !operator.hasBuyerReplyRenderer || !operator.hasProofDeliveryRenderer || !operator.hasPilotCloseRenderer || !operator.hasPilotOrderRoomRenderer || !operator.hasWorkspaceHandoffRenderer || !operator.hasCustomerSuccessRenderer || !operator.hasRetainerGrowthRenderer || !operator.hasOrderRoomPersistenceControls || !operator.hasSampleData) fail('operator_first_proof_renderer_missing', { viewport: viewport.name, operator })
+    if (!operator.hasStarterKitRenderer || !operator.hasSolutionRouteRenderer || !operator.hasImplementationBlueprintRenderer || !operator.hasIntakeJobRenderer || !operator.hasClientKickoffRenderer || !operator.hasChecklistRenderer || !operator.hasAcceptanceRenderer || !operator.hasBuyerReplyRenderer || !operator.hasProofDeliveryRenderer || !operator.hasPilotCloseRenderer || !operator.hasPilotOrderRoomRenderer || !operator.hasWorkspaceHandoffRenderer || !operator.hasCustomerSuccessRenderer || !operator.hasRetainerGrowthRenderer || !operator.hasRetainerPaymentRenderer || !operator.hasOrderRoomPersistenceControls || !operator.hasSampleData) fail('operator_first_proof_renderer_missing', { viewport: viewport.name, operator })
     if (operator.overflowX > 0) fail('operator_horizontal_overflow', { viewport: viewport.name, operator })
     await page.click('#load-sample')
     await expectCopy(
       page,
-      ['Sample Daily Intelligence Brief first proof', 'Open starter kit', 'Solution route', 'Copy solution route', 'Implementation blueprint', 'Copy implementation blueprint', 'Intake job packet', 'Copy intake job', 'Client kickoff pack', 'Copy kickoff pack', 'Checklist', 'Acceptance tests', 'Buyer reply draft', 'Copy buyer reply', 'Proof delivery packet', 'Copy proof packet', 'Pilot close packet', 'Copy pilot packet', 'Paid pilot order room', 'Copy payment request', 'Copy payment ledger', 'Copy order ledger', 'Copy pilot start checklist', 'Copy owner activation packet', 'Copy owner action queue', 'Copy activation JSON', 'Copy workspace manifest', 'Copy workspace handoff', 'Copy first run queue', 'Copy customer success desk', 'Copy support ticket queue', 'Copy customer value ledger', 'Copy renewal queue', 'Copy client update draft', 'Copy retainer growth offer', 'Copy retainer options', 'Copy retainer decision ledger', 'Copy next module roadmap', 'Copy retainer invoice draft', 'Copy retainer email draft', 'Save scope approval', 'Save payment proof', 'Create private workspace', 'Prepare first-run acceptance', 'Record owner accepted', 'Record changes requested', 'Record connector policy', 'Prepare autopilot approval queue', 'Prepare enterprise delivery pack', 'Prepare customer success desk', 'Prepare retainer growth offer', 'No lead was created'],
+      ['Sample Daily Intelligence Brief first proof', 'Open starter kit', 'Solution route', 'Copy solution route', 'Implementation blueprint', 'Copy implementation blueprint', 'Intake job packet', 'Copy intake job', 'Client kickoff pack', 'Copy kickoff pack', 'Checklist', 'Acceptance tests', 'Buyer reply draft', 'Copy buyer reply', 'Proof delivery packet', 'Copy proof packet', 'Pilot close packet', 'Copy pilot packet', 'Paid pilot order room', 'Copy payment request', 'Copy payment ledger', 'Copy order ledger', 'Copy pilot start checklist', 'Copy owner activation packet', 'Copy owner action queue', 'Copy activation JSON', 'Copy workspace manifest', 'Copy workspace handoff', 'Copy first run queue', 'Copy customer success desk', 'Copy support ticket queue', 'Copy customer value ledger', 'Copy renewal queue', 'Copy client update draft', 'Copy retainer growth offer', 'Copy retainer options', 'Copy retainer decision ledger', 'Copy next module roadmap', 'Copy retainer invoice draft', 'Copy retainer email draft', 'Copy retainer payment record', 'Copy retainer payment ledger', 'Copy MRR summary', 'Save scope approval', 'Save payment proof', 'Create private workspace', 'Prepare first-run acceptance', 'Record owner accepted', 'Record changes requested', 'Record connector policy', 'Prepare autopilot approval queue', 'Prepare enterprise delivery pack', 'Prepare customer success desk', 'Prepare retainer growth offer', 'Record retainer payment proof', 'No lead was created'],
       'operator_sample_packet',
       viewport.name,
     )
@@ -241,6 +242,9 @@ try {
       retainerInvoice: document.querySelector('#operator-actions #retainer-invoice-0')?.value || '',
       retainerEmail: document.querySelector('#operator-actions #retainer-email-0')?.value || '',
       retainerConfig: document.querySelector('#operator-actions #retainer-config-0')?.value || '',
+      retainerPaymentPacket: document.querySelector('#operator-actions #retainer-payment-0')?.value || '',
+      retainerPaymentLedger: document.querySelector('#operator-actions #retainer-payment-ledger-0')?.value || '',
+      retainerMrrSummary: document.querySelector('#operator-actions #retainer-mrr-summary-0')?.value || '',
       copyButtons: document.querySelectorAll('#operator-actions .operator-copy').length,
       stateButtons: document.querySelectorAll('#operator-actions .operator-state').length,
       workspaceButtons: document.querySelectorAll('#operator-actions .operator-workspace-start').length,
@@ -251,6 +255,7 @@ try {
       enterpriseDeliveryButtons: document.querySelectorAll('#operator-actions .operator-enterprise-delivery').length,
       customerSuccessButtons: document.querySelectorAll('#operator-actions .operator-customer-success').length,
       retainerGrowthButtons: document.querySelectorAll('#operator-actions .operator-retainer-growth').length,
+      retainerPaymentButtons: document.querySelectorAll('#operator-actions .operator-retainer-payment').length,
       stateText: document.querySelector('#operator-actions .operator-order-room')?.textContent || '',
       overflowX: Math.max(0, document.documentElement.scrollWidth - document.documentElement.clientWidth),
     }))
@@ -287,8 +292,11 @@ try {
     if (!operatorSample.retainerInvoice.includes('OWNER_APPROVED_RETAINER_QUOTE_REQUIRED')) fail('operator_sample_retainer_invoice_missing', { viewport: viewport.name, operatorSample })
     if (!operatorSample.retainerEmail.includes('managed AI-agent workcell')) fail('operator_sample_retainer_email_missing', { viewport: viewport.name, operatorSample })
     if (!operatorSample.retainerConfig.includes('"evidence_gated_retainer_growth"')) fail('operator_sample_retainer_config_missing', { viewport: viewport.name, operatorSample })
-    if (operatorSample.copyButtons < 30) fail('operator_sample_copy_missing', { viewport: viewport.name, operatorSample })
-    if (operatorSample.stateButtons < 4 || operatorSample.workspaceButtons < 1 || operatorSample.acceptanceButtons < 1 || operatorSample.ownerAcceptanceButtons < 2 || operatorSample.connectorPolicyButtons < 1 || operatorSample.productionApprovalButtons < 1 || operatorSample.enterpriseDeliveryButtons < 1 || operatorSample.customerSuccessButtons < 1 || operatorSample.retainerGrowthButtons < 1 || !operatorSample.stateText.includes('not_created_until_payment_proof')) fail('operator_sample_state_controls_missing', { viewport: viewport.name, operatorSample })
+    if (!operatorSample.retainerPaymentPacket.includes('retainer_payment_proof_recorded') || !operatorSample.retainerPaymentPacket.includes('Normalized MRR delta MMK: 900000')) fail('operator_sample_retainer_payment_packet_missing', { viewport: viewport.name, operatorSample })
+    if (!operatorSample.retainerPaymentLedger.includes('SAMPLE-PAYMENT-PROOF') || !operatorSample.retainerPaymentLedger.includes('not_bank_verified')) fail('operator_sample_retainer_payment_ledger_missing', { viewport: viewport.name, operatorSample })
+    if (!operatorSample.retainerMrrSummary.includes('"real_mrr_delta": 900000') || !operatorSample.retainerMrrSummary.includes('"payment_proof_attached"')) fail('operator_sample_retainer_mrr_summary_missing', { viewport: viewport.name, operatorSample })
+    if (operatorSample.copyButtons < 33) fail('operator_sample_copy_missing', { viewport: viewport.name, operatorSample })
+    if (operatorSample.stateButtons < 4 || operatorSample.workspaceButtons < 1 || operatorSample.acceptanceButtons < 1 || operatorSample.ownerAcceptanceButtons < 2 || operatorSample.connectorPolicyButtons < 1 || operatorSample.productionApprovalButtons < 1 || operatorSample.enterpriseDeliveryButtons < 1 || operatorSample.customerSuccessButtons < 1 || operatorSample.retainerGrowthButtons < 1 || operatorSample.retainerPaymentButtons < 1 || !operatorSample.stateText.includes('not_created_until_payment_proof')) fail('operator_sample_state_controls_missing', { viewport: viewport.name, operatorSample })
     const solutionRouteCopyButton = page.locator('#operator-actions [data-copy-target="solution-route-0"]')
     await solutionRouteCopyButton.scrollIntoViewIfNeeded()
     await solutionRouteCopyButton.click({ force: true })
@@ -388,6 +396,15 @@ try {
     }, { timeout: 5000 }).catch(() => undefined)
     const retainerCopyStatus = await page.locator('#operator-status').innerText({ timeout: 5000 }).catch(() => '')
     if (!retainerCopyStatus.includes('retainer-growth-0') || !retainerCopyStatus.includes('Text copied')) fail('operator_sample_retainer_growth_copy_failed', { viewport: viewport.name, retainerCopyStatus })
+    const retainerPaymentCopyButton = page.locator('#operator-actions [data-copy-target="retainer-payment-0"]')
+    await retainerPaymentCopyButton.scrollIntoViewIfNeeded()
+    await retainerPaymentCopyButton.click({ force: true })
+    await page.waitForFunction(() => {
+      const value = document.querySelector('#operator-status')?.textContent || ''
+      return value.includes('retainer-payment-0') || value.includes('copy_failed')
+    }, { timeout: 5000 }).catch(() => undefined)
+    const retainerPaymentCopyStatus = await page.locator('#operator-status').innerText({ timeout: 5000 }).catch(() => '')
+    if (!retainerPaymentCopyStatus.includes('retainer-payment-0') || !retainerPaymentCopyStatus.includes('Text copied')) fail('operator_sample_retainer_payment_copy_failed', { viewport: viewport.name, retainerPaymentCopyStatus })
     const stateButton = page.locator('#operator-actions .operator-state').first()
     await stateButton.scrollIntoViewIfNeeded()
     await stateButton.click({ force: true })
@@ -451,6 +468,14 @@ try {
     await retainerGrowthButton.click({ force: true })
     const retainerGrowthStatus = await page.locator('#operator-status').innerText({ timeout: 5000 }).catch(() => '')
     if (!retainerGrowthStatus.includes('Paste the ops key first.')) fail('operator_sample_retainer_growth_guard_failed', { viewport: viewport.name, retainerGrowthStatus })
+    page.once('dialog', async (dialog) => {
+      await dialog.dismiss()
+    })
+    const retainerPaymentButton = page.locator('#operator-actions .operator-retainer-payment').first()
+    await retainerPaymentButton.scrollIntoViewIfNeeded()
+    await retainerPaymentButton.click({ force: true })
+    const retainerPaymentStatus = await page.locator('#operator-status').innerText({ timeout: 5000 }).catch(() => '')
+    if (!retainerPaymentStatus.includes('Paste the ops key first.')) fail('operator_sample_retainer_payment_guard_failed', { viewport: viewport.name, retainerPaymentStatus })
     if (operatorSample.overflowX > 0) fail('operator_sample_horizontal_overflow', { viewport: viewport.name, operatorSample })
     if (consoleMessages.length) fail('console_messages', { viewport: viewport.name, consoleMessages })
 

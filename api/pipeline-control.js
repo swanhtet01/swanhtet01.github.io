@@ -80,6 +80,12 @@ function oneOf(value, allowed, fallback) {
   return allowed.includes(normalized) ? normalized : fallback
 }
 
+function moneyAmount(value) {
+  const normalized = String(value ?? '').replace(/[,\s]/g, '')
+  const amount = Number(normalized)
+  return Number.isFinite(amount) && amount > 0 ? Math.round(amount) : 0
+}
+
 function buildOrderRoomState(payload = {}) {
   const paymentProofState = oneOf(payload.payment_proof_state, ['payment_proof_required', 'proof_attached'], 'payment_proof_required')
   const requestedWorkspaceState = oneOf(
@@ -1130,6 +1136,89 @@ function buildRetainerGrowthOfferPack(input = {}) {
   }
 }
 
+function buildRetainerPaymentRecord(input = {}) {
+  const retainerGrowthOffer = input.retainerGrowthOffer || {}
+  const preparedAt = text(input.preparedAt) || new Date().toISOString()
+  const workspaceSlug = text(retainerGrowthOffer.workspace_slug || input.workspaceSlug) || 'private-workspace-required'
+  const leadId = text(retainerGrowthOffer.lead_id || input.leadId) || 'not set'
+  const templateName = text(retainerGrowthOffer.template_name || input.templateName) || 'SUPERMEGA agent'
+  const paymentProofReference = text(input.paymentProofReference || input.payment_proof_reference)
+  const ownerApprovalReference = text(input.ownerApprovalReference || input.owner_approval_reference)
+  const amountMmk = moneyAmount(input.amountMmk || input.amount_mmk)
+  const paymentPeriod = oneOf(input.paymentPeriod || input.payment_period, ['monthly', 'quarterly', 'annual', 'one_time_retainer'], 'monthly')
+  const periodDivisor = paymentPeriod === 'annual' ? 12 : paymentPeriod === 'quarterly' ? 3 : paymentPeriod === 'one_time_retainer' ? 0 : 1
+  const normalizedMrrDeltaMmk = periodDivisor ? Math.round(amountMmk / periodDivisor) : 0
+  const paidAt = text(input.paidAt || input.paid_at) || preparedAt
+  const ledgerCsv = [
+    ['workspace_slug', 'lead_id', 'template_name', 'amount_mmk', 'payment_period', 'normalized_mrr_delta_mmk', 'payment_proof_reference', 'owner_approval_reference', 'bank_reconciliation_state', 'recorded_at'].map(csvCell).join(','),
+    [
+      workspaceSlug,
+      leadId,
+      templateName,
+      String(amountMmk),
+      paymentPeriod,
+      String(normalizedMrrDeltaMmk),
+      paymentProofReference,
+      ownerApprovalReference,
+      'not_bank_verified',
+      preparedAt,
+    ].map(csvCell).join(','),
+  ].join('\n')
+  const packet = [
+    `# ${templateName} retainer payment proof record`,
+    '',
+    'Status: retainer_payment_proof_recorded',
+    `Lead: ${leadId}`,
+    `Workspace: ${workspaceSlug}`,
+    `Amount MMK: ${amountMmk}`,
+    `Payment period: ${paymentPeriod}`,
+    `Normalized MRR delta MMK: ${normalizedMrrDeltaMmk}`,
+    `Payment proof reference: ${paymentProofReference || 'PAYMENT_PROOF_REFERENCE_REQUIRED'}`,
+    `Owner approval reference: ${ownerApprovalReference || 'OWNER_APPROVAL_REFERENCE_REQUIRED'}`,
+    `Paid at: ${paidAt}`,
+    `Recorded at: ${preparedAt}`,
+    'Recurring revenue state: payment_proof_recorded',
+    'Bank reconciliation state: not_bank_verified',
+    '',
+    '## Guardrails',
+    '- This record requires a human-supplied payment proof reference.',
+    '- Bank reconciliation is still not automatic.',
+    '- Change, refund, or cancellation evidence must be recorded separately before adjusting MRR down.',
+  ].join('\n')
+  const summary = {
+    status: 'retainer_payment_proof_recorded',
+    revenue_event_type: 'retainer_payment_proof',
+    workspace_slug: workspaceSlug,
+    lead_id: leadId,
+    template_name: templateName,
+    amount_mmk: amountMmk,
+    payment_period: paymentPeriod,
+    normalized_mrr_delta_mmk: normalizedMrrDeltaMmk,
+    real_mrr_delta: normalizedMrrDeltaMmk,
+    recurring_revenue_state: 'payment_proof_recorded',
+    payment_state: 'payment_proof_attached',
+    payment_proof_reference: paymentProofReference,
+    owner_approval_reference: ownerApprovalReference,
+    bank_reconciliation_state: 'not_bank_verified',
+    paid_at: paidAt,
+    recorded_at: preparedAt,
+  }
+  return {
+    ...summary,
+    prepared_by: 'operator_console',
+    packet,
+    ledger_csv: ledgerCsv,
+    summary,
+    summary_json: JSON.stringify(summary, null, 2),
+    guardrails: [
+      'payment_proof_reference_required',
+      'owner_approval_reference_required',
+      'bank_reconciliation_not_automatic',
+      'mrr_delta_is_normalized_from_recorded_payment_period',
+    ],
+  }
+}
+
 function envText(...names) {
   for (const name of names) {
     const value = text(process.env[name])
@@ -1197,6 +1286,7 @@ function firstProofPacket(row) {
   const enterpriseDeliveryPack = parseJsonObject(result.enterprise_delivery_pack || payload.enterprise_delivery_pack)
   const customerSuccessDesk = parseJsonObject(result.customer_success_desk || payload.customer_success_desk)
   const retainerGrowthOffer = parseJsonObject(result.retainer_growth_offer || payload.retainer_growth_offer)
+  const retainerPaymentRecord = parseJsonObject(result.retainer_payment_record || payload.retainer_payment_record)
   const orderRoomState = Object.keys(persistedOrderRoomState).length
     ? persistedOrderRoomState
     : {
@@ -1548,6 +1638,10 @@ function firstProofPacket(row) {
       retainer_invoice_request_draft: text(retainerGrowthOffer.invoice_request_draft),
       retainer_client_email_draft: text(retainerGrowthOffer.client_email_draft),
       retainer_growth_config_json: text(retainerGrowthOffer.config_json) || (Object.keys(retainerGrowthOffer.config || {}).length ? JSON.stringify(retainerGrowthOffer.config, null, 2) : ''),
+      retainer_payment_record: Object.keys(retainerPaymentRecord).length ? retainerPaymentRecord : null,
+      retainer_payment_packet: text(retainerPaymentRecord.packet),
+      retainer_payment_ledger_csv: text(retainerPaymentRecord.ledger_csv),
+      retainer_mrr_summary_json: text(retainerPaymentRecord.summary_json) || (Object.keys(retainerPaymentRecord.summary || {}).length ? JSON.stringify(retainerPaymentRecord.summary, null, 2) : ''),
       state: orderRoomState,
     },
     approval_required: result.approval_required !== undefined ? result.approval_required !== false : task.approval_required !== false,
@@ -2469,6 +2563,110 @@ async function prepareRetainerGrowthOffer(payload) {
   }
 }
 
+async function recordRetainerPaymentProof(payload) {
+  const actionId = text(payload.action_id)
+  const leadId = text(payload.lead_id)
+  const paymentProofReference = text(payload.payment_proof_reference || payload.retainer_payment_proof_reference)
+  const ownerApprovalReference = text(payload.owner_approval_reference || payload.retainer_owner_approval_reference)
+  const amountMmk = moneyAmount(payload.amount_mmk || payload.retainer_amount_mmk)
+  const rawPaymentPeriod = text(payload.payment_period || payload.retainer_payment_period || 'monthly')
+  const paymentPeriod = oneOf(rawPaymentPeriod, ['monthly', 'quarterly', 'annual', 'one_time_retainer'], '')
+  if (!actionId && !leadId) return { status: 'error', reason: 'missing_action_or_lead_id' }
+  if (!paymentProofReference) return { status: 'error', reason: 'missing_retainer_payment_proof_reference' }
+  if (!ownerApprovalReference) return { status: 'error', reason: 'missing_retainer_owner_approval_reference' }
+  if (!amountMmk) return { status: 'error', reason: 'invalid_retainer_payment_amount' }
+  if (!paymentPeriod) return { status: 'error', reason: 'invalid_retainer_payment_period' }
+  if (!datastore.postgresConfigured()) return { status: 'error', reason: 'postgres_not_configured' }
+
+  const selected = await datastore.query(
+    `
+      select
+        action_id, lead_id, task_id, action_type, status, priority, owner,
+        title, next_step, approval_required, approval_state,
+        notification_channel, notification_status, payload, result, created_at
+      from public.supermega_pipeline_actions
+      where (($1 <> '' and action_id = $1) or ($1 = '' and $2 <> '' and lead_id = $2))
+      order by created_at desc
+      limit 1
+    `,
+    [actionId, leadId],
+  )
+  if (selected.status !== 'ready') return selected
+  if (!selected.rows.length) return { status: 'error', reason: 'action_not_found' }
+
+  const row = selected.rows[0]
+  const currentResult = parseJsonObject(row.result)
+  const retainerGrowthOffer = parseJsonObject(currentResult.retainer_growth_offer)
+  if (retainerGrowthOffer.status !== 'retainer_growth_offer_ready') {
+    return {
+      status: 'error',
+      reason: 'retainer_growth_offer_required',
+      action: safeAction(row),
+    }
+  }
+
+  const existingRecord = parseJsonObject(currentResult.retainer_payment_record)
+  if (existingRecord.status === 'retainer_payment_proof_recorded') {
+    return {
+      status: 'ready',
+      adapter: 'vercel_postgres_neon',
+      operation_status: 'already_recorded',
+      action: safeAction(row),
+      retainer_payment_record: existingRecord,
+    }
+  }
+
+  const context = contextFromActionRow(row, parseJsonObject(currentResult.pilot_order_room_state))
+  const preparedAt = new Date().toISOString()
+  const paymentRecord = buildRetainerPaymentRecord({
+    ...context,
+    retainerGrowthOffer,
+    paymentProofReference,
+    ownerApprovalReference,
+    amountMmk,
+    paymentPeriod,
+    paidAt: payload.paid_at,
+    preparedAt,
+  })
+  const result = await datastore.query(
+    `
+      with target as (
+        select id
+        from public.supermega_pipeline_actions
+        where (($1 <> '' and action_id = $1) or ($1 = '' and $2 <> '' and lead_id = $2))
+        order by created_at desc
+        limit 1
+      )
+      update public.supermega_pipeline_actions a
+      set
+        result = jsonb_set(
+          jsonb_set(coalesce(a.result, '{}'::jsonb), '{retainer_payment_record}', $3::jsonb, true),
+          '{retainer_payment_recorded_at}',
+          to_jsonb($4::text),
+          true
+        ),
+        status = 'retainer_payment_proof_recorded',
+        next_step = 'Reconcile the payment proof, keep delivery running, and update the value ledger before the next renewal.',
+        updated_at = now()
+      where a.id in (select id from target)
+      returning
+        a.action_id, a.lead_id, a.task_id, a.action_type, a.status, a.priority, a.owner,
+        a.title, a.next_step, a.approval_required, a.approval_state,
+        a.notification_channel, a.notification_status, a.payload, a.result, a.created_at
+    `,
+    [actionId, leadId, JSON.stringify(paymentRecord), preparedAt],
+  )
+  if (result.status !== 'ready') return { ...result, retainer_payment_record: paymentRecord }
+  if (!result.rows.length) return { status: 'error', reason: 'action_not_found', retainer_payment_record: paymentRecord }
+  return {
+    status: 'ready',
+    adapter: 'vercel_postgres_neon',
+    operation_status: 'recorded',
+    action: safeAction(result.rows[0]),
+    retainer_payment_record: paymentRecord,
+  }
+}
+
 function primaryDatabaseStatus(result) {
   if (!result || result.status === 'ready') {
     return { status: 'ready' }
@@ -2489,8 +2687,8 @@ function primaryDatabaseStatus(result) {
 function writeStatusCode(result) {
   if (result.status === 'ready') return 200
   if (result.reason === 'action_not_found') return 404
-  if (['private_workspace_not_ready', 'private_workspace_required', 'first_run_acceptance_required', 'owner_acceptance_required', 'owner_acceptance_not_accepted', 'connector_policy_required', 'production_approval_queue_required', 'enterprise_delivery_pack_required', 'customer_success_desk_required', 'use_start_private_workspace_operation'].includes(result.reason)) return 409
-  if (['missing_action_or_lead_id', 'invalid_owner_acceptance_decision', 'missing_owner_acceptance_reference', 'invalid_connector_policy_mode', 'missing_connector_policy_reference', 'missing_production_queue_reference', 'missing_enterprise_delivery_reference', 'missing_customer_success_reference', 'missing_retainer_growth_reference'].includes(result.reason)) return 400
+  if (['private_workspace_not_ready', 'private_workspace_required', 'first_run_acceptance_required', 'owner_acceptance_required', 'owner_acceptance_not_accepted', 'connector_policy_required', 'production_approval_queue_required', 'enterprise_delivery_pack_required', 'customer_success_desk_required', 'retainer_growth_offer_required', 'use_start_private_workspace_operation'].includes(result.reason)) return 409
+  if (['missing_action_or_lead_id', 'invalid_owner_acceptance_decision', 'missing_owner_acceptance_reference', 'invalid_connector_policy_mode', 'missing_connector_policy_reference', 'missing_production_queue_reference', 'missing_enterprise_delivery_reference', 'missing_customer_success_reference', 'missing_retainer_growth_reference', 'missing_retainer_payment_proof_reference', 'missing_retainer_owner_approval_reference', 'invalid_retainer_payment_amount', 'invalid_retainer_payment_period'].includes(result.reason)) return 400
   return 503
 }
 
@@ -2636,6 +2834,15 @@ async function handler(req, res) {
         endpoint: 'pipeline-control',
         operation,
         ...prepared,
+      })
+      return
+    }
+    if (operation === 'record_retainer_payment_proof') {
+      const recorded = await recordRetainerPaymentProof(payload)
+      json(res, writeStatusCode(recorded), {
+        endpoint: 'pipeline-control',
+        operation,
+        ...recorded,
       })
       return
     }
@@ -2886,12 +3093,14 @@ handler.__test = {
   buildPrivateWorkspaceManifest,
   buildProductionApprovalQueue,
   buildRetainerGrowthOfferPack,
+  buildRetainerPaymentRecord,
   firstProofPacket,
   prepareFirstRunAcceptance,
   prepareCustomerSuccessDesk,
   prepareEnterpriseDeliveryPack,
   prepareProductionApprovalQueue,
   prepareRetainerGrowthOffer,
+  recordRetainerPaymentProof,
   recordConnectorPolicy,
   recordOwnerAcceptance,
   safeAction,

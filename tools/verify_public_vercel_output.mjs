@@ -573,7 +573,7 @@ for (const token of ['renderFirstProofBrief', 'first_proof_operator_brief', 'Sol
 const pipelineControlFunctionPath = resolve(functionsDir, 'api/pipeline-control.js.func/api/pipeline-control.js')
 if (!existsSync(pipelineControlFunctionPath)) fail('public_pipeline_control_function_missing')
 const pipelineControlFunctionSource = readFileSync(pipelineControlFunctionPath, 'utf8')
-for (const token of ['firstProofPacket', 'first_proof', 'operator_brief_ready', 'starter_kit_url', 'solution_route_packet', 'solution_route_json', 'implementation_blueprint_packet', 'implementation_blueprint_json', 'intake_job_packet', 'intake_job_json', 'client_kickoff_packet', 'client_kickoff_json', 'buyer_reply_draft', 'proof_delivery_packet', 'pilot_close_packet', 'pilot_order_room', 'private_workspace_manifest', 'first_run_acceptance', 'owner_acceptance', 'connector_policy', 'production_approval_queue', 'enterprise_delivery_pack', 'customer_success_desk', 'retainer_growth_offer', 'prepareRetainerGrowthOffer', 'prepare_retainer_growth_offer', 'prepareCustomerSuccessDesk', 'prepare_customer_success_desk', 'prepareEnterpriseDeliveryPack', 'prepare_enterprise_delivery_pack', 'prepareProductionApprovalQueue', 'prepare_production_approval_queue', 'recordConnectorPolicy', 'record_connector_policy', 'recordOwnerAcceptance', 'record_owner_acceptance', 'prepareFirstRunAcceptance', 'prepare_first_run_acceptance', 'startPrivateWorkspace', 'start_private_workspace', 'updateOrderRoomState', 'update_order_room']) {
+for (const token of ['firstProofPacket', 'first_proof', 'operator_brief_ready', 'starter_kit_url', 'solution_route_packet', 'solution_route_json', 'implementation_blueprint_packet', 'implementation_blueprint_json', 'intake_job_packet', 'intake_job_json', 'client_kickoff_packet', 'client_kickoff_json', 'buyer_reply_draft', 'proof_delivery_packet', 'pilot_close_packet', 'pilot_order_room', 'private_workspace_manifest', 'first_run_acceptance', 'owner_acceptance', 'connector_policy', 'production_approval_queue', 'enterprise_delivery_pack', 'customer_success_desk', 'retainer_growth_offer', 'retainer_payment_record', 'recordRetainerPaymentProof', 'record_retainer_payment_proof', 'prepareRetainerGrowthOffer', 'prepare_retainer_growth_offer', 'prepareCustomerSuccessDesk', 'prepare_customer_success_desk', 'prepareEnterpriseDeliveryPack', 'prepare_enterprise_delivery_pack', 'prepareProductionApprovalQueue', 'prepare_production_approval_queue', 'recordConnectorPolicy', 'record_connector_policy', 'recordOwnerAcceptance', 'record_owner_acceptance', 'prepareFirstRunAcceptance', 'prepare_first_run_acceptance', 'startPrivateWorkspace', 'start_private_workspace', 'updateOrderRoomState', 'update_order_room']) {
   if (!pipelineControlFunctionSource.includes(token)) {
     fail('public_pipeline_control_first_proof_contract_missing', { token })
   }
@@ -647,15 +647,18 @@ for (const token of [
   'Prepare enterprise delivery pack',
   'Prepare customer success desk',
   'Prepare retainer growth offer',
+  'Record retainer payment proof',
   'recordOwnerAcceptance',
   'recordConnectorPolicy',
   'prepareProductionApprovalQueue',
   'prepareEnterpriseDeliveryPack',
   'prepareCustomerSuccessDesk',
   'prepareRetainerGrowthOffer',
+  'recordRetainerPaymentProof',
   'private_workspace_manifest',
   'customer_success_desk',
   'retainer_growth_offer',
+  'retainer_payment_record',
   'Copy customer success desk',
   'Copy support ticket queue',
   'Copy customer value ledger',
@@ -667,6 +670,9 @@ for (const token of [
   'Copy next module roadmap',
   'Copy retainer invoice draft',
   'Copy retainer email draft',
+  'Copy retainer payment record',
+  'Copy retainer payment ledger',
+  'Copy MRR summary',
   'Save scope approval',
   'Save payment proof',
   'persistOrderRoomState',
