@@ -4606,6 +4606,53 @@ const publicOperatorConsoleHtml = `<!doctype html>
               '- Approval queue before external sends, connector writes, credentialed browser actions, or payment requests.',
               '- Value ledger before any recurring revenue claim.'
             ].join('\\n'),
+            implementation_blueprint_packet:[
+              '# Daily Intelligence Brief Agent implementation blueprint',
+              '',
+              'Status: implementation_blueprint_ready',
+              'Lead: SAMPLE-SETUP',
+              'Template: daily-intelligence-brief',
+              'Delivery lane: decision_brief_workcell',
+              'First proof: One-page morning brief with what changed, why it matters, and exact follow-up actions.',
+              'Price hint: 11,000,000 MMK setup',
+              '',
+              '## Modules',
+              '- buyer_goal',
+              '- approved_sources',
+              '- source_trace',
+              '- first_proof',
+              '- approval_queue',
+              '- delivery_packet',
+              '- watchlist',
+              '- source_change_log',
+              '- decision_brief',
+              '- risk_flags',
+              '- followup_queue',
+              '',
+              '## Roles',
+              '- client_owner: approve scope, sources, payment route, external sends, connector writes, and acceptance evidence',
+              '- client_operator: provide source samples, review drafts, request corrections, and confirm daily workflow fit',
+              '- supermega_operator: configure the workcell, run proofs, maintain source trace, and prepare client-safe packets',
+              '- agent_worker: draft from approved sources only; no credentials, no autonomous sends, no live writes',
+              '',
+              '## Delivery plan',
+              '- day_0: Confirm buyer goal, first proof target, source samples, role owner, and approval boundary.',
+              '- day_1: Build the first proof.',
+              '- day_2: Review source trace, acceptance checks, delivery risk, and buyer usefulness.',
+              '- day_3_to_7: Turn accepted proof into a private approval-gated pilot workspace after scope and payment proof.',
+              '',
+              '## Acceptance gates',
+              '- [ ] Buyer confirms the first proof is useful.',
+              '- [ ] Important claims include source trace.',
+              '- [ ] Owner approves scope, price, and payment route before payment request.',
+              '- [ ] Private workspace starts only after payment proof.',
+              '',
+              '## Enterprise controls',
+              '- Source trace on important outputs.',
+              '- Role separation for owner, operator, SuperMega operator, and agent worker.',
+              '- Approval queue before send/write/payment/browser actions.',
+              '- Value ledger before recurring revenue claims.'
+            ].join('\\n'),
             intake_job_packet:[
               '# Daily Intelligence Brief Agent intake-to-first-proof job',
               '',
@@ -4937,6 +4984,11 @@ const publicOperatorConsoleHtml = `<!doctype html>
       const id = 'solution-route-'+index;
       return '<div class="operator-proof-section"><span>Solution route</span><textarea class="operator-reply" id="'+id+'" readonly>'+esc(proof.solution_route_packet || proof.solution_route_json || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+id+'">Copy solution route</button></div>';
     }
+    function proofImplementationBlueprint(proof, index){
+      if(!proof || (!proof.implementation_blueprint_packet && !proof.implementation_blueprint_json))return '';
+      const id = 'implementation-blueprint-'+index;
+      return '<div class="operator-proof-section"><span>Implementation blueprint</span><textarea class="operator-reply" id="'+id+'" readonly>'+esc(proof.implementation_blueprint_packet || proof.implementation_blueprint_json || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+id+'">Copy implementation blueprint</button></div>';
+    }
     function proofClientKickoff(proof, index){
       if(!proof || (!proof.client_kickoff_packet && !proof.client_kickoff_json))return '';
       const id = 'client-kickoff-'+index;
@@ -5171,7 +5223,7 @@ const publicOperatorConsoleHtml = `<!doctype html>
       if(!actions.length){actionsEl.innerHTML = '<div class="operator-item">No recent actions.</div>';return}
       actionsEl.innerHTML = actions.map(function(action,index){
         const proof = action.first_proof;
-        const proofHtml = proof ? '<div class="operator-proof"><strong>'+esc(proof.title || 'First proof')+'</strong><div class="operator-meta"><span class="operator-chip">'+esc(proof.status)+'</span><span class="operator-chip">'+esc(proof.template_id)+'</span><span class="operator-chip">'+esc(proof.human_gate)+'</span></div><div>'+esc(proof.first_proof_target || '')+'</div>'+proofStarterLink(proof)+proofSolutionRoute(proof,index)+proofIntakeJob(proof,index)+proofClientKickoff(proof,index)+proofList('Checklist',proof.checklist)+proofList('Acceptance tests',proof.acceptance_tests)+proofBuyerReply(proof,index)+proofDeliveryPacket(proof,index)+pilotClosePacket(proof,index)+pilotOrderRoom(action,proof,index)+'</div>' : '';
+        const proofHtml = proof ? '<div class="operator-proof"><strong>'+esc(proof.title || 'First proof')+'</strong><div class="operator-meta"><span class="operator-chip">'+esc(proof.status)+'</span><span class="operator-chip">'+esc(proof.template_id)+'</span><span class="operator-chip">'+esc(proof.human_gate)+'</span></div><div>'+esc(proof.first_proof_target || '')+'</div>'+proofStarterLink(proof)+proofSolutionRoute(proof,index)+proofImplementationBlueprint(proof,index)+proofIntakeJob(proof,index)+proofClientKickoff(proof,index)+proofList('Checklist',proof.checklist)+proofList('Acceptance tests',proof.acceptance_tests)+proofBuyerReply(proof,index)+proofDeliveryPacket(proof,index)+pilotClosePacket(proof,index)+pilotOrderRoom(action,proof,index)+'</div>' : '';
         return '<article class="operator-item"><strong>'+esc(action.title || action.action_type)+'</strong><div class="operator-meta"><span class="operator-chip">'+esc(action.status)+'</span><span class="operator-chip">'+esc(action.priority)+'</span><span class="operator-chip">'+esc(action.approval_state)+'</span><span>'+esc(action.lead_id)+'</span></div><div>'+esc(action.next_step || '')+'</div>'+proofHtml+'</article>';
       }).join('');
       actionsEl.querySelectorAll('[data-copy-target]').forEach(function(button){button.addEventListener('click',function(){copyDraft(button.getAttribute('data-copy-target'))})});

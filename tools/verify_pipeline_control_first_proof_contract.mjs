@@ -82,6 +82,19 @@ const action = internals.safeAction({
         packet: '# Daily Intelligence Brief Agent solution route\n\n## First proof\nOne-page morning brief with what changed and what to do next.\n\n## Premium delivery controls\n- Source trace on important outputs.',
         real_mrr_delta: 0,
       },
+      implementation_blueprint_pack: {
+        status: 'implementation_blueprint_ready',
+        pack_type: 'implementation_blueprint_pack',
+        template_id: 'daily-intelligence-brief',
+        delivery_lane: 'decision_brief_workcell',
+        service_model: 'managed_ai_workcell',
+        modules: ['buyer_goal', 'approved_sources', 'decision_brief'],
+        role_matrix: [{ role: 'agent_worker', responsibility: 'draft only' }],
+        delivery_plan: [{ phase: 'day_1', output: 'Build first proof' }],
+        acceptance_gates: ['Buyer confirms first proof is useful.', 'Private workspace starts only after payment proof.'],
+        packet: '# Daily Intelligence Brief Agent implementation blueprint\n\n## Modules\n- decision_brief\n\n## Acceptance gates\n- [ ] Private workspace starts only after payment proof.\n\n## Enterprise controls\n- Source trace on important outputs.',
+        real_mrr_delta: 0,
+      },
       intake_job: {
         status: 'ready_for_first_proof_build',
         job_type: 'intake_to_first_proof',
@@ -136,6 +149,11 @@ assert.equal(action.first_proof.solution_route.delivery_lane, 'decision_brief_wo
 assert.ok(action.first_proof.solution_route_packet.includes('solution route'))
 assert.ok(action.first_proof.solution_route_packet.includes('Premium delivery controls'))
 assert.ok(action.first_proof.solution_route_json.includes('"real_mrr_delta": 0'))
+assert.equal(action.first_proof.implementation_blueprint_pack.pack_type, 'implementation_blueprint_pack')
+assert.equal(action.first_proof.implementation_blueprint_pack.delivery_lane, 'decision_brief_workcell')
+assert.ok(action.first_proof.implementation_blueprint_packet.includes('implementation blueprint'))
+assert.ok(action.first_proof.implementation_blueprint_packet.includes('Acceptance gates'))
+assert.ok(action.first_proof.implementation_blueprint_json.includes('"real_mrr_delta": 0'))
 assert.equal(action.first_proof.intake_job.job_type, 'intake_to_first_proof')
 assert.ok(action.first_proof.intake_job_packet.includes('intake-to-first-proof job'))
 assert.ok(action.first_proof.intake_job_packet.includes('Source manifest'))
@@ -204,6 +222,7 @@ console.log(
       pilot_close_packet: 'ready',
       pilot_order_room: 'ready',
       solution_route: action.first_proof.solution_route.route_type,
+      implementation_blueprint: action.first_proof.implementation_blueprint_pack.pack_type,
       intake_job: action.first_proof.intake_job.job_type,
       kickoff_pack: action.first_proof.client_kickoff_pack.pack_type,
       private_workspace_manifest: action.first_proof.pilot_order_room.private_workspace_manifest.status,

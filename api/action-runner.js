@@ -325,6 +325,8 @@ function renderFirstProofBrief(row, lead = {}) {
   const intakeJobPacket = text(intakeJob.packet)
   const clientKickoffPack = parsePayload(task.client_kickoff_pack || payload.client_kickoff_pack)
   const clientKickoffPacket = text(clientKickoffPack.packet)
+  const implementationBlueprintPack = parsePayload(task.implementation_blueprint_pack || payload.implementation_blueprint_pack)
+  const implementationBlueprintPacket = text(implementationBlueprintPack.packet)
   const sourceTrace = lines(task.source_trace || payload.source_trace)
   if (starterKit) sourceTrace.push(`Starter kit: ${starterKit}`)
   if (text(row.lead_id)) sourceTrace.push(`Lead record: ${text(row.lead_id)}`)
@@ -344,6 +346,9 @@ function renderFirstProofBrief(row, lead = {}) {
     solutionRoutePacket ? '## Solution route' : '',
     solutionRoutePacket,
     solutionRoutePacket ? '' : '',
+    implementationBlueprintPacket ? '## Implementation blueprint' : '',
+    implementationBlueprintPacket,
+    implementationBlueprintPacket ? '' : '',
     clientKickoffPacket ? '## Client kickoff pack' : '',
     clientKickoffPacket,
     clientKickoffPacket ? '' : '',
@@ -375,6 +380,8 @@ function renderFirstProofBrief(row, lead = {}) {
     first_proof_target: proofTarget,
     solution_route: Object.keys(solutionRoute).length ? solutionRoute : null,
     solution_route_packet: solutionRoutePacket,
+    implementation_blueprint_pack: Object.keys(implementationBlueprintPack).length ? implementationBlueprintPack : null,
+    implementation_blueprint_packet: implementationBlueprintPacket,
     intake_job: Object.keys(intakeJob).length ? intakeJob : null,
     intake_job_packet: intakeJobPacket,
     client_kickoff_pack: Object.keys(clientKickoffPack).length ? clientKickoffPack : null,

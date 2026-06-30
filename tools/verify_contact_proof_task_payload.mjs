@@ -12,6 +12,7 @@ function fail(message, extra = {}) {
 const internals = handler.__test || {}
 if (
   typeof internals.buildSolutionRoute !== 'function' ||
+  typeof internals.buildImplementationBlueprintPack !== 'function' ||
   typeof internals.buildIntakeJob !== 'function' ||
   typeof internals.buildClientKickoffPack !== 'function' ||
   typeof internals.buildFirstProofTaskPayload !== 'function' ||
@@ -93,6 +94,20 @@ assert.ok(kickoffPack.packet.includes('client kickoff pack'))
 assert.ok(kickoffPack.packet.includes('First 48 hours'))
 assert.ok(kickoffPack.operator_checklist.some((item) => item.includes('payment and workspace actions blocked')))
 
+const implementationBlueprint = internals.buildImplementationBlueprintPack(record, solutionRoute, intakeJob)
+assert.equal(implementationBlueprint.pack_type, 'implementation_blueprint_pack')
+assert.equal(implementationBlueprint.status, 'implementation_blueprint_ready')
+assert.equal(implementationBlueprint.template_id, 'daily-intelligence-brief')
+assert.equal(implementationBlueprint.delivery_lane, 'decision_brief_workcell')
+assert.equal(implementationBlueprint.service_model, 'managed_ai_workcell')
+assert.equal(implementationBlueprint.real_mrr_delta, 0)
+assert.ok(implementationBlueprint.modules.includes('decision_brief'))
+assert.ok(implementationBlueprint.role_matrix.some((item) => item.role === 'agent_worker'))
+assert.ok(implementationBlueprint.delivery_plan.some((item) => item.phase === 'day_3_to_7'))
+assert.ok(implementationBlueprint.acceptance_gates.some((item) => item.includes('payment proof')))
+assert.ok(implementationBlueprint.packet.includes('implementation blueprint'))
+assert.ok(implementationBlueprint.packet.includes('Enterprise controls'))
+
 const proofTask = internals.buildFirstProofTaskPayload(record)
 assert.equal(proofTask.type, 'first_proof_build')
 assert.equal(proofTask.template_id, 'daily-intelligence-brief')
@@ -106,7 +121,10 @@ assert.equal(proofTask.solution_route.delivery_lane, 'decision_brief_workcell')
 assert.equal(proofTask.solution_route.real_mrr_delta, 0)
 assert.equal(proofTask.intake_job.job_type, 'intake_to_first_proof')
 assert.equal(proofTask.client_kickoff_pack.pack_type, 'client_kickoff_pack')
+assert.equal(proofTask.implementation_blueprint_pack.pack_type, 'implementation_blueprint_pack')
+assert.equal(proofTask.implementation_blueprint_pack.delivery_lane, 'decision_brief_workcell')
 assert.ok(proofTask.intake_job.packet.includes('First run steps'))
+assert.ok(proofTask.implementation_blueprint_pack.packet.includes('Acceptance gates'))
 assert.ok(proofTask.client_kickoff_pack.packet.includes('Buyer promise'))
 assert.ok(proofTask.source_trace.some((item) => item.includes('sample_sources')))
 assert.ok(proofTask.operator_brief.includes('Daily Intelligence Brief Agent'))
@@ -126,6 +144,8 @@ assert.equal(action.payload.first_proof_task.template_id, 'daily-intelligence-br
 assert.equal(action.payload.first_proof_task.operator_brief, proofTask.operator_brief)
 assert.equal(action.payload.solution_route.route_type, 'autopilot_solution_router')
 assert.equal(action.payload.first_proof_task.solution_route.route_type, 'autopilot_solution_router')
+assert.equal(action.payload.implementation_blueprint_pack.pack_type, 'implementation_blueprint_pack')
+assert.equal(action.payload.first_proof_task.implementation_blueprint_pack.pack_type, 'implementation_blueprint_pack')
 assert.equal(action.payload.first_proof_task.intake_job.job_type, 'intake_to_first_proof')
 assert.equal(action.payload.first_proof_task.client_kickoff_pack.pack_type, 'client_kickoff_pack')
 assert.deepEqual(action.payload.first_proof_task.acceptance_tests, proofTask.acceptance_tests)
@@ -145,6 +165,7 @@ console.log(
       status: 'ready',
       proof_task: proofTask.type,
       solution_route: solutionRoute.route_type,
+      implementation_blueprint: implementationBlueprint.pack_type,
       intake_job: intakeJob.job_type,
       kickoff_pack: kickoffPack.pack_type,
       template_id: proofTask.template_id,

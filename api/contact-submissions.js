@@ -500,6 +500,126 @@ function recordWithSolutionRoute(record, solutionRoute) {
   }
 }
 
+function implementationModulesForRoute(solutionRoute = {}) {
+  const lane = text(solutionRoute.delivery_lane)
+  const defaults = ['buyer_goal', 'approved_sources', 'source_trace', 'first_proof', 'approval_queue', 'delivery_packet']
+  const byLane = {
+    pos_launch_workcell: ['business_profile', 'catalog', 'staff_roles', 'checkout_or_booking', 'payment_proof', 'receipt', 'daily_close'],
+    chat_to_ledger_workcell: ['chat_sources', 'customer_match', 'order_ledger', 'open_balance_queue', 'delivery_queue', 'approval_only_followups'],
+    inbox_calendar_workcell: ['allowed_inbox_scope', 'calendar_scope', 'priority_rules', 'meeting_prep', 'reply_drafts', 'approval_queue'],
+    decision_brief_workcell: ['watchlist', 'source_change_log', 'decision_brief', 'risk_flags', 'followup_queue'],
+    factory_ops_workcell: ['production_sources', 'quality_claims', 'maintenance_notes', 'asset_or_line_map', 'risk_queue', 'read_only_dashboard'],
+    data_cleanup_workcell: ['source_file_parser', 'column_mapping', 'validation_rules', 'exception_report', 'clean_export'],
+  }
+  return [...defaults, ...(byLane[lane] || ['custom_source_map', 'custom_work_queue', 'custom_output_screen'])]
+}
+
+function buildImplementationBlueprintPack(record, solutionRoute = {}, intakeJob = {}) {
+  const templateName = record.public_package || record.requested_package || solutionRoute.package_name || 'SUPERMEGA agent'
+  const proofTarget = record.first_proof_target || solutionRoute.first_proof_target || record.first_output || 'First useful output'
+  const sourceRequests = Array.isArray(solutionRoute.source_requests) && solutionRoute.source_requests.length
+    ? solutionRoute.source_requests
+    : ['one approved sample source']
+  const modules = implementationModulesForRoute(solutionRoute)
+  const roleMatrix = [
+    { role: 'client_owner', responsibility: 'approve scope, sources, payment route, external sends, connector writes, and acceptance evidence' },
+    { role: 'client_operator', responsibility: 'provide source samples, review drafts, request corrections, and confirm daily workflow fit' },
+    { role: 'supermega_operator', responsibility: 'configure the workcell, run proofs, maintain source trace, and prepare client-safe packets' },
+    { role: 'agent_worker', responsibility: 'draft from approved sources only; no credentials, no autonomous sends, no live writes' },
+  ]
+  const dataContract = sourceRequests.map((item) => ({
+    source: item,
+    access_state: 'buyer_approved_sample_required',
+    use: 'first_proof_and_blueprint_only',
+    writeback: 'blocked_until_owner_approval',
+  }))
+  const deliveryPlan = [
+    { phase: 'day_0', output: 'Confirm buyer goal, first proof target, source samples, role owner, and approval boundary.' },
+    { phase: 'day_1', output: `Build the first proof: ${proofTarget}` },
+    { phase: 'day_2', output: 'Review source trace, acceptance checks, delivery risk, and buyer usefulness.' },
+    { phase: 'day_3_to_7', output: 'Turn accepted proof into a private approval-gated pilot workspace after scope and payment proof.' },
+  ]
+  const acceptanceGates = [
+    'Buyer confirms the first proof is useful.',
+    'Important claims include source trace.',
+    'Owner approves scope, price, and payment route before payment request.',
+    'Private workspace starts only after payment proof.',
+    'External sends, connector writes, credentialed browser actions, and payment actions stay approval-gated.',
+  ]
+  const nonIncluded = [
+    'No unmanaged autonomous external actions.',
+    'No production connector writeback before owner acceptance.',
+    'No revenue claim before payment proof.',
+    'No private client workspace before approved scope and payment proof.',
+  ]
+  const packet = [
+    `# ${templateName} implementation blueprint`,
+    '',
+    'Status: implementation_blueprint_ready',
+    `Lead: ${record.lead_id || 'not set'}`,
+    `Template: ${record.template_id || solutionRoute.template_id || 'custom'}`,
+    `Delivery lane: ${solutionRoute.delivery_lane || 'custom_workcell'}`,
+    `First proof: ${proofTarget}`,
+    `Price hint: ${record.price_hint || solutionRoute.price_hint || 'quote after proof review'}`,
+    '',
+    '## Modules',
+    ...modules.map((item) => `- ${item}`),
+    '',
+    '## Roles',
+    ...roleMatrix.map((item) => `- ${item.role}: ${item.responsibility}`),
+    '',
+    '## Source contract',
+    ...dataContract.map((item) => `- ${item.source}: ${item.access_state}; ${item.writeback}`),
+    '',
+    '## Delivery plan',
+    ...deliveryPlan.map((item) => `- ${item.phase}: ${item.output}`),
+    '',
+    '## Acceptance gates',
+    ...acceptanceGates.map((item) => `- [ ] ${item}`),
+    '',
+    '## Not included until approved',
+    ...nonIncluded.map((item) => `- ${item}`),
+    '',
+    '## Enterprise controls',
+    '- Source trace on important outputs.',
+    '- Role separation for owner, operator, SuperMega operator, and agent worker.',
+    '- Approval queue before send/write/payment/browser actions.',
+    '- Value ledger before recurring revenue claims.',
+    '',
+    '## Guardrails',
+    '- No external send without owner approval.',
+    '- No connector write without owner approval.',
+    '- No payment action without owner approval.',
+    '- Real MRR remains 0 until payment proof is recorded.',
+  ].join('\n')
+
+  return {
+    status: 'implementation_blueprint_ready',
+    pack_type: 'implementation_blueprint_pack',
+    lead_id: record.lead_id || '',
+    template_id: record.template_id || solutionRoute.template_id || '',
+    template_name: templateName,
+    delivery_lane: solutionRoute.delivery_lane || 'custom_workcell',
+    service_model: 'managed_ai_workcell',
+    first_proof_target: proofTarget,
+    source_requests: sourceRequests,
+    modules,
+    role_matrix: roleMatrix,
+    data_contract: dataContract,
+    delivery_plan: deliveryPlan,
+    acceptance_gates: acceptanceGates,
+    non_included: nonIncluded,
+    approval_boundary: 'owner approval before send/write/payment actions',
+    external_action_state: 'blocked_until_owner_approval',
+    connector_write_state: 'blocked_until_owner_approval',
+    payment_action_state: 'blocked_until_owner_approval',
+    workspace_state: 'not_created_until_payment_proof',
+    real_mrr_delta: 0,
+    intake_status: intakeJob.status || null,
+    packet,
+  }
+}
+
 function onboardingPlan(record) {
   const firstOutput = record.first_output || record.requested_package || 'First useful output'
   return {
@@ -896,6 +1016,7 @@ function buildFirstProofTaskPayload(record) {
   const templateName = routedRecord.public_package || routedRecord.requested_package || routedRecord.template_id || 'Custom SUPERMEGA template'
   const intakeJob = buildIntakeJob(routedRecord, acceptanceTests)
   const clientKickoffPack = buildClientKickoffPack(routedRecord, intakeJob)
+  const implementationBlueprintPack = buildImplementationBlueprintPack(routedRecord, solutionRoute, intakeJob)
   const sourceSummary = [
     routedRecord.source_links ? `source links: ${routedRecord.source_links}` : '',
     routedRecord.source_file_count ? `file count: ${routedRecord.source_file_count}` : '',
@@ -927,6 +1048,7 @@ function buildFirstProofTaskPayload(record) {
     solution_route: solutionRoute,
     intake_job: intakeJob,
     client_kickoff_pack: clientKickoffPack,
+    implementation_blueprint_pack: implementationBlueprintPack,
     source_trace: intakeJob.source_manifest
       .filter((item) => item.status === 'provided')
       .map((item) => `${item.source_type}: ${item.value}`),
@@ -979,6 +1101,7 @@ function pipelineActionPayload(record) {
       source_file_count: record.source_file_count,
       public_package: record.public_package,
       first_proof_target: record.first_proof_target,
+      implementation_blueprint_pack: firstProofTask.implementation_blueprint_pack,
       acceptance_tests: record.acceptance_tests,
       launch_blockers: record.launch_blockers,
       automation_boundary: record.automation_boundary,
@@ -1686,6 +1809,7 @@ async function handler(req, res) {
 
 handler.__test = {
   buildSolutionRoute,
+  buildImplementationBlueprintPack,
   buildFirstProofTaskPayload,
   buildClientKickoffPack,
   buildIntakeJob,
