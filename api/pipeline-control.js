@@ -271,6 +271,77 @@ function buildFirstRunAcceptance(input = {}) {
   }
 }
 
+function buildOwnerAcceptanceRecord(input = {}) {
+  const decision = oneOf(input.decision || input.ownerAcceptanceDecision, ['accepted', 'changes_requested'], '')
+  const evidenceReference = text(input.evidenceReference || input.ownerAcceptanceReference)
+  const recordedAt = text(input.recordedAt) || new Date().toISOString()
+  const acceptance = input.acceptance || {}
+  const workspaceSlug = text(acceptance.workspace_slug || input.workspaceSlug) || 'private-workspace-required'
+  const leadId = text(acceptance.lead_id || input.leadId) || 'not set'
+  const templateName = text(acceptance.template_name || input.templateName) || 'SUPERMEGA agent'
+  const ownerNote = text(input.ownerNote).slice(0, 500)
+  const accepted = decision === 'accepted'
+  const packet = [
+    `# ${templateName} owner acceptance record`,
+    '',
+    `Decision: ${decision || 'missing_decision'}`,
+    `Lead: ${leadId}`,
+    `Workspace: ${workspaceSlug}`,
+    `Evidence reference: ${evidenceReference || 'OWNER_ACCEPTANCE_REFERENCE_REQUIRED'}`,
+    `Recorded at: ${recordedAt}`,
+    ownerNote ? `Owner note: ${ownerNote}` : 'Owner note: not recorded',
+    'Real MRR delta: 0',
+    '',
+    '## Result',
+    accepted
+      ? 'Owner accepted the first run for the next approval-only production run.'
+      : 'Owner requested changes; no production send/write is allowed until a revised run is accepted.',
+    '',
+    '## Guardrails',
+    '- Connector writes remain blocked until a separate explicit connector policy is approved.',
+    '- External sends remain approval-only.',
+    '- Recurring revenue is still not claimed from this record.',
+    '- Real MRR remains 0 until payment and acceptance evidence are reconciled in the revenue ledger.',
+  ].join('\n')
+  const queueCsv = [
+    ['workspace_slug', 'lead_id', 'decision', 'next_step', 'external_action_state', 'connector_write_state', 'recurring_revenue_state', 'real_mrr_delta', 'evidence_reference'].map(csvCell).join(','),
+    [
+      workspaceSlug,
+      leadId,
+      decision,
+      accepted ? 'run_next_approval_only_cycle' : 'revise_first_run_output',
+      accepted ? 'approval_only_next_run_allowed' : 'blocked_until_revised_acceptance',
+      'blocked_until_explicit_policy',
+      'not_claimed',
+      '0',
+      evidenceReference,
+    ].map(csvCell).join(','),
+  ].join('\n')
+  return {
+    status: 'owner_acceptance_recorded',
+    decision,
+    workspace_slug: workspaceSlug,
+    lead_id: leadId,
+    template_name: templateName,
+    evidence_reference: evidenceReference,
+    owner_note: ownerNote,
+    recorded_at: recordedAt,
+    recorded_by: 'operator_console',
+    first_run_state: accepted ? 'accepted_for_next_approval_only_run' : 'changes_requested',
+    external_action_state: accepted ? 'approval_only_next_run_allowed' : 'blocked_until_revised_acceptance',
+    connector_write_state: 'blocked_until_explicit_policy',
+    recurring_revenue_state: 'not_claimed',
+    real_mrr_delta: 0,
+    packet,
+    queue_csv: queueCsv,
+    guardrails: [
+      'no_connector_write_without_explicit_policy',
+      'external_sends_remain_approval_only',
+      'no_recurring_revenue_claim_from_acceptance_record',
+    ],
+  }
+}
+
 function envText(...names) {
   for (const name of names) {
     const value = text(process.env[name])
@@ -328,6 +399,7 @@ function firstProofPacket(row) {
   const sourceTrace = list(task.source_trace || payload.source_trace)
   const persistedOrderRoomState = parseJsonObject(result.pilot_order_room_state || payload.pilot_order_room_state)
   const firstRunAcceptance = parseJsonObject(result.first_run_acceptance || payload.first_run_acceptance)
+  const ownerAcceptance = parseJsonObject(result.owner_acceptance || payload.owner_acceptance)
   const orderRoomState = Object.keys(persistedOrderRoomState).length
     ? persistedOrderRoomState
     : {
@@ -636,6 +708,9 @@ function firstProofPacket(row) {
       first_run_acceptance: Object.keys(firstRunAcceptance).length ? firstRunAcceptance : null,
       first_run_acceptance_packet: text(firstRunAcceptance.acceptance_packet),
       first_run_acceptance_queue_csv: text(firstRunAcceptance.acceptance_queue_csv),
+      owner_acceptance: Object.keys(ownerAcceptance).length ? ownerAcceptance : null,
+      owner_acceptance_packet: text(ownerAcceptance.packet),
+      owner_acceptance_queue_csv: text(ownerAcceptance.queue_csv),
       state: orderRoomState,
     },
     approval_required: result.approval_required !== undefined ? result.approval_required !== false : task.approval_required !== false,
@@ -975,6 +1050,106 @@ async function prepareFirstRunAcceptance(payload) {
   }
 }
 
+async function recordOwnerAcceptance(payload) {
+  const actionId = text(payload.action_id)
+  const leadId = text(payload.lead_id)
+  const decision = oneOf(payload.owner_acceptance_decision || payload.decision, ['accepted', 'changes_requested'], '')
+  const evidenceReference = text(payload.owner_acceptance_reference || payload.evidence_reference)
+  if (!actionId && !leadId) return { status: 'error', reason: 'missing_action_or_lead_id' }
+  if (!decision) return { status: 'error', reason: 'invalid_owner_acceptance_decision' }
+  if (!evidenceReference) return { status: 'error', reason: 'missing_owner_acceptance_reference' }
+  if (!datastore.postgresConfigured()) return { status: 'error', reason: 'postgres_not_configured' }
+
+  const selected = await datastore.query(
+    `
+      select
+        action_id, lead_id, task_id, action_type, status, priority, owner,
+        title, next_step, approval_required, approval_state,
+        notification_channel, notification_status, payload, result, created_at
+      from public.supermega_pipeline_actions
+      where (($1 <> '' and action_id = $1) or ($1 = '' and $2 <> '' and lead_id = $2))
+      order by created_at desc
+      limit 1
+    `,
+    [actionId, leadId],
+  )
+  if (selected.status !== 'ready') return selected
+  if (!selected.rows.length) return { status: 'error', reason: 'action_not_found' }
+
+  const row = selected.rows[0]
+  const currentResult = parseJsonObject(row.result)
+  const firstRunAcceptance = parseJsonObject(currentResult.first_run_acceptance)
+  if (firstRunAcceptance.status !== 'first_run_acceptance_packet_ready') {
+    return {
+      status: 'error',
+      reason: 'first_run_acceptance_required',
+      action: safeAction(row),
+    }
+  }
+
+  const existingOwnerAcceptance = parseJsonObject(currentResult.owner_acceptance)
+  if (existingOwnerAcceptance.status === 'owner_acceptance_recorded') {
+    return {
+      status: 'ready',
+      adapter: 'vercel_postgres_neon',
+      operation_status: 'already_recorded',
+      action: safeAction(row),
+      owner_acceptance: existingOwnerAcceptance,
+    }
+  }
+
+  const context = contextFromActionRow(row, parseJsonObject(currentResult.pilot_order_room_state))
+  const recordedAt = new Date().toISOString()
+  const ownerAcceptance = buildOwnerAcceptanceRecord({
+    ...context,
+    acceptance: firstRunAcceptance,
+    decision,
+    evidenceReference,
+    ownerNote: payload.owner_note,
+    recordedAt,
+  })
+  const result = await datastore.query(
+    `
+      with target as (
+        select id
+        from public.supermega_pipeline_actions
+        where (($1 <> '' and action_id = $1) or ($1 = '' and $2 <> '' and lead_id = $2))
+        order by created_at desc
+        limit 1
+      )
+      update public.supermega_pipeline_actions a
+      set
+        result = jsonb_set(
+          jsonb_set(coalesce(a.result, '{}'::jsonb), '{owner_acceptance}', $3::jsonb, true),
+          '{owner_acceptance_recorded_at}',
+          to_jsonb($4::text),
+          true
+        ),
+        status = case when $5 = 'accepted' then 'owner_accepted_first_run' else 'first_run_changes_requested' end,
+        next_step = case
+          when $5 = 'accepted' then 'Run the next production cycle approval-only; connector writes still need explicit policy approval.'
+          else 'Revise the first run output and prepare a new owner acceptance packet.'
+        end,
+        updated_at = now()
+      where a.id in (select id from target)
+      returning
+        a.action_id, a.lead_id, a.task_id, a.action_type, a.status, a.priority, a.owner,
+        a.title, a.next_step, a.approval_required, a.approval_state,
+        a.notification_channel, a.notification_status, a.payload, a.result, a.created_at
+    `,
+    [actionId, leadId, JSON.stringify(ownerAcceptance), recordedAt, decision],
+  )
+  if (result.status !== 'ready') return { ...result, owner_acceptance: ownerAcceptance }
+  if (!result.rows.length) return { status: 'error', reason: 'action_not_found', owner_acceptance: ownerAcceptance }
+  return {
+    status: 'ready',
+    adapter: 'vercel_postgres_neon',
+    operation_status: 'recorded',
+    action: safeAction(result.rows[0]),
+    owner_acceptance: ownerAcceptance,
+  }
+}
+
 function primaryDatabaseStatus(result) {
   if (!result || result.status === 'ready') {
     return { status: 'ready' }
@@ -995,8 +1170,8 @@ function primaryDatabaseStatus(result) {
 function writeStatusCode(result) {
   if (result.status === 'ready') return 200
   if (result.reason === 'action_not_found') return 404
-  if (['private_workspace_not_ready', 'private_workspace_required', 'use_start_private_workspace_operation'].includes(result.reason)) return 409
-  if (result.reason === 'missing_action_or_lead_id') return 400
+  if (['private_workspace_not_ready', 'private_workspace_required', 'first_run_acceptance_required', 'use_start_private_workspace_operation'].includes(result.reason)) return 409
+  if (['missing_action_or_lead_id', 'invalid_owner_acceptance_decision', 'missing_owner_acceptance_reference'].includes(result.reason)) return 400
   return 503
 }
 
@@ -1088,6 +1263,15 @@ async function handler(req, res) {
         endpoint: 'pipeline-control',
         operation,
         ...prepared,
+      })
+      return
+    }
+    if (operation === 'record_owner_acceptance') {
+      const recorded = await recordOwnerAcceptance(payload)
+      json(res, writeStatusCode(recorded), {
+        endpoint: 'pipeline-control',
+        operation,
+        ...recorded,
       })
       return
     }
@@ -1331,9 +1515,11 @@ async function handler(req, res) {
 
 handler.__test = {
   buildOrderRoomState,
+  buildOwnerAcceptanceRecord,
   buildPrivateWorkspaceManifest,
   firstProofPacket,
   prepareFirstRunAcceptance,
+  recordOwnerAcceptance,
   safeAction,
   startPrivateWorkspace,
   updateOrderRoomState,
