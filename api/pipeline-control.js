@@ -342,6 +342,128 @@ function buildOwnerAcceptanceRecord(input = {}) {
   }
 }
 
+function connectorPolicyActions(value) {
+  const raw = Array.isArray(value) ? value : text(value).split(',')
+  const allowed = new Map([
+    ['read_approved_sources', 'Read only buyer-approved sources.'],
+    ['draft_next_run', 'Draft the next production run inside the private workspace.'],
+    ['queue_external_send_for_owner_approval', 'Queue external sends for owner approval before sending.'],
+    ['queue_connector_write_for_owner_approval', 'Queue connector writes for owner approval before writing.'],
+    ['record_source_trace', 'Record source trace and decision evidence for every important output.'],
+  ])
+  const normalized = raw
+    .map((item) => text(item).toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, ''))
+    .filter((item) => allowed.has(item))
+  const unique = [...new Set(normalized)]
+  return unique.length ? unique.map((id) => ({ id, label: allowed.get(id) })) : [
+    { id: 'read_approved_sources', label: allowed.get('read_approved_sources') },
+    { id: 'draft_next_run', label: allowed.get('draft_next_run') },
+    { id: 'queue_external_send_for_owner_approval', label: allowed.get('queue_external_send_for_owner_approval') },
+    { id: 'queue_connector_write_for_owner_approval', label: allowed.get('queue_connector_write_for_owner_approval') },
+    { id: 'record_source_trace', label: allowed.get('record_source_trace') },
+  ]
+}
+
+function buildConnectorPolicyRecord(input = {}) {
+  const ownerAcceptance = input.ownerAcceptance || {}
+  const evidenceReference = text(input.evidenceReference || input.connectorPolicyReference)
+  const recordedAt = text(input.recordedAt) || new Date().toISOString()
+  const policyMode = oneOf(input.policyMode || input.connectorPolicyMode, ['approval_only'], 'approval_only')
+  const actions = connectorPolicyActions(input.allowedConnectorActions || input.allowed_actions)
+  const workspaceSlug = text(ownerAcceptance.workspace_slug || input.workspaceSlug) || 'private-workspace-required'
+  const leadId = text(ownerAcceptance.lead_id || input.leadId) || 'not set'
+  const templateName = text(ownerAcceptance.template_name || input.templateName) || 'SUPERMEGA agent'
+  const ownerNote = text(input.ownerNote).slice(0, 500)
+  const blockedActions = [
+    'autonomous_external_send',
+    'autonomous_connector_write',
+    'payment_or_recurring_revenue_claim',
+    'credentialed_browser_action_without_per_action_approval',
+  ]
+  const config = {
+    status: 'connector_policy_recorded',
+    policy_mode: policyMode,
+    workspace_slug: workspaceSlug,
+    lead_id: leadId,
+    template_name: templateName,
+    allowed_actions: actions.map((item) => item.id),
+    blocked_actions: blockedActions,
+    per_action_approval_required: true,
+    source_trace_required: true,
+    external_send_state: 'approval_required_per_action',
+    connector_write_state: 'approval_required_per_action',
+    recurring_revenue_state: 'not_claimed',
+    real_mrr_delta: 0,
+  }
+  const packet = [
+    `# ${templateName} connector policy record`,
+    '',
+    'Status: connector_policy_recorded',
+    `Lead: ${leadId}`,
+    `Workspace: ${workspaceSlug}`,
+    `Policy mode: ${policyMode}`,
+    `Evidence reference: ${evidenceReference || 'CONNECTOR_POLICY_REFERENCE_REQUIRED'}`,
+    `Recorded at: ${recordedAt}`,
+    ownerNote ? `Owner note: ${ownerNote}` : 'Owner note: not recorded',
+    'External send state: approval_required_per_action',
+    'Connector write state: approval_required_per_action',
+    'Recurring revenue state: not_claimed',
+    'Real MRR delta: 0',
+    '',
+    '## Allowed connector actions',
+    actions.map((item) => `- ${item.id}: ${item.label}`).join('\n'),
+    '',
+    '## Still blocked',
+    blockedActions.map((item) => `- ${item}`).join('\n'),
+    '',
+    '## Guardrails',
+    '- Every external send or connector write still needs a named owner approval event.',
+    '- The policy config is a run-control record, not an automatic connector credential.',
+    '- Revenue is still not claimed from this policy record.',
+  ].join('\n')
+  const queueCsv = [
+    ['workspace_slug', 'lead_id', 'policy_mode', 'allowed_actions', 'external_send_state', 'connector_write_state', 'recurring_revenue_state', 'real_mrr_delta', 'evidence_reference'].map(csvCell).join(','),
+    [
+      workspaceSlug,
+      leadId,
+      policyMode,
+      actions.map((item) => item.id).join('|'),
+      'approval_required_per_action',
+      'approval_required_per_action',
+      'not_claimed',
+      '0',
+      evidenceReference,
+    ].map(csvCell).join(','),
+  ].join('\n')
+  return {
+    status: 'connector_policy_recorded',
+    policy_mode: policyMode,
+    workspace_slug: workspaceSlug,
+    lead_id: leadId,
+    template_name: templateName,
+    evidence_reference: evidenceReference,
+    owner_note: ownerNote,
+    recorded_at: recordedAt,
+    recorded_by: 'operator_console',
+    allowed_connector_actions: actions.map((item) => item.id),
+    blocked_actions: blockedActions,
+    external_send_state: 'approval_required_per_action',
+    connector_write_state: 'approval_required_per_action',
+    recurring_revenue_state: 'not_claimed',
+    real_mrr_delta: 0,
+    packet,
+    queue_csv: queueCsv,
+    config,
+    config_json: JSON.stringify(config, null, 2),
+    guardrails: [
+      'per_action_owner_approval_required',
+      'no_autonomous_external_send',
+      'no_autonomous_connector_write',
+      'no_recurring_revenue_claim_from_connector_policy',
+    ],
+  }
+}
+
 function envText(...names) {
   for (const name of names) {
     const value = text(process.env[name])
@@ -400,6 +522,7 @@ function firstProofPacket(row) {
   const persistedOrderRoomState = parseJsonObject(result.pilot_order_room_state || payload.pilot_order_room_state)
   const firstRunAcceptance = parseJsonObject(result.first_run_acceptance || payload.first_run_acceptance)
   const ownerAcceptance = parseJsonObject(result.owner_acceptance || payload.owner_acceptance)
+  const connectorPolicy = parseJsonObject(result.connector_policy || payload.connector_policy)
   const orderRoomState = Object.keys(persistedOrderRoomState).length
     ? persistedOrderRoomState
     : {
@@ -711,6 +834,10 @@ function firstProofPacket(row) {
       owner_acceptance: Object.keys(ownerAcceptance).length ? ownerAcceptance : null,
       owner_acceptance_packet: text(ownerAcceptance.packet),
       owner_acceptance_queue_csv: text(ownerAcceptance.queue_csv),
+      connector_policy: Object.keys(connectorPolicy).length ? connectorPolicy : null,
+      connector_policy_packet: text(connectorPolicy.packet),
+      connector_policy_queue_csv: text(connectorPolicy.queue_csv),
+      connector_policy_config_json: text(connectorPolicy.config_json) || (Object.keys(connectorPolicy.config || {}).length ? JSON.stringify(connectorPolicy.config, null, 2) : ''),
       state: orderRoomState,
     },
     approval_required: result.approval_required !== undefined ? result.approval_required !== false : task.approval_required !== false,
@@ -1150,6 +1277,112 @@ async function recordOwnerAcceptance(payload) {
   }
 }
 
+async function recordConnectorPolicy(payload) {
+  const actionId = text(payload.action_id)
+  const leadId = text(payload.lead_id)
+  const policyMode = oneOf(payload.connector_policy_mode || payload.policy_mode, ['approval_only'], '')
+  const evidenceReference = text(payload.connector_policy_reference || payload.evidence_reference)
+  if (!actionId && !leadId) return { status: 'error', reason: 'missing_action_or_lead_id' }
+  if (!policyMode) return { status: 'error', reason: 'invalid_connector_policy_mode' }
+  if (!evidenceReference) return { status: 'error', reason: 'missing_connector_policy_reference' }
+  if (!datastore.postgresConfigured()) return { status: 'error', reason: 'postgres_not_configured' }
+
+  const selected = await datastore.query(
+    `
+      select
+        action_id, lead_id, task_id, action_type, status, priority, owner,
+        title, next_step, approval_required, approval_state,
+        notification_channel, notification_status, payload, result, created_at
+      from public.supermega_pipeline_actions
+      where (($1 <> '' and action_id = $1) or ($1 = '' and $2 <> '' and lead_id = $2))
+      order by created_at desc
+      limit 1
+    `,
+    [actionId, leadId],
+  )
+  if (selected.status !== 'ready') return selected
+  if (!selected.rows.length) return { status: 'error', reason: 'action_not_found' }
+
+  const row = selected.rows[0]
+  const currentResult = parseJsonObject(row.result)
+  const ownerAcceptance = parseJsonObject(currentResult.owner_acceptance)
+  if (ownerAcceptance.status !== 'owner_acceptance_recorded') {
+    return {
+      status: 'error',
+      reason: 'owner_acceptance_required',
+      action: safeAction(row),
+    }
+  }
+  if (ownerAcceptance.decision !== 'accepted') {
+    return {
+      status: 'error',
+      reason: 'owner_acceptance_not_accepted',
+      action: safeAction(row),
+      owner_acceptance: ownerAcceptance,
+    }
+  }
+
+  const existingConnectorPolicy = parseJsonObject(currentResult.connector_policy)
+  if (existingConnectorPolicy.status === 'connector_policy_recorded') {
+    return {
+      status: 'ready',
+      adapter: 'vercel_postgres_neon',
+      operation_status: 'already_recorded',
+      action: safeAction(row),
+      connector_policy: existingConnectorPolicy,
+    }
+  }
+
+  const context = contextFromActionRow(row, parseJsonObject(currentResult.pilot_order_room_state))
+  const recordedAt = new Date().toISOString()
+  const connectorPolicy = buildConnectorPolicyRecord({
+    ...context,
+    ownerAcceptance,
+    policyMode,
+    allowedConnectorActions: payload.allowed_connector_actions || payload.allowed_actions,
+    evidenceReference,
+    ownerNote: payload.owner_note,
+    recordedAt,
+  })
+  const result = await datastore.query(
+    `
+      with target as (
+        select id
+        from public.supermega_pipeline_actions
+        where (($1 <> '' and action_id = $1) or ($1 = '' and $2 <> '' and lead_id = $2))
+        order by created_at desc
+        limit 1
+      )
+      update public.supermega_pipeline_actions a
+      set
+        result = jsonb_set(
+          jsonb_set(coalesce(a.result, '{}'::jsonb), '{connector_policy}', $3::jsonb, true),
+          '{connector_policy_recorded_at}',
+          to_jsonb($4::text),
+          true
+        ),
+        status = 'connector_policy_recorded',
+        next_step = 'Run the next production cycle under the approval-only connector policy; per-action approval is still required.',
+        updated_at = now()
+      where a.id in (select id from target)
+      returning
+        a.action_id, a.lead_id, a.task_id, a.action_type, a.status, a.priority, a.owner,
+        a.title, a.next_step, a.approval_required, a.approval_state,
+        a.notification_channel, a.notification_status, a.payload, a.result, a.created_at
+    `,
+    [actionId, leadId, JSON.stringify(connectorPolicy), recordedAt],
+  )
+  if (result.status !== 'ready') return { ...result, connector_policy: connectorPolicy }
+  if (!result.rows.length) return { status: 'error', reason: 'action_not_found', connector_policy: connectorPolicy }
+  return {
+    status: 'ready',
+    adapter: 'vercel_postgres_neon',
+    operation_status: 'recorded',
+    action: safeAction(result.rows[0]),
+    connector_policy: connectorPolicy,
+  }
+}
+
 function primaryDatabaseStatus(result) {
   if (!result || result.status === 'ready') {
     return { status: 'ready' }
@@ -1170,8 +1403,8 @@ function primaryDatabaseStatus(result) {
 function writeStatusCode(result) {
   if (result.status === 'ready') return 200
   if (result.reason === 'action_not_found') return 404
-  if (['private_workspace_not_ready', 'private_workspace_required', 'first_run_acceptance_required', 'use_start_private_workspace_operation'].includes(result.reason)) return 409
-  if (['missing_action_or_lead_id', 'invalid_owner_acceptance_decision', 'missing_owner_acceptance_reference'].includes(result.reason)) return 400
+  if (['private_workspace_not_ready', 'private_workspace_required', 'first_run_acceptance_required', 'owner_acceptance_required', 'owner_acceptance_not_accepted', 'use_start_private_workspace_operation'].includes(result.reason)) return 409
+  if (['missing_action_or_lead_id', 'invalid_owner_acceptance_decision', 'missing_owner_acceptance_reference', 'invalid_connector_policy_mode', 'missing_connector_policy_reference'].includes(result.reason)) return 400
   return 503
 }
 
@@ -1268,6 +1501,15 @@ async function handler(req, res) {
     }
     if (operation === 'record_owner_acceptance') {
       const recorded = await recordOwnerAcceptance(payload)
+      json(res, writeStatusCode(recorded), {
+        endpoint: 'pipeline-control',
+        operation,
+        ...recorded,
+      })
+      return
+    }
+    if (operation === 'record_connector_policy') {
+      const recorded = await recordConnectorPolicy(payload)
       json(res, writeStatusCode(recorded), {
         endpoint: 'pipeline-control',
         operation,
@@ -1514,11 +1756,13 @@ async function handler(req, res) {
 }
 
 handler.__test = {
+  buildConnectorPolicyRecord,
   buildOrderRoomState,
   buildOwnerAcceptanceRecord,
   buildPrivateWorkspaceManifest,
   firstProofPacket,
   prepareFirstRunAcceptance,
+  recordConnectorPolicy,
   recordOwnerAcceptance,
   safeAction,
   startPrivateWorkspace,

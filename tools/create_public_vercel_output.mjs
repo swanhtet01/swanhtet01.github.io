@@ -4856,6 +4856,9 @@ const publicOperatorConsoleHtml = `<!doctype html>
       const firstRunAcceptanceQueueId = 'first-run-acceptance-queue-'+index;
       const ownerAcceptanceId = 'owner-acceptance-'+index;
       const ownerAcceptanceQueueId = 'owner-acceptance-queue-'+index;
+      const connectorPolicyId = 'connector-policy-'+index;
+      const connectorPolicyQueueId = 'connector-policy-queue-'+index;
+      const connectorPolicyConfigId = 'connector-policy-config-'+index;
       const state = room.state || {};
       const actionId = action && action.action_id || '';
       const leadId = action && action.lead_id || '';
@@ -4865,11 +4868,15 @@ const publicOperatorConsoleHtml = `<!doctype html>
       const workspaceButton = '<div class="operator-row"><button class="btn primary operator-workspace-start" type="button" data-workspace-command="start_private_workspace" data-action-id="'+esc(actionId)+'" data-lead-id="'+esc(leadId)+'">Create private workspace</button></div>';
       const acceptanceButton = '<div class="operator-row"><button class="btn primary operator-acceptance-prepare" type="button" data-acceptance-command="prepare_first_run_acceptance" data-action-id="'+esc(actionId)+'" data-lead-id="'+esc(leadId)+'">Prepare first-run acceptance</button></div>';
       const ownerDecisionButtons = '<div class="operator-row"><button class="btn primary operator-owner-acceptance" type="button" data-owner-acceptance="accepted" data-action-id="'+esc(actionId)+'" data-lead-id="'+esc(leadId)+'">Record owner accepted</button><button class="btn secondary operator-owner-acceptance" type="button" data-owner-acceptance="changes_requested" data-action-id="'+esc(actionId)+'" data-lead-id="'+esc(leadId)+'">Record changes requested</button></div>';
+      const connectorPolicyButton = '<div class="operator-row"><button class="btn primary operator-connector-policy" type="button" data-connector-policy="approval_only" data-action-id="'+esc(actionId)+'" data-lead-id="'+esc(leadId)+'">Record connector policy</button></div>';
       const acceptancePacket = room.first_run_acceptance_packet ? '<textarea class="operator-reply" id="'+firstRunAcceptanceId+'" readonly>'+esc(room.first_run_acceptance_packet || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+firstRunAcceptanceId+'">Copy first-run acceptance packet</button>' : '';
       const acceptanceQueue = room.first_run_acceptance_queue_csv ? '<textarea class="operator-reply" id="'+firstRunAcceptanceQueueId+'" readonly>'+esc(room.first_run_acceptance_queue_csv || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+firstRunAcceptanceQueueId+'">Copy first-run acceptance queue</button>' : '';
       const ownerPacket = room.owner_acceptance_packet ? '<textarea class="operator-reply" id="'+ownerAcceptanceId+'" readonly>'+esc(room.owner_acceptance_packet || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+ownerAcceptanceId+'">Copy owner acceptance record</button>' : '';
       const ownerQueue = room.owner_acceptance_queue_csv ? '<textarea class="operator-reply" id="'+ownerAcceptanceQueueId+'" readonly>'+esc(room.owner_acceptance_queue_csv || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+ownerAcceptanceQueueId+'">Copy owner acceptance queue</button>' : '';
-      return '<div class="operator-proof-section operator-order-room"><span>Paid pilot order room</span><div class="operator-meta"><span class="operator-chip">'+esc(room.status || 'draft_owner_approval_required')+'</span><span class="operator-chip">'+esc(room.payment_state || 'payment_proof_required')+'</span><span class="operator-chip">'+esc(room.order_state || 'order_not_started')+'</span></div>'+stateChips+stateButtons+workspaceButton+acceptanceButton+ownerDecisionButtons+'<textarea class="operator-reply" id="'+paymentId+'" readonly>'+esc(room.payment_request_draft || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+paymentId+'">Copy payment request</button><textarea class="operator-reply" id="'+paymentLedgerId+'" readonly>'+esc(room.payment_proof_ledger_csv || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+paymentLedgerId+'">Copy payment ledger</button><textarea class="operator-reply" id="'+orderLedgerId+'" readonly>'+esc(room.order_room_ledger_csv || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+orderLedgerId+'">Copy order ledger</button><textarea class="operator-reply" id="'+checklistId+'" readonly>'+esc(checklist)+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+checklistId+'">Copy pilot start checklist</button><textarea class="operator-reply" id="'+activationId+'" readonly>'+esc(room.owner_activation_packet || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+activationId+'">Copy owner activation packet</button><textarea class="operator-reply" id="'+actionQueueId+'" readonly>'+esc(room.owner_action_queue_csv || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+actionQueueId+'">Copy owner action queue</button><textarea class="operator-reply" id="'+activationJsonId+'" readonly>'+esc(room.activation_summary_json || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+activationJsonId+'">Copy activation JSON</button><textarea class="operator-reply" id="'+workspaceManifestId+'" readonly>'+esc(room.private_workspace_manifest_json || JSON.stringify(room.private_workspace_manifest || {},null,2))+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+workspaceManifestId+'">Copy workspace manifest</button><textarea class="operator-reply" id="'+workspaceHandoffId+'" readonly>'+esc(room.private_workspace_handoff_packet || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+workspaceHandoffId+'">Copy workspace handoff</button><textarea class="operator-reply" id="'+firstRunQueueId+'" readonly>'+esc(room.first_run_queue_csv || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+firstRunQueueId+'">Copy first run queue</button>'+acceptancePacket+acceptanceQueue+ownerPacket+ownerQueue+'</div>';
+      const connectorPacket = room.connector_policy_packet ? '<textarea class="operator-reply" id="'+connectorPolicyId+'" readonly>'+esc(room.connector_policy_packet || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+connectorPolicyId+'">Copy connector policy</button>' : '';
+      const connectorQueue = room.connector_policy_queue_csv ? '<textarea class="operator-reply" id="'+connectorPolicyQueueId+'" readonly>'+esc(room.connector_policy_queue_csv || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+connectorPolicyQueueId+'">Copy connector policy queue</button>' : '';
+      const connectorConfig = room.connector_policy_config_json ? '<textarea class="operator-reply" id="'+connectorPolicyConfigId+'" readonly>'+esc(room.connector_policy_config_json || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+connectorPolicyConfigId+'">Copy connector policy config</button>' : '';
+      return '<div class="operator-proof-section operator-order-room"><span>Paid pilot order room</span><div class="operator-meta"><span class="operator-chip">'+esc(room.status || 'draft_owner_approval_required')+'</span><span class="operator-chip">'+esc(room.payment_state || 'payment_proof_required')+'</span><span class="operator-chip">'+esc(room.order_state || 'order_not_started')+'</span></div>'+stateChips+stateButtons+workspaceButton+acceptanceButton+ownerDecisionButtons+connectorPolicyButton+'<textarea class="operator-reply" id="'+paymentId+'" readonly>'+esc(room.payment_request_draft || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+paymentId+'">Copy payment request</button><textarea class="operator-reply" id="'+paymentLedgerId+'" readonly>'+esc(room.payment_proof_ledger_csv || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+paymentLedgerId+'">Copy payment ledger</button><textarea class="operator-reply" id="'+orderLedgerId+'" readonly>'+esc(room.order_room_ledger_csv || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+orderLedgerId+'">Copy order ledger</button><textarea class="operator-reply" id="'+checklistId+'" readonly>'+esc(checklist)+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+checklistId+'">Copy pilot start checklist</button><textarea class="operator-reply" id="'+activationId+'" readonly>'+esc(room.owner_activation_packet || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+activationId+'">Copy owner activation packet</button><textarea class="operator-reply" id="'+actionQueueId+'" readonly>'+esc(room.owner_action_queue_csv || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+actionQueueId+'">Copy owner action queue</button><textarea class="operator-reply" id="'+activationJsonId+'" readonly>'+esc(room.activation_summary_json || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+activationJsonId+'">Copy activation JSON</button><textarea class="operator-reply" id="'+workspaceManifestId+'" readonly>'+esc(room.private_workspace_manifest_json || JSON.stringify(room.private_workspace_manifest || {},null,2))+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+workspaceManifestId+'">Copy workspace manifest</button><textarea class="operator-reply" id="'+workspaceHandoffId+'" readonly>'+esc(room.private_workspace_handoff_packet || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+workspaceHandoffId+'">Copy workspace handoff</button><textarea class="operator-reply" id="'+firstRunQueueId+'" readonly>'+esc(room.first_run_queue_csv || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+firstRunQueueId+'">Copy first run queue</button>'+acceptancePacket+acceptanceQueue+ownerPacket+ownerQueue+connectorPacket+connectorQueue+connectorConfig+'</div>';
     }
     function legacyCopy(el){
       el.focus();
@@ -4960,6 +4967,31 @@ const publicOperatorConsoleHtml = `<!doctype html>
       setStatus(data);
       if(response.ok) await refresh();
     }
+    async function recordConnectorPolicy(button){
+      if(!token()){setStatus('Paste the ops key first.');return}
+      const mode = button.getAttribute('data-connector-policy') || 'approval_only';
+      const reference = window.prompt('Connector policy evidence reference');
+      if(!reference || !reference.trim()){setStatus('Paste connector policy reference first.');return}
+      const payload = {
+        operation:'record_connector_policy',
+        action_id:button.getAttribute('data-action-id') || '',
+        lead_id:button.getAttribute('data-lead-id') || '',
+        connector_policy_mode:mode,
+        connector_policy_reference:reference.trim(),
+        allowed_connector_actions:[
+          'read_approved_sources',
+          'draft_next_run',
+          'queue_external_send_for_owner_approval',
+          'queue_connector_write_for_owner_approval',
+          'record_source_trace'
+        ]
+      };
+      setStatus({status:'recording_connector_policy', mode});
+      const response = await fetch('/api/pipeline-control',{method:'POST',headers:Object.assign({},authHeaders(),{'content-type':'application/json'}),body:JSON.stringify(payload),cache:'no-store'});
+      const data = await response.json().catch(function(){return {status:'error',reason:'invalid_json',code:response.status}});
+      setStatus(data);
+      if(response.ok) await refresh();
+    }
     function renderKpis(data){
       const metrics = data.metrics || {};
       kpisEl.innerHTML = [
@@ -4981,6 +5013,7 @@ const publicOperatorConsoleHtml = `<!doctype html>
       actionsEl.querySelectorAll('[data-workspace-command]').forEach(function(button){button.addEventListener('click',function(){startPrivateWorkspace(button)})});
       actionsEl.querySelectorAll('[data-acceptance-command]').forEach(function(button){button.addEventListener('click',function(){prepareFirstRunAcceptance(button)})});
       actionsEl.querySelectorAll('[data-owner-acceptance]').forEach(function(button){button.addEventListener('click',function(){recordOwnerAcceptance(button)})});
+      actionsEl.querySelectorAll('[data-connector-policy]').forEach(function(button){button.addEventListener('click',function(){recordConnectorPolicy(button)})});
     }
     async function refresh(){
       if(!token()){setStatus('Paste the ops key first.');return}
