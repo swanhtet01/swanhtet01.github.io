@@ -606,6 +606,133 @@ function buildProductionApprovalQueue(input = {}) {
   }
 }
 
+function buildEnterpriseDeliveryPack(input = {}) {
+  const productionQueue = input.productionQueue || {}
+  const evidenceReference = text(input.evidenceReference || input.deliveryPackReference)
+  const preparedAt = text(input.preparedAt) || new Date().toISOString()
+  const workspaceSlug = text(productionQueue.workspace_slug || input.workspaceSlug) || 'private-workspace-required'
+  const leadId = text(productionQueue.lead_id || input.leadId) || 'not set'
+  const templateName = text(productionQueue.template_name || input.templateName) || 'SUPERMEGA agent'
+  const supportWindow = text(input.supportWindow || input.support_window) || 'business-hours Myanmar time, urgent blockers reviewed same day'
+  const roles = [
+    { role: 'client_owner', access: 'approve scope, sources, sends, connector writes, and value evidence' },
+    { role: 'client_operator', access: 'submit source updates, review drafts, and request changes' },
+    { role: 'supermega_operator', access: 'prepare proofs, run drafts, and maintain the approval queue' },
+    { role: 'agent_worker', access: 'draft only from approved sources; no credentials or external actions' },
+  ]
+  const rollout = [
+    { day: 'day_0', milestone: 'Confirm source access, owner approvals, payment proof, and private workspace.' },
+    { day: 'day_1_to_3', milestone: 'Run approval-only autopilot drafts and collect change requests.' },
+    { day: 'day_4_to_7', milestone: 'Approve first client-facing send/write actions one by one.' },
+    { day: 'day_8_to_30', milestone: 'Track value evidence, support tickets, exception patterns, and renewal reason.' },
+  ]
+  const serviceLevels = [
+    { area: 'source_trace', promise: 'Every important output names the approved source or evidence reference.' },
+    { area: 'approval_boundary', promise: 'No external send, connector write, credentialed browser action, or payment action without owner approval.' },
+    { area: 'rollback', promise: 'Every connector write proposal includes a target record and rollback note before approval.' },
+    { area: 'support', promise: supportWindow },
+  ]
+  const valueLedgerCsv = [
+    ['workspace_slug', 'lead_id', 'metric', 'baseline', 'current_evidence', 'owner_confirmed', 'real_mrr_delta'].map(csvCell).join(','),
+    [workspaceSlug, leadId, 'time_saved', 'unknown_until_client_confirms', 'operator_estimate_requires_source_trace', 'no', '0'].map(csvCell).join(','),
+    [workspaceSlug, leadId, 'revenue_influenced', 'unknown_until_client_confirms', 'buyer_visible_value_note_required', 'no', '0'].map(csvCell).join(','),
+    [workspaceSlug, leadId, 'risk_removed', 'unknown_until_client_confirms', 'exception_or_error_prevented_evidence_required', 'no', '0'].map(csvCell).join(','),
+    [workspaceSlug, leadId, 'renewal_reason', 'not_claimed', '30_day_value_review_required', 'no', '0'].map(csvCell).join(','),
+  ].join('\n')
+  const accessMatrixCsv = [
+    ['workspace_slug', 'lead_id', 'role', 'access', 'external_action_allowed', 'connector_write_allowed'].map(csvCell).join(','),
+    ...roles.map((item) =>
+      [
+        workspaceSlug,
+        leadId,
+        item.role,
+        item.access,
+        item.role === 'client_owner' ? 'approve_only' : 'no',
+        item.role === 'client_owner' ? 'approve_only' : 'no',
+      ].map(csvCell).join(','),
+    ),
+  ].join('\n')
+  const packet = [
+    `# ${templateName} enterprise delivery pack`,
+    '',
+    'Status: enterprise_delivery_pack_ready',
+    `Lead: ${leadId}`,
+    `Workspace: ${workspaceSlug}`,
+    `Evidence reference: ${evidenceReference || 'ENTERPRISE_DELIVERY_REFERENCE_REQUIRED'}`,
+    `Prepared at: ${preparedAt}`,
+    'Delivery mode: managed_ai_workcell',
+    'Autopilot state: draft_queue_only_with_owner_approvals',
+    'Enterprise posture: approval_gated_source_traced',
+    'Recurring revenue state: not_claimed',
+    'Real MRR delta: 0',
+    '',
+    '## Access matrix',
+    roles.map((item) => `- ${item.role}: ${item.access}`).join('\n'),
+    '',
+    '## Rollout plan',
+    rollout.map((item) => `- ${item.day}: ${item.milestone}`).join('\n'),
+    '',
+    '## Service levels',
+    serviceLevels.map((item) => `- ${item.area}: ${item.promise}`).join('\n'),
+    '',
+    '## Value evidence ledger',
+    '- time_saved: owner-confirmed evidence required',
+    '- revenue_influenced: buyer-visible evidence required',
+    '- risk_removed: source-traced exception evidence required',
+    '- renewal_reason: 30-day value review required',
+    '',
+    '## Guardrails',
+    '- This delivery pack does not grant connector credentials.',
+    '- This delivery pack does not authorize autonomous external sends or writes.',
+    '- Real MRR remains 0 until payment proof and buyer-confirmed value evidence are recorded.',
+  ].join('\n')
+  const config = {
+    status: 'enterprise_delivery_pack_ready',
+    delivery_mode: 'managed_ai_workcell',
+    workspace_slug: workspaceSlug,
+    lead_id: leadId,
+    template_name: templateName,
+    access_roles: roles.map((item) => item.role),
+    rollout_days: rollout.map((item) => item.day),
+    support_window: supportWindow,
+    autopilot_state: 'draft_queue_only_with_owner_approvals',
+    external_send_state: 'approval_required_per_action',
+    connector_write_state: 'approval_required_per_action',
+    recurring_revenue_state: 'not_claimed',
+    real_mrr_delta: 0,
+  }
+  return {
+    status: 'enterprise_delivery_pack_ready',
+    delivery_mode: 'managed_ai_workcell',
+    workspace_slug: workspaceSlug,
+    lead_id: leadId,
+    template_name: templateName,
+    evidence_reference: evidenceReference,
+    prepared_at: preparedAt,
+    prepared_by: 'operator_console',
+    access_matrix: roles,
+    rollout_plan: rollout,
+    service_levels: serviceLevels,
+    support_window: supportWindow,
+    autopilot_state: 'draft_queue_only_with_owner_approvals',
+    external_send_state: 'approval_required_per_action',
+    connector_write_state: 'approval_required_per_action',
+    recurring_revenue_state: 'not_claimed',
+    real_mrr_delta: 0,
+    packet,
+    access_matrix_csv: accessMatrixCsv,
+    value_ledger_csv: valueLedgerCsv,
+    config,
+    config_json: JSON.stringify(config, null, 2),
+    guardrails: [
+      'enterprise_delivery_pack_is_not_connector_credential',
+      'source_trace_required_for_value_claims',
+      'per_action_owner_approval_required',
+      'no_real_mrr_claim_without_payment_and_value_evidence',
+    ],
+  }
+}
+
 function envText(...names) {
   for (const name of names) {
     const value = text(process.env[name])
@@ -666,6 +793,7 @@ function firstProofPacket(row) {
   const ownerAcceptance = parseJsonObject(result.owner_acceptance || payload.owner_acceptance)
   const connectorPolicy = parseJsonObject(result.connector_policy || payload.connector_policy)
   const productionApprovalQueue = parseJsonObject(result.production_approval_queue || payload.production_approval_queue)
+  const enterpriseDeliveryPack = parseJsonObject(result.enterprise_delivery_pack || payload.enterprise_delivery_pack)
   const orderRoomState = Object.keys(persistedOrderRoomState).length
     ? persistedOrderRoomState
     : {
@@ -985,6 +1113,11 @@ function firstProofPacket(row) {
       production_approval_packet: text(productionApprovalQueue.packet),
       production_approval_queue_csv: text(productionApprovalQueue.queue_csv),
       production_approval_config_json: text(productionApprovalQueue.config_json) || (Object.keys(productionApprovalQueue.config || {}).length ? JSON.stringify(productionApprovalQueue.config, null, 2) : ''),
+      enterprise_delivery_pack: Object.keys(enterpriseDeliveryPack).length ? enterpriseDeliveryPack : null,
+      enterprise_delivery_packet: text(enterpriseDeliveryPack.packet),
+      enterprise_access_matrix_csv: text(enterpriseDeliveryPack.access_matrix_csv),
+      enterprise_value_ledger_csv: text(enterpriseDeliveryPack.value_ledger_csv),
+      enterprise_delivery_config_json: text(enterpriseDeliveryPack.config_json) || (Object.keys(enterpriseDeliveryPack.config || {}).length ? JSON.stringify(enterpriseDeliveryPack.config, null, 2) : ''),
       state: orderRoomState,
     },
     approval_required: result.approval_required !== undefined ? result.approval_required !== false : task.approval_required !== false,
@@ -1624,6 +1757,100 @@ async function prepareProductionApprovalQueue(payload) {
   }
 }
 
+async function prepareEnterpriseDeliveryPack(payload) {
+  const actionId = text(payload.action_id)
+  const leadId = text(payload.lead_id)
+  const evidenceReference = text(payload.enterprise_delivery_reference || payload.evidence_reference)
+  if (!actionId && !leadId) return { status: 'error', reason: 'missing_action_or_lead_id' }
+  if (!evidenceReference) return { status: 'error', reason: 'missing_enterprise_delivery_reference' }
+  if (!datastore.postgresConfigured()) return { status: 'error', reason: 'postgres_not_configured' }
+
+  const selected = await datastore.query(
+    `
+      select
+        action_id, lead_id, task_id, action_type, status, priority, owner,
+        title, next_step, approval_required, approval_state,
+        notification_channel, notification_status, payload, result, created_at
+      from public.supermega_pipeline_actions
+      where (($1 <> '' and action_id = $1) or ($1 = '' and $2 <> '' and lead_id = $2))
+      order by created_at desc
+      limit 1
+    `,
+    [actionId, leadId],
+  )
+  if (selected.status !== 'ready') return selected
+  if (!selected.rows.length) return { status: 'error', reason: 'action_not_found' }
+
+  const row = selected.rows[0]
+  const currentResult = parseJsonObject(row.result)
+  const productionQueue = parseJsonObject(currentResult.production_approval_queue)
+  if (productionQueue.status !== 'production_approval_queue_ready') {
+    return {
+      status: 'error',
+      reason: 'production_approval_queue_required',
+      action: safeAction(row),
+    }
+  }
+
+  const existingPack = parseJsonObject(currentResult.enterprise_delivery_pack)
+  if (existingPack.status === 'enterprise_delivery_pack_ready') {
+    return {
+      status: 'ready',
+      adapter: 'vercel_postgres_neon',
+      operation_status: 'already_prepared',
+      action: safeAction(row),
+      enterprise_delivery_pack: existingPack,
+    }
+  }
+
+  const context = contextFromActionRow(row, parseJsonObject(currentResult.pilot_order_room_state))
+  const preparedAt = new Date().toISOString()
+  const enterprisePack = buildEnterpriseDeliveryPack({
+    ...context,
+    productionQueue,
+    evidenceReference,
+    supportWindow: payload.support_window,
+    preparedAt,
+  })
+  const result = await datastore.query(
+    `
+      with target as (
+        select id
+        from public.supermega_pipeline_actions
+        where (($1 <> '' and action_id = $1) or ($1 = '' and $2 <> '' and lead_id = $2))
+        order by created_at desc
+        limit 1
+      )
+      update public.supermega_pipeline_actions a
+      set
+        result = jsonb_set(
+          jsonb_set(coalesce(a.result, '{}'::jsonb), '{enterprise_delivery_pack}', $3::jsonb, true),
+          '{enterprise_delivery_pack_prepared_at}',
+          to_jsonb($4::text),
+          true
+        ),
+        status = 'enterprise_delivery_pack_ready',
+        next_step = 'Use the enterprise delivery pack for client onboarding, access boundaries, support cadence, and 30-day value review.',
+        updated_at = now()
+      where a.id in (select id from target)
+      returning
+        a.action_id, a.lead_id, a.task_id, a.action_type, a.status, a.priority, a.owner,
+        a.title, a.next_step, a.approval_required, a.approval_state,
+        a.notification_channel, a.notification_status, a.payload, a.result, a.created_at
+    `,
+    [actionId, leadId, JSON.stringify(enterprisePack), preparedAt],
+  )
+  if (result.status !== 'ready') return { ...result, enterprise_delivery_pack: enterprisePack }
+  if (!result.rows.length) return { status: 'error', reason: 'action_not_found', enterprise_delivery_pack: enterprisePack }
+  return {
+    status: 'ready',
+    adapter: 'vercel_postgres_neon',
+    operation_status: 'prepared',
+    action: safeAction(result.rows[0]),
+    enterprise_delivery_pack: enterprisePack,
+  }
+}
+
 function primaryDatabaseStatus(result) {
   if (!result || result.status === 'ready') {
     return { status: 'ready' }
@@ -1644,8 +1871,8 @@ function primaryDatabaseStatus(result) {
 function writeStatusCode(result) {
   if (result.status === 'ready') return 200
   if (result.reason === 'action_not_found') return 404
-  if (['private_workspace_not_ready', 'private_workspace_required', 'first_run_acceptance_required', 'owner_acceptance_required', 'owner_acceptance_not_accepted', 'connector_policy_required', 'use_start_private_workspace_operation'].includes(result.reason)) return 409
-  if (['missing_action_or_lead_id', 'invalid_owner_acceptance_decision', 'missing_owner_acceptance_reference', 'invalid_connector_policy_mode', 'missing_connector_policy_reference', 'missing_production_queue_reference'].includes(result.reason)) return 400
+  if (['private_workspace_not_ready', 'private_workspace_required', 'first_run_acceptance_required', 'owner_acceptance_required', 'owner_acceptance_not_accepted', 'connector_policy_required', 'production_approval_queue_required', 'use_start_private_workspace_operation'].includes(result.reason)) return 409
+  if (['missing_action_or_lead_id', 'invalid_owner_acceptance_decision', 'missing_owner_acceptance_reference', 'invalid_connector_policy_mode', 'missing_connector_policy_reference', 'missing_production_queue_reference', 'missing_enterprise_delivery_reference'].includes(result.reason)) return 400
   return 503
 }
 
@@ -1760,6 +1987,15 @@ async function handler(req, res) {
     }
     if (operation === 'prepare_production_approval_queue') {
       const prepared = await prepareProductionApprovalQueue(payload)
+      json(res, writeStatusCode(prepared), {
+        endpoint: 'pipeline-control',
+        operation,
+        ...prepared,
+      })
+      return
+    }
+    if (operation === 'prepare_enterprise_delivery_pack') {
+      const prepared = await prepareEnterpriseDeliveryPack(payload)
       json(res, writeStatusCode(prepared), {
         endpoint: 'pipeline-control',
         operation,
@@ -2007,12 +2243,14 @@ async function handler(req, res) {
 
 handler.__test = {
   buildConnectorPolicyRecord,
+  buildEnterpriseDeliveryPack,
   buildOrderRoomState,
   buildOwnerAcceptanceRecord,
   buildPrivateWorkspaceManifest,
   buildProductionApprovalQueue,
   firstProofPacket,
   prepareFirstRunAcceptance,
+  prepareEnterpriseDeliveryPack,
   prepareProductionApprovalQueue,
   recordConnectorPolicy,
   recordOwnerAcceptance,
