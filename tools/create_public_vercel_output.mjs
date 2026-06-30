@@ -4495,6 +4495,10 @@ const publicOperatorConsoleHtml = `<!doctype html>
     .operator-kpis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
     .operator-kpi{border:1px solid var(--line);padding:12px;background:color-mix(in srgb,var(--paper) 92%,var(--ink) 8%)}
     .operator-kpi strong{display:block;font-size:24px;line-height:1}
+    .operator-revenue-board{border:1px solid var(--line);padding:14px;background:color-mix(in srgb,var(--paper) 94%,var(--ink) 6%)}
+    .operator-money-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:10px}
+    .operator-money-cell{border:1px solid var(--line);padding:10px}
+    .operator-money-cell strong{display:block;font-size:20px;line-height:1.1}
     .operator-list{display:grid;gap:10px}
     .operator-item{border:1px solid var(--line);padding:14px;background:transparent}
     .operator-meta{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0;color:var(--muted);font-size:13px}
@@ -4506,7 +4510,7 @@ const publicOperatorConsoleHtml = `<!doctype html>
     .operator-proof ul{margin:8px 0 0;padding-left:18px}
     .operator-reply{width:100%;min-height:150px;margin-top:8px;border:1px solid var(--line);background:color-mix(in srgb,var(--paper) 93%,var(--ink) 7%);color:var(--ink);padding:10px;font:inherit;font-size:13px;line-height:1.45;resize:vertical}
     .operator-output{white-space:pre-wrap;overflow:auto;max-height:240px;border:1px solid var(--line);padding:12px;font-size:13px;background:color-mix(in srgb,var(--paper) 90%,var(--ink) 10%)}
-    @media(max-width:840px){.operator-grid{grid-template-columns:1fr}.operator-kpis{grid-template-columns:1fr}}
+    @media(max-width:840px){.operator-grid{grid-template-columns:1fr}.operator-kpis,.operator-money-grid{grid-template-columns:1fr}}
   </style>
 </head>
 <body>
@@ -4534,6 +4538,7 @@ const publicOperatorConsoleHtml = `<!doctype html>
         </div>
         <div class="operator-panel operator-stack">
           <div class="operator-kpis" id="operator-kpis"></div>
+          <div class="operator-proof-section operator-revenue-board" id="revenue-proof-board"></div>
           <div class="operator-list" id="operator-actions"></div>
         </div>
       </section>
@@ -4544,6 +4549,7 @@ const publicOperatorConsoleHtml = `<!doctype html>
     const statusBox = document.getElementById('operator-status');
     const actionsEl = document.getElementById('operator-actions');
     const kpisEl = document.getElementById('operator-kpis');
+    const revenueBoardEl = document.getElementById('revenue-proof-board');
     keyInput.value = sessionStorage.getItem('supermega_ops_key') || '';
     function esc(value){return String(value == null ? '' : value).replace(/[&<>"']/g,function(ch){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]})}
     function token(){return keyInput.value.trim()}
@@ -4553,8 +4559,50 @@ const publicOperatorConsoleHtml = `<!doctype html>
       return {
         status:'ready',
         runtime_status:'sample_only',
-        metrics:{open_action_count:1,recent_lead_count:1,recent_action_count:1},
+        metrics:{open_action_count:1,recent_lead_count:1,recent_action_count:1,proof_backed_mrr_mmk:900000,bank_verified_mrr_mmk:0,bank_unverified_mrr_mmk:900000},
         approval_inbox:{status:'sample',pending_count:1},
+        revenue_proof_board:{
+          status:'ready',
+          board_type:'revenue_proof_board',
+          action_count:1,
+          payment_record_count:1,
+          proof_backed_mrr_mmk:900000,
+          bank_verified_mrr_mmk:0,
+          bank_unverified_mrr_mmk:900000,
+          stage_counts:{queued:1},
+          payment_records:[{
+            action_id:'SAMPLE-FIRST-PROOF',
+            lead_id:'SAMPLE-SETUP',
+            title:'Sample Daily Intelligence Brief first proof',
+            workspace_slug:'pilot-daily-intelligence-brief-sample-setup',
+            template_name:'Daily Intelligence Brief Agent',
+            normalized_mrr_delta_mmk:900000,
+            payment_period:'monthly',
+            payment_proof_reference:'SAMPLE-PAYMENT-PROOF',
+            owner_approval_reference:'SAMPLE-OWNER-APPROVAL',
+            bank_reconciliation_state:'not_bank_verified',
+            recorded_at:'SAMPLE-RECORDED-AT'
+          }],
+          next_cash_actions:[{
+            action_id:'SAMPLE-FIRST-PROOF',
+            lead_id:'SAMPLE-SETUP',
+            title:'Sample Daily Intelligence Brief first proof',
+            next_action:'bank_reconcile_payment_proof',
+            owner:'Revenue Pod',
+            evidence_required:'bank_match_or_manual_owner_reconciliation',
+            revenue_claim_state:'proof_backed_not_bank_verified'
+          }],
+          open_proof_gaps:[],
+          payment_ledger_csv:[
+            '"action_id","lead_id","title","workspace_slug","template_name","normalized_mrr_delta_mmk","payment_period","payment_proof_reference","owner_approval_reference","bank_reconciliation_state","recorded_at"',
+            '"SAMPLE-FIRST-PROOF","SAMPLE-SETUP","Sample Daily Intelligence Brief first proof","pilot-daily-intelligence-brief-sample-setup","Daily Intelligence Brief Agent","900000","monthly","SAMPLE-PAYMENT-PROOF","SAMPLE-OWNER-APPROVAL","not_bank_verified","SAMPLE-RECORDED-AT"'
+          ].join('\\n'),
+          next_cash_actions_csv:[
+            '"action_id","lead_id","title","next_action","owner","evidence_required","revenue_claim_state"',
+            '"SAMPLE-FIRST-PROOF","SAMPLE-SETUP","Sample Daily Intelligence Brief first proof","bank_reconcile_payment_proof","Revenue Pod","bank_match_or_manual_owner_reconciliation","proof_backed_not_bank_verified"'
+          ].join('\\n'),
+          guardrails:['proof_backed_mrr_requires_retainer_payment_proof_record','bank_verified_mrr_is_separate_from_payment_proof','drafts_and_offers_do_not_count_as_mrr']
+        },
         recent_actions:[{
           action_id:'SAMPLE-FIRST-PROOF',
           lead_id:'SAMPLE-SETUP',
@@ -5175,7 +5223,7 @@ const publicOperatorConsoleHtml = `<!doctype html>
     }
     function loadSample(){
       const data = samplePipelineData();
-      renderKpis(data); renderActions(data); setStatus({status:'sample_loaded', note:'No lead was created. This is a no-write first-proof demo packet.'});
+      renderKpis(data); renderRevenueProofBoard(data); renderActions(data); setStatus({status:'sample_loaded', note:'No lead was created. This is a no-write first-proof demo packet.'});
     }
     function proofStarterLink(proof){
       if(!proof || !proof.starter_kit_url)return '';
@@ -5509,12 +5557,42 @@ const publicOperatorConsoleHtml = `<!doctype html>
       setStatus(data);
       if(response.ok) await refresh();
     }
+    function formatMmk(value){
+      const amount = Number(value || 0);
+      if(!Number.isFinite(amount))return '0 MMK';
+      return amount.toLocaleString('en-US')+' MMK';
+    }
+    function renderRevenueProofBoard(data){
+      const board = data.revenue_proof_board || {};
+      if(!board.status){
+        revenueBoardEl.innerHTML = '<span>Revenue proof board</span><div>No proof-backed MRR records loaded.</div>';
+        return;
+      }
+      const stageCounts = board.stage_counts || {};
+      const stageText = Object.keys(stageCounts).length ? Object.keys(stageCounts).map(function(key){return key+': '+stageCounts[key]}).join(' / ') : 'no action stages';
+      const guardrails = (board.guardrails || []).slice(0,4);
+      revenueBoardEl.innerHTML = [
+        '<span>Revenue proof board</span>',
+        '<div class="operator-meta"><span class="operator-chip">'+esc(board.status || 'ready')+'</span><span class="operator-chip">'+esc(board.board_type || 'revenue_proof_board')+'</span><span class="operator-chip">'+esc(stageText)+'</span></div>',
+        '<div class="operator-money-grid">',
+          '<div class="operator-money-cell"><span>Proof-backed MRR</span><strong>'+esc(formatMmk(board.proof_backed_mrr_mmk))+'</strong></div>',
+          '<div class="operator-money-cell"><span>Bank verified</span><strong>'+esc(formatMmk(board.bank_verified_mrr_mmk))+'</strong></div>',
+          '<div class="operator-money-cell"><span>Needs bank check</span><strong>'+esc(formatMmk(board.bank_unverified_mrr_mmk))+'</strong></div>',
+        '</div>',
+        '<div class="operator-proof-section"><span>Revenue payment ledger</span><textarea class="operator-reply" id="revenue-payment-ledger" readonly>'+esc(board.payment_ledger_csv || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="revenue-payment-ledger">Copy revenue payment ledger</button></div>',
+        '<div class="operator-proof-section"><span>Next cash actions</span><textarea class="operator-reply" id="revenue-next-cash-actions" readonly>'+esc(board.next_cash_actions_csv || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="revenue-next-cash-actions">Copy next cash actions</button></div>',
+        guardrails.length ? '<div class="operator-proof-section"><span>Guardrails</span><ul>'+guardrails.map(function(item){return '<li>'+esc(item)+'</li>'}).join('')+'</ul></div>' : ''
+      ].join('');
+      revenueBoardEl.querySelectorAll('[data-copy-target]').forEach(function(button){button.addEventListener('click',function(){copyDraft(button.getAttribute('data-copy-target'))})});
+    }
     function renderKpis(data){
       const metrics = data.metrics || {};
+      const board = data.revenue_proof_board || {};
       kpisEl.innerHTML = [
         ['Open actions', metrics.open_action_count ?? data.approval_inbox?.pending_count ?? '-'],
         ['Recent leads', metrics.recent_lead_count ?? '-'],
         ['Recent actions', metrics.recent_action_count ?? '-'],
+        ['Proof MRR', formatMmk(metrics.proof_backed_mrr_mmk ?? board.proof_backed_mrr_mmk ?? 0)],
       ].map(function(row){return '<div class="operator-kpi"><span>'+esc(row[0])+'</span><strong>'+esc(row[1])+'</strong></div>'}).join('');
     }
     function renderActions(data){
@@ -5543,7 +5621,7 @@ const publicOperatorConsoleHtml = `<!doctype html>
       const response = await fetch('/api/pipeline-control/status',{headers:authHeaders(),cache:'no-store'});
       const data = await response.json().catch(function(){return {status:'error',reason:'invalid_json',code:response.status}});
       if(!response.ok){setStatus(data);return}
-      renderKpis(data); renderActions(data); setStatus(data);
+      renderKpis(data); renderRevenueProofBoard(data); renderActions(data); setStatus(data);
     }
     async function runRunner(){
       if(!token()){setStatus('Paste the ops key first.');return}

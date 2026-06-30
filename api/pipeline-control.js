@@ -1670,6 +1670,137 @@ function safeAction(row) {
   }
 }
 
+function revenueProofBoard(rows = []) {
+  const actions = (Array.isArray(rows) ? rows : [])
+    .map((row) => (row && Object.prototype.hasOwnProperty.call(row, 'first_proof') ? row : safeAction(row || {})))
+    .filter(Boolean)
+  const stageCounts = {}
+  const paymentRecords = []
+  const nextCashActions = []
+  const openProofGaps = []
+  let proofBackedMrrMmk = 0
+  let bankUnverifiedMrrMmk = 0
+
+  for (const action of actions) {
+    const status = text(action.status) || 'unknown'
+    stageCounts[status] = (stageCounts[status] || 0) + 1
+    const proof = action.first_proof || {}
+    const room = proof.pilot_order_room || {}
+    const record = parseJsonObject(room.retainer_payment_record)
+    const retainerOffer = parseJsonObject(room.retainer_growth_offer)
+    const customerSuccess = parseJsonObject(room.customer_success_desk)
+    const actionId = text(action.action_id)
+    const leadId = text(action.lead_id)
+    const title = text(action.title) || text(action.action_type) || 'Revenue action'
+
+    if (record.status === 'retainer_payment_proof_recorded') {
+      const mrrDelta = moneyAmount(record.normalized_mrr_delta_mmk || record.real_mrr_delta)
+      proofBackedMrrMmk += mrrDelta
+      if (record.bank_reconciliation_state !== 'bank_verified') bankUnverifiedMrrMmk += mrrDelta
+      paymentRecords.push({
+        action_id: actionId || null,
+        lead_id: leadId || null,
+        title,
+        workspace_slug: text(record.workspace_slug || retainerOffer.workspace_slug || customerSuccess.workspace_slug),
+        template_name: text(record.template_name || proof.template_name || proof.template_id),
+        normalized_mrr_delta_mmk: mrrDelta,
+        payment_period: text(record.payment_period) || 'monthly',
+        payment_proof_reference: text(record.payment_proof_reference),
+        owner_approval_reference: text(record.owner_approval_reference),
+        bank_reconciliation_state: text(record.bank_reconciliation_state) || 'not_bank_verified',
+        recorded_at: text(record.recorded_at || record.paid_at),
+      })
+      continue
+    }
+
+    if (retainerOffer.status === 'retainer_growth_offer_ready') {
+      nextCashActions.push({
+        action_id: actionId || null,
+        lead_id: leadId || null,
+        title,
+        next_action: 'collect_retainer_payment_proof',
+        owner: text(action.owner) || 'Revenue Pod',
+        evidence_required: 'payment_proof_reference_and_owner_approval_reference',
+        revenue_claim_state: 'mrr_still_zero_until_payment_proof',
+      })
+      continue
+    }
+
+    if (customerSuccess.status === 'customer_success_desk_ready') {
+      nextCashActions.push({
+        action_id: actionId || null,
+        lead_id: leadId || null,
+        title,
+        next_action: 'prepare_retainer_growth_offer',
+        owner: text(action.owner) || 'Revenue Pod',
+        evidence_required: 'value_ledger_and_owner_approved_quote',
+        revenue_claim_state: 'not_claimed',
+      })
+      continue
+    }
+
+    openProofGaps.push({
+      action_id: actionId || null,
+      lead_id: leadId || null,
+      title,
+      gap: 'no_payment_or_retainer_path_recorded',
+      next_action: text(action.next_step) || 'Prepare first proof, customer success desk, or retainer offer.',
+    })
+  }
+
+  const paymentLedgerCsv = [
+    ['action_id', 'lead_id', 'title', 'workspace_slug', 'template_name', 'normalized_mrr_delta_mmk', 'payment_period', 'payment_proof_reference', 'owner_approval_reference', 'bank_reconciliation_state', 'recorded_at'].map(csvCell).join(','),
+    ...paymentRecords.map((record) => [
+      record.action_id,
+      record.lead_id,
+      record.title,
+      record.workspace_slug,
+      record.template_name,
+      String(record.normalized_mrr_delta_mmk),
+      record.payment_period,
+      record.payment_proof_reference,
+      record.owner_approval_reference,
+      record.bank_reconciliation_state,
+      record.recorded_at,
+    ].map(csvCell).join(',')),
+  ].join('\n')
+  const nextCashActionsCsv = [
+    ['action_id', 'lead_id', 'title', 'next_action', 'owner', 'evidence_required', 'revenue_claim_state'].map(csvCell).join(','),
+    ...nextCashActions.map((item) => [
+      item.action_id,
+      item.lead_id,
+      item.title,
+      item.next_action,
+      item.owner,
+      item.evidence_required,
+      item.revenue_claim_state,
+    ].map(csvCell).join(',')),
+  ].join('\n')
+
+  return {
+    status: 'ready',
+    board_type: 'revenue_proof_board',
+    generated_at: new Date().toISOString(),
+    action_count: actions.length,
+    payment_record_count: paymentRecords.length,
+    proof_backed_mrr_mmk: proofBackedMrrMmk,
+    bank_verified_mrr_mmk: Math.max(0, proofBackedMrrMmk - bankUnverifiedMrrMmk),
+    bank_unverified_mrr_mmk: bankUnverifiedMrrMmk,
+    stage_counts: stageCounts,
+    payment_records: paymentRecords,
+    next_cash_actions: nextCashActions,
+    open_proof_gaps: openProofGaps.slice(0, 8),
+    payment_ledger_csv: paymentLedgerCsv,
+    next_cash_actions_csv: nextCashActionsCsv,
+    guardrails: [
+      'proof_backed_mrr_requires_retainer_payment_proof_record',
+      'bank_verified_mrr_is_separate_from_payment_proof',
+      'drafts_and_offers_do_not_count_as_mrr',
+      'next_cash_actions_are_owner_reviewed_before_external_send_or_payment_request',
+    ],
+  }
+}
+
 function fallbackQueue() {
   const emailConfigured = Boolean(envText('RESEND_API_KEY'))
   const webhookConfigured = Boolean(envText('SUPERMEGA_LEAD_WEBHOOK_URL'))
@@ -2918,6 +3049,7 @@ async function handler(req, res) {
     const actions = snapshot.latestActions.map(safeAction)
     const leads = snapshot.latestLeads.map(safeLead)
     const nextAction = actions.find((action) => action.approval_state === 'pending') || actions[0] || null
+    const proofBoard = revenueProofBoard(actions)
 
     json(res, 200, {
       status: 'ready',
@@ -2937,6 +3069,9 @@ async function handler(req, res) {
         recent_action_count: actions.length,
         recent_lead_count: leads.length,
         recent_sales_run_count: snapshot.latestRuns.length,
+        proof_backed_mrr_mmk: proofBoard.proof_backed_mrr_mmk,
+        bank_verified_mrr_mmk: proofBoard.bank_verified_mrr_mmk,
+        bank_unverified_mrr_mmk: proofBoard.bank_unverified_mrr_mmk,
       },
       approval_inbox: {
         status: 'ready',
@@ -2957,6 +3092,7 @@ async function handler(req, res) {
       },
       recent_leads: leads,
       recent_actions: actions,
+      revenue_proof_board: proofBoard,
       recent_sales_runs: snapshot.latestRuns,
     })
     return
@@ -3034,6 +3170,7 @@ async function handler(req, res) {
     const actions = latestActions.data.map(safeAction)
     const leads = latestLeads.data.map(safeLead)
     const nextAction = actions.find((action) => action.approval_state === 'pending') || actions[0] || null
+    const proofBoard = revenueProofBoard(actions)
 
     json(res, 200, {
       status: 'ready',
@@ -3048,6 +3185,9 @@ async function handler(req, res) {
         recent_action_count: actions.length,
         recent_lead_count: leads.length,
         recent_sales_run_count: latestRuns.data.length,
+        proof_backed_mrr_mmk: proofBoard.proof_backed_mrr_mmk,
+        bank_verified_mrr_mmk: proofBoard.bank_verified_mrr_mmk,
+        bank_unverified_mrr_mmk: proofBoard.bank_unverified_mrr_mmk,
       },
       approval_inbox: {
         status: 'ready',
@@ -3068,6 +3208,7 @@ async function handler(req, res) {
       },
       recent_leads: leads,
       recent_actions: actions,
+      revenue_proof_board: proofBoard,
       recent_sales_runs: latestRuns.data,
     })
   } catch (error) {
@@ -3103,6 +3244,7 @@ handler.__test = {
   recordRetainerPaymentProof,
   recordConnectorPolicy,
   recordOwnerAcceptance,
+  revenueProofBoard,
   safeAction,
   startPrivateWorkspace,
   updateOrderRoomState,
