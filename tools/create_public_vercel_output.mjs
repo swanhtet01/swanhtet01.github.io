@@ -4944,6 +4944,84 @@ const publicOperatorConsoleHtml = `<!doctype html>
                 '"pilot-daily-intelligence-brief-sample-setup","SAMPLE-SETUP","build_first_production_run","Build the first approval-only Daily Intelligence Brief Agent run","Delivery Pod","not_sent","first_run_output","0"',
                 '"pilot-daily-intelligence-brief-sample-setup","SAMPLE-SETUP","owner_acceptance_review","Collect owner acceptance before live connector writes or sends","Founder","approval_required","acceptance_checklist","0"'
               ].join('\\n'),
+              customer_success_packet:[
+                '# Daily Intelligence Brief Agent 30-day customer success desk',
+                '',
+                'Status: customer_success_desk_ready',
+                'Lead: SAMPLE-SETUP',
+                'Workspace: pilot-daily-intelligence-brief-sample-setup',
+                'Evidence reference: SAMPLE-CS-REFERENCE',
+                'Desk type: managed_ai_agent_customer_success',
+                'Support window: business-hours Myanmar time, urgent blockers reviewed same day',
+                'Recurring revenue state: not_claimed',
+                'Real MRR delta: 0',
+                '',
+                '## 30-day cadence',
+                '- day_1: Confirm the first managed run outcome, source trace, blockers, and owner approval queue.',
+                '- day_3: Resolve onboarding friction and record the first buyer-visible value evidence.',
+                '- day_7: Review repeated tasks, exception patterns, and support tickets before expanding automation.',
+                '- day_14: Prepare the second value proof and decide whether another module is justified.',
+                '- day_30: Run renewal review with value ledger, open risks, next-module proposal, and owner decision.',
+                '',
+                '## Renewal motion',
+                '- collect_value_evidence: open',
+                '- prepare_30_day_review: open',
+                '- confirm_next_module: blocked_until_value_evidence',
+                '- decide_retainer: not_requested'
+              ].join('\\n'),
+              customer_success_ticket_queue_csv:[
+                '"workspace_slug","lead_id","ticket_type","owner","state","evidence_required","external_action_state","real_mrr_delta"',
+                '"pilot-daily-intelligence-brief-sample-setup","SAMPLE-SETUP","onboarding_blocker","SuperMega operator","watch","client_message_or_failed_step_trace","draft_only","0"',
+                '"pilot-daily-intelligence-brief-sample-setup","SAMPLE-SETUP","source_quality_issue","Agent Pod","watch","source_trace_and_missing_field_note","not_external","0"',
+                '"pilot-daily-intelligence-brief-sample-setup","SAMPLE-SETUP","user_training_gap","Client operator","watch","screen_recording_or_operator_note","draft_only","0"',
+                '"pilot-daily-intelligence-brief-sample-setup","SAMPLE-SETUP","value_exception","Founder","review","buyer_visible_value_note","owner_approval_required","0"'
+              ].join('\\n'),
+              customer_success_value_ledger_csv:[
+                '"workspace_slug","lead_id","value_metric","baseline","current_evidence","owner_confirmed","renewal_note","real_mrr_delta"',
+                '"pilot-daily-intelligence-brief-sample-setup","SAMPLE-SETUP","time_saved","unknown_until_client_confirms","timed_workflow_or_operator_note_required","no","prove before renewal","0"',
+                '"pilot-daily-intelligence-brief-sample-setup","SAMPLE-SETUP","revenue_influenced","unknown_until_client_confirms","lead_order_or_followup_evidence_required","no","do not claim without buyer evidence","0"',
+                '"pilot-daily-intelligence-brief-sample-setup","SAMPLE-SETUP","risk_removed","unknown_until_client_confirms","error_prevented_or_missing_task_closed","no","tie to support ticket","0"',
+                '"pilot-daily-intelligence-brief-sample-setup","SAMPLE-SETUP","renewal_reason","not_claimed","30_day_value_review_required","no","decision pending","0"'
+              ].join('\\n'),
+              customer_success_renewal_queue_csv:[
+                '"workspace_slug","lead_id","renewal_step","owner","state","evidence_required","real_mrr_delta"',
+                '"pilot-daily-intelligence-brief-sample-setup","SAMPLE-SETUP","collect_value_evidence","SuperMega operator","open","source_traced_value_ledger","0"',
+                '"pilot-daily-intelligence-brief-sample-setup","SAMPLE-SETUP","prepare_30_day_review","Revenue Pod","open","client_update_and_open_risk_summary","0"',
+                '"pilot-daily-intelligence-brief-sample-setup","SAMPLE-SETUP","confirm_next_module","Founder","blocked_until_value_evidence","buyer_visible_need_and_scope","0"',
+                '"pilot-daily-intelligence-brief-sample-setup","SAMPLE-SETUP","decide_retainer","Client owner","not_requested","payment_and_value_evidence_before_claim","0"'
+              ].join('\\n'),
+              customer_success_client_update:[
+                '# Daily Intelligence Brief Agent client update draft',
+                '',
+                'Status: draft - review before sending',
+                'Lead: SAMPLE-SETUP',
+                'Workspace: pilot-daily-intelligence-brief-sample-setup',
+                'Evidence reference: SAMPLE-CS-REFERENCE',
+                '',
+                '## What happened',
+                '- First managed run is in support mode.',
+                '- Open issues are tracked in the customer success ticket queue.',
+                '- Value evidence is being recorded before any renewal or upsell claim.',
+                '',
+                '## What we need from the client',
+                '- Confirm whether the latest output was useful.',
+                '- Send one example of a missed, slow, or repeated task we should improve.',
+                '- Approve any external message, connector write, account action, or next-module change before it happens.'
+              ].join('\\n'),
+              customer_success_config_json:JSON.stringify({
+                status:'customer_success_desk_ready',
+                desk_type:'managed_ai_agent_customer_success',
+                workspace_slug:'pilot-daily-intelligence-brief-sample-setup',
+                lead_id:'SAMPLE-SETUP',
+                template_name:'Daily Intelligence Brief Agent',
+                cadence_days:['day_1','day_3','day_7','day_14','day_30'],
+                ticket_types:['onboarding_blocker','source_quality_issue','user_training_gap','value_exception'],
+                renewal_steps:['collect_value_evidence','prepare_30_day_review','confirm_next_module','decide_retainer'],
+                external_send_state:'approval_required_per_action',
+                connector_write_state:'approval_required_per_action',
+                recurring_revenue_state:'not_claimed',
+                real_mrr_delta:0
+              },null,2),
               state:{
                 status:'not_persisted',
                 scope_approval_state:'pending',
@@ -5036,6 +5114,12 @@ const publicOperatorConsoleHtml = `<!doctype html>
       const enterpriseAccessMatrixId = 'enterprise-access-matrix-'+index;
       const enterpriseValueLedgerId = 'enterprise-value-ledger-'+index;
       const enterpriseDeliveryConfigId = 'enterprise-delivery-config-'+index;
+      const customerSuccessId = 'customer-success-'+index;
+      const customerSuccessTicketQueueId = 'customer-success-ticket-queue-'+index;
+      const customerSuccessValueLedgerId = 'customer-success-value-ledger-'+index;
+      const customerSuccessRenewalQueueId = 'customer-success-renewal-queue-'+index;
+      const customerSuccessClientUpdateId = 'customer-success-client-update-'+index;
+      const customerSuccessConfigId = 'customer-success-config-'+index;
       const state = room.state || {};
       const actionId = action && action.action_id || '';
       const leadId = action && action.lead_id || '';
@@ -5048,6 +5132,7 @@ const publicOperatorConsoleHtml = `<!doctype html>
       const connectorPolicyButton = '<div class="operator-row"><button class="btn primary operator-connector-policy" type="button" data-connector-policy="approval_only" data-action-id="'+esc(actionId)+'" data-lead-id="'+esc(leadId)+'">Record connector policy</button></div>';
       const productionApprovalButton = '<div class="operator-row"><button class="btn primary operator-production-approval" type="button" data-production-approval="prepare_production_approval_queue" data-action-id="'+esc(actionId)+'" data-lead-id="'+esc(leadId)+'">Prepare autopilot approval queue</button></div>';
       const enterpriseDeliveryButton = '<div class="operator-row"><button class="btn primary operator-enterprise-delivery" type="button" data-enterprise-delivery="prepare_enterprise_delivery_pack" data-action-id="'+esc(actionId)+'" data-lead-id="'+esc(leadId)+'">Prepare enterprise delivery pack</button></div>';
+      const customerSuccessButton = '<div class="operator-row"><button class="btn primary operator-customer-success" type="button" data-customer-success="prepare_customer_success_desk" data-action-id="'+esc(actionId)+'" data-lead-id="'+esc(leadId)+'">Prepare customer success desk</button></div>';
       const acceptancePacket = room.first_run_acceptance_packet ? '<textarea class="operator-reply" id="'+firstRunAcceptanceId+'" readonly>'+esc(room.first_run_acceptance_packet || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+firstRunAcceptanceId+'">Copy first-run acceptance packet</button>' : '';
       const acceptanceQueue = room.first_run_acceptance_queue_csv ? '<textarea class="operator-reply" id="'+firstRunAcceptanceQueueId+'" readonly>'+esc(room.first_run_acceptance_queue_csv || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+firstRunAcceptanceQueueId+'">Copy first-run acceptance queue</button>' : '';
       const ownerPacket = room.owner_acceptance_packet ? '<textarea class="operator-reply" id="'+ownerAcceptanceId+'" readonly>'+esc(room.owner_acceptance_packet || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+ownerAcceptanceId+'">Copy owner acceptance record</button>' : '';
@@ -5062,7 +5147,13 @@ const publicOperatorConsoleHtml = `<!doctype html>
       const enterpriseAccess = room.enterprise_access_matrix_csv ? '<textarea class="operator-reply" id="'+enterpriseAccessMatrixId+'" readonly>'+esc(room.enterprise_access_matrix_csv || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+enterpriseAccessMatrixId+'">Copy enterprise access matrix</button>' : '';
       const enterpriseValue = room.enterprise_value_ledger_csv ? '<textarea class="operator-reply" id="'+enterpriseValueLedgerId+'" readonly>'+esc(room.enterprise_value_ledger_csv || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+enterpriseValueLedgerId+'">Copy enterprise value ledger</button>' : '';
       const enterpriseConfig = room.enterprise_delivery_config_json ? '<textarea class="operator-reply" id="'+enterpriseDeliveryConfigId+'" readonly>'+esc(room.enterprise_delivery_config_json || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+enterpriseDeliveryConfigId+'">Copy enterprise delivery config</button>' : '';
-      return '<div class="operator-proof-section operator-order-room"><span>Paid pilot order room</span><div class="operator-meta"><span class="operator-chip">'+esc(room.status || 'draft_owner_approval_required')+'</span><span class="operator-chip">'+esc(room.payment_state || 'payment_proof_required')+'</span><span class="operator-chip">'+esc(room.order_state || 'order_not_started')+'</span></div>'+stateChips+stateButtons+workspaceButton+acceptanceButton+ownerDecisionButtons+connectorPolicyButton+productionApprovalButton+enterpriseDeliveryButton+'<textarea class="operator-reply" id="'+paymentId+'" readonly>'+esc(room.payment_request_draft || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+paymentId+'">Copy payment request</button><textarea class="operator-reply" id="'+paymentLedgerId+'" readonly>'+esc(room.payment_proof_ledger_csv || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+paymentLedgerId+'">Copy payment ledger</button><textarea class="operator-reply" id="'+orderLedgerId+'" readonly>'+esc(room.order_room_ledger_csv || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+orderLedgerId+'">Copy order ledger</button><textarea class="operator-reply" id="'+checklistId+'" readonly>'+esc(checklist)+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+checklistId+'">Copy pilot start checklist</button><textarea class="operator-reply" id="'+activationId+'" readonly>'+esc(room.owner_activation_packet || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+activationId+'">Copy owner activation packet</button><textarea class="operator-reply" id="'+actionQueueId+'" readonly>'+esc(room.owner_action_queue_csv || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+actionQueueId+'">Copy owner action queue</button><textarea class="operator-reply" id="'+activationJsonId+'" readonly>'+esc(room.activation_summary_json || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+activationJsonId+'">Copy activation JSON</button><textarea class="operator-reply" id="'+workspaceManifestId+'" readonly>'+esc(room.private_workspace_manifest_json || JSON.stringify(room.private_workspace_manifest || {},null,2))+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+workspaceManifestId+'">Copy workspace manifest</button><textarea class="operator-reply" id="'+workspaceHandoffId+'" readonly>'+esc(room.private_workspace_handoff_packet || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+workspaceHandoffId+'">Copy workspace handoff</button><textarea class="operator-reply" id="'+firstRunQueueId+'" readonly>'+esc(room.first_run_queue_csv || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+firstRunQueueId+'">Copy first run queue</button>'+acceptancePacket+acceptanceQueue+ownerPacket+ownerQueue+connectorPacket+connectorQueue+connectorConfig+productionPacket+productionQueue+productionConfig+enterprisePacket+enterpriseAccess+enterpriseValue+enterpriseConfig+'</div>';
+      const customerSuccessPacket = room.customer_success_packet ? '<textarea class="operator-reply" id="'+customerSuccessId+'" readonly>'+esc(room.customer_success_packet || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+customerSuccessId+'">Copy customer success desk</button>' : '';
+      const customerSuccessTickets = room.customer_success_ticket_queue_csv ? '<textarea class="operator-reply" id="'+customerSuccessTicketQueueId+'" readonly>'+esc(room.customer_success_ticket_queue_csv || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+customerSuccessTicketQueueId+'">Copy support ticket queue</button>' : '';
+      const customerSuccessValue = room.customer_success_value_ledger_csv ? '<textarea class="operator-reply" id="'+customerSuccessValueLedgerId+'" readonly>'+esc(room.customer_success_value_ledger_csv || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+customerSuccessValueLedgerId+'">Copy customer value ledger</button>' : '';
+      const customerSuccessRenewal = room.customer_success_renewal_queue_csv ? '<textarea class="operator-reply" id="'+customerSuccessRenewalQueueId+'" readonly>'+esc(room.customer_success_renewal_queue_csv || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+customerSuccessRenewalQueueId+'">Copy renewal queue</button>' : '';
+      const customerSuccessClientUpdate = room.customer_success_client_update ? '<textarea class="operator-reply" id="'+customerSuccessClientUpdateId+'" readonly>'+esc(room.customer_success_client_update || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+customerSuccessClientUpdateId+'">Copy client update draft</button>' : '';
+      const customerSuccessConfig = room.customer_success_config_json ? '<textarea class="operator-reply" id="'+customerSuccessConfigId+'" readonly>'+esc(room.customer_success_config_json || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+customerSuccessConfigId+'">Copy customer success config</button>' : '';
+      return '<div class="operator-proof-section operator-order-room"><span>Paid pilot order room</span><div class="operator-meta"><span class="operator-chip">'+esc(room.status || 'draft_owner_approval_required')+'</span><span class="operator-chip">'+esc(room.payment_state || 'payment_proof_required')+'</span><span class="operator-chip">'+esc(room.order_state || 'order_not_started')+'</span></div>'+stateChips+stateButtons+workspaceButton+acceptanceButton+ownerDecisionButtons+connectorPolicyButton+productionApprovalButton+enterpriseDeliveryButton+customerSuccessButton+'<textarea class="operator-reply" id="'+paymentId+'" readonly>'+esc(room.payment_request_draft || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+paymentId+'">Copy payment request</button><textarea class="operator-reply" id="'+paymentLedgerId+'" readonly>'+esc(room.payment_proof_ledger_csv || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+paymentLedgerId+'">Copy payment ledger</button><textarea class="operator-reply" id="'+orderLedgerId+'" readonly>'+esc(room.order_room_ledger_csv || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+orderLedgerId+'">Copy order ledger</button><textarea class="operator-reply" id="'+checklistId+'" readonly>'+esc(checklist)+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+checklistId+'">Copy pilot start checklist</button><textarea class="operator-reply" id="'+activationId+'" readonly>'+esc(room.owner_activation_packet || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+activationId+'">Copy owner activation packet</button><textarea class="operator-reply" id="'+actionQueueId+'" readonly>'+esc(room.owner_action_queue_csv || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+actionQueueId+'">Copy owner action queue</button><textarea class="operator-reply" id="'+activationJsonId+'" readonly>'+esc(room.activation_summary_json || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+activationJsonId+'">Copy activation JSON</button><textarea class="operator-reply" id="'+workspaceManifestId+'" readonly>'+esc(room.private_workspace_manifest_json || JSON.stringify(room.private_workspace_manifest || {},null,2))+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+workspaceManifestId+'">Copy workspace manifest</button><textarea class="operator-reply" id="'+workspaceHandoffId+'" readonly>'+esc(room.private_workspace_handoff_packet || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+workspaceHandoffId+'">Copy workspace handoff</button><textarea class="operator-reply" id="'+firstRunQueueId+'" readonly>'+esc(room.first_run_queue_csv || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+firstRunQueueId+'">Copy first run queue</button>'+acceptancePacket+acceptanceQueue+ownerPacket+ownerQueue+connectorPacket+connectorQueue+connectorConfig+productionPacket+productionQueue+productionConfig+enterprisePacket+enterpriseAccess+enterpriseValue+enterpriseConfig+customerSuccessPacket+customerSuccessTickets+customerSuccessValue+customerSuccessRenewal+customerSuccessClientUpdate+customerSuccessConfig+'</div>';
     }
     function legacyCopy(el){
       el.focus();
@@ -5210,6 +5301,22 @@ const publicOperatorConsoleHtml = `<!doctype html>
       setStatus(data);
       if(response.ok) await refresh();
     }
+    async function prepareCustomerSuccessDesk(button){
+      if(!token()){setStatus('Paste the ops key first.');return}
+      const reference = window.prompt('Customer success evidence reference');
+      if(!reference || !reference.trim()){setStatus('Paste customer success reference first.');return}
+      const payload = {
+        operation:'prepare_customer_success_desk',
+        action_id:button.getAttribute('data-action-id') || '',
+        lead_id:button.getAttribute('data-lead-id') || '',
+        customer_success_reference:reference.trim()
+      };
+      setStatus({status:'preparing_customer_success_desk'});
+      const response = await fetch('/api/pipeline-control',{method:'POST',headers:Object.assign({},authHeaders(),{'content-type':'application/json'}),body:JSON.stringify(payload),cache:'no-store'});
+      const data = await response.json().catch(function(){return {status:'error',reason:'invalid_json',code:response.status}});
+      setStatus(data);
+      if(response.ok) await refresh();
+    }
     function renderKpis(data){
       const metrics = data.metrics || {};
       kpisEl.innerHTML = [
@@ -5234,6 +5341,7 @@ const publicOperatorConsoleHtml = `<!doctype html>
       actionsEl.querySelectorAll('[data-connector-policy]').forEach(function(button){button.addEventListener('click',function(){recordConnectorPolicy(button)})});
       actionsEl.querySelectorAll('[data-production-approval]').forEach(function(button){button.addEventListener('click',function(){prepareProductionApprovalQueue(button)})});
       actionsEl.querySelectorAll('[data-enterprise-delivery]').forEach(function(button){button.addEventListener('click',function(){prepareEnterpriseDeliveryPack(button)})});
+      actionsEl.querySelectorAll('[data-customer-success]').forEach(function(button){button.addEventListener('click',function(){prepareCustomerSuccessDesk(button)})});
     }
     async function refresh(){
       if(!token()){setStatus('Paste the ops key first.');return}

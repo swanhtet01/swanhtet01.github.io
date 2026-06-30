@@ -733,6 +733,205 @@ function buildEnterpriseDeliveryPack(input = {}) {
   }
 }
 
+function buildCustomerSuccessDeskPack(input = {}) {
+  const enterprisePack = input.enterprisePack || {}
+  const evidenceReference = text(input.evidenceReference || input.customerSuccessReference || input.successReference)
+  const preparedAt = text(input.preparedAt) || new Date().toISOString()
+  const workspaceSlug = text(enterprisePack.workspace_slug || input.workspaceSlug) || 'private-workspace-required'
+  const leadId = text(enterprisePack.lead_id || input.leadId) || 'not set'
+  const templateName = text(enterprisePack.template_name || input.templateName) || 'SUPERMEGA agent'
+  const supportWindow = text(enterprisePack.support_window || input.supportWindow || input.support_window) || 'business-hours Myanmar time, urgent blockers reviewed same day'
+  const cadence = [
+    { day: 'day_1', checkpoint: 'Confirm the first managed run outcome, source trace, blockers, and owner approval queue.' },
+    { day: 'day_3', checkpoint: 'Resolve onboarding friction and record the first buyer-visible value evidence.' },
+    { day: 'day_7', checkpoint: 'Review repeated tasks, exception patterns, and support tickets before expanding automation.' },
+    { day: 'day_14', checkpoint: 'Prepare the second value proof and decide whether another module is justified.' },
+    { day: 'day_30', checkpoint: 'Run renewal review with value ledger, open risks, next-module proposal, and owner decision.' },
+  ]
+  const tickets = [
+    {
+      ticket_type: 'onboarding_blocker',
+      owner: 'SuperMega operator',
+      state: 'watch',
+      evidence_required: 'client_message_or_failed_step_trace',
+      external_action_state: 'draft_only',
+    },
+    {
+      ticket_type: 'source_quality_issue',
+      owner: 'Agent Pod',
+      state: 'watch',
+      evidence_required: 'source_trace_and_missing_field_note',
+      external_action_state: 'not_external',
+    },
+    {
+      ticket_type: 'user_training_gap',
+      owner: 'Client operator',
+      state: 'watch',
+      evidence_required: 'screen_recording_or_operator_note',
+      external_action_state: 'draft_only',
+    },
+    {
+      ticket_type: 'value_exception',
+      owner: 'Founder',
+      state: 'review',
+      evidence_required: 'buyer_visible_value_note',
+      external_action_state: 'owner_approval_required',
+    },
+  ].map((item) => ({ ...item, real_mrr_delta: 0 }))
+  const valueEvidence = [
+    { value_metric: 'time_saved', baseline: 'unknown_until_client_confirms', current_evidence: 'timed_workflow_or_operator_note_required', owner_confirmed: 'no', renewal_note: 'prove before renewal' },
+    { value_metric: 'revenue_influenced', baseline: 'unknown_until_client_confirms', current_evidence: 'lead_order_or_followup_evidence_required', owner_confirmed: 'no', renewal_note: 'do not claim without buyer evidence' },
+    { value_metric: 'risk_removed', baseline: 'unknown_until_client_confirms', current_evidence: 'error_prevented_or_missing_task_closed', owner_confirmed: 'no', renewal_note: 'tie to support ticket' },
+    { value_metric: 'response_speed', baseline: 'unknown_until_client_confirms', current_evidence: 'before_after_response_sample_required', owner_confirmed: 'no', renewal_note: 'use in 30-day review' },
+    { value_metric: 'renewal_reason', baseline: 'not_claimed', current_evidence: '30_day_value_review_required', owner_confirmed: 'no', renewal_note: 'decision pending' },
+  ].map((item) => ({ ...item, real_mrr_delta: 0 }))
+  const renewalQueue = [
+    { renewal_step: 'collect_value_evidence', owner: 'SuperMega operator', state: 'open', evidence_required: 'source_traced_value_ledger' },
+    { renewal_step: 'prepare_30_day_review', owner: 'Revenue Pod', state: 'open', evidence_required: 'client_update_and_open_risk_summary' },
+    { renewal_step: 'confirm_next_module', owner: 'Founder', state: 'blocked_until_value_evidence', evidence_required: 'buyer_visible_need_and_scope' },
+    { renewal_step: 'decide_retainer', owner: 'Client owner', state: 'not_requested', evidence_required: 'payment_and_value_evidence_before_claim' },
+  ].map((item) => ({ ...item, real_mrr_delta: 0 }))
+  const ticketQueueCsv = [
+    ['workspace_slug', 'lead_id', 'ticket_type', 'owner', 'state', 'evidence_required', 'external_action_state', 'real_mrr_delta'].map(csvCell).join(','),
+    ...tickets.map((item) =>
+      [
+        workspaceSlug,
+        leadId,
+        item.ticket_type,
+        item.owner,
+        item.state,
+        item.evidence_required,
+        item.external_action_state,
+        '0',
+      ].map(csvCell).join(','),
+    ),
+  ].join('\n')
+  const valueLedgerCsv = [
+    ['workspace_slug', 'lead_id', 'value_metric', 'baseline', 'current_evidence', 'owner_confirmed', 'renewal_note', 'real_mrr_delta'].map(csvCell).join(','),
+    ...valueEvidence.map((item) =>
+      [
+        workspaceSlug,
+        leadId,
+        item.value_metric,
+        item.baseline,
+        item.current_evidence,
+        item.owner_confirmed,
+        item.renewal_note,
+        '0',
+      ].map(csvCell).join(','),
+    ),
+  ].join('\n')
+  const renewalQueueCsv = [
+    ['workspace_slug', 'lead_id', 'renewal_step', 'owner', 'state', 'evidence_required', 'real_mrr_delta'].map(csvCell).join(','),
+    ...renewalQueue.map((item) =>
+      [
+        workspaceSlug,
+        leadId,
+        item.renewal_step,
+        item.owner,
+        item.state,
+        item.evidence_required,
+        '0',
+      ].map(csvCell).join(','),
+    ),
+  ].join('\n')
+  const clientUpdateDraft = [
+    `# ${templateName} client update draft`,
+    '',
+    'Status: draft - review before sending',
+    `Lead: ${leadId}`,
+    `Workspace: ${workspaceSlug}`,
+    `Evidence reference: ${evidenceReference || 'CUSTOMER_SUCCESS_REFERENCE_REQUIRED'}`,
+    '',
+    '## What happened',
+    '- First managed run is in support mode.',
+    '- Open issues are tracked in the customer success ticket queue.',
+    '- Value evidence is being recorded before any renewal or upsell claim.',
+    '',
+    '## What we need from the client',
+    '- Confirm whether the latest output was useful.',
+    '- Send one example of a missed, slow, or repeated task we should improve.',
+    '- Approve any external message, connector write, account action, or next-module change before it happens.',
+  ].join('\n')
+  const packet = [
+    `# ${templateName} 30-day customer success desk`,
+    '',
+    'Status: customer_success_desk_ready',
+    `Lead: ${leadId}`,
+    `Workspace: ${workspaceSlug}`,
+    `Evidence reference: ${evidenceReference || 'CUSTOMER_SUCCESS_REFERENCE_REQUIRED'}`,
+    `Prepared at: ${preparedAt}`,
+    'Desk type: managed_ai_agent_customer_success',
+    'Support window: ' + supportWindow,
+    'Recurring revenue state: not_claimed',
+    'Real MRR delta: 0',
+    '',
+    '## 30-day cadence',
+    cadence.map((item) => `- ${item.day}: ${item.checkpoint}`).join('\n'),
+    '',
+    '## Support queue',
+    tickets.map((item) => `- ${item.ticket_type}: ${item.owner} / ${item.state} / ${item.evidence_required}`).join('\n'),
+    '',
+    '## Value evidence',
+    valueEvidence.map((item) => `- ${item.value_metric}: ${item.current_evidence}`).join('\n'),
+    '',
+    '## Renewal motion',
+    renewalQueue.map((item) => `- ${item.renewal_step}: ${item.state} (${item.evidence_required})`).join('\n'),
+    '',
+    '## Guardrails',
+    '- Do not claim retention, upsell, or MRR from this desk without payment proof and buyer-confirmed value evidence.',
+    '- Do not send client updates or make connector writes without owner approval.',
+    '- Every value claim must link to a source trace, ticket, or client confirmation.',
+  ].join('\n')
+  const config = {
+    status: 'customer_success_desk_ready',
+    desk_type: 'managed_ai_agent_customer_success',
+    workspace_slug: workspaceSlug,
+    lead_id: leadId,
+    template_name: templateName,
+    support_window: supportWindow,
+    cadence_days: cadence.map((item) => item.day),
+    ticket_types: tickets.map((item) => item.ticket_type),
+    renewal_steps: renewalQueue.map((item) => item.renewal_step),
+    external_send_state: 'approval_required_per_action',
+    connector_write_state: 'approval_required_per_action',
+    recurring_revenue_state: 'not_claimed',
+    real_mrr_delta: 0,
+  }
+  return {
+    status: 'customer_success_desk_ready',
+    desk_type: 'managed_ai_agent_customer_success',
+    workspace_slug: workspaceSlug,
+    lead_id: leadId,
+    template_name: templateName,
+    evidence_reference: evidenceReference,
+    prepared_at: preparedAt,
+    prepared_by: 'operator_console',
+    support_window: supportWindow,
+    cadence,
+    ticket_queue: tickets,
+    value_evidence: valueEvidence,
+    renewal_queue: renewalQueue,
+    external_send_state: 'approval_required_per_action',
+    connector_write_state: 'approval_required_per_action',
+    recurring_revenue_state: 'not_claimed',
+    real_mrr_delta: 0,
+    packet,
+    ticket_queue_csv: ticketQueueCsv,
+    value_ledger_csv: valueLedgerCsv,
+    renewal_queue_csv: renewalQueueCsv,
+    client_update_draft: clientUpdateDraft,
+    config,
+    config_json: JSON.stringify(config, null, 2),
+    guardrails: [
+      'customer_success_desk_is_not_revenue_proof',
+      'value_claims_require_source_trace_or_client_confirmation',
+      'per_action_owner_approval_required',
+      'no_real_mrr_claim_without_payment_and_value_evidence',
+    ],
+  }
+}
+
 function envText(...names) {
   for (const name of names) {
     const value = text(process.env[name])
@@ -798,6 +997,7 @@ function firstProofPacket(row) {
   const connectorPolicy = parseJsonObject(result.connector_policy || payload.connector_policy)
   const productionApprovalQueue = parseJsonObject(result.production_approval_queue || payload.production_approval_queue)
   const enterpriseDeliveryPack = parseJsonObject(result.enterprise_delivery_pack || payload.enterprise_delivery_pack)
+  const customerSuccessDesk = parseJsonObject(result.customer_success_desk || payload.customer_success_desk)
   const orderRoomState = Object.keys(persistedOrderRoomState).length
     ? persistedOrderRoomState
     : {
@@ -1134,6 +1334,13 @@ function firstProofPacket(row) {
       enterprise_access_matrix_csv: text(enterpriseDeliveryPack.access_matrix_csv),
       enterprise_value_ledger_csv: text(enterpriseDeliveryPack.value_ledger_csv),
       enterprise_delivery_config_json: text(enterpriseDeliveryPack.config_json) || (Object.keys(enterpriseDeliveryPack.config || {}).length ? JSON.stringify(enterpriseDeliveryPack.config, null, 2) : ''),
+      customer_success_desk: Object.keys(customerSuccessDesk).length ? customerSuccessDesk : null,
+      customer_success_packet: text(customerSuccessDesk.packet),
+      customer_success_ticket_queue_csv: text(customerSuccessDesk.ticket_queue_csv),
+      customer_success_value_ledger_csv: text(customerSuccessDesk.value_ledger_csv),
+      customer_success_renewal_queue_csv: text(customerSuccessDesk.renewal_queue_csv),
+      customer_success_client_update: text(customerSuccessDesk.client_update_draft),
+      customer_success_config_json: text(customerSuccessDesk.config_json) || (Object.keys(customerSuccessDesk.config || {}).length ? JSON.stringify(customerSuccessDesk.config, null, 2) : ''),
       state: orderRoomState,
     },
     approval_required: result.approval_required !== undefined ? result.approval_required !== false : task.approval_required !== false,
@@ -1867,6 +2074,100 @@ async function prepareEnterpriseDeliveryPack(payload) {
   }
 }
 
+async function prepareCustomerSuccessDesk(payload) {
+  const actionId = text(payload.action_id)
+  const leadId = text(payload.lead_id)
+  const evidenceReference = text(payload.customer_success_reference || payload.evidence_reference)
+  if (!actionId && !leadId) return { status: 'error', reason: 'missing_action_or_lead_id' }
+  if (!evidenceReference) return { status: 'error', reason: 'missing_customer_success_reference' }
+  if (!datastore.postgresConfigured()) return { status: 'error', reason: 'postgres_not_configured' }
+
+  const selected = await datastore.query(
+    `
+      select
+        action_id, lead_id, task_id, action_type, status, priority, owner,
+        title, next_step, approval_required, approval_state,
+        notification_channel, notification_status, payload, result, created_at
+      from public.supermega_pipeline_actions
+      where (($1 <> '' and action_id = $1) or ($1 = '' and $2 <> '' and lead_id = $2))
+      order by created_at desc
+      limit 1
+    `,
+    [actionId, leadId],
+  )
+  if (selected.status !== 'ready') return selected
+  if (!selected.rows.length) return { status: 'error', reason: 'action_not_found' }
+
+  const row = selected.rows[0]
+  const currentResult = parseJsonObject(row.result)
+  const enterprisePack = parseJsonObject(currentResult.enterprise_delivery_pack)
+  if (enterprisePack.status !== 'enterprise_delivery_pack_ready') {
+    return {
+      status: 'error',
+      reason: 'enterprise_delivery_pack_required',
+      action: safeAction(row),
+    }
+  }
+
+  const existingDesk = parseJsonObject(currentResult.customer_success_desk)
+  if (existingDesk.status === 'customer_success_desk_ready') {
+    return {
+      status: 'ready',
+      adapter: 'vercel_postgres_neon',
+      operation_status: 'already_prepared',
+      action: safeAction(row),
+      customer_success_desk: existingDesk,
+    }
+  }
+
+  const context = contextFromActionRow(row, parseJsonObject(currentResult.pilot_order_room_state))
+  const preparedAt = new Date().toISOString()
+  const customerSuccessDesk = buildCustomerSuccessDeskPack({
+    ...context,
+    enterprisePack,
+    evidenceReference,
+    supportWindow: payload.support_window,
+    preparedAt,
+  })
+  const result = await datastore.query(
+    `
+      with target as (
+        select id
+        from public.supermega_pipeline_actions
+        where (($1 <> '' and action_id = $1) or ($1 = '' and $2 <> '' and lead_id = $2))
+        order by created_at desc
+        limit 1
+      )
+      update public.supermega_pipeline_actions a
+      set
+        result = jsonb_set(
+          jsonb_set(coalesce(a.result, '{}'::jsonb), '{customer_success_desk}', $3::jsonb, true),
+          '{customer_success_desk_prepared_at}',
+          to_jsonb($4::text),
+          true
+        ),
+        status = 'customer_success_desk_ready',
+        next_step = 'Use the customer success desk to run support, value evidence, renewal review, and next-module approvals.',
+        updated_at = now()
+      where a.id in (select id from target)
+      returning
+        a.action_id, a.lead_id, a.task_id, a.action_type, a.status, a.priority, a.owner,
+        a.title, a.next_step, a.approval_required, a.approval_state,
+        a.notification_channel, a.notification_status, a.payload, a.result, a.created_at
+    `,
+    [actionId, leadId, JSON.stringify(customerSuccessDesk), preparedAt],
+  )
+  if (result.status !== 'ready') return { ...result, customer_success_desk: customerSuccessDesk }
+  if (!result.rows.length) return { status: 'error', reason: 'action_not_found', customer_success_desk: customerSuccessDesk }
+  return {
+    status: 'ready',
+    adapter: 'vercel_postgres_neon',
+    operation_status: 'prepared',
+    action: safeAction(result.rows[0]),
+    customer_success_desk: customerSuccessDesk,
+  }
+}
+
 function primaryDatabaseStatus(result) {
   if (!result || result.status === 'ready') {
     return { status: 'ready' }
@@ -1887,8 +2188,8 @@ function primaryDatabaseStatus(result) {
 function writeStatusCode(result) {
   if (result.status === 'ready') return 200
   if (result.reason === 'action_not_found') return 404
-  if (['private_workspace_not_ready', 'private_workspace_required', 'first_run_acceptance_required', 'owner_acceptance_required', 'owner_acceptance_not_accepted', 'connector_policy_required', 'production_approval_queue_required', 'use_start_private_workspace_operation'].includes(result.reason)) return 409
-  if (['missing_action_or_lead_id', 'invalid_owner_acceptance_decision', 'missing_owner_acceptance_reference', 'invalid_connector_policy_mode', 'missing_connector_policy_reference', 'missing_production_queue_reference', 'missing_enterprise_delivery_reference'].includes(result.reason)) return 400
+  if (['private_workspace_not_ready', 'private_workspace_required', 'first_run_acceptance_required', 'owner_acceptance_required', 'owner_acceptance_not_accepted', 'connector_policy_required', 'production_approval_queue_required', 'enterprise_delivery_pack_required', 'use_start_private_workspace_operation'].includes(result.reason)) return 409
+  if (['missing_action_or_lead_id', 'invalid_owner_acceptance_decision', 'missing_owner_acceptance_reference', 'invalid_connector_policy_mode', 'missing_connector_policy_reference', 'missing_production_queue_reference', 'missing_enterprise_delivery_reference', 'missing_customer_success_reference'].includes(result.reason)) return 400
   return 503
 }
 
@@ -2012,6 +2313,15 @@ async function handler(req, res) {
     }
     if (operation === 'prepare_enterprise_delivery_pack') {
       const prepared = await prepareEnterpriseDeliveryPack(payload)
+      json(res, writeStatusCode(prepared), {
+        endpoint: 'pipeline-control',
+        operation,
+        ...prepared,
+      })
+      return
+    }
+    if (operation === 'prepare_customer_success_desk') {
+      const prepared = await prepareCustomerSuccessDesk(payload)
       json(res, writeStatusCode(prepared), {
         endpoint: 'pipeline-control',
         operation,
@@ -2259,6 +2569,7 @@ async function handler(req, res) {
 
 handler.__test = {
   buildConnectorPolicyRecord,
+  buildCustomerSuccessDeskPack,
   buildEnterpriseDeliveryPack,
   buildOrderRoomState,
   buildOwnerAcceptanceRecord,
@@ -2266,6 +2577,7 @@ handler.__test = {
   buildProductionApprovalQueue,
   firstProofPacket,
   prepareFirstRunAcceptance,
+  prepareCustomerSuccessDesk,
   prepareEnterpriseDeliveryPack,
   prepareProductionApprovalQueue,
   recordConnectorPolicy,
