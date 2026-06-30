@@ -787,6 +787,7 @@ function firstProofPacket(row) {
   const priceHint = text(task.price_hint) || text(payload.price_hint) || 'quote after proof review'
   const nextStep = text(row.next_step) || 'Share one approved sample source so we can build the first proof.'
   const leadId = text(row.lead_id) || 'not set'
+  const intakeJob = parseJsonObject(result.intake_job || task.intake_job || payload.intake_job)
   const sourceTrace = list(task.source_trace || payload.source_trace)
   const persistedOrderRoomState = parseJsonObject(result.pilot_order_room_state || payload.pilot_order_room_state)
   const firstRunAcceptance = parseJsonObject(result.first_run_acceptance || payload.first_run_acceptance)
@@ -1078,6 +1079,9 @@ function firstProofPacket(row) {
     template_name: templateName || null,
     starter_kit_url: starterKitUrl || null,
     first_proof_target: firstProofTarget || null,
+    intake_job: Object.keys(intakeJob).length ? intakeJob : null,
+    intake_job_packet: text(intakeJob.packet),
+    intake_job_json: Object.keys(intakeJob).length ? JSON.stringify(intakeJob, null, 2) : '',
     title: text(result.title) || (templateName && row.lead_id ? `${templateName} first proof for ${row.lead_id}` : 'First proof task'),
     checklist,
     acceptance_tests: acceptanceTests,

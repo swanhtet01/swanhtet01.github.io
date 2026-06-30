@@ -319,6 +319,8 @@ function renderFirstProofBrief(row, lead = {}) {
   const starterKit = text(task.starter_kit_url) || text(payload.starter_kit_url)
   const humanGate = text(task.human_gate) || 'owner approval before send/write/payment actions'
   const operatorBrief = text(task.operator_brief) || `${templateName} first proof for ${company}.\nFirst proof: ${proofTarget}.`
+  const intakeJob = parsePayload(task.intake_job || payload.intake_job)
+  const intakeJobPacket = text(intakeJob.packet)
   const sourceTrace = lines(task.source_trace || payload.source_trace)
   if (starterKit) sourceTrace.push(`Starter kit: ${starterKit}`)
   if (text(row.lead_id)) sourceTrace.push(`Lead record: ${text(row.lead_id)}`)
@@ -335,6 +337,9 @@ function renderFirstProofBrief(row, lead = {}) {
     '## Operator brief',
     operatorBrief,
     '',
+    intakeJobPacket ? '## Intake job' : '',
+    intakeJobPacket,
+    intakeJobPacket ? '' : '',
     '## Checklist',
     numbered(checklist),
     '',
@@ -358,6 +363,8 @@ function renderFirstProofBrief(row, lead = {}) {
     acceptance_tests: acceptanceTests,
     starter_kit_url: starterKit,
     first_proof_target: proofTarget,
+    intake_job: Object.keys(intakeJob).length ? intakeJob : null,
+    intake_job_packet: intakeJobPacket,
     approval_required: task.approval_required !== false,
     human_gate: humanGate,
   }

@@ -525,11 +525,95 @@ function defaultProofAcceptanceTests(record) {
   ]
 }
 
+function buildIntakeJob(record, acceptanceTests = []) {
+  const templateName = record.public_package || record.requested_package || record.template_id || 'Custom SUPERMEGA template'
+  const proofTarget = record.first_proof_target || record.first_output || record.requested_package || 'First useful output'
+  const sourceManifest = [
+    {
+      source_type: 'buyer_goal',
+      status: record.goal ? 'provided' : 'missing',
+      value: record.goal || 'ASK_BUYER_FOR_FIRST_WORKFLOW_GOAL',
+    },
+    {
+      source_type: 'sample_sources',
+      status: record.source_links || record.source_file_names ? 'provided' : 'missing',
+      value: record.source_links || record.source_file_names || 'ASK_BUYER_FOR_ONE_SAMPLE_FILE_FOLDER_SCREENSHOT_EXPORT_OR_EMAIL_THREAD',
+    },
+    {
+      source_type: 'starter_kit',
+      status: record.starter_kit_url ? 'provided' : 'missing',
+      value: record.starter_kit_url || (record.template_id ? `/site/agent-templates/${record.template_id}.json` : 'SELECT_TEMPLATE_STARTER_KIT'),
+    },
+    {
+      source_type: 'approval_boundary',
+      status: 'provided',
+      value: record.automation_boundary || 'Approval required before external sends, connector writes, payment actions, or live record edits.',
+    },
+  ]
+  const missingInputs = sourceManifest
+    .filter((item) => item.status === 'missing')
+    .map((item) => item.source_type)
+  const firstRunSteps = [
+    'Read the starter kit and buyer goal.',
+    'Open only the approved sample sources.',
+    'Extract the minimum facts needed for the first proof.',
+    `Draft the first proof: ${proofTarget}`,
+    'Attach source trace and acceptance-test status.',
+    'Queue buyer reply and pilot close packet for owner review.',
+  ]
+  const packet = [
+    `# ${templateName} intake-to-first-proof job`,
+    '',
+    `Lead: ${record.lead_id || 'not set'}`,
+    `Company: ${record.company || record.name || 'not set'}`,
+    `Template: ${record.template_id || 'custom'}`,
+    `First proof: ${proofTarget}`,
+    `Job state: ${missingInputs.length ? 'needs_source_before_build' : 'ready_for_first_proof_build'}`,
+    '',
+    '## Source manifest',
+    ...sourceManifest.map((item) => `- ${item.source_type}: ${item.status} - ${item.value}`),
+    '',
+    '## First run steps',
+    ...firstRunSteps.map((item, index) => `${index + 1}. ${item}`),
+    '',
+    '## Acceptance tests',
+    ...(acceptanceTests.length ? acceptanceTests : defaultProofAcceptanceTests(record)).map((item) => `- [ ] ${item}`),
+    '',
+    '## Approval boundary',
+    '- No external send without owner approval.',
+    '- No connector write without owner approval.',
+    '- No payment action without owner approval.',
+    '- Real MRR stays 0 until payment proof is recorded.',
+  ].join('\n')
+
+  return {
+    status: missingInputs.length ? 'needs_source_before_build' : 'ready_for_first_proof_build',
+    job_type: 'intake_to_first_proof',
+    lead_id: record.lead_id || '',
+    template_id: record.template_id || '',
+    template_name: templateName,
+    product_area: record.product_area || '',
+    first_proof_target: proofTarget,
+    owner: record.owner || 'Revenue Pod',
+    source_manifest: sourceManifest,
+    missing_inputs: missingInputs,
+    first_run_steps: firstRunSteps,
+    acceptance_tests: acceptanceTests.length ? acceptanceTests : defaultProofAcceptanceTests(record),
+    approval_boundary: 'owner approval before send/write/payment actions',
+    external_action_state: 'blocked_until_owner_approval',
+    connector_write_state: 'blocked_until_owner_approval',
+    payment_action_state: 'blocked_until_owner_approval',
+    real_mrr_delta: 0,
+    packet,
+  }
+}
+
 function buildFirstProofTaskPayload(record) {
   const acceptanceTests = listFromText(record.acceptance_tests)
   const proofTarget = record.first_proof_target || record.first_output || record.requested_package || 'First useful output'
   const starterKitUrl = record.starter_kit_url || (record.template_id ? `/site/agent-templates/${record.template_id}.json` : '')
   const templateName = record.public_package || record.requested_package || record.template_id || 'Custom SUPERMEGA template'
+  const intakeJob = buildIntakeJob(record, acceptanceTests)
   const sourceSummary = [
     record.source_links ? `source links: ${record.source_links}` : '',
     record.source_file_count ? `file count: ${record.source_file_count}` : '',
@@ -557,6 +641,10 @@ function buildFirstProofTaskPayload(record) {
     price_hint: record.price_hint || '',
     first_proof_target: proofTarget,
     operator_brief: truncate(operatorBrief, 2200),
+    intake_job: intakeJob,
+    source_trace: intakeJob.source_manifest
+      .filter((item) => item.status === 'provided')
+      .map((item) => `${item.source_type}: ${item.value}`),
     checklist: [
       starterKitUrl ? `Open starter kit: ${starterKitUrl}` : 'Confirm the selected template and starter kit.',
       'Review buyer goal, company context, source links, and attached file manifest.',
@@ -1304,6 +1392,7 @@ async function handler(req, res) {
 
 handler.__test = {
   buildFirstProofTaskPayload,
+  buildIntakeJob,
   pipelineActionPayload,
   telegramLeadMessage,
   operatorConsoleUrl,

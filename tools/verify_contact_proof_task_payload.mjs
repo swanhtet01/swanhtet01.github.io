@@ -11,6 +11,7 @@ function fail(message, extra = {}) {
 
 const internals = handler.__test || {}
 if (
+  typeof internals.buildIntakeJob !== 'function' ||
   typeof internals.buildFirstProofTaskPayload !== 'function' ||
   typeof internals.pipelineActionPayload !== 'function' ||
   typeof internals.telegramLeadMessage !== 'function'
@@ -52,6 +53,20 @@ const record = {
   next_step: 'Reply with one proof request.',
 }
 
+const intakeJob = internals.buildIntakeJob(record)
+assert.equal(intakeJob.job_type, 'intake_to_first_proof')
+assert.equal(intakeJob.status, 'ready_for_first_proof_build')
+assert.equal(intakeJob.template_id, 'daily-intelligence-brief')
+assert.equal(intakeJob.approval_boundary, 'owner approval before send/write/payment actions')
+assert.equal(intakeJob.external_action_state, 'blocked_until_owner_approval')
+assert.equal(intakeJob.connector_write_state, 'blocked_until_owner_approval')
+assert.equal(intakeJob.payment_action_state, 'blocked_until_owner_approval')
+assert.equal(intakeJob.real_mrr_delta, 0)
+assert.ok(intakeJob.source_manifest.some((item) => item.source_type === 'sample_sources' && item.status === 'provided'))
+assert.ok(intakeJob.first_run_steps.some((item) => item.includes('approved sample sources')))
+assert.ok(intakeJob.packet.includes('intake-to-first-proof job'))
+assert.ok(intakeJob.packet.includes('Source manifest'))
+
 const proofTask = internals.buildFirstProofTaskPayload(record)
 assert.equal(proofTask.type, 'first_proof_build')
 assert.equal(proofTask.template_id, 'daily-intelligence-brief')
@@ -59,6 +74,9 @@ assert.equal(proofTask.starter_kit_url, '/site/agent-templates/daily-intelligenc
 assert.equal(proofTask.first_proof_target, record.first_proof_target)
 assert.equal(proofTask.approval_required, true)
 assert.equal(proofTask.human_gate, 'owner approval before send/write/payment actions')
+assert.equal(proofTask.intake_job.job_type, 'intake_to_first_proof')
+assert.ok(proofTask.intake_job.packet.includes('First run steps'))
+assert.ok(proofTask.source_trace.some((item) => item.includes('sample_sources')))
 assert.ok(proofTask.operator_brief.includes('Daily Intelligence Brief Agent'))
 assert.ok(proofTask.operator_brief.includes('Yangon Import Co'))
 assert.ok(proofTask.operator_brief.includes('One-page morning brief'))
@@ -74,6 +92,7 @@ assert.equal(action.action_type, 'lead_followup')
 assert.equal(action.payload.first_proof_task.type, 'first_proof_build')
 assert.equal(action.payload.first_proof_task.template_id, 'daily-intelligence-brief')
 assert.equal(action.payload.first_proof_task.operator_brief, proofTask.operator_brief)
+assert.equal(action.payload.first_proof_task.intake_job.job_type, 'intake_to_first_proof')
 assert.deepEqual(action.payload.first_proof_task.acceptance_tests, proofTask.acceptance_tests)
 
 const alert = internals.telegramLeadMessage(record)
@@ -89,6 +108,7 @@ console.log(
     {
       status: 'ready',
       proof_task: proofTask.type,
+      intake_job: intakeJob.job_type,
       template_id: proofTask.template_id,
       checklist_items: proofTask.checklist.length,
       acceptance_tests: proofTask.acceptance_tests.length,

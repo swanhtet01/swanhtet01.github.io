@@ -72,6 +72,17 @@ const action = internals.safeAction({
       starter_kit_url: '/site/agent-templates/daily-intelligence-brief.json',
       price_hint: '11,000,000 MMK setup',
       first_proof_target: 'One-page morning brief with what changed and what to do next.',
+      intake_job: {
+        status: 'ready_for_first_proof_build',
+        job_type: 'intake_to_first_proof',
+        lead_id: 'LEAD-TEST123',
+        template_id: 'daily-intelligence-brief',
+        packet: '# Daily Intelligence Brief Agent intake-to-first-proof job\n\n## Source manifest\n- sample_sources: provided - https://drive.example/sample-folder',
+        source_manifest: [{ source_type: 'sample_sources', status: 'provided', value: 'https://drive.example/sample-folder' }],
+        first_run_steps: ['Open only approved sample sources'],
+        approval_boundary: 'owner approval before send/write/payment actions',
+        real_mrr_delta: 0,
+      },
       checklist: ['Open starter kit', 'Review buyer goal', 'Build first proof'],
       acceptance_tests: ['Shows source trace', 'Approval-only external actions', 'Uses approved sample sources'],
       approval_required: true,
@@ -100,6 +111,10 @@ assert.equal(action.first_proof.template_name, 'Daily Intelligence Brief Agent')
 assert.equal(action.first_proof.starter_kit_url, '/site/agent-templates/daily-intelligence-brief.json')
 assert.equal(action.first_proof.approval_required, true)
 assert.equal(action.first_proof.human_gate, 'owner approval before send/write/payment actions')
+assert.equal(action.first_proof.intake_job.job_type, 'intake_to_first_proof')
+assert.ok(action.first_proof.intake_job_packet.includes('intake-to-first-proof job'))
+assert.ok(action.first_proof.intake_job_packet.includes('Source manifest'))
+assert.ok(action.first_proof.intake_job_json.includes('"real_mrr_delta": 0'))
 assert.ok(action.first_proof.title.includes('Daily Intelligence Brief Agent'))
 assert.ok(action.first_proof.checklist.length >= 3)
 assert.ok(action.first_proof.acceptance_tests.length >= 3)
@@ -159,6 +174,7 @@ console.log(
       proof_delivery_packet: 'ready',
       pilot_close_packet: 'ready',
       pilot_order_room: 'ready',
+      intake_job: action.first_proof.intake_job.job_type,
       private_workspace_manifest: action.first_proof.pilot_order_room.private_workspace_manifest.status,
     },
     null,
