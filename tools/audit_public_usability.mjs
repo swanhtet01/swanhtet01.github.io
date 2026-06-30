@@ -178,7 +178,7 @@ try {
         hasProofDeliveryRenderer: html.includes('proofDeliveryPacket') && html.includes('Copy proof packet'),
         hasPilotCloseRenderer: html.includes('pilotClosePacket') && html.includes('Copy pilot packet'),
         hasPilotOrderRoomRenderer: html.includes('pilotOrderRoom') && html.includes('Copy payment request') && html.includes('Copy owner activation packet'),
-        hasWorkspaceHandoffRenderer: html.includes('Copy workspace manifest') && html.includes('Copy workspace handoff') && html.includes('Copy first run queue') && html.includes('Create private workspace') && html.includes('startPrivateWorkspace') && html.includes('Prepare first-run acceptance') && html.includes('prepareFirstRunAcceptance') && html.includes('Record owner accepted') && html.includes('recordOwnerAcceptance') && html.includes('Record connector policy') && html.includes('recordConnectorPolicy'),
+        hasWorkspaceHandoffRenderer: html.includes('Copy workspace manifest') && html.includes('Copy workspace handoff') && html.includes('Copy first run queue') && html.includes('Create private workspace') && html.includes('startPrivateWorkspace') && html.includes('Prepare first-run acceptance') && html.includes('prepareFirstRunAcceptance') && html.includes('Record owner accepted') && html.includes('recordOwnerAcceptance') && html.includes('Record connector policy') && html.includes('recordConnectorPolicy') && html.includes('Prepare autopilot approval queue') && html.includes('prepareProductionApprovalQueue'),
         hasOrderRoomPersistenceControls: html.includes('persistOrderRoomState') && html.includes('Save scope approval') && html.includes('Save payment proof'),
         hasSampleData: html.includes('samplePipelineData') && html.includes('No lead was created'),
         overflowX: Math.max(0, document.documentElement.scrollWidth - document.documentElement.clientWidth),
@@ -191,7 +191,7 @@ try {
     await page.click('#load-sample')
     await expectCopy(
       page,
-      ['Sample Daily Intelligence Brief first proof', 'Open starter kit', 'Checklist', 'Acceptance tests', 'Buyer reply draft', 'Copy buyer reply', 'Proof delivery packet', 'Copy proof packet', 'Pilot close packet', 'Copy pilot packet', 'Paid pilot order room', 'Copy payment request', 'Copy payment ledger', 'Copy order ledger', 'Copy pilot start checklist', 'Copy owner activation packet', 'Copy owner action queue', 'Copy activation JSON', 'Copy workspace manifest', 'Copy workspace handoff', 'Copy first run queue', 'Save scope approval', 'Save payment proof', 'Create private workspace', 'Prepare first-run acceptance', 'Record owner accepted', 'Record changes requested', 'Record connector policy', 'No lead was created'],
+      ['Sample Daily Intelligence Brief first proof', 'Open starter kit', 'Checklist', 'Acceptance tests', 'Buyer reply draft', 'Copy buyer reply', 'Proof delivery packet', 'Copy proof packet', 'Pilot close packet', 'Copy pilot packet', 'Paid pilot order room', 'Copy payment request', 'Copy payment ledger', 'Copy order ledger', 'Copy pilot start checklist', 'Copy owner activation packet', 'Copy owner action queue', 'Copy activation JSON', 'Copy workspace manifest', 'Copy workspace handoff', 'Copy first run queue', 'Save scope approval', 'Save payment proof', 'Create private workspace', 'Prepare first-run acceptance', 'Record owner accepted', 'Record changes requested', 'Record connector policy', 'Prepare autopilot approval queue', 'No lead was created'],
       'operator_sample_packet',
       viewport.name,
     )
@@ -218,6 +218,7 @@ try {
       acceptanceButtons: document.querySelectorAll('#operator-actions .operator-acceptance-prepare').length,
       ownerAcceptanceButtons: document.querySelectorAll('#operator-actions .operator-owner-acceptance').length,
       connectorPolicyButtons: document.querySelectorAll('#operator-actions .operator-connector-policy').length,
+      productionApprovalButtons: document.querySelectorAll('#operator-actions .operator-production-approval').length,
       stateText: document.querySelector('#operator-actions .operator-order-room')?.textContent || '',
       overflowX: Math.max(0, document.documentElement.scrollWidth - document.documentElement.clientWidth),
     }))
@@ -238,7 +239,7 @@ try {
     if (!operatorSample.workspaceHandoff.includes('Create workspace allowed: no')) fail('operator_sample_workspace_handoff_missing', { viewport: viewport.name, operatorSample })
     if (!operatorSample.firstRunQueue.includes('owner_acceptance_review')) fail('operator_sample_first_run_queue_missing', { viewport: viewport.name, operatorSample })
     if (operatorSample.copyButtons < 13) fail('operator_sample_copy_missing', { viewport: viewport.name, operatorSample })
-    if (operatorSample.stateButtons < 4 || operatorSample.workspaceButtons < 1 || operatorSample.acceptanceButtons < 1 || operatorSample.ownerAcceptanceButtons < 2 || operatorSample.connectorPolicyButtons < 1 || !operatorSample.stateText.includes('not_created_until_payment_proof')) fail('operator_sample_state_controls_missing', { viewport: viewport.name, operatorSample })
+    if (operatorSample.stateButtons < 4 || operatorSample.workspaceButtons < 1 || operatorSample.acceptanceButtons < 1 || operatorSample.ownerAcceptanceButtons < 2 || operatorSample.connectorPolicyButtons < 1 || operatorSample.productionApprovalButtons < 1 || !operatorSample.stateText.includes('not_created_until_payment_proof')) fail('operator_sample_state_controls_missing', { viewport: viewport.name, operatorSample })
     const copyButton = page.locator('#operator-actions .operator-copy').first()
     await copyButton.scrollIntoViewIfNeeded()
     await copyButton.click({ force: true })
@@ -315,6 +316,14 @@ try {
     await connectorPolicyButton.click({ force: true })
     const connectorPolicyStatus = await page.locator('#operator-status').innerText({ timeout: 5000 }).catch(() => '')
     if (!connectorPolicyStatus.includes('Paste the ops key first.')) fail('operator_sample_connector_policy_guard_failed', { viewport: viewport.name, connectorPolicyStatus })
+    page.once('dialog', async (dialog) => {
+      await dialog.dismiss()
+    })
+    const productionApprovalButton = page.locator('#operator-actions .operator-production-approval').first()
+    await productionApprovalButton.scrollIntoViewIfNeeded()
+    await productionApprovalButton.click({ force: true })
+    const productionApprovalStatus = await page.locator('#operator-status').innerText({ timeout: 5000 }).catch(() => '')
+    if (!productionApprovalStatus.includes('Paste the ops key first.')) fail('operator_sample_production_approval_guard_failed', { viewport: viewport.name, productionApprovalStatus })
     if (operatorSample.overflowX > 0) fail('operator_sample_horizontal_overflow', { viewport: viewport.name, operatorSample })
     if (consoleMessages.length) fail('console_messages', { viewport: viewport.name, consoleMessages })
 
