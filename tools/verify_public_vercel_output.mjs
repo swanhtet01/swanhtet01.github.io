@@ -557,7 +557,7 @@ const operatorHtml = readFileSync(operatorHtmlPath, 'utf8')
 const contactFunctionPath = resolve(functionsDir, 'api/contact-submissions.js.func/api/contact-submissions.js')
 if (!existsSync(contactFunctionPath)) fail('public_contact_function_missing')
 const contactFunctionSource = readFileSync(contactFunctionPath, 'utf8')
-for (const token of ['buildIntakeJob', 'intake_to_first_proof', 'intake_job', 'buildFirstProofTaskPayload', 'first_proof_task', 'owner approval before send/write/payment actions', 'New setup lead -', 'Operator:']) {
+for (const token of ['buildIntakeJob', 'intake_to_first_proof', 'intake_job', 'buildClientKickoffPack', 'client_kickoff_pack', 'buildFirstProofTaskPayload', 'first_proof_task', 'owner approval before send/write/payment actions', 'New setup lead -', 'Operator:']) {
   if (!contactFunctionSource.includes(token)) {
     fail('public_contact_proof_task_contract_missing', { token })
   }
@@ -565,7 +565,7 @@ for (const token of ['buildIntakeJob', 'intake_to_first_proof', 'intake_job', 'b
 const actionRunnerFunctionPath = resolve(functionsDir, 'api/action-runner.js.func/api/action-runner.js')
 if (!existsSync(actionRunnerFunctionPath)) fail('public_action_runner_function_missing')
 const actionRunnerFunctionSource = readFileSync(actionRunnerFunctionPath, 'utf8')
-for (const token of ['renderFirstProofBrief', 'first_proof_operator_brief', 'Intake job', 'intake_job_packet', 'Source trace', 'Do not send, write, charge, or edit live business records', 'claimPostgresBatch', 'vercel_postgres_neon']) {
+for (const token of ['renderFirstProofBrief', 'first_proof_operator_brief', 'Client kickoff pack', 'client_kickoff_packet', 'Intake job', 'intake_job_packet', 'Source trace', 'Do not send, write, charge, or edit live business records', 'claimPostgresBatch', 'vercel_postgres_neon']) {
   if (!actionRunnerFunctionSource.includes(token)) {
     fail('public_action_runner_first_proof_contract_missing', { token })
   }
@@ -573,7 +573,7 @@ for (const token of ['renderFirstProofBrief', 'first_proof_operator_brief', 'Int
 const pipelineControlFunctionPath = resolve(functionsDir, 'api/pipeline-control.js.func/api/pipeline-control.js')
 if (!existsSync(pipelineControlFunctionPath)) fail('public_pipeline_control_function_missing')
 const pipelineControlFunctionSource = readFileSync(pipelineControlFunctionPath, 'utf8')
-for (const token of ['firstProofPacket', 'first_proof', 'operator_brief_ready', 'starter_kit_url', 'intake_job_packet', 'intake_job_json', 'buyer_reply_draft', 'proof_delivery_packet', 'pilot_close_packet', 'pilot_order_room', 'private_workspace_manifest', 'first_run_acceptance', 'owner_acceptance', 'connector_policy', 'production_approval_queue', 'enterprise_delivery_pack', 'prepareEnterpriseDeliveryPack', 'prepare_enterprise_delivery_pack', 'prepareProductionApprovalQueue', 'prepare_production_approval_queue', 'recordConnectorPolicy', 'record_connector_policy', 'recordOwnerAcceptance', 'record_owner_acceptance', 'prepareFirstRunAcceptance', 'prepare_first_run_acceptance', 'startPrivateWorkspace', 'start_private_workspace', 'updateOrderRoomState', 'update_order_room']) {
+for (const token of ['firstProofPacket', 'first_proof', 'operator_brief_ready', 'starter_kit_url', 'intake_job_packet', 'intake_job_json', 'client_kickoff_packet', 'client_kickoff_json', 'buyer_reply_draft', 'proof_delivery_packet', 'pilot_close_packet', 'pilot_order_room', 'private_workspace_manifest', 'first_run_acceptance', 'owner_acceptance', 'connector_policy', 'production_approval_queue', 'enterprise_delivery_pack', 'prepareEnterpriseDeliveryPack', 'prepare_enterprise_delivery_pack', 'prepareProductionApprovalQueue', 'prepare_production_approval_queue', 'recordConnectorPolicy', 'record_connector_policy', 'recordOwnerAcceptance', 'record_owner_acceptance', 'prepareFirstRunAcceptance', 'prepare_first_run_acceptance', 'startPrivateWorkspace', 'start_private_workspace', 'updateOrderRoomState', 'update_order_room']) {
   if (!pipelineControlFunctionSource.includes(token)) {
     fail('public_pipeline_control_first_proof_contract_missing', { token })
   }
@@ -619,6 +619,7 @@ for (const token of [
   'Run queue now',
   'Open starter kit',
   'Copy intake job',
+  'Copy kickoff pack',
   'Copy buyer reply',
   'Copy proof packet',
   'Copy pilot packet',
@@ -652,6 +653,7 @@ for (const token of [
   'persistOrderRoomState',
   'proofBuyerReply',
   'proofIntakeJob',
+  'proofClientKickoff',
   'proofDeliveryPacket',
   'pilotClosePacket',
   'pilotOrderRoom',
@@ -726,7 +728,9 @@ for (const [id, name] of publicAgentTemplateContract) {
     'name="first_proof_target"',
     'name="acceptance_tests"',
     'name="intake_job_mode" value="intake_to_first_proof"',
+    'name="kickoff_pack_mode" value="client_kickoff_pack"',
     'name="first_run_mode" value="approval_only"',
+    'Kickoff pack',
     'Queued job',
     'Send setup request',
     'first-proof build',

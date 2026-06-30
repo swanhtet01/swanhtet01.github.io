@@ -114,7 +114,7 @@ try {
     await open(page, `${baseUrl}/agent-templates/daily-intelligence-brief/setup/`, viewport.name)
     await expectCopy(
       page,
-      ['Set up Daily Intelligence Brief Agent.', 'First proof', 'Queued job', 'Send setup request'],
+      ['Set up Daily Intelligence Brief Agent.', 'First proof', 'Queued job', 'Kickoff pack', 'Send setup request'],
       'template_setup',
       viewport.name,
     )
@@ -124,6 +124,7 @@ try {
       starterKitUrl: document.querySelector('input[name="starter_kit_url"]')?.value || '',
       firstProofTarget: document.querySelector('input[name="first_proof_target"]')?.value || '',
       intakeJobMode: document.querySelector('input[name="intake_job_mode"]')?.value || '',
+      kickoffPackMode: document.querySelector('input[name="kickoff_pack_mode"]')?.value || '',
       firstRunMode: document.querySelector('input[name="first_run_mode"]')?.value || '',
       formAction: document.querySelector('[data-agent-template-setup]')?.getAttribute('action') || '',
       submitVisible: Boolean(document.querySelector('[data-agent-template-setup] button[type="submit"]')?.getBoundingClientRect().height),
@@ -133,6 +134,7 @@ try {
     if (setup.starterKitUrl !== '/site/agent-templates/daily-intelligence-brief.json') fail('setup_starter_kit_url_missing', { viewport: viewport.name, setup })
     if (!setup.firstProofTarget.includes('One-page morning brief')) fail('setup_first_proof_missing', { viewport: viewport.name, setup })
     if (setup.intakeJobMode !== 'intake_to_first_proof') fail('setup_intake_job_mode_missing', { viewport: viewport.name, setup })
+    if (setup.kickoffPackMode !== 'client_kickoff_pack') fail('setup_kickoff_pack_mode_missing', { viewport: viewport.name, setup })
     if (setup.firstRunMode !== 'approval_only') fail('setup_first_run_mode_missing', { viewport: viewport.name, setup })
     if (setup.formAction !== '/api/contact-submissions') fail('setup_form_action_wrong', { viewport: viewport.name, setup })
     if (!setup.submitVisible) fail('setup_submit_not_visible', { viewport: viewport.name, setup })
@@ -177,6 +179,7 @@ try {
         runnerVisible: Boolean(document.querySelector('#run-runner')?.getBoundingClientRect().height),
         hasStarterKitRenderer: html.includes('Open starter kit'),
         hasIntakeJobRenderer: html.includes('proofIntakeJob') && html.includes('Copy intake job'),
+        hasClientKickoffRenderer: html.includes('proofClientKickoff') && html.includes('Copy kickoff pack'),
         hasChecklistRenderer: html.includes("proofList('Checklist'"),
         hasAcceptanceRenderer: html.includes("proofList('Acceptance tests'"),
         hasBuyerReplyRenderer: html.includes('proofBuyerReply') && html.includes('Copy buyer reply'),
@@ -191,12 +194,12 @@ try {
     })
     if (operator.title !== 'Operator Console | SUPERMEGA.dev') fail('operator_title_not_current', { viewport: viewport.name, operator })
     if (!operator.opsKeyVisible || !operator.sampleVisible || !operator.refreshVisible || !operator.runnerVisible) fail('operator_controls_missing', { viewport: viewport.name, operator })
-    if (!operator.hasStarterKitRenderer || !operator.hasIntakeJobRenderer || !operator.hasChecklistRenderer || !operator.hasAcceptanceRenderer || !operator.hasBuyerReplyRenderer || !operator.hasProofDeliveryRenderer || !operator.hasPilotCloseRenderer || !operator.hasPilotOrderRoomRenderer || !operator.hasWorkspaceHandoffRenderer || !operator.hasOrderRoomPersistenceControls || !operator.hasSampleData) fail('operator_first_proof_renderer_missing', { viewport: viewport.name, operator })
+    if (!operator.hasStarterKitRenderer || !operator.hasIntakeJobRenderer || !operator.hasClientKickoffRenderer || !operator.hasChecklistRenderer || !operator.hasAcceptanceRenderer || !operator.hasBuyerReplyRenderer || !operator.hasProofDeliveryRenderer || !operator.hasPilotCloseRenderer || !operator.hasPilotOrderRoomRenderer || !operator.hasWorkspaceHandoffRenderer || !operator.hasOrderRoomPersistenceControls || !operator.hasSampleData) fail('operator_first_proof_renderer_missing', { viewport: viewport.name, operator })
     if (operator.overflowX > 0) fail('operator_horizontal_overflow', { viewport: viewport.name, operator })
     await page.click('#load-sample')
     await expectCopy(
       page,
-      ['Sample Daily Intelligence Brief first proof', 'Open starter kit', 'Intake job packet', 'Copy intake job', 'Checklist', 'Acceptance tests', 'Buyer reply draft', 'Copy buyer reply', 'Proof delivery packet', 'Copy proof packet', 'Pilot close packet', 'Copy pilot packet', 'Paid pilot order room', 'Copy payment request', 'Copy payment ledger', 'Copy order ledger', 'Copy pilot start checklist', 'Copy owner activation packet', 'Copy owner action queue', 'Copy activation JSON', 'Copy workspace manifest', 'Copy workspace handoff', 'Copy first run queue', 'Save scope approval', 'Save payment proof', 'Create private workspace', 'Prepare first-run acceptance', 'Record owner accepted', 'Record changes requested', 'Record connector policy', 'Prepare autopilot approval queue', 'Prepare enterprise delivery pack', 'No lead was created'],
+      ['Sample Daily Intelligence Brief first proof', 'Open starter kit', 'Intake job packet', 'Copy intake job', 'Client kickoff pack', 'Copy kickoff pack', 'Checklist', 'Acceptance tests', 'Buyer reply draft', 'Copy buyer reply', 'Proof delivery packet', 'Copy proof packet', 'Pilot close packet', 'Copy pilot packet', 'Paid pilot order room', 'Copy payment request', 'Copy payment ledger', 'Copy order ledger', 'Copy pilot start checklist', 'Copy owner activation packet', 'Copy owner action queue', 'Copy activation JSON', 'Copy workspace manifest', 'Copy workspace handoff', 'Copy first run queue', 'Save scope approval', 'Save payment proof', 'Create private workspace', 'Prepare first-run acceptance', 'Record owner accepted', 'Record changes requested', 'Record connector policy', 'Prepare autopilot approval queue', 'Prepare enterprise delivery pack', 'No lead was created'],
       'operator_sample_packet',
       viewport.name,
     )
@@ -205,6 +208,7 @@ try {
       sampleStatus: document.querySelector('#operator-status')?.textContent || '',
       starterLink: document.querySelector('#operator-actions .operator-proof-link')?.getAttribute('href') || '',
       intakeJob: document.querySelector('#operator-actions #intake-job-0')?.value || '',
+      clientKickoff: document.querySelector('#operator-actions #client-kickoff-0')?.value || '',
       buyerReply: document.querySelector('#operator-actions #buyer-reply-0')?.value || '',
       proofPacket: document.querySelector('#operator-actions #proof-delivery-0')?.value || '',
       pilotPacket: document.querySelector('#operator-actions #pilot-close-0')?.value || '',
@@ -233,6 +237,7 @@ try {
     if (!operatorSample.sampleStatus.includes('sample_loaded')) fail('operator_sample_status_missing', { viewport: viewport.name, operatorSample })
     if (operatorSample.starterLink !== '/site/agent-templates/daily-intelligence-brief.json') fail('operator_sample_starter_link_missing', { viewport: viewport.name, operatorSample })
     if (!operatorSample.intakeJob.includes('intake-to-first-proof job') || !operatorSample.intakeJob.includes('Source manifest')) fail('operator_sample_intake_job_missing', { viewport: viewport.name, operatorSample })
+    if (!operatorSample.clientKickoff.includes('client kickoff pack') || !operatorSample.clientKickoff.includes('First 48 hours')) fail('operator_sample_client_kickoff_missing', { viewport: viewport.name, operatorSample })
     if (!operatorSample.buyerReply.includes('Please send one approved sample source')) fail('operator_sample_buyer_reply_missing', { viewport: viewport.name, operatorSample })
     if (!operatorSample.proofPacket.includes('## Acceptance test status')) fail('operator_sample_proof_packet_missing', { viewport: viewport.name, operatorSample })
     if (!operatorSample.pilotPacket.includes('Price hint: 11,000,000 MMK setup')) fail('operator_sample_pilot_packet_missing', { viewport: viewport.name, operatorSample })
@@ -246,7 +251,7 @@ try {
     if (!operatorSample.workspaceManifest.includes('"first_run_mode": "approval_only"')) fail('operator_sample_workspace_manifest_missing', { viewport: viewport.name, operatorSample })
     if (!operatorSample.workspaceHandoff.includes('Create workspace allowed: no')) fail('operator_sample_workspace_handoff_missing', { viewport: viewport.name, operatorSample })
     if (!operatorSample.firstRunQueue.includes('owner_acceptance_review')) fail('operator_sample_first_run_queue_missing', { viewport: viewport.name, operatorSample })
-    if (operatorSample.copyButtons < 14) fail('operator_sample_copy_missing', { viewport: viewport.name, operatorSample })
+    if (operatorSample.copyButtons < 15) fail('operator_sample_copy_missing', { viewport: viewport.name, operatorSample })
     if (operatorSample.stateButtons < 4 || operatorSample.workspaceButtons < 1 || operatorSample.acceptanceButtons < 1 || operatorSample.ownerAcceptanceButtons < 2 || operatorSample.connectorPolicyButtons < 1 || operatorSample.productionApprovalButtons < 1 || operatorSample.enterpriseDeliveryButtons < 1 || !operatorSample.stateText.includes('not_created_until_payment_proof')) fail('operator_sample_state_controls_missing', { viewport: viewport.name, operatorSample })
     const intakeCopyButton = page.locator('#operator-actions [data-copy-target="intake-job-0"]')
     await intakeCopyButton.scrollIntoViewIfNeeded()
@@ -257,6 +262,15 @@ try {
     }, { timeout: 5000 }).catch(() => undefined)
     const intakeCopyStatus = await page.locator('#operator-status').innerText({ timeout: 5000 }).catch(() => '')
     if (!intakeCopyStatus.includes('intake-job-0') || !intakeCopyStatus.includes('Text copied')) fail('operator_sample_intake_copy_failed', { viewport: viewport.name, intakeCopyStatus })
+    const kickoffCopyButton = page.locator('#operator-actions [data-copy-target="client-kickoff-0"]')
+    await kickoffCopyButton.scrollIntoViewIfNeeded()
+    await kickoffCopyButton.click({ force: true })
+    await page.waitForFunction(() => {
+      const value = document.querySelector('#operator-status')?.textContent || ''
+      return value.includes('client-kickoff-0') || value.includes('copy_failed')
+    }, { timeout: 5000 }).catch(() => undefined)
+    const kickoffCopyStatus = await page.locator('#operator-status').innerText({ timeout: 5000 }).catch(() => '')
+    if (!kickoffCopyStatus.includes('client-kickoff-0') || !kickoffCopyStatus.includes('Text copied')) fail('operator_sample_kickoff_copy_failed', { viewport: viewport.name, kickoffCopyStatus })
     const copyButton = page.locator('#operator-actions [data-copy-target="buyer-reply-0"]')
     await copyButton.scrollIntoViewIfNeeded()
     await copyButton.click({ force: true })

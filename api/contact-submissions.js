@@ -608,12 +608,102 @@ function buildIntakeJob(record, acceptanceTests = []) {
   }
 }
 
+function buildClientKickoffPack(record, intakeJob = {}) {
+  const templateName = record.public_package || record.requested_package || record.template_id || 'Custom SUPERMEGA template'
+  const proofTarget = record.first_proof_target || record.first_output || record.requested_package || 'First useful output'
+  const missingInputs = Array.isArray(intakeJob.missing_inputs) ? intakeJob.missing_inputs : []
+  const sourceRequests = missingInputs.length
+    ? missingInputs.map((item) => `Provide ${item.replace(/_/g, ' ')} before the first proof run.`)
+    : ['Approved sample source is enough to start the first proof run.']
+  const kickoffSteps = [
+    'Confirm the first proof target.',
+    'Use only buyer-approved sample sources.',
+    'Produce the first proof with source trace.',
+    'Review acceptance tests with the owner.',
+    'Only then discuss pilot scope, payment route, and private workspace.',
+  ]
+  const buyerMessage = [
+    `Hi ${record.name || 'there'},`,
+    '',
+    `I received the ${templateName} setup for ${record.company || 'your business'}.`,
+    '',
+    `First proof: ${proofTarget}.`,
+    '',
+    'To start cleanly, please make sure the approved sample source is available. I will use it only for the first proof and will not send messages, write records, connect accounts, or take payment actions without owner approval.',
+    '',
+    'Next step: I will prepare the first proof packet with source trace and acceptance-test status for review.',
+    '',
+    'Swan',
+    'SUPERMEGA.dev',
+  ].join('\n')
+  const operatorChecklist = [
+    'Open the intake job packet.',
+    ...sourceRequests,
+    `Build the first proof: ${proofTarget}`,
+    'Attach source trace for important claims.',
+    'Copy buyer reply only after owner review.',
+    'Keep payment and workspace actions blocked until explicit approval.',
+  ]
+  const packet = [
+    `# ${templateName} client kickoff pack`,
+    '',
+    `Lead: ${record.lead_id || 'not set'}`,
+    `Company: ${record.company || record.name || 'not set'}`,
+    `Template: ${record.template_id || 'custom'}`,
+    `Status: ${missingInputs.length ? 'waiting_for_minimum_source' : 'ready_for_first_proof'}`,
+    `Price hint: ${record.price_hint || 'quote after proof review'}`,
+    '',
+    '## Buyer promise',
+    `First useful output: ${proofTarget}`,
+    '',
+    '## What we need',
+    ...sourceRequests.map((item) => `- ${item}`),
+    '',
+    '## First 48 hours',
+    ...kickoffSteps.map((item, index) => `${index + 1}. ${item}`),
+    '',
+    '## Operator checklist',
+    ...operatorChecklist.map((item) => `- [ ] ${item}`),
+    '',
+    '## Buyer reply draft',
+    buyerMessage,
+    '',
+    '## Guardrails',
+    '- No external send without owner approval.',
+    '- No connector write without owner approval.',
+    '- No payment action without owner approval.',
+    '- No private workspace before payment proof.',
+    '- Real MRR remains 0 until payment proof is recorded.',
+  ].join('\n')
+
+  return {
+    status: missingInputs.length ? 'waiting_for_minimum_source' : 'ready_for_first_proof',
+    pack_type: 'client_kickoff_pack',
+    lead_id: record.lead_id || '',
+    template_id: record.template_id || '',
+    template_name: templateName,
+    company: record.company || '',
+    first_proof_target: proofTarget,
+    price_hint: record.price_hint || '',
+    source_requests: sourceRequests,
+    first_48_hours: kickoffSteps,
+    operator_checklist: operatorChecklist,
+    buyer_reply_draft: buyerMessage,
+    approval_boundary: 'owner approval before send/write/payment actions',
+    payment_state: 'not_requested',
+    workspace_state: 'not_created_until_payment_proof',
+    real_mrr_delta: 0,
+    packet,
+  }
+}
+
 function buildFirstProofTaskPayload(record) {
   const acceptanceTests = listFromText(record.acceptance_tests)
   const proofTarget = record.first_proof_target || record.first_output || record.requested_package || 'First useful output'
   const starterKitUrl = record.starter_kit_url || (record.template_id ? `/site/agent-templates/${record.template_id}.json` : '')
   const templateName = record.public_package || record.requested_package || record.template_id || 'Custom SUPERMEGA template'
   const intakeJob = buildIntakeJob(record, acceptanceTests)
+  const clientKickoffPack = buildClientKickoffPack(record, intakeJob)
   const sourceSummary = [
     record.source_links ? `source links: ${record.source_links}` : '',
     record.source_file_count ? `file count: ${record.source_file_count}` : '',
@@ -642,6 +732,7 @@ function buildFirstProofTaskPayload(record) {
     first_proof_target: proofTarget,
     operator_brief: truncate(operatorBrief, 2200),
     intake_job: intakeJob,
+    client_kickoff_pack: clientKickoffPack,
     source_trace: intakeJob.source_manifest
       .filter((item) => item.status === 'provided')
       .map((item) => `${item.source_type}: ${item.value}`),
@@ -1392,6 +1483,7 @@ async function handler(req, res) {
 
 handler.__test = {
   buildFirstProofTaskPayload,
+  buildClientKickoffPack,
   buildIntakeJob,
   pipelineActionPayload,
   telegramLeadMessage,

@@ -83,6 +83,15 @@ const action = internals.safeAction({
         approval_boundary: 'owner approval before send/write/payment actions',
         real_mrr_delta: 0,
       },
+      client_kickoff_pack: {
+        status: 'ready_for_first_proof',
+        pack_type: 'client_kickoff_pack',
+        lead_id: 'LEAD-TEST123',
+        template_id: 'daily-intelligence-brief',
+        packet: '# Daily Intelligence Brief Agent client kickoff pack\n\n## Buyer promise\nFirst useful output: One-page morning brief with what changed and what to do next.\n\n## First 48 hours\n1. Confirm the first proof target.',
+        buyer_reply_draft: 'Hi Swan,\n\nI received the Daily Intelligence Brief Agent setup.',
+        real_mrr_delta: 0,
+      },
       checklist: ['Open starter kit', 'Review buyer goal', 'Build first proof'],
       acceptance_tests: ['Shows source trace', 'Approval-only external actions', 'Uses approved sample sources'],
       approval_required: true,
@@ -115,6 +124,10 @@ assert.equal(action.first_proof.intake_job.job_type, 'intake_to_first_proof')
 assert.ok(action.first_proof.intake_job_packet.includes('intake-to-first-proof job'))
 assert.ok(action.first_proof.intake_job_packet.includes('Source manifest'))
 assert.ok(action.first_proof.intake_job_json.includes('"real_mrr_delta": 0'))
+assert.equal(action.first_proof.client_kickoff_pack.pack_type, 'client_kickoff_pack')
+assert.ok(action.first_proof.client_kickoff_packet.includes('client kickoff pack'))
+assert.ok(action.first_proof.client_kickoff_packet.includes('First 48 hours'))
+assert.ok(action.first_proof.client_kickoff_json.includes('"real_mrr_delta": 0'))
 assert.ok(action.first_proof.title.includes('Daily Intelligence Brief Agent'))
 assert.ok(action.first_proof.checklist.length >= 3)
 assert.ok(action.first_proof.acceptance_tests.length >= 3)
@@ -175,6 +188,7 @@ console.log(
       pilot_close_packet: 'ready',
       pilot_order_room: 'ready',
       intake_job: action.first_proof.intake_job.job_type,
+      kickoff_pack: action.first_proof.client_kickoff_pack.pack_type,
       private_workspace_manifest: action.first_proof.pilot_order_room.private_workspace_manifest.status,
     },
     null,

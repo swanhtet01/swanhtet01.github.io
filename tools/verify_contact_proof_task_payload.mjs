@@ -12,6 +12,7 @@ function fail(message, extra = {}) {
 const internals = handler.__test || {}
 if (
   typeof internals.buildIntakeJob !== 'function' ||
+  typeof internals.buildClientKickoffPack !== 'function' ||
   typeof internals.buildFirstProofTaskPayload !== 'function' ||
   typeof internals.pipelineActionPayload !== 'function' ||
   typeof internals.telegramLeadMessage !== 'function'
@@ -67,6 +68,18 @@ assert.ok(intakeJob.first_run_steps.some((item) => item.includes('approved sampl
 assert.ok(intakeJob.packet.includes('intake-to-first-proof job'))
 assert.ok(intakeJob.packet.includes('Source manifest'))
 
+const kickoffPack = internals.buildClientKickoffPack(record, intakeJob)
+assert.equal(kickoffPack.pack_type, 'client_kickoff_pack')
+assert.equal(kickoffPack.status, 'ready_for_first_proof')
+assert.equal(kickoffPack.template_id, 'daily-intelligence-brief')
+assert.equal(kickoffPack.payment_state, 'not_requested')
+assert.equal(kickoffPack.workspace_state, 'not_created_until_payment_proof')
+assert.equal(kickoffPack.real_mrr_delta, 0)
+assert.ok(kickoffPack.buyer_reply_draft.includes('I received the Daily Intelligence Brief Agent setup'))
+assert.ok(kickoffPack.packet.includes('client kickoff pack'))
+assert.ok(kickoffPack.packet.includes('First 48 hours'))
+assert.ok(kickoffPack.operator_checklist.some((item) => item.includes('payment and workspace actions blocked')))
+
 const proofTask = internals.buildFirstProofTaskPayload(record)
 assert.equal(proofTask.type, 'first_proof_build')
 assert.equal(proofTask.template_id, 'daily-intelligence-brief')
@@ -75,7 +88,9 @@ assert.equal(proofTask.first_proof_target, record.first_proof_target)
 assert.equal(proofTask.approval_required, true)
 assert.equal(proofTask.human_gate, 'owner approval before send/write/payment actions')
 assert.equal(proofTask.intake_job.job_type, 'intake_to_first_proof')
+assert.equal(proofTask.client_kickoff_pack.pack_type, 'client_kickoff_pack')
 assert.ok(proofTask.intake_job.packet.includes('First run steps'))
+assert.ok(proofTask.client_kickoff_pack.packet.includes('Buyer promise'))
 assert.ok(proofTask.source_trace.some((item) => item.includes('sample_sources')))
 assert.ok(proofTask.operator_brief.includes('Daily Intelligence Brief Agent'))
 assert.ok(proofTask.operator_brief.includes('Yangon Import Co'))
@@ -93,6 +108,7 @@ assert.equal(action.payload.first_proof_task.type, 'first_proof_build')
 assert.equal(action.payload.first_proof_task.template_id, 'daily-intelligence-brief')
 assert.equal(action.payload.first_proof_task.operator_brief, proofTask.operator_brief)
 assert.equal(action.payload.first_proof_task.intake_job.job_type, 'intake_to_first_proof')
+assert.equal(action.payload.first_proof_task.client_kickoff_pack.pack_type, 'client_kickoff_pack')
 assert.deepEqual(action.payload.first_proof_task.acceptance_tests, proofTask.acceptance_tests)
 
 const alert = internals.telegramLeadMessage(record)
@@ -109,6 +125,7 @@ console.log(
       status: 'ready',
       proof_task: proofTask.type,
       intake_job: intakeJob.job_type,
+      kickoff_pack: kickoffPack.pack_type,
       template_id: proofTask.template_id,
       checklist_items: proofTask.checklist.length,
       acceptance_tests: proofTask.acceptance_tests.length,

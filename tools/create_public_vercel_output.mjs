@@ -4018,6 +4018,7 @@ function buildAgentTemplateSetupHtml(kit) {
     ['access_policy', 'approval_required'],
     ['workspace_status', 'not_created_until_approved'],
     ['intake_job_mode', 'intake_to_first_proof'],
+    ['kickoff_pack_mode', 'client_kickoff_pack'],
     ['first_run_mode', 'approval_only'],
     ['management_owner', 'swanhtet@supermega.dev'],
     ['team', 'Owner or first operating team'],
@@ -4067,6 +4068,8 @@ ${unicornHeader}
             <span>${escapeHtml(kit.offer.first_proof)}</span>
             <strong>Queued job</strong>
             <span>Intake-to-first-proof packet with source manifest, first run steps, acceptance tests, and approval boundary.</span>
+            <strong>Kickoff pack</strong>
+            <span>Client-ready kickoff message, source request, 48-hour plan, and operator checklist.</span>
             <strong>What we need</strong>
             <ul>${renderKitList(kit.intake_schema.setup_inputs)}</ul>
             <strong>Accepted samples</strong>
@@ -4602,6 +4605,43 @@ const publicOperatorConsoleHtml = `<!doctype html>
               '- No payment action without owner approval.',
               '- Real MRR stays 0 until payment proof is recorded.'
             ].join('\\n'),
+            client_kickoff_packet:[
+              '# Daily Intelligence Brief Agent client kickoff pack',
+              '',
+              'Lead: SAMPLE-SETUP',
+              'Company: Sample buyer',
+              'Template: daily-intelligence-brief',
+              'Status: ready_for_first_proof',
+              'Price hint: 11,000,000 MMK setup',
+              '',
+              '## Buyer promise',
+              'First useful output: One-page morning brief with what changed, why it matters, and exact follow-up actions.',
+              '',
+              '## What we need',
+              '- Approved sample source is enough to start the first proof run.',
+              '',
+              '## First 48 hours',
+              '1. Confirm the first proof target.',
+              '2. Use only buyer-approved sample sources.',
+              '3. Produce the first proof with source trace.',
+              '4. Review acceptance tests with the owner.',
+              '5. Only then discuss pilot scope, payment route, and private workspace.',
+              '',
+              '## Operator checklist',
+              '- [ ] Open the intake job packet.',
+              '- [ ] Approved sample source is enough to start the first proof run.',
+              '- [ ] Build the first proof: One-page morning brief with what changed, why it matters, and exact follow-up actions.',
+              '- [ ] Attach source trace for important claims.',
+              '- [ ] Copy buyer reply only after owner review.',
+              '- [ ] Keep payment and workspace actions blocked until explicit approval.',
+              '',
+              '## Guardrails',
+              '- No external send without owner approval.',
+              '- No connector write without owner approval.',
+              '- No payment action without owner approval.',
+              '- No private workspace before payment proof.',
+              '- Real MRR remains 0 until payment proof is recorded.'
+            ].join('\\n'),
             checklist:[
               'Open starter kit and confirm buyer inputs.',
               'Review sample source links and missing source notes.',
@@ -4862,6 +4902,11 @@ const publicOperatorConsoleHtml = `<!doctype html>
       const id = 'intake-job-'+index;
       return '<div class="operator-proof-section"><span>Intake job packet</span><textarea class="operator-reply" id="'+id+'" readonly>'+esc(proof.intake_job_packet || proof.intake_job_json || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+id+'">Copy intake job</button></div>';
     }
+    function proofClientKickoff(proof, index){
+      if(!proof || (!proof.client_kickoff_packet && !proof.client_kickoff_json))return '';
+      const id = 'client-kickoff-'+index;
+      return '<div class="operator-proof-section"><span>Client kickoff pack</span><textarea class="operator-reply" id="'+id+'" readonly>'+esc(proof.client_kickoff_packet || proof.client_kickoff_json || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+id+'">Copy kickoff pack</button></div>';
+    }
     function proofBuyerReply(proof, index){
       if(!proof || !proof.buyer_reply_draft)return '';
       const id = 'buyer-reply-'+index;
@@ -5091,7 +5136,7 @@ const publicOperatorConsoleHtml = `<!doctype html>
       if(!actions.length){actionsEl.innerHTML = '<div class="operator-item">No recent actions.</div>';return}
       actionsEl.innerHTML = actions.map(function(action,index){
         const proof = action.first_proof;
-        const proofHtml = proof ? '<div class="operator-proof"><strong>'+esc(proof.title || 'First proof')+'</strong><div class="operator-meta"><span class="operator-chip">'+esc(proof.status)+'</span><span class="operator-chip">'+esc(proof.template_id)+'</span><span class="operator-chip">'+esc(proof.human_gate)+'</span></div><div>'+esc(proof.first_proof_target || '')+'</div>'+proofStarterLink(proof)+proofIntakeJob(proof,index)+proofList('Checklist',proof.checklist)+proofList('Acceptance tests',proof.acceptance_tests)+proofBuyerReply(proof,index)+proofDeliveryPacket(proof,index)+pilotClosePacket(proof,index)+pilotOrderRoom(action,proof,index)+'</div>' : '';
+        const proofHtml = proof ? '<div class="operator-proof"><strong>'+esc(proof.title || 'First proof')+'</strong><div class="operator-meta"><span class="operator-chip">'+esc(proof.status)+'</span><span class="operator-chip">'+esc(proof.template_id)+'</span><span class="operator-chip">'+esc(proof.human_gate)+'</span></div><div>'+esc(proof.first_proof_target || '')+'</div>'+proofStarterLink(proof)+proofIntakeJob(proof,index)+proofClientKickoff(proof,index)+proofList('Checklist',proof.checklist)+proofList('Acceptance tests',proof.acceptance_tests)+proofBuyerReply(proof,index)+proofDeliveryPacket(proof,index)+pilotClosePacket(proof,index)+pilotOrderRoom(action,proof,index)+'</div>' : '';
         return '<article class="operator-item"><strong>'+esc(action.title || action.action_type)+'</strong><div class="operator-meta"><span class="operator-chip">'+esc(action.status)+'</span><span class="operator-chip">'+esc(action.priority)+'</span><span class="operator-chip">'+esc(action.approval_state)+'</span><span>'+esc(action.lead_id)+'</span></div><div>'+esc(action.next_step || '')+'</div>'+proofHtml+'</article>';
       }).join('');
       actionsEl.querySelectorAll('[data-copy-target]').forEach(function(button){button.addEventListener('click',function(){copyDraft(button.getAttribute('data-copy-target'))})});
