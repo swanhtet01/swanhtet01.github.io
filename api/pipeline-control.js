@@ -111,10 +111,20 @@ function workspaceActivationStatus(state = {}) {
   const scopeApproved = state.scope_approval_state === 'approved' && state.price_approval_state === 'approved'
   const paymentReady = state.payment_route_state === 'approved' && ['approved_to_send', 'sent'].includes(state.payment_request_state)
   const proofReady = state.payment_proof_state === 'proof_attached'
+  if (scopeApproved && paymentReady && proofReady && state.private_workspace_state === 'created_after_payment_proof') return 'private_workspace_created'
   if (scopeApproved && paymentReady && proofReady) return 'ready_to_create_private_workspace'
   if (!scopeApproved) return 'blocked_until_scope_and_price_approved'
   if (!paymentReady) return 'blocked_until_payment_request_sent'
   return 'blocked_until_payment_proof'
+}
+
+function privateWorkspaceUrl(workspaceSlug, leadId) {
+  const appBase = (envText('SUPERMEGA_APP_BASE_URL', 'PUBLIC_APP_BASE_URL') || 'https://app.supermega.dev').replace(/\/$/, '')
+  const params = new URLSearchParams()
+  params.set('workspace', workspaceSlug)
+  params.set('lead', leadId)
+  const next = `/app/start?${params.toString()}`
+  return `${appBase}/login?next=${encodeURIComponent(next)}`
 }
 
 function buildPrivateWorkspaceManifest(input = {}) {
@@ -122,8 +132,9 @@ function buildPrivateWorkspaceManifest(input = {}) {
   const activationStatus = workspaceActivationStatus(state)
   const leadId = text(input.leadId) || 'not set'
   const templateId = text(input.templateId) || 'custom-agent'
-  const workspaceSlug = `pilot-${slugPart(templateId, 'agent')}-${slugPart(leadId, 'lead')}`.slice(0, 72)
-  const createWorkspaceAllowed = activationStatus === 'ready_to_create_private_workspace'
+  const workspaceSlug = text(state.private_workspace_slug || input.workspaceSlug) || `pilot-${slugPart(templateId, 'agent')}-${slugPart(leadId, 'lead')}`.slice(0, 72)
+  const createWorkspaceAllowed = ['ready_to_create_private_workspace', 'private_workspace_created'].includes(activationStatus)
+  const workspaceUrl = text(state.private_workspace_url || input.workspaceUrl) || privateWorkspaceUrl(workspaceSlug, leadId)
   const modules = [
     'buyer_goal',
     'approved_sources',
@@ -165,7 +176,11 @@ function buildPrivateWorkspaceManifest(input = {}) {
     first_proof_target: text(input.firstProofTarget) || null,
     price_hint: text(input.priceHint) || 'quote after proof review',
     create_workspace_allowed: createWorkspaceAllowed,
-    private_workspace_state: createWorkspaceAllowed ? state.private_workspace_state || 'ready_after_payment_proof' : 'not_created_until_payment_proof',
+    workspace_created: activationStatus === 'private_workspace_created',
+    workspace_created_at: text(state.workspace_created_at || input.workspaceCreatedAt) || null,
+    workspace_created_by: text(state.workspace_created_by || input.workspaceCreatedBy) || null,
+    workspace_url: workspaceUrl,
+    private_workspace_state: activationStatus === 'private_workspace_created' ? 'created_after_payment_proof' : createWorkspaceAllowed ? state.private_workspace_state || 'ready_after_payment_proof' : 'not_created_until_payment_proof',
     payment_proof_reference: createWorkspaceAllowed ? text(state.payment_proof_reference) || 'OWNER_PROOF_REFERENCE_REQUIRED' : 'required_before_workspace',
     first_run_mode: 'approval_only',
     real_mrr_delta: 0,
@@ -478,10 +493,12 @@ function firstProofPacket(row) {
     '',
     `Status: ${privateWorkspaceManifest.status}`,
     `Workspace slug: ${privateWorkspaceManifest.workspace_slug}`,
+    `Workspace URL: ${privateWorkspaceManifest.workspace_url}`,
     `Lead: ${leadId}`,
     `Template: ${templateId || 'not set'}`,
     `First run mode: ${privateWorkspaceManifest.first_run_mode}`,
     `Create workspace allowed: ${privateWorkspaceManifest.create_workspace_allowed ? 'yes' : 'no'}`,
+    `Workspace created: ${privateWorkspaceManifest.workspace_created ? 'yes' : 'no'}`,
     `Payment proof: ${privateWorkspaceManifest.payment_proof_reference}`,
     `Real MRR delta: ${privateWorkspaceManifest.real_mrr_delta}`,
     '',
@@ -613,6 +630,13 @@ async function updateOrderRoomState(payload) {
   if (!datastore.postgresConfigured()) return { status: 'error', reason: 'postgres_not_configured' }
 
   const state = buildOrderRoomState({ ...payload, action_id: actionId, lead_id: leadId })
+  if (state.private_workspace_state === 'created_after_payment_proof') {
+    return {
+      status: 'error',
+      reason: 'use_start_private_workspace_operation',
+      state,
+    }
+  }
   const result = await datastore.query(
     `
       with target as (
@@ -650,6 +674,128 @@ async function updateOrderRoomState(payload) {
   }
 }
 
+function contextFromActionRow(row, state = {}) {
+  const payload = parseJsonObject(row.payload)
+  const result = parseJsonObject(row.result)
+  const task = parseJsonObject(payload.first_proof_task)
+  const templateId = text(result.template_id) || text(task.template_id) || text(payload.template_id)
+  const templateName = text(task.template_name) || text(payload.public_package) || text(payload.requested_package) || templateId
+  return {
+    leadId: text(row.lead_id) || 'not set',
+    templateId,
+    templateName,
+    starterKitUrl: text(result.starter_kit_url) || text(task.starter_kit_url) || text(payload.starter_kit_url),
+    firstProofTarget: text(result.first_proof_target) || text(task.first_proof_target) || text(payload.first_proof_target),
+    priceHint: text(task.price_hint) || text(payload.price_hint) || 'quote after proof review',
+    state,
+  }
+}
+
+async function startPrivateWorkspace(payload) {
+  const actionId = text(payload.action_id)
+  const leadId = text(payload.lead_id)
+  if (!actionId && !leadId) return { status: 'error', reason: 'missing_action_or_lead_id' }
+  if (!datastore.postgresConfigured()) return { status: 'error', reason: 'postgres_not_configured' }
+
+  const selected = await datastore.query(
+    `
+      select
+        action_id, lead_id, task_id, action_type, status, priority, owner,
+        title, next_step, approval_required, approval_state,
+        notification_channel, notification_status, payload, result, created_at
+      from public.supermega_pipeline_actions
+      where (($1 <> '' and action_id = $1) or ($1 = '' and $2 <> '' and lead_id = $2))
+      order by created_at desc
+      limit 1
+    `,
+    [actionId, leadId],
+  )
+  if (selected.status !== 'ready') return selected
+  if (!selected.rows.length) return { status: 'error', reason: 'action_not_found' }
+
+  const row = selected.rows[0]
+  const currentResult = parseJsonObject(row.result)
+  const currentPayload = parseJsonObject(row.payload)
+  const currentState = parseJsonObject(currentResult.pilot_order_room_state || currentPayload.pilot_order_room_state)
+  const currentAction = safeAction(row)
+  const currentManifest = currentAction.first_proof?.pilot_order_room?.private_workspace_manifest || buildPrivateWorkspaceManifest(contextFromActionRow(row, currentState))
+  if (!['ready_to_create_private_workspace', 'private_workspace_created'].includes(currentManifest.status)) {
+    return {
+      status: 'error',
+      reason: 'private_workspace_not_ready',
+      activation_status: currentManifest.status,
+      action: currentAction,
+      private_workspace_manifest: currentManifest,
+    }
+  }
+
+  if (currentManifest.status === 'private_workspace_created') {
+    return {
+      status: 'ready',
+      adapter: 'vercel_postgres_neon',
+      operation_status: 'already_created',
+      action: currentAction,
+      private_workspace_manifest: currentManifest,
+    }
+  }
+
+  const createdAt = new Date().toISOString()
+  const createdState = {
+    ...currentState,
+    status: 'persisted_order_room_state',
+    action_id: text(row.action_id) || actionId || null,
+    lead_id: text(row.lead_id) || leadId || null,
+    private_workspace_state: 'created_after_payment_proof',
+    private_workspace_slug: currentManifest.workspace_slug,
+    private_workspace_url: currentManifest.workspace_url,
+    workspace_created_at: createdAt,
+    workspace_created_by: 'operator_console',
+    real_mrr_delta: 0,
+  }
+  const createdManifest = buildPrivateWorkspaceManifest(contextFromActionRow(row, createdState))
+  const result = await datastore.query(
+    `
+      with target as (
+        select id
+        from public.supermega_pipeline_actions
+        where (($1 <> '' and action_id = $1) or ($1 = '' and $2 <> '' and lead_id = $2))
+        order by created_at desc
+        limit 1
+      )
+      update public.supermega_pipeline_actions a
+      set
+        result = jsonb_set(
+          jsonb_set(
+            jsonb_set(coalesce(a.result, '{}'::jsonb), '{pilot_order_room_state}', $3::jsonb, true),
+            '{private_workspace_manifest}', $4::jsonb,
+            true
+          ),
+          '{private_workspace_started_at}',
+          to_jsonb($5::text),
+          true
+        ),
+        status = case when a.status in ('open', 'queued', 'done') then 'workspace_ready' else a.status end,
+        next_step = 'Open the private workspace handoff and run the first production job approval-only.',
+        updated_at = now()
+      where a.id in (select id from target)
+      returning
+        a.action_id, a.lead_id, a.task_id, a.action_type, a.status, a.priority, a.owner,
+        a.title, a.next_step, a.approval_required, a.approval_state,
+        a.notification_channel, a.notification_status, a.payload, a.result, a.created_at
+    `,
+    [actionId, leadId, JSON.stringify(createdState), JSON.stringify(createdManifest), createdAt],
+  )
+  if (result.status !== 'ready') return { ...result, private_workspace_manifest: createdManifest }
+  if (!result.rows.length) return { status: 'error', reason: 'action_not_found', private_workspace_manifest: createdManifest }
+  return {
+    status: 'ready',
+    adapter: 'vercel_postgres_neon',
+    operation_status: 'created',
+    action: safeAction(result.rows[0]),
+    private_workspace_manifest: createdManifest,
+  }
+}
+
 function primaryDatabaseStatus(result) {
   if (!result || result.status === 'ready') {
     return { status: 'ready' }
@@ -665,6 +811,14 @@ function primaryDatabaseStatus(result) {
     reason: provider === 'vercel_postgres_neon' ? 'vercel_postgres_query_failed' : quotaBlocked ? 'supabase_quota_or_project_restriction' : 'supabase_query_failed',
     detail: detail || text(result.reason),
   }
+}
+
+function writeStatusCode(result) {
+  if (result.status === 'ready') return 200
+  if (result.reason === 'action_not_found') return 404
+  if (['private_workspace_not_ready', 'use_start_private_workspace_operation'].includes(result.reason)) return 409
+  if (result.reason === 'missing_action_or_lead_id') return 400
+  return 503
 }
 
 async function supabaseFetch(config, path, options = {}) {
@@ -730,16 +884,30 @@ async function handler(req, res) {
       json(res, 400, { status: 'error', reason: error.message || 'invalid_request' })
       return
     }
-    if (text(payload.operation) !== 'update_order_room') {
+    const operation = text(payload.operation)
+    if (operation === 'update_order_room') {
+      const updated = await updateOrderRoomState(payload)
+      json(res, writeStatusCode(updated), {
+        endpoint: 'pipeline-control',
+        operation,
+        ...updated,
+      })
+      return
+    }
+    if (operation === 'start_private_workspace') {
+      const started = await startPrivateWorkspace(payload)
+      json(res, writeStatusCode(started), {
+        endpoint: 'pipeline-control',
+        operation,
+        ...started,
+      })
+      return
+    }
+    if (!operation) {
       json(res, 400, { status: 'error', reason: 'unsupported_operation' })
       return
     }
-    const updated = await updateOrderRoomState(payload)
-    json(res, updated.status === 'ready' ? 200 : updated.reason === 'action_not_found' ? 404 : 503, {
-      endpoint: 'pipeline-control',
-      operation: 'update_order_room',
-      ...updated,
-    })
+    json(res, 400, { status: 'error', reason: 'unsupported_operation' })
     return
   }
 
@@ -978,6 +1146,7 @@ handler.__test = {
   buildPrivateWorkspaceManifest,
   firstProofPacket,
   safeAction,
+  startPrivateWorkspace,
   updateOrderRoomState,
 }
 

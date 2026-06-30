@@ -573,7 +573,7 @@ for (const token of ['renderFirstProofBrief', 'first_proof_operator_brief', 'Sou
 const pipelineControlFunctionPath = resolve(functionsDir, 'api/pipeline-control.js.func/api/pipeline-control.js')
 if (!existsSync(pipelineControlFunctionPath)) fail('public_pipeline_control_function_missing')
 const pipelineControlFunctionSource = readFileSync(pipelineControlFunctionPath, 'utf8')
-for (const token of ['firstProofPacket', 'first_proof', 'operator_brief_ready', 'starter_kit_url', 'buyer_reply_draft', 'proof_delivery_packet', 'pilot_close_packet', 'pilot_order_room', 'private_workspace_manifest', 'updateOrderRoomState', 'update_order_room']) {
+for (const token of ['firstProofPacket', 'first_proof', 'operator_brief_ready', 'starter_kit_url', 'buyer_reply_draft', 'proof_delivery_packet', 'pilot_close_packet', 'pilot_order_room', 'private_workspace_manifest', 'startPrivateWorkspace', 'start_private_workspace', 'updateOrderRoomState', 'update_order_room']) {
   if (!pipelineControlFunctionSource.includes(token)) {
     fail('public_pipeline_control_first_proof_contract_missing', { token })
   }
@@ -632,6 +632,8 @@ for (const token of [
   'Copy workspace manifest',
   'Copy workspace handoff',
   'Copy first run queue',
+  'Create private workspace',
+  'startPrivateWorkspace',
   'private_workspace_manifest',
   'Save scope approval',
   'Save payment proof',
