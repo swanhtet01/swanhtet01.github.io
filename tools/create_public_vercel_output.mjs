@@ -5349,7 +5349,8 @@ const publicOperatorConsoleHtml = `<!doctype html>
             real_mrr_delta:0,
             approval_required:true,
             sent:false,
-            guardrails:['Internal draft only','No external send from the runner','Owner approval before buyer message','No payment or connector access without owner approval']
+            guardrails:['Internal draft only','No external send from the runner','Owner approval before buyer message','No payment or connector access without owner approval'],
+            approval:{status:'pending_owner_review',decision:'pending',sent:false,real_mrr_delta:0}
           }
         }]
       };
@@ -5695,6 +5696,32 @@ const publicOperatorConsoleHtml = `<!doctype html>
       setStatus(data);
       if(response.ok) await refresh();
     }
+    async function recordAutopilotDraftApproval(button){
+      if(!token()){setStatus('Paste the ops key first.');return}
+      const decision = button.getAttribute('data-autopilot-draft-decision') || '';
+      const draftRoot = button.closest ? button.closest('.operator-sales-draft') : null;
+      const draftBody = draftRoot ? draftRoot.querySelector('textarea.operator-reply') : null;
+      const reference = window.prompt(decision === 'approved' ? 'Owner approval reference for this draft' : 'Change request reference for this draft');
+      if(!reference || !reference.trim()){setStatus('Paste autopilot draft approval reference first.');return}
+      const note = window.prompt('Operator note (optional)','') || '';
+      const payload = {
+        operation:'record_autopilot_draft_approval',
+        action_id:button.getAttribute('data-action-id') || '',
+        lead_id:button.getAttribute('data-lead-id') || '',
+        autopilot_draft_type:button.getAttribute('data-autopilot-draft-type') || '',
+        package_name:button.getAttribute('data-autopilot-package-name') || '',
+        title:button.getAttribute('data-autopilot-draft-title') || '',
+        autopilot_draft_packet:draftBody ? draftBody.value : '',
+        autopilot_draft_decision:decision,
+        autopilot_draft_reference:reference.trim(),
+        operator_note:note.trim()
+      };
+      setStatus({status:'recording_autopilot_draft_approval', decision});
+      const response = await fetch('/api/pipeline-control',{method:'POST',headers:Object.assign({},authHeaders(),{'content-type':'application/json'}),body:JSON.stringify(payload),cache:'no-store'});
+      const data = await response.json().catch(function(){return {status:'error',reason:'invalid_json',code:response.status}});
+      setStatus(data);
+      if(response.ok) await refresh();
+    }
     function formatMmk(value){
       const amount = Number(value || 0);
       if(!Number.isFinite(amount))return '0 MMK';
@@ -5758,14 +5785,20 @@ const publicOperatorConsoleHtml = `<!doctype html>
       const id = 'sales-autopilot-draft-'+index;
       const body = draft.packet || draft.body || '';
       const guardrails = (draft.guardrails || []).slice(0,4);
+      const approval = draft.approval || {};
       const subject = draft.subject ? '<div class="operator-proof-section"><span>Subject</span><div>'+esc(draft.subject)+'</div></div>' : '';
+      const approvalText = approval.decision && approval.decision !== 'pending' ? '<div class="operator-proof-section"><span>Approval record</span><div>'+esc(approval.decision)+' / '+esc(approval.approval_reference || approval.status || '')+'</div></div>' : '';
+      const draftAttrs = ' data-autopilot-draft-type="'+esc(draft.type || '')+'" data-autopilot-package-name="'+esc(draft.package_name || '')+'" data-autopilot-draft-title="'+esc(draft.title || draft.package_name || action.title || '')+'"';
+      const approvalButtons = '<div class="operator-row"><button class="btn primary operator-autopilot-approval" type="button" data-autopilot-draft-decision="approved" data-action-id="'+esc(action.action_id || '')+'" data-lead-id="'+esc(action.lead_id || '')+'"'+draftAttrs+'>Approve autopilot draft</button><button class="btn secondary operator-autopilot-approval" type="button" data-autopilot-draft-decision="changes_requested" data-action-id="'+esc(action.action_id || '')+'" data-lead-id="'+esc(action.lead_id || '')+'"'+draftAttrs+'>Request draft changes</button></div>';
       return [
         '<div class="operator-proof operator-sales-draft">',
           '<strong>Autopilot draft artifact</strong>',
-          '<div class="operator-meta"><span class="operator-chip">'+esc(draft.type)+'</span><span class="operator-chip">'+esc(draft.external_action_state || 'blocked_until_owner_approval')+'</span><span class="operator-chip">'+esc(draft.payment_or_connector_state || 'blocked_until_owner_approval')+'</span><span class="operator-chip">sent '+esc(draft.sent === true ? 'yes' : 'no')+'</span><span class="operator-chip">MRR '+esc(draft.real_mrr_delta ?? 0)+'</span></div>',
+          '<div class="operator-meta"><span class="operator-chip">'+esc(draft.type)+'</span><span class="operator-chip">'+esc(draft.external_action_state || 'blocked_until_owner_approval')+'</span><span class="operator-chip">'+esc(draft.payment_or_connector_state || 'blocked_until_owner_approval')+'</span><span class="operator-chip">approval '+esc(approval.decision || 'pending')+'</span><span class="operator-chip">sent '+esc(draft.sent === true ? 'yes' : 'no')+'</span><span class="operator-chip">MRR '+esc(draft.real_mrr_delta ?? 0)+'</span></div>',
           '<div>'+esc(draft.package_name || draft.title || action.title || '')+'</div>',
           subject,
+          approvalText,
           body ? '<div class="operator-proof-section"><span>Draft body</span><textarea class="operator-reply" id="'+id+'" readonly>'+esc(body)+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+id+'">Copy autopilot draft</button></div>' : '',
+          approvalButtons,
           guardrails.length ? '<div class="operator-proof-section"><span>Guardrails</span><ul>'+guardrails.map(function(item){return '<li>'+esc(item)+'</li>'}).join('')+'</ul></div>' : '',
         '</div>'
       ].join('');
@@ -5789,6 +5822,7 @@ const publicOperatorConsoleHtml = `<!doctype html>
       actionsEl.querySelectorAll('[data-customer-success]').forEach(function(button){button.addEventListener('click',function(){prepareCustomerSuccessDesk(button)})});
       actionsEl.querySelectorAll('[data-retainer-growth]').forEach(function(button){button.addEventListener('click',function(){prepareRetainerGrowthOffer(button)})});
       actionsEl.querySelectorAll('[data-retainer-payment]').forEach(function(button){button.addEventListener('click',function(){recordRetainerPaymentProof(button)})});
+      actionsEl.querySelectorAll('[data-autopilot-draft-decision]').forEach(function(button){button.addEventListener('click',function(){recordAutopilotDraftApproval(button)})});
     }
     async function refresh(){
       if(!token()){setStatus('Paste the ops key first.');return}

@@ -1227,6 +1227,101 @@ function envText(...names) {
   return ''
 }
 
+function escapeHtml(value) {
+  return text(value).replace(/[&<>"']/g, (ch) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;',
+  }[ch]))
+}
+
+function fromCandidates() {
+  return [
+    envText('SUPERMEGA_FROM_EMAIL'),
+    'SuperMega <hello@supermega.dev>',
+    'SuperMega <onboarding@resend.dev>',
+  ].filter(Boolean)
+}
+
+function autopilotDraftFromPayload(payload = {}) {
+  return {
+    type: oneOf(payload.autopilot_draft_type || payload.type, ['source_request_packet', 'offer_packet', 'buyer_reply_draft'], ''),
+    lead_id: text(payload.lead_id),
+    package_name: text(payload.package_name || payload.autopilot_package_name),
+    title: text(payload.title || payload.autopilot_draft_title),
+    packet: text(payload.packet || payload.autopilot_draft_packet || payload.body),
+    body: text(payload.body || payload.autopilot_draft_body),
+    external_action_state: 'blocked_until_owner_approval',
+    payment_or_connector_state: 'blocked_until_owner_approval',
+    real_mrr_delta: 0,
+    approval_required: true,
+    sent: false,
+    guardrails: ['internal_draft_only', 'no_external_send_from_runner', 'owner_approval_before_buyer_message', 'no_payment_or_connector_without_owner_approval'],
+  }
+}
+
+async function sendAutopilotDraftApprovalEmail({ approval, draft, blocker }) {
+  const apiKey = envText('RESEND_API_KEY')
+  if (!apiKey) return { status: 'error', reason: 'resend_not_configured' }
+  const notifyEmail = envText('SUPERMEGA_CONTACT_NOTIFY_EMAIL') || 'swanhtet@supermega.dev'
+  const title = text(approval.title || draft.title || draft.package_name || approval.action_id) || 'Autopilot draft approval'
+  const html = `
+    <div style="font-family:Arial,sans-serif;line-height:1.55;color:#0f172a">
+      <h2 style="margin:0 0 16px">Autopilot draft approval recorded</h2>
+      <p style="margin:0 0 12px">SQL queue persistence is degraded, so this approval was routed through the email fallback ledger.</p>
+      <table style="border-collapse:collapse">
+        <tr><td style="padding:4px 12px 4px 0"><strong>Decision</strong></td><td>${escapeHtml(approval.decision)}</td></tr>
+        <tr><td style="padding:4px 12px 4px 0"><strong>Reference</strong></td><td>${escapeHtml(approval.approval_reference)}</td></tr>
+        <tr><td style="padding:4px 12px 4px 0"><strong>Action</strong></td><td>${escapeHtml(approval.action_id)}</td></tr>
+        <tr><td style="padding:4px 12px 4px 0"><strong>Lead</strong></td><td>${escapeHtml(approval.lead_id)}</td></tr>
+        <tr><td style="padding:4px 12px 4px 0"><strong>Draft type</strong></td><td>${escapeHtml(approval.draft_type)}</td></tr>
+        <tr><td style="padding:4px 12px 4px 0"><strong>Title</strong></td><td>${escapeHtml(title)}</td></tr>
+        <tr><td style="padding:4px 12px 4px 0"><strong>External state</strong></td><td>${escapeHtml(approval.external_action_state)}</td></tr>
+        <tr><td style="padding:4px 12px 4px 0"><strong>Payment/connector state</strong></td><td>${escapeHtml(approval.payment_or_connector_state)}</td></tr>
+        <tr><td style="padding:4px 12px 4px 0"><strong>Sent</strong></td><td>${approval.sent ? 'true' : 'false'}</td></tr>
+        <tr><td style="padding:4px 12px 4px 0"><strong>Real MRR delta</strong></td><td>${approval.real_mrr_delta}</td></tr>
+        <tr><td style="padding:4px 12px 4px 0"><strong>Database blocker</strong></td><td>${escapeHtml(blocker?.reason || blocker?.detail || 'not_available')}</td></tr>
+      </table>
+      <h3 style="margin:20px 0 8px">Draft body</h3>
+      <pre style="white-space:pre-wrap;background:#f8fafc;border:1px solid #e2e8f0;padding:12px;border-radius:8px">${escapeHtml(draft.packet || draft.body || '')}</pre>
+      <p style="margin:12px 0 0">Guardrails: runner does not send; no payment or connector action; no MRR claim without payment proof.</p>
+    </div>
+  `
+  let lastError = null
+  for (const from of fromCandidates()) {
+    try {
+      const response = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          from,
+          to: [notifyEmail],
+          subject: `[autopilot ${approval.decision}] ${title}`,
+          html,
+        }),
+        signal: AbortSignal.timeout(8000),
+      })
+      const bodyText = await response.text().catch(() => '')
+      let body = {}
+      try {
+        body = bodyText ? JSON.parse(bodyText) : {}
+      } catch {
+        body = {}
+      }
+      if (response.ok) return { status: 'ready', adapter: 'email_fallback', email_id: text(body.id), to: notifyEmail, from }
+      lastError = { status: 'error', reason: `resend_${response.status}`, to: notifyEmail, from }
+    } catch (error) {
+      lastError = { status: 'error', reason: 'resend_fetch_failed', detail: text(error && error.message), to: notifyEmail, from }
+    }
+  }
+  return lastError || { status: 'error', reason: 'resend_failed' }
+}
+
 function supabaseConfig() {
   return {
     url: envText('SUPABASE_URL', 'DATABASE_URL_SUPABASE_URL', 'DATABASE_URL_SUPERMEGA_DATABASE_URLSUPABASE_URL').replace(/\/$/, ''),
@@ -1653,6 +1748,7 @@ function safeAction(row) {
   const firstProof = firstProofPacket(row)
   const result = parseJsonObject(row.result)
   const autopilotDraftTypes = ['source_request_packet', 'offer_packet', 'buyer_reply_draft']
+  const autopilotDraftApproval = parseJsonObject(result.autopilot_draft_approval)
   const autopilotDraft = autopilotDraftTypes.includes(text(result.type))
     ? {
         status: text(result.status) || 'ready',
@@ -1671,6 +1767,14 @@ function safeAction(row) {
         approval_required: result.approval_required !== false,
         sent: result.sent === true,
         guardrails: list(result.guardrails),
+        approval: Object.keys(autopilotDraftApproval).length
+          ? autopilotDraftApproval
+          : {
+              status: 'pending_owner_review',
+              decision: text(row.approval_state) === 'approved' ? 'approved' : text(row.approval_state) === 'changes_requested' ? 'changes_requested' : 'pending',
+              sent: false,
+              real_mrr_delta: 0,
+            },
       }
     : null
   return {
@@ -1690,6 +1794,39 @@ function safeAction(row) {
     created_at: row.created_at || null,
     first_proof: firstProof,
     autopilot_draft: autopilotDraft,
+  }
+}
+
+function buildAutopilotDraftApprovalRecord(payload = {}, draft = {}) {
+  const decision = oneOf(payload.autopilot_draft_decision || payload.decision, ['approved', 'changes_requested'], '')
+  const approvalReference = text(payload.autopilot_draft_reference || payload.approval_reference || payload.evidence_reference)
+  const operatorNote = text(payload.operator_note || payload.note).slice(0, 500)
+  if (!decision) return { status: 'error', reason: 'invalid_autopilot_draft_decision' }
+  if (!approvalReference) return { status: 'error', reason: 'missing_autopilot_draft_reference' }
+  return {
+    status: 'autopilot_draft_approval_recorded',
+    decision,
+    action_id: text(payload.action_id) || null,
+    lead_id: text(payload.lead_id) || text(draft.lead_id) || null,
+    draft_type: text(draft.type),
+    package_name: text(draft.package_name),
+    title: text(draft.title || draft.package_name),
+    approval_reference: approvalReference.slice(0, 240),
+    operator_note: operatorNote,
+    external_action_state: decision === 'approved' ? 'approved_for_manual_owner_send' : 'blocked_until_changes_resolved',
+    payment_or_connector_state: 'blocked_until_owner_approval',
+    approved_to_send: decision === 'approved',
+    sent: false,
+    real_mrr_delta: 0,
+    recorded_by: 'operator_console',
+    recorded_at: new Date().toISOString(),
+    guardrails: [
+      'approval_record_only',
+      'runner_does_not_send',
+      'manual_send_requires_owner_execution',
+      'no_payment_or_connector_change_from_draft_approval',
+      'no_mrr_delta_without_payment_proof',
+    ],
   }
 }
 
@@ -2128,6 +2265,133 @@ async function updateOrderRoomState(payload) {
     adapter: 'vercel_postgres_neon',
     action: safeAction(result.rows[0]),
     order_room_state: state,
+  }
+}
+
+async function recordAutopilotDraftApproval(payload) {
+  const actionId = text(payload.action_id)
+  const leadId = text(payload.lead_id)
+  if (!actionId && !leadId) return { status: 'error', reason: 'missing_action_or_lead_id' }
+  if (!datastore.postgresConfigured()) return { status: 'error', reason: 'postgres_not_configured' }
+  const allowedTypes = ['source_request_packet', 'offer_packet', 'buyer_reply_draft']
+
+  const current = await datastore.query(
+    `
+      select
+        id, action_id, lead_id, task_id, action_type, status, priority, owner,
+        title, next_step, approval_required, approval_state,
+        notification_channel, notification_status, payload, result, created_at
+      from public.supermega_pipeline_actions
+      where (($1 <> '' and action_id = $1) or ($1 = '' and $2 <> '' and lead_id = $2))
+      order by created_at desc
+      limit 1
+    `,
+    [actionId, leadId],
+  )
+  if (current.status !== 'ready') {
+    const fallbackDraft = autopilotDraftFromPayload(payload)
+    if (!allowedTypes.includes(text(fallbackDraft.type)) || (!fallbackDraft.packet && !fallbackDraft.body && !fallbackDraft.title && !fallbackDraft.package_name)) {
+      return {
+        ...current,
+        fallback: {
+          status: 'error',
+          reason: 'autopilot_draft_not_found',
+        },
+      }
+    }
+    const approval = buildAutopilotDraftApprovalRecord({ ...payload, action_id: actionId, lead_id: leadId || fallbackDraft.lead_id }, fallbackDraft)
+    if (approval.status === 'error') return approval
+    const fallbackDelivery = await sendAutopilotDraftApprovalEmail({ approval, draft: fallbackDraft, blocker: current })
+    if (fallbackDelivery.status !== 'ready') {
+      return {
+        ...current,
+        fallback_delivery: fallbackDelivery,
+        autopilot_draft_approval: approval,
+      }
+    }
+    const approvalState = approval.decision === 'approved' ? 'approved' : 'changes_requested'
+    const nextStep =
+      approval.decision === 'approved'
+        ? 'Email fallback recorded approval. Manual owner send is still required; record real revenue only after payment proof.'
+        : 'Email fallback recorded requested changes. Revise the draft before any buyer-visible send.'
+    return {
+      status: 'ready',
+      adapter: 'email_fallback',
+      primary_database: {
+        status: current.status,
+        provider: current.provider || null,
+        adapter: current.adapter || null,
+        code: current.code || null,
+        reason: current.reason || null,
+        detail: current.detail || null,
+      },
+      fallback_delivery: fallbackDelivery,
+      action: safeAction({
+        action_id: actionId || null,
+        lead_id: leadId || fallbackDraft.lead_id || null,
+        action_type: 'autopilot_draft_approval',
+        status: 'open',
+        priority: 'high',
+        owner: 'Revenue Pod',
+        title: fallbackDraft.title || fallbackDraft.package_name || 'Autopilot draft approval',
+        next_step: nextStep,
+        approval_required: true,
+        approval_state: approvalState,
+        notification_channel: 'email_fallback',
+        notification_status: 'sent_to_owner_ledger',
+        result: {
+          ...fallbackDraft,
+          status: 'ready',
+          autopilot_draft_approval: approval,
+        },
+        created_at: new Date().toISOString(),
+      }),
+      autopilot_draft_approval: approval,
+    }
+  }
+  if (!current.rows.length) return { status: 'error', reason: 'action_not_found' }
+
+  const row = current.rows[0]
+  const result = parseJsonObject(row.result)
+  if (!allowedTypes.includes(text(result.type))) {
+    return {
+      status: 'error',
+      reason: 'autopilot_draft_not_found',
+      action: safeAction(row),
+    }
+  }
+
+  const approval = buildAutopilotDraftApprovalRecord({ ...payload, action_id: text(row.action_id), lead_id: text(row.lead_id) }, result)
+  if (approval.status === 'error') return approval
+  const approvalState = approval.decision === 'approved' ? 'approved' : 'changes_requested'
+  const nextStep =
+    approval.decision === 'approved'
+      ? 'Owner approved the draft. Send manually only from the approved channel, then record real revenue only after payment proof.'
+      : 'Revise the draft from the requested changes before any buyer-visible send.'
+  const updated = await datastore.query(
+    `
+      update public.supermega_pipeline_actions
+      set
+        result = jsonb_set(coalesce(result, '{}'::jsonb), '{autopilot_draft_approval}', $2::jsonb, true),
+        approval_state = $3,
+        notification_status = case when $3 = 'approved' then 'approved_manual_send_only' else 'changes_requested' end,
+        next_step = $4,
+        updated_at = now()
+      where id = $1
+      returning
+        action_id, lead_id, task_id, action_type, status, priority, owner,
+        title, next_step, approval_required, approval_state,
+        notification_channel, notification_status, payload, result, created_at
+    `,
+    [row.id, JSON.stringify(approval), approvalState, nextStep],
+  )
+  if (updated.status !== 'ready') return { ...updated, autopilot_draft_approval: approval }
+  if (!updated.rows.length) return { status: 'error', reason: 'action_not_found', autopilot_draft_approval: approval }
+  return {
+    status: 'ready',
+    adapter: 'vercel_postgres_neon',
+    action: safeAction(updated.rows[0]),
+    autopilot_draft_approval: approval,
   }
 }
 
@@ -3058,8 +3322,8 @@ function primaryDatabaseStatus(result) {
 function writeStatusCode(result) {
   if (result.status === 'ready') return 200
   if (result.reason === 'action_not_found') return 404
-  if (['private_workspace_not_ready', 'private_workspace_required', 'first_run_acceptance_required', 'owner_acceptance_required', 'owner_acceptance_not_accepted', 'connector_policy_required', 'production_approval_queue_required', 'enterprise_delivery_pack_required', 'customer_success_desk_required', 'retainer_growth_offer_required', 'use_start_private_workspace_operation'].includes(result.reason)) return 409
-  if (['missing_action_or_lead_id', 'invalid_owner_acceptance_decision', 'missing_owner_acceptance_reference', 'invalid_connector_policy_mode', 'missing_connector_policy_reference', 'missing_production_queue_reference', 'missing_enterprise_delivery_reference', 'missing_customer_success_reference', 'missing_retainer_growth_reference', 'missing_retainer_payment_proof_reference', 'missing_retainer_owner_approval_reference', 'invalid_retainer_payment_amount', 'invalid_retainer_payment_period'].includes(result.reason)) return 400
+  if (['private_workspace_not_ready', 'private_workspace_required', 'first_run_acceptance_required', 'owner_acceptance_required', 'owner_acceptance_not_accepted', 'connector_policy_required', 'production_approval_queue_required', 'enterprise_delivery_pack_required', 'customer_success_desk_required', 'retainer_growth_offer_required', 'use_start_private_workspace_operation', 'autopilot_draft_not_found'].includes(result.reason)) return 409
+  if (['missing_action_or_lead_id', 'invalid_owner_acceptance_decision', 'missing_owner_acceptance_reference', 'invalid_connector_policy_mode', 'missing_connector_policy_reference', 'missing_production_queue_reference', 'missing_enterprise_delivery_reference', 'missing_customer_success_reference', 'missing_retainer_growth_reference', 'missing_retainer_payment_proof_reference', 'missing_retainer_owner_approval_reference', 'invalid_retainer_payment_amount', 'invalid_retainer_payment_period', 'invalid_autopilot_draft_decision', 'missing_autopilot_draft_reference'].includes(result.reason)) return 400
   return 503
 }
 
@@ -3210,6 +3474,15 @@ async function handler(req, res) {
     }
     if (operation === 'record_retainer_payment_proof') {
       const recorded = await recordRetainerPaymentProof(payload)
+      json(res, writeStatusCode(recorded), {
+        endpoint: 'pipeline-control',
+        operation,
+        ...recorded,
+      })
+      return
+    }
+    if (operation === 'record_autopilot_draft_approval') {
+      const recorded = await recordAutopilotDraftApproval(payload)
       json(res, writeStatusCode(recorded), {
         endpoint: 'pipeline-control',
         operation,
@@ -3477,6 +3750,7 @@ async function handler(req, res) {
 
 handler.__test = {
   buildConnectorPolicyRecord,
+  buildAutopilotDraftApprovalRecord,
   buildCustomerSuccessDeskPack,
   buildEnterpriseDeliveryPack,
   buildOrderRoomState,
@@ -3487,12 +3761,14 @@ handler.__test = {
   buildRetainerPaymentRecord,
   firstProofPacket,
   autopilotCommandBoard,
+  autopilotDraftFromPayload,
   prepareFirstRunAcceptance,
   prepareCustomerSuccessDesk,
   prepareEnterpriseDeliveryPack,
   prepareProductionApprovalQueue,
   prepareRetainerGrowthOffer,
   recordRetainerPaymentProof,
+  recordAutopilotDraftApproval,
   recordConnectorPolicy,
   recordOwnerAcceptance,
   revenueProofBoard,
