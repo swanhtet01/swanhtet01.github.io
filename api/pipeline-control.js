@@ -195,6 +195,82 @@ function buildPrivateWorkspaceManifest(input = {}) {
   }
 }
 
+function buildFirstRunAcceptance(input = {}) {
+  const manifest = input.manifest || {}
+  const evidenceReference = text(input.evidenceReference || input.firstRunEvidenceReference) || 'FIRST_RUN_OUTPUT_REFERENCE_REQUIRED'
+  const preparedAt = text(input.preparedAt) || new Date().toISOString()
+  const workspaceSlug = text(manifest.workspace_slug || input.workspaceSlug) || 'private-workspace-required'
+  const leadId = text(input.leadId || manifest.lead_id) || 'not set'
+  const templateName = text(input.templateName || manifest.template_name) || text(manifest.template_id) || 'SUPERMEGA agent'
+  const acceptanceTests = list(input.acceptanceTests).length
+    ? list(input.acceptanceTests)
+    : ['Shows source trace for important outputs.', 'Uses only approved sources.', 'Keeps external actions approval-only until accepted.']
+  const acceptanceChecklist = [
+    'First run output is pasted into the workspace delivery packet.',
+    'Source trace is attached for important claims.',
+    'Owner reviews the output before any external send, connector write, or recurring charge.',
+    'Acceptance or requested changes are recorded in the approval log.',
+  ]
+  const packet = [
+    `# ${templateName} first run acceptance packet`,
+    '',
+    'Status: draft - owner acceptance required',
+    `Lead: ${leadId}`,
+    `Workspace: ${workspaceSlug}`,
+    `Workspace URL: ${text(manifest.workspace_url) || privateWorkspaceUrl(workspaceSlug, leadId)}`,
+    `Evidence reference: ${evidenceReference}`,
+    'External send/write state: blocked_until_owner_acceptance',
+    'Recurring revenue state: not_claimed',
+    'Real MRR delta: 0',
+    '',
+    '## First run output',
+    '[Paste the first production run output here before sending to the buyer.]',
+    '',
+    '## Acceptance tests',
+    acceptanceTests.map((item) => `- [ ] ${item}`).join('\n'),
+    '',
+    '## Owner decision',
+    '- [ ] Accept first run and allow the next approval-only production run.',
+    '- [ ] Request changes before any production send/write.',
+    '- [ ] Approve connector write/send policy separately if needed.',
+    '',
+    '## Guardrails',
+    '- No external send from this packet.',
+    '- No connector write before owner acceptance.',
+    '- No recurring revenue claim before real payment proof and acceptance evidence.',
+  ].join('\n')
+  const acceptanceQueueCsv = [
+    ['workspace_slug', 'lead_id', 'acceptance_step', 'owner', 'state', 'evidence_required', 'real_mrr_delta'].map(csvCell).join(','),
+    [workspaceSlug, leadId, 'paste_first_run_output', 'Delivery Pod', 'draft_required', evidenceReference, '0'].map(csvCell).join(','),
+    [workspaceSlug, leadId, 'owner_acceptance_review', 'Founder', 'acceptance_required', 'accepted_or_changes_requested', '0'].map(csvCell).join(','),
+    [workspaceSlug, leadId, 'connector_policy_review', 'Founder', 'blocked_until_acceptance', 'explicit_send_write_policy', '0'].map(csvCell).join(','),
+  ].join('\n')
+  return {
+    status: 'first_run_acceptance_packet_ready',
+    workspace_slug: workspaceSlug,
+    lead_id: leadId,
+    template_id: text(manifest.template_id || input.templateId) || null,
+    template_name: templateName,
+    first_run_state: 'draft_ready_for_owner_review',
+    acceptance_state: 'owner_acceptance_required',
+    external_action_state: 'blocked_until_owner_acceptance',
+    connector_write_state: 'blocked_until_owner_acceptance',
+    recurring_revenue_state: 'not_claimed',
+    evidence_reference: evidenceReference,
+    prepared_at: preparedAt,
+    prepared_by: 'operator_console',
+    real_mrr_delta: 0,
+    acceptance_checklist: acceptanceChecklist,
+    acceptance_packet: packet,
+    acceptance_queue_csv: acceptanceQueueCsv,
+    guardrails: [
+      'no_external_send_from_acceptance_packet',
+      'no_connector_write_before_owner_acceptance',
+      'no_recurring_revenue_claim_without_acceptance_evidence',
+    ],
+  }
+}
+
 function envText(...names) {
   for (const name of names) {
     const value = text(process.env[name])
@@ -251,6 +327,7 @@ function firstProofPacket(row) {
   const leadId = text(row.lead_id) || 'not set'
   const sourceTrace = list(task.source_trace || payload.source_trace)
   const persistedOrderRoomState = parseJsonObject(result.pilot_order_room_state || payload.pilot_order_room_state)
+  const firstRunAcceptance = parseJsonObject(result.first_run_acceptance || payload.first_run_acceptance)
   const orderRoomState = Object.keys(persistedOrderRoomState).length
     ? persistedOrderRoomState
     : {
@@ -556,6 +633,9 @@ function firstProofPacket(row) {
       private_workspace_manifest_json: JSON.stringify(privateWorkspaceManifest, null, 2),
       private_workspace_handoff_packet: privateWorkspaceHandoffPacket,
       first_run_queue_csv: firstRunQueueCsv,
+      first_run_acceptance: Object.keys(firstRunAcceptance).length ? firstRunAcceptance : null,
+      first_run_acceptance_packet: text(firstRunAcceptance.acceptance_packet),
+      first_run_acceptance_queue_csv: text(firstRunAcceptance.acceptance_queue_csv),
       state: orderRoomState,
     },
     approval_required: result.approval_required !== undefined ? result.approval_required !== false : task.approval_required !== false,
@@ -680,6 +760,7 @@ function contextFromActionRow(row, state = {}) {
   const task = parseJsonObject(payload.first_proof_task)
   const templateId = text(result.template_id) || text(task.template_id) || text(payload.template_id)
   const templateName = text(task.template_name) || text(payload.public_package) || text(payload.requested_package) || templateId
+  const acceptanceTests = list(result.acceptance_tests).length ? list(result.acceptance_tests) : list(task.acceptance_tests)
   return {
     leadId: text(row.lead_id) || 'not set',
     templateId,
@@ -687,6 +768,7 @@ function contextFromActionRow(row, state = {}) {
     starterKitUrl: text(result.starter_kit_url) || text(task.starter_kit_url) || text(payload.starter_kit_url),
     firstProofTarget: text(result.first_proof_target) || text(task.first_proof_target) || text(payload.first_proof_target),
     priceHint: text(task.price_hint) || text(payload.price_hint) || 'quote after proof review',
+    acceptanceTests,
     state,
   }
 }
@@ -796,6 +878,103 @@ async function startPrivateWorkspace(payload) {
   }
 }
 
+async function prepareFirstRunAcceptance(payload) {
+  const actionId = text(payload.action_id)
+  const leadId = text(payload.lead_id)
+  if (!actionId && !leadId) return { status: 'error', reason: 'missing_action_or_lead_id' }
+  if (!datastore.postgresConfigured()) return { status: 'error', reason: 'postgres_not_configured' }
+
+  const selected = await datastore.query(
+    `
+      select
+        action_id, lead_id, task_id, action_type, status, priority, owner,
+        title, next_step, approval_required, approval_state,
+        notification_channel, notification_status, payload, result, created_at
+      from public.supermega_pipeline_actions
+      where (($1 <> '' and action_id = $1) or ($1 = '' and $2 <> '' and lead_id = $2))
+      order by created_at desc
+      limit 1
+    `,
+    [actionId, leadId],
+  )
+  if (selected.status !== 'ready') return selected
+  if (!selected.rows.length) return { status: 'error', reason: 'action_not_found' }
+
+  const row = selected.rows[0]
+  const currentResult = parseJsonObject(row.result)
+  const currentState = parseJsonObject(currentResult.pilot_order_room_state || parseJsonObject(row.payload).pilot_order_room_state)
+  const currentAction = safeAction(row)
+  const currentManifest = currentAction.first_proof?.pilot_order_room?.private_workspace_manifest || buildPrivateWorkspaceManifest(contextFromActionRow(row, currentState))
+  if (currentManifest.status !== 'private_workspace_created') {
+    return {
+      status: 'error',
+      reason: 'private_workspace_required',
+      activation_status: currentManifest.status,
+      action: currentAction,
+      private_workspace_manifest: currentManifest,
+    }
+  }
+
+  const existingAcceptance = parseJsonObject(currentResult.first_run_acceptance)
+  if (existingAcceptance.status === 'first_run_acceptance_packet_ready') {
+    return {
+      status: 'ready',
+      adapter: 'vercel_postgres_neon',
+      operation_status: 'already_prepared',
+      action: currentAction,
+      first_run_acceptance: existingAcceptance,
+      private_workspace_manifest: currentManifest,
+    }
+  }
+
+  const context = contextFromActionRow(row, currentState)
+  const preparedAt = new Date().toISOString()
+  const firstRunAcceptance = buildFirstRunAcceptance({
+    ...context,
+    manifest: currentManifest,
+    evidenceReference: payload.first_run_evidence_reference,
+    preparedAt,
+  })
+  const result = await datastore.query(
+    `
+      with target as (
+        select id
+        from public.supermega_pipeline_actions
+        where (($1 <> '' and action_id = $1) or ($1 = '' and $2 <> '' and lead_id = $2))
+        order by created_at desc
+        limit 1
+      )
+      update public.supermega_pipeline_actions a
+      set
+        result = jsonb_set(
+          jsonb_set(coalesce(a.result, '{}'::jsonb), '{first_run_acceptance}', $3::jsonb, true),
+          '{first_run_acceptance_prepared_at}',
+          to_jsonb($4::text),
+          true
+        ),
+        status = case when a.status in ('workspace_ready', 'open', 'queued', 'done') then 'first_run_ready' else a.status end,
+        next_step = 'Review the first-run acceptance packet with the owner before any external send or connector write.',
+        updated_at = now()
+      where a.id in (select id from target)
+      returning
+        a.action_id, a.lead_id, a.task_id, a.action_type, a.status, a.priority, a.owner,
+        a.title, a.next_step, a.approval_required, a.approval_state,
+        a.notification_channel, a.notification_status, a.payload, a.result, a.created_at
+    `,
+    [actionId, leadId, JSON.stringify(firstRunAcceptance), preparedAt],
+  )
+  if (result.status !== 'ready') return { ...result, first_run_acceptance: firstRunAcceptance, private_workspace_manifest: currentManifest }
+  if (!result.rows.length) return { status: 'error', reason: 'action_not_found', first_run_acceptance: firstRunAcceptance, private_workspace_manifest: currentManifest }
+  return {
+    status: 'ready',
+    adapter: 'vercel_postgres_neon',
+    operation_status: 'prepared',
+    action: safeAction(result.rows[0]),
+    first_run_acceptance: firstRunAcceptance,
+    private_workspace_manifest: currentManifest,
+  }
+}
+
 function primaryDatabaseStatus(result) {
   if (!result || result.status === 'ready') {
     return { status: 'ready' }
@@ -816,7 +995,7 @@ function primaryDatabaseStatus(result) {
 function writeStatusCode(result) {
   if (result.status === 'ready') return 200
   if (result.reason === 'action_not_found') return 404
-  if (['private_workspace_not_ready', 'use_start_private_workspace_operation'].includes(result.reason)) return 409
+  if (['private_workspace_not_ready', 'private_workspace_required', 'use_start_private_workspace_operation'].includes(result.reason)) return 409
   if (result.reason === 'missing_action_or_lead_id') return 400
   return 503
 }
@@ -900,6 +1079,15 @@ async function handler(req, res) {
         endpoint: 'pipeline-control',
         operation,
         ...started,
+      })
+      return
+    }
+    if (operation === 'prepare_first_run_acceptance') {
+      const prepared = await prepareFirstRunAcceptance(payload)
+      json(res, writeStatusCode(prepared), {
+        endpoint: 'pipeline-control',
+        operation,
+        ...prepared,
       })
       return
     }
@@ -1145,6 +1333,7 @@ handler.__test = {
   buildOrderRoomState,
   buildPrivateWorkspaceManifest,
   firstProofPacket,
+  prepareFirstRunAcceptance,
   safeAction,
   startPrivateWorkspace,
   updateOrderRoomState,
