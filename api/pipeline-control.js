@@ -1710,6 +1710,17 @@ function revenueProofBoard(rows = []) {
         bank_reconciliation_state: text(record.bank_reconciliation_state) || 'not_bank_verified',
         recorded_at: text(record.recorded_at || record.paid_at),
       })
+      if (record.bank_reconciliation_state !== 'bank_verified') {
+        nextCashActions.push({
+          action_id: actionId || null,
+          lead_id: leadId || null,
+          title,
+          next_action: 'bank_reconcile_payment_proof',
+          owner: 'Revenue Pod',
+          evidence_required: 'bank_match_or_manual_owner_reconciliation',
+          revenue_claim_state: 'proof_backed_not_bank_verified',
+        })
+      }
       continue
     }
 
@@ -1797,6 +1808,212 @@ function revenueProofBoard(rows = []) {
       'bank_verified_mrr_is_separate_from_payment_proof',
       'drafts_and_offers_do_not_count_as_mrr',
       'next_cash_actions_are_owner_reviewed_before_external_send_or_payment_request',
+    ],
+  }
+}
+
+function commandPriorityRank(priority) {
+  return { critical: 0, high: 1, medium: 2, low: 3 }[text(priority)] ?? 4
+}
+
+function autopilotCommandBoard({ actions = [], leads = [], proofBoard = {}, latestRuns = [] } = {}) {
+  const safeActions = (Array.isArray(actions) ? actions : []).map((action) => (
+    action && Object.prototype.hasOwnProperty.call(action, 'first_proof') ? action : safeAction(action || {})
+  ))
+  const safeLeads = (Array.isArray(leads) ? leads : []).map((lead) => (
+    lead && Object.prototype.hasOwnProperty.call(lead, 'lead_score') ? lead : safeLead(lead || {})
+  ))
+  const commands = []
+  const coveredLeadIds = new Set()
+
+  function addCommand(input = {}) {
+    const leadId = text(input.lead_id)
+    if (leadId) coveredLeadIds.add(leadId)
+    const lane = text(input.lane) || 'operator_review'
+    const priority = text(input.priority) || 'medium'
+    const commandId = text(input.command_id) || [lane, input.action_id, leadId, commands.length + 1].map((part) => slugPart(part, '')).filter(Boolean).join('-')
+    commands.push({
+      command_id: commandId || `command-${commands.length + 1}`,
+      lane,
+      priority,
+      owner: text(input.owner) || 'Revenue Pod',
+      title: text(input.title) || 'Review operating queue',
+      lead_id: leadId || null,
+      action_id: text(input.action_id) || null,
+      suggested_action: text(input.suggested_action) || 'Review and choose the next owner-approved action.',
+      evidence_required: text(input.evidence_required) || 'operator_review',
+      expected_value: text(input.expected_value) || 'move pipeline forward without unsafe external action',
+      approval_required: input.approval_required !== false,
+      internal_autorun: input.internal_autorun === true,
+      external_action_state: text(input.external_action_state) || 'approval_required',
+      revenue_claim_state: text(input.revenue_claim_state) || 'not_claimed',
+    })
+  }
+
+  for (const cashAction of proofBoard.next_cash_actions || []) {
+    const nextAction = text(cashAction.next_action)
+    const title = text(cashAction.title) || 'Revenue action'
+    const isBankReconcile = nextAction === 'bank_reconcile_payment_proof'
+    const isPaymentProof = nextAction === 'collect_retainer_payment_proof'
+    addCommand({
+      lane: isBankReconcile ? 'cash_reconciliation' : isPaymentProof ? 'cash_collection' : 'retainer_growth',
+      priority: isBankReconcile || isPaymentProof ? 'critical' : 'high',
+      owner: cashAction.owner,
+      title: isBankReconcile ? `Reconcile payment proof: ${title}` : isPaymentProof ? `Collect retainer payment proof: ${title}` : `Prepare retainer path: ${title}`,
+      lead_id: cashAction.lead_id,
+      action_id: cashAction.action_id,
+      suggested_action: isBankReconcile
+        ? 'Match the payment proof to bank/payment evidence, then mark bank verification only after a human-confirmed match.'
+        : isPaymentProof
+          ? 'Prepare the payment-proof follow-up and owner checklist; do not send or claim MRR until proof is attached.'
+          : 'Draft the retainer growth offer from value evidence and keep external send approval-only.',
+      evidence_required: cashAction.evidence_required,
+      expected_value: isBankReconcile ? 'turn proof-backed MRR into bank-verified MRR' : isPaymentProof ? 'convert accepted retainer offer into proof-backed MRR' : 'create the next recurring revenue offer',
+      approval_required: true,
+      internal_autorun: !isPaymentProof,
+      external_action_state: isBankReconcile ? 'internal_review' : 'owner_approval_required_before_external_send',
+      revenue_claim_state: cashAction.revenue_claim_state,
+    })
+  }
+
+  for (const action of safeActions) {
+    const proof = action.first_proof || {}
+    const status = text(action.status)
+    const approvalState = text(action.approval_state)
+    const leadId = text(action.lead_id)
+    if (coveredLeadIds.has(leadId) && status !== 'queued') continue
+    if (proof.status && ['queued', 'open', 'operator_brief_ready'].includes(status)) {
+      addCommand({
+        lane: 'first_proof_delivery',
+        priority: text(action.priority) === 'high' ? 'high' : 'medium',
+        owner: action.owner,
+        title: `Build first proof: ${text(action.title) || text(proof.template_name) || 'client workflow'}`,
+        lead_id: leadId,
+        action_id: action.action_id,
+        suggested_action: 'Run the first-proof packet, attach source trace, and queue the buyer reply for owner review.',
+        evidence_required: text(proof.first_proof_target) || 'source_traced_first_proof',
+        expected_value: 'make the buyer see useful output before a paid pilot',
+        approval_required: true,
+        internal_autorun: true,
+        external_action_state: 'draft_only_until_owner_approval',
+        revenue_claim_state: 'not_claimed',
+      })
+      continue
+    }
+    if (approvalState === 'pending') {
+      addCommand({
+        lane: 'approval_inbox',
+        priority: 'high',
+        owner: action.owner,
+        title: `Review approval: ${text(action.title) || text(action.action_type) || 'pipeline action'}`,
+        lead_id: leadId,
+        action_id: action.action_id,
+        suggested_action: text(action.next_step) || 'Review approval state and choose the next safe action.',
+        evidence_required: 'owner_decision',
+        expected_value: 'clear a human gate that blocks delivery or revenue',
+        approval_required: true,
+        internal_autorun: false,
+        external_action_state: 'owner_decision_required',
+        revenue_claim_state: 'not_claimed',
+      })
+    }
+  }
+
+  for (const lead of safeLeads) {
+    const leadId = text(lead.lead_id)
+    if (!leadId || coveredLeadIds.has(leadId)) continue
+    addCommand({
+      lane: 'new_lead_intake',
+      priority: Number(lead.lead_score || 0) >= 70 ? 'high' : 'medium',
+      owner: 'Revenue Pod',
+      title: `Route new setup lead: ${text(lead.requested_package) || 'workflow request'}`,
+      lead_id: leadId,
+      suggested_action: text(lead.next_step) || 'Turn the lead into a first-proof task and request one approved source sample.',
+      evidence_required: 'buyer_goal_and_approved_source_sample',
+      expected_value: 'start the first proof loop from a captured lead',
+      approval_required: true,
+      internal_autorun: true,
+      external_action_state: 'draft_only_until_owner_approval',
+      revenue_claim_state: 'not_claimed',
+    })
+  }
+
+  if (!commands.length) {
+    addCommand({
+      lane: 'pipeline_watch',
+      priority: 'low',
+      owner: 'Revenue Pod',
+      title: 'Check the pipeline and source inbox',
+      suggested_action: 'No active command is ready; review lead sources, campaign clicks, and approved inbox labels for new setup opportunities.',
+      evidence_required: 'new_lead_or_owner_approved_source',
+      expected_value: 'keep the pipeline from going idle',
+      approval_required: false,
+      internal_autorun: true,
+      external_action_state: 'internal_only',
+      revenue_claim_state: 'not_claimed',
+    })
+  }
+
+  const sortedCommands = commands
+    .sort((a, b) => commandPriorityRank(a.priority) - commandPriorityRank(b.priority) || a.lane.localeCompare(b.lane))
+    .slice(0, 10)
+  const commandQueueCsv = [
+    ['command_id', 'lane', 'priority', 'owner', 'lead_id', 'action_id', 'title', 'suggested_action', 'evidence_required', 'expected_value', 'approval_required', 'internal_autorun', 'external_action_state', 'revenue_claim_state'].map(csvCell).join(','),
+    ...sortedCommands.map((command) => [
+      command.command_id,
+      command.lane,
+      command.priority,
+      command.owner,
+      command.lead_id,
+      command.action_id,
+      command.title,
+      command.suggested_action,
+      command.evidence_required,
+      command.expected_value,
+      command.approval_required ? 'yes' : 'no',
+      command.internal_autorun ? 'yes' : 'no',
+      command.external_action_state,
+      command.revenue_claim_state,
+    ].map(csvCell).join(',')),
+  ].join('\n')
+  const operatorBriefMarkdown = [
+    '# Autopilot daily money brief',
+    '',
+    `Status: ${sortedCommands.length ? 'commands_ready' : 'idle'}`,
+    `Mode: approval_gated_autopilot`,
+    `Proof-backed MRR MMK: ${moneyAmount(proofBoard.proof_backed_mrr_mmk)}`,
+    `Bank-unverified MRR MMK: ${moneyAmount(proofBoard.bank_unverified_mrr_mmk)}`,
+    `Recent actions: ${safeActions.length}`,
+    `Recent leads: ${safeLeads.length}`,
+    `Recent sales runs: ${Array.isArray(latestRuns) ? latestRuns.length : 0}`,
+    '',
+    '## Top commands',
+    ...sortedCommands.slice(0, 6).map((command, index) => `${index + 1}. [${command.priority}] ${command.lane} - ${command.title} :: ${command.suggested_action}`),
+    '',
+    '## Guardrails',
+    '- Internal preparation can run automatically when internal_autorun is yes.',
+    '- External sends, payment requests, connector writes, and production writes remain owner-approved.',
+    '- Revenue is not claimed from drafts, offers, or unverified assumptions.',
+  ].join('\n')
+
+  return {
+    status: 'ready',
+    board_type: 'autopilot_command_board',
+    mode: 'approval_gated_autopilot',
+    generated_at: new Date().toISOString(),
+    command_count: sortedCommands.length,
+    critical_count: sortedCommands.filter((command) => command.priority === 'critical').length,
+    internal_autorun_count: sortedCommands.filter((command) => command.internal_autorun).length,
+    owner_approval_count: sortedCommands.filter((command) => command.approval_required).length,
+    blocked_count: sortedCommands.filter((command) => command.external_action_state.includes('blocked')).length,
+    commands: sortedCommands,
+    command_queue_csv: commandQueueCsv,
+    operator_brief_markdown: operatorBriefMarkdown,
+    guardrails: [
+      'approval_gated_autopilot',
+      'internal_drafts_allowed_external_actions_blocked_until_owner_approval',
+      'money_actions_require_payment_or_bank_evidence',
+      'no_revenue_claim_without_payment_proof',
     ],
   }
 }
@@ -3050,6 +3267,7 @@ async function handler(req, res) {
     const leads = snapshot.latestLeads.map(safeLead)
     const nextAction = actions.find((action) => action.approval_state === 'pending') || actions[0] || null
     const proofBoard = revenueProofBoard(actions)
+    const autopilotBoard = autopilotCommandBoard({ actions, leads, proofBoard, latestRuns: snapshot.latestRuns })
 
     json(res, 200, {
       status: 'ready',
@@ -3072,6 +3290,9 @@ async function handler(req, res) {
         proof_backed_mrr_mmk: proofBoard.proof_backed_mrr_mmk,
         bank_verified_mrr_mmk: proofBoard.bank_verified_mrr_mmk,
         bank_unverified_mrr_mmk: proofBoard.bank_unverified_mrr_mmk,
+        autopilot_command_count: autopilotBoard.command_count,
+        autopilot_internal_autorun_count: autopilotBoard.internal_autorun_count,
+        autopilot_owner_approval_count: autopilotBoard.owner_approval_count,
       },
       approval_inbox: {
         status: 'ready',
@@ -3093,6 +3314,7 @@ async function handler(req, res) {
       recent_leads: leads,
       recent_actions: actions,
       revenue_proof_board: proofBoard,
+      autopilot_command_board: autopilotBoard,
       recent_sales_runs: snapshot.latestRuns,
     })
     return
@@ -3171,6 +3393,7 @@ async function handler(req, res) {
     const leads = latestLeads.data.map(safeLead)
     const nextAction = actions.find((action) => action.approval_state === 'pending') || actions[0] || null
     const proofBoard = revenueProofBoard(actions)
+    const autopilotBoard = autopilotCommandBoard({ actions, leads, proofBoard, latestRuns: latestRuns.data })
 
     json(res, 200, {
       status: 'ready',
@@ -3188,6 +3411,9 @@ async function handler(req, res) {
         proof_backed_mrr_mmk: proofBoard.proof_backed_mrr_mmk,
         bank_verified_mrr_mmk: proofBoard.bank_verified_mrr_mmk,
         bank_unverified_mrr_mmk: proofBoard.bank_unverified_mrr_mmk,
+        autopilot_command_count: autopilotBoard.command_count,
+        autopilot_internal_autorun_count: autopilotBoard.internal_autorun_count,
+        autopilot_owner_approval_count: autopilotBoard.owner_approval_count,
       },
       approval_inbox: {
         status: 'ready',
@@ -3209,6 +3435,7 @@ async function handler(req, res) {
       recent_leads: leads,
       recent_actions: actions,
       revenue_proof_board: proofBoard,
+      autopilot_command_board: autopilotBoard,
       recent_sales_runs: latestRuns.data,
     })
   } catch (error) {
@@ -3236,6 +3463,7 @@ handler.__test = {
   buildRetainerGrowthOfferPack,
   buildRetainerPaymentRecord,
   firstProofPacket,
+  autopilotCommandBoard,
   prepareFirstRunAcceptance,
   prepareCustomerSuccessDesk,
   prepareEnterpriseDeliveryPack,

@@ -4492,10 +4492,11 @@ const publicOperatorConsoleHtml = `<!doctype html>
     .operator-stack{display:grid;gap:12px}
     .operator-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
     .operator-input{width:100%;min-height:42px;border:1px solid var(--line);background:transparent;color:var(--ink);padding:10px 12px;font:inherit}
-    .operator-kpis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+    .operator-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px}
     .operator-kpi{border:1px solid var(--line);padding:12px;background:color-mix(in srgb,var(--paper) 92%,var(--ink) 8%)}
     .operator-kpi strong{display:block;font-size:24px;line-height:1}
     .operator-revenue-board{border:1px solid var(--line);padding:14px;background:color-mix(in srgb,var(--paper) 94%,var(--ink) 6%)}
+    .operator-command-board{border:1px solid var(--line);padding:14px;background:color-mix(in srgb,var(--paper) 91%,var(--ink) 9%)}
     .operator-money-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:10px}
     .operator-money-cell{border:1px solid var(--line);padding:10px}
     .operator-money-cell strong{display:block;font-size:20px;line-height:1.1}
@@ -4538,6 +4539,7 @@ const publicOperatorConsoleHtml = `<!doctype html>
         </div>
         <div class="operator-panel operator-stack">
           <div class="operator-kpis" id="operator-kpis"></div>
+          <div class="operator-proof-section operator-command-board" id="autopilot-command-board"></div>
           <div class="operator-proof-section operator-revenue-board" id="revenue-proof-board"></div>
           <div class="operator-list" id="operator-actions"></div>
         </div>
@@ -4549,6 +4551,7 @@ const publicOperatorConsoleHtml = `<!doctype html>
     const statusBox = document.getElementById('operator-status');
     const actionsEl = document.getElementById('operator-actions');
     const kpisEl = document.getElementById('operator-kpis');
+    const commandBoardEl = document.getElementById('autopilot-command-board');
     const revenueBoardEl = document.getElementById('revenue-proof-board');
     keyInput.value = sessionStorage.getItem('supermega_ops_key') || '';
     function esc(value){return String(value == null ? '' : value).replace(/[&<>"']/g,function(ch){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]})}
@@ -4602,6 +4605,87 @@ const publicOperatorConsoleHtml = `<!doctype html>
             '"SAMPLE-FIRST-PROOF","SAMPLE-SETUP","Sample Daily Intelligence Brief first proof","bank_reconcile_payment_proof","Revenue Pod","bank_match_or_manual_owner_reconciliation","proof_backed_not_bank_verified"'
           ].join('\\n'),
           guardrails:['proof_backed_mrr_requires_retainer_payment_proof_record','bank_verified_mrr_is_separate_from_payment_proof','drafts_and_offers_do_not_count_as_mrr']
+        },
+        autopilot_command_board:{
+          status:'ready',
+          board_type:'autopilot_command_board',
+          mode:'approval_gated_autopilot',
+          command_count:3,
+          critical_count:1,
+          internal_autorun_count:2,
+          owner_approval_count:3,
+          blocked_count:0,
+          commands:[{
+            command_id:'cash-reconciliation-sample-first-proof',
+            lane:'cash_reconciliation',
+            priority:'critical',
+            owner:'Revenue Pod',
+            title:'Reconcile payment proof: Sample Daily Intelligence Brief first proof',
+            lead_id:'SAMPLE-SETUP',
+            action_id:'SAMPLE-FIRST-PROOF',
+            suggested_action:'Match the payment proof to bank/payment evidence, then mark bank verification only after a human-confirmed match.',
+            evidence_required:'bank_match_or_manual_owner_reconciliation',
+            expected_value:'turn proof-backed MRR into bank-verified MRR',
+            approval_required:true,
+            internal_autorun:true,
+            external_action_state:'internal_review',
+            revenue_claim_state:'proof_backed_not_bank_verified'
+          },{
+            command_id:'first-proof-delivery-sample-first-proof',
+            lane:'first_proof_delivery',
+            priority:'high',
+            owner:'Revenue Pod',
+            title:'Build first proof: Sample Daily Intelligence Brief first proof',
+            lead_id:'SAMPLE-SETUP',
+            action_id:'SAMPLE-FIRST-PROOF',
+            suggested_action:'Run the first-proof packet, attach source trace, and queue the buyer reply for owner review.',
+            evidence_required:'One-page morning brief with what changed, why it matters, and exact follow-up actions.',
+            expected_value:'make the buyer see useful output before a paid pilot',
+            approval_required:true,
+            internal_autorun:true,
+            external_action_state:'draft_only_until_owner_approval',
+            revenue_claim_state:'not_claimed'
+          },{
+            command_id:'approval-inbox-sample-first-proof',
+            lane:'approval_inbox',
+            priority:'high',
+            owner:'Founder',
+            title:'Review approval: owner-safe buyer reply',
+            lead_id:'SAMPLE-SETUP',
+            action_id:'SAMPLE-FIRST-PROOF',
+            suggested_action:'Review buyer reply, payment path, and external-send boundary before any outreach.',
+            evidence_required:'owner_decision',
+            expected_value:'clear the human gate blocking delivery and revenue',
+            approval_required:true,
+            internal_autorun:false,
+            external_action_state:'owner_decision_required',
+            revenue_claim_state:'not_claimed'
+          }],
+          command_queue_csv:[
+            '"command_id","lane","priority","owner","lead_id","action_id","title","suggested_action","evidence_required","expected_value","approval_required","internal_autorun","external_action_state","revenue_claim_state"',
+            '"cash-reconciliation-sample-first-proof","cash_reconciliation","critical","Revenue Pod","SAMPLE-SETUP","SAMPLE-FIRST-PROOF","Reconcile payment proof: Sample Daily Intelligence Brief first proof","Match the payment proof to bank/payment evidence, then mark bank verification only after a human-confirmed match.","bank_match_or_manual_owner_reconciliation","turn proof-backed MRR into bank-verified MRR","yes","yes","internal_review","proof_backed_not_bank_verified"',
+            '"first-proof-delivery-sample-first-proof","first_proof_delivery","high","Revenue Pod","SAMPLE-SETUP","SAMPLE-FIRST-PROOF","Build first proof: Sample Daily Intelligence Brief first proof","Run the first-proof packet, attach source trace, and queue the buyer reply for owner review.","One-page morning brief with what changed, why it matters, and exact follow-up actions.","make the buyer see useful output before a paid pilot","yes","yes","draft_only_until_owner_approval","not_claimed"',
+            '"approval-inbox-sample-first-proof","approval_inbox","high","Founder","SAMPLE-SETUP","SAMPLE-FIRST-PROOF","Review approval: owner-safe buyer reply","Review buyer reply, payment path, and external-send boundary before any outreach.","owner_decision","clear the human gate blocking delivery and revenue","yes","no","owner_decision_required","not_claimed"'
+          ].join('\\n'),
+          operator_brief_markdown:[
+            '# Autopilot daily money brief',
+            '',
+            'Status: commands_ready',
+            'Mode: approval_gated_autopilot',
+            'Proof-backed MRR MMK: 900000',
+            'Bank-unverified MRR MMK: 900000',
+            '',
+            '## Top commands',
+            '1. [critical] cash_reconciliation - Reconcile payment proof: Sample Daily Intelligence Brief first proof :: Match the payment proof to bank/payment evidence, then mark bank verification only after a human-confirmed match.',
+            '2. [high] first_proof_delivery - Build first proof: Sample Daily Intelligence Brief first proof :: Run the first-proof packet, attach source trace, and queue the buyer reply for owner review.',
+            '3. [high] approval_inbox - Review approval: owner-safe buyer reply :: Review buyer reply, payment path, and external-send boundary before any outreach.',
+            '',
+            '## Guardrails',
+            '- Internal preparation can run automatically when internal_autorun is yes.',
+            '- External sends, payment requests, connector writes, and production writes remain owner-approved.',
+            '- Revenue is not claimed from drafts, offers, or unverified assumptions.'
+          ].join('\\n'),
+          guardrails:['approval_gated_autopilot','internal_drafts_allowed_external_actions_blocked_until_owner_approval','money_actions_require_payment_or_bank_evidence','no_revenue_claim_without_payment_proof']
         },
         recent_actions:[{
           action_id:'SAMPLE-FIRST-PROOF',
@@ -5223,7 +5307,7 @@ const publicOperatorConsoleHtml = `<!doctype html>
     }
     function loadSample(){
       const data = samplePipelineData();
-      renderKpis(data); renderRevenueProofBoard(data); renderActions(data); setStatus({status:'sample_loaded', note:'No lead was created. This is a no-write first-proof demo packet.'});
+      renderKpis(data); renderAutopilotCommandBoard(data); renderRevenueProofBoard(data); renderActions(data); setStatus({status:'sample_loaded', note:'No lead was created. This is a no-write first-proof demo packet.'});
     }
     function proofStarterLink(proof){
       if(!proof || !proof.starter_kit_url)return '';
@@ -5562,6 +5646,23 @@ const publicOperatorConsoleHtml = `<!doctype html>
       if(!Number.isFinite(amount))return '0 MMK';
       return amount.toLocaleString('en-US')+' MMK';
     }
+    function renderAutopilotCommandBoard(data){
+      const board = data.autopilot_command_board || {};
+      if(!board.status){
+        commandBoardEl.innerHTML = '<span>Autopilot command board</span><div>No command queue loaded.</div>';
+        return;
+      }
+      const commands = (board.commands || []).slice(0,5);
+      const commandList = commands.length ? '<ul>'+commands.map(function(command){return '<li><strong>'+esc(command.priority || 'medium')+'</strong> '+esc(command.lane || 'operator_review')+' - '+esc(command.title || '')+'<br><span>'+esc(command.suggested_action || '')+'</span></li>'}).join('')+'</ul>' : '<div>No commands ready.</div>';
+      commandBoardEl.innerHTML = [
+        '<span>Autopilot command board</span>',
+        '<div class="operator-meta"><span class="operator-chip">'+esc(board.status || 'ready')+'</span><span class="operator-chip">'+esc(board.mode || 'approval_gated_autopilot')+'</span><span class="operator-chip">commands '+esc(board.command_count ?? commands.length)+'</span><span class="operator-chip">internal '+esc(board.internal_autorun_count ?? 0)+'</span><span class="operator-chip">owner gates '+esc(board.owner_approval_count ?? 0)+'</span></div>',
+        '<div class="operator-proof-section"><span>Top money commands</span>'+commandList+'</div>',
+        '<div class="operator-proof-section"><span>Autopilot command queue</span><textarea class="operator-reply" id="autopilot-command-queue" readonly>'+esc(board.command_queue_csv || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="autopilot-command-queue">Copy autopilot command queue</button></div>',
+        '<div class="operator-proof-section"><span>Autopilot daily brief</span><textarea class="operator-reply" id="autopilot-daily-brief" readonly>'+esc(board.operator_brief_markdown || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="autopilot-daily-brief">Copy autopilot daily brief</button></div>'
+      ].join('');
+      commandBoardEl.querySelectorAll('[data-copy-target]').forEach(function(button){button.addEventListener('click',function(){copyDraft(button.getAttribute('data-copy-target'))})});
+    }
     function renderRevenueProofBoard(data){
       const board = data.revenue_proof_board || {};
       if(!board.status){
@@ -5588,11 +5689,13 @@ const publicOperatorConsoleHtml = `<!doctype html>
     function renderKpis(data){
       const metrics = data.metrics || {};
       const board = data.revenue_proof_board || {};
+      const commandBoard = data.autopilot_command_board || {};
       kpisEl.innerHTML = [
         ['Open actions', metrics.open_action_count ?? data.approval_inbox?.pending_count ?? '-'],
         ['Recent leads', metrics.recent_lead_count ?? '-'],
         ['Recent actions', metrics.recent_action_count ?? '-'],
         ['Proof MRR', formatMmk(metrics.proof_backed_mrr_mmk ?? board.proof_backed_mrr_mmk ?? 0)],
+        ['Commands', metrics.autopilot_command_count ?? commandBoard.command_count ?? 0],
       ].map(function(row){return '<div class="operator-kpi"><span>'+esc(row[0])+'</span><strong>'+esc(row[1])+'</strong></div>'}).join('');
     }
     function renderActions(data){
@@ -5621,7 +5724,7 @@ const publicOperatorConsoleHtml = `<!doctype html>
       const response = await fetch('/api/pipeline-control/status',{headers:authHeaders(),cache:'no-store'});
       const data = await response.json().catch(function(){return {status:'error',reason:'invalid_json',code:response.status}});
       if(!response.ok){setStatus(data);return}
-      renderKpis(data); renderRevenueProofBoard(data); renderActions(data); setStatus(data);
+      renderKpis(data); renderAutopilotCommandBoard(data); renderRevenueProofBoard(data); renderActions(data); setStatus(data);
     }
     async function runRunner(){
       if(!token()){setStatus('Paste the ops key first.');return}
