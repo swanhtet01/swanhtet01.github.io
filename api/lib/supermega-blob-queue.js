@@ -56,6 +56,10 @@ function runPrefix() {
   return `${queuePrefix()}/sales-runs`
 }
 
+function statePrefix() {
+  return `${queuePrefix()}/action-states`
+}
+
 function queueStatus(opts = {}) {
   const sdk = Object.prototype.hasOwnProperty.call(opts, 'blobSdk') ? opts.blobSdk : loadBlobSdk()
   const token = blobTokenConfigured()
@@ -110,6 +114,12 @@ function runPath(runId) {
   return `${runPrefix()}/${slugPart(runId, 'run')}.json`
 }
 
+function statePath(actionId) {
+  const stamp = new Date().toISOString().replace(/[^0-9]/g, '').slice(0, 17)
+  const suffix = crypto.randomBytes(4).toString('hex')
+  return `${statePrefix()}/${slugPart(actionId, 'action')}/${stamp}-${suffix}.json`
+}
+
 async function readJsonBlob(sdk, pathname) {
   const got = await sdk.get(pathname, { access: 'private' })
   const body = got?.stream ? await new Response(got.stream).text() : ''
@@ -123,6 +133,52 @@ async function writeJsonBlob(sdk, pathname, value) {
     allowOverwrite: true,
     contentType: 'application/json',
   })
+}
+
+function mergeActionPatch(record = {}, patch = {}) {
+  const currentPayload = parseJsonObject(record.payload)
+  const currentResult = parseJsonObject(record.result)
+  const hasPayload = Object.prototype.hasOwnProperty.call(patch, 'payload')
+  const hasResult = Object.prototype.hasOwnProperty.call(patch, 'result')
+  const nextPayload = hasPayload ? parseJsonObject(patch.payload) : currentPayload
+  const nextResult = hasResult ? { ...currentResult, ...parseJsonObject(patch.result) } : currentResult
+  return normalizeAction({
+    ...record,
+    ...patch,
+    action_id: record.action_id || patch.action_id,
+    payload: nextPayload,
+    result: nextResult,
+    updated_at: text(patch.updated_at) || new Date().toISOString(),
+  })
+}
+
+async function readLatestActionState(sdk, actionId) {
+  const id = text(actionId)
+  if (!id || !sdk || typeof sdk.list !== 'function' || typeof sdk.get !== 'function') return null
+  const prefix = `${statePrefix()}/${slugPart(id, 'action')}/`
+  const listed = await sdk.list({ prefix, limit: 50 })
+  const blobs = Array.isArray(listed.blobs) ? listed.blobs : []
+  blobs.sort((a, b) => text(b.pathname).localeCompare(text(a.pathname)))
+  for (const blob of blobs) {
+    const pathname = text(blob.pathname)
+    if (!pathname) continue
+    try {
+      const state = await readJsonBlob(sdk, pathname)
+      if (Object.keys(state).length) return { ...state, pathname }
+    } catch {
+      // Ignore unreadable overlay records; the base action remains usable.
+    }
+  }
+  return null
+}
+
+async function applyLatestActionState(sdk, record = {}) {
+  const state = await readLatestActionState(sdk, record.action_id)
+  const patch = parseJsonObject(state && state.patch)
+  if (!Object.keys(patch).length) return record
+  const merged = mergeActionPatch(record, patch)
+  merged.state_pathname = state.pathname
+  return merged
 }
 
 async function savePipelineAction(payload = {}, opts = {}) {
@@ -173,7 +229,7 @@ async function readActionRecords(limit = 20, opts = {}) {
       const pathname = text(blob.pathname)
       if (!pathname) continue
       try {
-        const record = normalizeAction(await readJsonBlob(sdk, pathname))
+        const record = await applyLatestActionState(sdk, normalizeAction(await readJsonBlob(sdk, pathname)))
         record.pathname = pathname
         rows.push(record)
       } catch {
@@ -238,9 +294,46 @@ async function updateAction(actionId, patch = {}, opts = {}) {
       updated_at: new Date().toISOString(),
     })
     await writeJsonBlob(sdk, pathname, next)
-    return { status: 'ready', adapter: 'vercel_blob', action_id: next.action_id, pathname }
+    return { status: 'ready', adapter: 'vercel_blob', action_id: next.action_id, pathname, record: next }
   } catch (error) {
     return { status: 'error', adapter: 'vercel_blob', reason: 'blob_action_update_failed', detail: text(error && error.message).slice(0, 180) }
+  }
+}
+
+async function findActionRecord(selector = {}, opts = {}) {
+  const actionId = text(selector.action_id || selector.actionId)
+  const leadId = text(selector.lead_id || selector.leadId)
+  if (!actionId && !leadId) return { status: 'error', adapter: 'vercel_blob', reason: 'missing_action_or_lead_id' }
+  const listed = await readActionRecords(100, opts)
+  if (listed.status !== 'ready') return listed
+  const row = listed.rows.find((item) => (
+    (actionId && text(item.action_id) === actionId) ||
+    (!actionId && leadId && text(item.lead_id) === leadId)
+  ))
+  if (!row) return { status: 'error', adapter: 'vercel_blob', reason: 'action_not_found' }
+  return { status: 'ready', adapter: 'vercel_blob', row }
+}
+
+async function updateActionRecord(selector = {}, patch = {}, opts = {}) {
+  const found = await findActionRecord(selector, opts)
+  if (found.status !== 'ready') return found
+  const sdk = Object.prototype.hasOwnProperty.call(opts, 'blobSdk') ? opts.blobSdk : loadBlobSdk()
+  if (!sdk || typeof sdk.put !== 'function') return { status: 'skipped', adapter: 'vercel_blob', reason: 'blob_sdk_missing' }
+  if (!blobTokenConfigured() && !opts.allowWithoutToken) return { status: 'skipped', adapter: 'vercel_blob', reason: 'blob_token_not_configured' }
+  const record = mergeActionPatch(found.row, patch)
+  const pathname = statePath(found.row.action_id)
+  try {
+    await writeJsonBlob(sdk, pathname, {
+      action_id: found.row.action_id,
+      lead_id: found.row.lead_id,
+      patch,
+      merged_status: record.status,
+      created_at: new Date().toISOString(),
+      storage_adapter: 'vercel_blob',
+    })
+    return { status: 'ready', adapter: 'vercel_blob', action_id: found.row.action_id, pathname, record }
+  } catch (error) {
+    return { status: 'error', adapter: 'vercel_blob', reason: 'blob_action_state_write_failed', detail: text(error && error.message).slice(0, 180) }
   }
 }
 
@@ -341,6 +434,7 @@ async function pipelineSnapshot({ actionLimit = 8 } = {}, opts = {}) {
 module.exports = {
   actionPath,
   claimBatch,
+  findActionRecord,
   findLeadById,
   latestSalesRun,
   normalizeAction,
@@ -350,4 +444,5 @@ module.exports = {
   savePipelineAction,
   saveSalesRun,
   updateAction,
+  updateActionRecord,
 }

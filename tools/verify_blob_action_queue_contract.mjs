@@ -85,6 +85,27 @@ const updated = await blobQueue.updateAction(action.action_id, {
   processed_at: '2026-07-01T00:00:00.000Z',
 }, { blobSdk: sdk, allowWithoutToken: true })
 assert.equal(updated.status, 'ready')
+assert.equal(updated.record.status, 'done')
+assert.equal(updated.record.result.sent, false)
+
+const foundAction = await blobQueue.findActionRecord({ action_id: action.action_id }, { blobSdk: sdk, allowWithoutToken: true })
+assert.equal(foundAction.status, 'ready')
+assert.equal(foundAction.row.action_id, action.action_id)
+
+const updatedByLead = await blobQueue.updateActionRecord({ lead_id: action.lead_id }, {
+  approval_state: 'approved',
+  result: {
+    ...updated.record.result,
+    pilot_order_room_state: {
+      payment_proof_state: 'proof_attached',
+      private_workspace_state: 'ready_after_payment_proof',
+      real_mrr_delta: 0,
+    },
+  },
+}, { blobSdk: sdk, allowWithoutToken: true })
+assert.equal(updatedByLead.status, 'ready')
+assert.equal(updatedByLead.record.approval_state, 'approved')
+assert.equal(updatedByLead.record.result.pilot_order_room_state.real_mrr_delta, 0)
 
 const run = await blobQueue.saveSalesRun({
   run_id: 'BLOB-CONTRACT-RUN',

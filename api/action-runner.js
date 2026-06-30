@@ -281,14 +281,22 @@ async function fetchLead(store, leadId) {
 }
 
 async function dispatchDraftReply(store, row) {
+  const payload = parsePayload(row.payload)
+  const task = parsePayload(payload.first_proof_task)
+  if (task.type === 'first_proof_build') {
+    let fetchedLead = null
+    try {
+      fetchedLead = await fetchLead(store, row.lead_id)
+    } catch {
+      fetchedLead = null
+    }
+    const proofBrief = renderFirstProofBrief(row, mergedLeadFromRow(row, fetchedLead || {}))
+    if (proofBrief.status === 'ready') return proofBrief
+  }
+
   const lead = await fetchLead(store, row.lead_id)
   if (!lead) {
     return { status: 'error', reason: 'lead_not_found', lead_id: row.lead_id }
-  }
-
-  const proofBrief = renderFirstProofBrief(row, lead)
-  if (proofBrief.status === 'ready') {
-    return proofBrief
   }
 
   const subject = `Re: ${text(lead.company) || text(lead.name) || 'Your SuperMega request'}`
@@ -808,6 +816,7 @@ async function handler(req, res) {
 
 handler.__test = {
   renderFirstProofBrief,
+  dispatchDraftReply,
   renderSalesAutopilotDraft,
   renderSourceRequestPacket,
   renderOfferPacket,

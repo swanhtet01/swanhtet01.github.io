@@ -2446,7 +2446,6 @@ async function updateOrderRoomState(payload) {
   const actionId = text(payload.action_id)
   const leadId = text(payload.lead_id)
   if (!actionId && !leadId) return { status: 'error', reason: 'missing_action_or_lead_id' }
-  if (!datastore.postgresConfigured()) return { status: 'error', reason: 'postgres_not_configured' }
 
   const state = buildOrderRoomState({ ...payload, action_id: actionId, lead_id: leadId })
   if (state.private_workspace_state === 'created_after_payment_proof') {
@@ -2456,6 +2455,7 @@ async function updateOrderRoomState(payload) {
       state,
     }
   }
+  if (!datastore.postgresConfigured()) return updateBlobOrderRoomState({ actionId, leadId, state }, { status: 'error', reason: 'postgres_not_configured' })
   const result = await datastore.query(
     `
       with target as (
@@ -2483,12 +2483,58 @@ async function updateOrderRoomState(payload) {
     `,
     [actionId, leadId, JSON.stringify(state)],
   )
-  if (result.status !== 'ready') return { ...result, state }
-  if (!result.rows.length) return { status: 'error', reason: 'action_not_found', state }
+  if (result.status !== 'ready') return updateBlobOrderRoomState({ actionId, leadId, state }, result)
+  if (!result.rows.length) {
+    const fallback = await updateBlobOrderRoomState({ actionId, leadId, state }, { status: 'error', reason: 'postgres_action_not_found' })
+    if (fallback.status === 'ready') return fallback
+    return { status: 'error', reason: 'action_not_found', state }
+  }
   return {
     status: 'ready',
     adapter: 'vercel_postgres_neon',
     action: safeAction(result.rows[0]),
+    order_room_state: state,
+  }
+}
+
+async function updateBlobOrderRoomState({ actionId, leadId, state }, primaryDatabase = {}) {
+  const found = await blobQueue.findActionRecord({ action_id: actionId, lead_id: leadId })
+  if (found.status !== 'ready') {
+    return {
+      ...found,
+      state,
+      primary_database: primaryDatabase,
+    }
+  }
+  const row = found.row
+  const currentResult = parseJsonObject(row.result)
+  const nextResult = {
+    ...currentResult,
+    pilot_order_room_state: state,
+  }
+  const nextApprovalState = state.scope_approval_state === 'approved' && state.price_approval_state === 'approved'
+    ? 'approved'
+    : row.approval_state
+  const updated = await blobQueue.updateActionRecord(
+    { action_id: actionId, lead_id: leadId },
+    {
+      result: nextResult,
+      approval_state: nextApprovalState,
+      notification_status: row.notification_status || 'blob_order_room_updated',
+    },
+  )
+  if (updated.status !== 'ready') {
+    return {
+      ...updated,
+      state,
+      primary_database: primaryDatabase,
+    }
+  }
+  return {
+    status: 'ready',
+    adapter: 'vercel_blob',
+    primary_database: primaryDatabase,
+    action: safeAction(updated.record),
     order_room_state: state,
   }
 }
@@ -2686,7 +2732,7 @@ async function startPrivateWorkspace(payload) {
   const actionId = text(payload.action_id)
   const leadId = text(payload.lead_id)
   if (!actionId && !leadId) return { status: 'error', reason: 'missing_action_or_lead_id' }
-  if (!datastore.postgresConfigured()) return { status: 'error', reason: 'postgres_not_configured' }
+  if (!datastore.postgresConfigured()) return startBlobPrivateWorkspace({ actionId, leadId }, { status: 'error', reason: 'postgres_not_configured' })
 
   const selected = await datastore.query(
     `
@@ -2701,8 +2747,12 @@ async function startPrivateWorkspace(payload) {
     `,
     [actionId, leadId],
   )
-  if (selected.status !== 'ready') return selected
-  if (!selected.rows.length) return { status: 'error', reason: 'action_not_found' }
+  if (selected.status !== 'ready') return startBlobPrivateWorkspace({ actionId, leadId }, selected)
+  if (!selected.rows.length) {
+    const fallback = await startBlobPrivateWorkspace({ actionId, leadId }, { status: 'error', reason: 'postgres_action_not_found' })
+    if (fallback.status === 'ready') return fallback
+    return { status: 'error', reason: 'action_not_found' }
+  }
 
   const row = selected.rows[0]
   const currentResult = parseJsonObject(row.result)
@@ -2765,7 +2815,7 @@ async function startPrivateWorkspace(payload) {
           to_jsonb($5::text),
           true
         ),
-        status = case when a.status in ('open', 'queued', 'done') then 'workspace_ready' else a.status end,
+        status = case when a.status in ('open', 'queued', 'processing', 'done', 'failed') then 'workspace_ready' else a.status end,
         next_step = 'Open the private workspace handoff and run the first production job approval-only.',
         updated_at = now()
       where a.id in (select id from target)
@@ -2783,6 +2833,89 @@ async function startPrivateWorkspace(payload) {
     adapter: 'vercel_postgres_neon',
     operation_status: 'created',
     action: safeAction(result.rows[0]),
+    private_workspace_manifest: createdManifest,
+  }
+}
+
+async function startBlobPrivateWorkspace({ actionId, leadId }, primaryDatabase = {}) {
+  const found = await blobQueue.findActionRecord({ action_id: actionId, lead_id: leadId })
+  if (found.status !== 'ready') {
+    return {
+      ...found,
+      primary_database: primaryDatabase,
+    }
+  }
+
+  const row = found.row
+  const currentResult = parseJsonObject(row.result)
+  const currentPayload = parseJsonObject(row.payload)
+  const currentState = parseJsonObject(currentResult.pilot_order_room_state || currentPayload.pilot_order_room_state)
+  const currentAction = safeAction(row)
+  const currentManifest = currentAction.first_proof?.pilot_order_room?.private_workspace_manifest || buildPrivateWorkspaceManifest(contextFromActionRow(row, currentState))
+  if (!['ready_to_create_private_workspace', 'private_workspace_created'].includes(currentManifest.status)) {
+    return {
+      status: 'error',
+      adapter: 'vercel_blob',
+      primary_database: primaryDatabase,
+      reason: 'private_workspace_not_ready',
+      activation_status: currentManifest.status,
+      action: currentAction,
+      private_workspace_manifest: currentManifest,
+    }
+  }
+
+  if (currentManifest.status === 'private_workspace_created') {
+    return {
+      status: 'ready',
+      adapter: 'vercel_blob',
+      primary_database: primaryDatabase,
+      operation_status: 'already_created',
+      action: currentAction,
+      private_workspace_manifest: currentManifest,
+    }
+  }
+
+  const createdAt = new Date().toISOString()
+  const createdState = {
+    ...currentState,
+    status: 'persisted_order_room_state',
+    action_id: text(row.action_id) || actionId || null,
+    lead_id: text(row.lead_id) || leadId || null,
+    private_workspace_state: 'created_after_payment_proof',
+    private_workspace_slug: currentManifest.workspace_slug,
+    private_workspace_url: currentManifest.workspace_url,
+    workspace_created_at: createdAt,
+    workspace_created_by: 'operator_console',
+    real_mrr_delta: 0,
+  }
+  const createdManifest = buildPrivateWorkspaceManifest(contextFromActionRow(row, createdState))
+  const nextResult = {
+    ...currentResult,
+    pilot_order_room_state: createdState,
+    private_workspace_manifest: createdManifest,
+    private_workspace_started_at: createdAt,
+  }
+  const updated = await blobQueue.updateActionRecord(
+    { action_id: actionId, lead_id: leadId },
+    {
+      result: nextResult,
+      status: ['open', 'queued', 'processing', 'done', 'failed'].includes(text(row.status)) ? 'workspace_ready' : row.status,
+      next_step: 'Open the private workspace handoff and run the first production job approval-only.',
+    },
+  )
+  if (updated.status !== 'ready') {
+    return {
+      ...updated,
+      primary_database: primaryDatabase,
+      private_workspace_manifest: createdManifest,
+    }
+  }
+  return {
+    status: 'ready',
+    adapter: 'vercel_blob',
+    primary_database: primaryDatabase,
+    operation_status: 'created',
+    action: safeAction(updated.record),
     private_workspace_manifest: createdManifest,
   }
 }

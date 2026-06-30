@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
 
 const require = createRequire(import.meta.url)
+const blobQueue = require('../api/lib/supermega-blob-queue.js')
 const handler = require('../api/action-runner.js')
 
 function fail(message, extra = {}) {
@@ -12,6 +13,9 @@ function fail(message, extra = {}) {
 const internals = handler.__test || {}
 if (typeof internals.renderFirstProofBrief !== 'function') {
   fail('action_runner_first_proof_renderer_missing')
+}
+if (typeof internals.dispatchDraftReply !== 'function') {
+  fail('action_runner_first_proof_dispatcher_missing')
 }
 
 const row = {
@@ -69,6 +73,32 @@ assert.ok(Array.isArray(brief.checklist))
 assert.ok(brief.checklist.length >= 3)
 assert.ok(Array.isArray(brief.acceptance_tests))
 assert.ok(brief.acceptance_tests.length >= 4)
+
+const originalFindLeadById = blobQueue.findLeadById
+try {
+  blobQueue.findLeadById = async () => null
+  const blobBrief = await internals.dispatchDraftReply(
+    { mode: 'blob', adapter: 'vercel_blob' },
+    {
+      ...row,
+      id: row.action_id,
+      payload: {
+        ...row.payload,
+        lead: {
+          lead_id: row.lead_id,
+          company: 'Payload Only Co',
+          goal: 'Render first proof without a SQL lead row.',
+        },
+      },
+    },
+  )
+  assert.equal(blobBrief.status, 'ready')
+  assert.equal(blobBrief.type, 'first_proof_operator_brief')
+  assert.ok(blobBrief.title.includes('Payload Only Co'))
+  assert.ok(blobBrief.body.includes('Do not send, write, charge, or edit live business records'))
+} finally {
+  blobQueue.findLeadById = originalFindLeadById
+}
 
 console.log(
   JSON.stringify(
