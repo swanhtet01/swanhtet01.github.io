@@ -1,5 +1,6 @@
 const crypto = require('crypto')
 const datastore = require('./lib/supermega-datastore')
+const blobQueue = require('./lib/supermega-blob-queue')
 
 const defaultNotifyEmail = 'swanhtet@supermega.dev'
 const defaultFrom = 'SuperMega Owner Brief <onboarding@supermega.dev>'
@@ -309,7 +310,7 @@ function leadAutopilotActions(lead = {}) {
 
 async function prepareLeadAutopilot(run) {
   if (!datastore.postgresConfigured()) {
-    return { status: 'skipped', reason: 'postgres_not_configured', action_count: 0 }
+    return prepareBlobLeadAutopilot(run, { status: 'skipped', reason: 'postgres_not_configured' })
   }
 
   const snapshot = await datastore.pipelineSnapshot({
@@ -317,12 +318,13 @@ async function prepareLeadAutopilot(run) {
     since7d: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
   })
   if (snapshot.status !== 'ready') {
-    return {
+    return prepareBlobLeadAutopilot(run, {
       status: 'error',
       reason: 'pipeline_snapshot_failed',
       detail: snapshot.detail || snapshot.reason || snapshot.code || null,
-      action_count: 0,
-    }
+      code: snapshot.code || null,
+      provider: snapshot.provider || snapshot.adapter || 'vercel_postgres_neon',
+    })
   }
 
   const leads = (snapshot.latestLeads || []).slice(0, 5)
@@ -330,12 +332,14 @@ async function prepareLeadAutopilot(run) {
   for (const lead of leads) {
     for (const action of leadAutopilotActions(lead)) {
       const result = await datastore.savePipelineAction({ ...action, run_id: run.run_id })
+      const finalResult = result.status === 'ready' ? result : await blobQueue.savePipelineAction({ ...action, run_id: run.run_id })
       prepared.push({
         action_id: action.action_id,
         lead_id: action.lead_id,
         action_type: action.action_type,
-        status: result.status,
-        reason: result.reason || result.detail || null,
+        status: finalResult.status,
+        adapter: finalResult.adapter,
+        reason: finalResult.reason || finalResult.detail || result.reason || result.detail || null,
       })
     }
   }
@@ -347,6 +351,61 @@ async function prepareLeadAutopilot(run) {
     prepared,
     approval_required: true,
     external_send: 'blocked_until_owner_approval',
+  }
+}
+
+function fallbackLeadForRun(run) {
+  const segment = run.selected_segment || {}
+  return {
+    lead_id: `SALES-${run.run_id}`,
+    task_id: `TASK-${run.run_id}`,
+    submitted_at: run.generated_at,
+    name: 'Owner pipeline',
+    company: text(segment.name) || 'Target buyer segment',
+    workflow: text(segment.first_workflow) || 'Owner-approved first proof workflow',
+    requested_package: text(segment.first_workflow) || 'Custom Solutions & AI Agents',
+    goal: `Find and qualify real accounts for ${text(segment.name) || 'the selected buyer segment'}.`,
+    lead_score: 82,
+    lead_stage: 'owner_research_required',
+    status: 'queued',
+    next_step: `Pick three real accounts for: ${text(segment.search) || 'Myanmar buyer research'}. Request one approved source sample before any external send.`,
+  }
+}
+
+async function prepareBlobLeadAutopilot(run, primaryError = {}) {
+  const lead = fallbackLeadForRun(run)
+  const prepared = []
+  for (const action of leadAutopilotActions(lead)) {
+    const result = await blobQueue.savePipelineAction({
+      ...action,
+      run_id: run.run_id,
+      notification_channel: 'blob_queue',
+      payload: {
+        ...action.payload,
+        run,
+        primary_database: primaryError,
+        fallback_reason: 'sql_pipeline_unavailable',
+      },
+    })
+    prepared.push({
+      action_id: action.action_id,
+      lead_id: action.lead_id,
+      action_type: action.action_type,
+      status: result.status,
+      adapter: result.adapter,
+      reason: result.reason || result.detail || null,
+    })
+  }
+  return {
+    status: prepared.some((item) => item.status === 'ready') ? (prepared.every((item) => item.status === 'ready') ? 'ready' : 'partial') : 'error',
+    adapter: 'vercel_blob',
+    primary_error: primaryError,
+    lead_count: 1,
+    action_count: prepared.filter((item) => item.status === 'ready').length,
+    prepared,
+    approval_required: true,
+    external_send: 'blocked_until_owner_approval',
+    payment_or_connector_access: 'blocked_until_owner_approval',
   }
 }
 
@@ -380,7 +439,7 @@ async function saveRun(run) {
 
   const config = supabaseConfig()
   if (!config.url || !config.serviceRoleKey) {
-    return { status: 'skipped', reason: 'supabase_not_configured', table: 'supermega_sales_runs' }
+    return blobQueue.saveSalesRun(run)
   }
 
   const response = await fetch(`${config.url}/rest/v1/supermega_sales_runs`, {
@@ -409,6 +468,10 @@ async function saveRun(run) {
   }
 
   const body = await response.text().catch(() => '')
+  const blobFallback = await blobQueue.saveSalesRun(run)
+  if (blobFallback.status === 'ready') {
+    return { ...blobFallback, primary_error: { status: 'error', reason: `supabase_${response.status}`, detail: body.slice(0, 180) } }
+  }
   return {
     status: 'error',
     reason: `supabase_${response.status}`,
@@ -431,6 +494,22 @@ async function checkSalesRunLedger() {
         latest_generated_at: latest?.generated_at || null,
       }
     }
+    const blobFallback = await blobQueue.latestSalesRun()
+    if (blobFallback.status === 'ready') {
+      const latest = blobFallback.rows?.[0] || null
+      return {
+        status: 'ready',
+        table: 'supermega_sales_runs',
+        adapter: 'vercel_blob',
+        latest_run_id: latest?.run_id || null,
+        latest_generated_at: latest?.generated_at || null,
+        primary_error: {
+          status: 'error',
+          reason: 'vercel_postgres_sales_run_probe_failed',
+          detail: result.detail || result.reason || result.code || null,
+        },
+      }
+    }
     return {
       status: 'error',
       reason: 'vercel_postgres_sales_run_probe_failed',
@@ -442,6 +521,17 @@ async function checkSalesRunLedger() {
 
   const config = supabaseConfig()
   if (!config.url || !config.serviceRoleKey) {
+    const blobFallback = await blobQueue.latestSalesRun()
+    if (blobFallback.status === 'ready') {
+      const latest = blobFallback.rows?.[0] || null
+      return {
+        status: 'ready',
+        table: 'supermega_sales_runs',
+        adapter: 'vercel_blob',
+        latest_run_id: latest?.run_id || null,
+        latest_generated_at: latest?.generated_at || null,
+      }
+    }
     return { status: 'not_configured', table: 'supermega_sales_runs' }
   }
 
@@ -471,6 +561,18 @@ async function checkSalesRunLedger() {
         latest_generated_at: rows[0]?.generated_at || null,
       }
     }
+    const blobFallback = await blobQueue.latestSalesRun()
+    if (blobFallback.status === 'ready') {
+      const latest = blobFallback.rows?.[0] || null
+      return {
+        status: 'ready',
+        table: 'supermega_sales_runs',
+        adapter: 'vercel_blob',
+        latest_run_id: latest?.run_id || null,
+        latest_generated_at: latest?.generated_at || null,
+        primary_error: { status: 'error', reason: `supabase_${response.status}`, detail: body.slice(0, 180) },
+      }
+    }
     return {
       status: 'error',
       reason: `supabase_${response.status}`,
@@ -479,6 +581,18 @@ async function checkSalesRunLedger() {
       detail: body.slice(0, 180),
     }
   } catch (error) {
+    const blobFallback = await blobQueue.latestSalesRun()
+    if (blobFallback.status === 'ready') {
+      const latest = blobFallback.rows?.[0] || null
+      return {
+        status: 'ready',
+        table: 'supermega_sales_runs',
+        adapter: 'vercel_blob',
+        latest_run_id: latest?.run_id || null,
+        latest_generated_at: latest?.generated_at || null,
+        primary_error: { status: 'error', reason: error?.name === 'AbortError' ? 'ledger_probe_timeout' : 'ledger_probe_failed', detail: text(error?.message).slice(0, 180) },
+      }
+    }
     return {
       status: 'error',
       reason: error?.name === 'AbortError' ? 'ledger_probe_timeout' : 'ledger_probe_failed',
@@ -582,7 +696,8 @@ module.exports = async function handler(req, res) {
       lead_ledger: config.url && config.serviceRoleKey ? 'configured' : 'not_configured',
       sales_run_ledger: salesRunLedger,
       sales_autopilot: {
-        status: datastore.postgresConfigured() && salesRunLedger.status === 'ready' ? 'ready' : 'needs_database',
+        status: salesRunLedger.status === 'ready' ? 'ready' : 'needs_database',
+        queue_adapter: salesRunLedger.adapter || 'vercel_postgres_neon',
         prepares: ['source_request', 'offer_packet', 'reply_draft'],
         external_send: 'blocked_until_owner_approval',
         payment_or_connector_access: 'blocked_until_owner_approval',

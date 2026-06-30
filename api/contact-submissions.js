@@ -1,5 +1,6 @@
 const crypto = require('crypto')
 const datastore = require('./lib/supermega-datastore')
+const blobQueue = require('./lib/supermega-blob-queue')
 const { notifyTelegram: sendTelegram } = require('./lib/notify-telegram')
 
 const notifyEmail = process.env.SUPERMEGA_CONTACT_NOTIFY_EMAIL || 'swanhtet@supermega.dev'
@@ -1182,6 +1183,8 @@ async function savePipelineAction({ record }) {
     }
     const config = supabaseConfig()
     if (!config.url || !config.serviceRoleKey) {
+      const blobFallback = await blobQueue.savePipelineAction(payload)
+      if (blobFallback.status === 'ready') return { ...blobFallback, primary_error: postgres }
       return {
         status: 'error',
         reason: postgres.reason || 'postgres_failed',
@@ -1195,7 +1198,7 @@ async function savePipelineAction({ record }) {
 
   const config = supabaseConfig()
   if (!config.url || !config.serviceRoleKey) {
-    return { status: 'skipped', reason: 'database_not_configured', table: 'supermega_pipeline_actions' }
+    return blobQueue.savePipelineAction(payload)
   }
 
   try {
@@ -1215,6 +1218,8 @@ async function savePipelineAction({ record }) {
       return { status: 'ready', code: response.status, table: 'supermega_pipeline_actions', action_id: record.task_id, adapter: 'supabase_rest' }
     }
 
+    const blobFallback = await blobQueue.savePipelineAction(payload)
+    if (blobFallback.status === 'ready') return { ...blobFallback, primary_error: { status: 'error', reason: `supabase_${response.status}` } }
     return {
       status: 'error',
       reason: `supabase_${response.status}`,
@@ -1222,6 +1227,8 @@ async function savePipelineAction({ record }) {
       hint: 'run_supermega_pipeline_actions_schema',
     }
   } catch (error) {
+    const blobFallback = await blobQueue.savePipelineAction(payload)
+    if (blobFallback.status === 'ready') return { ...blobFallback, primary_error: { status: 'error', reason: error.message || 'supabase_failed' } }
     return {
       status: 'error',
       reason: error.message || 'supabase_failed',
@@ -1727,7 +1734,7 @@ async function handler(req, res) {
   })().catch(() => {})
 
   // Email is a notification layer — only fail hard if the lead was not saved anywhere
-  const leadSaved = ledger.status === 'ready'
+  const leadSaved = ledger.status === 'ready' || pipelineAction.status === 'ready'
   if (delivery.status !== 'ready' && !leadSaved) {
     if (shouldRenderHtmlFormResponse(req)) {
       html(res, 502, 'Could not send.', `Email ${notifyEmail} directly and include your company, workflow, and contact details.`)
@@ -1789,8 +1796,12 @@ async function handler(req, res) {
       saved_count: ledger.status === 'ready' ? 1 : 0,
       saved_task_count: pipelineAction.status === 'ready' ? 1 : 0,
       email_routed_count: delivery.status === 'ready' ? 1 : 0,
-      management_mode: ledger.status === 'ready' && pipelineAction.status === 'ready' ? 'database_queue' : 'email_fallback',
-      datastore: ledger.adapter || pipelineAction.adapter || 'email_fallback',
+      management_mode: ledger.status === 'ready' && pipelineAction.status === 'ready'
+        ? 'database_queue'
+        : pipelineAction.status === 'ready' && pipelineAction.adapter === 'vercel_blob'
+          ? 'blob_action_queue'
+          : 'email_fallback',
+      datastore: pipelineAction.adapter || ledger.adapter || 'email_fallback',
       deskpos: deskposPipeline,
       workspace_id: 'public-site',
       lead_id: leadId,

@@ -18,6 +18,7 @@
 
 const crypto = require('crypto')
 const datastore = require('./lib/supermega-datastore')
+const blobQueue = require('./lib/supermega-blob-queue')
 
 const BATCH_LIMIT = 10
 const SUPABASE_TIMEOUT_MS = 8000
@@ -145,6 +146,11 @@ function supabaseStore() {
   return sb ? { mode: 'supabase', adapter: 'supabase_rest', sb } : null
 }
 
+function blobStore() {
+  const status = blobQueue.queueStatus()
+  return status.status === 'ready' ? { mode: 'blob', adapter: 'vercel_blob' } : null
+}
+
 async function claimPostgresBatch(batchSize = BATCH_LIMIT) {
   const result = await datastore.query(
     `
@@ -252,20 +258,24 @@ async function fetchPostgresLead(leadId) {
 
 async function claimBatch(store, batchSize = BATCH_LIMIT) {
   if (store.mode === 'postgres') return claimPostgresBatch(batchSize)
+  if (store.mode === 'blob') return blobQueue.claimBatch(batchSize)
   return claimSupabaseBatch(store.sb, batchSize)
 }
 
 async function updateAction(store, id, patch) {
   if (store.mode === 'postgres') return updatePostgresAction(id, patch)
+  if (store.mode === 'blob') return blobQueue.updateAction(id, patch)
   return updateSupabaseAction(store.sb, id, patch)
 }
 
 async function updateLead(store, leadId, patch) {
+  if (store.mode === 'blob') return { status: 'skipped', reason: 'blob_queue_does_not_mutate_lead_records', lead_id: leadId, patch }
   if (store.mode === 'postgres') return updatePostgresLead(leadId, patch)
   return updateSupabaseLead(store.sb, leadId, patch)
 }
 
 async function fetchLead(store, leadId) {
+  if (store.mode === 'blob') return blobQueue.findLeadById(leadId)
   if (store.mode === 'postgres') return fetchPostgresLead(leadId)
   return fetchSupabaseLead(store.sb, leadId)
 }
@@ -749,20 +759,24 @@ async function handler(req, res) {
   }
 
   // Backend-config check AFTER auth, so anonymous callers can't probe whether a queue is configured.
-  let store = postgresStore() || supabaseStore()
+  let store = postgresStore() || supabaseStore() || blobStore()
   if (!store) {
     json(res, 200, { status: 'blocked', reason: 'queue_not_configured' })
     return
   }
 
   let queued = await claimBatch(store)
-  if (queued.status !== 'ready' && store.mode === 'postgres') {
-    const fallback = supabaseStore()
-    if (fallback) {
+  if (queued.status !== 'ready' && store.mode !== 'blob') {
+    const fallbacks = [
+      store.mode === 'postgres' ? supabaseStore() : null,
+      blobStore(),
+    ].filter(Boolean)
+    for (const fallback of fallbacks) {
       const fallbackQueued = await claimBatch(fallback)
       if (fallbackQueued.status === 'ready') {
         store = fallback
         queued = { ...fallbackQueued, primary_error: queued }
+        break
       }
     }
   }
@@ -802,6 +816,7 @@ handler.__test = {
   updatePostgresAction,
   fetchPostgresLead,
   claimSupabaseBatch,
+  blobStore,
 }
 
 module.exports = handler

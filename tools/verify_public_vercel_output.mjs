@@ -557,7 +557,7 @@ const operatorHtml = readFileSync(operatorHtmlPath, 'utf8')
 const contactFunctionPath = resolve(functionsDir, 'api/contact-submissions.js.func/api/contact-submissions.js')
 if (!existsSync(contactFunctionPath)) fail('public_contact_function_missing')
 const contactFunctionSource = readFileSync(contactFunctionPath, 'utf8')
-for (const token of ['buildSolutionRoute', 'autopilot_solution_router', 'solution_route', 'buildImplementationBlueprintPack', 'implementation_blueprint_pack', 'buildIntakeJob', 'intake_to_first_proof', 'intake_job', 'buildClientKickoffPack', 'client_kickoff_pack', 'buildFirstProofTaskPayload', 'first_proof_task', 'owner approval before send/write/payment actions', 'New setup lead -', 'Operator:']) {
+for (const token of ['buildSolutionRoute', 'autopilot_solution_router', 'solution_route', 'buildImplementationBlueprintPack', 'implementation_blueprint_pack', 'buildIntakeJob', 'intake_to_first_proof', 'intake_job', 'buildClientKickoffPack', 'client_kickoff_pack', 'buildFirstProofTaskPayload', 'first_proof_task', 'owner approval before send/write/payment actions', 'supermega-blob-queue', 'blob_action_queue', 'New setup lead -', 'Operator:']) {
   if (!contactFunctionSource.includes(token)) {
     fail('public_contact_proof_task_contract_missing', { token })
   }
@@ -565,15 +565,23 @@ for (const token of ['buildSolutionRoute', 'autopilot_solution_router', 'solutio
 const actionRunnerFunctionPath = resolve(functionsDir, 'api/action-runner.js.func/api/action-runner.js')
 if (!existsSync(actionRunnerFunctionPath)) fail('public_action_runner_function_missing')
 const actionRunnerFunctionSource = readFileSync(actionRunnerFunctionPath, 'utf8')
-for (const token of ['renderFirstProofBrief', 'first_proof_operator_brief', 'Solution route', 'solution_route_packet', 'Implementation blueprint', 'implementation_blueprint_packet', 'Client kickoff pack', 'client_kickoff_packet', 'Intake job', 'intake_job_packet', 'Source trace', 'Do not send, write, charge, or edit live business records', 'renderSalesAutopilotDraft', 'source_request_packet', 'offer_packet', 'buyer_reply_draft', 'draft_only_no_send', 'owner_approval_before_external_send', 'no_revenue_claim_without_payment_proof', 'claimPostgresBatch', 'vercel_postgres_neon']) {
+for (const token of ['renderFirstProofBrief', 'first_proof_operator_brief', 'Solution route', 'solution_route_packet', 'Implementation blueprint', 'implementation_blueprint_packet', 'Client kickoff pack', 'client_kickoff_packet', 'Intake job', 'intake_job_packet', 'Source trace', 'Do not send, write, charge, or edit live business records', 'renderSalesAutopilotDraft', 'source_request_packet', 'offer_packet', 'buyer_reply_draft', 'draft_only_no_send', 'owner_approval_before_external_send', 'no_revenue_claim_without_payment_proof', 'claimPostgresBatch', 'blobStore', 'vercel_blob', 'supermega-blob-queue', 'vercel_postgres_neon']) {
   if (!actionRunnerFunctionSource.includes(token)) {
     fail('public_action_runner_first_proof_contract_missing', { token })
+  }
+}
+const salesDailyFunctionPath = resolve(functionsDir, 'api/sales-daily.js.func/api/sales-daily.js')
+if (!existsSync(salesDailyFunctionPath)) fail('public_sales_daily_function_missing')
+const salesDailyFunctionSource = readFileSync(salesDailyFunctionPath, 'utf8')
+for (const token of ['prepareBlobLeadAutopilot', 'fallbackLeadForRun', 'supermega-blob-queue', 'queue_adapter', 'blocked_until_owner_approval']) {
+  if (!salesDailyFunctionSource.includes(token)) {
+    fail('public_sales_daily_blob_queue_contract_missing', { token })
   }
 }
 const pipelineControlFunctionPath = resolve(functionsDir, 'api/pipeline-control.js.func/api/pipeline-control.js')
 if (!existsSync(pipelineControlFunctionPath)) fail('public_pipeline_control_function_missing')
 const pipelineControlFunctionSource = readFileSync(pipelineControlFunctionPath, 'utf8')
-for (const token of ['firstProofPacket', 'first_proof', 'operator_brief_ready', 'starter_kit_url', 'solution_route_packet', 'solution_route_json', 'implementation_blueprint_packet', 'implementation_blueprint_json', 'intake_job_packet', 'intake_job_json', 'client_kickoff_packet', 'client_kickoff_json', 'buyer_reply_draft', 'proof_delivery_packet', 'pilot_close_packet', 'pilot_order_room', 'private_workspace_manifest', 'first_run_acceptance', 'owner_acceptance', 'connector_policy', 'production_approval_queue', 'enterprise_delivery_pack', 'customer_success_desk', 'retainer_growth_offer', 'retainer_payment_record', 'recordRetainerPaymentProof', 'record_retainer_payment_proof', 'revenueProofBoard', 'revenue_proof_board', 'autopilotCommandBoard', 'autopilot_command_board', 'autopilot_command_count', 'autopilot_draft', 'autopilot_draft_approval', 'autopilotApprovalLedgerStatus', 'writeAutopilotApprovalLedger', 'readAutopilotApprovalLedger', 'approval_ledger', 'vercel_blob', 'autopilotDraftFromPayload', 'sendAutopilotDraftApprovalEmail', 'email_fallback', 'recordAutopilotDraftApproval', 'record_autopilot_draft_approval', 'autopilot_draft_packet', 'source_request_packet', 'offer_packet', 'buyer_reply_draft', 'command_queue_csv', 'operator_brief_markdown', 'approval_gated_autopilot', 'internal_drafts_allowed_external_actions_blocked_until_owner_approval', 'proof_backed_mrr_mmk', 'bank_verified_mrr_mmk', 'bank_unverified_mrr_mmk', 'payment_ledger_csv', 'next_cash_actions_csv', 'drafts_and_offers_do_not_count_as_mrr', 'prepareRetainerGrowthOffer', 'prepare_retainer_growth_offer', 'prepareCustomerSuccessDesk', 'prepare_customer_success_desk', 'prepareEnterpriseDeliveryPack', 'prepare_enterprise_delivery_pack', 'prepareProductionApprovalQueue', 'prepare_production_approval_queue', 'recordConnectorPolicy', 'record_connector_policy', 'recordOwnerAcceptance', 'record_owner_acceptance', 'prepareFirstRunAcceptance', 'prepare_first_run_acceptance', 'startPrivateWorkspace', 'start_private_workspace', 'updateOrderRoomState', 'update_order_room']) {
+for (const token of ['firstProofPacket', 'first_proof', 'operator_brief_ready', 'starter_kit_url', 'solution_route_packet', 'solution_route_json', 'implementation_blueprint_packet', 'implementation_blueprint_json', 'intake_job_packet', 'intake_job_json', 'client_kickoff_packet', 'client_kickoff_json', 'buyer_reply_draft', 'proof_delivery_packet', 'pilot_close_packet', 'pilot_order_room', 'private_workspace_manifest', 'first_run_acceptance', 'owner_acceptance', 'connector_policy', 'production_approval_queue', 'enterprise_delivery_pack', 'customer_success_desk', 'retainer_growth_offer', 'retainer_payment_record', 'recordRetainerPaymentProof', 'record_retainer_payment_proof', 'revenueProofBoard', 'revenue_proof_board', 'autopilotCommandBoard', 'autopilot_command_board', 'autopilot_command_count', 'autopilot_draft', 'autopilot_draft_approval', 'autopilotApprovalLedgerStatus', 'writeAutopilotApprovalLedger', 'readAutopilotApprovalLedger', 'blobPipelineControlPayload', 'blob_action_queue', 'approval_ledger', 'vercel_blob', 'autopilotDraftFromPayload', 'sendAutopilotDraftApprovalEmail', 'email_fallback', 'recordAutopilotDraftApproval', 'record_autopilot_draft_approval', 'autopilot_draft_packet', 'source_request_packet', 'offer_packet', 'buyer_reply_draft', 'command_queue_csv', 'operator_brief_markdown', 'approval_gated_autopilot', 'internal_drafts_allowed_external_actions_blocked_until_owner_approval', 'proof_backed_mrr_mmk', 'bank_verified_mrr_mmk', 'bank_unverified_mrr_mmk', 'payment_ledger_csv', 'next_cash_actions_csv', 'drafts_and_offers_do_not_count_as_mrr', 'prepareRetainerGrowthOffer', 'prepare_retainer_growth_offer', 'prepareCustomerSuccessDesk', 'prepare_customer_success_desk', 'prepareEnterpriseDeliveryPack', 'prepare_enterprise_delivery_pack', 'prepareProductionApprovalQueue', 'prepare_production_approval_queue', 'recordConnectorPolicy', 'record_connector_policy', 'recordOwnerAcceptance', 'record_owner_acceptance', 'prepareFirstRunAcceptance', 'prepare_first_run_acceptance', 'startPrivateWorkspace', 'start_private_workspace', 'updateOrderRoomState', 'update_order_room']) {
   if (!pipelineControlFunctionSource.includes(token)) {
     fail('public_pipeline_control_first_proof_contract_missing', { token })
   }
@@ -662,6 +670,8 @@ for (const token of [
   'Autopilot command board',
   'renderAutopilotCommandBoard',
   'autopilot-command-board',
+  'action queue',
+  'blob_action_queue',
   'Approval fallback ledger',
   'approval-ledger',
   'approval ledger',

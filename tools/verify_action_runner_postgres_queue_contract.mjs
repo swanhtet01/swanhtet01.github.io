@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
+import { readFileSync } from 'node:fs'
 
 const require = createRequire(import.meta.url)
 const handler = require('../api/action-runner.js')
@@ -10,7 +11,7 @@ function fail(message, extra = {}) {
 }
 
 const internals = handler.__test || {}
-for (const name of ['claimPostgresBatch', 'updatePostgresAction', 'fetchPostgresLead', 'claimSupabaseBatch']) {
+for (const name of ['claimPostgresBatch', 'updatePostgresAction', 'fetchPostgresLead', 'claimSupabaseBatch', 'blobStore']) {
   if (typeof internals[name] !== 'function') {
     fail('action_runner_queue_helper_missing', { name })
   }
@@ -37,6 +38,11 @@ for (const token of ['public.supermega_leads', 'lead_id = $1', 'name, email, com
   assert.ok(fetchSource.includes(token), `postgres lead fetch missing ${token}`)
 }
 
+const handlerSource = readFileSync('api/action-runner.js', 'utf8')
+for (const token of ['blobStore()', 'vercel_blob', 'claimBatch(fallback)']) {
+  assert.ok(handlerSource.includes(token), `action runner blob fallback missing ${token}`)
+}
+
 console.log(
   JSON.stringify(
     {
@@ -44,6 +50,7 @@ console.log(
       contract: 'action_runner_postgres_queue',
       primary_adapter: 'vercel_postgres_neon',
       fallback_adapter: 'supabase_rest',
+      durable_blob_fallback: 'vercel_blob',
     },
     null,
     2,

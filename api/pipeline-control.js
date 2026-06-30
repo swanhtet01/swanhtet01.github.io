@@ -1,5 +1,6 @@
 ﻿const crypto = require('crypto')
 const datastore = require('./lib/supermega-datastore')
+const blobQueue = require('./lib/supermega-blob-queue')
 
 function safeEqual(a, b) {
   const aHash = crypto.createHash('sha256').update(String(a)).digest()
@@ -2367,6 +2368,55 @@ function fallbackQueue() {
   }
 }
 
+async function blobPipelineControlPayload({ contract, primaryDatabase, fallbackDatabase = null } = {}) {
+  const blobSnapshot = await blobQueue.pipelineSnapshot({ actionLimit: 8 })
+  if (blobSnapshot.status !== 'ready') return null
+  const leads = (blobSnapshot.latestLeads || []).map(safeLead)
+  const actions = (blobSnapshot.latestActions || []).map(safeAction)
+  const proofBoard = revenueProofBoard(actions)
+  const autopilotBoard = autopilotCommandBoard({ actions, leads, proofBoard, latestRuns: blobSnapshot.latestRuns || [] })
+  const approvalLedger = await readAutopilotApprovalLedger(5)
+  return {
+    status: 'ready',
+    runtime_status: 'degraded',
+    endpoint: 'pipeline-control',
+    contract,
+    primary_database: primaryDatabase,
+    ...(fallbackDatabase ? { fallback_database: fallbackDatabase } : {}),
+    fallback_queue: fallbackQueue(),
+    blob_action_queue: blobQueue.queueStatus(),
+    approval_ledger: approvalLedger,
+    approval_inbox: {
+      status: approvalLedger.status === 'ready' ? 'ledger_fallback' : 'blob_queue',
+      pending_count: actions.filter((action) => action.approval_state === 'pending').length,
+      next_action: actions.find((action) => action.approval_state === 'pending') || actions[0] || null,
+    },
+    metrics: {
+      open_action_count: blobSnapshot.pendingActionCount || actions.length,
+      recent_lead_count: leads.length,
+      recent_action_count: actions.length,
+      lead_24h_count: blobSnapshot.lead24hCount || leads.length,
+      lead_7d_count: blobSnapshot.lead7dCount || leads.length,
+      proof_backed_mrr_mmk: proofBoard.proof_backed_mrr_mmk,
+      bank_verified_mrr_mmk: proofBoard.bank_verified_mrr_mmk,
+      bank_unverified_mrr_mmk: proofBoard.bank_unverified_mrr_mmk,
+    },
+    leads,
+    actions,
+    revenue_proof_board: proofBoard,
+    autopilot_command_board: autopilotBoard,
+    durable_queue: {
+      status: 'ready',
+      adapter: 'vercel_blob',
+      public_daily_cron: '/api/cron/sales-daily',
+      action_runner: '/api/action-runner',
+      pc_dependency: 'none',
+      note: 'Temporary durable queue while SQL is degraded; external sends, connector writes, payment actions, and revenue claims remain owner/proof gated.',
+    },
+    recent_sales_runs: blobSnapshot.latestRuns || [],
+  }
+}
+
 function recommendedDatastores() {
   return [
     {
@@ -3740,6 +3790,14 @@ async function handler(req, res) {
     if (snapshot.status !== 'ready') {
       const fallback = fallbackQueue()
       const approvalLedger = await readAutopilotApprovalLedger(5)
+      const blobPayload = await blobPipelineControlPayload({
+        contract,
+        primaryDatabase: primaryDatabaseStatus(snapshot),
+      })
+      if (blobPayload) {
+        json(res, 200, blobPayload)
+        return
+      }
       json(res, 200, {
         status: 'ready',
         runtime_status: fallback.status === 'ready' ? 'degraded' : 'blocked',
@@ -3840,6 +3898,15 @@ async function handler(req, res) {
 
   if (!config.url || !config.serviceRoleKey) {
     const approvalLedger = await readAutopilotApprovalLedger(5)
+    const blobPayload = await blobPipelineControlPayload({
+      contract,
+      primaryDatabase: datastore.datastoreStatus(),
+      fallbackDatabase: { status: 'not_configured', provider: 'supabase_rest', adapter: 'supabase_rest' },
+    })
+    if (blobPayload) {
+      json(res, 200, blobPayload)
+      return
+    }
     json(res, 200, {
       status: 'ready',
       runtime_status: 'not_configured',
@@ -3871,6 +3938,15 @@ async function handler(req, res) {
       const fallbackDatabase = primaryDatabaseStatus(blocked)
       const fallback = fallbackQueue()
       const approvalLedger = await readAutopilotApprovalLedger(5)
+      const blobPayload = await blobPipelineControlPayload({
+        contract,
+        primaryDatabase: datastore.datastoreStatus(),
+        fallbackDatabase,
+      })
+      if (blobPayload) {
+        json(res, 200, blobPayload)
+        return
+      }
       json(res, 200, {
         status: 'ready',
         runtime_status: fallback.status === 'ready' ? 'degraded' : 'blocked',

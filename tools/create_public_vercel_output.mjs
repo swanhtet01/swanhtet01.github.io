@@ -4587,6 +4587,7 @@ const publicOperatorConsoleHtml = `<!doctype html>
         runtime_status:'sample_only',
         metrics:{open_action_count:2,recent_lead_count:1,recent_action_count:2,proof_backed_mrr_mmk:900000,bank_verified_mrr_mmk:0,bank_unverified_mrr_mmk:900000},
         approval_inbox:{status:'sample',pending_count:1},
+        blob_action_queue:{status:'sample_private_queue',adapter:'vercel_blob',access:'private',purpose:'Durable action queue when SQL is degraded.'},
         approval_ledger:{status:'sample_private_ledger',adapter:'vercel_blob',access:'private',sdk:'sample',recent:[{decision:'pending',title:'Sample Daily Intelligence Brief source request approval',recorded_at:'SAMPLE-RECORDED-AT',approval_reference:'SAMPLE-OWNER-REVIEW'}]},
         revenue_proof_board:{
           status:'ready',
@@ -5754,6 +5755,7 @@ const publicOperatorConsoleHtml = `<!doctype html>
     function renderAutopilotCommandBoard(data){
       const board = data.autopilot_command_board || {};
       const ledger = data.approval_ledger || {};
+      const blobQueue = data.blob_action_queue || {};
       if(!board.status){
         commandBoardEl.innerHTML = '<span>Autopilot command board</span><div>No command queue loaded.</div>';
         return;
@@ -5764,7 +5766,7 @@ const publicOperatorConsoleHtml = `<!doctype html>
       const ledgerList = ledgerRecent.length ? '<ul>'+ledgerRecent.map(function(item){return '<li><strong>'+esc(item.decision || item.status || 'record')+'</strong> '+esc(item.title || item.package_name || item.action_id || item.lead_id || '')+'<br><span>'+esc(item.recorded_at || item.approval_reference || '')+'</span></li>'}).join('')+'</ul>' : '<div>No approval ledger records loaded.</div>';
       commandBoardEl.innerHTML = [
         '<span>Autopilot command board</span>',
-        '<div class="operator-meta"><span class="operator-chip">'+esc(board.status || 'ready')+'</span><span class="operator-chip">'+esc(board.mode || 'approval_gated_autopilot')+'</span><span class="operator-chip">commands '+esc(board.command_count ?? commands.length)+'</span><span class="operator-chip">internal '+esc(board.internal_autorun_count ?? 0)+'</span><span class="operator-chip">owner gates '+esc(board.owner_approval_count ?? 0)+'</span><span class="operator-chip">approval ledger '+esc(ledger.status || 'not_configured')+'</span></div>',
+        '<div class="operator-meta"><span class="operator-chip">'+esc(board.status || 'ready')+'</span><span class="operator-chip">'+esc(board.mode || 'approval_gated_autopilot')+'</span><span class="operator-chip">commands '+esc(board.command_count ?? commands.length)+'</span><span class="operator-chip">internal '+esc(board.internal_autorun_count ?? 0)+'</span><span class="operator-chip">owner gates '+esc(board.owner_approval_count ?? 0)+'</span><span class="operator-chip">action queue '+esc(blobQueue.status || blobQueue.adapter || 'primary_db')+'</span><span class="operator-chip">approval ledger '+esc(ledger.status || 'not_configured')+'</span></div>',
         '<div class="operator-proof-section"><span>Top money commands</span>'+commandList+'</div>',
         '<div class="operator-proof-section" id="approval-ledger"><span>Approval fallback ledger</span><div class="operator-meta"><span class="operator-chip">'+esc(ledger.adapter || 'vercel_blob')+'</span><span class="operator-chip">'+esc(ledger.access || 'private')+'</span><span class="operator-chip">'+esc(ledger.sdk || ledger.reason || 'status')+'</span></div>'+ledgerList+'</div>',
         '<div class="operator-proof-section"><span>Autopilot command queue</span><textarea class="operator-reply" id="autopilot-command-queue" readonly>'+esc(board.command_queue_csv || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="autopilot-command-queue">Copy autopilot command queue</button></div>',
