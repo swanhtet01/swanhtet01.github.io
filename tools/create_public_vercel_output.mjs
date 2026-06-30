@@ -5022,6 +5022,91 @@ const publicOperatorConsoleHtml = `<!doctype html>
                 recurring_revenue_state:'not_claimed',
                 real_mrr_delta:0
               },null,2),
+              retainer_growth_packet:[
+                '# Daily Intelligence Brief Agent retainer growth offer',
+                '',
+                'Status: retainer_growth_offer_ready',
+                'Lead: SAMPLE-SETUP',
+                'Workspace: pilot-daily-intelligence-brief-sample-setup',
+                'Evidence reference: SAMPLE-RETAINER-REFERENCE',
+                'Offer type: evidence_gated_retainer_growth',
+                'Retainer quote: OWNER_APPROVED_RETAINER_QUOTE_REQUIRED',
+                'Recurring revenue state: not_claimed',
+                'Real MRR delta: 0',
+                '',
+                '## Offer options',
+                '- managed_support_retainer: weekly support, fixes, source maintenance, and owner reporting',
+                '- growth_operator_retainer: recurring agent runs with approval queue and operator review',
+                '- next_module_build: new agent module or connector added after value review',
+                '',
+                '## Decision ledger',
+                '- confirm_value_evidence: open / source_traced_value_ledger',
+                '- approve_retainer_quote: owner_approval_required / owner_approved_mmk_quote',
+                '- attach_payment_proof: payment_proof_required / receipt_transfer_reference_or_checkout_record'
+              ].join('\\n'),
+              retainer_offer_options_csv:[
+                '"workspace_slug","lead_id","option_id","retainer_shape","buyer_value_proof_required","included_work","approval_state","payment_state","real_mrr_delta"',
+                '"pilot-daily-intelligence-brief-sample-setup","SAMPLE-SETUP","managed_support_retainer","weekly support, fixes, source maintenance, and owner reporting","confirmed_support_or_time_saved_evidence","support queue review, source trace maintenance, client update draft, monthly value ledger","owner_review_required","not_requested","0"',
+                '"pilot-daily-intelligence-brief-sample-setup","SAMPLE-SETUP","growth_operator_retainer","recurring agent runs with approval queue and operator review","buyer_visible_repeated_work_or_revenue_followup_evidence","scheduled agent runs, approval queue, value ledger, renewal review, next-module proposal","owner_review_required","not_requested","0"',
+                '"pilot-daily-intelligence-brief-sample-setup","SAMPLE-SETUP","next_module_build","new agent module or connector added after value review","specific_next_module_need_and_source_sample","module blueprint, source manifest, first proof, acceptance tests, delivery pack","scope_review_required","not_requested","0"'
+              ].join('\\n'),
+              retainer_decision_ledger_csv:[
+                '"workspace_slug","lead_id","renewal_action","owner","state","evidence_required","real_mrr_delta"',
+                '"pilot-daily-intelligence-brief-sample-setup","SAMPLE-SETUP","confirm_value_evidence","SuperMega operator","open","source_traced_value_ledger","0"',
+                '"pilot-daily-intelligence-brief-sample-setup","SAMPLE-SETUP","choose_offer_shape","Founder","blocked_until_value_evidence","client_success_review_note","0"',
+                '"pilot-daily-intelligence-brief-sample-setup","SAMPLE-SETUP","approve_retainer_quote","Founder","owner_approval_required","owner_approved_mmk_quote","0"',
+                '"pilot-daily-intelligence-brief-sample-setup","SAMPLE-SETUP","send_retainer_offer","Founder","not_sent","owner_approved_client_message","0"',
+                '"pilot-daily-intelligence-brief-sample-setup","SAMPLE-SETUP","attach_payment_proof","Revenue Pod","payment_proof_required","receipt_transfer_reference_or_checkout_record","0"'
+              ].join('\\n'),
+              retainer_next_module_roadmap_csv:[
+                '"workspace_slug","lead_id","module_id","trigger","proof_needed","state","real_mrr_delta"',
+                '"pilot-daily-intelligence-brief-sample-setup","SAMPLE-SETUP","source_monitor","client confirms repeated source checking work","source list and missed-change example","candidate","0"',
+                '"pilot-daily-intelligence-brief-sample-setup","SAMPLE-SETUP","approval_inbox","client has recurring outbound or writeback approvals","sample message or target record","candidate","0"',
+                '"pilot-daily-intelligence-brief-sample-setup","SAMPLE-SETUP","reporting_pack","client asks for weekly/monthly owner reporting","report format or decision question","candidate","0"'
+              ].join('\\n'),
+              retainer_invoice_request_draft:[
+                '# Daily Intelligence Brief Agent retainer invoice request draft',
+                '',
+                'Status: draft - owner approval required before sending',
+                'Lead: SAMPLE-SETUP',
+                'Workspace: pilot-daily-intelligence-brief-sample-setup',
+                'Retainer quote: OWNER_APPROVED_RETAINER_QUOTE_REQUIRED',
+                'Payment route: PAYMENT_LINK_REQUIRED_AFTER_OWNER_APPROVAL',
+                'Real MRR delta: 0',
+                '',
+                '## Stop conditions',
+                '- Do not send this invoice request without owner approval.',
+                '- Do not create a live payment link from this packet.',
+                '- Do not claim MRR until payment proof is attached and reconciled.'
+              ].join('\\n'),
+              retainer_client_email_draft:[
+                '# Daily Intelligence Brief Agent retainer offer email draft',
+                '',
+                'Status: draft - review before sending',
+                'Lead: SAMPLE-SETUP',
+                'Workspace: pilot-daily-intelligence-brief-sample-setup',
+                'Evidence reference: SAMPLE-RETAINER-REFERENCE',
+                '',
+                'Based on the first support cycle, I can keep this running as a managed AI-agent workcell instead of a one-off build.',
+                '',
+                'The next step is a short value review: confirm what saved time, reduced risk, or moved revenue, then choose the retainer shape that matches the real workflow.',
+                '',
+                'I will not send payment requests, connect accounts, write records, or claim recurring revenue without owner approval and payment proof.'
+              ].join('\\n'),
+              retainer_growth_config_json:JSON.stringify({
+                status:'retainer_growth_offer_ready',
+                offer_type:'evidence_gated_retainer_growth',
+                workspace_slug:'pilot-daily-intelligence-brief-sample-setup',
+                lead_id:'SAMPLE-SETUP',
+                template_name:'Daily Intelligence Brief Agent',
+                retainer_quote:'OWNER_APPROVED_RETAINER_QUOTE_REQUIRED',
+                option_ids:['managed_support_retainer','growth_operator_retainer','next_module_build'],
+                decision_actions:['confirm_value_evidence','choose_offer_shape','approve_retainer_quote','send_retainer_offer','attach_payment_proof'],
+                next_module_candidates:['source_monitor','approval_inbox','reporting_pack'],
+                recurring_revenue_state:'not_claimed',
+                payment_state:'payment_proof_required_before_mrr',
+                real_mrr_delta:0
+              },null,2),
               state:{
                 status:'not_persisted',
                 scope_approval_state:'pending',
@@ -5120,6 +5205,13 @@ const publicOperatorConsoleHtml = `<!doctype html>
       const customerSuccessRenewalQueueId = 'customer-success-renewal-queue-'+index;
       const customerSuccessClientUpdateId = 'customer-success-client-update-'+index;
       const customerSuccessConfigId = 'customer-success-config-'+index;
+      const retainerGrowthId = 'retainer-growth-'+index;
+      const retainerOptionsId = 'retainer-options-'+index;
+      const retainerDecisionLedgerId = 'retainer-decision-ledger-'+index;
+      const retainerRoadmapId = 'retainer-roadmap-'+index;
+      const retainerInvoiceId = 'retainer-invoice-'+index;
+      const retainerEmailId = 'retainer-email-'+index;
+      const retainerConfigId = 'retainer-config-'+index;
       const state = room.state || {};
       const actionId = action && action.action_id || '';
       const leadId = action && action.lead_id || '';
@@ -5133,6 +5225,7 @@ const publicOperatorConsoleHtml = `<!doctype html>
       const productionApprovalButton = '<div class="operator-row"><button class="btn primary operator-production-approval" type="button" data-production-approval="prepare_production_approval_queue" data-action-id="'+esc(actionId)+'" data-lead-id="'+esc(leadId)+'">Prepare autopilot approval queue</button></div>';
       const enterpriseDeliveryButton = '<div class="operator-row"><button class="btn primary operator-enterprise-delivery" type="button" data-enterprise-delivery="prepare_enterprise_delivery_pack" data-action-id="'+esc(actionId)+'" data-lead-id="'+esc(leadId)+'">Prepare enterprise delivery pack</button></div>';
       const customerSuccessButton = '<div class="operator-row"><button class="btn primary operator-customer-success" type="button" data-customer-success="prepare_customer_success_desk" data-action-id="'+esc(actionId)+'" data-lead-id="'+esc(leadId)+'">Prepare customer success desk</button></div>';
+      const retainerGrowthButton = '<div class="operator-row"><button class="btn primary operator-retainer-growth" type="button" data-retainer-growth="prepare_retainer_growth_offer" data-action-id="'+esc(actionId)+'" data-lead-id="'+esc(leadId)+'">Prepare retainer growth offer</button></div>';
       const acceptancePacket = room.first_run_acceptance_packet ? '<textarea class="operator-reply" id="'+firstRunAcceptanceId+'" readonly>'+esc(room.first_run_acceptance_packet || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+firstRunAcceptanceId+'">Copy first-run acceptance packet</button>' : '';
       const acceptanceQueue = room.first_run_acceptance_queue_csv ? '<textarea class="operator-reply" id="'+firstRunAcceptanceQueueId+'" readonly>'+esc(room.first_run_acceptance_queue_csv || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+firstRunAcceptanceQueueId+'">Copy first-run acceptance queue</button>' : '';
       const ownerPacket = room.owner_acceptance_packet ? '<textarea class="operator-reply" id="'+ownerAcceptanceId+'" readonly>'+esc(room.owner_acceptance_packet || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+ownerAcceptanceId+'">Copy owner acceptance record</button>' : '';
@@ -5153,7 +5246,14 @@ const publicOperatorConsoleHtml = `<!doctype html>
       const customerSuccessRenewal = room.customer_success_renewal_queue_csv ? '<textarea class="operator-reply" id="'+customerSuccessRenewalQueueId+'" readonly>'+esc(room.customer_success_renewal_queue_csv || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+customerSuccessRenewalQueueId+'">Copy renewal queue</button>' : '';
       const customerSuccessClientUpdate = room.customer_success_client_update ? '<textarea class="operator-reply" id="'+customerSuccessClientUpdateId+'" readonly>'+esc(room.customer_success_client_update || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+customerSuccessClientUpdateId+'">Copy client update draft</button>' : '';
       const customerSuccessConfig = room.customer_success_config_json ? '<textarea class="operator-reply" id="'+customerSuccessConfigId+'" readonly>'+esc(room.customer_success_config_json || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+customerSuccessConfigId+'">Copy customer success config</button>' : '';
-      return '<div class="operator-proof-section operator-order-room"><span>Paid pilot order room</span><div class="operator-meta"><span class="operator-chip">'+esc(room.status || 'draft_owner_approval_required')+'</span><span class="operator-chip">'+esc(room.payment_state || 'payment_proof_required')+'</span><span class="operator-chip">'+esc(room.order_state || 'order_not_started')+'</span></div>'+stateChips+stateButtons+workspaceButton+acceptanceButton+ownerDecisionButtons+connectorPolicyButton+productionApprovalButton+enterpriseDeliveryButton+customerSuccessButton+'<textarea class="operator-reply" id="'+paymentId+'" readonly>'+esc(room.payment_request_draft || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+paymentId+'">Copy payment request</button><textarea class="operator-reply" id="'+paymentLedgerId+'" readonly>'+esc(room.payment_proof_ledger_csv || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+paymentLedgerId+'">Copy payment ledger</button><textarea class="operator-reply" id="'+orderLedgerId+'" readonly>'+esc(room.order_room_ledger_csv || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+orderLedgerId+'">Copy order ledger</button><textarea class="operator-reply" id="'+checklistId+'" readonly>'+esc(checklist)+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+checklistId+'">Copy pilot start checklist</button><textarea class="operator-reply" id="'+activationId+'" readonly>'+esc(room.owner_activation_packet || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+activationId+'">Copy owner activation packet</button><textarea class="operator-reply" id="'+actionQueueId+'" readonly>'+esc(room.owner_action_queue_csv || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+actionQueueId+'">Copy owner action queue</button><textarea class="operator-reply" id="'+activationJsonId+'" readonly>'+esc(room.activation_summary_json || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+activationJsonId+'">Copy activation JSON</button><textarea class="operator-reply" id="'+workspaceManifestId+'" readonly>'+esc(room.private_workspace_manifest_json || JSON.stringify(room.private_workspace_manifest || {},null,2))+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+workspaceManifestId+'">Copy workspace manifest</button><textarea class="operator-reply" id="'+workspaceHandoffId+'" readonly>'+esc(room.private_workspace_handoff_packet || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+workspaceHandoffId+'">Copy workspace handoff</button><textarea class="operator-reply" id="'+firstRunQueueId+'" readonly>'+esc(room.first_run_queue_csv || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+firstRunQueueId+'">Copy first run queue</button>'+acceptancePacket+acceptanceQueue+ownerPacket+ownerQueue+connectorPacket+connectorQueue+connectorConfig+productionPacket+productionQueue+productionConfig+enterprisePacket+enterpriseAccess+enterpriseValue+enterpriseConfig+customerSuccessPacket+customerSuccessTickets+customerSuccessValue+customerSuccessRenewal+customerSuccessClientUpdate+customerSuccessConfig+'</div>';
+      const retainerPacket = room.retainer_growth_packet ? '<textarea class="operator-reply" id="'+retainerGrowthId+'" readonly>'+esc(room.retainer_growth_packet || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+retainerGrowthId+'">Copy retainer growth offer</button>' : '';
+      const retainerOptions = room.retainer_offer_options_csv ? '<textarea class="operator-reply" id="'+retainerOptionsId+'" readonly>'+esc(room.retainer_offer_options_csv || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+retainerOptionsId+'">Copy retainer options</button>' : '';
+      const retainerDecisionLedger = room.retainer_decision_ledger_csv ? '<textarea class="operator-reply" id="'+retainerDecisionLedgerId+'" readonly>'+esc(room.retainer_decision_ledger_csv || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+retainerDecisionLedgerId+'">Copy retainer decision ledger</button>' : '';
+      const retainerRoadmap = room.retainer_next_module_roadmap_csv ? '<textarea class="operator-reply" id="'+retainerRoadmapId+'" readonly>'+esc(room.retainer_next_module_roadmap_csv || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+retainerRoadmapId+'">Copy next module roadmap</button>' : '';
+      const retainerInvoice = room.retainer_invoice_request_draft ? '<textarea class="operator-reply" id="'+retainerInvoiceId+'" readonly>'+esc(room.retainer_invoice_request_draft || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+retainerInvoiceId+'">Copy retainer invoice draft</button>' : '';
+      const retainerEmail = room.retainer_client_email_draft ? '<textarea class="operator-reply" id="'+retainerEmailId+'" readonly>'+esc(room.retainer_client_email_draft || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+retainerEmailId+'">Copy retainer email draft</button>' : '';
+      const retainerConfig = room.retainer_growth_config_json ? '<textarea class="operator-reply" id="'+retainerConfigId+'" readonly>'+esc(room.retainer_growth_config_json || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+retainerConfigId+'">Copy retainer config</button>' : '';
+      return '<div class="operator-proof-section operator-order-room"><span>Paid pilot order room</span><div class="operator-meta"><span class="operator-chip">'+esc(room.status || 'draft_owner_approval_required')+'</span><span class="operator-chip">'+esc(room.payment_state || 'payment_proof_required')+'</span><span class="operator-chip">'+esc(room.order_state || 'order_not_started')+'</span></div>'+stateChips+stateButtons+workspaceButton+acceptanceButton+ownerDecisionButtons+connectorPolicyButton+productionApprovalButton+enterpriseDeliveryButton+customerSuccessButton+retainerGrowthButton+'<textarea class="operator-reply" id="'+paymentId+'" readonly>'+esc(room.payment_request_draft || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+paymentId+'">Copy payment request</button><textarea class="operator-reply" id="'+paymentLedgerId+'" readonly>'+esc(room.payment_proof_ledger_csv || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+paymentLedgerId+'">Copy payment ledger</button><textarea class="operator-reply" id="'+orderLedgerId+'" readonly>'+esc(room.order_room_ledger_csv || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+orderLedgerId+'">Copy order ledger</button><textarea class="operator-reply" id="'+checklistId+'" readonly>'+esc(checklist)+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+checklistId+'">Copy pilot start checklist</button><textarea class="operator-reply" id="'+activationId+'" readonly>'+esc(room.owner_activation_packet || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+activationId+'">Copy owner activation packet</button><textarea class="operator-reply" id="'+actionQueueId+'" readonly>'+esc(room.owner_action_queue_csv || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+actionQueueId+'">Copy owner action queue</button><textarea class="operator-reply" id="'+activationJsonId+'" readonly>'+esc(room.activation_summary_json || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+activationJsonId+'">Copy activation JSON</button><textarea class="operator-reply" id="'+workspaceManifestId+'" readonly>'+esc(room.private_workspace_manifest_json || JSON.stringify(room.private_workspace_manifest || {},null,2))+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+workspaceManifestId+'">Copy workspace manifest</button><textarea class="operator-reply" id="'+workspaceHandoffId+'" readonly>'+esc(room.private_workspace_handoff_packet || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+workspaceHandoffId+'">Copy workspace handoff</button><textarea class="operator-reply" id="'+firstRunQueueId+'" readonly>'+esc(room.first_run_queue_csv || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+firstRunQueueId+'">Copy first run queue</button>'+acceptancePacket+acceptanceQueue+ownerPacket+ownerQueue+connectorPacket+connectorQueue+connectorConfig+productionPacket+productionQueue+productionConfig+enterprisePacket+enterpriseAccess+enterpriseValue+enterpriseConfig+customerSuccessPacket+customerSuccessTickets+customerSuccessValue+customerSuccessRenewal+customerSuccessClientUpdate+customerSuccessConfig+retainerPacket+retainerOptions+retainerDecisionLedger+retainerRoadmap+retainerInvoice+retainerEmail+retainerConfig+'</div>';
     }
     function legacyCopy(el){
       el.focus();
@@ -5317,6 +5417,22 @@ const publicOperatorConsoleHtml = `<!doctype html>
       setStatus(data);
       if(response.ok) await refresh();
     }
+    async function prepareRetainerGrowthOffer(button){
+      if(!token()){setStatus('Paste the ops key first.');return}
+      const reference = window.prompt('Retainer growth evidence reference');
+      if(!reference || !reference.trim()){setStatus('Paste retainer growth reference first.');return}
+      const payload = {
+        operation:'prepare_retainer_growth_offer',
+        action_id:button.getAttribute('data-action-id') || '',
+        lead_id:button.getAttribute('data-lead-id') || '',
+        retainer_growth_reference:reference.trim()
+      };
+      setStatus({status:'preparing_retainer_growth_offer'});
+      const response = await fetch('/api/pipeline-control',{method:'POST',headers:Object.assign({},authHeaders(),{'content-type':'application/json'}),body:JSON.stringify(payload),cache:'no-store'});
+      const data = await response.json().catch(function(){return {status:'error',reason:'invalid_json',code:response.status}});
+      setStatus(data);
+      if(response.ok) await refresh();
+    }
     function renderKpis(data){
       const metrics = data.metrics || {};
       kpisEl.innerHTML = [
@@ -5342,6 +5458,7 @@ const publicOperatorConsoleHtml = `<!doctype html>
       actionsEl.querySelectorAll('[data-production-approval]').forEach(function(button){button.addEventListener('click',function(){prepareProductionApprovalQueue(button)})});
       actionsEl.querySelectorAll('[data-enterprise-delivery]').forEach(function(button){button.addEventListener('click',function(){prepareEnterpriseDeliveryPack(button)})});
       actionsEl.querySelectorAll('[data-customer-success]').forEach(function(button){button.addEventListener('click',function(){prepareCustomerSuccessDesk(button)})});
+      actionsEl.querySelectorAll('[data-retainer-growth]').forEach(function(button){button.addEventListener('click',function(){prepareRetainerGrowthOffer(button)})});
     }
     async function refresh(){
       if(!token()){setStatus('Paste the ops key first.');return}

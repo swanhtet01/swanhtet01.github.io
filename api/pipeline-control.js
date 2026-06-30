@@ -932,6 +932,204 @@ function buildCustomerSuccessDeskPack(input = {}) {
   }
 }
 
+function buildRetainerGrowthOfferPack(input = {}) {
+  const customerSuccessDesk = input.customerSuccessDesk || {}
+  const evidenceReference = text(input.evidenceReference || input.retainerGrowthReference || input.renewalReference)
+  const preparedAt = text(input.preparedAt) || new Date().toISOString()
+  const workspaceSlug = text(customerSuccessDesk.workspace_slug || input.workspaceSlug) || 'private-workspace-required'
+  const leadId = text(customerSuccessDesk.lead_id || input.leadId) || 'not set'
+  const templateName = text(customerSuccessDesk.template_name || input.templateName) || 'SUPERMEGA agent'
+  const retainerQuote = text(input.retainerQuote || input.retainer_quote) || 'OWNER_APPROVED_RETAINER_QUOTE_REQUIRED'
+  const offerOptions = [
+    {
+      option_id: 'managed_support_retainer',
+      retainer_shape: 'weekly support, fixes, source maintenance, and owner reporting',
+      buyer_value_proof_required: 'confirmed_support_or_time_saved_evidence',
+      included_work: 'support queue review, source trace maintenance, client update draft, monthly value ledger',
+      approval_state: 'owner_review_required',
+      payment_state: 'not_requested',
+    },
+    {
+      option_id: 'growth_operator_retainer',
+      retainer_shape: 'recurring agent runs with approval queue and operator review',
+      buyer_value_proof_required: 'buyer_visible_repeated_work_or_revenue_followup_evidence',
+      included_work: 'scheduled agent runs, approval queue, value ledger, renewal review, next-module proposal',
+      approval_state: 'owner_review_required',
+      payment_state: 'not_requested',
+    },
+    {
+      option_id: 'next_module_build',
+      retainer_shape: 'new agent module or connector added after value review',
+      buyer_value_proof_required: 'specific_next_module_need_and_source_sample',
+      included_work: 'module blueprint, source manifest, first proof, acceptance tests, delivery pack',
+      approval_state: 'scope_review_required',
+      payment_state: 'not_requested',
+    },
+  ].map((item) => ({ ...item, real_mrr_delta: 0 }))
+  const decisionLedger = [
+    { renewal_action: 'confirm_value_evidence', owner: 'SuperMega operator', state: 'open', evidence_required: 'source_traced_value_ledger' },
+    { renewal_action: 'choose_offer_shape', owner: 'Founder', state: 'blocked_until_value_evidence', evidence_required: 'client_success_review_note' },
+    { renewal_action: 'approve_retainer_quote', owner: 'Founder', state: 'owner_approval_required', evidence_required: 'owner_approved_mmk_quote' },
+    { renewal_action: 'send_retainer_offer', owner: 'Founder', state: 'not_sent', evidence_required: 'owner_approved_client_message' },
+    { renewal_action: 'attach_payment_proof', owner: 'Revenue Pod', state: 'payment_proof_required', evidence_required: 'receipt_transfer_reference_or_checkout_record' },
+  ].map((item) => ({ ...item, real_mrr_delta: 0 }))
+  const nextModuleRoadmap = [
+    { module_id: 'source_monitor', trigger: 'client confirms repeated source checking work', proof_needed: 'source list and missed-change example', state: 'candidate' },
+    { module_id: 'approval_inbox', trigger: 'client has recurring outbound or writeback approvals', proof_needed: 'sample message or target record', state: 'candidate' },
+    { module_id: 'reporting_pack', trigger: 'client asks for weekly/monthly owner reporting', proof_needed: 'report format or decision question', state: 'candidate' },
+  ].map((item) => ({ ...item, real_mrr_delta: 0 }))
+  const offerOptionsCsv = [
+    ['workspace_slug', 'lead_id', 'option_id', 'retainer_shape', 'buyer_value_proof_required', 'included_work', 'approval_state', 'payment_state', 'real_mrr_delta'].map(csvCell).join(','),
+    ...offerOptions.map((item) =>
+      [
+        workspaceSlug,
+        leadId,
+        item.option_id,
+        item.retainer_shape,
+        item.buyer_value_proof_required,
+        item.included_work,
+        item.approval_state,
+        item.payment_state,
+        '0',
+      ].map(csvCell).join(','),
+    ),
+  ].join('\n')
+  const decisionLedgerCsv = [
+    ['workspace_slug', 'lead_id', 'renewal_action', 'owner', 'state', 'evidence_required', 'real_mrr_delta'].map(csvCell).join(','),
+    ...decisionLedger.map((item) =>
+      [
+        workspaceSlug,
+        leadId,
+        item.renewal_action,
+        item.owner,
+        item.state,
+        item.evidence_required,
+        '0',
+      ].map(csvCell).join(','),
+    ),
+  ].join('\n')
+  const roadmapCsv = [
+    ['workspace_slug', 'lead_id', 'module_id', 'trigger', 'proof_needed', 'state', 'real_mrr_delta'].map(csvCell).join(','),
+    ...nextModuleRoadmap.map((item) =>
+      [
+        workspaceSlug,
+        leadId,
+        item.module_id,
+        item.trigger,
+        item.proof_needed,
+        item.state,
+        '0',
+      ].map(csvCell).join(','),
+    ),
+  ].join('\n')
+  const invoiceRequestDraft = [
+    `# ${templateName} retainer invoice request draft`,
+    '',
+    'Status: draft - owner approval required before sending',
+    `Lead: ${leadId}`,
+    `Workspace: ${workspaceSlug}`,
+    `Retainer quote: ${retainerQuote}`,
+    'Payment route: PAYMENT_LINK_REQUIRED_AFTER_OWNER_APPROVAL',
+    'Real MRR delta: 0',
+    '',
+    '## Buyer message',
+    'The first 30-day support review shows enough evidence to propose a managed retainer, but this invoice request is not live until the owner approves the exact MMK quote and payment route.',
+    '',
+    '## Stop conditions',
+    '- Do not send this invoice request without owner approval.',
+    '- Do not create a live payment link from this packet.',
+    '- Do not claim MRR until payment proof is attached and reconciled.',
+  ].join('\n')
+  const clientEmailDraft = [
+    `# ${templateName} retainer offer email draft`,
+    '',
+    'Status: draft - review before sending',
+    `Lead: ${leadId}`,
+    `Workspace: ${workspaceSlug}`,
+    `Evidence reference: ${evidenceReference || 'RETAINER_GROWTH_REFERENCE_REQUIRED'}`,
+    '',
+    'Hi,',
+    '',
+    'Based on the first support cycle, I can keep this running as a managed AI-agent workcell instead of a one-off build.',
+    '',
+    'The next step is a short value review: confirm what saved time, reduced risk, or moved revenue, then choose the retainer shape that matches the real workflow.',
+    '',
+    'I will not send payment requests, connect accounts, write records, or claim recurring revenue without owner approval and payment proof.',
+  ].join('\n')
+  const packet = [
+    `# ${templateName} retainer growth offer`,
+    '',
+    'Status: retainer_growth_offer_ready',
+    `Lead: ${leadId}`,
+    `Workspace: ${workspaceSlug}`,
+    `Evidence reference: ${evidenceReference || 'RETAINER_GROWTH_REFERENCE_REQUIRED'}`,
+    `Prepared at: ${preparedAt}`,
+    'Offer type: evidence_gated_retainer_growth',
+    `Retainer quote: ${retainerQuote}`,
+    'Recurring revenue state: not_claimed',
+    'Real MRR delta: 0',
+    '',
+    '## Offer options',
+    offerOptions.map((item) => `- ${item.option_id}: ${item.retainer_shape} (${item.buyer_value_proof_required})`).join('\n'),
+    '',
+    '## Decision ledger',
+    decisionLedger.map((item) => `- ${item.renewal_action}: ${item.state} / ${item.evidence_required}`).join('\n'),
+    '',
+    '## Next module roadmap',
+    nextModuleRoadmap.map((item) => `- ${item.module_id}: ${item.trigger}`).join('\n'),
+    '',
+    '## Guardrails',
+    '- This offer is not a payment request until the owner approves the MMK quote and message.',
+    '- Real MRR remains 0 until payment proof is recorded.',
+    '- Expansion modules require a source sample, first proof, and acceptance tests.',
+  ].join('\n')
+  const config = {
+    status: 'retainer_growth_offer_ready',
+    offer_type: 'evidence_gated_retainer_growth',
+    workspace_slug: workspaceSlug,
+    lead_id: leadId,
+    template_name: templateName,
+    retainer_quote: retainerQuote,
+    option_ids: offerOptions.map((item) => item.option_id),
+    decision_actions: decisionLedger.map((item) => item.renewal_action),
+    next_module_candidates: nextModuleRoadmap.map((item) => item.module_id),
+    recurring_revenue_state: 'not_claimed',
+    payment_state: 'payment_proof_required_before_mrr',
+    real_mrr_delta: 0,
+  }
+  return {
+    status: 'retainer_growth_offer_ready',
+    offer_type: 'evidence_gated_retainer_growth',
+    workspace_slug: workspaceSlug,
+    lead_id: leadId,
+    template_name: templateName,
+    evidence_reference: evidenceReference,
+    prepared_at: preparedAt,
+    prepared_by: 'operator_console',
+    retainer_quote: retainerQuote,
+    offer_options: offerOptions,
+    decision_ledger: decisionLedger,
+    next_module_roadmap: nextModuleRoadmap,
+    recurring_revenue_state: 'not_claimed',
+    payment_state: 'payment_proof_required_before_mrr',
+    real_mrr_delta: 0,
+    packet,
+    offer_options_csv: offerOptionsCsv,
+    decision_ledger_csv: decisionLedgerCsv,
+    next_module_roadmap_csv: roadmapCsv,
+    invoice_request_draft: invoiceRequestDraft,
+    client_email_draft: clientEmailDraft,
+    config,
+    config_json: JSON.stringify(config, null, 2),
+    guardrails: [
+      'retainer_offer_is_not_payment_proof',
+      'owner_approval_required_before_invoice_or_client_send',
+      'no_real_mrr_claim_without_payment_proof',
+      'next_module_requires_source_sample_and_acceptance_tests',
+    ],
+  }
+}
+
 function envText(...names) {
   for (const name of names) {
     const value = text(process.env[name])
@@ -998,6 +1196,7 @@ function firstProofPacket(row) {
   const productionApprovalQueue = parseJsonObject(result.production_approval_queue || payload.production_approval_queue)
   const enterpriseDeliveryPack = parseJsonObject(result.enterprise_delivery_pack || payload.enterprise_delivery_pack)
   const customerSuccessDesk = parseJsonObject(result.customer_success_desk || payload.customer_success_desk)
+  const retainerGrowthOffer = parseJsonObject(result.retainer_growth_offer || payload.retainer_growth_offer)
   const orderRoomState = Object.keys(persistedOrderRoomState).length
     ? persistedOrderRoomState
     : {
@@ -1341,6 +1540,14 @@ function firstProofPacket(row) {
       customer_success_renewal_queue_csv: text(customerSuccessDesk.renewal_queue_csv),
       customer_success_client_update: text(customerSuccessDesk.client_update_draft),
       customer_success_config_json: text(customerSuccessDesk.config_json) || (Object.keys(customerSuccessDesk.config || {}).length ? JSON.stringify(customerSuccessDesk.config, null, 2) : ''),
+      retainer_growth_offer: Object.keys(retainerGrowthOffer).length ? retainerGrowthOffer : null,
+      retainer_growth_packet: text(retainerGrowthOffer.packet),
+      retainer_offer_options_csv: text(retainerGrowthOffer.offer_options_csv),
+      retainer_decision_ledger_csv: text(retainerGrowthOffer.decision_ledger_csv),
+      retainer_next_module_roadmap_csv: text(retainerGrowthOffer.next_module_roadmap_csv),
+      retainer_invoice_request_draft: text(retainerGrowthOffer.invoice_request_draft),
+      retainer_client_email_draft: text(retainerGrowthOffer.client_email_draft),
+      retainer_growth_config_json: text(retainerGrowthOffer.config_json) || (Object.keys(retainerGrowthOffer.config || {}).length ? JSON.stringify(retainerGrowthOffer.config, null, 2) : ''),
       state: orderRoomState,
     },
     approval_required: result.approval_required !== undefined ? result.approval_required !== false : task.approval_required !== false,
@@ -2168,6 +2375,100 @@ async function prepareCustomerSuccessDesk(payload) {
   }
 }
 
+async function prepareRetainerGrowthOffer(payload) {
+  const actionId = text(payload.action_id)
+  const leadId = text(payload.lead_id)
+  const evidenceReference = text(payload.retainer_growth_reference || payload.renewal_reference || payload.evidence_reference)
+  if (!actionId && !leadId) return { status: 'error', reason: 'missing_action_or_lead_id' }
+  if (!evidenceReference) return { status: 'error', reason: 'missing_retainer_growth_reference' }
+  if (!datastore.postgresConfigured()) return { status: 'error', reason: 'postgres_not_configured' }
+
+  const selected = await datastore.query(
+    `
+      select
+        action_id, lead_id, task_id, action_type, status, priority, owner,
+        title, next_step, approval_required, approval_state,
+        notification_channel, notification_status, payload, result, created_at
+      from public.supermega_pipeline_actions
+      where (($1 <> '' and action_id = $1) or ($1 = '' and $2 <> '' and lead_id = $2))
+      order by created_at desc
+      limit 1
+    `,
+    [actionId, leadId],
+  )
+  if (selected.status !== 'ready') return selected
+  if (!selected.rows.length) return { status: 'error', reason: 'action_not_found' }
+
+  const row = selected.rows[0]
+  const currentResult = parseJsonObject(row.result)
+  const customerSuccessDesk = parseJsonObject(currentResult.customer_success_desk)
+  if (customerSuccessDesk.status !== 'customer_success_desk_ready') {
+    return {
+      status: 'error',
+      reason: 'customer_success_desk_required',
+      action: safeAction(row),
+    }
+  }
+
+  const existingOffer = parseJsonObject(currentResult.retainer_growth_offer)
+  if (existingOffer.status === 'retainer_growth_offer_ready') {
+    return {
+      status: 'ready',
+      adapter: 'vercel_postgres_neon',
+      operation_status: 'already_prepared',
+      action: safeAction(row),
+      retainer_growth_offer: existingOffer,
+    }
+  }
+
+  const context = contextFromActionRow(row, parseJsonObject(currentResult.pilot_order_room_state))
+  const preparedAt = new Date().toISOString()
+  const retainerGrowthOffer = buildRetainerGrowthOfferPack({
+    ...context,
+    customerSuccessDesk,
+    evidenceReference,
+    retainerQuote: payload.retainer_quote,
+    preparedAt,
+  })
+  const result = await datastore.query(
+    `
+      with target as (
+        select id
+        from public.supermega_pipeline_actions
+        where (($1 <> '' and action_id = $1) or ($1 = '' and $2 <> '' and lead_id = $2))
+        order by created_at desc
+        limit 1
+      )
+      update public.supermega_pipeline_actions a
+      set
+        result = jsonb_set(
+          jsonb_set(coalesce(a.result, '{}'::jsonb), '{retainer_growth_offer}', $3::jsonb, true),
+          '{retainer_growth_offer_prepared_at}',
+          to_jsonb($4::text),
+          true
+        ),
+        status = 'retainer_growth_offer_ready',
+        next_step = 'Review value evidence, approve the retainer quote, then send the retainer offer only after owner approval.',
+        updated_at = now()
+      where a.id in (select id from target)
+      returning
+        a.action_id, a.lead_id, a.task_id, a.action_type, a.status, a.priority, a.owner,
+        a.title, a.next_step, a.approval_required, a.approval_state,
+        a.notification_channel, a.notification_status, a.payload, a.result, a.created_at
+    `,
+    [actionId, leadId, JSON.stringify(retainerGrowthOffer), preparedAt],
+  )
+  if (result.status !== 'ready') return { ...result, retainer_growth_offer: retainerGrowthOffer }
+  if (!result.rows.length) return { status: 'error', reason: 'action_not_found', retainer_growth_offer: retainerGrowthOffer }
+  return {
+    status: 'ready',
+    adapter: 'vercel_postgres_neon',
+    operation_status: 'prepared',
+    action: safeAction(result.rows[0]),
+    retainer_growth_offer: retainerGrowthOffer,
+  }
+}
+
 function primaryDatabaseStatus(result) {
   if (!result || result.status === 'ready') {
     return { status: 'ready' }
@@ -2188,8 +2489,8 @@ function primaryDatabaseStatus(result) {
 function writeStatusCode(result) {
   if (result.status === 'ready') return 200
   if (result.reason === 'action_not_found') return 404
-  if (['private_workspace_not_ready', 'private_workspace_required', 'first_run_acceptance_required', 'owner_acceptance_required', 'owner_acceptance_not_accepted', 'connector_policy_required', 'production_approval_queue_required', 'enterprise_delivery_pack_required', 'use_start_private_workspace_operation'].includes(result.reason)) return 409
-  if (['missing_action_or_lead_id', 'invalid_owner_acceptance_decision', 'missing_owner_acceptance_reference', 'invalid_connector_policy_mode', 'missing_connector_policy_reference', 'missing_production_queue_reference', 'missing_enterprise_delivery_reference', 'missing_customer_success_reference'].includes(result.reason)) return 400
+  if (['private_workspace_not_ready', 'private_workspace_required', 'first_run_acceptance_required', 'owner_acceptance_required', 'owner_acceptance_not_accepted', 'connector_policy_required', 'production_approval_queue_required', 'enterprise_delivery_pack_required', 'customer_success_desk_required', 'use_start_private_workspace_operation'].includes(result.reason)) return 409
+  if (['missing_action_or_lead_id', 'invalid_owner_acceptance_decision', 'missing_owner_acceptance_reference', 'invalid_connector_policy_mode', 'missing_connector_policy_reference', 'missing_production_queue_reference', 'missing_enterprise_delivery_reference', 'missing_customer_success_reference', 'missing_retainer_growth_reference'].includes(result.reason)) return 400
   return 503
 }
 
@@ -2322,6 +2623,15 @@ async function handler(req, res) {
     }
     if (operation === 'prepare_customer_success_desk') {
       const prepared = await prepareCustomerSuccessDesk(payload)
+      json(res, writeStatusCode(prepared), {
+        endpoint: 'pipeline-control',
+        operation,
+        ...prepared,
+      })
+      return
+    }
+    if (operation === 'prepare_retainer_growth_offer') {
+      const prepared = await prepareRetainerGrowthOffer(payload)
       json(res, writeStatusCode(prepared), {
         endpoint: 'pipeline-control',
         operation,
@@ -2575,11 +2885,13 @@ handler.__test = {
   buildOwnerAcceptanceRecord,
   buildPrivateWorkspaceManifest,
   buildProductionApprovalQueue,
+  buildRetainerGrowthOfferPack,
   firstProofPacket,
   prepareFirstRunAcceptance,
   prepareCustomerSuccessDesk,
   prepareEnterpriseDeliveryPack,
   prepareProductionApprovalQueue,
+  prepareRetainerGrowthOffer,
   recordConnectorPolicy,
   recordOwnerAcceptance,
   safeAction,
