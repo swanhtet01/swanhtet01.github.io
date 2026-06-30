@@ -319,6 +319,8 @@ function renderFirstProofBrief(row, lead = {}) {
   const starterKit = text(task.starter_kit_url) || text(payload.starter_kit_url)
   const humanGate = text(task.human_gate) || 'owner approval before send/write/payment actions'
   const operatorBrief = text(task.operator_brief) || `${templateName} first proof for ${company}.\nFirst proof: ${proofTarget}.`
+  const solutionRoute = parsePayload(task.solution_route || payload.solution_route)
+  const solutionRoutePacket = text(solutionRoute.packet)
   const intakeJob = parsePayload(task.intake_job || payload.intake_job)
   const intakeJobPacket = text(intakeJob.packet)
   const clientKickoffPack = parsePayload(task.client_kickoff_pack || payload.client_kickoff_pack)
@@ -339,6 +341,9 @@ function renderFirstProofBrief(row, lead = {}) {
     '## Operator brief',
     operatorBrief,
     '',
+    solutionRoutePacket ? '## Solution route' : '',
+    solutionRoutePacket,
+    solutionRoutePacket ? '' : '',
     clientKickoffPacket ? '## Client kickoff pack' : '',
     clientKickoffPacket,
     clientKickoffPacket ? '' : '',
@@ -368,6 +373,8 @@ function renderFirstProofBrief(row, lead = {}) {
     acceptance_tests: acceptanceTests,
     starter_kit_url: starterKit,
     first_proof_target: proofTarget,
+    solution_route: Object.keys(solutionRoute).length ? solutionRoute : null,
+    solution_route_packet: solutionRoutePacket,
     intake_job: Object.keys(intakeJob).length ? intakeJob : null,
     intake_job_packet: intakeJobPacket,
     client_kickoff_pack: Object.keys(clientKickoffPack).length ? clientKickoffPack : null,

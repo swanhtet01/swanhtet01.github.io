@@ -72,6 +72,16 @@ const action = internals.safeAction({
       starter_kit_url: '/site/agent-templates/daily-intelligence-brief.json',
       price_hint: '11,000,000 MMK setup',
       first_proof_target: 'One-page morning brief with what changed and what to do next.',
+      solution_route: {
+        status: 'route_ready',
+        route_type: 'autopilot_solution_router',
+        template_id: 'daily-intelligence-brief',
+        package_name: 'Daily Intelligence Brief Agent',
+        delivery_lane: 'decision_brief_workcell',
+        service_model: 'managed_ai_workcell',
+        packet: '# Daily Intelligence Brief Agent solution route\n\n## First proof\nOne-page morning brief with what changed and what to do next.\n\n## Premium delivery controls\n- Source trace on important outputs.',
+        real_mrr_delta: 0,
+      },
       intake_job: {
         status: 'ready_for_first_proof_build',
         job_type: 'intake_to_first_proof',
@@ -120,6 +130,12 @@ assert.equal(action.first_proof.template_name, 'Daily Intelligence Brief Agent')
 assert.equal(action.first_proof.starter_kit_url, '/site/agent-templates/daily-intelligence-brief.json')
 assert.equal(action.first_proof.approval_required, true)
 assert.equal(action.first_proof.human_gate, 'owner approval before send/write/payment actions')
+assert.equal(action.first_proof.solution_route.route_type, 'autopilot_solution_router')
+assert.equal(action.first_proof.solution_route.template_id, 'daily-intelligence-brief')
+assert.equal(action.first_proof.solution_route.delivery_lane, 'decision_brief_workcell')
+assert.ok(action.first_proof.solution_route_packet.includes('solution route'))
+assert.ok(action.first_proof.solution_route_packet.includes('Premium delivery controls'))
+assert.ok(action.first_proof.solution_route_json.includes('"real_mrr_delta": 0'))
 assert.equal(action.first_proof.intake_job.job_type, 'intake_to_first_proof')
 assert.ok(action.first_proof.intake_job_packet.includes('intake-to-first-proof job'))
 assert.ok(action.first_proof.intake_job_packet.includes('Source manifest'))
@@ -187,6 +203,7 @@ console.log(
       proof_delivery_packet: 'ready',
       pilot_close_packet: 'ready',
       pilot_order_room: 'ready',
+      solution_route: action.first_proof.solution_route.route_type,
       intake_job: action.first_proof.intake_job.job_type,
       kickoff_pack: action.first_proof.client_kickoff_pack.pack_type,
       private_workspace_manifest: action.first_proof.pilot_order_room.private_workspace_manifest.status,

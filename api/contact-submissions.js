@@ -310,6 +310,196 @@ function recommendedNextStep(record) {
   return 'Reply asking for the first messy workflow, current tools, and the team that owns it.'
 }
 
+const solutionRouteCatalog = [
+  {
+    template_id: 'deskpos-quickstart',
+    package_name: 'DeskPOS Quickstart',
+    product_area: 'DeskPOS',
+    delivery_lane: 'pos_launch_workcell',
+    keywords: ['pos', 'point of sale', 'restaurant', 'cafe', 'shop', 'store', 'retail', 'spa', 'salon', 'clinic', 'booking', 'checkout', 'receipt', 'inventory', 'stock'],
+    first_proof_target: 'Working checkout, booking flow, receipt proof, and daily close insight on their starting catalog.',
+    source_requests: ['service or product list', 'staff list', 'payment wallet name', 'opening hours'],
+    sales_motion: 'Sell a fixed-scope DeskPOS setup after one checkout or booking proof is accepted.',
+  },
+  {
+    template_id: 'chat-ledger',
+    package_name: 'Viber / WhatsApp Business Ledger',
+    product_area: 'Custom Solutions & AI Agents',
+    delivery_lane: 'chat_to_ledger_workcell',
+    keywords: ['viber', 'whatsapp', 'messenger', 'chat', 'orders', 'customer messages', 'invoice', 'delivery', 'unpaid', 'balance', 'follow up'],
+    first_proof_target: 'Clean table of recent orders, who owes money, and which customers need follow-up today.',
+    source_requests: ['ten order screenshots or export rows', 'product list', 'payment proof examples', 'delivery rules'],
+    sales_motion: 'Sell a managed chat-to-ledger pilot after the buyer sees unpaid balances and follow-up drafts.',
+  },
+  {
+    template_id: 'inbox-calendar-operator',
+    package_name: 'Inbox & Calendar Operator',
+    product_area: 'Custom Solutions & AI Agents',
+    delivery_lane: 'inbox_calendar_workcell',
+    keywords: ['gmail', 'email', 'inbox', 'calendar', 'meeting', 'reply', 'assistant', 'followup', 'follow-up', 'schedule', 'appointment'],
+    first_proof_target: 'Morning action brief with drafted replies, meeting prep, and follow-up tasks waiting for approval.',
+    source_requests: ['approved inbox labels or sample emails', 'calendar categories', 'reply examples', 'VIP contacts'],
+    sales_motion: 'Sell a read-only inbox/calendar operator first, then add approval-gated sending after trust is proven.',
+  },
+  {
+    template_id: 'daily-intelligence-brief',
+    package_name: 'Daily Intelligence Brief Agent',
+    product_area: 'Custom Solutions & AI Agents',
+    delivery_lane: 'decision_brief_workcell',
+    keywords: ['brief', 'daily', 'morning', 'news', 'watch', 'monitor', 'supplier', 'competitor', 'market', 'research', 'decision', 'report'],
+    first_proof_target: 'One-page morning brief with what changed, why it matters, and exact follow-up actions.',
+    source_requests: ['watchlist URLs', 'company names or keywords', 'inbox labels', 'decision categories'],
+    sales_motion: 'Sell a recurring owner brief after one source-traced decision packet is accepted.',
+  },
+  {
+    template_id: 'factory-ops-ledger',
+    package_name: 'Factory Ops Ledger',
+    product_area: 'Factory & Operations App',
+    delivery_lane: 'factory_ops_workcell',
+    keywords: ['factory', 'production', 'quality', 'maintenance', 'machine', 'line', 'plant', 'warehouse', 'receiving', 'capa', 'issue', 'defect'],
+    first_proof_target: 'Dashboard showing production, quality claims, open issues, and the top risks to review today.',
+    source_requests: ['daily production sheet', 'quality claim log', 'maintenance notes', 'machine or line list'],
+    sales_motion: 'Sell a plant ledger pilot after the buyer accepts one read-only risk queue.',
+  },
+  {
+    template_id: 'data-clean-report-agent',
+    package_name: 'Data Cleanup & Reporting Agent',
+    product_area: 'Custom Solutions & AI Agents',
+    delivery_lane: 'data_cleanup_workcell',
+    keywords: ['excel', 'spreadsheet', 'sheet', 'pdf', 'file', 'files', 'data', 'clean', 'cleanup', 'report', 'reconcile', 'extract', 'ocr', 'dashboard'],
+    first_proof_target: 'One messy file cleaned into the target table with exceptions highlighted and a short summary report.',
+    source_requests: ['one messy source file', 'target report format', 'validation rules', 'known exception examples'],
+    sales_motion: 'Sell a repeatable cleanup/reporting agent after one messy source becomes a clean, reviewed output.',
+  },
+]
+
+function buildSolutionRoute(record = {}) {
+  const explicitTemplate = text(record.template_id)
+  const blob = [
+    record.requested_package,
+    record.public_package,
+    record.product_area,
+    record.workflow,
+    record.goal,
+    record.data,
+    record.company,
+    record.source_links,
+    record.page_path,
+    record.source_url,
+  ].join(' ').toLowerCase()
+  const ranked = solutionRouteCatalog
+    .map((route) => {
+      let score = route.template_id === explicitTemplate ? 80 : 0
+      if (text(record.public_package).toLowerCase() === route.package_name.toLowerCase()) score += 45
+      if (text(record.requested_package).toLowerCase() === route.package_name.toLowerCase()) score += 35
+      if (text(record.product_area).toLowerCase() === route.product_area.toLowerCase()) score += 18
+      const matched_keywords = route.keywords.filter((keyword) => blob.includes(keyword.toLowerCase()))
+      score += Math.min(42, matched_keywords.length * 7)
+      return { route, score, matched_keywords }
+    })
+    .sort((a, b) => b.score - a.score)
+  const winner = ranked[0]
+  const route = winner?.route || solutionRouteCatalog[solutionRouteCatalog.length - 1]
+  const matchedKeywords = winner?.matched_keywords || []
+  const fitScore = Math.max(20, Math.min(100, winner?.score || 20))
+  const templateId = explicitTemplate || route.template_id
+  const requestedPackage = text(record.requested_package)
+  const publicPackage = text(record.public_package)
+  const genericPackage = /^(first output request|first useful output|general enquiry|general inquiry|custom supermega template)$/i
+  const packageName = publicPackage && !genericPackage.test(publicPackage)
+    ? publicPackage
+    : requestedPackage && !genericPackage.test(requestedPackage)
+      ? requestedPackage
+      : route.package_name
+  const firstProofTarget = text(record.first_proof_target) || text(record.first_output) || route.first_proof_target
+  const starterKitUrl = text(record.starter_kit_url) || `/site/agent-templates/${templateId}.json`
+  const priceHint = text(record.price_hint) || 'quote after first proof review'
+  const status = fitScore >= 55 || explicitTemplate ? 'route_ready' : 'needs_operator_review'
+  const sourceRequests = route.source_requests
+  const deliveryPath = [
+    'Confirm buyer goal and first proof target.',
+    'Use only buyer-approved source samples.',
+    'Build the first proof with source trace.',
+    'Review acceptance tests and buyer usefulness.',
+    'Only then approve pilot scope, payment route, and private workspace.',
+  ]
+  const packet = [
+    `# ${packageName} solution route`,
+    '',
+    `Status: ${status}`,
+    `Lead: ${record.lead_id || 'not set'}`,
+    `Recommended template: ${templateId}`,
+    `Product area: ${text(record.product_area) || route.product_area}`,
+    `Delivery lane: ${route.delivery_lane}`,
+    `Fit score: ${fitScore}`,
+    `Matched keywords: ${matchedKeywords.length ? matchedKeywords.join(', ') : 'operator review required'}`,
+    `Price hint: ${priceHint}`,
+    '',
+    '## First proof',
+    firstProofTarget,
+    '',
+    '## What to request',
+    ...sourceRequests.map((item) => `- ${item}`),
+    '',
+    '## Sales motion',
+    route.sales_motion,
+    '',
+    '## Premium delivery controls',
+    '- Source trace on important outputs.',
+    '- Role separation: buyer owner, buyer operator, SuperMega operator, agent worker.',
+    '- Approval queue before external sends, connector writes, credentialed browser actions, or payment requests.',
+    '- Value ledger before any recurring revenue claim.',
+    '',
+    '## First 48 hours',
+    ...deliveryPath.map((item, index) => `${index + 1}. ${item}`),
+    '',
+    '## Guardrails',
+    '- No external send without owner approval.',
+    '- No connector write without owner approval.',
+    '- No payment action without owner approval.',
+    '- Real MRR remains 0 until payment proof is recorded.',
+  ].join('\n')
+
+  return {
+    status,
+    route_type: 'autopilot_solution_router',
+    template_id: templateId,
+    package_name: packageName,
+    product_area: text(record.product_area) || route.product_area,
+    delivery_lane: route.delivery_lane,
+    fit_score: fitScore,
+    matched_keywords: matchedKeywords,
+    starter_kit_url: starterKitUrl,
+    first_proof_target: firstProofTarget,
+    price_hint: priceHint,
+    source_requests: sourceRequests,
+    sales_motion: route.sales_motion,
+    delivery_path: deliveryPath,
+    service_model: 'managed_ai_workcell',
+    enterprise_controls: ['source_trace', 'role_separation', 'approval_queue', 'value_ledger'],
+    approval_boundary: 'owner approval before send/write/payment actions',
+    external_action_state: 'blocked_until_owner_approval',
+    connector_write_state: 'blocked_until_owner_approval',
+    payment_action_state: 'blocked_until_owner_approval',
+    real_mrr_delta: 0,
+    packet,
+  }
+}
+
+function recordWithSolutionRoute(record, solutionRoute) {
+  const genericPackage = /^(first output request|first useful output|general enquiry|general inquiry|custom supermega template)$/i
+  return {
+    ...record,
+    template_id: record.template_id || solutionRoute.template_id,
+    public_package: record.public_package && !genericPackage.test(record.public_package) ? record.public_package : solutionRoute.package_name,
+    requested_package: record.requested_package && !genericPackage.test(record.requested_package) ? record.requested_package : solutionRoute.package_name,
+    product_area: record.product_area || solutionRoute.product_area,
+    starter_kit_url: record.starter_kit_url || solutionRoute.starter_kit_url,
+    price_hint: record.price_hint || solutionRoute.price_hint,
+    first_proof_target: record.first_proof_target || solutionRoute.first_proof_target,
+  }
+}
+
 function onboardingPlan(record) {
   const firstOutput = record.first_output || record.requested_package || 'First useful output'
   return {
@@ -698,39 +888,43 @@ function buildClientKickoffPack(record, intakeJob = {}) {
 }
 
 function buildFirstProofTaskPayload(record) {
-  const acceptanceTests = listFromText(record.acceptance_tests)
-  const proofTarget = record.first_proof_target || record.first_output || record.requested_package || 'First useful output'
-  const starterKitUrl = record.starter_kit_url || (record.template_id ? `/site/agent-templates/${record.template_id}.json` : '')
-  const templateName = record.public_package || record.requested_package || record.template_id || 'Custom SUPERMEGA template'
-  const intakeJob = buildIntakeJob(record, acceptanceTests)
-  const clientKickoffPack = buildClientKickoffPack(record, intakeJob)
+  const solutionRoute = buildSolutionRoute(record)
+  const routedRecord = recordWithSolutionRoute(record, solutionRoute)
+  const acceptanceTests = listFromText(routedRecord.acceptance_tests)
+  const proofTarget = routedRecord.first_proof_target || routedRecord.first_output || routedRecord.requested_package || 'First useful output'
+  const starterKitUrl = routedRecord.starter_kit_url || (routedRecord.template_id ? `/site/agent-templates/${routedRecord.template_id}.json` : '')
+  const templateName = routedRecord.public_package || routedRecord.requested_package || routedRecord.template_id || 'Custom SUPERMEGA template'
+  const intakeJob = buildIntakeJob(routedRecord, acceptanceTests)
+  const clientKickoffPack = buildClientKickoffPack(routedRecord, intakeJob)
   const sourceSummary = [
-    record.source_links ? `source links: ${record.source_links}` : '',
-    record.source_file_count ? `file count: ${record.source_file_count}` : '',
-    record.source_file_names ? `files: ${record.source_file_names}` : '',
+    routedRecord.source_links ? `source links: ${routedRecord.source_links}` : '',
+    routedRecord.source_file_count ? `file count: ${routedRecord.source_file_count}` : '',
+    routedRecord.source_file_names ? `files: ${routedRecord.source_file_names}` : '',
   ].filter(Boolean).join('; ')
   const operatorBrief = [
-    `${templateName} first proof for ${record.company || record.name || record.email}.`,
-    `Goal: ${record.goal || 'Confirm the workflow and produce the first proof.'}`,
+    `${templateName} first proof for ${routedRecord.company || routedRecord.name || routedRecord.email}.`,
+    `Goal: ${routedRecord.goal || 'Confirm the workflow and produce the first proof.'}`,
+    `Recommended route: ${solutionRoute.package_name} (${solutionRoute.delivery_lane}).`,
     `First proof: ${proofTarget}.`,
     starterKitUrl ? `Starter kit: ${starterKitUrl}.` : '',
     sourceSummary ? `Sources: ${sourceSummary}.` : 'Sources: request the minimum sample sources before building.',
-    `Boundary: ${record.automation_boundary || 'Approval required before external sends, connector writes, payment actions, or live record edits.'}`,
+    `Boundary: ${routedRecord.automation_boundary || 'Approval required before external sends, connector writes, payment actions, or live record edits.'}`,
   ].filter(Boolean).join('\n')
 
   return {
     type: 'first_proof_build',
     status: 'queued',
-    template_id: record.template_id || '',
-    template_status: record.template_status || '',
+    template_id: routedRecord.template_id || '',
+    template_status: routedRecord.template_status || '',
     template_name: templateName,
     starter_kit_url: starterKitUrl,
-    product_area: record.product_area || '',
-    source_category: record.template_source_category || '',
-    source_area: record.template_source_area || '',
-    price_hint: record.price_hint || '',
+    product_area: routedRecord.product_area || '',
+    source_category: routedRecord.template_source_category || '',
+    source_area: routedRecord.template_source_area || '',
+    price_hint: routedRecord.price_hint || '',
     first_proof_target: proofTarget,
     operator_brief: truncate(operatorBrief, 2200),
+    solution_route: solutionRoute,
     intake_job: intakeJob,
     client_kickoff_pack: clientKickoffPack,
     source_trace: intakeJob.source_manifest
@@ -775,6 +969,7 @@ function pipelineActionPayload(record) {
       requested_package: record.requested_package,
       first_output: record.first_output,
       product_area: record.product_area,
+      solution_route: firstProofTask.solution_route,
       template_id: record.template_id,
       template_status: record.template_status,
       template_source_category: record.template_source_category,
@@ -1016,6 +1211,7 @@ function buildLeadRecord({ leadId, taskId, payload, req }) {
 }
 
 function emailRows(record) {
+  const route = buildSolutionRoute(record)
   const rows = [
     ['Lead', record.lead_id],
     ['Task', record.task_id],
@@ -1027,6 +1223,8 @@ function emailRows(record) {
     ['First output', record.first_output || record.requested_package],
     ['Public package', record.public_package],
     ['Template', record.template_id],
+    ['Recommended route', `${route.package_name} / ${route.delivery_lane}`],
+    ['Route first proof', route.first_proof_target],
     ['Template source', [record.template_source_category, record.template_source_area].filter(Boolean).join(' / ')],
     ['Starter kit', record.starter_kit_url],
     ['Operator console', operatorConsoleUrl()],
@@ -1189,6 +1387,7 @@ async function postLeadWebhook({ record }) {
 // Build the concise CEO lead-alert text, then push it via the shared Telegram helper.
 // Best-effort: the helper never throws and skips cleanly when TELEGRAM_* isn't configured.
 function telegramLeadMessage(record) {
+  const route = buildSolutionRoute(record)
   const company = record.company || record.name || 'Unknown'
   const goal = (record.goal || record.workflow || '').slice(0, 280)
   const score = record.lead_score || 0
@@ -1204,6 +1403,7 @@ function telegramLeadMessage(record) {
     `Contact: ${record.email}${record.phone ? ' / ' + record.phone : ''}`,
     pkg && pkg !== 'General enquiry' ? `Package: ${pkg}` : '',
     record.template_id ? `Template: ${record.template_id}` : '',
+    `Route: ${route.package_name} / ${route.delivery_lane}`,
     `Score: ${score} - ${record.lead_stage || 'needs_discovery'}`,
     `Goal: ${goal}`,
     `First proof: ${proofTarget}`,
@@ -1350,6 +1550,7 @@ async function handler(req, res) {
   const leadId = `LEAD-${crypto.randomBytes(6).toString('hex').toUpperCase()}`
   const taskId = `TASK-${crypto.randomBytes(6).toString('hex').toUpperCase()}`
   const record = buildLeadRecord({ leadId, taskId, payload: { ...payload, name, email, company, goal }, req })
+  const solutionRoute = buildSolutionRoute(record)
   const ledger = await saveLeadLedger({ record })
   const pipelineAction = await savePipelineAction({ record })
   const [webhook, deskposPipeline] = await Promise.all([
@@ -1452,6 +1653,7 @@ async function handler(req, res) {
     message: 'Submission routed.',
     submission: publicSubmission,
     onboarding: onboardingPlan(record),
+    solution_route: solutionRoute,
     delivery,
     ledger,
     pipeline_action: pipelineAction,
@@ -1477,11 +1679,13 @@ async function handler(req, res) {
         next_step: record.next_step,
       },
       onboarding: onboardingPlan(record),
+      solution_route: solutionRoute,
     },
   })
 }
 
 handler.__test = {
+  buildSolutionRoute,
   buildFirstProofTaskPayload,
   buildClientKickoffPack,
   buildIntakeJob,

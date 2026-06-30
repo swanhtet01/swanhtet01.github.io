@@ -11,6 +11,7 @@ function fail(message, extra = {}) {
 
 const internals = handler.__test || {}
 if (
+  typeof internals.buildSolutionRoute !== 'function' ||
   typeof internals.buildIntakeJob !== 'function' ||
   typeof internals.buildClientKickoffPack !== 'function' ||
   typeof internals.buildFirstProofTaskPayload !== 'function' ||
@@ -54,6 +55,18 @@ const record = {
   next_step: 'Reply with one proof request.',
 }
 
+const solutionRoute = internals.buildSolutionRoute(record)
+assert.equal(solutionRoute.route_type, 'autopilot_solution_router')
+assert.equal(solutionRoute.status, 'route_ready')
+assert.equal(solutionRoute.template_id, 'daily-intelligence-brief')
+assert.equal(solutionRoute.package_name, 'Daily Intelligence Brief Agent')
+assert.equal(solutionRoute.delivery_lane, 'decision_brief_workcell')
+assert.equal(solutionRoute.service_model, 'managed_ai_workcell')
+assert.equal(solutionRoute.real_mrr_delta, 0)
+assert.ok(solutionRoute.source_requests.some((item) => item.includes('watchlist')))
+assert.ok(solutionRoute.packet.includes('solution route'))
+assert.ok(solutionRoute.packet.includes('Premium delivery controls'))
+
 const intakeJob = internals.buildIntakeJob(record)
 assert.equal(intakeJob.job_type, 'intake_to_first_proof')
 assert.equal(intakeJob.status, 'ready_for_first_proof_build')
@@ -87,6 +100,10 @@ assert.equal(proofTask.starter_kit_url, '/site/agent-templates/daily-intelligenc
 assert.equal(proofTask.first_proof_target, record.first_proof_target)
 assert.equal(proofTask.approval_required, true)
 assert.equal(proofTask.human_gate, 'owner approval before send/write/payment actions')
+assert.equal(proofTask.solution_route.route_type, 'autopilot_solution_router')
+assert.equal(proofTask.solution_route.template_id, 'daily-intelligence-brief')
+assert.equal(proofTask.solution_route.delivery_lane, 'decision_brief_workcell')
+assert.equal(proofTask.solution_route.real_mrr_delta, 0)
 assert.equal(proofTask.intake_job.job_type, 'intake_to_first_proof')
 assert.equal(proofTask.client_kickoff_pack.pack_type, 'client_kickoff_pack')
 assert.ok(proofTask.intake_job.packet.includes('First run steps'))
@@ -107,12 +124,15 @@ assert.equal(action.action_type, 'lead_followup')
 assert.equal(action.payload.first_proof_task.type, 'first_proof_build')
 assert.equal(action.payload.first_proof_task.template_id, 'daily-intelligence-brief')
 assert.equal(action.payload.first_proof_task.operator_brief, proofTask.operator_brief)
+assert.equal(action.payload.solution_route.route_type, 'autopilot_solution_router')
+assert.equal(action.payload.first_proof_task.solution_route.route_type, 'autopilot_solution_router')
 assert.equal(action.payload.first_proof_task.intake_job.job_type, 'intake_to_first_proof')
 assert.equal(action.payload.first_proof_task.client_kickoff_pack.pack_type, 'client_kickoff_pack')
 assert.deepEqual(action.payload.first_proof_task.acceptance_tests, proofTask.acceptance_tests)
 
 const alert = internals.telegramLeadMessage(record)
 assert.ok(alert.includes('New setup lead - LEAD-TEST123'))
+assert.ok(alert.includes('Route: Daily Intelligence Brief Agent / decision_brief_workcell'))
 assert.ok(alert.includes('First proof: One-page morning brief'))
 assert.ok(alert.includes('Starter kit: https://supermega.dev/site/agent-templates/daily-intelligence-brief.json'))
 assert.ok(alert.includes('Setup page: https://supermega.dev/agent-templates/daily-intelligence-brief/setup/'))
@@ -124,6 +144,7 @@ console.log(
     {
       status: 'ready',
       proof_task: proofTask.type,
+      solution_route: solutionRoute.route_type,
       intake_job: intakeJob.job_type,
       kickoff_pack: kickoffPack.pack_type,
       template_id: proofTask.template_id,

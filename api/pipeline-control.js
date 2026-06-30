@@ -788,6 +788,7 @@ function firstProofPacket(row) {
   const nextStep = text(row.next_step) || 'Share one approved sample source so we can build the first proof.'
   const leadId = text(row.lead_id) || 'not set'
   const intakeJob = parseJsonObject(result.intake_job || task.intake_job || payload.intake_job)
+  const solutionRoute = parseJsonObject(result.solution_route || task.solution_route || payload.solution_route)
   const clientKickoffPack = parseJsonObject(result.client_kickoff_pack || task.client_kickoff_pack || payload.client_kickoff_pack)
   const sourceTrace = list(task.source_trace || payload.source_trace)
   const persistedOrderRoomState = parseJsonObject(result.pilot_order_room_state || payload.pilot_order_room_state)
@@ -1080,6 +1081,9 @@ function firstProofPacket(row) {
     template_name: templateName || null,
     starter_kit_url: starterKitUrl || null,
     first_proof_target: firstProofTarget || null,
+    solution_route: Object.keys(solutionRoute).length ? solutionRoute : null,
+    solution_route_packet: text(solutionRoute.packet),
+    solution_route_json: Object.keys(solutionRoute).length ? JSON.stringify(solutionRoute, null, 2) : '',
     intake_job: Object.keys(intakeJob).length ? intakeJob : null,
     intake_job_packet: text(intakeJob.packet),
     intake_job_json: Object.keys(intakeJob).length ? JSON.stringify(intakeJob, null, 2) : '',

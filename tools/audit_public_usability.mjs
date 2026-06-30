@@ -178,6 +178,7 @@ try {
         refreshVisible: Boolean(document.querySelector('#refresh')?.getBoundingClientRect().height),
         runnerVisible: Boolean(document.querySelector('#run-runner')?.getBoundingClientRect().height),
         hasStarterKitRenderer: html.includes('Open starter kit'),
+        hasSolutionRouteRenderer: html.includes('proofSolutionRoute') && html.includes('Copy solution route'),
         hasIntakeJobRenderer: html.includes('proofIntakeJob') && html.includes('Copy intake job'),
         hasClientKickoffRenderer: html.includes('proofClientKickoff') && html.includes('Copy kickoff pack'),
         hasChecklistRenderer: html.includes("proofList('Checklist'"),
@@ -194,12 +195,12 @@ try {
     })
     if (operator.title !== 'Operator Console | SUPERMEGA.dev') fail('operator_title_not_current', { viewport: viewport.name, operator })
     if (!operator.opsKeyVisible || !operator.sampleVisible || !operator.refreshVisible || !operator.runnerVisible) fail('operator_controls_missing', { viewport: viewport.name, operator })
-    if (!operator.hasStarterKitRenderer || !operator.hasIntakeJobRenderer || !operator.hasClientKickoffRenderer || !operator.hasChecklistRenderer || !operator.hasAcceptanceRenderer || !operator.hasBuyerReplyRenderer || !operator.hasProofDeliveryRenderer || !operator.hasPilotCloseRenderer || !operator.hasPilotOrderRoomRenderer || !operator.hasWorkspaceHandoffRenderer || !operator.hasOrderRoomPersistenceControls || !operator.hasSampleData) fail('operator_first_proof_renderer_missing', { viewport: viewport.name, operator })
+    if (!operator.hasStarterKitRenderer || !operator.hasSolutionRouteRenderer || !operator.hasIntakeJobRenderer || !operator.hasClientKickoffRenderer || !operator.hasChecklistRenderer || !operator.hasAcceptanceRenderer || !operator.hasBuyerReplyRenderer || !operator.hasProofDeliveryRenderer || !operator.hasPilotCloseRenderer || !operator.hasPilotOrderRoomRenderer || !operator.hasWorkspaceHandoffRenderer || !operator.hasOrderRoomPersistenceControls || !operator.hasSampleData) fail('operator_first_proof_renderer_missing', { viewport: viewport.name, operator })
     if (operator.overflowX > 0) fail('operator_horizontal_overflow', { viewport: viewport.name, operator })
     await page.click('#load-sample')
     await expectCopy(
       page,
-      ['Sample Daily Intelligence Brief first proof', 'Open starter kit', 'Intake job packet', 'Copy intake job', 'Client kickoff pack', 'Copy kickoff pack', 'Checklist', 'Acceptance tests', 'Buyer reply draft', 'Copy buyer reply', 'Proof delivery packet', 'Copy proof packet', 'Pilot close packet', 'Copy pilot packet', 'Paid pilot order room', 'Copy payment request', 'Copy payment ledger', 'Copy order ledger', 'Copy pilot start checklist', 'Copy owner activation packet', 'Copy owner action queue', 'Copy activation JSON', 'Copy workspace manifest', 'Copy workspace handoff', 'Copy first run queue', 'Save scope approval', 'Save payment proof', 'Create private workspace', 'Prepare first-run acceptance', 'Record owner accepted', 'Record changes requested', 'Record connector policy', 'Prepare autopilot approval queue', 'Prepare enterprise delivery pack', 'No lead was created'],
+      ['Sample Daily Intelligence Brief first proof', 'Open starter kit', 'Solution route', 'Copy solution route', 'Intake job packet', 'Copy intake job', 'Client kickoff pack', 'Copy kickoff pack', 'Checklist', 'Acceptance tests', 'Buyer reply draft', 'Copy buyer reply', 'Proof delivery packet', 'Copy proof packet', 'Pilot close packet', 'Copy pilot packet', 'Paid pilot order room', 'Copy payment request', 'Copy payment ledger', 'Copy order ledger', 'Copy pilot start checklist', 'Copy owner activation packet', 'Copy owner action queue', 'Copy activation JSON', 'Copy workspace manifest', 'Copy workspace handoff', 'Copy first run queue', 'Save scope approval', 'Save payment proof', 'Create private workspace', 'Prepare first-run acceptance', 'Record owner accepted', 'Record changes requested', 'Record connector policy', 'Prepare autopilot approval queue', 'Prepare enterprise delivery pack', 'No lead was created'],
       'operator_sample_packet',
       viewport.name,
     )
@@ -207,6 +208,7 @@ try {
       renderedActions: document.querySelectorAll('#operator-actions .operator-item').length,
       sampleStatus: document.querySelector('#operator-status')?.textContent || '',
       starterLink: document.querySelector('#operator-actions .operator-proof-link')?.getAttribute('href') || '',
+      solutionRoute: document.querySelector('#operator-actions #solution-route-0')?.value || '',
       intakeJob: document.querySelector('#operator-actions #intake-job-0')?.value || '',
       clientKickoff: document.querySelector('#operator-actions #client-kickoff-0')?.value || '',
       buyerReply: document.querySelector('#operator-actions #buyer-reply-0')?.value || '',
@@ -236,6 +238,7 @@ try {
     if (operatorSample.renderedActions !== 1) fail('operator_sample_action_missing', { viewport: viewport.name, operatorSample })
     if (!operatorSample.sampleStatus.includes('sample_loaded')) fail('operator_sample_status_missing', { viewport: viewport.name, operatorSample })
     if (operatorSample.starterLink !== '/site/agent-templates/daily-intelligence-brief.json') fail('operator_sample_starter_link_missing', { viewport: viewport.name, operatorSample })
+    if (!operatorSample.solutionRoute.includes('solution route') || !operatorSample.solutionRoute.includes('decision_brief_workcell') || !operatorSample.solutionRoute.includes('Premium delivery controls')) fail('operator_sample_solution_route_missing', { viewport: viewport.name, operatorSample })
     if (!operatorSample.intakeJob.includes('intake-to-first-proof job') || !operatorSample.intakeJob.includes('Source manifest')) fail('operator_sample_intake_job_missing', { viewport: viewport.name, operatorSample })
     if (!operatorSample.clientKickoff.includes('client kickoff pack') || !operatorSample.clientKickoff.includes('First 48 hours')) fail('operator_sample_client_kickoff_missing', { viewport: viewport.name, operatorSample })
     if (!operatorSample.buyerReply.includes('Please send one approved sample source')) fail('operator_sample_buyer_reply_missing', { viewport: viewport.name, operatorSample })
@@ -251,8 +254,17 @@ try {
     if (!operatorSample.workspaceManifest.includes('"first_run_mode": "approval_only"')) fail('operator_sample_workspace_manifest_missing', { viewport: viewport.name, operatorSample })
     if (!operatorSample.workspaceHandoff.includes('Create workspace allowed: no')) fail('operator_sample_workspace_handoff_missing', { viewport: viewport.name, operatorSample })
     if (!operatorSample.firstRunQueue.includes('owner_acceptance_review')) fail('operator_sample_first_run_queue_missing', { viewport: viewport.name, operatorSample })
-    if (operatorSample.copyButtons < 15) fail('operator_sample_copy_missing', { viewport: viewport.name, operatorSample })
+    if (operatorSample.copyButtons < 16) fail('operator_sample_copy_missing', { viewport: viewport.name, operatorSample })
     if (operatorSample.stateButtons < 4 || operatorSample.workspaceButtons < 1 || operatorSample.acceptanceButtons < 1 || operatorSample.ownerAcceptanceButtons < 2 || operatorSample.connectorPolicyButtons < 1 || operatorSample.productionApprovalButtons < 1 || operatorSample.enterpriseDeliveryButtons < 1 || !operatorSample.stateText.includes('not_created_until_payment_proof')) fail('operator_sample_state_controls_missing', { viewport: viewport.name, operatorSample })
+    const solutionRouteCopyButton = page.locator('#operator-actions [data-copy-target="solution-route-0"]')
+    await solutionRouteCopyButton.scrollIntoViewIfNeeded()
+    await solutionRouteCopyButton.click({ force: true })
+    await page.waitForFunction(() => {
+      const value = document.querySelector('#operator-status')?.textContent || ''
+      return value.includes('solution-route-0') || value.includes('copy_failed')
+    }, { timeout: 5000 }).catch(() => undefined)
+    const solutionRouteCopyStatus = await page.locator('#operator-status').innerText({ timeout: 5000 }).catch(() => '')
+    if (!solutionRouteCopyStatus.includes('solution-route-0') || !solutionRouteCopyStatus.includes('Text copied')) fail('operator_sample_solution_route_copy_failed', { viewport: viewport.name, solutionRouteCopyStatus })
     const intakeCopyButton = page.locator('#operator-actions [data-copy-target="intake-job-0"]')
     await intakeCopyButton.scrollIntoViewIfNeeded()
     await intakeCopyButton.click({ force: true })
