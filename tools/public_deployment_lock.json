@@ -1,11 +1,11 @@
 {
-    "public_host":  "supermega-public-oig4cziud-swanhtet01s-projects.vercel.app",
-    "deployment_id":  "dpl_BHVbJYqVhh3vEGKYynayvoVEe29q",
-    "locked_at":  "2026-07-01T17:26:00.2833672Z",
+    "public_host":  "supermega-public-d0vd825wq-swanhtet01s-projects.vercel.app",
+    "deployment_id":  "dpl_8ymY8LnxJobkNguisFELFbHuhB8T",
+    "locked_at":  "2026-07-01T17:46:47.5326855Z",
     "domains":  [
                     "supermega.dev",
                     "www.supermega.dev"
                 ],
     "project":  "supermega-public",
-    "reason":  "Private pilot delivery rooms can now accept public client first-run acceptance or change requests and surface client_first_run_acceptance in the protected operator control plane; connector writes, external actions, and recurring revenue remain blocked with real_mrr_delta=0."
+    "reason":  "Operator cockpit now has structured owner-acceptance, connector-policy, and production-approval evidence controls; the post-first-run gates work on the live legacy payload-only SQL table and keep autopilot draft-only with real_mrr_delta=0."
 }

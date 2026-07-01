@@ -6309,19 +6309,7 @@ async function prepareFirstRunAcceptance(payload) {
     return prepareBlobFirstRunAcceptance({ actionId, leadId, payload }, { status: 'error', reason: 'postgres_not_configured' })
   }
 
-  const selected = await datastore.query(
-    `
-      select
-        action_id, lead_id, task_id, action_type, status, priority, owner,
-        title, next_step, approval_required, approval_state,
-        notification_channel, notification_status, payload, result, created_at
-      from public.supermega_pipeline_actions
-      where (($1 <> '' and action_id = $1) or ($1 = '' and $2 <> '' and lead_id = $2))
-      order by created_at desc
-      limit 1
-    `,
-    [actionId, leadId],
-  )
+  const selected = await selectPipelineActionResultRow(actionId, leadId)
   if (selected.status !== 'ready') return prepareBlobFirstRunAcceptance({ actionId, leadId, payload }, selected)
   if (!selected.rows.length) {
     const fallback = await prepareBlobFirstRunAcceptance({ actionId, leadId, payload }, { status: 'error', reason: 'postgres_action_not_found' })
@@ -6349,7 +6337,8 @@ async function prepareFirstRunAcceptance(payload) {
   if (existingAcceptance.status === 'first_run_acceptance_packet_ready') {
     return {
       status: 'ready',
-      adapter: 'vercel_postgres_neon',
+      adapter: selected.legacy_payload ? 'vercel_postgres_neon_legacy_payload' : 'vercel_postgres_neon',
+      primary_database: selected.primary_database,
       operation_status: 'already_prepared',
       action: currentAction,
       first_run_acceptance: existingAcceptance,
@@ -6366,6 +6355,23 @@ async function prepareFirstRunAcceptance(payload) {
     evidenceReference: payload.first_run_evidence_reference,
     preparedAt,
   })
+  if (selected.legacy_payload) {
+    return writeLegacyPayloadPipelineActionTransition({
+      actionId,
+      leadId,
+      resultPatch: {
+        first_run_acceptance: firstRunAcceptance,
+        first_run_acceptance_prepared_at: preparedAt,
+      },
+      status: ['workspace_ready', 'first_run_output_ready', 'open', 'queued', 'done', 'client_accepted_first_run'].includes(text(row.status)) ? 'first_run_ready' : text(row.status) || 'first_run_ready',
+      nextStep: 'Review the first-run acceptance packet with the owner before any external send or connector write.',
+      notificationStatus: 'first_run_ready',
+      primaryDatabase: selected.primary_database,
+      responseKey: 'first_run_acceptance',
+      responseValue: firstRunAcceptance,
+      operationStatus: 'prepared',
+    })
+  }
   const result = await datastore.query(
     `
       with target as (
@@ -6507,19 +6513,7 @@ async function recordOwnerAcceptance(payload) {
     return recordBlobOwnerAcceptance({ actionId, leadId, payload }, { status: 'error', reason: 'postgres_not_configured' })
   }
 
-  const selected = await datastore.query(
-    `
-      select
-        action_id, lead_id, task_id, action_type, status, priority, owner,
-        title, next_step, approval_required, approval_state,
-        notification_channel, notification_status, payload, result, created_at
-      from public.supermega_pipeline_actions
-      where (($1 <> '' and action_id = $1) or ($1 = '' and $2 <> '' and lead_id = $2))
-      order by created_at desc
-      limit 1
-    `,
-    [actionId, leadId],
-  )
+  const selected = await selectPipelineActionResultRow(actionId, leadId)
   if (selected.status !== 'ready') return recordBlobOwnerAcceptance({ actionId, leadId, payload }, selected)
   if (!selected.rows.length) {
     const fallback = await recordBlobOwnerAcceptance({ actionId, leadId, payload }, { status: 'error', reason: 'postgres_action_not_found' })
@@ -6542,7 +6536,8 @@ async function recordOwnerAcceptance(payload) {
   if (existingOwnerAcceptance.status === 'owner_acceptance_recorded') {
     return {
       status: 'ready',
-      adapter: 'vercel_postgres_neon',
+      adapter: selected.legacy_payload ? 'vercel_postgres_neon_legacy_payload' : 'vercel_postgres_neon',
+      primary_database: selected.primary_database,
       operation_status: 'already_recorded',
       action: safeAction(row),
       owner_acceptance: existingOwnerAcceptance,
@@ -6559,6 +6554,25 @@ async function recordOwnerAcceptance(payload) {
     ownerNote: payload.owner_note,
     recordedAt,
   })
+  if (selected.legacy_payload) {
+    return writeLegacyPayloadPipelineActionTransition({
+      actionId,
+      leadId,
+      resultPatch: {
+        owner_acceptance: ownerAcceptance,
+        owner_acceptance_recorded_at: recordedAt,
+      },
+      status: decision === 'accepted' ? 'owner_accepted_first_run' : 'first_run_changes_requested',
+      nextStep: decision === 'accepted'
+        ? 'Run the next production cycle approval-only; connector writes still need explicit policy approval.'
+        : 'Revise the first run output and prepare a new owner acceptance packet.',
+      notificationStatus: 'owner_acceptance_recorded',
+      primaryDatabase: selected.primary_database,
+      responseKey: 'owner_acceptance',
+      responseValue: ownerAcceptance,
+      operationStatus: 'recorded',
+    })
+  }
   const result = await datastore.query(
     `
       with target as (
@@ -6704,6 +6718,95 @@ async function findBlobPipelineAction({ actionId, leadId }, primaryDatabase = {}
   }
 }
 
+function missingResultColumn(result) {
+  return result && result.status !== 'ready' && (result.code === '42703' || text(result.reason).includes('result'))
+}
+
+async function selectPipelineActionResultRow(actionId, leadId) {
+  const selectAction = (includeResultColumn) => datastore.query(
+    `
+      select
+        action_id, lead_id, task_id, action_type, status, priority, owner,
+        title, next_step, approval_required, approval_state,
+        notification_channel, notification_status, payload,
+        ${includeResultColumn ? 'result' : "coalesce(payload, '{}'::jsonb) as result"},
+        created_at
+      from public.supermega_pipeline_actions
+      where (($1 <> '' and action_id = $1) or ($1 = '' and $2 <> '' and lead_id = $2))
+      order by created_at desc
+      limit 1
+    `,
+    [actionId, leadId],
+  )
+  const selected = await selectAction(true)
+  if (!missingResultColumn(selected)) return { ...selected, legacy_payload: false }
+  const legacy = await selectAction(false)
+  return {
+    ...legacy,
+    legacy_payload: legacy.status === 'ready',
+    primary_database: selected,
+  }
+}
+
+async function writeLegacyPayloadPipelineActionTransition({
+  actionId,
+  leadId,
+  resultPatch,
+  status,
+  nextStep,
+  notificationStatus,
+  primaryDatabase = {},
+  responseKey,
+  responseValue,
+  operationStatus = 'prepared',
+}) {
+  const patchKeys = Object.keys(resultPatch || {})
+  if (!patchKeys.length) return { status: 'error', reason: 'empty_legacy_payload_patch' }
+  let expression = "coalesce(a.payload, '{}'::jsonb)"
+  const params = [actionId, leadId]
+  patchKeys.forEach((key, index) => {
+    params.push(JSON.stringify(resultPatch[key]))
+    expression = `jsonb_set(${expression}, '{${key}}', $${params.length}::jsonb, true)`
+  })
+  const statusParam = params.push(status)
+  const nextStepParam = params.push(nextStep)
+  const notificationParam = params.push(notificationStatus)
+  const result = await datastore.query(
+    `
+      with target as (
+        select id
+        from public.supermega_pipeline_actions
+        where (($1 <> '' and action_id = $1) or ($1 = '' and $2 <> '' and lead_id = $2))
+        order by created_at desc
+        limit 1
+      )
+      update public.supermega_pipeline_actions a
+      set
+        payload = ${expression},
+        status = $${statusParam},
+        next_step = $${nextStepParam},
+        notification_status = coalesce(a.notification_status, $${notificationParam}),
+        updated_at = now()
+      where a.id in (select id from target)
+      returning
+        a.action_id, a.lead_id, a.task_id, a.action_type, a.status, a.priority, a.owner,
+        a.title, a.next_step, a.approval_required, a.approval_state,
+        a.notification_channel, a.notification_status, a.payload, coalesce(a.payload, '{}'::jsonb) as result, a.created_at
+    `,
+    params,
+  )
+  if (result.status !== 'ready') return { ...result, [responseKey]: responseValue }
+  if (!result.rows.length) return { status: 'error', reason: 'action_not_found', [responseKey]: responseValue }
+  return {
+    status: 'ready',
+    adapter: 'vercel_postgres_neon_legacy_payload',
+    primary_database: primaryDatabase,
+    operation_status: operationStatus,
+    action: safeAction(result.rows[0]),
+    [responseKey]: responseValue,
+  }
+}
+
 async function writeBlobPipelineActionTransition({
   actionId,
   leadId,
@@ -6760,19 +6863,7 @@ async function recordConnectorPolicy(payload) {
     return recordBlobConnectorPolicy({ actionId, leadId, payload }, { status: 'error', reason: 'postgres_not_configured' })
   }
 
-  const selected = await datastore.query(
-    `
-      select
-        action_id, lead_id, task_id, action_type, status, priority, owner,
-        title, next_step, approval_required, approval_state,
-        notification_channel, notification_status, payload, result, created_at
-      from public.supermega_pipeline_actions
-      where (($1 <> '' and action_id = $1) or ($1 = '' and $2 <> '' and lead_id = $2))
-      order by created_at desc
-      limit 1
-    `,
-    [actionId, leadId],
-  )
+  const selected = await selectPipelineActionResultRow(actionId, leadId)
   if (selected.status !== 'ready') return recordBlobConnectorPolicy({ actionId, leadId, payload }, selected)
   if (!selected.rows.length) {
     const fallback = await recordBlobConnectorPolicy({ actionId, leadId, payload }, { status: 'error', reason: 'postgres_action_not_found' })
@@ -6803,7 +6894,8 @@ async function recordConnectorPolicy(payload) {
   if (existingConnectorPolicy.status === 'connector_policy_recorded') {
     return {
       status: 'ready',
-      adapter: 'vercel_postgres_neon',
+      adapter: selected.legacy_payload ? 'vercel_postgres_neon_legacy_payload' : 'vercel_postgres_neon',
+      primary_database: selected.primary_database,
       operation_status: 'already_recorded',
       action: safeAction(row),
       connector_policy: existingConnectorPolicy,
@@ -6821,6 +6913,23 @@ async function recordConnectorPolicy(payload) {
     ownerNote: payload.owner_note,
     recordedAt,
   })
+  if (selected.legacy_payload) {
+    return writeLegacyPayloadPipelineActionTransition({
+      actionId,
+      leadId,
+      resultPatch: {
+        connector_policy: connectorPolicy,
+        connector_policy_recorded_at: recordedAt,
+      },
+      status: 'connector_policy_recorded',
+      nextStep: 'Run the next production cycle under the approval-only connector policy; per-action approval is still required.',
+      notificationStatus: 'connector_policy_recorded',
+      primaryDatabase: selected.primary_database,
+      responseKey: 'connector_policy',
+      responseValue: connectorPolicy,
+      operationStatus: 'recorded',
+    })
+  }
   const result = await datastore.query(
     `
       with target as (
@@ -6939,19 +7048,7 @@ async function prepareProductionApprovalQueue(payload) {
     return prepareBlobProductionApprovalQueue({ actionId, leadId, payload }, { status: 'error', reason: 'postgres_not_configured' })
   }
 
-  const selected = await datastore.query(
-    `
-      select
-        action_id, lead_id, task_id, action_type, status, priority, owner,
-        title, next_step, approval_required, approval_state,
-        notification_channel, notification_status, payload, result, created_at
-      from public.supermega_pipeline_actions
-      where (($1 <> '' and action_id = $1) or ($1 = '' and $2 <> '' and lead_id = $2))
-      order by created_at desc
-      limit 1
-    `,
-    [actionId, leadId],
-  )
+  const selected = await selectPipelineActionResultRow(actionId, leadId)
   if (selected.status !== 'ready') return prepareBlobProductionApprovalQueue({ actionId, leadId, payload }, selected)
   if (!selected.rows.length) {
     const fallback = await prepareBlobProductionApprovalQueue({ actionId, leadId, payload }, { status: 'error', reason: 'postgres_action_not_found' })
@@ -6974,7 +7071,8 @@ async function prepareProductionApprovalQueue(payload) {
   if (existingQueue.status === 'production_approval_queue_ready') {
     return {
       status: 'ready',
-      adapter: 'vercel_postgres_neon',
+      adapter: selected.legacy_payload ? 'vercel_postgres_neon_legacy_payload' : 'vercel_postgres_neon',
+      primary_database: selected.primary_database,
       operation_status: 'already_prepared',
       action: safeAction(row),
       production_approval_queue: existingQueue,
@@ -6990,6 +7088,23 @@ async function prepareProductionApprovalQueue(payload) {
     sourceTrace: payload.source_trace,
     preparedAt,
   })
+  if (selected.legacy_payload) {
+    return writeLegacyPayloadPipelineActionTransition({
+      actionId,
+      leadId,
+      resultPatch: {
+        production_approval_queue: productionQueue,
+        production_approval_queue_prepared_at: preparedAt,
+      },
+      status: 'production_approval_queue_ready',
+      nextStep: 'Let agents prepare the next run drafts; approve each external send or connector write from the production approval queue.',
+      notificationStatus: 'production_approval_queue_ready',
+      primaryDatabase: selected.primary_database,
+      responseKey: 'production_approval_queue',
+      responseValue: productionQueue,
+      operationStatus: 'prepared',
+    })
+  }
   const result = await datastore.query(
     `
       with target as (
