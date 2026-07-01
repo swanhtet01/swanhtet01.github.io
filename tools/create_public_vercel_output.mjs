@@ -4523,6 +4523,12 @@ const publicOperatorConsoleHtml = `<!doctype html>
     .operator-kpi{border:1px solid var(--line);padding:12px;background:color-mix(in srgb,var(--paper) 92%,var(--ink) 8%)}
     .operator-kpi strong{display:block;font-size:24px;line-height:1}
     .operator-failover-report{border:1px solid var(--line);padding:14px;background:color-mix(in srgb,var(--paper) 96%,var(--ink) 4%)}
+    .operator-activation-cockpit{border:1px solid var(--line);padding:14px;background:color-mix(in srgb,var(--paper) 93%,var(--accent) 7%)}
+    .operator-activation-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px;margin-top:10px}
+    .operator-activation-step{border:1px solid var(--line);padding:10px;background:color-mix(in srgb,var(--paper) 96%,var(--ink) 4%);display:grid;gap:8px;align-content:start}
+    .operator-activation-step strong{font-size:14px;line-height:1.2}
+    .operator-activation-step.is-done{background:color-mix(in srgb,var(--paper) 90%,#1c8a5a 10%)}
+    .operator-activation-step.is-next{background:color-mix(in srgb,var(--paper) 88%,var(--accent) 12%)}
     .operator-revenue-board{border:1px solid var(--line);padding:14px;background:color-mix(in srgb,var(--paper) 94%,var(--ink) 6%)}
     .operator-command-board{border:1px solid var(--line);padding:14px;background:color-mix(in srgb,var(--paper) 91%,var(--ink) 9%)}
     .operator-money-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:10px}
@@ -4568,6 +4574,7 @@ const publicOperatorConsoleHtml = `<!doctype html>
         <div class="operator-panel operator-stack">
           <div class="operator-kpis" id="operator-kpis"></div>
           <div class="operator-proof-section operator-failover-report" id="datastore-failover-report"></div>
+          <div class="operator-proof-section operator-activation-cockpit" id="operator-activation-cockpit"></div>
           <div class="operator-proof-section operator-command-board" id="autopilot-command-board"></div>
           <div class="operator-proof-section operator-revenue-board" id="revenue-proof-board"></div>
           <div class="operator-list" id="operator-actions"></div>
@@ -4581,6 +4588,7 @@ const publicOperatorConsoleHtml = `<!doctype html>
     const actionsEl = document.getElementById('operator-actions');
     const kpisEl = document.getElementById('operator-kpis');
     const failoverReportEl = document.getElementById('datastore-failover-report');
+    const activationCockpitEl = document.getElementById('operator-activation-cockpit');
     const commandBoardEl = document.getElementById('autopilot-command-board');
     const revenueBoardEl = document.getElementById('revenue-proof-board');
     keyInput.value = sessionStorage.getItem('supermega_ops_key') || '';
@@ -5408,7 +5416,7 @@ const publicOperatorConsoleHtml = `<!doctype html>
     }
     function loadSample(){
       const data = samplePipelineData();
-      renderKpis(data); renderDatastoreFailoverReport(data); renderAutopilotCommandBoard(data); renderRevenueProofBoard(data); renderActions(data); setStatus({status:'sample_loaded', note:'No lead was created. This is a no-write first-proof demo packet.'});
+      renderKpis(data); renderDatastoreFailoverReport(data); renderActivationCockpit(data); renderAutopilotCommandBoard(data); renderRevenueProofBoard(data); renderActions(data); setStatus({status:'sample_loaded', note:'No lead was created. This is a no-write first-proof demo packet.'});
     }
     function proofStarterLink(proof){
       if(!proof || !proof.starter_kit_url)return '';
@@ -5792,6 +5800,91 @@ const publicOperatorConsoleHtml = `<!doctype html>
         report.next_fix ? '<div class="operator-proof-section"><span>Next infrastructure fix</span><div>'+esc(report.next_fix)+'</div></div>' : ''
       ].join('');
     }
+    function activationTargetAction(data){
+      const actions = Array.isArray(data.recent_actions) ? data.recent_actions : Array.isArray(data.actions) ? data.actions : [];
+      return actions.find(function(action){return action && action.first_proof && action.first_proof.pilot_order_room}) || actions.find(function(action){return action && action.first_proof}) || actions[0] || null;
+    }
+    function activationStepState(action){
+      const proof = action && action.first_proof || {};
+      const room = proof.pilot_order_room || {};
+      const state = room.state || {};
+      const manifest = room.private_workspace_manifest || {};
+      const hasScope = state.scope_approval_state === 'approved' && state.price_approval_state === 'approved';
+      const hasPaymentRequest = state.payment_request_state === 'approved_to_send' || state.payment_request_state === 'sent';
+      const hasPaymentProof = state.payment_proof_state === 'proof_attached' || state.private_workspace_state === 'ready_after_payment_proof' || state.private_workspace_state === 'created_after_payment_proof';
+      const hasWorkspace = Boolean(manifest.workspace_created || manifest.status === 'private_workspace_created' || state.private_workspace_state === 'created_after_payment_proof');
+      const hasFirstRunAcceptance = Boolean(room.first_run_acceptance_packet || room.first_run_acceptance_queue_csv);
+      const hasOwnerAcceptance = Boolean(room.owner_acceptance_packet || room.owner_acceptance_queue_csv);
+      const hasConnectorPolicy = Boolean(room.connector_policy_packet || room.connector_policy_config_json);
+      const hasProductionQueue = Boolean(room.production_approval_packet || room.production_approval_queue_csv);
+      const hasEnterprisePack = Boolean(room.enterprise_delivery_packet || room.enterprise_delivery_config_json);
+      const hasCustomerSuccess = Boolean(room.customer_success_packet || room.customer_success_config_json);
+      const hasRetainerOffer = Boolean(room.retainer_growth_packet || room.retainer_growth_config_json);
+      const hasRetainerPayment = Boolean(room.retainer_payment_packet || room.retainer_mrr_summary_json);
+      const proofReady = proof.status === 'operator_brief_ready' || proof.status === 'ready' || Boolean(proof.proof_delivery_packet);
+      const steps = [
+        { id:'first_proof_gate', title:'First proof', status:proof.status || 'not_loaded', done:proofReady, command:'', button:'' },
+        { id:'scope_price_gate', title:'Scope + price', status:hasScope ? 'approved' : 'owner_approval_required', done:hasScope, command:'approve_scope', button:'Save scope approval' },
+        { id:'payment_request_gate', title:'Payment request', status:hasPaymentRequest ? state.payment_request_state : 'approval_required', done:hasPaymentRequest, command:'approve_payment_request', button:'Approve payment request' },
+        { id:'payment_proof_gate', title:'Payment proof', status:hasPaymentProof ? 'proof_attached' : 'payment_proof_required', done:hasPaymentProof, command:'attach_payment_proof', button:'Attach payment proof' },
+        { id:'workspace_start_gate', title:'Workspace start', status:hasWorkspace ? 'workspace_created' : 'blocked_until_payment_proof', done:hasWorkspace, command:'start_private_workspace', button:'Create workspace' },
+        { id:'first_run_acceptance_gate', title:'First-run acceptance', status:hasFirstRunAcceptance ? 'acceptance_packet_ready' : 'approval_only_first_run', done:hasFirstRunAcceptance, command:'prepare_first_run_acceptance', button:'Prepare acceptance' },
+        { id:'owner_acceptance_gate', title:'Owner acceptance', status:hasOwnerAcceptance ? 'recorded' : 'owner_decision_required', done:hasOwnerAcceptance, command:'record_owner_acceptance', button:'Record accepted' },
+        { id:'connector_policy_gate', title:'Connector policy', status:hasConnectorPolicy ? 'approval_only_policy_ready' : 'writes_blocked', done:hasConnectorPolicy, command:'record_connector_policy', button:'Record policy' },
+        { id:'production_approval_gate', title:'Production queue', status:hasProductionQueue ? 'queue_ready' : 'approval_queue_needed', done:hasProductionQueue, command:'prepare_production_approval_queue', button:'Prepare queue' },
+        { id:'enterprise_delivery_gate', title:'Enterprise delivery', status:hasEnterprisePack ? 'delivery_pack_ready' : 'pack_needed', done:hasEnterprisePack, command:'prepare_enterprise_delivery_pack', button:'Prepare pack' },
+        { id:'customer_success_gate', title:'Customer success', status:hasCustomerSuccess ? 'desk_ready' : 'desk_needed', done:hasCustomerSuccess, command:'prepare_customer_success_desk', button:'Prepare CS desk' },
+        { id:'retainer_gate', title:'Retainer offer', status:hasRetainerOffer ? 'offer_ready' : 'value_evidence_required', done:hasRetainerOffer, command:'prepare_retainer_growth_offer', button:'Prepare retainer' },
+        { id:'retainer_payment_gate', title:'Retainer payment', status:hasRetainerPayment ? 'payment_recorded' : 'zero_until_payment_proof', done:hasRetainerPayment, command:'record_retainer_payment_proof', button:'Record retainer payment' }
+      ];
+      const nextIndex = steps.findIndex(function(step){return !step.done && step.command});
+      return { proof, room, state, manifest, steps: steps.map(function(step,index){return Object.assign({},step,{is_next:index === nextIndex})}) };
+    }
+    function renderActivationCockpit(data){
+      const action = activationTargetAction(data);
+      const report = data.datastore_failover_report || {};
+      if(!action){
+        activationCockpitEl.innerHTML = '<span>Activation cockpit</span><div>No paid-pilot action loaded.</div>';
+        return;
+      }
+      const state = activationStepState(action);
+      const steps = state.steps;
+      const completed = steps.filter(function(step){return step.done}).length;
+      const actionId = action.action_id || '';
+      const leadId = action.lead_id || '';
+      const templateName = state.proof.template_name || action.title || 'paid pilot';
+      const stepCards = steps.map(function(step){
+        const classes = 'operator-activation-step '+(step.done ? 'is-done' : step.is_next ? 'is-next' : '');
+        const button = step.command ? '<button class="btn secondary operator-activation-action" type="button" data-activation-command="'+esc(step.command)+'" data-action-id="'+esc(actionId)+'" data-lead-id="'+esc(leadId)+'">'+esc(step.button)+'</button>' : '';
+        return '<article class="'+classes+'" data-activation-step="'+esc(step.id)+'"><strong>'+esc(step.title)+'</strong><div class="operator-meta"><span class="operator-chip">'+esc(step.id)+'</span><span class="operator-chip">'+esc(step.done ? 'done' : step.is_next ? 'next' : 'waiting')+'</span></div><div>'+esc(step.status)+'</div>'+button+'</article>';
+      }).join('');
+      activationCockpitEl.innerHTML = [
+        '<span>Activation cockpit</span>',
+        '<div class="operator-meta"><span class="operator-chip">'+esc(leadId || 'lead_missing')+'</span><span class="operator-chip">'+esc(actionId || 'action_missing')+'</span><span class="operator-chip">'+esc(completed)+'/'+esc(steps.length)+' gates</span><span class="operator-chip">'+esc(report.client_onboarding_allowed ? 'client onboarding allowed' : 'client onboarding blocked')+'</span><span class="operator-chip">'+esc(report.operator_mode || 'operator_mode_unknown')+'</span></div>',
+        '<div><strong>One-click activation runbook</strong>: '+esc(templateName)+' moves through these gates in order. Real MRR stays 0 until payment proof is recorded and bank verification remains separate.</div>',
+        '<div class="operator-activation-grid">'+stepCards+'</div>'
+      ].join('');
+      activationCockpitEl.querySelectorAll('[data-activation-command]').forEach(function(button){button.addEventListener('click',function(){runActivationStep(button)})});
+    }
+    function runActivationStep(button){
+      const command = button.getAttribute('data-activation-command') || '';
+      const stateCommands = ['approve_scope','approve_payment_request','attach_payment_proof'];
+      if(stateCommands.includes(command)){
+        button.setAttribute('data-state-command',command);
+        persistOrderRoomState(button);
+        return;
+      }
+      if(command === 'start_private_workspace'){startPrivateWorkspace(button);return}
+      if(command === 'prepare_first_run_acceptance'){prepareFirstRunAcceptance(button);return}
+      if(command === 'record_owner_acceptance'){button.setAttribute('data-owner-acceptance','accepted');recordOwnerAcceptance(button);return}
+      if(command === 'record_connector_policy'){button.setAttribute('data-connector-policy','approval_only');recordConnectorPolicy(button);return}
+      if(command === 'prepare_production_approval_queue'){prepareProductionApprovalQueue(button);return}
+      if(command === 'prepare_enterprise_delivery_pack'){prepareEnterpriseDeliveryPack(button);return}
+      if(command === 'prepare_customer_success_desk'){prepareCustomerSuccessDesk(button);return}
+      if(command === 'prepare_retainer_growth_offer'){prepareRetainerGrowthOffer(button);return}
+      if(command === 'record_retainer_payment_proof'){recordRetainerPaymentProof(button);return}
+      setStatus({status:'activation_step_unsupported', activation_step:command});
+    }
     function renderAutopilotCommandBoard(data){
       const board = data.autopilot_command_board || {};
       const ledger = data.approval_ledger || {};
@@ -5900,7 +5993,7 @@ const publicOperatorConsoleHtml = `<!doctype html>
       const response = await fetch('/api/pipeline-control/status',{headers:authHeaders(),cache:'no-store'});
       const data = await response.json().catch(function(){return {status:'error',reason:'invalid_json',code:response.status}});
       if(!response.ok){setStatus(data);return}
-      renderKpis(data); renderDatastoreFailoverReport(data); renderAutopilotCommandBoard(data); renderRevenueProofBoard(data); renderActions(data); setStatus(data);
+      renderKpis(data); renderDatastoreFailoverReport(data); renderActivationCockpit(data); renderAutopilotCommandBoard(data); renderRevenueProofBoard(data); renderActions(data); setStatus(data);
     }
     async function runRunner(){
       if(!token()){setStatus('Paste the ops key first.');return}
