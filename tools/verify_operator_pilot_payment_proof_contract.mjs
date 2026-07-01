@@ -28,6 +28,10 @@ const sourceTokens = [
   'client_payment_proof_url',
   'Client payment proof submission',
   'Copy client payment proof',
+  'reconcileClientPaymentSubmission',
+  'data-client-payment-reconcile',
+  'Reconcile client payment + create workspace',
+  "operation:'reconcile_client_payment_submission'",
   "operation:'record_pilot_payment_proof'",
 ]
 
@@ -47,6 +51,9 @@ const outputTokens = [
   'Client payment proof submission',
   'Copy client payment proof',
   'client_pilot_payment_submission',
+  'Reconcile client payment + create workspace',
+  'data-client-payment-reconcile',
+  'reconcile_client_payment_submission',
   'data-pilot-payment-proof-command',
   'payment_amount_mmk',
   'payment_proof_reference',

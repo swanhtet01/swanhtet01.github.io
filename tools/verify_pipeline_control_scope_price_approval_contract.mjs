@@ -9,6 +9,7 @@ const handler = require('../api/pipeline-control.js')
 
 const originalOpsKey = process.env.SUPERMEGA_OPS_KEY
 const originalPostgresConfigured = datastore.postgresConfigured
+const originalQuery = datastore.query
 const originalFindActionRecord = blobQueue.findActionRecord
 const originalUpdateActionRecord = blobQueue.updateActionRecord
 
@@ -193,6 +194,67 @@ try {
   assert.ok(body.action.first_proof.pilot_order_room.scope_price_approval_packet.includes('11,000,000 MMK'))
   assert.ok(body.action.first_proof.pilot_order_room.payment_request_gate_packet.includes('Do not claim real MRR'))
 
+  const legacyPayloadRow = JSON.parse(JSON.stringify(baseRow))
+  legacyPayloadRow.payload = {
+    ...legacyPayloadRow.payload,
+    ...legacyPayloadRow.result,
+  }
+  legacyPayloadRow.result = legacyPayloadRow.payload
+  currentRow = JSON.parse(JSON.stringify(legacyPayloadRow))
+  let selectWithMissingResultColumn = true
+  datastore.postgresConfigured = () => true
+  blobQueue.findActionRecord = async () => ({ status: 'error', reason: 'action_not_found' })
+  datastore.query = async (sql, params = []) => {
+    const query = String(sql)
+    const isPlainSelect = query.trimStart().toLowerCase().startsWith('select')
+    if (isPlainSelect && query.includes('from public.supermega_pipeline_actions') && query.includes('result') && selectWithMissingResultColumn) {
+      selectWithMissingResultColumn = false
+      return { status: 'error', reason: 'column "result" does not exist', code: '42703' }
+    }
+    if (isPlainSelect && query.includes('from public.supermega_pipeline_actions')) {
+      assert.deepEqual(params, ['TASK-SCOPEPRICE123', 'LEAD-SCOPEPRICE123'])
+      return { status: 'ready', rows: [currentRow] }
+    }
+    if (query.includes("status = 'payment_request_approved'")) {
+      const approval = JSON.parse(params[2])
+      const state = JSON.parse(params[4])
+      currentRow = {
+        ...currentRow,
+        status: 'payment_request_approved',
+        next_step: 'Send owner-approved payment request, then attach payment proof before workspace start.',
+        payload: {
+          ...currentRow.payload,
+          scope_price_approval: approval,
+          scope_price_approval_recorded_at: params[3],
+          pilot_order_room_state: state,
+        },
+      }
+      currentRow.result = currentRow.payload
+      return { status: 'ready', rows: [currentRow] }
+    }
+    return { status: 'error', reason: 'unexpected_query', sql: query.slice(0, 120) }
+  }
+  const legacyResponse = await callHandler({
+    body: JSON.stringify({
+      operation: 'record_scope_price_approval',
+      action_id: 'TASK-SCOPEPRICE123',
+      lead_id: 'LEAD-SCOPEPRICE123',
+      approved_scope_summary: 'Legacy payload-only paid-pilot scope approval.',
+      approved_price_mmk: 11000000,
+      deposit_terms: '50_percent_to_start',
+      payment_route: 'manual_invoice_or_payment_link_after_owner_approval',
+      owner_approval_reference: 'Owner approved scope and price in legacy payload test.',
+    }),
+  })
+  const legacyBody = parseJson(legacyResponse)
+  assert.equal(legacyResponse.statusCode, 200)
+  assert.equal(legacyBody.status, 'ready')
+  assert.equal(legacyBody.adapter, 'vercel_postgres_neon_legacy_payload')
+  assert.equal(legacyBody.action.status, 'payment_request_approved')
+  assert.equal(legacyBody.scope_price_approval.status, 'scope_price_payment_gate_approved')
+  assert.equal(legacyBody.order_room_state.private_workspace_state, 'not_created_until_payment_proof')
+  assert.equal(legacyBody.order_room_state.real_mrr_delta, 0)
+
   console.log(
     JSON.stringify(
       {
@@ -212,6 +274,7 @@ try {
   if (originalOpsKey === undefined) delete process.env.SUPERMEGA_OPS_KEY
   else process.env.SUPERMEGA_OPS_KEY = originalOpsKey
   datastore.postgresConfigured = originalPostgresConfigured
+  datastore.query = originalQuery
   blobQueue.findActionRecord = originalFindActionRecord
   blobQueue.updateActionRecord = originalUpdateActionRecord
 }

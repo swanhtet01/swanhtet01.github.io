@@ -1,11 +1,11 @@
 {
-    "public_host":  "supermega-public-lvv8mjk2l-swanhtet01s-projects.vercel.app",
-    "deployment_id":  "dpl_GNKWTijo6kwAwMuUsrEeReZepR6n",
-    "locked_at":  "2026-07-01T09:12:00.0000000Z",
+    "public_host":  "supermega-public-1bk7eeyns-swanhtet01s-projects.vercel.app",
+    "deployment_id":  "dpl_hKtAgTrsHiPyvtwgpZJWRCEDEYbL",
+    "locked_at":  "2026-07-01T09:41:00.0000000Z",
     "domains":  [
                     "supermega.dev",
                     "www.supermega.dev"
                 ],
     "project":  "supermega-public",
-    "reason":  "Client payment-proof room can submit payment evidence directly into the operator ledger for owner reconciliation without claiming setup cash or MRR."
+    "reason":  "Operator can reconcile client-submitted payment proof into setup-cash proof and create the private workspace in one protected action; legacy payload-only SQL tables are supported."
 }

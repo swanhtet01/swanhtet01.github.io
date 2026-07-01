@@ -650,7 +650,7 @@ for (const token of ['prepareBlobLeadAutopilot', 'fallbackLeadForRun', 'supermeg
 const pipelineControlFunctionPath = resolve(functionsDir, 'api/pipeline-control.js.func/api/pipeline-control.js')
 if (!existsSync(pipelineControlFunctionPath)) fail('public_pipeline_control_function_missing')
 const pipelineControlFunctionSource = readFileSync(pipelineControlFunctionPath, 'utf8')
-for (const token of ['PUBLIC_WORKSPACE_BASE_URL', 'https://supermega.dev', '/app/start?', 'paymentProofUrl', '/app/payment-proof?', 'client_pilot_payment_submission', 'client_payment_proof_url']) {
+for (const token of ['PUBLIC_WORKSPACE_BASE_URL', 'https://supermega.dev', '/app/start?', 'paymentProofUrl', '/app/payment-proof?', 'client_pilot_payment_submission', 'client_payment_proof_url', 'reconcileClientPaymentSubmission', 'reconcile_client_payment_submission', 'client_payment_submission_reconciled']) {
   if (!pipelineControlFunctionSource.includes(token)) {
     fail('public_pipeline_workspace_url_contract_missing', { token })
   }
@@ -741,6 +741,9 @@ for (const token of [
   'Client payment proof submission',
   'Copy client payment proof',
   'client_pilot_payment_submission',
+  'Reconcile client payment + create workspace',
+  'data-client-payment-reconcile',
+  'reconcile_client_payment_submission',
   'Copy payment request',
   'Copy payment ledger',
   'Copy order ledger',
