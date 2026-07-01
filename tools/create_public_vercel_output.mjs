@@ -6278,20 +6278,21 @@ const publicOperatorConsoleHtml = `<!doctype html>
       const sourceRefId = 'activation-source-pack-reference-'+index;
       const sourceContentId = 'activation-source-pack-content-'+index;
       const sourceJsonId = 'activation-source-pack-json-'+index;
-      const pack = action.activation_source_pack || action.source_pack || (action.result && action.result.activation_source_pack) || {};
       const proof = action.first_proof || {};
+      const pack = proof.activation_source_pack || action.activation_source_pack || action.source_pack || (action.result && action.result.activation_source_pack) || {};
       const clientSubmission = proof.client_source_pack_submission || {};
       const clientSubmissionJson = proof.client_source_pack_submission_json || (clientSubmission && clientSubmission.source_count ? JSON.stringify(clientSubmission, null, 2) : '');
       const packStatus = pack && pack.source_count ? '<div class="operator-meta"><span class="operator-chip">source pack attached</span><span class="operator-chip">'+esc(pack.source_count)+' sources</span><span class="operator-chip">'+esc(pack.external_action_state || 'blocked_until_owner_approval')+'</span></div>' : '<div class="operator-meta"><span class="operator-chip">no source pack attached</span><span class="operator-chip">owner-approved data only</span></div>';
       const submissionStatus = clientSubmission && clientSubmission.source_count ? '<div class="operator-meta"><span class="operator-chip">client submitted source pack</span><span class="operator-chip">'+esc(clientSubmission.source_count)+' sources</span><span class="operator-chip">'+esc(clientSubmission.external_action_state || 'blocked_until_owner_approval')+'</span></div>' : '';
       const importLabel = clientSubmission && clientSubmission.source_count ? 'Attach submitted source pack' : 'Import source pack JSON';
+      const submittedPackProofButton = clientSubmission && clientSubmission.source_count ? '<button class="btn primary" type="button" data-submitted-source-pack-proof="prepare_first_proof_from_submitted_source_pack" data-action-id="'+esc(action.action_id || '')+'" data-lead-id="'+esc(action.lead_id || '')+'">Attach submitted pack + prepare proof</button>' : '';
       return [
         '<div class="operator-proof-section operator-activation-source-pack">',
           '<span>Client source pack</span>',
           packStatus,
           submissionStatus,
           '<textarea class="operator-reply" id="'+sourceJsonId+'" name="source_pack_json" placeholder="Paste Source pack JSON copied from /app/source-pack.">'+esc(clientSubmissionJson)+'</textarea>',
-          '<button class="btn secondary" type="button" data-source-pack-json-command="attach_activation_source_pack" data-source-pack-json-target="'+sourceJsonId+'" data-action-id="'+esc(action.action_id || '')+'" data-lead-id="'+esc(action.lead_id || '')+'">'+importLabel+'</button>',
+          '<div class="operator-row"><button class="btn secondary" type="button" data-source-pack-json-command="attach_activation_source_pack" data-source-pack-json-target="'+sourceJsonId+'" data-action-id="'+esc(action.action_id || '')+'" data-lead-id="'+esc(action.lead_id || '')+'">'+importLabel+'</button>'+submittedPackProofButton+'</div>',
           '<input class="operator-input" id="'+packNameId+'" name="source_pack_name" value="'+esc(pack.source_pack_name || 'Day 1 client source pack')+'" aria-label="Source pack name" />',
           '<div class="operator-row">',
             '<select class="operator-input" id="'+sourceTypeId+'" aria-label="Source type"><option value="google_drive">Google Drive</option><option value="gmail">Gmail</option><option value="uploaded_file">Uploaded file</option><option value="manual_note">Manual note</option><option value="pos_export">POS export</option></select>',
@@ -6340,6 +6341,7 @@ const publicOperatorConsoleHtml = `<!doctype html>
       actionsEl.querySelectorAll('[data-autopilot-draft-decision]').forEach(function(button){button.addEventListener('click',function(){recordAutopilotDraftApproval(button)})});
       actionsEl.querySelectorAll('[data-source-pack-request-decision]').forEach(function(button){button.addEventListener('click',function(){recordSourcePackRequestDecision(button)})});
       actionsEl.querySelectorAll('[data-source-pack-json-command]').forEach(function(button){button.addEventListener('click',function(){attachActivationSourcePackJson(button)})});
+      actionsEl.querySelectorAll('[data-submitted-source-pack-proof]').forEach(function(button){button.addEventListener('click',function(){prepareFirstProofFromSubmittedSourcePack(button)})});
       actionsEl.querySelectorAll('[data-source-pack-command]').forEach(function(button){button.addEventListener('click',function(){attachActivationSourcePack(button)})});
       actionsEl.querySelectorAll('[data-activation-proof-command]').forEach(function(button){button.addEventListener('click',function(){prepareActivationFirstProof(button)})});
       actionsEl.querySelectorAll('[data-proof-acceptance-json-command]').forEach(function(button){button.addEventListener('click',function(){recordProofReviewAcceptanceJson(button)})});
@@ -6403,6 +6405,22 @@ const publicOperatorConsoleHtml = `<!doctype html>
         operator_note:'Imported owner-approved client Source pack JSON. External sends, writes, payments, and connector access remain blocked until owner approval.'
       };
       setStatus({status:'importing_source_pack_json', note:'Attaching approved Source pack JSON to the action.'});
+      const response = await fetch('/api/pipeline-control',{method:'POST',headers:Object.assign({},authHeaders(),{'content-type':'application/json'}),body:JSON.stringify(payload),cache:'no-store'});
+      const data = await response.json().catch(function(){return {status:'error',reason:'invalid_json',code:response.status}});
+      setStatus(data);
+      if(response.ok) await refresh();
+    }
+    async function prepareFirstProofFromSubmittedSourcePack(button){
+      if(!token()){setStatus('Paste the ops key first.');return}
+      const note = window.prompt('Owner review note for submitted source pack','Owner reviewed submitted pack and approved first-proof preparation only.');
+      if(note === null){setStatus({status:'cancelled', reason:'operator_cancelled_submitted_source_pack_proof'});return}
+      const payload = {
+        operation:'prepare_first_proof_from_submitted_source_pack',
+        action_id:button.getAttribute('data-action-id') || '',
+        lead_id:button.getAttribute('data-lead-id') || '',
+        operator_note:(note || '').trim() || 'Owner reviewed submitted pack and approved first-proof preparation only.'
+      };
+      setStatus({status:'preparing_first_proof_from_submitted_source_pack', note:'Attaching client-submitted source pack and preparing first proof. External actions remain blocked.'});
       const response = await fetch('/api/pipeline-control',{method:'POST',headers:Object.assign({},authHeaders(),{'content-type':'application/json'}),body:JSON.stringify(payload),cache:'no-store'});
       const data = await response.json().catch(function(){return {status:'error',reason:'invalid_json',code:response.status}});
       setStatus(data);

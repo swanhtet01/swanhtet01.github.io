@@ -635,6 +635,18 @@ for (const token of ['firstProofPacket', 'first_proof', 'operator_brief_ready', 
   }
 }
 for (const token of [
+  'submittedSourcePackFromRow',
+  'submittedSourcePackHasSources',
+  'prepareFirstProofFromSubmittedSourcePack',
+  'prepare_first_proof_from_submitted_source_pack',
+  'first_proof_prepared_from_submitted_pack',
+  'client_source_pack_submission_required',
+]) {
+  if (!pipelineControlFunctionSource.includes(token)) {
+    fail('public_pipeline_control_submitted_source_pack_to_proof_contract_missing', { token })
+  }
+}
+for (const token of [
   'buildSourcePackRequestApprovalRecord',
   'sourcePackRequestFromPayload',
   'recordSourcePackRequestApproval',
@@ -824,6 +836,15 @@ for (const token of [
   'source_pack_request_packet',
 ]) {
   if (!operatorHtml.includes(token)) fail('public_operator_source_request_approval_contract_missing', { token })
+}
+for (const token of [
+  'Attach submitted pack + prepare proof',
+  'data-submitted-source-pack-proof',
+  'prepareFirstProofFromSubmittedSourcePack',
+  'prepare_first_proof_from_submitted_source_pack',
+  'preparing_first_proof_from_submitted_source_pack',
+]) {
+  if (!operatorHtml.includes(token)) fail('public_operator_submitted_source_pack_to_proof_contract_missing', { token })
 }
 for (const token of [
   'Submit source pack',

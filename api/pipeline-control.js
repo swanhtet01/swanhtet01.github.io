@@ -2775,6 +2775,7 @@ function firstProofPacket(row) {
   const sourcePackRequest = parseJsonObject(result.source_pack_request || task.source_pack_request || payload.source_pack_request)
   const sourcePackRequestApproval = parseJsonObject(result.source_pack_request_approval || sourcePackRequest.approval || payload.source_pack_request_approval)
   const clientSourcePackSubmission = parseJsonObject(result.client_source_pack_submission || payload.client_source_pack_submission)
+  const activationSourcePack = parseJsonObject(result.activation_source_pack || payload.activation_source_pack)
   const sourcePackRequestForOutput = Object.keys(sourcePackRequest).length
     ? {
         ...sourcePackRequest,
@@ -3109,6 +3110,8 @@ function firstProofPacket(row) {
     source_pack_request_approval: Object.keys(sourcePackRequestApproval).length ? sourcePackRequestApproval : null,
     client_source_pack_submission: Object.keys(clientSourcePackSubmission).length ? clientSourcePackSubmission : null,
     client_source_pack_submission_json: Object.keys(clientSourcePackSubmission).length ? JSON.stringify(clientSourcePackSubmission, null, 2) : '',
+    activation_source_pack: Object.keys(activationSourcePack).length ? activationSourcePack : null,
+    activation_source_pack_json: Object.keys(activationSourcePack).length ? JSON.stringify(activationSourcePack, null, 2) : '',
     title: text(result.title) || (templateName && row.lead_id ? `${templateName} first proof for ${row.lead_id}` : 'First proof task'),
     checklist,
     acceptance_tests: acceptanceTests,
@@ -5107,6 +5110,234 @@ async function recordSourcePackRequestApproval(payload) {
   }
 }
 
+function submittedSourcePackFromRow(row = {}, payload = {}) {
+  const rowPayload = parseJsonObject(row.payload)
+  const rowResult = parseJsonObject(row.result)
+  return parseJsonObject(
+    payload.client_source_pack_submission ||
+      payload.source_pack_submission ||
+      rowResult.client_source_pack_submission ||
+      rowPayload.client_source_pack_submission,
+  )
+}
+
+function activationSourcePayloadFromSubmission(submission = {}, payload = {}) {
+  const sources = Array.isArray(submission.sources) ? submission.sources : []
+  return {
+    action_id: text(payload.action_id || submission.action_id),
+    lead_id: text(payload.lead_id || submission.lead_id),
+    source_pack_name: text(submission.source_pack_name || payload.source_pack_name) || 'Client submitted source pack',
+    sources: sources.map((source) => ({
+      source_id: text(source.source_id),
+      source_type: text(source.source_type || source.type),
+      reference: text(source.reference || source.label || source.name),
+      content: text(source.content || source.content_excerpt || source.text || source.sample),
+      approved: source.approved !== false,
+    })),
+  }
+}
+
+function submittedSourcePackHasSources(submission = {}) {
+  const sources = Array.isArray(submission.sources) ? submission.sources : []
+  return sources.some((source) => source && source.approved !== false && text(source.content || source.content_excerpt || source.text || source.sample))
+}
+
+async function prepareBlobFirstProofFromSubmittedSourcePack({ actionId, leadId, payload }, primaryDatabase = {}, options = {}) {
+  const found = await blobQueue.findActionRecord({ action_id: actionId, lead_id: leadId })
+  if (found.status !== 'ready') {
+    if (options.allowMissing && found.reason === 'action_not_found') {
+      return {
+        status: 'skipped',
+        adapter: 'vercel_blob',
+        reason: 'blob_action_not_found',
+        primary_database: primaryDatabase,
+      }
+    }
+    return {
+      ...found,
+      primary_database: primaryDatabase,
+    }
+  }
+  const row = found.row
+  const currentResult = parseJsonObject(row.result)
+  const submission = submittedSourcePackFromRow(row, payload)
+  if (!submittedSourcePackHasSources(submission)) {
+    return {
+      status: 'error',
+      adapter: 'vercel_blob',
+      reason: 'client_source_pack_submission_required',
+      primary_database: primaryDatabase,
+      action: safeAction(row),
+    }
+  }
+  const sourcePack = buildActivationSourcePack(row, activationSourcePayloadFromSubmission(submission, payload))
+  if (!sourcePack.source_count) return { status: 'error', adapter: 'vercel_blob', reason: 'missing_activation_sources' }
+  const rowWithPack = {
+    ...row,
+    result: {
+      ...currentResult,
+      activation_source_pack: sourcePack,
+    },
+  }
+  const proof = buildActivationFirstProof(rowWithPack, {
+    ...payload,
+    activation_source_pack: sourcePack,
+    operator_note: text(payload.operator_note) || 'Prepared from client-submitted source pack. External actions remain blocked until owner approval.',
+  })
+  if (!text(proof.source_sample_excerpt)) return { status: 'error', adapter: 'vercel_blob', reason: 'missing_approved_source_sample', action: safeAction(row) }
+  const nextResult = {
+    ...currentResult,
+    client_source_pack_submission: submission,
+    activation_source_pack: sourcePack,
+    activation_source_pack_attached_at: sourcePack.attached_at,
+    activation_first_proof: proof,
+    activation_first_proof_prepared_at: proof.prepared_at,
+  }
+  const updated = await blobQueue.updateActionRecord(
+    { action_id: actionId, lead_id: leadId },
+    {
+      result: nextResult,
+      status: ['open', 'queued', 'processing', 'done', 'failed', 'source_request_approved', 'client_source_pack_received', 'source_pack_attached'].includes(text(row.status)) ? 'proof_ready' : row.status,
+      approval_state: 'pending_owner_review',
+      next_step: 'Review the source-derived first proof, then queue the buyer reply for owner approval.',
+      notification_status: 'first_proof_prepared_from_submitted_pack',
+    },
+  )
+  if (updated.status !== 'ready') {
+    return {
+      ...updated,
+      primary_database: primaryDatabase,
+      activation_source_pack: sourcePack,
+      activation_first_proof: proof,
+    }
+  }
+  return {
+    status: 'ready',
+    adapter: 'vercel_blob',
+    primary_database: primaryDatabase,
+    operation_status: 'prepared',
+    action: safeAction(updated.record),
+    activation_source_pack: sourcePack,
+    activation_first_proof: proof,
+  }
+}
+
+async function prepareFirstProofFromSubmittedSourcePack(payload = {}) {
+  const actionId = text(payload.action_id)
+  const leadId = text(payload.lead_id)
+  if (!actionId && !leadId) return { status: 'error', reason: 'missing_action_or_lead_id' }
+  if (!datastore.postgresConfigured()) {
+    return prepareBlobFirstProofFromSubmittedSourcePack({ actionId, leadId, payload }, { status: 'error', reason: 'postgres_not_configured' })
+  }
+
+  const resultColumn = await pipelineActionsResultColumnStatus()
+  if (resultColumn.status !== 'ready') return prepareBlobFirstProofFromSubmittedSourcePack({ actionId, leadId, payload }, resultColumn)
+  const resultSelect = pipelineActionResultSelect(resultColumn.has_result)
+  const selected = await datastore.query(
+    `
+      select
+        id, action_id, lead_id, task_id, action_type, status, priority, owner,
+        title, next_step, approval_required, approval_state,
+        notification_channel, notification_status, payload, ${resultSelect}, created_at
+      from public.supermega_pipeline_actions
+      where (($1 <> '' and action_id = $1) or ($1 = '' and $2 <> '' and lead_id = $2))
+      order by created_at desc
+      limit 1
+    `,
+    [actionId, leadId],
+  )
+  if (selected.status !== 'ready') return prepareBlobFirstProofFromSubmittedSourcePack({ actionId, leadId, payload }, selected)
+  if (!selected.rows.length) {
+    const fallback = await prepareBlobFirstProofFromSubmittedSourcePack({ actionId, leadId, payload }, { status: 'error', reason: 'postgres_action_not_found' })
+    if (fallback.status === 'ready') return fallback
+    return { status: 'error', reason: 'action_not_found' }
+  }
+
+  const row = selected.rows[0]
+  const currentResult = parseJsonObject(row.result)
+  const submission = submittedSourcePackFromRow(row, payload)
+  if (!submittedSourcePackHasSources(submission)) {
+    return {
+      status: 'error',
+      reason: 'client_source_pack_submission_required',
+      action: safeAction(row),
+    }
+  }
+  const sourcePack = buildActivationSourcePack(row, activationSourcePayloadFromSubmission(submission, payload))
+  if (!sourcePack.source_count) return { status: 'error', reason: 'missing_activation_sources', action: safeAction(row) }
+  const rowWithPack = {
+    ...row,
+    result: {
+      ...currentResult,
+      activation_source_pack: sourcePack,
+    },
+  }
+  const proof = buildActivationFirstProof(rowWithPack, {
+    ...payload,
+    activation_source_pack: sourcePack,
+    operator_note: text(payload.operator_note) || 'Prepared from client-submitted source pack. External actions remain blocked until owner approval.',
+  })
+  if (!text(proof.source_sample_excerpt)) return { status: 'error', reason: 'missing_approved_source_sample', action: safeAction(row) }
+  const nextResult = {
+    ...currentResult,
+    client_source_pack_submission: submission,
+    activation_source_pack: sourcePack,
+    activation_source_pack_attached_at: sourcePack.attached_at,
+    activation_first_proof: proof,
+    activation_first_proof_prepared_at: proof.prepared_at,
+  }
+  const resultUpdateExpression = resultColumn.has_result
+    ? 'result = $2::jsonb,'
+    : `
+        payload = coalesce(payload, '{}'::jsonb) || jsonb_build_object(
+          'client_source_pack_submission', $2::jsonb -> 'client_source_pack_submission',
+          'activation_source_pack', $2::jsonb -> 'activation_source_pack',
+          'activation_source_pack_attached_at', $2::jsonb -> 'activation_source_pack_attached_at',
+          'activation_first_proof', $2::jsonb -> 'activation_first_proof',
+          'activation_first_proof_prepared_at', $2::jsonb -> 'activation_first_proof_prepared_at'
+        ),
+      `
+  const returningResultExpression = resultColumn.has_result ? 'result' : '$2::jsonb as result'
+  const updated = await datastore.query(
+    `
+      update public.supermega_pipeline_actions
+      set
+        ${resultUpdateExpression}
+        status = case
+          when status in ('open', 'queued', 'processing', 'done', 'failed', 'source_request_approved', 'client_source_pack_received', 'source_pack_attached')
+          then 'proof_ready'
+          else status
+        end,
+        approval_state = 'pending_owner_review',
+        notification_status = 'first_proof_prepared_from_submitted_pack',
+        next_step = 'Review the source-derived first proof, then queue the buyer reply for owner approval.',
+        updated_at = now()
+      where id = $1
+      returning
+        action_id, lead_id, task_id, action_type, status, priority, owner,
+        title, next_step, approval_required, approval_state,
+        notification_channel, notification_status, payload, ${returningResultExpression}, created_at
+    `,
+    [row.id, JSON.stringify(nextResult)],
+  )
+  if (updated.status !== 'ready') return prepareBlobFirstProofFromSubmittedSourcePack({ actionId, leadId, payload }, updated)
+  if (!updated.rows.length) return { status: 'error', reason: 'action_not_found', activation_source_pack: sourcePack, activation_first_proof: proof }
+  const mirror = await prepareBlobFirstProofFromSubmittedSourcePack(
+    { actionId, leadId, payload },
+    { status: 'ready', adapter: 'vercel_postgres_neon', mirrored_from_primary: true },
+    { allowMissing: true },
+  )
+  return {
+    status: 'ready',
+    adapter: mirror.status === 'ready' ? 'vercel_postgres_neon_with_blob_queue' : 'vercel_postgres_neon',
+    operation_status: 'prepared',
+    action: safeAction(updated.rows[0]),
+    activation_source_pack: sourcePack,
+    activation_first_proof: proof,
+    mirror,
+  }
+}
+
 function contextFromActionRow(row, state = {}) {
   const payload = parseJsonObject(row.payload)
   const result = parseJsonObject(row.result)
@@ -6964,7 +7195,7 @@ function primaryDatabaseStatus(result) {
 function writeStatusCode(result) {
   if (result.status === 'ready') return 200
   if (result.reason === 'action_not_found') return 404
-  if (['private_workspace_not_ready', 'private_workspace_required', 'first_run_acceptance_required', 'owner_acceptance_required', 'owner_acceptance_not_accepted', 'connector_policy_required', 'production_approval_queue_required', 'enterprise_delivery_pack_required', 'customer_success_desk_required', 'retainer_growth_offer_required', 'scope_price_approval_required', 'use_start_private_workspace_operation', 'autopilot_draft_not_found'].includes(result.reason)) return 409
+  if (['private_workspace_not_ready', 'private_workspace_required', 'first_run_acceptance_required', 'owner_acceptance_required', 'owner_acceptance_not_accepted', 'connector_policy_required', 'production_approval_queue_required', 'enterprise_delivery_pack_required', 'customer_success_desk_required', 'retainer_growth_offer_required', 'scope_price_approval_required', 'use_start_private_workspace_operation', 'autopilot_draft_not_found', 'client_source_pack_submission_required'].includes(result.reason)) return 409
   if (['missing_action_or_lead_id', 'missing_activation_sources', 'missing_approved_source_sample', 'invalid_proof_review_decision', 'proof_not_accepted_for_paid_scope', 'invalid_scope_price_amount', 'missing_scope_price_owner_approval_reference', 'missing_pilot_payment_proof_reference', 'missing_pilot_payment_owner_reference', 'invalid_pilot_payment_amount', 'missing_first_run_output', 'missing_first_run_evidence_reference', 'invalid_owner_acceptance_decision', 'missing_owner_acceptance_reference', 'invalid_connector_policy_mode', 'missing_connector_policy_reference', 'missing_production_queue_reference', 'missing_enterprise_delivery_reference', 'missing_customer_success_reference', 'missing_retainer_growth_reference', 'missing_retainer_payment_proof_reference', 'missing_retainer_owner_approval_reference', 'invalid_retainer_payment_amount', 'invalid_retainer_payment_period', 'invalid_autopilot_draft_decision', 'missing_autopilot_draft_reference'].includes(result.reason)) return 400
   return 503
 }
@@ -7053,6 +7284,15 @@ async function handler(req, res) {
     }
     if (operation === 'prepare_activation_first_proof') {
       const prepared = await prepareActivationFirstProof(payload)
+      json(res, writeStatusCode(prepared), {
+        endpoint: 'pipeline-control',
+        operation,
+        ...prepared,
+      })
+      return
+    }
+    if (operation === 'prepare_first_proof_from_submitted_source_pack') {
+      const prepared = await prepareFirstProofFromSubmittedSourcePack(payload)
       json(res, writeStatusCode(prepared), {
         endpoint: 'pipeline-control',
         operation,
@@ -7585,6 +7825,7 @@ handler.__test = {
   prepareFirstRunAcceptance,
   attachActivationSourcePack,
   prepareActivationFirstProof,
+  prepareFirstProofFromSubmittedSourcePack,
   recordProofReviewAcceptance,
   recordScopePriceApproval,
   recordPilotPaymentProof,
