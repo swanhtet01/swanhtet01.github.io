@@ -87,6 +87,12 @@ function moneyAmount(value) {
   return Number.isFinite(amount) && amount > 0 ? Math.round(amount) : 0
 }
 
+function mmkAmountLabel(value, fallback = '11,000,000 MMK') {
+  const amount = moneyAmount(value)
+  if (!amount) return text(fallback) || '11,000,000 MMK'
+  return `${amount.toLocaleString('en-US')} MMK`
+}
+
 function truncate(value, limit = 500) {
   return text(value).slice(0, limit)
 }
@@ -751,6 +757,133 @@ function buildProofReviewAcceptanceRecord(row = {}, payload = {}) {
     recorded_at: recordedAt,
     recorded_by: 'operator_console',
     packet,
+  }
+}
+
+function buildScopePriceApprovalRecord(row = {}, payload = {}) {
+  const context = contextFromActivationAction(row)
+  const result = parseJsonObject(row.result)
+  const existingAcceptance = parseJsonObject(result.proof_review_acceptance || payload.proof_review_acceptance)
+  if (text(existingAcceptance.decision) && existingAcceptance.decision !== 'ready_for_paid_pilot') {
+    return { status: 'error', reason: 'proof_not_accepted_for_paid_scope' }
+  }
+  const approvedPriceMmk = moneyAmount(payload.approved_price_mmk || payload.price_mmk || payload.amount_mmk || payload.approved_price)
+  if (!approvedPriceMmk) return { status: 'error', reason: 'invalid_scope_price_amount' }
+  const ownerApprovalReference = truncate(payload.owner_approval_reference || payload.scope_approval_reference || payload.approval_reference, 500)
+  if (!ownerApprovalReference) return { status: 'error', reason: 'missing_scope_price_owner_approval_reference' }
+  const leadId = text(payload.lead_id) || text(row.lead_id) || text(context.lead.lead_id) || null
+  const actionId = text(payload.action_id) || text(row.action_id) || text(context.lead.task_id) || null
+  const approvedScopeSummary = truncate(
+    payload.approved_scope_summary || payload.scope_summary || payload.scope || context.firstProofTarget,
+    2000,
+  )
+  const paymentRoute = truncate(payload.payment_route || 'manual_invoice_or_payment_link_after_owner_approval', 240)
+  const depositTerms = truncate(payload.deposit_terms || '50_percent_to_start', 160)
+  const recordedAt = new Date().toISOString()
+  const priceLabel = mmkAmountLabel(approvedPriceMmk)
+  const proofDecision = text(existingAcceptance.decision) || 'ready_for_paid_pilot'
+  const paymentRequestDraft = [
+    `# ${context.templateName} payment request`,
+    '',
+    'Status: approved_to_send - owner approval recorded',
+    `Lead: ${leadId || 'not set'}`,
+    `Client: ${context.company}`,
+    `Approved pilot price: ${priceLabel}`,
+    `Deposit terms: ${depositTerms}`,
+    `Payment route: ${paymentRoute}`,
+    `Owner approval reference: ${ownerApprovalReference}`,
+    '',
+    '## Buyer message',
+    `The first proof was accepted as useful enough for a paid pilot. The approved pilot scope is: ${approvedScopeSummary}.`,
+    `Approved amount: ${priceLabel}.`,
+    'We start the private pilot workspace only after payment proof is attached.',
+    '',
+    '## Guardrails',
+    '- Send only through the owner-approved route.',
+    '- Do not create a workspace before payment proof.',
+    '- Do not claim real MRR until payment proof is recorded.',
+    '- External sends, connector writes, and browser actions remain owner-gated.',
+  ].join('\n')
+  const scopePacket = [
+    `# ${context.templateName} scope and price approval`,
+    '',
+    'Status: scope_price_payment_gate_approved',
+    `Lead: ${leadId || 'not set'}`,
+    `Action: ${actionId || 'not set'}`,
+    `Client: ${context.company}`,
+    `Proof decision: ${proofDecision}`,
+    `Approved price: ${priceLabel}`,
+    `Deposit terms: ${depositTerms}`,
+    `Payment route: ${paymentRoute}`,
+    `Owner approval reference: ${ownerApprovalReference}`,
+    `Recorded at: ${recordedAt}`,
+    'Real MRR delta: 0',
+    '',
+    '## Approved pilot scope',
+    approvedScopeSummary || context.firstProofTarget,
+    '',
+    '## Payment gate',
+    '- Payment request is approved to send, but payment proof is still required.',
+    '- Private workspace remains blocked until payment proof is attached.',
+    '- Do not claim real MRR from this approval record.',
+  ].join('\n')
+  const paymentGatePacket = [
+    `# ${context.templateName} payment request gate`,
+    '',
+    'Status: payment_request_approved_to_send',
+    `Approved price: ${priceLabel}`,
+    `Payment route: ${paymentRoute}`,
+    'Payment proof state: payment_proof_required',
+    'Workspace state: not_created_until_payment_proof',
+    'Real MRR delta: 0',
+    '',
+    '## Stop conditions',
+    '- Do not create the private workspace until payment proof is attached.',
+    '- Do not claim real MRR until payment proof is recorded.',
+    '- Do not run external sends, connector writes, or browser actions outside owner approval.',
+  ].join('\n')
+  return {
+    status: 'scope_price_payment_gate_approved',
+    approval_type: 'paid_pilot_scope_price',
+    lead_id: leadId,
+    action_id: actionId,
+    template_name: context.templateName,
+    company: context.company,
+    proof_review_decision: proofDecision,
+    approved_scope_summary: approvedScopeSummary,
+    approved_price_mmk: approvedPriceMmk,
+    approved_price_label: priceLabel,
+    currency: 'MMK',
+    deposit_terms: depositTerms,
+    payment_route: paymentRoute,
+    owner_approval_reference: ownerApprovalReference,
+    payment_request_state: 'approved_to_send',
+    payment_proof_state: 'payment_proof_required',
+    private_workspace_state: 'not_created_until_payment_proof',
+    external_action_state: 'blocked_until_owner_approval',
+    connector_write_state: 'blocked_until_owner_approval',
+    browser_action_state: 'blocked_until_owner_approval',
+    real_mrr_delta: 0,
+    recorded_at: recordedAt,
+    recorded_by: 'operator_console',
+    packet: scopePacket,
+    payment_request_draft: paymentRequestDraft,
+    payment_request_gate: {
+      status: 'payment_request_approved_to_send',
+      payment_route: paymentRoute,
+      approved_price_mmk: approvedPriceMmk,
+      approved_price_label: priceLabel,
+      payment_request_state: 'approved_to_send',
+      payment_proof_state: 'payment_proof_required',
+      private_workspace_state: 'not_created_until_payment_proof',
+      real_mrr_delta: 0,
+      packet: paymentGatePacket,
+    },
+    guardrails: [
+      'owner_approval_before_payment_request',
+      'payment_proof_required_before_workspace',
+      'no_real_mrr_claim_without_payment_proof',
+    ],
   }
 }
 
@@ -2424,6 +2557,7 @@ function firstProofPacket(row) {
   const customerSuccessDesk = parseJsonObject(result.customer_success_desk || payload.customer_success_desk)
   const retainerGrowthOffer = parseJsonObject(result.retainer_growth_offer || payload.retainer_growth_offer)
   const retainerPaymentRecord = parseJsonObject(result.retainer_payment_record || payload.retainer_payment_record)
+  const scopePriceApproval = parseJsonObject(result.scope_price_approval || payload.scope_price_approval)
   const activationFirstProof = parseJsonObject(result.activation_first_proof || task.activation_first_proof || payload.activation_first_proof)
   const orderRoomState = Object.keys(persistedOrderRoomState).length
     ? persistedOrderRoomState
@@ -2494,17 +2628,18 @@ function firstProofPacket(row) {
     '## Close message',
     `If this first proof is useful, I can turn it into the working ${templateName || 'SUPERMEGA agent'} pilot. The current price hint is ${priceHint}. I will keep the first production run approval-only and show source trace for the important outputs.`,
   ].join('\n')
-  const paymentRequestDraft = [
+  const approvedPriceHint = text(scopePriceApproval.approved_price_label) || priceHint
+  const paymentRequestDraft = text(scopePriceApproval.payment_request_draft) || [
     `# ${templateName || 'SUPERMEGA agent'} payment request draft`,
     '',
     'Status: draft - owner approval required before sending',
     `Lead: ${leadId}`,
-    `Pilot amount: ${priceHint}`,
+    `Pilot amount: ${approvedPriceHint}`,
     'Payment route: PAYMENT_LINK_REQUIRED_AFTER_OWNER_APPROVAL',
     '',
     '## Buyer message',
     `Approved scope: turn the first proof into the working ${templateName || 'SUPERMEGA agent'} pilot.`,
-    `Amount to approve: ${priceHint}.`,
+    `Amount to approve: ${approvedPriceHint}.`,
     'I will start the pilot only after payment route approval and payment proof are attached to the order room.',
     '',
     '## Guardrails',
@@ -2749,6 +2884,10 @@ function firstProofPacket(row) {
       owner_activation_packet: ownerActivationPacket,
       owner_action_queue_csv: ownerActionQueueCsv,
       activation_summary_json: activationSummaryJson,
+      scope_price_approval: Object.keys(scopePriceApproval).length ? scopePriceApproval : null,
+      scope_price_approval_packet: text(scopePriceApproval.packet),
+      payment_request_gate: Object.keys(scopePriceApproval.payment_request_gate || {}).length ? scopePriceApproval.payment_request_gate : null,
+      payment_request_gate_packet: text(scopePriceApproval.payment_request_gate?.packet),
       private_workspace_manifest: privateWorkspaceManifest,
       private_workspace_manifest_json: JSON.stringify(privateWorkspaceManifest, null, 2),
       private_workspace_handoff_packet: privateWorkspaceHandoffPacket,
@@ -3848,6 +3987,161 @@ async function recordBlobProofReviewAcceptance({ actionId, leadId, payload }, pr
     operation_status: 'recorded',
     action: safeAction(updated.record),
     proof_review_acceptance: acceptance,
+  }
+}
+
+function scopePriceOrderRoomState(record, payload = {}) {
+  return buildOrderRoomState({
+    ...payload,
+    action_id: record.action_id,
+    lead_id: record.lead_id,
+    scope_approval_state: 'approved',
+    price_approval_state: 'approved',
+    payment_route_state: 'approved',
+    payment_request_state: 'approved_to_send',
+    payment_proof_state: 'payment_proof_required',
+    private_workspace_state: 'not_created_until_payment_proof',
+    owner_note: record.owner_approval_reference,
+  })
+}
+
+async function recordScopePriceApproval(payload = {}) {
+  const actionId = text(payload.action_id)
+  const leadId = text(payload.lead_id)
+  if (!actionId && !leadId) return { status: 'error', reason: 'missing_action_or_lead_id' }
+  if (!datastore.postgresConfigured()) {
+    return recordBlobScopePriceApproval({ actionId, leadId, payload }, { status: 'error', reason: 'postgres_not_configured' })
+  }
+
+  const selected = await datastore.query(
+    `
+      select
+        action_id, lead_id, task_id, action_type, status, priority, owner,
+        title, next_step, approval_required, approval_state,
+        notification_channel, notification_status, payload, result, created_at
+      from public.supermega_pipeline_actions
+      where (($1 <> '' and action_id = $1) or ($1 = '' and $2 <> '' and lead_id = $2))
+      order by created_at desc
+      limit 1
+    `,
+    [actionId, leadId],
+  )
+  if (selected.status !== 'ready') return recordBlobScopePriceApproval({ actionId, leadId, payload }, selected)
+  if (!selected.rows.length) {
+    const fallback = await recordBlobScopePriceApproval({ actionId, leadId, payload }, { status: 'error', reason: 'postgres_action_not_found' })
+    if (fallback.status === 'ready') return fallback
+    return { status: 'error', reason: 'action_not_found' }
+  }
+
+  const row = selected.rows[0]
+  const approval = buildScopePriceApprovalRecord(row, { ...payload, action_id: text(row.action_id), lead_id: text(row.lead_id) })
+  if (approval.status === 'error') return approval
+  const state = scopePriceOrderRoomState(approval, payload)
+  const result = await datastore.query(
+    `
+      with target as (
+        select id
+        from public.supermega_pipeline_actions
+        where (($1 <> '' and action_id = $1) or ($1 = '' and $2 <> '' and lead_id = $2))
+        order by created_at desc
+        limit 1
+      )
+      update public.supermega_pipeline_actions a
+      set
+        result = jsonb_set(
+          jsonb_set(
+            jsonb_set(coalesce(a.result, '{}'::jsonb), '{scope_price_approval}', $3::jsonb, true),
+            '{scope_price_approval_recorded_at}',
+            to_jsonb($4::text),
+            true
+          ),
+          '{pilot_order_room_state}',
+          $5::jsonb,
+          true
+        ),
+        status = 'payment_request_approved',
+        next_step = 'Send owner-approved payment request, then attach payment proof before workspace start.',
+        approval_state = 'approved',
+        updated_at = now()
+      where a.id in (select id from target)
+      returning
+        a.action_id, a.lead_id, a.task_id, a.action_type, a.status, a.priority, a.owner,
+        a.title, a.next_step, a.approval_required, a.approval_state,
+        a.notification_channel, a.notification_status, a.payload, a.result, a.created_at
+    `,
+    [actionId, leadId, JSON.stringify(approval), approval.recorded_at, JSON.stringify(state)],
+  )
+  if (result.status !== 'ready') return recordBlobScopePriceApproval({ actionId, leadId, payload }, result)
+  if (!result.rows.length) return { status: 'error', reason: 'action_not_found', scope_price_approval: approval, order_room_state: state }
+  const mirror = await recordBlobScopePriceApproval(
+    { actionId, leadId, payload },
+    { status: 'ready', adapter: 'vercel_postgres_neon', mirrored_from_primary: true },
+    { allowMissing: true },
+  )
+  return {
+    status: 'ready',
+    adapter: mirror.status === 'ready' ? 'vercel_postgres_neon_with_blob_queue' : 'vercel_postgres_neon',
+    operation_status: 'recorded',
+    action: safeAction(result.rows[0]),
+    scope_price_approval: approval,
+    order_room_state: state,
+    mirror,
+  }
+}
+
+async function recordBlobScopePriceApproval({ actionId, leadId, payload }, primaryDatabase = {}, options = {}) {
+  const found = await blobQueue.findActionRecord({ action_id: actionId, lead_id: leadId })
+  if (found.status !== 'ready') {
+    if (options.allowMissing && found.reason === 'action_not_found') {
+      return {
+        status: 'skipped',
+        adapter: 'vercel_blob',
+        reason: 'blob_action_not_found',
+        primary_database: primaryDatabase,
+      }
+    }
+    return {
+      ...found,
+      primary_database: primaryDatabase,
+    }
+  }
+  const row = found.row
+  const currentResult = parseJsonObject(row.result)
+  const approval = buildScopePriceApprovalRecord(row, payload)
+  if (approval.status === 'error') return approval
+  const state = scopePriceOrderRoomState(approval, payload)
+  const nextResult = {
+    ...currentResult,
+    scope_price_approval: approval,
+    scope_price_approval_recorded_at: approval.recorded_at,
+    pilot_order_room_state: state,
+  }
+  const updated = await blobQueue.updateActionRecord(
+    { action_id: actionId, lead_id: leadId },
+    {
+      result: nextResult,
+      status: 'payment_request_approved',
+      next_step: 'Send owner-approved payment request, then attach payment proof before workspace start.',
+      approval_state: 'approved',
+      notification_status: row.notification_status || 'scope_price_approval_recorded',
+    },
+  )
+  if (updated.status !== 'ready') {
+    return {
+      ...updated,
+      primary_database: primaryDatabase,
+      scope_price_approval: approval,
+      order_room_state: state,
+    }
+  }
+  return {
+    status: 'ready',
+    adapter: 'vercel_blob',
+    primary_database: primaryDatabase,
+    operation_status: 'recorded',
+    action: safeAction(updated.record),
+    scope_price_approval: approval,
+    order_room_state: state,
   }
 }
 
@@ -5133,7 +5427,7 @@ function writeStatusCode(result) {
   if (result.status === 'ready') return 200
   if (result.reason === 'action_not_found') return 404
   if (['private_workspace_not_ready', 'private_workspace_required', 'first_run_acceptance_required', 'owner_acceptance_required', 'owner_acceptance_not_accepted', 'connector_policy_required', 'production_approval_queue_required', 'enterprise_delivery_pack_required', 'customer_success_desk_required', 'retainer_growth_offer_required', 'use_start_private_workspace_operation', 'autopilot_draft_not_found'].includes(result.reason)) return 409
-  if (['missing_action_or_lead_id', 'missing_activation_sources', 'missing_approved_source_sample', 'invalid_proof_review_decision', 'invalid_owner_acceptance_decision', 'missing_owner_acceptance_reference', 'invalid_connector_policy_mode', 'missing_connector_policy_reference', 'missing_production_queue_reference', 'missing_enterprise_delivery_reference', 'missing_customer_success_reference', 'missing_retainer_growth_reference', 'missing_retainer_payment_proof_reference', 'missing_retainer_owner_approval_reference', 'invalid_retainer_payment_amount', 'invalid_retainer_payment_period', 'invalid_autopilot_draft_decision', 'missing_autopilot_draft_reference'].includes(result.reason)) return 400
+  if (['missing_action_or_lead_id', 'missing_activation_sources', 'missing_approved_source_sample', 'invalid_proof_review_decision', 'proof_not_accepted_for_paid_scope', 'invalid_scope_price_amount', 'missing_scope_price_owner_approval_reference', 'invalid_owner_acceptance_decision', 'missing_owner_acceptance_reference', 'invalid_connector_policy_mode', 'missing_connector_policy_reference', 'missing_production_queue_reference', 'missing_enterprise_delivery_reference', 'missing_customer_success_reference', 'missing_retainer_growth_reference', 'missing_retainer_payment_proof_reference', 'missing_retainer_owner_approval_reference', 'invalid_retainer_payment_amount', 'invalid_retainer_payment_period', 'invalid_autopilot_draft_decision', 'missing_autopilot_draft_reference'].includes(result.reason)) return 400
   return 503
 }
 
@@ -5230,6 +5524,15 @@ async function handler(req, res) {
     }
     if (operation === 'record_proof_review_acceptance') {
       const recorded = await recordProofReviewAcceptance(payload)
+      json(res, writeStatusCode(recorded), {
+        endpoint: 'pipeline-control',
+        operation,
+        ...recorded,
+      })
+      return
+    }
+    if (operation === 'record_scope_price_approval') {
+      const recorded = await recordScopePriceApproval(payload)
       json(res, writeStatusCode(recorded), {
         endpoint: 'pipeline-control',
         operation,
@@ -5699,6 +6002,7 @@ handler.__test = {
   buildActivationProofReviewRequest,
   buildActivationSourcePackRequest,
   buildProofReviewAcceptanceRecord,
+  buildScopePriceApprovalRecord,
   buildActivationSessionFirstProofTask,
   buildActivationSessionLead,
   buildActivationSourcePack,
@@ -5713,6 +6017,7 @@ handler.__test = {
   attachActivationSourcePack,
   prepareActivationFirstProof,
   recordProofReviewAcceptance,
+  recordScopePriceApproval,
   prepareCustomerSuccessDesk,
   prepareEnterpriseDeliveryPack,
   prepareProductionApprovalQueue,
