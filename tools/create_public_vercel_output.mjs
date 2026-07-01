@@ -6046,12 +6046,15 @@ const publicOperatorConsoleHtml = `<!doctype html>
       const sourceTypeId = 'activation-source-pack-type-'+index;
       const sourceRefId = 'activation-source-pack-reference-'+index;
       const sourceContentId = 'activation-source-pack-content-'+index;
+      const sourceJsonId = 'activation-source-pack-json-'+index;
       const pack = action.activation_source_pack || action.source_pack || (action.result && action.result.activation_source_pack) || {};
       const packStatus = pack && pack.source_count ? '<div class="operator-meta"><span class="operator-chip">source pack attached</span><span class="operator-chip">'+esc(pack.source_count)+' sources</span><span class="operator-chip">'+esc(pack.external_action_state || 'blocked_until_owner_approval')+'</span></div>' : '<div class="operator-meta"><span class="operator-chip">no source pack attached</span><span class="operator-chip">owner-approved data only</span></div>';
       return [
         '<div class="operator-proof-section operator-activation-source-pack">',
           '<span>Client source pack</span>',
           packStatus,
+          '<textarea class="operator-reply" id="'+sourceJsonId+'" name="source_pack_json" placeholder="Paste Source pack JSON copied from /app/source-pack."></textarea>',
+          '<button class="btn secondary" type="button" data-source-pack-json-command="attach_activation_source_pack" data-source-pack-json-target="'+sourceJsonId+'" data-action-id="'+esc(action.action_id || '')+'" data-lead-id="'+esc(action.lead_id || '')+'">Import source pack JSON</button>',
           '<input class="operator-input" id="'+packNameId+'" name="source_pack_name" value="'+esc(pack.source_pack_name || 'Day 1 client source pack')+'" aria-label="Source pack name" />',
           '<div class="operator-row">',
             '<select class="operator-input" id="'+sourceTypeId+'" aria-label="Source type"><option value="google_drive">Google Drive</option><option value="gmail">Gmail</option><option value="uploaded_file">Uploaded file</option><option value="manual_note">Manual note</option><option value="pos_export">POS export</option></select>',
@@ -6095,8 +6098,47 @@ const publicOperatorConsoleHtml = `<!doctype html>
       actionsEl.querySelectorAll('[data-retainer-growth]').forEach(function(button){button.addEventListener('click',function(){prepareRetainerGrowthOffer(button)})});
       actionsEl.querySelectorAll('[data-retainer-payment]').forEach(function(button){button.addEventListener('click',function(){recordRetainerPaymentProof(button)})});
       actionsEl.querySelectorAll('[data-autopilot-draft-decision]').forEach(function(button){button.addEventListener('click',function(){recordAutopilotDraftApproval(button)})});
+      actionsEl.querySelectorAll('[data-source-pack-json-command]').forEach(function(button){button.addEventListener('click',function(){attachActivationSourcePackJson(button)})});
       actionsEl.querySelectorAll('[data-source-pack-command]').forEach(function(button){button.addEventListener('click',function(){attachActivationSourcePack(button)})});
       actionsEl.querySelectorAll('[data-activation-proof-command]').forEach(function(button){button.addEventListener('click',function(){prepareActivationFirstProof(button)})});
+    }
+    async function attachActivationSourcePackJson(button){
+      if(!token()){setStatus('Paste the ops key first.');return}
+      const jsonEl = document.getElementById(button.getAttribute('data-source-pack-json-target') || '');
+      const rawJson = jsonEl ? jsonEl.value.trim() : '';
+      if(!rawJson){setStatus('Paste Source pack JSON first.');return}
+      let imported;
+      try {
+        imported = JSON.parse(rawJson);
+      } catch (error) {
+        setStatus({status:'error',reason:'source_pack_json_parse_failed',message:String(error && error.message || error)});
+        return;
+      }
+      const rawSources = Array.isArray(imported) ? imported : Array.isArray(imported.sources) ? imported.sources : [];
+      const sources = rawSources.map(function(source,index){
+        return {
+          source_id:source.source_id || 'SRC-'+String(index+1).padStart(2,'0'),
+          source_type:source.source_type || source.type || 'manual_note',
+          reference:source.reference || source.label || source.name || 'source '+String(index+1),
+          content:source.content || source.content_excerpt || source.text || source.sample || '',
+          approved:source.approved !== false
+        };
+      }).filter(function(source){return source.reference || source.content});
+      if(!sources.length){setStatus({status:'error',reason:'missing_activation_sources',message:'Source pack JSON needs a sources array with content.'});return}
+      const payload = {
+        operation:'attach_activation_source_pack',
+        action_id:imported.action_id || button.getAttribute('data-action-id') || '',
+        lead_id:imported.lead_id || button.getAttribute('data-lead-id') || '',
+        source_pack_name:imported.source_pack_name || 'Imported client source pack',
+        source_pack_json:rawJson,
+        sources:sources,
+        operator_note:'Imported owner-approved client Source pack JSON. External sends, writes, payments, and connector access remain blocked until owner approval.'
+      };
+      setStatus({status:'importing_source_pack_json', note:'Attaching approved Source pack JSON to the action.'});
+      const response = await fetch('/api/pipeline-control',{method:'POST',headers:Object.assign({},authHeaders(),{'content-type':'application/json'}),body:JSON.stringify(payload),cache:'no-store'});
+      const data = await response.json().catch(function(){return {status:'error',reason:'invalid_json',code:response.status}});
+      setStatus(data);
+      if(response.ok) await refresh();
     }
     async function attachActivationSourcePack(button){
       if(!token()){setStatus('Paste the ops key first.');return}

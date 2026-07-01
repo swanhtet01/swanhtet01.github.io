@@ -561,7 +561,19 @@ function normalizeActivationSourceItems(payload = {}) {
     .map((source, index) => {
       const sourceType = oneOf(
         source.source_type || source.type,
-        ['google_drive', 'gmail', 'uploaded_file', 'manual_note', 'pos_export', 'browser_clip', 'whatsapp_viber', 'spreadsheet'],
+        [
+          'google_drive',
+          'gmail',
+          'uploaded_file',
+          'manual_note',
+          'pos_export',
+          'browser_clip',
+          'whatsapp_viber',
+          'spreadsheet',
+          'gmail_or_chat',
+          'spreadsheet_or_pos_export',
+          'process_note_or_screenshot',
+        ],
         'manual_note',
       )
       const reference = truncate(source.reference || source.source_reference || source.name || `${sourceType} source ${index + 1}`, 300)
