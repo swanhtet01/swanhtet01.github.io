@@ -186,6 +186,14 @@ function sourcePackIntakeUrl(leadId, actionId) {
   return `${appBase}/app/source-pack?${params.toString()}`
 }
 
+function proofReviewUrl(leadId, actionId) {
+  const appBase = (envText('PUBLIC_WORKSPACE_BASE_URL', 'SUPERMEGA_WORKSPACE_BASE_URL') || 'https://supermega.dev').replace(/\/$/, '')
+  const params = new URLSearchParams()
+  params.set('lead', leadId)
+  params.set('action', actionId)
+  return `${appBase}/app/proof-review?${params.toString()}`
+}
+
 function buildActivationSourcePackRequest(lead = {}) {
   const leadId = text(lead.lead_id) || text(lead.id) || 'lead-required'
   const actionId = text(lead.task_id) || text(lead.action_id) || 'action-required'
@@ -630,6 +638,50 @@ function buildActivationSourcePack(row = {}, payload = {}) {
   }
 }
 
+function buildActivationProofReviewRequest(row = {}, input = {}) {
+  const context = contextFromActivationAction(row)
+  const leadId = text(row.lead_id) || text(context.lead.lead_id) || text(input.lead_id) || 'lead-required'
+  const actionId = text(row.action_id) || text(context.lead.task_id) || text(input.action_id) || 'action-required'
+  const templateName = text(input.template_name) || context.templateName
+  const firstProofTarget = text(input.first_proof_target) || context.firstProofTarget
+  const reviewUrl = proofReviewUrl(leadId, actionId)
+  const decisionOptions = ['ready_for_paid_pilot', 'changes_requested', 'not_useful']
+  const clientReviewMessage = [
+    `Please review the first proof for ${templateName}.`,
+    '',
+    `Client: ${context.company}`,
+    `First proof target: ${firstProofTarget}`,
+    `Proof-review link: ${reviewUrl}`,
+    '',
+    'Choose one review result:',
+    '1. ready_for_paid_pilot - useful enough to scope the paid pilot.',
+    '2. changes_requested - useful direction, but needs edits before pilot scope.',
+    '3. not_useful - not enough value yet.',
+    '',
+    'This review does not send messages, write records, connect accounts, request payment, or claim revenue. Owner approval is still required before send/write/payment/browser actions.',
+  ].join('\n')
+  return {
+    status: 'proof_review_request_ready',
+    request_type: 'client_first_proof_review',
+    lead_id: leadId,
+    action_id: actionId,
+    template_name: templateName,
+    company: context.company,
+    first_proof_target: firstProofTarget,
+    review_url: reviewUrl,
+    decision_options: decisionOptions,
+    client_review_message: clientReviewMessage,
+    proof_packet_excerpt: truncate(input.proof_delivery_packet || '', 1200),
+    external_action_state: 'blocked_until_owner_approval',
+    connector_write_state: 'blocked_until_owner_approval',
+    browser_action_state: 'blocked_until_owner_approval',
+    payment_request_state: 'blocked_until_owner_approval',
+    approval_required: true,
+    human_gate: 'owner approval before send/write/payment/browser actions',
+    real_mrr_delta: 0,
+  }
+}
+
 function buildActivationFirstProof(row = {}, payload = {}) {
   const rowResult = parseJsonObject(row.result)
   const attachedSourcePack = parseJsonObject(payload.activation_source_pack || rowResult.activation_source_pack)
@@ -706,6 +758,11 @@ function buildActivationFirstProof(row = {}, payload = {}) {
     '',
     'I will not send messages, write records, connect accounts, use credentialed browser/mobile actions, request payment, or claim revenue without owner approval.',
   ].join('\n')
+  const proofReviewRequest = buildActivationProofReviewRequest(row, {
+    template_name: context.templateName,
+    first_proof_target: context.firstProofTarget,
+    proof_delivery_packet: proofDeliveryPacket,
+  })
 
   return {
     status: 'activation_first_proof_ready',
@@ -720,6 +777,7 @@ function buildActivationFirstProof(row = {}, payload = {}) {
     source_trace: sourceTrace,
     extracted_signals: extractedSignals,
     proof_delivery_packet: proofDeliveryPacket,
+    proof_review_request: proofReviewRequest,
     buyer_reply_draft: buyerReplyDraft,
     operator_note: operatorNote,
     prepared_at: preparedAt,
@@ -2575,6 +2633,7 @@ function firstProofPacket(row) {
   ].join('\n')
   const resolvedBuyerReplyDraft = text(activationFirstProof.buyer_reply_draft) || buyerReplyDraft
   const resolvedProofDeliveryPacket = text(activationFirstProof.proof_delivery_packet) || proofDeliveryPacket
+  const proofReviewRequest = parseJsonObject(activationFirstProof.proof_review_request || result.proof_review_request || task.proof_review_request || payload.proof_review_request)
 
   return {
     status: isBrief ? 'operator_brief_ready' : 'queued_for_runner',
@@ -2601,6 +2660,9 @@ function firstProofPacket(row) {
     checklist,
     acceptance_tests: acceptanceTests,
     activation_first_proof: Object.keys(activationFirstProof).length ? activationFirstProof : null,
+    proof_review_request: Object.keys(proofReviewRequest).length ? proofReviewRequest : null,
+    proof_review_request_packet: text(proofReviewRequest.client_review_message),
+    proof_review_request_json: Object.keys(proofReviewRequest).length ? JSON.stringify(proofReviewRequest, null, 2) : '',
     buyer_reply_draft: resolvedBuyerReplyDraft,
     proof_delivery_packet: resolvedProofDeliveryPacket,
     pilot_close_packet: pilotClosePacket,
@@ -5396,6 +5458,7 @@ handler.__test = {
   buildRetainerGrowthOfferPack,
   buildRetainerPaymentRecord,
   buildActivationSessionActionPayload,
+  buildActivationProofReviewRequest,
   buildActivationSourcePackRequest,
   buildActivationSessionFirstProofTask,
   buildActivationSessionLead,

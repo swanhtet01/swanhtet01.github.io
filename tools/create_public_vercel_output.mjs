@@ -3358,6 +3358,10 @@ const config = {
       dest: '/api/public-app-handoff.js',
     },
     {
+      src: '^/app/proof-review/?$',
+      dest: '/app/proof-review/index.html',
+    },
+    {
       src: '^/app/source-pack/?$',
       dest: '/app/source-pack/index.html',
     },
@@ -5493,6 +5497,15 @@ const publicOperatorConsoleHtml = `<!doctype html>
       const link = intakeUrl ? '<a class="operator-proof-link" href="'+esc(intakeUrl)+'" target="_blank" rel="noreferrer">Source-pack intake link</a>' : '';
       return '<div class="operator-proof-section" data-source-pack-request="client_source_pack_intake"><span>Client source request</span><div class="operator-meta"><span class="operator-chip">3 approved source samples</span><span class="operator-chip">'+esc(request && request.external_action_state || 'blocked_until_owner_approval')+'</span></div>'+link+'<textarea class="operator-reply" id="'+id+'" readonly>'+esc(packet || proof.source_pack_request_json || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+id+'">Copy source request</button></div>';
     }
+    function proofReviewRequest(proof, index){
+      const request = proof && proof.proof_review_request;
+      if(!request && !proof.proof_review_request_packet && !proof.proof_review_request_json)return '';
+      const id = 'proof-review-request-'+index;
+      const reviewUrl = request && request.review_url ? request.review_url : '';
+      const packet = proof.proof_review_request_packet || (request && request.client_review_message) || proof.proof_review_request_json || '';
+      const link = reviewUrl ? '<a class="operator-proof-link" href="'+esc(reviewUrl)+'" target="_blank" rel="noreferrer">Proof-review link</a>' : '';
+      return '<div class="operator-proof-section" data-proof-review-request="client_first_proof_review"><span>Client proof review</span><div class="operator-meta"><span class="operator-chip">ready_for_paid_pilot</span><span class="operator-chip">changes_requested</span><span class="operator-chip">'+esc(request && request.external_action_state || 'blocked_until_owner_approval')+'</span></div>'+link+'<textarea class="operator-reply" id="'+id+'" readonly>'+esc(packet || proof.proof_review_request_json || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+id+'">Copy review request</button></div>';
+    }
     function proofBuyerReply(proof, index){
       if(!proof || !proof.buyer_reply_draft)return '';
       const id = 'buyer-reply-'+index;
@@ -6083,7 +6096,7 @@ const publicOperatorConsoleHtml = `<!doctype html>
       if(!actions.length){actionsEl.innerHTML = '<div class="operator-item">No recent actions.</div>';return}
       actionsEl.innerHTML = actions.map(function(action,index){
         const proof = action.first_proof;
-        const proofHtml = proof ? '<div class="operator-proof"><strong>'+esc(proof.title || 'First proof')+'</strong><div class="operator-meta"><span class="operator-chip">'+esc(proof.status)+'</span><span class="operator-chip">'+esc(proof.template_id)+'</span><span class="operator-chip">'+esc(proof.human_gate)+'</span></div><div>'+esc(proof.first_proof_target || '')+'</div>'+proofStarterLink(proof)+proofSolutionRoute(proof,index)+proofImplementationBlueprint(proof,index)+proofIntakeJob(proof,index)+proofClientKickoff(proof,index)+proofSourcePackRequest(proof,index)+proofList('Checklist',proof.checklist)+proofList('Acceptance tests',proof.acceptance_tests)+sourcePackControl(action,index)+proofActivationSourceControl(action,index)+proofBuyerReply(proof,index)+proofDeliveryPacket(proof,index)+pilotClosePacket(proof,index)+pilotOrderRoom(action,proof,index)+'</div>' : '';
+        const proofHtml = proof ? '<div class="operator-proof"><strong>'+esc(proof.title || 'First proof')+'</strong><div class="operator-meta"><span class="operator-chip">'+esc(proof.status)+'</span><span class="operator-chip">'+esc(proof.template_id)+'</span><span class="operator-chip">'+esc(proof.human_gate)+'</span></div><div>'+esc(proof.first_proof_target || '')+'</div>'+proofStarterLink(proof)+proofSolutionRoute(proof,index)+proofImplementationBlueprint(proof,index)+proofIntakeJob(proof,index)+proofClientKickoff(proof,index)+proofSourcePackRequest(proof,index)+proofList('Checklist',proof.checklist)+proofList('Acceptance tests',proof.acceptance_tests)+sourcePackControl(action,index)+proofActivationSourceControl(action,index)+proofBuyerReply(proof,index)+proofDeliveryPacket(proof,index)+proofReviewRequest(proof,index)+pilotClosePacket(proof,index)+pilotOrderRoom(action,proof,index)+'</div>' : '';
         return '<article class="operator-item"><strong>'+esc(action.title || action.action_type)+'</strong><div class="operator-meta"><span class="operator-chip">'+esc(action.status)+'</span><span class="operator-chip">'+esc(action.priority)+'</span><span class="operator-chip">'+esc(action.approval_state)+'</span><span>'+esc(action.lead_id)+'</span></div><div>'+esc(action.next_step || '')+'</div>'+salesAutopilotDraft(action,index)+proofHtml+'</article>';
       }).join('');
       actionsEl.querySelectorAll('[data-copy-target]').forEach(function(button){button.addEventListener('click',function(){copyDraft(button.getAttribute('data-copy-target'))})});
@@ -6214,6 +6227,151 @@ const publicOperatorConsoleHtml = `<!doctype html>
 </html>`
 await mkdir(resolve(staticDir, 'operator'), { recursive: true })
 await writeFile(resolve(staticDir, 'operator', 'index.html'), publicOperatorConsoleHtml, 'utf8')
+const publicProofReviewHtml = `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="noindex,nofollow" />
+  <title>AI Workcell Proof Review | SUPERMEGA.dev</title>
+  <meta name="description" content="Client proof review room for SuperMega AI workcell first proofs." />
+  <meta name="theme-color" content="#1b1815" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" />
+  <style>
+    :root { color-scheme: light; --paper:#f4efe6; --ink:#1b1815; --muted:#6f675d; --line:rgba(27,24,21,.16); --panel:#fffaf1; --panel2:#ebe2d3; --accent:#d97757; --green:#1c8a5a; --red:#a14432; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; background: var(--paper); color: var(--ink); font-family: "Aptos", "Segoe UI Variable", "Segoe UI", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+    main { width: min(1180px, calc(100% - 28px)); margin: 0 auto; padding: 24px 0 54px; }
+    header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px 0 22px; border-bottom: 1px solid var(--line); }
+    .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: inherit; font-weight: 950; }
+    .mark { width: 38px; height: 38px; border-radius: 12px; background: #1b1815; display: grid; place-items: center; border: 1px solid rgba(27,24,21,.22); }
+    .mark img { width: 100%; height: 100%; display: block; border-radius: inherit; }
+    .btn { border: 1px solid var(--line); border-radius: 999px; padding: 11px 14px; background: var(--panel); color: var(--ink); font-weight: 850; text-decoration: none; cursor: pointer; }
+    .btn.primary { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+    .btn:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible { outline: 3px solid rgba(217,119,87,.28); outline-offset: 2px; }
+    .hero { display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, 430px); gap: 16px; padding: 28px 0 20px; align-items: stretch; }
+    .eyebrow { color: var(--accent); font-size: 12px; font-weight: 950; text-transform: uppercase; letter-spacing: 0; }
+    h1 { margin: 10px 0 0; max-width: 12ch; font-size: clamp(44px, 8vw, 84px); line-height: .9; letter-spacing: 0; }
+    h2 { margin: 0; font-size: clamp(24px, 3vw, 34px); letter-spacing: 0; }
+    p { color: var(--muted); font-size: 16px; line-height: 1.55; margin: 12px 0 0; max-width: 62rem; }
+    .summary, .panel, .decision-card { border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }
+    .summary { padding: 18px; display: grid; gap: 10px; align-content: start; }
+    .summary-row { display: grid; grid-template-columns: 108px 1fr; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+    .summary-row:last-child { border-bottom: 0; }
+    .summary-row span { color: var(--muted); font-size: 12px; font-weight: 900; text-transform: uppercase; }
+    .summary-row strong { overflow-wrap: anywhere; }
+    .band { border-top: 1px solid var(--line); padding-top: 22px; margin-top: 18px; }
+    .grid { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(320px, .95fr); gap: 12px; margin-top: 12px; align-items: start; }
+    .panel { padding: 16px; display: grid; gap: 12px; background: var(--panel2); }
+    .decision-card { padding: 14px; display: grid; gap: 10px; }
+    label { display: grid; gap: 7px; color: var(--muted); font-size: 12px; font-weight: 900; text-transform: uppercase; }
+    input, textarea, select { width: 100%; border: 1px solid var(--line); border-radius: 8px; padding: 11px 12px; background: #fffaf1; color: var(--ink); font: inherit; }
+    textarea { min-height: 190px; resize: vertical; line-height: 1.45; }
+    .actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .pill { display: inline-flex; align-items: center; width: fit-content; border-radius: 999px; padding: 7px 9px; background: rgba(28,138,90,.1); color: var(--green); font-size: 11px; font-weight: 950; text-transform: uppercase; }
+    .pill.stop { background: rgba(161,68,50,.1); color: var(--red); }
+    pre { margin: 0; overflow: auto; white-space: pre-wrap; border: 1px solid var(--line); border-radius: 8px; background: rgba(255,250,241,.85); padding: 14px; font-size: 13px; line-height: 1.45; max-height: 420px; }
+    footer { margin-top: 24px; padding-top: 18px; border-top: 1px solid var(--line); color: var(--muted); font-size: 13px; }
+    @media (max-width: 900px) { .hero, .grid { grid-template-columns: 1fr; } header { align-items: flex-start; } .summary-row { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <a class="brand" href="/" aria-label="SUPERMEGA.dev home"><span class="mark"><img src="/favicon.svg" alt="" /></span><span>SUPERMEGA.dev</span></a>
+      <a class="btn" href="/operator/">Operator console</a>
+    </header>
+    <section class="hero">
+      <div>
+        <div class="eyebrow">client review</div>
+        <h1>AI Workcell Proof Review</h1>
+        <p>Review the first proof and copy an acceptance artifact. This page does not submit data, send messages, write records, connect accounts, request payment, or claim revenue.</p>
+      </div>
+      <aside class="summary" aria-label="Proof review summary">
+        <div class="summary-row"><span>Lead</span><strong data-lead-id>Loading</strong></div>
+        <div class="summary-row"><span>Action</span><strong data-action-id>Loading</strong></div>
+        <div class="summary-row"><span>Decision</span><strong data-decision-summary>Waiting</strong></div>
+        <div class="summary-row"><span>Gate</span><strong>owner approval before send/write/payment/browser actions</strong></div>
+      </aside>
+    </section>
+    <section class="band">
+      <div class="actions"><h2>First proof review</h2><span class="pill stop">No external action</span></div>
+      <div class="grid">
+        <div class="panel">
+          <label>Proof packet<textarea id="proof-packet" placeholder="Paste the first proof packet from the operator if it is not already included in your message."></textarea></label>
+          <label>Review decision<select id="review-decision"><option value="ready_for_paid_pilot">ready_for_paid_pilot</option><option value="changes_requested">changes_requested</option><option value="not_useful">not_useful</option></select></label>
+          <label>Client note<textarea id="client-note" placeholder="What is useful, what needs changing, or why it is not useful yet."></textarea></label>
+        </div>
+        <div class="decision-card">
+          <h2>Proof acceptance JSON</h2>
+          <p>Copy this back to the SuperMega operator. It is an acceptance artifact only; payment and production still need owner approval.</p>
+          <div class="actions"><button class="btn primary" id="copy-acceptance" type="button">Copy acceptance JSON</button><button class="btn" id="refresh-acceptance" type="button">Refresh JSON</button></div>
+          <pre id="acceptance-json">Loading proof acceptance JSON.</pre>
+          <p id="copy-status">Nothing is submitted from this page.</p>
+        </div>
+      </div>
+    </section>
+    <footer>First-proof review only. Guardrail: owner approval before send/write/payment/browser actions. Real MRR stays 0 until payment proof is recorded.</footer>
+  </main>
+  <script>
+    (function(){
+      var params = new URLSearchParams(window.location.search);
+      var lead = (params.get('lead') || 'lead-required').slice(0, 80);
+      var action = (params.get('action') || 'action-required').slice(0, 80);
+      var leadEl = document.querySelector('[data-lead-id]');
+      var actionEl = document.querySelector('[data-action-id]');
+      var decisionEl = document.getElementById('review-decision');
+      var decisionSummary = document.querySelector('[data-decision-summary]');
+      var proofEl = document.getElementById('proof-packet');
+      var noteEl = document.getElementById('client-note');
+      var output = document.getElementById('acceptance-json');
+      var copyStatus = document.getElementById('copy-status');
+      if (leadEl) leadEl.textContent = lead;
+      if (actionEl) actionEl.textContent = action;
+      function buildAcceptance() {
+        var decision = decisionEl && decisionEl.value ? decisionEl.value : 'ready_for_paid_pilot';
+        if (decisionSummary) decisionSummary.textContent = decision;
+        return {
+          acceptance_type: 'first_proof_review',
+          lead_id: lead,
+          action_id: action,
+          decision: decision,
+          client_note: noteEl && noteEl.value ? noteEl.value.trim() : '',
+          proof_packet_excerpt: proofEl && proofEl.value ? proofEl.value.trim().slice(0, 1400) : '',
+          next_gate: decision === 'ready_for_paid_pilot' ? 'scope_price_owner_approval_required' : 'proof_revision_required',
+          human_gate: 'owner approval before send/write/payment/browser actions',
+          external_action_state: 'blocked_until_owner_approval',
+          connector_write_state: 'blocked_until_owner_approval',
+          browser_action_state: 'blocked_until_owner_approval',
+          payment_request_state: 'blocked_until_owner_approval',
+          real_mrr_delta: 0,
+          reviewed_at: new Date().toISOString()
+        };
+      }
+      function render() {
+        if (!output) return;
+        output.textContent = JSON.stringify(buildAcceptance(), null, 2);
+      }
+      document.querySelectorAll('textarea, select').forEach(function(el){ el.addEventListener('input', render); el.addEventListener('change', render); });
+      var refresh = document.getElementById('refresh-acceptance');
+      if (refresh) refresh.addEventListener('click', render);
+      var copy = document.getElementById('copy-acceptance');
+      if (copy) copy.addEventListener('click', async function(){
+        render();
+        try {
+          await navigator.clipboard.writeText(output.textContent || '');
+          if (copyStatus) copyStatus.textContent = 'Copied. Send this JSON to the SuperMega operator.';
+        } catch (error) {
+          if (copyStatus) copyStatus.textContent = 'Copy failed. Select the JSON manually and copy it.';
+        }
+      });
+      render();
+    })();
+  </script>
+</body>
+</html>`
+await mkdir(resolve(staticDir, 'app', 'proof-review'), { recursive: true })
+await writeFile(resolve(staticDir, 'app', 'proof-review', 'index.html'), publicProofReviewHtml, 'utf8')
 const publicSourcePackIntakeHtml = `<!doctype html>
 <html lang="en">
 <head>
