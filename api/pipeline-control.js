@@ -1306,13 +1306,104 @@ function buildPrivateWorkspaceManifest(input = {}) {
   }
 }
 
+function firstRunSourceTrace(value) {
+  const raw = Array.isArray(value)
+    ? value
+    : text(value)
+      .split(/\r?\n/)
+      .map((item) => item.replace(/^[-*\s]+/, ''))
+  return list(raw).slice(0, 20)
+}
+
+function buildFirstProductionRunRecord(input = {}) {
+  const manifest = input.manifest || {}
+  const output = text(input.firstRunOutput || input.first_run_output || input.output).slice(0, 12000)
+  const evidenceReference = text(input.evidenceReference || input.firstRunEvidenceReference || input.first_run_evidence_reference || input.evidence_reference).slice(0, 500)
+  const recordedAt = text(input.recordedAt) || new Date().toISOString()
+  const workspaceSlug = text(manifest.workspace_slug || input.workspaceSlug) || 'private-workspace-required'
+  const leadId = text(input.leadId || manifest.lead_id) || 'not set'
+  const templateName = text(input.templateName || manifest.template_name) || text(manifest.template_id) || 'SUPERMEGA agent'
+  const sourceTrace = firstRunSourceTrace(input.sourceTrace || input.source_trace)
+  const sourceTraceLines = sourceTrace.length
+    ? sourceTrace.map((item) => `- ${item}`).join('\n')
+    : '- Source trace not attached yet; owner acceptance should stay blocked.'
+  const packet = [
+    `# ${templateName} first production run`,
+    '',
+    'Status: recorded - owner acceptance required',
+    `Lead: ${leadId}`,
+    `Workspace: ${workspaceSlug}`,
+    `Workspace URL: ${text(manifest.workspace_url) || privateWorkspaceUrl(workspaceSlug, leadId)}`,
+    `Evidence reference: ${evidenceReference || 'FIRST_RUN_EVIDENCE_REFERENCE_REQUIRED'}`,
+    'External action state: approval_only_until_owner_acceptance',
+    'Connector write state: blocked_until_owner_acceptance',
+    'Recurring revenue state: not_claimed',
+    'Real MRR delta: 0',
+    '',
+    '## Output',
+    output || '[First production run output required before owner acceptance.]',
+    '',
+    '## Source trace',
+    sourceTraceLines,
+    '',
+    '## Owner acceptance gate',
+    '- Owner reviews this output before any external send.',
+    '- Connector writes stay blocked until explicit connector policy is recorded.',
+    '- Next run stays approval-only until owner acceptance exists.',
+    '- Real MRR is not claimed from this delivery record.',
+  ].join('\n')
+  const ledgerCsv = [
+    ['workspace_slug', 'lead_id', 'run_status', 'first_run_state', 'evidence_reference', 'external_action_state', 'connector_write_state', 'recurring_revenue_state', 'real_mrr_delta'].map(csvCell).join(','),
+    [
+      workspaceSlug,
+      leadId,
+      'first_production_run_recorded',
+      'ready_for_owner_acceptance',
+      evidenceReference,
+      'approval_only_until_owner_acceptance',
+      'blocked_until_owner_acceptance',
+      'not_claimed',
+      '0',
+    ].map(csvCell).join(','),
+  ].join('\n')
+  return {
+    status: 'first_production_run_recorded',
+    workspace_slug: workspaceSlug,
+    lead_id: leadId,
+    template_id: text(manifest.template_id || input.templateId) || null,
+    template_name: templateName,
+    output,
+    source_trace: sourceTrace,
+    evidence_reference: evidenceReference,
+    recorded_at: recordedAt,
+    recorded_by: 'operator_console',
+    first_run_state: 'ready_for_owner_acceptance',
+    external_action_state: 'approval_only_until_owner_acceptance',
+    connector_write_state: 'blocked_until_owner_acceptance',
+    browser_action_state: 'blocked_until_owner_acceptance',
+    recurring_revenue_state: 'not_claimed',
+    real_mrr_delta: 0,
+    packet,
+    ledger_csv: ledgerCsv,
+    guardrails: [
+      'first_run_output_recorded_before_acceptance',
+      'no_external_send_before_owner_acceptance',
+      'no_connector_write_before_explicit_policy',
+      'no_recurring_revenue_claim_from_first_run_record',
+    ],
+  }
+}
+
 function buildFirstRunAcceptance(input = {}) {
   const manifest = input.manifest || {}
-  const evidenceReference = text(input.evidenceReference || input.firstRunEvidenceReference) || 'FIRST_RUN_OUTPUT_REFERENCE_REQUIRED'
+  const firstProductionRun = input.firstProductionRun || input.first_production_run || {}
+  const evidenceReference = text(input.evidenceReference || input.firstRunEvidenceReference || firstProductionRun.evidence_reference) || 'FIRST_RUN_OUTPUT_REFERENCE_REQUIRED'
   const preparedAt = text(input.preparedAt) || new Date().toISOString()
   const workspaceSlug = text(manifest.workspace_slug || input.workspaceSlug) || 'private-workspace-required'
   const leadId = text(input.leadId || manifest.lead_id) || 'not set'
   const templateName = text(input.templateName || manifest.template_name) || text(manifest.template_id) || 'SUPERMEGA agent'
+  const firstRunOutput = text(firstProductionRun.output)
+  const sourceTrace = firstRunSourceTrace(firstProductionRun.source_trace)
   const acceptanceTests = list(input.acceptanceTests).length
     ? list(input.acceptanceTests)
     : ['Shows source trace for important outputs.', 'Uses only approved sources.', 'Keeps external actions approval-only until accepted.']
@@ -1335,7 +1426,10 @@ function buildFirstRunAcceptance(input = {}) {
     'Real MRR delta: 0',
     '',
     '## First run output',
-    '[Paste the first production run output here before sending to the buyer.]',
+    firstRunOutput || '[Paste the first production run output here before sending to the buyer.]',
+    '',
+    '## Source trace',
+    sourceTrace.length ? sourceTrace.map((item) => `- ${item}`).join('\n') : '- Attach source trace before owner acceptance.',
     '',
     '## Acceptance tests',
     acceptanceTests.map((item) => `- [ ] ${item}`).join('\n'),
@@ -1362,6 +1456,8 @@ function buildFirstRunAcceptance(input = {}) {
     lead_id: leadId,
     template_id: text(manifest.template_id || input.templateId) || null,
     template_name: templateName,
+    first_production_run_status: text(firstProductionRun.status) || 'not_recorded',
+    first_production_run_evidence_reference: text(firstProductionRun.evidence_reference) || null,
     first_run_state: 'draft_ready_for_owner_review',
     acceptance_state: 'owner_acceptance_required',
     external_action_state: 'blocked_until_owner_acceptance',
@@ -2655,6 +2751,7 @@ function firstProofPacket(row) {
   const sourcePackRequest = parseJsonObject(result.source_pack_request || task.source_pack_request || payload.source_pack_request)
   const sourceTrace = list(task.source_trace || payload.source_trace)
   const persistedOrderRoomState = parseJsonObject(result.pilot_order_room_state || payload.pilot_order_room_state)
+  const firstProductionRun = parseJsonObject(result.first_production_run || payload.first_production_run)
   const firstRunAcceptance = parseJsonObject(result.first_run_acceptance || payload.first_run_acceptance)
   const ownerAcceptance = parseJsonObject(result.owner_acceptance || payload.owner_acceptance)
   const connectorPolicy = parseJsonObject(result.connector_policy || payload.connector_policy)
@@ -3003,6 +3100,9 @@ function firstProofPacket(row) {
       private_workspace_manifest_json: JSON.stringify(privateWorkspaceManifest, null, 2),
       private_workspace_handoff_packet: privateWorkspaceHandoffPacket,
       first_run_queue_csv: firstRunQueueCsv,
+      first_production_run: Object.keys(firstProductionRun).length ? firstProductionRun : null,
+      first_production_run_packet: text(firstProductionRun.packet),
+      first_production_run_ledger_csv: text(firstProductionRun.ledger_csv),
       first_run_acceptance: Object.keys(firstRunAcceptance).length ? firstRunAcceptance : null,
       first_run_acceptance_packet: text(firstRunAcceptance.acceptance_packet),
       first_run_acceptance_queue_csv: text(firstRunAcceptance.acceptance_queue_csv),
@@ -4888,11 +4988,17 @@ async function startBlobPrivateWorkspace({ actionId, leadId }, primaryDatabase =
   }
 }
 
-async function prepareFirstRunAcceptance(payload) {
+async function recordFirstProductionRun(payload) {
   const actionId = text(payload.action_id)
   const leadId = text(payload.lead_id)
+  const firstRunOutput = text(payload.first_run_output || payload.output)
+  const evidenceReference = text(payload.first_run_evidence_reference || payload.evidence_reference)
   if (!actionId && !leadId) return { status: 'error', reason: 'missing_action_or_lead_id' }
-  if (!datastore.postgresConfigured()) return { status: 'error', reason: 'postgres_not_configured' }
+  if (!firstRunOutput) return { status: 'error', reason: 'missing_first_run_output' }
+  if (!evidenceReference) return { status: 'error', reason: 'missing_first_run_evidence_reference' }
+  if (!datastore.postgresConfigured()) {
+    return recordBlobFirstProductionRun({ actionId, leadId, payload }, { status: 'error', reason: 'postgres_not_configured' })
+  }
 
   const selected = await datastore.query(
     `
@@ -4907,14 +5013,220 @@ async function prepareFirstRunAcceptance(payload) {
     `,
     [actionId, leadId],
   )
-  if (selected.status !== 'ready') return selected
-  if (!selected.rows.length) return { status: 'error', reason: 'action_not_found' }
+  if (selected.status !== 'ready') return recordBlobFirstProductionRun({ actionId, leadId, payload }, selected)
+  if (!selected.rows.length) {
+    const fallback = await recordBlobFirstProductionRun({ actionId, leadId, payload }, { status: 'error', reason: 'postgres_action_not_found' })
+    if (fallback.status === 'ready') return fallback
+    return { status: 'error', reason: 'action_not_found' }
+  }
 
   const row = selected.rows[0]
   const currentResult = parseJsonObject(row.result)
   const currentState = parseJsonObject(currentResult.pilot_order_room_state || parseJsonObject(row.payload).pilot_order_room_state)
   const currentAction = safeAction(row)
   const currentManifest = currentAction.first_proof?.pilot_order_room?.private_workspace_manifest || buildPrivateWorkspaceManifest(contextFromActionRow(row, currentState))
+  if (currentManifest.status !== 'private_workspace_created') {
+    return {
+      status: 'error',
+      reason: 'private_workspace_required',
+      activation_status: currentManifest.status,
+      action: currentAction,
+      private_workspace_manifest: currentManifest,
+    }
+  }
+
+  const existingFirstRun = parseJsonObject(currentResult.first_production_run)
+  if (existingFirstRun.status === 'first_production_run_recorded') {
+    return {
+      status: 'ready',
+      adapter: 'vercel_postgres_neon',
+      operation_status: 'already_recorded',
+      action: currentAction,
+      first_production_run: existingFirstRun,
+      private_workspace_manifest: currentManifest,
+    }
+  }
+
+  const context = contextFromActionRow(row, currentState)
+  const recordedAt = new Date().toISOString()
+  const firstProductionRun = buildFirstProductionRunRecord({
+    ...context,
+    manifest: currentManifest,
+    firstRunOutput,
+    evidenceReference,
+    sourceTrace: payload.source_trace || payload.first_run_source_trace,
+    recordedAt,
+  })
+  const result = await datastore.query(
+    `
+      with target as (
+        select id
+        from public.supermega_pipeline_actions
+        where (($1 <> '' and action_id = $1) or ($1 = '' and $2 <> '' and lead_id = $2))
+        order by created_at desc
+        limit 1
+      )
+      update public.supermega_pipeline_actions a
+      set
+        result = jsonb_set(
+          jsonb_set(coalesce(a.result, '{}'::jsonb), '{first_production_run}', $3::jsonb, true),
+          '{first_production_run_recorded_at}',
+          to_jsonb($4::text),
+          true
+        ),
+        status = case when a.status in ('workspace_ready', 'open', 'queued', 'done', 'first_run_ready') then 'first_run_output_ready' else a.status end,
+        next_step = 'Prepare owner acceptance for the recorded first production run before any external send or connector write.',
+        updated_at = now()
+      where a.id in (select id from target)
+      returning
+        a.action_id, a.lead_id, a.task_id, a.action_type, a.status, a.priority, a.owner,
+        a.title, a.next_step, a.approval_required, a.approval_state,
+        a.notification_channel, a.notification_status, a.payload, a.result, a.created_at
+    `,
+    [actionId, leadId, JSON.stringify(firstProductionRun), recordedAt],
+  )
+  if (result.status !== 'ready') return recordBlobFirstProductionRun({ actionId, leadId, payload }, result)
+  if (!result.rows.length) return { status: 'error', reason: 'action_not_found', first_production_run: firstProductionRun, private_workspace_manifest: currentManifest }
+
+  const mirror = await recordBlobFirstProductionRun(
+    { actionId, leadId, payload },
+    { status: 'ready', adapter: 'vercel_postgres_neon', mirrored_from_primary: true },
+    { allowMissing: true },
+  )
+  return {
+    status: 'ready',
+    adapter: mirror.status === 'ready' ? 'vercel_postgres_neon_with_blob_queue' : 'vercel_postgres_neon',
+    operation_status: 'recorded',
+    action: safeAction(result.rows[0]),
+    first_production_run: firstProductionRun,
+    private_workspace_manifest: currentManifest,
+    mirror,
+  }
+}
+
+async function recordBlobFirstProductionRun({ actionId, leadId, payload }, primaryDatabase = {}, options = {}) {
+  const found = await blobQueue.findActionRecord({ action_id: actionId, lead_id: leadId })
+  if (found.status !== 'ready') {
+    if (options.allowMissing && found.reason === 'action_not_found') {
+      return {
+        status: 'skipped',
+        adapter: 'vercel_blob',
+        reason: 'blob_action_not_found',
+        primary_database: primaryDatabase,
+      }
+    }
+    return {
+      ...found,
+      primary_database: primaryDatabase,
+    }
+  }
+
+  const row = found.row
+  const currentResult = parseJsonObject(row.result)
+  const currentState = parseJsonObject(currentResult.pilot_order_room_state || parseJsonObject(row.payload).pilot_order_room_state)
+  const currentAction = safeAction(row)
+  const currentManifest = currentAction.first_proof?.pilot_order_room?.private_workspace_manifest || buildPrivateWorkspaceManifest(contextFromActionRow(row, currentState))
+  if (currentManifest.status !== 'private_workspace_created') {
+    return {
+      status: 'error',
+      adapter: 'vercel_blob',
+      primary_database: primaryDatabase,
+      reason: 'private_workspace_required',
+      activation_status: currentManifest.status,
+      action: currentAction,
+      private_workspace_manifest: currentManifest,
+    }
+  }
+
+  const existingFirstRun = parseJsonObject(currentResult.first_production_run)
+  if (existingFirstRun.status === 'first_production_run_recorded') {
+    return {
+      status: 'ready',
+      adapter: 'vercel_blob',
+      primary_database: primaryDatabase,
+      operation_status: 'already_recorded',
+      action: currentAction,
+      first_production_run: existingFirstRun,
+      private_workspace_manifest: currentManifest,
+    }
+  }
+
+  const recordedAt = new Date().toISOString()
+  const firstProductionRun = buildFirstProductionRunRecord({
+    ...contextFromActionRow(row, currentState),
+    manifest: currentManifest,
+    firstRunOutput: payload.first_run_output || payload.output,
+    evidenceReference: payload.first_run_evidence_reference || payload.evidence_reference,
+    sourceTrace: payload.source_trace || payload.first_run_source_trace,
+    recordedAt,
+  })
+  const nextResult = {
+    ...currentResult,
+    first_production_run: firstProductionRun,
+    first_production_run_recorded_at: recordedAt,
+  }
+  const updated = await blobQueue.updateActionRecord(
+    { action_id: actionId, lead_id: leadId },
+    {
+      result: nextResult,
+      status: ['workspace_ready', 'open', 'queued', 'done', 'first_run_ready'].includes(text(row.status)) ? 'first_run_output_ready' : row.status,
+      next_step: 'Prepare owner acceptance for the recorded first production run before any external send or connector write.',
+      notification_status: row.notification_status || 'first_run_output_ready',
+    },
+  )
+  if (updated.status !== 'ready') {
+    return {
+      ...updated,
+      primary_database: primaryDatabase,
+      first_production_run: firstProductionRun,
+      private_workspace_manifest: currentManifest,
+    }
+  }
+  return {
+    status: 'ready',
+    adapter: 'vercel_blob',
+    primary_database: primaryDatabase,
+    operation_status: 'recorded',
+    action: safeAction(updated.record),
+    first_production_run: firstProductionRun,
+    private_workspace_manifest: currentManifest,
+  }
+}
+
+async function prepareFirstRunAcceptance(payload) {
+  const actionId = text(payload.action_id)
+  const leadId = text(payload.lead_id)
+  if (!actionId && !leadId) return { status: 'error', reason: 'missing_action_or_lead_id' }
+  if (!datastore.postgresConfigured()) {
+    return prepareBlobFirstRunAcceptance({ actionId, leadId, payload }, { status: 'error', reason: 'postgres_not_configured' })
+  }
+
+  const selected = await datastore.query(
+    `
+      select
+        action_id, lead_id, task_id, action_type, status, priority, owner,
+        title, next_step, approval_required, approval_state,
+        notification_channel, notification_status, payload, result, created_at
+      from public.supermega_pipeline_actions
+      where (($1 <> '' and action_id = $1) or ($1 = '' and $2 <> '' and lead_id = $2))
+      order by created_at desc
+      limit 1
+    `,
+    [actionId, leadId],
+  )
+  if (selected.status !== 'ready') return prepareBlobFirstRunAcceptance({ actionId, leadId, payload }, selected)
+  if (!selected.rows.length) {
+    const fallback = await prepareBlobFirstRunAcceptance({ actionId, leadId, payload }, { status: 'error', reason: 'postgres_action_not_found' })
+    if (fallback.status === 'ready') return fallback
+    return { status: 'error', reason: 'action_not_found' }
+  }
+
+  const row = selected.rows[0]
+  const currentResult = parseJsonObject(row.result)
+  const currentState = parseJsonObject(currentResult.pilot_order_room_state || parseJsonObject(row.payload).pilot_order_room_state)
+  const currentAction = safeAction(row)
+  const currentManifest = currentAction.first_proof?.pilot_order_room?.private_workspace_manifest || buildPrivateWorkspaceManifest(contextFromActionRow(row, currentState))
+  const firstProductionRun = parseJsonObject(currentResult.first_production_run)
   if (currentManifest.status !== 'private_workspace_created') {
     return {
       status: 'error',
@@ -4942,6 +5254,7 @@ async function prepareFirstRunAcceptance(payload) {
   const firstRunAcceptance = buildFirstRunAcceptance({
     ...context,
     manifest: currentManifest,
+    firstProductionRun,
     evidenceReference: payload.first_run_evidence_reference,
     preparedAt,
   })
@@ -4985,6 +5298,95 @@ async function prepareFirstRunAcceptance(payload) {
   }
 }
 
+async function prepareBlobFirstRunAcceptance({ actionId, leadId, payload }, primaryDatabase = {}, options = {}) {
+  const found = await blobQueue.findActionRecord({ action_id: actionId, lead_id: leadId })
+  if (found.status !== 'ready') {
+    if (options.allowMissing && found.reason === 'action_not_found') {
+      return {
+        status: 'skipped',
+        adapter: 'vercel_blob',
+        reason: 'blob_action_not_found',
+        primary_database: primaryDatabase,
+      }
+    }
+    return {
+      ...found,
+      primary_database: primaryDatabase,
+    }
+  }
+
+  const row = found.row
+  const currentResult = parseJsonObject(row.result)
+  const currentState = parseJsonObject(currentResult.pilot_order_room_state || parseJsonObject(row.payload).pilot_order_room_state)
+  const currentAction = safeAction(row)
+  const currentManifest = currentAction.first_proof?.pilot_order_room?.private_workspace_manifest || buildPrivateWorkspaceManifest(contextFromActionRow(row, currentState))
+  const firstProductionRun = parseJsonObject(currentResult.first_production_run)
+  if (currentManifest.status !== 'private_workspace_created') {
+    return {
+      status: 'error',
+      adapter: 'vercel_blob',
+      primary_database: primaryDatabase,
+      reason: 'private_workspace_required',
+      activation_status: currentManifest.status,
+      action: currentAction,
+      private_workspace_manifest: currentManifest,
+    }
+  }
+
+  const existingAcceptance = parseJsonObject(currentResult.first_run_acceptance)
+  if (existingAcceptance.status === 'first_run_acceptance_packet_ready') {
+    return {
+      status: 'ready',
+      adapter: 'vercel_blob',
+      primary_database: primaryDatabase,
+      operation_status: 'already_prepared',
+      action: currentAction,
+      first_run_acceptance: existingAcceptance,
+      private_workspace_manifest: currentManifest,
+    }
+  }
+
+  const preparedAt = new Date().toISOString()
+  const firstRunAcceptance = buildFirstRunAcceptance({
+    ...contextFromActionRow(row, currentState),
+    manifest: currentManifest,
+    firstProductionRun,
+    evidenceReference: payload.first_run_evidence_reference,
+    preparedAt,
+  })
+  const nextResult = {
+    ...currentResult,
+    first_run_acceptance: firstRunAcceptance,
+    first_run_acceptance_prepared_at: preparedAt,
+  }
+  const updated = await blobQueue.updateActionRecord(
+    { action_id: actionId, lead_id: leadId },
+    {
+      result: nextResult,
+      status: ['workspace_ready', 'first_run_output_ready', 'open', 'queued', 'done'].includes(text(row.status)) ? 'first_run_ready' : row.status,
+      next_step: 'Review the first-run acceptance packet with the owner before any external send or connector write.',
+      notification_status: row.notification_status || 'first_run_ready',
+    },
+  )
+  if (updated.status !== 'ready') {
+    return {
+      ...updated,
+      primary_database: primaryDatabase,
+      first_run_acceptance: firstRunAcceptance,
+      private_workspace_manifest: currentManifest,
+    }
+  }
+  return {
+    status: 'ready',
+    adapter: 'vercel_blob',
+    primary_database: primaryDatabase,
+    operation_status: 'prepared',
+    action: safeAction(updated.record),
+    first_run_acceptance: firstRunAcceptance,
+    private_workspace_manifest: currentManifest,
+  }
+}
+
 async function recordOwnerAcceptance(payload) {
   const actionId = text(payload.action_id)
   const leadId = text(payload.lead_id)
@@ -4993,7 +5395,9 @@ async function recordOwnerAcceptance(payload) {
   if (!actionId && !leadId) return { status: 'error', reason: 'missing_action_or_lead_id' }
   if (!decision) return { status: 'error', reason: 'invalid_owner_acceptance_decision' }
   if (!evidenceReference) return { status: 'error', reason: 'missing_owner_acceptance_reference' }
-  if (!datastore.postgresConfigured()) return { status: 'error', reason: 'postgres_not_configured' }
+  if (!datastore.postgresConfigured()) {
+    return recordBlobOwnerAcceptance({ actionId, leadId, payload }, { status: 'error', reason: 'postgres_not_configured' })
+  }
 
   const selected = await datastore.query(
     `
@@ -5008,8 +5412,12 @@ async function recordOwnerAcceptance(payload) {
     `,
     [actionId, leadId],
   )
-  if (selected.status !== 'ready') return selected
-  if (!selected.rows.length) return { status: 'error', reason: 'action_not_found' }
+  if (selected.status !== 'ready') return recordBlobOwnerAcceptance({ actionId, leadId, payload }, selected)
+  if (!selected.rows.length) {
+    const fallback = await recordBlobOwnerAcceptance({ actionId, leadId, payload }, { status: 'error', reason: 'postgres_action_not_found' })
+    if (fallback.status === 'ready') return fallback
+    return { status: 'error', reason: 'action_not_found' }
+  }
 
   const row = selected.rows[0]
   const currentResult = parseJsonObject(row.result)
@@ -5081,6 +5489,92 @@ async function recordOwnerAcceptance(payload) {
     adapter: 'vercel_postgres_neon',
     operation_status: 'recorded',
     action: safeAction(result.rows[0]),
+    owner_acceptance: ownerAcceptance,
+  }
+}
+
+async function recordBlobOwnerAcceptance({ actionId, leadId, payload }, primaryDatabase = {}, options = {}) {
+  const found = await blobQueue.findActionRecord({ action_id: actionId, lead_id: leadId })
+  if (found.status !== 'ready') {
+    if (options.allowMissing && found.reason === 'action_not_found') {
+      return {
+        status: 'skipped',
+        adapter: 'vercel_blob',
+        reason: 'blob_action_not_found',
+        primary_database: primaryDatabase,
+      }
+    }
+    return {
+      ...found,
+      primary_database: primaryDatabase,
+    }
+  }
+
+  const row = found.row
+  const currentResult = parseJsonObject(row.result)
+  const firstRunAcceptance = parseJsonObject(currentResult.first_run_acceptance)
+  if (firstRunAcceptance.status !== 'first_run_acceptance_packet_ready') {
+    return {
+      status: 'error',
+      adapter: 'vercel_blob',
+      primary_database: primaryDatabase,
+      reason: 'first_run_acceptance_required',
+      action: safeAction(row),
+    }
+  }
+
+  const existingOwnerAcceptance = parseJsonObject(currentResult.owner_acceptance)
+  if (existingOwnerAcceptance.status === 'owner_acceptance_recorded') {
+    return {
+      status: 'ready',
+      adapter: 'vercel_blob',
+      primary_database: primaryDatabase,
+      operation_status: 'already_recorded',
+      action: safeAction(row),
+      owner_acceptance: existingOwnerAcceptance,
+    }
+  }
+
+  const decision = oneOf(payload.owner_acceptance_decision || payload.decision, ['accepted', 'changes_requested'], '')
+  const evidenceReference = text(payload.owner_acceptance_reference || payload.evidence_reference)
+  const recordedAt = new Date().toISOString()
+  const ownerAcceptance = buildOwnerAcceptanceRecord({
+    ...contextFromActionRow(row, parseJsonObject(currentResult.pilot_order_room_state)),
+    acceptance: firstRunAcceptance,
+    decision,
+    evidenceReference,
+    ownerNote: payload.owner_note,
+    recordedAt,
+  })
+  const nextResult = {
+    ...currentResult,
+    owner_acceptance: ownerAcceptance,
+    owner_acceptance_recorded_at: recordedAt,
+  }
+  const updated = await blobQueue.updateActionRecord(
+    { action_id: actionId, lead_id: leadId },
+    {
+      result: nextResult,
+      status: decision === 'accepted' ? 'owner_accepted_first_run' : 'first_run_changes_requested',
+      next_step: decision === 'accepted'
+        ? 'Run the next production cycle approval-only; connector writes still need explicit policy approval.'
+        : 'Revise the first run output and prepare a new owner acceptance packet.',
+      notification_status: row.notification_status || 'owner_acceptance_recorded',
+    },
+  )
+  if (updated.status !== 'ready') {
+    return {
+      ...updated,
+      primary_database: primaryDatabase,
+      owner_acceptance: ownerAcceptance,
+    }
+  }
+  return {
+    status: 'ready',
+    adapter: 'vercel_blob',
+    primary_database: primaryDatabase,
+    operation_status: 'recorded',
+    action: safeAction(updated.record),
     owner_acceptance: ownerAcceptance,
   }
 }
@@ -5692,7 +6186,7 @@ function writeStatusCode(result) {
   if (result.status === 'ready') return 200
   if (result.reason === 'action_not_found') return 404
   if (['private_workspace_not_ready', 'private_workspace_required', 'first_run_acceptance_required', 'owner_acceptance_required', 'owner_acceptance_not_accepted', 'connector_policy_required', 'production_approval_queue_required', 'enterprise_delivery_pack_required', 'customer_success_desk_required', 'retainer_growth_offer_required', 'scope_price_approval_required', 'use_start_private_workspace_operation', 'autopilot_draft_not_found'].includes(result.reason)) return 409
-  if (['missing_action_or_lead_id', 'missing_activation_sources', 'missing_approved_source_sample', 'invalid_proof_review_decision', 'proof_not_accepted_for_paid_scope', 'invalid_scope_price_amount', 'missing_scope_price_owner_approval_reference', 'missing_pilot_payment_proof_reference', 'missing_pilot_payment_owner_reference', 'invalid_pilot_payment_amount', 'invalid_owner_acceptance_decision', 'missing_owner_acceptance_reference', 'invalid_connector_policy_mode', 'missing_connector_policy_reference', 'missing_production_queue_reference', 'missing_enterprise_delivery_reference', 'missing_customer_success_reference', 'missing_retainer_growth_reference', 'missing_retainer_payment_proof_reference', 'missing_retainer_owner_approval_reference', 'invalid_retainer_payment_amount', 'invalid_retainer_payment_period', 'invalid_autopilot_draft_decision', 'missing_autopilot_draft_reference'].includes(result.reason)) return 400
+  if (['missing_action_or_lead_id', 'missing_activation_sources', 'missing_approved_source_sample', 'invalid_proof_review_decision', 'proof_not_accepted_for_paid_scope', 'invalid_scope_price_amount', 'missing_scope_price_owner_approval_reference', 'missing_pilot_payment_proof_reference', 'missing_pilot_payment_owner_reference', 'invalid_pilot_payment_amount', 'missing_first_run_output', 'missing_first_run_evidence_reference', 'invalid_owner_acceptance_decision', 'missing_owner_acceptance_reference', 'invalid_connector_policy_mode', 'missing_connector_policy_reference', 'missing_production_queue_reference', 'missing_enterprise_delivery_reference', 'missing_customer_success_reference', 'missing_retainer_growth_reference', 'missing_retainer_payment_proof_reference', 'missing_retainer_owner_approval_reference', 'invalid_retainer_payment_amount', 'invalid_retainer_payment_period', 'invalid_autopilot_draft_decision', 'missing_autopilot_draft_reference'].includes(result.reason)) return 400
   return 503
 }
 
@@ -5829,6 +6323,15 @@ async function handler(req, res) {
         endpoint: 'pipeline-control',
         operation,
         ...started,
+      })
+      return
+    }
+    if (operation === 'record_first_production_run') {
+      const recorded = await recordFirstProductionRun(payload)
+      json(res, writeStatusCode(recorded), {
+        endpoint: 'pipeline-control',
+        operation,
+        ...recorded,
       })
       return
     }
@@ -6282,6 +6785,7 @@ handler.__test = {
   buildActivationSessionLead,
   buildActivationSourcePack,
   buildActivationFirstProof,
+  buildFirstProductionRunRecord,
   firstProofPacket,
   operatorRuntimeSummary,
   autopilotCommandBoard,
@@ -6294,6 +6798,7 @@ handler.__test = {
   recordProofReviewAcceptance,
   recordScopePriceApproval,
   recordPilotPaymentProof,
+  recordFirstProductionRun,
   prepareCustomerSuccessDesk,
   prepareEnterpriseDeliveryPack,
   prepareProductionApprovalQueue,
