@@ -1,11 +1,11 @@
 {
-    "public_host":  "supermega-public-fsdj87j3k-swanhtet01s-projects.vercel.app",
-    "deployment_id":  "dpl_4FuGRwgJPivco5VBFiqyyN1CQzgd",
-    "locked_at":  "2026-07-01T06:34:51.4186937Z",
+    "public_host":  "supermega-public-le0qox4pu-swanhtet01s-projects.vercel.app",
+    "deployment_id":  "dpl_FaqoYDJTj3km6ib8HDSD4PTVBKFm",
+    "locked_at":  "2026-07-01T06:57:40.6403368Z",
     "domains":  [
                     "supermega.dev",
                     "www.supermega.dev"
                 ],
     "project":  "supermega-public",
-    "reason":  "Operator console can approve or request changes on AI Workcell source-pack requests before manual client send, with older action-ledger schema compatibility."
+    "reason":  "Client source-pack room can submit source packs directly into the operator ledger for first-proof review."
 }

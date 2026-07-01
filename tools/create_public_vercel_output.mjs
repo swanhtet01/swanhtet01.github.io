@@ -3339,6 +3339,14 @@ const config = {
       dest: '/api/contact-submissions.js',
     },
     {
+      src: '^/api/source-pack-submissions$',
+      dest: '/api/source-pack-submissions.js',
+    },
+    {
+      src: '^/api/source-pack-submissions/status$',
+      dest: '/api/source-pack-submissions.js',
+    },
+    {
       src: '^/api/campaign-clicks$',
       dest: '/api/campaign-clicks.js',
     },
@@ -6271,13 +6279,19 @@ const publicOperatorConsoleHtml = `<!doctype html>
       const sourceContentId = 'activation-source-pack-content-'+index;
       const sourceJsonId = 'activation-source-pack-json-'+index;
       const pack = action.activation_source_pack || action.source_pack || (action.result && action.result.activation_source_pack) || {};
+      const proof = action.first_proof || {};
+      const clientSubmission = proof.client_source_pack_submission || {};
+      const clientSubmissionJson = proof.client_source_pack_submission_json || (clientSubmission && clientSubmission.source_count ? JSON.stringify(clientSubmission, null, 2) : '');
       const packStatus = pack && pack.source_count ? '<div class="operator-meta"><span class="operator-chip">source pack attached</span><span class="operator-chip">'+esc(pack.source_count)+' sources</span><span class="operator-chip">'+esc(pack.external_action_state || 'blocked_until_owner_approval')+'</span></div>' : '<div class="operator-meta"><span class="operator-chip">no source pack attached</span><span class="operator-chip">owner-approved data only</span></div>';
+      const submissionStatus = clientSubmission && clientSubmission.source_count ? '<div class="operator-meta"><span class="operator-chip">client submitted source pack</span><span class="operator-chip">'+esc(clientSubmission.source_count)+' sources</span><span class="operator-chip">'+esc(clientSubmission.external_action_state || 'blocked_until_owner_approval')+'</span></div>' : '';
+      const importLabel = clientSubmission && clientSubmission.source_count ? 'Attach submitted source pack' : 'Import source pack JSON';
       return [
         '<div class="operator-proof-section operator-activation-source-pack">',
           '<span>Client source pack</span>',
           packStatus,
-          '<textarea class="operator-reply" id="'+sourceJsonId+'" name="source_pack_json" placeholder="Paste Source pack JSON copied from /app/source-pack."></textarea>',
-          '<button class="btn secondary" type="button" data-source-pack-json-command="attach_activation_source_pack" data-source-pack-json-target="'+sourceJsonId+'" data-action-id="'+esc(action.action_id || '')+'" data-lead-id="'+esc(action.lead_id || '')+'">Import source pack JSON</button>',
+          submissionStatus,
+          '<textarea class="operator-reply" id="'+sourceJsonId+'" name="source_pack_json" placeholder="Paste Source pack JSON copied from /app/source-pack.">'+esc(clientSubmissionJson)+'</textarea>',
+          '<button class="btn secondary" type="button" data-source-pack-json-command="attach_activation_source_pack" data-source-pack-json-target="'+sourceJsonId+'" data-action-id="'+esc(action.action_id || '')+'" data-lead-id="'+esc(action.lead_id || '')+'">'+importLabel+'</button>',
           '<input class="operator-input" id="'+packNameId+'" name="source_pack_name" value="'+esc(pack.source_pack_name || 'Day 1 client source pack')+'" aria-label="Source pack name" />',
           '<div class="operator-row">',
             '<select class="operator-input" id="'+sourceTypeId+'" aria-label="Source type"><option value="google_drive">Google Drive</option><option value="gmail">Gmail</option><option value="uploaded_file">Uploaded file</option><option value="manual_note">Manual note</option><option value="pos_export">POS export</option></select>',
@@ -6672,7 +6686,7 @@ const publicSourcePackIntakeHtml = `<!doctype html>
       <div>
         <div class="eyebrow">client intake</div>
         <h1>AI Workcell Source Pack Intake</h1>
-        <p>Send the smallest approved source pack for a first proof: one customer message, one order or work-list export, and one process note or screenshot. This page creates a local Source pack JSON. No external access, no account connection, no connector write, and no payment request happens here.</p>
+        <p>Send the smallest approved source pack for a first proof: one customer message, one order or work-list export, and one process note or screenshot. This page stores the source pack for operator review only. No external access, no account connection, no connector write, and no payment request happens here.</p>
       </div>
       <aside class="summary" aria-label="Source pack summary">
         <div class="summary-row"><span>Lead</span><strong data-lead-id>Loading</strong></div>
@@ -6706,9 +6720,9 @@ const publicSourcePackIntakeHtml = `<!doctype html>
     </section>
     <section class="band">
       <div class="panel">
-        <div class="actions"><h2>Source pack JSON</h2><button class="btn primary" id="copy-source-pack" type="button">Copy source pack</button><button class="btn" id="refresh-source-pack" type="button">Refresh JSON</button></div>
+        <div class="actions"><h2>Source pack JSON</h2><button class="btn primary" id="submit-source-pack" type="button">Submit source pack</button><button class="btn" id="copy-source-pack" type="button">Copy source pack</button><button class="btn" id="refresh-source-pack" type="button">Refresh JSON</button></div>
         <pre id="source-pack-json">Loading source pack template.</pre>
-        <p id="copy-status">Nothing is submitted from this page. Send the copied JSON to the SuperMega operator or paste it into the operator console.</p>
+        <p id="copy-status">Submitting stores the pack for operator review only. You can also copy the JSON for your records.</p>
       </div>
     </section>
     <footer>First-proof source intake only. Guardrail: owner approval before send/write/payment/browser actions. Real MRR stays 0 until payment proof is recorded.</footer>
@@ -6735,7 +6749,7 @@ const publicSourcePackIntakeHtml = `<!doctype html>
           source_pack_name: 'Client approved first-proof source pack',
           lead_id: lead,
           action_id: action,
-          status: 'client_prepared_owner_approval_required',
+          status: 'client_source_pack_submitted',
           approval_scope: 'first_proof_only',
           human_gate: 'owner approval before send/write/payment/browser actions',
           external_action_state: 'blocked_until_owner_approval',
@@ -6762,12 +6776,42 @@ const publicSourcePackIntakeHtml = `<!doctype html>
       document.querySelectorAll('input, textarea').forEach(function(el){ el.addEventListener('input', render); });
       var refresh = document.getElementById('refresh-source-pack');
       if (refresh) refresh.addEventListener('click', render);
+      var submit = document.getElementById('submit-source-pack');
+      if (submit) submit.addEventListener('click', async function(){
+        render();
+        var pack = buildSourcePack();
+        var filled = pack.sources.filter(function(source){ return source.content && source.content.trim(); });
+        if (!filled.length) {
+          if (copyStatus) copyStatus.textContent = 'Add at least one approved source sample before submitting.';
+          return;
+        }
+        submit.disabled = true;
+        if (copyStatus) copyStatus.textContent = 'Submitting source pack for operator review...';
+        try {
+          var response = await fetch('/api/source-pack-submissions', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify(pack),
+            cache: 'no-store'
+          });
+          var data = await response.json().catch(function(){ return { status:'error', reason:'invalid_json', code:response.status }; });
+          if (!response.ok || data.status !== 'ready') {
+            if (copyStatus) copyStatus.textContent = 'Submit failed: ' + (data.reason || response.status || 'unknown');
+            return;
+          }
+          if (copyStatus) copyStatus.textContent = 'Submitted for operator review. SuperMega can prepare the first proof after owner review.';
+        } catch (error) {
+          if (copyStatus) copyStatus.textContent = 'Submit failed. Copy the JSON and send it to SuperMega.';
+        } finally {
+          submit.disabled = false;
+        }
+      });
       var copy = document.getElementById('copy-source-pack');
       if (copy) copy.addEventListener('click', async function(){
         render();
         try {
           await navigator.clipboard.writeText(output.textContent || '');
-          if (copyStatus) copyStatus.textContent = 'Copied. Send this JSON to the SuperMega operator or paste it into the operator console.';
+          if (copyStatus) copyStatus.textContent = 'Copied. You can also submit it here for operator review.';
         } catch (error) {
           if (copyStatus) copyStatus.textContent = 'Copy failed. Select the JSON manually and copy it.';
         }
@@ -7059,6 +7103,7 @@ self.addEventListener('activate', (event) => {
 )
 await writeNodeFunction('health.js')
 await writeNodeFunction('contact-submissions.js')
+await writeNodeFunction('source-pack-submissions.js')
 await writeNodeFunction('campaign-clicks.js')
 await writeNodeFunction('commercial-control.js')
 await writeNodeFunction('pipeline-control.js')

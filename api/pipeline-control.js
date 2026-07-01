@@ -2774,6 +2774,7 @@ function firstProofPacket(row) {
   const clientKickoffPack = parseJsonObject(result.client_kickoff_pack || task.client_kickoff_pack || payload.client_kickoff_pack)
   const sourcePackRequest = parseJsonObject(result.source_pack_request || task.source_pack_request || payload.source_pack_request)
   const sourcePackRequestApproval = parseJsonObject(result.source_pack_request_approval || sourcePackRequest.approval || payload.source_pack_request_approval)
+  const clientSourcePackSubmission = parseJsonObject(result.client_source_pack_submission || payload.client_source_pack_submission)
   const sourcePackRequestForOutput = Object.keys(sourcePackRequest).length
     ? {
         ...sourcePackRequest,
@@ -3106,6 +3107,8 @@ function firstProofPacket(row) {
     source_pack_request_packet: text(sourcePackRequest.client_message),
     source_pack_request_json: Object.keys(sourcePackRequest).length ? JSON.stringify(sourcePackRequest, null, 2) : '',
     source_pack_request_approval: Object.keys(sourcePackRequestApproval).length ? sourcePackRequestApproval : null,
+    client_source_pack_submission: Object.keys(clientSourcePackSubmission).length ? clientSourcePackSubmission : null,
+    client_source_pack_submission_json: Object.keys(clientSourcePackSubmission).length ? JSON.stringify(clientSourcePackSubmission, null, 2) : '',
     title: text(result.title) || (templateName && row.lead_id ? `${templateName} first proof for ${row.lead_id}` : 'First proof task'),
     checklist,
     acceptance_tests: acceptanceTests,

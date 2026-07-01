@@ -34,6 +34,8 @@ for (const [src, dest] of [
   ['^/api/action-runner$', '/api/action-runner.js'],
   ['^/api/contact-submissions$', '/api/contact-submissions.js'],
   ['^/api/contact-submissions/status$', '/api/contact-submissions.js'],
+  ['^/api/source-pack-submissions$', '/api/source-pack-submissions.js'],
+  ['^/api/source-pack-submissions/status$', '/api/source-pack-submissions.js'],
   ['^/api/checkout-start$', '/api/checkout-start.js'],
   ['^/api/checkout-start/status$', '/api/checkout-start.js'],
   ['^/api/pipeline-control$', '/api/pipeline-control.js'],
@@ -565,6 +567,9 @@ const contactHtml = readFileSync(resolve(staticDir, 'contact/index.html'), 'utf8
 const operatorHtmlPath = resolve(staticDir, 'operator/index.html')
 if (!existsSync(operatorHtmlPath)) fail('public_operator_console_missing')
 const operatorHtml = readFileSync(operatorHtmlPath, 'utf8')
+const sourcePackHtmlPath = resolve(staticDir, 'app/source-pack/index.html')
+if (!existsSync(sourcePackHtmlPath)) fail('source_pack_intake_page_missing')
+const sourcePackHtml = readFileSync(sourcePackHtmlPath, 'utf8')
 const pilotWorkspaceHtmlPath = resolve(staticDir, 'app/start/index.html')
 if (!existsSync(pilotWorkspaceHtmlPath)) fail('pilot_workspace_page_missing')
 const pilotWorkspaceHtml = readFileSync(pilotWorkspaceHtmlPath, 'utf8')
@@ -590,6 +595,14 @@ const contactFunctionSource = readFileSync(contactFunctionPath, 'utf8')
 for (const token of ['buildSolutionRoute', 'autopilot_solution_router', 'solution_route', 'buildImplementationBlueprintPack', 'implementation_blueprint_pack', 'buildIntakeJob', 'intake_to_first_proof', 'intake_job', 'buildClientKickoffPack', 'client_kickoff_pack', 'buildContactSourcePackRequest', 'source_pack_request_ready', 'client_source_pack_intake', 'buildOwnerOnboardingAlert', 'owner_onboarding_alert', 'ai_workcell_source_pack_room', '/app/source-pack?', 'buildFirstProofTaskPayload', 'first_proof_task', 'lead: {', 'owner approval before send/write/payment actions', 'supermega-blob-queue', 'blob_action_queue', 'New setup lead -', 'Source pack room:', 'Operator:']) {
   if (!contactFunctionSource.includes(token)) {
     fail('public_contact_proof_task_contract_missing', { token })
+  }
+}
+const sourcePackFunctionPath = resolve(functionsDir, 'api/source-pack-submissions.js.func/api/source-pack-submissions.js')
+if (!existsSync(sourcePackFunctionPath)) fail('public_source_pack_submission_function_missing')
+const sourcePackFunctionSource = readFileSync(sourcePackFunctionPath, 'utf8')
+for (const token of ['normalizeSourcePackSubmission', 'client_source_pack_submitted', 'client_source_pack_received', 'pending_source_review', 'publicSubmissionResponse', 'no_mrr_delta_without_payment_proof']) {
+  if (!sourcePackFunctionSource.includes(token)) {
+    fail('public_source_pack_submission_contract_missing', { token })
   }
 }
 const actionRunnerFunctionPath = resolve(functionsDir, 'api/action-runner.js.func/api/action-runner.js')
@@ -811,6 +824,15 @@ for (const token of [
   'source_pack_request_packet',
 ]) {
   if (!operatorHtml.includes(token)) fail('public_operator_source_request_approval_contract_missing', { token })
+}
+for (const token of [
+  'Submit source pack',
+  '/api/source-pack-submissions',
+  'client_source_pack_submitted',
+  'Submitted for operator review',
+  'Submitting stores the pack for operator review only',
+]) {
+  if (!sourcePackHtml.includes(token)) fail('public_source_pack_intake_submit_contract_missing', { token })
 }
 const publicAgentTemplateContract = [
   ['deskpos-quickstart', 'DeskPOS Quickstart'],
