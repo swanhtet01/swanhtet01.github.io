@@ -1,0 +1,76 @@
+name: SuperMega Public Live Health
+
+# Default-branch live monitor for supermega.dev.
+# This intentionally checks production over HTTP and does not require Vercel secrets.
+on:
+  workflow_dispatch:
+  schedule:
+    # 08:15 Asia/Rangoon daily.
+    - cron: '45 1 * * *'
+
+permissions:
+  contents: read
+
+jobs:
+  live-health:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check public production site
+        run: |
+          python - <<'PY'
+          import json
+          import sys
+          import urllib.request
+
+          headers = {
+              "Accept": "text/html,application/json",
+              "User-Agent": "supermega-public-live-health/1.0",
+          }
+
+          checks = [
+              ("https://supermega.dev/", ["Free core tools. Premium AI workers."]),
+              ("https://www.supermega.dev/", ["Free core tools. Premium AI workers."]),
+              ("https://supermega.dev/products/", ["AI agent templates", "DeskPOS Quickstart"]),
+              ("https://supermega.dev/ai-agents/", ["AI Agent Army", "owner-approved"]),
+              ("https://supermega.dev/offers/", ["Start free", "Pay when the worker proves value"]),
+          ]
+
+          results = []
+          for url, tokens in checks:
+              request = urllib.request.Request(url, headers=headers)
+              with urllib.request.urlopen(request, timeout=45) as response:
+                  body = response.read().decode("utf-8", errors="replace")
+                  status = response.getcode()
+              missing = [token for token in tokens if token not in body]
+              result = {
+                  "url": url,
+                  "status": status,
+                  "bytes": len(body),
+                  "missing": missing,
+              }
+              results.append(result)
+              if status != 200 or missing:
+                  print(json.dumps({"status": "error", "failed": result, "results": results}, indent=2))
+                  sys.exit(1)
+
+          api_request = urllib.request.Request(
+              "https://supermega.dev/api/contact-submissions/status",
+              headers={"Accept": "application/json", "User-Agent": headers["User-Agent"]},
+          )
+          with urllib.request.urlopen(api_request, timeout=45) as response:
+              api = json.loads(response.read().decode("utf-8"))
+
+          if api.get("status") != "ready" or api.get("lead_ledger") != "configured":
+              print(json.dumps({"status": "error", "contact_api": api, "results": results}, indent=2))
+              sys.exit(1)
+
+          print(json.dumps({
+              "status": "ready",
+              "results": results,
+              "contact_api": {
+                  "status": api.get("status"),
+                  "lead_ledger": api.get("lead_ledger"),
+                  "ledger_table": api.get("ledger_table"),
+              },
+          }, indent=2))
+          PY
