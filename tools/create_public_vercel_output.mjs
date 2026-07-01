@@ -5501,10 +5501,11 @@ const publicOperatorConsoleHtml = `<!doctype html>
       const request = proof && proof.proof_review_request;
       if(!request && !proof.proof_review_request_packet && !proof.proof_review_request_json)return '';
       const id = 'proof-review-request-'+index;
+      const acceptanceId = 'proof-acceptance-json-'+index;
       const reviewUrl = request && request.review_url ? request.review_url : '';
       const packet = proof.proof_review_request_packet || (request && request.client_review_message) || proof.proof_review_request_json || '';
       const link = reviewUrl ? '<a class="operator-proof-link" href="'+esc(reviewUrl)+'" target="_blank" rel="noreferrer">Proof-review link</a>' : '';
-      return '<div class="operator-proof-section" data-proof-review-request="client_first_proof_review"><span>Client proof review</span><div class="operator-meta"><span class="operator-chip">ready_for_paid_pilot</span><span class="operator-chip">changes_requested</span><span class="operator-chip">'+esc(request && request.external_action_state || 'blocked_until_owner_approval')+'</span></div>'+link+'<textarea class="operator-reply" id="'+id+'" readonly>'+esc(packet || proof.proof_review_request_json || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+id+'">Copy review request</button></div>';
+      return '<div class="operator-proof-section" data-proof-review-request="client_first_proof_review"><span>Client proof review</span><div class="operator-meta"><span class="operator-chip">ready_for_paid_pilot</span><span class="operator-chip">changes_requested</span><span class="operator-chip">'+esc(request && request.external_action_state || 'blocked_until_owner_approval')+'</span></div>'+link+'<textarea class="operator-reply" id="'+id+'" readonly>'+esc(packet || proof.proof_review_request_json || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+id+'">Copy review request</button><textarea class="operator-reply" id="'+acceptanceId+'" name="proof_acceptance_json" placeholder="Paste Proof acceptance JSON copied from /app/proof-review."></textarea><button class="btn secondary" type="button" data-proof-acceptance-json-command="record_proof_review_acceptance" data-proof-acceptance-json-target="'+acceptanceId+'" data-action-id="'+esc(proof.action_id || request && request.action_id || '')+'" data-lead-id="'+esc(proof.lead_id || request && request.lead_id || '')+'">Import proof acceptance JSON</button></div>';
     }
     function proofBuyerReply(proof, index){
       if(!proof || !proof.buyer_reply_draft)return '';
@@ -6114,6 +6115,33 @@ const publicOperatorConsoleHtml = `<!doctype html>
       actionsEl.querySelectorAll('[data-source-pack-json-command]').forEach(function(button){button.addEventListener('click',function(){attachActivationSourcePackJson(button)})});
       actionsEl.querySelectorAll('[data-source-pack-command]').forEach(function(button){button.addEventListener('click',function(){attachActivationSourcePack(button)})});
       actionsEl.querySelectorAll('[data-activation-proof-command]').forEach(function(button){button.addEventListener('click',function(){prepareActivationFirstProof(button)})});
+      actionsEl.querySelectorAll('[data-proof-acceptance-json-command]').forEach(function(button){button.addEventListener('click',function(){recordProofReviewAcceptanceJson(button)})});
+    }
+    async function recordProofReviewAcceptanceJson(button){
+      if(!token()){setStatus('Paste the ops key first.');return}
+      const jsonEl = document.getElementById(button.getAttribute('data-proof-acceptance-json-target') || '');
+      const rawJson = jsonEl ? jsonEl.value.trim() : '';
+      if(!rawJson){setStatus('Paste Proof acceptance JSON first.');return}
+      let imported;
+      try {
+        imported = JSON.parse(rawJson);
+      } catch (error) {
+        setStatus({status:'error',reason:'proof_acceptance_json_parse_failed',message:String(error && error.message || error)});
+        return;
+      }
+      const payload = {
+        operation:'record_proof_review_acceptance',
+        action_id:imported.action_id || button.getAttribute('data-action-id') || '',
+        lead_id:imported.lead_id || button.getAttribute('data-lead-id') || '',
+        proof_acceptance_json:rawJson,
+        decision:imported.decision || '',
+        operator_note:'Imported client Proof acceptance JSON. Scope, price, payment, workspace creation, external sends, browser actions, and connector writes remain blocked until owner approval.'
+      };
+      setStatus({status:'importing_proof_acceptance_json', note:'Recording proof review result for owner scope and price gate.'});
+      const response = await fetch('/api/pipeline-control',{method:'POST',headers:Object.assign({},authHeaders(),{'content-type':'application/json'}),body:JSON.stringify(payload),cache:'no-store'});
+      const data = await response.json().catch(function(){return {status:'error',reason:'invalid_json',code:response.status}});
+      setStatus(data);
+      if(response.ok) await refresh();
     }
     async function attachActivationSourcePackJson(button){
       if(!token()){setStatus('Paste the ops key first.');return}

@@ -682,6 +682,78 @@ function buildActivationProofReviewRequest(row = {}, input = {}) {
   }
 }
 
+function buildProofReviewAcceptanceRecord(row = {}, payload = {}) {
+  const imported = parseJsonObject(payload.proof_acceptance_json || payload.proof_review_acceptance_json || payload.acceptance_json || payload.proof_review_acceptance)
+  const merged = { ...imported, ...payload }
+  const context = contextFromActivationAction(row)
+  const decision = oneOf(merged.decision || merged.review_decision, ['ready_for_paid_pilot', 'changes_requested', 'not_useful'], '')
+  if (!decision) return { status: 'error', reason: 'invalid_proof_review_decision' }
+  const recordedAt = new Date().toISOString()
+  const leadId = text(merged.lead_id) || text(row.lead_id) || text(context.lead.lead_id) || null
+  const actionId = text(merged.action_id) || text(row.action_id) || text(context.lead.task_id) || null
+  const ready = decision === 'ready_for_paid_pilot'
+  const changes = decision === 'changes_requested'
+  const nextGate = ready
+    ? 'scope_price_owner_approval_required'
+    : changes
+      ? 'proof_revision_required'
+      : 'discovery_rework_required'
+  const clientNote = truncate(merged.client_note || merged.note || merged.owner_note, 1200)
+  const proofPacketExcerpt = truncate(merged.proof_packet_excerpt || merged.proof_excerpt || '', 1600)
+  const packet = [
+    `# ${context.templateName} proof review acceptance`,
+    '',
+    `Decision: ${decision}`,
+    `Lead: ${leadId || 'not set'}`,
+    `Action: ${actionId || 'not set'}`,
+    `Client: ${context.company}`,
+    `Next gate: ${nextGate}`,
+    `Recorded at: ${recordedAt}`,
+    'Real MRR delta: 0',
+    '',
+    '## Client note',
+    clientNote || 'No client note recorded.',
+    '',
+    '## Proof excerpt',
+    proofPacketExcerpt || 'No proof excerpt pasted.',
+    '',
+    '## Guardrails',
+    '- This accepts or rejects proof usefulness only.',
+    '- Owner still must approve scope and price before any payment request.',
+    '- No external send/write/browser/payment action is authorized by this record.',
+    '- Real MRR remains 0 until payment proof is recorded.',
+  ].join('\n')
+  return {
+    status: 'proof_review_acceptance_recorded',
+    acceptance_type: 'first_proof_review',
+    decision,
+    lead_id: leadId,
+    action_id: actionId,
+    template_name: context.templateName,
+    company: context.company,
+    first_proof_target: context.firstProofTarget,
+    client_note: clientNote,
+    proof_packet_excerpt: proofPacketExcerpt,
+    next_gate: nextGate,
+    next_step: ready
+      ? 'Prepare owner-approved scope and price, then payment route for the paid pilot.'
+      : changes
+        ? 'Revise the first proof from the requested changes before scope and price.'
+        : 'Run a smaller discovery pass before making a paid-pilot offer.',
+    external_action_state: 'blocked_until_owner_approval',
+    connector_write_state: 'blocked_until_owner_approval',
+    browser_action_state: 'blocked_until_owner_approval',
+    payment_request_state: 'blocked_until_owner_approval',
+    workspace_state: 'not_created_until_payment_proof',
+    approval_required: true,
+    human_gate: 'owner approval before send/write/payment/browser actions',
+    real_mrr_delta: 0,
+    recorded_at: recordedAt,
+    recorded_by: 'operator_console',
+    packet,
+  }
+}
+
 function buildActivationFirstProof(row = {}, payload = {}) {
   const rowResult = parseJsonObject(row.result)
   const attachedSourcePack = parseJsonObject(payload.activation_source_pack || rowResult.activation_source_pack)
@@ -3622,6 +3694,163 @@ async function prepareBlobActivationFirstProof({ actionId, leadId, payload }, pr
   }
 }
 
+function proofReviewActionStatus(decision) {
+  if (decision === 'ready_for_paid_pilot') return 'proof_accepted_for_scope'
+  if (decision === 'changes_requested') return 'proof_changes_requested'
+  return 'proof_not_useful'
+}
+
+async function recordProofReviewAcceptance(payload = {}) {
+  const actionId = text(payload.action_id)
+  const leadId = text(payload.lead_id)
+  if (!actionId && !leadId) return { status: 'error', reason: 'missing_action_or_lead_id' }
+  if (!datastore.postgresConfigured()) {
+    return recordBlobProofReviewAcceptance({ actionId, leadId, payload }, { status: 'error', reason: 'postgres_not_configured' })
+  }
+
+  const selected = await datastore.query(
+    `
+      select
+        action_id, lead_id, task_id, action_type, status, priority, owner,
+        title, next_step, approval_required, approval_state,
+        notification_channel, notification_status, payload, result, created_at
+      from public.supermega_pipeline_actions
+      where (($1 <> '' and action_id = $1) or ($1 = '' and $2 <> '' and lead_id = $2))
+      order by created_at desc
+      limit 1
+    `,
+    [actionId, leadId],
+  )
+  if (selected.status !== 'ready') return recordBlobProofReviewAcceptance({ actionId, leadId, payload }, selected)
+  if (!selected.rows.length) {
+    const fallback = await recordBlobProofReviewAcceptance({ actionId, leadId, payload }, { status: 'error', reason: 'postgres_action_not_found' })
+    if (fallback.status === 'ready') return fallback
+    return { status: 'error', reason: 'action_not_found' }
+  }
+
+  const row = selected.rows[0]
+  const currentResult = parseJsonObject(row.result)
+  const existing = parseJsonObject(currentResult.proof_review_acceptance)
+  if (existing.status === 'proof_review_acceptance_recorded') {
+    return {
+      status: 'ready',
+      adapter: 'vercel_postgres_neon',
+      operation_status: 'already_recorded',
+      action: safeAction(row),
+      proof_review_acceptance: existing,
+    }
+  }
+  const acceptance = buildProofReviewAcceptanceRecord(row, { ...payload, action_id: text(row.action_id), lead_id: text(row.lead_id) })
+  if (acceptance.status === 'error') return acceptance
+  const actionStatus = proofReviewActionStatus(acceptance.decision)
+  const result = await datastore.query(
+    `
+      with target as (
+        select id
+        from public.supermega_pipeline_actions
+        where (($1 <> '' and action_id = $1) or ($1 = '' and $2 <> '' and lead_id = $2))
+        order by created_at desc
+        limit 1
+      )
+      update public.supermega_pipeline_actions a
+      set
+        result = jsonb_set(
+          jsonb_set(coalesce(a.result, '{}'::jsonb), '{proof_review_acceptance}', $3::jsonb, true),
+          '{proof_review_acceptance_recorded_at}',
+          to_jsonb($4::text),
+          true
+        ),
+        status = $5,
+        next_step = $6,
+        updated_at = now()
+      where a.id in (select id from target)
+      returning
+        a.action_id, a.lead_id, a.task_id, a.action_type, a.status, a.priority, a.owner,
+        a.title, a.next_step, a.approval_required, a.approval_state,
+        a.notification_channel, a.notification_status, a.payload, a.result, a.created_at
+    `,
+    [actionId, leadId, JSON.stringify(acceptance), acceptance.recorded_at, actionStatus, acceptance.next_step],
+  )
+  if (result.status !== 'ready') return recordBlobProofReviewAcceptance({ actionId, leadId, payload }, result)
+  if (!result.rows.length) return { status: 'error', reason: 'action_not_found', proof_review_acceptance: acceptance }
+  const mirror = await recordBlobProofReviewAcceptance(
+    { actionId, leadId, payload },
+    { status: 'ready', adapter: 'vercel_postgres_neon', mirrored_from_primary: true },
+    { allowMissing: true },
+  )
+  return {
+    status: 'ready',
+    adapter: mirror.status === 'ready' ? 'vercel_postgres_neon_with_blob_queue' : 'vercel_postgres_neon',
+    operation_status: 'recorded',
+    action: safeAction(result.rows[0]),
+    proof_review_acceptance: acceptance,
+    mirror,
+  }
+}
+
+async function recordBlobProofReviewAcceptance({ actionId, leadId, payload }, primaryDatabase = {}, options = {}) {
+  const found = await blobQueue.findActionRecord({ action_id: actionId, lead_id: leadId })
+  if (found.status !== 'ready') {
+    if (options.allowMissing && found.reason === 'action_not_found') {
+      return {
+        status: 'skipped',
+        adapter: 'vercel_blob',
+        reason: 'blob_action_not_found',
+        primary_database: primaryDatabase,
+      }
+    }
+    return {
+      ...found,
+      primary_database: primaryDatabase,
+    }
+  }
+  const row = found.row
+  const currentResult = parseJsonObject(row.result)
+  const existing = parseJsonObject(currentResult.proof_review_acceptance)
+  if (existing.status === 'proof_review_acceptance_recorded') {
+    return {
+      status: 'ready',
+      adapter: 'vercel_blob',
+      primary_database: primaryDatabase,
+      operation_status: 'already_recorded',
+      action: safeAction(row),
+      proof_review_acceptance: existing,
+    }
+  }
+  const acceptance = buildProofReviewAcceptanceRecord(row, payload)
+  if (acceptance.status === 'error') return acceptance
+  const actionStatus = proofReviewActionStatus(acceptance.decision)
+  const nextResult = {
+    ...currentResult,
+    proof_review_acceptance: acceptance,
+    proof_review_acceptance_recorded_at: acceptance.recorded_at,
+  }
+  const updated = await blobQueue.updateActionRecord(
+    { action_id: actionId, lead_id: leadId },
+    {
+      result: nextResult,
+      status: actionStatus,
+      next_step: acceptance.next_step,
+      notification_status: row.notification_status || 'proof_review_acceptance_recorded',
+    },
+  )
+  if (updated.status !== 'ready') {
+    return {
+      ...updated,
+      primary_database: primaryDatabase,
+      proof_review_acceptance: acceptance,
+    }
+  }
+  return {
+    status: 'ready',
+    adapter: 'vercel_blob',
+    primary_database: primaryDatabase,
+    operation_status: 'recorded',
+    action: safeAction(updated.record),
+    proof_review_acceptance: acceptance,
+  }
+}
+
 async function updateOrderRoomState(payload) {
   const actionId = text(payload.action_id)
   const leadId = text(payload.lead_id)
@@ -4904,7 +5133,7 @@ function writeStatusCode(result) {
   if (result.status === 'ready') return 200
   if (result.reason === 'action_not_found') return 404
   if (['private_workspace_not_ready', 'private_workspace_required', 'first_run_acceptance_required', 'owner_acceptance_required', 'owner_acceptance_not_accepted', 'connector_policy_required', 'production_approval_queue_required', 'enterprise_delivery_pack_required', 'customer_success_desk_required', 'retainer_growth_offer_required', 'use_start_private_workspace_operation', 'autopilot_draft_not_found'].includes(result.reason)) return 409
-  if (['missing_action_or_lead_id', 'missing_activation_sources', 'missing_approved_source_sample', 'invalid_owner_acceptance_decision', 'missing_owner_acceptance_reference', 'invalid_connector_policy_mode', 'missing_connector_policy_reference', 'missing_production_queue_reference', 'missing_enterprise_delivery_reference', 'missing_customer_success_reference', 'missing_retainer_growth_reference', 'missing_retainer_payment_proof_reference', 'missing_retainer_owner_approval_reference', 'invalid_retainer_payment_amount', 'invalid_retainer_payment_period', 'invalid_autopilot_draft_decision', 'missing_autopilot_draft_reference'].includes(result.reason)) return 400
+  if (['missing_action_or_lead_id', 'missing_activation_sources', 'missing_approved_source_sample', 'invalid_proof_review_decision', 'invalid_owner_acceptance_decision', 'missing_owner_acceptance_reference', 'invalid_connector_policy_mode', 'missing_connector_policy_reference', 'missing_production_queue_reference', 'missing_enterprise_delivery_reference', 'missing_customer_success_reference', 'missing_retainer_growth_reference', 'missing_retainer_payment_proof_reference', 'missing_retainer_owner_approval_reference', 'invalid_retainer_payment_amount', 'invalid_retainer_payment_period', 'invalid_autopilot_draft_decision', 'missing_autopilot_draft_reference'].includes(result.reason)) return 400
   return 503
 }
 
@@ -4996,6 +5225,15 @@ async function handler(req, res) {
         endpoint: 'pipeline-control',
         operation,
         ...prepared,
+      })
+      return
+    }
+    if (operation === 'record_proof_review_acceptance') {
+      const recorded = await recordProofReviewAcceptance(payload)
+      json(res, writeStatusCode(recorded), {
+        endpoint: 'pipeline-control',
+        operation,
+        ...recorded,
       })
       return
     }
@@ -5460,6 +5698,7 @@ handler.__test = {
   buildActivationSessionActionPayload,
   buildActivationProofReviewRequest,
   buildActivationSourcePackRequest,
+  buildProofReviewAcceptanceRecord,
   buildActivationSessionFirstProofTask,
   buildActivationSessionLead,
   buildActivationSourcePack,
@@ -5473,6 +5712,7 @@ handler.__test = {
   prepareFirstRunAcceptance,
   attachActivationSourcePack,
   prepareActivationFirstProof,
+  recordProofReviewAcceptance,
   prepareCustomerSuccessDesk,
   prepareEnterpriseDeliveryPack,
   prepareProductionApprovalQueue,
