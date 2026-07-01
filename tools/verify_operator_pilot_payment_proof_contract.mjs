@@ -24,6 +24,10 @@ const sourceTokens = [
   'owner_reconciliation_reference',
   'Record pilot payment proof',
   'pilot_payment_proof_reference_required',
+  'client_pilot_payment_submission',
+  'client_payment_proof_url',
+  'Client payment proof submission',
+  'Copy client payment proof',
   "operation:'record_pilot_payment_proof'",
 ]
 
@@ -38,6 +42,11 @@ const outputTokens = [
   'Owner reconciliation reference',
   'Pilot payment proof record',
   'Copy pilot payment proof',
+  'Client payment proof link',
+  'Copy client payment link',
+  'Client payment proof submission',
+  'Copy client payment proof',
+  'client_pilot_payment_submission',
   'data-pilot-payment-proof-command',
   'payment_amount_mmk',
   'payment_proof_reference',

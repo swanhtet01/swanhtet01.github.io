@@ -3355,6 +3355,14 @@ const config = {
       dest: '/api/proof-review-submissions.js',
     },
     {
+      src: '^/api/pilot-payment-submissions$',
+      dest: '/api/pilot-payment-submissions.js',
+    },
+    {
+      src: '^/api/pilot-payment-submissions/status$',
+      dest: '/api/pilot-payment-submissions.js',
+    },
+    {
       src: '^/api/campaign-clicks$',
       dest: '/api/campaign-clicks.js',
     },
@@ -3425,6 +3433,10 @@ const config = {
     {
       src: '^/app/proof-review/?$',
       dest: '/app/proof-review/index.html',
+    },
+    {
+      src: '^/app/payment-proof/?$',
+      dest: '/app/payment-proof/index.html',
     },
     {
       src: '^/app/source-pack/?$',
@@ -5668,6 +5680,8 @@ const publicOperatorConsoleHtml = `<!doctype html>
       const pilotPaymentPacketId = 'pilot-payment-proof-'+index;
       const pilotPaymentLedgerId = 'pilot-payment-proof-ledger-'+index;
       const pilotPaymentSummaryId = 'pilot-payment-proof-summary-'+index;
+      const clientPaymentSubmissionId = 'client-payment-submission-'+index;
+      const clientPaymentProofUrlId = 'client-payment-proof-url-'+index;
       const state = room.state || {};
       const actionId = action && action.action_id || '';
       const leadId = action && action.lead_id || '';
@@ -5686,6 +5700,7 @@ const publicOperatorConsoleHtml = `<!doctype html>
       const scopeApproval = room.scope_price_approval || {};
       const paymentGate = room.payment_request_gate || scopeApproval.payment_request_gate || {};
       const pilotPaymentProof = room.pilot_payment_proof || {};
+      const clientPaymentSubmission = room.client_pilot_payment_submission || {};
       const firstProductionRun = room.first_production_run || {};
       const scopeControl = '<div class="operator-proof-section operator-scope-price"><span>Approved pilot scope</span><textarea class="operator-reply" id="'+scopeSummaryId+'" name="approved_scope_summary" placeholder="Approved pilot scope after useful first proof.">'+esc(scopeApproval.approved_scope_summary || proof.first_proof_target || '')+'</textarea><div class="operator-row"><input class="operator-input" id="'+scopePriceId+'" name="approved_price_mmk" value="'+esc(scopeApproval.approved_price_mmk || '11000000')+'" aria-label="Approved price MMK" placeholder="Approved price MMK" /><input class="operator-input" id="'+scopeRouteId+'" name="payment_route" value="'+esc(scopeApproval.payment_route || 'manual_invoice_or_payment_link_after_owner_approval')+'" aria-label="Payment route" placeholder="Payment route" /></div><input class="operator-input" id="'+scopeReferenceId+'" name="owner_approval_reference" value="'+esc(scopeApproval.owner_approval_reference || '')+'" aria-label="Owner approval reference" placeholder="Owner approval reference" /><button class="btn primary" type="button" data-scope-price-command="record_scope_price_approval" data-scope-summary-target="'+scopeSummaryId+'" data-scope-price-target="'+scopePriceId+'" data-scope-route-target="'+scopeRouteId+'" data-scope-reference-target="'+scopeReferenceId+'" data-action-id="'+esc(actionId)+'" data-lead-id="'+esc(leadId)+'">Record scope + payment approval</button></div>';
       const pilotPaymentControl = '<div class="operator-proof-section operator-pilot-payment-proof"><span>Pilot payment proof</span><div class="operator-row"><input class="operator-input" id="'+pilotPaymentAmountId+'" name="payment_amount_mmk" value="'+esc(pilotPaymentProof.payment_amount_mmk || scopeApproval.approved_price_mmk || '11000000')+'" aria-label="Payment amount MMK" placeholder="Payment amount MMK" /><input class="operator-input" id="'+pilotPaymentMethodId+'" name="payment_method" value="'+esc(pilotPaymentProof.payment_method || 'manual_invoice_or_payment_link_after_owner_approval')+'" aria-label="Payment method" placeholder="Payment method" /></div><input class="operator-input" id="'+pilotPaymentProofId+'" name="payment_proof_reference" value="'+esc(pilotPaymentProof.payment_proof_reference || '')+'" aria-label="Payment proof reference" placeholder="Payment proof reference" /><input class="operator-input" id="'+pilotPaymentOwnerId+'" name="owner_reconciliation_reference" value="'+esc(pilotPaymentProof.owner_reconciliation_reference || '')+'" aria-label="Owner reconciliation reference" placeholder="Owner reconciliation reference" /><button class="btn primary" type="button" data-pilot-payment-proof-command="record_pilot_payment_proof" data-pilot-payment-amount-target="'+pilotPaymentAmountId+'" data-pilot-payment-method-target="'+pilotPaymentMethodId+'" data-pilot-payment-proof-target="'+pilotPaymentProofId+'" data-pilot-payment-owner-target="'+pilotPaymentOwnerId+'" data-action-id="'+esc(actionId)+'" data-lead-id="'+esc(leadId)+'">Record pilot payment proof</button></div>';
@@ -5728,7 +5743,9 @@ const publicOperatorConsoleHtml = `<!doctype html>
       const pilotPaymentPacket = room.pilot_payment_proof_packet ? '<div class="operator-proof-section"><span>Pilot payment proof record</span><textarea class="operator-reply" id="'+pilotPaymentPacketId+'" readonly>'+esc(room.pilot_payment_proof_packet || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+pilotPaymentPacketId+'">Copy pilot payment proof</button></div>' : '';
       const pilotPaymentLedger = room.pilot_payment_proof_ledger_csv ? '<textarea class="operator-reply" id="'+pilotPaymentLedgerId+'" readonly>'+esc(room.pilot_payment_proof_ledger_csv || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+pilotPaymentLedgerId+'">Copy pilot payment ledger</button>' : '';
       const pilotPaymentSummary = room.pilot_payment_summary_json ? '<textarea class="operator-reply" id="'+pilotPaymentSummaryId+'" readonly>'+esc(room.pilot_payment_summary_json || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+pilotPaymentSummaryId+'">Copy pilot payment summary</button>' : '';
-      return '<div class="operator-proof-section operator-order-room"><span>Paid pilot order room</span><div class="operator-meta"><span class="operator-chip">'+esc(room.status || 'draft_owner_approval_required')+'</span><span class="operator-chip">'+esc(room.payment_state || 'payment_proof_required')+'</span><span class="operator-chip">'+esc(room.order_state || 'order_not_started')+'</span></div>'+stateChips+scopeControl+pilotPaymentControl+stateButtons+workspaceButton+firstProductionRunControl+acceptanceButton+ownerDecisionButtons+connectorPolicyButton+productionApprovalButton+enterpriseDeliveryButton+customerSuccessButton+retainerGrowthButton+retainerPaymentButton+scopePacket+paymentGatePacket+pilotPaymentPacket+pilotPaymentLedger+pilotPaymentSummary+firstProductionRunPacket+firstProductionRunLedger+'<textarea class="operator-reply" id="'+paymentId+'" readonly>'+esc(room.payment_request_draft || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+paymentId+'">Copy payment request</button><textarea class="operator-reply" id="'+paymentLedgerId+'" readonly>'+esc(room.payment_proof_ledger_csv || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+paymentLedgerId+'">Copy payment ledger</button><textarea class="operator-reply" id="'+orderLedgerId+'" readonly>'+esc(room.order_room_ledger_csv || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+orderLedgerId+'">Copy order ledger</button><textarea class="operator-reply" id="'+checklistId+'" readonly>'+esc(checklist)+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+checklistId+'">Copy pilot start checklist</button><textarea class="operator-reply" id="'+activationId+'" readonly>'+esc(room.owner_activation_packet || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+activationId+'">Copy owner activation packet</button><textarea class="operator-reply" id="'+actionQueueId+'" readonly>'+esc(room.owner_action_queue_csv || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+actionQueueId+'">Copy owner action queue</button><textarea class="operator-reply" id="'+activationJsonId+'" readonly>'+esc(room.activation_summary_json || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+activationJsonId+'">Copy activation JSON</button><textarea class="operator-reply" id="'+workspaceManifestId+'" readonly>'+esc(room.private_workspace_manifest_json || JSON.stringify(room.private_workspace_manifest || {},null,2))+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+workspaceManifestId+'">Copy workspace manifest</button><textarea class="operator-reply" id="'+workspaceHandoffId+'" readonly>'+esc(room.private_workspace_handoff_packet || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+workspaceHandoffId+'">Copy workspace handoff</button><textarea class="operator-reply" id="'+firstRunQueueId+'" readonly>'+esc(room.first_run_queue_csv || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+firstRunQueueId+'">Copy first run queue</button>'+acceptancePacket+acceptanceQueue+ownerPacket+ownerQueue+connectorPacket+connectorQueue+connectorConfig+productionPacket+productionQueue+productionConfig+enterprisePacket+enterpriseAccess+enterpriseValue+enterpriseConfig+customerSuccessPacket+customerSuccessTickets+customerSuccessValue+customerSuccessRenewal+customerSuccessClientUpdate+customerSuccessConfig+retainerPacket+retainerOptions+retainerDecisionLedger+retainerRoadmap+retainerInvoice+retainerEmail+retainerConfig+retainerPaymentPacket+retainerPaymentLedger+retainerMrrSummary+'</div>';
+      const clientPaymentProofUrlBlock = room.client_payment_proof_url ? '<div class="operator-proof-section"><span>Client payment proof link</span><textarea class="operator-reply" id="'+clientPaymentProofUrlId+'" readonly>'+esc(room.client_payment_proof_url || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+clientPaymentProofUrlId+'">Copy client payment link</button></div>' : '';
+      const clientPaymentSubmissionBlock = clientPaymentSubmission.status ? '<div class="operator-proof-section"><span>Client payment proof submission</span><div class="operator-meta"><span class="operator-chip">'+esc(clientPaymentSubmission.status || 'client_pilot_payment_submitted')+'</span><span class="operator-chip">'+esc(clientPaymentSubmission.payment_proof_state || 'client_submitted_owner_review_required')+'</span><span class="operator-chip">MRR '+esc(clientPaymentSubmission.real_mrr_delta ?? 0)+'</span></div><textarea class="operator-reply" id="'+clientPaymentSubmissionId+'" readonly>'+esc(room.client_pilot_payment_submission_json || JSON.stringify(clientPaymentSubmission,null,2))+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+clientPaymentSubmissionId+'">Copy client payment proof</button></div>' : '';
+      return '<div class="operator-proof-section operator-order-room"><span>Paid pilot order room</span><div class="operator-meta"><span class="operator-chip">'+esc(room.status || 'draft_owner_approval_required')+'</span><span class="operator-chip">'+esc(room.payment_state || 'payment_proof_required')+'</span><span class="operator-chip">'+esc(room.order_state || 'order_not_started')+'</span></div>'+stateChips+scopeControl+pilotPaymentControl+stateButtons+workspaceButton+firstProductionRunControl+acceptanceButton+ownerDecisionButtons+connectorPolicyButton+productionApprovalButton+enterpriseDeliveryButton+customerSuccessButton+retainerGrowthButton+retainerPaymentButton+scopePacket+paymentGatePacket+clientPaymentProofUrlBlock+clientPaymentSubmissionBlock+pilotPaymentPacket+pilotPaymentLedger+pilotPaymentSummary+firstProductionRunPacket+firstProductionRunLedger+'<textarea class="operator-reply" id="'+paymentId+'" readonly>'+esc(room.payment_request_draft || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+paymentId+'">Copy payment request</button><textarea class="operator-reply" id="'+paymentLedgerId+'" readonly>'+esc(room.payment_proof_ledger_csv || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+paymentLedgerId+'">Copy payment ledger</button><textarea class="operator-reply" id="'+orderLedgerId+'" readonly>'+esc(room.order_room_ledger_csv || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+orderLedgerId+'">Copy order ledger</button><textarea class="operator-reply" id="'+checklistId+'" readonly>'+esc(checklist)+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+checklistId+'">Copy pilot start checklist</button><textarea class="operator-reply" id="'+activationId+'" readonly>'+esc(room.owner_activation_packet || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+activationId+'">Copy owner activation packet</button><textarea class="operator-reply" id="'+actionQueueId+'" readonly>'+esc(room.owner_action_queue_csv || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+actionQueueId+'">Copy owner action queue</button><textarea class="operator-reply" id="'+activationJsonId+'" readonly>'+esc(room.activation_summary_json || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+activationJsonId+'">Copy activation JSON</button><textarea class="operator-reply" id="'+workspaceManifestId+'" readonly>'+esc(room.private_workspace_manifest_json || JSON.stringify(room.private_workspace_manifest || {},null,2))+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+workspaceManifestId+'">Copy workspace manifest</button><textarea class="operator-reply" id="'+workspaceHandoffId+'" readonly>'+esc(room.private_workspace_handoff_packet || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+workspaceHandoffId+'">Copy workspace handoff</button><textarea class="operator-reply" id="'+firstRunQueueId+'" readonly>'+esc(room.first_run_queue_csv || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+firstRunQueueId+'">Copy first run queue</button>'+acceptancePacket+acceptanceQueue+ownerPacket+ownerQueue+connectorPacket+connectorQueue+connectorConfig+productionPacket+productionQueue+productionConfig+enterprisePacket+enterpriseAccess+enterpriseValue+enterpriseConfig+customerSuccessPacket+customerSuccessTickets+customerSuccessValue+customerSuccessRenewal+customerSuccessClientUpdate+customerSuccessConfig+retainerPacket+retainerOptions+retainerDecisionLedger+retainerRoadmap+retainerInvoice+retainerEmail+retainerConfig+retainerPaymentPacket+retainerPaymentLedger+retainerMrrSummary+'</div>';
     }
     function legacyCopy(el){
       el.focus();
@@ -6679,6 +6696,181 @@ const publicProofReviewHtml = `<!doctype html>
 </html>`
 await mkdir(resolve(staticDir, 'app', 'proof-review'), { recursive: true })
 await writeFile(resolve(staticDir, 'app', 'proof-review', 'index.html'), publicProofReviewHtml, 'utf8')
+const publicPaymentProofHtml = `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="noindex,nofollow" />
+  <title>AI Workcell Payment Proof | SUPERMEGA.dev</title>
+  <meta name="description" content="Client payment-proof submission room for SuperMega AI workcell paid pilots." />
+  <meta name="theme-color" content="#1b1815" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" />
+  <style>
+    :root { color-scheme: light; --paper:#f4efe6; --ink:#1b1815; --muted:#6f675d; --line:rgba(27,24,21,.16); --panel:#fffaf1; --panel2:#ebe2d3; --accent:#d97757; --green:#1c8a5a; --red:#a14432; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; background: var(--paper); color: var(--ink); font-family: "Aptos", "Segoe UI Variable", "Segoe UI", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+    main { width: min(1180px, calc(100% - 28px)); margin: 0 auto; padding: 24px 0 54px; }
+    header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px 0 22px; border-bottom: 1px solid var(--line); }
+    .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: inherit; font-weight: 950; }
+    .mark { width: 38px; height: 38px; border-radius: 12px; background: #1b1815; display: grid; place-items: center; border: 1px solid rgba(27,24,21,.22); }
+    .mark img { width: 100%; height: 100%; display: block; border-radius: inherit; }
+    .btn { border: 1px solid var(--line); border-radius: 999px; padding: 11px 14px; background: var(--panel); color: var(--ink); font-weight: 850; text-decoration: none; cursor: pointer; }
+    .btn.primary { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+    .btn:focus-visible, input:focus-visible, textarea:focus-visible { outline: 3px solid rgba(217,119,87,.28); outline-offset: 2px; }
+    .hero { display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, 430px); gap: 16px; padding: 28px 0 20px; align-items: stretch; }
+    .eyebrow { color: var(--accent); font-size: 12px; font-weight: 950; text-transform: uppercase; letter-spacing: 0; }
+    h1 { margin: 10px 0 0; max-width: 12ch; font-size: clamp(44px, 8vw, 84px); line-height: .9; letter-spacing: 0; }
+    h2 { margin: 0; font-size: clamp(24px, 3vw, 34px); letter-spacing: 0; }
+    p { color: var(--muted); font-size: 16px; line-height: 1.55; margin: 12px 0 0; max-width: 62rem; }
+    .summary, .panel, .proof-card { border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }
+    .summary { padding: 18px; display: grid; gap: 10px; align-content: start; }
+    .summary-row { display: grid; grid-template-columns: 116px 1fr; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+    .summary-row:last-child { border-bottom: 0; }
+    .summary-row span { color: var(--muted); font-size: 12px; font-weight: 900; text-transform: uppercase; }
+    .summary-row strong { overflow-wrap: anywhere; }
+    .band { border-top: 1px solid var(--line); padding-top: 22px; margin-top: 18px; }
+    .grid { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(320px, .95fr); gap: 12px; margin-top: 12px; align-items: start; }
+    .panel { padding: 16px; display: grid; gap: 12px; background: var(--panel2); }
+    .proof-card { padding: 14px; display: grid; gap: 10px; }
+    label { display: grid; gap: 7px; color: var(--muted); font-size: 12px; font-weight: 900; text-transform: uppercase; }
+    input, textarea { width: 100%; border: 1px solid var(--line); border-radius: 8px; padding: 11px 12px; background: #fffaf1; color: var(--ink); font: inherit; }
+    textarea { min-height: 150px; resize: vertical; line-height: 1.45; }
+    .actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .pill { display: inline-flex; align-items: center; width: fit-content; border-radius: 999px; padding: 7px 9px; background: rgba(28,138,90,.1); color: var(--green); font-size: 11px; font-weight: 950; text-transform: uppercase; }
+    .pill.stop { background: rgba(161,68,50,.1); color: var(--red); }
+    pre { margin: 0; overflow: auto; white-space: pre-wrap; border: 1px solid var(--line); border-radius: 8px; background: rgba(255,250,241,.85); padding: 14px; font-size: 13px; line-height: 1.45; max-height: 380px; }
+    footer { margin-top: 24px; padding-top: 18px; border-top: 1px solid var(--line); color: var(--muted); font-size: 13px; }
+    @media (max-width: 900px) { .hero, .grid { grid-template-columns: 1fr; } header { align-items: flex-start; } .summary-row { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <a class="brand" href="/" aria-label="SUPERMEGA.dev home"><span class="mark"><img src="/favicon.svg" alt="" /></span><span>SUPERMEGA.dev</span></a>
+      <a class="btn" href="/operator/">Operator console</a>
+    </header>
+    <section class="hero">
+      <div>
+        <div class="eyebrow">client payment evidence</div>
+        <h1>AI Workcell Payment Proof</h1>
+        <p>Submit payment evidence for operator reconciliation. This does not create a workspace, verify a bank match, send messages, or claim revenue.</p>
+      </div>
+      <aside class="summary" aria-label="Payment proof summary">
+        <div class="summary-row"><span>Lead</span><strong data-lead-id>Loading</strong></div>
+        <div class="summary-row"><span>Action</span><strong data-action-id>Loading</strong></div>
+        <div class="summary-row"><span>Status</span><strong data-payment-summary>Waiting</strong></div>
+        <div class="summary-row"><span>Gate</span><strong>owner reconciliation before workspace or revenue claim</strong></div>
+      </aside>
+    </section>
+    <section class="band">
+      <div class="actions"><h2>Payment proof</h2><span class="pill stop">Owner review required</span></div>
+      <div class="grid">
+        <div class="panel">
+          <label>Payment amount MMK<input id="payment-amount" inputmode="numeric" placeholder="5500000" /></label>
+          <label>Payment method<input id="payment-method" placeholder="KBZPay transfer, bank transfer, WavePay, cash deposit" /></label>
+          <label>Payment proof reference<textarea id="payment-reference" placeholder="Receipt number, transfer reference, screenshot filename, or payment confirmation text."></textarea></label>
+          <label>Client note<textarea id="client-note" placeholder="Anything the operator should know when reconciling the payment."></textarea></label>
+        </div>
+        <div class="proof-card">
+          <h2>Submission JSON</h2>
+          <p>Submit this evidence for operator reconciliation. Workspace start remains blocked until owner review.</p>
+          <div class="actions"><button class="btn primary" id="submit-payment-proof" type="button">Submit payment proof</button><button class="btn" id="copy-payment-proof" type="button">Copy JSON</button><button class="btn" id="refresh-payment-proof" type="button">Refresh JSON</button></div>
+          <pre id="payment-proof-json">Loading payment proof JSON.</pre>
+          <p id="copy-status">Submitting stores the payment proof for operator reconciliation only.</p>
+        </div>
+      </div>
+    </section>
+    <footer>Payment evidence only. Guardrail: owner reconciliation before workspace, bank verification is separate, and real MRR stays 0.</footer>
+  </main>
+  <script>
+    (function(){
+      var params = new URLSearchParams(window.location.search);
+      var lead = (params.get('lead') || 'lead-required').slice(0, 80);
+      var action = (params.get('action') || 'action-required').slice(0, 80);
+      var amountEl = document.getElementById('payment-amount');
+      var methodEl = document.getElementById('payment-method');
+      var referenceEl = document.getElementById('payment-reference');
+      var noteEl = document.getElementById('client-note');
+      var output = document.getElementById('payment-proof-json');
+      var copyStatus = document.getElementById('copy-status');
+      var summary = document.querySelector('[data-payment-summary]');
+      var leadEl = document.querySelector('[data-lead-id]');
+      var actionEl = document.querySelector('[data-action-id]');
+      if (leadEl) leadEl.textContent = lead;
+      if (actionEl) actionEl.textContent = action;
+      function buildPaymentProof() {
+        var amount = amountEl && amountEl.value ? amountEl.value.trim() : '';
+        var method = methodEl && methodEl.value ? methodEl.value.trim() : 'client_submitted_payment_proof';
+        var reference = referenceEl && referenceEl.value ? referenceEl.value.trim() : '';
+        if (summary) summary.textContent = reference ? 'ready to submit' : 'proof reference required';
+        return {
+          status: 'client_pilot_payment_submitted',
+          submission_type: 'client_pilot_payment_proof',
+          lead_id: lead,
+          action_id: action,
+          payment_amount_mmk: amount,
+          payment_method: method,
+          payment_proof_reference: reference,
+          client_note: noteEl && noteEl.value ? noteEl.value.trim() : '',
+          payment_proof_state: 'client_submitted_owner_review_required',
+          private_workspace_state: 'not_created_until_owner_reconciliation',
+          setup_cash_delta_mmk: 0,
+          real_mrr_delta: 0,
+          submitted_at: new Date().toISOString()
+        };
+      }
+      function render() {
+        if (!output) return;
+        output.textContent = JSON.stringify(buildPaymentProof(), null, 2);
+      }
+      document.querySelectorAll('input, textarea').forEach(function(el){ el.addEventListener('input', render); el.addEventListener('change', render); });
+      var refresh = document.getElementById('refresh-payment-proof');
+      if (refresh) refresh.addEventListener('click', render);
+      var submit = document.getElementById('submit-payment-proof');
+      if (submit) submit.addEventListener('click', async function(){
+        render();
+        var paymentProof = buildPaymentProof();
+        if (!paymentProof.payment_amount_mmk) { if (copyStatus) copyStatus.textContent = 'Add the payment amount before submitting.'; return; }
+        if (!paymentProof.payment_proof_reference) { if (copyStatus) copyStatus.textContent = 'Add the payment proof reference before submitting.'; return; }
+        submit.disabled = true;
+        if (copyStatus) copyStatus.textContent = 'Submitting payment proof for operator reconciliation...';
+        try {
+          var response = await fetch('/api/pilot-payment-submissions', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify(paymentProof),
+            cache: 'no-store'
+          });
+          var data = await response.json().catch(function(){ return { status:'error', reason:'invalid_json', code:response.status }; });
+          if (!response.ok || data.status !== 'ready') {
+            if (copyStatus) copyStatus.textContent = 'Submit failed: ' + (data.reason || response.status || 'unknown');
+            return;
+          }
+          if (copyStatus) copyStatus.textContent = 'Submitted for operator reconciliation. Workspace starts only after owner review.';
+        } catch (error) {
+          if (copyStatus) copyStatus.textContent = 'Submit failed. Copy the JSON and send it to SuperMega.';
+        } finally {
+          submit.disabled = false;
+        }
+      });
+      var copy = document.getElementById('copy-payment-proof');
+      if (copy) copy.addEventListener('click', async function(){
+        render();
+        try {
+          await navigator.clipboard.writeText(output.textContent || '');
+          if (copyStatus) copyStatus.textContent = 'Copied. You can also submit it here for operator reconciliation.';
+        } catch (error) {
+          if (copyStatus) copyStatus.textContent = 'Copy failed. Select the JSON manually and copy it.';
+        }
+      });
+      render();
+    })();
+  </script>
+</body>
+</html>`
+await mkdir(resolve(staticDir, 'app', 'payment-proof'), { recursive: true })
+await writeFile(resolve(staticDir, 'app', 'payment-proof', 'index.html'), publicPaymentProofHtml, 'utf8')
 const publicSourcePackIntakeHtml = `<!doctype html>
 <html lang="en">
 <head>
@@ -7157,6 +7349,7 @@ await writeNodeFunction('health.js')
 await writeNodeFunction('contact-submissions.js')
 await writeNodeFunction('source-pack-submissions.js')
 await writeNodeFunction('proof-review-submissions.js')
+await writeNodeFunction('pilot-payment-submissions.js')
 await writeNodeFunction('campaign-clicks.js')
 await writeNodeFunction('commercial-control.js')
 await writeNodeFunction('pipeline-control.js')

@@ -200,6 +200,14 @@ function proofReviewUrl(leadId, actionId) {
   return `${appBase}/app/proof-review?${params.toString()}`
 }
 
+function paymentProofUrl(leadId, actionId) {
+  const appBase = (envText('PUBLIC_WORKSPACE_BASE_URL', 'SUPERMEGA_WORKSPACE_BASE_URL') || 'https://supermega.dev').replace(/\/$/, '')
+  const params = new URLSearchParams()
+  params.set('lead', leadId)
+  params.set('action', actionId)
+  return `${appBase}/app/payment-proof?${params.toString()}`
+}
+
 function buildActivationSourcePackRequest(lead = {}) {
   const leadId = text(lead.lead_id) || text(lead.id) || 'lead-required'
   const actionId = text(lead.task_id) || text(lead.action_id) || 'action-required'
@@ -2802,6 +2810,7 @@ function firstProofPacket(row) {
   const retainerPaymentRecord = parseJsonObject(result.retainer_payment_record || payload.retainer_payment_record)
   const scopePriceApproval = parseJsonObject(result.scope_price_approval || payload.scope_price_approval)
   const pilotPaymentProof = parseJsonObject(result.pilot_payment_proof || payload.pilot_payment_proof)
+  const clientPilotPaymentSubmission = parseJsonObject(result.client_pilot_payment_submission || payload.client_pilot_payment_submission)
   const activationFirstProof = parseJsonObject(result.activation_first_proof || task.activation_first_proof || payload.activation_first_proof)
   const orderRoomState = Object.keys(persistedOrderRoomState).length
     ? persistedOrderRoomState
@@ -3140,6 +3149,9 @@ function firstProofPacket(row) {
       scope_price_approval_packet: text(scopePriceApproval.packet),
       payment_request_gate: Object.keys(scopePriceApproval.payment_request_gate || {}).length ? scopePriceApproval.payment_request_gate : null,
       payment_request_gate_packet: text(scopePriceApproval.payment_request_gate?.packet),
+      client_payment_proof_url: paymentProofUrl(leadId, text(row.action_id) || text(context.lead.task_id) || 'action-required'),
+      client_pilot_payment_submission: Object.keys(clientPilotPaymentSubmission).length ? clientPilotPaymentSubmission : null,
+      client_pilot_payment_submission_json: Object.keys(clientPilotPaymentSubmission).length ? JSON.stringify(clientPilotPaymentSubmission, null, 2) : '',
       pilot_payment_proof: Object.keys(pilotPaymentProof).length ? pilotPaymentProof : null,
       pilot_payment_proof_packet: text(pilotPaymentProof.packet),
       pilot_payment_proof_ledger_csv: text(pilotPaymentProof.ledger_csv),

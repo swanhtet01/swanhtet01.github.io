@@ -1,11 +1,11 @@
 {
-    "public_host":  "supermega-public-j4ashpi8s-swanhtet01s-projects.vercel.app",
-    "deployment_id":  "dpl_2FAsDYXeuy3dpwLZsjy2iu6hZkjN",
-    "locked_at":  "2026-07-01T08:08:00.0000000Z",
+    "public_host":  "supermega-public-lvv8mjk2l-swanhtet01s-projects.vercel.app",
+    "deployment_id":  "dpl_GNKWTijo6kwAwMuUsrEeReZepR6n",
+    "locked_at":  "2026-07-01T09:12:00.0000000Z",
     "domains":  [
                     "supermega.dev",
                     "www.supermega.dev"
                 ],
     "project":  "supermega-public",
-    "reason":  "Client proof-review room can submit proof acceptance directly into the operator ledger for scope and price review."
+    "reason":  "Client payment-proof room can submit payment evidence directly into the operator ledger for owner reconciliation without claiming setup cash or MRR."
 }

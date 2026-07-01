@@ -38,6 +38,8 @@ for (const [src, dest] of [
   ['^/api/source-pack-submissions/status$', '/api/source-pack-submissions.js'],
   ['^/api/proof-review-submissions$', '/api/proof-review-submissions.js'],
   ['^/api/proof-review-submissions/status$', '/api/proof-review-submissions.js'],
+  ['^/api/pilot-payment-submissions$', '/api/pilot-payment-submissions.js'],
+  ['^/api/pilot-payment-submissions/status$', '/api/pilot-payment-submissions.js'],
   ['^/api/checkout-start$', '/api/checkout-start.js'],
   ['^/api/checkout-start/status$', '/api/checkout-start.js'],
   ['^/api/pipeline-control$', '/api/pipeline-control.js'],
@@ -575,6 +577,9 @@ const sourcePackHtml = readFileSync(sourcePackHtmlPath, 'utf8')
 const proofReviewHtmlPath = resolve(staticDir, 'app/proof-review/index.html')
 if (!existsSync(proofReviewHtmlPath)) fail('proof_review_page_missing')
 const proofReviewHtml = readFileSync(proofReviewHtmlPath, 'utf8')
+const paymentProofHtmlPath = resolve(staticDir, 'app/payment-proof/index.html')
+if (!existsSync(paymentProofHtmlPath)) fail('payment_proof_page_missing')
+const paymentProofHtml = readFileSync(paymentProofHtmlPath, 'utf8')
 const pilotWorkspaceHtmlPath = resolve(staticDir, 'app/start/index.html')
 if (!existsSync(pilotWorkspaceHtmlPath)) fail('pilot_workspace_page_missing')
 const pilotWorkspaceHtml = readFileSync(pilotWorkspaceHtmlPath, 'utf8')
@@ -618,6 +623,14 @@ for (const token of ['normalizeProofReviewSubmission', 'proof_review_acceptance_
     fail('public_proof_review_submission_contract_missing', { token })
   }
 }
+const pilotPaymentSubmissionFunctionPath = resolve(functionsDir, 'api/pilot-payment-submissions.js.func/api/pilot-payment-submissions.js')
+if (!existsSync(pilotPaymentSubmissionFunctionPath)) fail('public_pilot_payment_submission_function_missing')
+const pilotPaymentSubmissionFunctionSource = readFileSync(pilotPaymentSubmissionFunctionPath, 'utf8')
+for (const token of ['normalizePilotPaymentSubmission', 'client_pilot_payment_submitted', 'client_payment_proof_received', 'pending_payment_review', 'publicSubmissionResponse', 'no_mrr_delta_without_owner_verified_payment_proof']) {
+  if (!pilotPaymentSubmissionFunctionSource.includes(token)) {
+    fail('public_pilot_payment_submission_contract_missing', { token })
+  }
+}
 const actionRunnerFunctionPath = resolve(functionsDir, 'api/action-runner.js.func/api/action-runner.js')
 if (!existsSync(actionRunnerFunctionPath)) fail('public_action_runner_function_missing')
 const actionRunnerFunctionSource = readFileSync(actionRunnerFunctionPath, 'utf8')
@@ -637,7 +650,7 @@ for (const token of ['prepareBlobLeadAutopilot', 'fallbackLeadForRun', 'supermeg
 const pipelineControlFunctionPath = resolve(functionsDir, 'api/pipeline-control.js.func/api/pipeline-control.js')
 if (!existsSync(pipelineControlFunctionPath)) fail('public_pipeline_control_function_missing')
 const pipelineControlFunctionSource = readFileSync(pipelineControlFunctionPath, 'utf8')
-for (const token of ['PUBLIC_WORKSPACE_BASE_URL', 'https://supermega.dev', '/app/start?']) {
+for (const token of ['PUBLIC_WORKSPACE_BASE_URL', 'https://supermega.dev', '/app/start?', 'paymentProofUrl', '/app/payment-proof?', 'client_pilot_payment_submission', 'client_payment_proof_url']) {
   if (!pipelineControlFunctionSource.includes(token)) {
     fail('public_pipeline_workspace_url_contract_missing', { token })
   }
@@ -723,6 +736,11 @@ for (const token of [
   'Copy proof packet',
   'Copy pilot packet',
   'Paid pilot order room',
+  'Client payment proof link',
+  'Copy client payment link',
+  'Client payment proof submission',
+  'Copy client payment proof',
+  'client_pilot_payment_submission',
   'Copy payment request',
   'Copy payment ledger',
   'Copy order ledger',
@@ -876,6 +894,15 @@ for (const token of [
   'Submitting stores the proof review for operator review only',
 ]) {
   if (!proofReviewHtml.includes(token)) fail('public_proof_review_submit_contract_missing', { token })
+}
+for (const token of [
+  'Submit payment proof',
+  '/api/pilot-payment-submissions',
+  'client_pilot_payment_submitted',
+  'Submitted for operator reconciliation',
+  'Submitting stores the payment proof for operator reconciliation only',
+]) {
+  if (!paymentProofHtml.includes(token)) fail('public_payment_proof_submit_contract_missing', { token })
 }
 const publicAgentTemplateContract = [
   ['deskpos-quickstart', 'DeskPOS Quickstart'],

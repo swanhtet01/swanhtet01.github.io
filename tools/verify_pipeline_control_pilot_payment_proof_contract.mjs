@@ -138,6 +138,18 @@ const baseRow = {
       lead_id: 'LEAD-PAYPROOF123',
       real_mrr_delta: 0,
     },
+    client_pilot_payment_submission: {
+      status: 'client_pilot_payment_submitted',
+      submission_type: 'client_pilot_payment_proof',
+      action_id: 'TASK-PAYPROOF123',
+      lead_id: 'LEAD-PAYPROOF123',
+      payment_amount_mmk: 5500000,
+      payment_method: 'KBZPay transfer',
+      payment_proof_state: 'client_submitted_owner_review_required',
+      private_workspace_state: 'not_created_until_owner_reconciliation',
+      setup_cash_delta_mmk: 0,
+      real_mrr_delta: 0,
+    },
   },
 }
 
@@ -197,6 +209,10 @@ try {
   assert.equal(body.order_room_state.real_mrr_delta, 0)
   assert.equal(body.action.status, 'payment_proof_recorded')
   assert.ok(body.action.next_step.includes('Create private workspace'))
+  assert.ok(body.action.first_proof.pilot_order_room.client_payment_proof_url.includes('/app/payment-proof?lead=LEAD-PAYPROOF123'))
+  assert.equal(body.action.first_proof.pilot_order_room.client_pilot_payment_submission.status, 'client_pilot_payment_submitted')
+  assert.equal(body.action.first_proof.pilot_order_room.client_pilot_payment_submission.setup_cash_delta_mmk, 0)
+  assert.equal(body.action.first_proof.pilot_order_room.client_pilot_payment_submission.real_mrr_delta, 0)
   assert.ok(recordedPatch, 'pilot_payment_proof_patch_missing')
   assert.equal(recordedPatch.result.pilot_payment_proof.payment_amount_mmk, 5500000)
   assert.equal(recordedPatch.result.pilot_order_room_state.private_workspace_state, 'ready_after_payment_proof')
