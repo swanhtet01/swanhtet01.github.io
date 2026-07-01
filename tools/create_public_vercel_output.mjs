@@ -1599,6 +1599,12 @@ const unicornShellStyle = `
       .proof-step b { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 999px; color: #fff; background: var(--ink); }
       .proof-step strong { display: block; font-size: 23px; letter-spacing: -0.045em; }
       .proof-step span { display: block; margin-top: 7px; color: var(--muted); line-height: 1.42; font-weight: 760; }
+      .workcell-panel { border: 1px solid var(--line); border-radius: 28px; padding: clamp(22px,4vw,40px); background: linear-gradient(135deg, rgba(194,96,63,0.06), rgba(201,162,75,0.055)); }
+      .workcell-panel p { color: var(--muted); line-height: 1.58; max-width: 66ch; }
+      .workcell-grid { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 12px; margin-top: 22px; }
+      .workcell-step { border: 1px solid var(--line); border-radius: 18px; padding: 16px; background: rgba(255,255,255,0.52); }
+      .workcell-step strong { display: block; letter-spacing: -0.02em; }
+      .workcell-step span { display: block; margin-top: 7px; color: var(--muted); font-size: 13px; line-height: 1.43; }
       .final { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 20px; align-items: center; border: 1px solid rgba(255,255,255,0.76); border-radius: 36px; padding: clamp(24px, 5vw, 48px); background: rgba(255,255,255,0.62); box-shadow: var(--shadow); backdrop-filter: blur(22px); }
       footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 24px 0 32px; color: var(--muted); font-weight: 800; }
       footer .footer-links { display: flex; flex-wrap: wrap; gap: 10px; }
@@ -1618,7 +1624,7 @@ const unicornShellStyle = `
         .brand-text strong, .brand-text small, .nav .optional-nav { display: none; }
         .nav { flex: 0 0 auto; gap: 6px; }
         .btn, button { min-height: 42px; padding: 0 12px; }
-        .poster, .split, .product-library-head, .output, .proof-system, .proof-board, .final { grid-template-columns: 1fr; }
+        .poster, .split, .product-library-head, .output, .proof-system, .proof-board, .workcell-grid, .final { grid-template-columns: 1fr; }
         .poster { min-height: auto; gap: 18px; padding: 20px 0 38px; }
         .eyebrow { font-size: 11px; letter-spacing: 0.18em; }
         h1 { max-width: 11ch; font-size: clamp(44px, 12vw, 60px); line-height: 0.98; letter-spacing: -0.065em; }
@@ -1713,7 +1719,7 @@ const unicornShellStyle = `
       :root[data-theme="dark"] body::before { background-image: linear-gradient(rgba(243,239,230,0.045) 1px, transparent 1px), linear-gradient(90deg, rgba(243,239,230,0.045) 1px, transparent 1px); }
       :root[data-theme="dark"] .btn, :root[data-theme="dark"] button { background: rgba(243,239,230,0.06); }
       :root[data-theme="dark"] .btn.primary, :root[data-theme="dark"] button { color: #fff; background: linear-gradient(135deg, #cc6e48, #d97757); box-shadow: 0 18px 40px rgba(217, 119, 87, 0.28); }
-      :root[data-theme="dark"] .output, :root[data-theme="dark"] .feature, :root[data-theme="dark"] .proof-card, :root[data-theme="dark"] .case, :root[data-theme="dark"] .proof-system, :root[data-theme="dark"] .final, :root[data-theme="dark"] .home-shot-card, :root[data-theme="dark"] .browser, :root[data-theme="dark"] .proof, :root[data-theme="dark"] .upgrade-card, :root[data-theme="dark"] .shell-card, :root[data-theme="dark"] .setup-card, :root[data-theme="dark"] .market-card, :root[data-theme="dark"] form, :root[data-theme="dark"] .feature-pills span, :root[data-theme="dark"] .chip, :root[data-theme="dark"] .metric, :root[data-theme="dark"] .proof-step, :root[data-theme="dark"] footer .footer-links a {
+      :root[data-theme="dark"] .output, :root[data-theme="dark"] .feature, :root[data-theme="dark"] .proof-card, :root[data-theme="dark"] .case, :root[data-theme="dark"] .proof-system, :root[data-theme="dark"] .workcell-panel, :root[data-theme="dark"] .workcell-step, :root[data-theme="dark"] .final, :root[data-theme="dark"] .home-shot-card, :root[data-theme="dark"] .browser, :root[data-theme="dark"] .proof, :root[data-theme="dark"] .upgrade-card, :root[data-theme="dark"] .shell-card, :root[data-theme="dark"] .setup-card, :root[data-theme="dark"] .market-card, :root[data-theme="dark"] form, :root[data-theme="dark"] .feature-pills span, :root[data-theme="dark"] .chip, :root[data-theme="dark"] .metric, :root[data-theme="dark"] .proof-step, :root[data-theme="dark"] footer .footer-links a {
         background: rgba(243,239,230,0.05); border-color: rgba(243,239,230,0.12);
       }
       :root[data-theme="dark"] .product-carousel, :root[data-theme="dark"] .product-shot-card, :root[data-theme="dark"] .product-shot-card .shot-open, :root[data-theme="dark"] .output > img { background: #201c17; }
@@ -2193,12 +2199,12 @@ const unicornAiAgentsHtml = `<!doctype html>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="robots" content="index,follow" />
-    <title>AI Agents in Days | SUPERMEGA.dev</title>
-    <meta name="description" content="Commission an AI agent built around your real workflow. Deposit today, running in 1–5 days. Yours to keep." />
+    <title>AI Workcell Pilot | SUPERMEGA.dev</title>
+    <meta name="description" content="Plug in real client sources and get an approval-only AI workcell: first proof, first production run, owner acceptance, and managed retainer path." />
     <meta name="theme-color" content="#f4efe6" />
     <link rel="canonical" href="https://supermega.dev/ai-agents/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" />
-    ${unicornSocialMeta({ title: 'AI Agents in Days | SUPERMEGA.dev', description: 'Commission an AI agent built around your real workflow. Deposit today, running in 1–5 days.', url: 'https://supermega.dev/ai-agents/' })}
+    ${unicornSocialMeta({ title: 'AI Workcell Pilot | SUPERMEGA.dev', description: 'Plug in real client sources and get an approval-only AI workcell with proof before scale.', url: 'https://supermega.dev/ai-agents/' })}
     <style>${unicornShellStyle}
       .agent-hero { padding: clamp(56px,10vw,96px) 0 0; text-align: center; }
       .agent-hero .eyebrow { margin-bottom: 18px; }
@@ -2235,11 +2241,26 @@ const unicornAiAgentsHtml = `<!doctype html>
 ${unicornHeader}
       <main>
         <section class="agent-hero section">
-          <div class="eyebrow">Sprint builds · 1–5 days · Yours to keep</div>
-          <h1>An AI agent for your exact job.</h1>
-          <p>Tell us the one task eating your team's time. We build an agent that reads your real data — Gmail, Drive, Sheets, Viber — drafts the work, and holds for your sign-off before anything moves.</p>
-          <div class="cta"><a class="btn primary" href="/contact/?package=agent">Commission a build</a><a class="btn secondary" href="/offers/">See pricing</a></div>
+          <div class="eyebrow">AI Workcell Pilot · approval-only · built from real sources</div>
+          <h1>Autopilot, but with owner control.</h1>
+          <p>Plug in what you already have: Gmail, Drive, Sheets, WhatsApp, Viber, POS exports, PDFs, screenshots, or messy spreadsheets. We build the workcell that drafts the work, shows source proof, and waits for approval before anything moves.</p>
+          <div class="cta"><a class="btn primary" href="/contact/?package=ai-workcell-pilot">Start with one source pack</a><a class="btn secondary" href="/offers/">See pricing</a></div>
           <p class="hero-tagline">Cast real work into software.</p>
+        </section>
+
+        <section class="section">
+          <div class="workcell-panel">
+            <div class="eyebrow">proof-to-retainer</div>
+            <h2>One practical path from sample data to managed autopilot.</h2>
+            <p>Every send, write, payment, or connector action waits for approval. The first month is about proving one valuable workflow, not pretending the company runs itself. MRR stays 0 until payment proof.</p>
+            <div class="workcell-grid">
+              <div class="workcell-step"><strong>Source pack</strong><span>You send the real files, messages, exports, or screenshots that define the work.</span></div>
+              <div class="workcell-step"><strong>First proof</strong><span>We return one useful output with source trace before full pilot commitment.</span></div>
+              <div class="workcell-step"><strong>First production run</strong><span>The first real run stays approval-only and records what happened in the ledger.</span></div>
+              <div class="workcell-step"><strong>Owner acceptance</strong><span>You approve value, request changes, or stop. Nothing scales without a decision.</span></div>
+              <div class="workcell-step"><strong>Managed retainer</strong><span>After acceptance, we maintain the AI Workcell Pilot and improve it as your client work expands.</span></div>
+            </div>
+          </div>
         </section>
 
         <section class="section">
@@ -2414,6 +2435,13 @@ const unicornPublicShellHtml = `<!doctype html>
       .how-step span { display: block; margin-top: 7px; color: var(--muted); font-size: 14px; line-height: 1.5; }
       .hero-img { width: 100%; display: block; border-radius: 16px; border: 1px solid rgba(42,36,28,0.12); box-shadow: var(--shadow); background: #f5f1e8; }
       :root[data-theme="dark"] .hero-img { border-color: rgba(243,239,230,0.14); }
+      .workcell-panel { border: 1px solid var(--line); border-radius: 28px; padding: clamp(22px,4vw,40px); background: linear-gradient(135deg, rgba(194,96,63,0.06), rgba(201,162,75,0.055)); }
+      .workcell-panel p { color: var(--muted); line-height: 1.58; max-width: 66ch; }
+      .workcell-grid { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 12px; margin-top: 22px; }
+      .workcell-step { border: 1px solid var(--line); border-radius: 18px; padding: 16px; background: rgba(255,255,255,0.52); }
+      .workcell-step strong { display: block; letter-spacing: -0.02em; }
+      .workcell-step span { display: block; margin-top: 7px; color: var(--muted); font-size: 13px; line-height: 1.43; }
+      :root[data-theme="dark"] .workcell-step { background: rgba(243,239,230,0.05); }
       /* Founder section */
       .founder-inner { display: grid; grid-template-columns: 220px 1fr; gap: 48px; align-items: start; }
       .founder-photo-wrap { position: sticky; top: 24px; }
@@ -2429,6 +2457,7 @@ const unicornPublicShellHtml = `<!doctype html>
       @media (max-width: 880px) {
         .uvp-grid { grid-template-columns: 1fr; }
         .how-steps { grid-template-columns: 1fr 1fr; }
+        .workcell-grid { grid-template-columns: 1fr; }
         .proof-strip { grid-template-columns: 1fr 1fr; }
         .proof-strip > div { border-right: 0; border-bottom: 1px solid var(--line); }
         .proof-strip > div:last-child { border-bottom: 0; }
@@ -2471,6 +2500,21 @@ ${unicornHeader}
           <div class="strip-item"><strong>You own it</strong><span>No per-seat fees, ever</span></div>
           <div class="strip-item"><strong>Delivered in weeks</strong><span>Not months</span></div>
         </div>
+
+        <section class="section">
+          <div class="workcell-panel">
+            <div class="eyebrow">AI Workcell Pilot</div>
+            <h2>Autopilot for the messy knowledge work you already have.</h2>
+            <p>Send messy Gmail, Sheets, WhatsApp, POS exports, PDFs, and screenshots. We turn them into one approval-only workcell that drafts the next action, shows the source proof, and waits for your decision before anything sends, writes, or touches money.</p>
+            <div class="workcell-grid">
+              <div class="workcell-step"><strong>First proof before deposit</strong><span>We show one useful output from your real source pack before asking you to buy the full pilot.</span></div>
+              <div class="workcell-step"><strong>Owner-approved autopilot</strong><span>The system can draft replies, clean data, prepare reports, and queue work, but every external action stays approval-only.</span></div>
+              <div class="workcell-step"><strong>Premium setup</strong><span>Private workspace, source trace, acceptance tests, and handoff built for a serious client, not a demo.</span></div>
+              <div class="workcell-step"><strong>Managed retainer</strong><span>After owner acceptance, we can keep improving the workcell. MRR stays 0 until payment proof.</span></div>
+            </div>
+            <div class="cta" style="margin-top:22px"><a class="btn primary" href="/ai-agents/">See the AI Workcell Pilot</a><a class="btn secondary" href="/contact/?package=ai-workcell-pilot">Start with one source pack</a></div>
+          </div>
+        </section>
 
 
         <section class="section" id="products">
@@ -3023,6 +3067,11 @@ ${publicLanguageToggleScript}
         'workflow-desk': 'back-office-workflow-desk',
         'first-workflow': 'back-office-workflow-desk',
         'document-extraction-ledger': 'document-extraction-ledger',
+          'agent': 'ai-workcell-pilot',
+          'agent-email': 'ai-workcell-pilot',
+          'agent-drive': 'ai-workcell-pilot',
+          'agent-digest': 'ai-workcell-pilot',
+          'ai-agent': 'ai-workcell-pilot',
           'operations-digital-twin': 'factory-issues-maintenance-quality',
           'digital-twin': 'factory-issues-maintenance-quality',
           'factorydesk': 'factory-issues-maintenance-quality',
@@ -3059,13 +3108,13 @@ ${publicLanguageToggleScript}
             placeholder: 'Describe the numbers and sources it should pull together, and who reads it.',
             next: 'Next: a short scope call, then 50% deposit to start.'
           },
-          'ai-agent': {
-            name: 'AI agent / automation',
+          'ai-workcell-pilot': {
+            name: 'AI Workcell Pilot',
             heading: 'Tell us what to build.',
             price: 'From 11,000,000 MMK',
-            lead: 'AI agent — from 11,000,000 MMK. What recurring job should it do?',
-            placeholder: 'Describe the recurring task, the inputs it reads, and what must stay approval-only.',
-            next: 'Next: a short scope call, then 50% deposit to start.'
+            lead: 'AI Workcell Pilot - from 11,000,000 MMK. Send one source pack and the first proof target.',
+            placeholder: 'Describe the messy recurring work, the sources it reads, and what must stay approval-only.',
+            next: 'Next: source pack review, First proof, then owner-approved pilot scope.'
           },
           'design-ship': {
             name: 'Design + ship system',
@@ -4244,16 +4293,16 @@ const publicOffers = [
     cta: 'Start this',
   },
   {
-    slug: 'dashboard', name: 'Custom build — dashboard / internal tool', mmkDisplay: serviceMmk('dashboard'), flagship: true,
+    slug: 'dashboard', name: 'Custom build — dashboard / internal tool', mmkDisplay: serviceMmk('dashboard'),
     who: 'Your numbers live across five spreadsheets and nobody trusts them.',
     gets: ['One screen that updates itself from your real data', 'Built around how you actually work', 'Export to clean CSV anytime'],
     cta: 'Scope my build',
   },
   {
-    slug: 'ai-agent', name: pricingServiceByKey['ai-agent'].name, mmkDisplay: serviceMmk('ai-agent'),
-    who: 'The same back-office task eats hours every single day.',
-    gets: ['An agent that reads your real inputs and drafts the work', 'Approval gate on anything that sends, pays, or changes the books', 'A run ledger — nothing happens silently'],
-    cta: 'Describe the job',
+    slug: 'ai-workcell-pilot', name: 'AI Workcell Pilot', mmkDisplay: serviceMmk('ai-agent'), flagship: true,
+    who: 'You want plug-and-play autopilot for client work, but with enterprise-level controls.',
+    gets: ['Source pack intake and First proof from real data', 'First production run stays approval-only until Owner acceptance', 'Managed retainer path with customer success desk; MRR stays 0 until payment proof'],
+    cta: 'Start the pilot',
   },
   {
     slug: 'design-ship', name: pricingServiceByKey['design-ship'].name, mmkDisplay: serviceMmk('design-ship'),
@@ -4347,6 +4396,20 @@ ${unicornHeader}
             </div>`).join('')}
           </div>
           <p class="of-note">Starting "from" prices in MMK. Final scope and price confirmed on a short call. Fixed-scope with clear revision caps; 50% deposit to start, payment method confirmed on first call.</p>
+        </section>
+
+        <section class="section">
+          <div class="workcell-panel">
+            <div class="eyebrow">AI Workcell Pilot</div>
+            <h2>The proof-to-retainer path.</h2>
+            <p>Premium setup means easy setup for the client: send one source pack, get a First proof, approve a First production run, then decide after Owner acceptance whether the workcell should become a Managed retainer. Every client gets a private workspace, acceptance tests, source trace, and a customer success desk. MRR stays 0 until payment proof.</p>
+            <div class="workcell-grid">
+              <div class="workcell-step"><strong>Source pack</strong><span>One messy workflow: Gmail, Sheet, chat export, POS CSV, PDF, or screenshot batch.</span></div>
+              <div class="workcell-step"><strong>First proof</strong><span>One useful output from real data before the full pilot is approved.</span></div>
+              <div class="workcell-step"><strong>First production run</strong><span>The first live run is approval-only; no send, write, payment, or connector action happens silently.</span></div>
+              <div class="workcell-step"><strong>Managed retainer</strong><span>After Owner acceptance, we keep the workcell improving with clear proof of value.</span></div>
+            </div>
+          </div>
         </section>
 
         <section class="section">

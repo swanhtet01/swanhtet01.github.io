@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { resolve } from 'node:path'
 import './enforce_current_public_product_output.mjs'
+import './verify_public_ai_workcell_pilot_offer_contract.mjs'
 
 const root = process.cwd()
 const outputRoot = resolve(root, '.vercel', 'output')

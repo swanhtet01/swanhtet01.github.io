@@ -1,11 +1,11 @@
 {
-    "public_host":  "supermega-public-8eop5y93y-swanhtet01s-projects.vercel.app",
-    "deployment_id":  "dpl_3xutdHCdbXPDTGrC1SqCfMyYRnHZ",
-    "locked_at":  "2026-07-01T04:42:00.0000000Z",
+    "public_host":  "supermega-public-gkid8mj0s-swanhtet01s-projects.vercel.app",
+    "deployment_id":  "dpl_W2BZWvpXXXDCc6bRjrVhMyE7bBX5",
+    "locked_at":  "2026-07-01T05:10:06.0000000Z",
     "domains":  [
                     "supermega.dev",
                     "www.supermega.dev"
                 ],
     "project":  "supermega-public",
-    "reason":  "Separated public project deployment verified and attached to public domains."
+    "reason":  "AI Workcell Pilot public offer verified live and attached to public domains."
 }
