@@ -4522,6 +4522,7 @@ const publicOperatorConsoleHtml = `<!doctype html>
     .operator-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px}
     .operator-kpi{border:1px solid var(--line);padding:12px;background:color-mix(in srgb,var(--paper) 92%,var(--ink) 8%)}
     .operator-kpi strong{display:block;font-size:24px;line-height:1}
+    .operator-failover-report{border:1px solid var(--line);padding:14px;background:color-mix(in srgb,var(--paper) 96%,var(--ink) 4%)}
     .operator-revenue-board{border:1px solid var(--line);padding:14px;background:color-mix(in srgb,var(--paper) 94%,var(--ink) 6%)}
     .operator-command-board{border:1px solid var(--line);padding:14px;background:color-mix(in srgb,var(--paper) 91%,var(--ink) 9%)}
     .operator-money-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:10px}
@@ -4566,6 +4567,7 @@ const publicOperatorConsoleHtml = `<!doctype html>
         </div>
         <div class="operator-panel operator-stack">
           <div class="operator-kpis" id="operator-kpis"></div>
+          <div class="operator-proof-section operator-failover-report" id="datastore-failover-report"></div>
           <div class="operator-proof-section operator-command-board" id="autopilot-command-board"></div>
           <div class="operator-proof-section operator-revenue-board" id="revenue-proof-board"></div>
           <div class="operator-list" id="operator-actions"></div>
@@ -4578,6 +4580,7 @@ const publicOperatorConsoleHtml = `<!doctype html>
     const statusBox = document.getElementById('operator-status');
     const actionsEl = document.getElementById('operator-actions');
     const kpisEl = document.getElementById('operator-kpis');
+    const failoverReportEl = document.getElementById('datastore-failover-report');
     const commandBoardEl = document.getElementById('autopilot-command-board');
     const revenueBoardEl = document.getElementById('revenue-proof-board');
     keyInput.value = sessionStorage.getItem('supermega_ops_key') || '';
@@ -4592,6 +4595,20 @@ const publicOperatorConsoleHtml = `<!doctype html>
         metrics:{open_action_count:2,recent_lead_count:1,recent_action_count:2,proof_backed_mrr_mmk:900000,bank_verified_mrr_mmk:0,bank_unverified_mrr_mmk:900000},
         approval_inbox:{status:'sample',pending_count:1},
         blob_action_queue:{status:'sample_private_queue',adapter:'vercel_blob',access:'private',purpose:'Durable action queue when SQL is degraded.'},
+        datastore_failover_report:{
+          status:'active',
+          report_type:'datastore_failover_report',
+          runtime_status:'degraded',
+          primary:{status:'not_configured',provider:'vercel_postgres_neon',adapter:'pg'},
+          fallback:{status:'ready',provider:'vercel_blob',adapter:'vercel_blob'},
+          client_onboarding_allowed:true,
+          operator_mode:'blob_queue_approval_only',
+          real_mrr_policy:'zero_until_payment_proof',
+          safe_actions:['capture_leads','run_action_runner','prepare_first_proof','start_private_workspace_after_payment_proof'],
+          blocked_actions:['external_send_without_owner_approval','connector_writes_without_owner_acceptance','payment_request_without_owner_approval','claim_mrr_without_payment_proof'],
+          next_fix:'Provision or uncap Vercel Postgres/Neon, set POSTGRES_URL or DATABASE_URL, then run the lead-ledger schema.'
+        },
+        operator_runtime_summary:'Blob fallback active: client onboarding allowed in approval-only mode; restore SQL for primary ledger durability.',
         approval_ledger:{status:'sample_private_ledger',adapter:'vercel_blob',access:'private',sdk:'sample',recent:[{decision:'pending',title:'Sample Daily Intelligence Brief source request approval',recorded_at:'SAMPLE-RECORDED-AT',approval_reference:'SAMPLE-OWNER-REVIEW'}]},
         revenue_proof_board:{
           status:'ready',
@@ -5391,7 +5408,7 @@ const publicOperatorConsoleHtml = `<!doctype html>
     }
     function loadSample(){
       const data = samplePipelineData();
-      renderKpis(data); renderAutopilotCommandBoard(data); renderRevenueProofBoard(data); renderActions(data); setStatus({status:'sample_loaded', note:'No lead was created. This is a no-write first-proof demo packet.'});
+      renderKpis(data); renderDatastoreFailoverReport(data); renderAutopilotCommandBoard(data); renderRevenueProofBoard(data); renderActions(data); setStatus({status:'sample_loaded', note:'No lead was created. This is a no-write first-proof demo packet.'});
     }
     function proofStarterLink(proof){
       if(!proof || !proof.starter_kit_url)return '';
@@ -5756,6 +5773,25 @@ const publicOperatorConsoleHtml = `<!doctype html>
       if(!Number.isFinite(amount))return '0 MMK';
       return amount.toLocaleString('en-US')+' MMK';
     }
+    function renderDatastoreFailoverReport(data){
+      const report = data.datastore_failover_report || {};
+      if(!report.report_type && !report.status){
+        failoverReportEl.innerHTML = '<span>Datastore failover report</span><div>No failover report loaded.</div>';
+        return;
+      }
+      const primary = report.primary || {};
+      const fallback = report.fallback || {};
+      const safeActions = (report.safe_actions || []).slice(0,6);
+      const blockedActions = (report.blocked_actions || []).slice(0,6);
+      failoverReportEl.innerHTML = [
+        '<span>Datastore failover report</span>',
+        '<div class="operator-meta"><span class="operator-chip">'+esc(report.status || 'unknown')+'</span><span class="operator-chip">'+esc(report.operator_mode || 'manual_review_required')+'</span><span class="operator-chip">primary '+esc(primary.adapter || primary.provider || 'unknown')+' '+esc(primary.status || 'unknown')+'</span><span class="operator-chip">fallback '+esc(fallback.adapter || fallback.provider || 'unknown')+' '+esc(fallback.status || 'unknown')+'</span><span class="operator-chip">'+esc(report.client_onboarding_allowed ? 'client onboarding allowed' : 'client onboarding blocked')+'</span><span class="operator-chip">'+esc(report.real_mrr_policy || 'zero_until_payment_proof')+'</span></div>',
+        '<div>'+esc(data.operator_runtime_summary || 'Runtime summary unavailable.')+'</div>',
+        safeActions.length ? '<div class="operator-proof-section"><span>Safe autopilot actions</span><ul>'+safeActions.map(function(item){return '<li>'+esc(item)+'</li>'}).join('')+'</ul></div>' : '',
+        blockedActions.length ? '<div class="operator-proof-section"><span>Blocked until owner proof</span><ul>'+blockedActions.map(function(item){return '<li>'+esc(item)+'</li>'}).join('')+'</ul></div>' : '',
+        report.next_fix ? '<div class="operator-proof-section"><span>Next infrastructure fix</span><div>'+esc(report.next_fix)+'</div></div>' : ''
+      ].join('');
+    }
     function renderAutopilotCommandBoard(data){
       const board = data.autopilot_command_board || {};
       const ledger = data.approval_ledger || {};
@@ -5864,7 +5900,7 @@ const publicOperatorConsoleHtml = `<!doctype html>
       const response = await fetch('/api/pipeline-control/status',{headers:authHeaders(),cache:'no-store'});
       const data = await response.json().catch(function(){return {status:'error',reason:'invalid_json',code:response.status}});
       if(!response.ok){setStatus(data);return}
-      renderKpis(data); renderAutopilotCommandBoard(data); renderRevenueProofBoard(data); renderActions(data); setStatus(data);
+      renderKpis(data); renderDatastoreFailoverReport(data); renderAutopilotCommandBoard(data); renderRevenueProofBoard(data); renderActions(data); setStatus(data);
     }
     async function runRunner(){
       if(!token()){setStatus('Paste the ops key first.');return}
@@ -5987,7 +6023,7 @@ const publicPilotWorkspaceHtml = `<!doctype html>
         <span class="pill">optional live check</span>
       </div>
       <div class="operator-panel">
-        <p>Paste the operator key to load live status from <code>/api/pipeline-control/status</code>. Without the key, this page stays public-safe and only shows the workspace IDs from the link.</p>
+        <p>Paste the operator key to load live status from <code>/api/pipeline-control/status</code>. The loader includes <code>datastore_failover_report</code> and <code>operator_runtime_summary</code> so degraded SQL never hides the client onboarding state.</p>
         <div class="operator-form">
           <input id="ops-key" type="password" autocomplete="off" placeholder="SUPERMEGA_OPS_KEY" aria-label="Operator key" />
           <button id="load-status" class="btn primary" type="button">Load operator status</button>
@@ -6021,6 +6057,13 @@ const publicPilotWorkspaceHtml = `<!doctype html>
           first_proof: action && action.first_proof ? action.first_proof.status : 'not_loaded',
           workspace_status: manifest.status || 'not_loaded',
           first_run_mode: manifest.first_run_mode || 'approval_only',
+          datastore_failover_report: payload && payload.datastore_failover_report ? {
+            status: payload.datastore_failover_report.status,
+            operator_mode: payload.datastore_failover_report.operator_mode,
+            client_onboarding_allowed: payload.datastore_failover_report.client_onboarding_allowed,
+            real_mrr_policy: payload.datastore_failover_report.real_mrr_policy
+          } : null,
+          operator_runtime_summary: payload && payload.operator_runtime_summary ? payload.operator_runtime_summary : 'Runtime status not loaded.',
           proof_backed_mrr_mmk: payload && payload.metrics ? payload.metrics.proof_backed_mrr_mmk : 0,
           next_step: action ? action.next_step : 'Open the operator console and confirm the order room exists.'
         };

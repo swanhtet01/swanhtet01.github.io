@@ -2367,6 +2367,105 @@ function fallbackQueue() {
   }
 }
 
+function datastoreBrief(input = {}, fallback = {}) {
+  const source = input && typeof input === 'object' ? input : {}
+  const backup = fallback && typeof fallback === 'object' ? fallback : {}
+  return {
+    status: text(source.status || backup.status) || 'unknown',
+    provider: text(source.provider || backup.provider) || null,
+    adapter: text(source.adapter || backup.adapter) || null,
+    reason: text(source.reason || backup.reason) || null,
+    detail: text(source.detail || backup.detail).slice(0, 180) || null,
+  }
+}
+
+function buildDatastoreFailoverReport({
+  runtimeStatus = 'ready',
+  primaryDatabase = {},
+  fallbackDatabase = null,
+  fallbackQueueStatus = null,
+  blobActionQueueStatus = null,
+} = {}) {
+  const primary = datastoreBrief(primaryDatabase, datastore.datastoreStatus())
+  const blobQueueStatus = datastoreBrief(blobActionQueueStatus, {
+    status: 'unknown',
+    provider: 'vercel_blob',
+    adapter: 'vercel_blob',
+  })
+  const fallbackSource = blobQueueStatus.status !== 'unknown'
+    ? blobQueueStatus
+    : fallbackDatabase || fallbackQueueStatus || blobQueueStatus
+  const fallback = datastoreBrief(fallbackSource, blobQueueStatus)
+  const primaryReady = primary.status === 'ready'
+  const fallbackReady = fallback.status === 'ready' || fallback.status === 'degraded_ready'
+  const activeFallback = !primaryReady && fallbackReady
+  const reportStatus = primaryReady ? 'standby' : activeFallback ? 'active' : 'blocked'
+  const operatorMode = primaryReady ? 'primary_sql' : activeFallback ? 'blob_queue_approval_only' : 'manual_review_required'
+  const clientOnboardingAllowed = primaryReady || activeFallback
+  return {
+    status: reportStatus,
+    report_type: 'datastore_failover_report',
+    runtime_status: text(runtimeStatus) || 'ready',
+    generated_at: new Date().toISOString(),
+    primary,
+    fallback,
+    fallback_queue: fallbackQueueStatus || null,
+    blob_action_queue: blobActionQueueStatus || null,
+    client_onboarding_allowed: clientOnboardingAllowed,
+    operator_mode: operatorMode,
+    real_mrr_policy: 'zero_until_payment_proof',
+    safe_actions: clientOnboardingAllowed
+      ? [
+          'capture_leads',
+          'run_action_runner',
+          'prepare_first_proof',
+          'update_order_room',
+          'start_private_workspace_after_payment_proof',
+          'prepare_customer_success_and_retainer_packets',
+        ]
+      : ['manual_owner_review'],
+    blocked_actions: [
+      'external_send_without_owner_approval',
+      'connector_writes_without_owner_acceptance',
+      'payment_request_without_owner_approval',
+      'claim_mrr_without_payment_proof',
+    ],
+    next_fix: primaryReady
+      ? 'Keep SQL healthy; keep Blob as a continuity fallback.'
+      : 'Provision or uncap Vercel Postgres/Neon, set POSTGRES_URL or DATABASE_URL in supermega-public, then run the lead-ledger schema and redeploy.',
+  }
+}
+
+function operatorRuntimeSummary(report = {}) {
+  if (report.status === 'active') {
+    return 'Blob fallback active: client onboarding allowed in approval-only mode; restore SQL for primary ledger durability.'
+  }
+  if (report.status === 'standby') {
+    return 'Primary SQL ready: client onboarding allowed; Blob fallback remains available for continuity.'
+  }
+  return 'Runtime blocked: client onboarding needs manual review until SQL or Blob fallback is ready.'
+}
+
+function statusRuntimeFields({
+  runtimeStatus,
+  primaryDatabase,
+  fallbackDatabase,
+  fallbackQueueStatus,
+  blobActionQueueStatus,
+} = {}) {
+  const report = buildDatastoreFailoverReport({
+    runtimeStatus,
+    primaryDatabase,
+    fallbackDatabase,
+    fallbackQueueStatus,
+    blobActionQueueStatus,
+  })
+  return {
+    datastore_failover_report: report,
+    operator_runtime_summary: operatorRuntimeSummary(report),
+  }
+}
+
 async function blobPipelineControlPayload({ contract, primaryDatabase, fallbackDatabase = null } = {}) {
   const blobSnapshot = await blobQueue.pipelineSnapshot({ actionLimit: 8 })
   if (blobSnapshot.status !== 'ready') return null
@@ -2375,6 +2474,8 @@ async function blobPipelineControlPayload({ contract, primaryDatabase, fallbackD
   const proofBoard = revenueProofBoard(actions)
   const autopilotBoard = autopilotCommandBoard({ actions, leads, proofBoard, latestRuns: blobSnapshot.latestRuns || [] })
   const approvalLedger = await readAutopilotApprovalLedger(5)
+  const fallback = fallbackQueue()
+  const blobStatus = blobQueue.queueStatus()
   return {
     status: 'ready',
     runtime_status: 'degraded',
@@ -2382,8 +2483,15 @@ async function blobPipelineControlPayload({ contract, primaryDatabase, fallbackD
     contract,
     primary_database: primaryDatabase,
     ...(fallbackDatabase ? { fallback_database: fallbackDatabase } : {}),
-    fallback_queue: fallbackQueue(),
-    blob_action_queue: blobQueue.queueStatus(),
+    fallback_queue: fallback,
+    blob_action_queue: blobStatus,
+    ...statusRuntimeFields({
+      runtimeStatus: 'degraded',
+      primaryDatabase,
+      fallbackDatabase,
+      fallbackQueueStatus: fallback,
+      blobActionQueueStatus: blobStatus,
+    }),
     approval_ledger: approvalLedger,
     approval_inbox: {
       status: approvalLedger.status === 'ready' ? 'ledger_fallback' : 'blob_queue',
@@ -3938,6 +4046,12 @@ async function handler(req, res) {
         primary_database: primaryDatabaseStatus(snapshot),
         fallback_queue: fallback,
         approval_ledger: approvalLedger,
+        ...statusRuntimeFields({
+          runtimeStatus: fallback.status === 'ready' ? 'degraded' : 'blocked',
+          primaryDatabase: primaryDatabaseStatus(snapshot),
+          fallbackQueueStatus: fallback,
+          blobActionQueueStatus: blobQueue.queueStatus(),
+        }),
         approval_inbox: {
           status: approvalLedger.status === 'ready' ? 'ledger_fallback' : fallback.status === 'ready' ? 'email_fallback' : 'blocked',
           pending_count: null,
@@ -3975,6 +4089,13 @@ async function handler(req, res) {
     const proofBoard = revenueProofBoard(actions)
     const autopilotBoard = autopilotCommandBoard({ actions, leads, proofBoard, latestRuns: snapshot.latestRuns })
     const approvalLedger = await readAutopilotApprovalLedger(5)
+    const primaryDatabase = {
+      status: 'ready',
+      provider: 'vercel_postgres_neon',
+      adapter: 'pg',
+    }
+    const fallback = fallbackQueue()
+    const blobStatus = blobQueue.queueStatus()
 
     json(res, 200, {
       status: 'ready',
@@ -3982,11 +4103,13 @@ async function handler(req, res) {
       endpoint: 'pipeline-control',
       generated_at: new Date().toISOString(),
       contract,
-      primary_database: {
-        status: 'ready',
-        provider: 'vercel_postgres_neon',
-        adapter: 'pg',
-      },
+      primary_database: primaryDatabase,
+      ...statusRuntimeFields({
+        runtimeStatus: 'ready',
+        primaryDatabase,
+        fallbackQueueStatus: fallback,
+        blobActionQueueStatus: blobStatus,
+      }),
       metrics: {
         leads_24h: snapshot.lead24hCount,
         leads_7d: snapshot.lead7dCount,
@@ -4011,7 +4134,7 @@ async function handler(req, res) {
         channel: 'email',
         human_review_required: true,
       },
-      fallback_queue: fallbackQueue(),
+      fallback_queue: fallback,
       approval_ledger: approvalLedger,
       durable_queue: {
         status: 'ready',
@@ -4047,6 +4170,13 @@ async function handler(req, res) {
       primary_database: datastore.datastoreStatus(),
       fallback_queue: fallbackQueue(),
       approval_ledger: approvalLedger,
+      ...statusRuntimeFields({
+        runtimeStatus: 'not_configured',
+        primaryDatabase: datastore.datastoreStatus(),
+        fallbackDatabase: { status: 'not_configured', provider: 'supabase_rest', adapter: 'supabase_rest' },
+        fallbackQueueStatus: fallbackQueue(),
+        blobActionQueueStatus: blobQueue.queueStatus(),
+      }),
       recommended_datastores: recommendedDatastores(),
       blockers: ['Provision Neon Postgres in the Vercel Marketplace, set POSTGRES_URL or DATABASE_URL, then run npm run db:lead-ledger:schema.'],
     })
@@ -4088,6 +4218,13 @@ async function handler(req, res) {
         fallback_database: fallbackDatabase,
         fallback_queue: fallback,
         approval_ledger: approvalLedger,
+        ...statusRuntimeFields({
+          runtimeStatus: fallback.status === 'ready' ? 'degraded' : 'blocked',
+          primaryDatabase: datastore.datastoreStatus(),
+          fallbackDatabase,
+          fallbackQueueStatus: fallback,
+          blobActionQueueStatus: blobQueue.queueStatus(),
+        }),
         approval_inbox: {
           status: approvalLedger.status === 'ready' ? 'ledger_fallback' : fallback.status === 'ready' ? 'email_fallback' : 'blocked',
           pending_count: null,
@@ -4125,6 +4262,13 @@ async function handler(req, res) {
     const proofBoard = revenueProofBoard(actions)
     const autopilotBoard = autopilotCommandBoard({ actions, leads, proofBoard, latestRuns: latestRuns.data })
     const approvalLedger = await readAutopilotApprovalLedger(5)
+    const primaryDatabase = {
+      status: 'ready',
+      provider: 'supabase_rest',
+      adapter: 'supabase_rest',
+    }
+    const fallback = fallbackQueue()
+    const blobStatus = blobQueue.queueStatus()
 
     json(res, 200, {
       status: 'ready',
@@ -4132,6 +4276,13 @@ async function handler(req, res) {
       endpoint: 'pipeline-control',
       generated_at: new Date().toISOString(),
       contract,
+      primary_database: primaryDatabase,
+      ...statusRuntimeFields({
+        runtimeStatus: 'ready',
+        primaryDatabase,
+        fallbackQueueStatus: fallback,
+        blobActionQueueStatus: blobStatus,
+      }),
       metrics: {
         leads_24h: lead24h.count ?? 0,
         leads_7d: lead7d.count ?? 0,
@@ -4156,7 +4307,7 @@ async function handler(req, res) {
         channel: 'email',
         human_review_required: true,
       },
-      fallback_queue: fallbackQueue(),
+      fallback_queue: fallback,
       approval_ledger: approvalLedger,
       durable_queue: {
         status: 'ready',
@@ -4172,13 +4323,20 @@ async function handler(req, res) {
     })
   } catch (error) {
     const approvalLedger = await readAutopilotApprovalLedger(5)
+    const fallback = fallbackQueue()
     json(res, 200, {
       status: 'ready',
       runtime_status: 'blocked',
       endpoint: 'pipeline-control',
       contract,
-      fallback_queue: fallbackQueue(),
+      fallback_queue: fallback,
       approval_ledger: approvalLedger,
+      ...statusRuntimeFields({
+        runtimeStatus: 'blocked',
+        primaryDatabase: datastore.datastoreStatus(),
+        fallbackQueueStatus: fallback,
+        blobActionQueueStatus: blobQueue.queueStatus(),
+      }),
       recommended_datastores: recommendedDatastores(),
       reason: 'pipeline_control_failed',
       detail: text(error?.message).slice(0, 180),
@@ -4195,10 +4353,12 @@ handler.__test = {
   buildOrderRoomState,
   buildOwnerAcceptanceRecord,
   buildPrivateWorkspaceManifest,
+  buildDatastoreFailoverReport,
   buildProductionApprovalQueue,
   buildRetainerGrowthOfferPack,
   buildRetainerPaymentRecord,
   firstProofPacket,
+  operatorRuntimeSummary,
   autopilotCommandBoard,
   autopilotDraftFromPayload,
   autopilotApprovalLedgerStatus,
