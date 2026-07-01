@@ -887,6 +887,112 @@ function buildScopePriceApprovalRecord(row = {}, payload = {}) {
   }
 }
 
+function buildPilotPaymentProofRecord(row = {}, payload = {}) {
+  const context = contextFromActivationAction(row)
+  const result = parseJsonObject(row.result)
+  const scopePriceApproval = parseJsonObject(result.scope_price_approval || payload.scope_price_approval)
+  if (scopePriceApproval.status !== 'scope_price_payment_gate_approved') {
+    return { status: 'error', reason: 'scope_price_approval_required' }
+  }
+  const paymentProofReference = truncate(payload.payment_proof_reference || payload.proof_reference || payload.receipt_reference, 500)
+  if (!paymentProofReference) return { status: 'error', reason: 'missing_pilot_payment_proof_reference' }
+  const ownerReconciliationReference = truncate(
+    payload.owner_reconciliation_reference || payload.owner_approval_reference || scopePriceApproval.owner_approval_reference,
+    500,
+  )
+  if (!ownerReconciliationReference) return { status: 'error', reason: 'missing_pilot_payment_owner_reference' }
+  const paymentAmountMmk = moneyAmount(payload.payment_amount_mmk || payload.amount_mmk || payload.paid_amount_mmk || scopePriceApproval.approved_price_mmk)
+  if (!paymentAmountMmk) return { status: 'error', reason: 'invalid_pilot_payment_amount' }
+  const leadId = text(payload.lead_id) || text(row.lead_id) || text(context.lead.lead_id) || null
+  const actionId = text(payload.action_id) || text(row.action_id) || text(context.lead.task_id) || null
+  const paymentMethod = truncate(payload.payment_method || payload.payment_route || scopePriceApproval.payment_route || 'manual_payment', 160)
+  const paidAt = text(payload.paid_at) || new Date().toISOString()
+  const recordedAt = new Date().toISOString()
+  const amountLabel = mmkAmountLabel(paymentAmountMmk)
+  const approvedPriceLabel = text(scopePriceApproval.approved_price_label) || mmkAmountLabel(scopePriceApproval.approved_price_mmk)
+  const bankReconciliationState = 'owner_matched_not_bank_verified'
+  const packet = [
+    `# ${context.templateName} pilot payment proof record`,
+    '',
+    'Status: pilot_payment_proof_recorded',
+    `Lead: ${leadId || 'not set'}`,
+    `Action: ${actionId || 'not set'}`,
+    `Client: ${context.company}`,
+    `Payment amount: ${amountLabel}`,
+    `Approved pilot price: ${approvedPriceLabel}`,
+    `Payment method: ${paymentMethod}`,
+    `Payment proof reference: ${paymentProofReference}`,
+    `Owner reconciliation reference: ${ownerReconciliationReference}`,
+    `Paid at: ${paidAt}`,
+    `Recorded at: ${recordedAt}`,
+    'Workspace state: ready_after_payment_proof',
+    'Real MRR delta: 0',
+    `Bank reconciliation state: ${bankReconciliationState}`,
+    '',
+    '## Result',
+    '- Payment proof is attached for the paid-pilot setup payment.',
+    '- Private workspace can be created next.',
+    '- This is setup cash evidence, not recurring MRR.',
+    '',
+    '## Guardrails',
+    '- Bank verification remains separate from owner reconciliation.',
+    '- Do not claim recurring MRR from this setup payment proof.',
+    '- First production run remains approval-only until accepted.',
+  ].join('\n')
+  const ledgerCsv = [
+    ['lead_id', 'action_id', 'template_name', 'payment_amount_mmk', 'setup_cash_delta_mmk', 'real_mrr_delta', 'payment_method', 'payment_proof_reference', 'owner_reconciliation_reference', 'bank_reconciliation_state', 'workspace_state', 'recorded_at'].map(csvCell).join(','),
+    [
+      leadId,
+      actionId,
+      context.templateName,
+      String(paymentAmountMmk),
+      String(paymentAmountMmk),
+      '0',
+      paymentMethod,
+      paymentProofReference,
+      ownerReconciliationReference,
+      bankReconciliationState,
+      'ready_after_payment_proof',
+      recordedAt,
+    ].map(csvCell).join(','),
+  ].join('\n')
+  const summary = {
+    status: 'pilot_payment_proof_recorded',
+    payment_event_type: 'pilot_setup_payment_proof',
+    lead_id: leadId,
+    action_id: actionId,
+    template_name: context.templateName,
+    company: context.company,
+    payment_amount_mmk: paymentAmountMmk,
+    setup_cash_delta_mmk: paymentAmountMmk,
+    real_mrr_delta: 0,
+    approved_price_mmk: moneyAmount(scopePriceApproval.approved_price_mmk),
+    payment_method: paymentMethod,
+    payment_proof_reference: paymentProofReference,
+    owner_reconciliation_reference: ownerReconciliationReference,
+    payment_proof_state: 'proof_attached',
+    private_workspace_state: 'ready_after_payment_proof',
+    recurring_revenue_state: 'not_claimed',
+    bank_reconciliation_state: bankReconciliationState,
+    paid_at: paidAt,
+    recorded_at: recordedAt,
+  }
+  return {
+    ...summary,
+    prepared_by: 'operator_console',
+    packet,
+    ledger_csv: ledgerCsv,
+    summary,
+    summary_json: JSON.stringify(summary, null, 2),
+    guardrails: [
+      'payment_proof_reference_required',
+      'setup_cash_is_not_recurring_mrr',
+      'workspace_allowed_after_payment_proof',
+      'bank_verification_is_separate',
+    ],
+  }
+}
+
 function buildActivationFirstProof(row = {}, payload = {}) {
   const rowResult = parseJsonObject(row.result)
   const attachedSourcePack = parseJsonObject(payload.activation_source_pack || rowResult.activation_source_pack)
@@ -2558,6 +2664,7 @@ function firstProofPacket(row) {
   const retainerGrowthOffer = parseJsonObject(result.retainer_growth_offer || payload.retainer_growth_offer)
   const retainerPaymentRecord = parseJsonObject(result.retainer_payment_record || payload.retainer_payment_record)
   const scopePriceApproval = parseJsonObject(result.scope_price_approval || payload.scope_price_approval)
+  const pilotPaymentProof = parseJsonObject(result.pilot_payment_proof || payload.pilot_payment_proof)
   const activationFirstProof = parseJsonObject(result.activation_first_proof || task.activation_first_proof || payload.activation_first_proof)
   const orderRoomState = Object.keys(persistedOrderRoomState).length
     ? persistedOrderRoomState
@@ -2648,7 +2755,7 @@ function firstProofPacket(row) {
     '- Do not start the private workspace until payment proof is attached.',
     '- Do not claim real MRR until payment proof is recorded.',
   ].join('\n')
-  const paymentProofLedgerCsv = [
+  const paymentProofLedgerCsv = text(pilotPaymentProof.ledger_csv) || [
     ['lead_id', 'template_id', 'amount_hint', 'payment_route', 'payment_status', 'payment_proof', 'real_mrr_delta', 'next_step'].map(csvCell).join(','),
     [
       leadId,
@@ -2888,6 +2995,10 @@ function firstProofPacket(row) {
       scope_price_approval_packet: text(scopePriceApproval.packet),
       payment_request_gate: Object.keys(scopePriceApproval.payment_request_gate || {}).length ? scopePriceApproval.payment_request_gate : null,
       payment_request_gate_packet: text(scopePriceApproval.payment_request_gate?.packet),
+      pilot_payment_proof: Object.keys(pilotPaymentProof).length ? pilotPaymentProof : null,
+      pilot_payment_proof_packet: text(pilotPaymentProof.packet),
+      pilot_payment_proof_ledger_csv: text(pilotPaymentProof.ledger_csv),
+      pilot_payment_summary_json: text(pilotPaymentProof.summary_json) || (Object.keys(pilotPaymentProof.summary || {}).length ? JSON.stringify(pilotPaymentProof.summary, null, 2) : ''),
       private_workspace_manifest: privateWorkspaceManifest,
       private_workspace_manifest_json: JSON.stringify(privateWorkspaceManifest, null, 2),
       private_workspace_handoff_packet: privateWorkspaceHandoffPacket,
@@ -4145,6 +4256,160 @@ async function recordBlobScopePriceApproval({ actionId, leadId, payload }, prima
   }
 }
 
+function pilotPaymentOrderRoomState(record, payload = {}) {
+  return buildOrderRoomState({
+    ...payload,
+    action_id: record.action_id,
+    lead_id: record.lead_id,
+    scope_approval_state: 'approved',
+    price_approval_state: 'approved',
+    payment_route_state: 'approved',
+    payment_request_state: 'sent',
+    payment_proof_state: 'proof_attached',
+    private_workspace_state: 'ready_after_payment_proof',
+    payment_proof_reference: record.payment_proof_reference,
+    owner_note: record.owner_reconciliation_reference,
+  })
+}
+
+async function recordPilotPaymentProof(payload = {}) {
+  const actionId = text(payload.action_id)
+  const leadId = text(payload.lead_id)
+  if (!actionId && !leadId) return { status: 'error', reason: 'missing_action_or_lead_id' }
+  if (!datastore.postgresConfigured()) {
+    return recordBlobPilotPaymentProof({ actionId, leadId, payload }, { status: 'error', reason: 'postgres_not_configured' })
+  }
+
+  const selected = await datastore.query(
+    `
+      select
+        action_id, lead_id, task_id, action_type, status, priority, owner,
+        title, next_step, approval_required, approval_state,
+        notification_channel, notification_status, payload, result, created_at
+      from public.supermega_pipeline_actions
+      where (($1 <> '' and action_id = $1) or ($1 = '' and $2 <> '' and lead_id = $2))
+      order by created_at desc
+      limit 1
+    `,
+    [actionId, leadId],
+  )
+  if (selected.status !== 'ready') return recordBlobPilotPaymentProof({ actionId, leadId, payload }, selected)
+  if (!selected.rows.length) {
+    const fallback = await recordBlobPilotPaymentProof({ actionId, leadId, payload }, { status: 'error', reason: 'postgres_action_not_found' })
+    if (fallback.status === 'ready') return fallback
+    return { status: 'error', reason: 'action_not_found' }
+  }
+
+  const row = selected.rows[0]
+  const proof = buildPilotPaymentProofRecord(row, { ...payload, action_id: text(row.action_id), lead_id: text(row.lead_id) })
+  if (proof.status === 'error') return proof
+  const state = pilotPaymentOrderRoomState(proof, payload)
+  const result = await datastore.query(
+    `
+      with target as (
+        select id
+        from public.supermega_pipeline_actions
+        where (($1 <> '' and action_id = $1) or ($1 = '' and $2 <> '' and lead_id = $2))
+        order by created_at desc
+        limit 1
+      )
+      update public.supermega_pipeline_actions a
+      set
+        result = jsonb_set(
+          jsonb_set(
+            jsonb_set(coalesce(a.result, '{}'::jsonb), '{pilot_payment_proof}', $3::jsonb, true),
+            '{pilot_payment_proof_recorded_at}',
+            to_jsonb($4::text),
+            true
+          ),
+          '{pilot_order_room_state}',
+          $5::jsonb,
+          true
+        ),
+        status = 'payment_proof_recorded',
+        next_step = 'Create private workspace, then run the first production job approval-only.',
+        updated_at = now()
+      where a.id in (select id from target)
+      returning
+        a.action_id, a.lead_id, a.task_id, a.action_type, a.status, a.priority, a.owner,
+        a.title, a.next_step, a.approval_required, a.approval_state,
+        a.notification_channel, a.notification_status, a.payload, a.result, a.created_at
+    `,
+    [actionId, leadId, JSON.stringify(proof), proof.recorded_at, JSON.stringify(state)],
+  )
+  if (result.status !== 'ready') return recordBlobPilotPaymentProof({ actionId, leadId, payload }, result)
+  if (!result.rows.length) return { status: 'error', reason: 'action_not_found', pilot_payment_proof: proof, order_room_state: state }
+  const mirror = await recordBlobPilotPaymentProof(
+    { actionId, leadId, payload },
+    { status: 'ready', adapter: 'vercel_postgres_neon', mirrored_from_primary: true },
+    { allowMissing: true },
+  )
+  return {
+    status: 'ready',
+    adapter: mirror.status === 'ready' ? 'vercel_postgres_neon_with_blob_queue' : 'vercel_postgres_neon',
+    operation_status: 'recorded',
+    action: safeAction(result.rows[0]),
+    pilot_payment_proof: proof,
+    order_room_state: state,
+    mirror,
+  }
+}
+
+async function recordBlobPilotPaymentProof({ actionId, leadId, payload }, primaryDatabase = {}, options = {}) {
+  const found = await blobQueue.findActionRecord({ action_id: actionId, lead_id: leadId })
+  if (found.status !== 'ready') {
+    if (options.allowMissing && found.reason === 'action_not_found') {
+      return {
+        status: 'skipped',
+        adapter: 'vercel_blob',
+        reason: 'blob_action_not_found',
+        primary_database: primaryDatabase,
+      }
+    }
+    return {
+      ...found,
+      primary_database: primaryDatabase,
+    }
+  }
+  const row = found.row
+  const currentResult = parseJsonObject(row.result)
+  const proof = buildPilotPaymentProofRecord(row, payload)
+  if (proof.status === 'error') return proof
+  const state = pilotPaymentOrderRoomState(proof, payload)
+  const nextResult = {
+    ...currentResult,
+    pilot_payment_proof: proof,
+    pilot_payment_proof_recorded_at: proof.recorded_at,
+    pilot_order_room_state: state,
+  }
+  const updated = await blobQueue.updateActionRecord(
+    { action_id: actionId, lead_id: leadId },
+    {
+      result: nextResult,
+      status: 'payment_proof_recorded',
+      next_step: 'Create private workspace, then run the first production job approval-only.',
+      notification_status: row.notification_status || 'pilot_payment_proof_recorded',
+    },
+  )
+  if (updated.status !== 'ready') {
+    return {
+      ...updated,
+      primary_database: primaryDatabase,
+      pilot_payment_proof: proof,
+      order_room_state: state,
+    }
+  }
+  return {
+    status: 'ready',
+    adapter: 'vercel_blob',
+    primary_database: primaryDatabase,
+    operation_status: 'recorded',
+    action: safeAction(updated.record),
+    pilot_payment_proof: proof,
+    order_room_state: state,
+  }
+}
+
 async function updateOrderRoomState(payload) {
   const actionId = text(payload.action_id)
   const leadId = text(payload.lead_id)
@@ -4518,7 +4783,7 @@ async function startPrivateWorkspace(payload) {
           to_jsonb($5::text),
           true
         ),
-        status = case when a.status in ('open', 'queued', 'processing', 'done', 'failed') then 'workspace_ready' else a.status end,
+        status = case when a.status in ('open', 'queued', 'processing', 'done', 'failed', 'payment_request_approved', 'payment_proof_recorded') then 'workspace_ready' else a.status end,
         next_step = 'Open the private workspace handoff and run the first production job approval-only.',
         updated_at = now()
       where a.id in (select id from target)
@@ -4602,7 +4867,7 @@ async function startBlobPrivateWorkspace({ actionId, leadId }, primaryDatabase =
     { action_id: actionId, lead_id: leadId },
     {
       result: nextResult,
-      status: ['open', 'queued', 'processing', 'done', 'failed'].includes(text(row.status)) ? 'workspace_ready' : row.status,
+      status: ['open', 'queued', 'processing', 'done', 'failed', 'payment_request_approved', 'payment_proof_recorded'].includes(text(row.status)) ? 'workspace_ready' : row.status,
       next_step: 'Open the private workspace handoff and run the first production job approval-only.',
     },
   )
@@ -5426,8 +5691,8 @@ function primaryDatabaseStatus(result) {
 function writeStatusCode(result) {
   if (result.status === 'ready') return 200
   if (result.reason === 'action_not_found') return 404
-  if (['private_workspace_not_ready', 'private_workspace_required', 'first_run_acceptance_required', 'owner_acceptance_required', 'owner_acceptance_not_accepted', 'connector_policy_required', 'production_approval_queue_required', 'enterprise_delivery_pack_required', 'customer_success_desk_required', 'retainer_growth_offer_required', 'use_start_private_workspace_operation', 'autopilot_draft_not_found'].includes(result.reason)) return 409
-  if (['missing_action_or_lead_id', 'missing_activation_sources', 'missing_approved_source_sample', 'invalid_proof_review_decision', 'proof_not_accepted_for_paid_scope', 'invalid_scope_price_amount', 'missing_scope_price_owner_approval_reference', 'invalid_owner_acceptance_decision', 'missing_owner_acceptance_reference', 'invalid_connector_policy_mode', 'missing_connector_policy_reference', 'missing_production_queue_reference', 'missing_enterprise_delivery_reference', 'missing_customer_success_reference', 'missing_retainer_growth_reference', 'missing_retainer_payment_proof_reference', 'missing_retainer_owner_approval_reference', 'invalid_retainer_payment_amount', 'invalid_retainer_payment_period', 'invalid_autopilot_draft_decision', 'missing_autopilot_draft_reference'].includes(result.reason)) return 400
+  if (['private_workspace_not_ready', 'private_workspace_required', 'first_run_acceptance_required', 'owner_acceptance_required', 'owner_acceptance_not_accepted', 'connector_policy_required', 'production_approval_queue_required', 'enterprise_delivery_pack_required', 'customer_success_desk_required', 'retainer_growth_offer_required', 'scope_price_approval_required', 'use_start_private_workspace_operation', 'autopilot_draft_not_found'].includes(result.reason)) return 409
+  if (['missing_action_or_lead_id', 'missing_activation_sources', 'missing_approved_source_sample', 'invalid_proof_review_decision', 'proof_not_accepted_for_paid_scope', 'invalid_scope_price_amount', 'missing_scope_price_owner_approval_reference', 'missing_pilot_payment_proof_reference', 'missing_pilot_payment_owner_reference', 'invalid_pilot_payment_amount', 'invalid_owner_acceptance_decision', 'missing_owner_acceptance_reference', 'invalid_connector_policy_mode', 'missing_connector_policy_reference', 'missing_production_queue_reference', 'missing_enterprise_delivery_reference', 'missing_customer_success_reference', 'missing_retainer_growth_reference', 'missing_retainer_payment_proof_reference', 'missing_retainer_owner_approval_reference', 'invalid_retainer_payment_amount', 'invalid_retainer_payment_period', 'invalid_autopilot_draft_decision', 'missing_autopilot_draft_reference'].includes(result.reason)) return 400
   return 503
 }
 
@@ -5533,6 +5798,15 @@ async function handler(req, res) {
     }
     if (operation === 'record_scope_price_approval') {
       const recorded = await recordScopePriceApproval(payload)
+      json(res, writeStatusCode(recorded), {
+        endpoint: 'pipeline-control',
+        operation,
+        ...recorded,
+      })
+      return
+    }
+    if (operation === 'record_pilot_payment_proof') {
+      const recorded = await recordPilotPaymentProof(payload)
       json(res, writeStatusCode(recorded), {
         endpoint: 'pipeline-control',
         operation,
@@ -6003,6 +6277,7 @@ handler.__test = {
   buildActivationSourcePackRequest,
   buildProofReviewAcceptanceRecord,
   buildScopePriceApprovalRecord,
+  buildPilotPaymentProofRecord,
   buildActivationSessionFirstProofTask,
   buildActivationSessionLead,
   buildActivationSourcePack,
@@ -6018,6 +6293,7 @@ handler.__test = {
   prepareActivationFirstProof,
   recordProofReviewAcceptance,
   recordScopePriceApproval,
+  recordPilotPaymentProof,
   prepareCustomerSuccessDesk,
   prepareEnterpriseDeliveryPack,
   prepareProductionApprovalQueue,
