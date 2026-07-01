@@ -183,6 +183,8 @@ try {
   assert.equal(body.proof_review_acceptance.payment_request_state, 'blocked_until_owner_approval')
   assert.equal(body.proof_review_acceptance.real_mrr_delta, 0)
   assert.equal(body.action.status, 'proof_accepted_for_scope')
+  assert.equal(body.action.first_proof.proof_review_acceptance.decision, 'ready_for_paid_pilot')
+  assert.ok(body.action.first_proof.proof_review_acceptance_json.includes('ready_for_paid_pilot'))
   assert.ok(body.action.next_step.includes('scope and price'))
   assert.ok(acceptancePatch, 'proof_review_acceptance_patch_missing')
   assert.equal(acceptancePatch.result.proof_review_acceptance.decision, 'ready_for_paid_pilot')

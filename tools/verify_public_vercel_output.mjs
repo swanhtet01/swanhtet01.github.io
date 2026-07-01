@@ -36,6 +36,8 @@ for (const [src, dest] of [
   ['^/api/contact-submissions/status$', '/api/contact-submissions.js'],
   ['^/api/source-pack-submissions$', '/api/source-pack-submissions.js'],
   ['^/api/source-pack-submissions/status$', '/api/source-pack-submissions.js'],
+  ['^/api/proof-review-submissions$', '/api/proof-review-submissions.js'],
+  ['^/api/proof-review-submissions/status$', '/api/proof-review-submissions.js'],
   ['^/api/checkout-start$', '/api/checkout-start.js'],
   ['^/api/checkout-start/status$', '/api/checkout-start.js'],
   ['^/api/pipeline-control$', '/api/pipeline-control.js'],
@@ -570,6 +572,9 @@ const operatorHtml = readFileSync(operatorHtmlPath, 'utf8')
 const sourcePackHtmlPath = resolve(staticDir, 'app/source-pack/index.html')
 if (!existsSync(sourcePackHtmlPath)) fail('source_pack_intake_page_missing')
 const sourcePackHtml = readFileSync(sourcePackHtmlPath, 'utf8')
+const proofReviewHtmlPath = resolve(staticDir, 'app/proof-review/index.html')
+if (!existsSync(proofReviewHtmlPath)) fail('proof_review_page_missing')
+const proofReviewHtml = readFileSync(proofReviewHtmlPath, 'utf8')
 const pilotWorkspaceHtmlPath = resolve(staticDir, 'app/start/index.html')
 if (!existsSync(pilotWorkspaceHtmlPath)) fail('pilot_workspace_page_missing')
 const pilotWorkspaceHtml = readFileSync(pilotWorkspaceHtmlPath, 'utf8')
@@ -603,6 +608,14 @@ const sourcePackFunctionSource = readFileSync(sourcePackFunctionPath, 'utf8')
 for (const token of ['normalizeSourcePackSubmission', 'client_source_pack_submitted', 'client_source_pack_received', 'pending_source_review', 'publicSubmissionResponse', 'no_mrr_delta_without_payment_proof']) {
   if (!sourcePackFunctionSource.includes(token)) {
     fail('public_source_pack_submission_contract_missing', { token })
+  }
+}
+const proofReviewFunctionPath = resolve(functionsDir, 'api/proof-review-submissions.js.func/api/proof-review-submissions.js')
+if (!existsSync(proofReviewFunctionPath)) fail('public_proof_review_submission_function_missing')
+const proofReviewFunctionSource = readFileSync(proofReviewFunctionPath, 'utf8')
+for (const token of ['normalizeProofReviewSubmission', 'proof_review_acceptance_recorded', 'proof_review_acceptance_received', 'proof_accepted_for_scope', 'publicSubmissionResponse', 'no_mrr_delta_without_payment_proof']) {
+  if (!proofReviewFunctionSource.includes(token)) {
+    fail('public_proof_review_submission_contract_missing', { token })
   }
 }
 const actionRunnerFunctionPath = resolve(functionsDir, 'api/action-runner.js.func/api/action-runner.js')
@@ -854,6 +867,15 @@ for (const token of [
   'Submitting stores the pack for operator review only',
 ]) {
   if (!sourcePackHtml.includes(token)) fail('public_source_pack_intake_submit_contract_missing', { token })
+}
+for (const token of [
+  'Submit proof review',
+  '/api/proof-review-submissions',
+  'proof_review_acceptance_recorded',
+  'Submitted for operator review',
+  'Submitting stores the proof review for operator review only',
+]) {
+  if (!proofReviewHtml.includes(token)) fail('public_proof_review_submit_contract_missing', { token })
 }
 const publicAgentTemplateContract = [
   ['deskpos-quickstart', 'DeskPOS Quickstart'],

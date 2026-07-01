@@ -3347,6 +3347,14 @@ const config = {
       dest: '/api/source-pack-submissions.js',
     },
     {
+      src: '^/api/proof-review-submissions$',
+      dest: '/api/proof-review-submissions.js',
+    },
+    {
+      src: '^/api/proof-review-submissions/status$',
+      dest: '/api/proof-review-submissions.js',
+    },
+    {
       src: '^/api/campaign-clicks$',
       dest: '/api/campaign-clicks.js',
     },
@@ -6558,7 +6566,7 @@ const publicProofReviewHtml = `<!doctype html>
       <div>
         <div class="eyebrow">client review</div>
         <h1>AI Workcell Proof Review</h1>
-        <p>Review the first proof and copy an acceptance artifact. This page does not submit data, send messages, write records, connect accounts, request payment, or claim revenue.</p>
+        <p>Review the first proof and submit an acceptance artifact for operator review. This page does not send messages, connect accounts, request payment, or claim revenue.</p>
       </div>
       <aside class="summary" aria-label="Proof review summary">
         <div class="summary-row"><span>Lead</span><strong data-lead-id>Loading</strong></div>
@@ -6577,10 +6585,10 @@ const publicProofReviewHtml = `<!doctype html>
         </div>
         <div class="decision-card">
           <h2>Proof acceptance JSON</h2>
-          <p>Copy this back to the SuperMega operator. It is an acceptance artifact only; payment and production still need owner approval.</p>
-          <div class="actions"><button class="btn primary" id="copy-acceptance" type="button">Copy acceptance JSON</button><button class="btn" id="refresh-acceptance" type="button">Refresh JSON</button></div>
+          <p>Submit this back to the SuperMega operator. It is an acceptance artifact only; payment and production still need owner approval.</p>
+          <div class="actions"><button class="btn primary" id="submit-acceptance" type="button">Submit proof review</button><button class="btn" id="copy-acceptance" type="button">Copy acceptance JSON</button><button class="btn" id="refresh-acceptance" type="button">Refresh JSON</button></div>
           <pre id="acceptance-json">Loading proof acceptance JSON.</pre>
-          <p id="copy-status">Nothing is submitted from this page.</p>
+          <p id="copy-status">Submitting stores the proof review for operator review only.</p>
         </div>
       </div>
     </section>
@@ -6618,7 +6626,8 @@ const publicProofReviewHtml = `<!doctype html>
           browser_action_state: 'blocked_until_owner_approval',
           payment_request_state: 'blocked_until_owner_approval',
           real_mrr_delta: 0,
-          reviewed_at: new Date().toISOString()
+          reviewed_at: new Date().toISOString(),
+          status: 'proof_review_acceptance_recorded'
         };
       }
       function render() {
@@ -6628,6 +6637,31 @@ const publicProofReviewHtml = `<!doctype html>
       document.querySelectorAll('textarea, select').forEach(function(el){ el.addEventListener('input', render); el.addEventListener('change', render); });
       var refresh = document.getElementById('refresh-acceptance');
       if (refresh) refresh.addEventListener('click', render);
+      var submit = document.getElementById('submit-acceptance');
+      if (submit) submit.addEventListener('click', async function(){
+        render();
+        var acceptance = buildAcceptance();
+        submit.disabled = true;
+        if (copyStatus) copyStatus.textContent = 'Submitting proof review for operator review...';
+        try {
+          var response = await fetch('/api/proof-review-submissions', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify(acceptance),
+            cache: 'no-store'
+          });
+          var data = await response.json().catch(function(){ return { status:'error', reason:'invalid_json', code:response.status }; });
+          if (!response.ok || data.status !== 'ready') {
+            if (copyStatus) copyStatus.textContent = 'Submit failed: ' + (data.reason || response.status || 'unknown');
+            return;
+          }
+          if (copyStatus) copyStatus.textContent = 'Submitted for operator review. SuperMega can prepare scope and price after owner approval.';
+        } catch (error) {
+          if (copyStatus) copyStatus.textContent = 'Submit failed. Copy the JSON and send it to SuperMega.';
+        } finally {
+          submit.disabled = false;
+        }
+      });
       var copy = document.getElementById('copy-acceptance');
       if (copy) copy.addEventListener('click', async function(){
         render();
@@ -7122,6 +7156,7 @@ self.addEventListener('activate', (event) => {
 await writeNodeFunction('health.js')
 await writeNodeFunction('contact-submissions.js')
 await writeNodeFunction('source-pack-submissions.js')
+await writeNodeFunction('proof-review-submissions.js')
 await writeNodeFunction('campaign-clicks.js')
 await writeNodeFunction('commercial-control.js')
 await writeNodeFunction('pipeline-control.js')

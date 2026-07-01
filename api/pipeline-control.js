@@ -3085,6 +3085,7 @@ function firstProofPacket(row) {
   const resolvedBuyerReplyDraft = text(activationFirstProof.buyer_reply_draft) || buyerReplyDraft
   const resolvedProofDeliveryPacket = text(activationFirstProof.proof_delivery_packet) || proofDeliveryPacket
   const proofReviewRequest = parseJsonObject(activationFirstProof.proof_review_request || result.proof_review_request || task.proof_review_request || payload.proof_review_request)
+  const proofReviewAcceptance = parseJsonObject(result.proof_review_acceptance || payload.proof_review_acceptance)
 
   return {
     status: isBrief ? 'operator_brief_ready' : 'queued_for_runner',
@@ -3119,6 +3120,8 @@ function firstProofPacket(row) {
     proof_review_request: Object.keys(proofReviewRequest).length ? proofReviewRequest : null,
     proof_review_request_packet: text(proofReviewRequest.client_review_message),
     proof_review_request_json: Object.keys(proofReviewRequest).length ? JSON.stringify(proofReviewRequest, null, 2) : '',
+    proof_review_acceptance: Object.keys(proofReviewAcceptance).length ? proofReviewAcceptance : null,
+    proof_review_acceptance_json: Object.keys(proofReviewAcceptance).length ? JSON.stringify(proofReviewAcceptance, null, 2) : '',
     buyer_reply_draft: resolvedBuyerReplyDraft,
     proof_delivery_packet: resolvedProofDeliveryPacket,
     pilot_close_packet: pilotClosePacket,

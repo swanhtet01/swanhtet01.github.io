@@ -1,11 +1,11 @@
 {
-    "public_host":  "supermega-public-hxf9acie8-swanhtet01s-projects.vercel.app",
-    "deployment_id":  "dpl_CfERutQ9DbKfHSECS2Sz8Ui692kQ",
-    "locked_at":  "2026-07-01T07:32:00.0000000Z",
+    "public_host":  "supermega-public-j4ashpi8s-swanhtet01s-projects.vercel.app",
+    "deployment_id":  "dpl_2FAsDYXeuy3dpwLZsjy2iu6hZkjN",
+    "locked_at":  "2026-07-01T08:08:00.0000000Z",
     "domains":  [
                     "supermega.dev",
                     "www.supermega.dev"
                 ],
     "project":  "supermega-public",
-    "reason":  "Operator can attach a client-submitted source pack and prepare the guarded first proof in one protected action."
+    "reason":  "Client proof-review room can submit proof acceptance directly into the operator ledger for scope and price review."
 }
