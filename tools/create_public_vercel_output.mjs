@@ -3358,6 +3358,10 @@ const config = {
       dest: '/api/public-app-handoff.js',
     },
     {
+      src: '^/app/start/?$',
+      dest: '/app/start/index.html',
+    },
+    {
       src: '^/(app|clients)(?:/.*)?$',
       dest: '/api/public-app-handoff.js',
     },
@@ -3627,7 +3631,7 @@ async function copyPublicStatic(source, destination, rootSource = source) {
 }
 
 async function prunePublicStaticRoot() {
-  const allowedRootDirs = new Set(['assets', 'site', 'social', 'products', 'agent-templates', 'start', 'contact', 'offers', 'work', 'operator', 'machine', 'card', 'c', 'demo', 'ai-agents', 'privacy'])
+  const allowedRootDirs = new Set(['assets', 'site', 'social', 'products', 'agent-templates', 'app', 'start', 'contact', 'offers', 'work', 'operator', 'machine', 'card', 'c', 'demo', 'ai-agents', 'privacy'])
   for (const entry of await readdir(staticDir, { withFileTypes: true }).catch(() => [])) {
     if (!entry.isDirectory() || allowedRootDirs.has(entry.name)) continue
     await rm(resolve(staticDir, entry.name), { recursive: true, force: true, maxRetries: 8, retryDelay: 250 })
@@ -5879,6 +5883,176 @@ const publicOperatorConsoleHtml = `<!doctype html>
 </html>`
 await mkdir(resolve(staticDir, 'operator'), { recursive: true })
 await writeFile(resolve(staticDir, 'operator', 'index.html'), publicOperatorConsoleHtml, 'utf8')
+const publicPilotWorkspaceHtml = `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="noindex,nofollow" />
+  <title>Private Pilot Workspace | SUPERMEGA.dev</title>
+  <meta name="description" content="Approval-only SuperMega private pilot workspace handoff." />
+  <meta name="theme-color" content="#1b1815" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" />
+  <style>
+    :root { color-scheme: light; --paper:#f4efe6; --ink:#1b1815; --muted:#6f675d; --line:rgba(27,24,21,.16); --panel:#fffaf1; --panel2:#ebe2d3; --accent:#d97757; --green:#1c8a5a; --blue:#255f99; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; background: var(--paper); color: var(--ink); font-family: "Aptos", "Segoe UI Variable", "Segoe UI", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+    a { color: inherit; }
+    main { width: min(1180px, calc(100% - 28px)); margin: 0 auto; padding: 24px 0 56px; }
+    header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px 0 22px; border-bottom: 1px solid var(--line); }
+    .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; font-weight: 900; }
+    .mark { width: 38px; height: 38px; border-radius: 12px; background: #1b1815; display: grid; place-items: center; border: 1px solid rgba(27,24,21,.22); }
+    .mark img { width: 100%; height: 100%; display: block; border-radius: inherit; }
+    .top-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+    .btn { border: 1px solid var(--line); border-radius: 999px; padding: 11px 14px; background: var(--panel); color: var(--ink); font-weight: 850; text-decoration: none; cursor: pointer; }
+    .btn.primary { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+    .btn:focus-visible, input:focus-visible { outline: 3px solid rgba(217,119,87,.28); outline-offset: 2px; }
+    .hero { display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, 420px); gap: 16px; align-items: stretch; padding: 28px 0 18px; }
+    .workspace-title { padding: clamp(22px, 4vw, 42px) 0; }
+    .eyebrow { color: var(--accent); font-size: 12px; font-weight: 950; text-transform: uppercase; letter-spacing: 0; }
+    h1 { margin: 10px 0 0; max-width: 13ch; font-size: clamp(46px, 8vw, 86px); line-height: .9; letter-spacing: 0; }
+    p { color: var(--muted); font-size: 17px; line-height: 1.55; margin: 14px 0 0; max-width: 55rem; }
+    .summary { border: 1px solid var(--line); background: var(--panel); border-radius: 8px; padding: 18px; display: grid; gap: 12px; align-content: start; }
+    .summary-row { display: grid; grid-template-columns: 128px 1fr; gap: 10px; align-items: start; padding: 10px 0; border-bottom: 1px solid var(--line); }
+    .summary-row:last-child { border-bottom: 0; }
+    .summary-row span { color: var(--muted); font-size: 12px; font-weight: 900; text-transform: uppercase; }
+    .summary-row strong { overflow-wrap: anywhere; }
+    .band { margin-top: 16px; border-top: 1px solid var(--line); padding-top: 22px; }
+    .section-title { display: flex; align-items: end; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+    .section-title h2 { margin: 0; font-size: clamp(24px, 3vw, 38px); letter-spacing: 0; }
+    .grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+    .card { border: 1px solid var(--line); border-radius: 8px; background: var(--panel); padding: 16px; min-height: 150px; }
+    .card span { display: block; color: var(--accent); font-size: 11px; font-weight: 950; text-transform: uppercase; letter-spacing: 0; }
+    .card strong { display: block; margin-top: 10px; font-size: 20px; letter-spacing: 0; }
+    .card p { font-size: 14px; margin-top: 8px; }
+    .queue { display: grid; gap: 10px; }
+    .queue-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; align-items: center; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); padding: 14px; }
+    .step { width: 28px; height: 28px; border-radius: 999px; display: grid; place-items: center; background: var(--ink); color: var(--paper); font-weight: 950; }
+    .pill { display: inline-flex; align-items: center; border-radius: 999px; padding: 7px 9px; background: rgba(28,138,90,.1); color: var(--green); font-size: 11px; font-weight: 950; text-transform: uppercase; white-space: nowrap; }
+    .operator-panel { display: grid; gap: 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel2); padding: 16px; }
+    .operator-form { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
+    input { width: 100%; border: 1px solid var(--line); border-radius: 999px; padding: 12px 14px; background: var(--panel); color: var(--ink); font: inherit; }
+    pre { margin: 0; overflow: auto; white-space: pre-wrap; border: 1px solid var(--line); border-radius: 8px; background: rgba(255,250,241,.7); padding: 14px; font-size: 13px; line-height: 1.45; }
+    footer { margin-top: 24px; padding-top: 18px; border-top: 1px solid var(--line); color: var(--muted); font-size: 13px; }
+    @media (max-width: 820px) { .hero, .grid { grid-template-columns: 1fr; } header { align-items: flex-start; } .summary-row, .operator-form { grid-template-columns: 1fr; } .queue-row { grid-template-columns: auto minmax(0, 1fr); } .queue-row .pill { grid-column: 2; width: fit-content; } }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <a class="brand" href="/" aria-label="SUPERMEGA.dev home"><span class="mark"><img src="/favicon.svg" alt="" /></span><span>SUPERMEGA.dev</span></a>
+      <nav class="top-actions" aria-label="Workspace actions">
+        <a class="btn" href="/operator/">Operator console</a>
+        <a class="btn primary" href="/contact/">Start another pilot</a>
+      </nav>
+    </header>
+    <section class="hero">
+      <div class="workspace-title">
+        <div class="eyebrow">approval_only paid pilot</div>
+        <h1>Private Pilot Workspace</h1>
+        <p>This room turns the approved first proof into the first production run. It is built for enterprise delivery: source trace, owner approval, no external sends, and no connector writes until the client accepts the run.</p>
+      </div>
+      <aside class="summary" aria-label="Workspace summary">
+        <div class="summary-row"><span>Workspace</span><strong data-workspace-slug>Loading</strong></div>
+        <div class="summary-row"><span>Lead</span><strong data-lead-id>Loading</strong></div>
+        <div class="summary-row"><span>Mode</span><strong>approval_only</strong></div>
+        <div class="summary-row"><span>Revenue</span><strong>Proof-backed MRR: 0</strong></div>
+      </aside>
+    </section>
+    <section class="band">
+      <div class="section-title">
+        <h2>First run queue</h2>
+        <span class="pill">owner gated</span>
+      </div>
+      <div class="queue">
+        <div class="queue-row"><span class="step">1</span><div><strong>Import approved sources</strong><p>Use only client-approved screenshots, files, exports, folders, or threads. Keep a source trace for important outputs.</p></div><span class="pill">manual source</span></div>
+        <div class="queue-row"><span class="step">2</span><div><strong>Build the first production run</strong><p>Draft the useful output inside the workspace. External sends stay blocked until owner approval.</p></div><span class="pill">not sent</span></div>
+        <div class="queue-row"><span class="step">3</span><div><strong>Owner acceptance review</strong><p>No connector writes without owner acceptance. Record accepted, changes requested, or blocked with evidence.</p></div><span class="pill">approval required</span></div>
+      </div>
+    </section>
+    <section class="band">
+      <div class="section-title">
+        <h2>Delivery controls</h2>
+        <span class="pill">enterprise rails</span>
+      </div>
+      <div class="grid">
+        <article class="card"><span>Guardrail</span><strong>No connector writes without owner acceptance</strong><p>Browser actions, Gmail, Sheets, POS, CRM, and payment actions stay approval-only until the client signs off.</p></article>
+        <article class="card"><span>Evidence</span><strong>Source trace before trust</strong><p>The first run must show what source created each important claim, decision, or follow-up action.</p></article>
+        <article class="card"><span>Money</span><strong>Proof-backed MRR: 0</strong><p>Drafts, offers, and workspaces do not count as MRR. Only attached payment proof changes the revenue ledger.</p></article>
+      </div>
+    </section>
+    <section class="band">
+      <div class="section-title">
+        <h2>Operator status</h2>
+        <span class="pill">optional live check</span>
+      </div>
+      <div class="operator-panel">
+        <p>Paste the operator key to load live status from <code>/api/pipeline-control/status</code>. Without the key, this page stays public-safe and only shows the workspace IDs from the link.</p>
+        <div class="operator-form">
+          <input id="ops-key" type="password" autocomplete="off" placeholder="SUPERMEGA_OPS_KEY" aria-label="Operator key" />
+          <button id="load-status" class="btn primary" type="button">Load operator status</button>
+        </div>
+        <pre id="workspace-status">Waiting for operator key.</pre>
+      </div>
+    </section>
+    <footer>Private pilot workspace handoff. This page is noindex and approval-only; use the operator console for protected actions.</footer>
+  </main>
+  <script>
+    (function(){
+      var params = new URLSearchParams(window.location.search);
+      var workspace = (params.get('workspace') || 'workspace-required').slice(0, 96);
+      var lead = (params.get('lead') || 'lead-required').slice(0, 64);
+      var workspaceEl = document.querySelector('[data-workspace-slug]');
+      var leadEl = document.querySelector('[data-lead-id]');
+      var statusEl = document.getElementById('workspace-status');
+      if (workspaceEl) workspaceEl.textContent = workspace;
+      if (leadEl) leadEl.textContent = lead;
+      function setStatus(value) {
+        if (!statusEl) return;
+        statusEl.textContent = typeof value === 'string' ? value : JSON.stringify(value, null, 2);
+      }
+      function summarize(action, payload) {
+        var room = action && action.first_proof && action.first_proof.pilot_order_room ? action.first_proof.pilot_order_room : {};
+        var manifest = room.private_workspace_manifest || {};
+        return {
+          status: action ? action.status : 'not_found',
+          workspace_slug: manifest.workspace_slug || workspace,
+          lead_id: action ? action.lead_id : lead,
+          first_proof: action && action.first_proof ? action.first_proof.status : 'not_loaded',
+          workspace_status: manifest.status || 'not_loaded',
+          first_run_mode: manifest.first_run_mode || 'approval_only',
+          proof_backed_mrr_mmk: payload && payload.metrics ? payload.metrics.proof_backed_mrr_mmk : 0,
+          next_step: action ? action.next_step : 'Open the operator console and confirm the order room exists.'
+        };
+      }
+      var loadButton = document.getElementById('load-status');
+      if (loadButton) {
+        loadButton.addEventListener('click', async function(){
+          var key = (document.getElementById('ops-key') && document.getElementById('ops-key').value || '').trim();
+          if (!key) { setStatus('Paste the ops key first.'); return; }
+          setStatus('Loading /api/pipeline-control/status...');
+          try {
+            var response = await fetch('/api/pipeline-control/status', { cache: 'no-store', headers: { authorization: 'Bearer ' + key, accept: 'application/json' } });
+            var payload = await response.json().catch(function(){ return { status: 'error', reason: 'invalid_json', code: response.status }; });
+            if (!response.ok) { setStatus(payload); return; }
+            var actions = Array.isArray(payload.actions) ? payload.actions : [];
+            var match = actions.find(function(action){
+              var room = action && action.first_proof && action.first_proof.pilot_order_room ? action.first_proof.pilot_order_room : {};
+              var manifest = room.private_workspace_manifest || {};
+              return action.lead_id === lead || action.action_id === lead || manifest.workspace_slug === workspace;
+            });
+            setStatus(summarize(match, payload));
+          } catch (error) {
+            setStatus({ status: 'error', reason: String(error && error.message || error) });
+          }
+        });
+      }
+    })();
+  </script>
+</body>
+</html>`
+await mkdir(resolve(staticDir, 'app', 'start'), { recursive: true })
+await writeFile(resolve(staticDir, 'app', 'start', 'index.html'), publicPilotWorkspaceHtml, 'utf8')
 const unicornPrivacyHtml = `<!doctype html>
 <html lang="en">
 <head>

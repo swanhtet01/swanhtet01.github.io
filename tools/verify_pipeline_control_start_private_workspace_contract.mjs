@@ -132,7 +132,9 @@ try {
     assert.equal(manifest.workspace_created, true)
     assert.equal(manifest.first_run_mode, 'approval_only')
     assert.equal(manifest.real_mrr_delta, 0)
-    assert.ok(manifest.workspace_url.includes('app.supermega.dev'))
+    assert.ok(manifest.workspace_url.startsWith('https://supermega.dev/app/start?'))
+    assert.ok(manifest.workspace_url.includes('workspace=pilot-daily-intelligence-brief-lead-test123'))
+    assert.ok(manifest.workspace_url.includes('lead=LEAD-TEST123'))
     return {
       status: 'ready',
       rows: [

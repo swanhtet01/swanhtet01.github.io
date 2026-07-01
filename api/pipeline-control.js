@@ -126,12 +126,11 @@ function workspaceActivationStatus(state = {}) {
 }
 
 function privateWorkspaceUrl(workspaceSlug, leadId) {
-  const appBase = (envText('SUPERMEGA_APP_BASE_URL', 'PUBLIC_APP_BASE_URL') || 'https://app.supermega.dev').replace(/\/$/, '')
+  const appBase = (envText('PUBLIC_WORKSPACE_BASE_URL', 'SUPERMEGA_WORKSPACE_BASE_URL') || 'https://supermega.dev').replace(/\/$/, '')
   const params = new URLSearchParams()
   params.set('workspace', workspaceSlug)
   params.set('lead', leadId)
-  const next = `/app/start?${params.toString()}`
-  return `${appBase}/login?next=${encodeURIComponent(next)}`
+  return `${appBase}/app/start?${params.toString()}`
 }
 
 function buildPrivateWorkspaceManifest(input = {}) {

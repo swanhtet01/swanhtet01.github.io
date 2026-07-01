@@ -53,6 +53,15 @@ const productsRoute = (config.routes || []).find((route) => route.src === '^/pro
 if (productsRoute?.dest !== '/products/index.html') {
   fail('products_route_not_static_page', { expected: { dest: '/products/index.html' }, actual: productsRoute })
 }
+const appStartRoute = (config.routes || []).find((route) => route.src === '^/app/start/?$')
+if (appStartRoute?.dest !== '/app/start/index.html') {
+  fail('pilot_workspace_route_not_static_page', { expected: { dest: '/app/start/index.html' }, actual: appStartRoute })
+}
+const appHandoffRouteIndex = (config.routes || []).findIndex((route) => route.src === '^/(app|clients)(?:/.*)?$')
+const appStartRouteIndex = (config.routes || []).findIndex((route) => route.src === '^/app/start/?$')
+if (appStartRouteIndex < 0 || appHandoffRouteIndex < 0 || appStartRouteIndex > appHandoffRouteIndex) {
+  fail('pilot_workspace_route_must_precede_app_handoff', { appStartRouteIndex, appHandoffRouteIndex })
+}
 
 for (const src of [
   '^/(?:agentops|agentops-toolbox|ai-back-office|back-office-operator|back-office-workflow-desk|openclaw|office-operator)/?$',
@@ -74,6 +83,7 @@ for (const entry of [
   'index.html',
   'products/index.html',
   'contact/index.html',
+  'app/start/index.html',
   'site/shots/actual-custom-workflow-queue.png',
   'site/shots/actual-custom-workflow-modules.png',
   'site/shots/actual-custom-workflow-overview.png',
@@ -554,6 +564,23 @@ const contactHtml = readFileSync(resolve(staticDir, 'contact/index.html'), 'utf8
 const operatorHtmlPath = resolve(staticDir, 'operator/index.html')
 if (!existsSync(operatorHtmlPath)) fail('public_operator_console_missing')
 const operatorHtml = readFileSync(operatorHtmlPath, 'utf8')
+const pilotWorkspaceHtmlPath = resolve(staticDir, 'app/start/index.html')
+if (!existsSync(pilotWorkspaceHtmlPath)) fail('pilot_workspace_page_missing')
+const pilotWorkspaceHtml = readFileSync(pilotWorkspaceHtmlPath, 'utf8')
+for (const token of [
+  'Private Pilot Workspace',
+  'data-workspace-slug',
+  'data-lead-id',
+  'approval_only',
+  'First run queue',
+  'Proof-backed MRR: 0',
+  'No connector writes without owner acceptance',
+  '/api/pipeline-control/status',
+  'Load operator status',
+  'noindex,nofollow',
+]) {
+  if (!pilotWorkspaceHtml.includes(token)) fail('pilot_workspace_page_contract_missing', { token })
+}
 const contactFunctionPath = resolve(functionsDir, 'api/contact-submissions.js.func/api/contact-submissions.js')
 if (!existsSync(contactFunctionPath)) fail('public_contact_function_missing')
 const contactFunctionSource = readFileSync(contactFunctionPath, 'utf8')
@@ -581,6 +608,11 @@ for (const token of ['prepareBlobLeadAutopilot', 'fallbackLeadForRun', 'supermeg
 const pipelineControlFunctionPath = resolve(functionsDir, 'api/pipeline-control.js.func/api/pipeline-control.js')
 if (!existsSync(pipelineControlFunctionPath)) fail('public_pipeline_control_function_missing')
 const pipelineControlFunctionSource = readFileSync(pipelineControlFunctionPath, 'utf8')
+for (const token of ['PUBLIC_WORKSPACE_BASE_URL', 'https://supermega.dev', '/app/start?']) {
+  if (!pipelineControlFunctionSource.includes(token)) {
+    fail('public_pipeline_workspace_url_contract_missing', { token })
+  }
+}
 for (const token of ['firstProofPacket', 'first_proof', 'operator_brief_ready', 'starter_kit_url', 'solution_route_packet', 'solution_route_json', 'implementation_blueprint_packet', 'implementation_blueprint_json', 'intake_job_packet', 'intake_job_json', 'client_kickoff_packet', 'client_kickoff_json', 'buyer_reply_draft', 'proof_delivery_packet', 'pilot_close_packet', 'pilot_order_room', 'private_workspace_manifest', 'first_run_acceptance', 'owner_acceptance', 'connector_policy', 'production_approval_queue', 'enterprise_delivery_pack', 'customer_success_desk', 'retainer_growth_offer', 'retainer_payment_record', 'recordRetainerPaymentProof', 'record_retainer_payment_proof', 'revenueProofBoard', 'revenue_proof_board', 'autopilotCommandBoard', 'autopilot_command_board', 'autopilot_command_count', 'autopilot_draft', 'autopilot_draft_approval', 'autopilotApprovalLedgerStatus', 'writeAutopilotApprovalLedger', 'readAutopilotApprovalLedger', 'blobPipelineControlPayload', 'updateBlobOrderRoomState', 'startBlobPrivateWorkspace', 'blob_action_queue', 'approval_ledger', 'vercel_blob', 'autopilotDraftFromPayload', 'sendAutopilotDraftApprovalEmail', 'email_fallback', 'recordAutopilotDraftApproval', 'record_autopilot_draft_approval', 'autopilot_draft_packet', 'source_request_packet', 'offer_packet', 'buyer_reply_draft', 'command_queue_csv', 'operator_brief_markdown', 'approval_gated_autopilot', 'internal_drafts_allowed_external_actions_blocked_until_owner_approval', 'proof_backed_mrr_mmk', 'bank_verified_mrr_mmk', 'bank_unverified_mrr_mmk', 'payment_ledger_csv', 'next_cash_actions_csv', 'drafts_and_offers_do_not_count_as_mrr', 'prepareRetainerGrowthOffer', 'prepare_retainer_growth_offer', 'prepareCustomerSuccessDesk', 'prepare_customer_success_desk', 'prepareEnterpriseDeliveryPack', 'prepare_enterprise_delivery_pack', 'prepareProductionApprovalQueue', 'prepare_production_approval_queue', 'recordConnectorPolicy', 'record_connector_policy', 'recordOwnerAcceptance', 'record_owner_acceptance', 'prepareFirstRunAcceptance', 'prepare_first_run_acceptance', 'startPrivateWorkspace', 'start_private_workspace', 'updateOrderRoomState', 'update_order_room']) {
   if (!pipelineControlFunctionSource.includes(token)) {
     fail('public_pipeline_control_first_proof_contract_missing', { token })
