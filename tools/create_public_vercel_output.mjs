@@ -6027,6 +6027,28 @@ const publicOperatorConsoleHtml = `<!doctype html>
         '</div>'
       ].join('');
     }
+    function sourcePackControl(action,index){
+      if(!action || !action.first_proof)return '';
+      const packNameId = 'activation-source-pack-name-'+index;
+      const sourceTypeId = 'activation-source-pack-type-'+index;
+      const sourceRefId = 'activation-source-pack-reference-'+index;
+      const sourceContentId = 'activation-source-pack-content-'+index;
+      const pack = action.activation_source_pack || action.source_pack || (action.result && action.result.activation_source_pack) || {};
+      const packStatus = pack && pack.source_count ? '<div class="operator-meta"><span class="operator-chip">source pack attached</span><span class="operator-chip">'+esc(pack.source_count)+' sources</span><span class="operator-chip">'+esc(pack.external_action_state || 'blocked_until_owner_approval')+'</span></div>' : '<div class="operator-meta"><span class="operator-chip">no source pack attached</span><span class="operator-chip">owner-approved data only</span></div>';
+      return [
+        '<div class="operator-proof-section operator-activation-source-pack">',
+          '<span>Client source pack</span>',
+          packStatus,
+          '<input class="operator-input" id="'+packNameId+'" name="source_pack_name" value="'+esc(pack.source_pack_name || 'Day 1 client source pack')+'" aria-label="Source pack name" />',
+          '<div class="operator-row">',
+            '<select class="operator-input" id="'+sourceTypeId+'" aria-label="Source type"><option value="google_drive">Google Drive</option><option value="gmail">Gmail</option><option value="uploaded_file">Uploaded file</option><option value="manual_note">Manual note</option><option value="pos_export">POS export</option></select>',
+            '<input class="operator-input" id="'+sourceRefId+'" value="approved client source" aria-label="Source reference" />',
+          '</div>',
+          '<textarea class="operator-reply" id="'+sourceContentId+'" placeholder="Paste approved client data: messages, Drive docs, CSV rows, notes, screenshots, or order records."></textarea>',
+          '<div class="operator-row"><button class="btn secondary" type="button" data-source-pack-command="attach_activation_source_pack" data-source-pack-name-target="'+packNameId+'" data-source-type-target="'+sourceTypeId+'" data-source-reference-target="'+sourceRefId+'" data-source-content-target="'+sourceContentId+'" data-action-id="'+esc(action.action_id || '')+'" data-lead-id="'+esc(action.lead_id || '')+'">Attach source pack</button><button class="btn primary" type="button" data-activation-proof-command="prepare_activation_first_proof" data-use-source-pack="true" data-action-id="'+esc(action.action_id || '')+'" data-lead-id="'+esc(action.lead_id || '')+'">Prepare proof from attached pack</button></div>',
+        '</div>'
+      ].join('');
+    }
     function proofActivationSourceControl(action,index){
       if(!action || !action.first_proof)return '';
       const sourceId = 'activation-proof-source-'+index;
@@ -6045,7 +6067,7 @@ const publicOperatorConsoleHtml = `<!doctype html>
       if(!actions.length){actionsEl.innerHTML = '<div class="operator-item">No recent actions.</div>';return}
       actionsEl.innerHTML = actions.map(function(action,index){
         const proof = action.first_proof;
-        const proofHtml = proof ? '<div class="operator-proof"><strong>'+esc(proof.title || 'First proof')+'</strong><div class="operator-meta"><span class="operator-chip">'+esc(proof.status)+'</span><span class="operator-chip">'+esc(proof.template_id)+'</span><span class="operator-chip">'+esc(proof.human_gate)+'</span></div><div>'+esc(proof.first_proof_target || '')+'</div>'+proofStarterLink(proof)+proofSolutionRoute(proof,index)+proofImplementationBlueprint(proof,index)+proofIntakeJob(proof,index)+proofClientKickoff(proof,index)+proofList('Checklist',proof.checklist)+proofList('Acceptance tests',proof.acceptance_tests)+proofActivationSourceControl(action,index)+proofBuyerReply(proof,index)+proofDeliveryPacket(proof,index)+pilotClosePacket(proof,index)+pilotOrderRoom(action,proof,index)+'</div>' : '';
+        const proofHtml = proof ? '<div class="operator-proof"><strong>'+esc(proof.title || 'First proof')+'</strong><div class="operator-meta"><span class="operator-chip">'+esc(proof.status)+'</span><span class="operator-chip">'+esc(proof.template_id)+'</span><span class="operator-chip">'+esc(proof.human_gate)+'</span></div><div>'+esc(proof.first_proof_target || '')+'</div>'+proofStarterLink(proof)+proofSolutionRoute(proof,index)+proofImplementationBlueprint(proof,index)+proofIntakeJob(proof,index)+proofClientKickoff(proof,index)+proofList('Checklist',proof.checklist)+proofList('Acceptance tests',proof.acceptance_tests)+sourcePackControl(action,index)+proofActivationSourceControl(action,index)+proofBuyerReply(proof,index)+proofDeliveryPacket(proof,index)+pilotClosePacket(proof,index)+pilotOrderRoom(action,proof,index)+'</div>' : '';
         return '<article class="operator-item"><strong>'+esc(action.title || action.action_type)+'</strong><div class="operator-meta"><span class="operator-chip">'+esc(action.status)+'</span><span class="operator-chip">'+esc(action.priority)+'</span><span class="operator-chip">'+esc(action.approval_state)+'</span><span>'+esc(action.lead_id)+'</span></div><div>'+esc(action.next_step || '')+'</div>'+salesAutopilotDraft(action,index)+proofHtml+'</article>';
       }).join('');
       actionsEl.querySelectorAll('[data-copy-target]').forEach(function(button){button.addEventListener('click',function(){copyDraft(button.getAttribute('data-copy-target'))})});
@@ -6060,22 +6082,51 @@ const publicOperatorConsoleHtml = `<!doctype html>
       actionsEl.querySelectorAll('[data-retainer-growth]').forEach(function(button){button.addEventListener('click',function(){prepareRetainerGrowthOffer(button)})});
       actionsEl.querySelectorAll('[data-retainer-payment]').forEach(function(button){button.addEventListener('click',function(){recordRetainerPaymentProof(button)})});
       actionsEl.querySelectorAll('[data-autopilot-draft-decision]').forEach(function(button){button.addEventListener('click',function(){recordAutopilotDraftApproval(button)})});
+      actionsEl.querySelectorAll('[data-source-pack-command]').forEach(function(button){button.addEventListener('click',function(){attachActivationSourcePack(button)})});
       actionsEl.querySelectorAll('[data-activation-proof-command]').forEach(function(button){button.addEventListener('click',function(){prepareActivationFirstProof(button)})});
+    }
+    async function attachActivationSourcePack(button){
+      if(!token()){setStatus('Paste the ops key first.');return}
+      const packNameEl = document.getElementById(button.getAttribute('data-source-pack-name-target') || '');
+      const sourceTypeEl = document.getElementById(button.getAttribute('data-source-type-target') || '');
+      const referenceEl = document.getElementById(button.getAttribute('data-source-reference-target') || '');
+      const contentEl = document.getElementById(button.getAttribute('data-source-content-target') || '');
+      const sourceContent = contentEl ? contentEl.value.trim() : '';
+      if(!sourceContent){setStatus('Paste approved client source content first.');return}
+      const payload = {
+        operation:'attach_activation_source_pack',
+        action_id:button.getAttribute('data-action-id') || '',
+        lead_id:button.getAttribute('data-lead-id') || '',
+        source_pack_name:packNameEl && packNameEl.value ? packNameEl.value.trim() : 'Day 1 client source pack',
+        sources:[{
+          source_type:sourceTypeEl && sourceTypeEl.value ? sourceTypeEl.value : 'manual_note',
+          reference:referenceEl && referenceEl.value ? referenceEl.value.trim() : 'approved client source',
+          content:sourceContent,
+          approved:true
+        }],
+        operator_note:'Attached owner-approved client source pack. External sends, writes, payments, and connector access remain blocked until owner approval.'
+      };
+      setStatus({status:'attaching_activation_source_pack', note:'Saving approved client source pack for proof generation.'});
+      const response = await fetch('/api/pipeline-control',{method:'POST',headers:Object.assign({},authHeaders(),{'content-type':'application/json'}),body:JSON.stringify(payload),cache:'no-store'});
+      const data = await response.json().catch(function(){return {status:'error',reason:'invalid_json',code:response.status}});
+      setStatus(data);
+      if(response.ok) await refresh();
     }
     async function prepareActivationFirstProof(button){
       if(!token()){setStatus('Paste the ops key first.');return}
+      const useSourcePack = button.getAttribute('data-use-source-pack') === 'true';
       const sourceEl = document.getElementById(button.getAttribute('data-source-target') || '');
       const referenceEl = document.getElementById(button.getAttribute('data-source-reference-target') || '');
       const sourceSample = sourceEl ? sourceEl.value.trim() : '';
-      if(!sourceSample){setStatus('Paste an approved source sample first.');return}
+      if(!sourceSample && !useSourcePack){setStatus('Paste an approved source sample first.');return}
       const payload = {
         operation:'prepare_activation_first_proof',
         action_id:button.getAttribute('data-action-id') || '',
         lead_id:button.getAttribute('data-lead-id') || '',
-        approved_source_sample:sourceSample,
-        source_reference:referenceEl && referenceEl.value ? referenceEl.value.trim() : 'operator-approved source sample',
-        operator_note:'Prepared from operator-approved source sample. No external send/write/payment action is allowed without owner approval.'
+        source_reference:sourceSample && referenceEl && referenceEl.value ? referenceEl.value.trim() : 'attached activation source pack',
+        operator_note:useSourcePack ? 'Prepared from attached owner-approved source pack. No external send/write/payment action is allowed without owner approval.' : 'Prepared from operator-approved source sample. No external send/write/payment action is allowed without owner approval.'
       };
+      if(sourceSample) payload.approved_source_sample = sourceSample;
       setStatus({status:'preparing_activation_first_proof', note:'Building proof packet from approved source. External actions remain blocked.'});
       const response = await fetch('/api/pipeline-control',{method:'POST',headers:Object.assign({},authHeaders(),{'content-type':'application/json'}),body:JSON.stringify(payload),cache:'no-store'});
       const data = await response.json().catch(function(){return {status:'error',reason:'invalid_json',code:response.status}});

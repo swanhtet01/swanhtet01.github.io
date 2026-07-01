@@ -459,9 +459,89 @@ function contextFromActivationAction(row = {}) {
   }
 }
 
+function normalizeActivationSourceItems(payload = {}) {
+  const rawSources = Array.isArray(payload.sources) && payload.sources.length
+    ? payload.sources
+    : [
+        {
+          source_type: payload.source_type || payload.source_kind,
+          reference: payload.source_reference || payload.reference,
+          content: payload.source_content || payload.content || payload.approved_source_sample || payload.source_sample,
+        },
+      ]
+  return rawSources
+    .map((source, index) => {
+      const sourceType = oneOf(
+        source.source_type || source.type,
+        ['google_drive', 'gmail', 'uploaded_file', 'manual_note', 'pos_export', 'browser_clip', 'whatsapp_viber', 'spreadsheet'],
+        'manual_note',
+      )
+      const reference = truncate(source.reference || source.source_reference || source.name || `${sourceType} source ${index + 1}`, 300)
+      const content = truncate(source.content || source.text || source.excerpt || source.sample, 2000)
+      if (!reference && !content) return null
+      return {
+        source_id: text(source.source_id) || `SRC-${String(index + 1).padStart(2, '0')}`,
+        source_type: sourceType,
+        reference: reference || `${sourceType} source ${index + 1}`,
+        content_excerpt: content,
+        approved: source.approved !== false,
+        approval_state: source.approved === false ? 'not_approved' : 'approved_for_first_proof_only',
+        connector_state: 'reference_only_until_connector_approval',
+        external_action_state: 'blocked_until_owner_approval',
+        real_mrr_delta: 0,
+      }
+    })
+    .filter(Boolean)
+}
+
+function buildActivationSourcePack(row = {}, payload = {}) {
+  const now = new Date().toISOString()
+  const context = contextFromActivationAction(row)
+  const sources = normalizeActivationSourceItems(payload)
+  const approvedSources = sources.filter((source) => source.approved)
+  const sourceTrace = approvedSources.map((source) => `${source.source_type}: ${source.reference}`)
+  const combinedSourceText = approvedSources
+    .map((source) => [`[${source.source_type}] ${source.reference}`, source.content_excerpt].filter(Boolean).join('\n'))
+    .filter(Boolean)
+    .join('\n\n')
+  return {
+    status: sources.length ? 'source_pack_attached' : 'source_pack_empty',
+    pack_type: 'activation_source_pack',
+    action_id: text(row.action_id) || text(payload.action_id) || null,
+    lead_id: text(row.lead_id) || text(payload.lead_id) || null,
+    source_pack_name: truncate(payload.source_pack_name || `${context.templateName} source pack`, 160),
+    company: context.company,
+    template_name: context.templateName,
+    first_proof_target: context.firstProofTarget,
+    source_count: sources.length,
+    approved_source_count: approvedSources.length,
+    sources,
+    source_trace: sourceTrace,
+    combined_source_text: combinedSourceText,
+    connector_state: 'reference_only_until_connector_approval',
+    external_action_state: 'blocked_until_owner_approval',
+    connector_write_state: 'blocked_until_owner_approval',
+    browser_action_state: 'blocked_until_owner_approval',
+    payment_request_state: 'blocked_until_owner_approval',
+    approval_required: true,
+    approval_state: 'approved_for_first_proof_only',
+    attached_at: now,
+    real_mrr_delta: 0,
+  }
+}
+
 function buildActivationFirstProof(row = {}, payload = {}) {
-  const approvedSourceSample = truncate(payload.approved_source_sample || payload.source_sample || payload.source_text, 5000)
-  const sourceReference = truncate(payload.source_reference || payload.evidence_reference || 'operator-approved source sample', 500)
+  const rowResult = parseJsonObject(row.result)
+  const attachedSourcePack = parseJsonObject(payload.activation_source_pack || rowResult.activation_source_pack)
+  const approvedSourceSample = truncate(
+    payload.approved_source_sample || payload.source_sample || payload.source_text || attachedSourcePack.combined_source_text,
+    5000,
+  )
+  const packTrace = list(attachedSourcePack.source_trace)
+  const sourceReference = truncate(
+    payload.source_reference || payload.evidence_reference || packTrace[0] || attachedSourcePack.source_pack_name || 'operator-approved source sample',
+    500,
+  )
   const operatorNote = truncate(payload.operator_note || '', 800)
   const preparedAt = new Date().toISOString()
   const context = contextFromActivationAction(row)
@@ -476,6 +556,7 @@ function buildActivationFirstProof(row = {}, payload = {}) {
   }))
   const sourceTrace = [
     sourceReference,
+    ...packTrace,
     ...linesFromText(context.task.source_trace || [], 6),
   ].filter(Boolean)
   const proofBullets = extractedSignals.length
@@ -544,6 +625,7 @@ function buildActivationFirstProof(row = {}, payload = {}) {
     prepared_at: preparedAt,
     approval_required: true,
     approval_state: 'pending',
+    human_gate: 'owner approval before send/write/payment/browser actions',
     external_action_state: 'blocked_until_owner_approval',
     connector_write_state: 'blocked_until_owner_approval',
     browser_action_state: 'blocked_until_owner_approval',
@@ -3108,12 +3190,139 @@ function recommendedDatastores() {
   ]
 }
 
+async function attachActivationSourcePack(payload = {}) {
+  const actionId = text(payload.action_id)
+  const leadId = text(payload.lead_id)
+  if (!actionId && !leadId) return { status: 'error', reason: 'missing_action_or_lead_id' }
+  if (!normalizeActivationSourceItems(payload).length) return { status: 'error', reason: 'missing_activation_sources' }
+  if (!datastore.postgresConfigured()) {
+    return attachBlobActivationSourcePack({ actionId, leadId, payload }, { status: 'error', reason: 'postgres_not_configured' })
+  }
+
+  const selected = await datastore.query(
+    `
+      select
+        action_id, lead_id, task_id, action_type, status, priority, owner,
+        title, next_step, approval_required, approval_state,
+        notification_channel, notification_status, payload, result, created_at
+      from public.supermega_pipeline_actions
+      where (($1 <> '' and action_id = $1) or ($1 = '' and $2 <> '' and lead_id = $2))
+      order by created_at desc
+      limit 1
+    `,
+    [actionId, leadId],
+  )
+  if (selected.status !== 'ready') return attachBlobActivationSourcePack({ actionId, leadId, payload }, selected)
+  if (!selected.rows.length) {
+    const fallback = await attachBlobActivationSourcePack({ actionId, leadId, payload }, { status: 'error', reason: 'postgres_action_not_found' })
+    if (fallback.status === 'ready') return fallback
+    return { status: 'error', reason: 'action_not_found' }
+  }
+
+  const row = selected.rows[0]
+  const sourcePack = buildActivationSourcePack(row, payload)
+  if (!sourcePack.source_count) return { status: 'error', reason: 'missing_activation_sources' }
+  const result = await datastore.query(
+    `
+      with target as (
+        select id
+        from public.supermega_pipeline_actions
+        where (($1 <> '' and action_id = $1) or ($1 = '' and $2 <> '' and lead_id = $2))
+        order by created_at desc
+        limit 1
+      )
+      update public.supermega_pipeline_actions a
+      set
+        result = jsonb_set(
+          jsonb_set(coalesce(a.result, '{}'::jsonb), '{activation_source_pack}', $3::jsonb, true),
+          '{activation_source_pack_attached_at}',
+          to_jsonb($4::text),
+          true
+        ),
+        status = case when a.status in ('open', 'queued', 'processing', 'done', 'failed') then 'source_pack_attached' else a.status end,
+        next_step = 'Prepare the first proof from the attached approved source pack.',
+        updated_at = now()
+      where a.id in (select id from target)
+      returning
+        a.action_id, a.lead_id, a.task_id, a.action_type, a.status, a.priority, a.owner,
+        a.title, a.next_step, a.approval_required, a.approval_state,
+        a.notification_channel, a.notification_status, a.payload, a.result, a.created_at
+    `,
+    [actionId, leadId, JSON.stringify(sourcePack), sourcePack.attached_at],
+  )
+  if (result.status !== 'ready') return attachBlobActivationSourcePack({ actionId, leadId, payload }, result)
+  if (!result.rows.length) return { status: 'error', reason: 'action_not_found', activation_source_pack: sourcePack }
+
+  const mirror = await attachBlobActivationSourcePack(
+    { actionId, leadId, payload },
+    { status: 'ready', adapter: 'vercel_postgres_neon', mirrored_from_primary: true },
+    { allowMissing: true },
+  )
+  return {
+    status: 'ready',
+    adapter: mirror.status === 'ready' ? 'vercel_postgres_neon_with_blob_queue' : 'vercel_postgres_neon',
+    operation_status: 'attached',
+    action: safeAction(result.rows[0]),
+    activation_source_pack: sourcePack,
+    mirror,
+  }
+}
+
+async function attachBlobActivationSourcePack({ actionId, leadId, payload }, primaryDatabase = {}, options = {}) {
+  const found = await blobQueue.findActionRecord({ action_id: actionId, lead_id: leadId })
+  if (found.status !== 'ready') {
+    if (options.allowMissing && found.reason === 'action_not_found') {
+      return {
+        status: 'skipped',
+        adapter: 'vercel_blob',
+        reason: 'blob_action_not_found',
+        primary_database: primaryDatabase,
+      }
+    }
+    return {
+      ...found,
+      primary_database: primaryDatabase,
+    }
+  }
+  const row = found.row
+  const sourcePack = buildActivationSourcePack(row, payload)
+  if (!sourcePack.source_count) return { status: 'error', adapter: 'vercel_blob', reason: 'missing_activation_sources' }
+  const currentResult = parseJsonObject(row.result)
+  const nextResult = {
+    ...currentResult,
+    activation_source_pack: sourcePack,
+    activation_source_pack_attached_at: sourcePack.attached_at,
+  }
+  const updated = await blobQueue.updateActionRecord(
+    { action_id: actionId, lead_id: leadId },
+    {
+      result: nextResult,
+      status: ['open', 'queued', 'processing', 'done', 'failed'].includes(text(row.status)) ? 'source_pack_attached' : row.status,
+      next_step: 'Prepare the first proof from the attached approved source pack.',
+      notification_status: row.notification_status || 'source_pack_attached',
+    },
+  )
+  if (updated.status !== 'ready') {
+    return {
+      ...updated,
+      primary_database: primaryDatabase,
+      activation_source_pack: sourcePack,
+    }
+  }
+  return {
+    status: 'ready',
+    adapter: 'vercel_blob',
+    primary_database: primaryDatabase,
+    operation_status: 'attached',
+    action: safeAction(updated.record),
+    activation_source_pack: sourcePack,
+  }
+}
+
 async function prepareActivationFirstProof(payload) {
   const actionId = text(payload.action_id)
   const leadId = text(payload.lead_id)
-  const approvedSourceSample = text(payload.approved_source_sample || payload.source_sample || payload.source_text)
   if (!actionId && !leadId) return { status: 'error', reason: 'missing_action_or_lead_id' }
-  if (!approvedSourceSample) return { status: 'error', reason: 'missing_approved_source_sample' }
   if (!datastore.postgresConfigured()) {
     return prepareBlobActivationFirstProof({ actionId, leadId, payload }, { status: 'error', reason: 'postgres_not_configured' })
   }
@@ -3140,6 +3349,7 @@ async function prepareActivationFirstProof(payload) {
 
   const row = selected.rows[0]
   const proof = buildActivationFirstProof(row, payload)
+  if (!text(proof.source_sample_excerpt)) return { status: 'error', reason: 'missing_approved_source_sample', action: safeAction(row) }
   const result = await datastore.query(
     `
       with target as (
@@ -3157,7 +3367,7 @@ async function prepareActivationFirstProof(payload) {
           to_jsonb($4::text),
           true
         ),
-        status = case when a.status in ('open', 'queued', 'processing', 'done', 'failed') then 'proof_ready' else a.status end,
+        status = case when a.status in ('open', 'queued', 'processing', 'done', 'failed', 'source_pack_attached') then 'proof_ready' else a.status end,
         next_step = 'Review the source-derived first proof, then queue the buyer reply for owner approval.',
         updated_at = now()
       where a.id in (select id from target)
@@ -3206,6 +3416,15 @@ async function prepareBlobActivationFirstProof({ actionId, leadId, payload }, pr
   const row = found.row
   const currentResult = parseJsonObject(row.result)
   const proof = buildActivationFirstProof(row, payload)
+  if (!text(proof.source_sample_excerpt)) {
+    return {
+      status: 'error',
+      adapter: 'vercel_blob',
+      reason: 'missing_approved_source_sample',
+      primary_database: primaryDatabase,
+      action: safeAction(row),
+    }
+  }
   const nextResult = {
     ...currentResult,
     activation_first_proof: proof,
@@ -3215,7 +3434,7 @@ async function prepareBlobActivationFirstProof({ actionId, leadId, payload }, pr
     { action_id: actionId, lead_id: leadId },
     {
       result: nextResult,
-      status: ['open', 'queued', 'processing', 'done', 'failed'].includes(text(row.status)) ? 'proof_ready' : row.status,
+      status: ['open', 'queued', 'processing', 'done', 'failed', 'source_pack_attached'].includes(text(row.status)) ? 'proof_ready' : row.status,
       next_step: 'Review the source-derived first proof, then queue the buyer reply for owner approval.',
       notification_status: row.notification_status || 'proof_ready',
     },
@@ -4519,7 +4738,7 @@ function writeStatusCode(result) {
   if (result.status === 'ready') return 200
   if (result.reason === 'action_not_found') return 404
   if (['private_workspace_not_ready', 'private_workspace_required', 'first_run_acceptance_required', 'owner_acceptance_required', 'owner_acceptance_not_accepted', 'connector_policy_required', 'production_approval_queue_required', 'enterprise_delivery_pack_required', 'customer_success_desk_required', 'retainer_growth_offer_required', 'use_start_private_workspace_operation', 'autopilot_draft_not_found'].includes(result.reason)) return 409
-  if (['missing_action_or_lead_id', 'missing_approved_source_sample', 'invalid_owner_acceptance_decision', 'missing_owner_acceptance_reference', 'invalid_connector_policy_mode', 'missing_connector_policy_reference', 'missing_production_queue_reference', 'missing_enterprise_delivery_reference', 'missing_customer_success_reference', 'missing_retainer_growth_reference', 'missing_retainer_payment_proof_reference', 'missing_retainer_owner_approval_reference', 'invalid_retainer_payment_amount', 'invalid_retainer_payment_period', 'invalid_autopilot_draft_decision', 'missing_autopilot_draft_reference'].includes(result.reason)) return 400
+  if (['missing_action_or_lead_id', 'missing_activation_sources', 'missing_approved_source_sample', 'invalid_owner_acceptance_decision', 'missing_owner_acceptance_reference', 'invalid_connector_policy_mode', 'missing_connector_policy_reference', 'missing_production_queue_reference', 'missing_enterprise_delivery_reference', 'missing_customer_success_reference', 'missing_retainer_growth_reference', 'missing_retainer_payment_proof_reference', 'missing_retainer_owner_approval_reference', 'invalid_retainer_payment_amount', 'invalid_retainer_payment_period', 'invalid_autopilot_draft_decision', 'missing_autopilot_draft_reference'].includes(result.reason)) return 400
   return 503
 }
 
@@ -4593,6 +4812,15 @@ async function handler(req, res) {
         endpoint: 'pipeline-control',
         operation,
         ...started,
+      })
+      return
+    }
+    if (operation === 'attach_activation_source_pack') {
+      const attached = await attachActivationSourcePack(payload)
+      json(res, writeStatusCode(attached), {
+        endpoint: 'pipeline-control',
+        operation,
+        ...attached,
       })
       return
     }
@@ -5066,6 +5294,7 @@ handler.__test = {
   buildActivationSessionActionPayload,
   buildActivationSessionFirstProofTask,
   buildActivationSessionLead,
+  buildActivationSourcePack,
   buildActivationFirstProof,
   firstProofPacket,
   operatorRuntimeSummary,
@@ -5074,6 +5303,7 @@ handler.__test = {
   autopilotApprovalLedgerStatus,
   readAutopilotApprovalLedger,
   prepareFirstRunAcceptance,
+  attachActivationSourcePack,
   prepareActivationFirstProof,
   prepareCustomerSuccessDesk,
   prepareEnterpriseDeliveryPack,
