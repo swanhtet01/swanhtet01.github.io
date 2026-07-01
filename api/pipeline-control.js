@@ -2463,6 +2463,30 @@ function autopilotDraftFromPayload(payload = {}) {
   }
 }
 
+function sourcePackRequestFromPayload(payload = {}) {
+  const existing = parseJsonObject(payload.source_pack_request)
+  const actionId = text(existing.action_id || payload.action_id)
+  const leadId = text(existing.lead_id || payload.lead_id)
+  return {
+    ...existing,
+    status: text(existing.status) || 'source_pack_request_ready',
+    request_type: text(existing.request_type) || 'client_source_pack_intake',
+    lead_id: leadId,
+    action_id: actionId,
+    template_name: text(existing.template_name || payload.source_pack_request_template_name || payload.template_name || payload.package_name || payload.requested_package),
+    company: text(existing.company || payload.company || payload.business_name),
+    first_proof_target: text(existing.first_proof_target || payload.first_proof_target),
+    intake_url: text(existing.intake_url || payload.source_pack_request_url || payload.intake_url),
+    client_message: text(existing.client_message || payload.source_pack_request_packet || payload.source_pack_request_body || payload.packet || payload.body),
+    external_action_state: text(existing.external_action_state) || 'blocked_until_owner_approval',
+    payment_request_state: text(existing.payment_request_state) || 'blocked_until_owner_approval',
+    real_mrr_delta: 0,
+    guardrails: list(existing.guardrails).length
+      ? list(existing.guardrails)
+      : ['draft_only_no_send', 'owner_approval_before_client_request', 'no_mrr_delta_without_payment_proof'],
+  }
+}
+
 function autopilotApprovalLedgerPrefix() {
   return text(process.env.SUPERMEGA_AUTOPILOT_APPROVAL_LEDGER_PREFIX) || 'supermega/autopilot-approvals'
 }
@@ -2749,6 +2773,20 @@ function firstProofPacket(row) {
   const implementationBlueprintPack = parseJsonObject(result.implementation_blueprint_pack || task.implementation_blueprint_pack || payload.implementation_blueprint_pack)
   const clientKickoffPack = parseJsonObject(result.client_kickoff_pack || task.client_kickoff_pack || payload.client_kickoff_pack)
   const sourcePackRequest = parseJsonObject(result.source_pack_request || task.source_pack_request || payload.source_pack_request)
+  const sourcePackRequestApproval = parseJsonObject(result.source_pack_request_approval || sourcePackRequest.approval || payload.source_pack_request_approval)
+  const sourcePackRequestForOutput = Object.keys(sourcePackRequest).length
+    ? {
+        ...sourcePackRequest,
+        approval: Object.keys(sourcePackRequestApproval).length
+          ? sourcePackRequestApproval
+          : {
+              status: 'pending_owner_review',
+              decision: 'pending',
+              sent: false,
+              real_mrr_delta: 0,
+            },
+      }
+    : null
   const sourceTrace = list(task.source_trace || payload.source_trace)
   const persistedOrderRoomState = parseJsonObject(result.pilot_order_room_state || payload.pilot_order_room_state)
   const firstProductionRun = parseJsonObject(result.first_production_run || payload.first_production_run)
@@ -3064,9 +3102,10 @@ function firstProofPacket(row) {
     client_kickoff_pack: Object.keys(clientKickoffPack).length ? clientKickoffPack : null,
     client_kickoff_packet: text(clientKickoffPack.packet),
     client_kickoff_json: Object.keys(clientKickoffPack).length ? JSON.stringify(clientKickoffPack, null, 2) : '',
-    source_pack_request: Object.keys(sourcePackRequest).length ? sourcePackRequest : null,
+    source_pack_request: sourcePackRequestForOutput,
     source_pack_request_packet: text(sourcePackRequest.client_message),
     source_pack_request_json: Object.keys(sourcePackRequest).length ? JSON.stringify(sourcePackRequest, null, 2) : '',
+    source_pack_request_approval: Object.keys(sourcePackRequestApproval).length ? sourcePackRequestApproval : null,
     title: text(result.title) || (templateName && row.lead_id ? `${templateName} first proof for ${row.lead_id}` : 'First proof task'),
     checklist,
     acceptance_tests: acceptanceTests,
@@ -3229,6 +3268,42 @@ function buildAutopilotDraftApprovalRecord(payload = {}, draft = {}) {
       'runner_does_not_send',
       'manual_send_requires_owner_execution',
       'no_payment_or_connector_change_from_draft_approval',
+      'no_mrr_delta_without_payment_proof',
+    ],
+  }
+}
+
+function buildSourcePackRequestApprovalRecord(payload = {}, request = {}) {
+  const decision = oneOf(payload.source_pack_request_decision || payload.decision, ['approved', 'changes_requested'], '')
+  const approvalReference = text(payload.source_pack_request_reference || payload.approval_reference || payload.evidence_reference)
+  const operatorNote = text(payload.operator_note || payload.note).slice(0, 500)
+  if (!decision) return { status: 'error', reason: 'invalid_source_pack_request_decision' }
+  if (!approvalReference) return { status: 'error', reason: 'missing_source_pack_request_reference' }
+  return {
+    status: 'source_pack_request_approval_recorded',
+    decision,
+    action_id: text(payload.action_id) || text(request.action_id) || null,
+    lead_id: text(payload.lead_id) || text(request.lead_id) || null,
+    request_type: text(request.request_type) || 'client_source_pack_intake',
+    template_name: text(request.template_name || payload.template_name || payload.package_name),
+    company: text(request.company || payload.company || payload.business_name),
+    first_proof_target: text(request.first_proof_target || payload.first_proof_target),
+    intake_url: text(request.intake_url || payload.source_pack_request_url || payload.intake_url),
+    approval_reference: approvalReference.slice(0, 240),
+    operator_note: operatorNote,
+    external_action_state: decision === 'approved' ? 'approved_for_manual_owner_send' : 'blocked_until_changes_resolved',
+    payment_request_state: 'blocked_until_owner_approval',
+    approved_to_request_sources: decision === 'approved',
+    sent: false,
+    real_mrr_delta: 0,
+    recorded_by: 'operator_console',
+    recorded_at: new Date().toISOString(),
+    guardrails: [
+      'approval_record_only',
+      'runner_does_not_send',
+      'manual_owner_send_only_after_review',
+      'no_client_request_from_runner',
+      'no_payment_request_from_source_pack_approval',
       'no_mrr_delta_without_payment_proof',
     ],
   }
@@ -4774,6 +4849,258 @@ async function recordAutopilotDraftApproval(payload) {
     adapter: 'vercel_postgres_neon',
     action: safeAction(updated.rows[0]),
     autopilot_draft_approval: approval,
+  }
+}
+
+function sourcePackRequestApprovalState(approval) {
+  return approval.decision === 'approved' ? 'approved' : 'changes_requested'
+}
+
+function sourcePackRequestNotificationStatus(approval) {
+  return approval.decision === 'approved' ? 'source_request_approved_manual_send_only' : 'source_request_changes_requested'
+}
+
+function sourcePackRequestNextStep(approval) {
+  return approval.decision === 'approved'
+    ? 'Owner approved the source request. Send manually only from the approved channel, then attach the client Source Pack JSON before first proof.'
+    : 'Revise the source request from the requested changes before any buyer-visible request.'
+}
+
+function sourcePackRequestHasContent(request = {}) {
+  return Boolean(
+    text(request.client_message) ||
+    text(request.intake_url) ||
+    text(request.template_name) ||
+    text(request.first_proof_target),
+  )
+}
+
+let pipelineActionsResultColumnCache = null
+async function pipelineActionsResultColumnStatus() {
+  if (pipelineActionsResultColumnCache) return pipelineActionsResultColumnCache
+  const checked = await datastore.query(
+    `
+      select exists (
+        select 1
+        from information_schema.columns
+        where table_schema = 'public'
+          and table_name = 'supermega_pipeline_actions'
+          and column_name = 'result'
+      ) as has_result
+    `,
+  )
+  if (checked.status !== 'ready') return checked
+  const hasResult = checked.rows?.[0]?.has_result === true || checked.rows?.[0]?.has_result === 'true'
+  pipelineActionsResultColumnCache = { status: 'ready', has_result: hasResult }
+  return pipelineActionsResultColumnCache
+}
+
+function pipelineActionResultSelect(hasResult) {
+  return hasResult ? 'result' : "'{}'::jsonb as result"
+}
+
+function sourcePackRequestFromRow(row = {}, payload = {}) {
+  const rowPayload = parseJsonObject(row.payload)
+  const rowTask = parseJsonObject(rowPayload.first_proof_task)
+  const rowResult = parseJsonObject(row.result)
+  const existing = parseJsonObject(rowResult.source_pack_request || rowTask.source_pack_request || rowPayload.source_pack_request || payload.source_pack_request)
+  if (Object.keys(existing).length) {
+    return sourcePackRequestFromPayload({
+      ...payload,
+      source_pack_request: existing,
+      action_id: text(row.action_id) || text(payload.action_id),
+      lead_id: text(row.lead_id) || text(payload.lead_id),
+      template_name: text(existing.template_name || rowTask.template_name || rowPayload.public_package || rowPayload.requested_package),
+      first_proof_target: text(existing.first_proof_target || rowResult.first_proof_target || rowTask.first_proof_target || rowPayload.first_proof_target),
+    })
+  }
+  return sourcePackRequestFromPayload({
+    ...payload,
+    action_id: text(row.action_id) || text(payload.action_id),
+    lead_id: text(row.lead_id) || text(payload.lead_id),
+    template_name: text(rowTask.template_name || rowPayload.public_package || rowPayload.requested_package || payload.template_name),
+    first_proof_target: text(rowResult.first_proof_target || rowTask.first_proof_target || rowPayload.first_proof_target || payload.first_proof_target),
+  })
+}
+
+async function recordBlobSourcePackRequestApproval({ actionId, leadId, payload }, primaryDatabase = {}) {
+  const found = await blobQueue.findActionRecord({ action_id: actionId, lead_id: leadId })
+  if (found.status !== 'ready') {
+    return {
+      ...found,
+      primary_database: primaryDatabase,
+    }
+  }
+  const row = found.row
+  const request = sourcePackRequestFromRow(row, payload)
+  if (!sourcePackRequestHasContent(request)) {
+    return {
+      status: 'error',
+      adapter: 'vercel_blob',
+      reason: 'source_pack_request_not_found',
+      primary_database: primaryDatabase,
+      action: safeAction(row),
+    }
+  }
+  const approval = buildSourcePackRequestApprovalRecord(
+    { ...payload, action_id: text(row.action_id) || actionId, lead_id: text(row.lead_id) || leadId },
+    request,
+  )
+  if (approval.status === 'error') return approval
+  const approvalState = sourcePackRequestApprovalState(approval)
+  const notificationStatus = sourcePackRequestNotificationStatus(approval)
+  const nextStep = sourcePackRequestNextStep(approval)
+  const currentResult = parseJsonObject(row.result)
+  const nextResult = {
+    ...currentResult,
+    type: text(currentResult.type) || 'first_proof_operator_brief',
+    source_pack_request: request,
+    source_pack_request_approval: approval,
+    source_pack_request_approval_recorded_at: approval.recorded_at,
+  }
+  const updated = await blobQueue.updateActionRecord(
+    { action_id: actionId, lead_id: leadId },
+    {
+      result: nextResult,
+      status: approval.decision === 'approved' ? 'source_request_approved' : 'source_request_changes_requested',
+      next_step: nextStep,
+      approval_state: approvalState,
+      notification_status: notificationStatus,
+    },
+  )
+  if (updated.status !== 'ready') {
+    return {
+      ...updated,
+      primary_database: primaryDatabase,
+      source_pack_request_approval: approval,
+    }
+  }
+  return {
+    status: 'ready',
+    adapter: 'vercel_blob',
+    primary_database: primaryDatabase,
+    operation_status: 'recorded',
+    action: safeAction(updated.record),
+    source_pack_request_approval: approval,
+  }
+}
+
+async function recordSourcePackRequestApproval(payload) {
+  const actionId = text(payload.action_id)
+  const leadId = text(payload.lead_id)
+  if (!actionId && !leadId) return { status: 'error', reason: 'missing_action_or_lead_id' }
+  if (!datastore.postgresConfigured()) {
+    return recordBlobSourcePackRequestApproval(
+      { actionId, leadId, payload },
+      { status: 'error', reason: 'postgres_not_configured', provider: 'vercel_postgres_neon', adapter: 'pg' },
+    )
+  }
+  const resultColumn = await pipelineActionsResultColumnStatus()
+  if (resultColumn.status !== 'ready') return recordBlobSourcePackRequestApproval({ actionId, leadId, payload }, resultColumn)
+  const resultSelect = pipelineActionResultSelect(resultColumn.has_result)
+
+  const current = await datastore.query(
+    `
+      select
+        id, action_id, lead_id, task_id, action_type, status, priority, owner,
+        title, next_step, approval_required, approval_state,
+        notification_channel, notification_status, payload, ${resultSelect}, created_at
+      from public.supermega_pipeline_actions
+      where (($1 <> '' and action_id = $1) or ($1 = '' and $2 <> '' and lead_id = $2))
+      order by created_at desc
+      limit 1
+    `,
+    [actionId, leadId],
+  )
+  if (current.status !== 'ready') {
+    return recordBlobSourcePackRequestApproval({ actionId, leadId, payload }, current)
+  }
+  if (!current.rows.length) {
+    const fallback = await recordBlobSourcePackRequestApproval(
+      { actionId, leadId, payload },
+      { status: 'error', reason: 'postgres_action_not_found', provider: 'vercel_postgres_neon', adapter: 'pg' },
+    )
+    if (fallback.status === 'ready') return fallback
+    return { status: 'error', reason: 'action_not_found' }
+  }
+
+  const row = current.rows[0]
+  const request = sourcePackRequestFromRow(row, payload)
+  if (!sourcePackRequestHasContent(request)) {
+    return {
+      status: 'error',
+      reason: 'source_pack_request_not_found',
+      action: safeAction(row),
+    }
+  }
+  const approval = buildSourcePackRequestApprovalRecord({ ...payload, action_id: text(row.action_id), lead_id: text(row.lead_id) }, request)
+  if (approval.status === 'error') return approval
+  const approvalState = sourcePackRequestApprovalState(approval)
+  const notificationStatus = sourcePackRequestNotificationStatus(approval)
+  const nextStep = sourcePackRequestNextStep(approval)
+  const currentResult = parseJsonObject(row.result)
+  const nextResult = {
+    ...currentResult,
+    type: text(currentResult.type) || 'first_proof_operator_brief',
+    source_pack_request: request,
+    source_pack_request_approval: approval,
+    source_pack_request_approval_recorded_at: approval.recorded_at,
+  }
+  const updateResultExpression = resultColumn.has_result
+    ? 'result = $2::jsonb,'
+    : `
+        payload = coalesce(payload, '{}'::jsonb) || jsonb_build_object(
+          'type', coalesce(payload ->> 'type', 'first_proof_operator_brief'),
+          'source_pack_request', $2::jsonb -> 'source_pack_request',
+          'source_pack_request_approval', $2::jsonb -> 'source_pack_request_approval',
+          'source_pack_request_approval_recorded_at', $2::jsonb -> 'source_pack_request_approval_recorded_at'
+        ),
+      `
+  const returningResultExpression = resultColumn.has_result ? 'result' : '$2::jsonb as result'
+  const updated = await datastore.query(
+    `
+      update public.supermega_pipeline_actions
+      set
+        ${updateResultExpression}
+        status = case
+          when status in ('open', 'queued', 'processing', 'done', 'failed', 'source_pack_request_ready', 'source_request_approved', 'source_request_changes_requested')
+          then $3
+          else status
+        end,
+        approval_state = $4,
+        notification_status = $5,
+        next_step = $6,
+        updated_at = now()
+      where id = $1
+      returning
+        action_id, lead_id, task_id, action_type, status, priority, owner,
+        title, next_step, approval_required, approval_state,
+        notification_channel, notification_status, payload, ${returningResultExpression}, created_at
+    `,
+    [
+      row.id,
+      JSON.stringify(nextResult),
+      approval.decision === 'approved' ? 'source_request_approved' : 'source_request_changes_requested',
+      approvalState,
+      notificationStatus,
+      nextStep,
+    ],
+  )
+  if (updated.status !== 'ready') {
+    return recordBlobSourcePackRequestApproval({ actionId, leadId, payload }, updated)
+  }
+  if (!updated.rows.length) return { status: 'error', reason: 'action_not_found', source_pack_request_approval: approval }
+  const mirror = await recordBlobSourcePackRequestApproval(
+    { actionId, leadId, payload },
+    { status: 'ready', adapter: 'vercel_postgres_neon', mirrored_from_primary: true },
+  )
+  return {
+    status: 'ready',
+    adapter: mirror.status === 'ready' ? 'vercel_postgres_neon_with_blob_queue' : 'vercel_postgres_neon',
+    operation_status: 'recorded',
+    action: safeAction(updated.rows[0]),
+    source_pack_request_approval: approval,
+    mirror,
   }
 }
 
@@ -6856,6 +7183,15 @@ async function handler(req, res) {
       })
       return
     }
+    if (operation === 'record_source_pack_request_approval') {
+      const recorded = await recordSourcePackRequestApproval(payload)
+      json(res, writeStatusCode(recorded), {
+        endpoint: 'pipeline-control',
+        operation,
+        ...recorded,
+      })
+      return
+    }
     if (operation === 'record_autopilot_draft_approval') {
       const recorded = await recordAutopilotDraftApproval(payload)
       json(res, writeStatusCode(recorded), {
@@ -7215,6 +7551,7 @@ handler.__test = {
   buildConnectorPolicyRecord,
   buildAutopilotDraftApprovalRecord,
   buildAutopilotApprovalLedgerRecord,
+  buildSourcePackRequestApprovalRecord,
   buildCustomerSuccessDeskPack,
   buildEnterpriseDeliveryPack,
   buildOrderRoomState,
@@ -7239,6 +7576,7 @@ handler.__test = {
   operatorRuntimeSummary,
   autopilotCommandBoard,
   autopilotDraftFromPayload,
+  sourcePackRequestFromPayload,
   autopilotApprovalLedgerStatus,
   readAutopilotApprovalLedger,
   prepareFirstRunAcceptance,
@@ -7253,6 +7591,7 @@ handler.__test = {
   prepareProductionApprovalQueue,
   prepareRetainerGrowthOffer,
   recordRetainerPaymentProof,
+  recordSourcePackRequestApproval,
   recordAutopilotDraftApproval,
   recordConnectorPolicy,
   recordOwnerAcceptance,

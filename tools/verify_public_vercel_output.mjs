@@ -622,6 +622,22 @@ for (const token of ['firstProofPacket', 'first_proof', 'operator_brief_ready', 
   }
 }
 for (const token of [
+  'buildSourcePackRequestApprovalRecord',
+  'sourcePackRequestFromPayload',
+  'recordSourcePackRequestApproval',
+  'record_source_pack_request_approval',
+  'source_pack_request_approval',
+  'source_request_approved_manual_send_only',
+  'approved_for_manual_owner_send',
+  'no_client_request_from_runner',
+  'pipelineActionsResultColumnStatus',
+  'pipelineActionResultSelect',
+]) {
+  if (!pipelineControlFunctionSource.includes(token)) {
+    fail('public_pipeline_control_source_request_approval_contract_missing', { token })
+  }
+}
+for (const token of [
   '<title>SUPERMEGA.dev — Custom Software for Myanmar Business</title>',
   'Your real work, turned into software.',
 ]) {
@@ -784,6 +800,17 @@ for (const token of [
   "proofList('Acceptance tests'",
 ]) {
   if (!operatorHtml.includes(token)) fail('public_operator_console_contract_missing', { token })
+}
+for (const token of [
+  'Approve source request',
+  'Request source changes',
+  'data-source-pack-request-decision',
+  'recordSourcePackRequestDecision',
+  'record_source_pack_request_approval',
+  'source_pack_request_reference',
+  'source_pack_request_packet',
+]) {
+  if (!operatorHtml.includes(token)) fail('public_operator_source_request_approval_contract_missing', { token })
 }
 const publicAgentTemplateContract = [
   ['deskpos-quickstart', 'DeskPOS Quickstart'],

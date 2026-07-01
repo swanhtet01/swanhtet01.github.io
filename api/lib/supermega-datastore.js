@@ -278,7 +278,36 @@ function countValue(result) {
   return Number(result?.rows?.[0]?.count || 0)
 }
 
+let _pipelineActionsResultColumnCache = null
+async function pipelineActionsResultColumnStatus() {
+  if (_pipelineActionsResultColumnCache) return _pipelineActionsResultColumnCache
+  const result = await query(
+    `
+      select exists (
+        select 1
+        from information_schema.columns
+        where table_schema = 'public'
+          and table_name = 'supermega_pipeline_actions'
+          and column_name = 'result'
+      ) as has_result
+    `,
+  )
+  if (result.status !== 'ready') return result
+  const hasResult = result.rows?.[0]?.has_result === true || result.rows?.[0]?.has_result === 'true'
+  _pipelineActionsResultColumnCache = { status: 'ready', has_result: hasResult }
+  return _pipelineActionsResultColumnCache
+}
+
 async function pipelineSnapshot({ since24h, since7d }) {
+  const resultColumn = await pipelineActionsResultColumnStatus()
+  if (resultColumn.status !== 'ready') {
+    return {
+      ...resultColumn,
+      adapter: 'vercel_postgres_neon',
+      provider: 'vercel_postgres_neon',
+    }
+  }
+  const resultSelect = resultColumn.has_result ? 'result' : "'{}'::jsonb as result"
   const checks = await Promise.all([
     query(
       `
@@ -291,7 +320,7 @@ async function pipelineSnapshot({ since24h, since7d }) {
     query(
       `
         select action_id, lead_id, task_id, action_type, status, priority, owner, title, next_step,
-          approval_required, approval_state, notification_channel, notification_status, payload, result, created_at
+          approval_required, approval_state, notification_channel, notification_status, payload, ${resultSelect}, created_at
         from public.supermega_pipeline_actions
         order by created_at desc
         limit 8

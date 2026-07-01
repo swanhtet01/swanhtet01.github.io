@@ -5551,14 +5551,20 @@ const publicOperatorConsoleHtml = `<!doctype html>
       const id = 'client-kickoff-'+index;
       return '<div class="operator-proof-section"><span>Client kickoff pack</span><textarea class="operator-reply" id="'+id+'" readonly>'+esc(proof.client_kickoff_packet || proof.client_kickoff_json || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+id+'">Copy kickoff pack</button></div>';
     }
-    function proofSourcePackRequest(proof, index){
+    function proofSourcePackRequest(action, proof, index){
       const request = proof && proof.source_pack_request;
       if(!request && !proof.source_pack_request_packet && !proof.source_pack_request_json)return '';
       const id = 'source-pack-request-'+index;
       const intakeUrl = request && request.intake_url ? request.intake_url : '';
       const packet = proof.source_pack_request_packet || (request && request.client_message) || proof.source_pack_request_json || '';
+      const approval = (request && request.approval) || proof.source_pack_request_approval || {};
+      const approvalDecision = approval && approval.decision ? approval.decision : 'pending';
+      const actionId = (action && action.action_id) || (request && request.action_id) || '';
+      const leadId = (action && action.lead_id) || (request && request.lead_id) || '';
+      const templateName = (request && request.template_name) || proof.template_name || proof.template_id || '';
       const link = intakeUrl ? '<a class="operator-proof-link" href="'+esc(intakeUrl)+'" target="_blank" rel="noreferrer">Source-pack intake link</a>' : '';
-      return '<div class="operator-proof-section" data-source-pack-request="client_source_pack_intake"><span>Client source request</span><div class="operator-meta"><span class="operator-chip">3 approved source samples</span><span class="operator-chip">'+esc(request && request.external_action_state || 'blocked_until_owner_approval')+'</span></div>'+link+'<textarea class="operator-reply" id="'+id+'" readonly>'+esc(packet || proof.source_pack_request_json || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+id+'">Copy source request</button></div>';
+      const approvalButtons = '<div class="operator-row"><button class="btn primary" type="button" data-source-pack-request-decision="approved" data-source-pack-request-target="'+id+'" data-source-pack-request-url="'+esc(intakeUrl)+'" data-source-pack-request-template-name="'+esc(templateName)+'" data-action-id="'+esc(actionId)+'" data-lead-id="'+esc(leadId)+'">Approve source request</button><button class="btn secondary" type="button" data-source-pack-request-decision="changes_requested" data-source-pack-request-target="'+id+'" data-source-pack-request-url="'+esc(intakeUrl)+'" data-source-pack-request-template-name="'+esc(templateName)+'" data-action-id="'+esc(actionId)+'" data-lead-id="'+esc(leadId)+'">Request source changes</button></div>';
+      return '<div class="operator-proof-section" data-source-pack-request="client_source_pack_intake"><span>Client source request</span><div class="operator-meta"><span class="operator-chip">3 approved source samples</span><span class="operator-chip">'+esc(request && request.external_action_state || 'blocked_until_owner_approval')+'</span><span class="operator-chip">approval '+esc(approvalDecision)+'</span></div>'+link+'<textarea class="operator-reply" id="'+id+'" readonly>'+esc(packet || proof.source_pack_request_json || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+id+'">Copy source request</button>'+approvalButtons+'</div>';
     }
     function proofReviewRequest(proof, index){
       const request = proof && proof.proof_review_request;
@@ -6040,6 +6046,30 @@ const publicOperatorConsoleHtml = `<!doctype html>
       setStatus(data);
       if(response.ok) await refresh();
     }
+    async function recordSourcePackRequestDecision(button){
+      if(!token()){setStatus('Paste the ops key first.');return}
+      const decision = button.getAttribute('data-source-pack-request-decision') || '';
+      const packetEl = document.getElementById(button.getAttribute('data-source-pack-request-target') || '');
+      const reference = window.prompt(decision === 'approved' ? 'Owner approval reference for this source request' : 'Change request reference for this source request');
+      if(!reference || !reference.trim()){setStatus('Paste source request approval reference first.');return}
+      const note = window.prompt('Operator note (optional)','') || '';
+      const payload = {
+        operation:'record_source_pack_request_approval',
+        action_id:button.getAttribute('data-action-id') || '',
+        lead_id:button.getAttribute('data-lead-id') || '',
+        source_pack_request_decision:decision,
+        source_pack_request_reference:reference.trim(),
+        source_pack_request_packet:packetEl ? packetEl.value : '',
+        source_pack_request_url:button.getAttribute('data-source-pack-request-url') || '',
+        source_pack_request_template_name:button.getAttribute('data-source-pack-request-template-name') || '',
+        operator_note:note.trim()
+      };
+      setStatus({status:'recording_source_pack_request_approval', decision});
+      const response = await fetch('/api/pipeline-control',{method:'POST',headers:Object.assign({},authHeaders(),{'content-type':'application/json'}),body:JSON.stringify(payload),cache:'no-store'});
+      const data = await response.json().catch(function(){return {status:'error',reason:'invalid_json',code:response.status}});
+      setStatus(data);
+      if(response.ok) await refresh();
+    }
     function formatMmk(value){
       const amount = Number(value || 0);
       if(!Number.isFinite(amount))return '0 MMK';
@@ -6276,7 +6306,7 @@ const publicOperatorConsoleHtml = `<!doctype html>
       if(!actions.length){actionsEl.innerHTML = '<div class="operator-item">No recent actions.</div>';return}
       actionsEl.innerHTML = actions.map(function(action,index){
         const proof = action.first_proof;
-        const proofHtml = proof ? '<div class="operator-proof"><strong>'+esc(proof.title || 'First proof')+'</strong><div class="operator-meta"><span class="operator-chip">'+esc(proof.status)+'</span><span class="operator-chip">'+esc(proof.template_id)+'</span><span class="operator-chip">'+esc(proof.human_gate)+'</span></div><div>'+esc(proof.first_proof_target || '')+'</div>'+proofStarterLink(proof)+proofSolutionRoute(proof,index)+proofImplementationBlueprint(proof,index)+proofIntakeJob(proof,index)+proofClientKickoff(proof,index)+proofSourcePackRequest(proof,index)+proofList('Checklist',proof.checklist)+proofList('Acceptance tests',proof.acceptance_tests)+sourcePackControl(action,index)+proofActivationSourceControl(action,index)+proofBuyerReply(proof,index)+proofDeliveryPacket(proof,index)+proofReviewRequest(proof,index)+pilotClosePacket(proof,index)+pilotOrderRoom(action,proof,index)+'</div>' : '';
+        const proofHtml = proof ? '<div class="operator-proof"><strong>'+esc(proof.title || 'First proof')+'</strong><div class="operator-meta"><span class="operator-chip">'+esc(proof.status)+'</span><span class="operator-chip">'+esc(proof.template_id)+'</span><span class="operator-chip">'+esc(proof.human_gate)+'</span></div><div>'+esc(proof.first_proof_target || '')+'</div>'+proofStarterLink(proof)+proofSolutionRoute(proof,index)+proofImplementationBlueprint(proof,index)+proofIntakeJob(proof,index)+proofClientKickoff(proof,index)+proofSourcePackRequest(action,proof,index)+proofList('Checklist',proof.checklist)+proofList('Acceptance tests',proof.acceptance_tests)+sourcePackControl(action,index)+proofActivationSourceControl(action,index)+proofBuyerReply(proof,index)+proofDeliveryPacket(proof,index)+proofReviewRequest(proof,index)+pilotClosePacket(proof,index)+pilotOrderRoom(action,proof,index)+'</div>' : '';
         return '<article class="operator-item"><strong>'+esc(action.title || action.action_type)+'</strong><div class="operator-meta"><span class="operator-chip">'+esc(action.status)+'</span><span class="operator-chip">'+esc(action.priority)+'</span><span class="operator-chip">'+esc(action.approval_state)+'</span><span>'+esc(action.lead_id)+'</span></div><div>'+esc(action.next_step || '')+'</div>'+salesAutopilotDraft(action,index)+proofHtml+'</article>';
       }).join('');
       actionsEl.querySelectorAll('[data-copy-target]').forEach(function(button){button.addEventListener('click',function(){copyDraft(button.getAttribute('data-copy-target'))})});
@@ -6294,6 +6324,7 @@ const publicOperatorConsoleHtml = `<!doctype html>
       actionsEl.querySelectorAll('[data-retainer-growth]').forEach(function(button){button.addEventListener('click',function(){prepareRetainerGrowthOffer(button)})});
       actionsEl.querySelectorAll('[data-retainer-payment]').forEach(function(button){button.addEventListener('click',function(){recordRetainerPaymentProof(button)})});
       actionsEl.querySelectorAll('[data-autopilot-draft-decision]').forEach(function(button){button.addEventListener('click',function(){recordAutopilotDraftApproval(button)})});
+      actionsEl.querySelectorAll('[data-source-pack-request-decision]').forEach(function(button){button.addEventListener('click',function(){recordSourcePackRequestDecision(button)})});
       actionsEl.querySelectorAll('[data-source-pack-json-command]').forEach(function(button){button.addEventListener('click',function(){attachActivationSourcePackJson(button)})});
       actionsEl.querySelectorAll('[data-source-pack-command]').forEach(function(button){button.addEventListener('click',function(){attachActivationSourcePack(button)})});
       actionsEl.querySelectorAll('[data-activation-proof-command]').forEach(function(button){button.addEventListener('click',function(){prepareActivationFirstProof(button)})});
