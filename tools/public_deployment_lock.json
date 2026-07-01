@@ -1,11 +1,11 @@
 {
-    "public_host":  "supermega-public-d0vd825wq-swanhtet01s-projects.vercel.app",
-    "deployment_id":  "dpl_8ymY8LnxJobkNguisFELFbHuhB8T",
-    "locked_at":  "2026-07-01T17:46:47.5326855Z",
+    "public_host":  "supermega-public-b0nmk9zmw-swanhtet01s-projects.vercel.app",
+    "deployment_id":  "dpl_3JrN6yqzaDfUpCNf4uczXpqVh9BB",
+    "locked_at":  "2026-07-01T18:09:40.5963796Z",
     "domains":  [
                     "supermega.dev",
                     "www.supermega.dev"
                 ],
     "project":  "supermega-public",
-    "reason":  "Operator cockpit now has structured owner-acceptance, connector-policy, and production-approval evidence controls; the post-first-run gates work on the live legacy payload-only SQL table and keep autopilot draft-only with real_mrr_delta=0."
+    "reason":  "Free Source-to-Screen is now a real browser-only acquisition page at /free/ with cost-control guardrails, and the operator post-pilot lifecycle uses structured enterprise-delivery, customer-success, retainer-growth, and retainer-payment evidence controls. Real MRR remains proof-gated."
 }
