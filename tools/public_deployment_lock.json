@@ -1,11 +1,11 @@
 {
-    "public_host":  "supermega-public-b0nmk9zmw-swanhtet01s-projects.vercel.app",
-    "deployment_id":  "dpl_3JrN6yqzaDfUpCNf4uczXpqVh9BB",
-    "locked_at":  "2026-07-01T18:09:40.5963796Z",
+    "public_host":  "supermega-public-9dof8xyhf-swanhtet01s-projects.vercel.app",
+    "deployment_id":  "dpl_DSFJfUsgDA5j7ARq4yr7Ya444JLh",
+    "locked_at":  "2026-07-01T21:33:58.2708928Z",
     "domains":  [
                     "supermega.dev",
                     "www.supermega.dev"
                 ],
     "project":  "supermega-public",
-    "reason":  "Free Source-to-Screen is now a real browser-only acquisition page at /free/ with cost-control guardrails, and the operator post-pilot lifecycle uses structured enterprise-delivery, customer-success, retainer-growth, and retainer-payment evidence controls. Real MRR remains proof-gated."
+    "reason":  "Separated public project deployment verified and attached to public domains."
 }

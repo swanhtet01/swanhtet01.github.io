@@ -718,8 +718,10 @@ for (const token of [
   }
 }
 for (const token of [
-  '<title>SUPERMEGA.dev — Custom Software for Myanmar Business</title>',
-  'Your real work, turned into software.',
+  '<title>SUPERMEGA.dev - Free core tools, premium AI workers</title>',
+  'Free core tools. Premium AI workers.',
+  'Agent crews',
+  'Digital workers',
 ]) {
   if (!homeHtml.includes(token)) fail('public_shell_contract_missing', { token })
 }

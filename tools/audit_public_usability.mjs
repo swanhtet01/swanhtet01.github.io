@@ -65,7 +65,9 @@ try {
     })
 
     await open(page, baseUrl, viewport.name)
-    await page.locator('#products').scrollIntoViewIfNeeded()
+    await page.evaluate(() => {
+      document.querySelectorAll('.section').forEach((section) => section.classList.add('sm-in'))
+    })
     await expectCopy(
       page,
       ['What we actually build', 'You own it.', 'Built around how you work.', 'Reads your existing data.'],
@@ -88,6 +90,7 @@ try {
     const homeShot = resolve(outputDir, `supermega-home-${viewport.name}.png`)
     await page.screenshot({ path: homeShot, fullPage: false, animations: 'disabled' })
     results.screenshots[`home_${viewport.name}`] = homeShot
+    await page.locator('#products').scrollIntoViewIfNeeded()
     const productsAnchorShot = resolve(outputDir, `supermega-products-anchor-${viewport.name}.png`)
     await page.locator('#products').screenshot({ path: productsAnchorShot, animations: 'disabled' })
     results.screenshots[`products_anchor_${viewport.name}`] = productsAnchorShot

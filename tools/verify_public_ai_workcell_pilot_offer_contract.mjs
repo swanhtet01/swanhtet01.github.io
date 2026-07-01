@@ -36,10 +36,10 @@ const workcellTokens = [
   'First proof',
   'First production run',
   'Owner acceptance',
-  'Managed retainer',
+  'Maintenance',
   'approval-only',
-  'MRR stays 0 until payment proof',
-  'proof-to-retainer',
+  'payment proof',
+  'proof-to-maintenance',
 ]
 
 requireTokens('generator_workcell_offer', source, [
@@ -50,10 +50,10 @@ requireTokens('generator_workcell_offer', source, [
 ])
 
 requireTokens('home_workcell_offer', home, [
-  'AI Workcell Pilot',
-  'messy Gmail, Sheets, WhatsApp, POS exports, PDFs, and screenshots',
-  'Owner-approved autopilot',
-  'First proof before deposit',
+  'Free core tools. Premium AI workers.',
+  'Premium AI',
+  'Agent crews',
+  'Digital workers',
 ])
 
 requireTokens('offers_workcell_offer', offers, [
@@ -66,9 +66,9 @@ requireTokens('offers_workcell_offer', offers, [
 
 requireTokens('agents_workcell_offer', agents, [
   ...workcellTokens,
-  'Autopilot, but with owner control',
-  'Plug in what you already have',
-  'Every send, write, payment, or connector action waits for approval',
+  'AI Agent Army',
+  'Agents that do the tasks SaaS leaves for humans',
+  'Every send, write, payment, browser/mobile action, or connector write waits for approval',
 ])
 
 for (const [label, text] of [

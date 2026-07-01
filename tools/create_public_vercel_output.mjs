@@ -2199,12 +2199,12 @@ const unicornAiAgentsHtml = `<!doctype html>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="robots" content="index,follow" />
-    <title>AI Workcell Pilot | SUPERMEGA.dev</title>
-    <meta name="description" content="Plug in real client sources and get an approval-only AI workcell: first proof, first production run, owner acceptance, and managed retainer path." />
+    <title>AI Agent Army | SUPERMEGA.dev</title>
+    <meta name="description" content="API-first AI agent crews, approval-gated workcells, and R&D-gated computer-use/mobile workers for real business tasks." />
     <meta name="theme-color" content="#f4efe6" />
     <link rel="canonical" href="https://supermega.dev/ai-agents/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" />
-    ${unicornSocialMeta({ title: 'AI Workcell Pilot | SUPERMEGA.dev', description: 'Plug in real client sources and get an approval-only AI workcell with proof before scale.', url: 'https://supermega.dev/ai-agents/' })}
+    ${unicornSocialMeta({ title: 'AI Agent Army | SUPERMEGA.dev', description: 'Plug in real sources and get approval-gated AI agent crews with proof before scale.', url: 'https://supermega.dev/ai-agents/' })}
     <style>${unicornShellStyle}
       .agent-hero { padding: clamp(56px,10vw,96px) 0 0; text-align: center; }
       .agent-hero .eyebrow { margin-bottom: 18px; }
@@ -2241,24 +2241,24 @@ const unicornAiAgentsHtml = `<!doctype html>
 ${unicornHeader}
       <main>
         <section class="agent-hero section">
-          <div class="eyebrow">AI Workcell Pilot · approval-only · built from real sources</div>
-          <h1>Autopilot, but with owner control.</h1>
-          <p>Plug in what you already have: Gmail, Drive, Sheets, WhatsApp, Viber, POS exports, PDFs, screenshots, or messy spreadsheets. We build the workcell that drafts the work, shows source proof, and waits for approval before anything moves.</p>
-          <div class="cta"><a class="btn primary" href="/contact/?package=ai-workcell-pilot">Start with one source pack</a><a class="btn secondary" href="/offers/">See pricing</a></div>
+          <div class="eyebrow">AI Agent Army · API-first · owner-approved</div>
+          <h1>Agents that do the tasks SaaS leaves for humans.</h1>
+          <p>Connect approved sources, choose a worker, and get a traceable first proof. Safe jobs run through APIs and queues first. The first paid path is the AI Workcell Pilot. Computer-use and mobile app actions are gated workcells until reliability, consent, vaulting, legal review, and audit logs are proven.</p>
+          <div class="cta"><a class="btn primary" href="/agent-templates/">Choose a worker</a><a class="btn secondary" href="/contact/?package=ai-workcell-pilot">Start with one source pack</a></div>
           <p class="hero-tagline">Cast real work into software.</p>
         </section>
 
         <section class="section">
           <div class="workcell-panel">
-            <div class="eyebrow">proof-to-retainer</div>
-            <h2>One practical path from sample data to managed autopilot.</h2>
-            <p>Every send, write, payment, or connector action waits for approval. The first month is about proving one valuable workflow, not pretending the company runs itself. MRR stays 0 until payment proof.</p>
+            <div class="eyebrow">proof-to-maintenance</div>
+            <h2>One practical path from sample data to a managed worker.</h2>
+            <p>Every send, write, payment, browser/mobile action, or connector write waits for approval. The first month proves one valuable workflow; it does not pretend the company runs itself. MRR stays 0 until payment proof.</p>
             <div class="workcell-grid">
               <div class="workcell-step"><strong>Source pack</strong><span>You send the real files, messages, exports, or screenshots that define the work.</span></div>
               <div class="workcell-step"><strong>First proof</strong><span>We return one useful output with source trace before full pilot commitment.</span></div>
               <div class="workcell-step"><strong>First production run</strong><span>The first real run stays approval-only and records what happened in the ledger.</span></div>
               <div class="workcell-step"><strong>Owner acceptance</strong><span>You approve value, request changes, or stop. Nothing scales without a decision.</span></div>
-              <div class="workcell-step"><strong>Managed retainer</strong><span>After acceptance, we maintain the AI Workcell Pilot and improve it as your client work expands.</span></div>
+              <div class="workcell-step"><strong>Maintenance</strong><span>After acceptance, we maintain the worker, monitor failures, and improve the workflow as evidence grows.</span></div>
             </div>
           </div>
         </section>
@@ -2274,13 +2274,13 @@ ${unicornHeader}
             <div class="sprint-card">
               <div class="s-time">3–5 days</div>
               <h3>Drive Document Processor</h3>
-              <p>A file lands in your Drive. AI pulls the key fields and updates your Sheet automatically — no re-typing.</p>
+              <p>A file lands in Drive. AI pulls key fields, prepares the clean Sheet update, and queues it for approval before writeback.</p>
               <a class="btn secondary" href="/contact/?package=agent-drive">Commission this agent</a>
             </div>
             <div class="sprint-card">
               <div class="s-time">1–2 days</div>
               <h3>Scheduled Digest Agent</h3>
-              <p>Daily or weekly AI summary of what matters, delivered to your inbox. Set it once, it runs itself.</p>
+              <p>Daily or weekly summary of what matters, with changes, risks, and next actions separated from anything that needs approval.</p>
               <a class="btn secondary" href="/contact/?package=agent-digest">Start in 2 days</a>
             </div>
           </div>
@@ -2288,7 +2288,7 @@ ${unicornHeader}
 
         <section class="section connector-section">
           <h2>One kernel, wired into 36 real systems.</h2>
-          <p class="section-sub">Agents read from the tools your team already uses and act through rails you already trust — including Myanmar-native ones no global platform has. Pick two or three to scope your first agent.</p>
+          <p class="section-sub">Agents read from the tools your team already uses and act through rails you already trust. API connectors come first; browser, desktop, and mobile hands are used only when no safer API/export path exists.</p>
           <div style="border:1px solid rgba(201,162,75,0.45);border-radius:18px;background:linear-gradient(135deg, rgba(201,162,75,0.12), rgba(194,96,63,0.06));padding:16px 20px;margin-bottom:20px">
             <div class="connector-group-label" style="color:#9a7d2f">★ Myanmar-native rails — built in, no global SaaS has these · 8</div>
             <div class="connector-grid" style="margin-top:10px">
@@ -2394,25 +2394,25 @@ const unicornPublicShellHtml = `<!doctype html>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="robots" content="index,follow" />
-    <title>SUPERMEGA.dev — Custom Software for Myanmar Business</title>
-    <meta name="description" content="We build custom software for Myanmar factories, distributors, and service businesses — starting from your real data. From 2,500,000 MMK. Delivered in weeks. Yours to keep." />
+    <title>SUPERMEGA.dev - Free core tools, premium AI workers</title>
+    <meta name="description" content="Free core tools replace bloated SaaS. Premium AI workers handle messy data, connectors, approvals, and daily operations for Myanmar businesses." />
     <meta name="theme-color" content="#f4efe6" />
     <link rel="canonical" href="https://supermega.dev/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" />
     <link rel="manifest" href="/site.webmanifest?v=supermega-atelier-20260623" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="SUPERMEGA.dev" />
-    <meta property="og:title" content="Custom business software, built for Myanmar | SUPERMEGA.dev" />
-    <meta property="og:description" content="We build custom software from your real data — Viber threads, Excel, Gmail — and hand you a running system in weeks. From 2,500,000 MMK. Yours to keep." />
+    <meta property="og:title" content="Free core tools, premium AI workers | SUPERMEGA.dev" />
+    <meta property="og:description" content="Replace bloated SaaS with free core tools, then add premium AI workers for data, connectors, approvals, and daily operations." />
     <meta property="og:url" content="https://supermega.dev/" />
     <meta property="og:image" content="https://supermega.dev/site/social/supermega-portal-card.png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Custom business software, built for Myanmar | SUPERMEGA.dev" />
-    <meta name="twitter:description" content="Custom software built from your real data. From 2,500,000 MMK, delivered in weeks, yours to keep." />
+    <meta name="twitter:title" content="Free core tools, premium AI workers | SUPERMEGA.dev" />
+    <meta name="twitter:description" content="Free core tools replace bloated SaaS. Premium AI workers handle the messy work." />
     <meta name="twitter:image" content="https://supermega.dev/site/social/supermega-portal-card.png" />
-    <script type="application/ld+json">{"@context":"https://schema.org","@type":"Organization","name":"SUPERMEGA.dev","url":"https://supermega.dev/","logo":"https://supermega.dev/favicon.svg","description":"Custom AI-native business software for Myanmar SMBs and factories. POS, factory operations, dashboards, AI agents, and more.","email":"swanhtet@supermega.dev","telephone":"+95-9-500-0721","sameAs":["https://www.linkedin.com/in/theswanhtet"]}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"Organization","name":"SUPERMEGA.dev","url":"https://supermega.dev/","logo":"https://supermega.dev/favicon.svg","description":"Free core business tools and premium AI workers for Myanmar SMBs and factories. POS, factory operations, AI agent crews, data cleanup, and approval-gated workcells.","email":"swanhtet@supermega.dev","telephone":"+95-9-500-0721","sameAs":["https://www.linkedin.com/in/theswanhtet"]}</script>
     <style>${unicornShellStyle}
       /* Homepage extras */
       .proof-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px,1fr)); margin-top: 44px; border: 1px solid var(--line); border-radius: 18px; overflow: hidden; }
@@ -2472,14 +2472,13 @@ ${unicornHeader}
       <main>
         <section class="poster">
           <div class="copy">
-            <div class="eyebrow">Starts from your real data · Built to last · Yours to keep</div>
-            <h1>Your real work, turned into software.</h1>
+            <div class="eyebrow">Free core · Premium AI · Agent crews</div>
+            <h1>Free core tools. Premium AI workers.</h1>
             <p lang="my" style="font-size:clamp(15px,2vw,18px);color:var(--clay);font-weight:800;margin:2px 0 14px;line-height:1.5">သင့်လုပ်ငန်းရဲ့ အလုပ်အကိုင်တွေကို သင်ကိုယ်တိုင် ပိုင်ဆိုင်တဲ့ ဆော့ဖ်ဝဲအဖြစ် တည်ဆောက်ပေးပါတယ်။</p>
-            <p>Most businesses we work with already have a system — it's spread across a group chat, a shared Excel, and someone's memory. We pull that out, structure it, and give you software you actually own. From 2,500,000 MMK. Delivered in weeks.</p>
+            <p>Free core tools replace bloated SaaS. Premium AI workers handle messy data, connectors, approvals, and daily operations across mobile, tablet, and desktop. Start with one useful tool, then add agents only after proof.</p>
             <div class="cta">
-              <a class="btn primary" href="/contact/">Share one workflow</a>
-              <a class="btn secondary" href="viber://chat?number=%2B9595000721" aria-label="Chat with us on Viber">Chat on Viber</a>
-              <a class="btn secondary" href="/demo/">See live demos</a>
+              <a class="btn primary" href="/free/">Try the free tool</a>
+              <a class="btn secondary" href="/ai-agents/">See AI agents</a>
               <a class="btn secondary" href="/offers/">See pricing</a>
             </div>
             <p class="hero-tagline">Cast real work into software.</p>
@@ -2495,24 +2494,24 @@ ${unicornHeader}
         </section>
 
         <div class="proof-strip section">
-          <a href="https://pos.supermega.dev/" target="_blank" rel="noopener" class="strip-item"><strong>Live now</strong><span>Try DeskPOS free ↗</span></a>
-          <div class="strip-item"><strong>From 2,500,000 MMK</strong><span>Paid once, no monthly fee</span></div>
-          <div class="strip-item"><strong>You own it</strong><span>No per-seat fees, ever</span></div>
-          <div class="strip-item"><strong>Delivered in weeks</strong><span>Not months</span></div>
+          <a href="https://pos.supermega.dev/" target="_blank" rel="noopener" class="strip-item"><strong>Free core</strong><span>Try DeskPOS free ↗</span></a>
+          <div class="strip-item"><strong>Premium AI</strong><span>Private data, connectors, source trace, scheduled runs</span></div>
+          <div class="strip-item"><strong>Agent crews</strong><span>Scoped workcells with proof and owner approval</span></div>
+          <div class="strip-item"><strong>Mobile + desktop</strong><span>Phone, tablet, counter screen, browser, and operator console</span></div>
         </div>
 
         <section class="section">
           <div class="workcell-panel">
-            <div class="eyebrow">AI Workcell Pilot</div>
-            <h2>Autopilot for the messy knowledge work you already have.</h2>
-            <p>Send messy Gmail, Sheets, WhatsApp, POS exports, PDFs, and screenshots. We turn them into one approval-only workcell that drafts the next action, shows the source proof, and waits for your decision before anything sends, writes, or touches money.</p>
+            <div class="eyebrow">SaaS killer path</div>
+            <h2>Start free. Add AI only where it creates cash value.</h2>
+            <p>Free core: deterministic tools that work in the browser or app. Premium AI: private data, source trace, connectors, scheduled runs, and owner-approved actions. Agent crews: one-off workcells for cleanup, reports, migration, inboxes, and launch tasks. Digital workers stay R&D-gated before write actions or regulated systems.</p>
             <div class="workcell-grid">
-              <div class="workcell-step"><strong>First proof before deposit</strong><span>We show one useful output from your real source pack before asking you to buy the full pilot.</span></div>
-              <div class="workcell-step"><strong>Owner-approved autopilot</strong><span>The system can draft replies, clean data, prepare reports, and queue work, but every external action stays approval-only.</span></div>
-              <div class="workcell-step"><strong>Premium setup</strong><span>Private workspace, source trace, acceptance tests, and handoff built for a serious client, not a demo.</span></div>
-              <div class="workcell-step"><strong>Managed retainer</strong><span>After owner acceptance, we can keep improving the workcell. MRR stays 0 until payment proof.</span></div>
+              <div class="workcell-step"><strong>Free core tools</strong><span>POS, source-to-screen, checklists, and simple boards that prove value before account setup.</span></div>
+              <div class="workcell-step"><strong>Premium AI layer</strong><span>Data cleanup, brief generation, reconciliation, drafts, and insights from approved sources.</span></div>
+              <div class="workcell-step"><strong>Agent crews</strong><span>Scoped jobs with first proof, acceptance tests, source trace, and no external action without approval.</span></div>
+              <div class="workcell-step"><strong>Digital workers</strong><span>Computer-use and mobile workcells are built behind gates: consent, reliability, vaulting, legal review, and audit logs.</span></div>
             </div>
-            <div class="cta" style="margin-top:22px"><a class="btn primary" href="/ai-agents/">See the AI Workcell Pilot</a><a class="btn secondary" href="/contact/?package=ai-workcell-pilot">Start with one source pack</a></div>
+            <div class="cta" style="margin-top:22px"><a class="btn primary" href="/free/">Try free Source-to-Screen</a><a class="btn secondary" href="/ai-agents/">See the AI Agent Army</a></div>
           </div>
         </section>
 
@@ -2684,19 +2683,19 @@ const unicornProductsHtml = `<!doctype html>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="robots" content="index,follow" />
     <title>Products | SUPERMEGA.dev</title>
-    <meta name="description" content="SUPERMEGA.dev products for Myanmar shops, factories, and restaurants: DeskPOS, the Factory & Operations App, and Custom Solutions & AI Agents — built from your real data." />
+    <meta name="description" content="Free-core tools, premium AI/data layers, and custom agent crews for Myanmar shops, factories, and operators." />
     <meta name="theme-color" content="#f4efe6" />
     <link rel="canonical" href="https://supermega.dev/products/" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="SUPERMEGA.dev" />
-    <meta property="og:title" content="SUPERMEGA.dev products — software for Myanmar shops, factories, and restaurants" />
-    <meta property="og:description" content="DeskPOS, the Factory & Operations App, and Custom Solutions & AI Agents — built from real work." />
+    <meta property="og:title" content="SUPERMEGA.dev products - free core tools and AI agent crews" />
+    <meta property="og:description" content="DeskPOS, Factory & Operations App, and Custom Solutions & AI Agents: free-core tools, premium data layers, and approval-gated workers." />
     <meta property="og:url" content="https://supermega.dev/products/" />
     <meta property="og:image" content="https://supermega.dev/site/social/supermega-portal-card.png" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="SUPERMEGA.dev products" />
     <meta name="twitter:image" content="https://supermega.dev/site/social/supermega-portal-card.png" />
-    <script type="application/ld+json">{"@context":"https://schema.org","@type":"CollectionPage","name":"SUPERMEGA.dev products","url":"https://supermega.dev/products/","description":"Custom business software for Myanmar shops, factories, and restaurants."}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"CollectionPage","name":"SUPERMEGA.dev products","url":"https://supermega.dev/products/","description":"Free-core tools, premium AI/data layers, and custom agent crews for Myanmar businesses."}</script>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" />
     <style>${unicornShellStyle}
       main { padding-bottom: 72px; }
@@ -2784,12 +2783,12 @@ ${unicornHeader}
       <main>
         <section class="poster">
           <div class="copy">
-            <div class="eyebrow">What we build</div>
-            <h1>Built for Myanmar. Yours to keep.</h1>
-            <p>We're a custom studio — no fixed catalog. Pick one workflow that's hurting you right now. We return the first working screen before you approve anything bigger.</p>
+            <div class="eyebrow">Free-core tools · Premium AI/data layers · Custom agent crews</div>
+            <h1>Built for Myanmar. Designed to replace bloated SaaS.</h1>
+            <p>Start with a useful free or fixed-scope tool. Add premium AI only when it handles a real money job: cleanup, reconciliation, reports, inboxes, approvals, and mobile or desktop workflows.</p>
             <div class="cta">
-              <a class="btn primary" href="/contact/">Tell us what to fix</a>
-              <a class="btn secondary" href="/demo/">See live demos</a>
+              <a class="btn primary" href="/free/">Try the free tool</a>
+              <a class="btn secondary" href="/ai-agents/">See agent crews</a>
               <a class="btn secondary" href="/offers/">Pricing</a>
             </div>
             <p class="hero-tagline">Cast real work into software.</p>
@@ -2849,8 +2848,8 @@ ${unicornHeader}
 
         <section class="section" id="agent-templates" aria-label="AI agent templates">
           <div class="eyebrow">AI agent templates</div>
-          <h2>Start with one useful worker.</h2>
-          <p>Pick a template, send one source sample, and we return the first proof before anything is connected, sent, billed, or changed.</p>
+          <h2>Plug-and-play templates for real workers.</h2>
+          <p>Pick a worker, send one source sample, and get first proof before anything is connected, sent, billed, or changed. These templates become the reusable operating layer behind every premium agent crew.</p>
           <div class="template-grid">
 ${renderPublicAgentTemplateCards()}
           </div>
@@ -3847,7 +3846,6 @@ async function writeNodeFunction(name, opts = {}) {
     })
   }
   await mkdir(resolve(functionDir, 'node_modules'), { recursive: true })
-  await mkdir(resolve(functionDir, 'api', 'node_modules'), { recursive: true })
   const copiedDependencies = new Set()
   const copyNodeDependency = async (dependency) => {
     if (copiedDependencies.has(dependency)) return
@@ -3859,16 +3857,10 @@ async function writeNodeFunction(name, opts = {}) {
       if (error?.code === 'ENOENT') return
       throw error
     }
-    await Promise.all([
-      cp(sourceDependency, resolve(functionDir, 'node_modules', dependency), {
-        recursive: true,
-        force: true,
-      }),
-      cp(sourceDependency, resolve(functionDir, 'api', 'node_modules', dependency), {
-        recursive: true,
-        force: true,
-      }),
-    ])
+    await cp(sourceDependency, resolve(functionDir, 'node_modules', dependency), {
+      recursive: true,
+      force: true,
+    })
     try {
       const packageJson = JSON.parse(await readFile(resolve(sourceDependency, 'package.json'), 'utf8'))
       const childDependencies = Object.keys({
@@ -4589,8 +4581,8 @@ const publicOffers = [
   },
   {
     slug: 'ai-workcell-pilot', name: 'AI Workcell Pilot', mmkDisplay: serviceMmk('ai-agent'), flagship: true,
-    who: 'You want plug-and-play autopilot for client work, but with enterprise-level controls.',
-    gets: ['Source pack intake and First proof from real data', 'First production run stays approval-only until Owner acceptance', 'Managed retainer path with customer success desk; MRR stays 0 until payment proof'],
+    who: 'You want an AI worker for one real task: cleanup, reports, inbox, reconciliation, migration, or launch ops.',
+    gets: ['Source pack intake and First proof from real data', 'First production run stays approval-only until Owner acceptance', 'Maintenance path with customer success desk; no recurring claim until payment proof'],
     cta: 'Start the pilot',
   },
   {
@@ -4615,19 +4607,19 @@ const publicOffersHtml = `<!doctype html>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="robots" content="index,follow" />
     <title>Pricing | SUPERMEGA.dev</title>
-    <meta name="description" content="Custom software, priced in MMK. Clear starting prices for tools, dashboards, AI agents, and full systems — built for Myanmar, yours to keep." />
+    <meta name="description" content="MMK starting prices for free-core upgrades, custom builds, AI agent crews, and full systems for Myanmar businesses." />
     <meta name="theme-color" content="#f4efe6" />
     <link rel="canonical" href="https://supermega.dev/offers/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="SUPERMEGA.dev" />
-    <meta property="og:title" content="Pricing — custom software, priced in MMK" />
-    <meta property="og:description" content="Clear starting prices for tools, dashboards, AI agents, and full systems. Built for Myanmar, yours to keep." />
+    <meta property="og:title" content="Pricing - free-core upgrades and AI agent crews" />
+    <meta property="og:description" content="Clear MMK starting prices for tools, dashboards, AI agent crews, and full systems. Built for Myanmar, yours to keep." />
     <meta property="og:url" content="https://supermega.dev/offers/" />
     <meta property="og:image" content="https://supermega.dev/site/social/supermega-portal-card.png" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Pricing — custom software, priced in MMK" />
-    <meta name="twitter:description" content="Clear starting prices for tools, dashboards, AI agents, and full systems. Built for Myanmar, yours to keep." />
+    <meta name="twitter:title" content="Pricing - free-core upgrades and AI agent crews" />
+    <meta name="twitter:description" content="Clear MMK starting prices for tools, dashboards, AI agent crews, and full systems." />
     <meta name="twitter:image" content="https://supermega.dev/site/social/supermega-portal-card.png" />
     <style>${unicornShellStyle}
       .of-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px,1fr)); gap: 16px; margin-top: 24px; align-items: stretch; }
@@ -4661,8 +4653,8 @@ ${unicornHeader}
         <section class="poster" style="min-height:auto;align-items:center">
           <div class="copy">
             <div class="eyebrow">Pricing</div>
-            <h1>You own it. No per-seat bill, ever.</h1>
-            <p>We build the exact version that fits how your business actually works — and you keep it outright. One payment, no ongoing vendor fees. Starting prices in MMK; final quote after one short call.</p>
+            <h1>Start free. Pay when the worker proves value.</h1>
+            <p>Free core tools show the workflow first. Paid builds add private data, connectors, source trace, approval queues, scheduled runs, and maintenance. Starting prices in MMK; final quote after one short call.</p>
             <div class="cta">
               <a class="btn primary" href="/contact/?package=build">Get a quote</a>
               <a class="btn secondary" href="viber://chat?number=%2B9595000721" aria-label="Chat with us on Viber">Chat on Viber</a>
@@ -4690,13 +4682,13 @@ ${unicornHeader}
         <section class="section">
           <div class="workcell-panel">
             <div class="eyebrow">AI Workcell Pilot</div>
-            <h2>The proof-to-retainer path.</h2>
-            <p>Premium setup means easy setup for the client: send one source pack, get a First proof, approve a First production run, then decide after Owner acceptance whether the workcell should become a Managed retainer. Every client gets a private workspace, acceptance tests, source trace, and a customer success desk. MRR stays 0 until payment proof.</p>
+            <h2>The proof-to-maintenance path.</h2>
+            <p>Premium setup means easy setup for the client: send one source pack, get a First proof, approve a First production run, then decide after Owner acceptance whether the workcell should be maintained. Every client gets a private workspace, acceptance tests, source trace, and a customer success desk. Recurring revenue stays 0 until payment proof.</p>
             <div class="workcell-grid">
               <div class="workcell-step"><strong>Source pack</strong><span>One messy workflow: Gmail, Sheet, chat export, POS CSV, PDF, or screenshot batch.</span></div>
               <div class="workcell-step"><strong>First proof</strong><span>One useful output from real data before the full pilot is approved.</span></div>
               <div class="workcell-step"><strong>First production run</strong><span>The first live run is approval-only; no send, write, payment, or connector action happens silently.</span></div>
-              <div class="workcell-step"><strong>Managed retainer</strong><span>After Owner acceptance, we keep the workcell improving with clear proof of value.</span></div>
+              <div class="workcell-step"><strong>Maintenance</strong><span>After Owner acceptance, we keep the workcell improving with clear proof of value.</span></div>
             </div>
           </div>
         </section>
