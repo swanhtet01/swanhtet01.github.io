@@ -6027,12 +6027,25 @@ const publicOperatorConsoleHtml = `<!doctype html>
         '</div>'
       ].join('');
     }
+    function proofActivationSourceControl(action,index){
+      if(!action || !action.first_proof)return '';
+      const sourceId = 'activation-proof-source-'+index;
+      const refId = 'activation-proof-reference-'+index;
+      return [
+        '<div class="operator-proof-section operator-activation-source">',
+          '<span>Approved source to proof</span>',
+          '<textarea class="operator-reply" id="'+sourceId+'" placeholder="Paste the approved source sample: message thread, file excerpt, POS export, notes, or screenshot text."></textarea>',
+          '<input class="operator-input" id="'+refId+'" value="operator-approved source sample" aria-label="Source reference" />',
+          '<button class="btn primary" type="button" data-activation-proof-command="prepare_activation_first_proof" data-source-target="'+sourceId+'" data-source-reference-target="'+refId+'" data-action-id="'+esc(action.action_id || '')+'" data-lead-id="'+esc(action.lead_id || '')+'">Prepare proof from source</button>',
+        '</div>'
+      ].join('');
+    }
     function renderActions(data){
-      const actions = data.recent_actions || [];
+      const actions = Array.isArray(data.recent_actions) && data.recent_actions.length ? data.recent_actions : Array.isArray(data.actions) ? data.actions : [];
       if(!actions.length){actionsEl.innerHTML = '<div class="operator-item">No recent actions.</div>';return}
       actionsEl.innerHTML = actions.map(function(action,index){
         const proof = action.first_proof;
-        const proofHtml = proof ? '<div class="operator-proof"><strong>'+esc(proof.title || 'First proof')+'</strong><div class="operator-meta"><span class="operator-chip">'+esc(proof.status)+'</span><span class="operator-chip">'+esc(proof.template_id)+'</span><span class="operator-chip">'+esc(proof.human_gate)+'</span></div><div>'+esc(proof.first_proof_target || '')+'</div>'+proofStarterLink(proof)+proofSolutionRoute(proof,index)+proofImplementationBlueprint(proof,index)+proofIntakeJob(proof,index)+proofClientKickoff(proof,index)+proofList('Checklist',proof.checklist)+proofList('Acceptance tests',proof.acceptance_tests)+proofBuyerReply(proof,index)+proofDeliveryPacket(proof,index)+pilotClosePacket(proof,index)+pilotOrderRoom(action,proof,index)+'</div>' : '';
+        const proofHtml = proof ? '<div class="operator-proof"><strong>'+esc(proof.title || 'First proof')+'</strong><div class="operator-meta"><span class="operator-chip">'+esc(proof.status)+'</span><span class="operator-chip">'+esc(proof.template_id)+'</span><span class="operator-chip">'+esc(proof.human_gate)+'</span></div><div>'+esc(proof.first_proof_target || '')+'</div>'+proofStarterLink(proof)+proofSolutionRoute(proof,index)+proofImplementationBlueprint(proof,index)+proofIntakeJob(proof,index)+proofClientKickoff(proof,index)+proofList('Checklist',proof.checklist)+proofList('Acceptance tests',proof.acceptance_tests)+proofActivationSourceControl(action,index)+proofBuyerReply(proof,index)+proofDeliveryPacket(proof,index)+pilotClosePacket(proof,index)+pilotOrderRoom(action,proof,index)+'</div>' : '';
         return '<article class="operator-item"><strong>'+esc(action.title || action.action_type)+'</strong><div class="operator-meta"><span class="operator-chip">'+esc(action.status)+'</span><span class="operator-chip">'+esc(action.priority)+'</span><span class="operator-chip">'+esc(action.approval_state)+'</span><span>'+esc(action.lead_id)+'</span></div><div>'+esc(action.next_step || '')+'</div>'+salesAutopilotDraft(action,index)+proofHtml+'</article>';
       }).join('');
       actionsEl.querySelectorAll('[data-copy-target]').forEach(function(button){button.addEventListener('click',function(){copyDraft(button.getAttribute('data-copy-target'))})});
@@ -6047,6 +6060,27 @@ const publicOperatorConsoleHtml = `<!doctype html>
       actionsEl.querySelectorAll('[data-retainer-growth]').forEach(function(button){button.addEventListener('click',function(){prepareRetainerGrowthOffer(button)})});
       actionsEl.querySelectorAll('[data-retainer-payment]').forEach(function(button){button.addEventListener('click',function(){recordRetainerPaymentProof(button)})});
       actionsEl.querySelectorAll('[data-autopilot-draft-decision]').forEach(function(button){button.addEventListener('click',function(){recordAutopilotDraftApproval(button)})});
+      actionsEl.querySelectorAll('[data-activation-proof-command]').forEach(function(button){button.addEventListener('click',function(){prepareActivationFirstProof(button)})});
+    }
+    async function prepareActivationFirstProof(button){
+      if(!token()){setStatus('Paste the ops key first.');return}
+      const sourceEl = document.getElementById(button.getAttribute('data-source-target') || '');
+      const referenceEl = document.getElementById(button.getAttribute('data-source-reference-target') || '');
+      const sourceSample = sourceEl ? sourceEl.value.trim() : '';
+      if(!sourceSample){setStatus('Paste an approved source sample first.');return}
+      const payload = {
+        operation:'prepare_activation_first_proof',
+        action_id:button.getAttribute('data-action-id') || '',
+        lead_id:button.getAttribute('data-lead-id') || '',
+        approved_source_sample:sourceSample,
+        source_reference:referenceEl && referenceEl.value ? referenceEl.value.trim() : 'operator-approved source sample',
+        operator_note:'Prepared from operator-approved source sample. No external send/write/payment action is allowed without owner approval.'
+      };
+      setStatus({status:'preparing_activation_first_proof', note:'Building proof packet from approved source. External actions remain blocked.'});
+      const response = await fetch('/api/pipeline-control',{method:'POST',headers:Object.assign({},authHeaders(),{'content-type':'application/json'}),body:JSON.stringify(payload),cache:'no-store'});
+      const data = await response.json().catch(function(){return {status:'error',reason:'invalid_json',code:response.status}});
+      setStatus(data);
+      if(response.ok) await refresh();
     }
     async function refresh(){
       if(!token()){setStatus('Paste the ops key first.');return}

@@ -434,6 +434,124 @@ function buildActivationSessionActionPayload(lead) {
   }
 }
 
+function linesFromText(value, limit = 12) {
+  if (Array.isArray(value)) return value.map((item) => text(item)).filter(Boolean).slice(0, limit)
+  return String(value || '')
+    .split(/\r?\n|[;•]/)
+    .map((item) => text(item).replace(/^[-*\d.)\s]+/, '').trim())
+    .filter(Boolean)
+    .slice(0, limit)
+}
+
+function contextFromActivationAction(row = {}) {
+  const payload = parseJsonObject(row.payload)
+  const result = parseJsonObject(row.result)
+  const task = parseJsonObject(payload.first_proof_task)
+  const lead = parseJsonObject(payload.lead)
+  return {
+    lead,
+    task,
+    result,
+    templateName: text(result.template_name) || text(task.template_name) || text(lead.public_package) || text(lead.requested_package) || text(row.title) || 'Managed AI Workcell',
+    company: text(lead.company) || text(lead.name) || text(row.lead_id) || 'client',
+    firstProofTarget: text(result.first_proof_target) || text(task.first_proof_target) || text(lead.first_proof_target) || 'First useful output',
+    priceHint: text(task.price_hint) || text(lead.price_hint) || 'owner-approved MMK quote after first proof',
+  }
+}
+
+function buildActivationFirstProof(row = {}, payload = {}) {
+  const approvedSourceSample = truncate(payload.approved_source_sample || payload.source_sample || payload.source_text, 5000)
+  const sourceReference = truncate(payload.source_reference || payload.evidence_reference || 'operator-approved source sample', 500)
+  const operatorNote = truncate(payload.operator_note || '', 800)
+  const preparedAt = new Date().toISOString()
+  const context = contextFromActivationAction(row)
+  const sourceLines = linesFromText(approvedSourceSample, 10)
+  const extractedSignals = sourceLines.map((line, index) => ({
+    signal_id: `SIG-${String(index + 1).padStart(2, '0')}`,
+    source_line: line,
+    recommended_action: index === 0
+      ? 'Handle first in the owner action queue.'
+      : 'Keep in the approval-only follow-up queue.',
+    owner_gate: 'owner_approval_required_before_external_action',
+  }))
+  const sourceTrace = [
+    sourceReference,
+    ...linesFromText(context.task.source_trace || [], 6),
+  ].filter(Boolean)
+  const proofBullets = extractedSignals.length
+    ? extractedSignals.map((signal) => `- ${signal.signal_id}: ${signal.source_line} -> ${signal.recommended_action}`).join('\n')
+    : '- Waiting for a readable approved source sample.'
+  const acceptanceTests = linesFromText(context.result.acceptance_tests || context.task.acceptance_tests, 8)
+  const acceptanceChecklist = acceptanceTests.length
+    ? acceptanceTests.map((item) => `- [ ] ${item}`).join('\n')
+    : '- [ ] Shows a useful output from the approved source sample.\n- [ ] Includes source trace.\n- [ ] Keeps buyer-facing actions approval-only.'
+  const proofDeliveryPacket = [
+    `# ${context.templateName} first proof`,
+    '',
+    'Status: draft_owner_review',
+    `Lead: ${text(row.lead_id) || 'not set'}`,
+    `Buyer: ${context.company}`,
+    `Prepared at: ${preparedAt}`,
+    `Source reference: ${sourceReference}`,
+    `First proof target: ${context.firstProofTarget}`,
+    '',
+    '## First proof output',
+    proofBullets,
+    '',
+    '## Source trace',
+    sourceTrace.map((item) => `- ${item}`).join('\n') || '- operator-approved source sample',
+    '',
+    '## Acceptance test status',
+    acceptanceChecklist,
+    '',
+    '## Owner action queue',
+    '- Review this proof packet.',
+    '- Approve or edit the buyer reply draft before sending.',
+    '- Approve scope and price before any payment request.',
+    '',
+    '## Guardrails',
+    '- No external send without owner approval.',
+    '- No connector write without owner approval.',
+    '- No credentialed browser/mobile action without owner approval.',
+    '- No payment request without owner approval.',
+    '- Real MRR remains 0 until payment proof is recorded.',
+  ].join('\n')
+  const buyerReplyDraft = [
+    `Hi ${text(context.lead.name) || 'there'},`,
+    '',
+    `I prepared the first ${context.templateName} proof from the approved sample source.`,
+    '',
+    `The proof focuses on: ${context.firstProofTarget}.`,
+    '',
+    'I will not send messages, write records, connect accounts, use credentialed browser/mobile actions, request payment, or claim revenue without owner approval.',
+  ].join('\n')
+
+  return {
+    status: 'activation_first_proof_ready',
+    proof_type: 'approved_source_first_proof',
+    action_id: text(row.action_id) || null,
+    lead_id: text(row.lead_id) || null,
+    template_name: context.templateName,
+    company: context.company,
+    first_proof_target: context.firstProofTarget,
+    source_reference: sourceReference,
+    source_sample_excerpt: approvedSourceSample.slice(0, 1200),
+    source_trace: sourceTrace,
+    extracted_signals: extractedSignals,
+    proof_delivery_packet: proofDeliveryPacket,
+    buyer_reply_draft: buyerReplyDraft,
+    operator_note: operatorNote,
+    prepared_at: preparedAt,
+    approval_required: true,
+    approval_state: 'pending',
+    external_action_state: 'blocked_until_owner_approval',
+    connector_write_state: 'blocked_until_owner_approval',
+    browser_action_state: 'blocked_until_owner_approval',
+    payment_request_state: 'blocked_until_owner_approval',
+    real_mrr_delta: 0,
+  }
+}
+
 async function saveActivationSessionAction(lead, actionPayload) {
   const primary = {
     lead: { status: 'skipped', reason: 'postgres_not_configured' },
@@ -1993,6 +2111,7 @@ function firstProofPacket(row) {
   const customerSuccessDesk = parseJsonObject(result.customer_success_desk || payload.customer_success_desk)
   const retainerGrowthOffer = parseJsonObject(result.retainer_growth_offer || payload.retainer_growth_offer)
   const retainerPaymentRecord = parseJsonObject(result.retainer_payment_record || payload.retainer_payment_record)
+  const activationFirstProof = parseJsonObject(result.activation_first_proof || task.activation_first_proof || payload.activation_first_proof)
   const orderRoomState = Object.keys(persistedOrderRoomState).length
     ? persistedOrderRoomState
     : {
@@ -2007,6 +2126,7 @@ function firstProofPacket(row) {
       }
   if (starterKitUrl) sourceTrace.push(`Starter kit: ${starterKitUrl}`)
   if (text(row.lead_id)) sourceTrace.push(`Lead: ${text(row.lead_id)}`)
+  for (const item of list(activationFirstProof.source_trace)) sourceTrace.push(item)
   const buyerReplyDraft = [
     `Hi ${text(payload.name) || 'there'},`,
     '',
@@ -2270,6 +2390,8 @@ function firstProofPacket(row) {
         .join(','),
     ),
   ].join('\n')
+  const resolvedBuyerReplyDraft = text(activationFirstProof.buyer_reply_draft) || buyerReplyDraft
+  const resolvedProofDeliveryPacket = text(activationFirstProof.proof_delivery_packet) || proofDeliveryPacket
 
   return {
     status: isBrief ? 'operator_brief_ready' : 'queued_for_runner',
@@ -2292,8 +2414,9 @@ function firstProofPacket(row) {
     title: text(result.title) || (templateName && row.lead_id ? `${templateName} first proof for ${row.lead_id}` : 'First proof task'),
     checklist,
     acceptance_tests: acceptanceTests,
-    buyer_reply_draft: buyerReplyDraft,
-    proof_delivery_packet: proofDeliveryPacket,
+    activation_first_proof: Object.keys(activationFirstProof).length ? activationFirstProof : null,
+    buyer_reply_draft: resolvedBuyerReplyDraft,
+    proof_delivery_packet: resolvedProofDeliveryPacket,
     pilot_close_packet: pilotClosePacket,
     pilot_order_room: {
       status: 'draft_owner_approval_required',
@@ -2983,6 +3106,135 @@ function recommendedDatastores() {
       action: 'Use a Google Sheet as the approval inbox while the SQL database is being restored.',
     },
   ]
+}
+
+async function prepareActivationFirstProof(payload) {
+  const actionId = text(payload.action_id)
+  const leadId = text(payload.lead_id)
+  const approvedSourceSample = text(payload.approved_source_sample || payload.source_sample || payload.source_text)
+  if (!actionId && !leadId) return { status: 'error', reason: 'missing_action_or_lead_id' }
+  if (!approvedSourceSample) return { status: 'error', reason: 'missing_approved_source_sample' }
+  if (!datastore.postgresConfigured()) {
+    return prepareBlobActivationFirstProof({ actionId, leadId, payload }, { status: 'error', reason: 'postgres_not_configured' })
+  }
+
+  const selected = await datastore.query(
+    `
+      select
+        action_id, lead_id, task_id, action_type, status, priority, owner,
+        title, next_step, approval_required, approval_state,
+        notification_channel, notification_status, payload, result, created_at
+      from public.supermega_pipeline_actions
+      where (($1 <> '' and action_id = $1) or ($1 = '' and $2 <> '' and lead_id = $2))
+      order by created_at desc
+      limit 1
+    `,
+    [actionId, leadId],
+  )
+  if (selected.status !== 'ready') return prepareBlobActivationFirstProof({ actionId, leadId, payload }, selected)
+  if (!selected.rows.length) {
+    const fallback = await prepareBlobActivationFirstProof({ actionId, leadId, payload }, { status: 'error', reason: 'postgres_action_not_found' })
+    if (fallback.status === 'ready') return fallback
+    return { status: 'error', reason: 'action_not_found' }
+  }
+
+  const row = selected.rows[0]
+  const proof = buildActivationFirstProof(row, payload)
+  const result = await datastore.query(
+    `
+      with target as (
+        select id
+        from public.supermega_pipeline_actions
+        where (($1 <> '' and action_id = $1) or ($1 = '' and $2 <> '' and lead_id = $2))
+        order by created_at desc
+        limit 1
+      )
+      update public.supermega_pipeline_actions a
+      set
+        result = jsonb_set(
+          jsonb_set(coalesce(a.result, '{}'::jsonb), '{activation_first_proof}', $3::jsonb, true),
+          '{activation_first_proof_prepared_at}',
+          to_jsonb($4::text),
+          true
+        ),
+        status = case when a.status in ('open', 'queued', 'processing', 'done', 'failed') then 'proof_ready' else a.status end,
+        next_step = 'Review the source-derived first proof, then queue the buyer reply for owner approval.',
+        updated_at = now()
+      where a.id in (select id from target)
+      returning
+        a.action_id, a.lead_id, a.task_id, a.action_type, a.status, a.priority, a.owner,
+        a.title, a.next_step, a.approval_required, a.approval_state,
+        a.notification_channel, a.notification_status, a.payload, a.result, a.created_at
+    `,
+    [actionId, leadId, JSON.stringify(proof), proof.prepared_at],
+  )
+  if (result.status !== 'ready') return prepareBlobActivationFirstProof({ actionId, leadId, payload }, result)
+  if (!result.rows.length) return { status: 'error', reason: 'action_not_found', activation_first_proof: proof }
+
+  const mirror = await prepareBlobActivationFirstProof(
+    { actionId, leadId, payload },
+    { status: 'ready', adapter: 'vercel_postgres_neon', mirrored_from_primary: true },
+    { allowMissing: true },
+  )
+  return {
+    status: 'ready',
+    adapter: mirror.status === 'ready' ? 'vercel_postgres_neon_with_blob_queue' : 'vercel_postgres_neon',
+    operation_status: 'prepared',
+    action: safeAction(result.rows[0]),
+    activation_first_proof: proof,
+    mirror,
+  }
+}
+
+async function prepareBlobActivationFirstProof({ actionId, leadId, payload }, primaryDatabase = {}, options = {}) {
+  const found = await blobQueue.findActionRecord({ action_id: actionId, lead_id: leadId })
+  if (found.status !== 'ready') {
+    if (options.allowMissing && found.reason === 'action_not_found') {
+      return {
+        status: 'skipped',
+        adapter: 'vercel_blob',
+        reason: 'blob_action_not_found',
+        primary_database: primaryDatabase,
+      }
+    }
+    return {
+      ...found,
+      primary_database: primaryDatabase,
+    }
+  }
+
+  const row = found.row
+  const currentResult = parseJsonObject(row.result)
+  const proof = buildActivationFirstProof(row, payload)
+  const nextResult = {
+    ...currentResult,
+    activation_first_proof: proof,
+    activation_first_proof_prepared_at: proof.prepared_at,
+  }
+  const updated = await blobQueue.updateActionRecord(
+    { action_id: actionId, lead_id: leadId },
+    {
+      result: nextResult,
+      status: ['open', 'queued', 'processing', 'done', 'failed'].includes(text(row.status)) ? 'proof_ready' : row.status,
+      next_step: 'Review the source-derived first proof, then queue the buyer reply for owner approval.',
+      notification_status: row.notification_status || 'proof_ready',
+    },
+  )
+  if (updated.status !== 'ready') {
+    return {
+      ...updated,
+      primary_database: primaryDatabase,
+      activation_first_proof: proof,
+    }
+  }
+  return {
+    status: 'ready',
+    adapter: 'vercel_blob',
+    primary_database: primaryDatabase,
+    operation_status: 'prepared',
+    action: safeAction(updated.record),
+    activation_first_proof: proof,
+  }
 }
 
 async function updateOrderRoomState(payload) {
@@ -4267,7 +4519,7 @@ function writeStatusCode(result) {
   if (result.status === 'ready') return 200
   if (result.reason === 'action_not_found') return 404
   if (['private_workspace_not_ready', 'private_workspace_required', 'first_run_acceptance_required', 'owner_acceptance_required', 'owner_acceptance_not_accepted', 'connector_policy_required', 'production_approval_queue_required', 'enterprise_delivery_pack_required', 'customer_success_desk_required', 'retainer_growth_offer_required', 'use_start_private_workspace_operation', 'autopilot_draft_not_found'].includes(result.reason)) return 409
-  if (['missing_action_or_lead_id', 'invalid_owner_acceptance_decision', 'missing_owner_acceptance_reference', 'invalid_connector_policy_mode', 'missing_connector_policy_reference', 'missing_production_queue_reference', 'missing_enterprise_delivery_reference', 'missing_customer_success_reference', 'missing_retainer_growth_reference', 'missing_retainer_payment_proof_reference', 'missing_retainer_owner_approval_reference', 'invalid_retainer_payment_amount', 'invalid_retainer_payment_period', 'invalid_autopilot_draft_decision', 'missing_autopilot_draft_reference'].includes(result.reason)) return 400
+  if (['missing_action_or_lead_id', 'missing_approved_source_sample', 'invalid_owner_acceptance_decision', 'missing_owner_acceptance_reference', 'invalid_connector_policy_mode', 'missing_connector_policy_reference', 'missing_production_queue_reference', 'missing_enterprise_delivery_reference', 'missing_customer_success_reference', 'missing_retainer_growth_reference', 'missing_retainer_payment_proof_reference', 'missing_retainer_owner_approval_reference', 'invalid_retainer_payment_amount', 'invalid_retainer_payment_period', 'invalid_autopilot_draft_decision', 'missing_autopilot_draft_reference'].includes(result.reason)) return 400
   return 503
 }
 
@@ -4341,6 +4593,15 @@ async function handler(req, res) {
         endpoint: 'pipeline-control',
         operation,
         ...started,
+      })
+      return
+    }
+    if (operation === 'prepare_activation_first_proof') {
+      const prepared = await prepareActivationFirstProof(payload)
+      json(res, writeStatusCode(prepared), {
+        endpoint: 'pipeline-control',
+        operation,
+        ...prepared,
       })
       return
     }
@@ -4805,6 +5066,7 @@ handler.__test = {
   buildActivationSessionActionPayload,
   buildActivationSessionFirstProofTask,
   buildActivationSessionLead,
+  buildActivationFirstProof,
   firstProofPacket,
   operatorRuntimeSummary,
   autopilotCommandBoard,
@@ -4812,6 +5074,7 @@ handler.__test = {
   autopilotApprovalLedgerStatus,
   readAutopilotApprovalLedger,
   prepareFirstRunAcceptance,
+  prepareActivationFirstProof,
   prepareCustomerSuccessDesk,
   prepareEnterpriseDeliveryPack,
   prepareProductionApprovalQueue,
