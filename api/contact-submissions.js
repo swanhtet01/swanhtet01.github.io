@@ -51,6 +51,7 @@ function receiptHtml(res, record) {
   const onboarding = onboardingPlan(record)
   const subject = encodeURIComponent(`SuperMega source files for ${record.lead_id}`)
   const body = encodeURIComponent(`Lead: ${record.lead_id}\nTask: ${record.task_id}\nCompany: ${record.company}\n\nSource links / notes:\n`)
+  const sourcePackUrl = sourcePackIntakeUrl(record)
   res.end(`<!doctype html>
 <html lang="en">
 <meta charset="utf-8">
@@ -93,6 +94,7 @@ function receiptHtml(res, record) {
     <li>${escapeHtml(onboarding.steps[2])}</li>
   </ol>
   <div class="actions">
+    <a class="primary" href="${escapeHtml(sourcePackUrl)}">Open source pack room</a>
     <a class="primary" href="mailto:${escapeHtml(notifyEmail)}?subject=${subject}&body=${body}">Send source links</a>
     <a href="/contact/">Send another request</a>
     <a href="/products/">View products</a>
@@ -136,6 +138,14 @@ function absolutePublicUrl(value) {
 
 function operatorConsoleUrl() {
   return envText('SUPERMEGA_OPERATOR_URL', 'SUPERMEGA_CONSOLE_URL') || 'https://supermega.dev/operator/'
+}
+
+function sourcePackIntakeUrl(record = {}) {
+  const base = (envText('PUBLIC_WORKSPACE_BASE_URL', 'SUPERMEGA_WORKSPACE_BASE_URL') || 'https://supermega.dev').replace(/\/$/, '')
+  const params = new URLSearchParams()
+  params.set('lead', text(record.lead_id) || text(record.id) || 'lead-required')
+  params.set('action', text(record.task_id) || text(record.action_id) || 'action-required')
+  return `${base}/app/source-pack?${params.toString()}`
 }
 
 function allowedOrigins() {
@@ -1008,6 +1018,109 @@ function buildClientKickoffPack(record, intakeJob = {}) {
   }
 }
 
+function buildContactSourcePackRequest(record) {
+  const templateName = record.public_package || record.requested_package || 'AI Workcell Pilot'
+  const company = record.company || record.name || 'client'
+  const firstProofTarget = record.first_proof_target || record.first_output || record.requested_package || 'first useful proof'
+  const intakeUrl = sourcePackIntakeUrl(record)
+  const minimumSources = [
+    {
+      source_type: 'gmail_or_chat',
+      label: 'Customer messages',
+      examples: ['Gmail thread', 'WhatsApp chat', 'Viber chat', 'Messenger screenshot'],
+      required: true,
+    },
+    {
+      source_type: 'spreadsheet_or_pos_export',
+      label: 'Orders, sales, POS, or work list',
+      examples: ['POS export', 'Google Sheet', 'Excel file', 'CSV sample'],
+      required: true,
+    },
+    {
+      source_type: 'process_note_or_screenshot',
+      label: 'How the work is done today',
+      examples: ['process note', 'screenshot', 'manual checklist', 'voice-note transcript'],
+      required: true,
+    },
+  ]
+  const clientMessage = [
+    `Please send 3 approved source samples for the ${templateName} first proof.`,
+    '',
+    `Client: ${company}`,
+    `First proof target: ${firstProofTarget}`,
+    `Source-pack intake link: ${intakeUrl}`,
+    '',
+    'Minimum source pack:',
+    '1. One customer message/thread.',
+    '2. One order, sales, POS, spreadsheet, or work-list export.',
+    '3. One process note, screenshot, checklist, or example of how the work is done today.',
+    '',
+    'This creates a first-proof packet only. No external sends, connector writes, browser/mobile actions, payment requests, workspace access, or revenue claims happen without owner approval.',
+  ].join('\n')
+
+  return {
+    status: 'source_pack_request_ready',
+    request_type: 'client_source_pack_intake',
+    lead_id: record.lead_id,
+    action_id: record.task_id,
+    template_name: templateName,
+    company,
+    first_proof_target: firstProofTarget,
+    intake_url: intakeUrl,
+    minimum_sources: minimumSources,
+    client_message: clientMessage,
+    source_pack_json_template: {
+      source_pack_name: `${company} source pack`,
+      lead_id: record.lead_id,
+      action_id: record.task_id,
+      sources: minimumSources.map((item, index) => ({
+        source_id: `SRC-${String(index + 1).padStart(2, '0')}`,
+        source_type: item.source_type,
+        reference: item.label,
+        content: '',
+        approved: true,
+      })),
+    },
+    external_action_state: 'blocked_until_owner_approval',
+    connector_write_state: 'blocked_until_owner_approval',
+    browser_action_state: 'blocked_until_owner_approval',
+    payment_request_state: 'blocked_until_owner_approval',
+    approval_required: true,
+    human_gate: 'owner approval before send/write/payment/browser actions',
+    real_mrr_delta: 0,
+  }
+}
+
+function buildOwnerOnboardingAlert(record, sourcePackRequest) {
+  const route = buildSolutionRoute(record)
+  const intakeUrl = sourcePackRequest?.intake_url || sourcePackIntakeUrl(record)
+  const message = [
+    `New AI Workcell Pilot lead: ${record.lead_id}`,
+    `Buyer: ${record.name || 'Unknown'} - ${record.company || 'Unknown company'}`,
+    `Package: ${record.public_package || record.requested_package || 'AI Workcell Pilot'}`,
+    `Route: ${route.package_name} / ${route.delivery_lane}`,
+    `First proof: ${record.first_proof_target || record.first_output || 'First useful proof'}`,
+    `Source pack room: ${intakeUrl}`,
+    `Operator: ${operatorConsoleUrl()}`,
+    'Owner action: send source request only after approval.',
+    'Guardrail: no external sends, connector writes, payment requests, workspace access, or revenue claims until owner/payment proof gates pass.',
+  ].join('\n')
+
+  return {
+    status: 'owner_alert_ready',
+    alert_type: 'ai_workcell_source_pack_room',
+    lead_id: record.lead_id,
+    action_id: record.task_id,
+    source_pack_intake_url: intakeUrl,
+    operator_console_url: operatorConsoleUrl(),
+    message,
+    external_action_state: 'draft_only_no_send',
+    connector_write_state: 'blocked_until_owner_approval',
+    payment_request_state: 'blocked_until_owner_approval',
+    real_mrr_delta: 0,
+  }
+}
+
 function buildFirstProofTaskPayload(record) {
   const solutionRoute = buildSolutionRoute(record)
   const routedRecord = recordWithSolutionRoute(record, solutionRoute)
@@ -1018,6 +1131,8 @@ function buildFirstProofTaskPayload(record) {
   const intakeJob = buildIntakeJob(routedRecord, acceptanceTests)
   const clientKickoffPack = buildClientKickoffPack(routedRecord, intakeJob)
   const implementationBlueprintPack = buildImplementationBlueprintPack(routedRecord, solutionRoute, intakeJob)
+  const sourcePackRequest = buildContactSourcePackRequest(routedRecord)
+  const ownerOnboardingAlert = buildOwnerOnboardingAlert(routedRecord, sourcePackRequest)
   const sourceSummary = [
     routedRecord.source_links ? `source links: ${routedRecord.source_links}` : '',
     routedRecord.source_file_count ? `file count: ${routedRecord.source_file_count}` : '',
@@ -1050,6 +1165,10 @@ function buildFirstProofTaskPayload(record) {
     intake_job: intakeJob,
     client_kickoff_pack: clientKickoffPack,
     implementation_blueprint_pack: implementationBlueprintPack,
+    source_pack_request: sourcePackRequest,
+    source_pack_request_packet: sourcePackRequest.client_message,
+    source_pack_request_json: JSON.stringify(sourcePackRequest, null, 2),
+    owner_onboarding_alert: ownerOnboardingAlert,
     source_trace: intakeJob.source_manifest
       .filter((item) => item.status === 'provided')
       .map((item) => `${item.source_type}: ${item.value}`),
@@ -1120,6 +1239,10 @@ function pipelineActionPayload(record) {
       public_package: record.public_package,
       first_proof_target: record.first_proof_target,
       implementation_blueprint_pack: firstProofTask.implementation_blueprint_pack,
+      source_pack_request: firstProofTask.source_pack_request,
+      source_pack_request_packet: firstProofTask.source_pack_request_packet,
+      source_pack_request_json: firstProofTask.source_pack_request_json,
+      owner_onboarding_alert: firstProofTask.owner_onboarding_alert,
       acceptance_tests: record.acceptance_tests,
       launch_blockers: record.launch_blockers,
       automation_boundary: record.automation_boundary,
@@ -1374,6 +1497,7 @@ function emailRows(record) {
     ['Route first proof', route.first_proof_target],
     ['Template source', [record.template_source_category, record.template_source_area].filter(Boolean).join(' / ')],
     ['Starter kit', record.starter_kit_url],
+    ['Source pack room', sourcePackIntakeUrl(record)],
     ['Operator console', operatorConsoleUrl()],
     ['Owner action', 'Open the operator console, run the queue, then produce the first proof before any external send/write/payment action.'],
     ['Price hint', record.price_hint],
@@ -1542,6 +1666,7 @@ function telegramLeadMessage(record) {
   const proofTarget = record.first_proof_target || record.first_output || record.requested_package || 'First useful proof'
   const starterKitUrl = absolutePublicUrl(record.starter_kit_url)
   const setupUrl = absolutePublicUrl(record.page_path || record.source_url)
+  const sourcePackUrl = sourcePackIntakeUrl(record)
   const consoleUrl = operatorConsoleUrl()
   const sheetUrl = text(process.env.SUPERMEGA_LEAD_SHEET_URL)
   return [
@@ -1556,6 +1681,7 @@ function telegramLeadMessage(record) {
     `First proof: ${proofTarget}`,
     starterKitUrl ? `Starter kit: ${starterKitUrl}` : '',
     setupUrl ? `Setup page: ${setupUrl}` : '',
+    `Source pack room: ${sourcePackUrl}`,
     `Operator: ${consoleUrl}`,
     sheetUrl ? `Sheet: ${sheetUrl}` : '',
     `Next: ${record.next_step || 'Open operator console and build the first proof.'}`,
@@ -1698,6 +1824,7 @@ async function handler(req, res) {
   const taskId = `TASK-${crypto.randomBytes(6).toString('hex').toUpperCase()}`
   const record = buildLeadRecord({ leadId, taskId, payload: { ...payload, name, email, company, goal }, req })
   const solutionRoute = buildSolutionRoute(record)
+  const firstProofTask = buildFirstProofTaskPayload(record)
   const ledger = await saveLeadLedger({ record })
   const pipelineAction = await savePipelineAction({ record })
   const [webhook, deskposPipeline] = await Promise.all([
@@ -1801,6 +1928,8 @@ async function handler(req, res) {
     submission: publicSubmission,
     onboarding: onboardingPlan(record),
     solution_route: solutionRoute,
+    source_pack_request: firstProofTask.source_pack_request,
+    owner_onboarding_alert: firstProofTask.owner_onboarding_alert,
     delivery,
     ledger,
     pipeline_action: pipelineAction,
@@ -1841,6 +1970,8 @@ handler.__test = {
   buildFirstProofTaskPayload,
   buildClientKickoffPack,
   buildIntakeJob,
+  buildContactSourcePackRequest,
+  buildOwnerOnboardingAlert,
   pipelineActionPayload,
   telegramLeadMessage,
   operatorConsoleUrl,
