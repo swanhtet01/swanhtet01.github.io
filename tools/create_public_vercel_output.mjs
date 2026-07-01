@@ -4529,6 +4529,8 @@ const publicOperatorConsoleHtml = `<!doctype html>
     .operator-activation-step strong{font-size:14px;line-height:1.2}
     .operator-activation-step.is-done{background:color-mix(in srgb,var(--paper) 90%,#1c8a5a 10%)}
     .operator-activation-step.is-next{background:color-mix(in srgb,var(--paper) 88%,var(--accent) 12%)}
+    .operator-activation-session{border:1px solid var(--line);padding:14px;background:color-mix(in srgb,var(--paper) 95%,#1c8a5a 5%)}
+    .operator-activation-session label{display:grid;gap:6px}
     .operator-revenue-board{border:1px solid var(--line);padding:14px;background:color-mix(in srgb,var(--paper) 94%,var(--ink) 6%)}
     .operator-command-board{border:1px solid var(--line);padding:14px;background:color-mix(in srgb,var(--paper) 91%,var(--ink) 9%)}
     .operator-money-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:10px}
@@ -4569,6 +4571,41 @@ const publicOperatorConsoleHtml = `<!doctype html>
             <button id="refresh" class="btn primary" type="button">Refresh queue</button>
             <button id="run-runner" class="btn secondary" type="button">Run queue now</button>
           </div>
+          <div class="operator-stack operator-activation-session" id="operator-activation-session">
+            <div>
+              <div class="eyebrow">Autopilot intake</div>
+              <h2>Start activation session</h2>
+            </div>
+            <label>
+              <span>Company or buyer</span>
+              <input class="operator-input" data-activation-session-field="company" value="Yangon owner-operated business" />
+            </label>
+            <label>
+              <span>Package</span>
+              <input class="operator-input" data-activation-session-field="requested_package" value="Managed AI Workcell" />
+            </label>
+            <label>
+              <span>Buyer goal</span>
+              <textarea class="operator-input" data-activation-session-field="buyer_goal">Turn messy daily messages, files, and follow-ups into one owner-approved action queue.</textarea>
+            </label>
+            <label>
+              <span>Source sample</span>
+              <textarea class="operator-input" data-activation-session-field="source_sample" placeholder="Paste a Drive folder, screenshot note, file list, inbox label, POS export, or sample workflow."></textarea>
+            </label>
+            <label>
+              <span>First proof target</span>
+              <input class="operator-input" data-activation-session-field="first_proof_target" value="One-page action brief with source trace and next owner decision." />
+            </label>
+            <label>
+              <span>Price hint</span>
+              <input class="operator-input" data-activation-session-field="price_hint" value="owner-approved MMK quote after first proof" />
+            </label>
+            <div class="operator-proof-section">
+              <span>Safety boundary</span>
+              <div>No external send, connector write, browser/mobile action, payment request, or revenue claim without owner approval. Real MRR stays 0 until payment proof is recorded.</div>
+            </div>
+            <button id="start-activation-session" class="btn primary" type="button">Start activation session</button>
+          </div>
           <div class="operator-output" id="operator-status">No data loaded.</div>
         </div>
         <div class="operator-panel operator-stack">
@@ -4591,6 +4628,7 @@ const publicOperatorConsoleHtml = `<!doctype html>
     const activationCockpitEl = document.getElementById('operator-activation-cockpit');
     const commandBoardEl = document.getElementById('autopilot-command-board');
     const revenueBoardEl = document.getElementById('revenue-proof-board');
+    const activationSessionEl = document.getElementById('operator-activation-session');
     keyInput.value = sessionStorage.getItem('supermega_ops_key') || '';
     function esc(value){return String(value == null ? '' : value).replace(/[&<>"']/g,function(ch){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]})}
     function token(){return keyInput.value.trim()}
@@ -5578,6 +5616,29 @@ const publicOperatorConsoleHtml = `<!doctype html>
       };
       return patches[command] || {};
     }
+    function activationSessionPayload(){
+      const payload = { operation:'start_activation_session' };
+      if(!activationSessionEl)return payload;
+      activationSessionEl.querySelectorAll('[data-activation-session-field]').forEach(function(field){
+        const key = field.getAttribute('data-activation-session-field');
+        payload[key] = field.value || '';
+      });
+      payload.automation_boundary = 'No external send, connector write, browser/mobile action, payment request, or revenue claim without owner approval.';
+      payload.source_category = 'operator_approved_sample';
+      payload.product_area = 'AI agent workcell';
+      return payload;
+    }
+    async function startActivationSession(){
+      if(!token()){setStatus('Paste the ops key first.');return}
+      const payload = activationSessionPayload();
+      if(!(payload.company || '').trim()){setStatus('Add a company or buyer first.');return}
+      if(!(payload.first_proof_target || '').trim()){setStatus('Add the first proof target first.');return}
+      setStatus({status:'starting_activation_session', note:'Creating approval-gated first-proof action. Real MRR stays 0 until payment proof.'});
+      const response = await fetch('/api/pipeline-control',{method:'POST',headers:Object.assign({},authHeaders(),{'content-type':'application/json'}),body:JSON.stringify(payload),cache:'no-store'});
+      const data = await response.json().catch(function(){return {status:'error',reason:'invalid_json',code:response.status}});
+      setStatus(data);
+      if(response.ok) await refresh();
+    }
     async function persistOrderRoomState(button){
       if(!token()){setStatus('Paste the ops key first.');return}
       const command = button.getAttribute('data-state-command') || '';
@@ -6007,6 +6068,7 @@ const publicOperatorConsoleHtml = `<!doctype html>
     document.getElementById('load-sample').addEventListener('click',loadSample);
     document.getElementById('refresh').addEventListener('click',refresh);
     document.getElementById('run-runner').addEventListener('click',runRunner);
+    document.getElementById('start-activation-session').addEventListener('click',startActivationSession);
   </script>
 </body>
 </html>`

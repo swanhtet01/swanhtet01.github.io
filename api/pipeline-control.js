@@ -87,6 +87,442 @@ function moneyAmount(value) {
   return Number.isFinite(amount) && amount > 0 ? Math.round(amount) : 0
 }
 
+function truncate(value, limit = 500) {
+  return text(value).slice(0, limit)
+}
+
+function buildActivationSessionLead(payload = {}) {
+  const now = new Date().toISOString()
+  const leadId = text(payload.lead_id) || `LEAD-${crypto.randomBytes(6).toString('hex').toUpperCase()}`
+  const taskId = text(payload.task_id) || `TASK-${crypto.randomBytes(6).toString('hex').toUpperCase()}`
+  const company = truncate(payload.company || payload.buyer || payload.client_name, 180) || 'Operator-started client'
+  const name = truncate(payload.name || payload.contact_name || payload.buyer_name, 120) || company
+  const requestedPackage = truncate(payload.requested_package || payload.package_name || payload.template_name || 'Managed AI Workcell', 160)
+  const templateId = slugPart(payload.template_id || requestedPackage, 'managed-ai-workcell')
+  const templateName = truncate(payload.template_name || requestedPackage, 160)
+  const firstProofTarget = truncate(payload.first_proof_target || payload.first_output || 'One useful output from the approved sample source.', 300)
+  const sourceSample = truncate(payload.source_sample || payload.source_links || payload.source_url || '', 1000)
+  const buyerGoal = truncate(payload.buyer_goal || payload.goal || payload.workflow || 'Create one proof-backed AI workcell that saves owner time or creates revenue.', 2400)
+  const priceHint = truncate(payload.price_hint || 'owner-approved MMK quote after first proof', 160)
+  const acceptanceTests = list(payload.acceptance_tests).length
+    ? list(payload.acceptance_tests)
+    : [
+        'Uses only approved source samples.',
+        'Shows source trace for important outputs.',
+        'Creates a buyer-ready first proof before any external send.',
+        'Keeps connector writes, browser actions, payment requests, and revenue claims owner-gated.',
+      ]
+
+  return {
+    id: leadId,
+    lead_id: leadId,
+    task_id: taskId,
+    source: 'operator_activation_session',
+    name,
+    email: truncate(payload.email, 180).toLowerCase(),
+    phone: truncate(payload.phone || payload.whatsapp || payload.viber, 80),
+    company,
+    workflow: truncate(payload.workflow || requestedPackage, 160),
+    requested_package: requestedPackage,
+    public_package: templateName,
+    first_output: firstProofTarget,
+    product_area: truncate(payload.product_area || 'AI agent workcell', 160),
+    template_id: templateId,
+    template_status: 'operator_started',
+    template_source_category: truncate(payload.source_category || 'client_sample', 120),
+    template_source_area: truncate(payload.source_area || 'approved_sources', 160),
+    starter_kit_url: truncate(payload.starter_kit_url || `/site/agent-templates/${templateId}.json`, 240),
+    price_hint: priceHint,
+    first_proof_target: firstProofTarget,
+    acceptance_tests: acceptanceTests.join('\n'),
+    launch_blockers: truncate(payload.launch_blockers || 'Need approved source sample and owner approval before external actions.', 500),
+    automation_boundary: truncate(payload.automation_boundary || 'Approval required before external sends, connector writes, credentialed browser/mobile actions, payment requests, or revenue claims.', 700),
+    goal: buyerGoal,
+    data: [
+      sourceSample ? `Source sample: ${sourceSample}` : 'Source sample: request minimum approved sample.',
+      `Buyer goal: ${buyerGoal}`,
+      `First proof target: ${firstProofTarget}`,
+    ].join(' | '),
+    team: truncate(payload.team || payload.users || 'owner plus operator', 500),
+    source_links: sourceSample,
+    source_file_names: truncate(payload.source_file_names, 1200),
+    source_file_count: truncate(payload.source_file_count, 20),
+    urgency: truncate(payload.urgency || 'start_first_proof', 120),
+    source_url: truncate(payload.source_url || sourceSample, 500),
+    page_path: '/operator/',
+    referrer: 'operator_console',
+    utm_source: 'operator',
+    utm_medium: 'activation_session',
+    utm_campaign: 'supermega_autopilot',
+    utm_content: templateId,
+    utm_term: '',
+    lead_score: 85,
+    lead_stage: 'operator_started',
+    status: 'queued',
+    owner: truncate(payload.owner || 'Revenue Pod', 160),
+    onboarding_stage: 'first_proof_session',
+    access_policy: 'approval_required',
+    workspace_status: 'not_created_until_payment_proof',
+    management_owner: truncate(payload.management_owner || payload.owner || 'Revenue Pod', 160),
+    next_step: 'Build the first proof from the approved source sample, then queue the buyer reply for owner approval.',
+    submitted_at: now,
+    raw: {
+      activation_session: true,
+      operator_started: true,
+      real_mrr_delta: 0,
+      external_action_state: 'blocked_until_owner_approval',
+      connector_write_state: 'blocked_until_owner_approval',
+      payment_request_state: 'blocked_until_owner_approval',
+      source_sample: sourceSample,
+    },
+  }
+}
+
+function buildActivationSessionFirstProofTask(lead) {
+  const acceptanceTests = list(String(lead.acceptance_tests || '').split('\n'))
+  const sourceTrace = lead.source_links ? [`source_sample: ${lead.source_links}`] : []
+  const templateName = lead.public_package || lead.requested_package || 'Managed AI Workcell'
+  const deliveryLane = 'managed_ai_workcell'
+  const modules = ['buyer_goal', 'approved_source_sample', 'source_trace', 'first_proof', 'approval_queue', 'delivery_workspace']
+  const roleMatrix = [
+    { role: 'founder_owner', responsibility: 'approve external sends, connector writes, payment requests, and revenue claims' },
+    { role: 'supermega_operator', responsibility: 'run source review, prepare first proof, and maintain the approval queue' },
+    { role: 'agent_worker', responsibility: 'draft outputs only from approved sources' },
+  ]
+  const sourceManifest = [
+    {
+      source_type: 'sample_sources',
+      status: lead.source_links ? 'provided' : 'missing',
+      value: lead.source_links || 'request approved sample source',
+    },
+  ]
+  const solutionRoute = {
+    status: 'route_ready',
+    route_type: 'operator_started_activation_session',
+    template_id: lead.template_id,
+    package_name: templateName,
+    delivery_lane: deliveryLane,
+    service_model: 'managed_ai_workcell',
+    first_proof_target: lead.first_proof_target,
+    packet: [
+      `# ${templateName} solution route`,
+      '',
+      `Lead: ${lead.lead_id}`,
+      `Company: ${lead.company}`,
+      `First proof: ${lead.first_proof_target}`,
+      '',
+      '## Delivery lane',
+      '- Managed AI workcell with owner-gated external actions.',
+      '- Start from one approved sample source and one first useful output.',
+      '- Convert proof into paid workspace only after scope, price, and payment proof gates.',
+      '',
+      '## Enterprise controls',
+      '- Source trace on important outputs.',
+      '- Approval queue before sends, writes, browser/mobile actions, and payment requests.',
+      '- Real MRR remains 0 until payment proof is recorded.',
+    ].join('\n'),
+    real_mrr_delta: 0,
+  }
+  const intakeJob = {
+    status: lead.source_links ? 'ready_for_first_proof_build' : 'waiting_for_minimum_source',
+    job_type: 'operator_activation_to_first_proof',
+    lead_id: lead.lead_id,
+    template_id: lead.template_id,
+    first_proof_target: lead.first_proof_target,
+    source_manifest: sourceManifest,
+    first_run_steps: [
+      'Open only approved source samples.',
+      'Extract the workflow facts needed for the first useful output.',
+      'Draft the first proof with source trace.',
+      'Queue the buyer reply for owner approval.',
+    ],
+    approval_boundary: lead.automation_boundary,
+    packet: [
+      `# ${templateName} intake-to-first-proof job`,
+      '',
+      `Lead: ${lead.lead_id}`,
+      `Goal: ${lead.goal}`,
+      `First proof target: ${lead.first_proof_target}`,
+      '',
+      '## Source manifest',
+      ...sourceManifest.map((item) => `- ${item.source_type}: ${item.status} - ${item.value}`),
+      '',
+      '## First run steps',
+      '- Open only approved source samples.',
+      '- Build a useful first proof with source trace.',
+      '- Queue any buyer-facing reply for owner review.',
+      '',
+      '## Guardrails',
+      '- No external send, connector write, browser/mobile action, payment request, or MRR claim without owner approval.',
+    ].join('\n'),
+    real_mrr_delta: 0,
+  }
+  const implementationBlueprintPack = {
+    status: 'implementation_blueprint_ready',
+    pack_type: 'implementation_blueprint_pack',
+    template_id: lead.template_id,
+    delivery_lane: deliveryLane,
+    service_model: 'managed_ai_workcell',
+    modules,
+    role_matrix: roleMatrix,
+    delivery_plan: [
+      { phase: 'day_0', output: 'Operator-started activation session and source request.' },
+      { phase: 'day_1', output: 'First proof packet with source trace.' },
+      { phase: 'day_2', output: 'Owner-approved pilot scope, price, and payment request draft.' },
+      { phase: 'after_payment_proof', output: 'Private workspace and approval-only first production run.' },
+    ],
+    acceptance_gates: [
+      'Buyer confirms the first proof is useful.',
+      'Owner approves pilot scope and MMK price.',
+      'Payment proof exists before workspace start.',
+      'First production run remains approval-only until accepted.',
+    ],
+    packet: [
+      `# ${templateName} implementation blueprint`,
+      '',
+      '## Modules',
+      ...modules.map((item) => `- ${item}`),
+      '',
+      '## Acceptance gates',
+      '- [ ] Buyer confirms the first proof is useful.',
+      '- [ ] Owner approves scope, price, and payment route.',
+      '- [ ] Payment proof exists before private workspace starts.',
+      '- [ ] Connector writes and external sends remain approval-only.',
+    ].join('\n'),
+    real_mrr_delta: 0,
+  }
+  const clientKickoffPack = {
+    status: lead.source_links ? 'ready_for_first_proof' : 'waiting_for_minimum_source',
+    pack_type: 'client_kickoff_pack',
+    lead_id: lead.lead_id,
+    template_id: lead.template_id,
+    template_name: templateName,
+    company: lead.company,
+    first_proof_target: lead.first_proof_target,
+    source_requests: sourceManifest,
+    first_48_hours: [
+      'Confirm the approved sample source.',
+      'Build the first proof from that source.',
+      'Review acceptance tests and source trace.',
+      'Decide whether to activate a paid pilot.',
+    ],
+    operator_checklist: [
+      'Confirm buyer goal and first proof target.',
+      'Check source sample access.',
+      'Prepare proof delivery packet.',
+      'Queue buyer reply for owner approval.',
+    ],
+    buyer_reply_draft: [
+      `Hi ${lead.name || 'there'},`,
+      '',
+      `I can start with a small ${templateName} proof.`,
+      '',
+      `First proof: ${lead.first_proof_target}.`,
+      '',
+      'Please send or confirm one approved sample source. I will use it only to prepare the first proof and will not send messages, write records, connect accounts, use credentialed browser actions, request payment, or claim revenue without owner approval.',
+    ].join('\n'),
+    packet: [
+      `# ${templateName} client kickoff pack`,
+      '',
+      `Lead: ${lead.lead_id}`,
+      `Company: ${lead.company}`,
+      `First useful output: ${lead.first_proof_target}`,
+      '',
+      '## First 48 hours',
+      '1. Confirm approved source sample.',
+      '2. Build first proof with source trace.',
+      '3. Queue buyer reply for owner approval.',
+      '4. Convert to paid workspace only after scope, price, and payment proof gates.',
+    ].join('\n'),
+    real_mrr_delta: 0,
+  }
+
+  return {
+    type: 'first_proof_build',
+    status: 'queued',
+    template_id: lead.template_id,
+    template_status: lead.template_status,
+    template_name: templateName,
+    starter_kit_url: lead.starter_kit_url,
+    product_area: lead.product_area,
+    source_category: lead.template_source_category,
+    source_area: lead.template_source_area,
+    price_hint: lead.price_hint,
+    first_proof_target: lead.first_proof_target,
+    operator_brief: [
+      `${templateName} first proof for ${lead.company}.`,
+      `Goal: ${lead.goal}`,
+      `First proof: ${lead.first_proof_target}`,
+      lead.source_links ? `Source sample: ${lead.source_links}` : 'Source sample missing: request the smallest approved source.',
+      `Boundary: ${lead.automation_boundary}`,
+    ].join('\n'),
+    solution_route: solutionRoute,
+    intake_job: intakeJob,
+    client_kickoff_pack: clientKickoffPack,
+    implementation_blueprint_pack: implementationBlueprintPack,
+    source_trace: sourceTrace,
+    checklist: [
+      'Confirm buyer goal and first proof target.',
+      'Open only approved sample sources.',
+      `Build the first proof: ${lead.first_proof_target}`,
+      'Attach source trace and acceptance-test status.',
+      'Queue any buyer-facing reply for owner approval.',
+      'Do not send, write, browse with credentials, charge, or edit live records without owner approval.',
+    ],
+    acceptance_tests: acceptanceTests,
+    approval_required: true,
+    human_gate: 'owner approval before send/write/payment/browser actions',
+  }
+}
+
+function buildActivationSessionActionPayload(lead) {
+  const firstProofTask = buildActivationSessionFirstProofTask(lead)
+  const orderRoomState = buildOrderRoomState({ action_id: lead.task_id, lead_id: lead.lead_id })
+  return {
+    action_id: lead.task_id,
+    lead_id: lead.lead_id,
+    task_id: lead.task_id,
+    action_type: 'activation_session_first_proof',
+    status: 'queued',
+    priority: 'high',
+    owner: lead.owner || 'Revenue Pod',
+    title: `Start ${lead.public_package || lead.requested_package} first proof for ${lead.company}`,
+    next_step: lead.next_step,
+    due_at: new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString(),
+    evidence_url: lead.source_links || lead.source_url || '',
+    source_url: lead.source_url || '',
+    approval_required: true,
+    approval_state: 'pending',
+    notification_channel: 'operator_console',
+    notification_status: 'queued',
+    payload: {
+      lead,
+      first_proof_task: firstProofTask,
+      activation_session: {
+        status: 'queued_for_first_proof',
+        source: 'operator_console',
+        lead_id: lead.lead_id,
+        action_id: lead.task_id,
+        approval_required: true,
+        approval_state: 'pending',
+        external_action_state: 'blocked_until_owner_approval',
+        connector_write_state: 'blocked_until_owner_approval',
+        browser_action_state: 'blocked_until_owner_approval',
+        payment_request_state: 'blocked_until_owner_approval',
+        real_mrr_delta: 0,
+      },
+    },
+    result: {
+      status: 'ready',
+      type: 'first_proof_operator_brief',
+      template_id: lead.template_id,
+      template_name: lead.public_package || lead.requested_package,
+      title: `${lead.public_package || lead.requested_package} first proof for ${lead.company}`,
+      starter_kit_url: lead.starter_kit_url,
+      first_proof_target: lead.first_proof_target,
+      checklist: firstProofTask.checklist,
+      acceptance_tests: firstProofTask.acceptance_tests,
+      approval_required: true,
+      human_gate: 'owner approval before send/write/payment/browser actions',
+      pilot_order_room_state: orderRoomState,
+      activation_session: {
+        status: 'operator_started',
+        external_action_state: 'blocked_until_owner_approval',
+        real_mrr_delta: 0,
+      },
+    },
+  }
+}
+
+async function saveActivationSessionAction(lead, actionPayload) {
+  const primary = {
+    lead: { status: 'skipped', reason: 'postgres_not_configured' },
+    action: { status: 'skipped', reason: 'postgres_not_configured' },
+  }
+  if (datastore.postgresConfigured()) {
+    try {
+      primary.lead = await datastore.saveLeadLedger(lead)
+      primary.action = await datastore.savePipelineAction(actionPayload)
+      if (primary.action.status === 'ready') {
+        const mirror = await blobQueue.savePipelineAction(actionPayload)
+        return {
+          status: 'ready',
+          adapter: mirror.status === 'ready' ? 'vercel_postgres_neon_with_blob_queue' : 'vercel_postgres_neon',
+          primary,
+          fallback: mirror,
+          action_id: actionPayload.action_id,
+        }
+      }
+    } catch (error) {
+      primary.action = {
+        status: 'error',
+        reason: 'postgres_activation_session_failed',
+        detail: text(error && error.message).slice(0, 180),
+      }
+    }
+  }
+
+  const blob = await blobQueue.savePipelineAction(actionPayload)
+  if (blob.status === 'ready') {
+    return {
+      status: 'ready',
+      adapter: 'vercel_blob',
+      primary,
+      fallback: blob,
+      action_id: actionPayload.action_id,
+    }
+  }
+  return {
+    status: 'error',
+    reason: blob.reason || primary.action.reason || 'activation_session_persistence_failed',
+    primary,
+    fallback: blob,
+  }
+}
+
+async function startActivationSession(payload = {}) {
+  const lead = buildActivationSessionLead(payload)
+  const actionPayload = buildActivationSessionActionPayload(lead)
+  const saved = await saveActivationSessionAction(lead, actionPayload)
+  if (saved.status !== 'ready') {
+    return {
+      status: 'error',
+      reason: saved.reason || 'activation_session_persistence_failed',
+      persistence: saved,
+      lead: safeLead(lead),
+      action: safeAction(actionPayload),
+    }
+  }
+  const action = safeAction(actionPayload)
+  return {
+    status: 'ready',
+    operation_status: 'activation_session_started',
+    adapter: saved.adapter,
+    lead: safeLead(lead),
+    action,
+    action_id: actionPayload.action_id,
+    lead_id: lead.lead_id,
+    first_proof_task: actionPayload.payload.first_proof_task,
+    activation_session: actionPayload.payload.activation_session,
+    approval_required: true,
+    approval_state: 'pending',
+    external_action_state: 'blocked_until_owner_approval',
+    connector_write_state: 'blocked_until_owner_approval',
+    browser_action_state: 'blocked_until_owner_approval',
+    payment_request_state: 'blocked_until_owner_approval',
+    real_mrr_delta: 0,
+    operator_next_step: 'Refresh queue, run the first-proof action, then keep buyer replies/payment/connector writes behind owner approval.',
+    runtime_guardrails: [
+      'No external send without owner approval.',
+      'No connector write without owner approval.',
+      'No credentialed browser or mobile action without owner approval.',
+      'No payment request without owner approval.',
+      'Real MRR remains 0 until payment proof is recorded.',
+    ],
+    persistence: saved,
+  }
+}
+
 function buildOrderRoomState(payload = {}) {
   const paymentProofState = oneOf(payload.payment_proof_state, ['payment_proof_required', 'proof_attached'], 'payment_proof_required')
   const requestedWorkspaceState = oneOf(
@@ -3899,6 +4335,15 @@ async function handler(req, res) {
       return
     }
     const operation = text(payload.operation)
+    if (operation === 'start_activation_session') {
+      const started = await startActivationSession(payload)
+      json(res, writeStatusCode(started), {
+        endpoint: 'pipeline-control',
+        operation,
+        ...started,
+      })
+      return
+    }
     if (operation === 'update_order_room') {
       const updated = await updateOrderRoomState(payload)
       json(res, writeStatusCode(updated), {
@@ -4357,6 +4802,9 @@ handler.__test = {
   buildProductionApprovalQueue,
   buildRetainerGrowthOfferPack,
   buildRetainerPaymentRecord,
+  buildActivationSessionActionPayload,
+  buildActivationSessionFirstProofTask,
+  buildActivationSessionLead,
   firstProofPacket,
   operatorRuntimeSummary,
   autopilotCommandBoard,
@@ -4374,6 +4822,7 @@ handler.__test = {
   recordOwnerAcceptance,
   revenueProofBoard,
   safeAction,
+  startActivationSession,
   startPrivateWorkspace,
   updateOrderRoomState,
   writeAutopilotApprovalLedger,
