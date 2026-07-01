@@ -3263,11 +3263,19 @@ const publicSourceToScreenHtml = `<!doctype html>
       .free-rules { display:grid; gap:9px; margin-top:18px; }
       .free-rules div { display:flex; gap:9px; align-items:flex-start; color:var(--muted); font-weight:820; line-height:1.4; }
       .free-rules b { color:var(--clay); min-width:118px; }
+      .workcell-picker { border:1px solid var(--line); border-radius:8px; background:rgba(255,255,255,.5); padding:14px; margin-top:18px; }
+      .workcell-picker > strong { display:block; margin-bottom:10px; }
+      .workcell-template-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:9px; }
+      .workcell-template-grid button { text-align:left; border:1px solid var(--line); border-radius:8px; background:rgba(255,250,241,.86); color:var(--ink); padding:11px; cursor:pointer; min-height:92px; }
+      .workcell-template-grid button[data-selected="true"] { border-color:rgba(194,96,63,.58); box-shadow:0 0 0 4px rgba(194,96,63,.10); background:#fffaf1; }
+      .workcell-template-grid strong { display:block; margin-bottom:5px; }
+      .workcell-template-grid span { color:var(--muted); font-size:13px; font-weight:760; line-height:1.35; }
       .workcell-path { display:grid; gap:10px; margin-top:18px; }
       .workcell-path article { border:1px solid var(--line); border-radius:8px; padding:13px; background:rgba(255,255,255,.45); }
       .workcell-path strong { display:block; margin-bottom:4px; }
       .workcell-path span { color:var(--muted); font-size:14px; line-height:1.4; }
       @media (max-width: 900px) { .free-main { grid-template-columns:1fr; } }
+      @media (max-width: 560px) { .workcell-template-grid { grid-template-columns:1fr; } }
     </style>
   </head>
   <body>
@@ -3284,6 +3292,16 @@ ${unicornHeader}
             <div><b>Cache by source hash</b><span>Repeated samples should reuse a prior draft before any queued AI job runs.</span></div>
             <div><b>Second run or export requires contact</b><span>The free mode shows value; private rooms, exports, connectors, and scheduled runs are paid.</span></div>
             <div><b>No free connectors</b><span>No Gmail, Drive, browser automation, payment, team seat, or writeback is enabled here.</span></div>
+          </div>
+          <div class="workcell-picker" aria-label="Workcell templates">
+            <strong>Workcell templates</strong>
+            <div class="workcell-template-grid">
+              <button type="button" data-workcell-template="daily_close" data-selected="true"><strong>Daily cash close</strong><span>Turn POS/chat/spreadsheet notes into owner close, gaps, and tomorrow queue.</span></button>
+              <button type="button" data-workcell-template="receivables_chase"><strong>Receivables chase</strong><span>Turn invoices and chat promises into who owes, next message, and proof trail.</span></button>
+              <button type="button" data-workcell-template="inventory_exception"><strong>Inventory exception desk</strong><span>Turn stock rows and supplier notes into shortage, overstock, and reorder queue.</span></button>
+              <button type="button" data-workcell-template="lead_reply"><strong>Lead reply desk</strong><span>Turn DMs, forms, and calls into reply drafts and follow-up priorities.</span></button>
+              <button type="button" data-workcell-template="document_ledger"><strong>Document ledger</strong><span>Turn receipts, screenshots, and files into a clean searchable action ledger.</span></button>
+            </div>
           </div>
           <div class="workcell-path" aria-label="Paid upgrade path">
             <article><strong>1. Free draft</strong><span>One source becomes one useful screen draft in the browser.</span></article>
@@ -3302,12 +3320,16 @@ ${unicornHeader}
             <label>Source sample<textarea data-source-sample placeholder="Paste a redacted POS export, chat thread, invoice list, staff note, screenshot text, or messy spreadsheet rows."></textarea></label>
             <div class="free-actions">
               <button class="btn primary" type="submit">Build free screen draft</button>
-              <a class="btn secondary" href="/contact/?package=ai-workcell-pilot&utm_source=free_source_to_screen">Start AI Workcell Pilot</a>
+              <a class="btn secondary" data-start-paid-pilot-link href="/contact/?package=ai-workcell-pilot&utm_source=free_source_to_screen&utm_content=free_workcell_order&workcell=daily_close">Start AI Workcell Pilot</a>
             </div>
           </form>
           <div class="free-output" aria-live="polite">
             <strong>First screen draft</strong>
             <pre data-source-to-screen-output>Paste one approved sample to generate a local draft. Nothing is sent, connected, written, billed, or claimed as revenue from this free page.</pre>
+          </div>
+          <div class="free-output" aria-live="polite">
+            <strong>Proof order packet</strong>
+            <pre data-proof-order-output>Choose a template and build a free draft to produce the paid-pilot order packet. This packet is local until you contact us.</pre>
           </div>
         </section>
       </main>
@@ -3318,8 +3340,44 @@ ${publicLanguageToggleScript}
       (function(){
         const form = document.querySelector('[data-source-to-screen-form]');
         const output = document.querySelector('[data-source-to-screen-output]');
+        const proofOrderOutput = document.querySelector('[data-proof-order-output]');
+        const paidPilotLink = document.querySelector('[data-start-paid-pilot-link]');
+        const templateButtons = Array.prototype.slice.call(document.querySelectorAll('[data-workcell-template]'));
         const sample = form && form.querySelector('[data-source-sample]');
         const type = form && form.querySelector('[data-output-type]');
+        const workcellTemplates = {
+          daily_close: {
+            name: 'Daily cash close',
+            proof_target: 'Owner can see today sales, cash variance, missing proof, and tomorrow action queue.',
+            required_sources: ['POS close or sales export', 'cash/mobile-money note', 'manager or cashier note'],
+            first_run_acceptance: ['cash variance explained', 'missing proof listed', 'tomorrow queue visible']
+          },
+          receivables_chase: {
+            name: 'Receivables chase',
+            proof_target: 'Owner can see who owes money, what was promised, and the next safe follow-up draft.',
+            required_sources: ['invoice or customer balance list', 'chat promise or payment note', 'owner follow-up rule'],
+            first_run_acceptance: ['debtors ranked', 'message drafts separated from sends', 'owner approval required before contact']
+          },
+          inventory_exception: {
+            name: 'Inventory exception desk',
+            proof_target: 'Owner can see shortage, overstock, supplier risk, and reorder actions from messy stock data.',
+            required_sources: ['stock export or shelf count', 'supplier note', 'sales velocity or recent orders'],
+            first_run_acceptance: ['exceptions grouped', 'reorder queue visible', 'writeback blocked until accepted']
+          },
+          lead_reply: {
+            name: 'Lead reply desk',
+            proof_target: 'Owner can see qualified leads, reply drafts, and follow-up priorities without losing source trace.',
+            required_sources: ['DM/form/call rows', 'offer or price rule', 'owner no-send rule'],
+            first_run_acceptance: ['lead intent classified', 'reply draft ready', 'send remains approval-only']
+          },
+          document_ledger: {
+            name: 'Document ledger',
+            proof_target: 'Owner can see receipts, screenshots, files, and notes converted into searchable actions.',
+            required_sources: ['receipt or document samples', 'folder or chat context', 'required ledger fields'],
+            first_run_acceptance: ['records normalized', 'missing fields listed', 'source trace preserved']
+          }
+        };
+        let selectedWorkcell = 'daily_close';
         function hashText(text){
           let hash = 0;
           for(let i=0;i<text.length;i++){ hash = ((hash << 5) - hash + text.charCodeAt(i)) | 0; }
@@ -3366,12 +3424,72 @@ ${publicLanguageToggleScript}
             'Free mode stops here: no export, connector, scheduled run, browser action, payment action, or team workspace.'
           ].join('\\n');
         }
+        function buildPaidPilotOrderPacket(kind, text){
+          const template = workcellTemplates[kind] || workcellTemplates.daily_close;
+          const sourceHash = hashText(text || '');
+          return [
+            '# AI Workcell Pilot order packet',
+            '',
+            'workcell_template: ' + template.name,
+            'workcell_id: ' + kind,
+            'source_hash: ' + sourceHash,
+            'free_load_policy: browser_only_until_contact',
+            'network_submit: no',
+            'model_call: no',
+            'connector_access: blocked',
+            'real_mrr_delta: 0',
+            '',
+            'proof_target: ' + template.proof_target,
+            '',
+            'required_sources:',
+            template.required_sources.map(function(item){ return '- ' + item; }).join('\\n'),
+            '',
+            'first_run_acceptance:',
+            template.first_run_acceptance.map(function(item){ return '- ' + item; }).join('\\n'),
+            '',
+            'paid_boundary:',
+            '- First proof, private workspace, exports, connectors, scheduled runs, browser actions, and team usage require approved paid pilot scope.',
+            '- Payment proof and owner acceptance are required before recurring revenue is recorded.'
+          ].join('\\n');
+        }
+        function syncWorkcellSelection(kind){
+          selectedWorkcell = workcellTemplates[kind] ? kind : 'daily_close';
+          templateButtons.forEach(function(button){
+            button.dataset.selected = button.getAttribute('data-workcell-template') === selectedWorkcell ? 'true' : 'false';
+          });
+          if(type){
+            type.value = selectedWorkcell === 'receivables_chase' || selectedWorkcell === 'lead_reply' ? 'lead_followup' : selectedWorkcell === 'document_ledger' ? 'document_ledger' : selectedWorkcell === 'inventory_exception' ? 'inventory_issue' : 'daily_close';
+          }
+          const sourceHash = hashText(sample && sample.value || '');
+          if(paidPilotLink){
+            paidPilotLink.href = '/contact/?package=ai-workcell-pilot&utm_source=free_source_to_screen&utm_content=free_workcell_order&workcell=' + encodeURIComponent(selectedWorkcell) + '&source_hash=' + encodeURIComponent(sourceHash);
+          }
+          if(proofOrderOutput){
+            proofOrderOutput.textContent = buildPaidPilotOrderPacket(selectedWorkcell, sample && sample.value || '');
+          }
+        }
+        templateButtons.forEach(function(button){
+          button.addEventListener('click', function(){
+            syncWorkcellSelection(button.getAttribute('data-workcell-template'));
+          });
+        });
+        if(type){
+          type.addEventListener('change', function(){
+            const next = type.value === 'lead_followup' ? 'lead_reply' : type.value === 'inventory_issue' ? 'inventory_exception' : type.value;
+            syncWorkcellSelection(next);
+          });
+        }
+        if(sample){
+          sample.addEventListener('input', function(){ syncWorkcellSelection(selectedWorkcell); });
+        }
         if(form){
           form.addEventListener('submit', function(event){
             event.preventDefault();
             output.textContent = buildSourceToScreenDraft(type.value, sample.value || '');
+            proofOrderOutput.textContent = buildPaidPilotOrderPacket(selectedWorkcell, sample.value || '');
           });
         }
+        syncWorkcellSelection(selectedWorkcell);
       })();
     </script>
   </body>
