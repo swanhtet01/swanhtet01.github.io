@@ -1238,7 +1238,7 @@ function buildOrderRoomState(payload = {}) {
 function workspaceActivationStatus(state = {}) {
   const scopeApproved = state.scope_approval_state === 'approved' && state.price_approval_state === 'approved'
   const paymentReady = state.payment_route_state === 'approved' && ['approved_to_send', 'sent'].includes(state.payment_request_state)
-  const proofReady = state.payment_proof_state === 'proof_attached'
+  const proofReady = ['proof_attached', 'owner_verified_payment_proof_recorded', 'client_payment_reconciled'].includes(state.payment_proof_state)
   if (scopeApproved && paymentReady && proofReady && state.private_workspace_state === 'created_after_payment_proof') return 'private_workspace_created'
   if (scopeApproved && paymentReady && proofReady) return 'ready_to_create_private_workspace'
   if (!scopeApproved) return 'blocked_until_scope_and_price_approved'
@@ -1293,8 +1293,41 @@ function buildPrivateWorkspaceManifest(input = {}) {
       evidence_required: 'acceptance_checklist',
     },
   ]
+  const firstRunChecklist = list(input.firstRunChecklist || input.first_run_checklist)
+  const resolvedFirstRunChecklist = firstRunChecklist.length
+    ? firstRunChecklist
+    : [
+        'Approved source samples are imported into the workspace.',
+        'First production run remains approval-only until owner acceptance.',
+        'Source trace is attached for every important output.',
+        'Connector writes, sends, and account actions stay blocked until acceptance.',
+      ]
+  const firstRunQueueCsv = text(input.firstRunQueueCsv || input.first_run_queue_csv) || [
+    ['workspace_slug', 'lead_id', 'step_id', 'title', 'owner', 'external_action_state', 'evidence_required', 'real_mrr_delta'].map(csvCell).join(','),
+    ...firstRunQueue.map((item) =>
+      [
+        workspaceSlug,
+        leadId,
+        item.step_id,
+        item.title,
+        item.owner,
+        item.external_action_state,
+        item.evidence_required,
+        '0',
+      ]
+        .map(csvCell)
+        .join(','),
+    ),
+  ].join('\n')
+  const clientKickoffPacket = text(input.clientKickoffPacket || input.client_kickoff_packet)
+  const proofDeliveryPacket = text(input.proofDeliveryPacket || input.proof_delivery_packet)
   return {
     status: activationStatus,
+    delivery_room_status: activationStatus === 'private_workspace_created'
+      ? 'workspace_delivery_room_ready'
+      : createWorkspaceAllowed
+        ? 'workspace_delivery_room_ready_after_payment_proof'
+        : 'workspace_delivery_room_blocked_until_payment_proof',
     workspace_slug: workspaceSlug,
     lead_id: leadId,
     template_id: templateId,
@@ -1310,6 +1343,12 @@ function buildPrivateWorkspaceManifest(input = {}) {
     private_workspace_state: activationStatus === 'private_workspace_created' ? 'created_after_payment_proof' : createWorkspaceAllowed ? state.private_workspace_state || 'ready_after_payment_proof' : 'not_created_until_payment_proof',
     payment_proof_reference: createWorkspaceAllowed ? text(state.payment_proof_reference) || 'OWNER_PROOF_REFERENCE_REQUIRED' : 'required_before_workspace',
     first_run_mode: 'approval_only',
+    workspace_delivery_gate: 'approval_only_until_owner_acceptance',
+    next_operator_action: activationStatus === 'private_workspace_created' ? 'record_first_production_run' : 'record_pilot_payment_proof',
+    client_kickoff_packet: clientKickoffPacket,
+    proof_delivery_packet: proofDeliveryPacket,
+    first_run_queue_csv: firstRunQueueCsv,
+    first_run_checklist: resolvedFirstRunChecklist,
     real_mrr_delta: 0,
     modules,
     first_run_queue: firstRunQueue,
@@ -3050,6 +3089,8 @@ function firstProofPacket(row) {
     null,
     2,
   )
+  const resolvedBuyerReplyDraft = text(activationFirstProof.buyer_reply_draft) || buyerReplyDraft
+  const resolvedProofDeliveryPacket = text(activationFirstProof.proof_delivery_packet) || proofDeliveryPacket
   const privateWorkspaceManifest = buildPrivateWorkspaceManifest({
     leadId,
     templateId,
@@ -3057,6 +3098,8 @@ function firstProofPacket(row) {
     starterKitUrl,
     firstProofTarget,
     priceHint,
+    clientKickoffPacket: text(clientKickoffPack.packet),
+    proofDeliveryPacket: resolvedProofDeliveryPacket,
     state: orderRoomState,
   })
   const privateWorkspaceHandoffPacket = [
@@ -3068,10 +3111,19 @@ function firstProofPacket(row) {
     `Lead: ${leadId}`,
     `Template: ${templateId || 'not set'}`,
     `First run mode: ${privateWorkspaceManifest.first_run_mode}`,
+    `Delivery room status: ${privateWorkspaceManifest.delivery_room_status}`,
+    `Workspace delivery gate: ${privateWorkspaceManifest.workspace_delivery_gate}`,
+    `Next operator action: ${privateWorkspaceManifest.next_operator_action}`,
     `Create workspace allowed: ${privateWorkspaceManifest.create_workspace_allowed ? 'yes' : 'no'}`,
     `Workspace created: ${privateWorkspaceManifest.workspace_created ? 'yes' : 'no'}`,
     `Payment proof: ${privateWorkspaceManifest.payment_proof_reference}`,
     `Real MRR delta: ${privateWorkspaceManifest.real_mrr_delta}`,
+    '',
+    '## Client kickoff packet',
+    privateWorkspaceManifest.client_kickoff_packet || '[Attach client kickoff packet from the first proof workcell.]',
+    '',
+    '## Proof delivery packet',
+    privateWorkspaceManifest.proof_delivery_packet || '[Attach reviewed proof delivery packet before first run.]',
     '',
     '## Modules',
     privateWorkspaceManifest.modules.map((item) => `- ${item}`).join('\n'),
@@ -3079,28 +3131,13 @@ function firstProofPacket(row) {
     '## First run queue',
     privateWorkspaceManifest.first_run_queue.map((item) => `- [ ] ${item.step_id}: ${item.title} (${item.external_action_state})`).join('\n'),
     '',
+    '## First run checklist',
+    privateWorkspaceManifest.first_run_checklist.map((item) => `- [ ] ${item}`).join('\n'),
+    '',
     '## Guardrails',
     privateWorkspaceManifest.guardrails.map((item) => `- ${item}`).join('\n'),
   ].join('\n')
-  const firstRunQueueCsv = [
-    ['workspace_slug', 'lead_id', 'step_id', 'title', 'owner', 'external_action_state', 'evidence_required', 'real_mrr_delta'].map(csvCell).join(','),
-    ...privateWorkspaceManifest.first_run_queue.map((item) =>
-      [
-        privateWorkspaceManifest.workspace_slug,
-        leadId,
-        item.step_id,
-        item.title,
-        item.owner,
-        item.external_action_state,
-        item.evidence_required,
-        '0',
-      ]
-        .map(csvCell)
-        .join(','),
-    ),
-  ].join('\n')
-  const resolvedBuyerReplyDraft = text(activationFirstProof.buyer_reply_draft) || buyerReplyDraft
-  const resolvedProofDeliveryPacket = text(activationFirstProof.proof_delivery_packet) || proofDeliveryPacket
+  const firstRunQueueCsv = privateWorkspaceManifest.first_run_queue_csv
   const proofReviewRequest = parseJsonObject(activationFirstProof.proof_review_request || result.proof_review_request || task.proof_review_request || payload.proof_review_request)
   const proofReviewAcceptance = parseJsonObject(result.proof_review_acceptance || payload.proof_review_acceptance)
 
@@ -5747,6 +5784,9 @@ function contextFromActionRow(row, state = {}) {
   const templateId = text(result.template_id) || text(task.template_id) || text(payload.template_id)
   const templateName = text(task.template_name) || text(payload.public_package) || text(payload.requested_package) || templateId
   const acceptanceTests = list(result.acceptance_tests).length ? list(result.acceptance_tests) : list(task.acceptance_tests)
+  const clientKickoffPack = parseJsonObject(result.client_kickoff_pack || task.client_kickoff_pack || payload.client_kickoff_pack)
+  const activationFirstProof = parseJsonObject(result.activation_first_proof || task.activation_first_proof || payload.activation_first_proof)
+  const privateWorkspaceManifest = parseJsonObject(result.private_workspace_manifest || payload.private_workspace_manifest)
   return {
     leadId: text(row.lead_id) || 'not set',
     templateId,
@@ -5755,6 +5795,10 @@ function contextFromActionRow(row, state = {}) {
     firstProofTarget: text(result.first_proof_target) || text(task.first_proof_target) || text(payload.first_proof_target),
     priceHint: text(task.price_hint) || text(payload.price_hint) || 'quote after proof review',
     acceptanceTests,
+    clientKickoffPacket: text(result.client_kickoff_packet) || text(clientKickoffPack.packet) || text(privateWorkspaceManifest.client_kickoff_packet),
+    proofDeliveryPacket: text(result.proof_delivery_packet) || text(activationFirstProof.proof_delivery_packet) || text(privateWorkspaceManifest.proof_delivery_packet),
+    firstRunQueueCsv: text(result.first_run_queue_csv) || text(privateWorkspaceManifest.first_run_queue_csv),
+    firstRunChecklist: list(privateWorkspaceManifest.first_run_checklist),
     state,
   }
 }

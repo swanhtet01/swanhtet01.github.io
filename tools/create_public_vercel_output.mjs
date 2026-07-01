@@ -7110,7 +7110,7 @@ const publicPilotWorkspaceHtml = `<!doctype html>
     .top-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
     .btn { border: 1px solid var(--line); border-radius: 999px; padding: 11px 14px; background: var(--panel); color: var(--ink); font-weight: 850; text-decoration: none; cursor: pointer; }
     .btn.primary { background: var(--ink); color: var(--paper); border-color: var(--ink); }
-    .btn:focus-visible, input:focus-visible { outline: 3px solid rgba(217,119,87,.28); outline-offset: 2px; }
+    .btn:focus-visible, input:focus-visible, textarea:focus-visible { outline: 3px solid rgba(217,119,87,.28); outline-offset: 2px; }
     .hero { display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, 420px); gap: 16px; align-items: stretch; padding: 28px 0 18px; }
     .workspace-title { padding: clamp(22px, 4vw, 42px) 0; }
     .eyebrow { color: var(--accent); font-size: 12px; font-weight: 950; text-transform: uppercase; letter-spacing: 0; }
@@ -7129,6 +7129,14 @@ const publicPilotWorkspaceHtml = `<!doctype html>
     .card span { display: block; color: var(--accent); font-size: 11px; font-weight: 950; text-transform: uppercase; letter-spacing: 0; }
     .card strong { display: block; margin-top: 10px; font-size: 20px; letter-spacing: 0; }
     .card p { font-size: 14px; margin-top: 8px; }
+    .artifact-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+    .artifact { border: 1px solid var(--line); border-radius: 8px; background: var(--panel); padding: 16px; display: grid; gap: 12px; min-width: 0; }
+    .artifact.wide { grid-column: 1 / -1; }
+    .artifact-header { display: flex; align-items: start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+    .artifact-header span { display: block; color: var(--accent); font-size: 11px; font-weight: 950; text-transform: uppercase; letter-spacing: 0; }
+    .artifact-header strong { display: block; margin-top: 6px; font-size: 20px; letter-spacing: 0; }
+    textarea { width: 100%; min-height: 220px; resize: vertical; border: 1px solid var(--line); border-radius: 8px; background: rgba(255,250,241,.72); color: var(--ink); padding: 14px; font: 13px/1.45 ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace; }
+    #first-run-queue { min-height: 150px; }
     .queue { display: grid; gap: 10px; }
     .queue-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; align-items: center; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); padding: 14px; }
     .step { width: 28px; height: 28px; border-radius: 999px; display: grid; place-items: center; background: var(--ink); color: var(--paper); font-weight: 950; }
@@ -7138,7 +7146,7 @@ const publicPilotWorkspaceHtml = `<!doctype html>
     input { width: 100%; border: 1px solid var(--line); border-radius: 999px; padding: 12px 14px; background: var(--panel); color: var(--ink); font: inherit; }
     pre { margin: 0; overflow: auto; white-space: pre-wrap; border: 1px solid var(--line); border-radius: 8px; background: rgba(255,250,241,.7); padding: 14px; font-size: 13px; line-height: 1.45; }
     footer { margin-top: 24px; padding-top: 18px; border-top: 1px solid var(--line); color: var(--muted); font-size: 13px; }
-    @media (max-width: 820px) { .hero, .grid { grid-template-columns: 1fr; } header { align-items: flex-start; } .summary-row, .operator-form { grid-template-columns: 1fr; } .queue-row { grid-template-columns: auto minmax(0, 1fr); } .queue-row .pill { grid-column: 2; width: fit-content; } }
+    @media (max-width: 820px) { .hero, .grid, .artifact-grid { grid-template-columns: 1fr; } .artifact.wide { grid-column: auto; } header { align-items: flex-start; } .summary-row, .operator-form { grid-template-columns: 1fr; } .queue-row { grid-template-columns: auto minmax(0, 1fr); } .queue-row .pill { grid-column: 2; width: fit-content; } }
   </style>
 </head>
 <body>
@@ -7160,8 +7168,63 @@ const publicPilotWorkspaceHtml = `<!doctype html>
         <div class="summary-row"><span>Workspace</span><strong data-workspace-slug>Loading</strong></div>
         <div class="summary-row"><span>Lead</span><strong data-lead-id>Loading</strong></div>
         <div class="summary-row"><span>Mode</span><strong>approval_only</strong></div>
+        <div class="summary-row"><span>Gate</span><strong data-delivery-gate>approval_only_until_owner_acceptance</strong></div>
         <div class="summary-row"><span>Revenue</span><strong>Proof-backed MRR: 0</strong></div>
       </aside>
+    </section>
+    <section class="band">
+      <div class="section-title">
+        <h2>Client delivery room</h2>
+        <span class="pill" data-delivery-status>workspace_delivery_room_ready</span>
+      </div>
+      <div class="grid">
+        <article class="card"><span>Status</span><strong data-next-action>record_first_production_run</strong><p>The next operator move is to run the first useful output inside this workspace, then request owner acceptance.</p></article>
+        <article class="card"><span>Client boundary</span><strong>Approval-only until accepted</strong><p>All browser, email, payment, POS, CRM, and sheet actions stay blocked until the client accepts the first production run.</p></article>
+        <article class="card"><span>Revenue rule</span><strong>Setup cash is not MRR</strong><p>Payment proof can unlock delivery. Recurring revenue is still zero until a recurring payment proof is recorded.</p></article>
+      </div>
+    </section>
+    <section class="band">
+      <div class="section-title">
+        <h2>Delivery artifacts</h2>
+        <span class="pill">copy-ready</span>
+      </div>
+      <div class="artifact-grid">
+        <article class="artifact">
+          <div class="artifact-header">
+            <div><span>Client kickoff packet</span><strong>What the client approves and provides</strong></div>
+            <button class="btn" type="button" data-copy-target="kickoff-packet">Copy kickoff packet</button>
+          </div>
+          <textarea id="kickoff-packet" readonly># Client kickoff packet
+
+Status: workspace_delivery_room_ready
+Gate: approval_only_until_owner_acceptance
+Goal: turn the approved first proof into a useful first production run.
+Access needed: approved screenshots, exports, folders, files, or threads only.
+No external sends, connector writes, account changes, or payment actions until owner acceptance.</textarea>
+        </article>
+        <article class="artifact">
+          <div class="artifact-header">
+            <div><span>Proof delivery packet</span><strong>What the first run must prove</strong></div>
+            <button class="btn" type="button" data-copy-target="proof-packet">Copy proof packet</button>
+          </div>
+          <textarea id="proof-packet" readonly># Proof delivery packet
+
+Result: first useful output goes here.
+Source trace: attach the approved source that created each important claim or task.
+Acceptance: client marks accepted, changes requested, or blocked.
+External actions: blocked until owner acceptance.</textarea>
+        </article>
+        <article class="artifact wide">
+          <div class="artifact-header">
+            <div><span>First production run queue</span><strong>Operator queue for the paid pilot</strong></div>
+            <button class="btn" type="button" data-copy-target="first-run-queue">Copy first run queue</button>
+          </div>
+          <textarea id="first-run-queue" readonly>"workspace_slug","lead_id","step_id","title","owner","external_action_state","evidence_required","real_mrr_delta"
+"workspace-required","lead-required","import_approved_sources","Import only buyer-approved sample sources","Revenue Pod","manual_owner_approved","source_trace","0"
+"workspace-required","lead-required","build_first_production_run","Build the first approval-only agent run","Delivery Pod","not_sent","first_run_output","0"
+"workspace-required","lead-required","owner_acceptance_review","Collect owner acceptance before live connector writes or sends","Founder","approval_required","acceptance_checklist","0"</textarea>
+        </article>
+      </div>
     </section>
     <section class="band">
       <div class="section-title">
@@ -7191,7 +7254,7 @@ const publicPilotWorkspaceHtml = `<!doctype html>
         <span class="pill">optional live check</span>
       </div>
       <div class="operator-panel">
-        <p>Paste the operator key to load live status from <code>/api/pipeline-control/status</code>. The loader includes <code>datastore_failover_report</code> and <code>operator_runtime_summary</code> so degraded SQL never hides the client onboarding state.</p>
+        <p>Paste the operator key to load live status from <code>/api/pipeline-control/status</code>. The loader reads <code>actions</code> or <code>recent_actions</code> and includes <code>datastore_failover_report</code> and <code>operator_runtime_summary</code> so degraded SQL never hides the client onboarding state.</p>
         <div class="operator-form">
           <input id="ops-key" type="password" autocomplete="off" placeholder="SUPERMEGA_OPS_KEY" aria-label="Operator key" />
           <button id="load-status" class="btn primary" type="button">Load operator status</button>
@@ -7208,9 +7271,65 @@ const publicPilotWorkspaceHtml = `<!doctype html>
       var lead = (params.get('lead') || 'lead-required').slice(0, 64);
       var workspaceEl = document.querySelector('[data-workspace-slug]');
       var leadEl = document.querySelector('[data-lead-id]');
+      var deliveryStatusEl = document.querySelector('[data-delivery-status]');
+      var deliveryGateEl = document.querySelector('[data-delivery-gate]');
+      var nextActionEl = document.querySelector('[data-next-action]');
+      var kickoffEl = document.getElementById('kickoff-packet');
+      var proofEl = document.getElementById('proof-packet');
+      var queueEl = document.getElementById('first-run-queue');
       var statusEl = document.getElementById('workspace-status');
       if (workspaceEl) workspaceEl.textContent = workspace;
       if (leadEl) leadEl.textContent = lead;
+      function defaultKickoff(manifest) {
+        return [
+          '# Client kickoff packet',
+          '',
+          'Status: ' + (manifest.delivery_room_status || 'workspace_delivery_room_ready'),
+          'Workspace: ' + (manifest.workspace_slug || workspace),
+          'Lead: ' + (manifest.lead_id || lead),
+          'Gate: ' + (manifest.workspace_delivery_gate || 'approval_only_until_owner_acceptance'),
+          'Goal: turn the approved first proof into a useful first production run.',
+          'Access needed: approved screenshots, exports, folders, files, or threads only.',
+          'No external sends, connector writes, account changes, or payment actions until owner acceptance.'
+        ].join('\\n');
+      }
+      function defaultProof(manifest) {
+        return [
+          '# Proof delivery packet',
+          '',
+          'Workspace: ' + (manifest.workspace_slug || workspace),
+          'Result: first useful output goes here.',
+          'Source trace: attach the approved source that created each important claim or task.',
+          'Acceptance: client marks accepted, changes requested, or blocked.',
+          'External actions: blocked until owner acceptance.'
+        ].join('\\n');
+      }
+      function defaultQueue(manifest) {
+        var slug = manifest.workspace_slug || workspace;
+        var leadId = manifest.lead_id || lead;
+        return [
+          '"workspace_slug","lead_id","step_id","title","owner","external_action_state","evidence_required","real_mrr_delta"',
+          '"' + slug + '","' + leadId + '","import_approved_sources","Import only buyer-approved sample sources","Revenue Pod","manual_owner_approved","source_trace","0"',
+          '"' + slug + '","' + leadId + '","build_first_production_run","Build the first approval-only agent run","Delivery Pod","not_sent","first_run_output","0"',
+          '"' + slug + '","' + leadId + '","owner_acceptance_review","Collect owner acceptance before live connector writes or sends","Founder","approval_required","acceptance_checklist","0"'
+        ].join('\\n');
+      }
+      function applyManifest(manifest) {
+        manifest = manifest || {};
+        if (deliveryStatusEl) deliveryStatusEl.textContent = manifest.delivery_room_status || 'workspace_delivery_room_ready';
+        if (deliveryGateEl) deliveryGateEl.textContent = manifest.workspace_delivery_gate || 'approval_only_until_owner_acceptance';
+        if (nextActionEl) nextActionEl.textContent = manifest.next_operator_action || 'record_first_production_run';
+        if (kickoffEl) kickoffEl.value = manifest.client_kickoff_packet || defaultKickoff(manifest);
+        if (proofEl) proofEl.value = manifest.proof_delivery_packet || defaultProof(manifest);
+        if (queueEl) queueEl.value = manifest.first_run_queue_csv || defaultQueue(manifest);
+      }
+      applyManifest({
+        workspace_slug: workspace,
+        lead_id: lead,
+        delivery_room_status: 'workspace_delivery_room_ready',
+        workspace_delivery_gate: 'approval_only_until_owner_acceptance',
+        next_operator_action: 'record_first_production_run'
+      });
       function setStatus(value) {
         if (!statusEl) return;
         statusEl.textContent = typeof value === 'string' ? value : JSON.stringify(value, null, 2);
@@ -7218,12 +7337,16 @@ const publicPilotWorkspaceHtml = `<!doctype html>
       function summarize(action, payload) {
         var room = action && action.first_proof && action.first_proof.pilot_order_room ? action.first_proof.pilot_order_room : {};
         var manifest = room.private_workspace_manifest || {};
+        applyManifest(manifest);
         return {
           status: action ? action.status : 'not_found',
           workspace_slug: manifest.workspace_slug || workspace,
           lead_id: action ? action.lead_id : lead,
           first_proof: action && action.first_proof ? action.first_proof.status : 'not_loaded',
           workspace_status: manifest.status || 'not_loaded',
+          delivery_room_status: manifest.delivery_room_status || 'workspace_delivery_room_ready',
+          workspace_delivery_gate: manifest.workspace_delivery_gate || 'approval_only_until_owner_acceptance',
+          next_operator_action: manifest.next_operator_action || 'record_first_production_run',
           first_run_mode: manifest.first_run_mode || 'approval_only',
           datastore_failover_report: payload && payload.datastore_failover_report ? {
             status: payload.datastore_failover_report.status,
@@ -7246,7 +7369,7 @@ const publicPilotWorkspaceHtml = `<!doctype html>
             var response = await fetch('/api/pipeline-control/status', { cache: 'no-store', headers: { authorization: 'Bearer ' + key, accept: 'application/json' } });
             var payload = await response.json().catch(function(){ return { status: 'error', reason: 'invalid_json', code: response.status }; });
             if (!response.ok) { setStatus(payload); return; }
-            var actions = Array.isArray(payload.actions) ? payload.actions : [];
+          var actions = Array.isArray(payload.actions) ? payload.actions : (Array.isArray(payload.recent_actions) ? payload.recent_actions : []);
             var match = actions.find(function(action){
               var room = action && action.first_proof && action.first_proof.pilot_order_room ? action.first_proof.pilot_order_room : {};
               var manifest = room.private_workspace_manifest || {};
@@ -7258,6 +7381,22 @@ const publicPilotWorkspaceHtml = `<!doctype html>
           }
         });
       }
+      document.querySelectorAll('[data-copy-target]').forEach(function(button){
+        button.addEventListener('click', async function(){
+          var target = document.getElementById(button.getAttribute('data-copy-target'));
+          if (!target) return;
+          var original = button.textContent;
+          try {
+            await navigator.clipboard.writeText(target.value || target.textContent || '');
+            button.textContent = 'Copied';
+          } catch (_error) {
+            target.focus();
+            target.select();
+            button.textContent = 'Select and copy';
+          }
+          setTimeout(function(){ button.textContent = original; }, 1400);
+        });
+      });
     })();
   </script>
 </body>

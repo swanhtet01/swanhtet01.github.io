@@ -1,11 +1,11 @@
 {
-    "public_host":  "supermega-public-1bk7eeyns-swanhtet01s-projects.vercel.app",
-    "deployment_id":  "dpl_hKtAgTrsHiPyvtwgpZJWRCEDEYbL",
-    "locked_at":  "2026-07-01T09:41:00.0000000Z",
+    "public_host":  "supermega-public-9s4jxfn18-swanhtet01s-projects.vercel.app",
+    "deployment_id":  "dpl_H5bpL43kU3cYme2MyQjLCPnJXnk7",
+    "locked_at":  "2026-07-01T10:02:51.7211318Z",
     "domains":  [
                     "supermega.dev",
                     "www.supermega.dev"
                 ],
     "project":  "supermega-public",
-    "reason":  "Operator can reconcile client-submitted payment proof into setup-cash proof and create the private workspace in one protected action; legacy payload-only SQL tables are supported."
+    "reason":  "Private pilot workspaces now render a client delivery room with kickoff packet, proof packet, first production run queue, live recent_actions status loading, and proof-gated next operator action."
 }
