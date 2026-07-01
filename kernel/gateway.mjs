@@ -25,7 +25,7 @@ const FALLBACK = { deep: 'reason', reason: 'bulk', bulk: null }
 const ledger = new Map() // clientId -> { inTokens, outTokens, calls } (this instance, current process life)
 const cache = new Map() // cacheKey -> { ...out, _exp }
 const CACHE_TTL_MS = Number(process.env.SUPERMEGA_AI_CACHE_TTL_MS || 3_600_000) // 1h default; keys are tenant-scoped
-const DEFAULT_CAP_TOKENS = Number(process.env.SUPERMEGA_CLIENT_TOKEN_CAP || 2_000_000)
+const DEFAULT_CAP_TOKENS = Number(process.env.SUPERMEGA_CLIENT_TOKEN_CAP || 150_000) // P0: free-tier cap (was 2M — 2M/mo kills margin at scale)
 
 // Persistent ledger/cache toggle. On by default; set SUPERMEGA_GATEWAY_PERSIST=0 to force pure in-memory.
 const PERSIST = String(process.env.SUPERMEGA_GATEWAY_PERSIST ?? '1') !== '0'
