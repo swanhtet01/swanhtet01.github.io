@@ -3355,6 +3355,14 @@ const config = {
       dest: '/api/proof-review-submissions.js',
     },
     {
+      src: '^/api/first-run-acceptance-submissions$',
+      dest: '/api/first-run-acceptance-submissions.js',
+    },
+    {
+      src: '^/api/first-run-acceptance-submissions/status$',
+      dest: '/api/first-run-acceptance-submissions.js',
+    },
+    {
       src: '^/api/pilot-payment-submissions$',
       dest: '/api/pilot-payment-submissions.js',
     },
@@ -7252,6 +7260,25 @@ External actions: blocked until owner acceptance.</textarea>
     </section>
     <section class="band">
       <div class="section-title">
+        <h2>Submit first-run acceptance</h2>
+        <span class="pill">client write</span>
+      </div>
+      <div class="operator-panel">
+        <p>Submitting stores the first-run decision for operator review only. It posts to <code>/api/first-run-acceptance-submissions</code> as <code>first_run_acceptance_submitted</code>; no external send, connector write, browser action, payment action, or recurring revenue claim is triggered.</p>
+        <div class="run-form">
+          <label>Decision<select id="first-run-client-decision"><option value="accepted">Accepted</option><option value="changes_requested">Changes requested</option></select></label>
+          <label>First-run excerpt<textarea id="first-run-packet-excerpt" placeholder="Optional: paste the output or short excerpt you are accepting or requesting changes on."></textarea></label>
+          <label class="wide">Client note<textarea id="first-run-client-note" placeholder="What worked? What should change before this becomes the next run or managed retainer?"></textarea></label>
+        </div>
+        <div class="run-actions">
+          <span class="pill">operator owner-acceptance review required</span>
+          <button id="submit-first-run-acceptance" class="btn primary" type="button">Submit first-run acceptance</button>
+        </div>
+        <pre id="first-run-acceptance-status">Waiting for client decision.</pre>
+      </div>
+    </section>
+    <section class="band">
+      <div class="section-title">
         <h2>First run queue</h2>
         <span class="pill">owner gated</span>
       </div>
@@ -7307,6 +7334,10 @@ External actions: blocked until owner acceptance.</textarea>
       var runOutputEl = document.getElementById('first-run-output');
       var runEvidenceEl = document.getElementById('first-run-evidence-reference');
       var runSourceTraceEl = document.getElementById('first-run-source-trace');
+      var clientDecisionEl = document.getElementById('first-run-client-decision');
+      var clientNoteEl = document.getElementById('first-run-client-note');
+      var firstRunExcerptEl = document.getElementById('first-run-packet-excerpt');
+      var acceptanceStatusEl = document.getElementById('first-run-acceptance-status');
       if (workspaceEl) workspaceEl.textContent = workspace;
       if (leadEl) leadEl.textContent = lead;
       function defaultKickoff(manifest) {
@@ -7370,10 +7401,15 @@ External actions: blocked until owner acceptance.</textarea>
         if (!runStatusEl) return;
         runStatusEl.textContent = typeof value === 'string' ? value : JSON.stringify(value, null, 2);
       }
+      function setAcceptanceStatus(value) {
+        if (!acceptanceStatusEl) return;
+        acceptanceStatusEl.textContent = typeof value === 'string' ? value : JSON.stringify(value, null, 2);
+      }
       function summarize(action, payload) {
         var room = action && action.first_proof && action.first_proof.pilot_order_room ? action.first_proof.pilot_order_room : {};
         var manifest = room.private_workspace_manifest || {};
         if (action && action.action_id) currentActionId = action.action_id;
+        if (firstRunExcerptEl && room.first_production_run_packet && !firstRunExcerptEl.value) firstRunExcerptEl.value = String(room.first_production_run_packet).slice(0, 1800);
         applyManifest(manifest);
         return {
           status: action ? action.status : 'not_found',
@@ -7464,6 +7500,51 @@ External actions: blocked until owner acceptance.</textarea>
             });
           } catch (error) {
             setRunStatus({ status: 'error', reason: String(error && error.message || error) });
+          }
+        });
+      }
+      var submitFirstRunAcceptanceButton = document.getElementById('submit-first-run-acceptance');
+      if (submitFirstRunAcceptanceButton) {
+        submitFirstRunAcceptanceButton.addEventListener('click', async function(){
+          var decision = (clientDecisionEl && clientDecisionEl.value || '').trim();
+          var clientNote = (clientNoteEl && clientNoteEl.value || '').trim();
+          var firstRunExcerpt = (firstRunExcerptEl && firstRunExcerptEl.value || '').trim();
+          if (!currentActionId) { setAcceptanceStatus('Missing action id. Open this room with ?action=TASK_ID or ask the operator to load status first.'); return; }
+          if (!decision) { setAcceptanceStatus('Choose accepted or changes_requested first.'); return; }
+          setAcceptanceStatus('Submitting first-run acceptance...');
+          try {
+            var response = await fetch('/api/first-run-acceptance-submissions', {
+              method: 'POST',
+              cache: 'no-store',
+              headers: {
+                accept: 'application/json',
+                'content-type': 'application/json'
+              },
+              body: JSON.stringify({
+                action_id: currentActionId,
+                lead_id: lead,
+                decision: decision,
+                client_note: clientNote,
+                first_run_packet_excerpt: firstRunExcerpt
+              })
+            });
+            var payload = await response.json().catch(function(){ return { status: 'error', reason: 'invalid_json', code: response.status }; });
+            if (!response.ok || payload.status !== 'ready') { setAcceptanceStatus(payload); return; }
+            setAcceptanceStatus({
+              status: payload.status,
+              submission_status: payload.submission_status,
+              first_run_acceptance_status: payload.first_run_acceptance ? payload.first_run_acceptance.status : 'not_returned',
+              decision: payload.first_run_acceptance ? payload.first_run_acceptance.decision : decision,
+              action_status: payload.action ? payload.action.status : 'not_returned',
+              next_gate: payload.first_run_acceptance ? payload.first_run_acceptance.next_gate : 'operator_owner_acceptance_record_required',
+              external_action_state: payload.first_run_acceptance ? payload.first_run_acceptance.external_action_state : 'blocked_until_operator_owner_acceptance',
+              connector_write_state: payload.first_run_acceptance ? payload.first_run_acceptance.connector_write_state : 'blocked_until_operator_owner_acceptance',
+              recurring_revenue_state: payload.first_run_acceptance ? payload.first_run_acceptance.recurring_revenue_state : 'not_claimed',
+              real_mrr_delta: payload.first_run_acceptance ? payload.first_run_acceptance.real_mrr_delta : 0,
+              message: 'Submitted for operator owner-acceptance review.'
+            });
+          } catch (error) {
+            setAcceptanceStatus({ status: 'error', reason: String(error && error.message || error) });
           }
         });
       }
@@ -7594,6 +7675,7 @@ await writeNodeFunction('health.js')
 await writeNodeFunction('contact-submissions.js')
 await writeNodeFunction('source-pack-submissions.js')
 await writeNodeFunction('proof-review-submissions.js')
+await writeNodeFunction('first-run-acceptance-submissions.js')
 await writeNodeFunction('pilot-payment-submissions.js')
 await writeNodeFunction('campaign-clicks.js')
 await writeNodeFunction('commercial-control.js')

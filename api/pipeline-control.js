@@ -2848,6 +2848,7 @@ function firstProofPacket(row) {
   const persistedOrderRoomState = parseJsonObject(result.pilot_order_room_state || payload.pilot_order_room_state)
   const firstProductionRun = parseJsonObject(result.first_production_run || payload.first_production_run)
   const firstRunAcceptance = parseJsonObject(result.first_run_acceptance || payload.first_run_acceptance)
+  const clientFirstRunAcceptance = parseJsonObject(result.client_first_run_acceptance || payload.client_first_run_acceptance)
   const ownerAcceptance = parseJsonObject(result.owner_acceptance || payload.owner_acceptance)
   const connectorPolicy = parseJsonObject(result.connector_policy || payload.connector_policy)
   const productionApprovalQueue = parseJsonObject(result.production_approval_queue || payload.production_approval_queue)
@@ -3211,6 +3212,8 @@ function firstProofPacket(row) {
       first_run_acceptance: Object.keys(firstRunAcceptance).length ? firstRunAcceptance : null,
       first_run_acceptance_packet: text(firstRunAcceptance.acceptance_packet),
       first_run_acceptance_queue_csv: text(firstRunAcceptance.acceptance_queue_csv),
+      client_first_run_acceptance: Object.keys(clientFirstRunAcceptance).length ? clientFirstRunAcceptance : null,
+      client_first_run_acceptance_json: Object.keys(clientFirstRunAcceptance).length ? JSON.stringify(clientFirstRunAcceptance, null, 2) : '',
       owner_acceptance: Object.keys(ownerAcceptance).length ? ownerAcceptance : null,
       owner_acceptance_packet: text(ownerAcceptance.packet),
       owner_acceptance_queue_csv: text(ownerAcceptance.queue_csv),

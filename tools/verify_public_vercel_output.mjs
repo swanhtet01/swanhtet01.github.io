@@ -38,6 +38,8 @@ for (const [src, dest] of [
   ['^/api/source-pack-submissions/status$', '/api/source-pack-submissions.js'],
   ['^/api/proof-review-submissions$', '/api/proof-review-submissions.js'],
   ['^/api/proof-review-submissions/status$', '/api/proof-review-submissions.js'],
+  ['^/api/first-run-acceptance-submissions$', '/api/first-run-acceptance-submissions.js'],
+  ['^/api/first-run-acceptance-submissions/status$', '/api/first-run-acceptance-submissions.js'],
   ['^/api/pilot-payment-submissions$', '/api/pilot-payment-submissions.js'],
   ['^/api/pilot-payment-submissions/status$', '/api/pilot-payment-submissions.js'],
   ['^/api/checkout-start$', '/api/checkout-start.js'],
@@ -592,6 +594,11 @@ for (const token of [
   'Client kickoff packet',
   'First production run queue',
   'Record first production run',
+  'Submit first-run acceptance',
+  '/api/first-run-acceptance-submissions',
+  'first_run_acceptance_submitted',
+  'Submitted for operator owner-acceptance review',
+  'Submitting stores the first-run decision for operator review only',
   'first-run-output',
   'first-run-evidence-reference',
   'record-first-run',
@@ -637,6 +644,14 @@ for (const token of ['normalizeProofReviewSubmission', 'proof_review_acceptance_
     fail('public_proof_review_submission_contract_missing', { token })
   }
 }
+const firstRunAcceptanceFunctionPath = resolve(functionsDir, 'api/first-run-acceptance-submissions.js.func/api/first-run-acceptance-submissions.js')
+if (!existsSync(firstRunAcceptanceFunctionPath)) fail('public_first_run_acceptance_submission_function_missing')
+const firstRunAcceptanceFunctionSource = readFileSync(firstRunAcceptanceFunctionPath, 'utf8')
+for (const token of ['normalizeFirstRunAcceptanceSubmission', 'first_run_acceptance_submitted', 'first_run_acceptance_received', 'client_accepted_first_run', 'publicSubmissionResponse', 'no_recurring_revenue_claim']) {
+  if (!firstRunAcceptanceFunctionSource.includes(token)) {
+    fail('public_first_run_acceptance_submission_contract_missing', { token })
+  }
+}
 const pilotPaymentSubmissionFunctionPath = resolve(functionsDir, 'api/pilot-payment-submissions.js.func/api/pilot-payment-submissions.js')
 if (!existsSync(pilotPaymentSubmissionFunctionPath)) fail('public_pilot_payment_submission_function_missing')
 const pilotPaymentSubmissionFunctionSource = readFileSync(pilotPaymentSubmissionFunctionPath, 'utf8')
@@ -669,7 +684,7 @@ for (const token of ['PUBLIC_WORKSPACE_BASE_URL', 'https://supermega.dev', '/app
     fail('public_pipeline_workspace_url_contract_missing', { token })
   }
 }
-for (const token of ['firstProofPacket', 'first_proof', 'operator_brief_ready', 'starter_kit_url', 'solution_route_packet', 'solution_route_json', 'implementation_blueprint_packet', 'implementation_blueprint_json', 'intake_job_packet', 'intake_job_json', 'client_kickoff_packet', 'client_kickoff_json', 'buyer_reply_draft', 'proof_delivery_packet', 'pilot_close_packet', 'pilot_order_room', 'private_workspace_manifest', 'first_run_acceptance', 'owner_acceptance', 'connector_policy', 'production_approval_queue', 'enterprise_delivery_pack', 'customer_success_desk', 'retainer_growth_offer', 'retainer_payment_record', 'recordRetainerPaymentProof', 'record_retainer_payment_proof', 'revenueProofBoard', 'revenue_proof_board', 'autopilotCommandBoard', 'autopilot_command_board', 'autopilot_command_count', 'autopilot_draft', 'autopilot_draft_approval', 'autopilotApprovalLedgerStatus', 'writeAutopilotApprovalLedger', 'readAutopilotApprovalLedger', 'blobPipelineControlPayload', 'updateBlobOrderRoomState', 'startBlobPrivateWorkspace', 'blob_action_queue', 'approval_ledger', 'vercel_blob', 'buildDatastoreFailoverReport', 'datastore_failover_report', 'operatorRuntimeSummary', 'operator_runtime_summary', 'blob_queue_approval_only', 'zero_until_payment_proof', 'autopilotDraftFromPayload', 'sendAutopilotDraftApprovalEmail', 'email_fallback', 'recordAutopilotDraftApproval', 'record_autopilot_draft_approval', 'autopilot_draft_packet', 'source_request_packet', 'offer_packet', 'buyer_reply_draft', 'command_queue_csv', 'operator_brief_markdown', 'approval_gated_autopilot', 'internal_drafts_allowed_external_actions_blocked_until_owner_approval', 'proof_backed_mrr_mmk', 'bank_verified_mrr_mmk', 'bank_unverified_mrr_mmk', 'payment_ledger_csv', 'next_cash_actions_csv', 'drafts_and_offers_do_not_count_as_mrr', 'prepareRetainerGrowthOffer', 'prepare_retainer_growth_offer', 'prepareCustomerSuccessDesk', 'prepare_customer_success_desk', 'prepareEnterpriseDeliveryPack', 'prepare_enterprise_delivery_pack', 'prepareProductionApprovalQueue', 'prepare_production_approval_queue', 'recordConnectorPolicy', 'record_connector_policy', 'recordOwnerAcceptance', 'record_owner_acceptance', 'prepareFirstRunAcceptance', 'prepare_first_run_acceptance', 'startPrivateWorkspace', 'start_private_workspace', 'updateOrderRoomState', 'update_order_room']) {
+for (const token of ['firstProofPacket', 'first_proof', 'operator_brief_ready', 'starter_kit_url', 'solution_route_packet', 'solution_route_json', 'implementation_blueprint_packet', 'implementation_blueprint_json', 'intake_job_packet', 'intake_job_json', 'client_kickoff_packet', 'client_kickoff_json', 'buyer_reply_draft', 'proof_delivery_packet', 'pilot_close_packet', 'pilot_order_room', 'private_workspace_manifest', 'first_run_acceptance', 'client_first_run_acceptance', 'owner_acceptance', 'connector_policy', 'production_approval_queue', 'enterprise_delivery_pack', 'customer_success_desk', 'retainer_growth_offer', 'retainer_payment_record', 'recordRetainerPaymentProof', 'record_retainer_payment_proof', 'revenueProofBoard', 'revenue_proof_board', 'autopilotCommandBoard', 'autopilot_command_board', 'autopilot_command_count', 'autopilot_draft', 'autopilot_draft_approval', 'autopilotApprovalLedgerStatus', 'writeAutopilotApprovalLedger', 'readAutopilotApprovalLedger', 'blobPipelineControlPayload', 'updateBlobOrderRoomState', 'startBlobPrivateWorkspace', 'blob_action_queue', 'approval_ledger', 'vercel_blob', 'buildDatastoreFailoverReport', 'datastore_failover_report', 'operatorRuntimeSummary', 'operator_runtime_summary', 'blob_queue_approval_only', 'zero_until_payment_proof', 'autopilotDraftFromPayload', 'sendAutopilotDraftApprovalEmail', 'email_fallback', 'recordAutopilotDraftApproval', 'record_autopilot_draft_approval', 'autopilot_draft_packet', 'source_request_packet', 'offer_packet', 'buyer_reply_draft', 'command_queue_csv', 'operator_brief_markdown', 'approval_gated_autopilot', 'internal_drafts_allowed_external_actions_blocked_until_owner_approval', 'proof_backed_mrr_mmk', 'bank_verified_mrr_mmk', 'bank_unverified_mrr_mmk', 'payment_ledger_csv', 'next_cash_actions_csv', 'drafts_and_offers_do_not_count_as_mrr', 'prepareRetainerGrowthOffer', 'prepare_retainer_growth_offer', 'prepareCustomerSuccessDesk', 'prepare_customer_success_desk', 'prepareEnterpriseDeliveryPack', 'prepare_enterprise_delivery_pack', 'prepareProductionApprovalQueue', 'prepare_production_approval_queue', 'recordConnectorPolicy', 'record_connector_policy', 'recordOwnerAcceptance', 'record_owner_acceptance', 'prepareFirstRunAcceptance', 'prepare_first_run_acceptance', 'startPrivateWorkspace', 'start_private_workspace', 'updateOrderRoomState', 'update_order_room']) {
   if (!pipelineControlFunctionSource.includes(token)) {
     fail('public_pipeline_control_first_proof_contract_missing', { token })
   }
