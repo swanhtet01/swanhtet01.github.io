@@ -178,6 +178,88 @@ function buildActivationSessionLead(payload = {}) {
   }
 }
 
+function sourcePackIntakeUrl(leadId, actionId) {
+  const appBase = (envText('PUBLIC_WORKSPACE_BASE_URL', 'SUPERMEGA_WORKSPACE_BASE_URL') || 'https://supermega.dev').replace(/\/$/, '')
+  const params = new URLSearchParams()
+  params.set('lead', leadId)
+  params.set('action', actionId)
+  return `${appBase}/app/source-pack?${params.toString()}`
+}
+
+function buildActivationSourcePackRequest(lead = {}) {
+  const leadId = text(lead.lead_id) || text(lead.id) || 'lead-required'
+  const actionId = text(lead.task_id) || text(lead.action_id) || 'action-required'
+  const templateName = text(lead.public_package) || text(lead.requested_package) || 'Managed AI Workcell'
+  const company = text(lead.company) || text(lead.name) || 'client'
+  const firstProofTarget = text(lead.first_proof_target) || 'one useful output from approved source samples'
+  const intakeUrl = sourcePackIntakeUrl(leadId, actionId)
+  const minimumSources = [
+    {
+      source_type: 'gmail_or_chat',
+      label: 'Customer messages',
+      examples: ['Gmail thread', 'Viber chat', 'WhatsApp chat', 'Messenger screenshot'],
+      required: true,
+    },
+    {
+      source_type: 'spreadsheet_or_pos_export',
+      label: 'Orders, sales, or work list',
+      examples: ['POS export', 'Google Sheet rows', 'Excel file', 'CSV sample'],
+      required: true,
+    },
+    {
+      source_type: 'process_note_or_screenshot',
+      label: 'How the work is currently done',
+      examples: ['process note', 'screenshot', 'voice-note transcript', 'manual checklist'],
+      required: true,
+    },
+  ]
+  const clientMessage = [
+    `Please send 3 approved source samples for the ${templateName} first proof.`,
+    '',
+    `Client: ${company}`,
+    `First proof target: ${firstProofTarget}`,
+    `Source-pack intake link: ${intakeUrl}`,
+    '',
+    'Minimum source pack:',
+    '1. One customer message/thread.',
+    '2. One order, sales, POS, spreadsheet, or work-list export.',
+    '3. One process note, screenshot, checklist, or example of how the work is done today.',
+    '',
+    'We will use these only to prepare the first proof. No external sends, connector writes, browser/mobile actions, payment requests, or revenue claims happen without owner approval.',
+  ].join('\n')
+  return {
+    status: 'source_pack_request_ready',
+    request_type: 'client_source_pack_intake',
+    lead_id: leadId,
+    action_id: actionId,
+    template_name: templateName,
+    company,
+    first_proof_target: firstProofTarget,
+    intake_url: intakeUrl,
+    minimum_sources: minimumSources,
+    client_message: clientMessage,
+    source_pack_json_template: {
+      source_pack_name: `${company} source pack`,
+      lead_id: leadId,
+      action_id: actionId,
+      sources: minimumSources.map((item, index) => ({
+        source_id: `SRC-${String(index + 1).padStart(2, '0')}`,
+        source_type: item.source_type,
+        reference: item.label,
+        content: '',
+        approved: true,
+      })),
+    },
+    external_action_state: 'blocked_until_owner_approval',
+    connector_write_state: 'blocked_until_owner_approval',
+    browser_action_state: 'blocked_until_owner_approval',
+    payment_request_state: 'blocked_until_owner_approval',
+    approval_required: true,
+    human_gate: 'owner approval before send/write/payment/browser actions',
+    real_mrr_delta: 0,
+  }
+}
+
 function buildActivationSessionFirstProofTask(lead) {
   const acceptanceTests = list(String(lead.acceptance_tests || '').split('\n'))
   const sourceTrace = lead.source_links ? [`source_sample: ${lead.source_links}`] : []
@@ -196,6 +278,7 @@ function buildActivationSessionFirstProofTask(lead) {
       value: lead.source_links || 'request approved sample source',
     },
   ]
+  const sourcePackRequest = buildActivationSourcePackRequest(lead)
   const solutionRoute = {
     status: 'route_ready',
     route_type: 'operator_started_activation_session',
@@ -300,6 +383,7 @@ function buildActivationSessionFirstProofTask(lead) {
     company: lead.company,
     first_proof_target: lead.first_proof_target,
     source_requests: sourceManifest,
+    source_pack_request: sourcePackRequest,
     first_48_hours: [
       'Confirm the approved sample source.',
       'Build the first proof from that source.',
@@ -330,6 +414,7 @@ function buildActivationSessionFirstProofTask(lead) {
       '',
       '## First 48 hours',
       '1. Confirm approved source sample.',
+      `Source-pack intake link: ${sourcePackRequest.intake_url}`,
       '2. Build first proof with source trace.',
       '3. Queue buyer reply for owner approval.',
       '4. Convert to paid workspace only after scope, price, and payment proof gates.',
@@ -360,6 +445,7 @@ function buildActivationSessionFirstProofTask(lead) {
     intake_job: intakeJob,
     client_kickoff_pack: clientKickoffPack,
     implementation_blueprint_pack: implementationBlueprintPack,
+    source_pack_request: sourcePackRequest,
     source_trace: sourceTrace,
     checklist: [
       'Confirm buyer goal and first proof target.',
@@ -403,6 +489,7 @@ function buildActivationSessionActionPayload(lead) {
         source: 'operator_console',
         lead_id: lead.lead_id,
         action_id: lead.task_id,
+        source_pack_request: firstProofTask.source_pack_request,
         approval_required: true,
         approval_state: 'pending',
         external_action_state: 'blocked_until_owner_approval',
@@ -422,6 +509,7 @@ function buildActivationSessionActionPayload(lead) {
       first_proof_target: lead.first_proof_target,
       checklist: firstProofTask.checklist,
       acceptance_tests: firstProofTask.acceptance_tests,
+      source_pack_request: firstProofTask.source_pack_request,
       approval_required: true,
       human_gate: 'owner approval before send/write/payment/browser actions',
       pilot_order_room_state: orderRoomState,
@@ -2183,6 +2271,7 @@ function firstProofPacket(row) {
   const solutionRoute = parseJsonObject(result.solution_route || task.solution_route || payload.solution_route)
   const implementationBlueprintPack = parseJsonObject(result.implementation_blueprint_pack || task.implementation_blueprint_pack || payload.implementation_blueprint_pack)
   const clientKickoffPack = parseJsonObject(result.client_kickoff_pack || task.client_kickoff_pack || payload.client_kickoff_pack)
+  const sourcePackRequest = parseJsonObject(result.source_pack_request || task.source_pack_request || payload.source_pack_request)
   const sourceTrace = list(task.source_trace || payload.source_trace)
   const persistedOrderRoomState = parseJsonObject(result.pilot_order_room_state || payload.pilot_order_room_state)
   const firstRunAcceptance = parseJsonObject(result.first_run_acceptance || payload.first_run_acceptance)
@@ -2493,6 +2582,9 @@ function firstProofPacket(row) {
     client_kickoff_pack: Object.keys(clientKickoffPack).length ? clientKickoffPack : null,
     client_kickoff_packet: text(clientKickoffPack.packet),
     client_kickoff_json: Object.keys(clientKickoffPack).length ? JSON.stringify(clientKickoffPack, null, 2) : '',
+    source_pack_request: Object.keys(sourcePackRequest).length ? sourcePackRequest : null,
+    source_pack_request_packet: text(sourcePackRequest.client_message),
+    source_pack_request_json: Object.keys(sourcePackRequest).length ? JSON.stringify(sourcePackRequest, null, 2) : '',
     title: text(result.title) || (templateName && row.lead_id ? `${templateName} first proof for ${row.lead_id}` : 'First proof task'),
     checklist,
     acceptance_tests: acceptanceTests,
@@ -5292,6 +5384,7 @@ handler.__test = {
   buildRetainerGrowthOfferPack,
   buildRetainerPaymentRecord,
   buildActivationSessionActionPayload,
+  buildActivationSourcePackRequest,
   buildActivationSessionFirstProofTask,
   buildActivationSessionLead,
   buildActivationSourcePack,

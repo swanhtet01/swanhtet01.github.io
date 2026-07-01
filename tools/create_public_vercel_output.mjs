@@ -3358,6 +3358,10 @@ const config = {
       dest: '/api/public-app-handoff.js',
     },
     {
+      src: '^/app/source-pack/?$',
+      dest: '/app/source-pack/index.html',
+    },
+    {
       src: '^/app/start/?$',
       dest: '/app/start/index.html',
     },
@@ -5480,6 +5484,15 @@ const publicOperatorConsoleHtml = `<!doctype html>
       const id = 'client-kickoff-'+index;
       return '<div class="operator-proof-section"><span>Client kickoff pack</span><textarea class="operator-reply" id="'+id+'" readonly>'+esc(proof.client_kickoff_packet || proof.client_kickoff_json || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+id+'">Copy kickoff pack</button></div>';
     }
+    function proofSourcePackRequest(proof, index){
+      const request = proof && proof.source_pack_request;
+      if(!request && !proof.source_pack_request_packet && !proof.source_pack_request_json)return '';
+      const id = 'source-pack-request-'+index;
+      const intakeUrl = request && request.intake_url ? request.intake_url : '';
+      const packet = proof.source_pack_request_packet || (request && request.client_message) || proof.source_pack_request_json || '';
+      const link = intakeUrl ? '<a class="operator-proof-link" href="'+esc(intakeUrl)+'" target="_blank" rel="noreferrer">Source-pack intake link</a>' : '';
+      return '<div class="operator-proof-section" data-source-pack-request="client_source_pack_intake"><span>Client source request</span><div class="operator-meta"><span class="operator-chip">3 approved source samples</span><span class="operator-chip">'+esc(request && request.external_action_state || 'blocked_until_owner_approval')+'</span></div>'+link+'<textarea class="operator-reply" id="'+id+'" readonly>'+esc(packet || proof.source_pack_request_json || '')+'</textarea><button class="btn secondary operator-copy" type="button" data-copy-target="'+id+'">Copy source request</button></div>';
+    }
     function proofBuyerReply(proof, index){
       if(!proof || !proof.buyer_reply_draft)return '';
       const id = 'buyer-reply-'+index;
@@ -6067,7 +6080,7 @@ const publicOperatorConsoleHtml = `<!doctype html>
       if(!actions.length){actionsEl.innerHTML = '<div class="operator-item">No recent actions.</div>';return}
       actionsEl.innerHTML = actions.map(function(action,index){
         const proof = action.first_proof;
-        const proofHtml = proof ? '<div class="operator-proof"><strong>'+esc(proof.title || 'First proof')+'</strong><div class="operator-meta"><span class="operator-chip">'+esc(proof.status)+'</span><span class="operator-chip">'+esc(proof.template_id)+'</span><span class="operator-chip">'+esc(proof.human_gate)+'</span></div><div>'+esc(proof.first_proof_target || '')+'</div>'+proofStarterLink(proof)+proofSolutionRoute(proof,index)+proofImplementationBlueprint(proof,index)+proofIntakeJob(proof,index)+proofClientKickoff(proof,index)+proofList('Checklist',proof.checklist)+proofList('Acceptance tests',proof.acceptance_tests)+sourcePackControl(action,index)+proofActivationSourceControl(action,index)+proofBuyerReply(proof,index)+proofDeliveryPacket(proof,index)+pilotClosePacket(proof,index)+pilotOrderRoom(action,proof,index)+'</div>' : '';
+        const proofHtml = proof ? '<div class="operator-proof"><strong>'+esc(proof.title || 'First proof')+'</strong><div class="operator-meta"><span class="operator-chip">'+esc(proof.status)+'</span><span class="operator-chip">'+esc(proof.template_id)+'</span><span class="operator-chip">'+esc(proof.human_gate)+'</span></div><div>'+esc(proof.first_proof_target || '')+'</div>'+proofStarterLink(proof)+proofSolutionRoute(proof,index)+proofImplementationBlueprint(proof,index)+proofIntakeJob(proof,index)+proofClientKickoff(proof,index)+proofSourcePackRequest(proof,index)+proofList('Checklist',proof.checklist)+proofList('Acceptance tests',proof.acceptance_tests)+sourcePackControl(action,index)+proofActivationSourceControl(action,index)+proofBuyerReply(proof,index)+proofDeliveryPacket(proof,index)+pilotClosePacket(proof,index)+pilotOrderRoom(action,proof,index)+'</div>' : '';
         return '<article class="operator-item"><strong>'+esc(action.title || action.action_type)+'</strong><div class="operator-meta"><span class="operator-chip">'+esc(action.status)+'</span><span class="operator-chip">'+esc(action.priority)+'</span><span class="operator-chip">'+esc(action.approval_state)+'</span><span>'+esc(action.lead_id)+'</span></div><div>'+esc(action.next_step || '')+'</div>'+salesAutopilotDraft(action,index)+proofHtml+'</article>';
       }).join('');
       actionsEl.querySelectorAll('[data-copy-target]').forEach(function(button){button.addEventListener('click',function(){copyDraft(button.getAttribute('data-copy-target'))})});
@@ -6159,6 +6172,172 @@ const publicOperatorConsoleHtml = `<!doctype html>
 </html>`
 await mkdir(resolve(staticDir, 'operator'), { recursive: true })
 await writeFile(resolve(staticDir, 'operator', 'index.html'), publicOperatorConsoleHtml, 'utf8')
+const publicSourcePackIntakeHtml = `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="noindex,nofollow" />
+  <title>AI Workcell Source Pack Intake | SUPERMEGA.dev</title>
+  <meta name="description" content="Client source pack intake for SuperMega AI workcell first proofs." />
+  <meta name="theme-color" content="#1b1815" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" />
+  <style>
+    :root { color-scheme: light; --paper:#f4efe6; --ink:#1b1815; --muted:#6f675d; --line:rgba(27,24,21,.16); --panel:#fffaf1; --panel2:#ebe2d3; --accent:#d97757; --green:#1c8a5a; --red:#a14432; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; background: var(--paper); color: var(--ink); font-family: "Aptos", "Segoe UI Variable", "Segoe UI", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+    main { width: min(1180px, calc(100% - 28px)); margin: 0 auto; padding: 24px 0 54px; }
+    header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px 0 22px; border-bottom: 1px solid var(--line); }
+    .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: inherit; font-weight: 950; }
+    .mark { width: 38px; height: 38px; border-radius: 12px; background: #1b1815; display: grid; place-items: center; border: 1px solid rgba(27,24,21,.22); }
+    .mark img { width: 100%; height: 100%; display: block; border-radius: inherit; }
+    .btn { border: 1px solid var(--line); border-radius: 999px; padding: 11px 14px; background: var(--panel); color: var(--ink); font-weight: 850; text-decoration: none; cursor: pointer; }
+    .btn.primary { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+    .btn:focus-visible, input:focus-visible, textarea:focus-visible { outline: 3px solid rgba(217,119,87,.28); outline-offset: 2px; }
+    .hero { display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, 430px); gap: 16px; padding: 28px 0 20px; align-items: stretch; }
+    .eyebrow { color: var(--accent); font-size: 12px; font-weight: 950; text-transform: uppercase; letter-spacing: 0; }
+    h1 { margin: 10px 0 0; max-width: 12ch; font-size: clamp(44px, 8vw, 84px); line-height: .9; letter-spacing: 0; }
+    h2 { margin: 0; font-size: clamp(24px, 3vw, 34px); letter-spacing: 0; }
+    p { color: var(--muted); font-size: 16px; line-height: 1.55; margin: 12px 0 0; max-width: 62rem; }
+    .summary, .panel, .source-card { border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }
+    .summary { padding: 18px; display: grid; gap: 10px; align-content: start; }
+    .summary-row { display: grid; grid-template-columns: 108px 1fr; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+    .summary-row:last-child { border-bottom: 0; }
+    .summary-row span { color: var(--muted); font-size: 12px; font-weight: 900; text-transform: uppercase; }
+    .summary-row strong { overflow-wrap: anywhere; }
+    .band { border-top: 1px solid var(--line); padding-top: 22px; margin-top: 18px; }
+    .source-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 12px; }
+    .source-card { padding: 14px; display: grid; gap: 9px; }
+    .source-card strong { font-size: 18px; }
+    label { display: grid; gap: 7px; color: var(--muted); font-size: 12px; font-weight: 900; text-transform: uppercase; }
+    input, textarea { width: 100%; border: 1px solid var(--line); border-radius: 8px; padding: 11px 12px; background: #fffaf1; color: var(--ink); font: inherit; }
+    textarea { min-height: 150px; resize: vertical; line-height: 1.45; }
+    .panel { padding: 16px; display: grid; gap: 12px; background: var(--panel2); }
+    .actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .pill { display: inline-flex; align-items: center; width: fit-content; border-radius: 999px; padding: 7px 9px; background: rgba(28,138,90,.1); color: var(--green); font-size: 11px; font-weight: 950; text-transform: uppercase; }
+    .pill.stop { background: rgba(161,68,50,.1); color: var(--red); }
+    pre { margin: 0; overflow: auto; white-space: pre-wrap; border: 1px solid var(--line); border-radius: 8px; background: rgba(255,250,241,.85); padding: 14px; font-size: 13px; line-height: 1.45; max-height: 420px; }
+    footer { margin-top: 24px; padding-top: 18px; border-top: 1px solid var(--line); color: var(--muted); font-size: 13px; }
+    @media (max-width: 900px) { .hero, .source-grid { grid-template-columns: 1fr; } header { align-items: flex-start; } .summary-row { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <a class="brand" href="/" aria-label="SUPERMEGA.dev home"><span class="mark"><img src="/favicon.svg" alt="" /></span><span>SUPERMEGA.dev</span></a>
+      <a class="btn" href="/operator/">Operator console</a>
+    </header>
+    <section class="hero">
+      <div>
+        <div class="eyebrow">client intake</div>
+        <h1>AI Workcell Source Pack Intake</h1>
+        <p>Send the smallest approved source pack for a first proof: one customer message, one order or work-list export, and one process note or screenshot. This page creates a local Source pack JSON. No external access, no account connection, no connector write, and no payment request happens here.</p>
+      </div>
+      <aside class="summary" aria-label="Source pack summary">
+        <div class="summary-row"><span>Lead</span><strong data-lead-id>Loading</strong></div>
+        <div class="summary-row"><span>Action</span><strong data-action-id>Loading</strong></div>
+        <div class="summary-row"><span>Mode</span><strong>first proof only</strong></div>
+        <div class="summary-row"><span>Gate</span><strong>owner approval before send/write/payment/browser actions</strong></div>
+      </aside>
+    </section>
+    <section class="band">
+      <div class="actions"><h2>3 approved source samples</h2><span class="pill stop">No external access</span></div>
+      <div class="source-grid">
+        <article class="source-card">
+          <strong>Customer messages</strong>
+          <p>Paste a Gmail thread, Viber chat, WhatsApp chat, Messenger screenshot text, or customer request sample.</p>
+          <label>Reference<input data-source-reference="0" value="Customer message sample" /></label>
+          <label>Content<textarea data-source-content="0" placeholder="Paste approved customer message text here."></textarea></label>
+        </article>
+        <article class="source-card">
+          <strong>Orders or work list</strong>
+          <p>Paste a POS export excerpt, Google Sheet rows, Excel rows, CSV sample, invoice list, or delivery queue.</p>
+          <label>Reference<input data-source-reference="1" value="Order or work-list export" /></label>
+          <label>Content<textarea data-source-content="1" placeholder="Paste approved rows or summary here."></textarea></label>
+        </article>
+        <article class="source-card">
+          <strong>Process context</strong>
+          <p>Paste a note, screenshot text, checklist, or short explanation of how the work is handled today.</p>
+          <label>Reference<input data-source-reference="2" value="Process note or screenshot" /></label>
+          <label>Content<textarea data-source-content="2" placeholder="Paste approved process context here."></textarea></label>
+        </article>
+      </div>
+    </section>
+    <section class="band">
+      <div class="panel">
+        <div class="actions"><h2>Source pack JSON</h2><button class="btn primary" id="copy-source-pack" type="button">Copy source pack</button><button class="btn" id="refresh-source-pack" type="button">Refresh JSON</button></div>
+        <pre id="source-pack-json">Loading source pack template.</pre>
+        <p id="copy-status">Nothing is submitted from this page. Send the copied JSON to the SuperMega operator or paste it into the operator console.</p>
+      </div>
+    </section>
+    <footer>First-proof source intake only. Guardrail: owner approval before send/write/payment/browser actions. Real MRR stays 0 until payment proof is recorded.</footer>
+  </main>
+  <script>
+    (function(){
+      var params = new URLSearchParams(window.location.search);
+      var lead = (params.get('lead') || 'lead-required').slice(0, 80);
+      var action = (params.get('action') || 'action-required').slice(0, 80);
+      var leadEl = document.querySelector('[data-lead-id]');
+      var actionEl = document.querySelector('[data-action-id]');
+      var output = document.getElementById('source-pack-json');
+      var copyStatus = document.getElementById('copy-status');
+      if (leadEl) leadEl.textContent = lead;
+      if (actionEl) actionEl.textContent = action;
+      function value(selector, index) {
+        var el = document.querySelector(selector + '="' + index + '"]');
+        return el && el.value ? el.value.trim() : '';
+      }
+      function buildSourcePack() {
+        var types = ['gmail_or_chat','spreadsheet_or_pos_export','process_note_or_screenshot'];
+        var labels = ['Customer messages','Orders or work list','Process context'];
+        return {
+          source_pack_name: 'Client approved first-proof source pack',
+          lead_id: lead,
+          action_id: action,
+          status: 'client_prepared_owner_approval_required',
+          approval_scope: 'first_proof_only',
+          human_gate: 'owner approval before send/write/payment/browser actions',
+          external_action_state: 'blocked_until_owner_approval',
+          connector_write_state: 'blocked_until_owner_approval',
+          browser_action_state: 'blocked_until_owner_approval',
+          payment_request_state: 'blocked_until_owner_approval',
+          real_mrr_delta: 0,
+          sources: types.map(function(type, index){
+            return {
+              source_id: 'SRC-' + String(index + 1).padStart(2, '0'),
+              source_type: type,
+              label: labels[index],
+              reference: value('[data-source-reference', index) || labels[index],
+              content: value('[data-source-content', index),
+              approved: true
+            };
+          })
+        };
+      }
+      function render() {
+        if (!output) return;
+        output.textContent = JSON.stringify(buildSourcePack(), null, 2);
+      }
+      document.querySelectorAll('input, textarea').forEach(function(el){ el.addEventListener('input', render); });
+      var refresh = document.getElementById('refresh-source-pack');
+      if (refresh) refresh.addEventListener('click', render);
+      var copy = document.getElementById('copy-source-pack');
+      if (copy) copy.addEventListener('click', async function(){
+        render();
+        try {
+          await navigator.clipboard.writeText(output.textContent || '');
+          if (copyStatus) copyStatus.textContent = 'Copied. Send this JSON to the SuperMega operator or paste it into the operator console.';
+        } catch (error) {
+          if (copyStatus) copyStatus.textContent = 'Copy failed. Select the JSON manually and copy it.';
+        }
+      });
+      render();
+    })();
+  </script>
+</body>
+</html>`
+await mkdir(resolve(staticDir, 'app', 'source-pack'), { recursive: true })
+await writeFile(resolve(staticDir, 'app', 'source-pack', 'index.html'), publicSourcePackIntakeHtml, 'utf8')
 const publicPilotWorkspaceHtml = `<!doctype html>
 <html lang="en">
 <head>
