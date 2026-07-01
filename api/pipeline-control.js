@@ -5579,6 +5579,67 @@ async function recordBlobOwnerAcceptance({ actionId, leadId, payload }, primaryD
   }
 }
 
+async function findBlobPipelineAction({ actionId, leadId }, primaryDatabase = {}, options = {}) {
+  const found = await blobQueue.findActionRecord({ action_id: actionId, lead_id: leadId })
+  if (found.status === 'ready') return found
+  if (options.allowMissing && found.reason === 'action_not_found') {
+    return {
+      status: 'skipped',
+      adapter: 'vercel_blob',
+      reason: 'blob_action_not_found',
+      primary_database: primaryDatabase,
+    }
+  }
+  return {
+    ...found,
+    primary_database: primaryDatabase,
+  }
+}
+
+async function writeBlobPipelineActionTransition({
+  actionId,
+  leadId,
+  row,
+  resultPatch,
+  status,
+  nextStep,
+  notificationStatus,
+  primaryDatabase = {},
+  responseKey,
+  responseValue,
+  operationStatus = 'prepared',
+}) {
+  const currentResult = parseJsonObject(row.result)
+  const nextResult = {
+    ...currentResult,
+    ...resultPatch,
+  }
+  const updated = await blobQueue.updateActionRecord(
+    { action_id: actionId, lead_id: leadId },
+    {
+      result: nextResult,
+      status,
+      next_step: nextStep,
+      notification_status: row.notification_status || notificationStatus,
+    },
+  )
+  if (updated.status !== 'ready') {
+    return {
+      ...updated,
+      primary_database: primaryDatabase,
+      [responseKey]: responseValue,
+    }
+  }
+  return {
+    status: 'ready',
+    adapter: 'vercel_blob',
+    primary_database: primaryDatabase,
+    operation_status: operationStatus,
+    action: safeAction(updated.record),
+    [responseKey]: responseValue,
+  }
+}
+
 async function recordConnectorPolicy(payload) {
   const actionId = text(payload.action_id)
   const leadId = text(payload.lead_id)
@@ -5587,7 +5648,9 @@ async function recordConnectorPolicy(payload) {
   if (!actionId && !leadId) return { status: 'error', reason: 'missing_action_or_lead_id' }
   if (!policyMode) return { status: 'error', reason: 'invalid_connector_policy_mode' }
   if (!evidenceReference) return { status: 'error', reason: 'missing_connector_policy_reference' }
-  if (!datastore.postgresConfigured()) return { status: 'error', reason: 'postgres_not_configured' }
+  if (!datastore.postgresConfigured()) {
+    return recordBlobConnectorPolicy({ actionId, leadId, payload }, { status: 'error', reason: 'postgres_not_configured' })
+  }
 
   const selected = await datastore.query(
     `
@@ -5602,8 +5665,12 @@ async function recordConnectorPolicy(payload) {
     `,
     [actionId, leadId],
   )
-  if (selected.status !== 'ready') return selected
-  if (!selected.rows.length) return { status: 'error', reason: 'action_not_found' }
+  if (selected.status !== 'ready') return recordBlobConnectorPolicy({ actionId, leadId, payload }, selected)
+  if (!selected.rows.length) {
+    const fallback = await recordBlobConnectorPolicy({ actionId, leadId, payload }, { status: 'error', reason: 'postgres_action_not_found' })
+    if (fallback.status === 'ready') return fallback
+    return { status: 'error', reason: 'action_not_found' }
+  }
 
   const row = selected.rows[0]
   const currentResult = parseJsonObject(row.result)
@@ -5685,13 +5752,84 @@ async function recordConnectorPolicy(payload) {
   }
 }
 
+async function recordBlobConnectorPolicy({ actionId, leadId, payload }, primaryDatabase = {}, options = {}) {
+  const policyMode = oneOf(payload.connector_policy_mode || payload.policy_mode, ['approval_only'], '')
+  const evidenceReference = text(payload.connector_policy_reference || payload.evidence_reference)
+  const found = await findBlobPipelineAction({ actionId, leadId }, primaryDatabase, options)
+  if (found.status !== 'ready') return found
+
+  const row = found.row
+  const currentResult = parseJsonObject(row.result)
+  const ownerAcceptance = parseJsonObject(currentResult.owner_acceptance)
+  if (ownerAcceptance.status !== 'owner_acceptance_recorded') {
+    return {
+      status: 'error',
+      adapter: 'vercel_blob',
+      primary_database: primaryDatabase,
+      reason: 'owner_acceptance_required',
+      action: safeAction(row),
+    }
+  }
+  if (ownerAcceptance.decision !== 'accepted') {
+    return {
+      status: 'error',
+      adapter: 'vercel_blob',
+      primary_database: primaryDatabase,
+      reason: 'owner_acceptance_not_accepted',
+      action: safeAction(row),
+      owner_acceptance: ownerAcceptance,
+    }
+  }
+
+  const existingConnectorPolicy = parseJsonObject(currentResult.connector_policy)
+  if (existingConnectorPolicy.status === 'connector_policy_recorded') {
+    return {
+      status: 'ready',
+      adapter: 'vercel_blob',
+      primary_database: primaryDatabase,
+      operation_status: 'already_recorded',
+      action: safeAction(row),
+      connector_policy: existingConnectorPolicy,
+    }
+  }
+
+  const recordedAt = new Date().toISOString()
+  const connectorPolicy = buildConnectorPolicyRecord({
+    ...contextFromActionRow(row, parseJsonObject(currentResult.pilot_order_room_state)),
+    ownerAcceptance,
+    policyMode,
+    allowedConnectorActions: payload.allowed_connector_actions || payload.allowed_actions,
+    evidenceReference,
+    ownerNote: payload.owner_note,
+    recordedAt,
+  })
+  return writeBlobPipelineActionTransition({
+    actionId,
+    leadId,
+    row,
+    resultPatch: {
+      connector_policy: connectorPolicy,
+      connector_policy_recorded_at: recordedAt,
+    },
+    status: 'connector_policy_recorded',
+    nextStep: 'Run the next production cycle under the approval-only connector policy; per-action approval is still required.',
+    notificationStatus: 'connector_policy_recorded',
+    primaryDatabase,
+    responseKey: 'connector_policy',
+    responseValue: connectorPolicy,
+    operationStatus: 'recorded',
+  })
+}
+
 async function prepareProductionApprovalQueue(payload) {
   const actionId = text(payload.action_id)
   const leadId = text(payload.lead_id)
   const evidenceReference = text(payload.production_queue_reference || payload.evidence_reference)
   if (!actionId && !leadId) return { status: 'error', reason: 'missing_action_or_lead_id' }
   if (!evidenceReference) return { status: 'error', reason: 'missing_production_queue_reference' }
-  if (!datastore.postgresConfigured()) return { status: 'error', reason: 'postgres_not_configured' }
+  if (!datastore.postgresConfigured()) {
+    return prepareBlobProductionApprovalQueue({ actionId, leadId, payload }, { status: 'error', reason: 'postgres_not_configured' })
+  }
 
   const selected = await datastore.query(
     `
@@ -5706,8 +5844,12 @@ async function prepareProductionApprovalQueue(payload) {
     `,
     [actionId, leadId],
   )
-  if (selected.status !== 'ready') return selected
-  if (!selected.rows.length) return { status: 'error', reason: 'action_not_found' }
+  if (selected.status !== 'ready') return prepareBlobProductionApprovalQueue({ actionId, leadId, payload }, selected)
+  if (!selected.rows.length) {
+    const fallback = await prepareBlobProductionApprovalQueue({ actionId, leadId, payload }, { status: 'error', reason: 'postgres_action_not_found' })
+    if (fallback.status === 'ready') return fallback
+    return { status: 'error', reason: 'action_not_found' }
+  }
 
   const row = selected.rows[0]
   const currentResult = parseJsonObject(row.result)
@@ -5779,13 +5921,70 @@ async function prepareProductionApprovalQueue(payload) {
   }
 }
 
+async function prepareBlobProductionApprovalQueue({ actionId, leadId, payload }, primaryDatabase = {}, options = {}) {
+  const evidenceReference = text(payload.production_queue_reference || payload.evidence_reference)
+  const found = await findBlobPipelineAction({ actionId, leadId }, primaryDatabase, options)
+  if (found.status !== 'ready') return found
+
+  const row = found.row
+  const currentResult = parseJsonObject(row.result)
+  const connectorPolicy = parseJsonObject(currentResult.connector_policy)
+  if (connectorPolicy.status !== 'connector_policy_recorded') {
+    return {
+      status: 'error',
+      adapter: 'vercel_blob',
+      primary_database: primaryDatabase,
+      reason: 'connector_policy_required',
+      action: safeAction(row),
+    }
+  }
+
+  const existingQueue = parseJsonObject(currentResult.production_approval_queue)
+  if (existingQueue.status === 'production_approval_queue_ready') {
+    return {
+      status: 'ready',
+      adapter: 'vercel_blob',
+      primary_database: primaryDatabase,
+      operation_status: 'already_prepared',
+      action: safeAction(row),
+      production_approval_queue: existingQueue,
+    }
+  }
+
+  const preparedAt = new Date().toISOString()
+  const productionQueue = buildProductionApprovalQueue({
+    ...contextFromActionRow(row, parseJsonObject(currentResult.pilot_order_room_state)),
+    connectorPolicy,
+    evidenceReference,
+    sourceTrace: payload.source_trace,
+    preparedAt,
+  })
+  return writeBlobPipelineActionTransition({
+    actionId,
+    leadId,
+    row,
+    resultPatch: {
+      production_approval_queue: productionQueue,
+      production_approval_queue_prepared_at: preparedAt,
+    },
+    status: 'production_approval_queue_ready',
+    nextStep: 'Let agents prepare the next run drafts; approve each external send or connector write from the production approval queue.',
+    notificationStatus: 'production_approval_queue_ready',
+    primaryDatabase,
+    responseKey: 'production_approval_queue',
+    responseValue: productionQueue,
+  })
+}
+
 async function prepareEnterpriseDeliveryPack(payload) {
   const actionId = text(payload.action_id)
   const leadId = text(payload.lead_id)
   const evidenceReference = text(payload.enterprise_delivery_reference || payload.evidence_reference)
   if (!actionId && !leadId) return { status: 'error', reason: 'missing_action_or_lead_id' }
   if (!evidenceReference) return { status: 'error', reason: 'missing_enterprise_delivery_reference' }
-  if (!datastore.postgresConfigured()) return { status: 'error', reason: 'postgres_not_configured' }
+  if (!datastore.postgresConfigured()) {
+    return prepareBlobEnterpriseDeliveryPack({ actionId, leadId, payload }, { status: 'error', reason: 'postgres_not_configured' })
+  }
 
   const selected = await datastore.query(
     `
@@ -5800,8 +5999,12 @@ async function prepareEnterpriseDeliveryPack(payload) {
     `,
     [actionId, leadId],
   )
-  if (selected.status !== 'ready') return selected
-  if (!selected.rows.length) return { status: 'error', reason: 'action_not_found' }
+  if (selected.status !== 'ready') return prepareBlobEnterpriseDeliveryPack({ actionId, leadId, payload }, selected)
+  if (!selected.rows.length) {
+    const fallback = await prepareBlobEnterpriseDeliveryPack({ actionId, leadId, payload }, { status: 'error', reason: 'postgres_action_not_found' })
+    if (fallback.status === 'ready') return fallback
+    return { status: 'error', reason: 'action_not_found' }
+  }
 
   const row = selected.rows[0]
   const currentResult = parseJsonObject(row.result)
@@ -5873,13 +6076,70 @@ async function prepareEnterpriseDeliveryPack(payload) {
   }
 }
 
+async function prepareBlobEnterpriseDeliveryPack({ actionId, leadId, payload }, primaryDatabase = {}, options = {}) {
+  const evidenceReference = text(payload.enterprise_delivery_reference || payload.evidence_reference)
+  const found = await findBlobPipelineAction({ actionId, leadId }, primaryDatabase, options)
+  if (found.status !== 'ready') return found
+
+  const row = found.row
+  const currentResult = parseJsonObject(row.result)
+  const productionQueue = parseJsonObject(currentResult.production_approval_queue)
+  if (productionQueue.status !== 'production_approval_queue_ready') {
+    return {
+      status: 'error',
+      adapter: 'vercel_blob',
+      primary_database: primaryDatabase,
+      reason: 'production_approval_queue_required',
+      action: safeAction(row),
+    }
+  }
+
+  const existingPack = parseJsonObject(currentResult.enterprise_delivery_pack)
+  if (existingPack.status === 'enterprise_delivery_pack_ready') {
+    return {
+      status: 'ready',
+      adapter: 'vercel_blob',
+      primary_database: primaryDatabase,
+      operation_status: 'already_prepared',
+      action: safeAction(row),
+      enterprise_delivery_pack: existingPack,
+    }
+  }
+
+  const preparedAt = new Date().toISOString()
+  const enterprisePack = buildEnterpriseDeliveryPack({
+    ...contextFromActionRow(row, parseJsonObject(currentResult.pilot_order_room_state)),
+    productionQueue,
+    evidenceReference,
+    supportWindow: payload.support_window,
+    preparedAt,
+  })
+  return writeBlobPipelineActionTransition({
+    actionId,
+    leadId,
+    row,
+    resultPatch: {
+      enterprise_delivery_pack: enterprisePack,
+      enterprise_delivery_pack_prepared_at: preparedAt,
+    },
+    status: 'enterprise_delivery_pack_ready',
+    nextStep: 'Use the enterprise delivery pack for client onboarding, access boundaries, support cadence, and 30-day value review.',
+    notificationStatus: 'enterprise_delivery_pack_ready',
+    primaryDatabase,
+    responseKey: 'enterprise_delivery_pack',
+    responseValue: enterprisePack,
+  })
+}
+
 async function prepareCustomerSuccessDesk(payload) {
   const actionId = text(payload.action_id)
   const leadId = text(payload.lead_id)
   const evidenceReference = text(payload.customer_success_reference || payload.evidence_reference)
   if (!actionId && !leadId) return { status: 'error', reason: 'missing_action_or_lead_id' }
   if (!evidenceReference) return { status: 'error', reason: 'missing_customer_success_reference' }
-  if (!datastore.postgresConfigured()) return { status: 'error', reason: 'postgres_not_configured' }
+  if (!datastore.postgresConfigured()) {
+    return prepareBlobCustomerSuccessDesk({ actionId, leadId, payload }, { status: 'error', reason: 'postgres_not_configured' })
+  }
 
   const selected = await datastore.query(
     `
@@ -5894,8 +6154,12 @@ async function prepareCustomerSuccessDesk(payload) {
     `,
     [actionId, leadId],
   )
-  if (selected.status !== 'ready') return selected
-  if (!selected.rows.length) return { status: 'error', reason: 'action_not_found' }
+  if (selected.status !== 'ready') return prepareBlobCustomerSuccessDesk({ actionId, leadId, payload }, selected)
+  if (!selected.rows.length) {
+    const fallback = await prepareBlobCustomerSuccessDesk({ actionId, leadId, payload }, { status: 'error', reason: 'postgres_action_not_found' })
+    if (fallback.status === 'ready') return fallback
+    return { status: 'error', reason: 'action_not_found' }
+  }
 
   const row = selected.rows[0]
   const currentResult = parseJsonObject(row.result)
@@ -5967,13 +6231,70 @@ async function prepareCustomerSuccessDesk(payload) {
   }
 }
 
+async function prepareBlobCustomerSuccessDesk({ actionId, leadId, payload }, primaryDatabase = {}, options = {}) {
+  const evidenceReference = text(payload.customer_success_reference || payload.evidence_reference)
+  const found = await findBlobPipelineAction({ actionId, leadId }, primaryDatabase, options)
+  if (found.status !== 'ready') return found
+
+  const row = found.row
+  const currentResult = parseJsonObject(row.result)
+  const enterprisePack = parseJsonObject(currentResult.enterprise_delivery_pack)
+  if (enterprisePack.status !== 'enterprise_delivery_pack_ready') {
+    return {
+      status: 'error',
+      adapter: 'vercel_blob',
+      primary_database: primaryDatabase,
+      reason: 'enterprise_delivery_pack_required',
+      action: safeAction(row),
+    }
+  }
+
+  const existingDesk = parseJsonObject(currentResult.customer_success_desk)
+  if (existingDesk.status === 'customer_success_desk_ready') {
+    return {
+      status: 'ready',
+      adapter: 'vercel_blob',
+      primary_database: primaryDatabase,
+      operation_status: 'already_prepared',
+      action: safeAction(row),
+      customer_success_desk: existingDesk,
+    }
+  }
+
+  const preparedAt = new Date().toISOString()
+  const customerSuccessDesk = buildCustomerSuccessDeskPack({
+    ...contextFromActionRow(row, parseJsonObject(currentResult.pilot_order_room_state)),
+    enterprisePack,
+    evidenceReference,
+    supportWindow: payload.support_window,
+    preparedAt,
+  })
+  return writeBlobPipelineActionTransition({
+    actionId,
+    leadId,
+    row,
+    resultPatch: {
+      customer_success_desk: customerSuccessDesk,
+      customer_success_desk_prepared_at: preparedAt,
+    },
+    status: 'customer_success_desk_ready',
+    nextStep: 'Use the customer success desk to run support, value evidence, renewal review, and next-module approvals.',
+    notificationStatus: 'customer_success_desk_ready',
+    primaryDatabase,
+    responseKey: 'customer_success_desk',
+    responseValue: customerSuccessDesk,
+  })
+}
+
 async function prepareRetainerGrowthOffer(payload) {
   const actionId = text(payload.action_id)
   const leadId = text(payload.lead_id)
   const evidenceReference = text(payload.retainer_growth_reference || payload.renewal_reference || payload.evidence_reference)
   if (!actionId && !leadId) return { status: 'error', reason: 'missing_action_or_lead_id' }
   if (!evidenceReference) return { status: 'error', reason: 'missing_retainer_growth_reference' }
-  if (!datastore.postgresConfigured()) return { status: 'error', reason: 'postgres_not_configured' }
+  if (!datastore.postgresConfigured()) {
+    return prepareBlobRetainerGrowthOffer({ actionId, leadId, payload }, { status: 'error', reason: 'postgres_not_configured' })
+  }
 
   const selected = await datastore.query(
     `
@@ -5988,8 +6309,12 @@ async function prepareRetainerGrowthOffer(payload) {
     `,
     [actionId, leadId],
   )
-  if (selected.status !== 'ready') return selected
-  if (!selected.rows.length) return { status: 'error', reason: 'action_not_found' }
+  if (selected.status !== 'ready') return prepareBlobRetainerGrowthOffer({ actionId, leadId, payload }, selected)
+  if (!selected.rows.length) {
+    const fallback = await prepareBlobRetainerGrowthOffer({ actionId, leadId, payload }, { status: 'error', reason: 'postgres_action_not_found' })
+    if (fallback.status === 'ready') return fallback
+    return { status: 'error', reason: 'action_not_found' }
+  }
 
   const row = selected.rows[0]
   const currentResult = parseJsonObject(row.result)
@@ -6061,6 +6386,61 @@ async function prepareRetainerGrowthOffer(payload) {
   }
 }
 
+async function prepareBlobRetainerGrowthOffer({ actionId, leadId, payload }, primaryDatabase = {}, options = {}) {
+  const evidenceReference = text(payload.retainer_growth_reference || payload.renewal_reference || payload.evidence_reference)
+  const found = await findBlobPipelineAction({ actionId, leadId }, primaryDatabase, options)
+  if (found.status !== 'ready') return found
+
+  const row = found.row
+  const currentResult = parseJsonObject(row.result)
+  const customerSuccessDesk = parseJsonObject(currentResult.customer_success_desk)
+  if (customerSuccessDesk.status !== 'customer_success_desk_ready') {
+    return {
+      status: 'error',
+      adapter: 'vercel_blob',
+      primary_database: primaryDatabase,
+      reason: 'customer_success_desk_required',
+      action: safeAction(row),
+    }
+  }
+
+  const existingOffer = parseJsonObject(currentResult.retainer_growth_offer)
+  if (existingOffer.status === 'retainer_growth_offer_ready') {
+    return {
+      status: 'ready',
+      adapter: 'vercel_blob',
+      primary_database: primaryDatabase,
+      operation_status: 'already_prepared',
+      action: safeAction(row),
+      retainer_growth_offer: existingOffer,
+    }
+  }
+
+  const preparedAt = new Date().toISOString()
+  const retainerGrowthOffer = buildRetainerGrowthOfferPack({
+    ...contextFromActionRow(row, parseJsonObject(currentResult.pilot_order_room_state)),
+    customerSuccessDesk,
+    evidenceReference,
+    retainerQuote: payload.retainer_quote,
+    preparedAt,
+  })
+  return writeBlobPipelineActionTransition({
+    actionId,
+    leadId,
+    row,
+    resultPatch: {
+      retainer_growth_offer: retainerGrowthOffer,
+      retainer_growth_offer_prepared_at: preparedAt,
+    },
+    status: 'retainer_growth_offer_ready',
+    nextStep: 'Review value evidence, approve the retainer quote, then send the retainer offer only after owner approval.',
+    notificationStatus: 'retainer_growth_offer_ready',
+    primaryDatabase,
+    responseKey: 'retainer_growth_offer',
+    responseValue: retainerGrowthOffer,
+  })
+}
+
 async function recordRetainerPaymentProof(payload) {
   const actionId = text(payload.action_id)
   const leadId = text(payload.lead_id)
@@ -6074,7 +6454,9 @@ async function recordRetainerPaymentProof(payload) {
   if (!ownerApprovalReference) return { status: 'error', reason: 'missing_retainer_owner_approval_reference' }
   if (!amountMmk) return { status: 'error', reason: 'invalid_retainer_payment_amount' }
   if (!paymentPeriod) return { status: 'error', reason: 'invalid_retainer_payment_period' }
-  if (!datastore.postgresConfigured()) return { status: 'error', reason: 'postgres_not_configured' }
+  if (!datastore.postgresConfigured()) {
+    return recordBlobRetainerPaymentProof({ actionId, leadId, payload }, { status: 'error', reason: 'postgres_not_configured' })
+  }
 
   const selected = await datastore.query(
     `
@@ -6089,8 +6471,12 @@ async function recordRetainerPaymentProof(payload) {
     `,
     [actionId, leadId],
   )
-  if (selected.status !== 'ready') return selected
-  if (!selected.rows.length) return { status: 'error', reason: 'action_not_found' }
+  if (selected.status !== 'ready') return recordBlobRetainerPaymentProof({ actionId, leadId, payload }, selected)
+  if (!selected.rows.length) {
+    const fallback = await recordBlobRetainerPaymentProof({ actionId, leadId, payload }, { status: 'error', reason: 'postgres_action_not_found' })
+    if (fallback.status === 'ready') return fallback
+    return { status: 'error', reason: 'action_not_found' }
+  }
 
   const row = selected.rows[0]
   const currentResult = parseJsonObject(row.result)
@@ -6163,6 +6549,69 @@ async function recordRetainerPaymentProof(payload) {
     action: safeAction(result.rows[0]),
     retainer_payment_record: paymentRecord,
   }
+}
+
+async function recordBlobRetainerPaymentProof({ actionId, leadId, payload }, primaryDatabase = {}, options = {}) {
+  const paymentProofReference = text(payload.payment_proof_reference || payload.retainer_payment_proof_reference)
+  const ownerApprovalReference = text(payload.owner_approval_reference || payload.retainer_owner_approval_reference)
+  const amountMmk = moneyAmount(payload.amount_mmk || payload.retainer_amount_mmk)
+  const rawPaymentPeriod = text(payload.payment_period || payload.retainer_payment_period || 'monthly')
+  const paymentPeriod = oneOf(rawPaymentPeriod, ['monthly', 'quarterly', 'annual', 'one_time_retainer'], '')
+  const found = await findBlobPipelineAction({ actionId, leadId }, primaryDatabase, options)
+  if (found.status !== 'ready') return found
+
+  const row = found.row
+  const currentResult = parseJsonObject(row.result)
+  const retainerGrowthOffer = parseJsonObject(currentResult.retainer_growth_offer)
+  if (retainerGrowthOffer.status !== 'retainer_growth_offer_ready') {
+    return {
+      status: 'error',
+      adapter: 'vercel_blob',
+      primary_database: primaryDatabase,
+      reason: 'retainer_growth_offer_required',
+      action: safeAction(row),
+    }
+  }
+
+  const existingRecord = parseJsonObject(currentResult.retainer_payment_record)
+  if (existingRecord.status === 'retainer_payment_proof_recorded') {
+    return {
+      status: 'ready',
+      adapter: 'vercel_blob',
+      primary_database: primaryDatabase,
+      operation_status: 'already_recorded',
+      action: safeAction(row),
+      retainer_payment_record: existingRecord,
+    }
+  }
+
+  const preparedAt = new Date().toISOString()
+  const paymentRecord = buildRetainerPaymentRecord({
+    ...contextFromActionRow(row, parseJsonObject(currentResult.pilot_order_room_state)),
+    retainerGrowthOffer,
+    paymentProofReference,
+    ownerApprovalReference,
+    amountMmk,
+    paymentPeriod,
+    paidAt: payload.paid_at,
+    preparedAt,
+  })
+  return writeBlobPipelineActionTransition({
+    actionId,
+    leadId,
+    row,
+    resultPatch: {
+      retainer_payment_record: paymentRecord,
+      retainer_payment_recorded_at: preparedAt,
+    },
+    status: 'retainer_payment_proof_recorded',
+    nextStep: 'Reconcile the payment proof, keep delivery running, and update the value ledger before the next renewal.',
+    notificationStatus: 'retainer_payment_proof_recorded',
+    primaryDatabase,
+    responseKey: 'retainer_payment_record',
+    responseValue: paymentRecord,
+    operationStatus: 'recorded',
+  })
 }
 
 function primaryDatabaseStatus(result) {
