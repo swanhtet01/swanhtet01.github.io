@@ -7137,6 +7137,11 @@ const publicPilotWorkspaceHtml = `<!doctype html>
     .artifact-header strong { display: block; margin-top: 6px; font-size: 20px; letter-spacing: 0; }
     textarea { width: 100%; min-height: 220px; resize: vertical; border: 1px solid var(--line); border-radius: 8px; background: rgba(255,250,241,.72); color: var(--ink); padding: 14px; font: 13px/1.45 ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace; }
     #first-run-queue { min-height: 150px; }
+    .run-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+    .run-form label { display: grid; gap: 7px; color: var(--muted); font-size: 12px; font-weight: 900; text-transform: uppercase; }
+    .run-form label.wide { grid-column: 1 / -1; }
+    .run-form textarea { min-height: 130px; }
+    .run-actions { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
     .queue { display: grid; gap: 10px; }
     .queue-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; align-items: center; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); padding: 14px; }
     .step { width: 28px; height: 28px; border-radius: 999px; display: grid; place-items: center; background: var(--ink); color: var(--paper); font-weight: 950; }
@@ -7146,7 +7151,7 @@ const publicPilotWorkspaceHtml = `<!doctype html>
     input { width: 100%; border: 1px solid var(--line); border-radius: 999px; padding: 12px 14px; background: var(--panel); color: var(--ink); font: inherit; }
     pre { margin: 0; overflow: auto; white-space: pre-wrap; border: 1px solid var(--line); border-radius: 8px; background: rgba(255,250,241,.7); padding: 14px; font-size: 13px; line-height: 1.45; }
     footer { margin-top: 24px; padding-top: 18px; border-top: 1px solid var(--line); color: var(--muted); font-size: 13px; }
-    @media (max-width: 820px) { .hero, .grid, .artifact-grid { grid-template-columns: 1fr; } .artifact.wide { grid-column: auto; } header { align-items: flex-start; } .summary-row, .operator-form { grid-template-columns: 1fr; } .queue-row { grid-template-columns: auto minmax(0, 1fr); } .queue-row .pill { grid-column: 2; width: fit-content; } }
+    @media (max-width: 820px) { .hero, .grid, .artifact-grid, .run-form { grid-template-columns: 1fr; } .artifact.wide, .run-form label.wide { grid-column: auto; } header { align-items: flex-start; } .summary-row, .operator-form { grid-template-columns: 1fr; } .queue-row { grid-template-columns: auto minmax(0, 1fr); } .queue-row .pill { grid-column: 2; width: fit-content; } }
   </style>
 </head>
 <body>
@@ -7228,6 +7233,25 @@ External actions: blocked until owner acceptance.</textarea>
     </section>
     <section class="band">
       <div class="section-title">
+        <h2>Record first production run</h2>
+        <span class="pill">protected write</span>
+      </div>
+      <div class="operator-panel">
+        <p>Use this after the workspace output is drafted. It calls <code>operation: 'record_first_production_run'</code> with <code>first_run_output</code>, <code>first_run_evidence_reference</code>, and <code>source_trace</code>. Success should move the action to <code>first_run_output_ready</code> and the run to <code>ready_for_owner_acceptance</code>. No external send, connector write, browser action, or payment action is triggered.</p>
+        <div class="run-form">
+          <label>Evidence reference<input id="first-run-evidence-reference" autocomplete="off" placeholder="workspace output URL, file, screenshot, or internal evidence id" /></label>
+          <label>Source trace<textarea id="first-run-source-trace" placeholder="One approved source per line: Gmail thread, Sheet row, POS export, screenshot, file, folder..."></textarea></label>
+          <label class="wide">First run output<textarea id="first-run-output" placeholder="Paste the first useful production output that the owner should accept or reject."></textarea></label>
+        </div>
+        <div class="run-actions">
+          <span class="pill">approval_only_until_owner_acceptance</span>
+          <button id="record-first-run" class="btn primary" type="button">Record first run</button>
+        </div>
+        <pre id="first-run-record-status">Waiting for operator key and first run output.</pre>
+      </div>
+    </section>
+    <section class="band">
+      <div class="section-title">
         <h2>First run queue</h2>
         <span class="pill">owner gated</span>
       </div>
@@ -7269,6 +7293,7 @@ External actions: blocked until owner acceptance.</textarea>
       var params = new URLSearchParams(window.location.search);
       var workspace = (params.get('workspace') || 'workspace-required').slice(0, 96);
       var lead = (params.get('lead') || 'lead-required').slice(0, 64);
+      var currentActionId = (params.get('action') || '').slice(0, 64);
       var workspaceEl = document.querySelector('[data-workspace-slug]');
       var leadEl = document.querySelector('[data-lead-id]');
       var deliveryStatusEl = document.querySelector('[data-delivery-status]');
@@ -7278,6 +7303,10 @@ External actions: blocked until owner acceptance.</textarea>
       var proofEl = document.getElementById('proof-packet');
       var queueEl = document.getElementById('first-run-queue');
       var statusEl = document.getElementById('workspace-status');
+      var runStatusEl = document.getElementById('first-run-record-status');
+      var runOutputEl = document.getElementById('first-run-output');
+      var runEvidenceEl = document.getElementById('first-run-evidence-reference');
+      var runSourceTraceEl = document.getElementById('first-run-source-trace');
       if (workspaceEl) workspaceEl.textContent = workspace;
       if (leadEl) leadEl.textContent = lead;
       function defaultKickoff(manifest) {
@@ -7334,9 +7363,17 @@ External actions: blocked until owner acceptance.</textarea>
         if (!statusEl) return;
         statusEl.textContent = typeof value === 'string' ? value : JSON.stringify(value, null, 2);
       }
+      function getOpsKey() {
+        return (document.getElementById('ops-key') && document.getElementById('ops-key').value || '').trim();
+      }
+      function setRunStatus(value) {
+        if (!runStatusEl) return;
+        runStatusEl.textContent = typeof value === 'string' ? value : JSON.stringify(value, null, 2);
+      }
       function summarize(action, payload) {
         var room = action && action.first_proof && action.first_proof.pilot_order_room ? action.first_proof.pilot_order_room : {};
         var manifest = room.private_workspace_manifest || {};
+        if (action && action.action_id) currentActionId = action.action_id;
         applyManifest(manifest);
         return {
           status: action ? action.status : 'not_found',
@@ -7362,7 +7399,7 @@ External actions: blocked until owner acceptance.</textarea>
       var loadButton = document.getElementById('load-status');
       if (loadButton) {
         loadButton.addEventListener('click', async function(){
-          var key = (document.getElementById('ops-key') && document.getElementById('ops-key').value || '').trim();
+          var key = getOpsKey();
           if (!key) { setStatus('Paste the ops key first.'); return; }
           setStatus('Loading /api/pipeline-control/status...');
           try {
@@ -7378,6 +7415,55 @@ External actions: blocked until owner acceptance.</textarea>
             setStatus(summarize(match, payload));
           } catch (error) {
             setStatus({ status: 'error', reason: String(error && error.message || error) });
+          }
+        });
+      }
+      var recordFirstRunButton = document.getElementById('record-first-run');
+      if (recordFirstRunButton) {
+        recordFirstRunButton.addEventListener('click', async function(){
+          var key = getOpsKey();
+          var firstRunOutput = (runOutputEl && runOutputEl.value || '').trim();
+          var evidenceReference = (runEvidenceEl && runEvidenceEl.value || '').trim();
+          var sourceTrace = (runSourceTraceEl && runSourceTraceEl.value || '')
+            .split(/\\r?\\n/)
+            .map(function(item){ return item.trim(); })
+            .filter(Boolean);
+          if (!key) { setRunStatus('Paste the ops key first.'); return; }
+          if (!firstRunOutput) { setRunStatus('Add the first_run_output first.'); return; }
+          if (!evidenceReference) { setRunStatus('Add the first_run_evidence_reference first.'); return; }
+          setRunStatus('Recording first production run...');
+          try {
+            var response = await fetch('/api/pipeline-control', {
+              method: 'POST',
+              cache: 'no-store',
+              headers: {
+                authorization: 'Bearer ' + key,
+                accept: 'application/json',
+                'content-type': 'application/json'
+              },
+              body: JSON.stringify({
+                operation: 'record_first_production_run',
+                action_id: currentActionId,
+                lead_id: lead,
+                first_run_output: firstRunOutput,
+                first_run_evidence_reference: evidenceReference,
+                source_trace: sourceTrace
+              })
+            });
+            var payload = await response.json().catch(function(){ return { status: 'error', reason: 'invalid_json', code: response.status }; });
+            if (!response.ok) { setRunStatus(payload); return; }
+            setRunStatus({
+              status: payload.status,
+              operation_status: payload.operation_status,
+              action_status: payload.action ? payload.action.status : 'not_returned',
+              first_run_status: payload.first_production_run ? payload.first_production_run.status : 'not_returned',
+              first_run_state: payload.first_production_run ? payload.first_production_run.first_run_state : 'not_returned',
+              external_action_state: payload.first_production_run ? payload.first_production_run.external_action_state : 'approval_only_until_owner_acceptance',
+              real_mrr_delta: payload.first_production_run ? payload.first_production_run.real_mrr_delta : 0,
+              next_step: payload.action ? payload.action.next_step : 'Prepare owner acceptance before any external send or connector write.'
+            });
+          } catch (error) {
+            setRunStatus({ status: 'error', reason: String(error && error.message || error) });
           }
         });
       }

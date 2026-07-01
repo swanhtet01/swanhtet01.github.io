@@ -233,6 +233,81 @@ try {
   assert.equal(idempotentBody.operation_status, 'already_recorded')
   assert.equal(idempotentBody.first_production_run.status, 'first_production_run_recorded')
 
+  const legacyRow = baseRow(createdState)
+  legacyRow.payload = {
+    ...legacyRow.payload,
+    ...legacyRow.result,
+  }
+  legacyRow.result = legacyRow.payload
+  let legacyQueryCount = 0
+  datastore.query = async (sql, params) => {
+    legacyQueryCount += 1
+    if (legacyQueryCount === 1) {
+      assert.ok(sql.includes('payload,'), 'legacy_initial_select_payload_missing')
+      assert.ok(sql.includes('result'), 'legacy_initial_select_should_try_result_column')
+      assert.ok(!sql.includes("coalesce(payload, '{}'::jsonb) as result"), 'legacy_initial_select_should_not_payload_alias')
+      return {
+        status: 'error',
+        reason: 'column "result" does not exist',
+        code: '42703',
+      }
+    }
+    if (legacyQueryCount === 2) {
+      assert.ok(sql.includes("coalesce(payload, '{}'::jsonb) as result"), 'legacy_select_payload_as_result_missing')
+      assert.equal(params[0], 'TASK-TEST123')
+      assert.equal(params[1], 'LEAD-TEST123')
+      return { status: 'ready', rows: [legacyRow], rowCount: 1 }
+    }
+    assert.ok(sql.includes('payload = jsonb_set'), 'legacy_payload_update_missing')
+    assert.ok(sql.includes("'{first_production_run}'"), 'legacy_first_production_run_jsonb_set_missing')
+    assert.ok(sql.includes("'{first_production_run_recorded_at}'"), 'legacy_first_production_run_recorded_at_missing')
+    assert.ok(sql.includes("coalesce(a.payload, '{}'::jsonb) as result"), 'legacy_return_payload_as_result_missing')
+    const firstRun = JSON.parse(params[2])
+    assert.equal(firstRun.status, 'first_production_run_recorded')
+    assert.equal(firstRun.first_run_state, 'ready_for_owner_acceptance')
+    assert.equal(firstRun.external_action_state, 'approval_only_until_owner_acceptance')
+    assert.equal(firstRun.real_mrr_delta, 0)
+    return {
+      status: 'ready',
+      rows: [
+        {
+          ...legacyRow,
+          payload: {
+            ...legacyRow.payload,
+            first_production_run: firstRun,
+            first_production_run_recorded_at: params[3],
+          },
+          result: {
+            ...legacyRow.payload,
+            first_production_run: firstRun,
+            first_production_run_recorded_at: params[3],
+          },
+          status: 'first_run_output_ready',
+          next_step: 'Prepare owner acceptance for the recorded first production run before any external send or connector write.',
+        },
+      ],
+      rowCount: 1,
+    }
+  }
+  const legacy = await callHandler({
+    body: JSON.stringify({
+      operation: 'record_first_production_run',
+      action_id: 'TASK-TEST123',
+      lead_id: 'LEAD-TEST123',
+      first_run_output: 'Legacy payload-only SQL first production run.',
+      first_run_evidence_reference: 'legacy payload evidence 001',
+      source_trace: ['Legacy payload source trace'],
+    }),
+  })
+  const legacyBody = parseJson(legacy)
+  assert.equal(legacy.statusCode, 200)
+  assert.equal(legacyBody.adapter, 'vercel_postgres_neon_legacy_payload')
+  assert.equal(legacyBody.operation_status, 'recorded')
+  assert.equal(legacyBody.action.status, 'first_run_output_ready')
+  assert.equal(legacyBody.first_production_run.status, 'first_production_run_recorded')
+  assert.equal(legacyBody.first_production_run.real_mrr_delta, 0)
+  assert.equal(legacyQueryCount, 3)
+
   console.log(
     JSON.stringify(
       {
@@ -243,6 +318,7 @@ try {
         operation_status: recordedBody.operation_status,
         first_run_status: recordedBody.first_production_run.status,
         idempotent_status: idempotentBody.operation_status,
+        legacy_status: legacyBody.operation_status,
       },
       null,
       2,

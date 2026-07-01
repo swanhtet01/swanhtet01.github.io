@@ -1,11 +1,11 @@
 {
-    "public_host":  "supermega-public-9s4jxfn18-swanhtet01s-projects.vercel.app",
-    "deployment_id":  "dpl_H5bpL43kU3cYme2MyQjLCPnJXnk7",
-    "locked_at":  "2026-07-01T10:02:51.7211318Z",
+    "public_host":  "supermega-public-fw6oxd72x-swanhtet01s-projects.vercel.app",
+    "deployment_id":  "dpl_5v8uwgpiTyARpXfHUs5JDszgfbnw",
+    "locked_at":  "2026-07-01T10:38:06.3664956Z",
     "domains":  [
                     "supermega.dev",
                     "www.supermega.dev"
                 ],
     "project":  "supermega-public",
-    "reason":  "Private pilot workspaces now render a client delivery room with kickoff packet, proof packet, first production run queue, live recent_actions status loading, and proof-gated next operator action."
+    "reason":  "Private pilot delivery rooms can now record the first production run through a protected operator-key action; legacy payload-only SQL is supported and the run stays approval-only with real_mrr_delta=0."
 }

@@ -6007,12 +6007,14 @@ async function recordFirstProductionRun(payload) {
     return recordBlobFirstProductionRun({ actionId, leadId, payload }, { status: 'error', reason: 'postgres_not_configured' })
   }
 
-  const selected = await datastore.query(
+  const selectAction = (includeResultColumn) => datastore.query(
     `
       select
         action_id, lead_id, task_id, action_type, status, priority, owner,
         title, next_step, approval_required, approval_state,
-        notification_channel, notification_status, payload, result, created_at
+        notification_channel, notification_status, payload,
+        ${includeResultColumn ? 'result' : "coalesce(payload, '{}'::jsonb) as result"},
+        created_at
       from public.supermega_pipeline_actions
       where (($1 <> '' and action_id = $1) or ($1 = '' and $2 <> '' and lead_id = $2))
       order by created_at desc
@@ -6020,6 +6022,20 @@ async function recordFirstProductionRun(payload) {
     `,
     [actionId, leadId],
   )
+  let selected = await selectAction(true)
+  if (selected.status !== 'ready' && (selected.code === '42703' || text(selected.reason).includes('result'))) {
+    const primaryDatabase = selected
+    selected = await selectAction(false)
+    if (selected.status === 'ready' && selected.rows.length) {
+      return recordLegacyPayloadFirstProductionRun({
+        row: selected.rows[0],
+        actionId: text(selected.rows[0].action_id) || actionId,
+        leadId: text(selected.rows[0].lead_id) || leadId,
+        payload,
+        primaryDatabase,
+      })
+    }
+  }
   if (selected.status !== 'ready') return recordBlobFirstProductionRun({ actionId, leadId, payload }, selected)
   if (!selected.rows.length) {
     const fallback = await recordBlobFirstProductionRun({ actionId, leadId, payload }, { status: 'error', reason: 'postgres_action_not_found' })
@@ -6108,6 +6124,88 @@ async function recordFirstProductionRun(payload) {
     first_production_run: firstProductionRun,
     private_workspace_manifest: currentManifest,
     mirror,
+  }
+}
+
+async function recordLegacyPayloadFirstProductionRun({ row, actionId, leadId, payload, primaryDatabase = {} }) {
+  const currentResult = parseJsonObject(row.result)
+  const currentState = parseJsonObject(currentResult.pilot_order_room_state || parseJsonObject(row.payload).pilot_order_room_state)
+  const currentAction = safeAction(row)
+  const currentManifest = currentAction.first_proof?.pilot_order_room?.private_workspace_manifest || buildPrivateWorkspaceManifest(contextFromActionRow(row, currentState))
+  if (currentManifest.status !== 'private_workspace_created') {
+    return {
+      status: 'error',
+      adapter: 'vercel_postgres_neon_legacy_payload',
+      primary_database: primaryDatabase,
+      reason: 'private_workspace_required',
+      activation_status: currentManifest.status,
+      action: currentAction,
+      private_workspace_manifest: currentManifest,
+    }
+  }
+
+  const existingFirstRun = parseJsonObject(currentResult.first_production_run)
+  if (existingFirstRun.status === 'first_production_run_recorded') {
+    return {
+      status: 'ready',
+      adapter: 'vercel_postgres_neon_legacy_payload',
+      primary_database: primaryDatabase,
+      operation_status: 'already_recorded',
+      action: currentAction,
+      first_production_run: existingFirstRun,
+      private_workspace_manifest: currentManifest,
+    }
+  }
+
+  const context = contextFromActionRow(row, currentState)
+  const recordedAt = new Date().toISOString()
+  const firstProductionRun = buildFirstProductionRunRecord({
+    ...context,
+    manifest: currentManifest,
+    firstRunOutput: payload.first_run_output || payload.output,
+    evidenceReference: payload.first_run_evidence_reference || payload.evidence_reference,
+    sourceTrace: payload.source_trace || payload.first_run_source_trace,
+    recordedAt,
+  })
+  const result = await datastore.query(
+    `
+      with target as (
+        select id
+        from public.supermega_pipeline_actions
+        where (($1 <> '' and action_id = $1) or ($1 = '' and $2 <> '' and lead_id = $2))
+        order by created_at desc
+        limit 1
+      )
+      update public.supermega_pipeline_actions a
+      set
+        payload = jsonb_set(
+          jsonb_set(coalesce(a.payload, '{}'::jsonb), '{first_production_run}', $3::jsonb, true),
+          '{first_production_run_recorded_at}',
+          to_jsonb($4::text),
+          true
+        ),
+        status = case when a.status in ('workspace_ready', 'open', 'queued', 'done', 'first_run_ready') then 'first_run_output_ready' else a.status end,
+        next_step = 'Prepare owner acceptance for the recorded first production run before any external send or connector write.',
+        updated_at = now()
+      where a.id in (select id from target)
+      returning
+        a.action_id, a.lead_id, a.task_id, a.action_type, a.status, a.priority, a.owner,
+        a.title, a.next_step, a.approval_required, a.approval_state,
+        a.notification_channel, a.notification_status, a.payload, coalesce(a.payload, '{}'::jsonb) as result, a.created_at
+    `,
+    [actionId, leadId, JSON.stringify(firstProductionRun), recordedAt],
+  )
+  if (result.status !== 'ready') return result
+  if (!result.rows.length) return { status: 'error', reason: 'action_not_found', first_production_run: firstProductionRun, private_workspace_manifest: currentManifest }
+  return {
+    status: 'ready',
+    adapter: 'vercel_postgres_neon_legacy_payload',
+    primary_database: primaryDatabase,
+    operation_status: 'recorded',
+    action: safeAction(result.rows[0]),
+    first_production_run: firstProductionRun,
+    private_workspace_manifest: currentManifest,
+    row: result.rows[0],
   }
 }
 
