@@ -283,6 +283,27 @@ function publicProductName(id, fallback) {
   return publicToolCopy[normalizedId]?.name || fallback
 }
 
+const publicCrewEndpoint = 'https://app.supermega.dev/api/crew'
+
+function crewForPublicAgentTemplate(template) {
+  const crews = {
+    'deskpos-quickstart': 'owner-brief',
+    'chat-ledger': 'read-my-chaos',
+    'inbox-calendar-operator': 'owner-brief',
+    'daily-intelligence-brief': 'owner-brief',
+    'factory-ops-ledger': 'owner-brief',
+    'data-clean-report-agent': 'read-my-chaos',
+    'document-pdf-intake-ledger': 'read-my-chaos',
+    'crm-follow-up-pipeline-assistant': 'outreach-draft',
+    'proposal-sow-builder': 'outreach-draft',
+  }
+  return crews[template.id] || 'read-my-chaos'
+}
+
+function publicCrewRunUrl(template) {
+  return `${publicCrewEndpoint}?crew=${encodeURIComponent(crewForPublicAgentTemplate(template))}&template=${encodeURIComponent(template.id)}`
+}
+
 function renderPublicAgentTemplateCards() {
   return publicAgentTemplates
     .map((template) => {
@@ -331,6 +352,7 @@ function renderSellableWorkerShelf() {
     .map((template) => {
       const outputs = template.outputs.slice(0, 3).map((output) => `<li>${escapeHtml(output)}</li>`).join('')
       const sourceInputs = template.setupInputs.slice(0, 3).join(', ')
+      const crewId = crewForPublicAgentTemplate(template)
       return `<article class="worker-card" data-worker-template="${escapeHtml(template.id)}">
                 <div class="worker-meta">
                   <span>${escapeHtml(template.status)}</span>
@@ -341,10 +363,12 @@ function renderSellableWorkerShelf() {
                 <div class="worker-fact"><strong>Buyer</strong><span>${escapeHtml(template.buyer)}</span></div>
                 <div class="worker-fact"><strong>Source pack</strong><span>${escapeHtml(sourceInputs)}</span></div>
                 <div class="worker-fact"><strong>First proof</strong><span>${escapeHtml(template.firstProof)}</span></div>
+                <div class="worker-fact"><strong>Live crew</strong><span>${escapeHtml(crewId)} via POST { crew, input } at ${escapeHtml(publicCrewEndpoint)}. Draft-only and auth-gated.</span></div>
                 <ul>${outputs}</ul>
                 ${renderWorkerEntitlementLadder(template)}
                 <div class="worker-price">${escapeHtml(template.pricingLabel)}</div>
                 <div class="worker-actions">
+                  <a class="btn primary" data-worker-run-action data-worker-run-endpoint="${escapeHtml(publicCrewEndpoint)}" data-worker-crew="${escapeHtml(crewId)}" data-sm-template-link="${escapeHtml(template.id)}" href="${escapeHtml(publicCrewRunUrl(template))}" target="_blank" rel="noreferrer">Open run endpoint</a>
                   <a class="btn secondary" data-sm-template-link="${escapeHtml(template.id)}" href="/agent-templates/${encodeURIComponent(template.id)}/setup/">Start setup</a>
                   <a class="link" data-sm-template-link="${escapeHtml(template.id)}" href="/contact/?template=${encodeURIComponent(template.id)}&package=ai-workcell-pilot">Ask about this worker</a>
                 </div>
@@ -375,6 +399,9 @@ function workerMatcherCatalogJson() {
       pricingLabel: template.pricingLabel,
       setupUrl: `/agent-templates/${template.id}/setup/`,
       contactUrl: `/contact/?template=${template.id}&package=ai-workcell-pilot`,
+      crewId: crewForPublicAgentTemplate(template),
+      runEndpoint: publicCrewEndpoint,
+      runUrl: publicCrewRunUrl(template),
       signals: profiles[template.id] || [],
     })),
   ).replaceAll('<', '\\u003c')
@@ -3952,7 +3979,9 @@ const publicAdaptiveWorkerRouterScript = `
         '<p>' + safeText(best.promise) + '</p>',
         '<div class="router-proof"><b>First proof</b><em>' + safeText(best.firstProof) + '</em></div>',
         '<div class="router-proof"><b>Buyer fit</b><em>' + safeText(best.buyer) + '</em></div>',
+        '<div class="router-proof"><b>Live crew</b><em>' + safeText(best.crewId) + ' via ' + safeText(best.runEndpoint) + '</em></div>',
         '<div class="router-result-actions">',
+        '<a class="btn primary" data-worker-run-action data-worker-run-endpoint="' + safeText(best.runEndpoint) + '" data-worker-crew="' + safeText(best.crewId) + '" data-sm-template-link="' + safeText(best.id) + '" href="' + safeText(best.runUrl) + '" target="_blank" rel="noreferrer">Open run endpoint</a>',
         '<a class="btn primary" data-sm-template-link="' + safeText(best.id) + '" href="' + safeText(best.setupUrl) + '">Start this worker</a>',
         '<a class="btn secondary" data-sm-template-link="' + safeText(best.id) + '" href="' + safeText(best.contactUrl) + '">Ask for this setup</a>',
         '</div>'
@@ -3998,6 +4027,43 @@ const publicAdaptiveWorkerRouterScript = `
     } else {
       initRouter();
     }
+  })();
+</script>`
+const publicCrewEndpointDiscoveryScript = `
+<script>
+  (function () {
+    var endpoint = '${publicCrewEndpoint}';
+    function safeText(value) {
+      return String(value || '').replace(/[&<>"']/g, function (char) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char];
+      });
+    }
+    function setStatus(message, state) {
+      document.querySelectorAll('[data-crew-endpoint-status]').forEach(function (el) {
+        el.setAttribute('data-status', state || 'unknown');
+        var target = el.querySelector('[data-crew-endpoint-message]');
+        if (target) target.innerHTML = safeText(message);
+      });
+    }
+    async function discover() {
+      if (!document.querySelector('[data-crew-endpoint-status]')) return;
+      setStatus('Checking live crew endpoint...', 'checking');
+      try {
+        var response = await fetch(endpoint, { method: 'GET', mode: 'cors', credentials: 'omit' });
+        var payload = await response.json().catch(function () { return {}; });
+        if (!response.ok || payload.ok !== true) {
+          setStatus('Crew endpoint is live but not ready for public discovery. Draft-only run still requires owner-approved access.', 'blocked');
+          return;
+        }
+        var crews = Array.isArray(payload.crews) ? payload.crews.join(', ') : 'read-my-chaos, owner-brief, outreach-draft';
+        setStatus('Live crews discovered: ' + crews + '. POST { crew, input } is draft-only and auth-gated.', 'ready');
+      } catch (error) {
+        setStatus('Crew endpoint is configured; browser discovery is blocked or offline. Use the run endpoint after owner-approved access.', 'blocked');
+      }
+    }
+    window.supermegaDiscoverLiveCrews = discover;
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', discover);
+    else discover();
   })();
 </script>`
 const publicRuntimeScripts = `${publicLanguageToggleScript}${publicBehaviorEventsScript}${publicLocalWorkerAdaptationScript}${publicRoleModeScript}${publicDeviceModeScript}${publicAdaptiveSetupPlanScript}${publicAdaptiveSourcePackScript}${publicAdaptiveProofPlanScript}${publicAdaptiveValuePlanScript}${publicAdaptivePilotPlanScript}`
@@ -4061,6 +4127,12 @@ const unicornAiAgentsHtml = `<!doctype html>
       .worker-ladder-step:first-child { border-top: 0; padding-top: 0; }
       .worker-ladder-step strong { display: block; font-size: 13px; letter-spacing: -.01em; color: var(--ink); }
       .worker-ladder-step span { display: block; margin-top: 3px; color: var(--muted); font-size: 12px; line-height: 1.4; }
+      .crew-endpoint-panel { border: 1px solid rgba(13,148,136,.28); border-radius: 18px; padding: 16px 18px; margin-top: 22px; background: rgba(13,148,136,.08); display: grid; gap: 8px; max-width: 76ch; }
+      .crew-endpoint-panel strong { font-size: 12px; letter-spacing: .1em; text-transform: uppercase; color: var(--blue); }
+      .crew-endpoint-panel code { white-space: normal; overflow-wrap: anywhere; font-size: 12px; color: var(--ink); }
+      .crew-endpoint-panel span { color: var(--muted); line-height: 1.45; font-size: 13px; }
+      .crew-endpoint-panel[data-status="ready"] { border-color: rgba(13,148,136,.42); background: rgba(13,148,136,.11); }
+      .crew-endpoint-panel[data-status="blocked"] { border-color: rgba(194,96,63,.28); background: rgba(194,96,63,.08); }
       .worker-price { margin-top: auto; font-weight: 900; color: var(--ink); }
       .worker-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
       .worker-card.is-router-match { border-color: rgba(194,96,63,0.5); box-shadow: 0 22px 70px rgba(194,96,63,0.16); background: rgba(255,255,255,0.8); }
@@ -4103,6 +4175,7 @@ const unicornAiAgentsHtml = `<!doctype html>
       :root[data-theme="dark"] .sprint-card, :root[data-theme="dark"] .worker-card, :root[data-theme="dark"] .behavior-step { background: rgba(243,239,230,0.05); }
       :root[data-theme="dark"] .worker-card.is-router-match, :root[data-theme="dark"] .router-result, :root[data-theme="dark"] .router-choice { background: rgba(243,239,230,0.07); }
       :root[data-theme="dark"] .worker-ladder { background: rgba(243,239,230,.05); border-color: rgba(243,239,230,.12); }
+      :root[data-theme="dark"] .crew-endpoint-panel { background: rgba(13,148,136,.08); }
       :root[data-theme="dark"] .connector-chip { background: rgba(243,239,230,0.05); border-color: rgba(243,239,230,0.12); }
       :root[data-theme="dark"] .connector-chip:hover { background: rgba(217,119,87,0.12); color: #D97757; border-color: rgba(217,119,87,0.28); }
     </style>
@@ -4198,6 +4271,11 @@ ${unicornHeader}
           <div class="eyebrow">General AI Worker Toolkit</div>
           <h2>Pick one reusable worker and prove it on real sources.</h2>
           <p style="color:var(--muted);max-width:62ch">These are sellable general-use tools: each has a buyer, source pack, first proof, output list, setup kit, and approval boundary. Start with one worker; add connectors, schedules, and maintenance only after evidence.</p>
+          <div class="crew-endpoint-panel" data-crew-endpoint-status data-crew-endpoint="${publicCrewEndpoint}">
+            <strong>Live crew endpoint</strong>
+            <code>${publicCrewEndpoint}</code>
+            <span data-crew-endpoint-message>GET discovers live crews: read-my-chaos, owner-brief, outreach-draft. POST { crew, input } runs draft-only, auth-gated work after owner-approved access.</span>
+          </div>
           <div class="worker-grid">
 ${renderSellableWorkerShelf()}
           </div>
@@ -4273,6 +4351,7 @@ ${renderSellableWorkerShelf()}
     </div>
 ${publicRuntimeScripts}
 ${publicAdaptiveWorkerRouterScript}
+${publicCrewEndpointDiscoveryScript}
   </body>
 </html>`
 

@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="Capsule Forge">
+  <title>Capsule Forge</title>
+  <desc>Two-tone capsule mark on Paper ground: Saiyan Gold top band over a Paper base, split by a seam with one offset gold press node.</desc>
+  <defs>
+    <!-- Gold top band gradient: brighter gold up top, settling into Saiyan Gold -->
+    <linearGradient id="goldBandLight" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#F2C75A"/>
+      <stop offset="1" stop-color="#E9B949"/>
+    </linearGradient>
+    <!-- Capsule silhouette, reused as clip and as stroke outline -->
+    <rect id="capsuleLight" x="12" y="8" width="40" height="48" rx="16" ry="16"/>
+    <clipPath id="capsuleClipLight">
+      <use href="#capsuleLight"/>
+    </clipPath>
+  </defs>
+
+  <!-- Paper capsule body -->
+  <use href="#capsuleLight" fill="#FFFDF8"/>
+
+  <!-- Gold top band (~42% of the 48px-tall body: 8 -> ~28), clipped to rounded corners -->
+  <g clip-path="url(#capsuleClipLight)">
+    <rect x="12" y="8" width="40" height="20.2" fill="url(#goldBandLight)"/>
+    <!-- 1px seam line at the split (ink-toned so it reads on paper) -->
+    <rect x="12" y="27.7" width="40" height="1" fill="#2A241C" opacity="0.45"/>
+    <rect x="12" y="28.2" width="40" height="0.8" fill="#F2C75A" opacity="0.30"/>
+  </g>
+
+  <!-- Offset gold press node in the paper base (right-of-center, lower third) -->
+  <circle cx="39" cy="43" r="4.6" fill="#E9B949"/>
+  <circle cx="39" cy="43" r="4.6" fill="none" stroke="#B8892E" stroke-width="0.6" opacity="0.6"/>
+
+  <!-- 1px gold edge (AA-safe gold-on-cream tone) to define the capsule against light UI chrome -->
+  <use href="#capsuleLight" fill="none" stroke="#B8892E" stroke-width="1.5" opacity="0.95"/>
+</svg>

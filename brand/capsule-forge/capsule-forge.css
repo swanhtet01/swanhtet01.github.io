@@ -1,0 +1,506 @@
+/* ============================================================================
+   CAPSULE FORGE — brand token + component layer
+   ----------------------------------------------------------------------------
+   Drop-in, self-contained CSS. No external @imports.
+   Assumes Inter + Fraunces are already loaded by the host page.
+   Clash Display is referenced with a Space Grotesk + system fallback so the
+   layer degrades gracefully if the display face is absent.
+
+   Locked by the design workshop (91/100). Doctrine: 95% calm / 5% charged.
+   The gold aura is RATIONED — one charged element per viewport, action/win
+   only. The Dragon Ball influence lives in physics (compression, aura,
+   power-level), never in characters, logos, or spiky-hair. Zero IP.
+
+   Contents:
+     1.  :root token block  (+ [data-theme="dark"] override)
+     2.  .cf-wordmark        (SUPER -> MEGA power-up lockup)
+     3.  .cf-capsule         (at-rest + .charged aura, reduced-motion guard)
+     4.  .cf-btn-deploy      (Ki-orange pill CTA — the ONE action colour)
+     5.  .cf-connector       (+ .cf-connector--mm gold-rail chip)
+     6.  .cf-meter           (clay -> gold power-level track)
+     7.  .cf-seam            (divider)
+   ========================================================================== */
+
+
+/* ==========================================================================
+   1. TOKENS
+   --------------------------------------------------------------------------
+   All brand hex live here as --cf-* custom properties. Consume tokens, never
+   raw hex, in product code so a future re-ratification is a one-file change.
+   ========================================================================== */
+
+:root {
+  /* -- Raw brand palette (LIGHT / default) ------------------------------- */
+  --cf-cream:            #F7F4EC; /* page canvas (unchanged)                */
+  --cf-paper:            #FFFDF8; /* cards / capsule surfaces               */
+  --cf-ink:              #2A241C; /* text                                   */
+  --cf-charcoal:         #181410; /* dark ground                            */
+
+  --cf-gold:             #E9B949; /* Saiyan Gold — THE through-line accent  */
+  --cf-gold-hi:          #F2C75A; /* top of the capsule gold band gradient  */
+  --cf-gold-text:        #B8892E; /* gold TEXT on cream — AA-safe variant   */
+  --cf-orange:           #F26419; /* Ki Orange — the ONE "Deploy" CTA       */
+  --cf-clay:             #C2603F; /* connective tissue                      */
+  --cf-clay-dark:        #D97757; /* clay, dark-mode variant                */
+
+  /* -- Semantic surfaces / ink (theme-swappable) ------------------------- */
+  --cf-canvas:           var(--cf-cream);
+  --cf-surface:          var(--cf-paper);
+  --cf-text:             var(--cf-ink);
+  --cf-text-muted:       #6B6154; /* warm grey, derived — muted body/UI     */
+  --cf-accent:           var(--cf-gold);
+  --cf-accent-ink:       var(--cf-gold-text); /* gold when used AS text     */
+  --cf-connective:       var(--cf-clay);
+
+  /* -- The capsule (signature motif) tokens ------------------------------ */
+  --cf-capsule-band:     linear-gradient(180deg, var(--cf-gold-hi), var(--cf-gold));
+  --cf-capsule-base:     var(--cf-paper);   /* lower body of the pill        */
+  --cf-capsule-seam:     rgba(42, 36, 28, .14); /* hairline between band/base */
+  --cf-capsule-node:     var(--cf-gold);    /* offset gold "press node" dot  */
+  --cf-capsule-node-ring:rgba(42, 36, 28, .18);
+  --cf-capsule-band-h:   42%;               /* gold band ≈ 42% of height      */
+  --cf-radius-pill:      999px;             /* the capsule radius everywhere  */
+
+  /* -- The rationed GOLD AURA (charged state) ---------------------------- */
+  --cf-aura: 0 0 0 1px var(--cf-gold), 0 8px 40px rgba(233, 185, 73, .28);
+
+  /* -- Text-only gold underglow (wordmark "MEGA") ------------------------ */
+  --cf-underglow: 0 0 18px rgba(233, 185, 73, .35);
+
+  /* -- Type ladder -------------------------------------------------------
+     Display  : wordmark + hero H1 ONLY.   (Space Grotesk fallback)
+     Editorial: warm subheads.
+     Body/UI  : everything else, tabular-nums on figures.
+     Burmese  : Noto Sans Myanmar / Padauk — NEVER the display face.        */
+  --cf-font-display:  "Clash Display", "Space Grotesk", system-ui, -apple-system,
+                      "Segoe UI", sans-serif;
+  --cf-font-editorial:"Fraunces", Georgia, "Times New Roman", serif;
+  --cf-font-body:     "Inter", system-ui, -apple-system, "Segoe UI", Roboto,
+                      Helvetica, Arial, sans-serif;
+  --cf-font-burmese:  "Noto Sans Myanmar", "Padauk", sans-serif;
+
+  /* -- Motion ------------------------------------------------------------ */
+  --cf-charge-in:  .42s cubic-bezier(.2, .7, .2, 1); /* compression ease-out */
+  --cf-charge-dur: 2.8s;                              /* aura breathe cycle   */
+
+  /* -- Elevation (calm, non-gold) ---------------------------------------- */
+  --cf-shadow-rest: 0 1px 2px rgba(42, 36, 28, .06),
+                    0 6px 20px rgba(42, 36, 28, .06);
+  --cf-hairline:    rgba(42, 36, 28, .12);
+
+  /* -- Sizing knobs ------------------------------------------------------ */
+  --cf-node-size:   9px;   /* diameter of the gold press node               */
+  --cf-meter-h:     10px;  /* power-level track height                      */
+}
+
+/* -- DARK GROUND override -------------------------------------------------
+   Forge Charcoal ground + #F3EFE6 ink + #A8A092 muted + #D97757 clay.
+   Gold stays gold (it is the through-line); on charcoal it is already AA,
+   so gold-as-text can use the pure accent rather than the darkened variant. */
+[data-theme="dark"] {
+  --cf-canvas:        var(--cf-charcoal);
+  --cf-surface:       #211C16;              /* raised charcoal card face     */
+  --cf-text:          #F3EFE6;              /* warm ink on dark              */
+  --cf-text-muted:    #A8A092;              /* muted on dark                 */
+  --cf-accent:        var(--cf-gold);
+  --cf-accent-ink:    var(--cf-gold);       /* AA on charcoal — use pure gold */
+  --cf-connective:    var(--cf-clay-dark);  /* #D97757                       */
+
+  /* Capsule recomposes for dark: gold band unchanged, base goes charcoal.  */
+  --cf-capsule-base:  #211C16;
+  --cf-capsule-seam:  rgba(243, 239, 230, .16);
+  --cf-capsule-node-ring: rgba(243, 239, 230, .22);
+
+  --cf-shadow-rest:   0 1px 2px rgba(0, 0, 0, .4),
+                      0 8px 26px rgba(0, 0, 0, .38);
+  --cf-hairline:      rgba(243, 239, 230, .14);
+}
+
+
+/* ==========================================================================
+   2. WORDMARK  —  SUPER -> MEGA -> .dev
+   --------------------------------------------------------------------------
+   The power-up rendered in the logotype. Upright, never italic.
+   "SUPER" medium -> "MEGA" bold with gold text underglow -> ".dev" lowercase gold.
+   Use on ONE lockup per page (it is the logo). Not a heading style.
+   ========================================================================== */
+
+.cf-wordmark {
+  display: inline-flex;
+  align-items: baseline;
+  gap: .06em;
+  font-family: var(--cf-font-display);
+  font-style: normal;               /* upright, never italic */
+  font-weight: 500;                 /* SUPER = medium         */
+  letter-spacing: -0.01em;
+  line-height: 1;
+  color: var(--cf-text);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  white-space: nowrap;
+}
+
+/* SUPER — the calm, at-rest half of the power-up. */
+.cf-wordmark__super {
+  font-weight: 500;
+}
+
+/* MEGA — the charged half: bold + gold underglow. This is the "power-up". */
+.cf-wordmark__mega {
+  font-weight: 700;
+  color: var(--cf-accent);
+  text-shadow: var(--cf-underglow);
+}
+
+/* .dev — lowercase gold tail. */
+.cf-wordmark__dev {
+  font-weight: 500;
+  color: var(--cf-accent);
+  text-transform: lowercase;
+}
+
+
+/* ==========================================================================
+   3. CAPSULE  —  the signature motif
+   --------------------------------------------------------------------------
+   Two-tone rounded pill: gold top band (~42% height) over a paper/charcoal
+   base, a hairline seam between them, and one offset gold "press node".
+   This same object is the logo container, favicon, button shape, card frame
+   and connector chip. Add .cf-capsule--charged to fire the rationed aura
+   (action/win ONLY — one per viewport).
+   ========================================================================== */
+
+.cf-capsule {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  min-width: 3rem;
+  min-height: 1.75rem;
+  padding: .5rem 1rem;
+  border-radius: var(--cf-radius-pill);
+  color: var(--cf-text);
+  font-family: var(--cf-font-body);
+  font-size: .9375rem;
+  line-height: 1.2;
+
+  /* The base body of the capsule. */
+  background-color: var(--cf-capsule-base);
+  box-shadow: var(--cf-shadow-rest);
+
+  /* Compression/settle transition for hover + charge changes. */
+  transition: transform var(--cf-charge-in), box-shadow var(--cf-charge-in);
+}
+
+/* Gold top band — a pseudo-element so it never captures pointer events and
+   the capsule's own children (text/icon) sit above it. ~42% of height. */
+.cf-capsule::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;               /* pin to the top edge                  */
+  height: var(--cf-capsule-band-h);
+  border-radius: var(--cf-radius-pill) var(--cf-radius-pill) 0 0;
+  background: var(--cf-capsule-band);
+  /* seam line drawn as a hairline shadow at the band's lower edge */
+  box-shadow: 0 1px 0 var(--cf-capsule-seam);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Offset gold "press node" — the small dot. Sits on the band, upper-right. */
+.cf-capsule::after {
+  content: "";
+  position: absolute;
+  top: calc(var(--cf-capsule-band-h) * 0.42);
+  right: .55rem;
+  width: var(--cf-node-size);
+  height: var(--cf-node-size);
+  border-radius: 50%;
+  background: var(--cf-capsule-node);
+  box-shadow: 0 0 0 1.5px var(--cf-capsule-node-ring);
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Keep real capsule content above the band pseudo-element. */
+.cf-capsule > * {
+  position: relative;
+  z-index: 2;
+}
+
+/* -- Card / frame usage: a larger, quieter capsule for content ----------- */
+.cf-capsule--card {
+  display: block;
+  min-height: 0;
+  padding: 1.25rem 1.375rem;
+  text-align: left;
+  border-radius: 1.25rem;          /* softened, not a full pill, at card scale */
+}
+.cf-capsule--card::before {
+  height: 6px;                     /* thin gold cap instead of 42% band     */
+  border-radius: 1.25rem 1.25rem 0 0;
+}
+.cf-capsule--card::after {
+  top: 12px;
+  right: 14px;
+}
+
+/* -- Icon / favicon usage: a tight square-ish capsule -------------------- */
+.cf-capsule--icon {
+  width: 2.5rem;
+  height: 2.5rem;
+  min-width: 0;
+  padding: 0;
+}
+
+/* -- CHARGED: the rationed gold aura ------------------------------------
+   Fire ONLY on a genuine action or win, ONE charged element per viewport.
+   .cf-capsule--charged applies the static aura; the breathe animation is a
+   subtle extra layer, dropped entirely under prefers-reduced-motion below. */
+.cf-capsule--charged {
+  box-shadow: var(--cf-aura);
+  animation: cf-aura-breathe var(--cf-charge-dur) ease-in-out infinite;
+}
+
+/* A tiny compression "settle" when an element becomes charged / is pressed. */
+.cf-capsule--charged:active,
+.cf-btn-deploy:active {
+  transform: translateY(1px) scale(.985); /* compression physics */
+}
+
+@keyframes cf-aura-breathe {
+  0%, 100% {
+    box-shadow: 0 0 0 1px var(--cf-gold), 0 8px 40px rgba(233, 185, 73, .28);
+  }
+  50% {
+    box-shadow: 0 0 0 1px var(--cf-gold), 0 10px 52px rgba(233, 185, 73, .40);
+  }
+}
+
+
+/* ==========================================================================
+   4. DEPLOY BUTTON  —  the ONE Ki-orange CTA
+   --------------------------------------------------------------------------
+   Ki Orange is action-only. This pill is the single loud element on a view.
+   It borrows the capsule shape; its aura, when charged, stays GOLD (the aura
+   is always gold — orange is the surface, gold is the charge).
+   ========================================================================== */
+
+.cf-btn-deploy {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: .5rem;
+  box-sizing: border-box;
+  padding: .75rem 1.5rem;
+  border: 0;
+  border-radius: var(--cf-radius-pill);
+  background: var(--cf-orange);
+  color: #FFF7F0;                  /* warm-white ink, AA on Ki Orange       */
+  font-family: var(--cf-font-body);
+  font-weight: 650;
+  font-size: 1rem;
+  line-height: 1;
+  letter-spacing: .01em;
+  cursor: pointer;
+  user-select: none;
+  text-decoration: none;           /* usable on <a> as well as <button>     */
+  box-shadow: var(--cf-shadow-rest);
+  transition: transform var(--cf-charge-in), box-shadow var(--cf-charge-in),
+              filter var(--cf-charge-in);
+}
+
+.cf-btn-deploy:hover {
+  filter: brightness(1.04);
+  box-shadow: 0 2px 4px rgba(42, 36, 28, .10),
+              0 10px 28px rgba(242, 100, 25, .26);
+}
+
+/* Keyboard focus — visible gold ring, honours the accent through-line. */
+.cf-btn-deploy:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--cf-canvas), 0 0 0 5px var(--cf-gold);
+}
+
+/* Charged win-state: the gold aura fires on the CTA itself. */
+.cf-btn-deploy.charged,
+.cf-btn-deploy--charged {
+  box-shadow: var(--cf-aura);
+  animation: cf-aura-breathe var(--cf-charge-dur) ease-in-out infinite;
+}
+
+.cf-btn-deploy:disabled,
+.cf-btn-deploy[aria-disabled="true"] {
+  cursor: not-allowed;
+  filter: grayscale(.3);
+  opacity: .55;
+  box-shadow: none;
+}
+
+
+/* ==========================================================================
+   5. CONNECTOR CHIP  —  .cf-connector  (+ .cf-connector--mm gold rail)
+   --------------------------------------------------------------------------
+   A small capsule-shaped chip for a connected service / integration. The
+   plain chip uses clay as its connective tissue; the --mm ("main / Myanmar
+   rail") variant swaps in the gold rail to mark a first-class connection.
+   ========================================================================== */
+
+.cf-connector {
+  display: inline-flex;
+  align-items: center;
+  gap: .5rem;
+  box-sizing: border-box;
+  padding: .375rem .75rem .375rem .5rem;
+  border-radius: var(--cf-radius-pill);
+  background: var(--cf-surface);
+  color: var(--cf-text);
+  font-family: var(--cf-font-body);
+  font-size: .8125rem;
+  font-weight: 550;
+  line-height: 1;
+  white-space: nowrap;
+  border: 1px solid var(--cf-hairline);
+
+  /* The connective rail — clay by default, drawn as a left inset bar. */
+  box-shadow: inset 3px 0 0 0 var(--cf-connective);
+}
+
+/* Small leading dot to echo the capsule "press node" at chip scale. */
+.cf-connector__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--cf-connective);
+  flex: 0 0 auto;
+}
+
+/* Optional trailing numeric — align with tabular figures. */
+.cf-connector__count {
+  font-variant-numeric: tabular-nums;
+  color: var(--cf-text-muted);
+}
+
+/* -- --mm : the GOLD RAIL variant (first-class / main connection) -------- */
+.cf-connector--mm {
+  box-shadow: inset 3px 0 0 0 var(--cf-gold);
+  border-color: rgba(233, 185, 73, .45);
+}
+.cf-connector--mm .cf-connector__dot {
+  background: var(--cf-gold);
+}
+
+
+/* ==========================================================================
+   6. POWER-LEVEL METER  —  clay -> gold track
+   --------------------------------------------------------------------------
+   Progress / power level. The fill runs clay at the low end to gold at full,
+   so "charged up" reads as the through-line accent. Drive it by setting the
+   custom property:  style="--cf-level: 72%"  (or width on the fill node).
+   ========================================================================== */
+
+.cf-meter {
+  --cf-level: 0%;                  /* 0–100%, override inline or in JS       */
+  position: relative;
+  width: 100%;
+  height: var(--cf-meter-h);
+  border-radius: var(--cf-radius-pill);
+  background: var(--cf-hairline);  /* empty track                            */
+  overflow: hidden;
+}
+
+.cf-meter__fill {
+  display: block;
+  height: 100%;
+  width: var(--cf-level);
+  border-radius: inherit;
+  /* clay (low) -> gold (full). The gradient is painted across the fill node,
+     so a short bar reads mostly clay and only reaches gold as it fills. */
+  background-image: linear-gradient(90deg,
+                      var(--cf-clay) 0%,
+                      var(--cf-clay-dark) 45%,
+                      var(--cf-gold-hi) 100%);
+  transition: width var(--cf-charge-in);
+}
+
+/* At full power the track earns the aura (still rationed — treat "maxed" as a
+   win). Add .cf-meter--charged when the level hits 100%. */
+.cf-meter--charged {
+  box-shadow: var(--cf-aura);
+}
+
+
+/* ==========================================================================
+   7. SEAM  —  divider
+   --------------------------------------------------------------------------
+   Echoes the capsule's seam line: a warm hairline with a single offset gold
+   node, so dividers carry the motif without spending the aura.
+   ========================================================================== */
+
+.cf-seam {
+  position: relative;
+  height: 1px;
+  margin: 1.5rem 0;
+  border: 0;
+  background: var(--cf-hairline);
+}
+
+/* The offset gold node on the seam (left-of-centre by default). */
+.cf-seam::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 12%;
+  width: 6px;
+  height: 6px;
+  margin-top: -3px;
+  border-radius: 50%;
+  background: var(--cf-gold);
+  box-shadow: 0 0 0 1px var(--cf-capsule-seam);
+}
+
+/* Vertical variant for inline separation. */
+.cf-seam--vertical {
+  display: inline-block;
+  width: 1px;
+  height: 1em;
+  margin: 0 .75rem;
+  vertical-align: middle;
+}
+.cf-seam--vertical::after {
+  left: 50%;
+  top: 30%;
+  margin-left: -3px;
+}
+
+
+/* ==========================================================================
+   MOTION GUARD  —  prefers-reduced-motion
+   --------------------------------------------------------------------------
+   Under reduced motion we KEEP the static gold aura (it is meaning, not
+   decoration) but DROP the breathe animation and the compression transitions
+   so nothing moves. This satisfies the doctrine's "dropped under
+   prefers-reduced-motion" for the animated layer specifically.
+   ========================================================================== */
+
+@media (prefers-reduced-motion: reduce) {
+  .cf-capsule,
+  .cf-btn-deploy,
+  .cf-meter__fill {
+    transition: none;
+  }
+
+  .cf-capsule--charged,
+  .cf-btn-deploy.charged,
+  .cf-btn-deploy--charged {
+    animation: none;
+    /* retain the static aura — just no breathing */
+    box-shadow: var(--cf-aura);
+  }
+
+  .cf-capsule--charged:active,
+  .cf-btn-deploy:active {
+    transform: none;
+  }
+}

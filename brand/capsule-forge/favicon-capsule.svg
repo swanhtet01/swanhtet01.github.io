@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="Capsule Forge">
+  <title>Capsule Forge</title>
+  <desc>Two-tone capsule mark: Saiyan Gold top band over a Forge Charcoal base, split by a seam with one offset gold press node.</desc>
+  <defs>
+    <!-- Gold top band gradient: brighter gold up top, settling into Saiyan Gold -->
+    <linearGradient id="goldBand" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#F2C75A"/>
+      <stop offset="1" stop-color="#E9B949"/>
+    </linearGradient>
+    <!-- Capsule silhouette, reused as clip and as stroke outline -->
+    <rect id="capsule" x="12" y="8" width="40" height="48" rx="16" ry="16"/>
+    <clipPath id="capsuleClip">
+      <use href="#capsule"/>
+    </clipPath>
+  </defs>
+
+  <!-- Charcoal capsule body -->
+  <use href="#capsule" fill="#181410"/>
+
+  <!-- Gold top band (~42% of the 48px-tall body: 8 -> ~28), clipped to rounded corners -->
+  <g clip-path="url(#capsuleClip)">
+    <rect x="12" y="8" width="40" height="20.2" fill="url(#goldBand)"/>
+    <!-- 1px seam line at the split -->
+    <rect x="12" y="27.7" width="40" height="1" fill="#181410" opacity="0.55"/>
+    <rect x="12" y="28.2" width="40" height="0.8" fill="#F2C75A" opacity="0.35"/>
+  </g>
+
+  <!-- Offset gold press node in the charcoal base (right-of-center, lower third) -->
+  <circle cx="39" cy="43" r="4.6" fill="#E9B949"/>
+
+  <!-- 1px gold edge to define the capsule against dark UI chrome -->
+  <use href="#capsule" fill="none" stroke="#E9B949" stroke-width="1.5" opacity="0.9"/>
+</svg>

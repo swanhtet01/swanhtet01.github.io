@@ -819,6 +819,17 @@ for (const token of [
   'entitlement_premium',
   'entitlement_gated_hands',
   'Owner-approved computer-use or mobile actions only',
+  'Live crew endpoint',
+  'https://app.supermega.dev/api/crew',
+  'data-crew-endpoint-status',
+  'data-worker-run-endpoint',
+  'data-worker-crew',
+  'data-worker-run-action',
+  'supermegaDiscoverLiveCrews',
+  'POST { crew, input }',
+  'read-my-chaos',
+  'owner-brief',
+  'outreach-draft',
   '/api/behavior-events',
 ]) {
   if (!aiAgentsHtml.includes(token)) fail('public_ai_agents_sellable_toolkit_contract_missing', { token })
