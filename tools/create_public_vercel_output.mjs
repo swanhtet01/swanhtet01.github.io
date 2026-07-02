@@ -368,7 +368,7 @@ function renderSellableWorkerShelf() {
                 ${renderWorkerEntitlementLadder(template)}
                 <div class="worker-price">${escapeHtml(template.pricingLabel)}</div>
                 <div class="worker-actions">
-                  <a class="btn primary" data-worker-run-action data-worker-run-endpoint="${escapeHtml(publicCrewEndpoint)}" data-worker-crew="${escapeHtml(crewId)}" data-sm-template-link="${escapeHtml(template.id)}" href="${escapeHtml(publicCrewRunUrl(template))}" target="_blank" rel="noreferrer">Open run endpoint</a>
+                  <a class="btn primary" data-worker-run-action data-worker-run-endpoint="${escapeHtml(publicCrewEndpoint)}" data-worker-crew="${escapeHtml(crewId)}" href="${escapeHtml(publicCrewRunUrl(template))}" target="_blank" rel="noreferrer">Open run endpoint</a>
                   <a class="btn secondary" data-sm-template-link="${escapeHtml(template.id)}" href="/agent-templates/${encodeURIComponent(template.id)}/setup/">Start setup</a>
                   <a class="link" data-sm-template-link="${escapeHtml(template.id)}" href="/contact/?template=${encodeURIComponent(template.id)}&package=ai-workcell-pilot">Ask about this worker</a>
                 </div>
@@ -3981,7 +3981,7 @@ const publicAdaptiveWorkerRouterScript = `
         '<div class="router-proof"><b>Buyer fit</b><em>' + safeText(best.buyer) + '</em></div>',
         '<div class="router-proof"><b>Live crew</b><em>' + safeText(best.crewId) + ' via ' + safeText(best.runEndpoint) + '</em></div>',
         '<div class="router-result-actions">',
-        '<a class="btn primary" data-worker-run-action data-worker-run-endpoint="' + safeText(best.runEndpoint) + '" data-worker-crew="' + safeText(best.crewId) + '" data-sm-template-link="' + safeText(best.id) + '" href="' + safeText(best.runUrl) + '" target="_blank" rel="noreferrer">Open run endpoint</a>',
+        '<a class="btn primary" data-worker-run-action data-worker-run-endpoint="' + safeText(best.runEndpoint) + '" data-worker-crew="' + safeText(best.crewId) + '" href="' + safeText(best.runUrl) + '" target="_blank" rel="noreferrer">Open run endpoint</a>',
         '<a class="btn primary" data-sm-template-link="' + safeText(best.id) + '" href="' + safeText(best.setupUrl) + '">Start this worker</a>',
         '<a class="btn secondary" data-sm-template-link="' + safeText(best.id) + '" href="' + safeText(best.contactUrl) + '">Ask for this setup</a>',
         '</div>'
@@ -4332,7 +4332,7 @@ ${renderSellableWorkerShelf()}
           <blockquote>A Yangon factory had a year of warranty claims — about 120 of them — buried across hundreds of Gmail threads, with no owner and no way to see what was overdue. We turned them into one clean ledger: every claim with an owner, a status, and a link back to the email it came from.</blockquote>
           <cite>— A real build, from real data</cite>
           <div class="cta" style="justify-content:center;margin-top:28px">
-            <a class="btn primary" href="/contact/?package=agent">Start with one agent</a>
+            <a class="btn primary" href="/contact/?package=agent" style="background:linear-gradient(180deg,#F6851F,#F26419);border-color:#F26419;color:#fff;box-shadow:0 12px 30px rgba(242,100,25,0.30)">Start with one agent</a>
           </div>
         </section>
       </main>
@@ -4488,7 +4488,7 @@ ${unicornHeader}
             <p style="font-size:clamp(15px,2vw,18px);color:var(--clay);font-weight:800;margin:2px 0 14px;line-height:1.5">Built for how Myanmar business really runs. Free to start — power up when you're ready.</p>
             <p>Free core tools replace bloated SaaS. Premium AI workers handle messy data, connectors, approvals, and daily operations across mobile, tablet, and desktop. Start with one useful tool, then add agents only after proof.</p>
             <div class="cta">
-              <a class="btn primary" href="/free/">Try the free tool</a>
+              <a class="btn primary" href="/free/" style="background:linear-gradient(180deg,#F6851F,#F26419);border-color:#F26419;color:#fff;box-shadow:0 12px 30px rgba(242,100,25,0.30)">Try the free tool</a>
               <a class="btn secondary" href="/ai-agents/">See AI agents</a>
               <a class="btn secondary" href="/offers/">See pricing</a>
             </div>
@@ -4522,7 +4522,7 @@ ${unicornHeader}
               <div class="workcell-step"><strong>Agent crews</strong><span>Scoped jobs with first proof, acceptance tests, source trace, and no external action without approval.</span></div>
               <div class="workcell-step"><strong>Gated hands</strong><span>Computer-use and mobile workcells are built behind gates: consent, reliability, vaulting, legal review, and audit logs.</span></div>
             </div>
-            <div class="cta" style="margin-top:22px"><a class="btn primary" href="/free/">Try free Source-to-Screen</a><a class="btn secondary" href="/ai-agents/">See the AI Agent Army</a></div>
+            <div class="cta" style="margin-top:22px"><a class="btn primary" href="/free/" style="background:linear-gradient(180deg,#F6851F,#F26419);border-color:#F26419;color:#fff;box-shadow:0 12px 30px rgba(242,100,25,0.30)">Try free Source-to-Screen</a><a class="btn secondary" href="/ai-agents/">See the AI Agent Army</a></div>
           </div>
         </section>
 
@@ -4798,7 +4798,7 @@ ${unicornHeader}
             <h1>Built for Myanmar. Designed to replace bloated SaaS.</h1>
             <p>Start with a useful free or fixed-scope tool. Add premium AI only when it handles a real money job: cleanup, reconciliation, reports, inboxes, approvals, and mobile or desktop workflows.</p>
             <div class="cta">
-              <a class="btn primary" href="/free/">Try the free tool</a>
+              <a class="btn primary" href="/free/" style="background:linear-gradient(180deg,#F6851F,#F26419);border-color:#F26419;color:#fff;box-shadow:0 12px 30px rgba(242,100,25,0.30)">Try the free tool</a>
               <a class="btn secondary" href="/ai-agents/">See agent crews</a>
               <a class="btn secondary" href="/offers/">Pricing</a>
             </div>
