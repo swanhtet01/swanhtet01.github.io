@@ -1235,6 +1235,11 @@ function pipelineActionPayload(record) {
       template_source_area: record.template_source_area,
       starter_kit_url: record.starter_kit_url,
       price_hint: record.price_hint,
+      entitlement_free_core: record.entitlement_free_core,
+      entitlement_paid_pilot: record.entitlement_paid_pilot,
+      entitlement_premium: record.entitlement_premium,
+      entitlement_gated_hands: record.entitlement_gated_hands,
+      entitlement_gate: record.entitlement_gate,
       source_file_count: record.source_file_count,
       public_package: record.public_package,
       first_proof_target: record.first_proof_target,
@@ -1395,6 +1400,11 @@ function buildLeadRecord({ leadId, taskId, payload, req }) {
   const templateSourceArea = truncate(payload.template_source_area, 160)
   const starterKitUrl = truncate(payload.starter_kit_url, 240)
   const priceHint = truncate(payload.price_hint, 120)
+  const entitlementFreeCore = truncate(payload.entitlement_free_core, 700)
+  const entitlementPaidPilot = truncate(payload.entitlement_paid_pilot, 700)
+  const entitlementPremium = truncate(payload.entitlement_premium, 700)
+  const entitlementGatedHands = truncate(payload.entitlement_gated_hands, 700)
+  const entitlementGate = truncate(payload.entitlement_gate, 700)
   const sourceFileNames = truncate(payload.source_file_names, 1200)
   const sourceFileCount = truncate(payload.source_file_count, 20)
   const onboardingStage = truncate(payload.onboarding_stage, 80) || 'source_review'
@@ -1410,6 +1420,11 @@ function buildLeadRecord({ leadId, taskId, payload, req }) {
     templateSourceArea ? `Template source area: ${templateSourceArea}` : '',
     starterKitUrl ? `Starter kit: ${starterKitUrl}` : '',
     priceHint ? `Price hint: ${priceHint}` : '',
+    entitlementFreeCore ? `Entitlement free core: ${entitlementFreeCore}` : '',
+    entitlementPaidPilot ? `Entitlement paid pilot: ${entitlementPaidPilot}` : '',
+    entitlementPremium ? `Entitlement premium: ${entitlementPremium}` : '',
+    entitlementGatedHands ? `Entitlement gated hands: ${entitlementGatedHands}` : '',
+    entitlementGate ? `Entitlement gate: ${entitlementGate}` : '',
     publicPackage ? `Public package: ${publicPackage}` : '',
     firstProofTarget ? `First proof target: ${firstProofTarget}` : '',
     acceptanceTests ? `Acceptance tests: ${acceptanceTests}` : '',
@@ -1444,6 +1459,11 @@ function buildLeadRecord({ leadId, taskId, payload, req }) {
     template_source_area: templateSourceArea,
     starter_kit_url: starterKitUrl,
     price_hint: priceHint,
+    entitlement_free_core: entitlementFreeCore,
+    entitlement_paid_pilot: entitlementPaidPilot,
+    entitlement_premium: entitlementPremium,
+    entitlement_gated_hands: entitlementGatedHands,
+    entitlement_gate: entitlementGate,
     first_proof_target: firstProofTarget,
     acceptance_tests: acceptanceTests,
     launch_blockers: launchBlockers,
@@ -1501,6 +1521,11 @@ function emailRows(record) {
     ['Operator console', operatorConsoleUrl()],
     ['Owner action', 'Open the operator console, run the queue, then produce the first proof before any external send/write/payment action.'],
     ['Price hint', record.price_hint],
+    ['Free core entitlement', record.entitlement_free_core],
+    ['Paid pilot entitlement', record.entitlement_paid_pilot],
+    ['Premium maintained entitlement', record.entitlement_premium],
+    ['Gated hands entitlement', record.entitlement_gated_hands],
+    ['Entitlement gate', record.entitlement_gate],
     ['First proof target', record.first_proof_target],
     ['Acceptance tests', record.acceptance_tests],
     ['Launch blockers', record.launch_blockers],
@@ -1867,6 +1892,11 @@ async function handler(req, res) {
             record.requested_package ? `Package: ${record.requested_package}` : '',
             record.first_proof_target ? `First proof: ${record.first_proof_target}` : '',
             record.price_hint ? `Price hint: ${record.price_hint}` : '',
+            record.entitlement_free_core ? `Free core entitlement: ${record.entitlement_free_core}` : '',
+            record.entitlement_paid_pilot ? `Paid pilot entitlement: ${record.entitlement_paid_pilot}` : '',
+            record.entitlement_premium ? `Premium maintained entitlement: ${record.entitlement_premium}` : '',
+            record.entitlement_gated_hands ? `Gated hands entitlement: ${record.entitlement_gated_hands}` : '',
+            record.entitlement_gate ? `Entitlement gate: ${record.entitlement_gate}` : '',
             record.goal || goal || '',
             record.data || '',
           ].filter(Boolean).join('\n'), 2400),
