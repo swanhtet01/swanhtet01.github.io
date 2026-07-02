@@ -189,7 +189,53 @@ export function buildPublicAgentTemplates(pricing) {
       firstRunWorkflow: ['Parse intake notes', 'Map scope to services', 'Draft proposal', 'Create SOW checklist', 'Queue owner approval'],
       outputs: ['proposal draft', 'SOW draft', 'assumptions and exclusions', 'owner approval checklist'],
     },
-  ]
+  ].map((template) => ({
+    ...template,
+    entitlementLadder: buildEntitlementLadder(template),
+  }))
+}
+
+function buildEntitlementLadder(template) {
+  const sampleProof = `One approved source-pack proof: ${template.firstProof}`
+  const freeCore =
+    template.id === 'deskpos-quickstart'
+      ? 'Free DeskPOS trial, worker matcher, setup checklist, and one checkout or booking proof without private connectors.'
+      : `Free matcher, setup checklist, and ${sampleProof} without live connectors or recurring runs.`
+  const paidPilot =
+    template.id === 'deskpos-quickstart'
+      ? 'Owner-approved private shop setup, payment receipt proof, first daily close, and handoff checklist.'
+      : `Owner-approved paid pilot that turns the accepted first proof into a private ${template.productArea} workcell.`
+  const premiumMaintained =
+    template.id === 'deskpos-quickstart'
+      ? 'Maintained POS workspace with daily close insight, receipts, backups, support, and premium AI diagnosis.'
+      : `Maintained ${template.name} with source trace, connector setup, scheduled runs, approval queue, monitoring, and support.`
+
+  return {
+    free_core: {
+      label: 'Free core',
+      entitlement_code: 'free_core',
+      includes: freeCore,
+      gate: 'deterministic browser or sample-source proof; no private connector, write action, or recurring claim.',
+    },
+    paid_pilot: {
+      label: 'Paid pilot',
+      entitlement_code: 'paid_pilot',
+      includes: paidPilot,
+      gate: 'starts only after owner approves scope, source boundary, first-run checklist, and payment proof.',
+    },
+    premium_maintained: {
+      label: 'Premium maintained',
+      entitlement_code: 'premium_maintained',
+      includes: premiumMaintained,
+      gate: 'requires accepted proof, approved workspace, token cap, source trace, and monthly review.',
+    },
+    gated_hands: {
+      label: 'Gated hands',
+      entitlement_code: 'gated_hands',
+      includes: 'Owner-approved computer-use or mobile actions only when API/export paths are not enough.',
+      gate: 'requires consent, vaulting, audit logs, rollback plan, reliability checks, and explicit owner approval.',
+    },
+  }
 }
 
 function buildRolePlaybook(template) {
@@ -245,11 +291,13 @@ export function buildAgentTemplateStarterKit(template) {
     role_playbook: buildRolePlaybook(template),
     first_run_workflow: template.firstRunWorkflow,
     outputs: template.outputs,
+    entitlement_ladder: template.entitlementLadder,
     acceptance_tests: [
       `Produces: ${template.firstProof}`,
       'Uses only approved sample sources on the first run.',
       'Shows source trace for every important number, record, or recommendation.',
       'Keeps every external action in approval-only mode until the owner signs off.',
+      'Keeps free core, paid pilot, premium maintained, and gated hands entitlements separate.',
     ],
     deployment_mode: {
       first_run: 'read-only proof',
@@ -295,6 +343,16 @@ ${kit.first_run_workflow.map((step, index) => `${index + 1}. ${step}`).join('\n'
 ## Outputs
 
 ${kit.outputs.map((item) => `- ${item}`).join('\n')}
+
+## Entitlement Ladder
+
+Free core: ${kit.entitlement_ladder.free_core.includes}
+
+Paid pilot: ${kit.entitlement_ladder.paid_pilot.includes}
+
+Premium maintained: ${kit.entitlement_ladder.premium_maintained.includes}
+
+Gated hands: ${kit.entitlement_ladder.gated_hands.includes}
 
 ## Role Playbook
 

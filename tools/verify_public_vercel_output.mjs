@@ -791,6 +791,17 @@ for (const token of [
   'Document / PDF Intake Ledger',
   'CRM Follow-up &amp; Pipeline Assistant',
   'Proposal &amp; SOW Builder',
+  'Sellable tool ladder',
+  'Free core',
+  'Paid pilot',
+  'Premium maintained',
+  'Gated hands',
+  'data-worker-entitlements',
+  'entitlement_free_core',
+  'entitlement_paid_pilot',
+  'entitlement_premium',
+  'entitlement_gated_hands',
+  'Owner-approved computer-use or mobile actions only',
   '/api/behavior-events',
 ]) {
   if (!aiAgentsHtml.includes(token)) fail('public_ai_agents_sellable_toolkit_contract_missing', { token })
@@ -833,6 +844,10 @@ for (const token of [
   'Paid pilot',
   'Payment proof',
   'no workspace, retainer, or MRR before payment proof',
+  'Entitlement ladder',
+  'Free core stays deterministic',
+  'Premium maintained adds monitoring, connectors, scheduled runs, and support',
+  'Gated hands require consent, vaulting, audit logs, and owner approval',
 ]) {
   if (!aiWorkerGuideHtml.includes(token)) fail('public_ai_worker_user_guide_contract_missing', { token })
 }
@@ -966,6 +981,9 @@ for (const token of [
   'free_core_tool',
   'premium_upgrade',
   'proof_metric',
+  'entitlement_ladder',
+  'next_entitlement_offer',
+  'Gated hands',
   'user_adaptation_segments',
   'User adaptation segments',
   'recommended_ui_adaptation',

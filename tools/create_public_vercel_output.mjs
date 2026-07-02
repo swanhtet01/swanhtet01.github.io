@@ -301,6 +301,31 @@ function renderPublicAgentTemplateCards() {
     .join('\n')
 }
 
+function entitlementValue(template, key, field = 'includes') {
+  return template.entitlementLadder?.[key]?.[field] || ''
+}
+
+function renderWorkerEntitlementLadder(template) {
+  const rows = ['free_core', 'paid_pilot', 'premium_maintained', 'gated_hands']
+    .map((key) => {
+      const item = template.entitlementLadder?.[key]
+      if (!item) return ''
+      return `<div class="worker-ladder-step" data-entitlement-code="${escapeHtml(item.entitlement_code)}">
+                <strong>${escapeHtml(item.label)}</strong>
+                <span>${escapeHtml(item.includes)}</span>
+              </div>`
+    })
+    .join('')
+  return `<div class="worker-ladder" data-worker-entitlements
+              data-entitlement_free_core="${escapeHtml(entitlementValue(template, 'free_core'))}"
+              data-entitlement_paid_pilot="${escapeHtml(entitlementValue(template, 'paid_pilot'))}"
+              data-entitlement_premium="${escapeHtml(entitlementValue(template, 'premium_maintained'))}"
+              data-entitlement_gated_hands="${escapeHtml(entitlementValue(template, 'gated_hands'))}">
+            <strong>Sellable tool ladder</strong>
+            <div>${rows}</div>
+          </div>`
+}
+
 function renderSellableWorkerShelf() {
   return publicAgentTemplates
     .map((template) => {
@@ -317,6 +342,7 @@ function renderSellableWorkerShelf() {
                 <div class="worker-fact"><strong>Source pack</strong><span>${escapeHtml(sourceInputs)}</span></div>
                 <div class="worker-fact"><strong>First proof</strong><span>${escapeHtml(template.firstProof)}</span></div>
                 <ul>${outputs}</ul>
+                ${renderWorkerEntitlementLadder(template)}
                 <div class="worker-price">${escapeHtml(template.pricingLabel)}</div>
                 <div class="worker-actions">
                   <a class="btn secondary" data-sm-template-link="${escapeHtml(template.id)}" href="/agent-templates/${encodeURIComponent(template.id)}/setup/">Start setup</a>
@@ -480,6 +506,10 @@ function contactTemplatePackagesJson() {
         status: template.status,
         next: template.next,
         starterKitUrl: `/site/agent-templates/${template.id}.json`,
+        entitlementFreeCore: entitlementValue(template, 'free_core'),
+        entitlementPaidPilot: entitlementValue(template, 'paid_pilot'),
+        entitlementPremium: entitlementValue(template, 'premium_maintained'),
+        entitlementGatedHands: entitlementValue(template, 'gated_hands'),
       },
     ]),
   )
@@ -495,6 +525,7 @@ async function writePublicAgentTemplateStarterKits() {
     buyer: kit.buyer,
     price_hint: kit.offer.price_hint,
     first_proof: kit.offer.first_proof,
+    entitlement_ladder: kit.entitlement_ladder,
     json_url: `/site/agent-templates/${kit.id}.json`,
     markdown_url: `/site/agent-templates/${kit.id}.md`,
     contact_url: kit.contact_url,
@@ -4023,6 +4054,13 @@ const unicornAiAgentsHtml = `<!doctype html>
       .worker-fact strong { font-size: 11px; text-transform: uppercase; letter-spacing: .12em; color: var(--blue); }
       .worker-fact span { color: var(--ink); font-size: 14px; line-height: 1.42; }
       .worker-card ul { margin: 0; padding-left: 18px; color: var(--muted); font-size: 13px; line-height: 1.45; }
+      .worker-ladder { border: 1px solid rgba(42,36,28,.12); border-radius: 16px; padding: 14px; background: rgba(255,250,241,.62); display: grid; gap: 10px; }
+      .worker-ladder > strong { display: block; font-size: 12px; letter-spacing: .1em; text-transform: uppercase; color: var(--clay); }
+      .worker-ladder > div { display: grid; gap: 8px; }
+      .worker-ladder-step { border-top: 1px solid rgba(42,36,28,.1); padding-top: 8px; }
+      .worker-ladder-step:first-child { border-top: 0; padding-top: 0; }
+      .worker-ladder-step strong { display: block; font-size: 13px; letter-spacing: -.01em; color: var(--ink); }
+      .worker-ladder-step span { display: block; margin-top: 3px; color: var(--muted); font-size: 12px; line-height: 1.4; }
       .worker-price { margin-top: auto; font-weight: 900; color: var(--ink); }
       .worker-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
       .worker-card.is-router-match { border-color: rgba(194,96,63,0.5); box-shadow: 0 22px 70px rgba(194,96,63,0.16); background: rgba(255,255,255,0.8); }
@@ -4064,6 +4102,7 @@ const unicornAiAgentsHtml = `<!doctype html>
       @media (max-width: 880px) { .sprint-grid, .worker-grid, .behavior-grid, .worker-router { grid-template-columns: 1fr; } }
       :root[data-theme="dark"] .sprint-card, :root[data-theme="dark"] .worker-card, :root[data-theme="dark"] .behavior-step { background: rgba(243,239,230,0.05); }
       :root[data-theme="dark"] .worker-card.is-router-match, :root[data-theme="dark"] .router-result, :root[data-theme="dark"] .router-choice { background: rgba(243,239,230,0.07); }
+      :root[data-theme="dark"] .worker-ladder { background: rgba(243,239,230,.05); border-color: rgba(243,239,230,.12); }
       :root[data-theme="dark"] .connector-chip { background: rgba(243,239,230,0.05); border-color: rgba(243,239,230,0.12); }
       :root[data-theme="dark"] .connector-chip:hover { background: rgba(217,119,87,0.12); color: #D97757; border-color: rgba(217,119,87,0.28); }
     </style>
@@ -4881,6 +4920,11 @@ ${unicornHeader}
             <input type="hidden" name="starter_kit_url" value="" />
             <input type="hidden" name="first_proof_target" value="" />
             <input type="hidden" name="price_hint" value="" />
+            <input type="hidden" name="entitlement_free_core" value="" />
+            <input type="hidden" name="entitlement_paid_pilot" value="" />
+            <input type="hidden" name="entitlement_premium" value="" />
+            <input type="hidden" name="entitlement_gated_hands" value="" />
+            <input type="hidden" name="entitlement_gate" value="" />
             <input type="hidden" name="proof_plan_worker_id" value="" />
             <input type="hidden" name="proof_plan_summary" value="" />
             <input type="hidden" name="proof_plan_milestones" value="" />
@@ -5079,6 +5123,11 @@ ${publicRuntimeScripts}
             set('starter_kit_url', selectedTemplate.starterKitUrl);
             set('first_proof_target', selectedTemplate.firstProof);
             set('price_hint', selectedTemplate.price);
+            set('entitlement_free_core', selectedTemplate.entitlementFreeCore);
+            set('entitlement_paid_pilot', selectedTemplate.entitlementPaidPilot);
+            set('entitlement_premium', selectedTemplate.entitlementPremium);
+            set('entitlement_gated_hands', selectedTemplate.entitlementGatedHands);
+            set('entitlement_gate', 'owner-approved computer-use or mobile actions only after consent, vaulting, audit logs, rollback, and explicit approval');
             set('utm_campaign', search.get('utm_campaign') || 'agent_template_intake');
             set('data', [
               'Template intake: ' + selectedTemplate.id,
@@ -5087,7 +5136,11 @@ ${publicRuntimeScripts}
               'Starter kit: ' + selectedTemplate.starterKitUrl,
               'Source category: ' + selectedTemplate.sourceCategory,
               'Source area: ' + selectedTemplate.sourceArea,
-              'Price hint: ' + selectedTemplate.price
+              'Price hint: ' + selectedTemplate.price,
+              'Entitlement free core: ' + selectedTemplate.entitlementFreeCore,
+              'Entitlement paid pilot: ' + selectedTemplate.entitlementPaidPilot,
+              'Entitlement premium: ' + selectedTemplate.entitlementPremium,
+              'Entitlement gated hands: ' + selectedTemplate.entitlementGatedHands
             ].join(' | '));
           }
           const selectedBox = document.querySelector('[data-selected-path]');
@@ -6389,6 +6442,18 @@ ${unicornHeader}
           </div>
         </section>
 
+        <section class="section sm-in" data-entitlement-ladder-guide>
+          <div class="eyebrow">Entitlement ladder</div>
+          <h2>Make every worker sellable without overpromising.</h2>
+          <p style="color:var(--muted);max-width:66ch">Each worker has the same commercial ladder, so buyers can start free, approve a paid pilot, and upgrade only after proof. Computer-use and mobile actions stay behind the strictest gate.</p>
+          <div class="guide-rule-grid">
+            <div class="guide-rule"><strong>Free core</strong><span>Free core stays deterministic: matcher, setup checklist, sample-source proof, and no private connector writes.</span></div>
+            <div class="guide-rule"><strong>Paid pilot</strong><span>Paid pilot starts after owner-approved scope, source boundary, payment proof, and first-run checklist.</span></div>
+            <div class="guide-rule"><strong>Premium maintained</strong><span>Premium maintained adds monitoring, connectors, scheduled runs, and support after accepted proof.</span></div>
+            <div class="guide-rule"><strong>Gated hands</strong><span>Gated hands require consent, vaulting, audit logs, and owner approval before computer-use or mobile actions.</span></div>
+          </div>
+        </section>
+
         <section class="section sm-in">
           <div class="eyebrow">Connectors</div>
           <h2>Connector setup rules.</h2>
@@ -6481,6 +6546,16 @@ ${unicornHeader}
             <article class="kit-card"><h3>Outputs</h3><ul>${renderKitList(kit.outputs)}</ul></article>
           </div>
         </section>
+        <section class="section" data-entitlement-ladder>
+          <div class="eyebrow">Sellable tool ladder</div>
+          <h2>Start free, upgrade only after proof.</h2>
+          <div class="kit-grid">
+            <article class="kit-card"><h3>${escapeHtml(kit.entitlement_ladder.free_core.label)}</h3><p>${escapeHtml(kit.entitlement_ladder.free_core.includes)}</p><small>${escapeHtml(kit.entitlement_ladder.free_core.gate)}</small></article>
+            <article class="kit-card"><h3>${escapeHtml(kit.entitlement_ladder.paid_pilot.label)}</h3><p>${escapeHtml(kit.entitlement_ladder.paid_pilot.includes)}</p><small>${escapeHtml(kit.entitlement_ladder.paid_pilot.gate)}</small></article>
+            <article class="kit-card"><h3>${escapeHtml(kit.entitlement_ladder.premium_maintained.label)}</h3><p>${escapeHtml(kit.entitlement_ladder.premium_maintained.includes)}</p><small>${escapeHtml(kit.entitlement_ladder.premium_maintained.gate)}</small></article>
+            <article class="kit-card"><h3>${escapeHtml(kit.entitlement_ladder.gated_hands.label)}</h3><p>${escapeHtml(kit.entitlement_ladder.gated_hands.includes)}</p><small>${escapeHtml(kit.entitlement_ladder.gated_hands.gate)}</small></article>
+          </div>
+        </section>
         <section class="section" data-role-playbook-section>
           <div class="eyebrow">Role playbook</div>
           <h2>Use this worker differently by role.</h2>
@@ -6513,6 +6588,11 @@ function buildAgentTemplateSetupHtml(kit) {
     ['starter_kit_url', `/site/agent-templates/${kit.id}.json`],
     ['first_proof_target', kit.offer.first_proof],
     ['price_hint', kit.offer.price_hint],
+    ['entitlement_free_core', kit.entitlement_ladder.free_core.includes],
+    ['entitlement_paid_pilot', kit.entitlement_ladder.paid_pilot.includes],
+    ['entitlement_premium', kit.entitlement_ladder.premium_maintained.includes],
+    ['entitlement_gated_hands', kit.entitlement_ladder.gated_hands.includes],
+    ['entitlement_gate', kit.entitlement_ladder.gated_hands.gate],
     ['acceptance_tests', kit.acceptance_tests.join('\n')],
     ['first_step', `Produce first proof: ${kit.offer.first_proof}`],
     ['onboarding_stage', 'source_review'],
@@ -6607,6 +6687,13 @@ ${unicornHeader}
             <ul>${renderKitList(kit.intake_schema.setup_inputs)}</ul>
             <strong>Accepted samples</strong>
             <ul>${renderKitList(kit.intake_schema.sample_sources)}</ul>
+            <strong>Sellable tool ladder</strong>
+            <ul>
+              <li><strong>${escapeHtml(kit.entitlement_ladder.free_core.label)}:</strong> ${escapeHtml(kit.entitlement_ladder.free_core.includes)}</li>
+              <li><strong>${escapeHtml(kit.entitlement_ladder.paid_pilot.label)}:</strong> ${escapeHtml(kit.entitlement_ladder.paid_pilot.includes)}</li>
+              <li><strong>${escapeHtml(kit.entitlement_ladder.premium_maintained.label)}:</strong> ${escapeHtml(kit.entitlement_ladder.premium_maintained.includes)}</li>
+              <li><strong>${escapeHtml(kit.entitlement_ladder.gated_hands.label)}:</strong> ${escapeHtml(kit.entitlement_ladder.gated_hands.includes)}</li>
+            </ul>
             <strong>Role playbook</strong>
             <span>Choose owner, operator, or technical admin mode above. The selected role is added to this setup request as a routing hint.</span>
             <div class="setup-role-grid" data-role-playbook-section>${renderRolePlaybookCards(kit)}</div>
@@ -7194,8 +7281,8 @@ const publicOperatorConsoleHtml = `<!doctype html>
             {priority:'medium',signal:'setup_started',template_id:'document-pdf-intake-ledger',event_count:9,setup_starts:2,template_clicks:7,lead_form_submits:0,recommended_next_step:'Prepare a short follow-up offer and sample source checklist for document-pdf-intake-ledger.',owner_gate:'no_external_send_or_connector_write_without_owner_approval'}
           ],
           sellable_tool_recommendations:[
-            {priority:'critical',signal:'lead_form_submitted',template_id:'daily-intelligence-brief',tool_name:'Daily Intelligence Brief Agent',buyer:'Importer, trader, factory owner, agency, or executive team',free_core_tool:'Free one-page watchlist brief from approved sources',premium_upgrade:'Scheduled operating brief with source-change log, decision queue, and follow-up task list',proof_metric:'important source changes ranked with exact owner decisions and next actions',source_pack_ask:'watchlist URLs, company names, inbox labels, decision categories, send time',recommended_sales_motion:'Open the lead queue, send the free proof request, and prepare the paid-pilot path.',owner_gate:'no_external_send_or_connector_write_without_owner_approval'},
-            {priority:'high',signal:'setup_started',template_id:'document-pdf-intake-ledger',tool_name:'Document / PDF Intake Ledger',buyer:'Law office, accountant, importer, school admin, clinic, or operations team processing repeated PDFs',free_core_tool:'Free five-document extraction proof with confidence notes',premium_upgrade:'Document intake ledger with missing-field queue, source trace, and review workflow',proof_metric:'five documents extracted into a clean table with gaps and source trace',source_pack_ask:'document samples, target fields, naming rules, exception examples, review owner',recommended_sales_motion:'Ask for the smallest source pack, then prove the document ledger before a premium build.',owner_gate:'no_external_send_or_connector_write_without_owner_approval'}
+            {priority:'critical',signal:'lead_form_submitted',template_id:'daily-intelligence-brief',tool_name:'Daily Intelligence Brief Agent',buyer:'Importer, trader, factory owner, agency, or executive team',free_core_tool:'Free one-page watchlist brief from approved sources',premium_upgrade:'Scheduled operating brief with source-change log, decision queue, and follow-up task list',proof_metric:'important source changes ranked with exact owner decisions and next actions',source_pack_ask:'watchlist URLs, company names, inbox labels, decision categories, send time',next_entitlement_offer:'paid_pilot',entitlement_ladder:{free_core:'Free one-page watchlist brief from approved sources',paid_pilot:'Owner-approved paid pilot after proof: watchlist URLs, company names, inbox labels, decision categories, send time',premium_maintained:'Scheduled operating brief with source-change log, decision queue, and follow-up task list',gated_hands:'Owner-approved computer-use or mobile actions only after consent, vaulting, audit logs, rollback plan, and explicit approval'},recommended_sales_motion:'Open the lead queue, send the free proof request, and prepare the paid-pilot path.',owner_gate:'no_external_send_or_connector_write_without_owner_approval'},
+            {priority:'high',signal:'setup_started',template_id:'document-pdf-intake-ledger',tool_name:'Document / PDF Intake Ledger',buyer:'Law office, accountant, importer, school admin, clinic, or operations team processing repeated PDFs',free_core_tool:'Free five-document extraction proof with confidence notes',premium_upgrade:'Document intake ledger with missing-field queue, source trace, and review workflow',proof_metric:'five documents extracted into a clean table with gaps and source trace',source_pack_ask:'document samples, target fields, naming rules, exception examples, review owner',next_entitlement_offer:'free_core_to_paid_pilot',entitlement_ladder:{free_core:'Free five-document extraction proof with confidence notes',paid_pilot:'Owner-approved paid pilot after proof: document samples, target fields, naming rules, exception examples, review owner',premium_maintained:'Document intake ledger with missing-field queue, source trace, and review workflow',gated_hands:'Owner-approved computer-use or mobile actions only after consent, vaulting, audit logs, rollback plan, and explicit approval'},recommended_sales_motion:'Ask for the smallest source pack, then prove the document ledger before a premium build.',owner_gate:'no_external_send_or_connector_write_without_owner_approval'}
           ],
           user_adaptation_segments:[
             {priority:'high',user_device_mode:'phone',user_role_mode:'owner',visitor_stage:'proof_setup_started',event_count:14,setup_starts:4,template_clicks:8,lead_form_submits:0,recommended_ui_adaptation:'Keep one recommended worker, one source-pack ask, and one tap-to-contact CTA above the fold.',recommended_sales_adaptation:'Lead with value proof, payment-proof gate, and owner approval before production.',privacy_gate:'aggregate_role_device_only_no_keystrokes_or_source_content'},
@@ -8669,7 +8756,7 @@ const publicOperatorConsoleHtml = `<!doctype html>
       const topHtml = topTemplates.length ? '<div class="operator-proof-section"><span>Top templates</span><ul>'+topTemplates.map(function(item){return '<li><strong>'+esc(item.template_id || 'unknown-template')+'</strong> - '+esc(item.count || 0)+' events, '+esc(item.setup_starts || 0)+' setup starts, '+esc(item.lead_form_submits || 0)+' lead forms</li>'}).join('')+'</ul></div>' : '<div class="operator-proof-section"><span>Top templates</span><div>No template-level signals yet.</div></div>';
       const eventHtml = eventCounts.length ? '<div class="operator-proof-section"><span>Event mix</span><ul>'+eventCounts.map(function(item){return '<li>'+esc(item.event_type || 'unknown')+': '+esc(item.count || 0)+'</li>'}).join('')+'</ul></div>' : '';
       const adaptationHtml = adaptations.length ? '<div class="operator-proof-section"><span>Adaptation queue</span><ul>'+adaptations.map(function(item){return '<li><strong>'+esc(item.priority || 'medium')+'</strong> '+esc(item.signal || 'signal')+' '+(item.template_id ? '('+esc(item.template_id)+') ' : '')+'- '+esc(item.recommended_next_step || '')+'</li>'}).join('')+'</ul></div>' : '';
-      const sellableHtml = sellableTools.length ? '<div class="operator-proof-section"><span>Sellable tools to push</span><ul>'+sellableTools.map(function(item){return '<li><strong>'+esc(item.tool_name || item.template_id || 'AI worker')+'</strong> - '+esc(item.buyer || 'target buyer')+'<br><small>Free: '+esc(item.free_core_tool || '')+' | Premium: '+esc(item.premium_upgrade || '')+' | Proof: '+esc(item.proof_metric || '')+'</small><br><small>Next: '+esc(item.recommended_sales_motion || '')+'</small></li>'}).join('')+'</ul></div>' : '';
+      const sellableHtml = sellableTools.length ? '<div class="operator-proof-section"><span>Sellable tools to push</span><ul>'+sellableTools.map(function(item){var ladder=item.entitlement_ladder||{};return '<li><strong>'+esc(item.tool_name || item.template_id || 'AI worker')+'</strong> - '+esc(item.buyer || 'target buyer')+'<br><small>Next entitlement: '+esc(item.next_entitlement_offer || 'free_core')+'</small><br><small>Free: '+esc(ladder.free_core || item.free_core_tool || '')+' | Paid pilot: '+esc(ladder.paid_pilot || '')+' | Premium: '+esc(ladder.premium_maintained || item.premium_upgrade || '')+'</small><br><small>Gated hands: '+esc(ladder.gated_hands || 'owner-approved computer-use or mobile actions only')+'</small><br><small>Proof: '+esc(item.proof_metric || '')+'</small><br><small>Next: '+esc(item.recommended_sales_motion || '')+'</small></li>'}).join('')+'</ul></div>' : '';
       const segmentHtml = userSegments.length ? '<div class="operator-proof-section"><span>User adaptation segments</span><ul>'+userSegments.map(function(item){return '<li><strong>'+esc(item.user_device_mode || 'device_unknown')+' / '+esc(item.user_role_mode || 'role_unknown')+'</strong> - '+esc(item.visitor_stage || 'stage_unknown')+' · '+esc(item.event_count || 0)+' signals<br><small>UI: '+esc(item.recommended_ui_adaptation || '')+'</small><br><small>Sales: '+esc(item.recommended_sales_adaptation || '')+'</small></li>'}).join('')+'</ul></div>' : '';
       const recentHtml = recent.length ? '<div class="operator-proof-section"><span>Recent signals</span><ul>'+recent.map(function(item){return '<li>'+esc(item.event_type || 'event')+' '+(item.template_id ? esc(item.template_id)+' ' : '')+esc(item.page_path || '')+'</li>'}).join('')+'</ul></div>' : '';
       behaviorBoardEl.innerHTML = [

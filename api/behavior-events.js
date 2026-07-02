@@ -463,6 +463,15 @@ function genericToolProfile(templateId) {
   }
 }
 
+function buildRecommendationEntitlementLadder(profile) {
+  return {
+    free_core: profile.free_core_tool || 'Free worker matcher, setup checklist, and first-proof plan',
+    paid_pilot: `Owner-approved paid pilot after proof: ${profile.source_pack_ask || 'smallest approved source pack and success metric'}`,
+    premium_maintained: profile.premium_upgrade || 'Maintained AI Workcell Pilot with source trace, connectors, approval queue, monitoring, and support',
+    gated_hands: 'Owner-approved computer-use or mobile actions only after consent, vaulting, audit logs, rollback plan, and explicit approval',
+  }
+}
+
 function buildSellableToolRecommendations(topTemplates, eventCounts) {
   if (!topTemplates.length) {
     const profile = genericToolProfile('adaptive-worker-matcher')
@@ -473,6 +482,8 @@ function buildSellableToolRecommendations(topTemplates, eventCounts) {
       intent_score: 0,
       setup_path: '/ai-agents/',
       contact_path: '/contact/?package=ai-workcell-pilot',
+      entitlement_ladder: buildRecommendationEntitlementLadder(profile),
+      next_entitlement_offer: 'free_core',
       recommended_sales_motion: 'Send traffic to the AI Worker Matcher and push one first-proof setup kit as the free entry tool.',
       owner_gate: 'no_external_send_or_connector_write_without_owner_approval',
       ...profile,
@@ -489,6 +500,8 @@ function buildSellableToolRecommendations(topTemplates, eventCounts) {
     const signal = templateSignal(row, eventCounts)
     const priority = leadSubmits > 0 ? 'critical' : setupStarts > 0 || index === 0 ? 'high' : 'medium'
     const intentScore = eventCount + templateClicks + setupStarts * 3 + leadSubmits * 8
+    const entitlementLadder = buildRecommendationEntitlementLadder(profile)
+    const nextEntitlementOffer = leadSubmits > 0 ? 'paid_pilot' : setupStarts > 0 ? 'free_core_to_paid_pilot' : 'free_core'
     const salesMotion =
       leadSubmits > 0
         ? `Open the lead queue, send the ${profile.free_core_tool} request, and prepare the ${profile.premium_upgrade} paid-pilot path.`
@@ -507,6 +520,8 @@ function buildSellableToolRecommendations(topTemplates, eventCounts) {
       lead_form_submits: leadSubmits,
       setup_path: `/agent-templates/${encodeURIComponent(templateId)}/setup/`,
       contact_path: `/contact/?template=${encodeURIComponent(templateId)}&package=ai-workcell-pilot`,
+      entitlement_ladder: entitlementLadder,
+      next_entitlement_offer: nextEntitlementOffer,
       recommended_sales_motion: salesMotion,
       owner_gate: 'no_external_send_or_connector_write_without_owner_approval',
       ...profile,
