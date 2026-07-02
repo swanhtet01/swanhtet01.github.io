@@ -39,6 +39,7 @@ if ($HttpOnlyAliases) {
 Invoke-Step 'public alias contract' powershell $aliasArgs
 Invoke-Step 'public route smoke' node @('tools\smoke_public_site.mjs')
 Invoke-Step 'lead ledger audit' node @('tools\audit_lead_ledger.mjs')
+Invoke-Step 'behavior events audit' node @('tools\audit_behavior_events.mjs')
 
 if (-not $SkipLeadPost) {
   Invoke-Step 'live lead post smoke' node @('tools\smoke_public_lead_post.mjs')
@@ -52,5 +53,5 @@ if (-not $SkipBrowser) {
   status = 'ready'
   checked_at = (Get-Date).ToUniversalTime().ToString('o')
   public_domain = 'https://supermega.dev'
-  note = 'Customer-facing site, alias, intake API, lead ledger, and usability checks passed.'
+  note = 'Customer-facing site, alias, intake API, lead ledger, behavior monitoring, and usability checks passed.'
 } | ConvertTo-Json -Depth 4

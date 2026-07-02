@@ -66,16 +66,21 @@
 
 **Files:**
 - Modify: `tools/verify_public_vercel_output.mjs`
+- Create: `tools/audit_behavior_events.mjs`
+- Modify: `tools/run_public_go_live_check.ps1`
 
 - [ ] Require all nine worker templates in products, contact router, JSON, Markdown, detail pages, and setup pages.
 - [ ] Require the General AI Worker Toolkit copy and behavior monitoring copy on `/ai-agents/`.
 - [ ] Require `api/behavior-events.js` in Vercel output and status route in `config.json`.
+- [ ] Add a no-write behavior-events audit that verifies local API/schema contract, live status route, unauthenticated summary privacy, and the Postgres table when DB env is available.
+- [ ] Run the behavior-events audit inside the public go-live gate.
 
 ### Task 6: Regenerate, Verify, Deploy
 
 **Commands:**
 - `node tools/create_public_vercel_output.mjs`
 - `node tools/verify_public_vercel_output.mjs`
+- `node tools/audit_behavior_events.mjs`
 - `powershell -ExecutionPolicy Bypass -File tools\run_public_go_live_check.ps1 -SkipLeadPost -HttpOnlyAliases`
 - `powershell -ExecutionPolicy Bypass -File tools\deploy_public_supermega.ps1 -SkipBuild`
 - `powershell -ExecutionPolicy Bypass -File tools\check_public_aliases.ps1 -HttpOnly`
