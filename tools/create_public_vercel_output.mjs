@@ -379,6 +379,21 @@ function workerSourcePackCatalogJson() {
   ).replaceAll('<', '\\u003c')
 }
 
+function workerProofPlanCatalogJson() {
+  return JSON.stringify(
+    publicAgentTemplates.map((template) => ({
+      id: template.id,
+      firstProof: template.firstProof,
+      setupInputs: template.setupInputs,
+      sampleSources: template.sampleSources,
+      firstRunWorkflow: template.firstRunWorkflow,
+      outputs: template.outputs,
+      setupUrl: `/agent-templates/${template.id}/setup/`,
+      contactUrl: `/contact/?template=${template.id}&package=ai-workcell-pilot`,
+    })),
+  ).replaceAll('<', '\\u003c')
+}
+
 function roleModeOptionsJson() {
   return JSON.stringify([
     {
@@ -1768,6 +1783,12 @@ const unicornShellStyle = `
       .source-pack-panel p { margin-top: 6px; max-width: 66ch; font-size: 14px; line-height: 1.42; }
       .source-pack-panel ul { display: grid; gap: 6px; margin: 10px 0 0; padding-left: 18px; color: var(--muted); font-size: 13px; font-weight: 780; line-height: 1.35; }
       .source-pack-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+      .proof-plan-panel { display: grid; grid-template-columns: minmax(0,1fr) minmax(250px,.66fr); gap: 16px; align-items: center; margin: 8px 0 20px; border: 1px solid rgba(43,105,124,0.24); border-radius: 24px; padding: 16px; background: rgba(255,255,255,0.66); box-shadow: 0 16px 48px rgba(42,36,28,0.07); }
+      .proof-plan-panel[hidden] { display: none !important; }
+      .proof-plan-panel strong { display: block; margin-top: 5px; font-size: clamp(20px,2.1vw,27px); line-height: 1.08; letter-spacing: -0.035em; }
+      .proof-plan-panel p { margin-top: 6px; max-width: 66ch; font-size: 14px; line-height: 1.42; }
+      .proof-plan-panel ol { display: grid; gap: 6px; margin: 10px 0 0; padding-left: 18px; color: var(--muted); font-size: 13px; font-weight: 780; line-height: 1.35; }
+      .proof-plan-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
       .final { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 20px; align-items: center; border: 1px solid rgba(255,255,255,0.76); border-radius: 36px; padding: clamp(24px, 5vw, 48px); background: rgba(255,255,255,0.62); box-shadow: var(--shadow); backdrop-filter: blur(22px); }
       footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 24px 0 32px; color: var(--muted); font-weight: 800; }
       footer .footer-links { display: flex; flex-wrap: wrap; gap: 10px; }
@@ -1787,7 +1808,7 @@ const unicornShellStyle = `
         .brand-text strong, .brand-text small, .nav .optional-nav { display: none; }
         .nav { flex: 0 0 auto; gap: 6px; }
         .btn, button { min-height: 42px; padding: 0 12px; }
-        .poster, .split, .product-library-head, .output, .proof-system, .proof-board, .workcell-grid, .local-worker-continue, .role-mode-panel, .device-mode-panel, .adaptive-plan-panel, .source-pack-panel, .final { grid-template-columns: 1fr; }
+        .poster, .split, .product-library-head, .output, .proof-system, .proof-board, .workcell-grid, .local-worker-continue, .role-mode-panel, .device-mode-panel, .adaptive-plan-panel, .source-pack-panel, .proof-plan-panel, .final { grid-template-columns: 1fr; }
         .poster { min-height: auto; gap: 18px; padding: 20px 0 38px; }
         .eyebrow { font-size: 11px; letter-spacing: 0.18em; }
         h1 { max-width: 11ch; font-size: clamp(44px, 12vw, 60px); line-height: 0.98; letter-spacing: -0.065em; }
@@ -1866,6 +1887,8 @@ const unicornShellStyle = `
         .adaptive-plan-actions .btn { flex: 1 1 auto; }
         .source-pack-actions { justify-content: stretch; }
         .source-pack-actions .btn { flex: 1 1 auto; }
+        .proof-plan-actions { justify-content: stretch; }
+        .proof-plan-actions .btn { flex: 1 1 auto; }
       }
 
       :root { --gilt: #C9A24B; }
@@ -1892,7 +1915,7 @@ const unicornShellStyle = `
       :root[data-theme="dark"] body::before { background-image: linear-gradient(rgba(243,239,230,0.045) 1px, transparent 1px), linear-gradient(90deg, rgba(243,239,230,0.045) 1px, transparent 1px); }
       :root[data-theme="dark"] .btn, :root[data-theme="dark"] button { background: rgba(243,239,230,0.06); }
       :root[data-theme="dark"] .btn.primary, :root[data-theme="dark"] button { color: #fff; background: linear-gradient(135deg, #cc6e48, #d97757); box-shadow: 0 18px 40px rgba(217, 119, 87, 0.28); }
-      :root[data-theme="dark"] .output, :root[data-theme="dark"] .feature, :root[data-theme="dark"] .proof-card, :root[data-theme="dark"] .case, :root[data-theme="dark"] .proof-system, :root[data-theme="dark"] .workcell-panel, :root[data-theme="dark"] .workcell-step, :root[data-theme="dark"] .local-worker-continue, :root[data-theme="dark"] .role-mode-panel, :root[data-theme="dark"] .device-mode-panel, :root[data-theme="dark"] .adaptive-plan-panel, :root[data-theme="dark"] .source-pack-panel, :root[data-theme="dark"] .final, :root[data-theme="dark"] .home-shot-card, :root[data-theme="dark"] .browser, :root[data-theme="dark"] .proof, :root[data-theme="dark"] .upgrade-card, :root[data-theme="dark"] .shell-card, :root[data-theme="dark"] .setup-card, :root[data-theme="dark"] .market-card, :root[data-theme="dark"] form, :root[data-theme="dark"] .feature-pills span, :root[data-theme="dark"] .chip, :root[data-theme="dark"] .metric, :root[data-theme="dark"] .proof-step, :root[data-theme="dark"] footer .footer-links a {
+      :root[data-theme="dark"] .output, :root[data-theme="dark"] .feature, :root[data-theme="dark"] .proof-card, :root[data-theme="dark"] .case, :root[data-theme="dark"] .proof-system, :root[data-theme="dark"] .workcell-panel, :root[data-theme="dark"] .workcell-step, :root[data-theme="dark"] .local-worker-continue, :root[data-theme="dark"] .role-mode-panel, :root[data-theme="dark"] .device-mode-panel, :root[data-theme="dark"] .adaptive-plan-panel, :root[data-theme="dark"] .source-pack-panel, :root[data-theme="dark"] .proof-plan-panel, :root[data-theme="dark"] .final, :root[data-theme="dark"] .home-shot-card, :root[data-theme="dark"] .browser, :root[data-theme="dark"] .proof, :root[data-theme="dark"] .upgrade-card, :root[data-theme="dark"] .shell-card, :root[data-theme="dark"] .setup-card, :root[data-theme="dark"] .market-card, :root[data-theme="dark"] form, :root[data-theme="dark"] .feature-pills span, :root[data-theme="dark"] .chip, :root[data-theme="dark"] .metric, :root[data-theme="dark"] .proof-step, :root[data-theme="dark"] footer .footer-links a {
         background: rgba(243,239,230,0.05); border-color: rgba(243,239,230,0.12);
       }
       :root[data-theme="dark"] .product-carousel, :root[data-theme="dark"] .product-shot-card, :root[data-theme="dark"] .product-shot-card .shot-open, :root[data-theme="dark"] .output > img { background: #201c17; }
@@ -3174,6 +3197,207 @@ const publicAdaptiveSourcePackScript = `
     }
   })();
 </script>`
+const publicAdaptiveProofPlanScript = `
+<script>
+  (function () {
+    var catalog = ${workerProofPlanCatalogJson()};
+    var storageKey = 'sm_adaptive_proof_plan';
+    var workerStateKey = 'sm_worker_continue_state';
+    var params = new URLSearchParams(window.location.search || '');
+    var renderTimer = null;
+    function safeText(value) {
+      return String(value || '').replace(/[&<>"']/g, function (char) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char];
+      });
+    }
+    function setupTemplateId() {
+      var match = window.location.pathname.match(/\\/agent-templates\\/([^/]+)\\/setup\\/?/);
+      return match ? decodeURIComponent(match[1]) : '';
+    }
+    function workerName(id) {
+      if (id === 'daily-intelligence-brief') return 'Daily Intelligence Brief Agent';
+      if (id === 'deskpos-quickstart') return 'DeskPOS Quickstart';
+      return String(id || '')
+        .split('-')
+        .filter(Boolean)
+        .map(function (part) { return part.charAt(0).toUpperCase() + part.slice(1); })
+        .join(' ')
+        .replace(/\\bCrm\\b/g, 'CRM')
+        .replace(/\\bPdf\\b/g, 'PDF')
+        .replace(/\\bPos\\b/g, 'POS')
+        .replace(/\\bSow\\b/g, 'SOW');
+    }
+    function readJson(key) {
+      try {
+        var stored = window.localStorage && localStorage.getItem(key);
+        return stored ? JSON.parse(stored) : {};
+      } catch (error) {
+        return {};
+      }
+    }
+    function readStored(key) {
+      try {
+        return window.localStorage ? localStorage.getItem(key) || '' : '';
+      } catch (error) {
+        return '';
+      }
+    }
+    function selectedWorkerId() {
+      var fromPath = setupTemplateId() || params.get('template') || params.get('agent_template') || '';
+      if (fromPath) return fromPath;
+      var recommended = document.querySelector('[data-router-result]')?.getAttribute('data-recommended-worker') || '';
+      if (recommended) return recommended;
+      var sourcePack = readJson('sm_adaptive_source_pack');
+      if (sourcePack.worker_id) return sourcePack.worker_id;
+      var plan = readJson('sm_adaptive_setup_plan');
+      if (plan.worker_id) return plan.worker_id;
+      return readJson(workerStateKey).template_id || '';
+    }
+    function findWorker(id) {
+      id = String(id || '');
+      for (var index = 0; index < catalog.length; index += 1) {
+        if (catalog[index].id === id) return catalog[index];
+      }
+      return null;
+    }
+    function ensureHidden(form, name) {
+      var field = form.querySelector('input[type="hidden"][name="' + name + '"]');
+      if (!field) {
+        field = document.createElement('input');
+        field.type = 'hidden';
+        field.name = name;
+        form.appendChild(field);
+      }
+      return field;
+    }
+    function deviceMode() {
+      if (window.supermegaDetectDeviceMode) {
+        var detected = window.supermegaDetectDeviceMode();
+        if (detected && detected.id) return detected;
+      }
+      return { id: readStored('sm_worker_device_mode'), label: '' };
+    }
+    function buildPlan() {
+      var worker = findWorker(selectedWorkerId());
+      var role = readStored('sm_worker_role_mode') || 'role_not_selected';
+      var device = deviceMode();
+      var sourcePack = readJson('sm_adaptive_source_pack');
+      if (!worker) {
+        return {
+          worker_id: '',
+          worker_name: 'Choose a worker',
+          summary: 'Choose a worker before building the proof plan.',
+          milestones: ['Choose worker', 'Send approved sample sources', 'Review first proof'],
+          metrics: ['worker selected', 'source pack ready', 'approval gate clear'],
+          gate: 'owner_approval_required_before_production',
+          readiness: 'choose_worker_first',
+          setup_url: '/agent-templates/',
+          contact_url: '/contact/?package=ai-workcell-pilot',
+          page_path: window.location.pathname,
+          generated_at: new Date().toISOString()
+        };
+      }
+      var firstInput = (worker.setupInputs || [])[0] || 'approved source boundary';
+      var outputMetrics = (worker.outputs || []).slice(0, 3);
+      var milestones = [
+        'Day 1 source boundary: ' + firstInput,
+        'Day 3 first proof: ' + (worker.firstProof || 'first useful output'),
+        'Day 7 acceptance gate: accept, refine, or stop before production'
+      ];
+      var metrics = outputMetrics.concat(['source trace accepted', 'owner approval decision recorded']).slice(0, 5);
+      return {
+        worker_id: worker.id,
+        worker_name: workerName(worker.id),
+        summary: workerName(worker.id) + ' | ' + role + ' | ' + (device.label || device.id || 'device pending') + ' | ' + (sourcePack.readiness || 'source pack pending'),
+        milestones: milestones,
+        metrics: metrics,
+        gate: 'owner_approval_required_before_production',
+        readiness: 'first_proof_plan_ready',
+        role_mode: role,
+        device_mode: device.id || '',
+        device_label: device.label || '',
+        source_pack_readiness: sourcePack.readiness || '',
+        setup_url: worker.setupUrl,
+        contact_url: worker.contactUrl,
+        page_path: window.location.pathname,
+        generated_at: new Date().toISOString()
+      };
+    }
+    function savePlan(plan) {
+      try {
+        if (window.localStorage) localStorage.setItem(storageKey, JSON.stringify(plan));
+      } catch (error) {}
+    }
+    function applyPlanToForms(plan) {
+      document.querySelectorAll('form').forEach(function (form) {
+        ensureHidden(form, 'proof_plan_worker_id').value = plan.worker_id || '';
+        ensureHidden(form, 'proof_plan_summary').value = plan.summary || '';
+        ensureHidden(form, 'proof_plan_milestones').value = (plan.milestones || []).join('; ');
+        ensureHidden(form, 'proof_plan_metrics').value = (plan.metrics || []).join('; ');
+        ensureHidden(form, 'proof_plan_gate').value = plan.gate || '';
+      });
+    }
+    function shouldShowPanel() {
+      return /^\\/(ai-agents|agent-templates|contact)(\\/|$)/.test(window.location.pathname);
+    }
+    function renderPlan(track) {
+      var plan = buildPlan();
+      savePlan(plan);
+      applyPlanToForms(plan);
+      if (!shouldShowPanel()) return plan;
+      var wrap = document.querySelector('.wrap');
+      var main = document.querySelector('main');
+      if (!wrap || !main) return plan;
+      var panel = document.querySelector('[data-adaptive-proof-plan]');
+      if (!panel) {
+        panel = document.createElement('section');
+        panel.className = 'proof-plan-panel';
+        panel.setAttribute('data-adaptive-proof-plan', '');
+        panel.setAttribute('aria-label', 'First proof planner');
+        wrap.insertBefore(panel, main);
+      }
+      var milestones = (plan.milestones || []).slice(0, 3).map(function (item) { return '<li>' + safeText(item) + '</li>'; }).join('');
+      panel.innerHTML = [
+        '<div>',
+        '<div class="eyebrow">First proof planner</div>',
+        '<strong>' + safeText(plan.worker_name) + '</strong>',
+        '<p>Use this 7-day proof plan to decide whether the worker is worth production setup before any recurring claim, connector write, or external action.</p>',
+        '<ol>' + milestones + '</ol>',
+        '<div class="role-mode-meta"><span>' + safeText(plan.readiness) + '</span><span>' + safeText(plan.gate) + '</span><span>' + safeText((plan.metrics || [])[0] || 'metric pending') + '</span></div>',
+        '</div>',
+        '<div class="proof-plan-actions">',
+        '<a class="btn primary" data-sm-template-link="' + safeText(plan.worker_id) + '" href="' + safeText(plan.setup_url) + '">Start proof</a>',
+        '<a class="btn secondary" data-sm-template-link="' + safeText(plan.worker_id) + '" href="' + safeText(plan.contact_url) + '">Send proof request</a>',
+        '<a class="btn secondary" href="/ai-agents/guide/">User guide</a>',
+        '</div>'
+      ].join('');
+      if (track && window.supermegaTrackBehavior) {
+        window.supermegaTrackBehavior('cta_clicked', {
+          template_id: plan.worker_id,
+          requested_package: 'adaptive-first-proof-plan',
+          component: 'adaptive_proof_plan',
+          cta_text: plan.readiness
+        });
+      }
+      return plan;
+    }
+    function scheduleRender() {
+      window.clearTimeout(renderTimer);
+      renderTimer = window.setTimeout(function () { renderPlan(false); }, 140);
+    }
+    window.supermegaAdaptiveProofPlan = renderPlan;
+    document.addEventListener('submit', function () { renderPlan(false); }, true);
+    document.addEventListener('click', function (event) {
+      if (event.target && event.target.closest && event.target.closest('[data-router-choice], [data-role-mode-choice], [data-sm-template-link]')) scheduleRender();
+    });
+    window.addEventListener('resize', scheduleRender);
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', function () { renderPlan(true); });
+    } else {
+      renderPlan(true);
+    }
+  })();
+</script>`
 const publicAdaptiveWorkerRouterScript = `
 <script>
   (function () {
@@ -3298,7 +3522,7 @@ const publicAdaptiveWorkerRouterScript = `
     }
   })();
 </script>`
-const publicRuntimeScripts = `${publicLanguageToggleScript}${publicBehaviorEventsScript}${publicLocalWorkerAdaptationScript}${publicRoleModeScript}${publicDeviceModeScript}${publicAdaptiveSetupPlanScript}${publicAdaptiveSourcePackScript}`
+const publicRuntimeScripts = `${publicLanguageToggleScript}${publicBehaviorEventsScript}${publicLocalWorkerAdaptationScript}${publicRoleModeScript}${publicDeviceModeScript}${publicAdaptiveSetupPlanScript}${publicAdaptiveSourcePackScript}${publicAdaptiveProofPlanScript}`
 
 function unicornSocialMeta({ title, description, url }) {
   const t = String(title || '').replace(/"/g, '&quot;')
@@ -4210,6 +4434,11 @@ ${unicornHeader}
             <input type="hidden" name="starter_kit_url" value="" />
             <input type="hidden" name="first_proof_target" value="" />
             <input type="hidden" name="price_hint" value="" />
+            <input type="hidden" name="proof_plan_worker_id" value="" />
+            <input type="hidden" name="proof_plan_summary" value="" />
+            <input type="hidden" name="proof_plan_milestones" value="" />
+            <input type="hidden" name="proof_plan_metrics" value="" />
+            <input type="hidden" name="proof_plan_gate" value="" />
             <div class="form-row">
               <label>Name<input autocomplete="name" name="name" required /></label>
               <label>Work email<input autocomplete="email" name="email" required type="email" /></label>
@@ -5670,6 +5899,17 @@ ${unicornHeader}
           </div>
         </section>
 
+        <section class="section sm-in" data-proof-plan-guide>
+          <div class="eyebrow">First proof planner</div>
+          <h2>Prove value before production.</h2>
+          <p style="color:var(--muted);max-width:66ch">The public flow turns selected worker, role, device, and source-pack readiness into a 7-day proof plan. Setup requests carry only milestone labels, metric names, and the owner approval gate.</p>
+          <div class="guide-rule-grid">
+            <div class="guide-rule"><strong>Day 1 source boundary</strong><span>Confirm the smallest approved source pack and what the worker is allowed to read.</span></div>
+            <div class="guide-rule"><strong>Day 3 first proof</strong><span>Review the first useful output, source trace, missing fields, and acceptance tests.</span></div>
+            <div class="guide-rule"><strong>Day 7 acceptance gate</strong><span>Accept, refine, or stop before production setup, connector writes, or external actions.</span></div>
+          </div>
+        </section>
+
         <section class="section sm-in">
           <div class="eyebrow">Connectors</div>
           <h2>Connector setup rules.</h2>
@@ -5814,6 +6054,11 @@ function buildAgentTemplateSetupHtml(kit) {
     ['source_pack_samples', ''],
     ['source_pack_first_proof', ''],
     ['source_pack_readiness', ''],
+    ['proof_plan_worker_id', ''],
+    ['proof_plan_summary', ''],
+    ['proof_plan_milestones', ''],
+    ['proof_plan_metrics', ''],
+    ['proof_plan_gate', ''],
     ['management_owner', 'swanhtet@supermega.dev'],
     ['team', 'Owner or first operating team'],
     ['urgency', 'This week'],

@@ -216,6 +216,28 @@ try {
       fail('adaptive_source_pack_missing', { viewport: viewport.name, sourcePack })
     }
     if (sourcePack.overflowX > 0) fail('adaptive_source_pack_horizontal_overflow', { viewport: viewport.name, sourcePack })
+    await page.waitForFunction(() => document.querySelector('[data-adaptive-proof-plan]')?.textContent.includes('Day 7 acceptance gate'), null, { timeout: 5000 })
+    const proofPlan = await page.evaluate(() => {
+      const stored = JSON.parse(window.localStorage.getItem('sm_adaptive_proof_plan') || '{}')
+      return {
+        visible: Boolean(document.querySelector('[data-adaptive-proof-plan]')?.getBoundingClientRect().height),
+        text: document.querySelector('[data-adaptive-proof-plan]')?.textContent || '',
+        storedWorker: stored.worker_id || '',
+        storedRole: stored.role_mode || '',
+        storedDevice: stored.device_mode || '',
+        storedReadiness: stored.readiness || '',
+        storedSourcePackReadiness: stored.source_pack_readiness || '',
+        milestones: (stored.milestones || []).join('; '),
+        metrics: (stored.metrics || []).join('; '),
+        gate: stored.gate || '',
+        setupHref: document.querySelector('[data-adaptive-proof-plan] a[data-sm-template-link="daily-intelligence-brief"]')?.getAttribute('href') || '',
+        overflowX: Math.max(0, document.documentElement.scrollWidth - document.documentElement.clientWidth),
+      }
+    })
+    if (!proofPlan.visible || proofPlan.storedWorker !== 'daily-intelligence-brief' || proofPlan.storedRole !== 'technical_admin' || proofPlan.storedDevice !== expectedDevice.id || proofPlan.storedReadiness !== 'first_proof_plan_ready' || proofPlan.storedSourcePackReadiness !== 'selected_worker_source_pack' || !proofPlan.text.includes('First proof planner') || !proofPlan.text.includes('Day 7 acceptance gate') || !proofPlan.milestones.includes('Day 1 source boundary: Watchlist sources') || !proofPlan.milestones.includes('Day 3 first proof') || !proofPlan.metrics.includes('daily operating brief') || proofPlan.gate !== 'owner_approval_required_before_production' || proofPlan.setupHref !== '/agent-templates/daily-intelligence-brief/setup/') {
+      fail('adaptive_proof_plan_missing', { viewport: viewport.name, expectedDevice, proofPlan })
+    }
+    if (proofPlan.overflowX > 0) fail('adaptive_proof_plan_horizontal_overflow', { viewport: viewport.name, proofPlan })
     await page.locator('[data-worker-router]').scrollIntoViewIfNeeded()
     await expectCopy(
       page,
@@ -260,6 +282,7 @@ try {
       hasDeviceGuide: Boolean(document.querySelector('[data-device-mode-guide]')) && document.body.textContent.includes('Phone mode') && document.body.textContent.includes('Tablet mode') && document.body.textContent.includes('Desktop mode'),
       hasAdaptivePlanGuide: Boolean(document.querySelector('[data-adaptive-plan-guide]')) && document.body.textContent.includes('Adaptive setup plan') && document.body.textContent.includes('The next step changes with the user.'),
       hasSourcePackGuide: Boolean(document.querySelector('[data-source-pack-guide]')) && document.body.textContent.includes('Source pack checklist') && document.body.textContent.includes('Send the smallest approved source pack.'),
+      hasProofPlanGuide: Boolean(document.querySelector('[data-proof-plan-guide]')) && document.body.textContent.includes('First proof planner') && document.body.textContent.includes('Day 7 acceptance gate'),
       hasSafetyCopy: document.body.textContent.includes('no external sends, writes, payments, or browser/mobile actions without owner approval'),
       hasNoPrivateTextCopy: document.body.textContent.includes('No keystrokes, source files, credentials, or private business text are tracked.'),
       overflowX: Math.max(0, document.documentElement.scrollWidth - document.documentElement.clientWidth),
@@ -271,6 +294,7 @@ try {
     if (!guide.hasDeviceGuide) fail('ai_worker_user_guide_device_mode_missing', { viewport: viewport.name, guide })
     if (!guide.hasAdaptivePlanGuide) fail('ai_worker_user_guide_adaptive_plan_missing', { viewport: viewport.name, guide })
     if (!guide.hasSourcePackGuide) fail('ai_worker_user_guide_source_pack_missing', { viewport: viewport.name, guide })
+    if (!guide.hasProofPlanGuide) fail('ai_worker_user_guide_proof_plan_missing', { viewport: viewport.name, guide })
     if (!guide.hasSafetyCopy || !guide.hasNoPrivateTextCopy) fail('ai_worker_user_guide_safety_copy_missing', { viewport: viewport.name, guide })
     if (guide.overflowX > 0) fail('ai_worker_user_guide_horizontal_overflow', { viewport: viewport.name, guide })
     await page.locator('[data-guide-template="deskpos-quickstart"]').scrollIntoViewIfNeeded()
@@ -312,6 +336,11 @@ try {
       sourcePackSamples: document.querySelector('input[name="source_pack_samples"]')?.value || '',
       sourcePackFirstProof: document.querySelector('input[name="source_pack_first_proof"]')?.value || '',
       sourcePackReadiness: document.querySelector('input[name="source_pack_readiness"]')?.value || '',
+      proofPlanWorkerId: document.querySelector('input[name="proof_plan_worker_id"]')?.value || '',
+      proofPlanSummary: document.querySelector('input[name="proof_plan_summary"]')?.value || '',
+      proofPlanMilestones: document.querySelector('input[name="proof_plan_milestones"]')?.value || '',
+      proofPlanMetrics: document.querySelector('input[name="proof_plan_metrics"]')?.value || '',
+      proofPlanGate: document.querySelector('input[name="proof_plan_gate"]')?.value || '',
       firstProofTarget: document.querySelector('input[name="first_proof_target"]')?.value || '',
       intakeJobMode: document.querySelector('input[name="intake_job_mode"]')?.value || '',
       kickoffPackMode: document.querySelector('input[name="kickoff_pack_mode"]')?.value || '',
@@ -327,6 +356,7 @@ try {
     if (setup.userDeviceMode !== expectedDevice.id || setup.userDeviceLabel !== expectedDevice.label) fail('setup_device_mode_hidden_missing', { viewport: viewport.name, expectedDevice, setup })
     if (setup.adaptiveWorkerId !== 'daily-intelligence-brief' || !setup.adaptivePlanSummary.includes('Daily Intelligence Brief Agent') || !setup.adaptivePlanSummary.includes(expectedDevice.label) || !setup.adaptiveNextStep.includes('connector scope') || setup.adaptiveUserPath !== '/agent-templates/daily-intelligence-brief/setup/') fail('setup_adaptive_plan_hidden_missing', { viewport: viewport.name, expectedDevice, setup })
     if (!setup.sourcePackRequired.includes('Watchlist sources') || !setup.sourcePackSamples.includes('watchlist URLs') || !setup.sourcePackFirstProof.includes('One-page morning brief') || setup.sourcePackReadiness !== 'selected_worker_source_pack') fail('setup_source_pack_hidden_missing', { viewport: viewport.name, setup })
+    if (setup.proofPlanWorkerId !== 'daily-intelligence-brief' || !setup.proofPlanSummary.includes('Daily Intelligence Brief Agent') || !setup.proofPlanSummary.includes(expectedDevice.label) || !setup.proofPlanMilestones.includes('Day 7 acceptance gate') || !setup.proofPlanMetrics.includes('daily operating brief') || setup.proofPlanGate !== 'owner_approval_required_before_production') fail('setup_proof_plan_hidden_missing', { viewport: viewport.name, expectedDevice, setup })
     if (!setup.firstProofTarget.includes('One-page morning brief')) fail('setup_first_proof_missing', { viewport: viewport.name, setup })
     if (setup.intakeJobMode !== 'intake_to_first_proof') fail('setup_intake_job_mode_missing', { viewport: viewport.name, setup })
     if (setup.kickoffPackMode !== 'client_kickoff_pack') fail('setup_kickoff_pack_mode_missing', { viewport: viewport.name, setup })

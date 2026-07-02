@@ -207,3 +207,21 @@ Live result: `supermega.dev` and `www.supermega.dev` point to deployment `dpl_Ac
 - [x] Deploy to `supermega-public` and verify aliases, contact API, lead ledger, behavior monitoring, and browser usability.
 
 Live result: `supermega.dev` and `www.supermega.dev` point to deployment `dpl_HWLgn4KyhXaFVADTyhAhuLfwj76i`, live aliases return HTTP 200, contact API is ready, lead ledger is configured, behavior monitoring is ready, and the behavior DB reports `recent_7d_count: 1299`.
+
+### Task 14: Add Adaptive First-Proof Planner
+
+**Files:**
+- Modify: `tools/create_public_vercel_output.mjs`
+- Modify: `tools/verify_public_vercel_output.mjs`
+- Modify: `tools/audit_public_usability.mjs`
+- Modify: `tools/public_deployment_lock.json`
+
+- [x] Add a browser-local first-proof planner derived from selected worker, role mode, device mode, and source-pack readiness.
+- [x] Store only catalog-derived milestone labels, metric names, worker ID, role/device hints, owner approval gate, page path, and generated time.
+- [x] Pass proof-plan readiness into setup/contact forms as `proof_plan_worker_id`, `proof_plan_summary`, `proof_plan_milestones`, `proof_plan_metrics`, and `proof_plan_gate`.
+- [x] Add AI Worker User Guide copy for the day-1 source boundary, day-3 first proof, and day-7 acceptance gate.
+- [x] Add static verifier coverage for the public shell, guide, and setup hidden fields.
+- [x] Add desktop, tablet, and mobile browser audit coverage for proof-plan panel rendering and setup hidden-field propagation.
+- [x] Deploy to `supermega-public` and verify aliases, contact API, lead ledger, behavior monitoring, and browser usability.
+
+Live result: `supermega.dev` and `www.supermega.dev` point to deployment `dpl_7jQohAP4PyLYDDqbGLwUedzJeEPs`, live aliases return HTTP 200, contact API is ready, lead ledger is configured, browser usability is green on desktop/tablet/mobile, behavior monitoring is ready, and the behavior DB reports `recent_7d_count: 1446`.
