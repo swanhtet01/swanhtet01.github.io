@@ -158,7 +158,7 @@ const publicMachineHtml = `<!doctype html>
     <meta name="theme-color" content="#07111f" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" />
     <style>
-      :root { color-scheme: dark; --bg:#07111f; --panel:rgba(255,255,255,.075); --line:rgba(255,255,255,.15); --text:#f6fbff; --muted:#a9b8c7; --cyan:#72f3ff; --blue:#4f8cff; --green:#8cf0b8; --ink:#06101d; }
+      :root { color-scheme: dark; --bg:#07111f; --panel:rgba(255,255,255,.075); --line:rgba(255,255,255,.15); --text:#f6fbff; --muted:#a9b8c7; --cyan:#F2C75A; --blue:#D97757; --green:#8cf0b8; --ink:#06101d; }
       * { box-sizing: border-box; }
       body { margin:0; min-height:100vh; background: radial-gradient(circle at 80% 8%, rgba(114,243,255,.2), transparent 28rem), radial-gradient(circle at 8% 24%, rgba(79,140,255,.18), transparent 28rem), linear-gradient(135deg,#07111f,#02050b); color:var(--text); font-family:"Aptos","Segoe UI Variable","Segoe UI",system-ui,sans-serif; -webkit-font-smoothing: antialiased; }
       main { width:min(1120px, calc(100% - 32px)); margin:0 auto; padding:28px 0 56px; }
@@ -813,7 +813,7 @@ function publicValueHtmlFromEngine(engine) {
     <meta name="theme-color" content="#08100d" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" />
     <style>
-      :root { color-scheme: dark; --bg: #08100d; --panel: rgba(255,255,255,0.07); --line: rgba(255,255,255,0.14); --text: #f7fbf6; --muted: #aab8af; --green: #8cf0b8; --blue: #73a9ff; --ink: #06100c; }
+      :root { color-scheme: dark; --bg: #08100d; --panel: rgba(255,255,255,0.07); --line: rgba(255,255,255,0.14); --text: #f7fbf6; --muted: #aab8af; --green: #8cf0b8; --blue: #D97757; --ink: #06100c; }
       * { box-sizing: border-box; }
       body { margin: 0; min-height: 100vh; background: #08100d; color: var(--text); font-family: "Aptos", "Segoe UI Variable", "Segoe UI", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
       a { color: inherit; text-decoration: none; }
@@ -960,7 +960,7 @@ function publicIntakeHtmlFromRouter(router) {
     <meta name="theme-color" content="#0b1018" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" />
     <style>
-      :root { color-scheme: dark; --bg: #0b1018; --panel: rgba(255,255,255,0.07); --line: rgba(255,255,255,0.14); --text: #f7fbff; --muted: #aab6c3; --green: #8cf0b8; --blue: #73a9ff; --ink: #06100c; }
+      :root { color-scheme: dark; --bg: #0b1018; --panel: rgba(255,255,255,0.07); --line: rgba(255,255,255,0.14); --text: #f7fbff; --muted: #aab6c3; --green: #8cf0b8; --blue: #D97757; --ink: #06100c; }
       * { box-sizing: border-box; }
       body { margin: 0; min-height: 100vh; background: #0b1018; color: var(--text); font-family: "Aptos", "Segoe UI Variable", "Segoe UI", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
       a { color: inherit; text-decoration: none; }
@@ -1310,7 +1310,7 @@ function renderPublicPricingHtml() {
         --ink: #0d1117;
         --muted: #5f6b66;
         --line: rgba(13, 17, 23, 0.13);
-        --blue: #124fff;
+        --blue: #C2603F;
         --navy: #07111f;
         --shadow: 0 34px 90px rgba(13, 17, 23, 0.14);
       }
@@ -1320,7 +1320,7 @@ function renderPublicPricingHtml() {
         min-height: 100vh;
         color: var(--ink);
         background:
-          radial-gradient(circle at 80% 2%, rgba(25, 216, 255, 0.18), transparent 30rem),
+          radial-gradient(circle at 80% 2%, rgba(233, 185, 73, 0.18), transparent 30rem),
           radial-gradient(circle at 4% 18%, rgba(18, 79, 255, 0.12), transparent 26rem),
           linear-gradient(180deg, #fbfcfb 0%, var(--cream) 58%, #e8f0ed 100%);
         font-family: "Aptos", "Segoe UI Variable", "Segoe UI", system-ui, -apple-system, sans-serif;
@@ -1337,7 +1337,7 @@ function renderPublicPricingHtml() {
       .brand-text small { color: var(--muted); font-size: 10px; font-weight: 900; letter-spacing: 0.18em; text-transform: uppercase; }
       .nav, .cta { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
       .btn, button { display: inline-flex; align-items: center; justify-content: center; min-height: 48px; border: 1px solid var(--line); border-radius: 999px; padding: 0 18px; background: rgba(255,255,255,0.58); color: var(--ink); font: inherit; font-weight: 950; backdrop-filter: blur(18px); }
-      .btn.primary, button { color: #fff; border-color: transparent; background: linear-gradient(135deg, #07111f, #124fff); box-shadow: 0 18px 46px rgba(18, 79, 255, 0.24); }
+      .btn.primary, button { color: #fff; border-color: transparent; background: linear-gradient(135deg, #07111f, #C2603F); box-shadow: 0 18px 46px rgba(18, 79, 255, 0.24); }
       .poster { display: grid; grid-template-columns: minmax(0, 0.84fr) minmax(340px, 1.16fr); gap: clamp(24px, 5vw, 72px); align-items: center; min-height: min(620px, calc(100svh - 86px)); padding: 10px 0 42px; }
       .eyebrow { color: var(--blue); font-size: 12px; font-weight: 950; letter-spacing: 0.22em; text-transform: uppercase; }
       h1, h2, h3 { font-family: var(--font-serif, "Georgia", ui-serif, serif); font-weight: 560; font-optical-sizing: auto; }
@@ -1508,9 +1508,9 @@ const publicCampaignRedirectHtml = `<!doctype html>
     <meta name="theme-color" content="#07111f" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" />
     <style>
-      :root { color-scheme: dark; --text: #f7fbff; --muted: #a8b8ca; --cyan: #64efff; --blue: #4f8cff; --ink: #06101d; }
+      :root { color-scheme: dark; --text: #f7fbff; --muted: #a8b8ca; --cyan: #E9B949; --blue: #D97757; --ink: #06101d; }
       * { box-sizing: border-box; }
-      body { margin: 0; min-height: 100svh; display: grid; place-items: center; padding: 24px; background-color: #07111f; background-image: radial-gradient(circle at 76% 18%, rgba(100,239,255,0.18), transparent 24rem), radial-gradient(circle at 8% 84%, rgba(79,140,255,0.18), transparent 26rem), linear-gradient(135deg, #07111f, #02050b 72%); color: var(--text); font-family: "Aptos", "Segoe UI Variable", "Segoe UI", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+      body { margin: 0; min-height: 100svh; display: grid; place-items: center; padding: 24px; background-color: #07111f; background-image: radial-gradient(circle at 76% 18%, rgba(233,185,73,0.18), transparent 24rem), radial-gradient(circle at 8% 84%, rgba(79,140,255,0.18), transparent 26rem), linear-gradient(135deg, #07111f, #02050b 72%); color: var(--text); font-family: "Aptos", "Segoe UI Variable", "Segoe UI", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
       main { width: min(640px, 100%); border: 1px solid rgba(217,247,255,0.16); border-radius: 34px; background: rgba(255,255,255,0.07); box-shadow: inset 0 1px 0 rgba(255,255,255,0.12), 0 36px 100px rgba(0,0,0,0.36); padding: clamp(28px, 7vw, 54px); }
       .brand { display: inline-flex; align-items: center; gap: 12px; color: var(--cyan); font-size: 12px; font-weight: 950; letter-spacing: 0.22em; text-transform: uppercase; }
       .mark { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 14px; overflow: hidden; background: #07111f; border: 1px solid rgba(255,255,255,0.16); }
@@ -4730,7 +4730,7 @@ const unicornProductsHtml = `<!doctype html>
       .chip { border: 1px solid var(--line); border-radius: 999px; padding: 8px 10px; background: rgba(255,255,255,0.64); color: var(--muted); font-size: 12px; font-weight: 900; }
       .screen-gallery { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 8px 0 2px; }
       .mini-screen { display: grid; gap: 8px; min-height: 120px; border: 1px solid var(--line); border-radius: 18px; background: linear-gradient(180deg, rgba(255,255,255,.88), rgba(248,244,236,.78)); padding: 12px; box-shadow: inset 0 1px 0 rgba(255,255,255,.9); }
-      .mini-screen small { color: #1265ff; font-size: 10px; font-weight: 950; letter-spacing: .16em; text-transform: uppercase; }
+      .mini-screen small { color: #C2603F; font-size: 10px; font-weight: 950; letter-spacing: .16em; text-transform: uppercase; }
       .mini-screen strong { color: #0d1117; font-size: 16px; line-height: 1; letter-spacing: -.04em; }
       .mini-screen span { color: var(--muted); font-size: 12px; font-weight: 780; line-height: 1.25; }
       .shot-gallery { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-content: center; gap: 10px; padding: 14px; background: linear-gradient(135deg, rgba(255,255,255,.78), rgba(229,242,255,.58)); border-left: 1px solid var(--line); }
@@ -4922,7 +4922,7 @@ const unicornContactHtml = `<!doctype html>
       label { display: grid; gap: 7px; color: var(--muted); font-size: 12px; font-weight: 950; letter-spacing: 0.14em; text-transform: uppercase; }
       input, textarea, select { width: 100%; border: 1px solid var(--line); border-radius: 14px; background: rgba(255,250,241,0.86); color: var(--ink); padding: 11px 12px; font: inherit; outline: none; }
       input[type="file"] { cursor: pointer; }
-      input[type="file"]::file-selector-button { margin-right: 10px; border: 0; border-radius: 999px; background: linear-gradient(135deg, #111827, #1265ff); color: #fff; cursor: pointer; font: inherit; font-size: 13px; font-weight: 950; padding: 9px 12px; }
+      input[type="file"]::file-selector-button { margin-right: 10px; border: 0; border-radius: 999px; background: linear-gradient(135deg, #111827, #C2603F); color: #fff; cursor: pointer; font: inherit; font-size: 13px; font-weight: 950; padding: 9px 12px; }
       select { appearance: none; background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%); background-position: calc(100% - 20px) 20px, calc(100% - 14px) 20px; background-size: 6px 6px, 6px 6px; background-repeat: no-repeat; }
       textarea { min-height: 88px; resize: vertical; }
       input:focus, textarea:focus, select:focus { border-color: rgba(194,96,63,0.55); box-shadow: 0 0 0 4px rgba(194,96,63,0.10); }
