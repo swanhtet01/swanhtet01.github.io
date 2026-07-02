@@ -15,6 +15,81 @@ const allowedEventTypes = new Set([
   'lead_form_submitted',
 ])
 
+const sellableToolProfiles = {
+  'deskpos-quickstart': {
+    tool_name: 'DeskPOS Quickstart',
+    buyer: 'Spa, salon, retail, cafe, repair, clinic, gym, tuition, or service owner',
+    free_core_tool: 'Free DeskPOS trial plus catalog setup checklist',
+    premium_upgrade: 'Private POS setup, payment receipts, daily close insight, and owner diagnosis',
+    proof_metric: 'one real checkout or booking flow plus daily close action list',
+    source_pack_ask: 'menu or product list, staff list, wallet name, logo, hours',
+  },
+  'chat-ledger': {
+    tool_name: 'Viber / WhatsApp Business Ledger',
+    buyer: 'Distributor, wholesaler, home business, or chat-first service owner',
+    free_core_tool: 'Free sample order ledger from ten approved chat examples',
+    premium_upgrade: 'Recurring chat-to-ledger workcell with open balances, delivery queue, and approval-only follow-up drafts',
+    proof_metric: 'unpaid balances found, delivery queue cleaned, and follow-up tasks drafted',
+    source_pack_ask: 'ten order screenshots, product list, delivery rules, payment proof examples',
+  },
+  'inbox-calendar-operator': {
+    tool_name: 'Inbox & Calendar Operator',
+    buyer: 'Founder, clinic admin, school operator, importer, or executive assistant',
+    free_core_tool: 'Free read-only morning action brief from approved labels and calendar categories',
+    premium_upgrade: 'Maintained inbox/calendar worker with draft replies, prep notes, reminders, and approval queue',
+    proof_metric: 'reply drafts, meeting prep notes, and missed follow-ups surfaced before noon',
+    source_pack_ask: 'Gmail labels, calendar categories, reply examples, VIP contacts, escalation rules',
+  },
+  'daily-intelligence-brief': {
+    tool_name: 'Daily Intelligence Brief Agent',
+    buyer: 'Importer, trader, factory owner, agency, or executive team',
+    free_core_tool: 'Free one-page watchlist brief from approved sources',
+    premium_upgrade: 'Scheduled operating brief with source-change log, decision queue, and follow-up task list',
+    proof_metric: 'important source changes ranked with exact owner decisions and next actions',
+    source_pack_ask: 'watchlist URLs, company names, inbox labels, decision categories, send time',
+  },
+  'factory-ops-ledger': {
+    tool_name: 'Factory Ops Ledger',
+    buyer: 'Small or mid-size factory using Excel, PDF, email, chat, and paper records',
+    free_core_tool: 'Free read-only plant risk snapshot from one approved file set',
+    premium_upgrade: 'Factory operations app with production, quality, maintenance, issue, and risk queues',
+    proof_metric: 'production, quality claims, open issues, and top risks visible in one review board',
+    source_pack_ask: 'daily production file, quality records, line or machine list, maintenance log, roles',
+  },
+  'data-clean-report-agent': {
+    tool_name: 'Data Cleanup & Reporting Agent',
+    buyer: 'Accountant, operations manager, or owner receiving messy weekly files',
+    free_core_tool: 'Free cleanup proof on one messy file',
+    premium_upgrade: 'Repeatable file cleanroom with validation rules, exception report, and export workflow',
+    proof_metric: 'rows cleaned, exceptions explained, and target report produced from approved source file',
+    source_pack_ask: 'sample files, target report, validation rules, exception examples, export destination',
+  },
+  'document-pdf-intake-ledger': {
+    tool_name: 'Document / PDF Intake Ledger',
+    buyer: 'Law office, accountant, importer, school admin, clinic, or operations team processing repeated PDFs',
+    free_core_tool: 'Free five-document extraction proof with confidence notes',
+    premium_upgrade: 'Document intake ledger with missing-field queue, source trace, and review workflow',
+    proof_metric: 'five documents extracted into a clean table with gaps and source trace',
+    source_pack_ask: 'document samples, target fields, naming rules, exception examples, review owner',
+  },
+  'crm-follow-up-pipeline-assistant': {
+    tool_name: 'CRM Follow-up & Pipeline Assistant',
+    buyer: 'Owner, sales manager, agency, clinic, training center, or B2B service team',
+    free_core_tool: 'Free ranked lead queue from one approved lead source and message source',
+    premium_upgrade: 'Pipeline assistant with stuck-deal detection and approval-only outreach drafts',
+    proof_metric: 'hot leads, stuck deals, missing next actions, and drafts ready for owner approval',
+    source_pack_ask: 'lead spreadsheet, recent replies, offer list, follow-up examples, owner approval rule',
+  },
+  'proposal-sow-builder': {
+    tool_name: 'Proposal & SOW Builder',
+    buyer: 'Agency, software studio, consultant, contractor, or B2B service owner',
+    free_core_tool: 'Free proposal/SOW draft from one approved intake note',
+    premium_upgrade: 'Reusable proposal workcell with scope parser, assumptions, exclusions, price bands, and approval checklist',
+    proof_metric: 'client-ready draft with scope, milestones, exclusions, and owner approval checklist',
+    source_pack_ask: 'scope notes, past proposal, service list, price band, approval checklist',
+  },
+}
+
 function json(res, statusCode, payload) {
   res.statusCode = statusCode
   res.setHeader('Content-Type', 'application/json; charset=utf-8')
@@ -297,6 +372,7 @@ function behaviorSummaryDegraded(reason, detail = {}) {
         recommended_next_step: 'Create the behavior events table in Vercel Postgres/Neon, then reload this console.',
         owner_gate: 'operator_only_no_public_signal_leak',
       }],
+      sellable_tool_recommendations: buildSellableToolRecommendations([], []),
       privacy: 'operator_summary_no_ip_user_agent_or_raw_payloads',
       ...detail,
     },
@@ -342,6 +418,84 @@ function buildAdaptationQueue(topTemplates, eventCounts) {
       lead_form_submits: leadSubmits,
       recommended_next_step: recommendedNextStep,
       owner_gate: 'no_external_send_or_connector_write_without_owner_approval',
+    }
+  })
+}
+
+function templateSignal(row, eventCounts) {
+  const leadForms = Number((eventCounts.find((event) => event.event_type === 'lead_form_submitted') || {}).count || 0)
+  const setupStarts = Number(row?.setup_starts || 0)
+  const templateClicks = Number(row?.template_clicks || 0)
+  const leadSubmits = Number(row?.lead_form_submits || 0)
+  if (leadSubmits > 0 || leadForms > 0) return 'lead_form_submitted'
+  if (setupStarts > 0) return 'setup_started'
+  if (templateClicks > 1) return 'repeat_template_clicks'
+  return 'template_interest'
+}
+
+function genericToolProfile(templateId) {
+  const safeTemplateId = text(templateId || 'adaptive-worker-matcher')
+  return {
+    tool_name: safeTemplateId
+      .split('-')
+      .filter(Boolean)
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ') || 'Adaptive Worker Matcher',
+    buyer: 'Owner, operator, or admin with a repeatable knowledge-work task',
+    free_core_tool: 'Free worker matcher, setup checklist, and first-proof plan',
+    premium_upgrade: 'Managed AI Workcell Pilot with source trace, connector setup, approval queue, and maintenance',
+    proof_metric: 'time saved, risk removed, cash follow-up, or quality/error reduction proven from approved sources',
+    source_pack_ask: 'smallest approved source sample, desired output, owner approval rule, and success metric',
+  }
+}
+
+function buildSellableToolRecommendations(topTemplates, eventCounts) {
+  if (!topTemplates.length) {
+    const profile = genericToolProfile('adaptive-worker-matcher')
+    return [{
+      priority: 'medium',
+      signal: 'no_behavior_signal_yet',
+      template_id: 'adaptive-worker-matcher',
+      intent_score: 0,
+      setup_path: '/ai-agents/',
+      contact_path: '/contact/?package=ai-workcell-pilot',
+      recommended_sales_motion: 'Send traffic to the AI Worker Matcher and push one first-proof setup kit as the free entry tool.',
+      owner_gate: 'no_external_send_or_connector_write_without_owner_approval',
+      ...profile,
+    }]
+  }
+
+  return topTemplates.slice(0, 5).map((row, index) => {
+    const templateId = text(row.template_id || 'unknown-template')
+    const profile = sellableToolProfiles[templateId] || genericToolProfile(templateId)
+    const eventCount = Number(row.count || 0)
+    const setupStarts = Number(row.setup_starts || 0)
+    const templateClicks = Number(row.template_clicks || 0)
+    const leadSubmits = Number(row.lead_form_submits || 0)
+    const signal = templateSignal(row, eventCounts)
+    const priority = leadSubmits > 0 ? 'critical' : setupStarts > 0 || index === 0 ? 'high' : 'medium'
+    const intentScore = eventCount + templateClicks + setupStarts * 3 + leadSubmits * 8
+    const salesMotion =
+      leadSubmits > 0
+        ? `Open the lead queue, send the ${profile.free_core_tool} request, and prepare the ${profile.premium_upgrade} paid-pilot path.`
+        : setupStarts > 0
+          ? `Package ${profile.tool_name} as the next sellable worker: ask for ${profile.source_pack_ask}, then prove ${profile.proof_metric}.`
+          : `Improve the ${profile.tool_name} card and route clicks to the free proof before offering the premium upgrade.`
+
+    return {
+      priority,
+      signal,
+      template_id: templateId,
+      intent_score: intentScore,
+      event_count: eventCount,
+      setup_starts: setupStarts,
+      template_clicks: templateClicks,
+      lead_form_submits: leadSubmits,
+      setup_path: `/agent-templates/${encodeURIComponent(templateId)}/setup/`,
+      contact_path: `/contact/?template=${encodeURIComponent(templateId)}&package=ai-workcell-pilot`,
+      recommended_sales_motion: salesMotion,
+      owner_gate: 'no_external_send_or_connector_write_without_owner_approval',
+      ...profile,
     }
   })
 }
@@ -417,6 +571,7 @@ async function behaviorSummary() {
       top_templates: topTemplates,
       recent_events: checks[4].rows || [],
       adaptation_queue: buildAdaptationQueue(topTemplates, eventCounts),
+      sellable_tool_recommendations: buildSellableToolRecommendations(topTemplates, eventCounts),
       privacy: 'operator_summary_no_ip_user_agent_or_raw_payloads',
     },
   }

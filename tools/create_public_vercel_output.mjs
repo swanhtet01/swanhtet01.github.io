@@ -7184,6 +7184,10 @@ const publicOperatorConsoleHtml = `<!doctype html>
             {priority:'critical',signal:'lead_form_submitted',template_id:'daily-intelligence-brief',event_count:18,setup_starts:6,template_clicks:11,lead_form_submits:1,recommended_next_step:'Open the lead queue and prepare the first-proof source request for daily-intelligence-brief.',owner_gate:'no_external_send_or_connector_write_without_owner_approval'},
             {priority:'medium',signal:'setup_started',template_id:'document-pdf-intake-ledger',event_count:9,setup_starts:2,template_clicks:7,lead_form_submits:0,recommended_next_step:'Prepare a short follow-up offer and sample source checklist for document-pdf-intake-ledger.',owner_gate:'no_external_send_or_connector_write_without_owner_approval'}
           ],
+          sellable_tool_recommendations:[
+            {priority:'critical',signal:'lead_form_submitted',template_id:'daily-intelligence-brief',tool_name:'Daily Intelligence Brief Agent',buyer:'Importer, trader, factory owner, agency, or executive team',free_core_tool:'Free one-page watchlist brief from approved sources',premium_upgrade:'Scheduled operating brief with source-change log, decision queue, and follow-up task list',proof_metric:'important source changes ranked with exact owner decisions and next actions',source_pack_ask:'watchlist URLs, company names, inbox labels, decision categories, send time',recommended_sales_motion:'Open the lead queue, send the free proof request, and prepare the paid-pilot path.',owner_gate:'no_external_send_or_connector_write_without_owner_approval'},
+            {priority:'high',signal:'setup_started',template_id:'document-pdf-intake-ledger',tool_name:'Document / PDF Intake Ledger',buyer:'Law office, accountant, importer, school admin, clinic, or operations team processing repeated PDFs',free_core_tool:'Free five-document extraction proof with confidence notes',premium_upgrade:'Document intake ledger with missing-field queue, source trace, and review workflow',proof_metric:'five documents extracted into a clean table with gaps and source trace',source_pack_ask:'document samples, target fields, naming rules, exception examples, review owner',recommended_sales_motion:'Ask for the smallest source pack, then prove the document ledger before a premium build.',owner_gate:'no_external_send_or_connector_write_without_owner_approval'}
+          ],
           recent_events:[
             {event_id:'BEHAV-SAMPLE-01',event_type:'setup_started',page_path:'/agent-templates/daily-intelligence-brief/setup/',template_id:'daily-intelligence-brief',requested_package:'Managed AI Workcell',component:'starter-kit',cta_text:'Send setup request',utm_campaign:'sample',recorded_at:'SAMPLE-RECORDED-AT'}
           ],
@@ -8646,10 +8650,12 @@ const publicOperatorConsoleHtml = `<!doctype html>
       const eventCounts = Array.isArray(summary.event_counts) ? summary.event_counts.slice(0,5) : [];
       const topTemplates = Array.isArray(summary.top_templates) ? summary.top_templates.slice(0,5) : [];
       const adaptations = Array.isArray(summary.adaptation_queue) ? summary.adaptation_queue.slice(0,5) : [];
+      const sellableTools = Array.isArray(summary.sellable_tool_recommendations) ? summary.sellable_tool_recommendations.slice(0,5) : [];
       const recent = Array.isArray(summary.recent_events) ? summary.recent_events.slice(0,4) : [];
       const topHtml = topTemplates.length ? '<div class="operator-proof-section"><span>Top templates</span><ul>'+topTemplates.map(function(item){return '<li><strong>'+esc(item.template_id || 'unknown-template')+'</strong> - '+esc(item.count || 0)+' events, '+esc(item.setup_starts || 0)+' setup starts, '+esc(item.lead_form_submits || 0)+' lead forms</li>'}).join('')+'</ul></div>' : '<div class="operator-proof-section"><span>Top templates</span><div>No template-level signals yet.</div></div>';
       const eventHtml = eventCounts.length ? '<div class="operator-proof-section"><span>Event mix</span><ul>'+eventCounts.map(function(item){return '<li>'+esc(item.event_type || 'unknown')+': '+esc(item.count || 0)+'</li>'}).join('')+'</ul></div>' : '';
       const adaptationHtml = adaptations.length ? '<div class="operator-proof-section"><span>Adaptation queue</span><ul>'+adaptations.map(function(item){return '<li><strong>'+esc(item.priority || 'medium')+'</strong> '+esc(item.signal || 'signal')+' '+(item.template_id ? '('+esc(item.template_id)+') ' : '')+'- '+esc(item.recommended_next_step || '')+'</li>'}).join('')+'</ul></div>' : '';
+      const sellableHtml = sellableTools.length ? '<div class="operator-proof-section"><span>Sellable tools to push</span><ul>'+sellableTools.map(function(item){return '<li><strong>'+esc(item.tool_name || item.template_id || 'AI worker')+'</strong> - '+esc(item.buyer || 'target buyer')+'<br><small>Free: '+esc(item.free_core_tool || '')+' | Premium: '+esc(item.premium_upgrade || '')+' | Proof: '+esc(item.proof_metric || '')+'</small><br><small>Next: '+esc(item.recommended_sales_motion || '')+'</small></li>'}).join('')+'</ul></div>' : '';
       const recentHtml = recent.length ? '<div class="operator-proof-section"><span>Recent signals</span><ul>'+recent.map(function(item){return '<li>'+esc(item.event_type || 'event')+' '+(item.template_id ? esc(item.template_id)+' ' : '')+esc(item.page_path || '')+'</li>'}).join('')+'</ul></div>' : '';
       behaviorBoardEl.innerHTML = [
         '<span>Behavior summary</span>',
@@ -8658,6 +8664,7 @@ const publicOperatorConsoleHtml = `<!doctype html>
         summary.reason ? '<div class="operator-proof-section"><span>Summary state</span><div>'+esc(summary.reason)+'</div></div>' : '',
         topHtml,
         eventHtml,
+        sellableHtml,
         adaptationHtml,
         recentHtml
       ].join('');

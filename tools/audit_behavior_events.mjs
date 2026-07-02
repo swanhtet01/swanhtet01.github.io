@@ -147,6 +147,11 @@ for (const token of [
   'saveSupabaseBehaviorEvent',
   'behaviorSummary',
   'buildAdaptationQueue',
+  'buildSellableToolRecommendations',
+  'sellable_tool_recommendations',
+  'free_core_tool',
+  'premium_upgrade',
+  'proof_metric',
   'requireOpsAuth',
   'operator_summary_no_ip_user_agent_or_raw_payloads',
 ]) {
