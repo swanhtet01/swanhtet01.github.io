@@ -5014,6 +5014,10 @@ const publicOperatorConsoleHtml = `<!doctype html>
     .operator-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px}
     .operator-kpi{border:1px solid var(--line);padding:12px;background:color-mix(in srgb,var(--paper) 92%,var(--ink) 8%)}
     .operator-kpi strong{display:block;font-size:24px;line-height:1}
+    .operator-behavior-board{border:1px solid var(--line);padding:14px;background:color-mix(in srgb,var(--paper) 93%,#1c8a5a 7%)}
+    .operator-signal-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-top:10px}
+    .operator-signal-cell{border:1px solid var(--line);padding:10px;background:color-mix(in srgb,var(--paper) 96%,var(--ink) 4%)}
+    .operator-signal-cell strong{display:block;font-size:20px;line-height:1.1}
     .operator-failover-report{border:1px solid var(--line);padding:14px;background:color-mix(in srgb,var(--paper) 96%,var(--ink) 4%)}
     .operator-activation-cockpit{border:1px solid var(--line);padding:14px;background:color-mix(in srgb,var(--paper) 93%,var(--accent) 7%)}
     .operator-activation-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px;margin-top:10px}
@@ -5102,6 +5106,7 @@ const publicOperatorConsoleHtml = `<!doctype html>
         </div>
         <div class="operator-panel operator-stack">
           <div class="operator-kpis" id="operator-kpis"></div>
+          <div class="operator-proof-section operator-behavior-board" id="behavior-summary-board"></div>
           <div class="operator-proof-section operator-failover-report" id="datastore-failover-report"></div>
           <div class="operator-proof-section operator-activation-cockpit" id="operator-activation-cockpit"></div>
           <div class="operator-proof-section operator-command-board" id="autopilot-command-board"></div>
@@ -5116,6 +5121,7 @@ const publicOperatorConsoleHtml = `<!doctype html>
     const statusBox = document.getElementById('operator-status');
     const actionsEl = document.getElementById('operator-actions');
     const kpisEl = document.getElementById('operator-kpis');
+    const behaviorBoardEl = document.getElementById('behavior-summary-board');
     const failoverReportEl = document.getElementById('datastore-failover-report');
     const activationCockpitEl = document.getElementById('operator-activation-cockpit');
     const commandBoardEl = document.getElementById('autopilot-command-board');
@@ -5131,6 +5137,31 @@ const publicOperatorConsoleHtml = `<!doctype html>
         status:'ready',
         runtime_status:'sample_only',
         metrics:{open_action_count:2,recent_lead_count:1,recent_action_count:2,proof_backed_mrr_mmk:900000,bank_verified_mrr_mmk:0,bank_unverified_mrr_mmk:900000},
+        behavior_summary:{
+          status:'ready',
+          source:'sample_private_queue',
+          adapter:'sample',
+          generated_at:'SAMPLE-GENERATED-AT',
+          events_24h:17,
+          events_7d:52,
+          event_counts:[
+            {event_type:'setup_started',count:9,last_recorded_at:'SAMPLE-RECORDED-AT'},
+            {event_type:'template_clicked',count:21,last_recorded_at:'SAMPLE-RECORDED-AT'},
+            {event_type:'lead_form_submitted',count:2,last_recorded_at:'SAMPLE-RECORDED-AT'}
+          ],
+          top_templates:[
+            {template_id:'daily-intelligence-brief',count:18,setup_starts:6,template_clicks:11,lead_form_submits:1,last_recorded_at:'SAMPLE-RECORDED-AT'},
+            {template_id:'document-pdf-intake-ledger',count:9,setup_starts:2,template_clicks:7,lead_form_submits:0,last_recorded_at:'SAMPLE-RECORDED-AT'}
+          ],
+          adaptation_queue:[
+            {priority:'critical',signal:'lead_form_submitted',template_id:'daily-intelligence-brief',event_count:18,setup_starts:6,template_clicks:11,lead_form_submits:1,recommended_next_step:'Open the lead queue and prepare the first-proof source request for daily-intelligence-brief.',owner_gate:'no_external_send_or_connector_write_without_owner_approval'},
+            {priority:'medium',signal:'setup_started',template_id:'document-pdf-intake-ledger',event_count:9,setup_starts:2,template_clicks:7,lead_form_submits:0,recommended_next_step:'Prepare a short follow-up offer and sample source checklist for document-pdf-intake-ledger.',owner_gate:'no_external_send_or_connector_write_without_owner_approval'}
+          ],
+          recent_events:[
+            {event_id:'BEHAV-SAMPLE-01',event_type:'setup_started',page_path:'/agent-templates/daily-intelligence-brief/setup/',template_id:'daily-intelligence-brief',requested_package:'Managed AI Workcell',component:'starter-kit',cta_text:'Send setup request',utm_campaign:'sample',recorded_at:'SAMPLE-RECORDED-AT'}
+          ],
+          privacy:'operator_summary_no_ip_user_agent_or_raw_payloads'
+        },
         approval_inbox:{status:'sample',pending_count:1},
         blob_action_queue:{status:'sample_private_queue',adapter:'vercel_blob',access:'private',purpose:'Durable action queue when SQL is degraded.'},
         datastore_failover_report:{
@@ -5946,7 +5977,7 @@ const publicOperatorConsoleHtml = `<!doctype html>
     }
     function loadSample(){
       const data = samplePipelineData();
-      renderKpis(data); renderDatastoreFailoverReport(data); renderActivationCockpit(data); renderAutopilotCommandBoard(data); renderRevenueProofBoard(data); renderActions(data); setStatus({status:'sample_loaded', note:'No lead was created. This is a no-write first-proof demo packet.'});
+      renderKpis(data); renderBehaviorSummaryBoard(data); renderDatastoreFailoverReport(data); renderActivationCockpit(data); renderAutopilotCommandBoard(data); renderRevenueProofBoard(data); renderActions(data); setStatus({status:'sample_loaded', note:'No lead was created. This is a no-write first-proof demo packet.'});
     }
     function proofStarterLink(proof){
       if(!proof || !proof.starter_kit_url)return '';
@@ -6579,6 +6610,31 @@ const publicOperatorConsoleHtml = `<!doctype html>
       if(!Number.isFinite(amount))return '0 MMK';
       return amount.toLocaleString('en-US')+' MMK';
     }
+    function renderBehaviorSummaryBoard(data){
+      const summary = data.behavior_summary || {};
+      if(!summary.status){
+        behaviorBoardEl.innerHTML = '<span>Behavior summary</span><div>No behavior summary loaded. Refresh with the ops key to see first-party worker signals.</div>';
+        return;
+      }
+      const eventCounts = Array.isArray(summary.event_counts) ? summary.event_counts.slice(0,5) : [];
+      const topTemplates = Array.isArray(summary.top_templates) ? summary.top_templates.slice(0,5) : [];
+      const adaptations = Array.isArray(summary.adaptation_queue) ? summary.adaptation_queue.slice(0,5) : [];
+      const recent = Array.isArray(summary.recent_events) ? summary.recent_events.slice(0,4) : [];
+      const topHtml = topTemplates.length ? '<div class="operator-proof-section"><span>Top templates</span><ul>'+topTemplates.map(function(item){return '<li><strong>'+esc(item.template_id || 'unknown-template')+'</strong> - '+esc(item.count || 0)+' events, '+esc(item.setup_starts || 0)+' setup starts, '+esc(item.lead_form_submits || 0)+' lead forms</li>'}).join('')+'</ul></div>' : '<div class="operator-proof-section"><span>Top templates</span><div>No template-level signals yet.</div></div>';
+      const eventHtml = eventCounts.length ? '<div class="operator-proof-section"><span>Event mix</span><ul>'+eventCounts.map(function(item){return '<li>'+esc(item.event_type || 'unknown')+': '+esc(item.count || 0)+'</li>'}).join('')+'</ul></div>' : '';
+      const adaptationHtml = adaptations.length ? '<div class="operator-proof-section"><span>Adaptation queue</span><ul>'+adaptations.map(function(item){return '<li><strong>'+esc(item.priority || 'medium')+'</strong> '+esc(item.signal || 'signal')+' '+(item.template_id ? '('+esc(item.template_id)+') ' : '')+'- '+esc(item.recommended_next_step || '')+'</li>'}).join('')+'</ul></div>' : '';
+      const recentHtml = recent.length ? '<div class="operator-proof-section"><span>Recent signals</span><ul>'+recent.map(function(item){return '<li>'+esc(item.event_type || 'event')+' '+(item.template_id ? esc(item.template_id)+' ' : '')+esc(item.page_path || '')+'</li>'}).join('')+'</ul></div>' : '';
+      behaviorBoardEl.innerHTML = [
+        '<span>Behavior summary</span>',
+        '<div class="operator-meta"><span class="operator-chip">'+esc(summary.status || 'unknown')+'</span><span class="operator-chip">'+esc(summary.source || 'unknown_source')+'</span><span class="operator-chip">'+esc(summary.privacy || 'operator_summary')+'</span></div>',
+        '<div class="operator-signal-grid"><div class="operator-signal-cell"><strong>'+esc(summary.events_24h || 0)+'</strong><span>signals 24h</span></div><div class="operator-signal-cell"><strong>'+esc(summary.events_7d || 0)+'</strong><span>signals 7d</span></div><div class="operator-signal-cell"><strong>'+esc(topTemplates.length)+'</strong><span>workers with intent</span></div></div>',
+        summary.reason ? '<div class="operator-proof-section"><span>Summary state</span><div>'+esc(summary.reason)+'</div></div>' : '',
+        topHtml,
+        eventHtml,
+        adaptationHtml,
+        recentHtml
+      ].join('');
+    }
     function renderDatastoreFailoverReport(data){
       const report = data.datastore_failover_report || {};
       if(!report.report_type && !report.status){
@@ -6977,7 +7033,14 @@ const publicOperatorConsoleHtml = `<!doctype html>
       const response = await fetch('/api/pipeline-control/status',{headers:authHeaders(),cache:'no-store'});
       const data = await response.json().catch(function(){return {status:'error',reason:'invalid_json',code:response.status}});
       if(!response.ok){setStatus(data);return}
-      renderKpis(data); renderDatastoreFailoverReport(data); renderActivationCockpit(data); renderAutopilotCommandBoard(data); renderRevenueProofBoard(data); renderActions(data); setStatus(data);
+      try {
+        const behaviorResponse = await fetch('/api/behavior-events?summary=1',{headers:authHeaders(),cache:'no-store'});
+        const behaviorData = await behaviorResponse.json().catch(function(){return {status:'error',reason:'invalid_json',code:behaviorResponse.status}});
+        data.behavior_summary = behaviorData.behavior_summary || {status:'error',reason:behaviorData.reason || 'behavior_summary_unavailable'};
+      } catch (error) {
+        data.behavior_summary = {status:'error',reason:String(error && error.message || 'behavior_summary_fetch_failed')};
+      }
+      renderKpis(data); renderBehaviorSummaryBoard(data); renderDatastoreFailoverReport(data); renderActivationCockpit(data); renderAutopilotCommandBoard(data); renderRevenueProofBoard(data); renderActions(data); setStatus(data);
     }
     async function runRunner(){
       if(!token()){setStatus('Paste the ops key first.');return}

@@ -43,7 +43,7 @@ Each worker must show:
 
 ## Behavior Monitoring
 
-Use first-party, coarse events only. Record event type, page path, selected template, package, UTM fields, referrer, user agent, and IP hint. Do not capture keystrokes, raw form text, source files, or private credentials. If Supabase is configured, write to `supermega_behavior_events`; otherwise return a clear degraded status so the site remains usable.
+Use first-party, coarse events only. Record event type, page path, selected template, package, UTM fields, referrer, user agent, and IP hint. Do not capture keystrokes, raw form text, source files, or private credentials. Write to the primary Vercel Postgres/Neon `supermega_behavior_events` table when configured, fall back to Supabase REST when available, and return a clear degraded status so the site remains usable when storage is unavailable. Operator summaries require `SUPERMEGA_OPS_KEY` and return aggregate/template-level signals only.
 
 ## Adaptability
 
@@ -51,7 +51,7 @@ The site adapts by making the selected worker persistent through the contact and
 - template links carry the chosen template;
 - contact forms keep UTM and template context;
 - events identify which worker gets clicks or starts;
-- operator follow-up can prioritize high-intent tools by template, source, and page path.
+- the private operator console shows a behavior summary and adaptation queue so follow-up can prioritize high-intent tools by template, source, and page path.
 
 ## Verification
 
@@ -59,6 +59,6 @@ Required evidence:
 - generated starter kit index includes all nine workers;
 - each worker has JSON, Markdown, detail page, setup page, source inputs, workflow, outputs, and acceptance tests;
 - `/ai-agents/` includes the General AI Worker Toolkit shelf and behavior-monitoring copy;
-- `/api/behavior-events` exists in Vercel output and exposes a status route;
+- `/api/behavior-events` exists in Vercel output, exposes a public status route, and exposes an authenticated `?summary=1` operator summary;
 - public verifier passes;
 - production deployment succeeds and live HTTP aliases pass.

@@ -6,7 +6,7 @@
 
 **Architecture:** Keep the existing static public generator as the source of truth. Extend the agent-template data model, render the same catalog into products, agent pages, setup kits, and contact routing, then add a first-party behavior endpoint copied into Vercel output.
 
-**Tech Stack:** Node.js ESM generator, Vercel static output/functions, Supabase REST when configured, Vercel Blob/HTTP-safe degraded status when not configured.
+**Tech Stack:** Node.js ESM generator, Vercel static output/functions, primary Vercel Postgres/Neon behavior ledger, Supabase REST fallback when configured, Vercel Blob/HTTP-safe degraded status when not configured.
 
 ---
 
@@ -39,7 +39,19 @@
 - [ ] Accept `GET` for endpoint status.
 - [ ] Accept `POST` with coarse event data: `event_type`, `page_path`, `template_id`, `requested_package`, `utm_*`, and referrer.
 - [ ] Reject oversized, invalid, disallowed-origin, and rate-limited requests.
-- [ ] Write to Supabase table `supermega_behavior_events` when configured; otherwise return `ledger.status = skipped`.
+- [ ] Write to Vercel Postgres/Neon table `supermega_behavior_events` when configured, fall back to Supabase REST when available, otherwise return a degraded ledger status.
+- [ ] Add an authenticated `?summary=1` behavior summary with template-level event counts and an adaptation queue behind `SUPERMEGA_OPS_KEY`.
+
+### Task 3B: Surface Behavior Signals In Operator Console
+
+**Files:**
+- Modify: `tools/create_public_vercel_output.mjs`
+- Modify: `tools/audit_public_usability.mjs`
+
+- [ ] Add a private Behavior summary board to `/operator/`.
+- [ ] Render events in 24h/7d, top templates, event mix, recent signals, and adaptation queue.
+- [ ] Keep all behavior-summary reads behind the existing ops key.
+- [ ] Add browser usability coverage for the sample behavior/adaptation board on desktop and mobile.
 
 ### Task 4: Add Client Event Hooks
 

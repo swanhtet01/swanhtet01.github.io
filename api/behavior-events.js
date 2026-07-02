@@ -1,4 +1,5 @@
 const crypto = require('crypto')
+const datastore = require('./lib/supermega-datastore')
 
 const defaultAllowedOrigins = 'https://supermega.dev,https://www.supermega.dev'
 const rateLimitWindowMs = Number(process.env.SUPERMEGA_BEHAVIOR_RATE_WINDOW_MS || 15 * 60 * 1000)
@@ -19,6 +20,12 @@ function json(res, statusCode, payload) {
   res.setHeader('Content-Type', 'application/json; charset=utf-8')
   res.setHeader('Cache-Control', 'no-store')
   res.end(JSON.stringify(payload))
+}
+
+function safeEqual(a, b) {
+  const aHash = crypto.createHash('sha256').update(String(a || '')).digest()
+  const bHash = crypto.createHash('sha256').update(String(b || '')).digest()
+  return crypto.timingSafeEqual(aHash, bHash)
 }
 
 function text(value) {
@@ -67,7 +74,7 @@ function cors(req, res) {
     res.setHeader('Access-Control-Allow-Origin', 'https://supermega.dev')
   }
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization')
 }
 
 function readBody(req) {
@@ -108,11 +115,33 @@ function checkRateLimit(req) {
   return entries.length <= rateLimitMax
 }
 
+function requestUrl(req) {
+  return new URL(req.url || '/api/behavior-events', 'https://supermega.dev')
+}
+
+function summaryRequested(req) {
+  const url = requestUrl(req)
+  return url.searchParams.get('summary') === '1' || url.searchParams.get('summary') === 'true'
+}
+
+function requireOpsAuth(req) {
+  const opsKey = text(process.env.SUPERMEGA_OPS_KEY)
+  if (!opsKey) return { ok: false, code: 503, reason: 'auth_not_configured' }
+  const authHeader = req.headers.authorization || req.headers.Authorization || ''
+  const provided = String(authHeader).startsWith('Bearer ') ? String(authHeader).slice(7) : ''
+  if (!provided || !safeEqual(provided, opsKey)) return { ok: false, code: 401, reason: 'unauthorized' }
+  return { ok: true }
+}
+
 function supabaseConfig() {
   return {
     url: envText('SUPABASE_URL', 'DATABASE_URL_SUPABASE_URL', 'DATABASE_URL_SUPERMEGA_DATABASE_URLSUPABASE_URL').replace(/\/$/, ''),
     serviceRoleKey: envText('SUPABASE_SERVICE_ROLE_KEY', 'DATABASE_URL_SUPABASE_SERVICE_ROLE_KEY'),
   }
+}
+
+function countValue(result) {
+  return Number(result?.rows?.[0]?.count || 0)
 }
 
 function buildBehaviorRecord({ payload, req }) {
@@ -144,6 +173,78 @@ function buildBehaviorRecord({ payload, req }) {
 }
 
 async function saveBehaviorEvent(record) {
+  const primary = await savePostgresBehaviorEvent(record)
+  if (primary.status === 'ready') return primary
+  const fallback = await saveSupabaseBehaviorEvent(record)
+  if (fallback.status === 'ready') {
+    return {
+      status: 'ready',
+      table: 'supermega_behavior_events',
+      primary_database: primary,
+      fallback_database: fallback,
+      note: 'saved_to_supabase_fallback',
+    }
+  }
+  return {
+    status: 'degraded',
+    table: 'supermega_behavior_events',
+    primary_database: primary,
+    fallback_database: fallback,
+    hint: 'create_supermega_behavior_events_table',
+  }
+}
+
+async function savePostgresBehaviorEvent(record) {
+  if (!datastore.postgresConfigured()) {
+    return { status: 'skipped', reason: 'postgres_not_configured', table: 'supermega_behavior_events', adapter: 'vercel_postgres_neon' }
+  }
+  const result = await datastore.query(
+    `
+      insert into public.supermega_behavior_events (
+        event_id, event_type, page_path, template_id, requested_package,
+        component, cta_text, source_url, referrer, utm_source, utm_medium,
+        utm_campaign, utm_content, utm_term, session_hint, user_agent,
+        ip_hint, recorded_at, raw
+      )
+      values (
+        $1, $2, $3, $4, $5,
+        $6, $7, $8, $9, $10, $11,
+        $12, $13, $14, $15, $16,
+        $17, $18::timestamptz, $19::jsonb
+      )
+      on conflict (event_id) do nothing
+    `,
+    [
+      record.event_id,
+      record.event_type,
+      record.page_path,
+      record.template_id,
+      record.requested_package,
+      record.component,
+      record.cta_text,
+      record.source_url,
+      record.referrer,
+      record.utm_source,
+      record.utm_medium,
+      record.utm_campaign,
+      record.utm_content,
+      record.utm_term,
+      record.session_hint,
+      record.user_agent,
+      record.ip_hint,
+      record.recorded_at,
+      JSON.stringify(record.raw || {}),
+    ],
+  )
+  return {
+    ...result,
+    table: 'supermega_behavior_events',
+    adapter: 'vercel_postgres_neon',
+    provider: 'vercel_postgres_neon',
+  }
+}
+
+async function saveSupabaseBehaviorEvent(record) {
   const config = supabaseConfig()
   if (!config.url || !config.serviceRoleKey) {
     return { status: 'skipped', reason: 'supabase_not_configured', table: 'supermega_behavior_events' }
@@ -176,6 +277,151 @@ async function saveBehaviorEvent(record) {
   }
 }
 
+function behaviorSummaryDegraded(reason, detail = {}) {
+  return {
+    status: 'ready',
+    endpoint: 'behavior-events',
+    behavior_summary: {
+      status: 'degraded',
+      source: 'vercel_postgres_neon',
+      reason,
+      generated_at: new Date().toISOString(),
+      events_24h: 0,
+      events_7d: 0,
+      event_counts: [],
+      top_templates: [],
+      recent_events: [],
+      adaptation_queue: [{
+        priority: 'medium',
+        signal: reason,
+        recommended_next_step: 'Create the behavior events table in Vercel Postgres/Neon, then reload this console.',
+        owner_gate: 'operator_only_no_public_signal_leak',
+      }],
+      privacy: 'operator_summary_no_ip_user_agent_or_raw_payloads',
+      ...detail,
+    },
+  }
+}
+
+function buildAdaptationQueue(topTemplates, eventCounts) {
+  if (!topTemplates.length) {
+    return [{
+      priority: 'medium',
+      signal: 'no_behavior_signal_yet',
+      recommended_next_step: 'Drive traffic to /ai-agents/ and one template setup page, then watch which worker receives the first setup_started signal.',
+      owner_gate: 'no_external_send_or_connector_write_without_owner_approval',
+    }]
+  }
+  const leadForms = Number((eventCounts.find((event) => event.event_type === 'lead_form_submitted') || {}).count || 0)
+  return topTemplates.slice(0, 5).map((row, index) => {
+    const setupStarts = Number(row.setup_starts || 0)
+    const templateClicks = Number(row.template_clicks || 0)
+    const leadSubmits = Number(row.lead_form_submits || 0)
+    const templateId = text(row.template_id || 'unknown-template')
+    let priority = index === 0 ? 'high' : 'medium'
+    let signal = 'template_interest'
+    let recommendedNextStep = `Add a clearer first-proof example and source-pack ask for ${templateId}.`
+    if (leadSubmits > 0 || leadForms > 0) {
+      priority = 'critical'
+      signal = 'lead_form_submitted'
+      recommendedNextStep = `Open the lead queue and prepare the first-proof source request for ${templateId}.`
+    } else if (setupStarts > 0) {
+      signal = 'setup_started'
+      recommendedNextStep = `Prepare a short follow-up offer and sample source checklist for ${templateId}.`
+    } else if (templateClicks > 1) {
+      signal = 'repeat_template_clicks'
+      recommendedNextStep = `Move ${templateId} higher in the worker gallery and add a buyer-specific proof card.`
+    }
+    return {
+      priority,
+      signal,
+      template_id: templateId,
+      event_count: Number(row.count || 0),
+      setup_starts: setupStarts,
+      template_clicks: templateClicks,
+      lead_form_submits: leadSubmits,
+      recommended_next_step: recommendedNextStep,
+      owner_gate: 'no_external_send_or_connector_write_without_owner_approval',
+    }
+  })
+}
+
+async function behaviorSummary() {
+  if (!datastore.postgresConfigured()) return behaviorSummaryDegraded('postgres_not_configured')
+
+  const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+  const since7d = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+  const checks = await Promise.all([
+    datastore.query('select count(*)::int as count from public.supermega_behavior_events where recorded_at >= $1::timestamptz', [since24h]),
+    datastore.query('select count(*)::int as count from public.supermega_behavior_events where recorded_at >= $1::timestamptz', [since7d]),
+    datastore.query(
+      `
+        select event_type, count(*)::int as count, max(recorded_at) as last_recorded_at
+        from public.supermega_behavior_events
+        where recorded_at >= $1::timestamptz
+        group by event_type
+        order by count desc, last_recorded_at desc
+      `,
+      [since7d],
+    ),
+    datastore.query(
+      `
+        select
+          nullif(template_id, '') as template_id,
+          count(*)::int as count,
+          count(*) filter (where event_type = 'setup_started')::int as setup_starts,
+          count(*) filter (where event_type = 'template_clicked')::int as template_clicks,
+          count(*) filter (where event_type = 'lead_form_submitted')::int as lead_form_submits,
+          max(recorded_at) as last_recorded_at
+        from public.supermega_behavior_events
+        where recorded_at >= $1::timestamptz
+          and nullif(template_id, '') is not null
+        group by nullif(template_id, '')
+        order by count desc, last_recorded_at desc
+        limit 6
+      `,
+      [since7d],
+    ),
+    datastore.query(
+      `
+        select event_id, event_type, page_path, template_id, requested_package,
+          component, cta_text, utm_campaign, recorded_at
+        from public.supermega_behavior_events
+        order by recorded_at desc
+        limit 8
+      `,
+    ),
+  ])
+
+  const blocked = checks.find((result) => result.status !== 'ready')
+  if (blocked) {
+    return behaviorSummaryDegraded(blocked.reason || 'behavior_summary_query_failed', {
+      detail: blocked.code || blocked.detail || null,
+    })
+  }
+
+  const eventCounts = checks[2].rows || []
+  const topTemplates = checks[3].rows || []
+  return {
+    status: 'ready',
+    endpoint: 'behavior-events',
+    behavior_summary: {
+      status: 'ready',
+      source: 'vercel_postgres_neon',
+      adapter: 'pg',
+      generated_at: new Date().toISOString(),
+      window: { since_24h: since24h, since_7d: since7d },
+      events_24h: countValue(checks[0]),
+      events_7d: countValue(checks[1]),
+      event_counts: eventCounts,
+      top_templates: topTemplates,
+      recent_events: checks[4].rows || [],
+      adaptation_queue: buildAdaptationQueue(topTemplates, eventCounts),
+      privacy: 'operator_summary_no_ip_user_agent_or_raw_payloads',
+    },
+  }
+}
+
 module.exports = async function handler(req, res) {
   cors(req, res)
 
@@ -191,11 +437,22 @@ module.exports = async function handler(req, res) {
   }
 
   if (req.method === 'GET') {
+    if (summaryRequested(req)) {
+      const auth = requireOpsAuth(req)
+      if (!auth.ok) {
+        json(res, auth.code, { status: 'error', reason: auth.reason })
+        return
+      }
+      json(res, 200, await behaviorSummary())
+      return
+    }
     json(res, 200, {
       status: 'ready',
       endpoint: 'behavior-events',
       allowed_events: Array.from(allowedEventTypes),
       privacy: 'coarse_first_party_events_only',
+      summary_endpoint: '/api/behavior-events?summary=1',
+      summary_auth: 'SUPERMEGA_OPS_KEY bearer token required',
     })
     return
   }

@@ -1,3 +1,7 @@
+-- SuperMega public behavior ledger.
+-- Run on the primary Vercel Postgres/Neon database; it is also Supabase-compatible
+-- for fallback deployments. The API stores raw request hints, but the operator
+-- summary endpoint returns only aggregate/template-level signals.
 create table if not exists public.supermega_behavior_events (
   event_id text primary key,
   event_type text not null,
@@ -22,6 +26,9 @@ create table if not exists public.supermega_behavior_events (
 
 create index if not exists supermega_behavior_events_type_idx
 on public.supermega_behavior_events (event_type, recorded_at desc);
+
+create index if not exists supermega_behavior_events_recorded_idx
+on public.supermega_behavior_events (recorded_at desc);
 
 create index if not exists supermega_behavior_events_template_idx
 on public.supermega_behavior_events (template_id, recorded_at desc);
