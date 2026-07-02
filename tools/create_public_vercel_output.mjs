@@ -4494,7 +4494,11 @@ ${unicornHeader}
             </div>
             <p class="hero-tagline">Cast real work into software.</p>
           </div>
-          <aside class="product-stage" aria-label="DeskPOS live product — point-of-sale for Myanmar shops">
+          <aside class="product-stage" style="position:relative" aria-label="DeskPOS live product — point-of-sale for Myanmar shops">
+            <span aria-hidden="true" style="position:absolute;top:14px;left:14px;z-index:2;display:inline-flex;align-items:center;gap:9px;background:rgba(24,20,16,0.86);border:1px solid rgba(233,185,73,0.5);border-radius:999px;padding:6px 14px 6px 8px;box-shadow:0 0 0 1px rgba(233,185,73,0.22),0 8px 30px rgba(233,185,73,0.24)">
+              <svg width="17" height="22" viewBox="0 0 40 52" aria-hidden="true"><defs><clipPath id="hbadge"><rect x="4" y="2" width="32" height="48" rx="16"/></clipPath></defs><g clip-path="url(#hbadge)"><rect x="4" y="2" width="32" height="48" fill="#181410"/><rect x="4" y="2" width="32" height="18" fill="#E9B949"/><rect x="4" y="19.4" width="32" height="1.5" fill="#181410" opacity="0.5"/></g><rect x="4" y="2" width="32" height="48" rx="16" fill="none" stroke="#E9B949" stroke-width="2"/><circle cx="26" cy="34" r="3.4" fill="#E9B949"/></svg>
+              <span style="color:#F3EFE6;font-size:12px;font-weight:850;letter-spacing:0.01em">One capsule.<b style="color:#E9B949"> You own it.</b></span>
+            </span>
             <img class="hero-img" src="/site/shots/live-product-restaurant-pos-menu-inventory.png?v=${publicShotVersion}" alt="DeskPOS — live point of sale system" loading="eager" decoding="async" />
             <div class="proof-line" aria-label="What the software does">
               <div class="proof"><b>Live</b><span>pos.supermega.dev</span></div>
