@@ -55,8 +55,15 @@ const results = { status: 'ready', base_url: baseUrl, screenshots: {}, checks: {
 try {
   for (const viewport of [
     { name: 'desktop', width: 1440, height: 980 },
+    { name: 'tablet', width: 834, height: 1112, isMobile: true },
     { name: 'mobile', width: 390, height: 844, isMobile: true },
   ]) {
+    const expectedDevice =
+      viewport.name === 'mobile'
+        ? { id: 'phone', label: 'Phone mode', copy: 'screenshots' }
+        : viewport.name === 'tablet'
+          ? { id: 'tablet', label: 'Tablet mode', copy: 'review queues' }
+          : { id: 'desktop', label: 'Desktop mode', copy: 'source review' }
     const page = await browser.newPage()
     await page.setViewportSize({ width: viewport.width, height: viewport.height })
     const consoleMessages = []
@@ -120,6 +127,7 @@ try {
     await open(page, `${baseUrl}/ai-agents/`, viewport.name)
     await page.evaluate(() => {
       window.localStorage.removeItem('sm_worker_role_mode')
+      window.localStorage.removeItem('sm_worker_device_mode')
       window.localStorage.setItem('sm_worker_continue_state', JSON.stringify({
         template_id: 'daily-intelligence-brief',
         last_signal: 'template_clicked',
@@ -143,6 +151,17 @@ try {
     if (localWorker.setupHref !== '/agent-templates/daily-intelligence-brief/setup/' || localWorker.guideHref !== '/ai-agents/guide/') fail('local_worker_continue_links_wrong', { viewport: viewport.name, localWorker })
     if (!localWorker.privacyCopy) fail('local_worker_continue_privacy_copy_missing', { viewport: viewport.name, localWorker })
     if (localWorker.overflowX > 0) fail('local_worker_continue_horizontal_overflow', { viewport: viewport.name, localWorker })
+    const deviceMode = await page.evaluate(() => ({
+      visible: Boolean(document.querySelector('[data-device-mode-panel]')?.getBoundingClientRect().height),
+      text: document.querySelector('[data-device-mode-panel]')?.textContent || '',
+      stored: window.localStorage.getItem('sm_worker_device_mode') || '',
+      detected: window.supermegaDetectDeviceMode ? window.supermegaDetectDeviceMode().id : '',
+      overflowX: Math.max(0, document.documentElement.scrollWidth - document.documentElement.clientWidth),
+    }))
+    if (!deviceMode.visible || deviceMode.stored !== expectedDevice.id || deviceMode.detected !== expectedDevice.id || !deviceMode.text.includes('Device-aware onboarding') || !deviceMode.text.includes(expectedDevice.label) || !deviceMode.text.includes(expectedDevice.copy)) {
+      fail('device_mode_panel_missing', { viewport: viewport.name, expectedDevice, deviceMode })
+    }
+    if (deviceMode.overflowX > 0) fail('device_mode_panel_horizontal_overflow', { viewport: viewport.name, deviceMode })
     const roleInitial = await page.evaluate(() => ({
       visible: Boolean(document.querySelector('[data-role-mode-panel]')?.getBoundingClientRect().height),
       text: document.querySelector('[data-role-mode-panel]')?.textContent || '',
@@ -201,6 +220,7 @@ try {
       workerCards: document.querySelectorAll('[data-guide-template]').length,
       setupLinks: document.querySelectorAll('[data-guide-template] a[href$="/setup/"]').length,
       hasRoleGuide: document.body.textContent.includes('Role-aware onboarding') && document.body.textContent.includes('Technical admin mode'),
+      hasDeviceGuide: Boolean(document.querySelector('[data-device-mode-guide]')) && document.body.textContent.includes('Phone mode') && document.body.textContent.includes('Tablet mode') && document.body.textContent.includes('Desktop mode'),
       hasSafetyCopy: document.body.textContent.includes('no external sends, writes, payments, or browser/mobile actions without owner approval'),
       hasNoPrivateTextCopy: document.body.textContent.includes('No keystrokes, source files, credentials, or private business text are tracked.'),
       overflowX: Math.max(0, document.documentElement.scrollWidth - document.documentElement.clientWidth),
@@ -209,6 +229,7 @@ try {
     if (guide.workerCards !== expectedTemplates.length) fail('ai_worker_user_guide_cards_missing', { viewport: viewport.name, guide })
     if (guide.setupLinks !== expectedTemplates.length) fail('ai_worker_user_guide_setup_links_missing', { viewport: viewport.name, guide })
     if (!guide.hasRoleGuide) fail('ai_worker_user_guide_role_mode_missing', { viewport: viewport.name, guide })
+    if (!guide.hasDeviceGuide) fail('ai_worker_user_guide_device_mode_missing', { viewport: viewport.name, guide })
     if (!guide.hasSafetyCopy || !guide.hasNoPrivateTextCopy) fail('ai_worker_user_guide_safety_copy_missing', { viewport: viewport.name, guide })
     if (guide.overflowX > 0) fail('ai_worker_user_guide_horizontal_overflow', { viewport: viewport.name, guide })
     await page.locator('[data-guide-template="deskpos-quickstart"]').scrollIntoViewIfNeeded()
@@ -240,6 +261,8 @@ try {
       starterKitUrl: document.querySelector('input[name="starter_kit_url"]')?.value || '',
       userRoleMode: document.querySelector('input[name="user_role_mode"]')?.value || '',
       userRoleLabel: document.querySelector('input[name="user_role_label"]')?.value || '',
+      userDeviceMode: document.querySelector('input[name="user_device_mode"]')?.value || '',
+      userDeviceLabel: document.querySelector('input[name="user_device_label"]')?.value || '',
       firstProofTarget: document.querySelector('input[name="first_proof_target"]')?.value || '',
       intakeJobMode: document.querySelector('input[name="intake_job_mode"]')?.value || '',
       kickoffPackMode: document.querySelector('input[name="kickoff_pack_mode"]')?.value || '',
@@ -252,6 +275,7 @@ try {
     if (setup.templateId !== 'daily-intelligence-brief') fail('setup_template_id_missing', { viewport: viewport.name, setup })
     if (setup.starterKitUrl !== '/site/agent-templates/daily-intelligence-brief.json') fail('setup_starter_kit_url_missing', { viewport: viewport.name, setup })
     if (setup.userRoleMode !== 'technical_admin' || setup.userRoleLabel !== 'Technical admin') fail('setup_role_mode_hidden_missing', { viewport: viewport.name, setup })
+    if (setup.userDeviceMode !== expectedDevice.id || setup.userDeviceLabel !== expectedDevice.label) fail('setup_device_mode_hidden_missing', { viewport: viewport.name, expectedDevice, setup })
     if (!setup.firstProofTarget.includes('One-page morning brief')) fail('setup_first_proof_missing', { viewport: viewport.name, setup })
     if (setup.intakeJobMode !== 'intake_to_first_proof') fail('setup_intake_job_mode_missing', { viewport: viewport.name, setup })
     if (setup.kickoffPackMode !== 'client_kickoff_pack') fail('setup_kickoff_pack_mode_missing', { viewport: viewport.name, setup })

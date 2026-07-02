@@ -738,6 +738,11 @@ for (const token of [
   'Role-aware onboarding',
   'supermegaSetRoleMode',
   'user_role_mode',
+  'sm_worker_device_mode',
+  'data-device-mode-panel',
+  'Device-aware onboarding',
+  'supermegaDetectDeviceMode',
+  'user_device_mode',
 ]) {
   if (!homeHtml.includes(token)) fail('public_shell_contract_missing', { token })
 }
@@ -773,9 +778,13 @@ for (const token of [
   'Computer-use and mobile workers are available only as gated workcells',
   'data-ai-worker-user-guide',
   'data-role-mode-guide',
+  'data-device-mode-guide',
   'Owner mode',
   'Operator mode',
   'Technical admin mode',
+  'Phone mode',
+  'Tablet mode',
+  'Desktop mode',
 ]) {
   if (!aiWorkerGuideHtml.includes(token)) fail('public_ai_worker_user_guide_contract_missing', { token })
 }
@@ -1104,6 +1113,8 @@ for (const [id, name] of publicAgentTemplateContract) {
     'name="starter_kit_url"',
     'name="user_role_mode"',
     'name="user_role_label"',
+    'name="user_device_mode"',
+    'name="user_device_label"',
     'name="first_proof_target"',
     'name="acceptance_tests"',
     'name="intake_job_mode" value="intake_to_first_proof"',

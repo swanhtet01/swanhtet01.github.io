@@ -153,3 +153,21 @@ Live result: `supermega.dev` and `www.supermega.dev` point to deployment `dpl_2D
 - [x] Deploy to `supermega-public` and verify aliases, contact API, lead ledger, behavior monitoring, and browser usability.
 
 Live result: `supermega.dev` and `www.supermega.dev` point to deployment `dpl_B1i8t99yXwWpH8qbJR5eMbaRhCNa`, and the go-live gate passed with behavior DB `recent_7d_count: 584`.
+
+### Task 11: Add Device-Aware Worker Onboarding
+
+**Files:**
+- Modify: `tools/create_public_vercel_output.mjs`
+- Modify: `tools/verify_public_vercel_output.mjs`
+- Modify: `tools/audit_public_usability.mjs`
+- Modify: `tools/public_deployment_lock.json`
+
+- [x] Add browser-local device mode detection for phone, tablet, and desktop onboarding.
+- [x] Store only the current device mode ID in this browser, not source text, private workflow content, credentials, or payment data.
+- [x] Pass the selected device mode into setup/contact forms as `user_device_mode` and `user_device_label` routing hints.
+- [x] Add device-aware copy to the AI Worker User Guide so users know what to do on phone, tablet, and desktop.
+- [x] Add static verifier coverage for the public shell, guide, and setup hidden fields.
+- [x] Add browser audit coverage for desktop, tablet, and mobile device modes, including setup hidden-field propagation.
+- [x] Deploy to `supermega-public` and verify aliases, contact API, lead ledger, behavior monitoring, and browser usability.
+
+Live result: `supermega.dev` and `www.supermega.dev` point to deployment `dpl_88pWKTaMpxhbQpkNeDzhoNMhtYJd`, and the go-live gate passed with behavior DB `recent_7d_count: 705`.

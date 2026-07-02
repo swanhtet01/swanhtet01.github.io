@@ -387,6 +387,35 @@ function roleModeOptionsJson() {
   ]).replaceAll('<', '\\u003c')
 }
 
+function deviceModeOptionsJson() {
+  return JSON.stringify([
+    {
+      id: 'phone',
+      label: 'Phone mode',
+      minWidth: 0,
+      maxWidth: 639,
+      nextStep: 'Review first proofs, upload photos or screenshots, approve quick items, and check owner status.',
+      proofFocus: 'Small-screen actions only: capture, review, approve, and send source samples after consent.',
+    },
+    {
+      id: 'tablet',
+      label: 'Tablet mode',
+      minWidth: 640,
+      maxWidth: 1023,
+      nextStep: 'Use review queues, floor handoff, manager approvals, and checklist work during live operations.',
+      proofFocus: 'Shared-work review: clear buttons, readable cards, no horizontal overflow, and approval-only actions.',
+    },
+    {
+      id: 'desktop',
+      label: 'Desktop mode',
+      minWidth: 1024,
+      maxWidth: 99999,
+      nextStep: 'Use source review, setup forms, proof packets, control console, ledgers, and larger dashboards.',
+      proofFocus: 'Full setup and operations: source trace, acceptance tests, private workspace, and behavior summary.',
+    },
+  ]).replaceAll('<', '\\u003c')
+}
+
 function contactTemplatePackagesJson() {
   const packages = Object.fromEntries(
     publicAgentTemplates.map((template) => [
@@ -1708,6 +1737,11 @@ const unicornShellStyle = `
       .role-mode-choice[aria-pressed="true"] { border-color: rgba(43,105,124,0.5); background: rgba(43,105,124,0.12); color: var(--blue); }
       .role-mode-meta { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
       .role-mode-meta span { border: 1px solid var(--line); border-radius: 999px; padding: 5px 9px; color: var(--muted); font-size: 11px; font-weight: 900; }
+      .device-mode-panel { display: grid; grid-template-columns: minmax(0,1fr) minmax(220px,.56fr); gap: 16px; align-items: center; margin: 8px 0 20px; border: 1px solid rgba(201,162,75,0.34); border-radius: 24px; padding: 16px; background: rgba(255,255,255,0.62); box-shadow: 0 16px 48px rgba(42,36,28,0.07); }
+      .device-mode-panel[hidden] { display: none !important; }
+      .device-mode-panel strong { display: block; margin-top: 5px; font-size: clamp(20px,2.1vw,27px); line-height: 1.08; letter-spacing: -0.035em; }
+      .device-mode-panel p { margin-top: 6px; max-width: 66ch; font-size: 14px; line-height: 1.42; }
+      .device-mode-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
       .final { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 20px; align-items: center; border: 1px solid rgba(255,255,255,0.76); border-radius: 36px; padding: clamp(24px, 5vw, 48px); background: rgba(255,255,255,0.62); box-shadow: var(--shadow); backdrop-filter: blur(22px); }
       footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 24px 0 32px; color: var(--muted); font-weight: 800; }
       footer .footer-links { display: flex; flex-wrap: wrap; gap: 10px; }
@@ -1727,7 +1761,7 @@ const unicornShellStyle = `
         .brand-text strong, .brand-text small, .nav .optional-nav { display: none; }
         .nav { flex: 0 0 auto; gap: 6px; }
         .btn, button { min-height: 42px; padding: 0 12px; }
-        .poster, .split, .product-library-head, .output, .proof-system, .proof-board, .workcell-grid, .local-worker-continue, .role-mode-panel, .final { grid-template-columns: 1fr; }
+        .poster, .split, .product-library-head, .output, .proof-system, .proof-board, .workcell-grid, .local-worker-continue, .role-mode-panel, .device-mode-panel, .final { grid-template-columns: 1fr; }
         .poster { min-height: auto; gap: 18px; padding: 20px 0 38px; }
         .eyebrow { font-size: 11px; letter-spacing: 0.18em; }
         h1 { max-width: 11ch; font-size: clamp(44px, 12vw, 60px); line-height: 0.98; letter-spacing: -0.065em; }
@@ -1800,6 +1834,8 @@ const unicornShellStyle = `
         .local-worker-continue .local-worker-actions .btn { flex: 1 1 auto; }
         .role-mode-actions { justify-content: stretch; }
         .role-mode-choice { flex: 1 1 auto; }
+        .device-mode-actions { justify-content: stretch; }
+        .device-mode-actions .btn { flex: 1 1 auto; }
       }
 
       :root { --gilt: #C9A24B; }
@@ -1826,7 +1862,7 @@ const unicornShellStyle = `
       :root[data-theme="dark"] body::before { background-image: linear-gradient(rgba(243,239,230,0.045) 1px, transparent 1px), linear-gradient(90deg, rgba(243,239,230,0.045) 1px, transparent 1px); }
       :root[data-theme="dark"] .btn, :root[data-theme="dark"] button { background: rgba(243,239,230,0.06); }
       :root[data-theme="dark"] .btn.primary, :root[data-theme="dark"] button { color: #fff; background: linear-gradient(135deg, #cc6e48, #d97757); box-shadow: 0 18px 40px rgba(217, 119, 87, 0.28); }
-      :root[data-theme="dark"] .output, :root[data-theme="dark"] .feature, :root[data-theme="dark"] .proof-card, :root[data-theme="dark"] .case, :root[data-theme="dark"] .proof-system, :root[data-theme="dark"] .workcell-panel, :root[data-theme="dark"] .workcell-step, :root[data-theme="dark"] .local-worker-continue, :root[data-theme="dark"] .role-mode-panel, :root[data-theme="dark"] .final, :root[data-theme="dark"] .home-shot-card, :root[data-theme="dark"] .browser, :root[data-theme="dark"] .proof, :root[data-theme="dark"] .upgrade-card, :root[data-theme="dark"] .shell-card, :root[data-theme="dark"] .setup-card, :root[data-theme="dark"] .market-card, :root[data-theme="dark"] form, :root[data-theme="dark"] .feature-pills span, :root[data-theme="dark"] .chip, :root[data-theme="dark"] .metric, :root[data-theme="dark"] .proof-step, :root[data-theme="dark"] footer .footer-links a {
+      :root[data-theme="dark"] .output, :root[data-theme="dark"] .feature, :root[data-theme="dark"] .proof-card, :root[data-theme="dark"] .case, :root[data-theme="dark"] .proof-system, :root[data-theme="dark"] .workcell-panel, :root[data-theme="dark"] .workcell-step, :root[data-theme="dark"] .local-worker-continue, :root[data-theme="dark"] .role-mode-panel, :root[data-theme="dark"] .device-mode-panel, :root[data-theme="dark"] .final, :root[data-theme="dark"] .home-shot-card, :root[data-theme="dark"] .browser, :root[data-theme="dark"] .proof, :root[data-theme="dark"] .upgrade-card, :root[data-theme="dark"] .shell-card, :root[data-theme="dark"] .setup-card, :root[data-theme="dark"] .market-card, :root[data-theme="dark"] form, :root[data-theme="dark"] .feature-pills span, :root[data-theme="dark"] .chip, :root[data-theme="dark"] .metric, :root[data-theme="dark"] .proof-step, :root[data-theme="dark"] footer .footer-links a {
         background: rgba(243,239,230,0.05); border-color: rgba(243,239,230,0.12);
       }
       :root[data-theme="dark"] .product-carousel, :root[data-theme="dark"] .product-shot-card, :root[data-theme="dark"] .product-shot-card .shot-open, :root[data-theme="dark"] .output > img { background: #201c17; }
@@ -2633,6 +2669,123 @@ const publicRoleModeScript = `
     }
   })();
 </script>`
+const publicDeviceModeScript = `
+<script>
+  (function () {
+    var modes = ${deviceModeOptionsJson()};
+    var storageKey = 'sm_worker_device_mode';
+    var resizeTimer = null;
+    function safeText(value) {
+      return String(value || '').replace(/[&<>"']/g, function (char) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char];
+      });
+    }
+    function viewportWidth() {
+      return Math.max(document.documentElement.clientWidth || 0, window.innerWidth || 0);
+    }
+    function detectMode() {
+      var width = viewportWidth();
+      var fallback = modes[0];
+      for (var index = 0; index < modes.length; index += 1) {
+        var item = modes[index];
+        if (width >= item.minWidth && width <= item.maxWidth) return item;
+      }
+      return fallback;
+    }
+    function findMode(id) {
+      id = String(id || '');
+      for (var index = 0; index < modes.length; index += 1) {
+        if (modes[index].id === id) return modes[index];
+      }
+      return null;
+    }
+    function saveMode(mode) {
+      if (!mode) return null;
+      try {
+        if (window.localStorage) localStorage.setItem(storageKey, mode.id);
+      } catch (error) {}
+      return mode;
+    }
+    function loadMode() {
+      var detected = detectMode();
+      try {
+        var stored = window.localStorage && localStorage.getItem(storageKey);
+        if (!stored || stored !== detected.id) return saveMode(detected);
+        return findMode(stored) || saveMode(detected);
+      } catch (error) {
+        return detected;
+      }
+    }
+    function ensureHidden(form, name) {
+      var field = form.querySelector('input[type="hidden"][name="' + name + '"]');
+      if (!field) {
+        field = document.createElement('input');
+        field.type = 'hidden';
+        field.name = name;
+        form.appendChild(field);
+      }
+      return field;
+    }
+    function applyDeviceToForms() {
+      var mode = loadMode();
+      document.querySelectorAll('form').forEach(function (form) {
+        ensureHidden(form, 'user_device_mode').value = mode ? mode.id : '';
+        ensureHidden(form, 'user_device_label').value = mode ? mode.label : '';
+      });
+      return mode;
+    }
+    function shouldShowPanel() {
+      return /^\\/(ai-agents|agent-templates|contact)(\\/|$)/.test(window.location.pathname);
+    }
+    function renderPanel(track) {
+      var mode = applyDeviceToForms();
+      if (!shouldShowPanel()) return mode;
+      var wrap = document.querySelector('.wrap');
+      var main = document.querySelector('main');
+      if (!wrap || !main || !mode) return mode;
+      var panel = document.querySelector('[data-device-mode-panel]');
+      if (!panel) {
+        panel = document.createElement('section');
+        panel.className = 'device-mode-panel';
+        panel.setAttribute('data-device-mode-panel', '');
+        panel.setAttribute('aria-label', 'Device-aware onboarding');
+        wrap.insertBefore(panel, main);
+      }
+      panel.innerHTML = [
+        '<div>',
+        '<div class="eyebrow">Device-aware onboarding</div>',
+        '<strong>' + safeText(mode.label) + '.</strong>',
+        '<p>' + safeText(mode.nextStep) + '</p>',
+        '<div class="role-mode-meta"><span>screen fit</span><span>' + safeText(mode.proofFocus) + '</span><span>saved only in this browser</span></div>',
+        '</div>',
+        '<div class="device-mode-actions">',
+        '<a class="btn primary" href="/agent-templates/">Setup kits</a>',
+        '<a class="btn secondary" href="/ai-agents/guide/">User guide</a>',
+        '</div>'
+      ].join('');
+      if (track && window.supermegaTrackBehavior) {
+        window.supermegaTrackBehavior('cta_clicked', {
+          requested_package: 'device-aware-onboarding',
+          component: 'device_mode_panel',
+          cta_text: mode.id
+        });
+      }
+      return mode;
+    }
+    function scheduleRender() {
+      window.clearTimeout(resizeTimer);
+      resizeTimer = window.setTimeout(function () { renderPanel(false); }, 120);
+    }
+    window.supermegaDetectDeviceMode = loadMode;
+    document.addEventListener('submit', applyDeviceToForms, true);
+    window.addEventListener('resize', scheduleRender);
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', function () { renderPanel(true); });
+    } else {
+      renderPanel(true);
+    }
+  })();
+</script>`
 const publicAdaptiveWorkerRouterScript = `
 <script>
   (function () {
@@ -2757,7 +2910,7 @@ const publicAdaptiveWorkerRouterScript = `
     }
   })();
 </script>`
-const publicRuntimeScripts = `${publicLanguageToggleScript}${publicBehaviorEventsScript}${publicLocalWorkerAdaptationScript}${publicRoleModeScript}`
+const publicRuntimeScripts = `${publicLanguageToggleScript}${publicBehaviorEventsScript}${publicLocalWorkerAdaptationScript}${publicRoleModeScript}${publicDeviceModeScript}`
 
 function unicornSocialMeta({ title, description, url }) {
   const t = String(title || '').replace(/"/g, '&quot;')
@@ -5096,13 +5249,14 @@ ${unicornHeader}
           </div>
         </section>
 
-        <section class="section sm-in">
+        <section class="section sm-in" data-device-mode-guide>
           <div class="eyebrow">Daily use</div>
           <h2>Mobile, tablet, and desktop.</h2>
+          <p style="color:var(--muted);max-width:66ch">Device-aware onboarding detects the current screen size and routes first steps toward phone, tablet, or desktop work without storing private source text.</p>
           <div class="guide-rule-grid">
-            <div class="guide-rule"><strong>Desktop</strong><span>Use desktop for source review, setup forms, operator console, ledgers, proof packets, and larger dashboards.</span></div>
-            <div class="guide-rule"><strong>Tablet</strong><span>Use tablet for review queues, shop/factory floor checks, approval lists, and manager handoff during live operations.</span></div>
-            <div class="guide-rule"><strong>Mobile</strong><span>Use mobile for first proof review, quick approvals, photos/screenshots, receipts, Viber follow-up drafts, and owner status checks.</span></div>
+            <div class="guide-rule"><strong>Phone mode</strong><span>Review first proofs, approve quick items, capture photos or screenshots, and check owner status.</span></div>
+            <div class="guide-rule"><strong>Tablet mode</strong><span>Use review queues, floor checks, approval lists, checklist work, and manager handoff during live operations.</span></div>
+            <div class="guide-rule"><strong>Desktop mode</strong><span>Use source review, setup forms, control console, ledgers, proof packets, and larger dashboards.</span></div>
           </div>
         </section>
 
@@ -5240,6 +5394,8 @@ function buildAgentTemplateSetupHtml(kit) {
     ['first_run_mode', 'approval_only'],
     ['user_role_mode', ''],
     ['user_role_label', ''],
+    ['user_device_mode', ''],
+    ['user_device_label', ''],
     ['management_owner', 'swanhtet@supermega.dev'],
     ['team', 'Owner or first operating team'],
     ['urgency', 'This week'],
