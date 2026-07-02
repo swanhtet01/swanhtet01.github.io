@@ -11,6 +11,9 @@ const expectedTemplates = [
   'Daily Intelligence Brief Agent',
   'Factory Ops Ledger',
   'Data Cleanup & Reporting Agent',
+  'Document / PDF Intake Ledger',
+  'CRM Follow-up & Pipeline Assistant',
+  'Proposal & SOW Builder',
 ]
 
 function fail(reason, extra = {}) {

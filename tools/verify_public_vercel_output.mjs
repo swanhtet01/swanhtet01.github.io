@@ -42,6 +42,8 @@ for (const [src, dest] of [
   ['^/api/first-run-acceptance-submissions/status$', '/api/first-run-acceptance-submissions.js'],
   ['^/api/pilot-payment-submissions$', '/api/pilot-payment-submissions.js'],
   ['^/api/pilot-payment-submissions/status$', '/api/pilot-payment-submissions.js'],
+  ['^/api/behavior-events$', '/api/behavior-events.js'],
+  ['^/api/behavior-events/status$', '/api/behavior-events.js'],
   ['^/api/checkout-start$', '/api/checkout-start.js'],
   ['^/api/checkout-start/status$', '/api/checkout-start.js'],
   ['^/api/pipeline-control$', '/api/pipeline-control.js'],
@@ -570,6 +572,7 @@ for (const [label, text] of [
 const homeHtml = readFileSync(resolve(staticDir, 'index.html'), 'utf8')
 const productsHtml = readFileSync(resolve(staticDir, 'products/index.html'), 'utf8')
 const contactHtml = readFileSync(resolve(staticDir, 'contact/index.html'), 'utf8')
+const aiAgentsHtml = readFileSync(resolve(staticDir, 'ai-agents/index.html'), 'utf8')
 const operatorHtmlPath = resolve(staticDir, 'operator/index.html')
 if (!existsSync(operatorHtmlPath)) fail('public_operator_console_missing')
 const operatorHtml = readFileSync(operatorHtmlPath, 'utf8')
@@ -724,6 +727,17 @@ for (const token of [
   'Digital workers',
 ]) {
   if (!homeHtml.includes(token)) fail('public_shell_contract_missing', { token })
+}
+for (const token of [
+  'General AI Worker Toolkit',
+  'Pick one reusable worker and prove it on real sources.',
+  'privacy-light first-party events',
+  'Document / PDF Intake Ledger',
+  'CRM Follow-up &amp; Pipeline Assistant',
+  'Proposal &amp; SOW Builder',
+  '/api/behavior-events',
+]) {
+  if (!aiAgentsHtml.includes(token)) fail('public_ai_agents_sellable_toolkit_contract_missing', { token })
 }
 for (const token of [
   '<title>Products | SUPERMEGA.dev</title>',
@@ -955,6 +969,9 @@ const publicAgentTemplateContract = [
   ['daily-intelligence-brief', 'Daily Intelligence Brief Agent'],
   ['factory-ops-ledger', 'Factory Ops Ledger'],
   ['data-clean-report-agent', 'Data Cleanup & Reporting Agent'],
+  ['document-pdf-intake-ledger', 'Document / PDF Intake Ledger'],
+  ['crm-follow-up-pipeline-assistant', 'CRM Follow-up & Pipeline Assistant'],
+  ['proposal-sow-builder', 'Proposal & SOW Builder'],
 ]
 const htmlEscaped = (value) => String(value).replace(/&/g, '&amp;')
 const starterKitIndexPath = resolve(staticDir, 'site/agent-templates/index.json')
@@ -998,6 +1015,8 @@ for (const [id, name] of publicAgentTemplateContract) {
     starter.first_run_workflow.length < 4 ||
     !Array.isArray(starter.acceptance_tests) ||
     starter.acceptance_tests.length < 4 ||
+    !Array.isArray(starter.adaptation_signals) ||
+    starter.adaptation_signals.length < 4 ||
     starter.contact_url !== `/contact/?template=${id}` ||
     starter.setup_url !== `/agent-templates/${id}/setup/`
   ) {
@@ -1030,6 +1049,20 @@ for (const token of ['AI agent templates', 'View setup kit', 'name="template_id"
   if (!productsHtml.includes(token) && !contactHtml.includes(token)) {
     fail('public_agent_template_contract_missing', { token })
   }
+}
+const behaviorFunctionPath = resolve(functionsDir, 'api/behavior-events.js.func/api/behavior-events.js')
+if (!existsSync(behaviorFunctionPath)) fail('public_behavior_events_function_missing')
+const behaviorFunctionSource = readFileSync(behaviorFunctionPath, 'utf8')
+for (const token of [
+  'supermega_behavior_events',
+  'page_viewed',
+  'cta_clicked',
+  'template_clicked',
+  'setup_started',
+  'lead_form_submitted',
+  'coarse_first_party_event_no_keystrokes_no_source_files_no_credentials',
+]) {
+  if (!behaviorFunctionSource.includes(token)) fail('public_behavior_events_contract_missing', { token })
 }
 // Guard against re-introducing speculative/non-sellable product names on the public products page.
 for (const banned of ['AI-worker paid pilots', 'Agency Client Operator', 'Agent App Control Room', 'Custom Agent Workcell', 'Social Commerce Inbox Operator']) {

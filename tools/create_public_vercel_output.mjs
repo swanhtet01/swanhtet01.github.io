@@ -287,15 +287,41 @@ function renderPublicAgentTemplateCards() {
   return publicAgentTemplates
     .map((template) => {
       const inputs = template.setupInputs.slice(0, 4).map((input) => `<li>${escapeHtml(input)}</li>`).join('')
-      return `<article class="template-card" id="${escapeHtml(template.id)}">
+      return `<article class="template-card" id="${escapeHtml(template.id)}" data-worker-template="${escapeHtml(template.id)}">
                 <small>${escapeHtml(template.status)} / ${escapeHtml(template.sourceCategory)}</small>
                 <h3>${escapeHtml(template.name)}</h3>
                 <p>${escapeHtml(template.promise)}</p>
                 <strong>${escapeHtml(template.pricingLabel)}</strong>
                 <span>First proof: ${escapeHtml(template.firstProof)}</span>
                 <ul>${inputs}</ul>
-                <a class="btn secondary" href="/agent-templates/${encodeURIComponent(template.id)}/setup/">Start this template</a>
+                <a class="btn secondary" data-sm-template-link="${escapeHtml(template.id)}" href="/agent-templates/${encodeURIComponent(template.id)}/setup/">Start this template</a>
                 <a class="link" href="/agent-templates/${encodeURIComponent(template.id)}/">View setup kit</a>
+              </article>`
+    })
+    .join('\n')
+}
+
+function renderSellableWorkerShelf() {
+  return publicAgentTemplates
+    .map((template) => {
+      const outputs = template.outputs.slice(0, 3).map((output) => `<li>${escapeHtml(output)}</li>`).join('')
+      const sourceInputs = template.setupInputs.slice(0, 3).join(', ')
+      return `<article class="worker-card" data-worker-template="${escapeHtml(template.id)}">
+                <div class="worker-meta">
+                  <span>${escapeHtml(template.status)}</span>
+                  <span>${escapeHtml(template.sourceCategory)}</span>
+                </div>
+                <h3>${escapeHtml(template.name)}</h3>
+                <p>${escapeHtml(template.promise)}</p>
+                <div class="worker-fact"><strong>Buyer</strong><span>${escapeHtml(template.buyer)}</span></div>
+                <div class="worker-fact"><strong>Source pack</strong><span>${escapeHtml(sourceInputs)}</span></div>
+                <div class="worker-fact"><strong>First proof</strong><span>${escapeHtml(template.firstProof)}</span></div>
+                <ul>${outputs}</ul>
+                <div class="worker-price">${escapeHtml(template.pricingLabel)}</div>
+                <div class="worker-actions">
+                  <a class="btn secondary" data-sm-template-link="${escapeHtml(template.id)}" href="/agent-templates/${encodeURIComponent(template.id)}/setup/">Start setup</a>
+                  <a class="link" data-sm-template-link="${escapeHtml(template.id)}" href="/contact/?template=${encodeURIComponent(template.id)}&package=ai-workcell-pilot">Ask about this worker</a>
+                </div>
               </article>`
     })
     .join('\n')
@@ -341,7 +367,7 @@ async function writePublicAgentTemplateStarterKits() {
   await mkdir(directory, { recursive: true })
   await writeTextFileEnsuringDir(
     resolve(directory, 'index.json'),
-    `${JSON.stringify({ version: '2026-06-29', templates: index }, null, 2)}\n`,
+    `${JSON.stringify({ version: '2026-07-02', templates: index }, null, 2)}\n`,
   )
   for (const kit of publicAgentTemplateStarterKits) {
     await writeTextFileEnsuringDir(resolve(directory, `${kit.id}.json`), `${JSON.stringify(kit, null, 2)}\n`)
@@ -2174,6 +2200,93 @@ const restaurantProductMedia = productMediaStack(restaurantProductUi, restaurant
 const agentOpsProductMedia = productMediaStack('', agentOpsProductGallery)
 
 const publicLanguageToggleScript = ''
+const publicBehaviorEventsScript = `
+<script>
+  (function () {
+    var endpoint = '/api/behavior-events';
+    var allowed = ['page_viewed', 'cta_clicked', 'template_clicked', 'setup_started', 'lead_form_submitted'];
+    var params = new URLSearchParams(window.location.search || '');
+    function text(value) { return String(value || '').slice(0, 240); }
+    function templateFromHref(href) {
+      var match = String(href || '').match(/\\/agent-templates\\/([^/?#]+)(?:\\/setup)?\\/?/);
+      return match ? decodeURIComponent(match[1]) : '';
+    }
+    function hidden(form, name) {
+      var field = form && form.querySelector ? form.querySelector('input[type="hidden"][name="' + name + '"]') : null;
+      return field ? field.value : '';
+    }
+    function sessionHint() {
+      try {
+        var key = 'sm_behavior_session';
+        var existing = window.localStorage && localStorage.getItem(key);
+        if (existing) return existing;
+        var next = 'sess-' + Math.random().toString(36).slice(2) + Date.now().toString(36);
+        if (window.localStorage) localStorage.setItem(key, next);
+        return next;
+      } catch (error) {
+        return 'session-storage-disabled';
+      }
+    }
+    function send(eventType, detail) {
+      if (allowed.indexOf(eventType) < 0) return;
+      var body = {
+        event_type: eventType,
+        page_path: window.location.pathname,
+        source_url: window.location.href,
+        referrer: document.referrer || '',
+        session_hint: sessionHint(),
+        template_id: text(detail && detail.template_id),
+        requested_package: text(detail && detail.requested_package),
+        component: text(detail && detail.component),
+        cta_text: text(detail && detail.cta_text),
+        utm_source: text(params.get('utm_source')),
+        utm_medium: text(params.get('utm_medium')),
+        utm_campaign: text(params.get('utm_campaign')),
+        utm_content: text(params.get('utm_content')),
+        utm_term: text(params.get('utm_term'))
+      };
+      try {
+        fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          keepalive: true,
+          body: JSON.stringify(body)
+        }).catch(function () {});
+      } catch (error) {}
+    }
+    function setupTemplateId() {
+      var match = window.location.pathname.match(/\\/agent-templates\\/([^/]+)\\/setup\\/?/);
+      return match ? decodeURIComponent(match[1]) : '';
+    }
+    window.addEventListener('load', function () {
+      send('page_viewed', { template_id: setupTemplateId() || params.get('template') || '' });
+      if (setupTemplateId()) send('setup_started', { template_id: setupTemplateId(), component: 'agent_template_setup' });
+    });
+    document.addEventListener('click', function (event) {
+      var target = event.target && event.target.closest ? event.target.closest('a,button') : null;
+      if (!target) return;
+      var href = target.getAttribute('href') || '';
+      var templateId = target.getAttribute('data-sm-template-link') || templateFromHref(href) || (target.closest('[data-worker-template]') && target.closest('[data-worker-template]').getAttribute('data-worker-template')) || '';
+      var eventType = templateId ? 'template_clicked' : 'cta_clicked';
+      send(eventType, {
+        template_id: templateId,
+        requested_package: params.get('package') || '',
+        component: target.className || target.tagName || '',
+        cta_text: target.textContent || ''
+      });
+    });
+    document.addEventListener('submit', function (event) {
+      var form = event.target;
+      if (!form || !form.matches || !form.matches('form')) return;
+      send('lead_form_submitted', {
+        template_id: hidden(form, 'template_id') || params.get('template') || setupTemplateId(),
+        requested_package: hidden(form, 'requested_package') || params.get('package') || '',
+        component: form.getAttribute('data-agent-template-setup') !== null ? 'agent_template_setup_form' : 'lead_form'
+      });
+    }, true);
+  })();
+</script>`
+const publicRuntimeScripts = `${publicLanguageToggleScript}${publicBehaviorEventsScript}`
 
 function unicornSocialMeta({ title, description, url }) {
   const t = String(title || '').replace(/"/g, '&quot;')
@@ -2217,6 +2330,22 @@ const unicornAiAgentsHtml = `<!doctype html>
       .sprint-card h3 { font-size: 20px; letter-spacing: -.02em; margin: 0; }
       .sprint-card p { font-size: 15px; color: var(--muted); line-height: 1.55; margin: 0; flex: 1; }
       .sprint-card .btn { align-self: flex-start; }
+      .worker-grid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 16px; margin-top: 28px; }
+      .worker-card { border: 1px solid var(--line); border-radius: 18px; padding: 22px; background: rgba(255,255,255,0.55); display: flex; flex-direction: column; gap: 13px; min-height: 100%; }
+      .worker-meta { display: flex; gap: 8px; flex-wrap: wrap; }
+      .worker-meta span { border: 1px solid var(--line); border-radius: 999px; padding: 4px 9px; color: var(--muted); font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; }
+      .worker-card h3 { margin: 0; font-size: 20px; letter-spacing: -.02em; }
+      .worker-card p { margin: 0; color: var(--muted); line-height: 1.5; font-size: 14px; }
+      .worker-fact { display: grid; gap: 4px; }
+      .worker-fact strong { font-size: 11px; text-transform: uppercase; letter-spacing: .12em; color: var(--blue); }
+      .worker-fact span { color: var(--ink); font-size: 14px; line-height: 1.42; }
+      .worker-card ul { margin: 0; padding-left: 18px; color: var(--muted); font-size: 13px; line-height: 1.45; }
+      .worker-price { margin-top: auto; font-weight: 900; color: var(--ink); }
+      .worker-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+      .behavior-grid { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 12px; margin-top: 20px; }
+      .behavior-step { border: 1px solid var(--line); border-radius: 18px; padding: 16px; background: rgba(255,255,255,0.5); }
+      .behavior-step strong { display: block; }
+      .behavior-step span { display: block; margin-top: 6px; color: var(--muted); font-size: 13px; line-height: 1.45; }
       .connector-section h2 { margin-bottom: 8px; }
       .connector-section .section-sub { color: var(--muted); font-size: 15px; margin-bottom: 28px; max-width: 52ch; }
       .connector-groups { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 24px; }
@@ -2230,8 +2359,9 @@ const unicornAiAgentsHtml = `<!doctype html>
       .agent-proof { margin: 64px auto 0; max-width: 600px; text-align: center; }
       .agent-proof blockquote { font-family: 'Fraunces', Georgia, serif; font-size: clamp(17px,2vw,22px); font-style: italic; line-height: 1.45; color: var(--ink); border-left: 3px solid var(--blue); padding-left: 20px; text-align: left; margin: 0 0 20px; }
       .agent-proof cite { font-size: 14px; color: var(--muted); display: block; margin-top: 8px; }
-      @media (max-width: 880px) { .sprint-grid { grid-template-columns: 1fr; } }
-      :root[data-theme="dark"] .sprint-card { background: rgba(243,239,230,0.05); }
+      @media (max-width: 980px) { .worker-grid { grid-template-columns: repeat(2, minmax(0,1fr)); } .behavior-grid { grid-template-columns: repeat(2, minmax(0,1fr)); } }
+      @media (max-width: 880px) { .sprint-grid, .worker-grid, .behavior-grid { grid-template-columns: 1fr; } }
+      :root[data-theme="dark"] .sprint-card, :root[data-theme="dark"] .worker-card, :root[data-theme="dark"] .behavior-step { background: rgba(243,239,230,0.05); }
       :root[data-theme="dark"] .connector-chip { background: rgba(243,239,230,0.05); border-color: rgba(243,239,230,0.12); }
       :root[data-theme="dark"] .connector-chip:hover { background: rgba(217,119,87,0.12); color: #D97757; border-color: rgba(217,119,87,0.28); }
     </style>
@@ -2263,25 +2393,25 @@ ${unicornHeader}
           </div>
         </section>
 
+        <section class="section worker-shelf-section">
+          <div class="eyebrow">General AI Worker Toolkit</div>
+          <h2>Pick one reusable worker and prove it on real sources.</h2>
+          <p style="color:var(--muted);max-width:62ch">These are sellable general-use tools: each has a buyer, source pack, first proof, output list, setup kit, and approval boundary. Start with one worker; add connectors, schedules, and maintenance only after evidence.</p>
+          <div class="worker-grid">
+${renderSellableWorkerShelf()}
+          </div>
+        </section>
+
         <section class="section">
-          <div class="sprint-grid">
-            <div class="sprint-card">
-              <div class="s-time">3–5 days</div>
-              <h3>Email Intelligence Agent</h3>
-              <p>Reads your inbox, surfaces what needs action, writes reply drafts. You approve before anything sends.</p>
-              <a class="btn secondary" href="/contact/?package=agent-email">Commission this agent</a>
-            </div>
-            <div class="sprint-card">
-              <div class="s-time">3–5 days</div>
-              <h3>Drive Document Processor</h3>
-              <p>A file lands in Drive. AI pulls key fields, prepares the clean Sheet update, and queues it for approval before writeback.</p>
-              <a class="btn secondary" href="/contact/?package=agent-drive">Commission this agent</a>
-            </div>
-            <div class="sprint-card">
-              <div class="s-time">1–2 days</div>
-              <h3>Scheduled Digest Agent</h3>
-              <p>Daily or weekly summary of what matters, with changes, risks, and next actions separated from anything that needs approval.</p>
-              <a class="btn secondary" href="/contact/?package=agent-digest">Start in 2 days</a>
+          <div class="workcell-panel">
+            <div class="eyebrow">behavior loop</div>
+            <h2>Built to learn which worker a buyer actually needs.</h2>
+            <p>SuperMega records privacy-light first-party events: page viewed, CTA clicked, template clicked, setup started, and lead submitted. No keystrokes, source files, credentials, or private business text are tracked. The signal helps route each buyer to the right first proof and helps us improve the catalog.</p>
+            <div class="behavior-grid">
+              <div class="behavior-step"><strong>Watch intent</strong><span>Template clicks and setup starts show which worker the buyer is choosing.</span></div>
+              <div class="behavior-step"><strong>Adapt the route</strong><span>Contact and setup forms keep the selected template, package, and campaign context.</span></div>
+              <div class="behavior-step"><strong>Improve follow-up</strong><span>Operators see the worker context before asking for sample files or booking a call.</span></div>
+              <div class="behavior-step"><strong>Keep it safe</strong><span>Analytics failures never block the site and do not trigger external actions.</span></div>
             </div>
           </div>
         </section>
@@ -2340,7 +2470,7 @@ ${unicornHeader}
         </span>
       </footer>
     </div>
-${publicLanguageToggleScript}
+${publicRuntimeScripts}
   </body>
 </html>`
 
@@ -2671,7 +2801,7 @@ ${unicornHeader}
         </span>
       </footer>
     </div>
-${publicLanguageToggleScript}
+${publicRuntimeScripts}
 ${productCarouselScript}
   </body>
 </html>`
@@ -2876,7 +3006,7 @@ ${renderPublicAgentTemplateCards()}
         </span>
       </footer>
     </div>
-${publicLanguageToggleScript}
+${publicRuntimeScripts}
   </body>
 </html>`
 
@@ -3034,7 +3164,7 @@ ${unicornHeader}
         </span>
       </footer>
     </div>
-${publicLanguageToggleScript}
+${publicRuntimeScripts}
     <script>
       for (const form of document.querySelectorAll('[data-sm-lead-form]')) {
         const search = new URLSearchParams(window.location.search);
@@ -3628,6 +3758,14 @@ const config = {
     {
       src: '^/api/campaign-clicks$',
       dest: '/api/campaign-clicks.js',
+    },
+    {
+      src: '^/api/behavior-events$',
+      dest: '/api/behavior-events.js',
+    },
+    {
+      src: '^/api/behavior-events/status$',
+      dest: '/api/behavior-events.js',
     },
     {
       src: '^/api/commercial-control$',
@@ -4283,7 +4421,7 @@ ${unicornHeader}
         </span>
       </footer>
     </div>
-${publicLanguageToggleScript}
+${publicRuntimeScripts}
   </body>
 </html>`
 }
@@ -4358,7 +4496,7 @@ ${unicornHeader}
       </main>
       <footer><span>SUPERMEGA.dev setup kit.</span><span class="footer-links"><a href="/products/">Products</a><a href="/contact/">Contact</a></span></footer>
     </div>
-${publicLanguageToggleScript}
+${publicRuntimeScripts}
   </body>
 </html>`
 }
@@ -4465,7 +4603,7 @@ ${unicornHeader}
       </main>
       <footer><span>SUPERMEGA.dev agent setup.</span><span class="footer-links"><a href="/agent-templates/${escapeHtml(kit.id)}/">Setup kit</a><a href="/contact/?template=${escapeHtml(kit.id)}">Contact route</a></span></footer>
     </div>
-${publicLanguageToggleScript}
+${publicRuntimeScripts}
     <script>
       const form = document.querySelector('[data-agent-template-setup]');
       const statusEl = document.querySelector('[data-setup-status]');
@@ -4547,7 +4685,7 @@ ${unicornHeader}
       </main>
       <footer><span>SUPERMEGA.dev setup kits.</span><span class="footer-links"><a href="/products/">Products</a><a href="/contact/">Contact</a></span></footer>
     </div>
-${publicLanguageToggleScript}
+${publicRuntimeScripts}
   </body>
 </html>`
 }
@@ -4729,7 +4867,7 @@ ${unicornHeader}
         </span>
       </footer>
     </div>
-${publicLanguageToggleScript}
+${publicRuntimeScripts}
   </body>
 </html>`
 
@@ -4852,7 +4990,7 @@ ${unicornHeader}
         </span>
       </footer>
     </div>
-${publicLanguageToggleScript}
+${publicRuntimeScripts}
   </body>
 </html>`
 await mkdir(resolve(staticDir, 'work'), { recursive: true })
@@ -7943,7 +8081,7 @@ const unicornPrivacyHtml = `<!doctype html>
     </span>
   </footer>
 </div>
-${publicLanguageToggleScript}
+${publicRuntimeScripts}
 </body>
 </html>`
 await mkdir(resolve(staticDir, 'privacy'), { recursive: true })
@@ -7984,6 +8122,7 @@ await writeNodeFunction('proof-review-submissions.js')
 await writeNodeFunction('first-run-acceptance-submissions.js')
 await writeNodeFunction('pilot-payment-submissions.js')
 await writeNodeFunction('campaign-clicks.js')
+await writeNodeFunction('behavior-events.js')
 await writeNodeFunction('commercial-control.js')
 await writeNodeFunction('pipeline-control.js')
 await writeNodeFunction('checkout-start.js')
