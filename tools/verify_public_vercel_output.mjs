@@ -748,6 +748,11 @@ for (const token of [
   'Adaptive setup plan',
   'supermegaAdaptiveSetupPlan',
   'adaptive_plan_summary',
+  'sm_adaptive_source_pack',
+  'data-adaptive-source-pack',
+  'Source pack checklist',
+  'supermegaAdaptiveSourcePack',
+  'source_pack_required',
 ]) {
   if (!homeHtml.includes(token)) fail('public_shell_contract_missing', { token })
 }
@@ -785,6 +790,7 @@ for (const token of [
   'data-role-mode-guide',
   'data-device-mode-guide',
   'data-adaptive-plan-guide',
+  'data-source-pack-guide',
   'Owner mode',
   'Operator mode',
   'Technical admin mode',
@@ -793,6 +799,8 @@ for (const token of [
   'Desktop mode',
   'The next step changes with the user.',
   'worker ID, plan summary, next step, and page path',
+  'Send the smallest approved source pack.',
+  'No secrets first',
 ]) {
   if (!aiWorkerGuideHtml.includes(token)) fail('public_ai_worker_user_guide_contract_missing', { token })
 }
@@ -1127,6 +1135,10 @@ for (const [id, name] of publicAgentTemplateContract) {
     'name="adaptive_plan_summary"',
     'name="adaptive_next_step"',
     'name="adaptive_user_path"',
+    'name="source_pack_required"',
+    'name="source_pack_samples"',
+    'name="source_pack_first_proof"',
+    'name="source_pack_readiness"',
     'name="first_proof_target"',
     'name="acceptance_tests"',
     'name="intake_job_mode" value="intake_to_first_proof"',

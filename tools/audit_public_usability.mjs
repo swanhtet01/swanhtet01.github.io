@@ -197,6 +197,25 @@ try {
       fail('adaptive_setup_plan_missing', { viewport: viewport.name, expectedDevice, adaptivePlan })
     }
     if (adaptivePlan.overflowX > 0) fail('adaptive_setup_plan_horizontal_overflow', { viewport: viewport.name, adaptivePlan })
+    await page.waitForFunction(() => document.querySelector('[data-adaptive-source-pack]')?.textContent.includes('watchlist URLs'), null, { timeout: 5000 })
+    const sourcePack = await page.evaluate(() => {
+      const stored = JSON.parse(window.localStorage.getItem('sm_adaptive_source_pack') || '{}')
+      return {
+        visible: Boolean(document.querySelector('[data-adaptive-source-pack]')?.getBoundingClientRect().height),
+        text: document.querySelector('[data-adaptive-source-pack]')?.textContent || '',
+        storedWorker: stored.worker_id || '',
+        storedReadiness: stored.readiness || '',
+        storedRequired: (stored.required || []).join('; '),
+        storedSamples: (stored.samples || []).join('; '),
+        firstProof: stored.first_proof || '',
+        setupHref: document.querySelector('[data-adaptive-source-pack] a[data-sm-template-link="daily-intelligence-brief"]')?.getAttribute('href') || '',
+        overflowX: Math.max(0, document.documentElement.scrollWidth - document.documentElement.clientWidth),
+      }
+    })
+    if (!sourcePack.visible || sourcePack.storedWorker !== 'daily-intelligence-brief' || sourcePack.storedReadiness !== 'selected_worker_source_pack' || !sourcePack.text.includes('Source pack checklist') || !sourcePack.text.includes('watchlist URLs') || !sourcePack.storedRequired.includes('Watchlist sources') || !sourcePack.storedSamples.includes('watchlist URLs') || !sourcePack.firstProof.includes('One-page morning brief') || sourcePack.setupHref !== '/agent-templates/daily-intelligence-brief/setup/') {
+      fail('adaptive_source_pack_missing', { viewport: viewport.name, sourcePack })
+    }
+    if (sourcePack.overflowX > 0) fail('adaptive_source_pack_horizontal_overflow', { viewport: viewport.name, sourcePack })
     await page.locator('[data-worker-router]').scrollIntoViewIfNeeded()
     await expectCopy(
       page,
@@ -240,6 +259,7 @@ try {
       hasRoleGuide: document.body.textContent.includes('Role-aware onboarding') && document.body.textContent.includes('Technical admin mode'),
       hasDeviceGuide: Boolean(document.querySelector('[data-device-mode-guide]')) && document.body.textContent.includes('Phone mode') && document.body.textContent.includes('Tablet mode') && document.body.textContent.includes('Desktop mode'),
       hasAdaptivePlanGuide: Boolean(document.querySelector('[data-adaptive-plan-guide]')) && document.body.textContent.includes('Adaptive setup plan') && document.body.textContent.includes('The next step changes with the user.'),
+      hasSourcePackGuide: Boolean(document.querySelector('[data-source-pack-guide]')) && document.body.textContent.includes('Source pack checklist') && document.body.textContent.includes('Send the smallest approved source pack.'),
       hasSafetyCopy: document.body.textContent.includes('no external sends, writes, payments, or browser/mobile actions without owner approval'),
       hasNoPrivateTextCopy: document.body.textContent.includes('No keystrokes, source files, credentials, or private business text are tracked.'),
       overflowX: Math.max(0, document.documentElement.scrollWidth - document.documentElement.clientWidth),
@@ -250,6 +270,7 @@ try {
     if (!guide.hasRoleGuide) fail('ai_worker_user_guide_role_mode_missing', { viewport: viewport.name, guide })
     if (!guide.hasDeviceGuide) fail('ai_worker_user_guide_device_mode_missing', { viewport: viewport.name, guide })
     if (!guide.hasAdaptivePlanGuide) fail('ai_worker_user_guide_adaptive_plan_missing', { viewport: viewport.name, guide })
+    if (!guide.hasSourcePackGuide) fail('ai_worker_user_guide_source_pack_missing', { viewport: viewport.name, guide })
     if (!guide.hasSafetyCopy || !guide.hasNoPrivateTextCopy) fail('ai_worker_user_guide_safety_copy_missing', { viewport: viewport.name, guide })
     if (guide.overflowX > 0) fail('ai_worker_user_guide_horizontal_overflow', { viewport: viewport.name, guide })
     await page.locator('[data-guide-template="deskpos-quickstart"]').scrollIntoViewIfNeeded()
@@ -287,6 +308,10 @@ try {
       adaptivePlanSummary: document.querySelector('input[name="adaptive_plan_summary"]')?.value || '',
       adaptiveNextStep: document.querySelector('input[name="adaptive_next_step"]')?.value || '',
       adaptiveUserPath: document.querySelector('input[name="adaptive_user_path"]')?.value || '',
+      sourcePackRequired: document.querySelector('input[name="source_pack_required"]')?.value || '',
+      sourcePackSamples: document.querySelector('input[name="source_pack_samples"]')?.value || '',
+      sourcePackFirstProof: document.querySelector('input[name="source_pack_first_proof"]')?.value || '',
+      sourcePackReadiness: document.querySelector('input[name="source_pack_readiness"]')?.value || '',
       firstProofTarget: document.querySelector('input[name="first_proof_target"]')?.value || '',
       intakeJobMode: document.querySelector('input[name="intake_job_mode"]')?.value || '',
       kickoffPackMode: document.querySelector('input[name="kickoff_pack_mode"]')?.value || '',
@@ -301,6 +326,7 @@ try {
     if (setup.userRoleMode !== 'technical_admin' || setup.userRoleLabel !== 'Technical admin') fail('setup_role_mode_hidden_missing', { viewport: viewport.name, setup })
     if (setup.userDeviceMode !== expectedDevice.id || setup.userDeviceLabel !== expectedDevice.label) fail('setup_device_mode_hidden_missing', { viewport: viewport.name, expectedDevice, setup })
     if (setup.adaptiveWorkerId !== 'daily-intelligence-brief' || !setup.adaptivePlanSummary.includes('Daily Intelligence Brief Agent') || !setup.adaptivePlanSummary.includes(expectedDevice.label) || !setup.adaptiveNextStep.includes('connector scope') || setup.adaptiveUserPath !== '/agent-templates/daily-intelligence-brief/setup/') fail('setup_adaptive_plan_hidden_missing', { viewport: viewport.name, expectedDevice, setup })
+    if (!setup.sourcePackRequired.includes('Watchlist sources') || !setup.sourcePackSamples.includes('watchlist URLs') || !setup.sourcePackFirstProof.includes('One-page morning brief') || setup.sourcePackReadiness !== 'selected_worker_source_pack') fail('setup_source_pack_hidden_missing', { viewport: viewport.name, setup })
     if (!setup.firstProofTarget.includes('One-page morning brief')) fail('setup_first_proof_missing', { viewport: viewport.name, setup })
     if (setup.intakeJobMode !== 'intake_to_first_proof') fail('setup_intake_job_mode_missing', { viewport: viewport.name, setup })
     if (setup.kickoffPackMode !== 'client_kickoff_pack') fail('setup_kickoff_pack_mode_missing', { viewport: viewport.name, setup })

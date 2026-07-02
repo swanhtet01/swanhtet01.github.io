@@ -364,6 +364,21 @@ function workerContinueCatalogJson() {
   ).replaceAll('<', '\\u003c')
 }
 
+function workerSourcePackCatalogJson() {
+  return JSON.stringify(
+    publicAgentTemplates.map((template) => ({
+      id: template.id,
+      firstProof: template.firstProof,
+      setupInputs: template.setupInputs,
+      sampleSources: template.sampleSources,
+      outputs: template.outputs,
+      sourceCategory: template.sourceCategory,
+      setupUrl: `/agent-templates/${template.id}/setup/`,
+      contactUrl: `/contact/?template=${template.id}&package=ai-workcell-pilot`,
+    })),
+  ).replaceAll('<', '\\u003c')
+}
+
 function roleModeOptionsJson() {
   return JSON.stringify([
     {
@@ -1747,6 +1762,12 @@ const unicornShellStyle = `
       .adaptive-plan-panel strong { display: block; margin-top: 5px; font-size: clamp(20px,2.1vw,27px); line-height: 1.08; letter-spacing: -0.035em; }
       .adaptive-plan-panel p { margin-top: 6px; max-width: 66ch; font-size: 14px; line-height: 1.42; }
       .adaptive-plan-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+      .source-pack-panel { display: grid; grid-template-columns: minmax(0,1fr) minmax(230px,.62fr); gap: 16px; align-items: center; margin: 8px 0 20px; border: 1px solid rgba(194,96,63,0.22); border-radius: 24px; padding: 16px; background: rgba(255,255,255,0.66); box-shadow: 0 16px 48px rgba(42,36,28,0.07); }
+      .source-pack-panel[hidden] { display: none !important; }
+      .source-pack-panel strong { display: block; margin-top: 5px; font-size: clamp(20px,2.1vw,27px); line-height: 1.08; letter-spacing: -0.035em; }
+      .source-pack-panel p { margin-top: 6px; max-width: 66ch; font-size: 14px; line-height: 1.42; }
+      .source-pack-panel ul { display: grid; gap: 6px; margin: 10px 0 0; padding-left: 18px; color: var(--muted); font-size: 13px; font-weight: 780; line-height: 1.35; }
+      .source-pack-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
       .final { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 20px; align-items: center; border: 1px solid rgba(255,255,255,0.76); border-radius: 36px; padding: clamp(24px, 5vw, 48px); background: rgba(255,255,255,0.62); box-shadow: var(--shadow); backdrop-filter: blur(22px); }
       footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 24px 0 32px; color: var(--muted); font-weight: 800; }
       footer .footer-links { display: flex; flex-wrap: wrap; gap: 10px; }
@@ -1766,7 +1787,7 @@ const unicornShellStyle = `
         .brand-text strong, .brand-text small, .nav .optional-nav { display: none; }
         .nav { flex: 0 0 auto; gap: 6px; }
         .btn, button { min-height: 42px; padding: 0 12px; }
-        .poster, .split, .product-library-head, .output, .proof-system, .proof-board, .workcell-grid, .local-worker-continue, .role-mode-panel, .device-mode-panel, .adaptive-plan-panel, .final { grid-template-columns: 1fr; }
+        .poster, .split, .product-library-head, .output, .proof-system, .proof-board, .workcell-grid, .local-worker-continue, .role-mode-panel, .device-mode-panel, .adaptive-plan-panel, .source-pack-panel, .final { grid-template-columns: 1fr; }
         .poster { min-height: auto; gap: 18px; padding: 20px 0 38px; }
         .eyebrow { font-size: 11px; letter-spacing: 0.18em; }
         h1 { max-width: 11ch; font-size: clamp(44px, 12vw, 60px); line-height: 0.98; letter-spacing: -0.065em; }
@@ -1843,6 +1864,8 @@ const unicornShellStyle = `
         .device-mode-actions .btn { flex: 1 1 auto; }
         .adaptive-plan-actions { justify-content: stretch; }
         .adaptive-plan-actions .btn { flex: 1 1 auto; }
+        .source-pack-actions { justify-content: stretch; }
+        .source-pack-actions .btn { flex: 1 1 auto; }
       }
 
       :root { --gilt: #C9A24B; }
@@ -1869,7 +1892,7 @@ const unicornShellStyle = `
       :root[data-theme="dark"] body::before { background-image: linear-gradient(rgba(243,239,230,0.045) 1px, transparent 1px), linear-gradient(90deg, rgba(243,239,230,0.045) 1px, transparent 1px); }
       :root[data-theme="dark"] .btn, :root[data-theme="dark"] button { background: rgba(243,239,230,0.06); }
       :root[data-theme="dark"] .btn.primary, :root[data-theme="dark"] button { color: #fff; background: linear-gradient(135deg, #cc6e48, #d97757); box-shadow: 0 18px 40px rgba(217, 119, 87, 0.28); }
-      :root[data-theme="dark"] .output, :root[data-theme="dark"] .feature, :root[data-theme="dark"] .proof-card, :root[data-theme="dark"] .case, :root[data-theme="dark"] .proof-system, :root[data-theme="dark"] .workcell-panel, :root[data-theme="dark"] .workcell-step, :root[data-theme="dark"] .local-worker-continue, :root[data-theme="dark"] .role-mode-panel, :root[data-theme="dark"] .device-mode-panel, :root[data-theme="dark"] .adaptive-plan-panel, :root[data-theme="dark"] .final, :root[data-theme="dark"] .home-shot-card, :root[data-theme="dark"] .browser, :root[data-theme="dark"] .proof, :root[data-theme="dark"] .upgrade-card, :root[data-theme="dark"] .shell-card, :root[data-theme="dark"] .setup-card, :root[data-theme="dark"] .market-card, :root[data-theme="dark"] form, :root[data-theme="dark"] .feature-pills span, :root[data-theme="dark"] .chip, :root[data-theme="dark"] .metric, :root[data-theme="dark"] .proof-step, :root[data-theme="dark"] footer .footer-links a {
+      :root[data-theme="dark"] .output, :root[data-theme="dark"] .feature, :root[data-theme="dark"] .proof-card, :root[data-theme="dark"] .case, :root[data-theme="dark"] .proof-system, :root[data-theme="dark"] .workcell-panel, :root[data-theme="dark"] .workcell-step, :root[data-theme="dark"] .local-worker-continue, :root[data-theme="dark"] .role-mode-panel, :root[data-theme="dark"] .device-mode-panel, :root[data-theme="dark"] .adaptive-plan-panel, :root[data-theme="dark"] .source-pack-panel, :root[data-theme="dark"] .final, :root[data-theme="dark"] .home-shot-card, :root[data-theme="dark"] .browser, :root[data-theme="dark"] .proof, :root[data-theme="dark"] .upgrade-card, :root[data-theme="dark"] .shell-card, :root[data-theme="dark"] .setup-card, :root[data-theme="dark"] .market-card, :root[data-theme="dark"] form, :root[data-theme="dark"] .feature-pills span, :root[data-theme="dark"] .chip, :root[data-theme="dark"] .metric, :root[data-theme="dark"] .proof-step, :root[data-theme="dark"] footer .footer-links a {
         background: rgba(243,239,230,0.05); border-color: rgba(243,239,230,0.12);
       }
       :root[data-theme="dark"] .product-carousel, :root[data-theme="dark"] .product-shot-card, :root[data-theme="dark"] .product-shot-card .shot-open, :root[data-theme="dark"] .output > img { background: #201c17; }
@@ -2985,6 +3008,172 @@ const publicAdaptiveSetupPlanScript = `
     }
   })();
 </script>`
+const publicAdaptiveSourcePackScript = `
+<script>
+  (function () {
+    var catalog = ${workerSourcePackCatalogJson()};
+    var storageKey = 'sm_adaptive_source_pack';
+    var workerStateKey = 'sm_worker_continue_state';
+    var params = new URLSearchParams(window.location.search || '');
+    var renderTimer = null;
+    function safeText(value) {
+      return String(value || '').replace(/[&<>"']/g, function (char) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char];
+      });
+    }
+    function setupTemplateId() {
+      var match = window.location.pathname.match(/\\/agent-templates\\/([^/]+)\\/setup\\/?/);
+      return match ? decodeURIComponent(match[1]) : '';
+    }
+    function workerName(id) {
+      if (id === 'daily-intelligence-brief') return 'Daily Intelligence Brief Agent';
+      if (id === 'deskpos-quickstart') return 'DeskPOS Quickstart';
+      return String(id || '')
+        .split('-')
+        .filter(Boolean)
+        .map(function (part) { return part.charAt(0).toUpperCase() + part.slice(1); })
+        .join(' ')
+        .replace(/\\bCrm\\b/g, 'CRM')
+        .replace(/\\bPdf\\b/g, 'PDF')
+        .replace(/\\bPos\\b/g, 'POS')
+        .replace(/\\bSow\\b/g, 'SOW');
+    }
+    function readJson(key) {
+      try {
+        var stored = window.localStorage && localStorage.getItem(key);
+        return stored ? JSON.parse(stored) : {};
+      } catch (error) {
+        return {};
+      }
+    }
+    function selectedWorkerId() {
+      var fromPath = setupTemplateId() || params.get('template') || params.get('agent_template') || '';
+      if (fromPath) return fromPath;
+      var recommended = document.querySelector('[data-router-result]')?.getAttribute('data-recommended-worker') || '';
+      if (recommended) return recommended;
+      var plan = readJson('sm_adaptive_setup_plan');
+      if (plan.worker_id) return plan.worker_id;
+      return readJson(workerStateKey).template_id || '';
+    }
+    function findWorker(id) {
+      id = String(id || '');
+      for (var index = 0; index < catalog.length; index += 1) {
+        if (catalog[index].id === id) return catalog[index];
+      }
+      return null;
+    }
+    function ensureHidden(form, name) {
+      var field = form.querySelector('input[type="hidden"][name="' + name + '"]');
+      if (!field) {
+        field = document.createElement('input');
+        field.type = 'hidden';
+        field.name = name;
+        form.appendChild(field);
+      }
+      return field;
+    }
+    function buildPack() {
+      var worker = findWorker(selectedWorkerId());
+      if (!worker) {
+        return {
+          worker_id: '',
+          worker_name: 'Choose a worker',
+          required: [],
+          samples: [],
+          first_proof: '',
+          readiness: 'choose_worker_first',
+          summary: 'Choose a worker before sending sources.',
+          setup_url: '/agent-templates/',
+          contact_url: '/contact/?package=ai-workcell-pilot'
+        };
+      }
+      var required = (worker.setupInputs || []).slice(0, 5);
+      var samples = (worker.sampleSources || []).slice(0, 5);
+      return {
+        worker_id: worker.id,
+        worker_name: workerName(worker.id),
+        required: required,
+        samples: samples,
+        first_proof: worker.firstProof || '',
+        readiness: 'selected_worker_source_pack',
+        summary: required.join(', ') + ' | samples: ' + samples.join(', '),
+        setup_url: worker.setupUrl,
+        contact_url: worker.contactUrl,
+        generated_at: new Date().toISOString()
+      };
+    }
+    function savePack(pack) {
+      try {
+        if (window.localStorage) localStorage.setItem(storageKey, JSON.stringify(pack));
+      } catch (error) {}
+    }
+    function applyPackToForms(pack) {
+      document.querySelectorAll('form').forEach(function (form) {
+        ensureHidden(form, 'source_pack_required').value = (pack.required || []).join('; ');
+        ensureHidden(form, 'source_pack_samples').value = (pack.samples || []).join('; ');
+        ensureHidden(form, 'source_pack_first_proof').value = pack.first_proof || '';
+        ensureHidden(form, 'source_pack_readiness').value = pack.readiness || '';
+      });
+    }
+    function shouldShowPanel() {
+      return /^\\/(ai-agents|agent-templates|contact)(\\/|$)/.test(window.location.pathname);
+    }
+    function renderPack(track) {
+      var pack = buildPack();
+      savePack(pack);
+      applyPackToForms(pack);
+      if (!shouldShowPanel()) return pack;
+      var wrap = document.querySelector('.wrap');
+      var main = document.querySelector('main');
+      if (!wrap || !main) return pack;
+      var panel = document.querySelector('[data-adaptive-source-pack]');
+      if (!panel) {
+        panel = document.createElement('section');
+        panel.className = 'source-pack-panel';
+        panel.setAttribute('data-adaptive-source-pack', '');
+        panel.setAttribute('aria-label', 'Source pack checklist');
+        wrap.insertBefore(panel, main);
+      }
+      var samples = (pack.samples || []).slice(0, 4).map(function (item) { return '<li>' + safeText(item) + '</li>'; }).join('');
+      panel.innerHTML = [
+        '<div>',
+        '<div class="eyebrow">Source pack checklist</div>',
+        '<strong>' + safeText(pack.worker_name) + '</strong>',
+        '<p>Send the smallest approved source pack that can prove the first output. Do not send credentials, payment secrets, or private system access first.</p>',
+        '<ul>' + samples + '</ul>',
+        '<div class="role-mode-meta"><span>' + safeText(pack.readiness) + '</span><span>first proof</span><span>' + safeText(pack.first_proof || 'pending') + '</span></div>',
+        '</div>',
+        '<div class="source-pack-actions">',
+        '<a class="btn primary" data-sm-template-link="' + safeText(pack.worker_id) + '" href="' + safeText(pack.setup_url) + '">Use this checklist</a>',
+        '<a class="btn secondary" data-sm-template-link="' + safeText(pack.worker_id) + '" href="' + safeText(pack.contact_url) + '">Send request</a>',
+        '</div>'
+      ].join('');
+      if (track && window.supermegaTrackBehavior) {
+        window.supermegaTrackBehavior('cta_clicked', {
+          template_id: pack.worker_id,
+          requested_package: 'adaptive-source-pack',
+          component: 'adaptive_source_pack',
+          cta_text: pack.readiness
+        });
+      }
+      return pack;
+    }
+    function scheduleRender() {
+      window.clearTimeout(renderTimer);
+      renderTimer = window.setTimeout(function () { renderPack(false); }, 140);
+    }
+    window.supermegaAdaptiveSourcePack = renderPack;
+    document.addEventListener('submit', function () { renderPack(false); }, true);
+    document.addEventListener('click', function (event) {
+      if (event.target && event.target.closest && event.target.closest('[data-router-choice], [data-role-mode-choice], [data-sm-template-link]')) scheduleRender();
+    });
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', function () { renderPack(true); });
+    } else {
+      renderPack(true);
+    }
+  })();
+</script>`
 const publicAdaptiveWorkerRouterScript = `
 <script>
   (function () {
@@ -3109,7 +3298,7 @@ const publicAdaptiveWorkerRouterScript = `
     }
   })();
 </script>`
-const publicRuntimeScripts = `${publicLanguageToggleScript}${publicBehaviorEventsScript}${publicLocalWorkerAdaptationScript}${publicRoleModeScript}${publicDeviceModeScript}${publicAdaptiveSetupPlanScript}`
+const publicRuntimeScripts = `${publicLanguageToggleScript}${publicBehaviorEventsScript}${publicLocalWorkerAdaptationScript}${publicRoleModeScript}${publicDeviceModeScript}${publicAdaptiveSetupPlanScript}${publicAdaptiveSourcePackScript}`
 
 function unicornSocialMeta({ title, description, url }) {
   const t = String(title || '').replace(/"/g, '&quot;')
@@ -5470,6 +5659,17 @@ ${unicornHeader}
           </div>
         </section>
 
+        <section class="section sm-in" data-source-pack-guide>
+          <div class="eyebrow">Source pack checklist</div>
+          <h2>Send the smallest approved source pack.</h2>
+          <p style="color:var(--muted);max-width:66ch">Each worker shows the minimum inputs and sample sources needed for the first proof. The checklist is generated from the worker template and passes only source-pack requirements into the setup request.</p>
+          <div class="guide-rule-grid">
+            <div class="guide-rule"><strong>Minimum inputs</strong><span>Start with the smallest source set that can prove the promised output.</span></div>
+            <div class="guide-rule"><strong>No secrets first</strong><span>Do not send credentials, payment secrets, or live system access for the first proof.</span></div>
+            <div class="guide-rule"><strong>Proof before scale</strong><span>Expand to connectors, schedules, and production workflows only after the first output is accepted.</span></div>
+          </div>
+        </section>
+
         <section class="section sm-in">
           <div class="eyebrow">Connectors</div>
           <h2>Connector setup rules.</h2>
@@ -5610,6 +5810,10 @@ function buildAgentTemplateSetupHtml(kit) {
     ['adaptive_plan_summary', ''],
     ['adaptive_next_step', ''],
     ['adaptive_user_path', ''],
+    ['source_pack_required', ''],
+    ['source_pack_samples', ''],
+    ['source_pack_first_proof', ''],
+    ['source_pack_readiness', ''],
     ['management_owner', 'swanhtet@supermega.dev'],
     ['team', 'Owner or first operating team'],
     ['urgency', 'This week'],

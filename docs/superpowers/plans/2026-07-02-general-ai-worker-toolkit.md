@@ -189,3 +189,21 @@ Live result: `supermega.dev` and `www.supermega.dev` point to deployment `dpl_88
 - [x] Deploy to `supermega-public` and verify aliases, contact API, lead ledger, behavior monitoring, and browser usability.
 
 Live result: `supermega.dev` and `www.supermega.dev` point to deployment `dpl_AcTfWp2b1GfhBZPvbJ4wFXSHVGdi`, and the go-live gate passed with behavior DB `recent_7d_count: 880`.
+
+### Task 13: Add Adaptive Source-Pack Checklist
+
+**Files:**
+- Modify: `tools/create_public_vercel_output.mjs`
+- Modify: `tools/verify_public_vercel_output.mjs`
+- Modify: `tools/audit_public_usability.mjs`
+- Modify: `tools/public_deployment_lock.json`
+
+- [x] Add a browser-local source-pack checklist derived from the selected worker template.
+- [x] Store only catalog-derived source requirements, sample source names, first proof, readiness, and generated time, not user content, credentials, secrets, or uploaded files.
+- [x] Pass source-pack readiness into setup/contact forms as `source_pack_required`, `source_pack_samples`, `source_pack_first_proof`, and `source_pack_readiness`.
+- [x] Add AI Worker User Guide copy that tells users to send the smallest approved source pack and no secrets first.
+- [x] Add static verifier coverage for the public shell, guide, and setup hidden fields.
+- [x] Add desktop, tablet, and mobile browser audit coverage for source-pack panel rendering and setup hidden-field propagation.
+- [x] Deploy to `supermega-public` and verify aliases, contact API, lead ledger, behavior monitoring, and browser usability.
+
+Live result: `supermega.dev` and `www.supermega.dev` point to deployment `dpl_HWLgn4KyhXaFVADTyhAhuLfwj76i`, live aliases return HTTP 200, contact API is ready, lead ledger is configured, behavior monitoring is ready, and the behavior DB reports `recent_7d_count: 1299`.
