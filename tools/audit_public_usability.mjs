@@ -179,6 +179,24 @@ try {
     }))
     if (roleMode.stored !== 'technical_admin' || roleMode.pressed !== 'true' || !roleMode.text.includes('Using Technical admin mode') || !roleMode.text.includes('connector scope')) fail('role_mode_selection_missing', { viewport: viewport.name, roleMode })
     if (roleMode.overflowX > 0) fail('role_mode_selection_horizontal_overflow', { viewport: viewport.name, roleMode })
+    await page.waitForFunction(() => document.querySelector('[data-adaptive-setup-plan]')?.textContent.includes('Technical admin mode'), null, { timeout: 5000 })
+    const adaptivePlan = await page.evaluate(() => {
+      const stored = JSON.parse(window.localStorage.getItem('sm_adaptive_setup_plan') || '{}')
+      return {
+        visible: Boolean(document.querySelector('[data-adaptive-setup-plan]')?.getBoundingClientRect().height),
+        text: document.querySelector('[data-adaptive-setup-plan]')?.textContent || '',
+        storedWorker: stored.worker_id || '',
+        storedRole: stored.role_mode || '',
+        storedDevice: stored.device_mode || '',
+        storedNextStep: stored.next_step || '',
+        setupHref: document.querySelector('[data-adaptive-setup-plan] a[data-sm-template-link="daily-intelligence-brief"]')?.getAttribute('href') || '',
+        overflowX: Math.max(0, document.documentElement.scrollWidth - document.documentElement.clientWidth),
+      }
+    })
+    if (!adaptivePlan.visible || adaptivePlan.storedWorker !== 'daily-intelligence-brief' || adaptivePlan.storedRole !== 'technical_admin' || adaptivePlan.storedDevice !== expectedDevice.id || !adaptivePlan.text.includes('Adaptive setup plan') || !adaptivePlan.text.includes('Daily Intelligence Brief Agent') || !adaptivePlan.text.includes('Technical admin mode') || !adaptivePlan.text.includes(expectedDevice.label) || !adaptivePlan.storedNextStep.includes('connector scope') || adaptivePlan.setupHref !== '/agent-templates/daily-intelligence-brief/setup/') {
+      fail('adaptive_setup_plan_missing', { viewport: viewport.name, expectedDevice, adaptivePlan })
+    }
+    if (adaptivePlan.overflowX > 0) fail('adaptive_setup_plan_horizontal_overflow', { viewport: viewport.name, adaptivePlan })
     await page.locator('[data-worker-router]').scrollIntoViewIfNeeded()
     await expectCopy(
       page,
@@ -221,6 +239,7 @@ try {
       setupLinks: document.querySelectorAll('[data-guide-template] a[href$="/setup/"]').length,
       hasRoleGuide: document.body.textContent.includes('Role-aware onboarding') && document.body.textContent.includes('Technical admin mode'),
       hasDeviceGuide: Boolean(document.querySelector('[data-device-mode-guide]')) && document.body.textContent.includes('Phone mode') && document.body.textContent.includes('Tablet mode') && document.body.textContent.includes('Desktop mode'),
+      hasAdaptivePlanGuide: Boolean(document.querySelector('[data-adaptive-plan-guide]')) && document.body.textContent.includes('Adaptive setup plan') && document.body.textContent.includes('The next step changes with the user.'),
       hasSafetyCopy: document.body.textContent.includes('no external sends, writes, payments, or browser/mobile actions without owner approval'),
       hasNoPrivateTextCopy: document.body.textContent.includes('No keystrokes, source files, credentials, or private business text are tracked.'),
       overflowX: Math.max(0, document.documentElement.scrollWidth - document.documentElement.clientWidth),
@@ -230,6 +249,7 @@ try {
     if (guide.setupLinks !== expectedTemplates.length) fail('ai_worker_user_guide_setup_links_missing', { viewport: viewport.name, guide })
     if (!guide.hasRoleGuide) fail('ai_worker_user_guide_role_mode_missing', { viewport: viewport.name, guide })
     if (!guide.hasDeviceGuide) fail('ai_worker_user_guide_device_mode_missing', { viewport: viewport.name, guide })
+    if (!guide.hasAdaptivePlanGuide) fail('ai_worker_user_guide_adaptive_plan_missing', { viewport: viewport.name, guide })
     if (!guide.hasSafetyCopy || !guide.hasNoPrivateTextCopy) fail('ai_worker_user_guide_safety_copy_missing', { viewport: viewport.name, guide })
     if (guide.overflowX > 0) fail('ai_worker_user_guide_horizontal_overflow', { viewport: viewport.name, guide })
     await page.locator('[data-guide-template="deskpos-quickstart"]').scrollIntoViewIfNeeded()
@@ -263,6 +283,10 @@ try {
       userRoleLabel: document.querySelector('input[name="user_role_label"]')?.value || '',
       userDeviceMode: document.querySelector('input[name="user_device_mode"]')?.value || '',
       userDeviceLabel: document.querySelector('input[name="user_device_label"]')?.value || '',
+      adaptiveWorkerId: document.querySelector('input[name="adaptive_worker_id"]')?.value || '',
+      adaptivePlanSummary: document.querySelector('input[name="adaptive_plan_summary"]')?.value || '',
+      adaptiveNextStep: document.querySelector('input[name="adaptive_next_step"]')?.value || '',
+      adaptiveUserPath: document.querySelector('input[name="adaptive_user_path"]')?.value || '',
       firstProofTarget: document.querySelector('input[name="first_proof_target"]')?.value || '',
       intakeJobMode: document.querySelector('input[name="intake_job_mode"]')?.value || '',
       kickoffPackMode: document.querySelector('input[name="kickoff_pack_mode"]')?.value || '',
@@ -276,6 +300,7 @@ try {
     if (setup.starterKitUrl !== '/site/agent-templates/daily-intelligence-brief.json') fail('setup_starter_kit_url_missing', { viewport: viewport.name, setup })
     if (setup.userRoleMode !== 'technical_admin' || setup.userRoleLabel !== 'Technical admin') fail('setup_role_mode_hidden_missing', { viewport: viewport.name, setup })
     if (setup.userDeviceMode !== expectedDevice.id || setup.userDeviceLabel !== expectedDevice.label) fail('setup_device_mode_hidden_missing', { viewport: viewport.name, expectedDevice, setup })
+    if (setup.adaptiveWorkerId !== 'daily-intelligence-brief' || !setup.adaptivePlanSummary.includes('Daily Intelligence Brief Agent') || !setup.adaptivePlanSummary.includes(expectedDevice.label) || !setup.adaptiveNextStep.includes('connector scope') || setup.adaptiveUserPath !== '/agent-templates/daily-intelligence-brief/setup/') fail('setup_adaptive_plan_hidden_missing', { viewport: viewport.name, expectedDevice, setup })
     if (!setup.firstProofTarget.includes('One-page morning brief')) fail('setup_first_proof_missing', { viewport: viewport.name, setup })
     if (setup.intakeJobMode !== 'intake_to_first_proof') fail('setup_intake_job_mode_missing', { viewport: viewport.name, setup })
     if (setup.kickoffPackMode !== 'client_kickoff_pack') fail('setup_kickoff_pack_mode_missing', { viewport: viewport.name, setup })

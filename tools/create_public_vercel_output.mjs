@@ -1742,6 +1742,11 @@ const unicornShellStyle = `
       .device-mode-panel strong { display: block; margin-top: 5px; font-size: clamp(20px,2.1vw,27px); line-height: 1.08; letter-spacing: -0.035em; }
       .device-mode-panel p { margin-top: 6px; max-width: 66ch; font-size: 14px; line-height: 1.42; }
       .device-mode-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+      .adaptive-plan-panel { display: grid; grid-template-columns: minmax(0,1fr) minmax(230px,.62fr); gap: 16px; align-items: center; margin: 8px 0 20px; border: 1px solid rgba(13,148,136,0.26); border-radius: 24px; padding: 16px; background: rgba(255,255,255,0.64); box-shadow: 0 16px 48px rgba(42,36,28,0.07); }
+      .adaptive-plan-panel[hidden] { display: none !important; }
+      .adaptive-plan-panel strong { display: block; margin-top: 5px; font-size: clamp(20px,2.1vw,27px); line-height: 1.08; letter-spacing: -0.035em; }
+      .adaptive-plan-panel p { margin-top: 6px; max-width: 66ch; font-size: 14px; line-height: 1.42; }
+      .adaptive-plan-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
       .final { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 20px; align-items: center; border: 1px solid rgba(255,255,255,0.76); border-radius: 36px; padding: clamp(24px, 5vw, 48px); background: rgba(255,255,255,0.62); box-shadow: var(--shadow); backdrop-filter: blur(22px); }
       footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 24px 0 32px; color: var(--muted); font-weight: 800; }
       footer .footer-links { display: flex; flex-wrap: wrap; gap: 10px; }
@@ -1761,7 +1766,7 @@ const unicornShellStyle = `
         .brand-text strong, .brand-text small, .nav .optional-nav { display: none; }
         .nav { flex: 0 0 auto; gap: 6px; }
         .btn, button { min-height: 42px; padding: 0 12px; }
-        .poster, .split, .product-library-head, .output, .proof-system, .proof-board, .workcell-grid, .local-worker-continue, .role-mode-panel, .device-mode-panel, .final { grid-template-columns: 1fr; }
+        .poster, .split, .product-library-head, .output, .proof-system, .proof-board, .workcell-grid, .local-worker-continue, .role-mode-panel, .device-mode-panel, .adaptive-plan-panel, .final { grid-template-columns: 1fr; }
         .poster { min-height: auto; gap: 18px; padding: 20px 0 38px; }
         .eyebrow { font-size: 11px; letter-spacing: 0.18em; }
         h1 { max-width: 11ch; font-size: clamp(44px, 12vw, 60px); line-height: 0.98; letter-spacing: -0.065em; }
@@ -1836,6 +1841,8 @@ const unicornShellStyle = `
         .role-mode-choice { flex: 1 1 auto; }
         .device-mode-actions { justify-content: stretch; }
         .device-mode-actions .btn { flex: 1 1 auto; }
+        .adaptive-plan-actions { justify-content: stretch; }
+        .adaptive-plan-actions .btn { flex: 1 1 auto; }
       }
 
       :root { --gilt: #C9A24B; }
@@ -1862,7 +1869,7 @@ const unicornShellStyle = `
       :root[data-theme="dark"] body::before { background-image: linear-gradient(rgba(243,239,230,0.045) 1px, transparent 1px), linear-gradient(90deg, rgba(243,239,230,0.045) 1px, transparent 1px); }
       :root[data-theme="dark"] .btn, :root[data-theme="dark"] button { background: rgba(243,239,230,0.06); }
       :root[data-theme="dark"] .btn.primary, :root[data-theme="dark"] button { color: #fff; background: linear-gradient(135deg, #cc6e48, #d97757); box-shadow: 0 18px 40px rgba(217, 119, 87, 0.28); }
-      :root[data-theme="dark"] .output, :root[data-theme="dark"] .feature, :root[data-theme="dark"] .proof-card, :root[data-theme="dark"] .case, :root[data-theme="dark"] .proof-system, :root[data-theme="dark"] .workcell-panel, :root[data-theme="dark"] .workcell-step, :root[data-theme="dark"] .local-worker-continue, :root[data-theme="dark"] .role-mode-panel, :root[data-theme="dark"] .device-mode-panel, :root[data-theme="dark"] .final, :root[data-theme="dark"] .home-shot-card, :root[data-theme="dark"] .browser, :root[data-theme="dark"] .proof, :root[data-theme="dark"] .upgrade-card, :root[data-theme="dark"] .shell-card, :root[data-theme="dark"] .setup-card, :root[data-theme="dark"] .market-card, :root[data-theme="dark"] form, :root[data-theme="dark"] .feature-pills span, :root[data-theme="dark"] .chip, :root[data-theme="dark"] .metric, :root[data-theme="dark"] .proof-step, :root[data-theme="dark"] footer .footer-links a {
+      :root[data-theme="dark"] .output, :root[data-theme="dark"] .feature, :root[data-theme="dark"] .proof-card, :root[data-theme="dark"] .case, :root[data-theme="dark"] .proof-system, :root[data-theme="dark"] .workcell-panel, :root[data-theme="dark"] .workcell-step, :root[data-theme="dark"] .local-worker-continue, :root[data-theme="dark"] .role-mode-panel, :root[data-theme="dark"] .device-mode-panel, :root[data-theme="dark"] .adaptive-plan-panel, :root[data-theme="dark"] .final, :root[data-theme="dark"] .home-shot-card, :root[data-theme="dark"] .browser, :root[data-theme="dark"] .proof, :root[data-theme="dark"] .upgrade-card, :root[data-theme="dark"] .shell-card, :root[data-theme="dark"] .setup-card, :root[data-theme="dark"] .market-card, :root[data-theme="dark"] form, :root[data-theme="dark"] .feature-pills span, :root[data-theme="dark"] .chip, :root[data-theme="dark"] .metric, :root[data-theme="dark"] .proof-step, :root[data-theme="dark"] footer .footer-links a {
         background: rgba(243,239,230,0.05); border-color: rgba(243,239,230,0.12);
       }
       :root[data-theme="dark"] .product-carousel, :root[data-theme="dark"] .product-shot-card, :root[data-theme="dark"] .product-shot-card .shot-open, :root[data-theme="dark"] .output > img { background: #201c17; }
@@ -2786,6 +2793,198 @@ const publicDeviceModeScript = `
     }
   })();
 </script>`
+const publicAdaptiveSetupPlanScript = `
+<script>
+  (function () {
+    var catalog = ${workerContinueCatalogJson()};
+    var storageKey = 'sm_adaptive_setup_plan';
+    var workerStateKey = 'sm_worker_continue_state';
+    var roleKey = 'sm_worker_role_mode';
+    var params = new URLSearchParams(window.location.search || '');
+    var renderTimer = null;
+    function safeText(value) {
+      return String(value || '').replace(/[&<>"']/g, function (char) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char];
+      });
+    }
+    function setupTemplateId() {
+      var match = window.location.pathname.match(/\\/agent-templates\\/([^/]+)\\/setup\\/?/);
+      return match ? decodeURIComponent(match[1]) : '';
+    }
+    function workerName(id) {
+      if (id === 'daily-intelligence-brief') return 'Daily Intelligence Brief Agent';
+      if (id === 'deskpos-quickstart') return 'DeskPOS Quickstart';
+      return String(id || '')
+        .split('-')
+        .filter(Boolean)
+        .map(function (part) { return part.charAt(0).toUpperCase() + part.slice(1); })
+        .join(' ')
+        .replace(/\\bCrm\\b/g, 'CRM')
+        .replace(/\\bPdf\\b/g, 'PDF')
+        .replace(/\\bPos\\b/g, 'POS')
+        .replace(/\\bSow\\b/g, 'SOW');
+    }
+    function findWorker(id) {
+      id = String(id || '');
+      for (var index = 0; index < catalog.length; index += 1) {
+        if (catalog[index].id === id) return catalog[index];
+      }
+      return null;
+    }
+    function readJson(key) {
+      try {
+        var stored = window.localStorage && localStorage.getItem(key);
+        return stored ? JSON.parse(stored) : {};
+      } catch (error) {
+        return {};
+      }
+    }
+    function readStored(key) {
+      try {
+        return window.localStorage ? localStorage.getItem(key) || '' : '';
+      } catch (error) {
+        return '';
+      }
+    }
+    function selectedWorkerId() {
+      var fromPath = setupTemplateId() || params.get('template') || params.get('agent_template') || '';
+      if (fromPath) return fromPath;
+      var recommended = document.querySelector('[data-router-result]')?.getAttribute('data-recommended-worker') || '';
+      if (recommended) return recommended;
+      return readJson(workerStateKey).template_id || '';
+    }
+    function roleLabel(role) {
+      if (role === 'owner') return 'Owner mode';
+      if (role === 'technical_admin') return 'Technical admin mode';
+      if (role === 'operator') return 'Work reviewer mode';
+      return 'Role not selected';
+    }
+    function roleStep(role) {
+      if (role === 'owner') return 'Approve first proof target, payment route, and first production-run boundary.';
+      if (role === 'technical_admin') return 'Confirm connector scope, permissions, vaulting, logs, and rollback boundary.';
+      if (role === 'operator') return 'Collect source samples, review missing fields, and report daily workflow gaps.';
+      return 'Choose a role mode so the setup request routes to the right checklist.';
+    }
+    function deviceStep(device) {
+      if (device === 'phone') return 'Use phone for quick approval and screenshot capture.';
+      if (device === 'tablet') return 'Use tablet for review queues, floor checks, and handoff.';
+      if (device === 'desktop') return 'Use desktop for source review, setup forms, proof packets, and dashboards.';
+      return 'Use the current screen for the first safe next step.';
+    }
+    function deviceMode() {
+      if (window.supermegaDetectDeviceMode) {
+        var detected = window.supermegaDetectDeviceMode();
+        if (detected && detected.id) return detected;
+      }
+      return { id: readStored('sm_worker_device_mode'), label: '' };
+    }
+    function ensureHidden(form, name) {
+      var field = form.querySelector('input[type="hidden"][name="' + name + '"]');
+      if (!field) {
+        field = document.createElement('input');
+        field.type = 'hidden';
+        field.name = name;
+        form.appendChild(field);
+      }
+      return field;
+    }
+    function buildPlan() {
+      var worker = findWorker(selectedWorkerId());
+      var role = readStored(roleKey);
+      var device = deviceMode();
+      var nextStep = [roleStep(role), deviceStep(device.id)].join(' ');
+      var summary = [
+        worker ? workerName(worker.id) : 'No worker selected',
+        roleLabel(role),
+        device && device.label ? device.label : device.id || 'Device not detected'
+      ].join(' | ');
+      return {
+        worker_id: worker ? worker.id : '',
+        setup_url: worker ? worker.setupUrl : '/agent-templates/',
+        contact_url: worker ? worker.contactUrl : '/contact/?package=ai-workcell-pilot',
+        worker_name: worker ? workerName(worker.id) : 'Choose a worker',
+        role_mode: role,
+        role_label: roleLabel(role),
+        device_mode: device && device.id ? device.id : '',
+        device_label: device && device.label ? device.label : '',
+        next_step: nextStep,
+        summary: summary,
+        generated_at: new Date().toISOString(),
+        page_path: window.location.pathname
+      };
+    }
+    function savePlan(plan) {
+      try {
+        if (window.localStorage) localStorage.setItem(storageKey, JSON.stringify(plan));
+      } catch (error) {}
+    }
+    function applyPlanToForms(plan) {
+      document.querySelectorAll('form').forEach(function (form) {
+        ensureHidden(form, 'adaptive_worker_id').value = plan.worker_id || '';
+        ensureHidden(form, 'adaptive_plan_summary').value = plan.summary || '';
+        ensureHidden(form, 'adaptive_next_step').value = plan.next_step || '';
+        ensureHidden(form, 'adaptive_user_path').value = plan.page_path || '';
+      });
+    }
+    function shouldShowPanel() {
+      return /^\\/(ai-agents|agent-templates|contact)(\\/|$)/.test(window.location.pathname);
+    }
+    function renderPlan(track) {
+      var plan = buildPlan();
+      savePlan(plan);
+      applyPlanToForms(plan);
+      if (!shouldShowPanel()) return plan;
+      var wrap = document.querySelector('.wrap');
+      var main = document.querySelector('main');
+      if (!wrap || !main) return plan;
+      var panel = document.querySelector('[data-adaptive-setup-plan]');
+      if (!panel) {
+        panel = document.createElement('section');
+        panel.className = 'adaptive-plan-panel';
+        panel.setAttribute('data-adaptive-setup-plan', '');
+        panel.setAttribute('aria-label', 'Adaptive setup plan');
+        wrap.insertBefore(panel, main);
+      }
+      panel.innerHTML = [
+        '<div>',
+        '<div class="eyebrow">Adaptive setup plan</div>',
+        '<strong>' + safeText(plan.worker_name) + '</strong>',
+        '<p>' + safeText(plan.next_step) + '</p>',
+        '<div class="role-mode-meta"><span>' + safeText(plan.role_label) + '</span><span>' + safeText(plan.device_label || plan.device_mode || 'device pending') + '</span><span>first proof before production</span></div>',
+        '</div>',
+        '<div class="adaptive-plan-actions">',
+        '<a class="btn primary" data-sm-template-link="' + safeText(plan.worker_id) + '" href="' + safeText(plan.setup_url) + '">Open setup</a>',
+        '<a class="btn secondary" data-sm-template-link="' + safeText(plan.worker_id) + '" href="' + safeText(plan.contact_url) + '">Send request</a>',
+        '<a class="btn secondary" href="/ai-agents/guide/">User guide</a>',
+        '</div>'
+      ].join('');
+      if (track && window.supermegaTrackBehavior) {
+        window.supermegaTrackBehavior('cta_clicked', {
+          template_id: plan.worker_id,
+          requested_package: 'adaptive-setup-plan',
+          component: 'adaptive_setup_plan',
+          cta_text: plan.role_mode + ' ' + plan.device_mode
+        });
+      }
+      return plan;
+    }
+    function scheduleRender() {
+      window.clearTimeout(renderTimer);
+      renderTimer = window.setTimeout(function () { renderPlan(false); }, 140);
+    }
+    window.supermegaAdaptiveSetupPlan = renderPlan;
+    document.addEventListener('submit', function () { renderPlan(false); }, true);
+    document.addEventListener('click', function (event) {
+      if (event.target && event.target.closest && event.target.closest('[data-role-mode-choice], [data-router-choice]')) scheduleRender();
+    });
+    window.addEventListener('resize', scheduleRender);
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', function () { renderPlan(true); });
+    } else {
+      renderPlan(true);
+    }
+  })();
+</script>`
 const publicAdaptiveWorkerRouterScript = `
 <script>
   (function () {
@@ -2910,7 +3109,7 @@ const publicAdaptiveWorkerRouterScript = `
     }
   })();
 </script>`
-const publicRuntimeScripts = `${publicLanguageToggleScript}${publicBehaviorEventsScript}${publicLocalWorkerAdaptationScript}${publicRoleModeScript}${publicDeviceModeScript}`
+const publicRuntimeScripts = `${publicLanguageToggleScript}${publicBehaviorEventsScript}${publicLocalWorkerAdaptationScript}${publicRoleModeScript}${publicDeviceModeScript}${publicAdaptiveSetupPlanScript}`
 
 function unicornSocialMeta({ title, description, url }) {
   const t = String(title || '').replace(/"/g, '&quot;')
@@ -5260,6 +5459,17 @@ ${unicornHeader}
           </div>
         </section>
 
+        <section class="section sm-in" data-adaptive-plan-guide>
+          <div class="eyebrow">Adaptive setup plan</div>
+          <h2>The next step changes with the user.</h2>
+          <p style="color:var(--muted);max-width:66ch">The public flow combines selected worker, role mode, and device mode into a first-proof plan before the request is sent. It passes only routing hints into forms: worker ID, plan summary, next step, and page path.</p>
+          <div class="guide-rule-grid">
+            <div class="guide-rule"><strong>Worker signal</strong><span>Selected setup kit or remembered worker decides which first-proof checklist should open.</span></div>
+            <div class="guide-rule"><strong>Role signal</strong><span>Owner, work reviewer, or technical admin mode changes approval, source, and connector tasks.</span></div>
+            <div class="guide-rule"><strong>Device signal</strong><span>Phone, tablet, and desktop users get different next actions without tracking private business text.</span></div>
+          </div>
+        </section>
+
         <section class="section sm-in">
           <div class="eyebrow">Connectors</div>
           <h2>Connector setup rules.</h2>
@@ -5396,6 +5606,10 @@ function buildAgentTemplateSetupHtml(kit) {
     ['user_role_label', ''],
     ['user_device_mode', ''],
     ['user_device_label', ''],
+    ['adaptive_worker_id', ''],
+    ['adaptive_plan_summary', ''],
+    ['adaptive_next_step', ''],
+    ['adaptive_user_path', ''],
     ['management_owner', 'swanhtet@supermega.dev'],
     ['team', 'Owner or first operating team'],
     ['urgency', 'This week'],

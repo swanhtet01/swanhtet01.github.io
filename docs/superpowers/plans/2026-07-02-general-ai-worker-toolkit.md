@@ -171,3 +171,21 @@ Live result: `supermega.dev` and `www.supermega.dev` point to deployment `dpl_B1
 - [x] Deploy to `supermega-public` and verify aliases, contact API, lead ledger, behavior monitoring, and browser usability.
 
 Live result: `supermega.dev` and `www.supermega.dev` point to deployment `dpl_88pWKTaMpxhbQpkNeDzhoNMhtYJd`, and the go-live gate passed with behavior DB `recent_7d_count: 705`.
+
+### Task 12: Add Adaptive Setup Plan
+
+**Files:**
+- Modify: `tools/create_public_vercel_output.mjs`
+- Modify: `tools/verify_public_vercel_output.mjs`
+- Modify: `tools/audit_public_usability.mjs`
+- Modify: `tools/public_deployment_lock.json`
+
+- [x] Add a browser-local Adaptive Setup Plan that combines selected worker, role mode, and device mode into the next first-proof step.
+- [x] Store only coarse routing data: worker ID, role mode, device mode, next step, page path, and generated time.
+- [x] Pass the plan into setup/contact forms as `adaptive_worker_id`, `adaptive_plan_summary`, `adaptive_next_step`, and `adaptive_user_path`.
+- [x] Add AI Worker User Guide copy explaining how the plan adapts without private source text.
+- [x] Add static verifier coverage for the public shell, guide, and setup hidden fields.
+- [x] Add browser audit coverage for desktop, tablet, and mobile plan rendering plus setup hidden-field propagation.
+- [x] Deploy to `supermega-public` and verify aliases, contact API, lead ledger, behavior monitoring, and browser usability.
+
+Live result: `supermega.dev` and `www.supermega.dev` point to deployment `dpl_AcTfWp2b1GfhBZPvbJ4wFXSHVGdi`, and the go-live gate passed with behavior DB `recent_7d_count: 880`.

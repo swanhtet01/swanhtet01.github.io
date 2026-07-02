@@ -743,6 +743,11 @@ for (const token of [
   'Device-aware onboarding',
   'supermegaDetectDeviceMode',
   'user_device_mode',
+  'sm_adaptive_setup_plan',
+  'data-adaptive-setup-plan',
+  'Adaptive setup plan',
+  'supermegaAdaptiveSetupPlan',
+  'adaptive_plan_summary',
 ]) {
   if (!homeHtml.includes(token)) fail('public_shell_contract_missing', { token })
 }
@@ -779,12 +784,15 @@ for (const token of [
   'data-ai-worker-user-guide',
   'data-role-mode-guide',
   'data-device-mode-guide',
+  'data-adaptive-plan-guide',
   'Owner mode',
   'Operator mode',
   'Technical admin mode',
   'Phone mode',
   'Tablet mode',
   'Desktop mode',
+  'The next step changes with the user.',
+  'worker ID, plan summary, next step, and page path',
 ]) {
   if (!aiWorkerGuideHtml.includes(token)) fail('public_ai_worker_user_guide_contract_missing', { token })
 }
@@ -1115,6 +1123,10 @@ for (const [id, name] of publicAgentTemplateContract) {
     'name="user_role_label"',
     'name="user_device_mode"',
     'name="user_device_label"',
+    'name="adaptive_worker_id"',
+    'name="adaptive_plan_summary"',
+    'name="adaptive_next_step"',
+    'name="adaptive_user_path"',
     'name="first_proof_target"',
     'name="acceptance_tests"',
     'name="intake_job_mode" value="intake_to_first_proof"',
