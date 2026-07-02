@@ -14,6 +14,8 @@ const allowedEventTypes = new Set([
   'setup_started',
   'lead_form_submitted',
 ])
+const allowedRoleModes = new Set(['owner', 'operator', 'technical_admin'])
+const allowedDeviceModes = new Set(['phone', 'tablet', 'desktop'])
 
 const sellableToolProfiles = {
   'deskpos-quickstart': {
@@ -110,6 +112,11 @@ function text(value) {
 function truncate(value, maxLength) {
   const normalized = text(value)
   return normalized.length > maxLength ? `${normalized.slice(0, maxLength - 3)}...` : normalized
+}
+
+function safeEnum(value, allowedValues) {
+  const normalized = text(value).toLowerCase()
+  return allowedValues.has(normalized) ? normalized : ''
 }
 
 function envText(...names) {
@@ -220,6 +227,8 @@ function countValue(result) {
 }
 
 function buildBehaviorRecord({ payload, req }) {
+  const userRoleMode = safeEnum(payload.user_role_mode, allowedRoleModes)
+  const userDeviceMode = safeEnum(payload.user_device_mode, allowedDeviceModes)
   return {
     event_id: `BEHAV-${crypto.randomBytes(6).toString('hex').toUpperCase()}`,
     event_type: truncate(payload.event_type, 80),
@@ -243,6 +252,10 @@ function buildBehaviorRecord({ payload, req }) {
       privacy: 'coarse_first_party_event_no_keystrokes_no_source_files_no_credentials',
       has_template_id: Boolean(text(payload.template_id)),
       has_campaign: Boolean(text(payload.utm_campaign)),
+      user_role_mode: userRoleMode,
+      user_device_mode: userDeviceMode,
+      has_role_mode: Boolean(userRoleMode),
+      has_device_mode: Boolean(userDeviceMode),
     },
   }
 }
@@ -373,6 +386,7 @@ function behaviorSummaryDegraded(reason, detail = {}) {
         owner_gate: 'operator_only_no_public_signal_leak',
       }],
       sellable_tool_recommendations: buildSellableToolRecommendations([], []),
+      user_adaptation_segments: buildUserAdaptationSegments([]),
       privacy: 'operator_summary_no_ip_user_agent_or_raw_payloads',
       ...detail,
     },
@@ -500,6 +514,65 @@ function buildSellableToolRecommendations(topTemplates, eventCounts) {
   })
 }
 
+function buildUserAdaptationSegments(segmentRows) {
+  if (!segmentRows.length) {
+    return [{
+      priority: 'medium',
+      user_device_mode: 'device_unknown',
+      user_role_mode: 'role_unknown',
+      visitor_stage: 'needs_behavior_signal',
+      event_count: 0,
+      recommended_ui_adaptation: 'Keep the AI Worker Matcher, free first-proof setup, and contact path visible until enough role/device behavior exists.',
+      recommended_sales_adaptation: 'Drive one buyer segment to /ai-agents/ and one setup kit, then compare device and role behavior in this private board.',
+      privacy_gate: 'aggregate_role_device_only_no_keystrokes_or_source_content',
+    }]
+  }
+
+  return segmentRows.slice(0, 6).map((row) => {
+    const device = text(row.user_device_mode || 'device_unknown')
+    const role = text(row.user_role_mode || 'role_unknown')
+    const eventCount = Number(row.count || 0)
+    const setupStarts = Number(row.setup_starts || 0)
+    const leadSubmits = Number(row.lead_form_submits || 0)
+    const templateClicks = Number(row.template_clicks || 0)
+    const visitorStage =
+      leadSubmits > 0
+        ? 'lead_handoff_ready'
+        : setupStarts > 0
+          ? 'proof_setup_started'
+          : templateClicks > 0
+            ? 'worker_discovery'
+            : 'site_orientation'
+    const priority = leadSubmits > 0 ? 'critical' : setupStarts > 0 ? 'high' : 'medium'
+    const uiByDevice = {
+      phone: 'Keep one recommended worker, one source-pack ask, and one tap-to-contact CTA above the fold.',
+      tablet: 'Show the worker comparison, source-pack checklist, and proof-plan milestones side by side without dense operator text.',
+      desktop: 'Expose the full matcher, setup kit, proof plan, and operator-grade source trace because desktop users can review more detail.',
+      device_unknown: 'Keep the default responsive path simple until more device evidence is available.',
+    }
+    const roleByMode = {
+      owner: 'Lead with value proof, payment-proof gate, and owner approval before production.',
+      operator: 'Lead with checklist, daily workflow steps, and fewer missed tasks.',
+      technical_admin: 'Lead with connector scope, permissions, audit log, vaulting, and rollback boundary.',
+      role_unknown: 'Keep the role picker visible and ask the visitor to choose owner, operator, or technical admin mode.',
+    }
+
+    return {
+      priority,
+      user_device_mode: device,
+      user_role_mode: role,
+      visitor_stage: visitorStage,
+      event_count: eventCount,
+      setup_starts: setupStarts,
+      template_clicks: templateClicks,
+      lead_form_submits: leadSubmits,
+      recommended_ui_adaptation: uiByDevice[device] || uiByDevice.device_unknown,
+      recommended_sales_adaptation: roleByMode[role] || roleByMode.role_unknown,
+      privacy_gate: 'aggregate_role_device_only_no_keystrokes_or_source_content',
+    }
+  })
+}
+
 async function behaviorSummary() {
   if (!datastore.postgresConfigured()) return behaviorSummaryDegraded('postgres_not_configured')
 
@@ -538,6 +611,40 @@ async function behaviorSummary() {
     ),
     datastore.query(
       `
+        with segmented as (
+          select
+            coalesce(
+              nullif(raw->>'user_device_mode', ''),
+              case
+                when lower(coalesce(user_agent, '')) like '%ipad%' or lower(coalesce(user_agent, '')) like '%tablet%' then 'tablet'
+                when lower(coalesce(user_agent, '')) like '%mobi%' or lower(coalesce(user_agent, '')) like '%iphone%' or lower(coalesce(user_agent, '')) like '%android%' then 'phone'
+                when nullif(user_agent, '') is null then 'device_unknown'
+                else 'desktop'
+              end
+            ) as user_device_mode,
+            coalesce(nullif(raw->>'user_role_mode', ''), 'role_unknown') as user_role_mode,
+            event_type,
+            recorded_at
+          from public.supermega_behavior_events
+          where recorded_at >= $1::timestamptz
+        )
+        select
+          user_device_mode,
+          user_role_mode,
+          count(*)::int as count,
+          count(*) filter (where event_type = 'setup_started')::int as setup_starts,
+          count(*) filter (where event_type = 'template_clicked')::int as template_clicks,
+          count(*) filter (where event_type = 'lead_form_submitted')::int as lead_form_submits,
+          max(recorded_at) as last_recorded_at
+        from segmented
+        group by user_device_mode, user_role_mode
+        order by count desc, last_recorded_at desc
+        limit 8
+      `,
+      [since7d],
+    ),
+    datastore.query(
+      `
         select event_id, event_type, page_path, template_id, requested_package,
           component, cta_text, utm_campaign, recorded_at
         from public.supermega_behavior_events
@@ -556,6 +663,7 @@ async function behaviorSummary() {
 
   const eventCounts = checks[2].rows || []
   const topTemplates = checks[3].rows || []
+  const userSegments = checks[4].rows || []
   return {
     status: 'ready',
     endpoint: 'behavior-events',
@@ -569,9 +677,10 @@ async function behaviorSummary() {
       events_7d: countValue(checks[1]),
       event_counts: eventCounts,
       top_templates: topTemplates,
-      recent_events: checks[4].rows || [],
+      recent_events: checks[5].rows || [],
       adaptation_queue: buildAdaptationQueue(topTemplates, eventCounts),
       sellable_tool_recommendations: buildSellableToolRecommendations(topTemplates, eventCounts),
+      user_adaptation_segments: buildUserAdaptationSegments(userSegments),
       privacy: 'operator_summary_no_ip_user_agent_or_raw_payloads',
     },
   }

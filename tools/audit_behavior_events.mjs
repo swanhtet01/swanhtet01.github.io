@@ -152,6 +152,11 @@ for (const token of [
   'free_core_tool',
   'premium_upgrade',
   'proof_metric',
+  'buildUserAdaptationSegments',
+  'user_adaptation_segments',
+  'user_role_mode',
+  'user_device_mode',
+  'aggregate_role_device_only_no_keystrokes_or_source_content',
   'requireOpsAuth',
   'operator_summary_no_ip_user_agent_or_raw_payloads',
 ]) {
