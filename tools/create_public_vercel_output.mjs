@@ -1811,6 +1811,12 @@ const unicornShellStyle = `
       .value-plan-panel p { margin-top: 6px; max-width: 66ch; font-size: 14px; line-height: 1.42; }
       .value-plan-panel ul { display: grid; gap: 6px; margin: 10px 0 0; padding-left: 18px; color: var(--muted); font-size: 13px; font-weight: 780; line-height: 1.35; }
       .value-plan-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+      .pilot-plan-panel { display: grid; grid-template-columns: minmax(0,1fr) minmax(250px,.66fr); gap: 16px; align-items: center; margin: 8px 0 20px; border: 1px solid rgba(201,162,75,0.34); border-radius: 24px; padding: 16px; background: rgba(255,255,255,0.68); box-shadow: 0 16px 48px rgba(42,36,28,0.07); }
+      .pilot-plan-panel[hidden] { display: none !important; }
+      .pilot-plan-panel strong { display: block; margin-top: 5px; font-size: clamp(20px,2.1vw,27px); line-height: 1.08; letter-spacing: -0.035em; }
+      .pilot-plan-panel p { margin-top: 6px; max-width: 66ch; font-size: 14px; line-height: 1.42; }
+      .pilot-plan-panel ol { display: grid; gap: 6px; margin: 10px 0 0; padding-left: 18px; color: var(--muted); font-size: 13px; font-weight: 780; line-height: 1.35; }
+      .pilot-plan-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
       .final { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 20px; align-items: center; border: 1px solid rgba(255,255,255,0.76); border-radius: 36px; padding: clamp(24px, 5vw, 48px); background: rgba(255,255,255,0.62); box-shadow: var(--shadow); backdrop-filter: blur(22px); }
       footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 24px 0 32px; color: var(--muted); font-weight: 800; }
       footer .footer-links { display: flex; flex-wrap: wrap; gap: 10px; }
@@ -1830,7 +1836,7 @@ const unicornShellStyle = `
         .brand-text strong, .brand-text small, .nav .optional-nav { display: none; }
         .nav { flex: 0 0 auto; gap: 6px; }
         .btn, button { min-height: 42px; padding: 0 12px; }
-        .poster, .split, .product-library-head, .output, .proof-system, .proof-board, .workcell-grid, .local-worker-continue, .role-mode-panel, .device-mode-panel, .adaptive-plan-panel, .source-pack-panel, .proof-plan-panel, .value-plan-panel, .final { grid-template-columns: 1fr; }
+        .poster, .split, .product-library-head, .output, .proof-system, .proof-board, .workcell-grid, .local-worker-continue, .role-mode-panel, .device-mode-panel, .adaptive-plan-panel, .source-pack-panel, .proof-plan-panel, .value-plan-panel, .pilot-plan-panel, .final { grid-template-columns: 1fr; }
         .poster { min-height: auto; gap: 18px; padding: 20px 0 38px; }
         .eyebrow { font-size: 11px; letter-spacing: 0.18em; }
         h1 { max-width: 11ch; font-size: clamp(44px, 12vw, 60px); line-height: 0.98; letter-spacing: -0.065em; }
@@ -1937,7 +1943,7 @@ const unicornShellStyle = `
       :root[data-theme="dark"] body::before { background-image: linear-gradient(rgba(243,239,230,0.045) 1px, transparent 1px), linear-gradient(90deg, rgba(243,239,230,0.045) 1px, transparent 1px); }
       :root[data-theme="dark"] .btn, :root[data-theme="dark"] button { background: rgba(243,239,230,0.06); }
       :root[data-theme="dark"] .btn.primary, :root[data-theme="dark"] button { color: #fff; background: linear-gradient(135deg, #cc6e48, #d97757); box-shadow: 0 18px 40px rgba(217, 119, 87, 0.28); }
-      :root[data-theme="dark"] .output, :root[data-theme="dark"] .feature, :root[data-theme="dark"] .proof-card, :root[data-theme="dark"] .case, :root[data-theme="dark"] .proof-system, :root[data-theme="dark"] .workcell-panel, :root[data-theme="dark"] .workcell-step, :root[data-theme="dark"] .local-worker-continue, :root[data-theme="dark"] .role-mode-panel, :root[data-theme="dark"] .device-mode-panel, :root[data-theme="dark"] .adaptive-plan-panel, :root[data-theme="dark"] .source-pack-panel, :root[data-theme="dark"] .proof-plan-panel, :root[data-theme="dark"] .value-plan-panel, :root[data-theme="dark"] .final, :root[data-theme="dark"] .home-shot-card, :root[data-theme="dark"] .browser, :root[data-theme="dark"] .proof, :root[data-theme="dark"] .upgrade-card, :root[data-theme="dark"] .shell-card, :root[data-theme="dark"] .setup-card, :root[data-theme="dark"] .market-card, :root[data-theme="dark"] form, :root[data-theme="dark"] .feature-pills span, :root[data-theme="dark"] .chip, :root[data-theme="dark"] .metric, :root[data-theme="dark"] .proof-step, :root[data-theme="dark"] footer .footer-links a {
+      :root[data-theme="dark"] .output, :root[data-theme="dark"] .feature, :root[data-theme="dark"] .proof-card, :root[data-theme="dark"] .case, :root[data-theme="dark"] .proof-system, :root[data-theme="dark"] .workcell-panel, :root[data-theme="dark"] .workcell-step, :root[data-theme="dark"] .local-worker-continue, :root[data-theme="dark"] .role-mode-panel, :root[data-theme="dark"] .device-mode-panel, :root[data-theme="dark"] .adaptive-plan-panel, :root[data-theme="dark"] .source-pack-panel, :root[data-theme="dark"] .proof-plan-panel, :root[data-theme="dark"] .value-plan-panel, :root[data-theme="dark"] .pilot-plan-panel, :root[data-theme="dark"] .final, :root[data-theme="dark"] .home-shot-card, :root[data-theme="dark"] .browser, :root[data-theme="dark"] .proof, :root[data-theme="dark"] .upgrade-card, :root[data-theme="dark"] .shell-card, :root[data-theme="dark"] .setup-card, :root[data-theme="dark"] .market-card, :root[data-theme="dark"] form, :root[data-theme="dark"] .feature-pills span, :root[data-theme="dark"] .chip, :root[data-theme="dark"] .metric, :root[data-theme="dark"] .proof-step, :root[data-theme="dark"] footer .footer-links a {
         background: rgba(243,239,230,0.05); border-color: rgba(243,239,230,0.12);
       }
       :root[data-theme="dark"] .product-carousel, :root[data-theme="dark"] .product-shot-card, :root[data-theme="dark"] .product-shot-card .shot-open, :root[data-theme="dark"] .output > img { background: #201c17; }
@@ -3631,6 +3637,205 @@ const publicAdaptiveValuePlanScript = `
     }
   })();
 </script>`
+const publicAdaptivePilotPlanScript = `
+<script>
+  (function () {
+    var catalog = ${workerValuePlanCatalogJson()};
+    var storageKey = 'sm_adaptive_pilot_plan';
+    var workerStateKey = 'sm_worker_continue_state';
+    var params = new URLSearchParams(window.location.search || '');
+    var renderTimer = null;
+    function safeText(value) {
+      return String(value || '').replace(/[&<>"']/g, function (char) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char];
+      });
+    }
+    function setupTemplateId() {
+      var match = window.location.pathname.match(/\\/agent-templates\\/([^/]+)\\/setup\\/?/);
+      return match ? decodeURIComponent(match[1]) : '';
+    }
+    function workerName(id) {
+      if (id === 'daily-intelligence-brief') return 'Daily Intelligence Brief Agent';
+      if (id === 'deskpos-quickstart') return 'DeskPOS Quickstart';
+      return String(id || '')
+        .split('-')
+        .filter(Boolean)
+        .map(function (part) { return part.charAt(0).toUpperCase() + part.slice(1); })
+        .join(' ')
+        .replace(/\\bCrm\\b/g, 'CRM')
+        .replace(/\\bPdf\\b/g, 'PDF')
+        .replace(/\\bPos\\b/g, 'POS')
+        .replace(/\\bSow\\b/g, 'SOW');
+    }
+    function readJson(key) {
+      try {
+        var stored = window.localStorage && localStorage.getItem(key);
+        return stored ? JSON.parse(stored) : {};
+      } catch (error) {
+        return {};
+      }
+    }
+    function selectedWorkerId() {
+      var fromPath = setupTemplateId() || params.get('template') || params.get('agent_template') || '';
+      if (fromPath) return fromPath;
+      var recommended = document.querySelector('[data-router-result]')?.getAttribute('data-recommended-worker') || '';
+      if (recommended) return recommended;
+      var valuePlan = readJson('sm_adaptive_value_plan');
+      if (valuePlan.worker_id) return valuePlan.worker_id;
+      var proofPlan = readJson('sm_adaptive_proof_plan');
+      if (proofPlan.worker_id) return proofPlan.worker_id;
+      var sourcePack = readJson('sm_adaptive_source_pack');
+      if (sourcePack.worker_id) return sourcePack.worker_id;
+      var plan = readJson('sm_adaptive_setup_plan');
+      if (plan.worker_id) return plan.worker_id;
+      return readJson(workerStateKey).template_id || '';
+    }
+    function findWorker(id) {
+      id = String(id || '');
+      for (var index = 0; index < catalog.length; index += 1) {
+        if (catalog[index].id === id) return catalog[index];
+      }
+      return null;
+    }
+    function ensureHidden(form, name) {
+      var field = form.querySelector('input[type="hidden"][name="' + name + '"]');
+      if (!field) {
+        field = document.createElement('input');
+        field.type = 'hidden';
+        field.name = name;
+        form.appendChild(field);
+      }
+      return field;
+    }
+    function unique(values) {
+      var seen = {};
+      return (values || []).filter(function (value) {
+        value = String(value || '').trim();
+        if (!value || seen[value]) return false;
+        seen[value] = true;
+        return true;
+      });
+    }
+    function buildPlan() {
+      var worker = findWorker(selectedWorkerId());
+      var valuePlan = readJson('sm_adaptive_value_plan');
+      var proofPlan = readJson('sm_adaptive_proof_plan');
+      if (!worker) {
+        return {
+          worker_id: '',
+          worker_name: 'Choose a worker',
+          summary: 'Choose a worker before building the paid pilot close plan.',
+          scope: ['free proof first', 'owner-approved scope', 'payment proof before workspace'],
+          next_action: 'Choose one worker and build the first proof.',
+          gate: 'payment_proof_required_before_workspace_or_mrr',
+          stage: 'choose_worker_first',
+          readiness: 'choose_worker_first',
+          setup_url: '/agent-templates/',
+          contact_url: '/contact/?package=ai-workcell-pilot',
+          page_path: window.location.pathname,
+          generated_at: new Date().toISOString()
+        };
+      }
+      var scope = unique([
+        'free proof: ' + (worker.firstProof || 'first useful output'),
+        'owner-approved paid pilot scope',
+        'approval-only first run',
+        'payment proof before workspace or MRR',
+        'retainer review only after value evidence'
+      ]);
+      return {
+        worker_id: worker.id,
+        worker_name: workerName(worker.id),
+        summary: workerName(worker.id) + ' paid pilot path: free proof, owner-approved paid pilot, payment proof before workspace or MRR.',
+        scope: scope,
+        next_action: 'Prepare paid pilot order room after owner-approved scope and payment proof.',
+        gate: 'payment_proof_required_before_workspace_or_mrr',
+        stage: 'free_proof_to_paid_pilot',
+        readiness: 'pilot_close_plan_ready',
+        value_plan_readiness: valuePlan.readiness || '',
+        proof_plan_readiness: proofPlan.readiness || '',
+        first_proof: worker.firstProof || '',
+        setup_url: worker.setupUrl,
+        contact_url: worker.contactUrl,
+        page_path: window.location.pathname,
+        generated_at: new Date().toISOString()
+      };
+    }
+    function savePlan(plan) {
+      try {
+        if (window.localStorage) localStorage.setItem(storageKey, JSON.stringify(plan));
+      } catch (error) {}
+    }
+    function applyPlanToForms(plan) {
+      document.querySelectorAll('form').forEach(function (form) {
+        ensureHidden(form, 'pilot_plan_worker_id').value = plan.worker_id || '';
+        ensureHidden(form, 'pilot_plan_summary').value = plan.summary || '';
+        ensureHidden(form, 'pilot_plan_scope').value = (plan.scope || []).join('; ');
+        ensureHidden(form, 'pilot_plan_next_action').value = plan.next_action || '';
+        ensureHidden(form, 'pilot_plan_gate').value = plan.gate || '';
+      });
+    }
+    function shouldShowPanel() {
+      return /^\\/(ai-agents|agent-templates|contact)(\\/|$)/.test(window.location.pathname);
+    }
+    function renderPlan(track) {
+      var plan = buildPlan();
+      savePlan(plan);
+      applyPlanToForms(plan);
+      if (!shouldShowPanel()) return plan;
+      var wrap = document.querySelector('.wrap');
+      var main = document.querySelector('main');
+      if (!wrap || !main) return plan;
+      var panel = document.querySelector('[data-adaptive-pilot-plan]');
+      if (!panel) {
+        panel = document.createElement('section');
+        panel.className = 'pilot-plan-panel';
+        panel.setAttribute('data-adaptive-pilot-plan', '');
+        panel.setAttribute('aria-label', 'Paid pilot close plan');
+        wrap.insertBefore(panel, main);
+      }
+      var scope = (plan.scope || []).slice(0, 4).map(function (item) { return '<li>' + safeText(item) + '</li>'; }).join('');
+      panel.innerHTML = [
+        '<div>',
+        '<div class="eyebrow">Paid pilot close plan</div>',
+        '<strong>' + safeText(plan.worker_name) + '</strong>',
+        '<p>Free proof first. Paid pilot only after owner-approved scope. No workspace, retainer, or MRR claim before payment proof.</p>',
+        '<ol>' + scope + '</ol>',
+        '<div class="role-mode-meta"><span>' + safeText(plan.readiness) + '</span><span>' + safeText(plan.gate) + '</span><span>' + safeText(plan.stage) + '</span></div>',
+        '</div>',
+        '<div class="pilot-plan-actions">',
+        '<a class="btn primary" data-sm-template-link="' + safeText(plan.worker_id) + '" href="' + safeText(plan.setup_url) + '">Open pilot setup</a>',
+        '<a class="btn secondary" data-sm-template-link="' + safeText(plan.worker_id) + '" href="' + safeText(plan.contact_url) + '">Send pilot request</a>',
+        '<a class="btn secondary" href="/ai-agents/guide/">User guide</a>',
+        '</div>'
+      ].join('');
+      if (track && window.supermegaTrackBehavior) {
+        window.supermegaTrackBehavior('cta_clicked', {
+          template_id: plan.worker_id,
+          requested_package: 'adaptive-paid-pilot-close-plan',
+          component: 'adaptive_pilot_plan',
+          cta_text: plan.readiness
+        });
+      }
+      return plan;
+    }
+    function scheduleRender() {
+      window.clearTimeout(renderTimer);
+      renderTimer = window.setTimeout(function () { renderPlan(false); }, 140);
+    }
+    window.supermegaAdaptivePilotPlan = renderPlan;
+    document.addEventListener('submit', function () { renderPlan(false); }, true);
+    document.addEventListener('click', function (event) {
+      if (event.target && event.target.closest && event.target.closest('[data-router-choice], [data-role-mode-choice], [data-sm-template-link]')) scheduleRender();
+    });
+    window.addEventListener('resize', scheduleRender);
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', function () { renderPlan(true); });
+    } else {
+      renderPlan(true);
+    }
+  })();
+</script>`
 const publicAdaptiveWorkerRouterScript = `
 <script>
   (function () {
@@ -3755,7 +3960,7 @@ const publicAdaptiveWorkerRouterScript = `
     }
   })();
 </script>`
-const publicRuntimeScripts = `${publicLanguageToggleScript}${publicBehaviorEventsScript}${publicLocalWorkerAdaptationScript}${publicRoleModeScript}${publicDeviceModeScript}${publicAdaptiveSetupPlanScript}${publicAdaptiveSourcePackScript}${publicAdaptiveProofPlanScript}${publicAdaptiveValuePlanScript}`
+const publicRuntimeScripts = `${publicLanguageToggleScript}${publicBehaviorEventsScript}${publicLocalWorkerAdaptationScript}${publicRoleModeScript}${publicDeviceModeScript}${publicAdaptiveSetupPlanScript}${publicAdaptiveSourcePackScript}${publicAdaptiveProofPlanScript}${publicAdaptiveValuePlanScript}${publicAdaptivePilotPlanScript}`
 
 function unicornSocialMeta({ title, description, url }) {
   const t = String(title || '').replace(/"/g, '&quot;')
@@ -4677,6 +4882,11 @@ ${unicornHeader}
             <input type="hidden" name="value_plan_metrics" value="" />
             <input type="hidden" name="value_plan_evidence" value="" />
             <input type="hidden" name="value_plan_gate" value="" />
+            <input type="hidden" name="pilot_plan_worker_id" value="" />
+            <input type="hidden" name="pilot_plan_summary" value="" />
+            <input type="hidden" name="pilot_plan_scope" value="" />
+            <input type="hidden" name="pilot_plan_next_action" value="" />
+            <input type="hidden" name="pilot_plan_gate" value="" />
             <div class="form-row">
               <label>Name<input autocomplete="name" name="name" required /></label>
               <label>Work email<input autocomplete="email" name="email" required type="email" /></label>
@@ -6159,6 +6369,17 @@ ${unicornHeader}
           </div>
         </section>
 
+        <section class="section sm-in" data-pilot-plan-guide>
+          <div class="eyebrow">Paid pilot close plan</div>
+          <h2>Close paid pilot after proof.</h2>
+          <p style="color:var(--muted);max-width:66ch">The pilot close plan keeps the commercial path explicit: free proof first, paid pilot after owner-approved scope, and no workspace, retainer, or MRR before payment proof.</p>
+          <div class="guide-rule-grid">
+            <div class="guide-rule"><strong>Free proof</strong><span>Use approved source samples to show the first useful output before asking for paid pilot scope.</span></div>
+            <div class="guide-rule"><strong>Paid pilot</strong><span>Move only after the owner approves scope, first-run boundaries, and the payment route.</span></div>
+            <div class="guide-rule"><strong>Payment proof</strong><span>No private workspace, retainer, recurring claim, or MRR until payment proof is attached.</span></div>
+          </div>
+        </section>
+
         <section class="section sm-in">
           <div class="eyebrow">Connectors</div>
           <h2>Connector setup rules.</h2>
@@ -6313,6 +6534,11 @@ function buildAgentTemplateSetupHtml(kit) {
     ['value_plan_metrics', ''],
     ['value_plan_evidence', ''],
     ['value_plan_gate', ''],
+    ['pilot_plan_worker_id', ''],
+    ['pilot_plan_summary', ''],
+    ['pilot_plan_scope', ''],
+    ['pilot_plan_next_action', ''],
+    ['pilot_plan_gate', ''],
     ['management_owner', 'swanhtet@supermega.dev'],
     ['team', 'Owner or first operating team'],
     ['urgency', 'This week'],

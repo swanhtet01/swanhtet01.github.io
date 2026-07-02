@@ -764,6 +764,12 @@ for (const token of [
   'supermegaAdaptiveValuePlan',
   'value_plan_metrics',
   'no_revenue_claim_without_payment_proof',
+  'sm_adaptive_pilot_plan',
+  'data-adaptive-pilot-plan',
+  'Paid pilot close plan',
+  'supermegaAdaptivePilotPlan',
+  'pilot_plan_next_action',
+  'payment_proof_required_before_workspace_or_mrr',
 ]) {
   if (!homeHtml.includes(token)) fail('public_shell_contract_missing', { token })
 }
@@ -804,6 +810,7 @@ for (const token of [
   'data-source-pack-guide',
   'data-proof-plan-guide',
   'data-value-plan-guide',
+  'data-pilot-plan-guide',
   'Owner mode',
   'Operator mode',
   'Technical admin mode',
@@ -821,6 +828,11 @@ for (const token of [
   'Time saved',
   'Risk removed',
   'Cash follow-up',
+  'Close paid pilot after proof.',
+  'Free proof',
+  'Paid pilot',
+  'Payment proof',
+  'no workspace, retainer, or MRR before payment proof',
 ]) {
   if (!aiWorkerGuideHtml.includes(token)) fail('public_ai_worker_user_guide_contract_missing', { token })
 }
@@ -1169,6 +1181,11 @@ for (const [id, name] of publicAgentTemplateContract) {
     'name="value_plan_metrics"',
     'name="value_plan_evidence"',
     'name="value_plan_gate"',
+    'name="pilot_plan_worker_id"',
+    'name="pilot_plan_summary"',
+    'name="pilot_plan_scope"',
+    'name="pilot_plan_next_action"',
+    'name="pilot_plan_gate"',
     'name="first_proof_target"',
     'name="acceptance_tests"',
     'name="intake_job_mode" value="intake_to_first_proof"',

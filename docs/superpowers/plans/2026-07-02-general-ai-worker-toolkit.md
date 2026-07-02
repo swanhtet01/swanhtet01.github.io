@@ -243,3 +243,21 @@ Live result: `supermega.dev` and `www.supermega.dev` point to deployment `dpl_7j
 - [x] Deploy to `supermega-public` and verify aliases, route smoke, contact API, lead ledger, behavior monitoring, and browser usability.
 
 Live result: `supermega.dev` and `www.supermega.dev` point to deployment `dpl_Cd9JdkFVgeTNzNuxaREru7khgscF`, live aliases return HTTP 200, contact API is ready, lead ledger is configured, route smoke is green, browser usability is green on desktop/tablet/mobile, behavior monitoring is ready, and the behavior DB reports `recent_7d_count: 1729`.
+
+### Task 16: Add Adaptive Paid-Pilot Close Plan
+
+**Files:**
+- Modify: `tools/create_public_vercel_output.mjs`
+- Modify: `tools/verify_public_vercel_output.mjs`
+- Modify: `tools/audit_public_usability.mjs`
+- Modify: `tools/public_deployment_lock.json`
+
+- [x] Add a browser-local paid-pilot close plan derived from selected worker, value-plan readiness, and first-proof readiness.
+- [x] Store only catalog-derived scope labels, worker ID, readiness, stage, gate, next action, page path, and generated time.
+- [x] Pass pilot-plan readiness into setup/contact forms as `pilot_plan_worker_id`, `pilot_plan_summary`, `pilot_plan_scope`, `pilot_plan_next_action`, and `pilot_plan_gate`.
+- [x] Add AI Worker User Guide copy for moving from free proof to paid pilot while blocking workspace, retainer, and MRR claims until payment proof.
+- [x] Add static verifier coverage for the public shell, guide, and setup hidden fields.
+- [x] Add desktop, tablet, and mobile browser audit coverage for pilot-plan panel rendering, setup hidden-field propagation, and contact hidden-field propagation.
+- [x] Deploy to `supermega-public` and verify aliases, route smoke, contact API, lead ledger, browser usability, and behavior monitoring.
+
+Live result: `supermega.dev` and `www.supermega.dev` point to deployment `dpl_6hUqQzHCfNd25hWGHyzdu78G3a8w`, live aliases return HTTP 200, contact API is ready, lead ledger is configured, route smoke is green, browser usability is green on desktop/tablet/mobile, behavior monitoring is ready, and the behavior DB reports `recent_7d_count: 1916`.

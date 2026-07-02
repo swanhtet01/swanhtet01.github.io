@@ -262,6 +262,28 @@ try {
       fail('adaptive_value_plan_missing', { viewport: viewport.name, expectedDevice, valuePlan })
     }
     if (valuePlan.overflowX > 0) fail('adaptive_value_plan_horizontal_overflow', { viewport: viewport.name, valuePlan })
+    await page.waitForFunction(() => document.querySelector('[data-adaptive-pilot-plan]')?.textContent.includes('Paid pilot close plan'), null, { timeout: 5000 })
+    const pilotPlan = await page.evaluate(() => {
+      const stored = JSON.parse(window.localStorage.getItem('sm_adaptive_pilot_plan') || '{}')
+      return {
+        visible: Boolean(document.querySelector('[data-adaptive-pilot-plan]')?.getBoundingClientRect().height),
+        text: document.querySelector('[data-adaptive-pilot-plan]')?.textContent || '',
+        storedWorker: stored.worker_id || '',
+        storedReadiness: stored.readiness || '',
+        storedStage: stored.stage || '',
+        storedValueReadiness: stored.value_plan_readiness || '',
+        storedProofReadiness: stored.proof_plan_readiness || '',
+        scope: (stored.scope || []).join('; '),
+        nextAction: stored.next_action || '',
+        gate: stored.gate || '',
+        setupHref: document.querySelector('[data-adaptive-pilot-plan] a[data-sm-template-link="daily-intelligence-brief"]')?.getAttribute('href') || '',
+        overflowX: Math.max(0, document.documentElement.scrollWidth - document.documentElement.clientWidth),
+      }
+    })
+    if (!pilotPlan.visible || pilotPlan.storedWorker !== 'daily-intelligence-brief' || pilotPlan.storedReadiness !== 'pilot_close_plan_ready' || pilotPlan.storedStage !== 'free_proof_to_paid_pilot' || pilotPlan.storedValueReadiness !== 'value_proof_plan_ready' || pilotPlan.storedProofReadiness !== 'first_proof_plan_ready' || !pilotPlan.text.includes('Paid pilot close plan') || !pilotPlan.text.includes('No workspace, retainer, or MRR claim before payment proof') || !pilotPlan.scope.includes('free proof: One-page morning brief') || !pilotPlan.scope.includes('approval-only first run') || !pilotPlan.nextAction.includes('paid pilot order room') || pilotPlan.gate !== 'payment_proof_required_before_workspace_or_mrr' || pilotPlan.setupHref !== '/agent-templates/daily-intelligence-brief/setup/') {
+      fail('adaptive_pilot_plan_missing', { viewport: viewport.name, expectedDevice, pilotPlan })
+    }
+    if (pilotPlan.overflowX > 0) fail('adaptive_pilot_plan_horizontal_overflow', { viewport: viewport.name, pilotPlan })
     await page.locator('[data-worker-router]').scrollIntoViewIfNeeded()
     await expectCopy(
       page,
@@ -308,6 +330,7 @@ try {
       hasSourcePackGuide: Boolean(document.querySelector('[data-source-pack-guide]')) && document.body.textContent.includes('Source pack checklist') && document.body.textContent.includes('Send the smallest approved source pack.'),
       hasProofPlanGuide: Boolean(document.querySelector('[data-proof-plan-guide]')) && document.body.textContent.includes('First proof planner') && document.body.textContent.includes('Day 7 acceptance gate'),
       hasValuePlanGuide: Boolean(document.querySelector('[data-value-plan-guide]')) && document.body.textContent.includes('Value proof plan') && document.body.textContent.includes('Prove value before retainer.') && document.body.textContent.includes('No revenue claim without payment proof'),
+      hasPilotPlanGuide: Boolean(document.querySelector('[data-pilot-plan-guide]')) && document.body.textContent.includes('Paid pilot close plan') && document.body.textContent.includes('Close paid pilot after proof.') && document.body.textContent.includes('no workspace, retainer, or MRR before payment proof'),
       hasSafetyCopy: document.body.textContent.includes('no external sends, writes, payments, or browser/mobile actions without owner approval'),
       hasNoPrivateTextCopy: document.body.textContent.includes('No keystrokes, source files, credentials, or private business text are tracked.'),
       overflowX: Math.max(0, document.documentElement.scrollWidth - document.documentElement.clientWidth),
@@ -321,6 +344,7 @@ try {
     if (!guide.hasSourcePackGuide) fail('ai_worker_user_guide_source_pack_missing', { viewport: viewport.name, guide })
     if (!guide.hasProofPlanGuide) fail('ai_worker_user_guide_proof_plan_missing', { viewport: viewport.name, guide })
     if (!guide.hasValuePlanGuide) fail('ai_worker_user_guide_value_plan_missing', { viewport: viewport.name, guide })
+    if (!guide.hasPilotPlanGuide) fail('ai_worker_user_guide_pilot_plan_missing', { viewport: viewport.name, guide })
     if (!guide.hasSafetyCopy || !guide.hasNoPrivateTextCopy) fail('ai_worker_user_guide_safety_copy_missing', { viewport: viewport.name, guide })
     if (guide.overflowX > 0) fail('ai_worker_user_guide_horizontal_overflow', { viewport: viewport.name, guide })
     await page.locator('[data-guide-template="deskpos-quickstart"]').scrollIntoViewIfNeeded()
@@ -372,6 +396,11 @@ try {
       valuePlanMetrics: document.querySelector('input[name="value_plan_metrics"]')?.value || '',
       valuePlanEvidence: document.querySelector('input[name="value_plan_evidence"]')?.value || '',
       valuePlanGate: document.querySelector('input[name="value_plan_gate"]')?.value || '',
+      pilotPlanWorkerId: document.querySelector('input[name="pilot_plan_worker_id"]')?.value || '',
+      pilotPlanSummary: document.querySelector('input[name="pilot_plan_summary"]')?.value || '',
+      pilotPlanScope: document.querySelector('input[name="pilot_plan_scope"]')?.value || '',
+      pilotPlanNextAction: document.querySelector('input[name="pilot_plan_next_action"]')?.value || '',
+      pilotPlanGate: document.querySelector('input[name="pilot_plan_gate"]')?.value || '',
       firstProofTarget: document.querySelector('input[name="first_proof_target"]')?.value || '',
       intakeJobMode: document.querySelector('input[name="intake_job_mode"]')?.value || '',
       kickoffPackMode: document.querySelector('input[name="kickoff_pack_mode"]')?.value || '',
@@ -389,6 +418,7 @@ try {
     if (!setup.sourcePackRequired.includes('Watchlist sources') || !setup.sourcePackSamples.includes('watchlist URLs') || !setup.sourcePackFirstProof.includes('One-page morning brief') || setup.sourcePackReadiness !== 'selected_worker_source_pack') fail('setup_source_pack_hidden_missing', { viewport: viewport.name, setup })
     if (setup.proofPlanWorkerId !== 'daily-intelligence-brief' || !setup.proofPlanSummary.includes('Daily Intelligence Brief Agent') || !setup.proofPlanSummary.includes(expectedDevice.label) || !setup.proofPlanMilestones.includes('Day 7 acceptance gate') || !setup.proofPlanMetrics.includes('daily operating brief') || setup.proofPlanGate !== 'owner_approval_required_before_production') fail('setup_proof_plan_hidden_missing', { viewport: viewport.name, expectedDevice, setup })
     if (setup.valuePlanWorkerId !== 'daily-intelligence-brief' || !setup.valuePlanSummary.includes('No revenue claim without payment proof') || !setup.valuePlanMetrics.includes('time_saved') || !setup.valuePlanMetrics.includes('cash_followup') || !setup.valuePlanEvidence.includes('source trace accepted') || (!setup.valuePlanEvidence.includes('decision queue') && !setup.valuePlanEvidence.includes('follow-up task list')) || setup.valuePlanGate !== 'no_revenue_claim_without_payment_proof') fail('setup_value_plan_hidden_missing', { viewport: viewport.name, expectedDevice, setup })
+    if (setup.pilotPlanWorkerId !== 'daily-intelligence-brief' || !setup.pilotPlanSummary.includes('payment proof before workspace or MRR') || !setup.pilotPlanScope.includes('free proof: One-page morning brief') || !setup.pilotPlanScope.includes('owner-approved paid pilot scope') || !setup.pilotPlanNextAction.includes('paid pilot order room') || setup.pilotPlanGate !== 'payment_proof_required_before_workspace_or_mrr') fail('setup_pilot_plan_hidden_missing', { viewport: viewport.name, expectedDevice, setup })
     if (!setup.firstProofTarget.includes('One-page morning brief')) fail('setup_first_proof_missing', { viewport: viewport.name, setup })
     if (setup.intakeJobMode !== 'intake_to_first_proof') fail('setup_intake_job_mode_missing', { viewport: viewport.name, setup })
     if (setup.kickoffPackMode !== 'client_kickoff_pack') fail('setup_kickoff_pack_mode_missing', { viewport: viewport.name, setup })
@@ -420,6 +450,10 @@ try {
       valuePlanMetrics: document.querySelector('input[name="value_plan_metrics"]')?.value || '',
       valuePlanEvidence: document.querySelector('input[name="value_plan_evidence"]')?.value || '',
       valuePlanGate: document.querySelector('input[name="value_plan_gate"]')?.value || '',
+      pilotPlanWorkerId: document.querySelector('input[name="pilot_plan_worker_id"]')?.value || '',
+      pilotPlanScope: document.querySelector('input[name="pilot_plan_scope"]')?.value || '',
+      pilotPlanNextAction: document.querySelector('input[name="pilot_plan_next_action"]')?.value || '',
+      pilotPlanGate: document.querySelector('input[name="pilot_plan_gate"]')?.value || '',
       overflowX: Math.max(0, document.documentElement.scrollWidth - document.documentElement.clientWidth),
     }))
     if (contact.headline !== 'Start with this template.') fail('contact_headline_not_current', { viewport: viewport.name, contact })
@@ -427,6 +461,7 @@ try {
     if (contact.templateId !== 'daily-intelligence-brief') fail('contact_template_id_missing', { viewport: viewport.name, contact })
     if (contact.starterKitUrl !== '/site/agent-templates/daily-intelligence-brief.json') fail('contact_starter_kit_url_missing', { viewport: viewport.name, contact })
     if (contact.valuePlanWorkerId !== 'daily-intelligence-brief' || !contact.valuePlanMetrics.includes('time_saved') || !contact.valuePlanEvidence.includes('source trace accepted') || contact.valuePlanGate !== 'no_revenue_claim_without_payment_proof') fail('contact_value_plan_hidden_missing', { viewport: viewport.name, contact })
+    if (contact.pilotPlanWorkerId !== 'daily-intelligence-brief' || !contact.pilotPlanScope.includes('free proof: One-page morning brief') || !contact.pilotPlanNextAction.includes('paid pilot order room') || contact.pilotPlanGate !== 'payment_proof_required_before_workspace_or_mrr') fail('contact_pilot_plan_hidden_missing', { viewport: viewport.name, contact })
     if (!contact.submitVisible) fail('contact_submit_not_visible', { viewport: viewport.name, contact })
     if (contact.overflowX > 0) fail('contact_horizontal_overflow', { viewport: viewport.name, contact })
 
