@@ -394,6 +394,22 @@ function workerProofPlanCatalogJson() {
   ).replaceAll('<', '\\u003c')
 }
 
+function workerValuePlanCatalogJson() {
+  return JSON.stringify(
+    publicAgentTemplates.map((template) => ({
+      id: template.id,
+      firstProof: template.firstProof,
+      setupInputs: template.setupInputs,
+      sampleSources: template.sampleSources,
+      firstRunWorkflow: template.firstRunWorkflow,
+      outputs: template.outputs,
+      sourceCategory: template.sourceCategory,
+      setupUrl: `/agent-templates/${template.id}/setup/`,
+      contactUrl: `/contact/?template=${template.id}&package=ai-workcell-pilot`,
+    })),
+  ).replaceAll('<', '\\u003c')
+}
+
 function roleModeOptionsJson() {
   return JSON.stringify([
     {
@@ -1789,6 +1805,12 @@ const unicornShellStyle = `
       .proof-plan-panel p { margin-top: 6px; max-width: 66ch; font-size: 14px; line-height: 1.42; }
       .proof-plan-panel ol { display: grid; gap: 6px; margin: 10px 0 0; padding-left: 18px; color: var(--muted); font-size: 13px; font-weight: 780; line-height: 1.35; }
       .proof-plan-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+      .value-plan-panel { display: grid; grid-template-columns: minmax(0,1fr) minmax(250px,.66fr); gap: 16px; align-items: center; margin: 8px 0 20px; border: 1px solid rgba(13,148,136,0.28); border-radius: 24px; padding: 16px; background: rgba(255,255,255,0.68); box-shadow: 0 16px 48px rgba(42,36,28,0.07); }
+      .value-plan-panel[hidden] { display: none !important; }
+      .value-plan-panel strong { display: block; margin-top: 5px; font-size: clamp(20px,2.1vw,27px); line-height: 1.08; letter-spacing: -0.035em; }
+      .value-plan-panel p { margin-top: 6px; max-width: 66ch; font-size: 14px; line-height: 1.42; }
+      .value-plan-panel ul { display: grid; gap: 6px; margin: 10px 0 0; padding-left: 18px; color: var(--muted); font-size: 13px; font-weight: 780; line-height: 1.35; }
+      .value-plan-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
       .final { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 20px; align-items: center; border: 1px solid rgba(255,255,255,0.76); border-radius: 36px; padding: clamp(24px, 5vw, 48px); background: rgba(255,255,255,0.62); box-shadow: var(--shadow); backdrop-filter: blur(22px); }
       footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 24px 0 32px; color: var(--muted); font-weight: 800; }
       footer .footer-links { display: flex; flex-wrap: wrap; gap: 10px; }
@@ -1808,7 +1830,7 @@ const unicornShellStyle = `
         .brand-text strong, .brand-text small, .nav .optional-nav { display: none; }
         .nav { flex: 0 0 auto; gap: 6px; }
         .btn, button { min-height: 42px; padding: 0 12px; }
-        .poster, .split, .product-library-head, .output, .proof-system, .proof-board, .workcell-grid, .local-worker-continue, .role-mode-panel, .device-mode-panel, .adaptive-plan-panel, .source-pack-panel, .proof-plan-panel, .final { grid-template-columns: 1fr; }
+        .poster, .split, .product-library-head, .output, .proof-system, .proof-board, .workcell-grid, .local-worker-continue, .role-mode-panel, .device-mode-panel, .adaptive-plan-panel, .source-pack-panel, .proof-plan-panel, .value-plan-panel, .final { grid-template-columns: 1fr; }
         .poster { min-height: auto; gap: 18px; padding: 20px 0 38px; }
         .eyebrow { font-size: 11px; letter-spacing: 0.18em; }
         h1 { max-width: 11ch; font-size: clamp(44px, 12vw, 60px); line-height: 0.98; letter-spacing: -0.065em; }
@@ -1915,7 +1937,7 @@ const unicornShellStyle = `
       :root[data-theme="dark"] body::before { background-image: linear-gradient(rgba(243,239,230,0.045) 1px, transparent 1px), linear-gradient(90deg, rgba(243,239,230,0.045) 1px, transparent 1px); }
       :root[data-theme="dark"] .btn, :root[data-theme="dark"] button { background: rgba(243,239,230,0.06); }
       :root[data-theme="dark"] .btn.primary, :root[data-theme="dark"] button { color: #fff; background: linear-gradient(135deg, #cc6e48, #d97757); box-shadow: 0 18px 40px rgba(217, 119, 87, 0.28); }
-      :root[data-theme="dark"] .output, :root[data-theme="dark"] .feature, :root[data-theme="dark"] .proof-card, :root[data-theme="dark"] .case, :root[data-theme="dark"] .proof-system, :root[data-theme="dark"] .workcell-panel, :root[data-theme="dark"] .workcell-step, :root[data-theme="dark"] .local-worker-continue, :root[data-theme="dark"] .role-mode-panel, :root[data-theme="dark"] .device-mode-panel, :root[data-theme="dark"] .adaptive-plan-panel, :root[data-theme="dark"] .source-pack-panel, :root[data-theme="dark"] .proof-plan-panel, :root[data-theme="dark"] .final, :root[data-theme="dark"] .home-shot-card, :root[data-theme="dark"] .browser, :root[data-theme="dark"] .proof, :root[data-theme="dark"] .upgrade-card, :root[data-theme="dark"] .shell-card, :root[data-theme="dark"] .setup-card, :root[data-theme="dark"] .market-card, :root[data-theme="dark"] form, :root[data-theme="dark"] .feature-pills span, :root[data-theme="dark"] .chip, :root[data-theme="dark"] .metric, :root[data-theme="dark"] .proof-step, :root[data-theme="dark"] footer .footer-links a {
+      :root[data-theme="dark"] .output, :root[data-theme="dark"] .feature, :root[data-theme="dark"] .proof-card, :root[data-theme="dark"] .case, :root[data-theme="dark"] .proof-system, :root[data-theme="dark"] .workcell-panel, :root[data-theme="dark"] .workcell-step, :root[data-theme="dark"] .local-worker-continue, :root[data-theme="dark"] .role-mode-panel, :root[data-theme="dark"] .device-mode-panel, :root[data-theme="dark"] .adaptive-plan-panel, :root[data-theme="dark"] .source-pack-panel, :root[data-theme="dark"] .proof-plan-panel, :root[data-theme="dark"] .value-plan-panel, :root[data-theme="dark"] .final, :root[data-theme="dark"] .home-shot-card, :root[data-theme="dark"] .browser, :root[data-theme="dark"] .proof, :root[data-theme="dark"] .upgrade-card, :root[data-theme="dark"] .shell-card, :root[data-theme="dark"] .setup-card, :root[data-theme="dark"] .market-card, :root[data-theme="dark"] form, :root[data-theme="dark"] .feature-pills span, :root[data-theme="dark"] .chip, :root[data-theme="dark"] .metric, :root[data-theme="dark"] .proof-step, :root[data-theme="dark"] footer .footer-links a {
         background: rgba(243,239,230,0.05); border-color: rgba(243,239,230,0.12);
       }
       :root[data-theme="dark"] .product-carousel, :root[data-theme="dark"] .product-shot-card, :root[data-theme="dark"] .product-shot-card .shot-open, :root[data-theme="dark"] .output > img { background: #201c17; }
@@ -3398,6 +3420,217 @@ const publicAdaptiveProofPlanScript = `
     }
   })();
 </script>`
+const publicAdaptiveValuePlanScript = `
+<script>
+  (function () {
+    var catalog = ${workerValuePlanCatalogJson()};
+    var storageKey = 'sm_adaptive_value_plan';
+    var workerStateKey = 'sm_worker_continue_state';
+    var params = new URLSearchParams(window.location.search || '');
+    var renderTimer = null;
+    function safeText(value) {
+      return String(value || '').replace(/[&<>"']/g, function (char) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char];
+      });
+    }
+    function setupTemplateId() {
+      var match = window.location.pathname.match(/\\/agent-templates\\/([^/]+)\\/setup\\/?/);
+      return match ? decodeURIComponent(match[1]) : '';
+    }
+    function workerName(id) {
+      if (id === 'daily-intelligence-brief') return 'Daily Intelligence Brief Agent';
+      if (id === 'deskpos-quickstart') return 'DeskPOS Quickstart';
+      return String(id || '')
+        .split('-')
+        .filter(Boolean)
+        .map(function (part) { return part.charAt(0).toUpperCase() + part.slice(1); })
+        .join(' ')
+        .replace(/\\bCrm\\b/g, 'CRM')
+        .replace(/\\bPdf\\b/g, 'PDF')
+        .replace(/\\bPos\\b/g, 'POS')
+        .replace(/\\bSow\\b/g, 'SOW');
+    }
+    function readJson(key) {
+      try {
+        var stored = window.localStorage && localStorage.getItem(key);
+        return stored ? JSON.parse(stored) : {};
+      } catch (error) {
+        return {};
+      }
+    }
+    function selectedWorkerId() {
+      var fromPath = setupTemplateId() || params.get('template') || params.get('agent_template') || '';
+      if (fromPath) return fromPath;
+      var recommended = document.querySelector('[data-router-result]')?.getAttribute('data-recommended-worker') || '';
+      if (recommended) return recommended;
+      var proofPlan = readJson('sm_adaptive_proof_plan');
+      if (proofPlan.worker_id) return proofPlan.worker_id;
+      var sourcePack = readJson('sm_adaptive_source_pack');
+      if (sourcePack.worker_id) return sourcePack.worker_id;
+      var plan = readJson('sm_adaptive_setup_plan');
+      if (plan.worker_id) return plan.worker_id;
+      return readJson(workerStateKey).template_id || '';
+    }
+    function findWorker(id) {
+      id = String(id || '');
+      for (var index = 0; index < catalog.length; index += 1) {
+        if (catalog[index].id === id) return catalog[index];
+      }
+      return null;
+    }
+    function ensureHidden(form, name) {
+      var field = form.querySelector('input[type="hidden"][name="' + name + '"]');
+      if (!field) {
+        field = document.createElement('input');
+        field.type = 'hidden';
+        field.name = name;
+        form.appendChild(field);
+      }
+      return field;
+    }
+    function unique(values) {
+      var seen = {};
+      return (values || []).filter(function (value) {
+        value = String(value || '').trim();
+        if (!value || seen[value]) return false;
+        seen[value] = true;
+        return true;
+      });
+    }
+    function metricsForWorker(worker) {
+      var text = ((worker.outputs || []).join(' ') + ' ' + (worker.firstRunWorkflow || []).join(' ') + ' ' + (worker.firstProof || '')).toLowerCase();
+      var metrics = ['time_saved', 'risk_removed'];
+      if (/lead|deal|follow|payment|cash|pipeline|order|brief|decision/.test(text)) metrics.push('cash_followup');
+      if (/quality|exception|error|validation|missing|risk|trace|clean|defect|claim/.test(text)) metrics.push('quality_or_error_reduction');
+      if (metrics.indexOf('cash_followup') < 0) metrics.push('cash_followup');
+      if (metrics.indexOf('quality_or_error_reduction') < 0) metrics.push('quality_or_error_reduction');
+      return unique(metrics).slice(0, 4);
+    }
+    function evidenceForWorker(worker, sourcePack, proofPlan) {
+      var outputs = worker.outputs || [];
+      var outputText = outputs.join(' ').toLowerCase();
+      var evidence = ['source trace accepted'];
+      if (outputs.indexOf('decision queue') >= 0 || /decision/.test(outputText)) evidence.push('decision queue');
+      if (outputs.indexOf('follow-up task list') >= 0 || /follow/.test(outputText)) evidence.push('follow-up task list');
+      if (/exception|missing|validation|quality|risk|claim/.test(outputText)) evidence.push('exception or risk ledger');
+      if (sourcePack && sourcePack.readiness) evidence.push('source pack boundary accepted');
+      if (proofPlan && proofPlan.readiness) evidence.push('acceptance decision recorded');
+      if (outputs[0]) evidence.push(outputs[0]);
+      return unique(evidence).slice(0, 5);
+    }
+    function buildPlan() {
+      var worker = findWorker(selectedWorkerId());
+      var sourcePack = readJson('sm_adaptive_source_pack');
+      var proofPlan = readJson('sm_adaptive_proof_plan');
+      if (!worker) {
+        return {
+          worker_id: '',
+          worker_name: 'Choose a worker',
+          summary: 'Choose a worker before building the value proof plan.',
+          metrics: ['time_saved', 'risk_removed', 'cash_followup'],
+          evidence: ['source trace accepted', 'acceptance decision recorded'],
+          gate: 'no_revenue_claim_without_payment_proof',
+          readiness: 'choose_worker_first',
+          setup_url: '/agent-templates/',
+          contact_url: '/contact/?package=ai-workcell-pilot',
+          page_path: window.location.pathname,
+          generated_at: new Date().toISOString()
+        };
+      }
+      var metrics = metricsForWorker(worker);
+      var evidence = evidenceForWorker(worker, sourcePack, proofPlan);
+      return {
+        worker_id: worker.id,
+        worker_name: workerName(worker.id),
+        summary: workerName(worker.id) + ' value proof: ' + metrics.join(', ') + '. No revenue claim without payment proof.',
+        metrics: metrics,
+        evidence: evidence,
+        gate: 'no_revenue_claim_without_payment_proof',
+        readiness: 'value_proof_plan_ready',
+        proof_plan_readiness: proofPlan.readiness || '',
+        source_pack_readiness: sourcePack.readiness || '',
+        first_proof: worker.firstProof || '',
+        setup_url: worker.setupUrl,
+        contact_url: worker.contactUrl,
+        page_path: window.location.pathname,
+        generated_at: new Date().toISOString()
+      };
+    }
+    function savePlan(plan) {
+      try {
+        if (window.localStorage) localStorage.setItem(storageKey, JSON.stringify(plan));
+      } catch (error) {}
+    }
+    function applyPlanToForms(plan) {
+      document.querySelectorAll('form').forEach(function (form) {
+        ensureHidden(form, 'value_plan_worker_id').value = plan.worker_id || '';
+        ensureHidden(form, 'value_plan_summary').value = plan.summary || '';
+        ensureHidden(form, 'value_plan_metrics').value = (plan.metrics || []).join('; ');
+        ensureHidden(form, 'value_plan_evidence').value = (plan.evidence || []).join('; ');
+        ensureHidden(form, 'value_plan_gate').value = plan.gate || '';
+      });
+    }
+    function shouldShowPanel() {
+      return /^\\/(ai-agents|agent-templates|contact)(\\/|$)/.test(window.location.pathname);
+    }
+    function renderPlan(track) {
+      var plan = buildPlan();
+      savePlan(plan);
+      applyPlanToForms(plan);
+      if (!shouldShowPanel()) return plan;
+      var wrap = document.querySelector('.wrap');
+      var main = document.querySelector('main');
+      if (!wrap || !main) return plan;
+      var panel = document.querySelector('[data-adaptive-value-plan]');
+      if (!panel) {
+        panel = document.createElement('section');
+        panel.className = 'value-plan-panel';
+        panel.setAttribute('data-adaptive-value-plan', '');
+        panel.setAttribute('aria-label', 'Value proof plan');
+        wrap.insertBefore(panel, main);
+      }
+      var evidence = (plan.evidence || []).slice(0, 4).map(function (item) { return '<li>' + safeText(item) + '</li>'; }).join('');
+      panel.innerHTML = [
+        '<div>',
+        '<div class="eyebrow">Value proof plan</div>',
+        '<strong>' + safeText(plan.worker_name) + '</strong>',
+        '<p>No revenue claim without payment proof. Use this plan to prove time saved, risk removed, cash follow-up, and error reduction before retainer or production scale.</p>',
+        '<ul>' + evidence + '</ul>',
+        '<div class="role-mode-meta"><span>' + safeText(plan.readiness) + '</span><span>' + safeText(plan.gate) + '</span><span>' + safeText((plan.metrics || [])[0] || 'metric pending') + '</span></div>',
+        '</div>',
+        '<div class="value-plan-actions">',
+        '<a class="btn primary" data-sm-template-link="' + safeText(plan.worker_id) + '" href="' + safeText(plan.setup_url) + '">Build value proof</a>',
+        '<a class="btn secondary" data-sm-template-link="' + safeText(plan.worker_id) + '" href="' + safeText(plan.contact_url) + '">Send value plan</a>',
+        '<a class="btn secondary" href="/ai-agents/guide/">User guide</a>',
+        '</div>'
+      ].join('');
+      if (track && window.supermegaTrackBehavior) {
+        window.supermegaTrackBehavior('cta_clicked', {
+          template_id: plan.worker_id,
+          requested_package: 'adaptive-value-proof-plan',
+          component: 'adaptive_value_plan',
+          cta_text: plan.readiness
+        });
+      }
+      return plan;
+    }
+    function scheduleRender() {
+      window.clearTimeout(renderTimer);
+      renderTimer = window.setTimeout(function () { renderPlan(false); }, 140);
+    }
+    window.supermegaAdaptiveValuePlan = renderPlan;
+    document.addEventListener('submit', function () { renderPlan(false); }, true);
+    document.addEventListener('click', function (event) {
+      if (event.target && event.target.closest && event.target.closest('[data-router-choice], [data-role-mode-choice], [data-sm-template-link]')) scheduleRender();
+    });
+    window.addEventListener('resize', scheduleRender);
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', function () { renderPlan(true); });
+    } else {
+      renderPlan(true);
+    }
+  })();
+</script>`
 const publicAdaptiveWorkerRouterScript = `
 <script>
   (function () {
@@ -3522,7 +3755,7 @@ const publicAdaptiveWorkerRouterScript = `
     }
   })();
 </script>`
-const publicRuntimeScripts = `${publicLanguageToggleScript}${publicBehaviorEventsScript}${publicLocalWorkerAdaptationScript}${publicRoleModeScript}${publicDeviceModeScript}${publicAdaptiveSetupPlanScript}${publicAdaptiveSourcePackScript}${publicAdaptiveProofPlanScript}`
+const publicRuntimeScripts = `${publicLanguageToggleScript}${publicBehaviorEventsScript}${publicLocalWorkerAdaptationScript}${publicRoleModeScript}${publicDeviceModeScript}${publicAdaptiveSetupPlanScript}${publicAdaptiveSourcePackScript}${publicAdaptiveProofPlanScript}${publicAdaptiveValuePlanScript}`
 
 function unicornSocialMeta({ title, description, url }) {
   const t = String(title || '').replace(/"/g, '&quot;')
@@ -4439,6 +4672,11 @@ ${unicornHeader}
             <input type="hidden" name="proof_plan_milestones" value="" />
             <input type="hidden" name="proof_plan_metrics" value="" />
             <input type="hidden" name="proof_plan_gate" value="" />
+            <input type="hidden" name="value_plan_worker_id" value="" />
+            <input type="hidden" name="value_plan_summary" value="" />
+            <input type="hidden" name="value_plan_metrics" value="" />
+            <input type="hidden" name="value_plan_evidence" value="" />
+            <input type="hidden" name="value_plan_gate" value="" />
             <div class="form-row">
               <label>Name<input autocomplete="name" name="name" required /></label>
               <label>Work email<input autocomplete="email" name="email" required type="email" /></label>
@@ -5910,6 +6148,17 @@ ${unicornHeader}
           </div>
         </section>
 
+        <section class="section sm-in" data-value-plan-guide>
+          <div class="eyebrow">Value proof plan</div>
+          <h2>Prove value before retainer.</h2>
+          <p style="color:var(--muted);max-width:66ch">The value proof plan converts the selected worker and first-proof state into buyer evidence labels before any retainer, production scale, or recurring revenue claim. No revenue claim without payment proof.</p>
+          <div class="guide-rule-grid">
+            <div class="guide-rule"><strong>Time saved</strong><span>Capture where manual review, copy-paste, matching, or follow-up work becomes shorter.</span></div>
+            <div class="guide-rule"><strong>Risk removed</strong><span>Show missed items, missing fields, source trace, and owner approval gates before live actions.</span></div>
+            <div class="guide-rule"><strong>Cash follow-up</strong><span>Separate useful buyer follow-up from claimed revenue until payment proof is attached.</span></div>
+          </div>
+        </section>
+
         <section class="section sm-in">
           <div class="eyebrow">Connectors</div>
           <h2>Connector setup rules.</h2>
@@ -6059,6 +6308,11 @@ function buildAgentTemplateSetupHtml(kit) {
     ['proof_plan_milestones', ''],
     ['proof_plan_metrics', ''],
     ['proof_plan_gate', ''],
+    ['value_plan_worker_id', ''],
+    ['value_plan_summary', ''],
+    ['value_plan_metrics', ''],
+    ['value_plan_evidence', ''],
+    ['value_plan_gate', ''],
     ['management_owner', 'swanhtet@supermega.dev'],
     ['team', 'Owner or first operating team'],
     ['urgency', 'This week'],

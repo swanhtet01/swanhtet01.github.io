@@ -238,6 +238,30 @@ try {
       fail('adaptive_proof_plan_missing', { viewport: viewport.name, expectedDevice, proofPlan })
     }
     if (proofPlan.overflowX > 0) fail('adaptive_proof_plan_horizontal_overflow', { viewport: viewport.name, proofPlan })
+    await page.waitForFunction(() => {
+      const panel = document.querySelector('[data-adaptive-value-plan]')
+      return panel && (panel.textContent.includes('No revenue claim without payment proof') || panel.textContent.includes('Value proof plan'))
+    }, null, { timeout: 5000 })
+    const valuePlan = await page.evaluate(() => {
+      const stored = JSON.parse(window.localStorage.getItem('sm_adaptive_value_plan') || '{}')
+      return {
+        visible: Boolean(document.querySelector('[data-adaptive-value-plan]')?.getBoundingClientRect().height),
+        text: document.querySelector('[data-adaptive-value-plan]')?.textContent || '',
+        storedWorker: stored.worker_id || '',
+        storedReadiness: stored.readiness || '',
+        storedProofReadiness: stored.proof_plan_readiness || '',
+        storedSourcePackReadiness: stored.source_pack_readiness || '',
+        metrics: (stored.metrics || []).join('; '),
+        evidence: (stored.evidence || []).join('; '),
+        gate: stored.gate || '',
+        setupHref: document.querySelector('[data-adaptive-value-plan] a[data-sm-template-link="daily-intelligence-brief"]')?.getAttribute('href') || '',
+        overflowX: Math.max(0, document.documentElement.scrollWidth - document.documentElement.clientWidth),
+      }
+    })
+    if (!valuePlan.visible || valuePlan.storedWorker !== 'daily-intelligence-brief' || valuePlan.storedReadiness !== 'value_proof_plan_ready' || valuePlan.storedProofReadiness !== 'first_proof_plan_ready' || valuePlan.storedSourcePackReadiness !== 'selected_worker_source_pack' || !valuePlan.text.includes('Value proof plan') || !valuePlan.text.includes('No revenue claim without payment proof') || !valuePlan.metrics.includes('time_saved') || !valuePlan.metrics.includes('cash_followup') || !valuePlan.evidence.includes('source trace accepted') || (!valuePlan.evidence.includes('decision queue') && !valuePlan.evidence.includes('follow-up task list')) || valuePlan.gate !== 'no_revenue_claim_without_payment_proof' || valuePlan.setupHref !== '/agent-templates/daily-intelligence-brief/setup/') {
+      fail('adaptive_value_plan_missing', { viewport: viewport.name, expectedDevice, valuePlan })
+    }
+    if (valuePlan.overflowX > 0) fail('adaptive_value_plan_horizontal_overflow', { viewport: viewport.name, valuePlan })
     await page.locator('[data-worker-router]').scrollIntoViewIfNeeded()
     await expectCopy(
       page,
@@ -283,6 +307,7 @@ try {
       hasAdaptivePlanGuide: Boolean(document.querySelector('[data-adaptive-plan-guide]')) && document.body.textContent.includes('Adaptive setup plan') && document.body.textContent.includes('The next step changes with the user.'),
       hasSourcePackGuide: Boolean(document.querySelector('[data-source-pack-guide]')) && document.body.textContent.includes('Source pack checklist') && document.body.textContent.includes('Send the smallest approved source pack.'),
       hasProofPlanGuide: Boolean(document.querySelector('[data-proof-plan-guide]')) && document.body.textContent.includes('First proof planner') && document.body.textContent.includes('Day 7 acceptance gate'),
+      hasValuePlanGuide: Boolean(document.querySelector('[data-value-plan-guide]')) && document.body.textContent.includes('Value proof plan') && document.body.textContent.includes('Prove value before retainer.') && document.body.textContent.includes('No revenue claim without payment proof'),
       hasSafetyCopy: document.body.textContent.includes('no external sends, writes, payments, or browser/mobile actions without owner approval'),
       hasNoPrivateTextCopy: document.body.textContent.includes('No keystrokes, source files, credentials, or private business text are tracked.'),
       overflowX: Math.max(0, document.documentElement.scrollWidth - document.documentElement.clientWidth),
@@ -295,6 +320,7 @@ try {
     if (!guide.hasAdaptivePlanGuide) fail('ai_worker_user_guide_adaptive_plan_missing', { viewport: viewport.name, guide })
     if (!guide.hasSourcePackGuide) fail('ai_worker_user_guide_source_pack_missing', { viewport: viewport.name, guide })
     if (!guide.hasProofPlanGuide) fail('ai_worker_user_guide_proof_plan_missing', { viewport: viewport.name, guide })
+    if (!guide.hasValuePlanGuide) fail('ai_worker_user_guide_value_plan_missing', { viewport: viewport.name, guide })
     if (!guide.hasSafetyCopy || !guide.hasNoPrivateTextCopy) fail('ai_worker_user_guide_safety_copy_missing', { viewport: viewport.name, guide })
     if (guide.overflowX > 0) fail('ai_worker_user_guide_horizontal_overflow', { viewport: viewport.name, guide })
     await page.locator('[data-guide-template="deskpos-quickstart"]').scrollIntoViewIfNeeded()
@@ -341,6 +367,11 @@ try {
       proofPlanMilestones: document.querySelector('input[name="proof_plan_milestones"]')?.value || '',
       proofPlanMetrics: document.querySelector('input[name="proof_plan_metrics"]')?.value || '',
       proofPlanGate: document.querySelector('input[name="proof_plan_gate"]')?.value || '',
+      valuePlanWorkerId: document.querySelector('input[name="value_plan_worker_id"]')?.value || '',
+      valuePlanSummary: document.querySelector('input[name="value_plan_summary"]')?.value || '',
+      valuePlanMetrics: document.querySelector('input[name="value_plan_metrics"]')?.value || '',
+      valuePlanEvidence: document.querySelector('input[name="value_plan_evidence"]')?.value || '',
+      valuePlanGate: document.querySelector('input[name="value_plan_gate"]')?.value || '',
       firstProofTarget: document.querySelector('input[name="first_proof_target"]')?.value || '',
       intakeJobMode: document.querySelector('input[name="intake_job_mode"]')?.value || '',
       kickoffPackMode: document.querySelector('input[name="kickoff_pack_mode"]')?.value || '',
@@ -357,6 +388,7 @@ try {
     if (setup.adaptiveWorkerId !== 'daily-intelligence-brief' || !setup.adaptivePlanSummary.includes('Daily Intelligence Brief Agent') || !setup.adaptivePlanSummary.includes(expectedDevice.label) || !setup.adaptiveNextStep.includes('connector scope') || setup.adaptiveUserPath !== '/agent-templates/daily-intelligence-brief/setup/') fail('setup_adaptive_plan_hidden_missing', { viewport: viewport.name, expectedDevice, setup })
     if (!setup.sourcePackRequired.includes('Watchlist sources') || !setup.sourcePackSamples.includes('watchlist URLs') || !setup.sourcePackFirstProof.includes('One-page morning brief') || setup.sourcePackReadiness !== 'selected_worker_source_pack') fail('setup_source_pack_hidden_missing', { viewport: viewport.name, setup })
     if (setup.proofPlanWorkerId !== 'daily-intelligence-brief' || !setup.proofPlanSummary.includes('Daily Intelligence Brief Agent') || !setup.proofPlanSummary.includes(expectedDevice.label) || !setup.proofPlanMilestones.includes('Day 7 acceptance gate') || !setup.proofPlanMetrics.includes('daily operating brief') || setup.proofPlanGate !== 'owner_approval_required_before_production') fail('setup_proof_plan_hidden_missing', { viewport: viewport.name, expectedDevice, setup })
+    if (setup.valuePlanWorkerId !== 'daily-intelligence-brief' || !setup.valuePlanSummary.includes('No revenue claim without payment proof') || !setup.valuePlanMetrics.includes('time_saved') || !setup.valuePlanMetrics.includes('cash_followup') || !setup.valuePlanEvidence.includes('source trace accepted') || (!setup.valuePlanEvidence.includes('decision queue') && !setup.valuePlanEvidence.includes('follow-up task list')) || setup.valuePlanGate !== 'no_revenue_claim_without_payment_proof') fail('setup_value_plan_hidden_missing', { viewport: viewport.name, expectedDevice, setup })
     if (!setup.firstProofTarget.includes('One-page morning brief')) fail('setup_first_proof_missing', { viewport: viewport.name, setup })
     if (setup.intakeJobMode !== 'intake_to_first_proof') fail('setup_intake_job_mode_missing', { viewport: viewport.name, setup })
     if (setup.kickoffPackMode !== 'client_kickoff_pack') fail('setup_kickoff_pack_mode_missing', { viewport: viewport.name, setup })
@@ -384,12 +416,17 @@ try {
       templateId: document.querySelector('input[name="template_id"]')?.value || '',
       starterKitUrl: document.querySelector('input[name="starter_kit_url"]')?.value || '',
       productArea: document.querySelector('input[name="product_area"]')?.value || '',
+      valuePlanWorkerId: document.querySelector('input[name="value_plan_worker_id"]')?.value || '',
+      valuePlanMetrics: document.querySelector('input[name="value_plan_metrics"]')?.value || '',
+      valuePlanEvidence: document.querySelector('input[name="value_plan_evidence"]')?.value || '',
+      valuePlanGate: document.querySelector('input[name="value_plan_gate"]')?.value || '',
       overflowX: Math.max(0, document.documentElement.scrollWidth - document.documentElement.clientWidth),
     }))
     if (contact.headline !== 'Start with this template.') fail('contact_headline_not_current', { viewport: viewport.name, contact })
     if (contact.selectedPackage !== 'Daily Intelligence Brief Agent') fail('contact_template_not_selected', { viewport: viewport.name, contact })
     if (contact.templateId !== 'daily-intelligence-brief') fail('contact_template_id_missing', { viewport: viewport.name, contact })
     if (contact.starterKitUrl !== '/site/agent-templates/daily-intelligence-brief.json') fail('contact_starter_kit_url_missing', { viewport: viewport.name, contact })
+    if (contact.valuePlanWorkerId !== 'daily-intelligence-brief' || !contact.valuePlanMetrics.includes('time_saved') || !contact.valuePlanEvidence.includes('source trace accepted') || contact.valuePlanGate !== 'no_revenue_claim_without_payment_proof') fail('contact_value_plan_hidden_missing', { viewport: viewport.name, contact })
     if (!contact.submitVisible) fail('contact_submit_not_visible', { viewport: viewport.name, contact })
     if (contact.overflowX > 0) fail('contact_horizontal_overflow', { viewport: viewport.name, contact })
 

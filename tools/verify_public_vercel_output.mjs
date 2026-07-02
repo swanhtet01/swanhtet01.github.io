@@ -758,6 +758,12 @@ for (const token of [
   'First proof planner',
   'supermegaAdaptiveProofPlan',
   'proof_plan_milestones',
+  'sm_adaptive_value_plan',
+  'data-adaptive-value-plan',
+  'Value proof plan',
+  'supermegaAdaptiveValuePlan',
+  'value_plan_metrics',
+  'no_revenue_claim_without_payment_proof',
 ]) {
   if (!homeHtml.includes(token)) fail('public_shell_contract_missing', { token })
 }
@@ -797,6 +803,7 @@ for (const token of [
   'data-adaptive-plan-guide',
   'data-source-pack-guide',
   'data-proof-plan-guide',
+  'data-value-plan-guide',
   'Owner mode',
   'Operator mode',
   'Technical admin mode',
@@ -809,6 +816,11 @@ for (const token of [
   'No secrets first',
   'Prove value before production.',
   'Day 7 acceptance gate',
+  'Prove value before retainer.',
+  'No revenue claim without payment proof',
+  'Time saved',
+  'Risk removed',
+  'Cash follow-up',
 ]) {
   if (!aiWorkerGuideHtml.includes(token)) fail('public_ai_worker_user_guide_contract_missing', { token })
 }
@@ -1152,6 +1164,11 @@ for (const [id, name] of publicAgentTemplateContract) {
     'name="proof_plan_milestones"',
     'name="proof_plan_metrics"',
     'name="proof_plan_gate"',
+    'name="value_plan_worker_id"',
+    'name="value_plan_summary"',
+    'name="value_plan_metrics"',
+    'name="value_plan_evidence"',
+    'name="value_plan_gate"',
     'name="first_proof_target"',
     'name="acceptance_tests"',
     'name="intake_job_mode" value="intake_to_first_proof"',

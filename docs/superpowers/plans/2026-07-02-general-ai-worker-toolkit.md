@@ -225,3 +225,21 @@ Live result: `supermega.dev` and `www.supermega.dev` point to deployment `dpl_HW
 - [x] Deploy to `supermega-public` and verify aliases, contact API, lead ledger, behavior monitoring, and browser usability.
 
 Live result: `supermega.dev` and `www.supermega.dev` point to deployment `dpl_7jQohAP4PyLYDDqbGLwUedzJeEPs`, live aliases return HTTP 200, contact API is ready, lead ledger is configured, browser usability is green on desktop/tablet/mobile, behavior monitoring is ready, and the behavior DB reports `recent_7d_count: 1446`.
+
+### Task 15: Add Adaptive Value Proof Plan
+
+**Files:**
+- Modify: `tools/create_public_vercel_output.mjs`
+- Modify: `tools/verify_public_vercel_output.mjs`
+- Modify: `tools/audit_public_usability.mjs`
+- Modify: `tools/public_deployment_lock.json`
+
+- [x] Add a browser-local value proof plan derived from selected worker, source-pack readiness, and first-proof readiness.
+- [x] Store only catalog-derived evidence labels, metric labels, worker ID, readiness, gate, page path, and generated time.
+- [x] Pass value-plan readiness into setup/contact forms as `value_plan_worker_id`, `value_plan_summary`, `value_plan_metrics`, `value_plan_evidence`, and `value_plan_gate`.
+- [x] Add AI Worker User Guide copy for proving value before retainer and keeping revenue claims blocked until payment proof.
+- [x] Add static verifier coverage for the public shell, guide, and setup hidden fields.
+- [x] Add desktop, tablet, and mobile browser audit coverage for value-plan panel rendering, setup hidden-field propagation, and contact hidden-field propagation.
+- [x] Deploy to `supermega-public` and verify aliases, route smoke, contact API, lead ledger, behavior monitoring, and browser usability.
+
+Live result: `supermega.dev` and `www.supermega.dev` point to deployment `dpl_Cd9JdkFVgeTNzNuxaREru7khgscF`, live aliases return HTTP 200, contact API is ready, lead ledger is configured, route smoke is green, browser usability is green on desktop/tablet/mobile, behavior monitoring is ready, and the behavior DB reports `recent_7d_count: 1729`.
