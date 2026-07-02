@@ -53,7 +53,7 @@ requireTokens('home_workcell_offer', home, [
   'Free core tools. Premium AI workers.',
   'Premium AI',
   'Agent crews',
-  'Digital workers',
+  'Gated hands',
 ])
 
 requireTokens('offers_workcell_offer', offers, [

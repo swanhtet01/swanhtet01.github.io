@@ -195,7 +195,7 @@ const publicMachineHtml = `<!doctype html>
   <body>
     <main>
       <header>
-        <a class="brand" href="/"><span class="mark"><img src="/favicon.svg" alt="" /></span><span>SUPERMEGA.dev</span></a>
+        <a class="brand" href="/"><span class="mark"><img src="/favicon.svg" alt="" /></span><span class="wm" style="letter-spacing:-0.02em"><b style="font-weight:600">SUPER</b><b style="font-weight:900;text-shadow:0 0 14px rgba(233,185,73,0.45)">MEGA</b><b style="color:#E9B949;font-weight:700">.dev</b></span></a>
         <a class="btn" href="/contact/">Contact</a>
       </header>
       <section class="hero">
@@ -681,7 +681,7 @@ function publicToolsHtmlFromCatalog(catalog, agentRadar = {}, socialOAuth = {}) 
   <body>
     <div class="wrap">
       <header>
-        <a class="brand" href="/" aria-label="SUPERMEGA.dev home"><span class="mark"><img src="/favicon.svg" alt="" /></span><span>SUPERMEGA.dev</span></a>
+        <a class="brand" href="/" aria-label="SUPERMEGA.dev home"><span class="mark"><img src="/favicon.svg" alt="" /></span><span class="wm" style="letter-spacing:-0.02em"><b style="font-weight:600">SUPER</b><b style="font-weight:900;text-shadow:0 0 14px rgba(233,185,73,0.45)">MEGA</b><b style="color:#E9B949;font-weight:700">.dev</b></span></a>
         <nav class="nav" aria-label="Primary">
           <a class="btn secondary-nav" href="/">Home</a>
           <a class="btn primary" href="/contact/?source=tools">Contact</a>
@@ -826,7 +826,7 @@ function publicValueHtmlFromEngine(engine) {
   <body>
     <div class="wrap">
       <header>
-        <a class="brand" href="/" aria-label="SUPERMEGA.dev home"><span class="mark"><img src="/favicon.svg" alt="" /></span><span>SUPERMEGA.dev</span></a>
+        <a class="brand" href="/" aria-label="SUPERMEGA.dev home"><span class="mark"><img src="/favicon.svg" alt="" /></span><span class="wm" style="letter-spacing:-0.02em"><b style="font-weight:600">SUPER</b><b style="font-weight:900;text-shadow:0 0 14px rgba(233,185,73,0.45)">MEGA</b><b style="color:#E9B949;font-weight:700">.dev</b></span></a>
         <nav class="nav" aria-label="Primary">
           <a class="btn secondary-nav" href="/tools/">Tools</a>
           <a class="btn secondary-nav" href="/start/">Start</a>
@@ -980,7 +980,7 @@ function publicIntakeHtmlFromRouter(router) {
   <body>
     <div class="wrap">
       <header>
-        <a class="brand" href="/" aria-label="SUPERMEGA.dev home"><span class="mark"><img src="/favicon.svg" alt="" /></span><span>SUPERMEGA.dev</span></a>
+        <a class="brand" href="/" aria-label="SUPERMEGA.dev home"><span class="mark"><img src="/favicon.svg" alt="" /></span><span class="wm" style="letter-spacing:-0.02em"><b style="font-weight:600">SUPER</b><b style="font-weight:900;text-shadow:0 0 14px rgba(233,185,73,0.45)">MEGA</b><b style="color:#E9B949;font-weight:700">.dev</b></span></a>
         <nav class="nav" aria-label="Primary">
           <a class="btn secondary-nav" href="/tools/">Tools</a>
           <a class="btn secondary-nav" href="/proof/">Proof</a>
@@ -1221,7 +1221,7 @@ function publicProofHtmlFromPacks(proof) {
   <body>
     <div class="wrap">
       <header>
-        <a class="brand" href="/" aria-label="SUPERMEGA.dev home"><span class="mark"><img src="/favicon.svg" alt="" /></span><span>SUPERMEGA.dev</span></a>
+        <a class="brand" href="/" aria-label="SUPERMEGA.dev home"><span class="mark"><img src="/favicon.svg" alt="" /></span><span class="wm" style="letter-spacing:-0.02em"><b style="font-weight:600">SUPER</b><b style="font-weight:900;text-shadow:0 0 14px rgba(233,185,73,0.45)">MEGA</b><b style="color:#E9B949;font-weight:700">.dev</b></span></a>
         <nav class="nav" aria-label="Primary">
           <a class="btn secondary-nav" href="/tools/">Tools</a>
           <a class="btn secondary-nav" href="/value/">Value</a>
@@ -1337,8 +1337,8 @@ function renderPublicPricingHtml() {
     <div class="wrap">
       <header>
         <a class="brand" href="/" aria-label="SUPERMEGA.dev home">
-          <span class="mark"><svg viewBox="0 0 64 64" width="100%" height="100%" fill="none" aria-hidden="true"><g stroke="#D97757" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M35.8 10.3 A22 22 0 1 1 28.2 10.3"/><path d="M22 45 L22 26 L32 38 L42 26 L42 45" stroke-width="4"/></g><path d="M32 34.5 L33.2 37 L35.5 38 L33.2 39 L32 41.5 L30.8 39 L28.5 38 L30.8 37 Z" fill="#C9A24B"/><path d="M32 7.6 L32.9 9.7 L35 10.3 L32.9 10.9 L32 13 L31.1 10.9 L29 10.3 L31.1 9.7 Z" fill="#C9A24B"/></svg></span>
-          <span class="brand-text"><strong>SUPERMEGA.dev</strong></span>
+          <span class="mark"><svg viewBox="0 0 64 64" width="100%" height="100%" fill="none" aria-hidden="true"><g stroke="#D97757" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M35.8 10.3 A22 22 0 1 1 28.2 10.3"/><path d="M22 45 L22 26 L32 38 L42 26 L42 45" stroke-width="4"/></g><path d="M32 34.5 L33.2 37 L35.5 38 L33.2 39 L32 41.5 L30.8 39 L28.5 38 L30.8 37 Z" fill="#E9B949"/><path d="M32 7.6 L32.9 9.7 L35 10.3 L32.9 10.9 L32 13 L31.1 10.9 L29 10.3 L31.1 9.7 Z" fill="#E9B949"/></svg></span>
+          <span class="brand-text"><span class="wm" style="font-size:18px;letter-spacing:-0.02em"><b style="font-weight:600">SUPER</b><b style="font-weight:900;text-shadow:0 0 14px rgba(233,185,73,0.45)">MEGA</b><b style="color:#E9B949;font-weight:700">.dev</b></span></span>
         </a>
         <nav class="nav" aria-label="Primary">
           <a class="btn secondary" href="/products/">Products</a>
@@ -1416,7 +1416,7 @@ const publicCardHtml = `<!doctype html>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" />
     <style>
       @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;500;700;900&display=swap');
-      :root { color-scheme: light dark; --cream:#f7f4ec; --paper:#fffdf8; --ink:#2a241c; --muted:#6b6052; --clay:#c2603f; --gilt:#c9a24b; --line:rgba(42,36,28,0.12); --bg:#1b1815; }
+      :root { color-scheme: light dark; --cream:#f7f4ec; --paper:#fffdf8; --ink:#2a241c; --muted:#6b6052; --clay:#c2603f; --gilt:#E9B949; --line:rgba(42,36,28,0.12); --bg:#1b1815; }
       * { box-sizing: border-box; }
       body { margin: 0; min-height: 100svh; display: grid; place-items: center; padding: 24px; background-color: #1b1815; background-image: radial-gradient(ellipse at 80% 12%, rgba(201,162,75,0.13), transparent 30rem), radial-gradient(ellipse at 8% 88%, rgba(194,96,63,0.15), transparent 30rem), linear-gradient(160deg, #1f1b17, #13110e 75%); color: var(--ink); font-family: "Inter", "Segoe UI", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
       a { color: inherit; text-decoration: none; }
@@ -1452,7 +1452,7 @@ const publicCardHtml = `<!doctype html>
         <span class="qr-label">Scan to visit</span>
       </div>
       <section class="content">
-        <a class="brand" href="/" aria-label="SUPERMEGA.dev home"><span class="mark"><img src="/favicon.svg?v=supermega-atelier-20260623" alt="" /></span><span>SUPERMEGA.dev</span></a>
+        <a class="brand" href="/" aria-label="SUPERMEGA.dev home"><span class="mark"><img src="/favicon.svg?v=supermega-atelier-20260623" alt="" /></span><span class="wm" style="letter-spacing:-0.02em"><b style="font-weight:600">SUPER</b><b style="font-weight:900;text-shadow:0 0 14px rgba(233,185,73,0.45)">MEGA</b><b style="color:#E9B949;font-weight:700">.dev</b></span></a>
         <h1>Swan Htet</h1>
         <p class="role">Founder — custom software for Myanmar business</p>
         <p class="pitch">I build the software your team actually needs — starting from your real data. Priced in MMK. Built in weeks. Yours to keep.</p>
@@ -1495,7 +1495,7 @@ const publicCampaignRedirectHtml = `<!doctype html>
   </head>
   <body>
     <main>
-      <div class="brand"><span class="mark"><img src="/favicon.svg?v=supermega-atelier-20260623" alt="" /></span><span>SUPERMEGA.dev</span></div>
+      <div class="brand"><span class="mark"><img src="/favicon.svg?v=supermega-atelier-20260623" alt="" /></span><span class="wm" style="letter-spacing:-0.02em"><b style="font-weight:600">SUPER</b><b style="font-weight:900;text-shadow:0 0 14px rgba(233,185,73,0.45)">MEGA</b><b style="color:#E9B949;font-weight:700">.dev</b></span></div>
       <h1>Opening SUPERMEGA.</h1>
       <p>Sending you to the main site.</p>
       <a data-sm-campaign-link href="${activeCardContactPath}">Continue</a>
@@ -1950,7 +1950,7 @@ const unicornShellStyle = `
         .proof-plan-actions .btn { flex: 1 1 auto; }
       }
 
-      :root { --gilt: #C9A24B; }
+      :root { --gilt: #E9B949; }
       .reveal { opacity: 0; transform: translateY(18px); transition: opacity .66s cubic-bezier(.22,1,.36,1), transform .66s cubic-bezier(.22,1,.36,1); }
       .reveal.in { opacity: 1; transform: none; }
       .hero-tagline { font-family: var(--font-serif); font-style: italic; color: var(--blue); font-size: clamp(15px, 1.4vw, 17px); margin-top: 20px; letter-spacing: -0.01em; opacity: 0.88; max-width: 28ch; }
@@ -1993,8 +1993,8 @@ const unicornHeader = `
       <script>(function(){try{var t=localStorage.getItem('sm-theme');if(!t){t=(window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light';}document.documentElement.setAttribute('data-theme',t);}catch(e){}})();</script>
       <header>
         <a class="brand" href="/" aria-label="SUPERMEGA.dev home">
-          <span class="mark"><svg viewBox="0 0 64 64" width="100%" height="100%" fill="none" aria-hidden="true"><g stroke="#D97757" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M35.8 10.3 A22 22 0 1 1 28.2 10.3"/><path d="M22 45 L22 26 L32 38 L42 26 L42 45" stroke-width="4"/></g><path d="M32 34.5 L33.2 37 L35.5 38 L33.2 39 L32 41.5 L30.8 39 L28.5 38 L30.8 37 Z" fill="#C9A24B"/><path d="M32 7.6 L32.9 9.7 L35 10.3 L32.9 10.9 L32 13 L31.1 10.9 L29 10.3 L31.1 9.7 Z" fill="#C9A24B"/></svg></span>
-          <span class="brand-text"><strong>SUPERMEGA.dev</strong></span>
+          <span class="mark"><svg viewBox="0 0 64 64" width="100%" height="100%" fill="none" aria-hidden="true"><g stroke="#D97757" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M35.8 10.3 A22 22 0 1 1 28.2 10.3"/><path d="M22 45 L22 26 L32 38 L42 26 L42 45" stroke-width="4"/></g><path d="M32 34.5 L33.2 37 L35.5 38 L33.2 39 L32 41.5 L30.8 39 L28.5 38 L30.8 37 Z" fill="#E9B949"/><path d="M32 7.6 L32.9 9.7 L35 10.3 L32.9 10.9 L32 13 L31.1 10.9 L29 10.3 L31.1 9.7 Z" fill="#E9B949"/></svg></span>
+          <span class="brand-text"><span class="wm" style="font-size:18px;letter-spacing:-0.02em"><b style="font-weight:600">SUPER</b><b style="font-weight:900;text-shadow:0 0 14px rgba(233,185,73,0.45)">MEGA</b><b style="color:#E9B949;font-weight:700">.dev</b></span></span>
         </a>
         <nav class="nav" aria-label="Primary">
           <button class="btn secondary theme-toggle" type="button" aria-label="Toggle dark mode" onclick="var r=document.documentElement,n=r.getAttribute('data-theme')==='dark'?'light':'dark';r.setAttribute('data-theme',n);try{localStorage.setItem('sm-theme',n)}catch(e){}"></button>
@@ -4221,7 +4221,7 @@ ${renderSellableWorkerShelf()}
           <h2>One kernel, wired into 36 real systems.</h2>
           <p class="section-sub">Agents read from the tools your team already uses and act through rails you already trust. API connectors come first; browser, desktop, and mobile hands are used only when no safer API/export path exists.</p>
           <div style="border:1px solid rgba(201,162,75,0.45);border-radius:18px;background:linear-gradient(135deg, rgba(201,162,75,0.12), rgba(194,96,63,0.06));padding:16px 20px;margin-bottom:20px">
-            <div class="connector-group-label" style="color:#9a7d2f">★ Myanmar-native rails — built in, no global SaaS has these · 8</div>
+            <div class="connector-group-label" style="color:#B8892E">★ Myanmar-native rails — built in, no global SaaS has these · 8</div>
             <div class="connector-grid" style="margin-top:10px">
               ${['KBZPay','WavePay','AYA Pay','CB Pay','OnePay','MMQR','CBM Rate','Viber'].map((n) => `<div class="connector-chip" style="border-color:rgba(201,162,75,0.55);background:rgba(201,162,75,0.14);color:#7a6320;font-weight:850">${n}</div>`).join('')}
             </div>
@@ -4406,7 +4406,7 @@ ${unicornHeader}
           <div class="copy">
             <div class="eyebrow">Free core · Premium AI · Agent crews</div>
             <h1>Free core tools. Premium AI workers.</h1>
-            <p lang="my" style="font-size:clamp(15px,2vw,18px);color:var(--clay);font-weight:800;margin:2px 0 14px;line-height:1.5">သင့်လုပ်ငန်းရဲ့ အလုပ်အကိုင်တွေကို သင်ကိုယ်တိုင် ပိုင်ဆိုင်တဲ့ ဆော့ဖ်ဝဲအဖြစ် တည်ဆောက်ပေးပါတယ်။</p>
+            <p style="font-size:clamp(15px,2vw,18px);color:var(--clay);font-weight:800;margin:2px 0 14px;line-height:1.5">Built for how Myanmar business really runs. Free to start — power up when you're ready.</p>
             <p>Free core tools replace bloated SaaS. Premium AI workers handle messy data, connectors, approvals, and daily operations across mobile, tablet, and desktop. Start with one useful tool, then add agents only after proof.</p>
             <div class="cta">
               <a class="btn primary" href="/free/">Try the free tool</a>
@@ -4436,12 +4436,12 @@ ${unicornHeader}
           <div class="workcell-panel">
             <div class="eyebrow">SaaS killer path</div>
             <h2>Start free. Add AI only where it creates cash value.</h2>
-            <p>Free core: deterministic tools that work in the browser or app. Premium AI: private data, source trace, connectors, scheduled runs, and owner-approved actions. Agent crews: one-off workcells for cleanup, reports, migration, inboxes, and launch tasks. Digital workers stay R&D-gated before write actions or regulated systems.</p>
+            <p>Free core: deterministic tools that work in the browser or app. Premium AI: private data, source trace, connectors, scheduled runs, and owner-approved actions. Agent crews: one-off workcells for cleanup, reports, migration, inboxes, and launch tasks. Gated hands stay R&D-gated before write actions or regulated systems.</p>
             <div class="workcell-grid">
               <div class="workcell-step"><strong>Free core tools</strong><span>POS, source-to-screen, checklists, and simple boards that prove value before account setup.</span></div>
               <div class="workcell-step"><strong>Premium AI layer</strong><span>Data cleanup, brief generation, reconciliation, drafts, and insights from approved sources.</span></div>
               <div class="workcell-step"><strong>Agent crews</strong><span>Scoped jobs with first proof, acceptance tests, source trace, and no external action without approval.</span></div>
-              <div class="workcell-step"><strong>Digital workers</strong><span>Computer-use and mobile workcells are built behind gates: consent, reliability, vaulting, legal review, and audit logs.</span></div>
+              <div class="workcell-step"><strong>Gated hands</strong><span>Computer-use and mobile workcells are built behind gates: consent, reliability, vaulting, legal review, and audit logs.</span></div>
             </div>
             <div class="cta" style="margin-top:22px"><a class="btn primary" href="/free/">Try free Source-to-Screen</a><a class="btn secondary" href="/ai-agents/">See the AI Agent Army</a></div>
           </div>
@@ -4474,16 +4474,16 @@ ${unicornHeader}
                 <filter id="lkSoft" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="7" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
                 <style>
                   .lk-pill{fill:#fffdf8;stroke:rgba(42,36,28,.16);stroke-width:1.2}
-                  .lk-pill.lk-gilt{stroke:#c9a24b;stroke-width:1.6}
+                  .lk-pill.lk-gilt{stroke:#E9B949;stroke-width:1.6}
                   .lk-pl{fill:#2a241c;font-size:15px;font-weight:650;letter-spacing:-.01em}
                   .lk-ps{fill:#8a8073;font-size:11px;font-weight:700}
                   .lk-col{fill:#9c4a2d;font-size:11px;font-weight:900;letter-spacing:.2em}
                   .lk-wire{fill:none;stroke-linecap:round}
                   .lk-flow-in{stroke:#c2603f;stroke-width:2;stroke-dasharray:2 11;opacity:.55;animation:lkin 1.5s linear infinite}
-                  .lk-flow-out{stroke:#c9a24b;stroke-width:2.2;stroke-dasharray:2 11;opacity:.7;animation:lkout 1.4s linear infinite}
+                  .lk-flow-out{stroke:#E9B949;stroke-width:2.2;stroke-dasharray:2 11;opacity:.7;animation:lkout 1.4s linear infinite}
                   @keyframes lkin{to{stroke-dashoffset:-13}}
                   @keyframes lkout{to{stroke-dashoffset:-13}}
-                  .lk-ring{fill:none;stroke:#c9a24b;stroke-width:1.5;opacity:.5;transform-origin:480px 200px;animation:lkpulse 3.4s ease-out infinite}
+                  .lk-ring{fill:none;stroke:#E9B949;stroke-width:1.5;opacity:.5;transform-origin:480px 200px;animation:lkpulse 3.4s ease-out infinite}
                   @keyframes lkpulse{0%{transform:scale(.82);opacity:.55}70%{opacity:0}100%{transform:scale(1.5);opacity:0}}
                   .lk-dot{animation:lkblink 2.6s ease-in-out infinite}
                   @keyframes lkblink{0%,100%{opacity:.4}50%{opacity:1}}
@@ -4491,7 +4491,7 @@ ${unicornHeader}
                 </style>
               </defs>
               <text x="118" y="22" text-anchor="middle" class="lk-col">YOUR DATA</text>
-              <text x="842" y="22" text-anchor="middle" class="lk-col" fill="#9a7d2f">ACTIONS · YOU APPROVE</text>
+              <text x="842" y="22" text-anchor="middle" class="lk-col" fill="#B8892E">ACTIONS · YOU APPROVE</text>
               <path class="lk-wire lk-flow-in" d="M212,75 C 300,75 330,200 392,200"/>
               <path class="lk-wire lk-flow-in" d="M212,137 C 300,137 332,200 392,200"/>
               <path class="lk-wire lk-flow-in" d="M212,199 C 320,199 350,200 392,200"/>
@@ -4504,28 +4504,28 @@ ${unicornHeader}
               <path class="lk-wire lk-flow-out" d="M568,200 C 630,200 660,323 748,323"/>
               <g>
                 <rect class="lk-pill" x="24" y="52" width="188" height="46" rx="23"/><text class="lk-pl" x="48" y="80">Gmail</text>
-                <rect class="lk-pill lk-gilt" x="24" y="114" width="188" height="46" rx="23"/><circle class="lk-dot" cx="40" cy="137" r="4" fill="#c9a24b"/><text class="lk-pl" x="56" y="142">Viber</text>
+                <rect class="lk-pill lk-gilt" x="24" y="114" width="188" height="46" rx="23"/><circle class="lk-dot" cx="40" cy="137" r="4" fill="#E9B949"/><text class="lk-pl" x="56" y="142">Viber</text>
                 <rect class="lk-pill" x="24" y="176" width="188" height="46" rx="23"/><text class="lk-pl" x="48" y="204">Google Drive</text>
                 <rect class="lk-pill" x="24" y="238" width="188" height="46" rx="23"/><text class="lk-pl" x="48" y="266">Sheets</text>
                 <rect class="lk-pill" x="24" y="300" width="188" height="46" rx="23"/><text class="lk-pl" x="48" y="328">Telegram</text>
               </g>
               <circle class="lk-ring" cx="480" cy="200" r="86"/>
               <circle cx="480" cy="200" r="82" fill="url(#lkCore)" filter="url(#lkSoft)"/>
-              <circle cx="480" cy="200" r="82" fill="none" stroke="#c9a24b" stroke-width="2" opacity=".85"/>
+              <circle cx="480" cy="200" r="82" fill="none" stroke="#E9B949" stroke-width="2" opacity=".85"/>
               <text x="480" y="176" text-anchor="middle" fill="#fff" font-size="13" font-weight="900" letter-spacing=".18em">SUPERMEGA</text>
               <text x="480" y="210" text-anchor="middle" fill="#fff" font-family="Fraunces, Georgia, serif" font-size="40" font-weight="600">36</text>
               <text x="480" y="232" text-anchor="middle" fill="#f7e9d8" font-size="12" font-weight="800">connectors</text>
               <text x="480" y="306" text-anchor="middle" fill="#6f665a" font-size="12.5" font-weight="800">one kernel · one data spine</text>
               <g>
-                <rect class="lk-pill lk-gilt" x="748" y="52" width="188" height="46" rx="23"/><circle class="lk-dot" cx="764" cy="75" r="4" fill="#c9a24b"/><text class="lk-pl" x="780" y="80">KBZPay request</text>
-                <rect class="lk-pill lk-gilt" x="748" y="114" width="188" height="46" rx="23"/><circle class="lk-dot" cx="764" cy="137" r="4" fill="#c9a24b"/><text class="lk-pl" x="780" y="134">MMK total</text><text class="lk-ps" x="780" y="150">at today's CBM rate</text>
-                <rect class="lk-pill lk-gilt" x="748" y="176" width="188" height="46" rx="23"/><circle class="lk-dot" cx="764" cy="199" r="4" fill="#c9a24b"/><text class="lk-pl" x="780" y="204">Viber alert</text>
+                <rect class="lk-pill lk-gilt" x="748" y="52" width="188" height="46" rx="23"/><circle class="lk-dot" cx="764" cy="75" r="4" fill="#E9B949"/><text class="lk-pl" x="780" y="80">KBZPay request</text>
+                <rect class="lk-pill lk-gilt" x="748" y="114" width="188" height="46" rx="23"/><circle class="lk-dot" cx="764" cy="137" r="4" fill="#E9B949"/><text class="lk-pl" x="780" y="134">MMK total</text><text class="lk-ps" x="780" y="150">at today's CBM rate</text>
+                <rect class="lk-pill lk-gilt" x="748" y="176" width="188" height="46" rx="23"/><circle class="lk-dot" cx="764" cy="199" r="4" fill="#E9B949"/><text class="lk-pl" x="780" y="204">Viber alert</text>
                 <rect class="lk-pill" x="748" y="238" width="188" height="46" rx="23"/><text class="lk-pl" x="772" y="266">Approval queue</text>
                 <rect class="lk-pill" x="748" y="300" width="188" height="46" rx="23"/><text class="lk-pl" x="772" y="322">Audit-linked</text><text class="lk-ps" x="772" y="336">every number traceable</text>
               </g>
             </svg>
             </div>
-            <p style="max-width:64ch;color:var(--muted);line-height:1.6;margin:18px auto 0;text-align:center">SUPERMEGA reads the tools your team already uses, structures the work in one kernel, and acts only when you approve. <strong style="color:#9a7d2f">Myanmar-native rails — KBZPay, Wave, AYA, CB Pay, MMQR, the live CBM rate, and Viber — are built in. No global SaaS has them.</strong></p>
+            <p style="max-width:64ch;color:var(--muted);line-height:1.6;margin:18px auto 0;text-align:center">SUPERMEGA reads the tools your team already uses, structures the work in one kernel, and acts only when you approve. <strong style="color:#B8892E">Myanmar-native rails — KBZPay, Wave, AYA, CB Pay, MMQR, the live CBM rate, and Viber — are built in. No global SaaS has them.</strong></p>
           </div>
         </section>
 
@@ -5960,8 +5960,8 @@ async function prunePublicSiteDir() {
 await rm(outputDir, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 })
 await mkdir(outputDir, { recursive: true })
 await copyPublicStatic(resolve(root, 'api-static'), staticDir)
-// Brand favicon is owned here (revert-proof against OneDrive restoring the old file): Arcane Atelier mark.
-await writeFile(resolve(staticDir, 'favicon.svg'), `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="SuperMega"><rect width="64" height="64" rx="16" fill="#1B1815"/><g fill="none" stroke="#D97757" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M35.8 10.3 A22 22 0 1 1 28.2 10.3"/><path d="M22 45 L22 26 L32 38 L42 26 L42 45" stroke-width="4"/></g><path d="M32 34.5 L33.2 37 L35.5 38 L33.2 39 L32 41.5 L30.8 39 L28.5 38 L30.8 37 Z" fill="#C9A24B"/><path d="M32 7.6 L32.9 9.7 L35 10.3 L32.9 10.9 L32 13 L31.1 10.9 L29 10.3 L31.1 9.7 Z" fill="#C9A24B"/><rect x=".75" y=".75" width="62.5" height="62.5" rx="15.25" fill="none" stroke="#F3EFE6" stroke-opacity=".14" stroke-width="1.5"/></svg>\n`, 'utf8')
+// Brand favicon is owned here (revert-proof against OneDrive restoring the old file): Capsule Forge mark.
+await writeFile(resolve(staticDir, 'favicon.svg'), `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="SuperMega"><defs><linearGradient id="gb" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#F2C75A"/><stop offset="1" stop-color="#E9B949"/></linearGradient><rect id="c" x="12" y="8" width="40" height="48" rx="16" ry="16"/><clipPath id="cc"><use href="#c"/></clipPath></defs><use href="#c" fill="#181410"/><g clip-path="url(#cc)"><rect x="12" y="8" width="40" height="20.2" fill="url(#gb)"/><rect x="12" y="27.7" width="40" height="1" fill="#181410" opacity="0.55"/><rect x="12" y="28.2" width="40" height="0.8" fill="#F2C75A" opacity="0.35"/></g><circle cx="39" cy="43" r="4.6" fill="#E9B949"/><use href="#c" fill="none" stroke="#E9B949" stroke-width="1.5" opacity="0.9"/></svg>\n`, 'utf8')
 for (const entry of await readdir(resolve(staticDir, 'site')).catch(() => [])) {
   if (/\.json$/i.test(entry)) {
     await rm(resolve(staticDir, 'site', entry), { force: true })
@@ -9248,7 +9248,7 @@ const publicProofReviewHtml = `<!doctype html>
 <body>
   <main>
     <header>
-      <a class="brand" href="/" aria-label="SUPERMEGA.dev home"><span class="mark"><img src="/favicon.svg" alt="" /></span><span>SUPERMEGA.dev</span></a>
+      <a class="brand" href="/" aria-label="SUPERMEGA.dev home"><span class="mark"><img src="/favicon.svg" alt="" /></span><span class="wm" style="letter-spacing:-0.02em"><b style="font-weight:600">SUPER</b><b style="font-weight:900;text-shadow:0 0 14px rgba(233,185,73,0.45)">MEGA</b><b style="color:#E9B949;font-weight:700">.dev</b></span></a>
       <a class="btn" href="/operator/">Operator console</a>
     </header>
     <section class="hero">
@@ -9419,7 +9419,7 @@ const publicPaymentProofHtml = `<!doctype html>
 <body>
   <main>
     <header>
-      <a class="brand" href="/" aria-label="SUPERMEGA.dev home"><span class="mark"><img src="/favicon.svg" alt="" /></span><span>SUPERMEGA.dev</span></a>
+      <a class="brand" href="/" aria-label="SUPERMEGA.dev home"><span class="mark"><img src="/favicon.svg" alt="" /></span><span class="wm" style="letter-spacing:-0.02em"><b style="font-weight:600">SUPER</b><b style="font-weight:900;text-shadow:0 0 14px rgba(233,185,73,0.45)">MEGA</b><b style="color:#E9B949;font-weight:700">.dev</b></span></a>
       <a class="btn" href="/operator/">Operator console</a>
     </header>
     <section class="hero">
@@ -9595,7 +9595,7 @@ const publicSourcePackIntakeHtml = `<!doctype html>
 <body>
   <main>
     <header>
-      <a class="brand" href="/" aria-label="SUPERMEGA.dev home"><span class="mark"><img src="/favicon.svg" alt="" /></span><span>SUPERMEGA.dev</span></a>
+      <a class="brand" href="/" aria-label="SUPERMEGA.dev home"><span class="mark"><img src="/favicon.svg" alt="" /></span><span class="wm" style="letter-spacing:-0.02em"><b style="font-weight:600">SUPER</b><b style="font-weight:900;text-shadow:0 0 14px rgba(233,185,73,0.45)">MEGA</b><b style="color:#E9B949;font-weight:700">.dev</b></span></a>
       <a class="btn" href="/operator/">Operator console</a>
     </header>
     <section class="hero">
@@ -9809,7 +9809,7 @@ const publicPilotWorkspaceHtml = `<!doctype html>
 <body>
   <main>
     <header>
-      <a class="brand" href="/" aria-label="SUPERMEGA.dev home"><span class="mark"><img src="/favicon.svg" alt="" /></span><span>SUPERMEGA.dev</span></a>
+      <a class="brand" href="/" aria-label="SUPERMEGA.dev home"><span class="mark"><img src="/favicon.svg" alt="" /></span><span class="wm" style="letter-spacing:-0.02em"><b style="font-weight:600">SUPER</b><b style="font-weight:900;text-shadow:0 0 14px rgba(233,185,73,0.45)">MEGA</b><b style="color:#E9B949;font-weight:700">.dev</b></span></a>
       <nav class="top-actions" aria-label="Workspace actions">
         <a class="btn" href="/operator/">Operator console</a>
         <a class="btn primary" href="/contact/">Start another pilot</a>
@@ -10233,8 +10233,8 @@ const unicornPrivacyHtml = `<!doctype html>
   <script>(function(){try{var t=localStorage.getItem('sm-theme');if(!t){t=(window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light';}document.documentElement.setAttribute('data-theme',t);}catch(e){}})();</script>
   <header>
     <a class="brand" href="/" aria-label="SUPERMEGA.dev home">
-      <span class="mark"><svg viewBox="0 0 64 64" width="100%" height="100%" fill="none" aria-hidden="true"><g stroke="#D97757" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M35.8 10.3 A22 22 0 1 1 28.2 10.3"/><path d="M22 45 L22 26 L32 38 L42 26 L42 45" stroke-width="4"/></g><path d="M32 34.5 L33.2 37 L35.5 38 L33.2 39 L32 41.5 L30.8 39 L28.5 38 L30.8 37 Z" fill="#C9A24B"/><path d="M32 7.6 L32.9 9.7 L35 10.3 L32.9 10.9 L32 13 L31.1 10.9 L29 10.3 L31.1 9.7 Z" fill="#C9A24B"/></svg></span>
-      <span class="brand-text"><strong>SUPERMEGA.dev</strong></span>
+      <span class="mark"><svg viewBox="0 0 64 64" width="100%" height="100%" fill="none" aria-hidden="true"><g stroke="#D97757" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M35.8 10.3 A22 22 0 1 1 28.2 10.3"/><path d="M22 45 L22 26 L32 38 L42 26 L42 45" stroke-width="4"/></g><path d="M32 34.5 L33.2 37 L35.5 38 L33.2 39 L32 41.5 L30.8 39 L28.5 38 L30.8 37 Z" fill="#E9B949"/><path d="M32 7.6 L32.9 9.7 L35 10.3 L32.9 10.9 L32 13 L31.1 10.9 L29 10.3 L31.1 9.7 Z" fill="#E9B949"/></svg></span>
+      <span class="brand-text"><span class="wm" style="font-size:18px;letter-spacing:-0.02em"><b style="font-weight:600">SUPER</b><b style="font-weight:900;text-shadow:0 0 14px rgba(233,185,73,0.45)">MEGA</b><b style="color:#E9B949;font-weight:700">.dev</b></span></span>
     </a>
     <nav class="nav" aria-label="Primary">
       <button class="btn secondary theme-toggle" type="button" aria-label="Toggle dark mode" onclick="var r=document.documentElement,n=r.getAttribute('data-theme')==='dark'?'light':'dark';r.setAttribute('data-theme',n);try{localStorage.setItem('sm-theme',n)}catch(e){}"></button>

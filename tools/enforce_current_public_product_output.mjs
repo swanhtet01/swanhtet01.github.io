@@ -63,7 +63,7 @@ assertIncludes('home', home, [
   '<title>SUPERMEGA.dev - Free core tools, premium AI workers</title>',
   'Free core tools. Premium AI workers.',
   'Agent crews',
-  'Digital workers',
+  'Gated hands',
 ])
 assertIncludes('products', products, [
   '<title>Products | SUPERMEGA.dev</title>',

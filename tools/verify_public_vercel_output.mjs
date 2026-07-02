@@ -727,7 +727,7 @@ for (const token of [
   '<title>SUPERMEGA.dev - Free core tools, premium AI workers</title>',
   'Free core tools. Premium AI workers.',
   'Agent crews',
-  'Digital workers',
+  'Gated hands',
   'sm_worker_continue_state',
   'data-local-worker-continue',
   'Browser-local continuation',
@@ -772,6 +772,23 @@ for (const token of [
   'payment_proof_required_before_workspace_or_mrr',
 ]) {
   if (!homeHtml.includes(token)) fail('public_shell_contract_missing', { token })
+}
+for (const [entry, html] of Object.entries({
+  'index.html': homeHtml,
+  'products/index.html': productsHtml,
+  'contact/index.html': contactHtml,
+  'ai-agents/index.html': aiAgentsHtml,
+  'ai-agents/guide/index.html': aiWorkerGuideHtml,
+  'operator/index.html': operatorHtml,
+})) {
+  const match = html.match(/\bDigital workers?\b/i)
+  if (match) {
+    fail('public_digital_worker_term_guard_missing_poc', {
+      entry,
+      match: match[0],
+      required_gate: 'measured_poc_pass_rate_report_before_customer_facing_term',
+    })
+  }
 }
 for (const token of [
   'General AI Worker Toolkit',
