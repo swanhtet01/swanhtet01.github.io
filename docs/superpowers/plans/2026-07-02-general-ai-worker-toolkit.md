@@ -101,3 +101,19 @@ Expected result: generator and verifier exit `0`, deployment returns a productio
 - [x] Deploy to `supermega-public` and verify both aliases plus behavior monitoring in the go-live gate.
 
 Live result: `supermega.dev` and `www.supermega.dev` point to deployment `dpl_HbaKyVudEhpgVembR2a7hAKmCWrh`, and the go-live gate passed with behavior DB `recent_7d_count: 54`.
+
+### Task 8: Add Public User Guide
+
+**Files:**
+- Modify: `tools/create_public_vercel_output.mjs`
+- Modify: `tools/verify_public_vercel_output.mjs`
+- Modify: `tools/audit_public_usability.mjs`
+
+- [x] Add `/ai-agents/guide/` as a generated AI Worker User Guide for starting, using, approving, and improving workers.
+- [x] Cover desktop, tablet, and mobile use, connector setup rules, approval gates, behavior adaptation, and computer-use/mobile workcell limits.
+- [x] Generate guide cards from all nine worker templates so source packs, first proofs, and setup links stay current.
+- [x] Link the guide from `/ai-agents/`, `/agent-templates/`, template pages, and setup pages.
+- [x] Add static verifier coverage, sitemap coverage, and desktop/mobile browser usability coverage for the guide.
+- [x] Deploy to `supermega-public` and verify aliases, contact API, lead ledger, behavior monitoring, and browser usability.
+
+Live result: `supermega.dev` and `www.supermega.dev` point to deployment `dpl_DAUAZWKeXYnsod3wcwGaZRvB8mVE`, and the go-live gate passed with behavior DB `recent_7d_count: 378`.

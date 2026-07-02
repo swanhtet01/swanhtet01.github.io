@@ -573,6 +573,9 @@ const homeHtml = readFileSync(resolve(staticDir, 'index.html'), 'utf8')
 const productsHtml = readFileSync(resolve(staticDir, 'products/index.html'), 'utf8')
 const contactHtml = readFileSync(resolve(staticDir, 'contact/index.html'), 'utf8')
 const aiAgentsHtml = readFileSync(resolve(staticDir, 'ai-agents/index.html'), 'utf8')
+const aiWorkerGuidePath = resolve(staticDir, 'ai-agents/guide/index.html')
+if (!existsSync(aiWorkerGuidePath)) fail('public_ai_worker_user_guide_missing')
+const aiWorkerGuideHtml = readFileSync(aiWorkerGuidePath, 'utf8')
 const operatorHtmlPath = resolve(staticDir, 'operator/index.html')
 if (!existsSync(operatorHtmlPath)) fail('public_operator_console_missing')
 const operatorHtml = readFileSync(operatorHtmlPath, 'utf8')
@@ -731,6 +734,7 @@ for (const token of [
 for (const token of [
   'General AI Worker Toolkit',
   'Pick one reusable worker and prove it on real sources.',
+  '/ai-agents/guide/',
   'Adaptive Worker Matcher',
   'data-worker-router',
   'data-router-result',
@@ -748,6 +752,18 @@ for (const token of [
   '/api/behavior-events',
 ]) {
   if (!aiAgentsHtml.includes(token)) fail('public_ai_agents_sellable_toolkit_contract_missing', { token })
+}
+for (const token of [
+  'AI worker user guide',
+  'Use any worker in four steps.',
+  'Mobile, tablet, and desktop.',
+  'Connector setup rules.',
+  'Behavior adaptation loop',
+  'no external sends, writes, payments, or browser/mobile actions without owner approval',
+  'Computer-use and mobile workers are available only as gated workcells',
+  'data-ai-worker-user-guide',
+]) {
+  if (!aiWorkerGuideHtml.includes(token)) fail('public_ai_worker_user_guide_contract_missing', { token })
 }
 for (const token of [
   '<title>Products | SUPERMEGA.dev</title>',
@@ -1004,9 +1020,22 @@ const starterPageIndexHtml = readFileSync(starterPageIndexPath, 'utf8')
 if (!starterPageIndexHtml.includes('AI agent setup kits') || !starterPageIndexHtml.includes('Start from a working template.')) {
   fail('public_agent_template_page_index_contract_missing')
 }
+if (!starterPageIndexHtml.includes('/ai-agents/guide/')) {
+  fail('public_agent_template_page_index_guide_link_missing')
+}
+const sitemapHtml = readFileSync(resolve(staticDir, 'sitemap.xml'), 'utf8')
+if (!sitemapHtml.includes('https://supermega.dev/ai-agents/guide/')) {
+  fail('public_ai_worker_user_guide_sitemap_missing')
+}
 for (const [id, name] of publicAgentTemplateContract) {
   if (!productsHtml.includes(id) || (!productsHtml.includes(name) && !productsHtml.includes(htmlEscaped(name)))) {
     fail('public_agent_template_missing_from_products', { id, name })
+  }
+  if (!aiWorkerGuideHtml.includes(id) || (!aiWorkerGuideHtml.includes(name) && !aiWorkerGuideHtml.includes(htmlEscaped(name)))) {
+    fail('public_ai_worker_user_guide_template_missing', { id, name })
+  }
+  if (!sitemapHtml.includes(`https://supermega.dev/agent-templates/${id}/`)) {
+    fail('public_agent_template_sitemap_missing', { id })
   }
   if (!contactHtml.includes(id)) {
     fail('public_agent_template_missing_from_contact_router', { id })
@@ -1042,6 +1071,9 @@ for (const [id, name] of publicAgentTemplateContract) {
   }
   if (!starterPageHtml.includes(name) && !starterPageHtml.includes(htmlEscaped(name))) {
     fail('public_agent_template_page_contract_missing', { id, name })
+  }
+  if (!starterPageHtml.includes('/ai-agents/guide/') || !starterSetupHtml.includes('/ai-agents/guide/')) {
+    fail('public_agent_template_guide_link_missing', { id })
   }
   for (const token of [
     'data-agent-template-setup',

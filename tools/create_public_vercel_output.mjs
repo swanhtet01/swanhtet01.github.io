@@ -2545,11 +2545,11 @@ ${unicornHeader}
           <div class="eyebrow">AI Agent Army · API-first · owner-approved</div>
           <h1>Agents that do the tasks SaaS leaves for humans.</h1>
           <p>Connect approved sources, choose a worker, and get a traceable first proof. Safe jobs run through APIs and queues first. The first paid path is the AI Workcell Pilot. Computer-use and mobile app actions are gated workcells until reliability, consent, vaulting, legal review, and audit logs are proven.</p>
-          <div class="cta"><a class="btn primary" href="/agent-templates/">Choose a worker</a><a class="btn secondary" href="/contact/?package=ai-workcell-pilot">Start with one source pack</a></div>
+          <div class="cta"><a class="btn primary" href="/agent-templates/">Choose a worker</a><a class="btn secondary" href="/ai-agents/guide/">Read the user guide</a><a class="btn secondary" href="/contact/?package=ai-workcell-pilot">Start with one source pack</a></div>
           <p class="hero-tagline">Cast real work into software.</p>
         </section>
 
-        <section class="section">
+        <section class="section sm-in">
           <div class="workcell-panel">
             <div class="eyebrow">proof-to-maintenance</div>
             <h2>One practical path from sample data to a managed worker.</h2>
@@ -2633,7 +2633,7 @@ ${renderSellableWorkerShelf()}
           </div>
         </section>
 
-        <section class="section">
+        <section class="section sm-in">
           <div class="workcell-panel">
             <div class="eyebrow">behavior loop</div>
             <h2>Built to learn which worker a buyer actually needs.</h2>
@@ -2862,7 +2862,7 @@ ${unicornHeader}
           <div class="strip-item"><strong>Mobile + desktop</strong><span>Phone, tablet, counter screen, browser, and operator console</span></div>
         </div>
 
-        <section class="section">
+        <section class="section sm-in">
           <div class="workcell-panel">
             <div class="eyebrow">SaaS killer path</div>
             <h2>Start free. Add AI only where it creates cash value.</h2>
@@ -3217,7 +3217,7 @@ ${renderPublicAgentTemplateCards()}
           </div>
         </section>
 
-        <section class="section">
+        <section class="section sm-in">
           <div class="final">
             <div>
               <div class="eyebrow">Start small</div>
@@ -4666,6 +4666,138 @@ function formHidden(name, value) {
   return `<input type="hidden" name="${escapeHtml(name)}" value="${escapeHtml(value || '')}" />`
 }
 
+function buildAiWorkerUserGuideHtml() {
+  const workerRows = publicAgentTemplateStarterKits
+    .map(
+      (kit) => `<article class="guide-worker" data-guide-template="${escapeHtml(kit.id)}">
+        <div><span>${escapeHtml(kit.status)}</span><h3>${escapeHtml(kit.name)}</h3></div>
+        <p>${escapeHtml(kit.offer.promise)}</p>
+        <ul>
+          <li><strong>First proof:</strong> ${escapeHtml(kit.offer.first_proof)}</li>
+          <li><strong>Sample sources:</strong> ${escapeHtml(kit.intake_schema.sample_sources.slice(0, 3).join(', '))}</li>
+          <li><strong>Approval:</strong> ${escapeHtml(kit.deployment_mode.human_gate)}</li>
+        </ul>
+        <div class="guide-actions"><a class="btn secondary" data-sm-template-link="${escapeHtml(kit.id)}" href="${escapeHtml(kit.setup_url)}">Start setup</a><a class="guide-link" href="/agent-templates/${escapeHtml(kit.id)}/">Setup kit</a></div>
+      </article>`,
+    )
+    .join('\n')
+
+  return `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="index,follow" />
+    <title>AI Worker User Guide | SUPERMEGA.dev</title>
+    <meta name="description" content="How to start, use, approve, and improve SUPERMEGA.dev AI workers across desktop, tablet, and mobile." />
+    <link rel="canonical" href="https://supermega.dev/ai-agents/guide/" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" />
+    ${unicornSocialMeta({ title: 'AI Worker User Guide | SUPERMEGA.dev', description: 'Start with one approved source pack, get a first proof, then scale an approval-gated AI worker.', url: 'https://supermega.dev/ai-agents/guide/' })}
+    <style>${unicornShellStyle}
+      .guide-hero { min-height: auto; grid-template-columns: minmax(0, 1fr) minmax(300px, .82fr); align-items: start; }
+      .guide-panel { border: 1px solid var(--line); border-radius: 18px; padding: 20px; background: rgba(255,255,255,.58); box-shadow: var(--shadow); }
+      .guide-panel strong { display:block; font-size: 13px; letter-spacing: .1em; text-transform: uppercase; color: var(--blue); }
+      .guide-panel span { display:block; margin-top: 8px; color: var(--muted); line-height: 1.45; }
+      .guide-grid { display:grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-top: 20px; }
+      .guide-step, .guide-rule, .guide-worker { border: 1px solid var(--line); border-radius: 18px; padding: 18px; background: rgba(255,255,255,.52); }
+      .guide-step n { display:grid; place-items:center; width: 34px; height: 34px; border-radius:999px; background: var(--blue); color: #fff; font-weight:900; }
+      .guide-step strong, .guide-rule strong { display:block; margin-top: 12px; font-size: 18px; letter-spacing: -.02em; }
+      .guide-step span, .guide-rule span, .guide-worker p, .guide-worker li { color: var(--muted); line-height: 1.45; }
+      .guide-rule-grid { display:grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 18px; }
+      .guide-worker-grid { display:grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-top: 20px; }
+      .guide-worker { display:grid; gap: 10px; }
+      .guide-worker span { color: var(--blue); font-size: 11px; font-weight: 950; letter-spacing: .12em; text-transform: uppercase; }
+      .guide-worker h3 { margin: 4px 0 0; font-size: 20px; line-height: 1.1; letter-spacing: -.03em; }
+      .guide-worker ul { margin: 0; padding-left: 18px; }
+      .guide-actions { display:flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+      .guide-link { color: var(--blue); font-size: 12px; font-weight: 900; text-decoration: none; }
+      .guide-safety { border: 1px solid rgba(194,96,63,.35); border-radius: 18px; padding: 20px; background: rgba(194,96,63,.08); margin-top: 18px; }
+      .guide-safety p { color: var(--ink); max-width: 68ch; }
+      [data-ai-worker-user-guide] .section,
+      [data-ai-worker-user-guide] .section.reveal,
+      [data-ai-worker-user-guide] .section.sm-in { opacity: 1 !important; transform: none !important; }
+      @media (max-width: 980px) { .guide-grid, .guide-rule-grid, .guide-worker-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+      @media (max-width: 760px) { .guide-hero, .guide-grid, .guide-rule-grid, .guide-worker-grid { grid-template-columns: 1fr; } }
+      :root[data-theme="dark"] .guide-panel, :root[data-theme="dark"] .guide-step, :root[data-theme="dark"] .guide-rule, :root[data-theme="dark"] .guide-worker { background: rgba(243,239,230,.05); }
+    </style>
+  </head>
+  <body>
+    <div class="wrap" data-ai-worker-user-guide>
+${unicornHeader}
+      <main>
+        <section class="poster guide-hero">
+          <div class="copy">
+            <div class="eyebrow">AI worker user guide</div>
+            <h1>Use the worker like a real teammate.</h1>
+            <p>Start with one approved source pack, get a first proof, then decide whether the worker should become a maintained workflow. The same operating rules work on desktop, tablet, and mobile.</p>
+            <div class="cta"><a class="btn primary" href="/agent-templates/">Choose a worker</a><a class="btn secondary" href="/ai-agents/">Back to AI agents</a></div>
+          </div>
+          <aside class="guide-panel">
+            <strong>Operating promise</strong>
+            <span>Every AI worker starts read-only, shows source trace, and keeps no external sends, writes, payments, or browser/mobile actions without owner approval.</span>
+            <strong style="margin-top:16px">Behavior adaptation loop</strong>
+            <span>Privacy-light first-party events help route buyers to the right worker and improve the catalog. No keystrokes, source files, credentials, or private business text are tracked.</span>
+          </aside>
+        </section>
+
+        <section class="section sm-in">
+          <div class="eyebrow">Quick start</div>
+          <h2>Use any worker in four steps.</h2>
+          <div class="guide-grid">
+            <div class="guide-step"><n>1</n><strong>Pick the job</strong><span>Use the matcher or setup kits to choose the worker that matches your source and first proof.</span></div>
+            <div class="guide-step"><n>2</n><strong>Send one source pack</strong><span>Share a small approved sample: screenshot, export, folder link, email thread, sheet, PDF, or chat sample.</span></div>
+            <div class="guide-step"><n>3</n><strong>Review first proof</strong><span>Check the output, source trace, missing fields, and approval boundary before connecting more tools.</span></div>
+            <div class="guide-step"><n>4</n><strong>Accept or refine</strong><span>Approve, request changes, or stop. Production runs and recurring support begin only after owner acceptance.</span></div>
+          </div>
+        </section>
+
+        <section class="section sm-in">
+          <div class="eyebrow">Daily use</div>
+          <h2>Mobile, tablet, and desktop.</h2>
+          <div class="guide-rule-grid">
+            <div class="guide-rule"><strong>Desktop</strong><span>Use desktop for source review, setup forms, operator console, ledgers, proof packets, and larger dashboards.</span></div>
+            <div class="guide-rule"><strong>Tablet</strong><span>Use tablet for review queues, shop/factory floor checks, approval lists, and manager handoff during live operations.</span></div>
+            <div class="guide-rule"><strong>Mobile</strong><span>Use mobile for first proof review, quick approvals, photos/screenshots, receipts, Viber follow-up drafts, and owner status checks.</span></div>
+          </div>
+        </section>
+
+        <section class="section sm-in">
+          <div class="eyebrow">Connectors</div>
+          <h2>Connector setup rules.</h2>
+          <div class="guide-rule-grid">
+            <div class="guide-rule"><strong>Export first</strong><span>Start with files, screenshots, or exports before granting account access. Prove value before credentials.</span></div>
+            <div class="guide-rule"><strong>API before browser</strong><span>Use official APIs, webhooks, and scheduled jobs before computer-use or mobile-app action workers.</span></div>
+            <div class="guide-rule"><strong>Approval ledger</strong><span>Every send, write, payment, browser action, mobile action, or live record edit needs owner approval and evidence.</span></div>
+          </div>
+          <div class="guide-safety"><p>Computer-use and mobile workers are available only as gated workcells after reliability, consent, vaulting, legal review, and audit logs are proven.</p></div>
+        </section>
+
+        <section class="section sm-in">
+          <div class="eyebrow">Template guide</div>
+          <h2>What to send for each worker.</h2>
+          <div class="guide-worker-grid">
+${workerRows}
+          </div>
+        </section>
+
+        <section class="section sm-in">
+          <div class="final">
+            <div>
+              <div class="eyebrow">Start safely</div>
+              <h2>Choose one worker and one source pack.</h2>
+              <p>The first useful output is the proof. The platform scales only after the first proof is accepted.</p>
+            </div>
+            <a class="btn primary" href="/agent-templates/">Choose a setup kit</a>
+          </div>
+        </section>
+      </main>
+      <footer><span>SUPERMEGA.dev AI worker guide.</span><span class="footer-links"><a href="/ai-agents/">AI agents</a><a href="/agent-templates/">Setup kits</a><a href="/contact/">Contact</a></span></footer>
+    </div>
+${publicRuntimeScripts}
+  </body>
+</html>`
+}
+
 function buildAgentTemplatePageHtml(kit) {
   return `<!doctype html>
 <html lang="en">
@@ -4703,6 +4835,7 @@ ${unicornHeader}
             <div class="cta">
               <a class="btn primary" href="${escapeHtml(kit.setup_url)}">Start this template</a>
               <a class="btn secondary" href="/agent-templates/">All setup kits</a>
+              <a class="btn secondary" href="/ai-agents/guide/">User guide</a>
             </div>
           </div>
           <aside class="kit-panel">
@@ -4726,7 +4859,7 @@ ${unicornHeader}
           <p style="margin-top:14px"><a class="kit-json" href="/site/agent-templates/${escapeHtml(kit.id)}.json">Agent-readable JSON</a></p>
         </section>
       </main>
-      <footer><span>SUPERMEGA.dev setup kit.</span><span class="footer-links"><a href="/products/">Products</a><a href="/contact/">Contact</a></span></footer>
+      <footer><span>SUPERMEGA.dev setup kit.</span><span class="footer-links"><a href="/ai-agents/guide/">User guide</a><a href="/products/">Products</a><a href="/contact/">Contact</a></span></footer>
     </div>
 ${publicRuntimeScripts}
   </body>
@@ -4833,7 +4966,7 @@ ${unicornHeader}
           </form>
         </section>
       </main>
-      <footer><span>SUPERMEGA.dev agent setup.</span><span class="footer-links"><a href="/agent-templates/${escapeHtml(kit.id)}/">Setup kit</a><a href="/contact/?template=${escapeHtml(kit.id)}">Contact route</a></span></footer>
+      <footer><span>SUPERMEGA.dev agent setup.</span><span class="footer-links"><a href="/ai-agents/guide/">User guide</a><a href="/agent-templates/${escapeHtml(kit.id)}/">Setup kit</a><a href="/contact/?template=${escapeHtml(kit.id)}">Contact route</a></span></footer>
     </div>
 ${publicRuntimeScripts}
     <script>
@@ -4911,6 +5044,7 @@ ${unicornHeader}
             <div class="eyebrow">AI agent setup kits</div>
             <h1>Start from a working template.</h1>
             <p>Each kit defines the buyer, sample inputs, first proof, workflow, outputs, and acceptance tests before any client system is connected.</p>
+            <div class="cta"><a class="btn secondary" href="/ai-agents/guide/">Read the user guide</a></div>
           </div>
         </section>
         <section class="section"><div class="kit-grid">${cards}</div></section>
@@ -4928,6 +5062,8 @@ for (const detailDoc of productDetailDocs) {
 }
 await mkdir(resolve(staticDir, 'agent-templates'), { recursive: true })
 await writeFile(resolve(staticDir, 'agent-templates', 'index.html'), normalizePublicProductNames(buildAgentTemplateIndexHtml()), 'utf8')
+await mkdir(resolve(staticDir, 'ai-agents', 'guide'), { recursive: true })
+await writeFile(resolve(staticDir, 'ai-agents', 'guide', 'index.html'), normalizePublicProductNames(buildAiWorkerUserGuideHtml()), 'utf8')
 for (const kit of publicAgentTemplateStarterKits) {
   await mkdir(resolve(staticDir, 'agent-templates', kit.id), { recursive: true })
   await writeFile(resolve(staticDir, 'agent-templates', kit.id, 'index.html'), normalizePublicProductNames(buildAgentTemplatePageHtml(kit)), 'utf8')
@@ -8391,6 +8527,30 @@ await cp('C:/sm-site/supermega-demo/index.html', resolve(staticDir, 'demo', 'ind
 await cp('C:/sm-site/supermega-demo/favicon.svg', resolve(staticDir, 'demo', 'favicon.svg'), { force: true }).catch(() => undefined)
 await writeFile(resolve(staticDir, 'robots.txt'), 'User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /app/\nDisallow: /clients/\nDisallow: /machine/\nDisallow: /operator/\nSitemap: https://supermega.dev/sitemap.xml\n', 'utf8')
 await writeFile(resolve(staticDir, 'sitemap.xml'), '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url><loc>https://supermega.dev/</loc><changefreq>weekly</changefreq><priority>1.0</priority></url>\n  <url><loc>https://supermega.dev/products/</loc><changefreq>weekly</changefreq><priority>0.9</priority></url>\n  <url><loc>https://supermega.dev/products/pos/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>\n  <url><loc>https://supermega.dev/products/factory/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>\n  <url><loc>https://supermega.dev/products/documents/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>\n  <url><loc>https://supermega.dev/free/</loc><changefreq>weekly</changefreq><priority>0.86</priority></url>\n  <url><loc>https://supermega.dev/ai-agents/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>\n  <url><loc>https://supermega.dev/agent-templates/</loc><changefreq>weekly</changefreq><priority>0.85</priority></url>\n  <url><loc>https://supermega.dev/agent-templates/deskpos-quickstart/</loc><changefreq>weekly</changefreq><priority>0.72</priority></url>\n  <url><loc>https://supermega.dev/agent-templates/chat-ledger/</loc><changefreq>weekly</changefreq><priority>0.72</priority></url>\n  <url><loc>https://supermega.dev/agent-templates/inbox-calendar-operator/</loc><changefreq>weekly</changefreq><priority>0.72</priority></url>\n  <url><loc>https://supermega.dev/agent-templates/daily-intelligence-brief/</loc><changefreq>weekly</changefreq><priority>0.72</priority></url>\n  <url><loc>https://supermega.dev/agent-templates/factory-ops-ledger/</loc><changefreq>weekly</changefreq><priority>0.72</priority></url>\n  <url><loc>https://supermega.dev/agent-templates/data-clean-report-agent/</loc><changefreq>weekly</changefreq><priority>0.72</priority></url>\n  <url><loc>https://supermega.dev/offers/</loc><changefreq>weekly</changefreq><priority>0.95</priority></url>\n  <url><loc>https://supermega.dev/work/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>\n  <url><loc>https://supermega.dev/contact/</loc><changefreq>monthly</changefreq><priority>0.9</priority></url>\n  <url><loc>https://supermega.dev/card/</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>\n  <url><loc>https://supermega.dev/privacy/</loc><changefreq>yearly</changefreq><priority>0.3</priority></url>\n</urlset>\n', 'utf8')
+const publicSitemapUrls = [
+  ['/', 'weekly', '1.0'],
+  ['/products/', 'weekly', '0.9'],
+  ['/products/pos/', 'weekly', '0.8'],
+  ['/products/factory/', 'weekly', '0.8'],
+  ['/products/documents/', 'weekly', '0.8'],
+  ['/free/', 'weekly', '0.86'],
+  ['/ai-agents/', 'weekly', '0.8'],
+  ['/ai-agents/guide/', 'weekly', '0.82'],
+  ['/agent-templates/', 'weekly', '0.85'],
+  ...publicAgentTemplateStarterKits.map((kit) => [kit.contact_url.replace('/contact/?template=', '/agent-templates/') + '/', 'weekly', '0.72']),
+  ['/offers/', 'weekly', '0.95'],
+  ['/work/', 'weekly', '0.8'],
+  ['/contact/', 'monthly', '0.9'],
+  ['/card/', 'monthly', '0.6'],
+  ['/privacy/', 'yearly', '0.3'],
+]
+await writeFile(
+  resolve(staticDir, 'sitemap.xml'),
+  `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${publicSitemapUrls
+    .map(([path, changefreq, priority]) => `  <url><loc>https://supermega.dev${path}</loc><changefreq>${changefreq}</changefreq><priority>${priority}</priority></url>`)
+    .join('\n')}\n</urlset>\n`,
+  'utf8',
+)
 await writeFile(
   resolve(staticDir, 'sw.js'),
   `const CACHE_VERSION = 'supermega-public-clean-20260522'

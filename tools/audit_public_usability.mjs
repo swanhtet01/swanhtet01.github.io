@@ -147,6 +147,42 @@ try {
     await page.locator('[data-worker-router]').screenshot({ path: matcherShot, animations: 'disabled' })
     results.screenshots[`adaptive_worker_matcher_${viewport.name}`] = matcherShot
 
+    await open(page, `${baseUrl}/ai-agents/guide/`, viewport.name)
+    await expectCopy(
+      page,
+      ['AI worker user guide', 'Use any worker in four steps.', 'Mobile, tablet, and desktop.', 'Connector setup rules.', 'Behavior adaptation loop', ...expectedTemplates],
+      'ai_worker_user_guide',
+      viewport.name,
+    )
+    const guide = await page.evaluate(() => ({
+      title: document.title,
+      workerCards: document.querySelectorAll('[data-guide-template]').length,
+      setupLinks: document.querySelectorAll('[data-guide-template] a[href$="/setup/"]').length,
+      hasSafetyCopy: document.body.textContent.includes('no external sends, writes, payments, or browser/mobile actions without owner approval'),
+      hasNoPrivateTextCopy: document.body.textContent.includes('No keystrokes, source files, credentials, or private business text are tracked.'),
+      overflowX: Math.max(0, document.documentElement.scrollWidth - document.documentElement.clientWidth),
+    }))
+    if (guide.title !== 'AI Worker User Guide | SUPERMEGA.dev') fail('ai_worker_user_guide_title_wrong', { viewport: viewport.name, guide })
+    if (guide.workerCards !== expectedTemplates.length) fail('ai_worker_user_guide_cards_missing', { viewport: viewport.name, guide })
+    if (guide.setupLinks !== expectedTemplates.length) fail('ai_worker_user_guide_setup_links_missing', { viewport: viewport.name, guide })
+    if (!guide.hasSafetyCopy || !guide.hasNoPrivateTextCopy) fail('ai_worker_user_guide_safety_copy_missing', { viewport: viewport.name, guide })
+    if (guide.overflowX > 0) fail('ai_worker_user_guide_horizontal_overflow', { viewport: viewport.name, guide })
+    await page.locator('[data-guide-template="deskpos-quickstart"]').scrollIntoViewIfNeeded()
+    const guideLower = await page.evaluate(() => ({
+      firstGuideCardVisible: Boolean(document.querySelector('[data-guide-template="deskpos-quickstart"]')?.getBoundingClientRect().height),
+      connectorHeadingVisible: Boolean([...document.querySelectorAll('h2')].some((heading) => heading.textContent?.includes('Connector setup rules.'))),
+      mobileHeadingVisible: Boolean([...document.querySelectorAll('h2')].some((heading) => heading.textContent?.includes('Mobile, tablet, and desktop.'))),
+      lowerSectionOpacity: Math.min(
+        ...[...document.querySelectorAll('[data-ai-worker-user-guide] .section')]
+          .map((section) => Number.parseFloat(window.getComputedStyle(section).opacity || '0')),
+      ),
+    }))
+    if (!guideLower.firstGuideCardVisible || !guideLower.connectorHeadingVisible || !guideLower.mobileHeadingVisible) fail('ai_worker_user_guide_lower_sections_missing', { viewport: viewport.name, guideLower })
+    if (guideLower.lowerSectionOpacity < 0.98) fail('ai_worker_user_guide_lower_sections_faded', { viewport: viewport.name, guideLower })
+    const guideShot = resolve(outputDir, `supermega-ai-worker-user-guide-${viewport.name}.png`)
+    await page.screenshot({ path: guideShot, fullPage: true, animations: 'disabled' })
+    results.screenshots[`ai_worker_user_guide_${viewport.name}`] = guideShot
+
     await open(page, `${baseUrl}/agent-templates/daily-intelligence-brief/setup/`, viewport.name)
     await expectCopy(
       page,
