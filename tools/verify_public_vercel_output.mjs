@@ -728,6 +728,11 @@ for (const token of [
   'Free core tools. Premium AI workers.',
   'Agent crews',
   'Digital workers',
+  'sm_worker_continue_state',
+  'data-local-worker-continue',
+  'Browser-local continuation',
+  'No source files, typed business text, credentials, or payment data are stored',
+  'supermegaRememberWorker',
 ]) {
   if (!homeHtml.includes(token)) fail('public_shell_contract_missing', { token })
 }

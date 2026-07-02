@@ -117,3 +117,20 @@ Live result: `supermega.dev` and `www.supermega.dev` point to deployment `dpl_Hb
 - [x] Deploy to `supermega-public` and verify aliases, contact API, lead ledger, behavior monitoring, and browser usability.
 
 Live result: `supermega.dev` and `www.supermega.dev` point to deployment `dpl_DAUAZWKeXYnsod3wcwGaZRvB8mVE`, and the go-live gate passed with behavior DB `recent_7d_count: 378`.
+
+### Task 9: Add Browser-Local Worker Continuation
+
+**Files:**
+- Modify: `tools/create_public_vercel_output.mjs`
+- Modify: `tools/verify_public_vercel_output.mjs`
+- Modify: `tools/audit_public_usability.mjs`
+
+- [x] Add a returning-user continuation panel that can resume the selected AI worker from any public page.
+- [x] Store only browser-local template ID, last step, page path, click count, and timestamps.
+- [x] Do not store source files, typed business text, credentials, payment data, or connector secrets.
+- [x] Generate the continuation catalog from all nine worker templates without shipping retired product wording into guarded pricing pages.
+- [x] Add clear, setup, contact, and user guide actions for the remembered worker.
+- [x] Add static verifier coverage and desktop/mobile browser audit coverage for the continuation panel.
+- [x] Deploy to `supermega-public` and verify aliases, contact API, lead ledger, behavior monitoring, and browser usability.
+
+Live result: `supermega.dev` and `www.supermega.dev` point to deployment `dpl_2D86PN5wUAwDemD7Pyf7onFC19Kh`, and the go-live gate passed with behavior DB `recent_7d_count: 506`.

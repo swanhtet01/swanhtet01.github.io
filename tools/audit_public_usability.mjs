@@ -118,6 +118,30 @@ try {
     results.screenshots[`agent_templates_${viewport.name}`] = productsShot
 
     await open(page, `${baseUrl}/ai-agents/`, viewport.name)
+    await page.evaluate(() => {
+      window.localStorage.setItem('sm_worker_continue_state', JSON.stringify({
+        template_id: 'daily-intelligence-brief',
+        last_signal: 'template_clicked',
+        signal_count: 3,
+        first_seen_at: 'SAMPLE-FIRST-SEEN',
+        last_seen_at: 'SAMPLE-LAST-SEEN',
+        last_page_path: '/ai-agents/',
+      }))
+    })
+    await page.reload({ waitUntil: 'commit', timeout: 45000 })
+    await page.waitForLoadState('domcontentloaded', { timeout: 15000 }).catch(() => undefined)
+    const localWorker = await page.evaluate(() => ({
+      visible: Boolean(document.querySelector('[data-local-worker-continue]')?.getBoundingClientRect().height),
+      text: document.querySelector('[data-local-worker-continue]')?.textContent || '',
+      setupHref: document.querySelector('[data-local-worker-continue] a[data-sm-template-link="daily-intelligence-brief"]')?.getAttribute('href') || '',
+      guideHref: document.querySelector('[data-local-worker-continue] a[href="/ai-agents/guide/"]')?.getAttribute('href') || '',
+      privacyCopy: document.body.textContent.includes('No source files, typed business text, credentials, or payment data are stored.'),
+      overflowX: Math.max(0, document.documentElement.scrollWidth - document.documentElement.clientWidth),
+    }))
+    if (!localWorker.visible || !localWorker.text.includes('Continue Daily Intelligence Brief Agent')) fail('local_worker_continue_panel_missing', { viewport: viewport.name, localWorker })
+    if (localWorker.setupHref !== '/agent-templates/daily-intelligence-brief/setup/' || localWorker.guideHref !== '/ai-agents/guide/') fail('local_worker_continue_links_wrong', { viewport: viewport.name, localWorker })
+    if (!localWorker.privacyCopy) fail('local_worker_continue_privacy_copy_missing', { viewport: viewport.name, localWorker })
+    if (localWorker.overflowX > 0) fail('local_worker_continue_horizontal_overflow', { viewport: viewport.name, localWorker })
     await page.locator('[data-worker-router]').scrollIntoViewIfNeeded()
     await expectCopy(
       page,

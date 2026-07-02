@@ -354,6 +354,16 @@ function workerMatcherCatalogJson() {
   ).replaceAll('<', '\\u003c')
 }
 
+function workerContinueCatalogJson() {
+  return JSON.stringify(
+    publicAgentTemplates.map((template) => ({
+      id: template.id,
+      setupUrl: `/agent-templates/${template.id}/setup/`,
+      contactUrl: `/contact/?template=${template.id}&package=ai-workcell-pilot`,
+    })),
+  ).replaceAll('<', '\\u003c')
+}
+
 function contactTemplatePackagesJson() {
   const packages = Object.fromEntries(
     publicAgentTemplates.map((template) => [
@@ -1658,6 +1668,14 @@ const unicornShellStyle = `
       .workcell-step { border: 1px solid var(--line); border-radius: 18px; padding: 16px; background: rgba(255,255,255,0.52); }
       .workcell-step strong { display: block; letter-spacing: -0.02em; }
       .workcell-step span { display: block; margin-top: 7px; color: var(--muted); font-size: 13px; line-height: 1.43; }
+      .local-worker-continue { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 18px; align-items: center; margin: 8px 0 20px; border: 1px solid rgba(194,96,63,0.26); border-radius: 24px; padding: 16px; background: rgba(255,255,255,0.68); box-shadow: 0 18px 54px rgba(42,36,28,0.08); }
+      .local-worker-continue[hidden] { display: none !important; }
+      .local-worker-continue strong { display: block; margin-top: 5px; font-size: clamp(21px,2.4vw,30px); line-height: 1.05; letter-spacing: -0.035em; }
+      .local-worker-continue p { margin-top: 6px; max-width: 62ch; font-size: 14px; line-height: 1.42; }
+      .local-worker-continue .local-worker-meta { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+      .local-worker-continue .local-worker-meta span { border: 1px solid var(--line); border-radius: 999px; padding: 5px 9px; color: var(--muted); font-size: 11px; font-weight: 900; }
+      .local-worker-continue .local-worker-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+      .local-worker-continue .local-worker-clear { color: var(--muted); font-size: 12px; font-weight: 900; }
       .final { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 20px; align-items: center; border: 1px solid rgba(255,255,255,0.76); border-radius: 36px; padding: clamp(24px, 5vw, 48px); background: rgba(255,255,255,0.62); box-shadow: var(--shadow); backdrop-filter: blur(22px); }
       footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 24px 0 32px; color: var(--muted); font-weight: 800; }
       footer .footer-links { display: flex; flex-wrap: wrap; gap: 10px; }
@@ -1677,7 +1695,7 @@ const unicornShellStyle = `
         .brand-text strong, .brand-text small, .nav .optional-nav { display: none; }
         .nav { flex: 0 0 auto; gap: 6px; }
         .btn, button { min-height: 42px; padding: 0 12px; }
-        .poster, .split, .product-library-head, .output, .proof-system, .proof-board, .workcell-grid, .final { grid-template-columns: 1fr; }
+        .poster, .split, .product-library-head, .output, .proof-system, .proof-board, .workcell-grid, .local-worker-continue, .final { grid-template-columns: 1fr; }
         .poster { min-height: auto; gap: 18px; padding: 20px 0 38px; }
         .eyebrow { font-size: 11px; letter-spacing: 0.18em; }
         h1 { max-width: 11ch; font-size: clamp(44px, 12vw, 60px); line-height: 0.98; letter-spacing: -0.065em; }
@@ -1746,6 +1764,8 @@ const unicornShellStyle = `
         .feature-pills span { padding: 6px 8px; font-size: 10px; }
         .mini { padding-top: 10px; }
         .final .btn { width: 100%; }
+        .local-worker-continue .local-worker-actions { justify-content: stretch; }
+        .local-worker-continue .local-worker-actions .btn { flex: 1 1 auto; }
       }
 
       :root { --gilt: #C9A24B; }
@@ -1772,7 +1792,7 @@ const unicornShellStyle = `
       :root[data-theme="dark"] body::before { background-image: linear-gradient(rgba(243,239,230,0.045) 1px, transparent 1px), linear-gradient(90deg, rgba(243,239,230,0.045) 1px, transparent 1px); }
       :root[data-theme="dark"] .btn, :root[data-theme="dark"] button { background: rgba(243,239,230,0.06); }
       :root[data-theme="dark"] .btn.primary, :root[data-theme="dark"] button { color: #fff; background: linear-gradient(135deg, #cc6e48, #d97757); box-shadow: 0 18px 40px rgba(217, 119, 87, 0.28); }
-      :root[data-theme="dark"] .output, :root[data-theme="dark"] .feature, :root[data-theme="dark"] .proof-card, :root[data-theme="dark"] .case, :root[data-theme="dark"] .proof-system, :root[data-theme="dark"] .workcell-panel, :root[data-theme="dark"] .workcell-step, :root[data-theme="dark"] .final, :root[data-theme="dark"] .home-shot-card, :root[data-theme="dark"] .browser, :root[data-theme="dark"] .proof, :root[data-theme="dark"] .upgrade-card, :root[data-theme="dark"] .shell-card, :root[data-theme="dark"] .setup-card, :root[data-theme="dark"] .market-card, :root[data-theme="dark"] form, :root[data-theme="dark"] .feature-pills span, :root[data-theme="dark"] .chip, :root[data-theme="dark"] .metric, :root[data-theme="dark"] .proof-step, :root[data-theme="dark"] footer .footer-links a {
+      :root[data-theme="dark"] .output, :root[data-theme="dark"] .feature, :root[data-theme="dark"] .proof-card, :root[data-theme="dark"] .case, :root[data-theme="dark"] .proof-system, :root[data-theme="dark"] .workcell-panel, :root[data-theme="dark"] .workcell-step, :root[data-theme="dark"] .local-worker-continue, :root[data-theme="dark"] .final, :root[data-theme="dark"] .home-shot-card, :root[data-theme="dark"] .browser, :root[data-theme="dark"] .proof, :root[data-theme="dark"] .upgrade-card, :root[data-theme="dark"] .shell-card, :root[data-theme="dark"] .setup-card, :root[data-theme="dark"] .market-card, :root[data-theme="dark"] form, :root[data-theme="dark"] .feature-pills span, :root[data-theme="dark"] .chip, :root[data-theme="dark"] .metric, :root[data-theme="dark"] .proof-step, :root[data-theme="dark"] footer .footer-links a {
         background: rgba(243,239,230,0.05); border-color: rgba(243,239,230,0.12);
       }
       :root[data-theme="dark"] .product-carousel, :root[data-theme="dark"] .product-shot-card, :root[data-theme="dark"] .product-shot-card .shot-open, :root[data-theme="dark"] .output > img { background: #201c17; }
@@ -2286,6 +2306,19 @@ const publicBehaviorEventsScript = `
       var match = window.location.pathname.match(/\\/agent-templates\\/([^/]+)\\/setup\\/?/);
       return match ? decodeURIComponent(match[1]) : '';
     }
+    function workerName(id) {
+      if (id === 'daily-intelligence-brief') return 'Daily Intelligence Brief Agent';
+      if (id === 'deskpos-quickstart') return 'DeskPOS Quickstart';
+      return String(id || '')
+        .split('-')
+        .filter(Boolean)
+        .map(function (part) { return part.charAt(0).toUpperCase() + part.slice(1); })
+        .join(' ')
+        .replace(/\\bCrm\\b/g, 'CRM')
+        .replace(/\\bPdf\\b/g, 'PDF')
+        .replace(/\\bPos\\b/g, 'POS')
+        .replace(/\\bSow\\b/g, 'SOW');
+    }
     window.addEventListener('load', function () {
       send('page_viewed', { template_id: setupTemplateId() || params.get('template') || '' });
       if (setupTemplateId()) send('setup_started', { template_id: setupTemplateId(), component: 'agent_template_setup' });
@@ -2312,6 +2345,144 @@ const publicBehaviorEventsScript = `
         component: form.getAttribute('data-agent-template-setup') !== null ? 'agent_template_setup_form' : 'lead_form'
       });
     }, true);
+  })();
+</script>`
+const publicLocalWorkerAdaptationScript = `
+<script>
+  (function () {
+    var catalog = ${workerContinueCatalogJson()};
+    var storageKey = 'sm_worker_continue_state';
+    var params = new URLSearchParams(window.location.search || '');
+    function safeText(value) {
+      return String(value || '').replace(/[&<>"']/g, function (char) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char];
+      });
+    }
+    function templateFromHref(href) {
+      var match = String(href || '').match(/\\/agent-templates\\/([^/?#]+)(?:\\/setup)?\\/?/);
+      return match ? decodeURIComponent(match[1]) : '';
+    }
+    function setupTemplateId() {
+      var match = window.location.pathname.match(/\\/agent-templates\\/([^/]+)\\/setup\\/?/);
+      return match ? decodeURIComponent(match[1]) : '';
+    }
+    function workerName(id) {
+      if (id === 'daily-intelligence-brief') return 'Daily Intelligence Brief Agent';
+      if (id === 'deskpos-quickstart') return 'DeskPOS Quickstart';
+      return String(id || '')
+        .split('-')
+        .filter(Boolean)
+        .map(function (part) { return part.charAt(0).toUpperCase() + part.slice(1); })
+        .join(' ')
+        .replace(/\\bCrm\\b/g, 'CRM')
+        .replace(/\\bPdf\\b/g, 'PDF')
+        .replace(/\\bPos\\b/g, 'POS')
+        .replace(/\\bSow\\b/g, 'SOW');
+    }
+    function findWorker(id) {
+      id = String(id || '');
+      for (var index = 0; index < catalog.length; index += 1) {
+        if (catalog[index].id === id) return catalog[index];
+      }
+      return null;
+    }
+    function loadState() {
+      try {
+        var stored = window.localStorage && localStorage.getItem(storageKey);
+        return stored ? JSON.parse(stored) : {};
+      } catch (error) {
+        return {};
+      }
+    }
+    function saveState(state) {
+      try {
+        if (window.localStorage) localStorage.setItem(storageKey, JSON.stringify(state));
+      } catch (error) {}
+    }
+    function rememberWorker(templateId, signal) {
+      var worker = findWorker(templateId);
+      if (!worker) return;
+      var previous = loadState();
+      var now = new Date().toISOString();
+      saveState({
+        template_id: worker.id,
+        last_signal: String(signal || 'template_interest').slice(0, 80),
+        signal_count: Math.max(1, Number(previous.signal_count || 0) + 1),
+        first_seen_at: previous.first_seen_at || now,
+        last_seen_at: now,
+        last_page_path: window.location.pathname
+      });
+    }
+    function clearWorker(event) {
+      if (event) event.preventDefault();
+      try {
+        if (window.localStorage) localStorage.removeItem(storageKey);
+      } catch (error) {}
+      var panel = document.querySelector('[data-local-worker-continue]');
+      if (panel) panel.hidden = true;
+    }
+    function renderPanel() {
+      var state = loadState();
+      var worker = findWorker(state.template_id);
+      var wrap = document.querySelector('.wrap');
+      var main = document.querySelector('main');
+      if (!worker || !wrap || !main) return;
+      var panel = document.querySelector('[data-local-worker-continue]');
+      if (!panel) {
+        panel = document.createElement('section');
+        panel.className = 'local-worker-continue';
+        panel.setAttribute('data-local-worker-continue', '');
+        panel.setAttribute('aria-label', 'Browser-local worker continuation');
+        wrap.insertBefore(panel, main);
+      }
+      var count = Math.max(1, Number(state.signal_count || 1));
+      panel.innerHTML = [
+        '<div>',
+        '<div class="eyebrow">Browser-local continuation</div>',
+        '<strong>Continue ' + safeText(workerName(worker.id)) + '.</strong>',
+        '<p>Saved only in this browser: selected worker, last step, page path, and click count. No source files, typed business text, credentials, or payment data are stored.</p>',
+        '<div class="local-worker-meta"><span>' + safeText(state.last_signal || 'template_interest') + '</span><span>' + count + ' signal' + (count === 1 ? '' : 's') + '</span><span>clear anytime</span></div>',
+        '</div>',
+        '<div class="local-worker-actions">',
+        '<a class="btn primary" data-sm-template-link="' + safeText(worker.id) + '" href="' + safeText(worker.setupUrl) + '">Continue setup</a>',
+        '<a class="btn secondary" data-sm-template-link="' + safeText(worker.id) + '" href="' + safeText(worker.contactUrl) + '">Ask for this worker</a>',
+        '<a class="btn secondary" href="/ai-agents/guide/">User guide</a>',
+        '<a class="local-worker-clear" href="#" data-local-worker-reset>Clear</a>',
+        '</div>'
+      ].join('');
+      panel.hidden = false;
+      var reset = panel.querySelector('[data-local-worker-reset]');
+      if (reset) reset.addEventListener('click', clearWorker);
+    }
+    window.supermegaRememberWorker = rememberWorker;
+    function rememberFromPage() {
+      var currentTemplate = setupTemplateId() || params.get('template') || '';
+      if (currentTemplate) rememberWorker(currentTemplate, setupTemplateId() ? 'setup_started' : 'template_param');
+      renderPanel();
+    }
+    document.addEventListener('click', function (event) {
+      var reset = event.target && event.target.closest ? event.target.closest('[data-local-worker-reset]') : null;
+      if (reset) {
+        clearWorker(event);
+        return;
+      }
+      var target = event.target && event.target.closest ? event.target.closest('a,button') : null;
+      if (!target) return;
+      var href = target.getAttribute('href') || '';
+      var templateId = target.getAttribute('data-sm-template-link') || templateFromHref(href) || (target.closest('[data-worker-template]') && target.closest('[data-worker-template]').getAttribute('data-worker-template')) || '';
+      if (templateId) rememberWorker(templateId, 'template_clicked');
+    });
+    document.addEventListener('submit', function (event) {
+      var form = event.target;
+      if (!form || !form.querySelector) return;
+      var field = form.querySelector('input[type="hidden"][name="template_id"]');
+      if (field && field.value) rememberWorker(field.value, 'lead_form_submitted');
+    }, true);
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', rememberFromPage);
+    } else {
+      rememberFromPage();
+    }
   })();
 </script>`
 const publicAdaptiveWorkerRouterScript = `
@@ -2438,7 +2609,7 @@ const publicAdaptiveWorkerRouterScript = `
     }
   })();
 </script>`
-const publicRuntimeScripts = `${publicLanguageToggleScript}${publicBehaviorEventsScript}`
+const publicRuntimeScripts = `${publicLanguageToggleScript}${publicBehaviorEventsScript}${publicLocalWorkerAdaptationScript}`
 
 function unicornSocialMeta({ title, description, url }) {
   const t = String(title || '').replace(/"/g, '&quot;')
