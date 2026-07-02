@@ -117,6 +117,36 @@ try {
     await page.locator('#agent-templates').screenshot({ path: productsShot, animations: 'disabled' })
     results.screenshots[`agent_templates_${viewport.name}`] = productsShot
 
+    await open(page, `${baseUrl}/ai-agents/`, viewport.name)
+    await page.locator('[data-worker-router]').scrollIntoViewIfNeeded()
+    await expectCopy(
+      page,
+      ['Adaptive Worker Matcher', 'Route a buyer to the right first worker before a call.', 'General AI Worker Toolkit', 'Document / PDF Intake Ledger'],
+      'adaptive_worker_matcher',
+      viewport.name,
+    )
+    await page.click('[data-worker-router] [data-router-choice="documents"]')
+    await page.click('[data-worker-router] [data-router-choice="pdfs-docs"]')
+    await page.click('[data-worker-router] [data-router-choice="professional-services"]')
+    await page.click('[data-worker-router] [data-router-choice="ledger"]')
+    await page.waitForFunction(() => document.querySelector('[data-router-result]')?.getAttribute('data-recommended-worker') === 'document-pdf-intake-ledger', null, { timeout: 5000 })
+    const matcher = await page.evaluate(() => ({
+      recommendedWorker: document.querySelector('[data-router-result]')?.getAttribute('data-recommended-worker') || '',
+      resultText: document.querySelector('[data-router-result]')?.textContent || '',
+      setupHref: document.querySelector('[data-router-result] a[data-sm-template-link="document-pdf-intake-ledger"]')?.getAttribute('href') || '',
+      highlightedCards: document.querySelectorAll('[data-worker-template="document-pdf-intake-ledger"].is-router-match').length,
+      pressedChoices: document.querySelectorAll('[data-worker-router] [aria-pressed="true"]').length,
+      overflowX: Math.max(0, document.documentElement.scrollWidth - document.documentElement.clientWidth),
+    }))
+    if (matcher.recommendedWorker !== 'document-pdf-intake-ledger') fail('adaptive_worker_matcher_recommendation_wrong', { viewport: viewport.name, matcher })
+    if (!matcher.resultText.includes('Document / PDF Intake Ledger') || !matcher.resultText.includes('First proof')) fail('adaptive_worker_matcher_result_missing', { viewport: viewport.name, matcher })
+    if (matcher.setupHref !== '/agent-templates/document-pdf-intake-ledger/setup/') fail('adaptive_worker_matcher_setup_link_wrong', { viewport: viewport.name, matcher })
+    if (matcher.highlightedCards < 1 || matcher.pressedChoices !== 4) fail('adaptive_worker_matcher_state_missing', { viewport: viewport.name, matcher })
+    if (matcher.overflowX > 0) fail('adaptive_worker_matcher_horizontal_overflow', { viewport: viewport.name, matcher })
+    const matcherShot = resolve(outputDir, `supermega-adaptive-worker-matcher-${viewport.name}.png`)
+    await page.locator('[data-worker-router]').screenshot({ path: matcherShot, animations: 'disabled' })
+    results.screenshots[`adaptive_worker_matcher_${viewport.name}`] = matcherShot
+
     await open(page, `${baseUrl}/agent-templates/daily-intelligence-brief/setup/`, viewport.name)
     await expectCopy(
       page,

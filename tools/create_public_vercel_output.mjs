@@ -327,6 +327,33 @@ function renderSellableWorkerShelf() {
     .join('\n')
 }
 
+function workerMatcherCatalogJson() {
+  const profiles = {
+    'deskpos-quickstart': ['store-pos', 'pos-shop', 'retail-service', 'owner-founder', 'checkout', 'dashboard', 'sales-follow-up'],
+    'chat-ledger': ['sales-follow-up', 'chat-orders', 'retail-service', 'owner-founder', 'ledger', 'follow-up'],
+    'inbox-calendar-operator': ['daily-ops', 'email-calendar', 'admin-ops', 'owner-founder', 'brief', 'follow-up'],
+    'daily-intelligence-brief': ['daily-ops', 'email-calendar', 'owner-founder', 'brief', 'dashboard', 'reports'],
+    'factory-ops-ledger': ['factory', 'factory-records', 'factory-team', 'dashboard', 'ledger', 'daily-ops'],
+    'data-clean-report-agent': ['documents', 'spreadsheet-files', 'admin-ops', 'reports', 'ledger', 'dashboard', 'professional-services'],
+    'document-pdf-intake-ledger': ['documents', 'pdfs-docs', 'professional-services', 'admin-ops', 'ledger', 'reports'],
+    'crm-follow-up-pipeline-assistant': ['sales-follow-up', 'email-calendar', 'chat-orders', 'sales-team', 'follow-up', 'ledger'],
+    'proposal-sow-builder': ['sales-follow-up', 'scope-notes', 'professional-services', 'owner-founder', 'proposal'],
+  }
+  return JSON.stringify(
+    publicAgentTemplates.map((template) => ({
+      id: template.id,
+      name: template.name,
+      buyer: template.buyer,
+      promise: template.promise,
+      firstProof: template.firstProof,
+      pricingLabel: template.pricingLabel,
+      setupUrl: `/agent-templates/${template.id}/setup/`,
+      contactUrl: `/contact/?template=${template.id}&package=ai-workcell-pilot`,
+      signals: profiles[template.id] || [],
+    })),
+  ).replaceAll('<', '\\u003c')
+}
+
 function contactTemplatePackagesJson() {
   const packages = Object.fromEntries(
     publicAgentTemplates.map((template) => [
@@ -2254,6 +2281,7 @@ const publicBehaviorEventsScript = `
         }).catch(function () {});
       } catch (error) {}
     }
+    window.supermegaTrackBehavior = send;
     function setupTemplateId() {
       var match = window.location.pathname.match(/\\/agent-templates\\/([^/]+)\\/setup\\/?/);
       return match ? decodeURIComponent(match[1]) : '';
@@ -2284,6 +2312,130 @@ const publicBehaviorEventsScript = `
         component: form.getAttribute('data-agent-template-setup') !== null ? 'agent_template_setup_form' : 'lead_form'
       });
     }, true);
+  })();
+</script>`
+const publicAdaptiveWorkerRouterScript = `
+<script>
+  (function () {
+    var catalog = ${workerMatcherCatalogJson()};
+    var storageKey = 'sm_adaptive_worker_router';
+    function safeText(value) {
+      return String(value || '').replace(/[&<>"']/g, function (char) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char];
+      });
+    }
+    function loadState() {
+      try {
+        var stored = window.localStorage && localStorage.getItem(storageKey);
+        return stored ? JSON.parse(stored) : {};
+      } catch (error) {
+        return {};
+      }
+    }
+    function saveState(state) {
+      try {
+        if (window.localStorage) localStorage.setItem(storageKey, JSON.stringify(state));
+      } catch (error) {}
+    }
+    function selectedValues(state) {
+      return Object.keys(state).map(function (key) { return state[key]; }).filter(Boolean);
+    }
+    function scoreWorker(worker, values) {
+      return values.reduce(function (score, value) {
+        return score + (worker.signals.indexOf(value) >= 0 ? 1 : 0);
+      }, 0);
+    }
+    function bestMatch(state) {
+      var values = selectedValues(state);
+      if (!values.length) return null;
+      return catalog
+        .map(function (worker) {
+          return Object.assign({}, worker, { score: scoreWorker(worker, values) });
+        })
+        .sort(function (a, b) {
+          if (b.score !== a.score) return b.score - a.score;
+          return a.name.localeCompare(b.name);
+        })[0] || null;
+    }
+    function setActiveChoices(router, state) {
+      router.querySelectorAll('[data-router-choice]').forEach(function (button) {
+        var active = state[button.getAttribute('data-router-group')] === button.getAttribute('data-router-choice');
+        button.setAttribute('aria-pressed', active ? 'true' : 'false');
+        button.classList.toggle('is-selected', active);
+      });
+    }
+    function setWorkerHighlight(best) {
+      document.querySelectorAll('[data-worker-template]').forEach(function (card) {
+        var active = best && card.getAttribute('data-worker-template') === best.id;
+        card.classList.toggle('is-router-match', Boolean(active));
+        if (card.classList.contains('worker-card')) {
+          card.style.order = active ? '-1' : '';
+        }
+      });
+    }
+    function renderResult(router, state) {
+      var result = router.querySelector('[data-router-result]');
+      if (!result) return;
+      var best = bestMatch(state);
+      setWorkerHighlight(best);
+      if (!best || best.score < 1) {
+        result.removeAttribute('data-recommended-worker');
+        result.innerHTML = '<span>Recommendation</span><strong>Choose two or three signals.</strong><p>The matcher runs in the browser and does not read your typed business data.</p>';
+        return;
+      }
+      result.setAttribute('data-recommended-worker', best.id);
+      result.innerHTML = [
+        '<span>Recommended first worker</span>',
+        '<strong>' + safeText(best.name) + '</strong>',
+        '<p>' + safeText(best.promise) + '</p>',
+        '<div class="router-proof"><b>First proof</b><em>' + safeText(best.firstProof) + '</em></div>',
+        '<div class="router-proof"><b>Buyer fit</b><em>' + safeText(best.buyer) + '</em></div>',
+        '<div class="router-result-actions">',
+        '<a class="btn primary" data-sm-template-link="' + safeText(best.id) + '" href="' + safeText(best.setupUrl) + '">Start this worker</a>',
+        '<a class="btn secondary" data-sm-template-link="' + safeText(best.id) + '" href="' + safeText(best.contactUrl) + '">Ask for this setup</a>',
+        '</div>'
+      ].join('');
+      if (window.supermegaTrackBehavior) {
+        window.supermegaTrackBehavior('template_clicked', {
+          template_id: best.id,
+          requested_package: 'adaptive-worker-matcher',
+          component: 'adaptive_worker_matcher_result',
+          cta_text: 'matched ' + best.name
+        });
+      }
+    }
+    function initRouter() {
+      var router = document.querySelector('[data-worker-router]');
+      if (!router) return;
+      var state = loadState();
+      setActiveChoices(router, state);
+      renderResult(router, state);
+      router.addEventListener('click', function (event) {
+        var button = event.target && event.target.closest ? event.target.closest('[data-router-choice]') : null;
+        if (!button) return;
+        var group = button.getAttribute('data-router-group');
+        var choice = button.getAttribute('data-router-choice');
+        if (!group || !choice) return;
+        state[group] = choice;
+        saveState(state);
+        setActiveChoices(router, state);
+        renderResult(router, state);
+      });
+      var reset = router.querySelector('[data-router-reset]');
+      if (reset) {
+        reset.addEventListener('click', function () {
+          state = {};
+          saveState(state);
+          setActiveChoices(router, state);
+          renderResult(router, state);
+        });
+      }
+    }
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initRouter);
+    } else {
+      initRouter();
+    }
   })();
 </script>`
 const publicRuntimeScripts = `${publicLanguageToggleScript}${publicBehaviorEventsScript}`
@@ -2342,6 +2494,24 @@ const unicornAiAgentsHtml = `<!doctype html>
       .worker-card ul { margin: 0; padding-left: 18px; color: var(--muted); font-size: 13px; line-height: 1.45; }
       .worker-price { margin-top: auto; font-weight: 900; color: var(--ink); }
       .worker-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+      .worker-card.is-router-match { border-color: rgba(194,96,63,0.5); box-shadow: 0 22px 70px rgba(194,96,63,0.16); background: rgba(255,255,255,0.8); }
+      .worker-router { display: grid; grid-template-columns: minmax(0,1.25fr) minmax(280px,.75fr); gap: 22px; align-items: stretch; }
+      .router-copy p { color: var(--muted); line-height: 1.55; max-width: 62ch; }
+      .router-groups { display: grid; gap: 16px; margin-top: 20px; }
+      .router-choice-group { display: grid; gap: 9px; }
+      .router-choice-group strong { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--blue); }
+      .router-choice-row { display: flex; flex-wrap: wrap; gap: 8px; }
+      .router-choice { border: 1px solid var(--line); border-radius: 999px; background: rgba(255,255,255,0.68); color: var(--ink); min-height: 40px; padding: 0 13px; font: inherit; font-size: 13px; font-weight: 850; cursor: pointer; }
+      .router-choice.is-selected, .router-choice[aria-pressed="true"] { border-color: rgba(194,96,63,0.55); background: rgba(194,96,63,0.12); color: var(--blue); }
+      .router-choice:focus-visible { outline: 3px solid rgba(194,96,63,0.22); outline-offset: 2px; }
+      .router-result { border: 1px solid rgba(194,96,63,0.28); border-radius: 18px; padding: 20px; background: rgba(255,255,255,0.72); display: grid; gap: 12px; align-content: start; min-height: 100%; }
+      .router-result span, .router-proof b { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--blue); font-style: normal; }
+      .router-result strong { font-size: clamp(20px,2.4vw,30px); line-height: 1.08; letter-spacing: -.02em; }
+      .router-result p { margin: 0; color: var(--muted); line-height: 1.48; }
+      .router-proof { display: grid; gap: 4px; }
+      .router-proof em { color: var(--ink); font-style: normal; line-height: 1.42; }
+      .router-result-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 4px; }
+      .router-reset { justify-self: start; border: 0; background: transparent; color: var(--muted); font: inherit; font-size: 12px; font-weight: 850; cursor: pointer; padding: 4px 0; }
       .behavior-grid { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 12px; margin-top: 20px; }
       .behavior-step { border: 1px solid var(--line); border-radius: 18px; padding: 16px; background: rgba(255,255,255,0.5); }
       .behavior-step strong { display: block; }
@@ -2360,8 +2530,9 @@ const unicornAiAgentsHtml = `<!doctype html>
       .agent-proof blockquote { font-family: 'Fraunces', Georgia, serif; font-size: clamp(17px,2vw,22px); font-style: italic; line-height: 1.45; color: var(--ink); border-left: 3px solid var(--blue); padding-left: 20px; text-align: left; margin: 0 0 20px; }
       .agent-proof cite { font-size: 14px; color: var(--muted); display: block; margin-top: 8px; }
       @media (max-width: 980px) { .worker-grid { grid-template-columns: repeat(2, minmax(0,1fr)); } .behavior-grid { grid-template-columns: repeat(2, minmax(0,1fr)); } }
-      @media (max-width: 880px) { .sprint-grid, .worker-grid, .behavior-grid { grid-template-columns: 1fr; } }
+      @media (max-width: 880px) { .sprint-grid, .worker-grid, .behavior-grid, .worker-router { grid-template-columns: 1fr; } }
       :root[data-theme="dark"] .sprint-card, :root[data-theme="dark"] .worker-card, :root[data-theme="dark"] .behavior-step { background: rgba(243,239,230,0.05); }
+      :root[data-theme="dark"] .worker-card.is-router-match, :root[data-theme="dark"] .router-result, :root[data-theme="dark"] .router-choice { background: rgba(243,239,230,0.07); }
       :root[data-theme="dark"] .connector-chip { background: rgba(243,239,230,0.05); border-color: rgba(243,239,230,0.12); }
       :root[data-theme="dark"] .connector-chip:hover { background: rgba(217,119,87,0.12); color: #D97757; border-color: rgba(217,119,87,0.28); }
     </style>
@@ -2389,6 +2560,66 @@ ${unicornHeader}
               <div class="workcell-step"><strong>First production run</strong><span>The first real run stays approval-only and records what happened in the ledger.</span></div>
               <div class="workcell-step"><strong>Owner acceptance</strong><span>You approve value, request changes, or stop. Nothing scales without a decision.</span></div>
               <div class="workcell-step"><strong>Maintenance</strong><span>After acceptance, we maintain the worker, monitor failures, and improve the workflow as evidence grows.</span></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="section adaptive-worker-section" data-worker-router>
+          <div class="workcell-panel worker-router">
+            <div class="router-copy">
+              <div class="eyebrow">Adaptive Worker Matcher</div>
+              <h2>Route a buyer to the right first worker before a call.</h2>
+              <p>Choose the job, source type, buyer, and output. The page recommends a first worker, highlights it in the shelf, and keeps the selected template in the setup path. No typed business data, uploaded files, credentials, or private source content are read by the matcher.</p>
+              <div class="router-groups">
+                <div class="router-choice-group">
+                  <strong>Job</strong>
+                  <div class="router-choice-row">
+                    <button class="router-choice" type="button" data-router-group="job" data-router-choice="sales-follow-up" aria-pressed="false">Sales follow-up</button>
+                    <button class="router-choice" type="button" data-router-group="job" data-router-choice="documents" aria-pressed="false">Documents</button>
+                    <button class="router-choice" type="button" data-router-group="job" data-router-choice="daily-ops" aria-pressed="false">Daily ops</button>
+                    <button class="router-choice" type="button" data-router-group="job" data-router-choice="store-pos" aria-pressed="false">Shop / POS</button>
+                    <button class="router-choice" type="button" data-router-group="job" data-router-choice="factory" aria-pressed="false">Factory</button>
+                  </div>
+                </div>
+                <div class="router-choice-group">
+                  <strong>Source</strong>
+                  <div class="router-choice-row">
+                    <button class="router-choice" type="button" data-router-group="source" data-router-choice="chat-orders" aria-pressed="false">Chat orders</button>
+                    <button class="router-choice" type="button" data-router-group="source" data-router-choice="pdfs-docs" aria-pressed="false">PDFs / scans</button>
+                    <button class="router-choice" type="button" data-router-group="source" data-router-choice="spreadsheet-files" aria-pressed="false">Sheets</button>
+                    <button class="router-choice" type="button" data-router-group="source" data-router-choice="email-calendar" aria-pressed="false">Inbox / calendar</button>
+                    <button class="router-choice" type="button" data-router-group="source" data-router-choice="factory-records" aria-pressed="false">Plant records</button>
+                    <button class="router-choice" type="button" data-router-group="source" data-router-choice="scope-notes" aria-pressed="false">Scope notes</button>
+                  </div>
+                </div>
+                <div class="router-choice-group">
+                  <strong>Buyer</strong>
+                  <div class="router-choice-row">
+                    <button class="router-choice" type="button" data-router-group="buyer" data-router-choice="owner-founder" aria-pressed="false">Owner</button>
+                    <button class="router-choice" type="button" data-router-group="buyer" data-router-choice="sales-team" aria-pressed="false">Sales team</button>
+                    <button class="router-choice" type="button" data-router-group="buyer" data-router-choice="admin-ops" aria-pressed="false">Admin ops</button>
+                    <button class="router-choice" type="button" data-router-group="buyer" data-router-choice="factory-team" aria-pressed="false">Factory team</button>
+                    <button class="router-choice" type="button" data-router-group="buyer" data-router-choice="professional-services" aria-pressed="false">Professional services</button>
+                  </div>
+                </div>
+                <div class="router-choice-group">
+                  <strong>Output</strong>
+                  <div class="router-choice-row">
+                    <button class="router-choice" type="button" data-router-group="output" data-router-choice="ledger" aria-pressed="false">Ledger</button>
+                    <button class="router-choice" type="button" data-router-group="output" data-router-choice="follow-up" aria-pressed="false">Follow-up queue</button>
+                    <button class="router-choice" type="button" data-router-group="output" data-router-choice="proposal" aria-pressed="false">Proposal</button>
+                    <button class="router-choice" type="button" data-router-group="output" data-router-choice="brief" aria-pressed="false">Brief</button>
+                    <button class="router-choice" type="button" data-router-group="output" data-router-choice="dashboard" aria-pressed="false">Dashboard</button>
+                    <button class="router-choice" type="button" data-router-group="output" data-router-choice="checkout" aria-pressed="false">Checkout</button>
+                  </div>
+                </div>
+              </div>
+              <button class="router-reset" type="button" data-router-reset>Reset matcher</button>
+            </div>
+            <div class="router-result" data-router-result>
+              <span>Recommendation</span>
+              <strong>Choose two or three signals.</strong>
+              <p>The matcher runs in the browser and does not read your typed business data.</p>
             </div>
           </div>
         </section>
@@ -2471,6 +2702,7 @@ ${renderSellableWorkerShelf()}
       </footer>
     </div>
 ${publicRuntimeScripts}
+${publicAdaptiveWorkerRouterScript}
   </body>
 </html>`
 
