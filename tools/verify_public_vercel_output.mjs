@@ -733,6 +733,11 @@ for (const token of [
   'Browser-local continuation',
   'No source files, typed business text, credentials, or payment data are stored',
   'supermegaRememberWorker',
+  'sm_worker_role_mode',
+  'data-role-mode-panel',
+  'Role-aware onboarding',
+  'supermegaSetRoleMode',
+  'user_role_mode',
 ]) {
   if (!homeHtml.includes(token)) fail('public_shell_contract_missing', { token })
 }
@@ -767,6 +772,10 @@ for (const token of [
   'no external sends, writes, payments, or browser/mobile actions without owner approval',
   'Computer-use and mobile workers are available only as gated workcells',
   'data-ai-worker-user-guide',
+  'data-role-mode-guide',
+  'Owner mode',
+  'Operator mode',
+  'Technical admin mode',
 ]) {
   if (!aiWorkerGuideHtml.includes(token)) fail('public_ai_worker_user_guide_contract_missing', { token })
 }
@@ -1069,6 +1078,9 @@ for (const [id, name] of publicAgentTemplateContract) {
     starter.acceptance_tests.length < 4 ||
     !Array.isArray(starter.adaptation_signals) ||
     starter.adaptation_signals.length < 4 ||
+    !starter.role_playbook?.owner?.first_action ||
+    !starter.role_playbook?.operator?.approval_focus ||
+    !starter.role_playbook?.technical_admin?.success_signal ||
     starter.contact_url !== `/contact/?template=${id}` ||
     starter.setup_url !== `/agent-templates/${id}/setup/`
   ) {
@@ -1080,11 +1092,18 @@ for (const [id, name] of publicAgentTemplateContract) {
   if (!starterPageHtml.includes('/ai-agents/guide/') || !starterSetupHtml.includes('/ai-agents/guide/')) {
     fail('public_agent_template_guide_link_missing', { id })
   }
+  for (const token of ['Role playbook', 'data-role-playbook="owner"', 'data-role-playbook="operator"', 'data-role-playbook="technical_admin"']) {
+    if (!starterPageHtml.includes(token) || !starterSetupHtml.includes(token)) {
+      fail('public_agent_template_role_playbook_missing', { id, token })
+    }
+  }
   for (const token of [
     'data-agent-template-setup',
     '/api/contact-submissions',
     `name="template_id" value="${id}"`,
     'name="starter_kit_url"',
+    'name="user_role_mode"',
+    'name="user_role_label"',
     'name="first_proof_target"',
     'name="acceptance_tests"',
     'name="intake_job_mode" value="intake_to_first_proof"',

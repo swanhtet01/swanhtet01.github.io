@@ -134,3 +134,22 @@ Live result: `supermega.dev` and `www.supermega.dev` point to deployment `dpl_DA
 - [x] Deploy to `supermega-public` and verify aliases, contact API, lead ledger, behavior monitoring, and browser usability.
 
 Live result: `supermega.dev` and `www.supermega.dev` point to deployment `dpl_2D86PN5wUAwDemD7Pyf7onFC19Kh`, and the go-live gate passed with behavior DB `recent_7d_count: 506`.
+
+### Task 10: Add Role-Aware Worker Onboarding
+
+**Files:**
+- Modify: `tools/public_agent_templates.mjs`
+- Modify: `tools/create_public_vercel_output.mjs`
+- Modify: `tools/verify_public_vercel_output.mjs`
+- Modify: `tools/audit_public_usability.mjs`
+
+- [x] Add `role_playbook` to every worker starter kit for owner, operator, and technical admin users.
+- [x] Render role playbooks on setup kit pages and setup request pages.
+- [x] Add a browser-local role mode panel for `/ai-agents/`, `/agent-templates/`, and `/contact/`.
+- [x] Store only the selected role mode in the browser, not source text, private workflow content, credentials, or payment data.
+- [x] Pass the selected role into setup/contact forms as `user_role_mode` and `user_role_label` routing hints.
+- [x] Add verifier coverage for starter-kit role data, static guide copy, setup hidden fields, and guarded `/offers/` wording.
+- [x] Add desktop/mobile browser coverage for selecting technical admin mode and carrying it into a setup form.
+- [x] Deploy to `supermega-public` and verify aliases, contact API, lead ledger, behavior monitoring, and browser usability.
+
+Live result: `supermega.dev` and `www.supermega.dev` point to deployment `dpl_B1i8t99yXwWpH8qbJR5eMbaRhCNa`, and the go-live gate passed with behavior DB `recent_7d_count: 584`.

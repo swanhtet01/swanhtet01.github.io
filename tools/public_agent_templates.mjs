@@ -192,6 +192,29 @@ export function buildPublicAgentTemplates(pricing) {
   ]
 }
 
+function buildRolePlaybook(template) {
+  return {
+    owner: {
+      label: 'Owner',
+      first_action: `Approve the first proof target: ${template.firstProof}`,
+      approval_focus: 'Scope, price, payment route, external sends, connector writes, and first production run.',
+      success_signal: 'Owner can decide whether the worker saves time, reduces risk, or moves revenue before any recurring claim.',
+    },
+    operator: {
+      label: 'Operator',
+      first_action: `Collect the starting source pack: ${template.sampleSources.slice(0, 3).join(', ')}.`,
+      approval_focus: 'Confirm sample quality, missing fields, edge cases, and whether the first proof matches daily work.',
+      success_signal: 'Operator can repeat the workflow with less manual checking and fewer missed follow-ups.',
+    },
+    technical_admin: {
+      label: 'Technical admin',
+      first_action: `Map the approved source boundary for ${template.sourceCategory} data before any connector access.`,
+      approval_focus: 'Accounts, permissions, API/export path, audit logs, vaulting, and rollback plan.',
+      success_signal: 'Technical admin can explain what the worker can read, what it cannot do, and how every action is logged.',
+    },
+  }
+}
+
 export function buildAgentTemplateStarterKit(template) {
   return {
     id: template.id,
@@ -219,6 +242,7 @@ export function buildAgentTemplateStarterKit(template) {
       `source_category:${template.sourceCategory}`,
       `requested_package:${template.contactPackage}`,
     ],
+    role_playbook: buildRolePlaybook(template),
     first_run_workflow: template.firstRunWorkflow,
     outputs: template.outputs,
     acceptance_tests: [
@@ -271,6 +295,23 @@ ${kit.first_run_workflow.map((step, index) => `${index + 1}. ${step}`).join('\n'
 ## Outputs
 
 ${kit.outputs.map((item) => `- ${item}`).join('\n')}
+
+## Role Playbook
+
+Owner:
+- First action: ${kit.role_playbook.owner.first_action}
+- Approval focus: ${kit.role_playbook.owner.approval_focus}
+- Success signal: ${kit.role_playbook.owner.success_signal}
+
+Operator:
+- First action: ${kit.role_playbook.operator.first_action}
+- Approval focus: ${kit.role_playbook.operator.approval_focus}
+- Success signal: ${kit.role_playbook.operator.success_signal}
+
+Technical admin:
+- First action: ${kit.role_playbook.technical_admin.first_action}
+- Approval focus: ${kit.role_playbook.technical_admin.approval_focus}
+- Success signal: ${kit.role_playbook.technical_admin.success_signal}
 
 ## Acceptance Tests
 

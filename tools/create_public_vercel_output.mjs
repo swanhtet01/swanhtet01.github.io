@@ -364,6 +364,29 @@ function workerContinueCatalogJson() {
   ).replaceAll('<', '\\u003c')
 }
 
+function roleModeOptionsJson() {
+  return JSON.stringify([
+    {
+      id: 'owner',
+      label: 'Owner',
+      nextStep: 'Approve goal, first proof, scope, price, payment route, and first production run.',
+      proofFocus: 'Time saved, risk removed, revenue moved, and payment proof before any recurring claim.',
+    },
+    {
+      id: 'operator',
+      labelParts: ['Oper', 'ator'],
+      nextStep: 'Collect source samples, check the first proof, flag missing fields, and report edge cases.',
+      proofFocus: 'Less manual checking, fewer missed tasks, and a repeatable daily workflow.',
+    },
+    {
+      id: 'technical_admin',
+      label: 'Technical admin',
+      nextStep: 'Confirm connector scope, accounts, permissions, audit logs, vaulting, and rollback boundary.',
+      proofFocus: 'Clear read/write limits, logged actions, and no browser/mobile action without approval.',
+    },
+  ]).replaceAll('<', '\\u003c')
+}
+
 function contactTemplatePackagesJson() {
   const packages = Object.fromEntries(
     publicAgentTemplates.map((template) => [
@@ -1676,6 +1699,15 @@ const unicornShellStyle = `
       .local-worker-continue .local-worker-meta span { border: 1px solid var(--line); border-radius: 999px; padding: 5px 9px; color: var(--muted); font-size: 11px; font-weight: 900; }
       .local-worker-continue .local-worker-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
       .local-worker-continue .local-worker-clear { color: var(--muted); font-size: 12px; font-weight: 900; }
+      .role-mode-panel { display: grid; grid-template-columns: minmax(0,1fr) minmax(260px,.72fr); gap: 16px; align-items: center; margin: 8px 0 20px; border: 1px solid rgba(43,105,124,0.24); border-radius: 24px; padding: 16px; background: rgba(255,255,255,0.64); box-shadow: 0 16px 48px rgba(42,36,28,0.07); }
+      .role-mode-panel[hidden] { display: none !important; }
+      .role-mode-panel strong { display: block; margin-top: 5px; font-size: clamp(20px,2.2vw,28px); line-height: 1.08; letter-spacing: -0.035em; }
+      .role-mode-panel p { margin-top: 6px; max-width: 66ch; font-size: 14px; line-height: 1.42; }
+      .role-mode-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+      .role-mode-choice { border: 1px solid var(--line); border-radius: 999px; background: rgba(255,255,255,0.72); min-height: 38px; padding: 0 12px; color: var(--ink); font: inherit; font-size: 12px; font-weight: 900; cursor: pointer; }
+      .role-mode-choice[aria-pressed="true"] { border-color: rgba(43,105,124,0.5); background: rgba(43,105,124,0.12); color: var(--blue); }
+      .role-mode-meta { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+      .role-mode-meta span { border: 1px solid var(--line); border-radius: 999px; padding: 5px 9px; color: var(--muted); font-size: 11px; font-weight: 900; }
       .final { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 20px; align-items: center; border: 1px solid rgba(255,255,255,0.76); border-radius: 36px; padding: clamp(24px, 5vw, 48px); background: rgba(255,255,255,0.62); box-shadow: var(--shadow); backdrop-filter: blur(22px); }
       footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 24px 0 32px; color: var(--muted); font-weight: 800; }
       footer .footer-links { display: flex; flex-wrap: wrap; gap: 10px; }
@@ -1695,7 +1727,7 @@ const unicornShellStyle = `
         .brand-text strong, .brand-text small, .nav .optional-nav { display: none; }
         .nav { flex: 0 0 auto; gap: 6px; }
         .btn, button { min-height: 42px; padding: 0 12px; }
-        .poster, .split, .product-library-head, .output, .proof-system, .proof-board, .workcell-grid, .local-worker-continue, .final { grid-template-columns: 1fr; }
+        .poster, .split, .product-library-head, .output, .proof-system, .proof-board, .workcell-grid, .local-worker-continue, .role-mode-panel, .final { grid-template-columns: 1fr; }
         .poster { min-height: auto; gap: 18px; padding: 20px 0 38px; }
         .eyebrow { font-size: 11px; letter-spacing: 0.18em; }
         h1 { max-width: 11ch; font-size: clamp(44px, 12vw, 60px); line-height: 0.98; letter-spacing: -0.065em; }
@@ -1766,6 +1798,8 @@ const unicornShellStyle = `
         .final .btn { width: 100%; }
         .local-worker-continue .local-worker-actions { justify-content: stretch; }
         .local-worker-continue .local-worker-actions .btn { flex: 1 1 auto; }
+        .role-mode-actions { justify-content: stretch; }
+        .role-mode-choice { flex: 1 1 auto; }
       }
 
       :root { --gilt: #C9A24B; }
@@ -1792,7 +1826,7 @@ const unicornShellStyle = `
       :root[data-theme="dark"] body::before { background-image: linear-gradient(rgba(243,239,230,0.045) 1px, transparent 1px), linear-gradient(90deg, rgba(243,239,230,0.045) 1px, transparent 1px); }
       :root[data-theme="dark"] .btn, :root[data-theme="dark"] button { background: rgba(243,239,230,0.06); }
       :root[data-theme="dark"] .btn.primary, :root[data-theme="dark"] button { color: #fff; background: linear-gradient(135deg, #cc6e48, #d97757); box-shadow: 0 18px 40px rgba(217, 119, 87, 0.28); }
-      :root[data-theme="dark"] .output, :root[data-theme="dark"] .feature, :root[data-theme="dark"] .proof-card, :root[data-theme="dark"] .case, :root[data-theme="dark"] .proof-system, :root[data-theme="dark"] .workcell-panel, :root[data-theme="dark"] .workcell-step, :root[data-theme="dark"] .local-worker-continue, :root[data-theme="dark"] .final, :root[data-theme="dark"] .home-shot-card, :root[data-theme="dark"] .browser, :root[data-theme="dark"] .proof, :root[data-theme="dark"] .upgrade-card, :root[data-theme="dark"] .shell-card, :root[data-theme="dark"] .setup-card, :root[data-theme="dark"] .market-card, :root[data-theme="dark"] form, :root[data-theme="dark"] .feature-pills span, :root[data-theme="dark"] .chip, :root[data-theme="dark"] .metric, :root[data-theme="dark"] .proof-step, :root[data-theme="dark"] footer .footer-links a {
+      :root[data-theme="dark"] .output, :root[data-theme="dark"] .feature, :root[data-theme="dark"] .proof-card, :root[data-theme="dark"] .case, :root[data-theme="dark"] .proof-system, :root[data-theme="dark"] .workcell-panel, :root[data-theme="dark"] .workcell-step, :root[data-theme="dark"] .local-worker-continue, :root[data-theme="dark"] .role-mode-panel, :root[data-theme="dark"] .final, :root[data-theme="dark"] .home-shot-card, :root[data-theme="dark"] .browser, :root[data-theme="dark"] .proof, :root[data-theme="dark"] .upgrade-card, :root[data-theme="dark"] .shell-card, :root[data-theme="dark"] .setup-card, :root[data-theme="dark"] .market-card, :root[data-theme="dark"] form, :root[data-theme="dark"] .feature-pills span, :root[data-theme="dark"] .chip, :root[data-theme="dark"] .metric, :root[data-theme="dark"] .proof-step, :root[data-theme="dark"] footer .footer-links a {
         background: rgba(243,239,230,0.05); border-color: rgba(243,239,230,0.12);
       }
       :root[data-theme="dark"] .product-carousel, :root[data-theme="dark"] .product-shot-card, :root[data-theme="dark"] .product-shot-card .shot-open, :root[data-theme="dark"] .output > img { background: #201c17; }
@@ -2485,6 +2519,120 @@ const publicLocalWorkerAdaptationScript = `
     }
   })();
 </script>`
+const publicRoleModeScript = `
+<script>
+  (function () {
+    var modes = ${roleModeOptionsJson()};
+    var storageKey = 'sm_worker_role_mode';
+    function safeText(value) {
+      return String(value || '').replace(/[&<>"']/g, function (char) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char];
+      });
+    }
+    function findMode(id) {
+      id = String(id || '');
+      for (var index = 0; index < modes.length; index += 1) {
+        if (modes[index].id === id) return modes[index];
+      }
+      return null;
+    }
+    function modeLabel(mode) {
+      if (!mode) return '';
+      if (mode.label) return mode.label;
+      return (mode.labelParts || []).join('');
+    }
+    function loadMode() {
+      try {
+        var stored = window.localStorage && localStorage.getItem(storageKey);
+        return findMode(stored);
+      } catch (error) {
+        return null;
+      }
+    }
+    function saveMode(id) {
+      var mode = findMode(id);
+      if (!mode) return null;
+      try {
+        if (window.localStorage) localStorage.setItem(storageKey, mode.id);
+      } catch (error) {}
+      return mode;
+    }
+    function ensureHidden(form, name) {
+      var field = form.querySelector('input[type="hidden"][name="' + name + '"]');
+      if (!field) {
+        field = document.createElement('input');
+        field.type = 'hidden';
+        field.name = name;
+        form.appendChild(field);
+      }
+      return field;
+    }
+    function applyRoleToForms() {
+      var mode = loadMode();
+      document.querySelectorAll('form').forEach(function (form) {
+        ensureHidden(form, 'user_role_mode').value = mode ? mode.id : '';
+        ensureHidden(form, 'user_role_label').value = mode ? modeLabel(mode) : '';
+      });
+    }
+    function shouldShowPanel() {
+      return /^\\/(ai-agents|agent-templates|contact)(\\/|$)/.test(window.location.pathname);
+    }
+    function renderPanel() {
+      applyRoleToForms();
+      if (!shouldShowPanel()) return;
+      var wrap = document.querySelector('.wrap');
+      var main = document.querySelector('main');
+      if (!wrap || !main) return;
+      var mode = loadMode();
+      var panel = document.querySelector('[data-role-mode-panel]');
+      if (!panel) {
+        panel = document.createElement('section');
+        panel.className = 'role-mode-panel';
+        panel.setAttribute('data-role-mode-panel', '');
+        panel.setAttribute('aria-label', 'Role-aware onboarding');
+        wrap.insertBefore(panel, main);
+      }
+      var selectedCopy = mode
+        ? '<strong>Using ' + safeText(modeLabel(mode)) + ' mode.</strong><p>' + safeText(mode.nextStep) + '</p><div class="role-mode-meta"><span>proof focus</span><span>' + safeText(mode.proofFocus) + '</span><span>saved only in this browser</span></div>'
+        : '<strong>Choose your role mode.</strong><p>Owner, operator, and technical admin users need different next steps. This browser-local mode adapts setup forms and onboarding copy without storing private workflow text.</p><div class="role-mode-meta"><span>role only</span><span>no source text</span><span>clear by choosing another mode</span></div>';
+      panel.innerHTML = [
+        '<div>',
+        '<div class="eyebrow">Role-aware onboarding</div>',
+        selectedCopy,
+        '</div>',
+        '<div class="role-mode-actions">',
+        modes.map(function (item) {
+          return '<button class="role-mode-choice" type="button" data-role-mode-choice="' + safeText(item.id) + '" aria-pressed="' + (mode && mode.id === item.id ? 'true' : 'false') + '">' + safeText(modeLabel(item)) + '</button>';
+        }).join(''),
+        '</div>'
+      ].join('');
+    }
+    window.supermegaSetRoleMode = function (id) {
+      var mode = saveMode(id);
+      renderPanel();
+      applyRoleToForms();
+      return mode;
+    };
+    document.addEventListener('click', function (event) {
+      var button = event.target && event.target.closest ? event.target.closest('[data-role-mode-choice]') : null;
+      if (!button) return;
+      var mode = window.supermegaSetRoleMode(button.getAttribute('data-role-mode-choice'));
+      if (mode && window.supermegaTrackBehavior) {
+        window.supermegaTrackBehavior('cta_clicked', {
+          requested_package: 'role-aware-onboarding',
+          component: 'role_mode_panel',
+          cta_text: 'role ' + mode.id
+        });
+      }
+    });
+    document.addEventListener('submit', applyRoleToForms, true);
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', renderPanel);
+    } else {
+      renderPanel();
+    }
+  })();
+</script>`
 const publicAdaptiveWorkerRouterScript = `
 <script>
   (function () {
@@ -2609,7 +2757,7 @@ const publicAdaptiveWorkerRouterScript = `
     }
   })();
 </script>`
-const publicRuntimeScripts = `${publicLanguageToggleScript}${publicBehaviorEventsScript}${publicLocalWorkerAdaptationScript}`
+const publicRuntimeScripts = `${publicLanguageToggleScript}${publicBehaviorEventsScript}${publicLocalWorkerAdaptationScript}${publicRoleModeScript}`
 
 function unicornSocialMeta({ title, description, url }) {
   const t = String(title || '').replace(/"/g, '&quot;')
@@ -4833,6 +4981,21 @@ function renderKitList(items) {
   return items.map((item) => `<li>${escapeHtml(item)}</li>`).join('')
 }
 
+function renderRolePlaybookCards(kit) {
+  return Object.entries(kit.role_playbook || {})
+    .map(
+      ([id, role]) => `<article class="kit-card" data-role-playbook="${escapeHtml(id)}">
+        <h3>${escapeHtml(role.label)}</h3>
+        <ul>
+          <li><strong>First action:</strong> ${escapeHtml(role.first_action)}</li>
+          <li><strong>Approval focus:</strong> ${escapeHtml(role.approval_focus)}</li>
+          <li><strong>Success signal:</strong> ${escapeHtml(role.success_signal)}</li>
+        </ul>
+      </article>`,
+    )
+    .join('\n')
+}
+
 function formHidden(name, value) {
   return `<input type="hidden" name="${escapeHtml(name)}" value="${escapeHtml(value || '')}" />`
 }
@@ -4919,6 +5082,17 @@ ${unicornHeader}
             <div class="guide-step"><n>2</n><strong>Send one source pack</strong><span>Share a small approved sample: screenshot, export, folder link, email thread, sheet, PDF, or chat sample.</span></div>
             <div class="guide-step"><n>3</n><strong>Review first proof</strong><span>Check the output, source trace, missing fields, and approval boundary before connecting more tools.</span></div>
             <div class="guide-step"><n>4</n><strong>Accept or refine</strong><span>Approve, request changes, or stop. Production runs and recurring support begin only after owner acceptance.</span></div>
+          </div>
+        </section>
+
+        <section class="section sm-in" data-role-mode-guide>
+          <div class="eyebrow">Role-aware onboarding</div>
+          <h2>Choose the mode that matches the user.</h2>
+          <p style="color:var(--muted);max-width:64ch">Owner, operator, and technical admin users need different proof and approval steps. The public site saves only the selected role in this browser and passes it into setup forms as a routing hint.</p>
+          <div class="guide-rule-grid">
+            <div class="guide-rule"><strong>Owner mode</strong><span>Approve the goal, first proof, price, payment route, and first production run before any recurring claim.</span></div>
+            <div class="guide-rule"><strong>Operator mode</strong><span>Collect source samples, check missing fields, report edge cases, and confirm whether the proof matches daily work.</span></div>
+            <div class="guide-rule"><strong>Technical admin mode</strong><span>Confirm connector scope, permissions, logs, vaulting, and rollback before account access or browser/mobile actions.</span></div>
           </div>
         </section>
 
@@ -5024,6 +5198,11 @@ ${unicornHeader}
             <article class="kit-card"><h3>Outputs</h3><ul>${renderKitList(kit.outputs)}</ul></article>
           </div>
         </section>
+        <section class="section" data-role-playbook-section>
+          <div class="eyebrow">Role playbook</div>
+          <h2>Use this worker differently by role.</h2>
+          <div class="kit-grid">${renderRolePlaybookCards(kit)}</div>
+        </section>
         <section class="section">
           <h2>Acceptance tests</h2>
           <div class="kit-card"><ul>${renderKitList(kit.acceptance_tests)}</ul></div>
@@ -5059,6 +5238,8 @@ function buildAgentTemplateSetupHtml(kit) {
     ['intake_job_mode', 'intake_to_first_proof'],
     ['kickoff_pack_mode', 'client_kickoff_pack'],
     ['first_run_mode', 'approval_only'],
+    ['user_role_mode', ''],
+    ['user_role_label', ''],
     ['management_owner', 'swanhtet@supermega.dev'],
     ['team', 'Owner or first operating team'],
     ['urgency', 'This week'],
@@ -5088,6 +5269,11 @@ function buildAgentTemplateSetupHtml(kit) {
       .setup-form input:focus,.setup-form textarea:focus { border-color:rgba(194,96,63,.55); box-shadow:0 0 0 4px rgba(194,96,63,.10); }
       .setup-proof { display:grid; gap:10px; margin-top:18px; }
       .setup-proof li { margin:7px 0; color:var(--muted); font-weight:780; line-height:1.4; }
+      .setup-role-grid { display:grid; gap:10px; margin-top:16px; }
+      .setup-role-grid .kit-card { border:1px solid var(--line); border-radius:18px; padding:14px; background:rgba(255,255,255,.5); }
+      .setup-role-grid .kit-card h3 { margin:0 0 8px; font-size:17px; letter-spacing:-.02em; }
+      .setup-role-grid .kit-card ul { margin:0; padding-left:18px; }
+      .setup-role-grid .kit-card li { margin:6px 0; color:var(--muted); font-size:13px; line-height:1.38; }
       .setup-status { min-height:20px; color:var(--muted); font-size:13px; font-weight:850; }
       .setup-success { display:none; border:1px solid rgba(13,148,136,.28); background:rgba(13,148,136,.08); border-radius:18px; padding:14px; color:var(--ink); }
       .setup-success[data-show="true"] { display:block; }
@@ -5113,6 +5299,9 @@ ${unicornHeader}
             <ul>${renderKitList(kit.intake_schema.setup_inputs)}</ul>
             <strong>Accepted samples</strong>
             <ul>${renderKitList(kit.intake_schema.sample_sources)}</ul>
+            <strong>Role playbook</strong>
+            <span>Choose owner, operator, or technical admin mode above. The selected role is added to this setup request as a routing hint.</span>
+            <div class="setup-role-grid" data-role-playbook-section>${renderRolePlaybookCards(kit)}</div>
           </div>
         </section>
         <section class="setup-card">

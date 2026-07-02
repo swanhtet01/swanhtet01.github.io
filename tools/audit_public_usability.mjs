@@ -119,6 +119,7 @@ try {
 
     await open(page, `${baseUrl}/ai-agents/`, viewport.name)
     await page.evaluate(() => {
+      window.localStorage.removeItem('sm_worker_role_mode')
       window.localStorage.setItem('sm_worker_continue_state', JSON.stringify({
         template_id: 'daily-intelligence-brief',
         last_signal: 'template_clicked',
@@ -142,6 +143,23 @@ try {
     if (localWorker.setupHref !== '/agent-templates/daily-intelligence-brief/setup/' || localWorker.guideHref !== '/ai-agents/guide/') fail('local_worker_continue_links_wrong', { viewport: viewport.name, localWorker })
     if (!localWorker.privacyCopy) fail('local_worker_continue_privacy_copy_missing', { viewport: viewport.name, localWorker })
     if (localWorker.overflowX > 0) fail('local_worker_continue_horizontal_overflow', { viewport: viewport.name, localWorker })
+    const roleInitial = await page.evaluate(() => ({
+      visible: Boolean(document.querySelector('[data-role-mode-panel]')?.getBoundingClientRect().height),
+      text: document.querySelector('[data-role-mode-panel]')?.textContent || '',
+      overflowX: Math.max(0, document.documentElement.scrollWidth - document.documentElement.clientWidth),
+    }))
+    if (!roleInitial.visible || !roleInitial.text.includes('Role-aware onboarding') || !roleInitial.text.includes('Choose your role mode')) fail('role_mode_panel_missing', { viewport: viewport.name, roleInitial })
+    if (roleInitial.overflowX > 0) fail('role_mode_panel_horizontal_overflow', { viewport: viewport.name, roleInitial })
+    await page.click('[data-role-mode-choice="technical_admin"]')
+    await page.waitForFunction(() => window.localStorage.getItem('sm_worker_role_mode') === 'technical_admin', null, { timeout: 5000 })
+    const roleMode = await page.evaluate(() => ({
+      stored: window.localStorage.getItem('sm_worker_role_mode') || '',
+      text: document.querySelector('[data-role-mode-panel]')?.textContent || '',
+      pressed: document.querySelector('[data-role-mode-choice="technical_admin"]')?.getAttribute('aria-pressed') || '',
+      overflowX: Math.max(0, document.documentElement.scrollWidth - document.documentElement.clientWidth),
+    }))
+    if (roleMode.stored !== 'technical_admin' || roleMode.pressed !== 'true' || !roleMode.text.includes('Using Technical admin mode') || !roleMode.text.includes('connector scope')) fail('role_mode_selection_missing', { viewport: viewport.name, roleMode })
+    if (roleMode.overflowX > 0) fail('role_mode_selection_horizontal_overflow', { viewport: viewport.name, roleMode })
     await page.locator('[data-worker-router]').scrollIntoViewIfNeeded()
     await expectCopy(
       page,
@@ -182,6 +200,7 @@ try {
       title: document.title,
       workerCards: document.querySelectorAll('[data-guide-template]').length,
       setupLinks: document.querySelectorAll('[data-guide-template] a[href$="/setup/"]').length,
+      hasRoleGuide: document.body.textContent.includes('Role-aware onboarding') && document.body.textContent.includes('Technical admin mode'),
       hasSafetyCopy: document.body.textContent.includes('no external sends, writes, payments, or browser/mobile actions without owner approval'),
       hasNoPrivateTextCopy: document.body.textContent.includes('No keystrokes, source files, credentials, or private business text are tracked.'),
       overflowX: Math.max(0, document.documentElement.scrollWidth - document.documentElement.clientWidth),
@@ -189,6 +208,7 @@ try {
     if (guide.title !== 'AI Worker User Guide | SUPERMEGA.dev') fail('ai_worker_user_guide_title_wrong', { viewport: viewport.name, guide })
     if (guide.workerCards !== expectedTemplates.length) fail('ai_worker_user_guide_cards_missing', { viewport: viewport.name, guide })
     if (guide.setupLinks !== expectedTemplates.length) fail('ai_worker_user_guide_setup_links_missing', { viewport: viewport.name, guide })
+    if (!guide.hasRoleGuide) fail('ai_worker_user_guide_role_mode_missing', { viewport: viewport.name, guide })
     if (!guide.hasSafetyCopy || !guide.hasNoPrivateTextCopy) fail('ai_worker_user_guide_safety_copy_missing', { viewport: viewport.name, guide })
     if (guide.overflowX > 0) fail('ai_worker_user_guide_horizontal_overflow', { viewport: viewport.name, guide })
     await page.locator('[data-guide-template="deskpos-quickstart"]').scrollIntoViewIfNeeded()
@@ -210,7 +230,7 @@ try {
     await open(page, `${baseUrl}/agent-templates/daily-intelligence-brief/setup/`, viewport.name)
     await expectCopy(
       page,
-      ['Set up Daily Intelligence Brief Agent.', 'First proof', 'Queued job', 'Kickoff pack', 'Send setup request'],
+      ['Set up Daily Intelligence Brief Agent.', 'First proof', 'Queued job', 'Kickoff pack', 'Role playbook', 'Technical admin', 'Send setup request'],
       'template_setup',
       viewport.name,
     )
@@ -218,22 +238,27 @@ try {
       title: document.title,
       templateId: document.querySelector('input[name="template_id"]')?.value || '',
       starterKitUrl: document.querySelector('input[name="starter_kit_url"]')?.value || '',
+      userRoleMode: document.querySelector('input[name="user_role_mode"]')?.value || '',
+      userRoleLabel: document.querySelector('input[name="user_role_label"]')?.value || '',
       firstProofTarget: document.querySelector('input[name="first_proof_target"]')?.value || '',
       intakeJobMode: document.querySelector('input[name="intake_job_mode"]')?.value || '',
       kickoffPackMode: document.querySelector('input[name="kickoff_pack_mode"]')?.value || '',
       firstRunMode: document.querySelector('input[name="first_run_mode"]')?.value || '',
       formAction: document.querySelector('[data-agent-template-setup]')?.getAttribute('action') || '',
       submitVisible: Boolean(document.querySelector('[data-agent-template-setup] button[type="submit"]')?.getBoundingClientRect().height),
+      roleCards: document.querySelectorAll('[data-role-playbook-section] [data-role-playbook]').length,
       overflowX: Math.max(0, document.documentElement.scrollWidth - document.documentElement.clientWidth),
     }))
     if (setup.templateId !== 'daily-intelligence-brief') fail('setup_template_id_missing', { viewport: viewport.name, setup })
     if (setup.starterKitUrl !== '/site/agent-templates/daily-intelligence-brief.json') fail('setup_starter_kit_url_missing', { viewport: viewport.name, setup })
+    if (setup.userRoleMode !== 'technical_admin' || setup.userRoleLabel !== 'Technical admin') fail('setup_role_mode_hidden_missing', { viewport: viewport.name, setup })
     if (!setup.firstProofTarget.includes('One-page morning brief')) fail('setup_first_proof_missing', { viewport: viewport.name, setup })
     if (setup.intakeJobMode !== 'intake_to_first_proof') fail('setup_intake_job_mode_missing', { viewport: viewport.name, setup })
     if (setup.kickoffPackMode !== 'client_kickoff_pack') fail('setup_kickoff_pack_mode_missing', { viewport: viewport.name, setup })
     if (setup.firstRunMode !== 'approval_only') fail('setup_first_run_mode_missing', { viewport: viewport.name, setup })
     if (setup.formAction !== '/api/contact-submissions') fail('setup_form_action_wrong', { viewport: viewport.name, setup })
     if (!setup.submitVisible) fail('setup_submit_not_visible', { viewport: viewport.name, setup })
+    if (setup.roleCards < 3) fail('setup_role_playbook_missing', { viewport: viewport.name, setup })
     if (setup.overflowX > 0) fail('setup_horizontal_overflow', { viewport: viewport.name, setup })
 
     await open(page, `${baseUrl}/contact/?template=daily-intelligence-brief`, viewport.name)
