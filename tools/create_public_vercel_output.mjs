@@ -4296,7 +4296,7 @@ ${renderSellableWorkerShelf()}
         </section>
 
         <section class="section connector-section">
-          <h2>One kernel, wired into 36 real systems.</h2>
+          <h2>One kernel, wired into 45 real systems.</h2>
           <p class="section-sub">Agents read from the tools your team already uses and act through rails you already trust. API connectors come first; browser, desktop, and mobile hands are used only when no safer API/export path exists.</p>
           <div style="border:1px solid rgba(201,162,75,0.45);border-radius:18px;background:linear-gradient(135deg, rgba(201,162,75,0.12), rgba(194,96,63,0.06));padding:16px 20px;margin-bottom:20px">
             <div class="connector-group-label" style="color:#B8892E">★ Myanmar-native rails — built in, no global SaaS has these · 8</div>
@@ -4307,21 +4307,21 @@ ${renderSellableWorkerShelf()}
           <div class="connector-groups">
             ${[
               ['Messaging & notify', ['Telegram', 'WhatsApp Business', 'LINE', 'LINE Notify', 'Facebook Messenger', 'Slack', 'Microsoft Teams', 'Discord', 'SMS (Twilio)', 'Email (Resend)']],
-              ['Data & work', ['Gmail', 'Google Drive', 'Google Sheets', 'Google Calendar', 'Notion', 'Airtable', 'HubSpot', 'Supabase']],
-              ['AI models', ['Claude (gateway)', 'Anthropic (Claude)', 'OpenAI (GPT)', 'Google Gemini', 'OpenRouter']],
-              ['Commerce', ['Shopify', 'WooCommerce']],
-              ['Payments (global) & integration', ['Stripe', 'Generic Webhook', 'Generic HTTP']],
+              ['Data & work', ['Gmail', 'Google Drive', 'Google Sheets', 'Google Calendar', 'Notion', 'Airtable', 'HubSpot', 'Supabase', 'QuickBooks', 'Mailchimp']],
+              ['AI models', ['Claude (gateway)', 'Anthropic (Claude)', 'OpenAI (GPT)', 'Google Gemini', 'OpenRouter', 'DeepSeek', 'Mistral']],
+              ['Commerce', ['Shopify', 'WooCommerce', 'Shopee', 'Lazada', 'Barcode (EAN-13)']],
+              ['Payments (global) & integration', ['Stripe', '2C2P', 'Generic Webhook', 'Zapier', 'Generic HTTP']],
             ].map(([label, items]) => `<div class="connector-group"><div class="connector-group-label">${label} · ${items.length}</div><div class="connector-grid">${items.map((n) => `<div class="connector-chip">${n}</div>`).join('')}</div></div>`).join('')}
           </div>
-          <p class="connector-note">36 connectors live in the kernel today — and adding the next one is a single adapter file, not a rebuild. That's the architecture: it scales by addition, never by replacing what works. Most clients start with two or three.</p>
+          <p class="connector-note">45 connectors live in the kernel today — and adding the next one is a single adapter file, not a rebuild. That's the architecture: it scales by addition, never by replacing what works. Most clients start with two or three.</p>
         </section>
 
         <section class="section">
           <div class="eyebrow">Technical architecture</div>
           <h2>Why this works when other platforms don't</h2>
-          <p style="color:var(--muted);max-width:56ch;margin-bottom:32px">Most "AI tools" are wrappers over a single API. SuperMega is a kernel — a shared data spine, an action bus, and 36 pre-wired connectors that agents can combine to build real workflows from your actual data.</p>
+          <p style="color:var(--muted);max-width:56ch;margin-bottom:32px">Most "AI tools" are wrappers over a single API. SuperMega is a kernel — a shared data spine, an action bus, and 45 pre-wired connectors that agents can combine to build real workflows from your actual data.</p>
           <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px">
-            <div class="output"><strong>36 connectors, pre-wired</strong><span style="color:var(--muted);display:block;margin-top:6px;font-size:15px">Including Myanmar-native rails — KBZ Pay, Wave Pay, AYA Pay, CB Pay, MMQR, CBM Rate, and Viber. No international platform has these. An agent can read a Gmail thread, calculate in MMK at today's rate, and send a Viber alert — in one pipeline.</span></div>
+            <div class="output"><strong>45 connectors, pre-wired</strong><span style="color:var(--muted);display:block;margin-top:6px;font-size:15px">Including Myanmar-native rails — KBZ Pay, Wave Pay, AYA Pay, CB Pay, MMQR, CBM Rate, and Viber. No international platform has these. An agent can read a Gmail thread, calculate in MMK at today's rate, and send a Viber alert — in one pipeline.</span></div>
             <div class="output"><strong>Multi-model AI kernel</strong><span style="color:var(--muted);display:block;margin-top:6px;font-size:15px">Claude, Gemini, and GPT-4o in one registry. Each agent call routes to the right model by task and cost. Drafting an email reply uses a cheap fast model. Classifying 500 warranty claims uses the most accurate one.</span></div>
             <div class="output"><strong>Approval-gated action bus</strong><span style="color:var(--muted);display:block;margin-top:6px;font-size:15px">Agents prepare work. You approve. Every money, send, and access action requires a human decision. The pipeline persists every action to a ledger — nothing happens silently, nothing repeats without cause.</span></div>
             <div class="output"><strong>Real-data, first call</strong><span style="color:var(--muted);display:block;margin-top:6px;font-size:15px">We connect to your actual Gmail, Drive, Sheets, and database on the first day. Not demo data, not sample exports. The first output is built from your real inputs so the price and timeline are accurate before any deposit.</span></div>
@@ -4546,12 +4546,12 @@ ${unicornHeader}
         <section class="section">
           <div style="border:1px solid var(--line);border-radius:28px;padding:clamp(22px,4vw,40px);background:linear-gradient(135deg, rgba(194,96,63,0.055), rgba(201,162,75,0.05));">
             <div class="eyebrow" style="color:#c2603f">The part global software can't copy</div>
-            <h2 style="margin:8px 0 20px;max-width:20ch">One kernel. 36 connectors. Your data, structured.</h2>
+            <h2 style="margin:8px 0 20px;max-width:20ch">One kernel. 45 connectors. Your data, structured.</h2>
             <style>.lk-stage{margin:0 -6px}@media(max-width:680px){.lk-stage{overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:8px;scrollbar-width:thin}.lk-stage svg{min-width:600px}}</style>
             <div class="lk-stage" role="group" aria-label="Scroll to view the full kernel diagram">
             <svg viewBox="0 0 960 400" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="lk-t lk-d" style="width:100%;height:auto;display:block;max-width:920px;margin:0 auto" font-family="Inter, system-ui, sans-serif">
               <title id="lk-t">The SUPERMEGA kernel: your data flows in, the kernel structures it, approved actions flow out</title>
-              <desc id="lk-d">Data sources (Gmail, Viber, Drive, Sheets, Telegram) feed a central kernel of 36 connectors; approved actions flow out (KBZPay request, MMK total at the CBM rate, Viber alert, approval queue, audit-linked record). Myanmar-native rails are highlighted in gold.</desc>
+              <desc id="lk-d">Data sources (Gmail, Viber, Drive, Sheets, Telegram) feed a central kernel of 45 connectors; approved actions flow out (KBZPay request, MMK total at the CBM rate, Viber alert, approval queue, audit-linked record). Myanmar-native rails are highlighted in gold.</desc>
               <defs>
                 <radialGradient id="lkCore" cx="50%" cy="38%" r="68%"><stop offset="0%" stop-color="#d3754f"/><stop offset="55%" stop-color="#c2603f"/><stop offset="100%" stop-color="#9c4a2d"/></radialGradient>
                 <filter id="lkSoft" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="7" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
