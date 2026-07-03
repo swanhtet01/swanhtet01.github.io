@@ -724,10 +724,8 @@ for (const token of [
   }
 }
 for (const token of [
-  '<title>SUPERMEGA.dev - Free core tools, premium AI workers</title>',
-  'Free core tools. Premium AI workers.',
-  'Agent crews',
-  'Gated hands',
+  '<title>supermega.dev — your business, in one simple app</title>',
+  'Your whole business, in one simple app.',
   'sm_worker_continue_state',
   'data-local-worker-continue',
   'Browser-local continuation',

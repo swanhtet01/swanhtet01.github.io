@@ -4106,7 +4106,7 @@ const unicornAiAgentsHtml = `<!doctype html>
     <meta name="robots" content="index,follow" />
     <title>AI Agent Army | SUPERMEGA.dev</title>
     <meta name="description" content="API-first AI agent crews, approval-gated workcells, and R&D-gated computer-use/mobile workers for real business tasks." />
-    <meta name="theme-color" content="#f4efe6" />
+    <meta name="theme-color" content="#0A0E1C" />
     <link rel="canonical" href="https://supermega.dev/ai-agents/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" />
     ${unicornSocialMeta({ title: 'AI Agent Army | SUPERMEGA.dev', description: 'Plug in real sources and get approval-gated AI agent crews with proof before scale.', url: 'https://supermega.dev/ai-agents/' })}
@@ -4417,23 +4417,23 @@ const unicornPublicShellHtml = `<!doctype html>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="robots" content="index,follow" />
-    <title>SUPERMEGA.dev - Free core tools, premium AI workers</title>
-    <meta name="description" content="Free core tools replace bloated SaaS. Premium AI workers handle messy data, connectors, approvals, and daily operations for Myanmar businesses." />
-    <meta name="theme-color" content="#f4efe6" />
+    <title>supermega.dev — your business, in one simple app</title>
+    <meta name="description" content="One simple app for your whole business — sales, stock, customers and money. Easy to use, yours to keep, and it works on the phone you already have." />
+    <meta name="theme-color" content="#0A0E1C" />
     <link rel="canonical" href="https://supermega.dev/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" />
     <link rel="manifest" href="/site.webmanifest?v=supermega-atelier-20260623" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="SUPERMEGA.dev" />
-    <meta property="og:title" content="Free core tools, premium AI workers | SUPERMEGA.dev" />
-    <meta property="og:description" content="Replace bloated SaaS with free core tools, then add premium AI workers for data, connectors, approvals, and daily operations." />
+    <meta property="og:title" content="supermega.dev — your business, in one simple app" />
+    <meta property="og:description" content="One simple app for your whole business. Easy to use, yours to keep." />
     <meta property="og:url" content="https://supermega.dev/" />
     <meta property="og:image" content="https://supermega.dev/site/social/supermega-portal-card.png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Free core tools, premium AI workers | SUPERMEGA.dev" />
-    <meta name="twitter:description" content="Free core tools replace bloated SaaS. Premium AI workers handle the messy work." />
+    <meta name="twitter:title" content="supermega.dev — your business, in one simple app" />
+    <meta name="twitter:description" content="One simple app for your whole business. Yours to keep." />
     <meta name="twitter:image" content="https://supermega.dev/site/social/supermega-portal-card.png" />
     <script type="application/ld+json">{"@context":"https://schema.org","@type":"Organization","name":"SUPERMEGA.dev","url":"https://supermega.dev/","logo":"https://supermega.dev/favicon.svg","description":"Free core business tools and premium AI workers for Myanmar SMBs and factories. POS, factory operations, AI agent crews, data cleanup, and approval-gated workcells.","email":"swanhtet@supermega.dev","telephone":"+95-9-500-0721","sameAs":["https://www.linkedin.com/in/theswanhtet"]}</script>
     <style>${unicornShellStyle}
@@ -4495,194 +4495,36 @@ ${unicornHeader}
       <main>
         <section class="poster">
           <div class="copy">
-            <div class="eyebrow">Free core · Premium AI · Agent crews</div>
-            <h1>Free core tools. Premium AI workers.</h1>
-            <p style="font-size:clamp(15px,2vw,18px);color:var(--clay);font-weight:800;margin:2px 0 14px;line-height:1.5">Built for how Myanmar business really runs. Free to start — power up when you're ready.</p>
-            <p>Free core tools replace bloated SaaS. Premium AI workers handle messy data, connectors, approvals, and daily operations across mobile, tablet, and desktop. Start with one useful tool, then add agents only after proof.</p>
-            <div class="cta">
-              <a class="btn primary" href="/free/" style="background:linear-gradient(180deg,#F6851F,#F26419);border-color:#F26419;color:#fff;box-shadow:0 12px 30px rgba(242,100,25,0.30)">Try the free tool</a>
-              <a class="btn secondary" href="/ai-agents/">See AI agents</a>
-              <a class="btn secondary" href="/offers/">See pricing</a>
+            <h1>Your whole business, in one simple app.</h1>
+            <p style="font-size:clamp(16px,2vw,19px);color:var(--muted);margin:18px 0 0;max-width:36ch;line-height:1.55">Sales, stock, customers and money — together in one place, and easy to use. You own it, and it works on the phone you already have.</p>
+            <div class="cta" style="margin-top:28px">
+              <a class="btn primary" href="/free/">Start free</a>
+              <a class="btn secondary" href="/offers/">See how it works</a>
             </div>
-            <p class="hero-tagline">Cast real work into software.</p>
           </div>
-          <aside class="product-stage" style="position:relative" aria-label="DeskPOS live product — point-of-sale for Myanmar shops">
-            <span aria-hidden="true" style="position:absolute;top:14px;left:14px;z-index:2;display:inline-flex;align-items:center;gap:9px;background:rgba(24,20,16,0.86);border:1px solid rgba(255,59,59,0.5);border-radius:999px;padding:6px 14px 6px 8px;box-shadow:0 0 0 1px rgba(255,59,59,0.22),0 8px 30px rgba(255,59,59,0.24)">
-              <svg width="17" height="22" viewBox="0 0 40 52" aria-hidden="true"><defs><clipPath id="hbadge"><rect x="4" y="2" width="32" height="48" rx="16"/></clipPath></defs><g clip-path="url(#hbadge)"><rect x="4" y="2" width="32" height="48" fill="#0A0E1C"/><rect x="4" y="2" width="32" height="18" fill="#FF3B3B"/><rect x="4" y="19.4" width="32" height="1.5" fill="#0A0E1C" opacity="0.5"/></g><rect x="4" y="2" width="32" height="48" rx="16" fill="none" stroke="#FF3B3B" stroke-width="2"/><circle cx="26" cy="34" r="3.4" fill="#FF3B3B"/></svg>
-              <span style="color:#F3EFE6;font-size:12px;font-weight:850;letter-spacing:0.01em">One capsule.<b style="color:#FF3B3B"> You own it.</b></span>
-            </span>
-            <img class="hero-img" src="/site/shots/live-product-restaurant-pos-menu-inventory.png?v=${publicShotVersion}" alt="DeskPOS — live point of sale system" loading="eager" decoding="async" />
-            <div class="proof-line" aria-label="What the software does">
-              <div class="proof"><b>Live</b><span>pos.supermega.dev</span></div>
-              <div class="proof"><b>First order</b><span>in 5 min</span></div>
-              <div class="proof"><b>Yours to keep</b><span>One-time payment</span></div>
+          <aside class="product-stage" aria-label="supermega app">
+            <img class="hero-img" src="/site/shots/live-product-restaurant-pos-menu-inventory.png?v=${publicShotVersion}" alt="supermega — your business in one app" loading="eager" decoding="async" />
+            <div class="proof-line" aria-label="Why it is simple">
+              <div class="proof"><b>Free to start</b><span>No card</span></div>
+              <div class="proof"><b>Yours to keep</b><span>One app</span></div>
+              <div class="proof"><b>On your phone</b><span>Nothing to install</span></div>
             </div>
           </aside>
         </section>
 
-        <div class="proof-strip section">
-          <a href="https://pos.supermega.dev/" target="_blank" rel="noopener" class="strip-item"><strong>Free core</strong><span>Try DeskPOS free ↗</span></a>
-          <div class="strip-item"><strong>Premium AI</strong><span>Private data, connectors, source trace, scheduled runs</span></div>
-          <div class="strip-item"><strong>Agent crews</strong><span>Scoped workcells with proof and owner approval</span></div>
-          <div class="strip-item"><strong>Mobile + desktop</strong><span>Phone, tablet, counter screen, browser, and operator console</span></div>
-        </div>
-
-        <section class="section sm-in">
-          <div class="workcell-panel">
-            <div class="eyebrow">SaaS killer path</div>
-            <h2>Start free. Add AI only where it creates cash value.</h2>
-            <p>Free core: deterministic tools that work in the browser or app. Premium AI: private data, source trace, connectors, scheduled runs, and owner-approved actions. Agent crews: one-off workcells for cleanup, reports, migration, inboxes, and launch tasks. Gated hands stay R&D-gated before write actions or regulated systems.</p>
-            <div class="workcell-grid">
-              <div class="workcell-step"><strong>Free core tools</strong><span>POS, source-to-screen, checklists, and simple boards that prove value before account setup.</span></div>
-              <div class="workcell-step"><strong>Premium AI layer</strong><span>Data cleanup, brief generation, reconciliation, drafts, and insights from approved sources.</span></div>
-              <div class="workcell-step"><strong>Agent crews</strong><span>Scoped jobs with first proof, acceptance tests, source trace, and no external action without approval.</span></div>
-              <div class="workcell-step"><strong>Gated hands</strong><span>Computer-use and mobile workcells are built behind gates: consent, reliability, vaulting, legal review, and audit logs.</span></div>
-            </div>
-            <div class="cta" style="margin-top:22px"><a class="btn primary" href="/free/" style="background:linear-gradient(180deg,#F6851F,#F26419);border-color:#F26419;color:#fff;box-shadow:0 12px 30px rgba(242,100,25,0.30)">Try free Source-to-Screen</a><a class="btn secondary" href="/ai-agents/">See the AI Agent Army</a></div>
-          </div>
-        </section>
-
-
         <section class="section" id="products">
-          <h2>What we actually build</h2>
+          <h2>Three tools, one place your business runs.</h2>
           <div class="uvp-grid">
-            <div class="uvp-card"><strong>You own it.</strong><span>No per-seat fees that grow when you hire. No vendor who can switch it off. The software is yours to keep.</span></div>
-            <div class="uvp-card"><strong>Built around how you work.</strong><span>Not a generic template — built from your actual data, your team's real workflow.</span></div>
-            <div class="uvp-card"><strong>Reads your existing data.</strong><span>Gmail, Viber, Drive, Sheets, Telegram — we pull structure from what you already have. No migration, no manual entry.</span></div>
-            <div class="uvp-card"><strong>Works in Myanmar conditions.</strong><span>Handles Burmese text, local number formats, and spotty internet. Runs fast on the hardware you already own.</span></div>
-            <div class="uvp-card"><strong>Every number is traceable.</strong><span>Every extracted record links to the source chat, email, or file it came from. Nothing is made up.</span></div>
-            <div class="uvp-card"><strong>You approve every action.</strong><span>AI drafts the next step; you decide whether it sends, saves, or posts. Nothing acts without your sign-off.</span></div>
+            <div class="uvp-card" style="border-top:3px solid #FF3B3B"><strong>Shop</strong><span>Sales, stock, customers and money for your shop or restaurant — the everyday app.</span></div>
+            <div class="uvp-card" style="border-top:3px solid #F59E1B"><strong>Factory</strong><span>Track issues, maintenance, quality and orders for your factory or workshop.</span></div>
+            <div class="uvp-card" style="border-top:3px solid #8B5CF6"><strong>Studio</strong><span>Make your marketing — posts, product photos and ads — in minutes, with AI.</span></div>
           </div>
         </section>
 
         <section class="section">
-          <div style="border:1px solid var(--line);border-radius:28px;padding:clamp(22px,4vw,40px);background:linear-gradient(135deg, rgba(255,59,59,0.055), rgba(255,59,59,0.05));">
-            <div class="eyebrow" style="color:#FF3B3B">The part global software can't copy</div>
-            <h2 style="margin:8px 0 20px;max-width:20ch">One kernel. 51 connectors. Your data, structured.</h2>
-            <style>.lk-stage{margin:0 -6px}@media(max-width:680px){.lk-stage{overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:8px;scrollbar-width:thin}.lk-stage svg{min-width:600px}}</style>
-            <div class="lk-stage" role="group" aria-label="Scroll to view the full kernel diagram">
-            <svg viewBox="0 0 960 400" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="lk-t lk-d" style="width:100%;height:auto;display:block;max-width:920px;margin:0 auto" font-family="Inter, system-ui, sans-serif">
-              <title id="lk-t">The SUPERMEGA kernel: your data flows in, the kernel structures it, approved actions flow out</title>
-              <desc id="lk-d">Data sources (Gmail, Viber, Drive, Sheets, Telegram) feed a central kernel of 51 connectors; approved actions flow out (KBZPay request, MMK total at the CBM rate, Viber alert, approval queue, audit-linked record). Myanmar-native rails are highlighted in gold.</desc>
-              <defs>
-                <radialGradient id="lkCore" cx="50%" cy="38%" r="68%"><stop offset="0%" stop-color="#d3754f"/><stop offset="55%" stop-color="#FF3B3B"/><stop offset="100%" stop-color="#9c4a2d"/></radialGradient>
-                <filter id="lkSoft" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="7" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
-                <style>
-                  .lk-pill{fill:#fffdf8;stroke:rgba(42,36,28,.16);stroke-width:1.2}
-                  .lk-pill.lk-gilt{stroke:#FF3B3B;stroke-width:1.6}
-                  .lk-pl{fill:#2a241c;font-size:15px;font-weight:650;letter-spacing:-.01em}
-                  .lk-ps{fill:#8a8073;font-size:11px;font-weight:700}
-                  .lk-col{fill:#9c4a2d;font-size:11px;font-weight:900;letter-spacing:.2em}
-                  .lk-wire{fill:none;stroke-linecap:round}
-                  .lk-flow-in{stroke:#FF3B3B;stroke-width:2;stroke-dasharray:2 11;opacity:.55;animation:lkin 1.5s linear infinite}
-                  .lk-flow-out{stroke:#FF3B3B;stroke-width:2.2;stroke-dasharray:2 11;opacity:.7;animation:lkout 1.4s linear infinite}
-                  @keyframes lkin{to{stroke-dashoffset:-13}}
-                  @keyframes lkout{to{stroke-dashoffset:-13}}
-                  .lk-ring{fill:none;stroke:#FF3B3B;stroke-width:1.5;opacity:.5;transform-origin:480px 200px;animation:lkpulse 3.4s ease-out infinite}
-                  @keyframes lkpulse{0%{transform:scale(.82);opacity:.55}70%{opacity:0}100%{transform:scale(1.5);opacity:0}}
-                  .lk-dot{animation:lkblink 2.6s ease-in-out infinite}
-                  @keyframes lkblink{0%,100%{opacity:.4}50%{opacity:1}}
-                  @media (prefers-reduced-motion: reduce){.lk-flow-in,.lk-flow-out,.lk-ring,.lk-dot{animation:none}.lk-flow-in,.lk-flow-out{stroke-dasharray:none;opacity:.4}}
-                </style>
-              </defs>
-              <text x="118" y="22" text-anchor="middle" class="lk-col">YOUR DATA</text>
-              <text x="842" y="22" text-anchor="middle" class="lk-col" fill="#B8892E">ACTIONS · YOU APPROVE</text>
-              <path class="lk-wire lk-flow-in" d="M212,75 C 300,75 330,200 392,200"/>
-              <path class="lk-wire lk-flow-in" d="M212,137 C 300,137 332,200 392,200"/>
-              <path class="lk-wire lk-flow-in" d="M212,199 C 320,199 350,200 392,200"/>
-              <path class="lk-wire lk-flow-in" d="M212,261 C 320,261 350,200 392,200"/>
-              <path class="lk-wire lk-flow-in" d="M212,323 C 300,323 332,200 392,200"/>
-              <path class="lk-wire lk-flow-out" d="M568,200 C 630,200 660,75 748,75"/>
-              <path class="lk-wire lk-flow-out" d="M568,200 C 630,200 660,137 748,137"/>
-              <path class="lk-wire lk-flow-out" d="M568,200 C 640,200 670,199 748,199"/>
-              <path class="lk-wire lk-flow-out" d="M568,200 C 640,200 670,261 748,261"/>
-              <path class="lk-wire lk-flow-out" d="M568,200 C 630,200 660,323 748,323"/>
-              <g>
-                <rect class="lk-pill" x="24" y="52" width="188" height="46" rx="23"/><text class="lk-pl" x="48" y="80">Gmail</text>
-                <rect class="lk-pill lk-gilt" x="24" y="114" width="188" height="46" rx="23"/><circle class="lk-dot" cx="40" cy="137" r="4" fill="#FF3B3B"/><text class="lk-pl" x="56" y="142">Viber</text>
-                <rect class="lk-pill" x="24" y="176" width="188" height="46" rx="23"/><text class="lk-pl" x="48" y="204">Google Drive</text>
-                <rect class="lk-pill" x="24" y="238" width="188" height="46" rx="23"/><text class="lk-pl" x="48" y="266">Sheets</text>
-                <rect class="lk-pill" x="24" y="300" width="188" height="46" rx="23"/><text class="lk-pl" x="48" y="328">Telegram</text>
-              </g>
-              <circle class="lk-ring" cx="480" cy="200" r="86"/>
-              <circle cx="480" cy="200" r="82" fill="url(#lkCore)" filter="url(#lkSoft)"/>
-              <circle cx="480" cy="200" r="82" fill="none" stroke="#FF3B3B" stroke-width="2" opacity=".85"/>
-              <text x="480" y="176" text-anchor="middle" fill="#fff" font-size="13" font-weight="900" letter-spacing=".18em">SUPERMEGA</text>
-              <text x="480" y="210" text-anchor="middle" fill="#fff" font-family="Fraunces, Georgia, serif" font-size="40" font-weight="600">36</text>
-              <text x="480" y="232" text-anchor="middle" fill="#f7e9d8" font-size="12" font-weight="800">connectors</text>
-              <text x="480" y="306" text-anchor="middle" fill="#6f665a" font-size="12.5" font-weight="800">one kernel · one data spine</text>
-              <g>
-                <rect class="lk-pill lk-gilt" x="748" y="52" width="188" height="46" rx="23"/><circle class="lk-dot" cx="764" cy="75" r="4" fill="#FF3B3B"/><text class="lk-pl" x="780" y="80">KBZPay request</text>
-                <rect class="lk-pill lk-gilt" x="748" y="114" width="188" height="46" rx="23"/><circle class="lk-dot" cx="764" cy="137" r="4" fill="#FF3B3B"/><text class="lk-pl" x="780" y="134">MMK total</text><text class="lk-ps" x="780" y="150">at today's CBM rate</text>
-                <rect class="lk-pill lk-gilt" x="748" y="176" width="188" height="46" rx="23"/><circle class="lk-dot" cx="764" cy="199" r="4" fill="#FF3B3B"/><text class="lk-pl" x="780" y="204">Viber alert</text>
-                <rect class="lk-pill" x="748" y="238" width="188" height="46" rx="23"/><text class="lk-pl" x="772" y="266">Approval queue</text>
-                <rect class="lk-pill" x="748" y="300" width="188" height="46" rx="23"/><text class="lk-pl" x="772" y="322">Audit-linked</text><text class="lk-ps" x="772" y="336">every number traceable</text>
-              </g>
-            </svg>
-            </div>
-            <p style="max-width:64ch;color:var(--muted);line-height:1.6;margin:18px auto 0;text-align:center">SUPERMEGA reads the tools your team already uses, structures the work in one kernel, and acts only when you approve. <strong style="color:#B8892E">Myanmar-native rails — KBZPay, Wave, AYA, CB Pay, MMQR, the live CBM rate, and Viber — are built in. No global SaaS has them.</strong></p>
-          </div>
-        </section>
-
-        <style>
-          @media (prefers-reduced-motion: no-preference){
-            html.sm-js .section{opacity:0;transform:translateY(18px);transition:opacity .7s cubic-bezier(.2,.7,.2,1), transform .7s cubic-bezier(.2,.7,.2,1)}
-            html.sm-js .section.sm-in{opacity:1;transform:none}
-          }
-          .uvp-card,.how-step,.strip-item{transition:transform .2s ease, box-shadow .2s ease}
-          .uvp-card:hover,.how-step:hover{transform:translateY(-2px)}
-          a:focus-visible,.btn:focus-visible,button:focus-visible{outline:2px solid #FF3B3B;outline-offset:3px;border-radius:10px}
-        </style>
-        <script>
-          (function(){
-            var d=document, root=d.documentElement;
-            root.classList.add('sm-js');
-            function reveal(){
-              var secs=[].slice.call(d.querySelectorAll('.section'));
-              if(!('IntersectionObserver' in window)){secs.forEach(function(s){s.classList.add('sm-in')});return}
-              var io=new IntersectionObserver(function(es){es.forEach(function(en){if(en.isIntersecting){en.target.classList.add('sm-in');io.unobserve(en.target)}})},{threshold:.08,rootMargin:'0px 0px -8% 0px'});
-              secs.forEach(function(s){io.observe(s)});
-              setTimeout(function(){secs.forEach(function(s){s.classList.add('sm-in')})},1400);
-            }
-            if(d.readyState!=='loading')reveal();else d.addEventListener('DOMContentLoaded',reveal);
-          })();
-        </script>
-
-        <section class="section">
-          <h2>How it works</h2>
-          <div class="how-steps">
-            <div class="how-step"><n>1</n><strong>Send one source</strong><span>A file, Viber export, Gmail chain, or spreadsheet — we start from data you already have, not a blank template.</span></div>
-            <div class="how-step"><n>2</n><strong>Deposit</strong><span>50% to start. Keeps both sides honest.</span></div>
-            <div class="how-step"><n>3</n><strong>Ship</strong><span>We build it and hand you a running thing at a live URL. Not a folder of files.</span></div>
-            <div class="how-step"><n>4</n><strong>Care</strong><span>Optional monthly plan keeps it running and improving. Or take it and go.</span></div>
-          </div>
-        </section>
-
-        <section class="section founder-section" id="founder">
-          <div class="founder-inner">
-            <div class="founder-photo-wrap">
-              <img class="founder-photo" src="/site/social/swan-htet.jpg" alt="Swan Htet — founder, SUPERMEGA.dev" width="220" height="220" loading="lazy" decoding="async" />
-            </div>
-            <div class="founder-copy">
-              <p class="founder-quote">"Every Myanmar business I've sat with has the same look when I ask them how they track their warranty claims — or their orders, or their suppliers. A slight pause, then: 'We have a system.' And they do. It's just split across a Viber group, a notebook on someone's desk, and one person who would be impossible to replace if they ever left."</p>
-              <p>A manufacturer here in Yangon came to me last year with 18 months of warranty claims buried in Gmail — no owner, no due dates, no way to know what was overdue without reading every thread. In three weeks I turned their own data into a weekly ops brief: owner column, days-open, escalation flag. They run it every Monday now. No subscription, no vendor to call — it's theirs to keep.</p>
-              <p>That's how I work: full-time, one business at a time, here in Yangon. I'm not selling you a platform to learn or a seat to rent. You start with a free tool that does one real job today. When it earns its place, you add an AI worker that reads your Viber, your Excel, your inbox — and drafts the work for you to approve, never behind your back. You pay for the power only once you've felt it, and whatever we build is yours to own. The only ask is one honest conversation about what's actually breaking.</p>
-              <div class="founder-sig">
-                <strong>Swan Htet</strong>
-                <span>Founder, SUPERMEGA.dev</span>
-                <a class="founder-linkedin" href="https://www.linkedin.com/in/theswanhtet" target="_blank" rel="noopener noreferrer">LinkedIn →</a>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section class="section">
-          <div class="final">
-            <div><h2>Tell us the one thing to fix first.</h2></div>
-            <div style="display:flex;gap:12px;flex-wrap:wrap">
-              <a class="btn primary" href="/contact/?package=build">Book a build</a>
-              <a class="btn secondary" href="/offers/">See pricing</a>
-            </div>
+          <div style="border:1px solid var(--line);border-radius:20px;padding:clamp(24px,4vw,36px);text-align:center;background:rgba(255,59,59,0.045)">
+            <p style="font-size:clamp(18px,2.4vw,23px);font-weight:600;letter-spacing:-.01em;max-width:42ch;margin:0 auto;color:var(--ink)">Simple to start. Yours to keep. Made for the way your business really works.</p>
+            <div class="cta" style="justify-content:center;margin-top:22px"><a class="btn primary" href="/free/">Start free</a></div>
           </div>
         </section>
       </main>
@@ -4711,7 +4553,7 @@ const unicornProductsHtml = `<!doctype html>
     <meta name="robots" content="index,follow" />
     <title>Products | SUPERMEGA.dev</title>
     <meta name="description" content="Free-core tools, premium AI/data layers, and custom agent crews for Myanmar shops, factories, and operators." />
-    <meta name="theme-color" content="#f4efe6" />
+    <meta name="theme-color" content="#0A0E1C" />
     <link rel="canonical" href="https://supermega.dev/products/" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="SUPERMEGA.dev" />
@@ -4924,7 +4766,7 @@ const unicornContactHtml = `<!doctype html>
     <meta property="og:image" content="https://supermega.dev/site/social/supermega-portal-card.png" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:image" content="https://supermega.dev/site/social/supermega-portal-card.png" />
-    <meta name="theme-color" content="#f4efe6" />
+    <meta name="theme-color" content="#0A0E1C" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" />
     <style>${unicornShellStyle}
       .contact-main { display: grid; grid-template-columns: minmax(0, 0.78fr) minmax(320px, 1.22fr); gap: clamp(24px, 5vw, 64px); align-items: center; min-height: calc(100svh - 84px); padding: 14px 0 34px; }
@@ -5398,7 +5240,7 @@ const publicSourceToScreenHtml = `<!doctype html>
     <title>Free Source-to-Screen | SUPERMEGA.dev</title>
     <meta name="description" content="Paste one messy source and get a browser-only first useful screen draft before any account, connector, model run, or payment." />
     <link rel="canonical" href="https://supermega.dev/free/" />
-    <meta name="theme-color" content="#f4efe6" />
+    <meta name="theme-color" content="#0A0E1C" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" />
     <style>${unicornShellStyle}
       .free-main { display:grid; grid-template-columns:minmax(0,.82fr) minmax(360px,1.18fr); gap:clamp(24px,5vw,64px); align-items:start; padding:clamp(26px,5vw,58px) 0 46px; }
@@ -6374,7 +6216,7 @@ function buildProductDetailHtml(p) {
     <meta name="robots" content="index,follow" />
     <title>${p.displayName} | SUPERMEGA.dev</title>
     <meta name="description" content="${p.subhead.replace(/"/g, '&quot;')}" />
-    <meta name="theme-color" content="#f4efe6" />
+    <meta name="theme-color" content="#0A0E1C" />
     <link rel="canonical" href="https://supermega.dev/products/${p.slug}/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" />
     <meta property="og:type" content="website" />
@@ -6723,7 +6565,7 @@ function buildAgentTemplatePageHtml(kit) {
     <meta name="robots" content="index,follow" />
     <title>${escapeHtml(kit.name)} setup kit | SUPERMEGA.dev</title>
     <meta name="description" content="${escapeHtml(kit.offer.promise)}" />
-    <meta name="theme-color" content="#f4efe6" />
+    <meta name="theme-color" content="#0A0E1C" />
     <link rel="canonical" href="https://supermega.dev/agent-templates/${escapeHtml(kit.id)}/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" />
     <style>${unicornShellStyle}
@@ -7092,7 +6934,7 @@ const publicOffersHtml = `<!doctype html>
     <meta name="robots" content="index,follow" />
     <title>Pricing | SUPERMEGA.dev</title>
     <meta name="description" content="MMK starting prices for free-core upgrades, custom builds, AI agent crews, and full systems for Myanmar businesses." />
-    <meta name="theme-color" content="#f4efe6" />
+    <meta name="theme-color" content="#0A0E1C" />
     <link rel="canonical" href="https://supermega.dev/offers/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" />
     <meta property="og:type" content="website" />
@@ -7253,7 +7095,7 @@ const publicWorkHtml = `<!doctype html>
     <meta name="robots" content="index,follow" />
     <title>Our work | SUPERMEGA.dev</title>
     <meta name="description" content="Real software we've built and shipped for businesses in Myanmar — live products you can try right now, and custom systems built from real, messy work." />
-    <meta name="theme-color" content="#f4efe6" />
+    <meta name="theme-color" content="#0A0E1C" />
     <link rel="canonical" href="https://supermega.dev/work/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" />
     <meta property="og:type" content="website" />
@@ -10447,7 +10289,7 @@ const unicornPrivacyHtml = `<!doctype html>
   <meta name="description" content="SUPERMEGA.dev privacy policy — how we handle your data when you contact us or use our software." />
   ${unicornSocialMeta({ title: 'Privacy Policy | SUPERMEGA.dev', description: 'How SUPERMEGA.dev handles your data when you contact us or use our software.', url: 'https://supermega.dev/privacy/' })}
   <link rel="canonical" href="https://supermega.dev/privacy/" />
-  <meta name="theme-color" content="#f4efe6" />
+  <meta name="theme-color" content="#0A0E1C" />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" />
   <style>${unicornShellStyle}</style>
 </head>

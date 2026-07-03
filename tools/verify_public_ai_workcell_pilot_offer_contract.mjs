@@ -50,10 +50,8 @@ requireTokens('generator_workcell_offer', source, [
 ])
 
 requireTokens('home_workcell_offer', home, [
-  'Free core tools. Premium AI workers.',
-  'Premium AI',
-  'Agent crews',
-  'Gated hands',
+  'Your whole business, in one simple app.',
+  'Start free',
 ])
 
 requireTokens('offers_workcell_offer', offers, [
