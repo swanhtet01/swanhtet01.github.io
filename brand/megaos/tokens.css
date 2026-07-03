@@ -36,13 +36,15 @@
   --sm-body:    system-ui, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
 }
 
-/* Swap ONLY these three per product; base stays void blue.
- *   Retail  (app.supermega.dev)  →  --sm-accent:#FF3B3B  (Fire Red)      [live]
- *   Factory / ERP                →  --sm-accent:#F59E1B  (Amber, proposed) — industrial
- *   LMS / Learning               →  --sm-accent:#22C58B  (Green, proposed) — growth
- * (ERP/LMS accents are proposals — founder to confirm.) Apply with [data-product="erp"] etc. */
-:root[data-product="erp"]   { --sm-accent:#F59E1B; --sm-accent-2:#FFB74D; --sm-accent-soft:rgba(245,158,27,.15); }
-:root[data-product="lms"]   { --sm-accent:#22C58B; --sm-accent-2:#4BE0A8; --sm-accent-soft:rgba(34,197,139,.15); }
+/* THREE products, one void-blue base, one accent each. Swap ONLY the accent per product.
+ *   Retail   (app.supermega.dev)      →  --sm-accent:#FF3B3B  (Fire Red)   [live]
+ *   Factory / ERP                     →  --sm-accent:#F59E1B  (Amber, proposed) — industrial
+ *   Studio   (creative: AI design/    →  --sm-accent:#8B5CF6  (Violet)     — creative, the 3rd product
+ *            photos/copy for SME         (replaces the earlier LMS idea; founder-set 2026-07-03).
+ *            marketing)
+ * Apply with [data-product="studio"] etc. */
+:root[data-product="erp"]    { --sm-accent:#F59E1B; --sm-accent-2:#FFB74D; --sm-accent-soft:rgba(245,158,27,.15); }
+:root[data-product="studio"] { --sm-accent:#8B5CF6; --sm-accent-2:#A855F7; --sm-accent-soft:rgba(139,92,246,.15); }
 
 /* shared primitives */
 .sm-brand { font-family: var(--sm-display); font-weight: 700; letter-spacing: -.025em; display: inline-flex; align-items: center; }
