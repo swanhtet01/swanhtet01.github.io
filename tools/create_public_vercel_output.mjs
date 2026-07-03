@@ -1436,68 +1436,72 @@ const publicCardHtml = `<!doctype html>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="robots" content="index,follow" />
-    <title>Swan Htet | SUPERMEGA.dev</title>
-    <meta name="description" content="Swan Htet — founder of SUPERMEGA.dev. Custom software for Myanmar businesses, starting from your real data. Priced in MMK." />
+    <title>Swan Htet | supermega.dev</title>
+    <meta name="description" content="Swan Htet — founder of supermega.dev. Simple software that helps your business run better." />
     <link rel="canonical" href="https://supermega.dev/card/" />
     <meta property="og:type" content="profile" />
-    <meta property="og:site_name" content="SUPERMEGA.dev" />
-    <meta property="og:title" content="Swan Htet | SUPERMEGA.dev" />
-    <meta property="og:description" content="Custom software for Myanmar businesses — starting from your real data. Priced in MMK. Built in weeks. Yours to keep." />
+    <meta property="og:site_name" content="supermega.dev" />
+    <meta property="og:title" content="Swan Htet | supermega.dev" />
+    <meta property="og:description" content="Simple software that helps your business run better — one app, easy to use, and yours to keep." />
     <meta property="og:url" content="https://supermega.dev/card/" />
     <meta property="og:image" content="https://supermega.dev/site/social/supermega-portal-card.png" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:image" content="https://supermega.dev/site/social/supermega-portal-card.png" />
-    <meta name="theme-color" content="#1b1815" />
+    <meta name="theme-color" content="#16181D" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" />
     <style>
-      @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;500;700;900&display=swap');
-      :root { color-scheme: light dark; --cream:#f7f4ec; --paper:#fffdf8; --ink:#2a241c; --muted:#6b6052; --clay:#c2603f; --gilt:#E9B949; --line:rgba(42,36,28,0.12); --bg:#1b1815; }
+      @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap');
+      :root { color-scheme: dark; --bg:#16181D; --surface:#1C1F27; --elev:#242833; --ink:#EAECEF; --muted:#989FAA; --dim:#666D77; --accent:#4F86F7; --accent-soft:rgba(79,134,247,.16); --line:rgba(255,255,255,.08); }
       * { box-sizing: border-box; }
-      body { margin: 0; min-height: 100svh; display: grid; place-items: center; padding: 24px; background-color: #1b1815; background-image: radial-gradient(ellipse at 80% 12%, rgba(201,162,75,0.13), transparent 30rem), radial-gradient(ellipse at 8% 88%, rgba(194,96,63,0.15), transparent 30rem), linear-gradient(160deg, #1f1b17, #13110e 75%); color: var(--ink); font-family: "Inter", "Segoe UI", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+      body { margin: 0; min-height: 100svh; display: grid; place-items: center; padding: 24px; background-color: var(--bg); background-image: radial-gradient(ellipse at 82% 10%, rgba(79,134,247,0.12), transparent 32rem), radial-gradient(ellipse at 6% 92%, rgba(79,134,247,0.06), transparent 30rem), linear-gradient(160deg, #181B21, #101216 78%); color: var(--ink); font-family: "Inter", "Segoe UI", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
       a { color: inherit; text-decoration: none; }
-      .card { position: relative; overflow: hidden; width: min(980px, 100%); min-height: min(640px, calc(100svh - 48px)); display: flex; align-items: center; gap: clamp(28px, 5vw, 60px); border: 1px solid var(--line); border-radius: clamp(28px, 5vw, 52px); background: linear-gradient(158deg, var(--paper) 0%, var(--cream) 100%); box-shadow: 0 50px 130px rgba(0,0,0,0.5), 0 8px 32px rgba(0,0,0,0.26); padding: clamp(32px, 6vw, 68px); }
-      .card::before { content: "SUPERMEGA"; position: absolute; right: -3%; bottom: -4%; color: transparent; -webkit-text-stroke: 1px rgba(42,36,28,0.05); font-size: clamp(60px, 14vw, 168px); font-weight: 900; letter-spacing: -0.1em; line-height: 0.8; pointer-events: none; }
-      .photo-col { flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; gap: 14px; position: relative; }
-      .avatar { width: clamp(148px, 22vw, 216px); height: clamp(148px, 22vw, 216px); border-radius: 50%; object-fit: cover; border: 3px solid var(--paper); box-shadow: 0 16px 40px rgba(42,36,28,0.3), 0 0 0 1px var(--line); }
-      .qr { width: 104px; height: 104px; border-radius: 14px; background: var(--paper); border: 1px solid var(--line); padding: 7px; box-shadow: 0 6px 16px rgba(42,36,28,0.12); }
-      .qr-label { font-size: 10.5px; font-weight: 900; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); margin-top: -4px; }
-      .content { position: relative; flex: 1 1 auto; min-width: 0; max-width: 560px; }
-      .brand { display: inline-flex; align-items: center; gap: 10px; color: var(--clay); font-size: 11px; font-weight: 950; letter-spacing: 0.22em; text-transform: uppercase; }
-      .mark { display: grid; place-items: center; width: 38px; height: 38px; border-radius: 12px; overflow: hidden; background: var(--bg); border: 1px solid var(--line); }
-      .mark img { width: 100%; height: 100%; display: block; }
-      h1 { font-family: "Fraunces", Georgia, serif; margin: 18px 0 6px; font-size: clamp(48px, 8vw, 84px); line-height: 0.92; letter-spacing: -0.02em; font-weight: 600; color: var(--ink); }
-      .role { margin: 0 0 16px; color: var(--clay); font-size: clamp(16px, 2.4vw, 20px); font-weight: 850; }
-      .pitch { max-width: 34rem; margin: 0 0 26px; color: var(--muted); font-size: clamp(17px, 2.2vw, 21px); line-height: 1.42; font-weight: 500; }
-      .details { display: grid; gap: 8px; margin-bottom: 26px; }
-      .details a { width: fit-content; color: var(--ink); font-size: clamp(16px, 2vw, 20px); font-weight: 850; }
-      .details a:hover { color: var(--clay); }
+      .card { position: relative; overflow: hidden; width: min(960px, 100%); min-height: min(600px, calc(100svh - 48px)); display: flex; align-items: center; gap: clamp(28px, 5vw, 56px); border: 1px solid var(--line); border-radius: clamp(24px, 4vw, 40px); background: linear-gradient(158deg, var(--surface) 0%, #191C23 100%); box-shadow: 0 50px 130px rgba(0,0,0,0.55); padding: clamp(30px, 6vw, 64px); }
+      .card::before { content: "supermega"; position: absolute; right: -2%; bottom: -5%; color: transparent; -webkit-text-stroke: 1px rgba(255,255,255,0.028); font-size: clamp(56px, 13vw, 150px); font-weight: 700; letter-spacing: -0.04em; line-height: 0.8; pointer-events: none; font-family: "Space Grotesk", sans-serif; }
+      .photo-col { flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; gap: 18px; position: relative; }
+      .avatar { width: clamp(140px, 20vw, 200px); height: clamp(140px, 20vw, 200px); border-radius: 50%; object-fit: cover; border: 1px solid var(--line); box-shadow: 0 16px 40px rgba(0,0,0,0.4), 0 0 0 4px var(--accent-soft); }
+      .qr-panel { display: flex; flex-direction: column; align-items: center; gap: 9px; padding: 14px; border: 1px solid var(--line); border-radius: 16px; background: var(--elev); }
+      .qr { width: 116px; height: 116px; border-radius: 10px; background: #fff; padding: 8px; display: block; }
+      .qr-label { font-size: 10.5px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+      .qr-label::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 7px var(--accent); }
+      .content { position: relative; flex: 1 1 auto; min-width: 0; max-width: 540px; }
+      .brand { display: inline-flex; align-items: center; gap: 9px; font-family: "Space Grotesk", sans-serif; font-weight: 700; letter-spacing: -0.02em; font-size: 16px; color: var(--ink); }
+      .brand .bdot { width: 9px; height: 9px; border-radius: 3px; background: var(--accent); }
+      .brand .bd { color: var(--dim); font-weight: 500; }
+      h1 { font-family: "Space Grotesk", sans-serif; margin: 22px 0 6px; font-size: clamp(40px, 6.5vw, 68px); line-height: 0.98; letter-spacing: -0.03em; font-weight: 700; color: var(--ink); }
+      .role { margin: 0 0 18px; color: var(--accent); font-size: clamp(15px, 2.2vw, 18px); font-weight: 600; }
+      .pitch { max-width: 32rem; margin: 0 0 26px; color: var(--muted); font-size: clamp(16px, 2vw, 19px); line-height: 1.5; font-weight: 400; }
+      .details { display: grid; gap: 7px; margin-bottom: 26px; }
+      .details a { width: fit-content; color: var(--ink); font-size: clamp(15px, 1.8vw, 18px); font-weight: 600; }
+      .details a:hover { color: var(--accent); }
       .actions { display: flex; flex-wrap: wrap; gap: 10px; }
-      .button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 50px; border-radius: 999px; padding: 0 22px; font-weight: 900; font-size: 15px; }
-      .button.primary { background: linear-gradient(135deg, var(--clay), #a84e30); color: #fff; box-shadow: 0 18px 44px rgba(194,96,63,0.3); }
-      .button.viber { background: var(--blue, #c2603f); color: #fff; box-shadow: 0 18px 44px rgba(194,96,63,0.28); }
-      .button.secondary { border: 1px solid var(--line); background: var(--paper); color: var(--ink); }
-      @media (max-width: 760px) { body { padding: 14px; } .card { flex-direction: column; text-align: center; align-items: center; min-height: calc(100svh - 28px); padding: 38px 26px; gap: 22px; border-radius: 32px; } .content { display: flex; flex-direction: column; align-items: center; } .details a, .pitch { margin-left: auto; margin-right: auto; } .actions { justify-content: center; } .qr, .qr-label { display: none; } }
+      .button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 48px; border-radius: 10px; padding: 0 20px; font-weight: 600; font-size: 15px; }
+      .button.primary { background: var(--accent); color: #fff; }
+      .button.viber { border: 1px solid var(--line); background: transparent; color: var(--ink); }
+      .button.secondary { border: 1px solid var(--line); background: transparent; color: var(--ink); }
+      @media (max-width: 760px) { body { padding: 14px; } .card { flex-direction: column; text-align: center; align-items: center; min-height: calc(100svh - 28px); padding: 34px 24px; gap: 24px; border-radius: 28px; } .content { display: flex; flex-direction: column; align-items: center; } .details a, .pitch { margin-left: auto; margin-right: auto; } .actions { justify-content: center; } }
     </style>
   </head>
   <body>
     <main class="card" aria-label="Swan Htet contact card">
       <div class="photo-col">
-        <img class="avatar" src="/site/social/swan-htet.jpg" alt="Swan Htet, founder of SUPERMEGA.dev" width="216" height="216" />
-        <img class="qr" src="/site/social/supermega-contact-qr.png" alt="QR code linking to supermega.dev" width="104" height="104" loading="lazy" />
-        <span class="qr-label">Scan to visit</span>
+        <img class="avatar" src="/site/social/swan-htet.jpg" alt="Swan Htet, founder of supermega.dev" width="200" height="200" />
+        <div class="qr-panel">
+          <img class="qr" src="/site/social/supermega-contact-qr.png" alt="QR code — scan to open supermega.dev" width="116" height="116" loading="lazy" />
+          <span class="qr-label">Scan to open</span>
+        </div>
       </div>
       <section class="content">
-        <a class="brand" href="/" aria-label="SUPERMEGA.dev home"><span class="mark"><img src="/favicon.svg?v=supermega-atelier-20260623" alt="" /></span><span class="wm" style="letter-spacing:-0.02em"><b style="font-weight:600">SUPER</b><b style="font-weight:900;text-shadow:0 0 14px rgba(233,185,73,0.45)">MEGA</b><b style="color:#E9B949;font-weight:700">.dev</b></span></a>
+        <a class="brand" href="/" aria-label="supermega.dev home"><span class="bdot"></span><b>supermega</b><span class="bd">.dev</span></a>
         <h1>Swan Htet</h1>
-        <p class="role">Founder — custom software for Myanmar business</p>
-        <p class="pitch">I build the software your team actually needs — starting from your real data. Priced in MMK. Built in weeks. Yours to keep.</p>
+        <p class="role">Founder · supermega.dev</p>
+        <p class="pitch">I build simple software that helps businesses run better — one app for the whole thing, easy to use, and yours to keep.</p>
         <div class="details">
           <a href="mailto:swanhtet@supermega.dev">swanhtet@supermega.dev</a>
           <a href="tel:+9595000721">+95 9 500 0721</a>
         </div>
         <div class="actions">
           <a class="button viber" href="viber://chat?number=%2B9595000721" aria-label="Chat on Viber"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 0C5.376 0 0 5.376 0 12s5.376 12 12 12 12-5.376 12-12S18.624 0 12 0zm5.568 16.8c-.24.576-.96 1.056-1.608 1.2-.432.096-.984.168-2.856-.624-2.4-.984-3.936-3.432-4.056-3.6-.12-.168-.984-1.32-.984-2.52s.624-1.776 1.2-1.776c.216 0 .624.024.84.576.144.36.384.984.432 1.128.12.288.024.624-.12.84l-.384.48c-.12.168-.24.36-.12.696.576 1.44 1.872 2.376 3.48 3.024.264.096.456.048.624-.144l.528-.624c.192-.24.432-.264.696-.168.648.264 1.56.648 1.8.744.288.12.48.168.528.288.048.192.048.864-.192 1.296zm.12-4.848c-.072 0-.12-.024-.12-.096-.264-2.952-2.496-5.136-5.424-5.4-.072-.024-.12-.072-.12-.144v-.528c0-.072.048-.12.12-.12 3.336.288 5.976 2.904 6.264 6.168 0 .072-.048.12-.12.12h-.6zm-1.464-1.584c-.072 0-.144-.024-.144-.12-.216-1.68-1.536-3-3.216-3.24-.072 0-.12-.072-.12-.144v-.528c0-.072.048-.12.12-.12 2.016.264 3.624 1.848 3.888 3.864 0 .072-.048.12-.12.12h-.408zm-1.272-1.584c-.072 0-.12-.048-.12-.12-.144-.792-.768-1.416-1.56-1.56-.072-.024-.12-.072-.12-.144v-.528c0-.072.048-.12.12-.12 1.128.168 2.016 1.032 2.184 2.16 0 .072-.048.12-.12.12h-.384z"/></svg>Viber</a>
-          <a class="button primary" href="${activeCardContactPath}">supermega.dev</a>
+          <a class="button primary" href="${activeCardContactPath}">Open supermega.dev</a>
           <a class="button secondary" href="https://www.linkedin.com/in/theswanhtet" rel="noreferrer" target="_blank">LinkedIn</a>
         </div>
       </section>
