@@ -1,0 +1,54 @@
+{
+  "slug": "read-my-chaos",
+  "name": "Read My Chaos",
+  "version": 1,
+  "description": "The flagship intake crew: turns an operator's OWN inbox and chat exports (Gmail, Viber, LINE) into structured ledgers — orders, payments, claims, follow-ups — plus a short operator brief of what needs action today.",
+  "requires_account_access": true,
+  "policy": {
+    "own_accounts_only": true,
+    "skip_personal": true,
+    "read_only": true,
+    "notes": "Legal bright line (SUPERMEGA-MASTER-STRATEGY): only accounts the tenant owns and exports themselves — never third-party groups, never scraped chats. Personal and non-business threads are skipped, never stored. The crew reads and structures; it never sends, replies, or mutates the source account."
+  },
+  "intake": {
+    "accepts": [
+      "gmail thread export",
+      "viber chat export",
+      "line chat export",
+      "pasted message text"
+    ],
+    "description": "Chat/inbox exports the tenant made from their OWN accounts. Injection frames are stripped at the gateway (stripInjectionFrames) before any content reaches a model."
+  },
+  "roles": [
+    {
+      "id": "intake",
+      "title": "Intake",
+      "tier": "bulk",
+      "goal": "Split raw exports into per-thread units, drop personal/non-business threads entirely (skip_personal — do not extract, do not store), and tag each remaining unit with source, counterparty, and date range."
+    },
+    {
+      "id": "extractor",
+      "title": "Ledger Extractor",
+      "tier": "bulk",
+      "goal": "Pull structured rows out of each unit: orders (item, qty, amount_mmk), payments (method, amount_mmk, reference), claims/complaints, and promised follow-ups — with the source quote attached to every row so nothing is unverifiable."
+    },
+    {
+      "id": "brief-writer",
+      "title": "Brief Writer",
+      "tier": "reason",
+      "goal": "Cross-check the extracted ledgers, merge duplicates across channels (the same order confirmed in Viber and Gmail is ONE order), and write the operator brief: what changed, what is owed, what needs a reply today. Cite ledger rows; never invent."
+    }
+  ],
+  "output_contract": {
+    "format": "json",
+    "fields": [
+      "orders",
+      "payments",
+      "claims",
+      "follow_ups",
+      "skipped_personal_count",
+      "operator_brief"
+    ],
+    "description": "Structured ledgers (same shape the Gmail extractor emits, so they merge into one dataset) plus operator_brief markdown. skipped_personal_count is reported so the tenant can see the skip_personal policy actually working."
+  }
+}
