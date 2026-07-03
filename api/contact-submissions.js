@@ -854,6 +854,18 @@ function buildSourceToScreenOrder(record = {}) {
   const orderPacket = text(record.source_to_screen_order_packet)
   const freeLoadPolicy = text(record.source_to_screen_free_load_policy) || 'browser_only_until_contact'
   if (!workcellId && !workcellName && !sourceHash && !proofTarget && !orderPacket) return null
+  const costBoundary = {
+    plan: 'free',
+    execution_mode: freeLoadPolicy,
+    server_run_allowed: false,
+    llm_calls_allowed: false,
+    model_tier_allowed: 'none',
+    customer_pii_to_model: false,
+    tenant_training_allowed: false,
+    external_action_allowed: false,
+    paid_upgrade_trigger: 'owner_approves_first_proof_pilot',
+    approval_gate: 'owner_approval_required_before_send_write_payment',
+  }
   const resolvedWorkcellName = workcellName || workcellId || 'Source-to-Screen workcell'
   const resolvedProofTarget = proofTarget || record.first_proof_target || record.first_output || 'Confirm first proof target from Source-to-Screen draft.'
   const resolvedPacket = orderPacket || [
@@ -874,6 +886,7 @@ function buildSourceToScreenOrder(record = {}) {
     source_hash: sourceHash || '',
     proof_target: resolvedProofTarget,
     free_load_policy: freeLoadPolicy,
+    cost_boundary: costBoundary,
     order_packet: resolvedPacket,
     external_action_state: 'blocked_until_owner_approval',
     connector_write_state: 'blocked_until_owner_approval',

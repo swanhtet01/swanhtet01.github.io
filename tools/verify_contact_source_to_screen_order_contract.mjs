@@ -59,6 +59,18 @@ assert.equal(sourceRequest.source_to_screen_order.source_hash, '00abc123')
 assert.equal(sourceRequest.source_to_screen_order.proof_target, record.source_to_screen_proof_target)
 assert.equal(sourceRequest.source_to_screen_order.free_load_policy, 'browser_only_until_contact')
 assert.equal(sourceRequest.source_to_screen_order.order_packet, orderPacket)
+assert.deepEqual(sourceRequest.source_to_screen_order.cost_boundary, {
+  plan: 'free',
+  execution_mode: 'browser_only_until_contact',
+  server_run_allowed: false,
+  llm_calls_allowed: false,
+  model_tier_allowed: 'none',
+  customer_pii_to_model: false,
+  tenant_training_allowed: false,
+  external_action_allowed: false,
+  paid_upgrade_trigger: 'owner_approves_first_proof_pilot',
+  approval_gate: 'owner_approval_required_before_send_write_payment',
+})
 assert.equal(sourceRequest.first_proof_target, record.source_to_screen_proof_target)
 assert.ok(sourceRequest.client_message.includes('Source-to-Screen workcell: Receivables chase'))
 assert.ok(sourceRequest.client_message.includes('Source hash: 00abc123'))
@@ -79,8 +91,11 @@ const action = internals.pipelineActionPayload(record)
 assert.ok(action.payload.source_to_screen_order, 'pipeline_source_to_screen_order_missing')
 assert.equal(action.payload.source_to_screen_order.workcell_id, 'receivables_chase')
 assert.equal(action.payload.source_to_screen_order.order_packet, orderPacket)
+assert.equal(action.payload.source_to_screen_order.cost_boundary.llm_calls_allowed, false)
+assert.equal(action.payload.source_to_screen_order.cost_boundary.server_run_allowed, false)
 assert.equal(action.payload.source_pack_request.source_to_screen_order.source_hash, '00abc123')
 assert.equal(action.payload.first_proof_task.source_to_screen_order.proof_target, record.source_to_screen_proof_target)
+assert.equal(action.payload.first_proof_task.source_to_screen_order.cost_boundary.paid_upgrade_trigger, 'owner_approves_first_proof_pilot')
 assert.equal(action.payload.first_proof_task.real_mrr_delta, 0)
 
 console.log(JSON.stringify({
