@@ -16,8 +16,16 @@ const publicAgentTemplateStarterKits = buildAgentTemplateStarterKits(publicAgent
 const outputDir = resolve(root, '.vercel', 'output')
 const staticDir = resolve(outputDir, 'static')
 const functionsDir = resolve(outputDir, 'functions', 'api')
-const nodeFunctionDependencies = [
-  '@vercel/blob',
+// Per-function dependency scoping (deploy-bloat fix, 2026-06-26): previously the FULL list below was
+// copied into EVERY function's node_modules — ~11MB × 19 functions (@vercel/blob drags in zod 5.1MB,
+// undici, jose, execa via @vercel/oidc's CLI deps), producing a 27k-file output past Vercel's 15k limit.
+// blob and pg are BOTH lazy-required only through two lib modules (supermega-blob-queue / supermega-
+// datastore); a function that imports neither can never reach them, so it needs neither tree. We now
+// copy ONLY the group(s) a function actually references. This removes deps a function never requires —
+// it cannot break a runtime require. (@vercel/blob's transitive tree, incl. its OIDC/CLI chain, is left
+// intact for functions that DO use blob, so its env-dependent token path is unaffected.)
+const blobFunctionDependencies = ['@vercel/blob']
+const pgFunctionDependencies = [
   'pg',
   'pg-cloudflare',
   'pg-connection-string',
@@ -5927,7 +5935,18 @@ async function writeNodeFunction(name, opts = {}) {
       throw error
     }
   }
-  for (const dependency of nodeFunctionDependencies) {
+  // Detect which heavy dep groups THIS function can reach. blob is lazy-required only via
+  // api/lib/supermega-blob-queue.js (or a direct @vercel/blob import, e.g. pipeline-control.js);
+  // pg only via api/lib/supermega-datastore.js. No other lib module imports either, so scanning the
+  // function's own source is sufficient. A function referencing neither gets an empty node_modules.
+  const functionSource = await readFile(resolve(root, 'api', name), 'utf8').catch(() => '')
+  const needsBlob = /supermega-blob-queue|@vercel\/blob/.test(functionSource)
+  const needsPg = /supermega-datastore|require\(['"]pg['"]\)/.test(functionSource)
+  const functionDependencies = [
+    ...(needsBlob ? blobFunctionDependencies : []),
+    ...(needsPg ? pgFunctionDependencies : []),
+  ]
+  for (const dependency of functionDependencies) {
     await copyNodeDependency(dependency)
   }
   await writeFile(
