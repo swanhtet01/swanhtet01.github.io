@@ -1199,12 +1199,17 @@ function buildContactSourcePackRequest(record) {
 function buildOwnerOnboardingAlert(record, sourcePackRequest) {
   const route = buildSolutionRoute(record)
   const intakeUrl = sourcePackRequest?.intake_url || sourcePackIntakeUrl(record)
+  const sourceToScreenOrder = buildSourceToScreenOrder(record)
+  const pilotCrewRunSheet = buildPilotCrewRunSheet(sourceToScreenOrder)
   const message = [
     `New AI Workcell Pilot lead: ${record.lead_id}`,
     `Buyer: ${record.name || 'Unknown'} - ${record.company || 'Unknown company'}`,
     `Package: ${record.public_package || record.requested_package || 'AI Workcell Pilot'}`,
     `Route: ${route.package_name} / ${route.delivery_lane}`,
     `First proof: ${record.first_proof_target || record.first_output || 'First useful proof'}`,
+    pilotCrewRunSheet ? `Pilot crew: ${pilotCrewRunSheet.crew_slug} (${pilotCrewRunSheet.minimum_plan})` : '',
+    pilotCrewRunSheet ? `Run sheet: ${pilotCrewRunSheet.role_sequence.join(' -> ')} / ${pilotCrewRunSheet.execution_mode}` : '',
+    pilotCrewRunSheet ? `Blocked actions: ${pilotCrewRunSheet.blocked_actions.join(', ')}` : '',
     `Source pack room: ${intakeUrl}`,
     `Operator: ${operatorConsoleUrl()}`,
     'Owner action: send source request only after approval.',
@@ -1218,6 +1223,7 @@ function buildOwnerOnboardingAlert(record, sourcePackRequest) {
     action_id: record.task_id,
     source_pack_intake_url: intakeUrl,
     operator_console_url: operatorConsoleUrl(),
+    pilot_crew_run_sheet: pilotCrewRunSheet,
     message,
     external_action_state: 'draft_only_no_send',
     connector_write_state: 'blocked_until_owner_approval',
@@ -1798,6 +1804,8 @@ async function postLeadWebhook({ record }) {
 // Best-effort: the helper never throws and skips cleanly when TELEGRAM_* isn't configured.
 function telegramLeadMessage(record) {
   const route = buildSolutionRoute(record)
+  const sourceToScreenOrder = buildSourceToScreenOrder(record)
+  const pilotCrewRunSheet = buildPilotCrewRunSheet(sourceToScreenOrder)
   const company = record.company || record.name || 'Unknown'
   const goal = (record.goal || record.workflow || '').slice(0, 280)
   const score = record.lead_score || 0
@@ -1818,6 +1826,9 @@ function telegramLeadMessage(record) {
     `Score: ${score} - ${record.lead_stage || 'needs_discovery'}`,
     `Goal: ${goal}`,
     `First proof: ${proofTarget}`,
+    pilotCrewRunSheet ? `Pilot crew: ${pilotCrewRunSheet.crew_slug}` : '',
+    sourceToScreenOrder?.source_hash ? `Source hash: ${sourceToScreenOrder.source_hash}` : '',
+    pilotCrewRunSheet ? `Blocked: ${pilotCrewRunSheet.blocked_actions.join(', ')}` : '',
     starterKitUrl ? `Starter kit: ${starterKitUrl}` : '',
     setupUrl ? `Setup page: ${setupUrl}` : '',
     `Source pack room: ${sourcePackUrl}`,

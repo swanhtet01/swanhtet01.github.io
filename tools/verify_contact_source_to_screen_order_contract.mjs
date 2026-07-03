@@ -114,9 +114,19 @@ assert.deepEqual(proofTask.pilot_crew_run_sheet, {
   ],
   real_mrr_delta: 0,
 })
+assert.ok(proofTask.owner_onboarding_alert.pilot_crew_run_sheet, 'owner_alert_pilot_crew_run_sheet_missing')
+assert.equal(proofTask.owner_onboarding_alert.pilot_crew_run_sheet.crew_slug, 'source-to-screen-pilot')
+assert.ok(proofTask.owner_onboarding_alert.message.includes('Pilot crew: source-to-screen-pilot'))
+assert.ok(proofTask.owner_onboarding_alert.message.includes('Run sheet: intake -> proof-builder -> approval-pack / approval_only'))
+assert.ok(proofTask.owner_onboarding_alert.message.includes('Blocked actions: external_send, connector_write, browser_or_mobile_action, payment_request, workspace_activation'))
 assert.ok(proofTask.operator_brief.includes('Source-to-Screen: Receivables chase'))
 assert.ok(proofTask.operator_brief.includes('Source hash: 00abc123'))
 assert.ok(proofTask.source_trace.some((item) => item.includes('source_to_screen_order_packet')))
+
+const telegramMessage = internals.telegramLeadMessage(record)
+assert.ok(telegramMessage.includes('Pilot crew: source-to-screen-pilot'))
+assert.ok(telegramMessage.includes('Source hash: 00abc123'))
+assert.ok(telegramMessage.includes('Blocked: external_send, connector_write, browser_or_mobile_action, payment_request, workspace_activation'))
 
 const action = internals.pipelineActionPayload(record)
 assert.ok(action.payload.source_to_screen_order, 'pipeline_source_to_screen_order_missing')
