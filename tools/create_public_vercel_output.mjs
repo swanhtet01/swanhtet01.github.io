@@ -166,7 +166,7 @@ const publicMachineHtml = `<!doctype html>
     <meta name="theme-color" content="#07111f" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" />
     <style>
-      :root { color-scheme: dark; --bg:#07111f; --panel:rgba(255,255,255,.075); --line:rgba(255,255,255,.15); --text:#f6fbff; --muted:#a9b8c7; --cyan:#F2C75A; --blue:#D97757; --green:#8cf0b8; --ink:#06101d; }
+      :root { color-scheme: dark; --bg:#07111f; --panel:rgba(255,255,255,.075); --line:rgba(255,255,255,.15); --text:#f6fbff; --muted:#a9b8c7; --cyan:#FF5C4D; --blue:#FF3B3B; --green:#8cf0b8; --ink:#06101d; }
       * { box-sizing: border-box; }
       body { margin:0; min-height:100vh; background: radial-gradient(circle at 80% 8%, rgba(114,243,255,.2), transparent 28rem), radial-gradient(circle at 8% 24%, rgba(79,140,255,.18), transparent 28rem), linear-gradient(135deg,#07111f,#02050b); color:var(--text); font-family:"Aptos","Segoe UI Variable","Segoe UI",system-ui,sans-serif; -webkit-font-smoothing: antialiased; }
       main { width:min(1120px, calc(100% - 32px)); margin:0 auto; padding:28px 0 56px; }
@@ -203,7 +203,7 @@ const publicMachineHtml = `<!doctype html>
   <body>
     <main>
       <header>
-        <a class="brand" href="/"><span class="mark"><img src="/favicon.svg" alt="" /></span><span class="wm" style="letter-spacing:-0.02em"><b style="font-weight:600">SUPER</b><b style="font-weight:900;text-shadow:0 0 14px rgba(233,185,73,0.45)">MEGA</b><b style="color:#E9B949;font-weight:700">.dev</b></span></a>
+        <a class="brand" href="/"><span class="mark"><img src="/favicon.svg" alt="" /></span><span class="wm" style="letter-spacing:-0.025em"><b style="font-weight:700">supermega</b><b style="color:#5E6B87;font-weight:500">.dev</b></span></a>
         <a class="btn" href="/contact/">Contact</a>
       </header>
       <section class="hero">
@@ -716,7 +716,7 @@ function publicToolsHtmlFromCatalog(catalog, agentRadar = {}, socialOAuth = {}) 
   <body>
     <div class="wrap">
       <header>
-        <a class="brand" href="/" aria-label="SUPERMEGA.dev home"><span class="mark"><img src="/favicon.svg" alt="" /></span><span class="wm" style="letter-spacing:-0.02em"><b style="font-weight:600">SUPER</b><b style="font-weight:900;text-shadow:0 0 14px rgba(233,185,73,0.45)">MEGA</b><b style="color:#E9B949;font-weight:700">.dev</b></span></a>
+        <a class="brand" href="/" aria-label="SUPERMEGA.dev home"><span class="mark"><img src="/favicon.svg" alt="" /></span><span class="wm" style="letter-spacing:-0.025em"><b style="font-weight:700">supermega</b><b style="color:#5E6B87;font-weight:500">.dev</b></span></a>
         <nav class="nav" aria-label="Primary">
           <a class="btn secondary-nav" href="/">Home</a>
           <a class="btn primary" href="/contact/?source=tools">Contact</a>
@@ -821,7 +821,7 @@ function publicValueHtmlFromEngine(engine) {
     <meta name="theme-color" content="#08100d" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" />
     <style>
-      :root { color-scheme: dark; --bg: #08100d; --panel: rgba(255,255,255,0.07); --line: rgba(255,255,255,0.14); --text: #f7fbf6; --muted: #aab8af; --green: #8cf0b8; --blue: #D97757; --ink: #06100c; }
+      :root { color-scheme: dark; --bg: #08100d; --panel: rgba(255,255,255,0.07); --line: rgba(255,255,255,0.14); --text: #f7fbf6; --muted: #aab8af; --green: #8cf0b8; --blue: #FF3B3B; --ink: #06100c; }
       * { box-sizing: border-box; }
       body { margin: 0; min-height: 100vh; background: #08100d; color: var(--text); font-family: "Aptos", "Segoe UI Variable", "Segoe UI", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
       a { color: inherit; text-decoration: none; }
@@ -861,7 +861,7 @@ function publicValueHtmlFromEngine(engine) {
   <body>
     <div class="wrap">
       <header>
-        <a class="brand" href="/" aria-label="SUPERMEGA.dev home"><span class="mark"><img src="/favicon.svg" alt="" /></span><span class="wm" style="letter-spacing:-0.02em"><b style="font-weight:600">SUPER</b><b style="font-weight:900;text-shadow:0 0 14px rgba(233,185,73,0.45)">MEGA</b><b style="color:#E9B949;font-weight:700">.dev</b></span></a>
+        <a class="brand" href="/" aria-label="SUPERMEGA.dev home"><span class="mark"><img src="/favicon.svg" alt="" /></span><span class="wm" style="letter-spacing:-0.025em"><b style="font-weight:700">supermega</b><b style="color:#5E6B87;font-weight:500">.dev</b></span></a>
         <nav class="nav" aria-label="Primary">
           <a class="btn secondary-nav" href="/tools/">Tools</a>
           <a class="btn secondary-nav" href="/start/">Start</a>
@@ -968,7 +968,7 @@ function publicIntakeHtmlFromRouter(router) {
     <meta name="theme-color" content="#0b1018" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" />
     <style>
-      :root { color-scheme: dark; --bg: #0b1018; --panel: rgba(255,255,255,0.07); --line: rgba(255,255,255,0.14); --text: #f7fbff; --muted: #aab6c3; --green: #8cf0b8; --blue: #D97757; --ink: #06100c; }
+      :root { color-scheme: dark; --bg: #0b1018; --panel: rgba(255,255,255,0.07); --line: rgba(255,255,255,0.14); --text: #f7fbff; --muted: #aab6c3; --green: #8cf0b8; --blue: #FF3B3B; --ink: #06100c; }
       * { box-sizing: border-box; }
       body { margin: 0; min-height: 100vh; background: #0b1018; color: var(--text); font-family: "Aptos", "Segoe UI Variable", "Segoe UI", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
       a { color: inherit; text-decoration: none; }
@@ -1015,7 +1015,7 @@ function publicIntakeHtmlFromRouter(router) {
   <body>
     <div class="wrap">
       <header>
-        <a class="brand" href="/" aria-label="SUPERMEGA.dev home"><span class="mark"><img src="/favicon.svg" alt="" /></span><span class="wm" style="letter-spacing:-0.02em"><b style="font-weight:600">SUPER</b><b style="font-weight:900;text-shadow:0 0 14px rgba(233,185,73,0.45)">MEGA</b><b style="color:#E9B949;font-weight:700">.dev</b></span></a>
+        <a class="brand" href="/" aria-label="SUPERMEGA.dev home"><span class="mark"><img src="/favicon.svg" alt="" /></span><span class="wm" style="letter-spacing:-0.025em"><b style="font-weight:700">supermega</b><b style="color:#5E6B87;font-weight:500">.dev</b></span></a>
         <nav class="nav" aria-label="Primary">
           <a class="btn secondary-nav" href="/tools/">Tools</a>
           <a class="btn secondary-nav" href="/proof/">Proof</a>
@@ -1256,7 +1256,7 @@ function publicProofHtmlFromPacks(proof) {
   <body>
     <div class="wrap">
       <header>
-        <a class="brand" href="/" aria-label="SUPERMEGA.dev home"><span class="mark"><img src="/favicon.svg" alt="" /></span><span class="wm" style="letter-spacing:-0.02em"><b style="font-weight:600">SUPER</b><b style="font-weight:900;text-shadow:0 0 14px rgba(233,185,73,0.45)">MEGA</b><b style="color:#E9B949;font-weight:700">.dev</b></span></a>
+        <a class="brand" href="/" aria-label="SUPERMEGA.dev home"><span class="mark"><img src="/favicon.svg" alt="" /></span><span class="wm" style="letter-spacing:-0.025em"><b style="font-weight:700">supermega</b><b style="color:#5E6B87;font-weight:500">.dev</b></span></a>
         <nav class="nav" aria-label="Primary">
           <a class="btn secondary-nav" href="/tools/">Tools</a>
           <a class="btn secondary-nav" href="/value/">Value</a>
@@ -1318,7 +1318,7 @@ function renderPublicPricingHtml() {
         --ink: #0d1117;
         --muted: #5f6b66;
         --line: rgba(13, 17, 23, 0.13);
-        --blue: #C2603F;
+        --blue: #FF3B3B;
         --navy: #07111f;
         --shadow: 0 34px 90px rgba(13, 17, 23, 0.14);
       }
@@ -1345,7 +1345,7 @@ function renderPublicPricingHtml() {
       .brand-text small { color: var(--muted); font-size: 10px; font-weight: 900; letter-spacing: 0.18em; text-transform: uppercase; }
       .nav, .cta { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
       .btn, button { display: inline-flex; align-items: center; justify-content: center; min-height: 48px; border: 1px solid var(--line); border-radius: 999px; padding: 0 18px; background: rgba(255,255,255,0.58); color: var(--ink); font: inherit; font-weight: 950; backdrop-filter: blur(18px); }
-      .btn.primary, button { color: #fff; border-color: transparent; background: linear-gradient(135deg, #07111f, #C2603F); box-shadow: 0 18px 46px rgba(18, 79, 255, 0.24); }
+      .btn.primary, button { color: #fff; border-color: transparent; background: linear-gradient(135deg, #07111f, #FF3B3B); box-shadow: 0 18px 46px rgba(18, 79, 255, 0.24); }
       .poster { display: grid; grid-template-columns: minmax(0, 0.84fr) minmax(340px, 1.16fr); gap: clamp(24px, 5vw, 72px); align-items: center; min-height: min(620px, calc(100svh - 86px)); padding: 10px 0 42px; }
       .eyebrow { color: var(--blue); font-size: 12px; font-weight: 950; letter-spacing: 0.22em; text-transform: uppercase; }
       h1, h2, h3 { font-family: var(--font-serif, "Georgia", ui-serif, serif); font-weight: 560; font-optical-sizing: auto; }
@@ -1372,8 +1372,8 @@ function renderPublicPricingHtml() {
     <div class="wrap">
       <header>
         <a class="brand" href="/" aria-label="SUPERMEGA.dev home">
-          <span class="mark"><svg viewBox="0 0 64 64" width="100%" height="100%" fill="none" aria-hidden="true"><g stroke="#D97757" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M35.8 10.3 A22 22 0 1 1 28.2 10.3"/><path d="M22 45 L22 26 L32 38 L42 26 L42 45" stroke-width="4"/></g><path d="M32 34.5 L33.2 37 L35.5 38 L33.2 39 L32 41.5 L30.8 39 L28.5 38 L30.8 37 Z" fill="#E9B949"/><path d="M32 7.6 L32.9 9.7 L35 10.3 L32.9 10.9 L32 13 L31.1 10.9 L29 10.3 L31.1 9.7 Z" fill="#E9B949"/></svg></span>
-          <span class="brand-text"><span class="wm" style="font-size:18px;letter-spacing:-0.02em"><b style="font-weight:600">SUPER</b><b style="font-weight:900;text-shadow:0 0 14px rgba(233,185,73,0.45)">MEGA</b><b style="color:#E9B949;font-weight:700">.dev</b></span></span>
+          <span class="mark"><svg viewBox="0 0 64 64" width="100%" height="100%" fill="none" aria-hidden="true"><g stroke="#FF3B3B" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M35.8 10.3 A22 22 0 1 1 28.2 10.3"/><path d="M22 45 L22 26 L32 38 L42 26 L42 45" stroke-width="4"/></g><path d="M32 34.5 L33.2 37 L35.5 38 L33.2 39 L32 41.5 L30.8 39 L28.5 38 L30.8 37 Z" fill="#FF3B3B"/><path d="M32 7.6 L32.9 9.7 L35 10.3 L32.9 10.9 L32 13 L31.1 10.9 L29 10.3 L31.1 9.7 Z" fill="#FF3B3B"/></svg></span>
+          <span class="brand-text"><span class="wm" style="font-size:18px;letter-spacing:-0.025em"><b style="font-weight:700">supermega</b><b style="color:#5E6B87;font-weight:500">.dev</b></span></span>
         </a>
         <nav class="nav" aria-label="Primary">
           <a class="btn secondary" href="/products/">Products</a>
@@ -1447,13 +1447,13 @@ const publicCardHtml = `<!doctype html>
     <meta property="og:image" content="https://supermega.dev/site/social/supermega-portal-card.png" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:image" content="https://supermega.dev/site/social/supermega-portal-card.png" />
-    <meta name="theme-color" content="#16181D" />
+    <meta name="theme-color" content="#0A0E1C" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" />
     <style>
       @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap');
-      :root { color-scheme: dark; --bg:#16181D; --surface:#1C1F27; --elev:#242833; --ink:#EAECEF; --muted:#989FAA; --dim:#666D77; --accent:#4F86F7; --accent-soft:rgba(79,134,247,.16); --line:rgba(255,255,255,.08); }
+      :root { color-scheme: dark; --bg:#0A0E1C; --surface:#111731; --elev:#1A2240; --ink:#EAEEF7; --muted:#93A0BC; --dim:#5E6B87; --accent:#FF3B3B; --accent-soft:rgba(255,59,59,.16); --line:rgba(255,255,255,.08); }
       * { box-sizing: border-box; }
-      body { margin: 0; min-height: 100svh; display: grid; place-items: center; padding: 24px; background-color: var(--bg); background-image: radial-gradient(ellipse at 82% 10%, rgba(79,134,247,0.12), transparent 32rem), radial-gradient(ellipse at 6% 92%, rgba(79,134,247,0.06), transparent 30rem), linear-gradient(160deg, #181B21, #101216 78%); color: var(--ink); font-family: "Inter", "Segoe UI", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+      body { margin: 0; min-height: 100svh; display: grid; place-items: center; padding: 24px; background-color: var(--bg); background-image: radial-gradient(ellipse at 82% 10%, rgba(255,59,59,0.12), transparent 32rem), radial-gradient(ellipse at 6% 92%, rgba(255,59,59,0.06), transparent 30rem), linear-gradient(160deg, #181B21, #101216 78%); color: var(--ink); font-family: "Inter", "Segoe UI", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
       a { color: inherit; text-decoration: none; }
       .card { position: relative; overflow: hidden; width: min(960px, 100%); min-height: min(600px, calc(100svh - 48px)); display: flex; align-items: center; gap: clamp(28px, 5vw, 56px); border: 1px solid var(--line); border-radius: clamp(24px, 4vw, 40px); background: linear-gradient(158deg, var(--surface) 0%, #191C23 100%); box-shadow: 0 50px 130px rgba(0,0,0,0.55); padding: clamp(30px, 6vw, 64px); }
       .card::before { content: "supermega"; position: absolute; right: -2%; bottom: -5%; color: transparent; -webkit-text-stroke: 1px rgba(255,255,255,0.028); font-size: clamp(56px, 13vw, 150px); font-weight: 700; letter-spacing: -0.04em; line-height: 0.8; pointer-events: none; font-family: "Space Grotesk", sans-serif; }
@@ -1465,7 +1465,7 @@ const publicCardHtml = `<!doctype html>
       .qr-label::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 7px var(--accent); }
       .content { position: relative; flex: 1 1 auto; min-width: 0; max-width: 540px; }
       .brand { display: inline-flex; align-items: center; font-family: "Space Grotesk", sans-serif; font-weight: 700; letter-spacing: -0.025em; font-size: 16px; color: var(--ink); }
-      .brand .bdot { width: 10px; height: 10px; border-radius: 3px; background: linear-gradient(135deg, #63A0FF, #4F86F7); box-shadow: 0 0 11px rgba(79,134,247,0.55); margin-right: 11px; }
+      .brand .bdot { width: 10px; height: 10px; border-radius: 3px; background: linear-gradient(135deg, #FF5C4D, #FF3B3B); box-shadow: 0 0 11px rgba(255,59,59,0.55); margin-right: 11px; }
       .brand .bd { color: var(--dim); font-weight: 500; }
       h1 { font-family: "Space Grotesk", sans-serif; margin: 22px 0 6px; font-size: clamp(40px, 6.5vw, 68px); line-height: 0.98; letter-spacing: -0.03em; font-weight: 700; color: var(--ink); }
       .role { margin: 0 0 18px; color: var(--accent); font-size: clamp(15px, 2.2vw, 18px); font-weight: 600; }
@@ -1520,9 +1520,9 @@ const publicCampaignRedirectHtml = `<!doctype html>
     <meta name="theme-color" content="#07111f" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" />
     <style>
-      :root { color-scheme: dark; --text: #f7fbff; --muted: #a8b8ca; --cyan: #E9B949; --blue: #D97757; --ink: #06101d; }
+      :root { color-scheme: dark; --text: #f7fbff; --muted: #a8b8ca; --cyan: #FF3B3B; --blue: #FF3B3B; --ink: #06101d; }
       * { box-sizing: border-box; }
-      body { margin: 0; min-height: 100svh; display: grid; place-items: center; padding: 24px; background-color: #07111f; background-image: radial-gradient(circle at 76% 18%, rgba(233,185,73,0.18), transparent 24rem), radial-gradient(circle at 8% 84%, rgba(79,140,255,0.18), transparent 26rem), linear-gradient(135deg, #07111f, #02050b 72%); color: var(--text); font-family: "Aptos", "Segoe UI Variable", "Segoe UI", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+      body { margin: 0; min-height: 100svh; display: grid; place-items: center; padding: 24px; background-color: #07111f; background-image: radial-gradient(circle at 76% 18%, rgba(255,59,59,0.18), transparent 24rem), radial-gradient(circle at 8% 84%, rgba(79,140,255,0.18), transparent 26rem), linear-gradient(135deg, #07111f, #02050b 72%); color: var(--text); font-family: "Aptos", "Segoe UI Variable", "Segoe UI", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
       main { width: min(640px, 100%); border: 1px solid rgba(217,247,255,0.16); border-radius: 34px; background: rgba(255,255,255,0.07); box-shadow: inset 0 1px 0 rgba(255,255,255,0.12), 0 36px 100px rgba(0,0,0,0.36); padding: clamp(28px, 7vw, 54px); }
       .brand { display: inline-flex; align-items: center; gap: 12px; color: var(--cyan); font-size: 12px; font-weight: 950; letter-spacing: 0.22em; text-transform: uppercase; }
       .mark { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 14px; overflow: hidden; background: #07111f; border: 1px solid rgba(255,255,255,0.16); }
@@ -1534,7 +1534,7 @@ const publicCampaignRedirectHtml = `<!doctype html>
   </head>
   <body>
     <main>
-      <div class="brand"><span class="mark"><img src="/favicon.svg?v=supermega-atelier-20260623" alt="" /></span><span class="wm" style="letter-spacing:-0.02em"><b style="font-weight:600">SUPER</b><b style="font-weight:900;text-shadow:0 0 14px rgba(233,185,73,0.45)">MEGA</b><b style="color:#E9B949;font-weight:700">.dev</b></span></div>
+      <div class="brand"><span class="mark"><img src="/favicon.svg?v=supermega-atelier-20260623" alt="" /></span><span class="wm" style="letter-spacing:-0.025em"><b style="font-weight:700">supermega</b><b style="color:#5E6B87;font-weight:500">.dev</b></span></div>
       <h1>Opening SUPERMEGA.</h1>
       <p>Sending you to the main site.</p>
       <a data-sm-campaign-link href="${activeCardContactPath}">Continue</a>
@@ -1584,7 +1584,7 @@ const unicornShellStyle = `
         --ink: #2a241c;
         --muted: #6f665a;
         --line: rgba(42, 36, 28, 0.14);
-        --blue: #c2603f;
+        --blue: #FF3B3B;
         --blue-soft: #f2e4db;
         --aqua: #d9895f;
         --navy: #2a241c;
@@ -1631,8 +1631,8 @@ const unicornShellStyle = `
       .brand-text small { color: var(--muted); font-size: 10px; font-weight: 900; letter-spacing: 0.18em; text-transform: uppercase; }
       .nav { display: flex; align-items: center; gap: 10px; }
       .btn, button { display: inline-flex; align-items: center; justify-content: center; min-height: 48px; border: 1px solid var(--line); border-radius: 999px; padding: 0 18px; background: rgba(255,255,255,0.64); color: var(--ink); font: inherit; font-weight: 650; backdrop-filter: blur(18px); transition: transform 180ms ease, background 180ms ease, border-color 180ms ease; }
-      .btn:hover, button:hover { transform: translateY(-1px); border-color: rgba(194,96,63,0.40); }
-      .btn.primary, button { color: #fff; border-color: transparent; background: linear-gradient(135deg, #b1542f, #cc6e48); box-shadow: 0 18px 40px rgba(194, 96, 63, 0.26); }
+      .btn:hover, button:hover { transform: translateY(-1px); border-color: rgba(255,59,59,0.40); }
+      .btn.primary, button { color: #fff; border-color: transparent; background: linear-gradient(135deg, #b1542f, #D62828); box-shadow: 0 18px 40px rgba(194, 96, 63, 0.26); }
       .poster { display: grid; grid-template-columns: minmax(0, 0.84fr) minmax(340px, 1.16fr); gap: clamp(24px, 5vw, 72px); align-items: center; min-height: min(620px, calc(100svh - 86px)); padding: 10px 0 42px; }
       .eyebrow { color: var(--blue); font-size: 12px; font-weight: 950; letter-spacing: 0.22em; text-transform: uppercase; }
       h1, h2, h3 { font-family: var(--font-serif, "Georgia", ui-serif, serif); font-weight: 560; font-optical-sizing: auto; }
@@ -1642,7 +1642,7 @@ const unicornShellStyle = `
       p { margin: 0; max-width: 34rem; color: var(--muted); font-size: clamp(17px, 1.8vw, 20px); line-height: 1.5; letter-spacing: -0.01em; }
       .cta { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 22px; }
       .product-stage { position: relative; display: grid; gap: 14px; }
-      .product-stage::before { content: ""; position: absolute; inset: -4% 2% auto 12%; height: 70%; border-radius: 999px; background: linear-gradient(135deg, rgba(217,119,87,0.20), rgba(200,168,119,0.14)); filter: blur(46px); z-index: -1; }
+      .product-stage::before { content: ""; position: absolute; inset: -4% 2% auto 12%; height: 70%; border-radius: 999px; background: linear-gradient(135deg, rgba(255,59,59,0.20), rgba(43,74,160,0.14)); filter: blur(46px); z-index: -1; }
       .browser { overflow: hidden; border: 1px solid rgba(255,255,255,0.84); border-radius: 36px; background: rgba(255,255,255,0.62); box-shadow: var(--shadow); backdrop-filter: blur(24px); }
       .browser-top { display: none; }
       .dots { display: inline-flex; gap: 6px; }
@@ -1663,8 +1663,8 @@ const unicornShellStyle = `
       .screen-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 12px; align-items: center; border: 1px solid var(--line); border-radius: 16px; padding: 12px; background: rgba(255,255,255,0.8); color: var(--ink); font-size: 14px; font-weight: 900; }
       .screen-row span { color: var(--muted); font-size: 12px; font-weight: 850; }
       .screen-row em { border-radius: 999px; padding: 6px 9px; background: #07111f; color: #fff; font-style: normal; font-size: 11px; }
-      .product-ui { display: grid; gap: 14px; aspect-ratio: 16 / 10.4; padding: clamp(18px, 3vw, 30px); background: radial-gradient(circle at top right, rgba(217,119,87,.16), transparent 34%), linear-gradient(135deg, #fffaf0, #f6efe4); color: var(--ink); }
-      .product-ui.dark { background: radial-gradient(circle at top right, rgba(217,119,87,.20), transparent 38%), linear-gradient(135deg, #221c17, #2c2620); color: #f8f4ec; }
+      .product-ui { display: grid; gap: 14px; aspect-ratio: 16 / 10.4; padding: clamp(18px, 3vw, 30px); background: radial-gradient(circle at top right, rgba(255,59,59,.16), transparent 34%), linear-gradient(135deg, #fffaf0, #f6efe4); color: var(--ink); }
+      .product-ui.dark { background: radial-gradient(circle at top right, rgba(255,59,59,.20), transparent 38%), linear-gradient(135deg, #221c17, #2c2620); color: #f8f4ec; }
       .product-ui.retail { background: radial-gradient(circle at top right, rgba(255,184,80,.24), transparent 34%), linear-gradient(135deg, #fff8eb, #f5fbff); }
       .app-frame { display: grid; grid-template-rows: auto 1fr; gap: 14px; height: 100%; min-height: 0; }
       .app-topbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; border: 1px solid rgba(13,17,23,.10); border-radius: 18px; padding: 10px 12px; background: rgba(255,255,255,.72); }
@@ -1679,18 +1679,18 @@ const unicornShellStyle = `
       .app-chip { border: 1px solid rgba(13,17,23,.10); border-radius: 999px; padding: 6px 8px; background: rgba(255,255,255,.72); font-size: 9px; font-weight: 950; white-space: nowrap; }
       .app-chip.active { background: #07111f; color: #fff; border-color: #07111f; }
       .product-ui.dark .app-chip { border-color: rgba(255,255,255,.14); background: rgba(255,255,255,.08); color: #f8fbff; }
-      .product-ui.dark .app-chip.active { background: #d97757; color: #06221f; }
+      .product-ui.dark .app-chip.active { background: #FF3B3B; color: #06221f; }
       .app-body { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(156px, .72fr); gap: 12px; min-height: 0; }
       .app-card { border: 1px solid rgba(13,17,23,.10); border-radius: 20px; background: rgba(255,255,255,.76); padding: 13px; min-width: 0; box-shadow: 0 12px 28px rgba(13,17,23,.06); }
       .product-ui.dark .app-card { border-color: rgba(255,255,255,.14); background: rgba(255,255,255,.08); box-shadow: none; }
       .app-card h4 { margin: 0; font-size: 20px; line-height: 1; letter-spacing: -.055em; }
       .app-label { display: block; margin-bottom: 6px; color: var(--blue); font-size: 8px; font-weight: 950; letter-spacing: .18em; text-transform: uppercase; }
-      .product-ui.dark .app-label { color: #d97757; }
+      .product-ui.dark .app-label { color: #FF3B3B; }
       .app-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 7px; margin-top: 10px; }
       .app-kpi { border: 1px solid rgba(13,17,23,.08); border-radius: 13px; padding: 8px; background: rgba(255,255,255,.72); }
       .product-ui.dark .app-kpi { border-color: rgba(255,255,255,.12); background: rgba(255,255,255,.07); }
       .app-kpi b { display: block; color: var(--blue); font-size: 7px; letter-spacing: .14em; text-transform: uppercase; }
-      .product-ui.dark .app-kpi b { color: #d97757; }
+      .product-ui.dark .app-kpi b { color: #FF3B3B; }
       .app-kpi span { display: block; margin-top: 3px; font-size: 18px; font-weight: 950; letter-spacing: -.04em; }
       .app-table { display: grid; gap: 7px; margin-top: 10px; }
       .app-row { display: grid; grid-template-columns: minmax(0,1fr) auto auto; gap: 8px; align-items: center; border: 1px solid rgba(13,17,23,.08); border-radius: 12px; padding: 8px 9px; background: rgba(255,255,255,.78); }
@@ -1698,18 +1698,18 @@ const unicornShellStyle = `
       .app-row strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; letter-spacing: -.015em; }
       .app-row span { color: var(--muted); font-size: 9px; font-weight: 850; white-space: nowrap; }
       .product-ui.dark .app-row span { color: rgba(245,250,255,.66); }
-      .app-row em { border-radius: 999px; padding: 5px 7px; background: rgba(194,96,63,.10); color: var(--blue); font-style: normal; font-size: 8px; font-weight: 950; white-space: nowrap; }
-      .product-ui.dark .app-row em { background: rgba(217,119,87,.16); color: #d97757; }
+      .app-row em { border-radius: 999px; padding: 5px 7px; background: rgba(255,59,59,.10); color: var(--blue); font-style: normal; font-size: 8px; font-weight: 950; white-space: nowrap; }
+      .product-ui.dark .app-row em { background: rgba(255,59,59,.16); color: #FF3B3B; }
       .app-side { display: grid; gap: 9px; align-content: start; }
       .app-module { border: 1px solid rgba(13,17,23,.10); border-radius: 16px; padding: 10px; background: rgba(255,255,255,.70); }
       .product-ui.dark .app-module { border-color: rgba(255,255,255,.14); background: rgba(255,255,255,.08); }
       .app-module b { display: block; color: var(--blue); font-size: 8px; letter-spacing: .15em; text-transform: uppercase; }
-      .product-ui.dark .app-module b { color: #d97757; }
+      .product-ui.dark .app-module b { color: #FF3B3B; }
       .app-module span { display: block; margin-top: 5px; font-size: 11px; line-height: 1.18; font-weight: 900; }
       .product-top { display: flex; justify-content: space-between; gap: 12px; align-items: center; }
       .product-title small { display: block; color: var(--blue); font-size: 10px; font-weight: 950; letter-spacing: .18em; text-transform: uppercase; }
       .product-title strong { display: block; margin-top: 5px; font-size: clamp(26px, 3.5vw, 42px); line-height: .94; letter-spacing: -.07em; }
-      .product-ui.dark .product-title small { color: #d97757; }
+      .product-ui.dark .product-title small { color: #FF3B3B; }
       .product-badge { border: 1px solid rgba(13,17,23,.10); border-radius: 999px; padding: 8px 10px; background: rgba(255,255,255,.72); font-size: 11px; font-weight: 950; text-transform: uppercase; white-space: nowrap; }
       .product-ui.dark .product-badge { border-color: rgba(255,255,255,.16); background: rgba(255,255,255,.08); color: #eaffff; }
       .metric-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 9px; }
@@ -1717,7 +1717,7 @@ const unicornShellStyle = `
       .metric b { display: block; color: var(--blue); font-size: 9px; font-weight: 950; letter-spacing: .14em; text-transform: uppercase; }
       .metric span { display: block; margin-top: 4px; font-size: clamp(18px, 2vw, 28px); font-weight: 950; letter-spacing: -.05em; }
       .product-ui.dark .metric { border-color: rgba(255,255,255,.14); background: rgba(255,255,255,.08); }
-      .product-ui.dark .metric b { color: #d97757; }
+      .product-ui.dark .metric b { color: #FF3B3B; }
       .work-list { display: grid; gap: 8px; }
       .work-item { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; border: 1px solid rgba(13,17,23,.10); border-radius: 16px; padding: 10px 12px; background: rgba(255,255,255,.78); }
       .work-item strong { display: block; font-size: 13px; letter-spacing: -.02em; }
@@ -1725,13 +1725,13 @@ const unicornShellStyle = `
       .work-item em { border-radius: 999px; padding: 6px 8px; background: #07111f; color: #fff; font-size: 10px; font-style: normal; font-weight: 950; white-space: nowrap; }
       .product-ui.dark .work-item { border-color: rgba(255,255,255,.14); background: rgba(255,255,255,.08); }
       .product-ui.dark .work-item span { color: rgba(245,250,255,.66); }
-      .product-ui.dark .work-item em { background: #d97757; color: #06221f; }
+      .product-ui.dark .work-item em { background: #FF3B3B; color: #06221f; }
       .module-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 9px; }
       .module-tile { border: 1px solid rgba(13,17,23,.10); border-radius: 16px; padding: 11px; background: rgba(255,255,255,.68); }
       .module-tile b { display: block; color: var(--blue); font-size: 9px; letter-spacing: .14em; text-transform: uppercase; }
       .module-tile span { display: block; margin-top: 6px; font-size: 13px; font-weight: 950; letter-spacing: -.03em; }
       .product-ui.dark .module-tile { border-color: rgba(255,255,255,.14); background: rgba(255,255,255,.08); }
-      .product-ui.dark .module-tile b { color: #d97757; }
+      .product-ui.dark .module-tile b { color: #FF3B3B; }
       .proof-line { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
       .proof { border: 1px solid rgba(255,255,255,0.72); border-radius: 20px; padding: 14px; background: rgba(255,255,255,0.62); backdrop-filter: blur(16px); }
       .proof b { display: block; color: var(--blue); font-size: 11px; letter-spacing: 0.17em; text-transform: uppercase; }
@@ -1830,13 +1830,13 @@ const unicornShellStyle = `
       .proof-step b { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 999px; color: #fff; background: var(--ink); }
       .proof-step strong { display: block; font-size: 23px; letter-spacing: -0.045em; }
       .proof-step span { display: block; margin-top: 7px; color: var(--muted); line-height: 1.42; font-weight: 760; }
-      .workcell-panel { border: 1px solid var(--line); border-radius: 28px; padding: clamp(22px,4vw,40px); background: linear-gradient(135deg, rgba(194,96,63,0.06), rgba(201,162,75,0.055)); }
+      .workcell-panel { border: 1px solid var(--line); border-radius: 28px; padding: clamp(22px,4vw,40px); background: linear-gradient(135deg, rgba(255,59,59,0.06), rgba(255,59,59,0.055)); }
       .workcell-panel p { color: var(--muted); line-height: 1.58; max-width: 66ch; }
       .workcell-grid { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 12px; margin-top: 22px; }
       .workcell-step { border: 1px solid var(--line); border-radius: 18px; padding: 16px; background: rgba(255,255,255,0.52); }
       .workcell-step strong { display: block; letter-spacing: -0.02em; }
       .workcell-step span { display: block; margin-top: 7px; color: var(--muted); font-size: 13px; line-height: 1.43; }
-      .local-worker-continue { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 18px; align-items: center; margin: 8px 0 20px; border: 1px solid rgba(194,96,63,0.26); border-radius: 24px; padding: 16px; background: rgba(255,255,255,0.68); box-shadow: 0 18px 54px rgba(42,36,28,0.08); }
+      .local-worker-continue { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 18px; align-items: center; margin: 8px 0 20px; border: 1px solid rgba(255,59,59,0.26); border-radius: 24px; padding: 16px; background: rgba(255,255,255,0.68); box-shadow: 0 18px 54px rgba(42,36,28,0.08); }
       .local-worker-continue[hidden] { display: none !important; }
       .local-worker-continue strong { display: block; margin-top: 5px; font-size: clamp(21px,2.4vw,30px); line-height: 1.05; letter-spacing: -0.035em; }
       .local-worker-continue p { margin-top: 6px; max-width: 62ch; font-size: 14px; line-height: 1.42; }
@@ -1853,7 +1853,7 @@ const unicornShellStyle = `
       .role-mode-choice[aria-pressed="true"] { border-color: rgba(43,105,124,0.5); background: rgba(43,105,124,0.12); color: var(--blue); }
       .role-mode-meta { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
       .role-mode-meta span { border: 1px solid var(--line); border-radius: 999px; padding: 5px 9px; color: var(--muted); font-size: 11px; font-weight: 900; }
-      .device-mode-panel { display: grid; grid-template-columns: minmax(0,1fr) minmax(220px,.56fr); gap: 16px; align-items: center; margin: 8px 0 20px; border: 1px solid rgba(201,162,75,0.34); border-radius: 24px; padding: 16px; background: rgba(255,255,255,0.62); box-shadow: 0 16px 48px rgba(42,36,28,0.07); }
+      .device-mode-panel { display: grid; grid-template-columns: minmax(0,1fr) minmax(220px,.56fr); gap: 16px; align-items: center; margin: 8px 0 20px; border: 1px solid rgba(255,59,59,0.34); border-radius: 24px; padding: 16px; background: rgba(255,255,255,0.62); box-shadow: 0 16px 48px rgba(42,36,28,0.07); }
       .device-mode-panel[hidden] { display: none !important; }
       .device-mode-panel strong { display: block; margin-top: 5px; font-size: clamp(20px,2.1vw,27px); line-height: 1.08; letter-spacing: -0.035em; }
       .device-mode-panel p { margin-top: 6px; max-width: 66ch; font-size: 14px; line-height: 1.42; }
@@ -1863,7 +1863,7 @@ const unicornShellStyle = `
       .adaptive-plan-panel strong { display: block; margin-top: 5px; font-size: clamp(20px,2.1vw,27px); line-height: 1.08; letter-spacing: -0.035em; }
       .adaptive-plan-panel p { margin-top: 6px; max-width: 66ch; font-size: 14px; line-height: 1.42; }
       .adaptive-plan-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
-      .source-pack-panel { display: grid; grid-template-columns: minmax(0,1fr) minmax(230px,.62fr); gap: 16px; align-items: center; margin: 8px 0 20px; border: 1px solid rgba(194,96,63,0.22); border-radius: 24px; padding: 16px; background: rgba(255,255,255,0.66); box-shadow: 0 16px 48px rgba(42,36,28,0.07); }
+      .source-pack-panel { display: grid; grid-template-columns: minmax(0,1fr) minmax(230px,.62fr); gap: 16px; align-items: center; margin: 8px 0 20px; border: 1px solid rgba(255,59,59,0.22); border-radius: 24px; padding: 16px; background: rgba(255,255,255,0.66); box-shadow: 0 16px 48px rgba(42,36,28,0.07); }
       .source-pack-panel[hidden] { display: none !important; }
       .source-pack-panel strong { display: block; margin-top: 5px; font-size: clamp(20px,2.1vw,27px); line-height: 1.08; letter-spacing: -0.035em; }
       .source-pack-panel p { margin-top: 6px; max-width: 66ch; font-size: 14px; line-height: 1.42; }
@@ -1881,7 +1881,7 @@ const unicornShellStyle = `
       .value-plan-panel p { margin-top: 6px; max-width: 66ch; font-size: 14px; line-height: 1.42; }
       .value-plan-panel ul { display: grid; gap: 6px; margin: 10px 0 0; padding-left: 18px; color: var(--muted); font-size: 13px; font-weight: 780; line-height: 1.35; }
       .value-plan-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
-      .pilot-plan-panel { display: grid; grid-template-columns: minmax(0,1fr) minmax(250px,.66fr); gap: 16px; align-items: center; margin: 8px 0 20px; border: 1px solid rgba(201,162,75,0.34); border-radius: 24px; padding: 16px; background: rgba(255,255,255,0.68); box-shadow: 0 16px 48px rgba(42,36,28,0.07); }
+      .pilot-plan-panel { display: grid; grid-template-columns: minmax(0,1fr) minmax(250px,.66fr); gap: 16px; align-items: center; margin: 8px 0 20px; border: 1px solid rgba(255,59,59,0.34); border-radius: 24px; padding: 16px; background: rgba(255,255,255,0.68); box-shadow: 0 16px 48px rgba(42,36,28,0.07); }
       .pilot-plan-panel[hidden] { display: none !important; }
       .pilot-plan-panel strong { display: block; margin-top: 5px; font-size: clamp(20px,2.1vw,27px); line-height: 1.08; letter-spacing: -0.035em; }
       .pilot-plan-panel p { margin-top: 6px; max-width: 66ch; font-size: 14px; line-height: 1.42; }
@@ -1989,7 +1989,7 @@ const unicornShellStyle = `
         .proof-plan-actions .btn { flex: 1 1 auto; }
       }
 
-      :root { --gilt: #E9B949; }
+      :root { --gilt: #FF3B3B; }
       .reveal { opacity: 0; transform: translateY(18px); transition: opacity .66s cubic-bezier(.22,1,.36,1), transform .66s cubic-bezier(.22,1,.36,1); }
       .reveal.in { opacity: 1; transform: none; }
       .hero-tagline { font-family: var(--font-serif); font-style: italic; color: var(--blue); font-size: clamp(15px, 1.4vw, 17px); margin-top: 20px; letter-spacing: -0.01em; opacity: 0.88; max-width: 28ch; }
@@ -2000,19 +2000,19 @@ const unicornShellStyle = `
       :root[data-theme="dark"] .theme-toggle::before { content: 'Light'; }
       :root[data-theme="dark"] {
         color-scheme: dark;
-        --cream: #1B1815; --paper: #242019; --ink: #F3EFE6; --muted: #A8A092;
-        --line: rgba(243,239,230,0.12); --blue: #D97757; --blue-soft: rgba(217,119,87,0.16);
-        --aqua: #E0A06B; --navy: #F3EFE6; --shadow: 0 34px 90px rgba(0,0,0,0.5); --gilt: #D7B25C;
+        --cream: #0A0E1C; --paper: #111731; --ink: #EAEEF7; --muted: #93A0BC;
+        --line: rgba(148,164,210,0.12); --blue: #FF3B3B; --blue-soft: rgba(255,59,59,0.16);
+        --aqua: #FF5C4D; --navy: #EAEEF7; --shadow: 0 34px 90px rgba(0,0,0,0.6); --gilt: #FF3B3B;
       }
       :root[data-theme="dark"] body {
         background:
-          radial-gradient(circle at 80% 2%, rgba(217,119,87,0.14), transparent 30rem),
-          radial-gradient(circle at 4% 18%, rgba(200,168,119,0.08), transparent 26rem),
-          linear-gradient(180deg, #1d1916 0%, var(--cream) 55%, #161310 100%);
+          radial-gradient(circle at 84% 2%, rgba(255,59,59,0.13), transparent 32rem),
+          radial-gradient(circle at 3% 20%, rgba(43,74,160,0.20), transparent 30rem),
+          linear-gradient(180deg, #0C1122 0%, var(--cream) 55%, #070A15 100%);
       }
       :root[data-theme="dark"] body::before { background-image: linear-gradient(rgba(243,239,230,0.045) 1px, transparent 1px), linear-gradient(90deg, rgba(243,239,230,0.045) 1px, transparent 1px); }
       :root[data-theme="dark"] .btn, :root[data-theme="dark"] button { background: rgba(243,239,230,0.06); }
-      :root[data-theme="dark"] .btn.primary, :root[data-theme="dark"] button { color: #fff; background: linear-gradient(135deg, #cc6e48, #d97757); box-shadow: 0 18px 40px rgba(217, 119, 87, 0.28); }
+      :root[data-theme="dark"] .btn.primary, :root[data-theme="dark"] button { color: #fff; background: linear-gradient(135deg, #D62828, #FF3B3B); box-shadow: 0 18px 40px rgba(217, 119, 87, 0.28); }
       :root[data-theme="dark"] .output, :root[data-theme="dark"] .feature, :root[data-theme="dark"] .proof-card, :root[data-theme="dark"] .case, :root[data-theme="dark"] .proof-system, :root[data-theme="dark"] .workcell-panel, :root[data-theme="dark"] .workcell-step, :root[data-theme="dark"] .local-worker-continue, :root[data-theme="dark"] .role-mode-panel, :root[data-theme="dark"] .device-mode-panel, :root[data-theme="dark"] .adaptive-plan-panel, :root[data-theme="dark"] .source-pack-panel, :root[data-theme="dark"] .proof-plan-panel, :root[data-theme="dark"] .value-plan-panel, :root[data-theme="dark"] .pilot-plan-panel, :root[data-theme="dark"] .final, :root[data-theme="dark"] .home-shot-card, :root[data-theme="dark"] .browser, :root[data-theme="dark"] .proof, :root[data-theme="dark"] .upgrade-card, :root[data-theme="dark"] .shell-card, :root[data-theme="dark"] .setup-card, :root[data-theme="dark"] .market-card, :root[data-theme="dark"] form, :root[data-theme="dark"] .feature-pills span, :root[data-theme="dark"] .chip, :root[data-theme="dark"] .metric, :root[data-theme="dark"] .proof-step, :root[data-theme="dark"] footer .footer-links a {
         background: rgba(243,239,230,0.05); border-color: rgba(243,239,230,0.12);
       }
@@ -2029,11 +2029,11 @@ const unicornShellStyle = `
 `
 
 const unicornHeader = `
-      <script>(function(){try{var t=localStorage.getItem('sm-theme');if(!t){t=(window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light';}document.documentElement.setAttribute('data-theme',t);}catch(e){}})();</script>
+      <script>(function(){try{var t=localStorage.getItem('sm-theme');if(!t){t='dark';}document.documentElement.setAttribute('data-theme',t);}catch(e){}})();</script>
       <header>
         <a class="brand" href="/" aria-label="SUPERMEGA.dev home">
-          <span class="mark"><svg viewBox="0 0 64 64" width="100%" height="100%" fill="none" aria-hidden="true"><g stroke="#D97757" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M35.8 10.3 A22 22 0 1 1 28.2 10.3"/><path d="M22 45 L22 26 L32 38 L42 26 L42 45" stroke-width="4"/></g><path d="M32 34.5 L33.2 37 L35.5 38 L33.2 39 L32 41.5 L30.8 39 L28.5 38 L30.8 37 Z" fill="#E9B949"/><path d="M32 7.6 L32.9 9.7 L35 10.3 L32.9 10.9 L32 13 L31.1 10.9 L29 10.3 L31.1 9.7 Z" fill="#E9B949"/></svg></span>
-          <span class="brand-text"><span class="wm" style="font-size:18px;letter-spacing:-0.02em"><b style="font-weight:600">SUPER</b><b style="font-weight:900;text-shadow:0 0 14px rgba(233,185,73,0.45)">MEGA</b><b style="color:#E9B949;font-weight:700">.dev</b></span></span>
+          <span class="mark"><svg viewBox="0 0 64 64" width="100%" height="100%" fill="none" aria-hidden="true"><g stroke="#FF3B3B" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M35.8 10.3 A22 22 0 1 1 28.2 10.3"/><path d="M22 45 L22 26 L32 38 L42 26 L42 45" stroke-width="4"/></g><path d="M32 34.5 L33.2 37 L35.5 38 L33.2 39 L32 41.5 L30.8 39 L28.5 38 L30.8 37 Z" fill="#FF3B3B"/><path d="M32 7.6 L32.9 9.7 L35 10.3 L32.9 10.9 L32 13 L31.1 10.9 L29 10.3 L31.1 9.7 Z" fill="#FF3B3B"/></svg></span>
+          <span class="brand-text"><span class="wm" style="font-size:18px;letter-spacing:-0.025em"><b style="font-weight:700">supermega</b><b style="color:#5E6B87;font-weight:500">.dev</b></span></span>
         </a>
         <nav class="nav" aria-label="Primary">
           <button class="btn secondary theme-toggle" type="button" aria-label="Toggle dark mode" onclick="var r=document.documentElement,n=r.getAttribute('data-theme')==='dark'?'light':'dark';r.setAttribute('data-theme',n);try{localStorage.setItem('sm-theme',n)}catch(e){}"></button>
@@ -4144,10 +4144,10 @@ const unicornAiAgentsHtml = `<!doctype html>
       .crew-endpoint-panel code { white-space: normal; overflow-wrap: anywhere; font-size: 12px; color: var(--ink); }
       .crew-endpoint-panel span { color: var(--muted); line-height: 1.45; font-size: 13px; }
       .crew-endpoint-panel[data-status="ready"] { border-color: rgba(13,148,136,.42); background: rgba(13,148,136,.11); }
-      .crew-endpoint-panel[data-status="blocked"] { border-color: rgba(194,96,63,.28); background: rgba(194,96,63,.08); }
+      .crew-endpoint-panel[data-status="blocked"] { border-color: rgba(255,59,59,.28); background: rgba(255,59,59,.08); }
       .worker-price { margin-top: auto; font-weight: 900; color: var(--ink); }
       .worker-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
-      .worker-card.is-router-match { border-color: rgba(194,96,63,0.5); box-shadow: 0 22px 70px rgba(194,96,63,0.16); background: rgba(255,255,255,0.8); }
+      .worker-card.is-router-match { border-color: rgba(255,59,59,0.5); box-shadow: 0 22px 70px rgba(255,59,59,0.16); background: rgba(255,255,255,0.8); }
       .worker-router { display: grid; grid-template-columns: minmax(0,1.25fr) minmax(280px,.75fr); gap: 22px; align-items: stretch; }
       .router-copy p { color: var(--muted); line-height: 1.55; max-width: 62ch; }
       .router-groups { display: grid; gap: 16px; margin-top: 20px; }
@@ -4155,9 +4155,9 @@ const unicornAiAgentsHtml = `<!doctype html>
       .router-choice-group strong { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--blue); }
       .router-choice-row { display: flex; flex-wrap: wrap; gap: 8px; }
       .router-choice { border: 1px solid var(--line); border-radius: 999px; background: rgba(255,255,255,0.68); color: var(--ink); min-height: 40px; padding: 0 13px; font: inherit; font-size: 13px; font-weight: 850; cursor: pointer; }
-      .router-choice.is-selected, .router-choice[aria-pressed="true"] { border-color: rgba(194,96,63,0.55); background: rgba(194,96,63,0.12); color: var(--blue); }
-      .router-choice:focus-visible { outline: 3px solid rgba(194,96,63,0.22); outline-offset: 2px; }
-      .router-result { border: 1px solid rgba(194,96,63,0.28); border-radius: 18px; padding: 20px; background: rgba(255,255,255,0.72); display: grid; gap: 12px; align-content: start; min-height: 100%; }
+      .router-choice.is-selected, .router-choice[aria-pressed="true"] { border-color: rgba(255,59,59,0.55); background: rgba(255,59,59,0.12); color: var(--blue); }
+      .router-choice:focus-visible { outline: 3px solid rgba(255,59,59,0.22); outline-offset: 2px; }
+      .router-result { border: 1px solid rgba(255,59,59,0.28); border-radius: 18px; padding: 20px; background: rgba(255,255,255,0.72); display: grid; gap: 12px; align-content: start; min-height: 100%; }
       .router-result span, .router-proof b { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--blue); font-style: normal; }
       .router-result strong { font-size: clamp(20px,2.4vw,30px); line-height: 1.08; letter-spacing: -.02em; }
       .router-result p { margin: 0; color: var(--muted); line-height: 1.48; }
@@ -4176,7 +4176,7 @@ const unicornAiAgentsHtml = `<!doctype html>
       .connector-group-label { font-size: 11px; font-weight: 950; letter-spacing: 0.16em; text-transform: uppercase; color: var(--blue); }
       .connector-grid { display: flex; flex-wrap: wrap; gap: 8px; }
       .connector-chip { border: 1px solid var(--line); border-radius: 100px; padding: 6px 14px; font-size: 13px; font-weight: 500; color: var(--muted); background: rgba(255,255,255,0.55); transition: background 180ms ease, color 180ms ease; }
-      .connector-chip:hover { background: var(--blue-soft); color: var(--blue); border-color: rgba(194,96,63,0.28); }
+      .connector-chip:hover { background: var(--blue-soft); color: var(--blue); border-color: rgba(255,59,59,0.28); }
       .connector-note { margin-top: 28px; font-size: 14px; color: var(--muted); max-width: 52ch; }
       @media (max-width: 880px) { .connector-groups { grid-template-columns: 1fr; gap: 20px; } }
       .agent-proof { margin: 64px auto 0; max-width: 600px; text-align: center; }
@@ -4189,7 +4189,7 @@ const unicornAiAgentsHtml = `<!doctype html>
       :root[data-theme="dark"] .worker-ladder { background: rgba(243,239,230,.05); border-color: rgba(243,239,230,.12); }
       :root[data-theme="dark"] .crew-endpoint-panel { background: rgba(13,148,136,.08); }
       :root[data-theme="dark"] .connector-chip { background: rgba(243,239,230,0.05); border-color: rgba(243,239,230,0.12); }
-      :root[data-theme="dark"] .connector-chip:hover { background: rgba(217,119,87,0.12); color: #D97757; border-color: rgba(217,119,87,0.28); }
+      :root[data-theme="dark"] .connector-chip:hover { background: rgba(255,59,59,0.12); color: #FF3B3B; border-color: rgba(255,59,59,0.28); }
     </style>
   </head>
   <body>
@@ -4310,10 +4310,10 @@ ${renderSellableWorkerShelf()}
         <section class="section connector-section">
           <h2>One kernel, wired into 51 real systems.</h2>
           <p class="section-sub">Agents read from the tools your team already uses and act through rails you already trust. API connectors come first; browser, desktop, and mobile hands are used only when no safer API/export path exists.</p>
-          <div style="border:1px solid rgba(201,162,75,0.45);border-radius:18px;background:linear-gradient(135deg, rgba(201,162,75,0.12), rgba(194,96,63,0.06));padding:16px 20px;margin-bottom:20px">
+          <div style="border:1px solid rgba(255,59,59,0.45);border-radius:18px;background:linear-gradient(135deg, rgba(255,59,59,0.12), rgba(255,59,59,0.06));padding:16px 20px;margin-bottom:20px">
             <div class="connector-group-label" style="color:#B8892E">★ Myanmar-native rails — built in, no global SaaS has these · 8</div>
             <div class="connector-grid" style="margin-top:10px">
-              ${['KBZPay','WavePay','AYA Pay','CB Pay','OnePay','MMQR','CBM Rate','Viber'].map((n) => `<div class="connector-chip" style="border-color:rgba(201,162,75,0.55);background:rgba(201,162,75,0.14);color:#7a6320;font-weight:850">${n}</div>`).join('')}
+              ${['KBZPay','WavePay','AYA Pay','CB Pay','OnePay','MMQR','CBM Rate','Viber'].map((n) => `<div class="connector-chip" style="border-color:rgba(255,59,59,0.55);background:rgba(255,59,59,0.14);color:#7a6320;font-weight:850">${n}</div>`).join('')}
             </div>
           </div>
           <div class="connector-groups">
@@ -4458,7 +4458,7 @@ const unicornPublicShellHtml = `<!doctype html>
       .how-step span { display: block; margin-top: 7px; color: var(--muted); font-size: 14px; line-height: 1.5; }
       .hero-img { width: 100%; display: block; border-radius: 16px; border: 1px solid rgba(42,36,28,0.12); box-shadow: var(--shadow); background: #f5f1e8; }
       :root[data-theme="dark"] .hero-img { border-color: rgba(243,239,230,0.14); }
-      .workcell-panel { border: 1px solid var(--line); border-radius: 28px; padding: clamp(22px,4vw,40px); background: linear-gradient(135deg, rgba(194,96,63,0.06), rgba(201,162,75,0.055)); }
+      .workcell-panel { border: 1px solid var(--line); border-radius: 28px; padding: clamp(22px,4vw,40px); background: linear-gradient(135deg, rgba(255,59,59,0.06), rgba(255,59,59,0.055)); }
       .workcell-panel p { color: var(--muted); line-height: 1.58; max-width: 66ch; }
       .workcell-grid { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 12px; margin-top: 22px; }
       .workcell-step { border: 1px solid var(--line); border-radius: 18px; padding: 16px; background: rgba(255,255,255,0.52); }
@@ -4507,9 +4507,9 @@ ${unicornHeader}
             <p class="hero-tagline">Cast real work into software.</p>
           </div>
           <aside class="product-stage" style="position:relative" aria-label="DeskPOS live product — point-of-sale for Myanmar shops">
-            <span aria-hidden="true" style="position:absolute;top:14px;left:14px;z-index:2;display:inline-flex;align-items:center;gap:9px;background:rgba(24,20,16,0.86);border:1px solid rgba(233,185,73,0.5);border-radius:999px;padding:6px 14px 6px 8px;box-shadow:0 0 0 1px rgba(233,185,73,0.22),0 8px 30px rgba(233,185,73,0.24)">
-              <svg width="17" height="22" viewBox="0 0 40 52" aria-hidden="true"><defs><clipPath id="hbadge"><rect x="4" y="2" width="32" height="48" rx="16"/></clipPath></defs><g clip-path="url(#hbadge)"><rect x="4" y="2" width="32" height="48" fill="#181410"/><rect x="4" y="2" width="32" height="18" fill="#E9B949"/><rect x="4" y="19.4" width="32" height="1.5" fill="#181410" opacity="0.5"/></g><rect x="4" y="2" width="32" height="48" rx="16" fill="none" stroke="#E9B949" stroke-width="2"/><circle cx="26" cy="34" r="3.4" fill="#E9B949"/></svg>
-              <span style="color:#F3EFE6;font-size:12px;font-weight:850;letter-spacing:0.01em">One capsule.<b style="color:#E9B949"> You own it.</b></span>
+            <span aria-hidden="true" style="position:absolute;top:14px;left:14px;z-index:2;display:inline-flex;align-items:center;gap:9px;background:rgba(24,20,16,0.86);border:1px solid rgba(255,59,59,0.5);border-radius:999px;padding:6px 14px 6px 8px;box-shadow:0 0 0 1px rgba(255,59,59,0.22),0 8px 30px rgba(255,59,59,0.24)">
+              <svg width="17" height="22" viewBox="0 0 40 52" aria-hidden="true"><defs><clipPath id="hbadge"><rect x="4" y="2" width="32" height="48" rx="16"/></clipPath></defs><g clip-path="url(#hbadge)"><rect x="4" y="2" width="32" height="48" fill="#0A0E1C"/><rect x="4" y="2" width="32" height="18" fill="#FF3B3B"/><rect x="4" y="19.4" width="32" height="1.5" fill="#0A0E1C" opacity="0.5"/></g><rect x="4" y="2" width="32" height="48" rx="16" fill="none" stroke="#FF3B3B" stroke-width="2"/><circle cx="26" cy="34" r="3.4" fill="#FF3B3B"/></svg>
+              <span style="color:#F3EFE6;font-size:12px;font-weight:850;letter-spacing:0.01em">One capsule.<b style="color:#FF3B3B"> You own it.</b></span>
             </span>
             <img class="hero-img" src="/site/shots/live-product-restaurant-pos-menu-inventory.png?v=${publicShotVersion}" alt="DeskPOS — live point of sale system" loading="eager" decoding="async" />
             <div class="proof-line" aria-label="What the software does">
@@ -4556,8 +4556,8 @@ ${unicornHeader}
         </section>
 
         <section class="section">
-          <div style="border:1px solid var(--line);border-radius:28px;padding:clamp(22px,4vw,40px);background:linear-gradient(135deg, rgba(194,96,63,0.055), rgba(201,162,75,0.05));">
-            <div class="eyebrow" style="color:#c2603f">The part global software can't copy</div>
+          <div style="border:1px solid var(--line);border-radius:28px;padding:clamp(22px,4vw,40px);background:linear-gradient(135deg, rgba(255,59,59,0.055), rgba(255,59,59,0.05));">
+            <div class="eyebrow" style="color:#FF3B3B">The part global software can't copy</div>
             <h2 style="margin:8px 0 20px;max-width:20ch">One kernel. 51 connectors. Your data, structured.</h2>
             <style>.lk-stage{margin:0 -6px}@media(max-width:680px){.lk-stage{overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:8px;scrollbar-width:thin}.lk-stage svg{min-width:600px}}</style>
             <div class="lk-stage" role="group" aria-label="Scroll to view the full kernel diagram">
@@ -4565,20 +4565,20 @@ ${unicornHeader}
               <title id="lk-t">The SUPERMEGA kernel: your data flows in, the kernel structures it, approved actions flow out</title>
               <desc id="lk-d">Data sources (Gmail, Viber, Drive, Sheets, Telegram) feed a central kernel of 51 connectors; approved actions flow out (KBZPay request, MMK total at the CBM rate, Viber alert, approval queue, audit-linked record). Myanmar-native rails are highlighted in gold.</desc>
               <defs>
-                <radialGradient id="lkCore" cx="50%" cy="38%" r="68%"><stop offset="0%" stop-color="#d3754f"/><stop offset="55%" stop-color="#c2603f"/><stop offset="100%" stop-color="#9c4a2d"/></radialGradient>
+                <radialGradient id="lkCore" cx="50%" cy="38%" r="68%"><stop offset="0%" stop-color="#d3754f"/><stop offset="55%" stop-color="#FF3B3B"/><stop offset="100%" stop-color="#9c4a2d"/></radialGradient>
                 <filter id="lkSoft" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="7" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
                 <style>
                   .lk-pill{fill:#fffdf8;stroke:rgba(42,36,28,.16);stroke-width:1.2}
-                  .lk-pill.lk-gilt{stroke:#E9B949;stroke-width:1.6}
+                  .lk-pill.lk-gilt{stroke:#FF3B3B;stroke-width:1.6}
                   .lk-pl{fill:#2a241c;font-size:15px;font-weight:650;letter-spacing:-.01em}
                   .lk-ps{fill:#8a8073;font-size:11px;font-weight:700}
                   .lk-col{fill:#9c4a2d;font-size:11px;font-weight:900;letter-spacing:.2em}
                   .lk-wire{fill:none;stroke-linecap:round}
-                  .lk-flow-in{stroke:#c2603f;stroke-width:2;stroke-dasharray:2 11;opacity:.55;animation:lkin 1.5s linear infinite}
-                  .lk-flow-out{stroke:#E9B949;stroke-width:2.2;stroke-dasharray:2 11;opacity:.7;animation:lkout 1.4s linear infinite}
+                  .lk-flow-in{stroke:#FF3B3B;stroke-width:2;stroke-dasharray:2 11;opacity:.55;animation:lkin 1.5s linear infinite}
+                  .lk-flow-out{stroke:#FF3B3B;stroke-width:2.2;stroke-dasharray:2 11;opacity:.7;animation:lkout 1.4s linear infinite}
                   @keyframes lkin{to{stroke-dashoffset:-13}}
                   @keyframes lkout{to{stroke-dashoffset:-13}}
-                  .lk-ring{fill:none;stroke:#E9B949;stroke-width:1.5;opacity:.5;transform-origin:480px 200px;animation:lkpulse 3.4s ease-out infinite}
+                  .lk-ring{fill:none;stroke:#FF3B3B;stroke-width:1.5;opacity:.5;transform-origin:480px 200px;animation:lkpulse 3.4s ease-out infinite}
                   @keyframes lkpulse{0%{transform:scale(.82);opacity:.55}70%{opacity:0}100%{transform:scale(1.5);opacity:0}}
                   .lk-dot{animation:lkblink 2.6s ease-in-out infinite}
                   @keyframes lkblink{0%,100%{opacity:.4}50%{opacity:1}}
@@ -4599,22 +4599,22 @@ ${unicornHeader}
               <path class="lk-wire lk-flow-out" d="M568,200 C 630,200 660,323 748,323"/>
               <g>
                 <rect class="lk-pill" x="24" y="52" width="188" height="46" rx="23"/><text class="lk-pl" x="48" y="80">Gmail</text>
-                <rect class="lk-pill lk-gilt" x="24" y="114" width="188" height="46" rx="23"/><circle class="lk-dot" cx="40" cy="137" r="4" fill="#E9B949"/><text class="lk-pl" x="56" y="142">Viber</text>
+                <rect class="lk-pill lk-gilt" x="24" y="114" width="188" height="46" rx="23"/><circle class="lk-dot" cx="40" cy="137" r="4" fill="#FF3B3B"/><text class="lk-pl" x="56" y="142">Viber</text>
                 <rect class="lk-pill" x="24" y="176" width="188" height="46" rx="23"/><text class="lk-pl" x="48" y="204">Google Drive</text>
                 <rect class="lk-pill" x="24" y="238" width="188" height="46" rx="23"/><text class="lk-pl" x="48" y="266">Sheets</text>
                 <rect class="lk-pill" x="24" y="300" width="188" height="46" rx="23"/><text class="lk-pl" x="48" y="328">Telegram</text>
               </g>
               <circle class="lk-ring" cx="480" cy="200" r="86"/>
               <circle cx="480" cy="200" r="82" fill="url(#lkCore)" filter="url(#lkSoft)"/>
-              <circle cx="480" cy="200" r="82" fill="none" stroke="#E9B949" stroke-width="2" opacity=".85"/>
+              <circle cx="480" cy="200" r="82" fill="none" stroke="#FF3B3B" stroke-width="2" opacity=".85"/>
               <text x="480" y="176" text-anchor="middle" fill="#fff" font-size="13" font-weight="900" letter-spacing=".18em">SUPERMEGA</text>
               <text x="480" y="210" text-anchor="middle" fill="#fff" font-family="Fraunces, Georgia, serif" font-size="40" font-weight="600">36</text>
               <text x="480" y="232" text-anchor="middle" fill="#f7e9d8" font-size="12" font-weight="800">connectors</text>
               <text x="480" y="306" text-anchor="middle" fill="#6f665a" font-size="12.5" font-weight="800">one kernel · one data spine</text>
               <g>
-                <rect class="lk-pill lk-gilt" x="748" y="52" width="188" height="46" rx="23"/><circle class="lk-dot" cx="764" cy="75" r="4" fill="#E9B949"/><text class="lk-pl" x="780" y="80">KBZPay request</text>
-                <rect class="lk-pill lk-gilt" x="748" y="114" width="188" height="46" rx="23"/><circle class="lk-dot" cx="764" cy="137" r="4" fill="#E9B949"/><text class="lk-pl" x="780" y="134">MMK total</text><text class="lk-ps" x="780" y="150">at today's CBM rate</text>
-                <rect class="lk-pill lk-gilt" x="748" y="176" width="188" height="46" rx="23"/><circle class="lk-dot" cx="764" cy="199" r="4" fill="#E9B949"/><text class="lk-pl" x="780" y="204">Viber alert</text>
+                <rect class="lk-pill lk-gilt" x="748" y="52" width="188" height="46" rx="23"/><circle class="lk-dot" cx="764" cy="75" r="4" fill="#FF3B3B"/><text class="lk-pl" x="780" y="80">KBZPay request</text>
+                <rect class="lk-pill lk-gilt" x="748" y="114" width="188" height="46" rx="23"/><circle class="lk-dot" cx="764" cy="137" r="4" fill="#FF3B3B"/><text class="lk-pl" x="780" y="134">MMK total</text><text class="lk-ps" x="780" y="150">at today's CBM rate</text>
+                <rect class="lk-pill lk-gilt" x="748" y="176" width="188" height="46" rx="23"/><circle class="lk-dot" cx="764" cy="199" r="4" fill="#FF3B3B"/><text class="lk-pl" x="780" y="204">Viber alert</text>
                 <rect class="lk-pill" x="748" y="238" width="188" height="46" rx="23"/><text class="lk-pl" x="772" y="266">Approval queue</text>
                 <rect class="lk-pill" x="748" y="300" width="188" height="46" rx="23"/><text class="lk-pl" x="772" y="322">Audit-linked</text><text class="lk-ps" x="772" y="336">every number traceable</text>
               </g>
@@ -4631,7 +4631,7 @@ ${unicornHeader}
           }
           .uvp-card,.how-step,.strip-item{transition:transform .2s ease, box-shadow .2s ease}
           .uvp-card:hover,.how-step:hover{transform:translateY(-2px)}
-          a:focus-visible,.btn:focus-visible,button:focus-visible{outline:2px solid #c2603f;outline-offset:3px;border-radius:10px}
+          a:focus-visible,.btn:focus-visible,button:focus-visible{outline:2px solid #FF3B3B;outline-offset:3px;border-radius:10px}
         </style>
         <script>
           (function(){
@@ -4742,7 +4742,7 @@ const unicornProductsHtml = `<!doctype html>
       .chip { border: 1px solid var(--line); border-radius: 999px; padding: 8px 10px; background: rgba(255,255,255,0.64); color: var(--muted); font-size: 12px; font-weight: 900; }
       .screen-gallery { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 8px 0 2px; }
       .mini-screen { display: grid; gap: 8px; min-height: 120px; border: 1px solid var(--line); border-radius: 18px; background: linear-gradient(180deg, rgba(255,255,255,.88), rgba(248,244,236,.78)); padding: 12px; box-shadow: inset 0 1px 0 rgba(255,255,255,.9); }
-      .mini-screen small { color: #C2603F; font-size: 10px; font-weight: 950; letter-spacing: .16em; text-transform: uppercase; }
+      .mini-screen small { color: #FF3B3B; font-size: 10px; font-weight: 950; letter-spacing: .16em; text-transform: uppercase; }
       .mini-screen strong { color: #0d1117; font-size: 16px; line-height: 1; letter-spacing: -.04em; }
       .mini-screen span { color: var(--muted); font-size: 12px; font-weight: 780; line-height: 1.25; }
       .shot-gallery { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-content: center; gap: 10px; padding: 14px; background: linear-gradient(135deg, rgba(255,255,255,.78), rgba(229,242,255,.58)); border-left: 1px solid var(--line); }
@@ -4934,21 +4934,21 @@ const unicornContactHtml = `<!doctype html>
       label { display: grid; gap: 7px; color: var(--muted); font-size: 12px; font-weight: 950; letter-spacing: 0.14em; text-transform: uppercase; }
       input, textarea, select { width: 100%; border: 1px solid var(--line); border-radius: 14px; background: rgba(255,250,241,0.86); color: var(--ink); padding: 11px 12px; font: inherit; outline: none; }
       input[type="file"] { cursor: pointer; }
-      input[type="file"]::file-selector-button { margin-right: 10px; border: 0; border-radius: 999px; background: linear-gradient(135deg, #111827, #C2603F); color: #fff; cursor: pointer; font: inherit; font-size: 13px; font-weight: 950; padding: 9px 12px; }
+      input[type="file"]::file-selector-button { margin-right: 10px; border: 0; border-radius: 999px; background: linear-gradient(135deg, #111827, #FF3B3B); color: #fff; cursor: pointer; font: inherit; font-size: 13px; font-weight: 950; padding: 9px 12px; }
       select { appearance: none; background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%); background-position: calc(100% - 20px) 20px, calc(100% - 14px) 20px; background-size: 6px 6px, 6px 6px; background-repeat: no-repeat; }
       textarea { min-height: 88px; resize: vertical; }
-      input:focus, textarea:focus, select:focus { border-color: rgba(194,96,63,0.55); box-shadow: 0 0 0 4px rgba(194,96,63,0.10); }
+      input:focus, textarea:focus, select:focus { border-color: rgba(255,59,59,0.55); box-shadow: 0 0 0 4px rgba(255,59,59,0.10); }
       button { width: 100%; cursor: pointer; }
       button[disabled] { cursor: wait; opacity: 0.66; transform: none; }
       .form-status { min-height: 20px; margin: -2px 0 0; color: var(--muted); font-size: 13px; font-weight: 850; line-height: 1.35; }
       .field-help { color: var(--muted); font-size: 12px; font-weight: 800; letter-spacing: 0; line-height: 1.35; text-transform: none; }
       .upload-list { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 2px; }
       .upload-list span { border: 1px solid var(--line); border-radius: 999px; background: rgba(255,255,255,0.62); color: var(--muted); font-size: 12px; font-weight: 850; letter-spacing: 0; padding: 7px 9px; text-transform: none; }
-      .next-card { display: grid; gap: 7px; border: 1px solid rgba(194,96,63,0.18); border-radius: 20px; padding: 14px; background: rgba(194,96,63,0.08); color: var(--ink); }
+      .next-card { display: grid; gap: 7px; border: 1px solid rgba(255,59,59,0.18); border-radius: 20px; padding: 14px; background: rgba(255,59,59,0.08); color: var(--ink); }
       .next-card[hidden] { display: none; }
       .next-card strong { font-size: 16px; letter-spacing: -0.02em; }
       .next-card span { color: var(--muted); line-height: 1.4; font-weight: 760; }
-      .selected-path { display: grid; gap: 5px; border: 1px solid rgba(194,96,63,0.16); border-radius: 16px; background: rgba(194,96,63,0.055); padding: 11px 12px; }
+      .selected-path { display: grid; gap: 5px; border: 1px solid rgba(255,59,59,0.16); border-radius: 16px; background: rgba(255,59,59,0.055); padding: 11px 12px; }
       .selected-path small { color: var(--blue); font-size: 11px; font-weight: 950; letter-spacing: 0.14em; text-transform: uppercase; }
       .selected-path strong { font-size: 19px; letter-spacing: -0.035em; }
       .selected-path span { color: var(--muted); font-weight: 780; line-height: 1.35; }
@@ -5417,7 +5417,7 @@ const publicSourceToScreenHtml = `<!doctype html>
       .workcell-picker > strong { display:block; margin-bottom:10px; }
       .workcell-template-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:9px; }
       .workcell-template-grid button { text-align:left; border:1px solid var(--line); border-radius:8px; background:rgba(255,250,241,.86); color:var(--ink); padding:11px; cursor:pointer; min-height:92px; }
-      .workcell-template-grid button[data-selected="true"] { border-color:rgba(194,96,63,.58); box-shadow:0 0 0 4px rgba(194,96,63,.10); background:#fffaf1; }
+      .workcell-template-grid button[data-selected="true"] { border-color:rgba(255,59,59,.58); box-shadow:0 0 0 4px rgba(255,59,59,.10); background:#fffaf1; }
       .workcell-template-grid strong { display:block; margin-bottom:5px; }
       .workcell-template-grid span { color:var(--muted); font-size:13px; font-weight:760; line-height:1.35; }
       .workcell-path { display:grid; gap:10px; margin-top:18px; }
@@ -6184,7 +6184,7 @@ await rm(outputDir, { recursive: true, force: true, maxRetries: 8, retryDelay: 2
 await mkdir(outputDir, { recursive: true })
 await copyPublicStatic(resolve(root, 'api-static'), staticDir)
 // Brand favicon is owned here (revert-proof against OneDrive restoring the old file): Capsule Forge mark.
-await writeFile(resolve(staticDir, 'favicon.svg'), `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="supermega"><defs><linearGradient id="a" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#63A0FF"/><stop offset="1" stop-color="#4F86F7"/></linearGradient><linearGradient id="h" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff" stop-opacity="0.30"/><stop offset="0.55" stop-color="#ffffff" stop-opacity="0"/></linearGradient></defs><rect x="4" y="4" width="56" height="56" rx="15" fill="#1C1F27"/><rect x="4.75" y="4.75" width="54.5" height="54.5" rx="14.25" fill="none" stroke="#ffffff" stroke-opacity="0.09"/><rect x="18.5" y="18.5" width="27" height="27" rx="8.5" fill="url(#a)"/><rect x="18.5" y="18.5" width="27" height="27" rx="8.5" fill="url(#h)"/></svg>\n`, 'utf8')
+await writeFile(resolve(staticDir, 'favicon.svg'), `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="supermega"><defs><linearGradient id="a" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FF5C4D"/><stop offset="1" stop-color="#FF3B3B"/></linearGradient><linearGradient id="h" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff" stop-opacity="0.30"/><stop offset="0.55" stop-color="#ffffff" stop-opacity="0"/></linearGradient></defs><rect x="4" y="4" width="56" height="56" rx="15" fill="#111731"/><rect x="4.75" y="4.75" width="54.5" height="54.5" rx="14.25" fill="none" stroke="#ffffff" stroke-opacity="0.09"/><rect x="18.5" y="18.5" width="27" height="27" rx="8.5" fill="url(#a)"/><rect x="18.5" y="18.5" width="27" height="27" rx="8.5" fill="url(#h)"/></svg>\n`, 'utf8')
 for (const entry of await readdir(resolve(staticDir, 'site')).catch(() => [])) {
   if (/\.json$/i.test(entry)) {
     await rm(resolve(staticDir, 'site', entry), { force: true })
@@ -6548,7 +6548,7 @@ function buildAiWorkerUserGuideHtml() {
       .guide-worker ul { margin: 0; padding-left: 18px; }
       .guide-actions { display:flex; gap: 10px; flex-wrap: wrap; align-items: center; }
       .guide-link { color: var(--blue); font-size: 12px; font-weight: 900; text-decoration: none; }
-      .guide-safety { border: 1px solid rgba(194,96,63,.35); border-radius: 18px; padding: 20px; background: rgba(194,96,63,.08); margin-top: 18px; }
+      .guide-safety { border: 1px solid rgba(255,59,59,.35); border-radius: 18px; padding: 20px; background: rgba(255,59,59,.08); margin-top: 18px; }
       .guide-safety p { color: var(--ink); max-width: 68ch; }
       [data-ai-worker-user-guide] .section,
       [data-ai-worker-user-guide] .section.reveal,
@@ -6877,7 +6877,7 @@ function buildAgentTemplateSetupHtml(kit) {
       .setup-form label { display:grid; gap:6px; color:var(--muted); font-size:12px; font-weight:950; letter-spacing:.12em; text-transform:uppercase; }
       .setup-form input,.setup-form textarea { width:100%; border:1px solid var(--line); border-radius:14px; background:rgba(255,250,241,.88); color:var(--ink); padding:11px 12px; font:inherit; outline:none; }
       .setup-form textarea { min-height:110px; resize:vertical; }
-      .setup-form input:focus,.setup-form textarea:focus { border-color:rgba(194,96,63,.55); box-shadow:0 0 0 4px rgba(194,96,63,.10); }
+      .setup-form input:focus,.setup-form textarea:focus { border-color:rgba(255,59,59,.55); box-shadow:0 0 0 4px rgba(255,59,59,.10); }
       .setup-proof { display:grid; gap:10px; margin-top:18px; }
       .setup-proof li { margin:7px 0; color:var(--muted); font-weight:780; line-height:1.4; }
       .setup-role-grid { display:grid; gap:10px; margin-top:16px; }
@@ -7394,7 +7394,7 @@ const publicOperatorConsoleHtml = `<!doctype html>
 </head>
 <body>
   <div class="wrap">
-    <script>(function(){try{var t=localStorage.getItem('sm-theme');if(!t){t=(window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light';}document.documentElement.setAttribute('data-theme',t);}catch(e){}})();</script>
+    <script>(function(){try{var t=localStorage.getItem('sm-theme');if(!t){t='dark';}document.documentElement.setAttribute('data-theme',t);}catch(e){}})();</script>
     ${unicornHeader}
     <main class="operator-main">
       <section class="operator-grid">
@@ -9431,7 +9431,7 @@ const publicProofReviewHtml = `<!doctype html>
   <meta name="theme-color" content="#1b1815" />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" />
   <style>
-    :root { color-scheme: light; --paper:#f4efe6; --ink:#1b1815; --muted:#6f675d; --line:rgba(27,24,21,.16); --panel:#fffaf1; --panel2:#ebe2d3; --accent:#d97757; --green:#1c8a5a; --red:#a14432; }
+    :root { color-scheme: light; --paper:#f4efe6; --ink:#1b1815; --muted:#6f675d; --line:rgba(27,24,21,.16); --panel:#fffaf1; --panel2:#ebe2d3; --accent:#FF3B3B; --green:#1c8a5a; --red:#a14432; }
     * { box-sizing: border-box; }
     body { margin: 0; min-height: 100vh; background: var(--paper); color: var(--ink); font-family: "Aptos", "Segoe UI Variable", "Segoe UI", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
     main { width: min(1180px, calc(100% - 28px)); margin: 0 auto; padding: 24px 0 54px; }
@@ -9441,7 +9441,7 @@ const publicProofReviewHtml = `<!doctype html>
     .mark img { width: 100%; height: 100%; display: block; border-radius: inherit; }
     .btn { border: 1px solid var(--line); border-radius: 999px; padding: 11px 14px; background: var(--panel); color: var(--ink); font-weight: 850; text-decoration: none; cursor: pointer; }
     .btn.primary { background: var(--ink); color: var(--paper); border-color: var(--ink); }
-    .btn:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible { outline: 3px solid rgba(217,119,87,.28); outline-offset: 2px; }
+    .btn:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible { outline: 3px solid rgba(255,59,59,.28); outline-offset: 2px; }
     .hero { display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, 430px); gap: 16px; padding: 28px 0 20px; align-items: stretch; }
     .eyebrow { color: var(--accent); font-size: 12px; font-weight: 950; text-transform: uppercase; letter-spacing: 0; }
     h1 { margin: 10px 0 0; max-width: 12ch; font-size: clamp(44px, 8vw, 84px); line-height: .9; letter-spacing: 0; }
@@ -9471,7 +9471,7 @@ const publicProofReviewHtml = `<!doctype html>
 <body>
   <main>
     <header>
-      <a class="brand" href="/" aria-label="SUPERMEGA.dev home"><span class="mark"><img src="/favicon.svg" alt="" /></span><span class="wm" style="letter-spacing:-0.02em"><b style="font-weight:600">SUPER</b><b style="font-weight:900;text-shadow:0 0 14px rgba(233,185,73,0.45)">MEGA</b><b style="color:#E9B949;font-weight:700">.dev</b></span></a>
+      <a class="brand" href="/" aria-label="SUPERMEGA.dev home"><span class="mark"><img src="/favicon.svg" alt="" /></span><span class="wm" style="letter-spacing:-0.025em"><b style="font-weight:700">supermega</b><b style="color:#5E6B87;font-weight:500">.dev</b></span></a>
       <a class="btn" href="/operator/">Operator console</a>
     </header>
     <section class="hero">
@@ -9602,7 +9602,7 @@ const publicPaymentProofHtml = `<!doctype html>
   <meta name="theme-color" content="#1b1815" />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" />
   <style>
-    :root { color-scheme: light; --paper:#f4efe6; --ink:#1b1815; --muted:#6f675d; --line:rgba(27,24,21,.16); --panel:#fffaf1; --panel2:#ebe2d3; --accent:#d97757; --green:#1c8a5a; --red:#a14432; }
+    :root { color-scheme: light; --paper:#f4efe6; --ink:#1b1815; --muted:#6f675d; --line:rgba(27,24,21,.16); --panel:#fffaf1; --panel2:#ebe2d3; --accent:#FF3B3B; --green:#1c8a5a; --red:#a14432; }
     * { box-sizing: border-box; }
     body { margin: 0; min-height: 100vh; background: var(--paper); color: var(--ink); font-family: "Aptos", "Segoe UI Variable", "Segoe UI", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
     main { width: min(1180px, calc(100% - 28px)); margin: 0 auto; padding: 24px 0 54px; }
@@ -9612,7 +9612,7 @@ const publicPaymentProofHtml = `<!doctype html>
     .mark img { width: 100%; height: 100%; display: block; border-radius: inherit; }
     .btn { border: 1px solid var(--line); border-radius: 999px; padding: 11px 14px; background: var(--panel); color: var(--ink); font-weight: 850; text-decoration: none; cursor: pointer; }
     .btn.primary { background: var(--ink); color: var(--paper); border-color: var(--ink); }
-    .btn:focus-visible, input:focus-visible, textarea:focus-visible { outline: 3px solid rgba(217,119,87,.28); outline-offset: 2px; }
+    .btn:focus-visible, input:focus-visible, textarea:focus-visible { outline: 3px solid rgba(255,59,59,.28); outline-offset: 2px; }
     .hero { display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, 430px); gap: 16px; padding: 28px 0 20px; align-items: stretch; }
     .eyebrow { color: var(--accent); font-size: 12px; font-weight: 950; text-transform: uppercase; letter-spacing: 0; }
     h1 { margin: 10px 0 0; max-width: 12ch; font-size: clamp(44px, 8vw, 84px); line-height: .9; letter-spacing: 0; }
@@ -9642,7 +9642,7 @@ const publicPaymentProofHtml = `<!doctype html>
 <body>
   <main>
     <header>
-      <a class="brand" href="/" aria-label="SUPERMEGA.dev home"><span class="mark"><img src="/favicon.svg" alt="" /></span><span class="wm" style="letter-spacing:-0.02em"><b style="font-weight:600">SUPER</b><b style="font-weight:900;text-shadow:0 0 14px rgba(233,185,73,0.45)">MEGA</b><b style="color:#E9B949;font-weight:700">.dev</b></span></a>
+      <a class="brand" href="/" aria-label="SUPERMEGA.dev home"><span class="mark"><img src="/favicon.svg" alt="" /></span><span class="wm" style="letter-spacing:-0.025em"><b style="font-weight:700">supermega</b><b style="color:#5E6B87;font-weight:500">.dev</b></span></a>
       <a class="btn" href="/operator/">Operator console</a>
     </header>
     <section class="hero">
@@ -9777,7 +9777,7 @@ const publicSourcePackIntakeHtml = `<!doctype html>
   <meta name="theme-color" content="#1b1815" />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" />
   <style>
-    :root { color-scheme: light; --paper:#f4efe6; --ink:#1b1815; --muted:#6f675d; --line:rgba(27,24,21,.16); --panel:#fffaf1; --panel2:#ebe2d3; --accent:#d97757; --green:#1c8a5a; --red:#a14432; }
+    :root { color-scheme: light; --paper:#f4efe6; --ink:#1b1815; --muted:#6f675d; --line:rgba(27,24,21,.16); --panel:#fffaf1; --panel2:#ebe2d3; --accent:#FF3B3B; --green:#1c8a5a; --red:#a14432; }
     * { box-sizing: border-box; }
     body { margin: 0; min-height: 100vh; background: var(--paper); color: var(--ink); font-family: "Aptos", "Segoe UI Variable", "Segoe UI", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
     main { width: min(1180px, calc(100% - 28px)); margin: 0 auto; padding: 24px 0 54px; }
@@ -9787,7 +9787,7 @@ const publicSourcePackIntakeHtml = `<!doctype html>
     .mark img { width: 100%; height: 100%; display: block; border-radius: inherit; }
     .btn { border: 1px solid var(--line); border-radius: 999px; padding: 11px 14px; background: var(--panel); color: var(--ink); font-weight: 850; text-decoration: none; cursor: pointer; }
     .btn.primary { background: var(--ink); color: var(--paper); border-color: var(--ink); }
-    .btn:focus-visible, input:focus-visible, textarea:focus-visible { outline: 3px solid rgba(217,119,87,.28); outline-offset: 2px; }
+    .btn:focus-visible, input:focus-visible, textarea:focus-visible { outline: 3px solid rgba(255,59,59,.28); outline-offset: 2px; }
     .hero { display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, 430px); gap: 16px; padding: 28px 0 20px; align-items: stretch; }
     .eyebrow { color: var(--accent); font-size: 12px; font-weight: 950; text-transform: uppercase; letter-spacing: 0; }
     h1 { margin: 10px 0 0; max-width: 12ch; font-size: clamp(44px, 8vw, 84px); line-height: .9; letter-spacing: 0; }
@@ -9818,7 +9818,7 @@ const publicSourcePackIntakeHtml = `<!doctype html>
 <body>
   <main>
     <header>
-      <a class="brand" href="/" aria-label="SUPERMEGA.dev home"><span class="mark"><img src="/favicon.svg" alt="" /></span><span class="wm" style="letter-spacing:-0.02em"><b style="font-weight:600">SUPER</b><b style="font-weight:900;text-shadow:0 0 14px rgba(233,185,73,0.45)">MEGA</b><b style="color:#E9B949;font-weight:700">.dev</b></span></a>
+      <a class="brand" href="/" aria-label="SUPERMEGA.dev home"><span class="mark"><img src="/favicon.svg" alt="" /></span><span class="wm" style="letter-spacing:-0.025em"><b style="font-weight:700">supermega</b><b style="color:#5E6B87;font-weight:500">.dev</b></span></a>
       <a class="btn" href="/operator/">Operator console</a>
     </header>
     <section class="hero">
@@ -9973,7 +9973,7 @@ const publicPilotWorkspaceHtml = `<!doctype html>
   <meta name="theme-color" content="#1b1815" />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" />
   <style>
-    :root { color-scheme: light; --paper:#f4efe6; --ink:#1b1815; --muted:#6f675d; --line:rgba(27,24,21,.16); --panel:#fffaf1; --panel2:#ebe2d3; --accent:#d97757; --green:#1c8a5a; --blue:#255f99; }
+    :root { color-scheme: light; --paper:#f4efe6; --ink:#1b1815; --muted:#6f675d; --line:rgba(27,24,21,.16); --panel:#fffaf1; --panel2:#ebe2d3; --accent:#FF3B3B; --green:#1c8a5a; --blue:#255f99; }
     * { box-sizing: border-box; }
     body { margin: 0; min-height: 100vh; background: var(--paper); color: var(--ink); font-family: "Aptos", "Segoe UI Variable", "Segoe UI", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
     a { color: inherit; }
@@ -9985,7 +9985,7 @@ const publicPilotWorkspaceHtml = `<!doctype html>
     .top-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
     .btn { border: 1px solid var(--line); border-radius: 999px; padding: 11px 14px; background: var(--panel); color: var(--ink); font-weight: 850; text-decoration: none; cursor: pointer; }
     .btn.primary { background: var(--ink); color: var(--paper); border-color: var(--ink); }
-    .btn:focus-visible, input:focus-visible, textarea:focus-visible { outline: 3px solid rgba(217,119,87,.28); outline-offset: 2px; }
+    .btn:focus-visible, input:focus-visible, textarea:focus-visible { outline: 3px solid rgba(255,59,59,.28); outline-offset: 2px; }
     .hero { display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, 420px); gap: 16px; align-items: stretch; padding: 28px 0 18px; }
     .workspace-title { padding: clamp(22px, 4vw, 42px) 0; }
     .eyebrow { color: var(--accent); font-size: 12px; font-weight: 950; text-transform: uppercase; letter-spacing: 0; }
@@ -10032,7 +10032,7 @@ const publicPilotWorkspaceHtml = `<!doctype html>
 <body>
   <main>
     <header>
-      <a class="brand" href="/" aria-label="SUPERMEGA.dev home"><span class="mark"><img src="/favicon.svg" alt="" /></span><span class="wm" style="letter-spacing:-0.02em"><b style="font-weight:600">SUPER</b><b style="font-weight:900;text-shadow:0 0 14px rgba(233,185,73,0.45)">MEGA</b><b style="color:#E9B949;font-weight:700">.dev</b></span></a>
+      <a class="brand" href="/" aria-label="SUPERMEGA.dev home"><span class="mark"><img src="/favicon.svg" alt="" /></span><span class="wm" style="letter-spacing:-0.025em"><b style="font-weight:700">supermega</b><b style="color:#5E6B87;font-weight:500">.dev</b></span></a>
       <nav class="top-actions" aria-label="Workspace actions">
         <a class="btn" href="/operator/">Operator console</a>
         <a class="btn primary" href="/contact/">Start another pilot</a>
@@ -10453,11 +10453,11 @@ const unicornPrivacyHtml = `<!doctype html>
 </head>
 <body>
 <div class="wrap">
-  <script>(function(){try{var t=localStorage.getItem('sm-theme');if(!t){t=(window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light';}document.documentElement.setAttribute('data-theme',t);}catch(e){}})();</script>
+  <script>(function(){try{var t=localStorage.getItem('sm-theme');if(!t){t='dark';}document.documentElement.setAttribute('data-theme',t);}catch(e){}})();</script>
   <header>
     <a class="brand" href="/" aria-label="SUPERMEGA.dev home">
-      <span class="mark"><svg viewBox="0 0 64 64" width="100%" height="100%" fill="none" aria-hidden="true"><g stroke="#D97757" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M35.8 10.3 A22 22 0 1 1 28.2 10.3"/><path d="M22 45 L22 26 L32 38 L42 26 L42 45" stroke-width="4"/></g><path d="M32 34.5 L33.2 37 L35.5 38 L33.2 39 L32 41.5 L30.8 39 L28.5 38 L30.8 37 Z" fill="#E9B949"/><path d="M32 7.6 L32.9 9.7 L35 10.3 L32.9 10.9 L32 13 L31.1 10.9 L29 10.3 L31.1 9.7 Z" fill="#E9B949"/></svg></span>
-      <span class="brand-text"><span class="wm" style="font-size:18px;letter-spacing:-0.02em"><b style="font-weight:600">SUPER</b><b style="font-weight:900;text-shadow:0 0 14px rgba(233,185,73,0.45)">MEGA</b><b style="color:#E9B949;font-weight:700">.dev</b></span></span>
+      <span class="mark"><svg viewBox="0 0 64 64" width="100%" height="100%" fill="none" aria-hidden="true"><g stroke="#FF3B3B" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M35.8 10.3 A22 22 0 1 1 28.2 10.3"/><path d="M22 45 L22 26 L32 38 L42 26 L42 45" stroke-width="4"/></g><path d="M32 34.5 L33.2 37 L35.5 38 L33.2 39 L32 41.5 L30.8 39 L28.5 38 L30.8 37 Z" fill="#FF3B3B"/><path d="M32 7.6 L32.9 9.7 L35 10.3 L32.9 10.9 L32 13 L31.1 10.9 L29 10.3 L31.1 9.7 Z" fill="#FF3B3B"/></svg></span>
+      <span class="brand-text"><span class="wm" style="font-size:18px;letter-spacing:-0.025em"><b style="font-weight:700">supermega</b><b style="color:#5E6B87;font-weight:500">.dev</b></span></span>
     </a>
     <nav class="nav" aria-label="Primary">
       <button class="btn secondary theme-toggle" type="button" aria-label="Toggle dark mode" onclick="var r=document.documentElement,n=r.getAttribute('data-theme')==='dark'?'light':'dark';r.setAttribute('data-theme',n);try{localStorage.setItem('sm-theme',n)}catch(e){}"></button>
