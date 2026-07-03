@@ -53,6 +53,12 @@ import './ai-mistral.mjs'
 import './data-quickbooks.mjs'
 import './integration-zapier.mjs'
 import './data-mailchimp.mjs'
+import './ai-groq.mjs'
+import './ai-cohere.mjs'
+import './messaging-instagram.mjs'
+import './data-dropbox.mjs'
+import './commerce-square.mjs'
+import './data-xero.mjs'
 
 export * from './registry.mjs'
 export default registry
