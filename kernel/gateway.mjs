@@ -27,6 +27,50 @@ const cache = new Map() // cacheKey -> { ...out, _exp }
 const CACHE_TTL_MS = Number(process.env.SUPERMEGA_AI_CACHE_TTL_MS || 3_600_000) // 1h default; keys are tenant-scoped
 const DEFAULT_CAP_TOKENS = Number(process.env.SUPERMEGA_CLIENT_TOKEN_CAP || 150_000) // P0: free-tier cap (was 2M — 2M/mo kills margin at scale)
 
+// Cost weights per tier, relative to bulk (Haiku 4.5 = 1). Sonnet 4.6 is ~3x Haiku per token,
+// Opus ~15x. The ledger stores COST-WEIGHTED (bulk-equivalent) tokens, so the monthly cap is a
+// COST ceiling, not a raw-token ceiling: one Sonnet token burns 3 units of the cap. Free tenants
+// only ever run bulk (weight 1), so for them cap units == raw tokens.
+export const TIER_COST_WEIGHTS = { bulk: 1, reason: 3, deep: 15 }
+
+// ---- Plan model (server-side) --------------------------------------------------------------------
+// Tenants (supermega_console_clients) carry a `plan` column ('free' | 'pro' | ...). The plan is
+// resolved HERE, server-side, per call — never trusted from the caller. Unknown tenants and failed
+// lookups resolve to 'free' (fail closed): free = forced bulk (Haiku) tier + non-overridable
+// default cap. Lookups are cached per warm instance for a few minutes.
+export const FREE_PLAN = 'free'
+const PLAN_CACHE_TTL_MS = Number(process.env.SUPERMEGA_PLAN_CACHE_TTL_MS || 300_000)
+const planCache = new Map() // clientId -> { plan, exp }
+
+export async function resolvePlan(clientId) {
+  if (!clientId) return FREE_PLAN
+  const hit = planCache.get(clientId)
+  if (hit && Date.now() < hit.exp) return hit.plan
+  let plan = FREE_PLAN
+  const store = await spine()
+  if (store?.getClient) {
+    try {
+      const c = await store.getClient(clientId)
+      const p = String(c?.plan || '').trim().toLowerCase()
+      if (p) plan = p
+    } catch { /* lookup failure → stay 'free' (fail closed on cost) */ }
+  }
+  planCache.set(clientId, { plan, exp: Date.now() + PLAN_CACHE_TTL_MS })
+  return plan
+}
+
+// Pure policy: the tier + cap a tenant on `plan` actually gets, given what the caller asked for.
+// Free tenants are FORCED to bulk and caller-supplied capTokens overrides are rejected (the
+// default cap stands) — otherwise any client could hand itself Sonnet and an unlimited budget.
+// Paid plans keep their requested tier and may override the cap.
+export function policyFor(plan, { tier, capTokens } = {}) {
+  const requested = tier && TIERS[tier] ? tier : 'reason'
+  if (!plan || String(plan).toLowerCase() === FREE_PLAN) {
+    return { plan: FREE_PLAN, tier: 'bulk', cap: DEFAULT_CAP_TOKENS, overridesRejected: Boolean((tier && tier !== 'bulk') || capTokens) }
+  }
+  return { plan: String(plan).toLowerCase(), tier: requested, cap: Number(capTokens || DEFAULT_CAP_TOKENS), overridesRejected: false }
+}
+
 // Persistent ledger/cache toggle. On by default; set SUPERMEGA_GATEWAY_PERSIST=0 to force pure in-memory.
 const PERSIST = String(process.env.SUPERMEGA_GATEWAY_PERSIST ?? '1') !== '0'
 let _store // lazily-loaded store.mjs module (null once we know it's unavailable)
@@ -61,10 +105,13 @@ export function stripInjectionFrames(text) {
     .trim()
 }
 
-async function recordUsage(clientId, usage) {
+// Ledger units are COST-WEIGHTED (bulk-equivalent) tokens: raw tokens × TIER_COST_WEIGHTS[tier].
+// This makes the monthly cap a spend ceiling — a Sonnet call burns 3x what the same Haiku call would.
+async function recordUsage(clientId, usage, tier) {
   if (!clientId || !usage) return
-  const inTokens = usage.input_tokens || 0
-  const outTokens = usage.output_tokens || 0
+  const w = TIER_COST_WEIGHTS[tier] || 1
+  const inTokens = (usage.input_tokens || 0) * w
+  const outTokens = (usage.output_tokens || 0) * w
   // Always update the fast in-memory ledger (synchronous source for usageFor()).
   const e = ledger.get(clientId) || { inTokens: 0, outTokens: 0, calls: 0 }
   e.inTokens += inTokens
@@ -198,12 +245,12 @@ export function providerChain() {
  * @param {object}   o
  * @param {string}   o.system            system prompt
  * @param {Array}    o.messages          [{role, content}]
- * @param {string}   [o.tier='reason']   'bulk' | 'reason' | 'deep'
- * @param {string}   [o.clientId]        tenant id — enables the per-tenant monthly cost cap + logging
+ * @param {string}   [o.tier='reason']   'bulk' | 'reason' | 'deep' — a REQUEST, not a right: free-plan tenants are forced to 'bulk' server-side
+ * @param {string}   [o.clientId]        tenant id — enables server-side plan resolution + the per-tenant monthly cost cap + logging
  * @param {object}   [o.schema]          JSON Schema -> forces validated structured output (tool-use)
  * @param {string}   [o.cacheKey]        explicit cache key; else derived from the request
  * @param {number}   [o.maxTokens]       override the tier default
- * @param {number}   [o.capTokens]       override the monthly token cap for THIS tenant (else DEFAULT_CAP_TOKENS)
+ * @param {number}   [o.capTokens]       override the monthly cap for THIS tenant (else DEFAULT_CAP_TOKENS) — REJECTED for free-plan tenants
  * @param {number}   [o.timeoutMs=45000]
  * @returns {Promise<{text?:string, data?:object, usage:object, model:string, tier:string}>}
  */
@@ -214,8 +261,13 @@ export async function complete(o) {
   // Per-tenant monthly cost cap, enforced against the persisted ledger (survives cold starts /
   // spans instances). Over the hard cap → refuse. Over the soft threshold → downgrade to a cheaper
   // tier so the client stays under budget instead of being cut off mid-month.
+  // The tenant's PLAN is resolved server-side first: free tenants are forced to the bulk (Haiku)
+  // tier and their capTokens override is rejected — tier/cap are never trusted from the caller.
   if (clientId) {
-    const cap = Number(o.capTokens || DEFAULT_CAP_TOKENS)
+    const plan = await resolvePlan(clientId)
+    const policy = policyFor(plan, { tier: o.tier, capTokens: o.capTokens })
+    tier = policy.tier
+    const cap = policy.cap
     const used = await monthlyUsageFor(clientId)
     if (cap > 0 && used.total >= cap) {
       const err = new Error('gateway_client_cap_reached')
@@ -271,7 +323,7 @@ export async function complete(o) {
       try {
         const r = await provider.call({ tierDef, system, messages, tool, maxTokens }, controller.signal)
         clearTimeout(timer)
-        await recordUsage(clientId, r.usage)
+        await recordUsage(clientId, r.usage, curTier)
         const out = tool
           ? { data: r.data, usage: r.usage, model: r.model, tier: curTier, provider: provider.name }
           : { text: r.text, usage: r.usage, model: r.model, tier: curTier, provider: provider.name }
@@ -296,4 +348,4 @@ export async function complete(o) {
   throw lastErr || new Error('gateway_failed')
 }
 
-export default { complete, stripInjectionFrames, usageFor, monthlyUsageFor, providerChain, TIERS }
+export default { complete, stripInjectionFrames, usageFor, monthlyUsageFor, providerChain, resolvePlan, policyFor, TIERS, TIER_COST_WEIGHTS, FREE_PLAN }

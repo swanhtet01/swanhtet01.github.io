@@ -7,11 +7,15 @@
 create table if not exists public.supermega_console_clients (
   id           text primary key,
   name         text not null,
+  plan         text not null default 'free',  -- gates the AI gateway: 'free' → forced bulk tier + fixed cap
   contacts     jsonb default '[]'::jsonb,
   channels     jsonb default '{}'::jsonb,
   notes        text,
   created_at   timestamptz default now()
 );
+
+-- Existing installs predate the plan column — additive, safe to re-run.
+alter table public.supermega_console_clients add column if not exists plan text not null default 'free';
 
 create table if not exists public.supermega_console_projects (
   id             text primary key,

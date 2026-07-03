@@ -44,7 +44,8 @@ async function q(sql, params = []) { return (await (await pg()).query(sql, param
 let tablesReady
 async function ensurePgTables() {
   if (!tablesReady) tablesReady = q(`
-    create table if not exists supermega_console_clients (id text primary key, name text not null, contacts jsonb default '[]'::jsonb, channels jsonb default '{}'::jsonb, notes text, created_at timestamptz default now());
+    create table if not exists supermega_console_clients (id text primary key, name text not null, plan text not null default 'free', contacts jsonb default '[]'::jsonb, channels jsonb default '{}'::jsonb, notes text, created_at timestamptz default now());
+    alter table supermega_console_clients add column if not exists plan text not null default 'free';
     create table if not exists supermega_console_projects (id text primary key, client_id text, lead_id text, offer text, scope_summary text, price_mmk bigint, deposit_status text default 'unpaid', deposit_method text, status text default 'scoping', live_url text, created_at timestamptz default now());
     create table if not exists supermega_console_deals (id text primary key, lead_id text, project_id text, packet jsonb, status text default 'draft', created_at timestamptz default now());
     create table if not exists supermega_console_activity (id text primary key, at timestamptz default now(), kind text, summary text, ref text);
@@ -136,10 +137,28 @@ export async function listProjects() {
   return memSort([...mem.project.values()])
 }
 export async function createClient(c) {
-  const row = { id: randomUUID(), name: c.name || 'New client', contacts: c.contacts || [], channels: c.channels || {}, notes: c.notes || '' }
-  if (mode === 'supabase') return (await rest('POST', 'supermega_console_clients', row))[0]
-  if (mode === 'postgres') { await ensurePgTables(); return (await q('insert into supermega_console_clients (id,name,contacts,channels,notes) values ($1,$2,$3,$4,$5) returning *', [row.id, row.name, JSON.stringify(row.contacts), JSON.stringify(row.channels), row.notes]))[0] }
+  // plan gates the AI gateway tier/cap (gateway.mjs resolvePlan) — 'free' unless explicitly set.
+  const row = { id: String(c.id || randomUUID()), name: c.name || 'New client', plan: String(c.plan || 'free').toLowerCase(), contacts: c.contacts || [], channels: c.channels || {}, notes: c.notes || '' }
+  if (mode === 'supabase') {
+    try { return (await rest('POST', 'supermega_console_clients', row))[0] }
+    catch (e) {
+      // Live table may predate the `plan` column (console-tables.sql migration not yet run).
+      // Don't break client creation over it — retry without the column; the tenant is 'free' anyway.
+      if (!/plan/i.test(String((e && e.message) || ''))) throw e
+      const { plan, ...legacy } = row
+      const created = (await rest('POST', 'supermega_console_clients', legacy))[0]
+      return created ? { plan, ...created } : created
+    }
+  }
+  if (mode === 'postgres') { await ensurePgTables(); return (await q('insert into supermega_console_clients (id,name,plan,contacts,channels,notes) values ($1,$2,$3,$4,$5,$6) returning *', [row.id, row.name, row.plan, JSON.stringify(row.contacts), JSON.stringify(row.channels), row.notes]))[0] }
   const rec = { ...row, created_at: new Date().toISOString() }; mem.client.set(rec.id, rec); return rec
+}
+// Fetch a single client/tenant by id (used by the gateway's server-side plan resolution).
+export async function getClient(id) {
+  if (!id) return null
+  if (mode === 'supabase') { const r = await rest('GET', `supermega_console_clients?id=eq.${encodeURIComponent(id)}&limit=1`); return r[0] || null }
+  if (mode === 'postgres') { await ensurePgTables(); return (await q('select * from supermega_console_clients where id=$1 limit 1', [id]))[0] || null }
+  return mem.client.get(id) || null
 }
 export async function createProject(p) {
   const row = { id: randomUUID(), client_id: p.client_id || null, lead_id: p.lead_id || null, offer: p.offer || 'build', scope_summary: p.scope_summary || '', status: p.status || 'scoping', deposit_status: p.deposit_status || 'unpaid' }
@@ -421,4 +440,4 @@ export async function ping() {
   return { ok: false, mode, detail: 'unknown_mode' }
 }
 
-export default { mode, listLeads, getLead, insertLead, updateLead, listClients, listProjects, createClient, createProject, updateProject, getProject, markDepositPaid, convertedLeadIds, saveDeal, listDeals, updateDeal, logActivity, listActivity, getTokenUsage, addTokenUsage, getCachedResponse, putCachedResponse, recordPaymentEvent, ping, bumpGraduation, recordBuildModules, listGraduation }
+export default { mode, listLeads, getLead, insertLead, updateLead, listClients, listProjects, createClient, getClient, createProject, updateProject, getProject, markDepositPaid, convertedLeadIds, saveDeal, listDeals, updateDeal, logActivity, listActivity, getTokenUsage, addTokenUsage, getCachedResponse, putCachedResponse, recordPaymentEvent, ping, bumpGraduation, recordBuildModules, listGraduation }
