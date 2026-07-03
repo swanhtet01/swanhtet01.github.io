@@ -13,7 +13,7 @@
     "vercel:deploy": "npx vercel deploy --prebuilt -y",
     "vercel:deploy:prod": "npx vercel deploy --prebuilt --prod -y",
     "public:build": "node tools/create_public_vercel_output.mjs",
-    "public:verify": "node tools/verify_public_source_to_screen_contract.mjs && node tools/verify_public_free_workcell_order_contract.mjs && node tools/verify_operator_structured_retainer_controls_contract.mjs && node tools/verify_public_vercel_artifact_budget.mjs && node tools/verify_public_vercel_output.mjs",
+    "public:verify": "node tools/verify_public_source_to_screen_contract.mjs && node tools/verify_public_free_workcell_order_contract.mjs && node tools/verify_public_source_to_paid_intake_handoff_contract.mjs && node tools/verify_operator_structured_retainer_controls_contract.mjs && node tools/verify_public_vercel_artifact_budget.mjs && node tools/verify_public_vercel_output.mjs",
     "deploy:public:prod": "node tools/create_public_vercel_output.mjs && npm run public:verify && npx vercel deploy --prebuilt --prod -y",
     "smoke:local": "bash tools/run_local_smoke.sh",
     "smoke:public": "python3 tools/smoke_test_public_site.py",

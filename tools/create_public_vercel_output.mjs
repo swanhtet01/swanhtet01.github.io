@@ -4948,6 +4948,12 @@ const unicornContactHtml = `<!doctype html>
       .selected-path small { color: var(--blue); font-size: 11px; font-weight: 950; letter-spacing: 0.14em; text-transform: uppercase; }
       .selected-path strong { font-size: 19px; letter-spacing: -0.035em; }
       .selected-path span { color: var(--muted); font-weight: 780; line-height: 1.35; }
+      .source-handoff { display: grid; gap: 5px; border: 1px solid rgba(13,148,136,0.2); border-radius: 16px; background: rgba(13,148,136,0.075); padding: 11px 12px; }
+      .source-handoff[hidden] { display: none; }
+      .source-handoff small { color: #0f766e; font-size: 11px; font-weight: 950; letter-spacing: 0.14em; text-transform: uppercase; }
+      .source-handoff strong { font-size: 16px; letter-spacing: -0.025em; }
+      .source-handoff span, .source-handoff code { color: var(--muted); font-size: 12px; font-weight: 800; line-height: 1.35; }
+      .source-handoff code { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
       .selected-price { color: var(--blue); font-weight: 950; font-size: 14px; letter-spacing: 0.02em; }
       .selected-next { color: var(--muted); font-weight: 800; font-size: 13px; line-height: 1.35; }
       .policy { margin: 0; color: var(--muted); font-size: 13px; font-weight: 820; line-height: 1.4; }
@@ -4964,6 +4970,7 @@ const unicornContactHtml = `<!doctype html>
         .contact-main p { font-size: 16px; line-height: 1.32; }
         .optional-mobile { display: none; }
         .selected-path, .file-label { display: none; }
+        .source-handoff { padding: 10px; }
         button { min-height: 44px; padding: 12px 16px; }
         .policy { font-size: 12px; line-height: 1.25; }
         .form-status { min-height: 16px; font-size: 12px; }
@@ -5031,12 +5038,19 @@ ${unicornHeader}
             <input type="hidden" name="pilot_plan_scope" value="" />
             <input type="hidden" name="pilot_plan_next_action" value="" />
             <input type="hidden" name="pilot_plan_gate" value="" />
+            <input type="hidden" name="source_to_screen_workcell_id" value="" />
+            <input type="hidden" name="source_to_screen_workcell_name" value="" />
+            <input type="hidden" name="source_to_screen_source_hash" value="" />
+            <input type="hidden" name="source_to_screen_proof_target" value="" />
+            <input type="hidden" name="source_to_screen_order_packet" value="" />
+            <input type="hidden" name="source_to_screen_free_load_policy" value="" />
             <div class="form-row">
               <label>Name<input autocomplete="name" name="name" required /></label>
               <label>Work email<input autocomplete="email" name="email" required type="email" /></label>
               <label class="optional-mobile">Phone / WhatsApp<input autocomplete="tel" name="phone" type="tel" /></label>
               <label>Company<input autocomplete="organization" name="company" required /></label>
               <div class="wide selected-path" data-selected-path hidden><small>Selected</small><strong>General enquiry</strong><span class="selected-price" data-selected-price hidden></span><span class="selected-next" data-selected-next hidden></span></div>
+              <div class="wide source-handoff" data-source-to-screen-handoff hidden><small>Source-to-Screen packet carried from free draft</small><strong data-source-to-screen-handoff-title></strong><span data-source-to-screen-handoff-proof></span><code data-source-to-screen-handoff-hash></code></div>
               <label class="wide file-label">Upload files<input data-file-picker multiple name="source_files" type="file" /><span class="upload-list" data-upload-list></span></label>
               <label class="wide">Source link or system<input name="source_links" placeholder="Drive folder, sheet, email thread, POS export, meter reading, device, or note" /></label>
               <label class="wide">What should become clear?<textarea name="goal" placeholder="Example: what changed, who owns it, what is missing, and what should happen next." required></textarea></label>
@@ -5085,6 +5099,7 @@ ${publicRuntimeScripts}
           const input = form.querySelector('[name="' + name + '"]');
           if (input) input.value = value || '';
         };
+        const get = (name) => form.querySelector('[name="' + name + '"]')?.value || '';
         set('source_url', window.location.href);
         set('page_path', window.location.pathname + window.location.search);
         set('referrer', document.referrer || '');
@@ -5249,6 +5264,86 @@ ${publicRuntimeScripts}
           const heading = document.querySelector('[data-contact-heading]');
           if (heading && selectedPackage.heading) heading.textContent = selectedPackage.heading;
         }
+        const sourceToScreenTemplates = {
+          daily_close: {
+            name: 'Daily cash close',
+            proof_target: 'Owner can see today sales, cash variance, missing proof, and tomorrow action queue.'
+          },
+          receivables_chase: {
+            name: 'Receivables chase',
+            proof_target: 'Owner can see who owes money, what was promised, and the next safe follow-up draft.'
+          },
+          inventory_exception: {
+            name: 'Inventory exception desk',
+            proof_target: 'Owner can see shortage, overstock, supplier risk, and reorder actions from messy stock data.'
+          },
+          lead_reply: {
+            name: 'Lead reply desk',
+            proof_target: 'Owner can see qualified leads, reply drafts, and follow-up priorities without losing source trace.'
+          },
+          document_ledger: {
+            name: 'Document ledger',
+            proof_target: 'Owner can see receipts, screenshots, files, and notes converted into searchable actions.'
+          }
+        };
+        function loadSourceToScreenOrder(){
+          let stored = {};
+          try {
+            stored = JSON.parse(localStorage.getItem('sm_source_to_screen_order') || '{}') || {};
+          } catch (error) {
+            stored = {};
+          }
+          const workcellId = search.get('workcell') || stored.workcell_id || '';
+          const sourceHash = search.get('source_hash') || stored.source_hash || '';
+          if (!workcellId && !sourceHash && !stored.source_to_screen_order_packet && !stored.order_packet) return;
+          const template = sourceToScreenTemplates[workcellId] || {};
+          const workcellName = stored.workcell_template || stored.workcell_name || template.name || workcellId || 'Source-to-Screen draft';
+          const proofTarget = stored.proof_target || template.proof_target || 'Confirm the first proof target from the free draft.';
+          const packet = stored.source_to_screen_order_packet || stored.order_packet || [
+            '# AI Workcell Pilot order packet',
+            '',
+            'workcell_template: ' + workcellName,
+            'workcell_id: ' + (workcellId || 'unknown'),
+            'source_hash: ' + (sourceHash || 'missing'),
+            'free_load_policy: browser_only_until_contact',
+            'real_mrr_delta: 0',
+            '',
+            'proof_target: ' + proofTarget
+          ].join('\\n');
+          set('source_to_screen_workcell_id', workcellId || stored.workcell_id || '');
+          set('source_to_screen_workcell_name', workcellName);
+          set('source_to_screen_source_hash', sourceHash || stored.source_hash || '');
+          set('source_to_screen_proof_target', proofTarget);
+          set('source_to_screen_order_packet', packet);
+          set('source_to_screen_free_load_policy', stored.free_load_policy || 'browser_only_until_contact');
+          if (!get('requested_package') || get('requested_package') === 'General enquiry') {
+            set('workflow', 'AI Workcell Pilot');
+            set('requested_package', 'AI Workcell Pilot');
+            set('first_output', 'AI Workcell Pilot');
+            set('product_area', 'AI agent workcell');
+            set('public_package', 'AI Workcell Pilot');
+            set('first_step', 'Review Source-to-Screen packet and request approved source pack.');
+          }
+          const previousData = get('data');
+          const handoffData = [
+            'Source-to-Screen handoff: ' + workcellName,
+            'Source hash: ' + (sourceHash || stored.source_hash || 'missing'),
+            'Proof target: ' + proofTarget,
+            'Free load policy: browser_only_until_contact'
+          ].join(' | ');
+          if (!previousData.includes('Source-to-Screen handoff:')) set('data', [previousData, handoffData].filter(Boolean).join(' | '));
+          const handoff = document.querySelector('[data-source-to-screen-handoff]');
+          if (handoff) {
+            handoff.hidden = false;
+            const title = handoff.querySelector('[data-source-to-screen-handoff-title]');
+            const proof = handoff.querySelector('[data-source-to-screen-handoff-proof]');
+            const hash = handoff.querySelector('[data-source-to-screen-handoff-hash]');
+            if (title) title.textContent = workcellName;
+            if (proof) proof.textContent = proofTarget;
+            if (hash) hash.textContent = 'source_hash=' + (sourceHash || stored.source_hash || 'missing');
+          }
+        }
+        loadSourceToScreenOrder();
         const status = form.querySelector('[data-lead-status]');
         const submit = form.querySelector('button[type="submit"]');
         const nextCard = form.querySelector('[data-next-card]');
@@ -5396,6 +5491,7 @@ ${publicLanguageToggleScript}
         const templateButtons = Array.prototype.slice.call(document.querySelectorAll('[data-workcell-template]'));
         const sample = form && form.querySelector('[data-source-sample]');
         const type = form && form.querySelector('[data-output-type]');
+        const orderStorageKey = 'sm_source_to_screen_order';
         const workcellTemplates = {
           daily_close: {
             name: 'Daily cash close',
@@ -5503,6 +5599,25 @@ ${publicLanguageToggleScript}
             '- Payment proof and owner acceptance are required before recurring revenue is recorded.'
           ].join('\\n');
         }
+        function saveWorkcellOrderPacket(kind, sourceHash, packet){
+          const template = workcellTemplates[kind] || workcellTemplates.daily_close;
+          try {
+            localStorage.setItem(orderStorageKey, JSON.stringify({
+              source_to_screen_order_packet: packet,
+              order_packet: packet,
+              workcell_id: kind,
+              workcell_template: template.name,
+              workcell_name: template.name,
+              source_hash: sourceHash,
+              proof_target: template.proof_target,
+              required_sources: template.required_sources,
+              first_run_acceptance: template.first_run_acceptance,
+              free_load_policy: 'browser_only_until_contact',
+              real_mrr_delta: 0,
+              saved_at: new Date().toISOString()
+            }));
+          } catch (error) {}
+        }
         function syncWorkcellSelection(kind){
           selectedWorkcell = workcellTemplates[kind] ? kind : 'daily_close';
           templateButtons.forEach(function(button){
@@ -5516,7 +5631,9 @@ ${publicLanguageToggleScript}
             paidPilotLink.href = '/contact/?package=ai-workcell-pilot&utm_source=free_source_to_screen&utm_content=free_workcell_order&workcell=' + encodeURIComponent(selectedWorkcell) + '&source_hash=' + encodeURIComponent(sourceHash);
           }
           if(proofOrderOutput){
-            proofOrderOutput.textContent = buildPaidPilotOrderPacket(selectedWorkcell, sample && sample.value || '');
+            const packet = buildPaidPilotOrderPacket(selectedWorkcell, sample && sample.value || '');
+            proofOrderOutput.textContent = packet;
+            saveWorkcellOrderPacket(selectedWorkcell, sourceHash, packet);
           }
         }
         templateButtons.forEach(function(button){
