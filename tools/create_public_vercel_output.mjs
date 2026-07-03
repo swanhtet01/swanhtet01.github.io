@@ -84,7 +84,7 @@ const requiredPublicSiteJsonFiles = [
   'value-intake-router.json',
 ]
 const legacyInitialsMarkHtml = ['<span class="mark">', String.fromCharCode(83, 77), '</span>'].join('')
-const signalMarkHtml = '<span class="mark"><img src="/favicon.svg" alt="" /></span>'
+const signalMarkHtml = '<span style="width:11px;height:11px;border-radius:3px;background:linear-gradient(135deg,#FF5C4D,#FF3B3B);box-shadow:0 0 12px rgba(255,59,59,.6);display:inline-block;flex:none"></span>'
 
 async function writeTextFileEnsuringDir(destination, content) {
   const targetDir = dirname(destination)
@@ -203,7 +203,7 @@ const publicMachineHtml = `<!doctype html>
   <body>
     <main>
       <header>
-        <a class="brand" href="/"><span class="mark"><img src="/favicon.svg" alt="" /></span><span class="wm" style="letter-spacing:-0.025em"><b style="font-weight:700">supermega</b><b style="color:#5E6B87;font-weight:500">.dev</b></span></a>
+        <a class="brand" href="/"><span style="width:11px;height:11px;border-radius:3px;background:linear-gradient(135deg,#FF5C4D,#FF3B3B);box-shadow:0 0 12px rgba(255,59,59,.6);display:inline-block;flex:none"></span><span class="wm" style="letter-spacing:-0.025em"><b style="font-weight:700">supermega</b><b style="color:#5E6B87;font-weight:500">.dev</b></span></a>
         <a class="btn" href="/contact/">Contact</a>
       </header>
       <section class="hero">
@@ -716,7 +716,7 @@ function publicToolsHtmlFromCatalog(catalog, agentRadar = {}, socialOAuth = {}) 
   <body>
     <div class="wrap">
       <header>
-        <a class="brand" href="/" aria-label="SUPERMEGA.dev home"><span class="mark"><img src="/favicon.svg" alt="" /></span><span class="wm" style="letter-spacing:-0.025em"><b style="font-weight:700">supermega</b><b style="color:#5E6B87;font-weight:500">.dev</b></span></a>
+        <a class="brand" href="/" aria-label="SUPERMEGA.dev home"><span style="width:11px;height:11px;border-radius:3px;background:linear-gradient(135deg,#FF5C4D,#FF3B3B);box-shadow:0 0 12px rgba(255,59,59,.6);display:inline-block;flex:none"></span><span class="wm" style="letter-spacing:-0.025em"><b style="font-weight:700">supermega</b><b style="color:#5E6B87;font-weight:500">.dev</b></span></a>
         <nav class="nav" aria-label="Primary">
           <a class="btn secondary-nav" href="/">Home</a>
           <a class="btn primary" href="/contact/?source=tools">Contact</a>
@@ -861,7 +861,7 @@ function publicValueHtmlFromEngine(engine) {
   <body>
     <div class="wrap">
       <header>
-        <a class="brand" href="/" aria-label="SUPERMEGA.dev home"><span class="mark"><img src="/favicon.svg" alt="" /></span><span class="wm" style="letter-spacing:-0.025em"><b style="font-weight:700">supermega</b><b style="color:#5E6B87;font-weight:500">.dev</b></span></a>
+        <a class="brand" href="/" aria-label="SUPERMEGA.dev home"><span style="width:11px;height:11px;border-radius:3px;background:linear-gradient(135deg,#FF5C4D,#FF3B3B);box-shadow:0 0 12px rgba(255,59,59,.6);display:inline-block;flex:none"></span><span class="wm" style="letter-spacing:-0.025em"><b style="font-weight:700">supermega</b><b style="color:#5E6B87;font-weight:500">.dev</b></span></a>
         <nav class="nav" aria-label="Primary">
           <a class="btn secondary-nav" href="/tools/">Tools</a>
           <a class="btn secondary-nav" href="/start/">Start</a>
@@ -1015,7 +1015,7 @@ function publicIntakeHtmlFromRouter(router) {
   <body>
     <div class="wrap">
       <header>
-        <a class="brand" href="/" aria-label="SUPERMEGA.dev home"><span class="mark"><img src="/favicon.svg" alt="" /></span><span class="wm" style="letter-spacing:-0.025em"><b style="font-weight:700">supermega</b><b style="color:#5E6B87;font-weight:500">.dev</b></span></a>
+        <a class="brand" href="/" aria-label="SUPERMEGA.dev home"><span style="width:11px;height:11px;border-radius:3px;background:linear-gradient(135deg,#FF5C4D,#FF3B3B);box-shadow:0 0 12px rgba(255,59,59,.6);display:inline-block;flex:none"></span><span class="wm" style="letter-spacing:-0.025em"><b style="font-weight:700">supermega</b><b style="color:#5E6B87;font-weight:500">.dev</b></span></a>
         <nav class="nav" aria-label="Primary">
           <a class="btn secondary-nav" href="/tools/">Tools</a>
           <a class="btn secondary-nav" href="/proof/">Proof</a>
@@ -1256,7 +1256,7 @@ function publicProofHtmlFromPacks(proof) {
   <body>
     <div class="wrap">
       <header>
-        <a class="brand" href="/" aria-label="SUPERMEGA.dev home"><span class="mark"><img src="/favicon.svg" alt="" /></span><span class="wm" style="letter-spacing:-0.025em"><b style="font-weight:700">supermega</b><b style="color:#5E6B87;font-weight:500">.dev</b></span></a>
+        <a class="brand" href="/" aria-label="SUPERMEGA.dev home"><span style="width:11px;height:11px;border-radius:3px;background:linear-gradient(135deg,#FF5C4D,#FF3B3B);box-shadow:0 0 12px rgba(255,59,59,.6);display:inline-block;flex:none"></span><span class="wm" style="letter-spacing:-0.025em"><b style="font-weight:700">supermega</b><b style="color:#5E6B87;font-weight:500">.dev</b></span></a>
         <nav class="nav" aria-label="Primary">
           <a class="btn secondary-nav" href="/tools/">Tools</a>
           <a class="btn secondary-nav" href="/value/">Value</a>
@@ -1534,7 +1534,7 @@ const publicCampaignRedirectHtml = `<!doctype html>
   </head>
   <body>
     <main>
-      <div class="brand"><span class="mark"><img src="/favicon.svg?v=supermega-atelier-20260623" alt="" /></span><span class="wm" style="letter-spacing:-0.025em"><b style="font-weight:700">supermega</b><b style="color:#5E6B87;font-weight:500">.dev</b></span></div>
+      <div class="brand"><span style="width:11px;height:11px;border-radius:3px;background:linear-gradient(135deg,#FF5C4D,#FF3B3B);box-shadow:0 0 12px rgba(255,59,59,.6);display:inline-block;flex:none"></span><span class="wm" style="letter-spacing:-0.025em"><b style="font-weight:700">supermega</b><b style="color:#5E6B87;font-weight:500">.dev</b></span></div>
       <h1>Opening SUPERMEGA.</h1>
       <p>Sending you to the main site.</p>
       <a data-sm-campaign-link href="${activeCardContactPath}">Continue</a>
@@ -9471,7 +9471,7 @@ const publicProofReviewHtml = `<!doctype html>
 <body>
   <main>
     <header>
-      <a class="brand" href="/" aria-label="SUPERMEGA.dev home"><span class="mark"><img src="/favicon.svg" alt="" /></span><span class="wm" style="letter-spacing:-0.025em"><b style="font-weight:700">supermega</b><b style="color:#5E6B87;font-weight:500">.dev</b></span></a>
+      <a class="brand" href="/" aria-label="SUPERMEGA.dev home"><span style="width:11px;height:11px;border-radius:3px;background:linear-gradient(135deg,#FF5C4D,#FF3B3B);box-shadow:0 0 12px rgba(255,59,59,.6);display:inline-block;flex:none"></span><span class="wm" style="letter-spacing:-0.025em"><b style="font-weight:700">supermega</b><b style="color:#5E6B87;font-weight:500">.dev</b></span></a>
       <a class="btn" href="/operator/">Operator console</a>
     </header>
     <section class="hero">
@@ -9642,7 +9642,7 @@ const publicPaymentProofHtml = `<!doctype html>
 <body>
   <main>
     <header>
-      <a class="brand" href="/" aria-label="SUPERMEGA.dev home"><span class="mark"><img src="/favicon.svg" alt="" /></span><span class="wm" style="letter-spacing:-0.025em"><b style="font-weight:700">supermega</b><b style="color:#5E6B87;font-weight:500">.dev</b></span></a>
+      <a class="brand" href="/" aria-label="SUPERMEGA.dev home"><span style="width:11px;height:11px;border-radius:3px;background:linear-gradient(135deg,#FF5C4D,#FF3B3B);box-shadow:0 0 12px rgba(255,59,59,.6);display:inline-block;flex:none"></span><span class="wm" style="letter-spacing:-0.025em"><b style="font-weight:700">supermega</b><b style="color:#5E6B87;font-weight:500">.dev</b></span></a>
       <a class="btn" href="/operator/">Operator console</a>
     </header>
     <section class="hero">
@@ -9818,7 +9818,7 @@ const publicSourcePackIntakeHtml = `<!doctype html>
 <body>
   <main>
     <header>
-      <a class="brand" href="/" aria-label="SUPERMEGA.dev home"><span class="mark"><img src="/favicon.svg" alt="" /></span><span class="wm" style="letter-spacing:-0.025em"><b style="font-weight:700">supermega</b><b style="color:#5E6B87;font-weight:500">.dev</b></span></a>
+      <a class="brand" href="/" aria-label="SUPERMEGA.dev home"><span style="width:11px;height:11px;border-radius:3px;background:linear-gradient(135deg,#FF5C4D,#FF3B3B);box-shadow:0 0 12px rgba(255,59,59,.6);display:inline-block;flex:none"></span><span class="wm" style="letter-spacing:-0.025em"><b style="font-weight:700">supermega</b><b style="color:#5E6B87;font-weight:500">.dev</b></span></a>
       <a class="btn" href="/operator/">Operator console</a>
     </header>
     <section class="hero">
@@ -10032,7 +10032,7 @@ const publicPilotWorkspaceHtml = `<!doctype html>
 <body>
   <main>
     <header>
-      <a class="brand" href="/" aria-label="SUPERMEGA.dev home"><span class="mark"><img src="/favicon.svg" alt="" /></span><span class="wm" style="letter-spacing:-0.025em"><b style="font-weight:700">supermega</b><b style="color:#5E6B87;font-weight:500">.dev</b></span></a>
+      <a class="brand" href="/" aria-label="SUPERMEGA.dev home"><span style="width:11px;height:11px;border-radius:3px;background:linear-gradient(135deg,#FF5C4D,#FF3B3B);box-shadow:0 0 12px rgba(255,59,59,.6);display:inline-block;flex:none"></span><span class="wm" style="letter-spacing:-0.025em"><b style="font-weight:700">supermega</b><b style="color:#5E6B87;font-weight:500">.dev</b></span></a>
       <nav class="top-actions" aria-label="Workspace actions">
         <a class="btn" href="/operator/">Operator console</a>
         <a class="btn primary" href="/contact/">Start another pilot</a>
