@@ -846,9 +846,46 @@ function defaultProofAcceptanceTests(record) {
   ]
 }
 
+function buildSourceToScreenOrder(record = {}) {
+  const workcellId = text(record.source_to_screen_workcell_id)
+  const workcellName = text(record.source_to_screen_workcell_name)
+  const sourceHash = text(record.source_to_screen_source_hash)
+  const proofTarget = text(record.source_to_screen_proof_target)
+  const orderPacket = text(record.source_to_screen_order_packet)
+  const freeLoadPolicy = text(record.source_to_screen_free_load_policy) || 'browser_only_until_contact'
+  if (!workcellId && !workcellName && !sourceHash && !proofTarget && !orderPacket) return null
+  const resolvedWorkcellName = workcellName || workcellId || 'Source-to-Screen workcell'
+  const resolvedProofTarget = proofTarget || record.first_proof_target || record.first_output || 'Confirm first proof target from Source-to-Screen draft.'
+  const resolvedPacket = orderPacket || [
+    '# AI Workcell Pilot order packet',
+    '',
+    `workcell_template: ${resolvedWorkcellName}`,
+    `workcell_id: ${workcellId || 'unknown'}`,
+    `source_hash: ${sourceHash || 'missing'}`,
+    `free_load_policy: ${freeLoadPolicy}`,
+    'real_mrr_delta: 0',
+    '',
+    `proof_target: ${resolvedProofTarget}`,
+  ].join('\n')
+  return {
+    status: 'source_to_screen_order_attached',
+    workcell_id: workcellId || '',
+    workcell_name: resolvedWorkcellName,
+    source_hash: sourceHash || '',
+    proof_target: resolvedProofTarget,
+    free_load_policy: freeLoadPolicy,
+    order_packet: resolvedPacket,
+    external_action_state: 'blocked_until_owner_approval',
+    connector_write_state: 'blocked_until_owner_approval',
+    payment_request_state: 'blocked_until_owner_approval',
+    real_mrr_delta: 0,
+  }
+}
+
 function buildIntakeJob(record, acceptanceTests = []) {
   const templateName = record.public_package || record.requested_package || record.template_id || 'Custom SUPERMEGA template'
-  const proofTarget = record.first_proof_target || record.first_output || record.requested_package || 'First useful output'
+  const sourceToScreenOrder = buildSourceToScreenOrder(record)
+  const proofTarget = sourceToScreenOrder?.proof_target || record.first_proof_target || record.first_output || record.requested_package || 'First useful output'
   const sourceManifest = [
     {
       source_type: 'buyer_goal',
@@ -860,6 +897,13 @@ function buildIntakeJob(record, acceptanceTests = []) {
       status: record.source_links || record.source_file_names ? 'provided' : 'missing',
       value: record.source_links || record.source_file_names || 'ASK_BUYER_FOR_ONE_SAMPLE_FILE_FOLDER_SCREENSHOT_EXPORT_OR_EMAIL_THREAD',
     },
+    ...(sourceToScreenOrder ? [{
+      source_type: 'source_to_screen_order_packet',
+      status: 'provided',
+      value: sourceToScreenOrder.order_packet,
+      source_hash: sourceToScreenOrder.source_hash,
+      workcell_id: sourceToScreenOrder.workcell_id,
+    }] : []),
     {
       source_type: 'starter_kit',
       status: record.starter_kit_url ? 'provided' : 'missing',
@@ -1021,9 +1065,18 @@ function buildClientKickoffPack(record, intakeJob = {}) {
 function buildContactSourcePackRequest(record) {
   const templateName = record.public_package || record.requested_package || 'AI Workcell Pilot'
   const company = record.company || record.name || 'client'
-  const firstProofTarget = record.first_proof_target || record.first_output || record.requested_package || 'first useful proof'
+  const sourceToScreenOrder = buildSourceToScreenOrder(record)
+  const firstProofTarget = sourceToScreenOrder?.proof_target || record.first_proof_target || record.first_output || record.requested_package || 'first useful proof'
   const intakeUrl = sourcePackIntakeUrl(record)
   const minimumSources = [
+    ...(sourceToScreenOrder ? [{
+      source_type: 'source_to_screen_order_packet',
+      label: 'Source-to-Screen order packet',
+      examples: ['free Source-to-Screen proof order packet'],
+      required: false,
+      already_provided: true,
+      source_hash: sourceToScreenOrder.source_hash,
+    }] : []),
     {
       source_type: 'gmail_or_chat',
       label: 'Customer messages',
@@ -1048,6 +1101,8 @@ function buildContactSourcePackRequest(record) {
     '',
     `Client: ${company}`,
     `First proof target: ${firstProofTarget}`,
+    sourceToScreenOrder ? `Source-to-Screen workcell: ${sourceToScreenOrder.workcell_name}` : '',
+    sourceToScreenOrder?.source_hash ? `Source hash: ${sourceToScreenOrder.source_hash}` : '',
     `Source-pack intake link: ${intakeUrl}`,
     '',
     'Minimum source pack:',
@@ -1066,6 +1121,7 @@ function buildContactSourcePackRequest(record) {
     template_name: templateName,
     company,
     first_proof_target: firstProofTarget,
+    source_to_screen_order: sourceToScreenOrder,
     intake_url: intakeUrl,
     minimum_sources: minimumSources,
     client_message: clientMessage,
@@ -1124,8 +1180,9 @@ function buildOwnerOnboardingAlert(record, sourcePackRequest) {
 function buildFirstProofTaskPayload(record) {
   const solutionRoute = buildSolutionRoute(record)
   const routedRecord = recordWithSolutionRoute(record, solutionRoute)
+  const sourceToScreenOrder = buildSourceToScreenOrder(routedRecord)
   const acceptanceTests = listFromText(routedRecord.acceptance_tests)
-  const proofTarget = routedRecord.first_proof_target || routedRecord.first_output || routedRecord.requested_package || 'First useful output'
+  const proofTarget = sourceToScreenOrder?.proof_target || routedRecord.first_proof_target || routedRecord.first_output || routedRecord.requested_package || 'First useful output'
   const starterKitUrl = routedRecord.starter_kit_url || (routedRecord.template_id ? `/site/agent-templates/${routedRecord.template_id}.json` : '')
   const templateName = routedRecord.public_package || routedRecord.requested_package || routedRecord.template_id || 'Custom SUPERMEGA template'
   const intakeJob = buildIntakeJob(routedRecord, acceptanceTests)
@@ -1142,6 +1199,8 @@ function buildFirstProofTaskPayload(record) {
     `${templateName} first proof for ${routedRecord.company || routedRecord.name || routedRecord.email}.`,
     `Goal: ${routedRecord.goal || 'Confirm the workflow and produce the first proof.'}`,
     `Recommended route: ${solutionRoute.package_name} (${solutionRoute.delivery_lane}).`,
+    sourceToScreenOrder ? `Source-to-Screen: ${sourceToScreenOrder.workcell_name}.` : '',
+    sourceToScreenOrder?.source_hash ? `Source hash: ${sourceToScreenOrder.source_hash}.` : '',
     `First proof: ${proofTarget}.`,
     starterKitUrl ? `Starter kit: ${starterKitUrl}.` : '',
     sourceSummary ? `Sources: ${sourceSummary}.` : 'Sources: request the minimum sample sources before building.',
@@ -1168,6 +1227,7 @@ function buildFirstProofTaskPayload(record) {
     source_pack_request: sourcePackRequest,
     source_pack_request_packet: sourcePackRequest.client_message,
     source_pack_request_json: JSON.stringify(sourcePackRequest, null, 2),
+    source_to_screen_order: sourceToScreenOrder,
     owner_onboarding_alert: ownerOnboardingAlert,
     source_trace: intakeJob.source_manifest
       .filter((item) => item.status === 'provided')
@@ -1183,6 +1243,7 @@ function buildFirstProofTaskPayload(record) {
     acceptance_tests: acceptanceTests.length ? acceptanceTests : defaultProofAcceptanceTests(record),
     approval_required: true,
     human_gate: 'owner approval before send/write/payment actions',
+    real_mrr_delta: 0,
   }
 }
 
@@ -1243,6 +1304,7 @@ function pipelineActionPayload(record) {
       source_file_count: record.source_file_count,
       public_package: record.public_package,
       first_proof_target: record.first_proof_target,
+      source_to_screen_order: firstProofTask.source_to_screen_order,
       implementation_blueprint_pack: firstProofTask.implementation_blueprint_pack,
       source_pack_request: firstProofTask.source_pack_request,
       source_pack_request_packet: firstProofTask.source_pack_request_packet,
