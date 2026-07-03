@@ -1464,8 +1464,8 @@ const publicCardHtml = `<!doctype html>
       .qr-label { font-size: 10.5px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); display: flex; align-items: center; gap: 6px; }
       .qr-label::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 7px var(--accent); }
       .content { position: relative; flex: 1 1 auto; min-width: 0; max-width: 540px; }
-      .brand { display: inline-flex; align-items: center; gap: 9px; font-family: "Space Grotesk", sans-serif; font-weight: 700; letter-spacing: -0.02em; font-size: 16px; color: var(--ink); }
-      .brand .bdot { width: 9px; height: 9px; border-radius: 3px; background: var(--accent); }
+      .brand { display: inline-flex; align-items: center; font-family: "Space Grotesk", sans-serif; font-weight: 700; letter-spacing: -0.025em; font-size: 16px; color: var(--ink); }
+      .brand .bdot { width: 10px; height: 10px; border-radius: 3px; background: linear-gradient(135deg, #63A0FF, #4F86F7); box-shadow: 0 0 11px rgba(79,134,247,0.55); margin-right: 11px; }
       .brand .bd { color: var(--dim); font-weight: 500; }
       h1 { font-family: "Space Grotesk", sans-serif; margin: 22px 0 6px; font-size: clamp(40px, 6.5vw, 68px); line-height: 0.98; letter-spacing: -0.03em; font-weight: 700; color: var(--ink); }
       .role { margin: 0 0 18px; color: var(--accent); font-size: clamp(15px, 2.2vw, 18px); font-weight: 600; }
@@ -6184,7 +6184,7 @@ await rm(outputDir, { recursive: true, force: true, maxRetries: 8, retryDelay: 2
 await mkdir(outputDir, { recursive: true })
 await copyPublicStatic(resolve(root, 'api-static'), staticDir)
 // Brand favicon is owned here (revert-proof against OneDrive restoring the old file): Capsule Forge mark.
-await writeFile(resolve(staticDir, 'favicon.svg'), `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="SuperMega"><defs><linearGradient id="gb" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#F2C75A"/><stop offset="1" stop-color="#E9B949"/></linearGradient><rect id="c" x="12" y="8" width="40" height="48" rx="16" ry="16"/><clipPath id="cc"><use href="#c"/></clipPath></defs><use href="#c" fill="#181410"/><g clip-path="url(#cc)"><rect x="12" y="8" width="40" height="20.2" fill="url(#gb)"/><rect x="12" y="27.7" width="40" height="1" fill="#181410" opacity="0.55"/><rect x="12" y="28.2" width="40" height="0.8" fill="#F2C75A" opacity="0.35"/></g><circle cx="39" cy="43" r="4.6" fill="#E9B949"/><use href="#c" fill="none" stroke="#E9B949" stroke-width="1.5" opacity="0.9"/></svg>\n`, 'utf8')
+await writeFile(resolve(staticDir, 'favicon.svg'), `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="supermega"><defs><linearGradient id="a" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#63A0FF"/><stop offset="1" stop-color="#4F86F7"/></linearGradient><linearGradient id="h" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff" stop-opacity="0.30"/><stop offset="0.55" stop-color="#ffffff" stop-opacity="0"/></linearGradient></defs><rect x="4" y="4" width="56" height="56" rx="15" fill="#1C1F27"/><rect x="4.75" y="4.75" width="54.5" height="54.5" rx="14.25" fill="none" stroke="#ffffff" stroke-opacity="0.09"/><rect x="18.5" y="18.5" width="27" height="27" rx="8.5" fill="url(#a)"/><rect x="18.5" y="18.5" width="27" height="27" rx="8.5" fill="url(#h)"/></svg>\n`, 'utf8')
 for (const entry of await readdir(resolve(staticDir, 'site')).catch(() => [])) {
   if (/\.json$/i.test(entry)) {
     await rm(resolve(staticDir, 'site', entry), { force: true })
