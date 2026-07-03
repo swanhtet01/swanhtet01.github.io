@@ -905,6 +905,32 @@ function buildSourceToScreenOrder(record = {}) {
   }
 }
 
+function buildPilotCrewRunSheet(sourceToScreenOrder) {
+  if (!sourceToScreenOrder) return null
+  return {
+    status: 'pilot_run_sheet_ready',
+    crew_slug: 'source-to-screen-pilot',
+    crew_name: 'Source-to-Screen Pilot',
+    minimum_plan: 'pilot',
+    execution_mode: 'approval_only',
+    source_hash: sourceToScreenOrder.source_hash || '',
+    workcell_id: sourceToScreenOrder.workcell_id || '',
+    workcell_name: sourceToScreenOrder.workcell_name || 'Source-to-Screen workcell',
+    proof_target: sourceToScreenOrder.proof_target || 'Build one source-traced first proof.',
+    role_sequence: ['intake', 'proof-builder', 'approval-pack'],
+    input_contract: ['source-to-screen order packet', 'approved sample source', 'source hash', 'proof target', 'owner acceptance rule'],
+    output_contract: ['source_trace', 'first_proof', 'approval_queue', 'required_sources', 'blocked_actions', 'paid_pilot_scope'],
+    blocked_actions: ['external_send', 'connector_write', 'browser_or_mobile_action', 'payment_request', 'workspace_activation'],
+    operator_steps: [
+      'Verify the source pack is owner-approved and matches the source hash.',
+      'Build one source-traced first proof from approved sources only.',
+      'Prepare the owner approval queue with blocked actions separated from draft outputs.',
+      'Wait for owner acceptance before send/write/payment/workspace activation.',
+    ],
+    real_mrr_delta: 0,
+  }
+}
+
 function buildIntakeJob(record, acceptanceTests = []) {
   const templateName = record.public_package || record.requested_package || record.template_id || 'Custom SUPERMEGA template'
   const sourceToScreenOrder = buildSourceToScreenOrder(record)
@@ -1213,6 +1239,7 @@ function buildFirstProofTaskPayload(record) {
   const implementationBlueprintPack = buildImplementationBlueprintPack(routedRecord, solutionRoute, intakeJob)
   const sourcePackRequest = buildContactSourcePackRequest(routedRecord)
   const ownerOnboardingAlert = buildOwnerOnboardingAlert(routedRecord, sourcePackRequest)
+  const pilotCrewRunSheet = buildPilotCrewRunSheet(sourceToScreenOrder)
   const sourceSummary = [
     routedRecord.source_links ? `source links: ${routedRecord.source_links}` : '',
     routedRecord.source_file_count ? `file count: ${routedRecord.source_file_count}` : '',
@@ -1251,6 +1278,7 @@ function buildFirstProofTaskPayload(record) {
     source_pack_request_packet: sourcePackRequest.client_message,
     source_pack_request_json: JSON.stringify(sourcePackRequest, null, 2),
     source_to_screen_order: sourceToScreenOrder,
+    pilot_crew_run_sheet: pilotCrewRunSheet,
     owner_onboarding_alert: ownerOnboardingAlert,
     source_trace: intakeJob.source_manifest
       .filter((item) => item.status === 'provided')
@@ -1328,6 +1356,7 @@ function pipelineActionPayload(record) {
       public_package: record.public_package,
       first_proof_target: record.first_proof_target,
       source_to_screen_order: firstProofTask.source_to_screen_order,
+      pilot_crew_run_sheet: firstProofTask.pilot_crew_run_sheet,
       implementation_blueprint_pack: firstProofTask.implementation_blueprint_pack,
       source_pack_request: firstProofTask.source_pack_request,
       source_pack_request_packet: firstProofTask.source_pack_request_packet,

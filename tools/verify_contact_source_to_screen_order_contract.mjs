@@ -92,6 +92,28 @@ assert.equal(proofTask.first_proof_target, record.source_to_screen_proof_target)
 assert.ok(proofTask.source_to_screen_order, 'proof_task_source_to_screen_order_missing')
 assert.equal(proofTask.source_to_screen_order.workcell_id, 'receivables_chase')
 assert.equal(proofTask.source_pack_request.source_to_screen_order.order_packet, orderPacket)
+assert.deepEqual(proofTask.pilot_crew_run_sheet, {
+  status: 'pilot_run_sheet_ready',
+  crew_slug: 'source-to-screen-pilot',
+  crew_name: 'Source-to-Screen Pilot',
+  minimum_plan: 'pilot',
+  execution_mode: 'approval_only',
+  source_hash: '00abc123',
+  workcell_id: 'receivables_chase',
+  workcell_name: 'Receivables chase',
+  proof_target: record.source_to_screen_proof_target,
+  role_sequence: ['intake', 'proof-builder', 'approval-pack'],
+  input_contract: ['source-to-screen order packet', 'approved sample source', 'source hash', 'proof target', 'owner acceptance rule'],
+  output_contract: ['source_trace', 'first_proof', 'approval_queue', 'required_sources', 'blocked_actions', 'paid_pilot_scope'],
+  blocked_actions: ['external_send', 'connector_write', 'browser_or_mobile_action', 'payment_request', 'workspace_activation'],
+  operator_steps: [
+    'Verify the source pack is owner-approved and matches the source hash.',
+    'Build one source-traced first proof from approved sources only.',
+    'Prepare the owner approval queue with blocked actions separated from draft outputs.',
+    'Wait for owner acceptance before send/write/payment/workspace activation.',
+  ],
+  real_mrr_delta: 0,
+})
 assert.ok(proofTask.operator_brief.includes('Source-to-Screen: Receivables chase'))
 assert.ok(proofTask.operator_brief.includes('Source hash: 00abc123'))
 assert.ok(proofTask.source_trace.some((item) => item.includes('source_to_screen_order_packet')))
@@ -107,6 +129,9 @@ assert.equal(action.payload.source_pack_request.source_to_screen_order.source_ha
 assert.equal(action.payload.first_proof_task.source_to_screen_order.proof_target, record.source_to_screen_proof_target)
 assert.equal(action.payload.first_proof_task.source_to_screen_order.cost_boundary.paid_upgrade_trigger, 'owner_approves_first_proof_pilot')
 assert.equal(action.payload.first_proof_task.source_to_screen_order.execution_route.first_run_mode, 'approval_only')
+assert.equal(action.payload.pilot_crew_run_sheet.crew_slug, 'source-to-screen-pilot')
+assert.equal(action.payload.pilot_crew_run_sheet.real_mrr_delta, 0)
+assert.ok(action.payload.pilot_crew_run_sheet.blocked_actions.includes('payment_request'))
 assert.equal(action.payload.first_proof_task.real_mrr_delta, 0)
 
 console.log(JSON.stringify({
