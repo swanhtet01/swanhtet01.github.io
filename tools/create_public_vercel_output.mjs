@@ -10397,7 +10397,7 @@ await writeFile(resolve(staticDir, 'card', 'index.html'), publicCardHtml, 'utf8'
 // /megaos-preview/, not just a claude.ai artifact. Touches no existing page. NOT the live brand
 // yet — the full rebrand rollout is held for the founder's explicit go on the SUPERMEGA→MegaOS name.
 await mkdir(resolve(staticDir, 'megaos-preview'), { recursive: true })
-const megaosPreviewBody = await readFile(resolve(root, 'brand', 'megaos', 'reference-command-home.html'), 'utf8').catch(() => '')
+const megaosPreviewBody = await readFile(resolve(root, 'brand', 'megaos', 'reference-app-home.html'), 'utf8').catch(() => '')
 if (megaosPreviewBody) {
   await writeFile(
     resolve(staticDir, 'megaos-preview', 'index.html'),

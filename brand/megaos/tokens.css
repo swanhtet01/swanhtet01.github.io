@@ -1,62 +1,45 @@
-/* MegaOS — design tokens (resolved 2026-06-26).
- * Two skins share ONE wordmark, ONE type stack, and ONE "live = accent + status-dot + text-label"
- * grammar. Command Center (dark) is the chosen DEFAULT (Swan picked a dark direction). Cobalt (light)
- * is kept as the daylight/funnel option. Voice everywhere = plain human English, simple, no hype.
+/* supermega.dev — design tokens (Graphite-Dark, resolved 2026-07-03).
+ * Founder direction: dark but PROFESSIONAL (not neon), minimal text, simple plain English for a
+ * Myanmar audience (in English), de-emphasise agents/backend/payments, connectors shown generically,
+ * not location-specific. The product is "the app" at app.supermega.dev.
  *
- * Apply by setting data-skin on <html>: default (no attr) = Command Center dark; [data-skin="cobalt"] = light.
- * Production fonts: Space Grotesk (display/wordmark), Inter (body), JetBrains Mono (numbers/status/eyebrows).
- * Burmese, if used at all, is a light accent only (English carries everything) — never the display face.
+ * Graphite-Dark is the shared design system across all three verticals (Retail/Factory/LMS).
+ * Production fonts: Space Grotesk (display/wordmark), Inter (body). Accent is RATIONED (CTA + live only).
  */
 
 :root {
-  /* ---- Command Center (dark) — DEFAULT ---- */
-  --mo-bg:            #07090C; /* Void — page ground */
-  --mo-surface:       #0D1117; /* Deck — cards, nav, inputs */
-  --mo-surface-2:     #161C26; /* Panel — raised/active */
-  --mo-text:          #E6EAF0; /* Signal — primary text (~15:1 on Void) */
-  --mo-muted:         #9AA4B2;
-  --mo-dim:           #6B7686; /* labels only */
-  --mo-accent:        #A6FF3C; /* Volt — THE accent. live-state + the ONE cta. rationed. */
-  --mo-accent-ink:    #07090C; /* text ON the accent (dark-on-lime = most sun-legible element) */
-  --mo-secondary:     #3DD6C4; /* Cyan — links, in-progress, secondary series */
-  --mo-alert:         #FF5C5C; /* error/over-threshold ONLY (success = accent) */
-  --mo-line:          rgba(255,255,255,.08); /* hairline borders carry structure, not shadows */
-  --mo-grid:          rgba(230,234,240,.028); /* faint command-grid backdrop */
-  --mo-radius:        7px;   /* buttons/inputs — never 999px pills */
-  --mo-radius-card:   11px;
+  --sm-bg:         #16181D; /* Graphite ground — charcoal, not pure black */
+  --sm-surface:    #1C1F27; /* cards, nav */
+  --sm-elev:       #242833; /* raised rows/cards */
+  --sm-text:       #EAECEF; /* soft white */
+  --sm-muted:      #989FAA;
+  --sm-dim:        #666D77; /* labels only */
+  --sm-accent:     #4F86F7; /* calm professional azure — the ONE accent, rationed to CTA + focus */
+  --sm-accent-soft:rgba(79,134,247,.14);
+  --sm-live:       #3FBF8F; /* muted green — live/success status only */
+  --sm-line:       rgba(255,255,255,.07); /* hairline borders carry structure */
+  --sm-radius:     8px;
+  --sm-radius-card:14px;
 
-  --mo-display: "Space Grotesk", system-ui, "Segoe UI", sans-serif;
-  --mo-body:    system-ui, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
-  --mo-mono:    ui-monospace, "Cascadia Code", "JetBrains Mono", Consolas, monospace;
+  --sm-display: "Space Grotesk", system-ui, "Segoe UI", sans-serif;
+  --sm-body:    system-ui, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
 }
 
-:root[data-skin="cobalt"] {
-  /* ---- Cobalt (light) — daylight/funnel option ---- */
-  --mo-bg:            #FBFCFE; /* cool near-white (NOT cream) */
-  --mo-surface:       #FFFFFF;
-  --mo-surface-2:     #EEF2F8;
-  --mo-text:          #0B1220; /* Ink (~16:1) */
-  --mo-muted:         #414B5A;
-  --mo-dim:           #7A8595;
-  --mo-accent:        #0B45E0; /* Mega Cobalt */
-  --mo-accent-ink:    #FFFFFF;
-  --mo-secondary:     #12B76A; /* live green */
-  --mo-alert:         #B42318;
-  --mo-line:          rgba(11,18,32,.12);
-  --mo-grid:          rgba(11,18,32,.05);
-}
+/* shared primitives */
+.sm-brand { font-family: var(--sm-display); font-weight: 700; letter-spacing: -.02em; display: inline-flex; align-items: center; gap: 9px; }
+.sm-brand .dot { width: 9px; height: 9px; border-radius: 3px; background: var(--sm-accent); }
+.sm-brand span { color: var(--sm-dim); font-weight: 500; }
 
-/* ---- shared primitives ---- */
-.mo-wordmark { font-family: var(--mo-display); font-weight: 800; letter-spacing: -.02em; display: inline-flex; align-items: center; }
-.mo-wordmark .m { color: var(--mo-muted); font-weight: 500; }
-.mo-wordmark .o { color: var(--mo-text); font-weight: 800; }
-.mo-wordmark .cur { width: .4em; height: .95em; margin-left: .22em; background: var(--mo-accent); border-radius: 1px; transform: translateY(.1em); }
+.sm-btn { display: inline-flex; align-items: center; gap: 8px; border-radius: var(--sm-radius); padding: 10px 18px; font-weight: 600; font-size: 14px; cursor: pointer; border: 1px solid transparent; font-family: var(--sm-body); }
+.sm-btn--primary { background: var(--sm-accent); color: #fff; }
+.sm-btn--quiet { color: var(--sm-muted); background: transparent; }
 
-.mo-btn { display: inline-flex; align-items: center; gap: 8px; border-radius: var(--mo-radius); padding: 10px 17px; font-weight: 800; font-size: 14px; cursor: pointer; border: 1px solid transparent; font-family: var(--mo-body); }
-.mo-btn--primary { background: var(--mo-accent); color: var(--mo-accent-ink); box-shadow: 0 0 22px color-mix(in srgb, var(--mo-accent) 28%, transparent); }
-.mo-btn--ghost { background: transparent; border-color: var(--mo-line); color: var(--mo-text); }
+.sm-dot-live { width: 8px; height: 8px; border-radius: 50%; background: var(--sm-live); box-shadow: 0 0 7px var(--sm-live); display: inline-block; }
 
-/* the "live" grammar: an accent dot + a text label. glow only on genuinely-live state. */
-.mo-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--mo-dim); display: inline-block; }
-.mo-dot--live { background: var(--mo-accent); box-shadow: 0 0 8px var(--mo-accent); }
-.mo-tnum { font-variant-numeric: tabular-nums; }
+/* Voice rules (copy is design material):
+ * - Plain, simple English a Myanmar shop owner reads easily. Short sentences.
+ * - No hype, no jargon, no "AI/agents/kernel/connectors/backend". Say the plain thing.
+ * - Don't lead with payments or "built-in X". Keep feature claims open and generic.
+ * - Not location-specific (no "Yangon"). Broad.
+ * - It's "the app" / supermega.dev — not a heavy product sub-brand.
+ */
