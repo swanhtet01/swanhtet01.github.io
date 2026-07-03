@@ -84,7 +84,7 @@ const requiredPublicSiteJsonFiles = [
   'value-intake-router.json',
 ]
 const legacyInitialsMarkHtml = ['<span class="mark">', String.fromCharCode(83, 77), '</span>'].join('')
-const signalMarkHtml = '<span style="width:11px;height:11px;border-radius:3px;background:linear-gradient(135deg,#FF5C4D,#FF3B3B);box-shadow:0 0 12px rgba(255,59,59,.6);display:inline-block;flex:none"></span>'
+const signalMarkHtml = '<span style="display:inline-flex;align-items:center;flex:none" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M6.5 8 L11 12 L6.5 16" stroke="#FF3B3B" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M12.6 16.2 L18 16.2" stroke="#FF3B3B" stroke-width="2.6" stroke-linecap="round"/></svg></span>'
 
 async function writeTextFileEnsuringDir(destination, content) {
   const targetDir = dirname(destination)
@@ -203,7 +203,7 @@ const publicMachineHtml = `<!doctype html>
   <body>
     <main>
       <header>
-        <a class="brand" href="/"><span style="width:11px;height:11px;border-radius:3px;background:linear-gradient(135deg,#FF5C4D,#FF3B3B);box-shadow:0 0 12px rgba(255,59,59,.6);display:inline-block;flex:none"></span><span class="wm" style="letter-spacing:-0.025em"><b style="font-weight:700">supermega</b><b style="color:#5E6B87;font-weight:500">.dev</b></span></a>
+        <a class="brand" href="/"><span style="display:inline-flex;align-items:center;flex:none" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M6.5 8 L11 12 L6.5 16" stroke="#FF3B3B" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M12.6 16.2 L18 16.2" stroke="#FF3B3B" stroke-width="2.6" stroke-linecap="round"/></svg></span><span class="wm" style="letter-spacing:-0.025em"><b style="font-weight:700">supermega</b><b style="color:#5E6B87;font-weight:500">.dev</b></span></a>
         <a class="btn" href="/contact/">Contact</a>
       </header>
       <section class="hero">
@@ -716,7 +716,7 @@ function publicToolsHtmlFromCatalog(catalog, agentRadar = {}, socialOAuth = {}) 
   <body>
     <div class="wrap">
       <header>
-        <a class="brand" href="/" aria-label="SUPERMEGA.dev home"><span style="width:11px;height:11px;border-radius:3px;background:linear-gradient(135deg,#FF5C4D,#FF3B3B);box-shadow:0 0 12px rgba(255,59,59,.6);display:inline-block;flex:none"></span><span class="wm" style="letter-spacing:-0.025em"><b style="font-weight:700">supermega</b><b style="color:#5E6B87;font-weight:500">.dev</b></span></a>
+        <a class="brand" href="/" aria-label="SUPERMEGA.dev home"><span style="display:inline-flex;align-items:center;flex:none" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M6.5 8 L11 12 L6.5 16" stroke="#FF3B3B" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M12.6 16.2 L18 16.2" stroke="#FF3B3B" stroke-width="2.6" stroke-linecap="round"/></svg></span><span class="wm" style="letter-spacing:-0.025em"><b style="font-weight:700">supermega</b><b style="color:#5E6B87;font-weight:500">.dev</b></span></a>
         <nav class="nav" aria-label="Primary">
           <a class="btn secondary-nav" href="/">Home</a>
           <a class="btn primary" href="/contact/?source=tools">Contact</a>
@@ -861,7 +861,7 @@ function publicValueHtmlFromEngine(engine) {
   <body>
     <div class="wrap">
       <header>
-        <a class="brand" href="/" aria-label="SUPERMEGA.dev home"><span style="width:11px;height:11px;border-radius:3px;background:linear-gradient(135deg,#FF5C4D,#FF3B3B);box-shadow:0 0 12px rgba(255,59,59,.6);display:inline-block;flex:none"></span><span class="wm" style="letter-spacing:-0.025em"><b style="font-weight:700">supermega</b><b style="color:#5E6B87;font-weight:500">.dev</b></span></a>
+        <a class="brand" href="/" aria-label="SUPERMEGA.dev home"><span style="display:inline-flex;align-items:center;flex:none" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M6.5 8 L11 12 L6.5 16" stroke="#FF3B3B" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M12.6 16.2 L18 16.2" stroke="#FF3B3B" stroke-width="2.6" stroke-linecap="round"/></svg></span><span class="wm" style="letter-spacing:-0.025em"><b style="font-weight:700">supermega</b><b style="color:#5E6B87;font-weight:500">.dev</b></span></a>
         <nav class="nav" aria-label="Primary">
           <a class="btn secondary-nav" href="/tools/">Tools</a>
           <a class="btn secondary-nav" href="/start/">Start</a>
@@ -1015,7 +1015,7 @@ function publicIntakeHtmlFromRouter(router) {
   <body>
     <div class="wrap">
       <header>
-        <a class="brand" href="/" aria-label="SUPERMEGA.dev home"><span style="width:11px;height:11px;border-radius:3px;background:linear-gradient(135deg,#FF5C4D,#FF3B3B);box-shadow:0 0 12px rgba(255,59,59,.6);display:inline-block;flex:none"></span><span class="wm" style="letter-spacing:-0.025em"><b style="font-weight:700">supermega</b><b style="color:#5E6B87;font-weight:500">.dev</b></span></a>
+        <a class="brand" href="/" aria-label="SUPERMEGA.dev home"><span style="display:inline-flex;align-items:center;flex:none" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M6.5 8 L11 12 L6.5 16" stroke="#FF3B3B" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M12.6 16.2 L18 16.2" stroke="#FF3B3B" stroke-width="2.6" stroke-linecap="round"/></svg></span><span class="wm" style="letter-spacing:-0.025em"><b style="font-weight:700">supermega</b><b style="color:#5E6B87;font-weight:500">.dev</b></span></a>
         <nav class="nav" aria-label="Primary">
           <a class="btn secondary-nav" href="/tools/">Tools</a>
           <a class="btn secondary-nav" href="/proof/">Proof</a>
@@ -1256,7 +1256,7 @@ function publicProofHtmlFromPacks(proof) {
   <body>
     <div class="wrap">
       <header>
-        <a class="brand" href="/" aria-label="SUPERMEGA.dev home"><span style="width:11px;height:11px;border-radius:3px;background:linear-gradient(135deg,#FF5C4D,#FF3B3B);box-shadow:0 0 12px rgba(255,59,59,.6);display:inline-block;flex:none"></span><span class="wm" style="letter-spacing:-0.025em"><b style="font-weight:700">supermega</b><b style="color:#5E6B87;font-weight:500">.dev</b></span></a>
+        <a class="brand" href="/" aria-label="SUPERMEGA.dev home"><span style="display:inline-flex;align-items:center;flex:none" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M6.5 8 L11 12 L6.5 16" stroke="#FF3B3B" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M12.6 16.2 L18 16.2" stroke="#FF3B3B" stroke-width="2.6" stroke-linecap="round"/></svg></span><span class="wm" style="letter-spacing:-0.025em"><b style="font-weight:700">supermega</b><b style="color:#5E6B87;font-weight:500">.dev</b></span></a>
         <nav class="nav" aria-label="Primary">
           <a class="btn secondary-nav" href="/tools/">Tools</a>
           <a class="btn secondary-nav" href="/value/">Value</a>
@@ -1372,7 +1372,7 @@ function renderPublicPricingHtml() {
     <div class="wrap">
       <header>
         <a class="brand" href="/" aria-label="SUPERMEGA.dev home">
-          <span class="mark"><svg viewBox="0 0 64 64" width="100%" height="100%" fill="none" aria-hidden="true"><g stroke="#FF3B3B" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M35.8 10.3 A22 22 0 1 1 28.2 10.3"/><path d="M22 45 L22 26 L32 38 L42 26 L42 45" stroke-width="4"/></g><path d="M32 34.5 L33.2 37 L35.5 38 L33.2 39 L32 41.5 L30.8 39 L28.5 38 L30.8 37 Z" fill="#FF3B3B"/><path d="M32 7.6 L32.9 9.7 L35 10.3 L32.9 10.9 L32 13 L31.1 10.9 L29 10.3 L31.1 9.7 Z" fill="#FF3B3B"/></svg></span>
+          <span style="display:inline-flex;align-items:center;flex:none" aria-hidden="true"><svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M6.5 8 L11 12 L6.5 16" stroke="#FF3B3B" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M12.6 16.2 L18 16.2" stroke="#FF3B3B" stroke-width="2.6" stroke-linecap="round"/></svg></span>
           <span class="brand-text"><span class="wm" style="font-size:18px;letter-spacing:-0.025em"><b style="font-weight:700">supermega</b><b style="color:#5E6B87;font-weight:500">.dev</b></span></span>
         </a>
         <nav class="nav" aria-label="Primary">
@@ -1534,7 +1534,7 @@ const publicCampaignRedirectHtml = `<!doctype html>
   </head>
   <body>
     <main>
-      <div class="brand"><span style="width:11px;height:11px;border-radius:3px;background:linear-gradient(135deg,#FF5C4D,#FF3B3B);box-shadow:0 0 12px rgba(255,59,59,.6);display:inline-block;flex:none"></span><span class="wm" style="letter-spacing:-0.025em"><b style="font-weight:700">supermega</b><b style="color:#5E6B87;font-weight:500">.dev</b></span></div>
+      <div class="brand"><span style="display:inline-flex;align-items:center;flex:none" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M6.5 8 L11 12 L6.5 16" stroke="#FF3B3B" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M12.6 16.2 L18 16.2" stroke="#FF3B3B" stroke-width="2.6" stroke-linecap="round"/></svg></span><span class="wm" style="letter-spacing:-0.025em"><b style="font-weight:700">supermega</b><b style="color:#5E6B87;font-weight:500">.dev</b></span></div>
       <h1>Opening SUPERMEGA.</h1>
       <p>Sending you to the main site.</p>
       <a data-sm-campaign-link href="${activeCardContactPath}">Continue</a>
@@ -2032,7 +2032,7 @@ const unicornHeader = `
       <script>(function(){try{var t=localStorage.getItem('sm-theme');if(!t){t='dark';}document.documentElement.setAttribute('data-theme',t);}catch(e){}})();</script>
       <header>
         <a class="brand" href="/" aria-label="SUPERMEGA.dev home">
-          <span class="mark"><svg viewBox="0 0 64 64" width="100%" height="100%" fill="none" aria-hidden="true"><g stroke="#FF3B3B" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M35.8 10.3 A22 22 0 1 1 28.2 10.3"/><path d="M22 45 L22 26 L32 38 L42 26 L42 45" stroke-width="4"/></g><path d="M32 34.5 L33.2 37 L35.5 38 L33.2 39 L32 41.5 L30.8 39 L28.5 38 L30.8 37 Z" fill="#FF3B3B"/><path d="M32 7.6 L32.9 9.7 L35 10.3 L32.9 10.9 L32 13 L31.1 10.9 L29 10.3 L31.1 9.7 Z" fill="#FF3B3B"/></svg></span>
+          <span style="display:inline-flex;align-items:center;flex:none" aria-hidden="true"><svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M6.5 8 L11 12 L6.5 16" stroke="#FF3B3B" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M12.6 16.2 L18 16.2" stroke="#FF3B3B" stroke-width="2.6" stroke-linecap="round"/></svg></span>
           <span class="brand-text"><span class="wm" style="font-size:18px;letter-spacing:-0.025em"><b style="font-weight:700">supermega</b><b style="color:#5E6B87;font-weight:500">.dev</b></span></span>
         </a>
         <nav class="nav" aria-label="Primary">
@@ -6184,7 +6184,7 @@ await rm(outputDir, { recursive: true, force: true, maxRetries: 8, retryDelay: 2
 await mkdir(outputDir, { recursive: true })
 await copyPublicStatic(resolve(root, 'api-static'), staticDir)
 // Brand favicon is owned here (revert-proof against OneDrive restoring the old file): Capsule Forge mark.
-await writeFile(resolve(staticDir, 'favicon.svg'), `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="supermega"><defs><linearGradient id="a" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FF5C4D"/><stop offset="1" stop-color="#FF3B3B"/></linearGradient><linearGradient id="h" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff" stop-opacity="0.30"/><stop offset="0.55" stop-color="#ffffff" stop-opacity="0"/></linearGradient></defs><rect x="4" y="4" width="56" height="56" rx="15" fill="#111731"/><rect x="4.75" y="4.75" width="54.5" height="54.5" rx="14.25" fill="none" stroke="#ffffff" stroke-opacity="0.09"/><rect x="18.5" y="18.5" width="27" height="27" rx="8.5" fill="url(#a)"/><rect x="18.5" y="18.5" width="27" height="27" rx="8.5" fill="url(#h)"/></svg>\n`, 'utf8')
+await writeFile(resolve(staticDir, 'favicon.svg'), `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="supermega"><rect x="4" y="4" width="56" height="56" rx="15" fill="#111731"/><rect x="4.75" y="4.75" width="54.5" height="54.5" rx="14.25" fill="none" stroke="#ffffff" stroke-opacity="0.10"/><path d="M21 23 L31.5 32 L21 41" fill="none" stroke="#FF3B3B" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/><path d="M35 41 L47 41" fill="none" stroke="#FF3B3B" stroke-width="5" stroke-linecap="round"/></svg>\n`, 'utf8')
 for (const entry of await readdir(resolve(staticDir, 'site')).catch(() => [])) {
   if (/\.json$/i.test(entry)) {
     await rm(resolve(staticDir, 'site', entry), { force: true })
@@ -9471,7 +9471,7 @@ const publicProofReviewHtml = `<!doctype html>
 <body>
   <main>
     <header>
-      <a class="brand" href="/" aria-label="SUPERMEGA.dev home"><span style="width:11px;height:11px;border-radius:3px;background:linear-gradient(135deg,#FF5C4D,#FF3B3B);box-shadow:0 0 12px rgba(255,59,59,.6);display:inline-block;flex:none"></span><span class="wm" style="letter-spacing:-0.025em"><b style="font-weight:700">supermega</b><b style="color:#5E6B87;font-weight:500">.dev</b></span></a>
+      <a class="brand" href="/" aria-label="SUPERMEGA.dev home"><span style="display:inline-flex;align-items:center;flex:none" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M6.5 8 L11 12 L6.5 16" stroke="#FF3B3B" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M12.6 16.2 L18 16.2" stroke="#FF3B3B" stroke-width="2.6" stroke-linecap="round"/></svg></span><span class="wm" style="letter-spacing:-0.025em"><b style="font-weight:700">supermega</b><b style="color:#5E6B87;font-weight:500">.dev</b></span></a>
       <a class="btn" href="/operator/">Operator console</a>
     </header>
     <section class="hero">
@@ -9642,7 +9642,7 @@ const publicPaymentProofHtml = `<!doctype html>
 <body>
   <main>
     <header>
-      <a class="brand" href="/" aria-label="SUPERMEGA.dev home"><span style="width:11px;height:11px;border-radius:3px;background:linear-gradient(135deg,#FF5C4D,#FF3B3B);box-shadow:0 0 12px rgba(255,59,59,.6);display:inline-block;flex:none"></span><span class="wm" style="letter-spacing:-0.025em"><b style="font-weight:700">supermega</b><b style="color:#5E6B87;font-weight:500">.dev</b></span></a>
+      <a class="brand" href="/" aria-label="SUPERMEGA.dev home"><span style="display:inline-flex;align-items:center;flex:none" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M6.5 8 L11 12 L6.5 16" stroke="#FF3B3B" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M12.6 16.2 L18 16.2" stroke="#FF3B3B" stroke-width="2.6" stroke-linecap="round"/></svg></span><span class="wm" style="letter-spacing:-0.025em"><b style="font-weight:700">supermega</b><b style="color:#5E6B87;font-weight:500">.dev</b></span></a>
       <a class="btn" href="/operator/">Operator console</a>
     </header>
     <section class="hero">
@@ -9818,7 +9818,7 @@ const publicSourcePackIntakeHtml = `<!doctype html>
 <body>
   <main>
     <header>
-      <a class="brand" href="/" aria-label="SUPERMEGA.dev home"><span style="width:11px;height:11px;border-radius:3px;background:linear-gradient(135deg,#FF5C4D,#FF3B3B);box-shadow:0 0 12px rgba(255,59,59,.6);display:inline-block;flex:none"></span><span class="wm" style="letter-spacing:-0.025em"><b style="font-weight:700">supermega</b><b style="color:#5E6B87;font-weight:500">.dev</b></span></a>
+      <a class="brand" href="/" aria-label="SUPERMEGA.dev home"><span style="display:inline-flex;align-items:center;flex:none" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M6.5 8 L11 12 L6.5 16" stroke="#FF3B3B" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M12.6 16.2 L18 16.2" stroke="#FF3B3B" stroke-width="2.6" stroke-linecap="round"/></svg></span><span class="wm" style="letter-spacing:-0.025em"><b style="font-weight:700">supermega</b><b style="color:#5E6B87;font-weight:500">.dev</b></span></a>
       <a class="btn" href="/operator/">Operator console</a>
     </header>
     <section class="hero">
@@ -10032,7 +10032,7 @@ const publicPilotWorkspaceHtml = `<!doctype html>
 <body>
   <main>
     <header>
-      <a class="brand" href="/" aria-label="SUPERMEGA.dev home"><span style="width:11px;height:11px;border-radius:3px;background:linear-gradient(135deg,#FF5C4D,#FF3B3B);box-shadow:0 0 12px rgba(255,59,59,.6);display:inline-block;flex:none"></span><span class="wm" style="letter-spacing:-0.025em"><b style="font-weight:700">supermega</b><b style="color:#5E6B87;font-weight:500">.dev</b></span></a>
+      <a class="brand" href="/" aria-label="SUPERMEGA.dev home"><span style="display:inline-flex;align-items:center;flex:none" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M6.5 8 L11 12 L6.5 16" stroke="#FF3B3B" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M12.6 16.2 L18 16.2" stroke="#FF3B3B" stroke-width="2.6" stroke-linecap="round"/></svg></span><span class="wm" style="letter-spacing:-0.025em"><b style="font-weight:700">supermega</b><b style="color:#5E6B87;font-weight:500">.dev</b></span></a>
       <nav class="top-actions" aria-label="Workspace actions">
         <a class="btn" href="/operator/">Operator console</a>
         <a class="btn primary" href="/contact/">Start another pilot</a>
@@ -10456,7 +10456,7 @@ const unicornPrivacyHtml = `<!doctype html>
   <script>(function(){try{var t=localStorage.getItem('sm-theme');if(!t){t='dark';}document.documentElement.setAttribute('data-theme',t);}catch(e){}})();</script>
   <header>
     <a class="brand" href="/" aria-label="SUPERMEGA.dev home">
-      <span class="mark"><svg viewBox="0 0 64 64" width="100%" height="100%" fill="none" aria-hidden="true"><g stroke="#FF3B3B" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M35.8 10.3 A22 22 0 1 1 28.2 10.3"/><path d="M22 45 L22 26 L32 38 L42 26 L42 45" stroke-width="4"/></g><path d="M32 34.5 L33.2 37 L35.5 38 L33.2 39 L32 41.5 L30.8 39 L28.5 38 L30.8 37 Z" fill="#FF3B3B"/><path d="M32 7.6 L32.9 9.7 L35 10.3 L32.9 10.9 L32 13 L31.1 10.9 L29 10.3 L31.1 9.7 Z" fill="#FF3B3B"/></svg></span>
+      <span style="display:inline-flex;align-items:center;flex:none" aria-hidden="true"><svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M6.5 8 L11 12 L6.5 16" stroke="#FF3B3B" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M12.6 16.2 L18 16.2" stroke="#FF3B3B" stroke-width="2.6" stroke-linecap="round"/></svg></span>
       <span class="brand-text"><span class="wm" style="font-size:18px;letter-spacing:-0.025em"><b style="font-weight:700">supermega</b><b style="color:#5E6B87;font-weight:500">.dev</b></span></span>
     </a>
     <nav class="nav" aria-label="Primary">
