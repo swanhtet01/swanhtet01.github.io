@@ -49,7 +49,8 @@ async function linePost(path, body) {
  * @param {object[]} [o.messages]  raw LINE message objects (overrides `text`)
  * @returns {Promise<{ ok:boolean, requestId?:string, reason?:string }>}
  */
-export async function send({ to, text, messages } = {}) {
+export async function send(_input = {}) {
+  const { to, text, messages } = _input || {}
   if (!configured()) return { ok: false, reason: 'line_not_configured' }
   if (!to) return { ok: false, reason: 'line_missing_to' }
   const msgs = messages || [{ type: 'text', text: String(text || '').slice(0, 5000) }]
@@ -68,7 +69,8 @@ export async function send({ to, text, messages } = {}) {
  * @param {object[]} [o.messages]  raw LINE message objects (overrides `text`)
  * @returns {Promise<{ ok:boolean, requestId?:string, reason?:string }>}
  */
-export async function broadcast({ text, messages } = {}) {
+export async function broadcast(_input = {}) {
+  const { text, messages } = _input || {}
   if (!configured()) return { ok: false, reason: 'line_not_configured' }
   const msgs = messages || [{ type: 'text', text: String(text || '').slice(0, 5000) }]
   try {

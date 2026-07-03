@@ -62,7 +62,8 @@ async function wooFetch(path, options = {}) {
  * @param {number} [opts.perPage]  max products to return (1–100, default 20)
  * @returns {Promise<{ ok:boolean, products?:Array, reason?:string }>}
  */
-export async function listProducts({ perPage = 20 } = {}) {
+export async function listProducts(_input = {}) {
+  const { perPage = 20 } = _input || {}
   const params = new URLSearchParams({ per_page: String(Math.min(Math.max(1, perPage), 100)) })
   const r = await wooFetch('/products?' + params.toString(), { method: 'GET' })
   if (!r.ok) return r
@@ -77,7 +78,8 @@ export async function listProducts({ perPage = 20 } = {}) {
  * @param {string} [opts.status]   filter by status (e.g. 'processing', 'completed', 'on-hold')
  * @returns {Promise<{ ok:boolean, orders?:Array, reason?:string }>}
  */
-export async function listOrders({ perPage = 20, status } = {}) {
+export async function listOrders(_input = {}) {
+  const { perPage = 20, status } = _input || {}
   const params = new URLSearchParams({ per_page: String(Math.min(Math.max(1, perPage), 100)) })
   if (status) params.set('status', String(status))
   const r = await wooFetch('/orders?' + params.toString(), { method: 'GET' })

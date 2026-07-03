@@ -67,7 +67,8 @@ async function stripe(method, path, params, idempotencyKey) {
  * @param {string} [o.description]
  * @returns {Promise<{ id:string, url:string, ref:string|null }>}
  */
-export async function createCheckout({ amount, currency = 'usd', ref = null, description } = {}) {
+export async function createCheckout(_input = {}) {
+  const { amount, currency = 'usd', ref = null, description } = _input || {}
   if (!configured()) return { ok: false, reason: 'stripe_not_configured' }
   const cents = Math.round(Number(amount) * 100)
   if (!Number.isFinite(cents) || cents <= 0) return { ok: false, reason: 'stripe_bad_amount' }

@@ -50,7 +50,8 @@ const configured = () => {
  * @param {Array}   [payload.embeds]    Discord embed objects for rich layout (title/desc/fields/color).
  * @returns {Promise<{ ok:boolean, status?:number, reason?:string }>}
  */
-export async function send({ content, username, embeds } = {}) {
+export async function send(_input = {}) {
+  const { content, username, embeds } = _input || {}
   if (!configured()) return { ok: false, reason: 'discord_not_configured' }
   const message = String(content || '').trim()
   const hasEmbeds = Array.isArray(embeds) && embeds.length > 0

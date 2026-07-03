@@ -80,7 +80,8 @@ function buildRawMessage({ to, subject, text, from, cc, bcc }) {
  * @param {string} [o.subjectUser]  override the impersonated mailbox for this call
  * @returns {Promise<{ id:string, threadId:string }>}
  */
-export async function send({ to, subject, text, from, cc, bcc, subjectUser } = {}) {
+export async function send(_input = {}) {
+  const { to, subject, text, from, cc, bcc, subjectUser } = _input || {}
   if (!configured()) throw new Error('gmail_not_configured')
   if (!to) throw new Error('gmail_missing_to')
   const sub = subjectUser || subjectEnv()

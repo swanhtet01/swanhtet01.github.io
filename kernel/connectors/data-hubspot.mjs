@@ -57,7 +57,8 @@ async function hsFetch(path, options = {}) {
  * @param {number}  [opts.limit]  max contacts to return (default 20)
  * @returns {Promise<{ ok:boolean, contacts:Array }>}
  */
-export async function listContacts({ limit = 20 } = {}) {
+export async function listContacts(_input = {}) {
+  const { limit = 20 } = _input || {}
   if (!configured()) return { ok: false, reason: 'hubspot_not_configured' }
   const r = await hsFetch(`/crm/v3/objects/contacts?limit=${encodeURIComponent(limit)}`, { method: 'GET' })
   if (!r.ok) return r
@@ -85,7 +86,8 @@ export async function createContact(properties) {
  * @param {number}  [opts.limit]  max deals to return (default 20)
  * @returns {Promise<{ ok:boolean, deals:Array }>}
  */
-export async function listDeals({ limit = 20 } = {}) {
+export async function listDeals(_input = {}) {
+  const { limit = 20 } = _input || {}
   if (!configured()) return { ok: false, reason: 'hubspot_not_configured' }
   const r = await hsFetch(`/crm/v3/objects/deals?limit=${encodeURIComponent(limit)}`, { method: 'GET' })
   if (!r.ok) return r

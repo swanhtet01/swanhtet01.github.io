@@ -67,7 +67,8 @@ async function waveRequest(path, payload) {
  * @param {string}  [o.description] payment description shown in WavePay app
  * @returns {Promise<{ ok:boolean, qrString?:string, requestId?:string, orderId?:string, reason?:string }>}
  */
-export async function createQR({ amount, orderId, description = 'SuperMega Payment' } = {}) {
+export async function createQR(_input = {}) {
+  const { amount, orderId, description = 'SuperMega Payment' } = _input || {}
   try {
     if (!configured()) return { ok: false, reason: 'wavepay_not_configured' }
     if (!amount || !orderId) return { ok: false, reason: 'wavepay_missing_amount_or_orderId' }
@@ -106,7 +107,8 @@ export async function createQR({ amount, orderId, description = 'SuperMega Payme
  * @param {string}  o.orderId   the merchant order id passed to createQR
  * @returns {Promise<{ ok:boolean, status?:string, requestId?:string, reason?:string }>}
  */
-export async function queryPayment({ orderId } = {}) {
+export async function queryPayment(_input = {}) {
+  const { orderId } = _input || {}
   try {
     if (!configured()) return { ok: false, reason: 'wavepay_not_configured' }
     if (!orderId) return { ok: false, reason: 'wavepay_missing_orderId' }

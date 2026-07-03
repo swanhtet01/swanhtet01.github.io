@@ -31,7 +31,8 @@ const TIMEOUT   = 30000
  * @param {number}              [o.temperature=0.2]
  * @returns {Promise<{ok:boolean, text?:string, reason?:string}>}
  */
-export async function generate({ prompt, model = 'gemini-1.5-flash', media = [], maxTokens = 1024, temperature = 0.2 } = {}) {
+export async function generate(_input = {}) {
+  const { prompt, model = 'gemini-1.5-flash', media = [], maxTokens = 1024, temperature = 0.2 } = _input || {}
   if (!configured()) return { ok: false, reason: 'gemini_not_configured' }
   try {
     const parts = []
@@ -72,7 +73,8 @@ export async function generate({ prompt, model = 'gemini-1.5-flash', media = [],
  * @param {string} [o.hint]    language hint appended to the prompt, e.g. 'Burmese (Myanmar)'
  * @returns {Promise<{ok:boolean, text?:string, reason?:string}>}
  */
-export async function transcribeAudio({ b64, mimeType, hint = 'Burmese (Myanmar) or English' } = {}) {
+export async function transcribeAudio(_input = {}) {
+  const { b64, mimeType, hint = 'Burmese (Myanmar) or English' } = _input || {}
   if (!b64 || !mimeType) return { ok: false, reason: 'gemini_transcribe_missing_audio' }
   return generate({
     model: 'gemini-1.5-pro',
@@ -91,7 +93,8 @@ export async function transcribeAudio({ b64, mimeType, hint = 'Burmese (Myanmar)
  * @param {string} [o.prompt]     what to extract (defaults to 5W1H factory template)
  * @returns {Promise<{ok:boolean, text?:string, reason?:string}>}
  */
-export async function extractFromImage({ b64, mimeType = 'image/jpeg', prompt } = {}) {
+export async function extractFromImage(_input = {}) {
+  const { b64, mimeType = 'image/jpeg', prompt } = _input || {}
   const defaultPrompt = `Read this factory image (whiteboard, form, or document).
 Extract: what happened, where, who is responsible, when, and any numbers.
 Return a JSON object with keys: what, where, who, when, numbers (array of {label,value,unit}), notes.

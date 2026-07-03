@@ -73,7 +73,8 @@ async function cbRequest(path, payload) {
  * @param {string}  [o.callbackUrl] redirect URL after payment
  * @returns {Promise<{ ok:boolean, qrCode?:string, orderId?:string, reason?:string }>}
  */
-export async function createQR({ amount, orderId, title = 'SUPERMEGA Payment', callbackUrl = '' } = {}) {
+export async function createQR(_input = {}) {
+  const { amount, orderId, title = 'SUPERMEGA Payment', callbackUrl = '' } = _input || {}
   if (!configured()) return { ok: false, reason: 'cbpay_not_configured' }
   if (!amount || !orderId) return { ok: false, reason: 'cbpay_missing_amount_or_orderId' }
   try {
@@ -108,7 +109,8 @@ export async function createQR({ amount, orderId, title = 'SUPERMEGA Payment', c
  * @param {string}  o.orderId  the merchant order ID passed to createQR
  * @returns {Promise<{ ok:boolean, status?:string, transactionId?:string, reason?:string }>}
  */
-export async function queryPayment({ orderId } = {}) {
+export async function queryPayment(_input = {}) {
+  const { orderId } = _input || {}
   if (!configured()) return { ok: false, reason: 'cbpay_not_configured' }
   if (!orderId) return { ok: false, reason: 'cbpay_missing_orderId' }
   try {

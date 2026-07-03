@@ -74,7 +74,8 @@ const configured = () => Boolean(merchantId() && secretKey())
  * @param {string}  [order.description]   short order description shown on the hosted payment page.
  * @returns {Promise<{ ok:boolean, reason?:string, token?:string, webPaymentUrl?:string }>}
  */
-export async function createPayment({ invoiceNo, amount, currencyCode, description } = {}) {
+export async function createPayment(_input = {}) {
+  const { invoiceNo, amount, currencyCode, description } = _input || {}
   if (!configured()) return { ok: false, reason: '2c2p_not_configured' }
 
   const invoice = String(invoiceNo || '').trim()

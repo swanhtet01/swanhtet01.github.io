@@ -55,7 +55,8 @@ const configured = () => {
  * @param {number}  [opts.max_tokens=700]      cap on generated tokens.
  * @returns {Promise<{ ok:true, text:string, model?:string, usage?:object } | { ok:false, reason:string }>}
  */
-export async function complete({ system, prompt, model = 'mistral-small-latest', max_tokens = 700 } = {}) {
+export async function complete(_input = {}) {
+  const { system, prompt, model = 'mistral-small-latest', max_tokens = 700 } = _input || {}
   if (!configured()) return { ok: false, reason: 'mistral_not_configured' }
   const user = String(prompt || '').trim()
   if (!user) return { ok: false, reason: 'mistral_empty_prompt' }

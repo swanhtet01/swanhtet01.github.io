@@ -83,7 +83,8 @@ async function kbzRequest(endpoint, payload) {
  * @param {string}  [o.callbackUrl]  browser redirect after customer pays (optional deeplink)
  * @returns {Promise<{ ok:boolean, qrCode?:string, prepayId?:string, orderId?:string, reason?:string }>}
  */
-export async function createQR({ amount, orderId, title = 'SuperMega Payment', callbackUrl = '' } = {}) {
+export async function createQR(_input = {}) {
+  const { amount, orderId, title = 'SuperMega Payment', callbackUrl = '' } = _input || {}
   try {
     if (!configured()) return { ok: false, reason: 'kbzpay_not_configured' }
     if (!amount || !orderId) return { ok: false, reason: 'kbzpay_missing_amount_or_orderId' }
@@ -124,7 +125,8 @@ export async function createQR({ amount, orderId, title = 'SuperMega Payment', c
  * @param {string}  o.orderId   the merchant order id passed to createQR
  * @returns {Promise<{ ok:boolean, status?:string, tradeNo?:string, reason?:string }>}
  */
-export async function queryPayment({ orderId } = {}) {
+export async function queryPayment(_input = {}) {
+  const { orderId } = _input || {}
   try {
     if (!configured()) return { ok: false, reason: 'kbzpay_not_configured' }
     if (!orderId) return { ok: false, reason: 'kbzpay_missing_orderId' }

@@ -37,7 +37,8 @@ function headers() {
  * @param {number}  [opts.timeout]    ms, default 20000
  * @returns {Promise<{ ok:boolean, text:string, raw:object, reason?:string }>}
  */
-export async function complete({ model = defaultModel(), messages, maxTokens = 1024, timeout = 20000 } = {}) {
+export async function complete(_input = {}) {
+  const { model = defaultModel(), messages, maxTokens = 1024, timeout = 20000 } = _input || {}
   if (!configured()) return { ok: false, reason: 'openrouter_not_configured' }
   if (!Array.isArray(messages) || !messages.length) return { ok: false, reason: 'openrouter_empty_messages' }
 

@@ -68,7 +68,8 @@ function timePoint(value, timeZone) {
  * @param {string} [o.subject]     impersonate this user
  * @returns {Promise<{ id:string, htmlLink:string, status:string }>}
  */
-export async function createEvent({ summary, start, end, attendees, description, calendarId, timeZone, subject } = {}) {
+export async function createEvent(_input = {}) {
+  const { summary, start, end, attendees, description, calendarId, timeZone, subject } = _input || {}
   if (!configured()) throw new Error('calendar_not_configured')
   if (!summary || !start || !end) throw new Error('calendar_missing_args') // need title + start + end
   const calId = calendarId || defaultCalendarId()
@@ -92,7 +93,8 @@ export async function createEvent({ summary, start, end, attendees, description,
  * @param {string} [o.subject]
  * @returns {Promise<{ items:Array }>}
  */
-export async function listEvents({ calendarId, maxResults = 10, timeMin, subject } = {}) {
+export async function listEvents(_input = {}) {
+  const { calendarId, maxResults = 10, timeMin, subject } = _input || {}
   if (!configured()) throw new Error('calendar_not_configured')
   const calId = calendarId || defaultCalendarId()
   const json = await calFetch('GET', `/calendars/${encodeURIComponent(calId)}/events`, {

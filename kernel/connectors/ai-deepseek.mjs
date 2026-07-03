@@ -62,7 +62,8 @@ function headers() {
  * @param {number}  [opts.timeout]     ms, default 20000
  * @returns {Promise<{ ok:boolean, text:string, usage:object, model:string, reason?:string }>}
  */
-export async function complete({ system, prompt, model = 'deepseek-chat', max_tokens = 700, timeout = 20000 } = {}) {
+export async function complete(_input = {}) {
+  const { system, prompt, model = 'deepseek-chat', max_tokens = 700, timeout = 20000 } = _input || {}
   if (!configured()) return { ok: false, reason: 'deepseek_not_configured' }
   const userPrompt = String(prompt || '').trim()
   if (!userPrompt) return { ok: false, reason: 'deepseek_empty_prompt' }

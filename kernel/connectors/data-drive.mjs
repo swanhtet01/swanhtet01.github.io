@@ -179,7 +179,8 @@ export async function ensureFolder(name, { parentId, driveId, shareWith, shareRo
  * @param {string} [o.convertTo]   target Google type, e.g. 'application/vnd.google-apps.document'
  * @returns {Promise<{ id:string, url:string, updated:boolean }>}
  */
-export async function uploadOrUpdate({ name, parentId, content, mimeType = 'text/plain', convertTo } = {}) {
+export async function uploadOrUpdate(_input = {}) {
+  const { name, parentId, content, mimeType = 'text/plain', convertTo } = _input || {}
   if (!configured()) throw new Error('drive_not_configured')
   if (!name || content == null) throw new Error('drive_missing_args')
   // Match an existing file by name in the folder. When converting (Google Doc), the stored mime is

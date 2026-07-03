@@ -81,7 +81,8 @@ function clampTimeout(t) {
  * @param {number}  [o.timeout]     timeout in ms (1000–30000, default 10000)
  * @returns {Promise<{ ok:boolean, status:number, headers:object, body:any, text:string, reason?:string }>}
  */
-export async function request({ url, method = 'GET', headers = {}, body, timeout } = {}) {
+export async function request(_input = {}) {
+  const { url, method = 'GET', headers = {}, body, timeout } = _input || {}
   const urlErr = await validateUrl(url)
   if (urlErr) return { ok: false, reason: `http_invalid_url: ${urlErr}` }
 

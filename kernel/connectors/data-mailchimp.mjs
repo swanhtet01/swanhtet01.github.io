@@ -73,7 +73,8 @@ const configured = () => {
  * @param {string}  [payload.status]  subscription status: 'subscribed' (default) | 'pending' | etc.
  * @returns {Promise<{ ok:boolean, status?:number, id?:string, reason?:string }>}
  */
-export async function addSubscriber({ listId, email, status = 'subscribed' } = {}) {
+export async function addSubscriber(_input = {}) {
+  const { listId, email, status = 'subscribed' } = _input || {}
   if (!configured()) return { ok: false, reason: 'mailchimp_not_configured' }
   const id = String(listId || '').trim()
   const addr = String(email || '').trim()

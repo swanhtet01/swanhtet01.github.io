@@ -40,7 +40,8 @@ function headers() {
  * @param {number}  [o.timeout]    ms, default 10000
  * @returns {Promise<{ ok:boolean, text?:string, raw?:object, reason?:string }>}
  */
-export async function complete({ model = defaultModel(), system, messages, maxTokens = 1024, timeout = 10000 } = {}) {
+export async function complete(_input = {}) {
+  const { model = defaultModel(), system, messages, maxTokens = 1024, timeout = 10000 } = _input || {}
   if (!configured()) return { ok: false, reason: 'anthropic_not_configured' }
   const turns = typeof messages === 'string'
     ? [{ role: 'user', content: messages }]
