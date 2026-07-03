@@ -168,7 +168,7 @@ const publicMachineHtml = `<!doctype html>
     <style>
       :root { color-scheme: dark; --bg:#07111f; --panel:rgba(255,255,255,.075); --line:rgba(255,255,255,.15); --text:#f6fbff; --muted:#a9b8c7; --cyan:#FF5C4D; --blue:#FF3B3B; --green:#8cf0b8; --ink:#06101d; }
       * { box-sizing: border-box; }
-      body { margin:0; min-height:100vh; background: radial-gradient(circle at 80% 8%, rgba(114,243,255,.2), transparent 28rem), radial-gradient(circle at 8% 24%, rgba(79,140,255,.18), transparent 28rem), linear-gradient(135deg,#07111f,#02050b); color:var(--text); font-family:"Aptos","Segoe UI Variable","Segoe UI",system-ui,sans-serif; -webkit-font-smoothing: antialiased; }
+      body { margin:0; min-height:100vh; background: radial-gradient(circle at 80% 8%, rgba(114,243,255,.2), transparent 28rem), radial-gradient(circle at 8% 24%, rgba(79,140,255,.18), transparent 28rem), linear-gradient(135deg,#07111f,#02050b); color:var(--text); font-family:"Inter","Segoe UI",system-ui,sans-serif; -webkit-font-smoothing: antialiased; }
       main { width:min(1120px, calc(100% - 32px)); margin:0 auto; padding:28px 0 56px; }
       header { display:flex; align-items:center; justify-content:space-between; gap:18px; margin-bottom:28px; }
       a { color:inherit; text-decoration:none; }
@@ -674,7 +674,7 @@ function publicToolsHtmlFromCatalog(catalog, agentRadar = {}, socialOAuth = {}) 
     <style>
       :root { color-scheme: dark; --bg: #0b0f14; --panel: rgba(255,255,255,0.07); --line: rgba(255,255,255,0.14); --text: #f7fafc; --muted: #aeb8c2; --green: #8cf0b8; --gold: #f2c86d; --ink: #08100d; }
       * { box-sizing: border-box; }
-      body { margin: 0; min-height: 100vh; color: var(--text); background: #0b0f14; font-family: "Aptos", "Segoe UI Variable", "Segoe UI", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+      body { margin: 0; min-height: 100vh; color: var(--text); background: #0b0f14; font-family: "Inter", "Segoe UI", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
       a { color: inherit; text-decoration: none; }
       .wrap { width: min(1180px, calc(100% - 32px)); margin: 0 auto; }
       header { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 22px 0; border-bottom: 1px solid var(--line); }
@@ -823,7 +823,7 @@ function publicValueHtmlFromEngine(engine) {
     <style>
       :root { color-scheme: dark; --bg: #08100d; --panel: rgba(255,255,255,0.07); --line: rgba(255,255,255,0.14); --text: #f7fbf6; --muted: #aab8af; --green: #8cf0b8; --blue: #FF3B3B; --ink: #06100c; }
       * { box-sizing: border-box; }
-      body { margin: 0; min-height: 100vh; background: #08100d; color: var(--text); font-family: "Aptos", "Segoe UI Variable", "Segoe UI", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+      body { margin: 0; min-height: 100vh; background: #08100d; color: var(--text); font-family: "Inter", "Segoe UI", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
       a { color: inherit; text-decoration: none; }
       .wrap { width: min(1180px, calc(100% - 32px)); margin: 0 auto; }
       header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 22px 0; border-bottom: 1px solid var(--line); }
@@ -970,7 +970,7 @@ function publicIntakeHtmlFromRouter(router) {
     <style>
       :root { color-scheme: dark; --bg: #0b1018; --panel: rgba(255,255,255,0.07); --line: rgba(255,255,255,0.14); --text: #f7fbff; --muted: #aab6c3; --green: #8cf0b8; --blue: #FF3B3B; --ink: #06100c; }
       * { box-sizing: border-box; }
-      body { margin: 0; min-height: 100vh; background: #0b1018; color: var(--text); font-family: "Aptos", "Segoe UI Variable", "Segoe UI", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+      body { margin: 0; min-height: 100vh; background: #0b1018; color: var(--text); font-family: "Inter", "Segoe UI", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
       a { color: inherit; text-decoration: none; }
       .wrap { width: min(1180px, calc(100% - 32px)); margin: 0 auto; }
       header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 22px 0; border-bottom: 1px solid var(--line); }
@@ -1218,7 +1218,7 @@ function publicProofHtmlFromPacks(proof) {
     <style>
       :root { color-scheme: dark; --bg: #0d1117; --panel: rgba(255,255,255,0.065); --line: rgba(255,255,255,0.14); --text: #f8fbff; --muted: #aeb9c5; --green: #8cf0b8; --gold: #f2c86d; --blue: #91d7ff; }
       * { box-sizing: border-box; }
-      body { margin: 0; min-height: 100vh; background: #0d1117; color: var(--text); font-family: "Aptos", "Segoe UI Variable", "Segoe UI", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+      body { margin: 0; min-height: 100vh; background: #0d1117; color: var(--text); font-family: "Inter", "Segoe UI", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
       a { color: inherit; text-decoration: none; }
       .wrap { width: min(1180px, calc(100% - 32px)); margin: 0 auto; }
       header { display: flex; justify-content: space-between; gap: 16px; align-items: center; padding: 20px 0 34px; }
@@ -1331,7 +1331,7 @@ function renderPublicPricingHtml() {
           radial-gradient(circle at 80% 2%, rgba(233, 185, 73, 0.18), transparent 30rem),
           radial-gradient(circle at 4% 18%, rgba(18, 79, 255, 0.12), transparent 26rem),
           linear-gradient(180deg, #fbfcfb 0%, var(--cream) 58%, #e8f0ed 100%);
-        font-family: "Aptos", "Segoe UI Variable", "Segoe UI", system-ui, -apple-system, sans-serif;
+        font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
         -webkit-font-smoothing: antialiased;
       }
       a { color: inherit; text-decoration: none; }
@@ -1522,7 +1522,7 @@ const publicCampaignRedirectHtml = `<!doctype html>
     <style>
       :root { color-scheme: dark; --text: #f7fbff; --muted: #a8b8ca; --cyan: #FF3B3B; --blue: #FF3B3B; --ink: #06101d; }
       * { box-sizing: border-box; }
-      body { margin: 0; min-height: 100svh; display: grid; place-items: center; padding: 24px; background-color: #07111f; background-image: radial-gradient(circle at 76% 18%, rgba(255,59,59,0.18), transparent 24rem), radial-gradient(circle at 8% 84%, rgba(79,140,255,0.18), transparent 26rem), linear-gradient(135deg, #07111f, #02050b 72%); color: var(--text); font-family: "Aptos", "Segoe UI Variable", "Segoe UI", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+      body { margin: 0; min-height: 100svh; display: grid; place-items: center; padding: 24px; background-color: #07111f; background-image: radial-gradient(circle at 76% 18%, rgba(255,59,59,0.18), transparent 24rem), radial-gradient(circle at 8% 84%, rgba(79,140,255,0.18), transparent 26rem), linear-gradient(135deg, #07111f, #02050b 72%); color: var(--text); font-family: "Inter", "Segoe UI", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
       main { width: min(640px, 100%); border: 1px solid rgba(217,247,255,0.16); border-radius: 34px; background: rgba(255,255,255,0.07); box-shadow: inset 0 1px 0 rgba(255,255,255,0.12), 0 36px 100px rgba(0,0,0,0.36); padding: clamp(28px, 7vw, 54px); }
       .brand { display: inline-flex; align-items: center; gap: 12px; color: var(--cyan); font-size: 12px; font-weight: 950; letter-spacing: 0.22em; text-transform: uppercase; }
       .mark { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 14px; overflow: hidden; background: #07111f; border: 1px solid rgba(255,255,255,0.16); }
@@ -1589,7 +1589,7 @@ const unicornShellStyle = `
         --aqua: #d9895f;
         --navy: #2a241c;
         --shadow: 0 34px 90px rgba(42, 36, 28, 0.13);
-        --font-sans: "Inter", "Aptos", "Segoe UI Variable", "Segoe UI", system-ui, -apple-system, sans-serif;
+        --font-sans: "Inter", "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
         --font-serif: "Fraunces", "Georgia", "Cambria", ui-serif, serif;
       }
       * { box-sizing: border-box; }
@@ -9275,7 +9275,7 @@ const publicProofReviewHtml = `<!doctype html>
   <style>
     :root { color-scheme: light; --paper:#f4efe6; --ink:#1b1815; --muted:#6f675d; --line:rgba(27,24,21,.16); --panel:#fffaf1; --panel2:#ebe2d3; --accent:#FF3B3B; --green:#1c8a5a; --red:#a14432; }
     * { box-sizing: border-box; }
-    body { margin: 0; min-height: 100vh; background: var(--paper); color: var(--ink); font-family: "Aptos", "Segoe UI Variable", "Segoe UI", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+    body { margin: 0; min-height: 100vh; background: var(--paper); color: var(--ink); font-family: "Inter", "Segoe UI", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
     main { width: min(1180px, calc(100% - 28px)); margin: 0 auto; padding: 24px 0 54px; }
     header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px 0 22px; border-bottom: 1px solid var(--line); }
     .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: inherit; font-weight: 950; }
@@ -9446,7 +9446,7 @@ const publicPaymentProofHtml = `<!doctype html>
   <style>
     :root { color-scheme: light; --paper:#f4efe6; --ink:#1b1815; --muted:#6f675d; --line:rgba(27,24,21,.16); --panel:#fffaf1; --panel2:#ebe2d3; --accent:#FF3B3B; --green:#1c8a5a; --red:#a14432; }
     * { box-sizing: border-box; }
-    body { margin: 0; min-height: 100vh; background: var(--paper); color: var(--ink); font-family: "Aptos", "Segoe UI Variable", "Segoe UI", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+    body { margin: 0; min-height: 100vh; background: var(--paper); color: var(--ink); font-family: "Inter", "Segoe UI", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
     main { width: min(1180px, calc(100% - 28px)); margin: 0 auto; padding: 24px 0 54px; }
     header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px 0 22px; border-bottom: 1px solid var(--line); }
     .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: inherit; font-weight: 950; }
@@ -9621,7 +9621,7 @@ const publicSourcePackIntakeHtml = `<!doctype html>
   <style>
     :root { color-scheme: light; --paper:#f4efe6; --ink:#1b1815; --muted:#6f675d; --line:rgba(27,24,21,.16); --panel:#fffaf1; --panel2:#ebe2d3; --accent:#FF3B3B; --green:#1c8a5a; --red:#a14432; }
     * { box-sizing: border-box; }
-    body { margin: 0; min-height: 100vh; background: var(--paper); color: var(--ink); font-family: "Aptos", "Segoe UI Variable", "Segoe UI", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+    body { margin: 0; min-height: 100vh; background: var(--paper); color: var(--ink); font-family: "Inter", "Segoe UI", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
     main { width: min(1180px, calc(100% - 28px)); margin: 0 auto; padding: 24px 0 54px; }
     header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px 0 22px; border-bottom: 1px solid var(--line); }
     .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: inherit; font-weight: 950; }
@@ -9817,7 +9817,7 @@ const publicPilotWorkspaceHtml = `<!doctype html>
   <style>
     :root { color-scheme: light; --paper:#f4efe6; --ink:#1b1815; --muted:#6f675d; --line:rgba(27,24,21,.16); --panel:#fffaf1; --panel2:#ebe2d3; --accent:#FF3B3B; --green:#1c8a5a; --blue:#255f99; }
     * { box-sizing: border-box; }
-    body { margin: 0; min-height: 100vh; background: var(--paper); color: var(--ink); font-family: "Aptos", "Segoe UI Variable", "Segoe UI", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+    body { margin: 0; min-height: 100vh; background: var(--paper); color: var(--ink); font-family: "Inter", "Segoe UI", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
     a { color: inherit; }
     main { width: min(1180px, calc(100% - 28px)); margin: 0 auto; padding: 24px 0 56px; }
     header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px 0 22px; border-bottom: 1px solid var(--line); }
