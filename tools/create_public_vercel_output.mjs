@@ -6040,7 +6040,7 @@ async function copyPublicStatic(source, destination, rootSource = source) {
 }
 
 async function prunePublicStaticRoot() {
-  const allowedRootDirs = new Set(['assets', 'site', 'social', 'products', 'agent-templates', 'app', 'start', 'contact', 'offers', 'work', 'operator', 'machine', 'card', 'c', 'demo', 'ai-agents', 'privacy'])
+  const allowedRootDirs = new Set(['assets', 'site', 'social', 'products', 'agent-templates', 'app', 'start', 'contact', 'offers', 'work', 'operator', 'machine', 'card', 'c', 'demo', 'ai-agents', 'privacy', 'megaos-preview'])
   for (const entry of await readdir(staticDir, { withFileTypes: true }).catch(() => [])) {
     if (!entry.isDirectory() || allowedRootDirs.has(entry.name)) continue
     await rm(resolve(staticDir, entry.name), { recursive: true, force: true, maxRetries: 8, retryDelay: 250 })
@@ -10392,6 +10392,19 @@ await mkdir(resolve(staticDir, 'machine'), { recursive: true })
 await writeFile(resolve(staticDir, 'machine', 'index.html'), normalizePublicProductNames(publicMachineHtml), 'utf8')
 await mkdir(resolve(staticDir, 'card'), { recursive: true })
 await writeFile(resolve(staticDir, 'card', 'index.html'), publicCardHtml, 'utf8')
+// MegaOS Command Center — dark-direction preview (ADDITIVE + noindex). Serves the committed
+// reference page from brand/megaos/ so the chosen new brand is viewable as a REAL site page at
+// /megaos-preview/, not just a claude.ai artifact. Touches no existing page. NOT the live brand
+// yet — the full rebrand rollout is held for the founder's explicit go on the SUPERMEGA→MegaOS name.
+await mkdir(resolve(staticDir, 'megaos-preview'), { recursive: true })
+const megaosPreviewBody = await readFile(resolve(root, 'brand', 'megaos', 'reference-command-home.html'), 'utf8').catch(() => '')
+if (megaosPreviewBody) {
+  await writeFile(
+    resolve(staticDir, 'megaos-preview', 'index.html'),
+    `<!doctype html>\n<html lang="en">\n<head>\n<meta charset="UTF-8" />\n<meta name="viewport" content="width=device-width, initial-scale=1.0" />\n<meta name="robots" content="noindex,nofollow" />\n<title>MegaOS — dark direction preview</title>\n</head>\n<body>\n${megaosPreviewBody}\n</body>\n</html>\n`,
+    'utf8',
+  )
+}
 // Demo hub (source lives in C:/sm-site, outside OneDrive) served at /demo/
 await mkdir(resolve(staticDir, 'demo'), { recursive: true })
 await cp('C:/sm-site/supermega-demo/index.html', resolve(staticDir, 'demo', 'index.html'), { force: true }).catch(() => undefined)
