@@ -1,15 +1,15 @@
 <style>
   :root{
-    --bg:#16181D; --surface:#1C1F27; --elev:#242833; --line:rgba(255,255,255,.07);
-    --text:#EAECEF; --muted:#989FAA; --dim:#666D77;
-    --accent:#4F86F7; --accent-soft:rgba(79,134,247,.14); --live:#3FBF8F;
+    --bg:#0A0E1C; --surface:#111731; --elev:#1A2240; --line:rgba(148,164,210,.12);
+    --text:#EAEEF7; --muted:#93A0BC; --dim:#5E6B87;
+    --accent:#FF3B3B; --accent-soft:rgba(255,59,59,.15); --live:#3FBF8F;
     --sans:system-ui,"Segoe UI",Roboto,"Helvetica Neue",sans-serif;
     --disp:"Space Grotesk",system-ui,"Segoe UI",sans-serif;
     --wrap:1040px;
   }
   *{box-sizing:border-box}
   body{margin:0}
-  .app{background:var(--bg);color:var(--text);font-family:var(--sans);line-height:1.55;-webkit-font-smoothing:antialiased}
+  .app{background:var(--bg);color:var(--text);font-family:var(--sans);line-height:1.55;-webkit-font-smoothing:antialiased;background-image:radial-gradient(ellipse at 84% 6%, rgba(255,59,59,0.12), transparent 34rem), radial-gradient(ellipse at 3% 96%, rgba(43,74,160,0.24), transparent 36rem)}
   .wrap{max-width:var(--wrap);margin:0 auto;padding:0 24px}
   h1,h2{margin:0;text-wrap:balance}
   p{margin:0}
@@ -17,7 +17,7 @@
   :focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:5px}
 
   .brand{font-family:var(--disp);font-weight:700;letter-spacing:-.025em;font-size:18px;display:inline-flex;align-items:center}
-  .brand .dot{width:10px;height:10px;border-radius:3px;background:linear-gradient(135deg,#63A0FF,#4F86F7);box-shadow:0 0 11px rgba(79,134,247,.55);margin-right:11px}
+  .brand .dot{width:10px;height:10px;border-radius:3px;background:linear-gradient(135deg,#FF5C4D,#FF3B3B);box-shadow:0 0 12px rgba(255,59,59,.6);margin-right:11px}
   .brand b{font-weight:700}
   .brand span{color:var(--dim);font-weight:500}
 

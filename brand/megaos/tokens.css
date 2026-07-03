@@ -1,33 +1,52 @@
-/* supermega.dev — design tokens (Graphite-Dark, resolved 2026-07-03).
- * Founder direction: dark but PROFESSIONAL (not neon), minimal text, simple plain English for a
- * Myanmar audience (in English), de-emphasise agents/backend/payments, connectors shown generically,
- * not location-specific. The product is "the app" at app.supermega.dev.
+/* supermega.dev — design tokens (Void Blue system, resolved 2026-07-03).
  *
- * Graphite-Dark is the shared design system across all three verticals (Retail/Factory/LMS).
+ * FOUNDER DIRECTION (all agents pivot to this):
+ *   - Void Blue is the NATIVE base colour of the company (deep space-navy dark ground). Constant everywhere.
+ *   - Each PRODUCT gets ONE accent colour on that shared void-blue base. The Retail app (app.supermega.dev)
+ *     = FIRE RED. The base stays; the accent tells you which product you're in.
+ *   - Dark, professional, minimal text, simple plain English for a Myanmar audience (in English).
+ *     De-emphasise agents/backend/payments; connectors shown generically; not location-specific.
+ *
+ * Domain model (recommended): ONE unified app at app.supermega.dev for the whole suite; the accent
+ * shifts by product/workspace (one login, one bill, suite network effects). Marketing can live on
+ * supermega.dev per vertical. Subdomains only if a product must stand fully alone.
+ *
  * Production fonts: Space Grotesk (display/wordmark), Inter (body). Accent is RATIONED (CTA + live only).
  */
 
 :root {
-  --sm-bg:         #16181D; /* Graphite ground — charcoal, not pure black */
-  --sm-surface:    #1C1F27; /* cards, nav */
-  --sm-elev:       #242833; /* raised rows/cards */
-  --sm-text:       #EAECEF; /* soft white */
-  --sm-muted:      #989FAA;
-  --sm-dim:        #666D77; /* labels only */
-  --sm-accent:     #4F86F7; /* calm professional azure — the ONE accent, rationed to CTA + focus */
-  --sm-accent-soft:rgba(79,134,247,.14);
-  --sm-live:       #3FBF8F; /* muted green — live/success status only */
-  --sm-line:       rgba(255,255,255,.07); /* hairline borders carry structure */
+  /* ---- Void Blue base (shared across ALL products) ---- */
+  --sm-bg:         #0A0E1C; /* Void Blue — deep space navy ground */
+  --sm-surface:    #111731; /* cards, nav */
+  --sm-elev:       #1A2240; /* raised rows/cards */
+  --sm-text:       #EAEEF7; /* cool white */
+  --sm-muted:      #93A0BC; /* blue-grey */
+  --sm-dim:        #5E6B87;
+  --sm-line:       rgba(148,164,210,.12); /* faint blue hairline — borders carry structure */
+  --sm-live:       #3FBF8F; /* muted green — live/success status (complements the red accent) */
   --sm-radius:     8px;
   --sm-radius-card:14px;
+
+  /* ---- Per-product ACCENT (default = Retail app = Fire Red) ---- */
+  --sm-accent:     #FF3B3B; /* Fire Red — retail */
+  --sm-accent-2:   #FF5C4D; /* lighter fire, for the logo-dot gradient */
+  --sm-accent-soft:rgba(255,59,59,.15);
 
   --sm-display: "Space Grotesk", system-ui, "Segoe UI", sans-serif;
   --sm-body:    system-ui, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
 }
 
+/* Swap ONLY these three per product; base stays void blue.
+ *   Retail  (app.supermega.dev)  →  --sm-accent:#FF3B3B  (Fire Red)      [live]
+ *   Factory / ERP                →  --sm-accent:#F59E1B  (Amber, proposed) — industrial
+ *   LMS / Learning               →  --sm-accent:#22C58B  (Green, proposed) — growth
+ * (ERP/LMS accents are proposals — founder to confirm.) Apply with [data-product="erp"] etc. */
+:root[data-product="erp"]   { --sm-accent:#F59E1B; --sm-accent-2:#FFB74D; --sm-accent-soft:rgba(245,158,27,.15); }
+:root[data-product="lms"]   { --sm-accent:#22C58B; --sm-accent-2:#4BE0A8; --sm-accent-soft:rgba(34,197,139,.15); }
+
 /* shared primitives */
-.sm-brand { font-family: var(--sm-display); font-weight: 700; letter-spacing: -.02em; display: inline-flex; align-items: center; gap: 9px; }
-.sm-brand .dot { width: 9px; height: 9px; border-radius: 3px; background: var(--sm-accent); }
+.sm-brand { font-family: var(--sm-display); font-weight: 700; letter-spacing: -.025em; display: inline-flex; align-items: center; }
+.sm-brand .dot { width: 10px; height: 10px; border-radius: 3px; background: linear-gradient(135deg, var(--sm-accent-2), var(--sm-accent)); box-shadow: 0 0 12px color-mix(in srgb, var(--sm-accent) 60%, transparent); margin-right: 11px; }
 .sm-brand span { color: var(--sm-dim); font-weight: 500; }
 
 .sm-btn { display: inline-flex; align-items: center; gap: 8px; border-radius: var(--sm-radius); padding: 10px 18px; font-weight: 600; font-size: 14px; cursor: pointer; border: 1px solid transparent; font-family: var(--sm-body); }
@@ -36,10 +55,5 @@
 
 .sm-dot-live { width: 8px; height: 8px; border-radius: 50%; background: var(--sm-live); box-shadow: 0 0 7px var(--sm-live); display: inline-block; }
 
-/* Voice rules (copy is design material):
- * - Plain, simple English a Myanmar shop owner reads easily. Short sentences.
- * - No hype, no jargon, no "AI/agents/kernel/connectors/backend". Say the plain thing.
- * - Don't lead with payments or "built-in X". Keep feature claims open and generic.
- * - Not location-specific (no "Yangon"). Broad.
- * - It's "the app" / supermega.dev — not a heavy product sub-brand.
- */
+/* Voice rules: plain simple English a Myanmar shop owner reads easily. Short sentences. No hype, no jargon,
+ * no "AI/agents/kernel/connectors/backend". Don't lead with payments. Not location-specific. It's "the app". */
