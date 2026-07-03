@@ -51,7 +51,8 @@ const configured = () => token().length > 0
  * @param {string}  [payload.path]  the folder path to list ('' = root; e.g. '/exports'). Defaults to ''.
  * @returns {Promise<{ ok:boolean, status?:number, entries?:Array<{name:string,path:string,type:string}>, reason?:string }>}
  */
-export async function listFolder({ path = '' } = {}) {
+export async function listFolder(payload = {}) {
+  const { path = '' } = payload || {}
   if (!configured()) return { ok: false, reason: 'dropbox_not_configured' }
   // Root is the empty string in Dropbox; any other value is passed through as-is.
   const folder = String(path == null ? '' : path)

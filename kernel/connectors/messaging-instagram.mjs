@@ -57,7 +57,8 @@ const configured = () => Boolean(token() && businessId())
  * @param {string}  [payload.text]         the message text to send (required).
  * @returns {Promise<{ ok:boolean, status?:number, id?:string, reason?:string }>}
  */
-export async function send({ recipientId, text } = {}) {
+export async function send(args = {}) {
+  const { recipientId, text } = args || {}
   if (!configured()) return { ok: false, reason: 'messaging-instagram_not_configured' }
   const to = String(recipientId || '').trim()
   const body = String(text || '')

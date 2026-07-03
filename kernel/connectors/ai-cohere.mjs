@@ -47,7 +47,8 @@ const configured = () => apiKey().length > 0
  * @param {number}   [payload.maxTokens]  max output tokens (default 1024).
  * @returns {Promise<{ ok:boolean, status?:number, id?:string, text?:string, reason?:string }>}
  */
-export async function chat({ model = 'command-r-plus', messages, maxTokens = 1024 } = {}) {
+export async function chat(payload = {}) {
+  const { model = 'command-r-plus', messages, maxTokens = 1024 } = payload || {}
   if (!configured()) return { ok: false, reason: 'ai-cohere_not_configured' }
   if (!Array.isArray(messages) || messages.length === 0) {
     return { ok: false, reason: 'ai-cohere_missing_messages' }

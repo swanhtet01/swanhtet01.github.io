@@ -63,7 +63,8 @@ function authHeaders() {
  * @param {number} [payload.page]  1-based page of results to fetch (default 1).
  * @returns {Promise<{ ok:boolean, status?:number, contacts?:Array<{id:string,name:string}>, reason?:string }>}
  */
-export async function listContacts({ page = 1 } = {}) {
+export async function listContacts(payload = {}) {
+  const { page = 1 } = payload || {}
   if (!configured()) return { ok: false, reason: 'data-xero_not_configured' }
   const p = Number(page) || 1
 

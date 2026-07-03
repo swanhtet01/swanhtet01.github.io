@@ -47,7 +47,8 @@ const configured = () => Boolean(apiKey())
  * @param {number}   [payload.maxTokens]  max tokens to generate (default 1024, mapped to max_tokens).
  * @returns {Promise<{ ok:boolean, status?:number, id?:string, text?:string, reason?:string }>}
  */
-export async function complete({ model = 'llama-3.3-70b-versatile', messages, maxTokens = 1024 } = {}) {
+export async function complete(payload = {}) {
+  const { model = 'llama-3.3-70b-versatile', messages, maxTokens = 1024 } = payload || {}
   if (!configured()) return { ok: false, reason: 'ai-groq_not_configured' }
   if (!Array.isArray(messages) || messages.length === 0) return { ok: false, reason: 'ai-groq_missing_messages' }
 
