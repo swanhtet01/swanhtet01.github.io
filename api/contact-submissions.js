@@ -866,6 +866,15 @@ function buildSourceToScreenOrder(record = {}) {
     paid_upgrade_trigger: 'owner_approves_first_proof_pilot',
     approval_gate: 'owner_approval_required_before_send_write_payment',
   }
+  const executionRoute = {
+    crew_slug: 'source-to-screen-pilot',
+    crew_name: 'Source-to-Screen Pilot',
+    minimum_plan: 'pilot',
+    route_status: 'paid_pilot_required',
+    free_fallback: 'browser-only draft and order packet',
+    paid_pilot_scope: 'Turn the approved Source-to-Screen packet into a source-traced first proof with an owner approval queue.',
+    first_run_mode: 'approval_only',
+  }
   const resolvedWorkcellName = workcellName || workcellId || 'Source-to-Screen workcell'
   const resolvedProofTarget = proofTarget || record.first_proof_target || record.first_output || 'Confirm first proof target from Source-to-Screen draft.'
   const resolvedPacket = orderPacket || [
@@ -887,6 +896,7 @@ function buildSourceToScreenOrder(record = {}) {
     proof_target: resolvedProofTarget,
     free_load_policy: freeLoadPolicy,
     cost_boundary: costBoundary,
+    execution_route: executionRoute,
     order_packet: resolvedPacket,
     external_action_state: 'blocked_until_owner_approval',
     connector_write_state: 'blocked_until_owner_approval',

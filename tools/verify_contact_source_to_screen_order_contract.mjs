@@ -71,6 +71,15 @@ assert.deepEqual(sourceRequest.source_to_screen_order.cost_boundary, {
   paid_upgrade_trigger: 'owner_approves_first_proof_pilot',
   approval_gate: 'owner_approval_required_before_send_write_payment',
 })
+assert.deepEqual(sourceRequest.source_to_screen_order.execution_route, {
+  crew_slug: 'source-to-screen-pilot',
+  crew_name: 'Source-to-Screen Pilot',
+  minimum_plan: 'pilot',
+  route_status: 'paid_pilot_required',
+  free_fallback: 'browser-only draft and order packet',
+  paid_pilot_scope: 'Turn the approved Source-to-Screen packet into a source-traced first proof with an owner approval queue.',
+  first_run_mode: 'approval_only',
+})
 assert.equal(sourceRequest.first_proof_target, record.source_to_screen_proof_target)
 assert.ok(sourceRequest.client_message.includes('Source-to-Screen workcell: Receivables chase'))
 assert.ok(sourceRequest.client_message.includes('Source hash: 00abc123'))
@@ -93,9 +102,11 @@ assert.equal(action.payload.source_to_screen_order.workcell_id, 'receivables_cha
 assert.equal(action.payload.source_to_screen_order.order_packet, orderPacket)
 assert.equal(action.payload.source_to_screen_order.cost_boundary.llm_calls_allowed, false)
 assert.equal(action.payload.source_to_screen_order.cost_boundary.server_run_allowed, false)
+assert.equal(action.payload.source_to_screen_order.execution_route.crew_slug, 'source-to-screen-pilot')
 assert.equal(action.payload.source_pack_request.source_to_screen_order.source_hash, '00abc123')
 assert.equal(action.payload.first_proof_task.source_to_screen_order.proof_target, record.source_to_screen_proof_target)
 assert.equal(action.payload.first_proof_task.source_to_screen_order.cost_boundary.paid_upgrade_trigger, 'owner_approves_first_proof_pilot')
+assert.equal(action.payload.first_proof_task.source_to_screen_order.execution_route.first_run_mode, 'approval_only')
 assert.equal(action.payload.first_proof_task.real_mrr_delta, 0)
 
 console.log(JSON.stringify({

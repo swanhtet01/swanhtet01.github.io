@@ -5,19 +5,31 @@ import assert from 'node:assert/strict'
 import { loadCrew, listCrews, validateCrew, BRIGHT_LINE_FLAGS } from './crew-runner.mjs'
 import { TIERS } from './gateway.mjs'
 
-test('listCrews enumerates both shipped crews', async () => {
+test('listCrews enumerates every shipped crew', async () => {
   const slugs = (await listCrews()).map((c) => c.slug)
   assert.ok(slugs.includes('reconcile-premium'), 'reconcile-premium is registered')
   assert.ok(slugs.includes('read-my-chaos'), 'read-my-chaos is registered')
+  assert.ok(slugs.includes('source-to-screen-pilot'), 'source-to-screen-pilot is registered')
 })
 
 test('shipped crews follow the convention: INTAKE first, real tier per role, output contract', async () => {
-  for (const slug of ['reconcile-premium', 'read-my-chaos']) {
+  for (const slug of ['reconcile-premium', 'read-my-chaos', 'source-to-screen-pilot']) {
     const crew = await loadCrew(slug)
     assert.equal(validateCrew(crew, { slug }).length, 0, `${slug} validates clean`)
     assert.equal(crew.roles[0].id, 'intake', `${slug} starts with the generic INTAKE role`)
     for (const role of crew.roles) assert.ok(TIERS[role.tier], `${slug}/${role.id}: '${role.tier}' is a real gateway tier`)
     assert.ok(crew.output_contract.fields.length > 0, `${slug} has a non-empty output contract`)
+  }
+})
+
+test('source-to-screen-pilot is the paid upgrade path from free browser drafts', async () => {
+  const crew = await loadCrew('source-to-screen-pilot')
+  assert.equal(crew.plan, 'pilot')
+  assert.match(crew.free_tier_fallback, /browser-only/i, 'free users keep the browser-only proof draft')
+  assert.ok(crew.intake.accepts.includes('source-to-screen order packet'), 'accepts the saved free order packet')
+  assert.ok(crew.roles.some((r) => r.id === 'proof-builder' && r.tier === 'reason'), 'paid pilot has a proof-builder role')
+  for (const field of ['source_trace', 'first_proof', 'approval_queue', 'blocked_actions', 'paid_pilot_scope']) {
+    assert.ok(crew.output_contract.fields.includes(field), `${field} is in the output contract`)
   }
 })
 
