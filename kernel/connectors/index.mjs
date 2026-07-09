@@ -67,6 +67,10 @@ import './data-zoho-books.mjs'
 import './ai-perplexity.mjs'
 import './marketing-meta-ads.mjs'
 import './data-ga4.mjs'
+import './payment-paypal.mjs'
+import './data-onedrive.mjs'
+import './crm-pipedrive.mjs'
+import './data-clickup.mjs'
 
 export * from './registry.mjs'
 export default registry
