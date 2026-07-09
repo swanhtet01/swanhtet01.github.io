@@ -669,12 +669,12 @@ function publicToolsHtmlFromCatalog(catalog, agentRadar = {}, socialOAuth = {}) 
     <meta name="robots" content="index,follow" />
     <title>Product Examples | SUPERMEGA.dev</title>
     <meta name="description" content="SuperMega product examples that turn sources into briefs, reviewable records, and management reports." />
-    <meta name="theme-color" content="#0b0f14" />
+    <meta name="theme-color" content="#07111f" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" />
     <style>
-      :root { color-scheme: dark; --bg: #0b0f14; --panel: rgba(255,255,255,0.07); --line: rgba(255,255,255,0.14); --text: #f7fafc; --muted: #aeb8c2; --green: #8cf0b8; --gold: #f2c86d; --ink: #08100d; }
+      :root { color-scheme: dark; --bg: #07111f; --panel: rgba(255,255,255,0.07); --line: rgba(255,255,255,0.14); --text: #f7fafc; --muted: #aeb8c2; --green: #8cf0b8; --gold: #f2c86d; --ink: #07111f; }
       * { box-sizing: border-box; }
-      body { margin: 0; min-height: 100vh; color: var(--text); background: #0b0f14; font-family: "Inter", "Segoe UI", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+      body { margin: 0; min-height: 100vh; color: var(--text); background: #07111f; font-family: "Inter", "Segoe UI", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
       a { color: inherit; text-decoration: none; }
       .wrap { width: min(1180px, calc(100% - 32px)); margin: 0 auto; }
       header { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 22px 0; border-bottom: 1px solid var(--line); }
@@ -818,12 +818,12 @@ function publicValueHtmlFromEngine(engine) {
     <meta name="robots" content="index,follow" />
     <title>Automated Value Engine | SUPERMEGA.dev</title>
     <meta name="description" content="SuperMega automated value engine for intake, scoring, proof packs, quote readiness, and human-approved paid tool delivery." />
-    <meta name="theme-color" content="#08100d" />
+    <meta name="theme-color" content="#07111f" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" />
     <style>
-      :root { color-scheme: dark; --bg: #08100d; --panel: rgba(255,255,255,0.07); --line: rgba(255,255,255,0.14); --text: #f7fbf6; --muted: #aab8af; --green: #8cf0b8; --blue: #FF3B3B; --ink: #06100c; }
+      :root { color-scheme: dark; --bg: #07111f; --panel: rgba(255,255,255,0.07); --line: rgba(255,255,255,0.14); --text: #f7fbf6; --muted: #aab8af; --green: #8cf0b8; --blue: #FF3B3B; --ink: #06100c; }
       * { box-sizing: border-box; }
-      body { margin: 0; min-height: 100vh; background: #08100d; color: var(--text); font-family: "Inter", "Segoe UI", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+      body { margin: 0; min-height: 100vh; background: #07111f; color: var(--text); font-family: "Inter", "Segoe UI", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
       a { color: inherit; text-decoration: none; }
       .wrap { width: min(1180px, calc(100% - 32px)); margin: 0 auto; }
       header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 22px 0; border-bottom: 1px solid var(--line); }
@@ -965,12 +965,12 @@ function publicIntakeHtmlFromRouter(router) {
     <meta name="robots" content="index,follow" />
     <title>Start Here | SUPERMEGA.dev</title>
     <meta name="description" content="Pick one useful output. SuperMega turns the source into a brief, clean table, or report." />
-    <meta name="theme-color" content="#0b1018" />
+    <meta name="theme-color" content="#07111f" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" />
     <style>
-      :root { color-scheme: dark; --bg: #0b1018; --panel: rgba(255,255,255,0.07); --line: rgba(255,255,255,0.14); --text: #f7fbff; --muted: #aab6c3; --green: #8cf0b8; --blue: #FF3B3B; --ink: #06100c; }
+      :root { color-scheme: dark; --bg: #07111f; --panel: rgba(255,255,255,0.07); --line: rgba(255,255,255,0.14); --text: #f7fbff; --muted: #aab6c3; --green: #8cf0b8; --blue: #FF3B3B; --ink: #06100c; }
       * { box-sizing: border-box; }
-      body { margin: 0; min-height: 100vh; background: #0b1018; color: var(--text); font-family: "Inter", "Segoe UI", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+      body { margin: 0; min-height: 100vh; background: #07111f; color: var(--text); font-family: "Inter", "Segoe UI", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
       a { color: inherit; text-decoration: none; }
       .wrap { width: min(1180px, calc(100% - 32px)); margin: 0 auto; }
       header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 22px 0; border-bottom: 1px solid var(--line); }
@@ -1213,12 +1213,12 @@ function publicProofHtmlFromPacks(proof) {
     <meta name="robots" content="index,follow" />
     <title>Proof Packs | SUPERMEGA.dev</title>
     <meta name="description" content="SuperMega product proof: sample inputs, finished outputs, and acceptance checks." />
-    <meta name="theme-color" content="#0d1117" />
+    <meta name="theme-color" content="#07111f" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" />
     <style>
-      :root { color-scheme: dark; --bg: #0d1117; --panel: rgba(255,255,255,0.065); --line: rgba(255,255,255,0.14); --text: #f8fbff; --muted: #aeb9c5; --green: #8cf0b8; --gold: #f2c86d; --blue: #91d7ff; }
+      :root { color-scheme: dark; --bg: #07111f; --panel: rgba(255,255,255,0.065); --line: rgba(255,255,255,0.14); --text: #f8fbff; --muted: #aeb9c5; --green: #8cf0b8; --gold: #f2c86d; --blue: #91d7ff; }
       * { box-sizing: border-box; }
-      body { margin: 0; min-height: 100vh; background: #0d1117; color: var(--text); font-family: "Inter", "Segoe UI", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+      body { margin: 0; min-height: 100vh; background: #07111f; color: var(--text); font-family: "Inter", "Segoe UI", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
       a { color: inherit; text-decoration: none; }
       .wrap { width: min(1180px, calc(100% - 32px)); margin: 0 auto; }
       header { display: flex; justify-content: space-between; gap: 16px; align-items: center; padding: 20px 0 34px; }
@@ -1315,7 +1315,7 @@ function renderPublicPricingHtml() {
         color-scheme: light;
         --cream: #f4f8f6;
         --paper: #ffffff;
-        --ink: #0d1117;
+        --ink: #07111f;
         --muted: #5f6b66;
         --line: rgba(13, 17, 23, 0.13);
         --blue: #FF3B3B;
@@ -1447,11 +1447,11 @@ const publicCardHtml = `<!doctype html>
     <meta property="og:image" content="https://supermega.dev/site/social/supermega-portal-card.png" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:image" content="https://supermega.dev/site/social/supermega-portal-card.png" />
-    <meta name="theme-color" content="#0A0E1C" />
+    <meta name="theme-color" content="#07111f" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" />
     <style>
       @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap');
-      :root { color-scheme: dark; --bg:#0A0E1C; --surface:#111731; --elev:#1A2240; --ink:#EAEEF7; --muted:#93A0BC; --dim:#5E6B87; --accent:#FF3B3B; --accent-soft:rgba(255,59,59,.16); --line:rgba(255,255,255,.08); }
+      :root { color-scheme: dark; --bg:#07111f; --surface:#111731; --elev:#1A2240; --ink:#EAEEF7; --muted:#93A0BC; --dim:#5E6B87; --accent:#FF3B3B; --accent-soft:rgba(255,59,59,.16); --line:rgba(255,255,255,.08); }
       * { box-sizing: border-box; }
       body { margin: 0; min-height: 100svh; display: grid; place-items: center; padding: 24px; background-color: var(--bg); background-image: radial-gradient(ellipse at 82% 10%, rgba(255,59,59,0.12), transparent 32rem), radial-gradient(ellipse at 6% 92%, rgba(255,59,59,0.06), transparent 30rem), linear-gradient(160deg, #181B21, #101216 78%); color: var(--ink); font-family: "Inter", "Segoe UI", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
       a { color: inherit; text-decoration: none; }
@@ -1646,7 +1646,7 @@ const unicornShellStyle = `
       .browser { overflow: hidden; border: 1px solid rgba(255,255,255,0.84); border-radius: 36px; background: rgba(255,255,255,0.62); box-shadow: var(--shadow); backdrop-filter: blur(24px); }
       .browser-top { display: none; }
       .dots { display: inline-flex; gap: 6px; }
-      .dots span { width: 9px; height: 9px; border-radius: 50%; background: #0d1117; opacity: 0.18; }
+      .dots span { width: 9px; height: 9px; border-radius: 50%; background: #07111f; opacity: 0.18; }
       .browser-top strong { font-size: 13px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
       .browser > img { display: block; width: 100%; height: auto; aspect-ratio: 16 / 10.4; object-fit: contain; object-position: center; background: #f7faf8; }
       .hero-browser-shot { aspect-ratio: 16 / 10.4; background: #f7faf8 var(--hero-shot) center / contain no-repeat; }
@@ -2000,7 +2000,7 @@ const unicornShellStyle = `
       :root[data-theme="dark"] .theme-toggle::before { content: 'Light'; }
       :root[data-theme="dark"] {
         color-scheme: dark;
-        --cream: #0A0E1C; --paper: #111731; --ink: #EAEEF7; --muted: #93A0BC;
+        --cream: #07111f; --paper: #111731; --ink: #EAEEF7; --muted: #93A0BC;
         --line: rgba(148,164,210,0.12); --blue: #FF3B3B; --blue-soft: rgba(255,59,59,0.16);
         --aqua: #FF5C4D; --navy: #EAEEF7; --shadow: 0 34px 90px rgba(0,0,0,0.6); --gilt: #FF3B3B;
       }
@@ -4106,7 +4106,7 @@ const unicornAiAgentsHtml = `<!doctype html>
     <meta name="robots" content="index,follow" />
     <title>AI Agent Army | SUPERMEGA.dev</title>
     <meta name="description" content="API-first AI agent crews, approval-gated workcells, and R&D-gated computer-use/mobile workers for real business tasks." />
-    <meta name="theme-color" content="#0A0E1C" />
+    <meta name="theme-color" content="#07111f" />
     <link rel="canonical" href="https://supermega.dev/ai-agents/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" />
     ${unicornSocialMeta({ title: 'AI Agent Army | SUPERMEGA.dev', description: 'Plug in real sources and get approval-gated AI agent crews with proof before scale.', url: 'https://supermega.dev/ai-agents/' })}
@@ -4419,7 +4419,7 @@ const unicornPublicShellHtml = `<!doctype html>
     <meta name="robots" content="index,follow" />
     <title>supermega.dev — your business, in one simple app</title>
     <meta name="description" content="One simple app for your whole business — sales, stock, customers and money. Easy to use, yours to keep, and it works on the phone you already have." />
-    <meta name="theme-color" content="#0A0E1C" />
+    <meta name="theme-color" content="#07111f" />
     <link rel="canonical" href="https://supermega.dev/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" />
     <link rel="manifest" href="/site.webmanifest?v=supermega-atelier-20260623" />
@@ -4553,7 +4553,7 @@ const unicornProductsHtml = `<!doctype html>
     <meta name="robots" content="index,follow" />
     <title>Products | SUPERMEGA.dev</title>
     <meta name="description" content="Free-core tools, premium AI/data layers, and custom agent crews for Myanmar shops, factories, and operators." />
-    <meta name="theme-color" content="#0A0E1C" />
+    <meta name="theme-color" content="#07111f" />
     <link rel="canonical" href="https://supermega.dev/products/" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="SUPERMEGA.dev" />
@@ -4585,7 +4585,7 @@ const unicornProductsHtml = `<!doctype html>
       .screen-gallery { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 8px 0 2px; }
       .mini-screen { display: grid; gap: 8px; min-height: 120px; border: 1px solid var(--line); border-radius: 18px; background: linear-gradient(180deg, rgba(255,255,255,.88), rgba(248,244,236,.78)); padding: 12px; box-shadow: inset 0 1px 0 rgba(255,255,255,.9); }
       .mini-screen small { color: #FF3B3B; font-size: 10px; font-weight: 950; letter-spacing: .16em; text-transform: uppercase; }
-      .mini-screen strong { color: #0d1117; font-size: 16px; line-height: 1; letter-spacing: -.04em; }
+      .mini-screen strong { color: #07111f; font-size: 16px; line-height: 1; letter-spacing: -.04em; }
       .mini-screen span { color: var(--muted); font-size: 12px; font-weight: 780; line-height: 1.25; }
       .shot-gallery { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-content: center; gap: 10px; padding: 14px; background: linear-gradient(135deg, rgba(255,255,255,.78), rgba(229,242,255,.58)); border-left: 1px solid var(--line); }
       .shot-gallery img { width: 100%; height: auto; aspect-ratio: 16 / 9; object-fit: cover; object-position: 50% 18%; border: 1px solid rgba(13,17,23,.08); border-radius: 22px; background: rgba(255,255,255,.72); box-shadow: 0 18px 42px rgba(13,17,23,.10); }
@@ -4766,7 +4766,7 @@ const unicornContactHtml = `<!doctype html>
     <meta property="og:image" content="https://supermega.dev/site/social/supermega-portal-card.png" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:image" content="https://supermega.dev/site/social/supermega-portal-card.png" />
-    <meta name="theme-color" content="#0A0E1C" />
+    <meta name="theme-color" content="#07111f" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" />
     <style>${unicornShellStyle}
       .contact-main { display: grid; grid-template-columns: minmax(0, 0.78fr) minmax(320px, 1.22fr); gap: clamp(24px, 5vw, 64px); align-items: center; min-height: calc(100svh - 84px); padding: 14px 0 34px; }
@@ -5240,7 +5240,7 @@ const publicSourceToScreenHtml = `<!doctype html>
     <title>Free Source-to-Screen | SUPERMEGA.dev</title>
     <meta name="description" content="Paste one messy source and get a browser-only first useful screen draft before any account, connector, model run, or payment." />
     <link rel="canonical" href="https://supermega.dev/free/" />
-    <meta name="theme-color" content="#0A0E1C" />
+    <meta name="theme-color" content="#07111f" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" />
     <style>${unicornShellStyle}
       .free-main { display:grid; grid-template-columns:minmax(0,.82fr) minmax(360px,1.18fr); gap:clamp(24px,5vw,64px); align-items:start; padding:clamp(26px,5vw,58px) 0 46px; }
@@ -6105,7 +6105,7 @@ for (const entry of await readdir(staticDir, { withFileTypes: true })) {
   }
 }
 await writeFile(resolve(staticDir, 'index.html'), normalizePublicProductNames(unicornPublicShellHtml), 'utf8')
-await writeFile(resolve(staticDir, '404.html'), `<!doctype html><html lang="en"><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="robots" content="noindex,nofollow" /><title>Page not found | SUPERMEGA.dev</title><meta name="theme-color" content="#1b1815" /><link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" /><style>${unicornShellStyle}</style></head><body><div class="wrap">${unicornHeader}<main><section class="poster" style="min-height:58vh;align-items:center"><div class="copy"><div class="eyebrow">404</div><h1>Page not found.</h1><p>That page doesn’t exist. Head back home, or see what we build.</p><div class="cta"><a class="btn primary" href="/">Home</a><a class="btn secondary" href="/products/">Products</a></div></div></section></main></div></body></html>`, 'utf8')
+await writeFile(resolve(staticDir, '404.html'), `<!doctype html><html lang="en"><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="robots" content="noindex,nofollow" /><title>Page not found | SUPERMEGA.dev</title><meta name="theme-color" content="#07111f" /><link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" /><style>${unicornShellStyle}</style></head><body><div class="wrap">${unicornHeader}<main><section class="poster" style="min-height:58vh;align-items:center"><div class="copy"><div class="eyebrow">404</div><h1>Page not found.</h1><p>That page doesn’t exist. Head back home, or see what we build.</p><div class="cta"><a class="btn primary" href="/">Home</a><a class="btn secondary" href="/products/">Products</a></div></div></section></main></div></body></html>`, 'utf8')
 await mkdir(resolve(staticDir, 'products'), { recursive: true })
 await writeFile(resolve(staticDir, 'products', 'index.html'), normalizePublicProductNames(unicornProductsHtml), 'utf8')
 // Premium product detail pages (one per product, data-driven, shares the brand shell)
@@ -6216,7 +6216,7 @@ function buildProductDetailHtml(p) {
     <meta name="robots" content="index,follow" />
     <title>${p.displayName} | SUPERMEGA.dev</title>
     <meta name="description" content="${p.subhead.replace(/"/g, '&quot;')}" />
-    <meta name="theme-color" content="#0A0E1C" />
+    <meta name="theme-color" content="#07111f" />
     <link rel="canonical" href="https://supermega.dev/products/${p.slug}/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" />
     <meta property="og:type" content="website" />
@@ -6565,7 +6565,7 @@ function buildAgentTemplatePageHtml(kit) {
     <meta name="robots" content="index,follow" />
     <title>${escapeHtml(kit.name)} setup kit | SUPERMEGA.dev</title>
     <meta name="description" content="${escapeHtml(kit.offer.promise)}" />
-    <meta name="theme-color" content="#0A0E1C" />
+    <meta name="theme-color" content="#07111f" />
     <link rel="canonical" href="https://supermega.dev/agent-templates/${escapeHtml(kit.id)}/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" />
     <style>${unicornShellStyle}
@@ -6934,7 +6934,7 @@ const publicOffersHtml = `<!doctype html>
     <meta name="robots" content="index,follow" />
     <title>Pricing | SUPERMEGA.dev</title>
     <meta name="description" content="MMK starting prices for free-core upgrades, custom builds, AI agent crews, and full systems for Myanmar businesses." />
-    <meta name="theme-color" content="#0A0E1C" />
+    <meta name="theme-color" content="#07111f" />
     <link rel="canonical" href="https://supermega.dev/offers/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" />
     <meta property="og:type" content="website" />
@@ -7095,7 +7095,7 @@ const publicWorkHtml = `<!doctype html>
     <meta name="robots" content="index,follow" />
     <title>Our work | SUPERMEGA.dev</title>
     <meta name="description" content="Real software we've built and shipped for businesses in Myanmar — live products you can try right now, and custom systems built from real, messy work." />
-    <meta name="theme-color" content="#0A0E1C" />
+    <meta name="theme-color" content="#07111f" />
     <link rel="canonical" href="https://supermega.dev/work/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" />
     <meta property="og:type" content="website" />
@@ -9270,7 +9270,7 @@ const publicProofReviewHtml = `<!doctype html>
   <meta name="robots" content="noindex,nofollow" />
   <title>AI Workcell Proof Review | SUPERMEGA.dev</title>
   <meta name="description" content="Client proof review room for SuperMega AI workcell first proofs." />
-  <meta name="theme-color" content="#1b1815" />
+  <meta name="theme-color" content="#07111f" />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" />
   <style>
     :root { color-scheme: light; --paper:#f4efe6; --ink:#1b1815; --muted:#6f675d; --line:rgba(27,24,21,.16); --panel:#fffaf1; --panel2:#ebe2d3; --accent:#FF3B3B; --green:#1c8a5a; --red:#a14432; }
@@ -9441,7 +9441,7 @@ const publicPaymentProofHtml = `<!doctype html>
   <meta name="robots" content="noindex,nofollow" />
   <title>AI Workcell Payment Proof | SUPERMEGA.dev</title>
   <meta name="description" content="Client payment-proof submission room for SuperMega AI workcell paid pilots." />
-  <meta name="theme-color" content="#1b1815" />
+  <meta name="theme-color" content="#07111f" />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" />
   <style>
     :root { color-scheme: light; --paper:#f4efe6; --ink:#1b1815; --muted:#6f675d; --line:rgba(27,24,21,.16); --panel:#fffaf1; --panel2:#ebe2d3; --accent:#FF3B3B; --green:#1c8a5a; --red:#a14432; }
@@ -9616,7 +9616,7 @@ const publicSourcePackIntakeHtml = `<!doctype html>
   <meta name="robots" content="noindex,nofollow" />
   <title>AI Workcell Source Pack Intake | SUPERMEGA.dev</title>
   <meta name="description" content="Client source pack intake for SuperMega AI workcell first proofs." />
-  <meta name="theme-color" content="#1b1815" />
+  <meta name="theme-color" content="#07111f" />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" />
   <style>
     :root { color-scheme: light; --paper:#f4efe6; --ink:#1b1815; --muted:#6f675d; --line:rgba(27,24,21,.16); --panel:#fffaf1; --panel2:#ebe2d3; --accent:#FF3B3B; --green:#1c8a5a; --red:#a14432; }
@@ -9812,7 +9812,7 @@ const publicPilotWorkspaceHtml = `<!doctype html>
   <meta name="robots" content="noindex,nofollow" />
   <title>Private Pilot Workspace | SUPERMEGA.dev</title>
   <meta name="description" content="Approval-only SuperMega private pilot workspace handoff." />
-  <meta name="theme-color" content="#1b1815" />
+  <meta name="theme-color" content="#07111f" />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" />
   <style>
     :root { color-scheme: light; --paper:#f4efe6; --ink:#1b1815; --muted:#6f675d; --line:rgba(27,24,21,.16); --panel:#fffaf1; --panel2:#ebe2d3; --accent:#FF3B3B; --green:#1c8a5a; --blue:#255f99; }
@@ -10289,7 +10289,7 @@ const unicornPrivacyHtml = `<!doctype html>
   <meta name="description" content="SUPERMEGA.dev privacy policy — how we handle your data when you contact us or use our software." />
   ${unicornSocialMeta({ title: 'Privacy Policy | SUPERMEGA.dev', description: 'How SUPERMEGA.dev handles your data when you contact us or use our software.', url: 'https://supermega.dev/privacy/' })}
   <link rel="canonical" href="https://supermega.dev/privacy/" />
-  <meta name="theme-color" content="#0A0E1C" />
+  <meta name="theme-color" content="#07111f" />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" />
   <style>${unicornShellStyle}</style>
 </head>
