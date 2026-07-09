@@ -572,6 +572,7 @@ for (const [label, text] of [
 const homeHtml = readFileSync(resolve(staticDir, 'index.html'), 'utf8')
 const productsHtml = readFileSync(resolve(staticDir, 'products/index.html'), 'utf8')
 const contactHtml = readFileSync(resolve(staticDir, 'contact/index.html'), 'utf8')
+const offersHtml = readFileSync(resolve(staticDir, 'offers/index.html'), 'utf8')
 const aiAgentsHtml = readFileSync(resolve(staticDir, 'ai-agents/index.html'), 'utf8')
 const aiWorkerGuidePath = resolve(staticDir, 'ai-agents/guide/index.html')
 if (!existsSync(aiWorkerGuidePath)) fail('public_ai_worker_user_guide_missing')
@@ -591,6 +592,25 @@ const paymentProofHtml = readFileSync(paymentProofHtmlPath, 'utf8')
 const pilotWorkspaceHtmlPath = resolve(staticDir, 'app/start/index.html')
 if (!existsSync(pilotWorkspaceHtmlPath)) fail('pilot_workspace_page_missing')
 const pilotWorkspaceHtml = readFileSync(pilotWorkspaceHtmlPath, 'utf8')
+
+for (const [entry, html] of Object.entries({
+  'contact/index.html': contactHtml,
+  'offers/index.html': offersHtml,
+  'operator/index.html': operatorHtml,
+  'app/source-pack/index.html': sourcePackHtml,
+  'app/proof-review/index.html': proofReviewHtml,
+  'app/payment-proof/index.html': paymentProofHtml,
+})) {
+  for (const retired of [
+    'Send one workflow',
+    'Send one workflow source',
+    'AI Workcell',
+    'Managed AI Workcell',
+    'data-source-to-screen',
+  ]) {
+    if (html.includes(retired)) fail('public_retired_workcell_copy_found', { entry, retired })
+  }
+}
 for (const token of [
   'Private Pilot Workspace',
   'data-workspace-slug',
@@ -725,7 +745,7 @@ for (const token of [
 }
 for (const token of [
   '<title>supermega.dev — your business, in one simple app</title>',
-  'Your whole business, in one simple app.',
+  'Stop running your business on Viber',
   'sm_worker_continue_state',
   'data-local-worker-continue',
   'Browser-local continuation',
@@ -789,48 +809,12 @@ for (const [entry, html] of Object.entries({
   }
 }
 for (const token of [
-  'General AI Worker Toolkit',
-  'Pick one reusable worker and prove it on real sources.',
-  '/ai-agents/guide/',
-  'Adaptive Worker Matcher',
-  'data-worker-router',
-  'data-router-result',
-  'data-router-choice="sales-follow-up"',
-  'data-router-choice="pdfs-docs"',
-  'data-router-choice="proposal"',
-  'Recommended first worker',
-  'supermegaTrackBehavior',
-  'adaptive_worker_matcher_result',
-  'is-router-match',
-  'privacy-light first-party events',
-  'Document / PDF Intake Ledger',
-  'CRM Follow-up &amp; Pipeline Assistant',
-  'Proposal &amp; SOW Builder',
-  'Sellable tool ladder',
-  'Free core',
-  'Paid pilot',
-  'Premium maintained',
-  'Gated hands',
-  'data-worker-entitlements',
-  'entitlement_free_core',
-  'entitlement_paid_pilot',
-  'entitlement_premium',
-  'entitlement_gated_hands',
-  'Owner-approved computer-use or mobile actions only',
-  'Live crew endpoint',
-  'https://app.supermega.dev/api/crew',
-  'data-crew-endpoint-status',
-  'data-worker-run-endpoint',
-  'data-worker-crew',
-  'data-worker-run-action',
-  'supermegaDiscoverLiveCrews',
-  'POST { crew, input }',
-  'read-my-chaos',
-  'owner-brief',
-  'outreach-draft',
-  '/api/behavior-events',
+  'Continue to SuperMega',
+  'url=/products/',
+  'window.location.replace("/products/")',
+  'See our two apps',
 ]) {
-  if (!aiAgentsHtml.includes(token)) fail('public_ai_agents_sellable_toolkit_contract_missing', { token })
+  if (!aiAgentsHtml.includes(token)) fail('public_ai_agents_redirect_contract_missing', { token })
 }
 for (const token of [
   'AI worker user guide',
@@ -879,7 +863,8 @@ for (const token of [
 }
 for (const token of [
   '<title>Products | SUPERMEGA.dev</title>',
-  'Factory & Operations App',
+  'Retail OS',
+  'Factory OS',
   'Custom Solutions & AI Agents',
   '/products/factory/',
   '/products/pos/',
@@ -1120,7 +1105,7 @@ for (const token of [
   if (!paymentProofHtml.includes(token)) fail('public_payment_proof_submit_contract_missing', { token })
 }
 const publicAgentTemplateContract = [
-  ['deskpos-quickstart', 'DeskPOS Quickstart'],
+  ['deskpos-quickstart', 'Retail OS Quickstart'],
   ['chat-ledger', 'Viber / WhatsApp Business Ledger'],
   ['inbox-calendar-operator', 'Inbox & Calendar Operator'],
   ['daily-intelligence-brief', 'Daily Intelligence Brief Agent'],
@@ -1151,8 +1136,8 @@ if (!sitemapHtml.includes('https://supermega.dev/ai-agents/guide/')) {
   fail('public_ai_worker_user_guide_sitemap_missing')
 }
 for (const [id, name] of publicAgentTemplateContract) {
-  if (!productsHtml.includes(id) || (!productsHtml.includes(name) && !productsHtml.includes(htmlEscaped(name)))) {
-    fail('public_agent_template_missing_from_products', { id, name })
+  if (!starterPageIndexHtml.includes(id) || (!starterPageIndexHtml.includes(name) && !starterPageIndexHtml.includes(htmlEscaped(name)))) {
+    fail('public_agent_template_missing_from_starter_index', { id, name })
   }
   if (!aiWorkerGuideHtml.includes(id) || (!aiWorkerGuideHtml.includes(name) && !aiWorkerGuideHtml.includes(htmlEscaped(name)))) {
     fail('public_ai_worker_user_guide_template_missing', { id, name })
@@ -1253,8 +1238,9 @@ for (const [id, name] of publicAgentTemplateContract) {
     }
   }
 }
-for (const token of ['AI agent templates', 'View setup kit', 'name="template_id"', 'name="starter_kit_url"', "search.get('template')", '/site/agent-templates/daily-intelligence-brief.json', '/agent-templates/daily-intelligence-brief/setup/']) {
-  if (!productsHtml.includes(token) && !contactHtml.includes(token)) {
+const agentTemplatePublicHtml = [productsHtml, contactHtml, starterPageIndexHtml].join('\n')
+for (const token of ['AI agent setup kits', 'View setup kit', 'name="template_id"', 'name="starter_kit_url"', "search.get('template')", '/site/agent-templates/daily-intelligence-brief.json', '/agent-templates/daily-intelligence-brief/setup/']) {
+  if (!agentTemplatePublicHtml.includes(token)) {
     fail('public_agent_template_contract_missing', { token })
   }
 }
@@ -1314,7 +1300,7 @@ function walkHtmlFiles(directory, prefix = '') {
 
 for (const entry of walkHtmlFiles(staticDir)) {
   const html = readFileSync(resolve(staticDir, entry), 'utf8')
-  const staleMatch = html.match(/Product Activation|Three products\. One setup contract|Quote-ready setup|View pricing|USD\s|Demo hub|Demo center|open demos|login demos|Request quote/i)
+  const staleMatch = html.match(/Product Activation|Three products\. One setup contract|Quote-ready setup|View pricing|USD\s|Demo hub|Demo center|open demos|login demos|Request quote|AI Workcell Pilot|Source-to-Screen|Agents that do the tasks SaaS leaves for humans|AI Agent Army/i)
   if (staleMatch) fail('retired_public_copy_found_anywhere', { entry, match: staleMatch[0] })
   const privateMatch = html.match(privateLeakPattern)
   if (privateMatch) fail('private_client_copy_leak_anywhere', { entry, match: privateMatch[0] })

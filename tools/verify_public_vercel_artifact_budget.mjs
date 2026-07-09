@@ -11,10 +11,23 @@ function fail(code, detail = {}) {
 }
 
 function walk(dir, visitor) {
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+  let entries
+  try {
+    entries = readdirSync(dir, { withFileTypes: true })
+  } catch (error) {
+    if (error?.code === 'ENOENT') return
+    throw error
+  }
+  for (const entry of entries) {
     const fullPath = join(dir, entry.name)
     if (entry.isDirectory()) walk(fullPath, visitor)
-    else if (entry.isFile()) visitor(fullPath, statSync(fullPath))
+    else if (entry.isFile()) {
+      try {
+        visitor(fullPath, statSync(fullPath))
+      } catch (error) {
+        if (error?.code !== 'ENOENT') throw error
+      }
+    }
   }
 }
 

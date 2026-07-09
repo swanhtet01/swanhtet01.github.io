@@ -379,7 +379,7 @@ function renderSellableWorkerShelf() {
                 <div class="worker-actions">
                   <a class="btn primary" data-worker-run-action data-worker-run-endpoint="${escapeHtml(publicCrewEndpoint)}" data-worker-crew="${escapeHtml(crewId)}" href="${escapeHtml(publicCrewRunUrl(template))}" target="_blank" rel="noreferrer">Open run endpoint</a>
                   <a class="btn secondary" data-sm-template-link="${escapeHtml(template.id)}" href="/agent-templates/${encodeURIComponent(template.id)}/setup/">Start setup</a>
-                  <a class="link" data-sm-template-link="${escapeHtml(template.id)}" href="/contact/?template=${encodeURIComponent(template.id)}&package=ai-workcell-pilot">Ask about this worker</a>
+                  <a class="link" data-sm-template-link="${escapeHtml(template.id)}" href="/contact/?template=${encodeURIComponent(template.id)}&package=custom-ai-agent-build">Ask about this worker</a>
                 </div>
               </article>`
     })
@@ -407,7 +407,7 @@ function workerMatcherCatalogJson() {
       firstProof: template.firstProof,
       pricingLabel: template.pricingLabel,
       setupUrl: `/agent-templates/${template.id}/setup/`,
-      contactUrl: `/contact/?template=${template.id}&package=ai-workcell-pilot`,
+      contactUrl: `/contact/?template=${template.id}&package=custom-ai-agent-build`,
       crewId: crewForPublicAgentTemplate(template),
       runEndpoint: publicCrewEndpoint,
       runUrl: publicCrewRunUrl(template),
@@ -421,7 +421,7 @@ function workerContinueCatalogJson() {
     publicAgentTemplates.map((template) => ({
       id: template.id,
       setupUrl: `/agent-templates/${template.id}/setup/`,
-      contactUrl: `/contact/?template=${template.id}&package=ai-workcell-pilot`,
+      contactUrl: `/contact/?template=${template.id}&package=custom-ai-agent-build`,
     })),
   ).replaceAll('<', '\\u003c')
 }
@@ -436,7 +436,7 @@ function workerSourcePackCatalogJson() {
       outputs: template.outputs,
       sourceCategory: template.sourceCategory,
       setupUrl: `/agent-templates/${template.id}/setup/`,
-      contactUrl: `/contact/?template=${template.id}&package=ai-workcell-pilot`,
+      contactUrl: `/contact/?template=${template.id}&package=custom-ai-agent-build`,
     })),
   ).replaceAll('<', '\\u003c')
 }
@@ -451,7 +451,7 @@ function workerProofPlanCatalogJson() {
       firstRunWorkflow: template.firstRunWorkflow,
       outputs: template.outputs,
       setupUrl: `/agent-templates/${template.id}/setup/`,
-      contactUrl: `/contact/?template=${template.id}&package=ai-workcell-pilot`,
+      contactUrl: `/contact/?template=${template.id}&package=custom-ai-agent-build`,
     })),
   ).replaceAll('<', '\\u003c')
 }
@@ -467,7 +467,7 @@ function workerValuePlanCatalogJson() {
       outputs: template.outputs,
       sourceCategory: template.sourceCategory,
       setupUrl: `/agent-templates/${template.id}/setup/`,
-      contactUrl: `/contact/?template=${template.id}&package=ai-workcell-pilot`,
+      contactUrl: `/contact/?template=${template.id}&package=custom-ai-agent-build`,
     })),
   ).replaceAll('<', '\\u003c')
 }
@@ -3060,7 +3060,7 @@ const publicAdaptiveSetupPlanScript = `
       return {
         worker_id: worker ? worker.id : '',
         setup_url: worker ? worker.setupUrl : '/agent-templates/',
-        contact_url: worker ? worker.contactUrl : '/contact/?package=ai-workcell-pilot',
+        contact_url: worker ? worker.contactUrl : '/contact/?package=custom-ai-agent-build',
         worker_name: worker ? workerName(worker.id) : 'Choose a worker',
         role_mode: role,
         role_label: roleLabel(role),
@@ -3220,7 +3220,7 @@ const publicAdaptiveSourcePackScript = `
           readiness: 'choose_worker_first',
           summary: 'Choose a worker before sending sources.',
           setup_url: '/agent-templates/',
-          contact_url: '/contact/?package=ai-workcell-pilot'
+          contact_url: '/contact/?package=custom-ai-agent-build'
         };
       }
       var required = (worker.setupInputs || []).slice(0, 5);
@@ -3405,7 +3405,7 @@ const publicAdaptiveProofPlanScript = `
           gate: 'owner_approval_required_before_production',
           readiness: 'choose_worker_first',
           setup_url: '/agent-templates/',
-          contact_url: '/contact/?package=ai-workcell-pilot',
+          contact_url: '/contact/?package=custom-ai-agent-build',
           page_path: window.location.pathname,
           generated_at: new Date().toISOString()
         };
@@ -3623,7 +3623,7 @@ const publicAdaptiveValuePlanScript = `
           gate: 'no_revenue_claim_without_payment_proof',
           readiness: 'choose_worker_first',
           setup_url: '/agent-templates/',
-          contact_url: '/contact/?package=ai-workcell-pilot',
+          contact_url: '/contact/?package=custom-ai-agent-build',
           page_path: window.location.pathname,
           generated_at: new Date().toISOString()
         };
@@ -3816,7 +3816,7 @@ const publicAdaptivePilotPlanScript = `
           stage: 'choose_worker_first',
           readiness: 'choose_worker_first',
           setup_url: '/agent-templates/',
-          contact_url: '/contact/?package=ai-workcell-pilot',
+          contact_url: '/contact/?package=custom-ai-agent-build',
           page_path: window.location.pathname,
           generated_at: new Date().toISOString()
         };
@@ -4110,12 +4110,12 @@ const unicornAiAgentsHtml = `<!doctype html>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="robots" content="index,follow" />
-    <title>AI Agent Army | SUPERMEGA.dev</title>
-    <meta name="description" content="API-first AI agent crews, approval-gated workcells, and R&D-gated computer-use/mobile workers for real business tasks." />
+    <title>Custom Solutions & AI Agents | SUPERMEGA.dev</title>
+    <meta name="description" content="Custom AI setup kits, approval-gated workers, and practical automation for real business tasks." />
     <meta name="theme-color" content="#07111f" />
     <link rel="canonical" href="https://supermega.dev/ai-agents/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" />
-    ${unicornSocialMeta({ title: 'AI Agent Army | SUPERMEGA.dev', description: 'Plug in real sources and get approval-gated AI agent crews with proof before scale.', url: 'https://supermega.dev/ai-agents/' })}
+    ${unicornSocialMeta({ title: 'Custom Solutions & AI Agents | SUPERMEGA.dev', description: 'Plug in real sources and get approval-gated AI workers with proof before scale.', url: 'https://supermega.dev/ai-agents/' })}
     <style>${unicornShellStyle}
       .agent-hero { padding: clamp(56px,10vw,96px) 0 0; text-align: center; }
       .agent-hero .eyebrow { margin-bottom: 18px; }
@@ -4203,10 +4203,10 @@ const unicornAiAgentsHtml = `<!doctype html>
 ${unicornHeader}
       <main>
         <section class="agent-hero section">
-          <div class="eyebrow">AI Agent Army · API-first · owner-approved</div>
-          <h1>Agents that do the tasks SaaS leaves for humans.</h1>
-          <p>Connect approved sources, choose a worker, and get a traceable first proof. Safe jobs run through APIs and queues first. The first paid path is the AI Workcell Pilot. Computer-use and mobile app actions are gated workcells until reliability, consent, vaulting, legal review, and audit logs are proven.</p>
-          <div class="cta"><a class="btn primary" href="/agent-templates/">Choose a worker</a><a class="btn secondary" href="/ai-agents/guide/">Read the user guide</a><a class="btn secondary" href="/contact/?package=ai-workcell-pilot">Start with one source pack</a></div>
+          <div class="eyebrow">Custom Solutions &amp; AI Agents · API-first · owner-approved</div>
+          <h1>AI setup kits for real business work.</h1>
+          <p>Choose a worker template, send one approved sample, and get a traceable first proof. Safe jobs run through APIs and queues first. The paid path is a Custom Solutions & AI Agents setup with consent, audit logs, and owner approval before any external action.</p>
+          <div class="cta"><a class="btn primary" href="/agent-templates/">Choose a worker</a><a class="btn secondary" href="/ai-agents/guide/">Read the user guide</a><a class="btn secondary" href="/contact/?package=custom-ai-agent-build">Start with one task</a></div>
           <p class="hero-tagline">Cast real work into software.</p>
         </section>
 
@@ -4694,6 +4694,20 @@ ${unicornHeader}
             </div>
           </article>
 
+          <article class="feature" id="custom-solutions-ai-agents">
+            <div class="feature-copy">
+              <div class="eyebrow">Custom solutions & AI agents</div>
+              <h2>Custom Solutions & AI Agents.</h2>
+              <p>For the work that does not fit a normal app: messy files, Viber orders, inboxes, PDFs, reports, follow-ups, and approval queues. Start from a setup kit, prove one useful output, then turn it into a maintained workflow.</p>
+              <div class="chips"><span class="chip">Setup kits</span><span class="chip">Data cleanup</span><span class="chip">Inbox / calendar</span><span class="chip">PDF intake</span><span class="chip">Approval queues</span></div>
+              <div class="use"><strong>Start with one proof</strong><span>Pick a template or send the repeated task. We show the first useful output before anything runs in production.</span></div>
+              <div class="cta"><a class="btn primary" href="/agent-templates/">View setup kits</a><a class="btn secondary" href="/contact/?package=custom-ai-agent-build">Ask for a custom build</a></div>
+            </div>
+            <div class="shot-gallery" aria-label="Custom Solutions and AI Agents product screen">
+              ${workflowProductUi}
+            </div>
+          </article>
+
         </section>
 
         <section class="section sm-in">
@@ -4722,12 +4736,12 @@ const unicornContactHtml = `<!doctype html>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="robots" content="index,follow" />
     <title>Contact | SUPERMEGA.dev</title>
-    <meta name="description" content="Send one workflow to SUPERMEGA. We reply with the first useful app, timeline, and approval path." />
+    <meta name="description" content="Tell SUPERMEGA what you run. Start free with Retail OS or Factory OS, then add custom automation when it proves useful." />
     <link rel="canonical" href="https://supermega.dev/contact/" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="SUPERMEGA.dev" />
-    <meta property="og:title" content="Contact SUPERMEGA.dev — send one workflow" />
-    <meta property="og:description" content="Send one workflow to SUPERMEGA. We reply with the first useful app, timeline, and approval path." />
+    <meta property="og:title" content="Contact SUPERMEGA.dev - start free" />
+    <meta property="og:description" content="Tell SUPERMEGA what you run. Start free with Retail OS or Factory OS, then add custom automation when it proves useful." />
     <meta property="og:url" content="https://supermega.dev/contact/" />
     <meta property="og:image" content="https://supermega.dev/site/social/supermega-portal-card.png" />
     <meta name="twitter:card" content="summary_large_image" />
@@ -4760,12 +4774,6 @@ const unicornContactHtml = `<!doctype html>
       .selected-path small { color: var(--blue); font-size: 11px; font-weight: 950; letter-spacing: 0.14em; text-transform: uppercase; }
       .selected-path strong { font-size: 19px; letter-spacing: -0.035em; }
       .selected-path span { color: var(--muted); font-weight: 780; line-height: 1.35; }
-      .source-handoff { display: grid; gap: 5px; border: 1px solid rgba(13,148,136,0.2); border-radius: 16px; background: rgba(13,148,136,0.075); padding: 11px 12px; }
-      .source-handoff[hidden] { display: none; }
-      .source-handoff small { color: #0f766e; font-size: 11px; font-weight: 950; letter-spacing: 0.14em; text-transform: uppercase; }
-      .source-handoff strong { font-size: 16px; letter-spacing: -0.025em; }
-      .source-handoff span, .source-handoff code { color: var(--muted); font-size: 12px; font-weight: 800; line-height: 1.35; }
-      .source-handoff code { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
       .selected-price { color: var(--blue); font-weight: 950; font-size: 14px; letter-spacing: 0.02em; }
       .selected-next { color: var(--muted); font-weight: 800; font-size: 13px; line-height: 1.35; }
       .policy { margin: 0; color: var(--muted); font-size: 13px; font-weight: 820; line-height: 1.4; }
@@ -4782,7 +4790,6 @@ const unicornContactHtml = `<!doctype html>
         .contact-main p { font-size: 16px; line-height: 1.32; }
         .optional-mobile { display: none; }
         .selected-path, .file-label { display: none; }
-        .source-handoff { padding: 10px; }
         button { min-height: 44px; padding: 12px 16px; }
         .policy { font-size: 12px; line-height: 1.25; }
         .form-status { min-height: 16px; font-size: 12px; }
@@ -4814,7 +4821,7 @@ ${unicornHeader}
             <input type="hidden" name="utm_campaign" value="" />
             <input type="hidden" name="utm_content" value="" />
             <input type="hidden" name="utm_term" value="" />
-            <input type="hidden" name="first_step" value="Review one workflow and reply with the first useful app." />
+            <input type="hidden" name="first_step" value="Review the business type and reply with the first useful app." />
             <input type="hidden" name="onboarding_stage" value="source_review" />
             <input type="hidden" name="access_policy" value="approval_required" />
             <input type="hidden" name="workspace_status" value="not_created_until_approved" />
@@ -4850,19 +4857,12 @@ ${unicornHeader}
             <input type="hidden" name="pilot_plan_scope" value="" />
             <input type="hidden" name="pilot_plan_next_action" value="" />
             <input type="hidden" name="pilot_plan_gate" value="" />
-            <input type="hidden" name="source_to_screen_workcell_id" value="" />
-            <input type="hidden" name="source_to_screen_workcell_name" value="" />
-            <input type="hidden" name="source_to_screen_source_hash" value="" />
-            <input type="hidden" name="source_to_screen_proof_target" value="" />
-            <input type="hidden" name="source_to_screen_order_packet" value="" />
-            <input type="hidden" name="source_to_screen_free_load_policy" value="" />
             <div class="form-row">
               <label>Name<input autocomplete="name" name="name" required /></label>
               <label>Work email<input autocomplete="email" name="email" required type="email" /></label>
               <label class="optional-mobile">Phone / WhatsApp<input autocomplete="tel" name="phone" type="tel" /></label>
               <label>Company<input autocomplete="organization" name="company" required /></label>
               <div class="wide selected-path" data-selected-path hidden><small>Selected</small><strong>General enquiry</strong><span class="selected-price" data-selected-price hidden></span><span class="selected-next" data-selected-next hidden></span></div>
-              <div class="wide source-handoff" data-source-to-screen-handoff hidden><small>Source-to-Screen packet carried from free draft</small><strong data-source-to-screen-handoff-title></strong><span data-source-to-screen-handoff-proof></span><code data-source-to-screen-handoff-hash></code></div>
               <label class="wide file-label">Upload files<input data-file-picker multiple name="source_files" type="file" /><span class="upload-list" data-upload-list></span></label>
               <label class="wide">Source link or system<input name="source_links" placeholder="Drive folder, sheet, email thread, POS export, meter reading, device, or note" /></label>
               <label class="wide">What should become clear?<textarea name="goal" placeholder="Example: what changed, who owns it, what is missing, and what should happen next." required></textarea></label>
@@ -4872,7 +4872,7 @@ ${unicornHeader}
             <p class="policy">No account or data connection before you approve the first step.</p>
             <p class="policy" style="border-top:1px solid var(--line);margin-top:10px;padding-top:10px"><strong style="color:#FF3B3B">14-day money-back guarantee.</strong> KBZPay · AYA Pay · Wave Money · bank transfer. 50% deposit, fully refundable.</p>
             <p class="form-status" data-lead-status aria-live="polite"></p>
-            <div class="next-card" data-next-card hidden><strong>Saved</strong><span>We review the workflow and reply with the first app to build. Nothing changes without approval.</span></div>
+            <div class="next-card" data-next-card hidden><strong>Saved</strong><span>We review the task and reply with the first useful output to build. Nothing changes without approval.</span></div>
           </form>
         </section>
         <section aria-label="Direct contact options" style="margin-top:32px;padding-top:24px;border-top:1px solid var(--line)">
@@ -4928,11 +4928,11 @@ ${publicRuntimeScripts}
         'workflow-desk': 'back-office-workflow-desk',
         'first-workflow': 'back-office-workflow-desk',
         'document-extraction-ledger': 'document-extraction-ledger',
-          'agent': 'ai-workcell-pilot',
-          'agent-email': 'ai-workcell-pilot',
-          'agent-drive': 'ai-workcell-pilot',
-          'agent-digest': 'ai-workcell-pilot',
-          'ai-agent': 'ai-workcell-pilot',
+          'agent': 'custom-ai-agent-build',
+          'agent-email': 'custom-ai-agent-build',
+          'agent-drive': 'custom-ai-agent-build',
+          'agent-digest': 'custom-ai-agent-build',
+          'ai-agent': 'custom-ai-agent-build',
           'operations-digital-twin': 'factory-issues-maintenance-quality',
           'digital-twin': 'factory-issues-maintenance-quality',
           'factorydesk': 'factory-issues-maintenance-quality',
@@ -4969,13 +4969,13 @@ ${publicRuntimeScripts}
             placeholder: 'Describe the numbers and sources it should pull together, and who reads it.',
             next: 'Next: a short scope call, then 50% deposit to start.'
           },
-          'ai-workcell-pilot': {
-            name: 'AI Workcell Pilot',
+          'custom-ai-agent-build': {
+            name: 'Custom Solutions & AI Agents',
             heading: 'Tell us what to build.',
             price: 'From 11,000,000 MMK',
-            lead: 'AI Workcell Pilot - from 11,000,000 MMK. Send one source pack and the first proof target.',
-            placeholder: 'Describe the messy recurring work, the sources it reads, and what must stay approval-only.',
-            next: 'Next: source pack review, First proof, then owner-approved pilot scope.'
+            lead: 'Custom Solutions & AI Agents - from 11,000,000 MMK. Tell us the repeated task and the first proof you need.',
+            placeholder: 'Describe the recurring work, the sources it reads, who approves it, and what should happen first.',
+            next: 'Next: sample review, first proof, then owner-approved setup scope.'
           },
           'design-ship': {
             name: 'Design + ship system',
@@ -5000,7 +5000,7 @@ ${publicRuntimeScripts}
           },
           'back-office-workflow-desk': {
             name: 'Back Office Workflow Desk',
-            lead: 'Send one workflow source.',
+            lead: 'Tell us what you run.',
             placeholder: 'Paste a link or describe the repeated work.'
           },
           'factory-issues-maintenance-quality': {
@@ -5068,86 +5068,6 @@ ${publicRuntimeScripts}
           const heading = document.querySelector('[data-contact-heading]');
           if (heading && selectedPackage.heading) heading.textContent = selectedPackage.heading;
         }
-        const sourceToScreenTemplates = {
-          daily_close: {
-            name: 'Daily cash close',
-            proof_target: 'Owner can see today sales, cash variance, missing proof, and tomorrow action queue.'
-          },
-          receivables_chase: {
-            name: 'Receivables chase',
-            proof_target: 'Owner can see who owes money, what was promised, and the next safe follow-up draft.'
-          },
-          inventory_exception: {
-            name: 'Inventory exception desk',
-            proof_target: 'Owner can see shortage, overstock, supplier risk, and reorder actions from messy stock data.'
-          },
-          lead_reply: {
-            name: 'Lead reply desk',
-            proof_target: 'Owner can see qualified leads, reply drafts, and follow-up priorities without losing source trace.'
-          },
-          document_ledger: {
-            name: 'Document ledger',
-            proof_target: 'Owner can see receipts, screenshots, files, and notes converted into searchable actions.'
-          }
-        };
-        function loadSourceToScreenOrder(){
-          let stored = {};
-          try {
-            stored = JSON.parse(localStorage.getItem('sm_source_to_screen_order') || '{}') || {};
-          } catch (error) {
-            stored = {};
-          }
-          const workcellId = search.get('workcell') || stored.workcell_id || '';
-          const sourceHash = search.get('source_hash') || stored.source_hash || '';
-          if (!workcellId && !sourceHash && !stored.source_to_screen_order_packet && !stored.order_packet) return;
-          const template = sourceToScreenTemplates[workcellId] || {};
-          const workcellName = stored.workcell_template || stored.workcell_name || template.name || workcellId || 'Source-to-Screen draft';
-          const proofTarget = stored.proof_target || template.proof_target || 'Confirm the first proof target from the free draft.';
-          const packet = stored.source_to_screen_order_packet || stored.order_packet || [
-            '# AI Workcell Pilot order packet',
-            '',
-            'workcell_template: ' + workcellName,
-            'workcell_id: ' + (workcellId || 'unknown'),
-            'source_hash: ' + (sourceHash || 'missing'),
-            'free_load_policy: browser_only_until_contact',
-            'real_mrr_delta: 0',
-            '',
-            'proof_target: ' + proofTarget
-          ].join('\\n');
-          set('source_to_screen_workcell_id', workcellId || stored.workcell_id || '');
-          set('source_to_screen_workcell_name', workcellName);
-          set('source_to_screen_source_hash', sourceHash || stored.source_hash || '');
-          set('source_to_screen_proof_target', proofTarget);
-          set('source_to_screen_order_packet', packet);
-          set('source_to_screen_free_load_policy', stored.free_load_policy || 'browser_only_until_contact');
-          if (!get('requested_package') || get('requested_package') === 'General enquiry') {
-            set('workflow', 'AI Workcell Pilot');
-            set('requested_package', 'AI Workcell Pilot');
-            set('first_output', 'AI Workcell Pilot');
-            set('product_area', 'AI agent workcell');
-            set('public_package', 'AI Workcell Pilot');
-            set('first_step', 'Review Source-to-Screen packet and request approved source pack.');
-          }
-          const previousData = get('data');
-          const handoffData = [
-            'Source-to-Screen handoff: ' + workcellName,
-            'Source hash: ' + (sourceHash || stored.source_hash || 'missing'),
-            'Proof target: ' + proofTarget,
-            'Free load policy: browser_only_until_contact'
-          ].join(' | ');
-          if (!previousData.includes('Source-to-Screen handoff:')) set('data', [previousData, handoffData].filter(Boolean).join(' | '));
-          const handoff = document.querySelector('[data-source-to-screen-handoff]');
-          if (handoff) {
-            handoff.hidden = false;
-            const title = handoff.querySelector('[data-source-to-screen-handoff-title]');
-            const proof = handoff.querySelector('[data-source-to-screen-handoff-proof]');
-            const hash = handoff.querySelector('[data-source-to-screen-handoff-hash]');
-            if (title) title.textContent = workcellName;
-            if (proof) proof.textContent = proofTarget;
-            if (hash) hash.textContent = 'source_hash=' + (sourceHash || stored.source_hash || 'missing');
-          }
-        }
-        loadSourceToScreenOrder();
         const status = form.querySelector('[data-lead-status]');
         const submit = form.querySelector('button[type="submit"]');
         const nextCard = form.querySelector('[data-next-card]');
@@ -6712,7 +6632,7 @@ ${unicornHeader}
           <div class="copy">
             <div class="eyebrow">Pricing</div>
             <h1>Start free. Pay when the worker proves value.</h1>
-            <p>Free core tools show the workflow first. Paid builds add private data, connectors, source trace, approval queues, scheduled runs, and maintenance. Starting prices in MMK; final quote after one short call.</p>
+            <p>Start with the app or setup kit that fits the business. Paid builds add private data, connectors, source trace, approval queues, scheduled runs, and maintenance. Starting prices in MMK; final quote after one short call.</p>
             <div class="cta">
               <a class="btn primary" href="/contact/?package=build">Get a quote</a>
               <a class="btn secondary" href="viber://chat?number=%2B9595000721" aria-label="Chat with us on Viber">Chat on Viber</a>
@@ -6741,7 +6661,7 @@ ${unicornHeader}
           <div class="eyebrow">How it works</div>
           <h2>From one workflow to a running system</h2>
           <div class="pd-steps">
-            <div class="pd-step"><strong>1. Send one workflow</strong><span>Share one file, screenshot, email chain, or chat export. That's enough to scope the first screen.</span></div>
+            <div class="pd-step"><strong>1. Tell us what you run</strong><span>Start with your shop, factory floor, or operating team. One file, screenshot, or note is enough for the first screen.</span></div>
             <div class="pd-step"><strong>2. Scope call (free)</strong><span>We review your source, show you the first screen, and confirm the price. No payment, no access required.</span></div>
             <div class="pd-step"><strong>3. 50% deposit to start</strong><span>Fixed-scope, fixed price. The second 50% is due when the system is live and you're satisfied.</span></div>
             <div class="pd-step"><strong>4. Delivered in weeks</strong><span>A running system at a real URL. You own it outright — no monthly fees, no vendor lock-in.</span></div>
@@ -6773,11 +6693,11 @@ ${publicRuntimeScripts}
 await mkdir(resolve(staticDir, 'contact'), { recursive: true })
 await writeFile(resolve(staticDir, 'contact', 'index.html'), normalizePublicProductNames(collapsedContactHtml), 'utf8')
 await mkdir(resolve(staticDir, 'free'), { recursive: true })
-await writeFile(resolve(staticDir, 'free', 'index.html'), normalizePublicProductNames(publicSourceToScreenHtml), 'utf8')
+await writeFile(resolve(staticDir, 'free', 'index.html'), publicRedirectHtml('/products/', 'See the two apps'), 'utf8')
 await mkdir(resolve(staticDir, 'offers'), { recursive: true })
 await writeFile(resolve(staticDir, 'offers', 'index.html'), normalizePublicProductNames(publicOffersHtml), 'utf8')
 await mkdir(resolve(staticDir, 'ai-agents'), { recursive: true })
-// Old "AI Agent Army" page retired (not a product). Redirect to the two-suite products page.
+// AI agents index is not a standalone product page. Redirect to the two-suite products page.
 await writeFile(resolve(staticDir, 'ai-agents', 'index.html'), publicRedirectHtml('/products/', 'See our two apps'), 'utf8')
 
 // Work / case studies — public proof. Honest, de-identified real builds (live products + client systems).
@@ -6972,7 +6892,7 @@ const publicOperatorConsoleHtml = `<!doctype html>
             </label>
             <label>
               <span>Package</span>
-              <input class="operator-input" data-activation-session-field="requested_package" value="Managed AI Workcell" />
+              <input class="operator-input" data-activation-session-field="requested_package" value="Custom Solutions & AI Agents" />
             </label>
             <label>
               <span>Buyer goal</span>
@@ -7060,7 +6980,7 @@ const publicOperatorConsoleHtml = `<!doctype html>
             {priority:'medium',user_device_mode:'desktop',user_role_mode:'technical_admin',visitor_stage:'worker_discovery',event_count:10,setup_starts:0,template_clicks:7,lead_form_submits:0,recommended_ui_adaptation:'Expose the full matcher, setup kit, proof plan, and operator-grade source trace because desktop users can review more detail.',recommended_sales_adaptation:'Lead with connector scope, permissions, audit log, vaulting, and rollback boundary.',privacy_gate:'aggregate_role_device_only_no_keystrokes_or_source_content'}
           ],
           recent_events:[
-            {event_id:'BEHAV-SAMPLE-01',event_type:'setup_started',page_path:'/agent-templates/daily-intelligence-brief/setup/',template_id:'daily-intelligence-brief',requested_package:'Managed AI Workcell',component:'starter-kit',cta_text:'Send setup request',utm_campaign:'sample',recorded_at:'SAMPLE-RECORDED-AT'}
+            {event_id:'BEHAV-SAMPLE-01',event_type:'setup_started',page_path:'/agent-templates/daily-intelligence-brief/setup/',template_id:'daily-intelligence-brief',requested_package:'Custom Solutions & AI Agents',component:'starter-kit',cta_text:'Send setup request',utm_campaign:'sample',recorded_at:'SAMPLE-RECORDED-AT'}
           ],
           privacy:'operator_summary_no_ip_user_agent_or_raw_payloads'
         },
@@ -8974,8 +8894,8 @@ const publicProofReviewHtml = `<!doctype html>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="robots" content="noindex,nofollow" />
-  <title>AI Workcell Proof Review | SUPERMEGA.dev</title>
-  <meta name="description" content="Client proof review room for SuperMega AI workcell first proofs." />
+  <title>Proof Review | SUPERMEGA.dev</title>
+  <meta name="description" content="Client proof review room for SuperMega first proofs." />
   <meta name="theme-color" content="#07111f" />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" />
   <style>
@@ -9025,7 +8945,7 @@ const publicProofReviewHtml = `<!doctype html>
     <section class="hero">
       <div>
         <div class="eyebrow">client review</div>
-        <h1>AI Workcell Proof Review</h1>
+        <h1>Proof Review</h1>
         <p>Review the first proof and submit an acceptance artifact for operator review. This page does not send messages, connect accounts, request payment, or claim revenue.</p>
       </div>
       <aside class="summary" aria-label="Proof review summary">
@@ -9145,8 +9065,8 @@ const publicPaymentProofHtml = `<!doctype html>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="robots" content="noindex,nofollow" />
-  <title>AI Workcell Payment Proof | SUPERMEGA.dev</title>
-  <meta name="description" content="Client payment-proof submission room for SuperMega AI workcell paid pilots." />
+  <title>Payment Proof | SUPERMEGA.dev</title>
+  <meta name="description" content="Client payment-proof submission room for SuperMega paid pilots." />
   <meta name="theme-color" content="#07111f" />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" />
   <style>
@@ -9196,7 +9116,7 @@ const publicPaymentProofHtml = `<!doctype html>
     <section class="hero">
       <div>
         <div class="eyebrow">client payment evidence</div>
-        <h1>AI Workcell Payment Proof</h1>
+        <h1>Payment Proof</h1>
         <p>Submit payment evidence for operator reconciliation. This does not create a workspace, verify a bank match, send messages, or claim revenue.</p>
       </div>
       <aside class="summary" aria-label="Payment proof summary">
@@ -9320,8 +9240,8 @@ const publicSourcePackIntakeHtml = `<!doctype html>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="robots" content="noindex,nofollow" />
-  <title>AI Workcell Source Pack Intake | SUPERMEGA.dev</title>
-  <meta name="description" content="Client source pack intake for SuperMega AI workcell first proofs." />
+  <title>Source Pack Intake | SUPERMEGA.dev</title>
+  <meta name="description" content="Client source pack intake for SuperMega first proofs." />
   <meta name="theme-color" content="#07111f" />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" />
   <style>
@@ -9372,7 +9292,7 @@ const publicSourcePackIntakeHtml = `<!doctype html>
     <section class="hero">
       <div>
         <div class="eyebrow">client intake</div>
-        <h1>AI Workcell Source Pack Intake</h1>
+        <h1>Source Pack Intake</h1>
         <p>Send the smallest approved source pack for a first proof: one customer message, one order or work-list export, and one process note or screenshot. This page stores the source pack for operator review only. No external access, no account connection, no connector write, and no payment request happens here.</p>
       </div>
       <aside class="summary" aria-label="Source pack summary">
@@ -10079,14 +9999,13 @@ await mkdir(resolve(staticDir, 'demo'), { recursive: true })
 await cp('C:/sm-site/supermega-demo/index.html', resolve(staticDir, 'demo', 'index.html'), { force: true }).catch(() => undefined)
 await cp('C:/sm-site/supermega-demo/favicon.svg', resolve(staticDir, 'demo', 'favicon.svg'), { force: true }).catch(() => undefined)
 await writeFile(resolve(staticDir, 'robots.txt'), 'User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /app/\nDisallow: /clients/\nDisallow: /machine/\nDisallow: /operator/\nSitemap: https://supermega.dev/sitemap.xml\n', 'utf8')
-await writeFile(resolve(staticDir, 'sitemap.xml'), '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url><loc>https://supermega.dev/</loc><changefreq>weekly</changefreq><priority>1.0</priority></url>\n  <url><loc>https://supermega.dev/products/</loc><changefreq>weekly</changefreq><priority>0.9</priority></url>\n  <url><loc>https://supermega.dev/products/pos/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>\n  <url><loc>https://supermega.dev/products/factory/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>\n  <url><loc>https://supermega.dev/products/documents/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>\n  <url><loc>https://supermega.dev/free/</loc><changefreq>weekly</changefreq><priority>0.86</priority></url>\n  <url><loc>https://supermega.dev/ai-agents/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>\n  <url><loc>https://supermega.dev/agent-templates/</loc><changefreq>weekly</changefreq><priority>0.85</priority></url>\n  <url><loc>https://supermega.dev/agent-templates/deskpos-quickstart/</loc><changefreq>weekly</changefreq><priority>0.72</priority></url>\n  <url><loc>https://supermega.dev/agent-templates/chat-ledger/</loc><changefreq>weekly</changefreq><priority>0.72</priority></url>\n  <url><loc>https://supermega.dev/agent-templates/inbox-calendar-operator/</loc><changefreq>weekly</changefreq><priority>0.72</priority></url>\n  <url><loc>https://supermega.dev/agent-templates/daily-intelligence-brief/</loc><changefreq>weekly</changefreq><priority>0.72</priority></url>\n  <url><loc>https://supermega.dev/agent-templates/factory-ops-ledger/</loc><changefreq>weekly</changefreq><priority>0.72</priority></url>\n  <url><loc>https://supermega.dev/agent-templates/data-clean-report-agent/</loc><changefreq>weekly</changefreq><priority>0.72</priority></url>\n  <url><loc>https://supermega.dev/offers/</loc><changefreq>weekly</changefreq><priority>0.95</priority></url>\n  <url><loc>https://supermega.dev/work/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>\n  <url><loc>https://supermega.dev/contact/</loc><changefreq>monthly</changefreq><priority>0.9</priority></url>\n  <url><loc>https://supermega.dev/card/</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>\n  <url><loc>https://supermega.dev/privacy/</loc><changefreq>yearly</changefreq><priority>0.3</priority></url>\n</urlset>\n', 'utf8')
+await writeFile(resolve(staticDir, 'sitemap.xml'), '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url><loc>https://supermega.dev/</loc><changefreq>weekly</changefreq><priority>1.0</priority></url>\n  <url><loc>https://supermega.dev/products/</loc><changefreq>weekly</changefreq><priority>0.9</priority></url>\n  <url><loc>https://supermega.dev/products/pos/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>\n  <url><loc>https://supermega.dev/products/factory/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>\n  <url><loc>https://supermega.dev/products/documents/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>\n  <url><loc>https://supermega.dev/ai-agents/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>\n  <url><loc>https://supermega.dev/agent-templates/</loc><changefreq>weekly</changefreq><priority>0.85</priority></url>\n  <url><loc>https://supermega.dev/agent-templates/deskpos-quickstart/</loc><changefreq>weekly</changefreq><priority>0.72</priority></url>\n  <url><loc>https://supermega.dev/agent-templates/chat-ledger/</loc><changefreq>weekly</changefreq><priority>0.72</priority></url>\n  <url><loc>https://supermega.dev/agent-templates/inbox-calendar-operator/</loc><changefreq>weekly</changefreq><priority>0.72</priority></url>\n  <url><loc>https://supermega.dev/agent-templates/daily-intelligence-brief/</loc><changefreq>weekly</changefreq><priority>0.72</priority></url>\n  <url><loc>https://supermega.dev/agent-templates/factory-ops-ledger/</loc><changefreq>weekly</changefreq><priority>0.72</priority></url>\n  <url><loc>https://supermega.dev/agent-templates/data-clean-report-agent/</loc><changefreq>weekly</changefreq><priority>0.72</priority></url>\n  <url><loc>https://supermega.dev/offers/</loc><changefreq>weekly</changefreq><priority>0.95</priority></url>\n  <url><loc>https://supermega.dev/work/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>\n  <url><loc>https://supermega.dev/contact/</loc><changefreq>monthly</changefreq><priority>0.9</priority></url>\n  <url><loc>https://supermega.dev/card/</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>\n  <url><loc>https://supermega.dev/privacy/</loc><changefreq>yearly</changefreq><priority>0.3</priority></url>\n</urlset>\n', 'utf8')
 const publicSitemapUrls = [
   ['/', 'weekly', '1.0'],
   ['/products/', 'weekly', '0.9'],
   ['/products/pos/', 'weekly', '0.8'],
   ['/products/factory/', 'weekly', '0.8'],
   ['/products/documents/', 'weekly', '0.8'],
-  ['/free/', 'weekly', '0.86'],
   ['/ai-agents/', 'weekly', '0.8'],
   ['/ai-agents/guide/', 'weekly', '0.82'],
   ['/agent-templates/', 'weekly', '0.85'],
@@ -10146,7 +10065,7 @@ await prunePublicSiteDir()
 await prunePublicStaticRoot()
 await mkdir(staticDir, { recursive: true })
 await mkdir(resolve(staticDir, 'free'), { recursive: true })
-await writeFile(resolve(staticDir, 'free', 'index.html'), normalizePublicProductNames(publicSourceToScreenHtml), 'utf8')
+await writeFile(resolve(staticDir, 'free', 'index.html'), publicRedirectHtml('/products/', 'See the two apps'), 'utf8')
 await writeFile(
   resolve(staticDir, 'private-not-found.html'),
   '<!doctype html><html lang="en"><meta charset="utf-8"><meta name="robots" content="noindex,nofollow"><title>Not found</title><body>Not found.</body></html>\n',
