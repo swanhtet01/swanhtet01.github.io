@@ -1910,7 +1910,7 @@ const unicornShellStyle = `
         .brand { flex: 1 1 auto; min-width: 0; gap: 8px; }
         .brand-text { min-width: 0; }
         .brand-text strong { display: block; max-width: 142px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 16px; }
-        .brand-text strong, .brand-text small, .nav .optional-nav { display: none; }
+        .brand-text, .brand-text .wm, .brand-text strong, .brand-text small, .nav .optional-nav { display: none; }
         .nav { flex: 0 0 auto; gap: 6px; }
         .btn, button { min-height: 42px; padding: 0 12px; }
         .poster, .split, .product-library-head, .output, .proof-system, .proof-board, .workcell-grid, .local-worker-continue, .role-mode-panel, .device-mode-panel, .adaptive-plan-panel, .source-pack-panel, .proof-plan-panel, .value-plan-panel, .pilot-plan-panel, .final { grid-template-columns: 1fr; }
@@ -1994,6 +1994,9 @@ const unicornShellStyle = `
         .source-pack-actions .btn { flex: 1 1 auto; }
         .proof-plan-actions { justify-content: stretch; }
         .proof-plan-actions .btn { flex: 1 1 auto; }
+      }
+      @media (max-width: 480px) {
+        .nav a[href="/demo/"] { display: none; }
       }
 
       :root { --gilt: #FF3B3B; }
