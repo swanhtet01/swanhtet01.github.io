@@ -142,15 +142,16 @@ function normalizePublicProductNames(content) {
     .replace(/\/site\/shots\/product-factory-maintenance-quality-app\.svg|\/site\/shots\/product-factory-operations-app\.svg|\/site\/shots\/product-factory-issue-maintenance-tracker\.svg/g, '/site/shots/product-factory-issues-maintenance-quality.svg')
     .replace(/\/site\/shots\/product-restaurant-pos-inventory-app\.svg|\/site\/shots\/product-restaurant-pos-app\.svg|\/site\/shots\/product-restaurant-pos-stock-tracker\.svg/g, '/site/shots/product-restaurant-pos-menu-inventory.svg')
     .replace(/Back Office (?:Back Office )+Workflow Desk/g, 'Back Office Workflow Desk')
-    // FINAL CANONICALIZATION — collapse every legacy/variant product name to the only 3 public
-    // names (CEO-ratified, pricing.json taxonomy: DeskPOS · Factory & Operations App · Custom
-    // Solutions & AI Agents). Runs last so nothing slips through, on every normalized page.
-    .replace(/Restaurant POS \+ Inventory|Restaurant POS and Inventory/g, 'DeskPOS')
-    .replace(/DeskPOS\s*[—–-]\s*Point of Sale/g, 'DeskPOS')
-    .replace(/Factory Operations App/g, 'Factory & Operations App')
-    .replace(/Document Extraction Ledger/g, 'Custom Solutions & AI Agents')
-    .replace(/Back Office AI Desk|Back Office Workflow Desk/g, 'Custom Solutions & AI Agents')
-    // Retire the old tagline. Header sub-mark → clean wordmark; every other use → the one CEO line.
+    // FINAL CANONICALIZATION — founder-locked 2-suite product story (SITE-CONSISTENCY-KIT.md,
+    // 2026-07-09): the site sells exactly two apps — Retail OS (the shop app) and Factory OS (the
+    // factory/operations app). Collapse every legacy/variant name into those two. Runs last so
+    // nothing slips through, on every normalized page.
+    .replace(/Restaurant POS \+ Inventory|Restaurant POS and Inventory/g, 'Retail OS')
+    .replace(/DeskPOS\s*[—–-]\s*Point of Sale/g, 'Retail OS')
+    .replace(/\bDeskPOS\b/g, 'Retail OS')
+    .replace(/Factory & Operations App|Factory Operations App/g, 'Factory OS')
+    .replace(/Document Extraction Ledger|Back Office AI Desk|Back Office Workflow Desk/g, 'Custom Solutions & AI Agents')
+    // Retire the old tagline. Header sub-mark → clean wordmark; every other use → the one line.
     .replace(/<small>Cast real work into software<\/small>/g, '')
     .replace(/Cast real work into software\.?/g, 'Stop running your business on Viber & Excel.')
 }
@@ -1578,19 +1579,25 @@ const publicCampaignRedirectHtml = `<!doctype html>
 const unicornShellStyle = `
       @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400..900&display=swap');
       :root {
-        color-scheme: light;
-        --cream: #f7f4ec;
-        --paper: #fffdf8;
-        --ink: #2a241c;
-        --muted: #6f665a;
-        --line: rgba(42, 36, 28, 0.14);
+        color-scheme: dark;
+        /* Void Blue + Fire Red — canonical (BRAND-TOKENS.css). Legacy var names kept, dark values. */
+        --void: #07111f;
+        --void-deep: #06101d;
+        --cream: #07111f;
+        --paper: rgba(255, 255, 255, 0.075);
+        --panel: rgba(255, 255, 255, 0.075);
+        --ink: #f6fbff;
+        --text: #f6fbff;
+        --muted: #a9b8c7;
+        --line: rgba(255, 255, 255, 0.15);
         --blue: #FF3B3B;
-        --blue-soft: #f2e4db;
-        --aqua: #d9895f;
-        --navy: #2a241c;
-        --shadow: 0 34px 90px rgba(42, 36, 28, 0.13);
-        --font-sans: "Inter", "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
-        --font-serif: "Space Grotesk", "Georgia", "Cambria", ui-serif, serif;
+        --blue-soft: rgba(255, 59, 59, 0.16);
+        --aqua: #FF5C4D;
+        --navy: #07111f;
+        --dotdev: #5E6B87;
+        --shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+        --font-sans: "Inter", "Noto Sans Myanmar", "Segoe UI", system-ui, -apple-system, sans-serif;
+        --font-serif: "Space Grotesk", "Inter", system-ui, ui-serif, sans-serif;
       }
       * { box-sizing: border-box; }
       html { scroll-behavior: smooth; }
@@ -1598,11 +1605,11 @@ const unicornShellStyle = `
         margin: 0;
         min-height: 100vh;
         overflow-x: hidden;
-        color: var(--ink);
+        color: var(--text);
         background:
-          radial-gradient(circle at 80% 2%, rgba(217, 119, 87, 0.14), transparent 30rem),
-          radial-gradient(circle at 4% 18%, rgba(194, 96, 63, 0.10), transparent 26rem),
-          linear-gradient(180deg, #fbf9f3 0%, var(--cream) 58%, #efe9dd 100%);
+          radial-gradient(circle at 80% 2%, rgba(255, 59, 59, 0.10), transparent 30rem),
+          radial-gradient(circle at 4% 18%, rgba(255, 59, 59, 0.07), transparent 26rem),
+          linear-gradient(180deg, #08121f 0%, var(--void) 58%, #050d18 100%);
         font-family: var(--font-sans);
         text-rendering: optimizeLegibility;
         -webkit-font-smoothing: antialiased;
@@ -1612,10 +1619,10 @@ const unicornShellStyle = `
         position: fixed;
         inset: 0;
         pointer-events: none;
-        opacity: 0.12;
+        opacity: 0.10;
         background-image:
-          linear-gradient(rgba(13, 17, 23, 0.055) 1px, transparent 1px),
-          linear-gradient(90deg, rgba(13, 17, 23, 0.055) 1px, transparent 1px);
+          linear-gradient(rgba(255, 255, 255, 0.06) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(255, 255, 255, 0.06) 1px, transparent 1px);
         background-size: 64px 64px;
         mask-image: linear-gradient(180deg, #000 0%, transparent 72%);
       }
@@ -1624,15 +1631,15 @@ const unicornShellStyle = `
       .wrap { width: min(1180px, calc(100% - 36px)); margin: 0 auto; position: relative; overflow: clip; }
       header { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 22px 0; }
       .brand { display: inline-flex; align-items: center; gap: 12px; font-weight: 950; letter-spacing: -0.045em; }
-      .mark { position: relative; display: grid; place-items: center; width: 43px; height: 43px; border-radius: 14px; overflow: hidden; background: var(--navy); box-shadow: 0 14px 34px rgba(7,17,31,0.22), inset 0 1px 0 rgba(255,255,255,0.18); }
+      .mark { position: relative; display: grid; place-items: center; width: 43px; height: 43px; border-radius: 14px; overflow: hidden; background: transparent; }
       .mark img { display: block; width: 100%; height: 100%; }
       .brand-text { display: grid; gap: 2px; }
       .brand-text strong { font-size: 18px; }
       .brand-text small { color: var(--muted); font-size: 10px; font-weight: 900; letter-spacing: 0.18em; text-transform: uppercase; }
       .nav { display: flex; align-items: center; gap: 10px; }
-      .btn, button { display: inline-flex; align-items: center; justify-content: center; min-height: 48px; border: 1px solid var(--line); border-radius: 999px; padding: 0 18px; background: rgba(255,255,255,0.64); color: var(--ink); font: inherit; font-weight: 650; backdrop-filter: blur(18px); transition: transform 180ms ease, background 180ms ease, border-color 180ms ease; }
+      .btn, button { display: inline-flex; align-items: center; justify-content: center; min-height: 48px; border: 1px solid var(--line); border-radius: 999px; padding: 0 18px; background: rgba(255,255,255,0.06); color: var(--text); font: inherit; font-weight: 650; backdrop-filter: blur(18px); transition: transform 180ms ease, background 180ms ease, border-color 180ms ease; }
       .btn:hover, button:hover { transform: translateY(-1px); border-color: rgba(255,59,59,0.40); }
-      .btn.primary, button { color: #fff; border-color: transparent; background: linear-gradient(135deg, #b1542f, #D62828); box-shadow: 0 18px 40px rgba(194, 96, 63, 0.26); }
+      .btn.primary, button { color: #fff; border-color: transparent; background: linear-gradient(135deg, #FF3B3B, #FF5C4D); box-shadow: 0 18px 40px rgba(255, 59, 59, 0.28); }
       .poster { display: grid; grid-template-columns: minmax(0, 0.84fr) minmax(340px, 1.16fr); gap: clamp(24px, 5vw, 72px); align-items: center; min-height: min(620px, calc(100svh - 86px)); padding: 10px 0 42px; }
       .eyebrow { color: var(--blue); font-size: 12px; font-weight: 950; letter-spacing: 0.22em; text-transform: uppercase; }
       h1, h2, h3 { font-family: var(--font-serif, "Georgia", ui-serif, serif); font-weight: 560; font-optical-sizing: auto; }
@@ -2038,7 +2045,6 @@ const unicornHeader = `
         <nav class="nav" aria-label="Primary">
           <button class="btn secondary theme-toggle" type="button" aria-label="Toggle dark mode" onclick="var r=document.documentElement,n=r.getAttribute('data-theme')==='dark'?'light':'dark';r.setAttribute('data-theme',n);try{localStorage.setItem('sm-theme',n)}catch(e){}"></button>
           <a class="btn secondary optional-nav" href="/products/">Products</a>
-          <a class="btn secondary optional-nav" href="/ai-agents/">AI Agents</a>
           <a class="btn secondary" href="/demo/">Demos</a>
           <a class="btn secondary" href="/offers/">Pricing</a>
           <a class="btn primary" href="/contact/">Contact</a>
@@ -4308,32 +4314,33 @@ ${renderSellableWorkerShelf()}
         </section>
 
         <section class="section connector-section">
-          <h2>One kernel, wired into 51 real systems.</h2>
+          <h2>One kernel, wired into 59 real systems.</h2>
           <p class="section-sub">Agents read from the tools your team already uses and act through rails you already trust. API connectors come first; browser, desktop, and mobile hands are used only when no safer API/export path exists.</p>
           <div style="border:1px solid rgba(255,59,59,0.45);border-radius:18px;background:linear-gradient(135deg, rgba(255,59,59,0.12), rgba(255,59,59,0.06));padding:16px 20px;margin-bottom:20px">
-            <div class="connector-group-label" style="color:#FF3B3B">★ Myanmar-native rails — built in, no global SaaS has these · 8</div>
+            <div class="connector-group-label" style="color:#FF3B3B">★ Myanmar-native rails — built in, no global SaaS has these · 9</div>
             <div class="connector-grid" style="margin-top:10px">
-              ${['KBZPay','WavePay','AYA Pay','CB Pay','OnePay','MMQR','CBM Rate','Viber'].map((n) => `<div class="connector-chip" style="border-color:rgba(255,59,59,0.55);background:rgba(255,59,59,0.14);color:#7a6320;font-weight:850">${n}</div>`).join('')}
+              ${['KBZPay','WavePay','AYA Pay','CB Pay','OnePay','MMQR','CBM Rate','Viber','Dinger'].map((n) => `<div class="connector-chip" style="border-color:rgba(255,59,59,0.55);background:rgba(255,59,59,0.14);color:#FFB4AB;font-weight:850">${n}</div>`).join('')}
             </div>
           </div>
           <div class="connector-groups">
             ${[
               ['Messaging & notify', ['Telegram', 'WhatsApp Business', 'Instagram', 'LINE', 'LINE Notify', 'Facebook Messenger', 'Slack', 'Microsoft Teams', 'Discord', 'SMS (Twilio)', 'Email (Resend)']],
-              ['Data & work', ['Gmail', 'Google Drive', 'Google Sheets', 'Google Calendar', 'Notion', 'Airtable', 'HubSpot', 'Supabase', 'QuickBooks', 'Xero', 'Dropbox', 'Mailchimp']],
-              ['AI models', ['Claude (gateway)', 'Anthropic (Claude)', 'OpenAI (GPT)', 'Google Gemini', 'OpenRouter', 'DeepSeek', 'Mistral', 'Groq', 'Cohere']],
-              ['Commerce', ['Shopify', 'WooCommerce', 'Shopee', 'Lazada', 'Square', 'Barcode (EAN-13)']],
+              ['Data & work', ['Gmail', 'Google Drive', 'Google Sheets', 'Google Calendar', 'Notion', 'Airtable', 'HubSpot', 'Supabase', 'QuickBooks', 'Xero', 'Zoho Books', 'Dropbox', 'Mailchimp', 'Google Analytics']],
+              ['AI models', ['Claude (gateway)', 'Anthropic (Claude)', 'OpenAI (GPT)', 'Google Gemini', 'OpenRouter', 'DeepSeek', 'Mistral', 'Groq', 'Cohere', 'Perplexity']],
+              ['Commerce', ['Shopify', 'WooCommerce', 'Shopee', 'Lazada', 'Square', 'TikTok Shop', 'Barcode (EAN-13)']],
+              ['Fulfilment & ads', ['Ninja Van', 'J&T Express', 'Meta Ads']],
               ['Payments (global) & integration', ['Stripe', '2C2P', 'Generic Webhook', 'Zapier', 'Generic HTTP']],
             ].map(([label, items]) => `<div class="connector-group"><div class="connector-group-label">${label} · ${items.length}</div><div class="connector-grid">${items.map((n) => `<div class="connector-chip">${n}</div>`).join('')}</div></div>`).join('')}
           </div>
-          <p class="connector-note">51 connectors live in the kernel today — and adding the next one is a single adapter file, not a rebuild. That's the architecture: it scales by addition, never by replacing what works. Most clients start with two or three.</p>
+          <p class="connector-note">59 connectors live in the kernel today — and adding the next one is a single adapter file, not a rebuild. That's the architecture: it scales by addition, never by replacing what works. Most clients start with two or three.</p>
         </section>
 
         <section class="section">
           <div class="eyebrow">Technical architecture</div>
           <h2>Why this works when other platforms don't</h2>
-          <p style="color:var(--muted);max-width:56ch;margin-bottom:32px">Most "AI tools" are wrappers over a single API. SuperMega is a kernel — a shared data spine, an action bus, and 51 pre-wired connectors that agents can combine to build real workflows from your actual data.</p>
+          <p style="color:var(--muted);max-width:56ch;margin-bottom:32px">Most "AI tools" are wrappers over a single API. SuperMega is a kernel — a shared data spine, an action bus, and 59 pre-wired connectors that agents can combine to build real workflows from your actual data.</p>
           <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px">
-            <div class="output"><strong>51 connectors, pre-wired</strong><span style="color:var(--muted);display:block;margin-top:6px;font-size:15px">Including Myanmar-native rails — KBZ Pay, Wave Pay, AYA Pay, CB Pay, MMQR, CBM Rate, and Viber. No international platform has these. An agent can read a Gmail thread, calculate in MMK at today's rate, and send a Viber alert — in one pipeline.</span></div>
+            <div class="output"><strong>59 connectors, pre-wired</strong><span style="color:var(--muted);display:block;margin-top:6px;font-size:15px">Including Myanmar-native rails — KBZ Pay, Wave Pay, AYA Pay, CB Pay, MMQR, CBM Rate, and Viber. No international platform has these. An agent can read a Gmail thread, calculate in MMK at today's rate, and send a Viber alert — in one pipeline.</span></div>
             <div class="output"><strong>Multi-model AI kernel</strong><span style="color:var(--muted);display:block;margin-top:6px;font-size:15px">Claude, Gemini, and GPT-4o in one registry. Each agent call routes to the right model by task and cost. Drafting an email reply uses a cheap fast model. Classifying 500 warranty claims uses the most accurate one.</span></div>
             <div class="output"><strong>Approval-gated action bus</strong><span style="color:var(--muted);display:block;margin-top:6px;font-size:15px">Agents prepare work. You approve. Every money, send, and access action requires a human decision. The pipeline persists every action to a ledger — nothing happens silently, nothing repeats without cause.</span></div>
             <div class="output"><strong>Real-data, first call</strong><span style="color:var(--muted);display:block;margin-top:6px;font-size:15px">We connect to your actual Gmail, Drive, Sheets, and database on the first day. Not demo data, not sample exports. The first output is built from your real inputs so the price and timeline are accurate before any deposit.</span></div>
@@ -4448,23 +4455,23 @@ const unicornPublicShellHtml = `<!doctype html>
       .proof-strip a:hover strong { color: var(--blue); }
       .hero-tagline { font-family: var(--font-serif); font-style: italic; color: var(--blue); font-size: clamp(15px, 1.4vw, 17px); margin-top: 22px; letter-spacing: -0.01em; opacity: 0.9; }
       .uvp-grid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 14px; margin-top: 24px; }
-      .uvp-card { border: 1px solid var(--line); border-radius: 18px; padding: 22px; background: rgba(255,255,255,0.5); }
-      :root[data-theme="dark"] .uvp-card { background: rgba(243,239,230,0.05); }
+      .uvp-card { border: 1px solid var(--line); border-radius: 18px; padding: 22px; background: rgba(255,255,255,0.055); }
+      :root[data-theme="dark"] .uvp-card { background: rgba(255,255,255,0.055); }
       .uvp-card strong { display: block; font-size: 18px; letter-spacing: -0.02em; }
       .uvp-card span { display: block; margin-top: 8px; color: var(--muted); font-size: 14px; line-height: 1.5; }
       .how-steps { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 16px; margin-top: 24px; }
       .how-step n { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 999px; background: var(--blue); color: #fff; font-weight: 600; font-size: 15px; }
       .how-step strong { display: block; margin-top: 12px; font-size: 18px; letter-spacing: -0.02em; }
       .how-step span { display: block; margin-top: 7px; color: var(--muted); font-size: 14px; line-height: 1.5; }
-      .hero-img { width: 100%; display: block; border-radius: 16px; border: 1px solid rgba(42,36,28,0.12); box-shadow: var(--shadow); background: #f5f1e8; }
-      :root[data-theme="dark"] .hero-img { border-color: rgba(243,239,230,0.14); }
+      .hero-img { width: 100%; display: block; border-radius: 16px; border: 1px solid var(--line); box-shadow: var(--shadow); background: rgba(255,255,255,0.04); }
+      :root[data-theme="dark"] .hero-img { border-color: var(--line); }
       .workcell-panel { border: 1px solid var(--line); border-radius: 28px; padding: clamp(22px,4vw,40px); background: linear-gradient(135deg, rgba(255,59,59,0.06), rgba(255,59,59,0.055)); }
       .workcell-panel p { color: var(--muted); line-height: 1.58; max-width: 66ch; }
       .workcell-grid { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 12px; margin-top: 22px; }
-      .workcell-step { border: 1px solid var(--line); border-radius: 18px; padding: 16px; background: rgba(255,255,255,0.52); }
+      .workcell-step { border: 1px solid var(--line); border-radius: 18px; padding: 16px; background: rgba(255,255,255,0.055); }
       .workcell-step strong { display: block; letter-spacing: -0.02em; }
       .workcell-step span { display: block; margin-top: 7px; color: var(--muted); font-size: 13px; line-height: 1.43; }
-      :root[data-theme="dark"] .workcell-step { background: rgba(243,239,230,0.05); }
+      :root[data-theme="dark"] .workcell-step { background: rgba(255,255,255,0.055); }
       /* Founder section */
       .founder-inner { display: grid; grid-template-columns: 220px 1fr; gap: 48px; align-items: start; }
       .founder-photo-wrap { position: sticky; top: 24px; }
@@ -4495,49 +4502,40 @@ ${unicornHeader}
       <main>
         <section class="poster">
           <div class="copy">
-            <h1>Your whole business, in one simple app.</h1>
-            <p style="font-size:clamp(16px,2vw,19px);color:var(--muted);margin:18px 0 0;max-width:36ch;line-height:1.55">Sales, stock, customers and money — together in one place, and easy to use. You own it, and it works on the phone you already have.</p>
+            <h1>Stop running your business on Viber &amp; Excel.</h1>
+            <p style="font-size:clamp(16px,2vw,19px);color:var(--muted);margin:18px 0 0;max-width:38ch;line-height:1.55">Two simple apps for the way your business really runs — your shop and your factory floor. Easy to use, yours to keep, and they work on the phone you already have.</p>
             <div class="cta" style="margin-top:28px">
-              <a class="btn primary" href="/free/">Start free</a>
-              <a class="btn secondary" href="/offers/">See how it works</a>
+              <a class="btn primary" href="/contact/">Start free</a>
+              <a class="btn secondary" href="/products/">See the two apps</a>
             </div>
           </div>
           <aside class="product-stage" aria-label="supermega app">
             <img class="hero-img" src="/site/shots/live-product-restaurant-pos-menu-inventory.png?v=${publicShotVersion}" alt="supermega — your business in one app" loading="eager" decoding="async" />
             <div class="proof-line" aria-label="Why it is simple">
               <div class="proof"><b>Free to start</b><span>No card</span></div>
-              <div class="proof"><b>Yours to keep</b><span>One app</span></div>
+              <div class="proof"><b>Yours to keep</b><span>Your data</span></div>
               <div class="proof"><b>On your phone</b><span>Nothing to install</span></div>
             </div>
           </aside>
         </section>
 
         <section class="section" id="products">
-          <h2>Three tools, one place your business runs.</h2>
-          <div class="uvp-grid">
-            <div class="uvp-card" style="border-top:3px solid #FF3B3B"><strong>Shop</strong><span>Sales, stock, customers and money for your shop or restaurant — the everyday app.</span></div>
-            <div class="uvp-card" style="border-top:3px solid #F59E1B"><strong>Factory</strong><span>Track issues, maintenance, quality and orders for your factory or workshop.</span></div>
-            <div class="uvp-card" style="border-top:3px solid #8B5CF6"><strong>Studio</strong><span>Make your marketing — posts, product photos and ads — in minutes, with AI.</span></div>
+          <h2>Two apps. One way your business runs.</h2>
+          <div class="uvp-grid" style="grid-template-columns:repeat(2,minmax(0,1fr))">
+            <div class="uvp-card" style="border-top:3px solid #FF3B3B"><strong>Retail OS</strong><span>The app for your shop or restaurant. Point of sale, customers and books — together in one place. Start free; premium adds AI and data features.</span></div>
+            <div class="uvp-card" style="border-top:3px solid #FF3B3B"><strong>Factory OS</strong><span>The app for your factory and operations. Log, assign and confirm the day's work, turn a whiteboard photo into data, and keep to your standards.</span></div>
           </div>
         </section>
 
         <section class="section">
           <div style="border:1px solid var(--line);border-radius:20px;padding:clamp(24px,4vw,36px);text-align:center;background:rgba(255,59,59,0.045)">
-            <p style="font-size:clamp(18px,2.4vw,23px);font-weight:600;letter-spacing:-.01em;max-width:42ch;margin:0 auto;color:var(--ink)">Simple to start. Yours to keep. Made for the way your business really works.</p>
-            <div class="cta" style="justify-content:center;margin-top:22px"><a class="btn primary" href="/free/">Start free</a></div>
+            <p style="font-size:clamp(18px,2.4vw,23px);font-weight:600;letter-spacing:-.01em;max-width:42ch;margin:0 auto;color:var(--text)">Simple to start. Yours to keep. Made for the way your business really works.</p>
+            <div class="cta" style="justify-content:center;margin-top:22px"><a class="btn primary" href="/contact/">Start free</a></div>
           </div>
         </section>
       </main>
       <footer>
-        <span>© 2026 SUPERMEGA.dev — custom business software for Myanmar. Built from your real data.</span>
-        <span class="footer-links">
-          <a href="mailto:swanhtet@supermega.dev">swanhtet@supermega.dev</a>
-          <a href="tel:+9595000721">+95 9 500 0721</a>
-          <a href="/products/">Products</a>
-          <a href="/demo/">Demos</a>
-          <a href="/offers/">Pricing</a>
-          <a href="https://www.linkedin.com/in/theswanhtet" rel="noreferrer" target="_blank">LinkedIn</a>
-        </span>
+        <span>Powered by SuperMega Technologies</span>
       </footer>
     </div>
 ${publicRuntimeScripts}
@@ -4652,97 +4650,65 @@ ${unicornHeader}
       <main>
         <section class="poster">
           <div class="copy">
-            <div class="eyebrow">Free-core tools · Premium AI/data layers · Custom agent crews</div>
-            <h1>Built for Myanmar. Designed to replace bloated SaaS.</h1>
-            <p>Start with a useful free or fixed-scope tool. Add premium AI only when it handles a real money job: cleanup, reconciliation, reports, inboxes, approvals, and mobile or desktop workflows.</p>
+            <div class="eyebrow">Two apps · Start free · Yours to keep</div>
+            <h1>Stop running your business on Viber &amp; Excel.</h1>
+            <p>Two simple apps, built for the way your business really runs. Retail OS for your shop. Factory OS for your factory floor. Start free; add AI and data features when you need them.</p>
             <div class="cta">
-              <a class="btn primary" href="/free/" style="background:linear-gradient(180deg,#F6851F,#F26419);border-color:#F26419;color:#fff;box-shadow:0 12px 30px rgba(242,100,25,0.30)">Try the free tool</a>
-              <a class="btn secondary" href="/ai-agents/">See agent crews</a>
+              <a class="btn primary" href="/contact/">Start free</a>
               <a class="btn secondary" href="/offers/">Pricing</a>
             </div>
-            <p class="hero-tagline">Cast real work into software.</p>
           </div>
           <aside class="product-stage">
             <div class="browser">
-            ${workflowProductUi}
+            ${restaurantProductUi}
             </div>
           </aside>
         </section>
 
         <section class="gallery" aria-label="SUPERMEGA product lineup">
-          <article class="feature" id="build-app-from-workflow">
+          <article class="feature" id="restaurant-pos-menu-inventory">
             <div class="feature-copy">
-              <div class="eyebrow">Main offer</div>
-              <h2>Custom Workflow App.</h2>
-              <p>For repeated work stuck in email, spreadsheets, folders, chat, or forms.</p>
-              <div class="chips"><span class="chip">Daily ledger</span><span class="chip">Owner assigned</span><span class="chip">Status tracked</span><span class="chip">Overdue flagged</span><span class="chip">Source linked</span></div>
-              <div class="use"><strong>First result</strong><span>A daily screen with source, owner, status, proof, and next action.</span></div>
-              <a class="btn primary" href="/products/documents/">See details</a>
+              <div class="eyebrow">The app for your shop</div>
+              <h2>Retail OS.</h2>
+              <p>Point of sale, customers and books — together in one place for your shop or restaurant. Take any payment, track stock, and close the day with proof. Live now.</p>
+              <div class="chips"><span class="chip">Point of sale</span><span class="chip">Any payment</span><span class="chip">Customers</span><span class="chip">Books</span><span class="chip">Daily close</span></div>
+              <div class="use"><strong>Start free</strong><span>Ring up sales and close the day. Premium adds AI and data features.</span></div>
+              <div class="cta"><a class="btn primary" href="/products/pos/">See details</a><a class="btn secondary" href="https://pos.supermega.dev/" target="_blank" rel="noopener">Try it live ↗</a></div>
             </div>
-            <div class="shot-gallery" aria-label="Custom Workflow App product screenshots">
-              ${workflowProductUi}
+            <div class="shot-gallery" aria-label="Retail OS product screenshots">
+              ${restaurantProductUi}
             </div>
           </article>
 
           <article class="feature" id="factory-issues-maintenance-quality">
             <div class="feature-copy">
-              <div class="eyebrow">Factory and operations</div>
-              <h2>Factory Operations App.</h2>
-              <p>For quality, maintenance, receiving, assets, WCM boards, ISO evidence, and factory actions.</p>
-              <div class="chips"><span class="chip">WCM board</span><span class="chip">ISO evidence</span><span class="chip">CAPA / 5W1H</span><span class="chip">Maintenance</span></div>
-              <div class="use"><strong>First result</strong><span>One factory screen for open issues, evidence, owner, risk, and approved action.</span></div>
+              <div class="eyebrow">The app for your factory</div>
+              <h2>Factory OS.</h2>
+              <p>Log, assign and confirm the day's work on the floor. Turn a whiteboard photo into data, track quality and maintenance, and keep to your standards — the collaborative operations app.</p>
+              <div class="chips"><span class="chip">Log / assign / confirm</span><span class="chip">Whiteboard → data</span><span class="chip">Quality</span><span class="chip">Maintenance</span></div>
+              <div class="use"><strong>Start free</strong><span>One factory screen for open work, owner, status, and confirmed action.</span></div>
               <a class="btn primary" href="/products/factory/">See details</a>
             </div>
-            <div class="shot-gallery" aria-label="Factory Operations App product screenshots">
+            <div class="shot-gallery" aria-label="Factory OS product screenshots">
               ${factoryProductUi}
             </div>
           </article>
 
-          <article class="feature" id="restaurant-pos-menu-inventory">
-            <div class="feature-copy">
-              <div class="eyebrow">Retail and service</div>
-              <h2>DeskPOS — Point of Sale.</h2>
-              <p>For menus, QR handoff, orders, payment proof, stock, shift notes, and daily close. Live now.</p>
-              <div class="chips"><span class="chip">Menu and QR</span><span class="chip">Orders</span><span class="chip">Payment proof</span><span class="chip">Daily close</span></div>
-              <div class="use"><strong>First result</strong><span>One branch can close the day with sales proof, cash gaps, stock notes, and owner report.</span></div>
-              <div class="cta"><a class="btn primary" href="/products/pos/">See details</a><a class="btn secondary" href="https://pos.supermega.dev/" target="_blank" rel="noopener">Try it live ↗</a></div>
-            </div>
-            <div class="shot-gallery" aria-label="Restaurant POS + Inventory product screenshots">
-              ${restaurantProductUi}
-            </div>
-          </article>
-
-        </section>
-
-
-        <section class="section" id="agent-templates" aria-label="AI agent templates">
-          <div class="eyebrow">AI agent templates</div>
-          <h2>Plug-and-play templates for real workers.</h2>
-          <p>Pick a worker, send one source sample, and get first proof before anything is connected, sent, billed, or changed. These templates become the reusable operating layer behind every premium agent crew.</p>
-          <div class="template-grid">
-${renderPublicAgentTemplateCards()}
-          </div>
         </section>
 
         <section class="section sm-in">
           <div class="final">
             <div>
-              <div class="eyebrow">Start small</div>
-              <h2>Tell us the one thing to fix first.</h2>
-              <p>We reply with what we'd build first, the price, and the timeline. Fixed scope, 50% deposit to start.</p>
+              <div class="eyebrow">Start free</div>
+              <h2>Try it with your own business.</h2>
+              <p>Tell us about your shop or factory and we'll help you start. Pricing is shared at launch or on a scoping call.</p>
             </div>
-            <div style="display:flex;gap:12px;flex-wrap:wrap"><a class="btn primary" href="/contact/?package=build">Book a build</a><a class="btn secondary" href="/offers/">See pricing</a></div>
+            <div style="display:flex;gap:12px;flex-wrap:wrap"><a class="btn primary" href="/contact/">Start free</a><a class="btn secondary" href="/offers/">Pricing</a></div>
           </div>
         </section>
       </main>
       <footer>
-        <span>© 2026 SUPERMEGA.dev — start with one useful app. Expand only after proof.</span>
-        <span class="footer-links">
-          <a href="mailto:swanhtet@supermega.dev">swanhtet@supermega.dev</a>
-          <a href="tel:+9595000721">+95 9 500 0721</a>
-          <a href="https://www.linkedin.com/in/theswanhtet" rel="noreferrer" target="_blank">LinkedIn</a>
-          <a href="/contact/">Contact</a>
-        </span>
+        <span>Powered by SuperMega Technologies</span>
       </footer>
     </div>
 ${publicRuntimeScripts}
@@ -4828,9 +4794,9 @@ const unicornContactHtml = `<!doctype html>
 ${unicornHeader}
       <main class="contact-main">
         <section aria-label="Contact SUPERMEGA">
-          <div class="eyebrow">Contact</div>
-          <h1 data-contact-heading>Send one workflow.</h1>
-          <p data-contact-lead>Send the source your team already uses.</p>
+          <div class="eyebrow">Start free</div>
+          <h1 data-contact-heading>Tell us about your business.</h1>
+          <p data-contact-lead>Retail OS for your shop, Factory OS for your factory floor. Tell us what you run and we'll help you start free.</p>
         </section>
         <section aria-label="Workflow contact form">
           <form action="/api/contact-submissions" data-sm-lead-form enctype="multipart/form-data" method="post">
@@ -4926,15 +4892,7 @@ ${unicornHeader}
         </section>
       </main>
       <footer>
-        <span>© 2026 SUPERMEGA.dev — custom business software for Myanmar. Built from your real data.</span>
-        <span class="footer-links">
-          <a href="mailto:swanhtet@supermega.dev">swanhtet@supermega.dev</a>
-          <a href="tel:+9595000721">+95 9 500 0721</a>
-          <a href="/products/">Products</a>
-          <a href="/demo/">Demos</a>
-          <a href="/offers/">Pricing</a>
-          <a href="/privacy/">Privacy</a>
-        </span>
+        <span>Powered by SuperMega Technologies</span>
       </footer>
     </div>
 ${publicRuntimeScripts}
@@ -5237,275 +5195,60 @@ const publicSourceToScreenHtml = `<!doctype html>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="robots" content="index,follow" />
-    <title>Free Source-to-Screen | SUPERMEGA.dev</title>
-    <meta name="description" content="Paste one messy source and get a browser-only first useful screen draft before any account, connector, model run, or payment." />
+    <title>Start free | SUPERMEGA.dev</title>
+    <meta name="description" content="Start free with the two apps that run your business — Retail OS for your shop and Factory OS for your factory floor. Stop running your business on Viber and Excel." />
     <link rel="canonical" href="https://supermega.dev/free/" />
     <meta name="theme-color" content="#07111f" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" />
     <style>${unicornShellStyle}
-      .free-main { display:grid; grid-template-columns:minmax(0,.82fr) minmax(360px,1.18fr); gap:clamp(24px,5vw,64px); align-items:start; padding:clamp(26px,5vw,58px) 0 46px; }
-      .free-panel, .free-output, .free-rules { border:1px solid var(--line); border-radius:8px; background:rgba(255,255,255,.58); box-shadow:var(--shadow); padding:clamp(16px,2.6vw,24px); }
-      .free-form { display:grid; gap:12px; }
-      .free-form label { display:grid; gap:7px; color:var(--muted); font-size:12px; font-weight:950; letter-spacing:.12em; text-transform:uppercase; }
-      .free-form input, .free-form textarea, .free-form select { width:100%; border:1px solid var(--line); border-radius:12px; background:rgba(255,250,241,.9); color:var(--ink); padding:11px 12px; font:inherit; }
-      .free-form textarea { min-height:132px; resize:vertical; }
-      .free-actions { display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
-      .free-output { display:grid; gap:12px; margin-top:14px; }
-      .free-output pre { white-space:pre-wrap; overflow:auto; margin:0; border:1px solid var(--line); border-radius:8px; background:#111827; color:#f8fafc; padding:14px; font-size:13px; line-height:1.5; }
-      .free-rules { display:grid; gap:9px; margin-top:18px; }
-      .free-rules div { display:flex; gap:9px; align-items:flex-start; color:var(--muted); font-weight:820; line-height:1.4; }
-      .free-rules b { color:#FF3B3B; min-width:118px; }
-      .workcell-picker { border:1px solid var(--line); border-radius:8px; background:rgba(255,255,255,.5); padding:14px; margin-top:18px; }
-      .workcell-picker > strong { display:block; margin-bottom:10px; }
-      .workcell-template-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:9px; }
-      .workcell-template-grid button { text-align:left; border:1px solid var(--line); border-radius:8px; background:rgba(255,250,241,.86); color:var(--ink); padding:11px; cursor:pointer; min-height:92px; }
-      .workcell-template-grid button[data-selected="true"] { border-color:rgba(255,59,59,.58); box-shadow:0 0 0 4px rgba(255,59,59,.10); background:#fffaf1; }
-      .workcell-template-grid strong { display:block; margin-bottom:5px; }
-      .workcell-template-grid span { color:var(--muted); font-size:13px; font-weight:760; line-height:1.35; }
-      .workcell-path { display:grid; gap:10px; margin-top:18px; }
-      .workcell-path article { border:1px solid var(--line); border-radius:8px; padding:13px; background:rgba(255,255,255,.45); }
-      .workcell-path strong { display:block; margin-bottom:4px; }
-      .workcell-path span { color:var(--muted); font-size:14px; line-height:1.4; }
-      @media (max-width: 900px) { .free-main { grid-template-columns:1fr; } }
-      @media (max-width: 560px) { .workcell-template-grid { grid-template-columns:1fr; } }
+      .start-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; margin-top:28px; }
+      .start-card { border:1px solid var(--line); border-radius:18px; padding:24px; background:rgba(255,255,255,.055); }
+      .start-card .eyebrow { margin-bottom:8px; }
+      .start-card h3 { font-size:clamp(22px,2.6vw,30px); }
+      .start-card p { margin-top:10px; }
+      .start-card .cta { margin-top:18px; }
+      @media (max-width: 760px) { .start-grid { grid-template-columns:1fr; } }
     </style>
   </head>
   <body>
     <div class="wrap">
 ${unicornHeader}
-      <main class="free-main">
-        <section>
-          <div class="eyebrow">Free Source-to-Screen</div>
-          <h1>Paste one messy source.</h1>
-          <p>Get one browser-only first screen draft: extracted facts, missing fields, owner queue, and the next approval-gated workcell step. This is free acquisition and source-normalization, not a full SaaS account.</p>
-          <div class="free-rules" aria-label="Free load controls">
-            <div><b>Browser-only first pass</b><span>No network submit is required to generate the draft on this page.</span></div>
-            <div><b>No model call until</b><span>You submit a clear source sample and contact details for a paid first proof.</span></div>
-            <div><b>Cache by source hash</b><span>Repeated samples should reuse a prior draft before any queued AI job runs.</span></div>
-            <div><b>Second run or export requires contact</b><span>The free mode shows value; private rooms, exports, connectors, and scheduled runs are paid.</span></div>
-            <div><b>No free connectors</b><span>No Gmail, Drive, browser automation, payment, team seat, or writeback is enabled here.</span></div>
-          </div>
-          <div class="workcell-picker" aria-label="Workcell templates">
-            <strong>Workcell templates</strong>
-            <div class="workcell-template-grid">
-              <button type="button" data-workcell-template="daily_close" data-selected="true"><strong>Daily cash close</strong><span>Turn POS/chat/spreadsheet notes into owner close, gaps, and tomorrow queue.</span></button>
-              <button type="button" data-workcell-template="receivables_chase"><strong>Receivables chase</strong><span>Turn invoices and chat promises into who owes, next message, and proof trail.</span></button>
-              <button type="button" data-workcell-template="inventory_exception"><strong>Inventory exception desk</strong><span>Turn stock rows and supplier notes into shortage, overstock, and reorder queue.</span></button>
-              <button type="button" data-workcell-template="lead_reply"><strong>Lead reply desk</strong><span>Turn DMs, forms, and calls into reply drafts and follow-up priorities.</span></button>
-              <button type="button" data-workcell-template="document_ledger"><strong>Document ledger</strong><span>Turn receipts, screenshots, and files into a clean searchable action ledger.</span></button>
-            </div>
-          </div>
-          <div class="workcell-path" aria-label="Paid upgrade path">
-            <article><strong>1. Free draft</strong><span>One source becomes one useful screen draft in the browser.</span></article>
-            <article><strong>2. First proof</strong><span>Submit the approved source pack and we prepare a traceable first proof.</span></article>
-            <article><strong>3. AI Workcell Pilot</strong><span>Start AI Workcell Pilot after scope and price approval. MRR stays 0 until payment proof.</span></article>
+      <main>
+        <section class="poster" style="min-height:auto;padding-top:24px">
+          <div class="copy">
+            <div class="eyebrow">Start free</div>
+            <h1>Stop running your business on Viber &amp; Excel.</h1>
+            <p>Pick the app for your business and start free. Easy to use, yours to keep, and it works on the phone you already have.</p>
           </div>
         </section>
-        <section class="free-panel" aria-label="Source-to-screen builder">
-          <form class="free-form" data-source-to-screen-form>
-            <label>Output type<select data-output-type>
-              <option value="daily_close">Daily close board</option>
-              <option value="document_ledger">Document ledger</option>
-              <option value="lead_followup">Lead follow-up queue</option>
-              <option value="inventory_issue">Inventory issue queue</option>
-            </select></label>
-            <label>Source sample<textarea data-source-sample placeholder="Paste a redacted POS export, chat thread, invoice list, staff note, screenshot text, or messy spreadsheet rows."></textarea></label>
-            <div class="free-actions">
-              <button class="btn primary" type="submit">Build free screen draft</button>
-              <a class="btn secondary" data-start-paid-pilot-link href="/contact/?package=ai-workcell-pilot&utm_source=free_source_to_screen&utm_content=free_workcell_order&workcell=daily_close">Start AI Workcell Pilot</a>
+        <section class="section">
+          <div class="start-grid">
+            <div class="start-card" style="border-top:3px solid #FF3B3B">
+              <div class="eyebrow">The app for your shop</div>
+              <h3>Retail OS</h3>
+              <p>Point of sale, customers and books — together in one place for your shop or restaurant. Start free; premium adds AI and data features.</p>
+              <div class="cta"><a class="btn primary" href="https://pos.supermega.dev/" target="_blank" rel="noopener">Open the live app</a><a class="btn secondary" href="/products/pos/">See details</a></div>
             </div>
-          </form>
-          <div class="free-output" aria-live="polite">
-            <strong>First screen draft</strong>
-            <pre data-source-to-screen-output>Paste one approved sample to generate a local draft. Nothing is sent, connected, written, billed, or claimed as revenue from this free page.</pre>
+            <div class="start-card" style="border-top:3px solid #FF3B3B">
+              <div class="eyebrow">The app for your factory</div>
+              <h3>Factory OS</h3>
+              <p>Log, assign and confirm the day's work, turn a whiteboard photo into data, and keep to your standards — the collaborative operations app.</p>
+              <div class="cta"><a class="btn primary" href="/contact/">Start free</a><a class="btn secondary" href="/products/factory/">See details</a></div>
+            </div>
           </div>
-          <div class="free-output" aria-live="polite">
-            <strong>Proof order packet</strong>
-            <pre data-proof-order-output>Choose a template and build a free draft to produce the paid-pilot order packet. This packet is local until you contact us.</pre>
+        </section>
+        <section class="section">
+          <div style="border:1px solid var(--line);border-radius:20px;padding:clamp(24px,4vw,36px);text-align:center;background:rgba(255,59,59,0.045)">
+            <p style="font-size:clamp(18px,2.4vw,23px);font-weight:600;letter-spacing:-.01em;max-width:42ch;margin:0 auto;color:var(--text)">Not sure which one fits? Tell us about your business and we'll help you start.</p>
+            <div class="cta" style="justify-content:center;margin-top:22px"><a class="btn primary" href="/contact/">Contact us</a></div>
           </div>
         </section>
       </main>
-      <footer><span>SUPERMEGA.dev - free source-to-screen entry.</span><span class="footer-links"><a href="/ai-agents/">AI Agents</a><a href="/offers/">Pricing</a><a href="/contact/">Contact</a></span></footer>
+      <footer>
+        <span>Powered by SuperMega Technologies</span>
+      </footer>
     </div>
-${publicLanguageToggleScript}
-    <script>
-      (function(){
-        const form = document.querySelector('[data-source-to-screen-form]');
-        const output = document.querySelector('[data-source-to-screen-output]');
-        const proofOrderOutput = document.querySelector('[data-proof-order-output]');
-        const paidPilotLink = document.querySelector('[data-start-paid-pilot-link]');
-        const templateButtons = Array.prototype.slice.call(document.querySelectorAll('[data-workcell-template]'));
-        const sample = form && form.querySelector('[data-source-sample]');
-        const type = form && form.querySelector('[data-output-type]');
-        const orderStorageKey = 'sm_source_to_screen_order';
-        const workcellTemplates = {
-          daily_close: {
-            name: 'Daily cash close',
-            proof_target: 'Owner can see today sales, cash variance, missing proof, and tomorrow action queue.',
-            required_sources: ['POS close or sales export', 'cash/mobile-money note', 'manager or cashier note'],
-            first_run_acceptance: ['cash variance explained', 'missing proof listed', 'tomorrow queue visible']
-          },
-          receivables_chase: {
-            name: 'Receivables chase',
-            proof_target: 'Owner can see who owes money, what was promised, and the next safe follow-up draft.',
-            required_sources: ['invoice or customer balance list', 'chat promise or payment note', 'owner follow-up rule'],
-            first_run_acceptance: ['debtors ranked', 'message drafts separated from sends', 'owner approval required before contact']
-          },
-          inventory_exception: {
-            name: 'Inventory exception desk',
-            proof_target: 'Owner can see shortage, overstock, supplier risk, and reorder actions from messy stock data.',
-            required_sources: ['stock export or shelf count', 'supplier note', 'sales velocity or recent orders'],
-            first_run_acceptance: ['exceptions grouped', 'reorder queue visible', 'writeback blocked until accepted']
-          },
-          lead_reply: {
-            name: 'Lead reply desk',
-            proof_target: 'Owner can see qualified leads, reply drafts, and follow-up priorities without losing source trace.',
-            required_sources: ['DM/form/call rows', 'offer or price rule', 'owner no-send rule'],
-            first_run_acceptance: ['lead intent classified', 'reply draft ready', 'send remains approval-only']
-          },
-          document_ledger: {
-            name: 'Document ledger',
-            proof_target: 'Owner can see receipts, screenshots, files, and notes converted into searchable actions.',
-            required_sources: ['receipt or document samples', 'folder or chat context', 'required ledger fields'],
-            first_run_acceptance: ['records normalized', 'missing fields listed', 'source trace preserved']
-          }
-        };
-        let selectedWorkcell = 'daily_close';
-        function hashText(text){
-          let hash = 0;
-          for(let i=0;i<text.length;i++){ hash = ((hash << 5) - hash + text.charCodeAt(i)) | 0; }
-          return Math.abs(hash).toString(16).padStart(8,'0');
-        }
-        function lines(text){
-          return String(text || '').split(/\\r?\\n/).map(function(line){ return line.trim(); }).filter(Boolean);
-        }
-        function buildSourceToScreenDraft(kind, text){
-          const sourceLines = lines(text).slice(0, 12);
-          const sourceHash = hashText(text || '');
-          const missing = [];
-          if(!/date|today|yesterday|202\\d|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec/i.test(text)) missing.push('date or period');
-          if(!/owner|manager|staff|cashier|sales|admin|supplier|customer/i.test(text)) missing.push('owner or responsible person');
-          if(!/mmk|ks|kyat|amount|total|qty|quantity|price|paid|cash/i.test(text)) missing.push('amount or quantity');
-          const title = {
-            daily_close: 'Daily close board',
-            document_ledger: 'Document ledger',
-            lead_followup: 'Lead follow-up queue',
-            inventory_issue: 'Inventory issue queue'
-          }[kind] || 'Source-to-screen draft';
-          const facts = sourceLines.length ? sourceLines.slice(0, 5) : ['No source rows pasted yet.'];
-          return [
-            '# ' + title,
-            '',
-            'Status: browser_only_first_pass',
-            'Source hash: ' + sourceHash,
-            'Network submit: no',
-            'Connector access: blocked',
-            'Real MRR delta: 0',
-            '',
-            '## Extracted facts',
-            facts.map(function(item, index){ return String(index + 1) + '. ' + item; }).join('\\n'),
-            '',
-            '## Missing fields',
-            (missing.length ? missing : ['enough for a first proof review']).map(function(item){ return '- ' + item; }).join('\\n'),
-            '',
-            '## Owner queue',
-            '- Confirm the source is approved for a first proof.',
-            '- Decide what output should be judged useful.',
-            '- Submit contact details only if you want a private AI Workcell Pilot.',
-            '',
-            '## Upgrade boundary',
-            'Free mode stops here: no export, connector, scheduled run, browser action, payment action, or team workspace.'
-          ].join('\\n');
-        }
-        function buildPaidPilotOrderPacket(kind, text){
-          const template = workcellTemplates[kind] || workcellTemplates.daily_close;
-          const sourceHash = hashText(text || '');
-          return [
-            '# AI Workcell Pilot order packet',
-            '',
-            'workcell_template: ' + template.name,
-            'workcell_id: ' + kind,
-            'source_hash: ' + sourceHash,
-            'free_load_policy: browser_only_until_contact',
-            'network_submit: no',
-            'model_call: no',
-            'connector_access: blocked',
-            'real_mrr_delta: 0',
-            '',
-            'proof_target: ' + template.proof_target,
-            '',
-            'required_sources:',
-            template.required_sources.map(function(item){ return '- ' + item; }).join('\\n'),
-            '',
-            'first_run_acceptance:',
-            template.first_run_acceptance.map(function(item){ return '- ' + item; }).join('\\n'),
-            '',
-            'paid_boundary:',
-            '- First proof, private workspace, exports, connectors, scheduled runs, browser actions, and team usage require approved paid pilot scope.',
-            '- Payment proof and owner acceptance are required before recurring revenue is recorded.'
-          ].join('\\n');
-        }
-        function saveWorkcellOrderPacket(kind, sourceHash, packet){
-          const template = workcellTemplates[kind] || workcellTemplates.daily_close;
-          try {
-            localStorage.setItem(orderStorageKey, JSON.stringify({
-              source_to_screen_order_packet: packet,
-              order_packet: packet,
-              workcell_id: kind,
-              workcell_template: template.name,
-              workcell_name: template.name,
-              source_hash: sourceHash,
-              proof_target: template.proof_target,
-              required_sources: template.required_sources,
-              first_run_acceptance: template.first_run_acceptance,
-              free_load_policy: 'browser_only_until_contact',
-              real_mrr_delta: 0,
-              saved_at: new Date().toISOString()
-            }));
-          } catch (error) {}
-        }
-        function syncWorkcellSelection(kind){
-          selectedWorkcell = workcellTemplates[kind] ? kind : 'daily_close';
-          templateButtons.forEach(function(button){
-            button.dataset.selected = button.getAttribute('data-workcell-template') === selectedWorkcell ? 'true' : 'false';
-          });
-          if(type){
-            type.value = selectedWorkcell === 'receivables_chase' || selectedWorkcell === 'lead_reply' ? 'lead_followup' : selectedWorkcell === 'document_ledger' ? 'document_ledger' : selectedWorkcell === 'inventory_exception' ? 'inventory_issue' : 'daily_close';
-          }
-          const sourceHash = hashText(sample && sample.value || '');
-          if(paidPilotLink){
-            paidPilotLink.href = '/contact/?package=ai-workcell-pilot&utm_source=free_source_to_screen&utm_content=free_workcell_order&workcell=' + encodeURIComponent(selectedWorkcell) + '&source_hash=' + encodeURIComponent(sourceHash);
-          }
-          if(proofOrderOutput){
-            const packet = buildPaidPilotOrderPacket(selectedWorkcell, sample && sample.value || '');
-            proofOrderOutput.textContent = packet;
-            saveWorkcellOrderPacket(selectedWorkcell, sourceHash, packet);
-          }
-        }
-        templateButtons.forEach(function(button){
-          button.addEventListener('click', function(){
-            syncWorkcellSelection(button.getAttribute('data-workcell-template'));
-          });
-        });
-        if(type){
-          type.addEventListener('change', function(){
-            const next = type.value === 'lead_followup' ? 'lead_reply' : type.value === 'inventory_issue' ? 'inventory_exception' : type.value;
-            syncWorkcellSelection(next);
-          });
-        }
-        if(sample){
-          sample.addEventListener('input', function(){ syncWorkcellSelection(selectedWorkcell); });
-        }
-        if(form){
-          form.addEventListener('submit', function(event){
-            event.preventDefault();
-            output.textContent = buildSourceToScreenDraft(type.value, sample.value || '');
-            proofOrderOutput.textContent = buildPaidPilotOrderPacket(selectedWorkcell, sample.value || '');
-          });
-        }
-        syncWorkcellSelection(selectedWorkcell);
-      })();
-    </script>
+${publicRuntimeScripts}
   </body>
 </html>`
 
@@ -6112,8 +5855,8 @@ await writeFile(resolve(staticDir, 'products', 'index.html'), normalizePublicPro
 const productDetailDocs = [
   {
     slug: 'pos',
-    displayName: 'DeskPOS — Point of Sale',
-    eyebrow: 'Point of sale',
+    displayName: 'Retail OS',
+    eyebrow: 'The app for your shop',
     headline: 'Ring up sales, take any payment, and close the day with proof',
     subhead: 'The counter app for spas, salons, retail shops, cafes, restaurants, and repair counters. Take cash or any digital payment; track stock and bookings; and close every day with a clean cash-up the owner can trust — even when the internet drops.',
     shot: '/site/shots/live-product-restaurant-pos-menu-inventory.png',
@@ -6144,8 +5887,8 @@ const productDetailDocs = [
   },
   {
     slug: 'factory',
-    displayName: 'Factory Operations App',
-    eyebrow: 'Factory operations',
+    displayName: 'Factory OS',
+    eyebrow: 'The app for your factory',
     headline: 'Run production, quality, and maintenance from one system',
     subhead: 'Built for factories that need to replace shop-floor log books and scattered Excel files with one production, quality, and maintenance operating lane.',
     shot: '/site/shots/live-product-factory-issues-maintenance-quality.png',
@@ -6309,12 +6052,7 @@ ${unicornHeader}
         </section>
       </main>
       <footer>
-        <span>© 2026 SUPERMEGA.dev — builds custom business apps from real work.</span>
-        <span class="footer-links">
-          <a href="mailto:swanhtet@supermega.dev">swanhtet@supermega.dev</a>
-          <a href="/products/">Products</a>
-          <a href="/contact/">Contact</a>
-        </span>
+        <span>Powered by SuperMega Technologies</span>
       </footer>
     </div>
 ${publicRuntimeScripts}
@@ -6906,16 +6644,10 @@ const publicOffers = [
     cta: 'Scope my build',
   },
   {
-    slug: 'ai-workcell-pilot', name: 'AI Workcell Pilot', mmkDisplay: serviceMmk('ai-agent'), flagship: true,
-    who: 'You want an AI worker for one real task: cleanup, reports, inbox, reconciliation, migration, or launch ops.',
-    gets: ['Source pack intake and First proof from real data', 'First production run stays approval-only until Owner acceptance', 'Maintenance path with customer success desk; no recurring claim until payment proof'],
-    cta: 'Start the pilot',
-  },
-  {
     slug: 'design-ship', name: pricingServiceByKey['design-ship'].name, mmkDisplay: serviceMmk('design-ship'),
     who: 'You want it to look premium and actually run — one build, end to end.',
     gets: ['Brand and UI designed on our system', 'A full working system, live and in use', 'Hands over as a running thing, not a pile of files'],
-    cta: 'Book a build',
+    cta: 'Talk to us',
   },
 ]
 // By-product view — 2 honest tiers per product class, MMK only, from pricing.json.
@@ -6949,8 +6681,8 @@ const publicOffersHtml = `<!doctype html>
     <meta name="twitter:image" content="https://supermega.dev/site/social/supermega-portal-card.png" />
     <style>${unicornShellStyle}
       .of-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px,1fr)); gap: 16px; margin-top: 24px; align-items: stretch; }
-      .of-card { position: relative; display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 20px; padding: 24px; background: rgba(255,255,255,0.55); }
-      :root[data-theme="dark"] .of-card { background: rgba(243,239,230,0.05); }
+      .of-card { position: relative; display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 20px; padding: 24px; background: rgba(255,255,255,0.055); }
+      :root[data-theme="dark"] .of-card { background: rgba(255,255,255,0.055); }
       .of-card.flagship { border-color: var(--blue); box-shadow: var(--shadow); }
       .of-tag { position: absolute; top: -11px; left: 22px; background: var(--blue); color: #fff; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; padding: 4px 11px; border-radius: 999px; }
       .of-card h3 { margin: 0; font-size: 20px; letter-spacing: -0.02em; }
@@ -6986,7 +6718,7 @@ ${unicornHeader}
               <a class="btn secondary" href="viber://chat?number=%2B9595000721" aria-label="Chat with us on Viber">Chat on Viber</a>
               <a class="btn secondary" href="/demo/">See live demos</a>
             </div>
-            <p class="hero-tagline">Cast real work into software.</p>
+            <p class="hero-tagline">Stop running your business on Viber &amp; Excel.</p>
           </div>
         </section>
 
@@ -7006,20 +6738,6 @@ ${unicornHeader}
         </section>
 
         <section class="section">
-          <div class="workcell-panel">
-            <div class="eyebrow">AI Workcell Pilot</div>
-            <h2>The proof-to-maintenance path.</h2>
-            <p>Premium setup means easy setup for the client: send one source pack, get a First proof, approve a First production run, then decide after Owner acceptance whether the workcell should be maintained. Every client gets a private workspace, acceptance tests, source trace, and a customer success desk. Recurring revenue stays 0 until payment proof.</p>
-            <div class="workcell-grid">
-              <div class="workcell-step"><strong>Source pack</strong><span>One messy workflow: Gmail, Sheet, chat export, POS CSV, PDF, or screenshot batch.</span></div>
-              <div class="workcell-step"><strong>First proof</strong><span>One useful output from real data before the full pilot is approved.</span></div>
-              <div class="workcell-step"><strong>First production run</strong><span>The first live run is approval-only; no send, write, payment, or connector action happens silently.</span></div>
-              <div class="workcell-step"><strong>Maintenance</strong><span>After Owner acceptance, we keep the workcell improving with clear proof of value.</span></div>
-            </div>
-          </div>
-        </section>
-
-        <section class="section">
           <div class="eyebrow">How it works</div>
           <h2>From one workflow to a running system</h2>
           <div class="pd-steps">
@@ -7031,7 +6749,7 @@ ${unicornHeader}
         </section>
 
         <section class="section">
-          <div class="trust-note" style="margin-top:24px;padding:20px 24px;border:1px solid var(--line);border-radius:16px;background:rgba(255,255,255,0.5);max-width:640px;">
+          <div class="trust-note" style="margin-top:24px;padding:20px 24px;border:1px solid var(--line);border-radius:16px;background:rgba(255,255,255,0.055);max-width:640px;">
             <strong style="display:block;font-size:15px;letter-spacing:-0.02em;margin-bottom:8px;">Our guarantee</strong>
             <p style="font-size:14px;color:var(--muted);margin:0;line-height:1.55;">If we haven't delivered a working first screen within 14 days of your deposit, we refund in full. We accept KBZPay, AYA Pay, Wave Money, and bank transfer.</p>
           </div>
@@ -7039,20 +6757,13 @@ ${unicornHeader}
 
         <section class="section">
           <div class="final">
-            <div><h2>Tell us the one thing to fix first.</h2></div>
-            <a class="btn primary" href="/contact/?package=build">Get a quote</a>
+            <div><h2>Start free with the two apps.</h2></div>
+            <a class="btn primary" href="/contact/">Start free</a>
           </div>
         </section>
       </main>
       <footer>
-        <span>© 2026 SUPERMEGA.dev — builds custom business apps from real work.</span>
-        <span class="footer-links">
-          <a href="mailto:swanhtet@supermega.dev">swanhtet@supermega.dev</a>
-          <a href="/products/">Products</a>
-          <a href="/demo/">Demos</a>
-          <a href="/contact/">Contact</a>
-          <a href="/privacy/">Privacy</a>
-        </span>
+        <span>Powered by SuperMega Technologies</span>
       </footer>
     </div>
 ${publicRuntimeScripts}
@@ -7066,7 +6777,8 @@ await writeFile(resolve(staticDir, 'free', 'index.html'), normalizePublicProduct
 await mkdir(resolve(staticDir, 'offers'), { recursive: true })
 await writeFile(resolve(staticDir, 'offers', 'index.html'), normalizePublicProductNames(publicOffersHtml), 'utf8')
 await mkdir(resolve(staticDir, 'ai-agents'), { recursive: true })
-await writeFile(resolve(staticDir, 'ai-agents', 'index.html'), normalizePublicProductNames(unicornAiAgentsHtml), 'utf8')
+// Old "AI Agent Army" page retired (not a product). Redirect to the two-suite products page.
+await writeFile(resolve(staticDir, 'ai-agents', 'index.html'), publicRedirectHtml('/products/', 'See our two apps'), 'utf8')
 
 // Work / case studies — public proof. Honest, de-identified real builds (live products + client systems).
 const publicWorkCases = [
@@ -7162,20 +6874,14 @@ ${unicornHeader}
           <div class="final">
             <div><h2>Want one built for your business?</h2></div>
             <div style="display:flex;gap:12px;flex-wrap:wrap">
-              <a class="btn primary" href="/contact/?package=build">Book a build</a>
+              <a class="btn primary" href="/contact/">Talk to us</a>
               <a class="btn secondary" href="/offers/">See pricing</a>
             </div>
           </div>
         </section>
       </main>
       <footer>
-        <span>© 2026 SUPERMEGA.dev — custom business software for Myanmar. Built from your real data.</span>
-        <span class="footer-links">
-          <a href="mailto:swanhtet@supermega.dev">swanhtet@supermega.dev</a>
-          <a href="/products/">Products</a>
-          <a href="/demo/">Demos</a>
-          <a href="/offers/">Pricing</a>
-        </span>
+        <span>Powered by SuperMega Technologies</span>
       </footer>
     </div>
 ${publicRuntimeScripts}
