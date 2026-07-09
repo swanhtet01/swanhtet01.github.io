@@ -27,28 +27,39 @@ import { register } from './registry.mjs'
  * @returns {Promise<{ ok:boolean, status:number, body:string }>}
  */
 export async function send(url, payload, { secret, signatureHeader = 'X-Supermega-Signature', extraHeaders = {}, timeoutMs = 8000 } = {}) {
-  const target = url || process.env.WEBHOOK_DEFAULT_URL
-  if (!target) return { ok: false, reason: 'webhook_no_url' }
-  const body = JSON.stringify(payload)
+  const target = (typeof url === 'string' && url) || process.env.WEBHOOK_DEFAULT_URL
+  // Reject anything that isn't a real http(s) URL BEFORE fetch (a non-string/garbage url makes
+  // fetch throw a raw TypeError, which would crash an orchestration instead of degrading).
+  if (!target || typeof target !== 'string') return { ok: false, reason: 'webhook_no_url' }
+  let parsed
+  try { parsed = new URL(target) } catch { return { ok: false, reason: 'webhook_bad_url' } }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return { ok: false, reason: 'webhook_bad_scheme' }
+  let body
+  try { body = JSON.stringify(payload ?? {}) } catch { return { ok: false, reason: 'webhook_unserializable_payload' } }
   const sigSecret = secret || process.env.WEBHOOK_HMAC_SECRET || ''
   const headers = {
     'content-type': 'application/json',
     'user-agent': 'supermega-kernel/1.0',
-    ...extraHeaders,
+    ...(extraHeaders && typeof extraHeaders === 'object' ? extraHeaders : {}),
   }
   if (sigSecret) {
     const sig = crypto.createHmac('sha256', sigSecret).update(body).digest('hex')
     headers[signatureHeader] = 'sha256=' + sig
   }
-  const res = await fetch(target, {
-    method: 'POST',
-    headers,
-    body,
-    signal: AbortSignal.timeout(timeoutMs),
-  })
-  const resBody = await res.text().catch(() => '')
-  if (!res.ok) return { ok: false, reason: `webhook_${res.status}: ${resBody.slice(0, 200)}` }
-  return { ok: true, status: res.status, body: resBody.slice(0, 500) }
+  try {
+    const res = await fetch(target, {
+      method: 'POST',
+      headers,
+      body,
+      signal: AbortSignal.timeout(timeoutMs),
+    })
+    const resBody = await res.text().catch(() => '')
+    if (!res.ok) return { ok: false, reason: `webhook_${res.status}: ${resBody.slice(0, 200)}` }
+    return { ok: true, status: res.status, body: resBody.slice(0, 500) }
+  } catch (e) {
+    // Network error / timeout / abort must degrade to {ok:false}, never throw out of the connector.
+    return { ok: false, reason: String((e && e.message) || 'webhook_error').slice(0, 200) }
+  }
 }
 
 export const integrationWebhook = {

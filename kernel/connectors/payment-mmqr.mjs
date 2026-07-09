@@ -27,10 +27,25 @@ export const paymentMmqr = {
     return { ok: false, detail: `MMQR self-test failed (canonical=${t.canonicalOk} roundTrip=${t.roundTripOk} amount=${t.amountOk})` }
   },
   // Expose the core so other kernel code can build/validate without re-importing the file.
-  build: buildDynamicMmqr,
-  read: readMmqr,
-  crc16ccitt,
-  parseEmvco,
+  // Boundary-guarded: invalid input yields a clean domain error, never a raw TypeError crash, so an
+  // autonomous caller can try/catch a meaningful message instead of the kernel throwing 'Cannot read
+  // properties of null'. The proven core (_mmqr-core.mjs) is untouched — guards live only here.
+  build: (input) => {
+    if (!input || typeof input !== 'object') throw new Error('mmqr_bad_input: build expects a payload object')
+    return buildDynamicMmqr(input)
+  },
+  read: (payload) => {
+    if (typeof payload !== 'string' || !payload) throw new Error('mmqr_bad_input: read expects an EMVCo string')
+    return readMmqr(payload)
+  },
+  crc16ccitt: (payload) => {
+    if (typeof payload !== 'string') throw new Error('mmqr_bad_input: crc16ccitt expects a string')
+    return crc16ccitt(payload)
+  },
+  parseEmvco: (payload) => {
+    if (typeof payload !== 'string' || !payload) throw new Error('mmqr_bad_input: parseEmvco expects an EMVCo string')
+    return parseEmvco(payload)
+  },
 }
 
 register(paymentMmqr)

@@ -24,7 +24,8 @@ const getFrom = () => {
   return name ? `${name} <${addr}>` : addr
 }
 
-async function send({ to, subject, html, text, from, fromName, replyTo, cc, bcc }) {
+async function send(input) {
+  const { to, subject, html, text, from, fromName, replyTo, cc, bcc } = input || {}
   const key = getKey()
   if (!key) return { ok: false, reason: 'resend_not_configured' }
   if (!to || !subject || (!html && !text)) return { ok: false, reason: 'resend: to, subject, and html or text are required' }

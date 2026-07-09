@@ -60,7 +60,8 @@ async function shopifyGet(path) {
  * @param {string} [opts.since_id]    only orders with id > since_id
  * @returns {Promise<{ ok:boolean, orders?:Array, reason?:string }>}
  */
-export async function listOrders(opts = {}) {
+export async function listOrders(opts) {
+  opts = (opts && typeof opts === 'object') ? opts : {}
   const params = new URLSearchParams({
     status: opts.status || 'open',
     limit: String(Math.min(opts.limit || 50, 250)),
@@ -78,7 +79,8 @@ export async function listOrders(opts = {}) {
  * @param {number} [opts.limit]  max products (1–250, default 50)
  * @returns {Promise<{ ok:boolean, products?:Array, reason?:string }>}
  */
-export async function listProducts(opts = {}) {
+export async function listProducts(opts) {
+  opts = (opts && typeof opts === 'object') ? opts : {}
   const params = new URLSearchParams({ limit: String(Math.min(opts.limit || 50, 250)) })
   const result = await shopifyGet(`products.json?${params}`)
   if (!result.ok) return result
