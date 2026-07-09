@@ -1,0 +1,190 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1000" viewBox="0 0 1600 1000" role="img" aria-labelledby="title desc">
+  <title id="title">Source Room product screen</title>
+  <desc id="desc">A SuperMega screen showing messy files converted into structured rows with review flags.</desc>
+  <defs>
+    <linearGradient id="page" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fffdf8"/>
+      <stop offset="0.52" stop-color="#f4efe6"/>
+      <stop offset="1" stop-color="#eaf8fb"/>
+    </linearGradient>
+    <linearGradient id="panel" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.96"/>
+      <stop offset="1" stop-color="#eef7f7" stop-opacity="0.84"/>
+    </linearGradient>
+    <linearGradient id="dark" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#07121e"/>
+      <stop offset="1" stop-color="#183b45"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#64efff"/>
+      <stop offset="1" stop-color="#2f74ff"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="32" stdDeviation="36" flood-color="#23313f" flood-opacity="0.18"/>
+    </filter>
+    <filter id="soft" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="42"/>
+    </filter>
+    <style>
+      .font { font-family: Inter, "Segoe UI", Arial, sans-serif; }
+      .mono { font-family: "Cascadia Mono", "SFMono-Regular", Consolas, monospace; }
+      .ink { fill: #08111d; }
+      .muted { fill: #61707e; }
+      .line { stroke: rgba(8,17,29,0.12); stroke-width: 2; }
+      .chip { fill: rgba(255,255,255,0.82); stroke: rgba(8,17,29,0.12); stroke-width: 2; }
+      .tiny { font-size: 24px; font-weight: 850; letter-spacing: 0.08em; }
+      .label { font-size: 21px; font-weight: 900; letter-spacing: 0.12em; text-transform: uppercase; }
+      .body { font-size: 28px; font-weight: 760; }
+      .head { font-size: 56px; font-weight: 950; letter-spacing: -0.055em; }
+      .cell { font-size: 23px; font-weight: 760; }
+    </style>
+  </defs>
+
+  <rect width="1600" height="1000" rx="42" fill="url(#page)"/>
+  <circle cx="1335" cy="140" r="150" fill="#64efff" opacity="0.32" filter="url(#soft)"/>
+  <circle cx="166" cy="844" r="220" fill="#2f74ff" opacity="0.08" filter="url(#soft)"/>
+  <path d="M0 166h1600M0 332h1600M0 498h1600M0 664h1600M0 830h1600M208 0v1000M416 0v1000M624 0v1000M832 0v1000M1040 0v1000M1248 0v1000M1456 0v1000" stroke="#08111d" stroke-opacity="0.045" stroke-width="1"/>
+
+  <g filter="url(#shadow)">
+    <rect x="80" y="76" width="1440" height="848" rx="34" fill="url(#panel)" stroke="rgba(8,17,29,0.12)" stroke-width="2"/>
+    <rect x="80" y="76" width="1440" height="86" rx="34" fill="#fffdf8" opacity="0.92"/>
+    <line x1="80" y1="162" x2="1520" y2="162" class="line"/>
+  </g>
+
+  <g class="font">
+    <rect x="118" y="104" width="46" height="46" rx="14" fill="url(#dark)"/>
+    <circle cx="141" cy="127" r="12" fill="#72f3ff" opacity="0.95"/>
+    <circle cx="141" cy="127" r="5" fill="#061220"/>
+    <text x="186" y="124" class="ink" font-size="25" font-weight="950">Source Room</text>
+    <text x="186" y="148" class="muted mono" font-size="15" font-weight="800" letter-spacing="0.13em">SOURCE TO ROW REVIEW</text>
+
+    <g transform="translate(1168 104)">
+      <rect width="118" height="38" rx="19" fill="#08111d"/>
+      <text x="59" y="25" text-anchor="middle" fill="#fff" font-size="16" font-weight="900">Review 18</text>
+    </g>
+    <g transform="translate(1304 104)">
+      <rect width="152" height="38" rx="19" fill="url(#accent)"/>
+      <text x="76" y="25" text-anchor="middle" fill="#06101d" font-size="16" font-weight="950">Export rows</text>
+    </g>
+  </g>
+
+  <g class="font" transform="translate(118 206)">
+    <text class="label" fill="#1265ff" x="0" y="0">Input</text>
+    <text class="head ink" x="0" y="68">Messy sources.</text>
+    <text class="body muted" x="0" y="112">Folders, PDFs, emails, sheets.</text>
+
+    <g transform="translate(0 160)">
+      <rect class="chip" width="394" height="86" rx="24"/>
+      <rect x="24" y="22" width="42" height="42" rx="12" fill="#fff4d6"/>
+      <text x="82" y="39" class="cell ink">PDF invoice batch</text>
+      <text x="82" y="65" class="mono" fill="#9a6b12" font-size="17" font-weight="800">12 files</text>
+    </g>
+    <g transform="translate(0 266)">
+      <rect class="chip" width="394" height="86" rx="24"/>
+      <rect x="24" y="22" width="42" height="42" rx="12" fill="#dff8ff"/>
+      <text x="82" y="39" class="cell ink">Drive folder</text>
+      <text x="82" y="65" class="mono" fill="#1265ff" font-size="17" font-weight="800">shared uploads</text>
+    </g>
+    <g transform="translate(0 372)">
+      <rect class="chip" width="394" height="86" rx="24"/>
+      <rect x="24" y="22" width="42" height="42" rx="12" fill="#eadfff"/>
+      <text x="82" y="39" class="cell ink">Phone screenshots</text>
+      <text x="82" y="65" class="mono" fill="#6c4bc7" font-size="17" font-weight="800">stock photos</text>
+    </g>
+    <g transform="translate(0 478)">
+      <rect class="chip" width="394" height="86" rx="24"/>
+      <rect x="24" y="22" width="42" height="42" rx="12" fill="#e0fbe9"/>
+      <text x="82" y="39" class="cell ink">Email export</text>
+      <text x="82" y="65" class="mono" fill="#12824f" font-size="17" font-weight="800">supplier thread</text>
+    </g>
+  </g>
+
+  <g class="font" transform="translate(572 236)">
+    <rect x="0" y="0" width="224" height="462" rx="34" fill="#08111d" opacity="0.96"/>
+    <text x="112" y="58" text-anchor="middle" fill="#72f3ff" class="label">Process</text>
+    <g transform="translate(42 100)">
+      <circle cx="70" cy="38" r="38" fill="url(#accent)"/>
+      <text x="70" y="48" text-anchor="middle" fill="#06101d" font-size="23" font-weight="950">1</text>
+      <text x="70" y="104" text-anchor="middle" fill="#fff" font-size="25" font-weight="900">Extract</text>
+      <path d="M70 122v42" stroke="#72f3ff" stroke-width="5" stroke-linecap="round"/>
+    </g>
+    <g transform="translate(42 246)">
+      <circle cx="70" cy="38" r="38" fill="#fff"/>
+      <text x="70" y="48" text-anchor="middle" fill="#08111d" font-size="23" font-weight="950">2</text>
+      <text x="70" y="104" text-anchor="middle" fill="#fff" font-size="25" font-weight="900">Clean</text>
+      <path d="M70 122v42" stroke="#72f3ff" stroke-width="5" stroke-linecap="round"/>
+    </g>
+    <g transform="translate(42 332)">
+      <circle cx="70" cy="38" r="38" fill="#e6fbff"/>
+      <text x="70" y="48" text-anchor="middle" fill="#08111d" font-size="23" font-weight="950">3</text>
+      <text x="70" y="104" text-anchor="middle" fill="#fff" font-size="25" font-weight="900">Review</text>
+    </g>
+  </g>
+
+  <g class="font" transform="translate(846 206)">
+    <text class="label" fill="#1265ff" x="0" y="0">Output</text>
+    <text class="head ink" x="0" y="68">Usable rows.</text>
+    <text class="body muted" x="0" y="112">Rows keep proof, confidence, and review status.</text>
+
+    <g transform="translate(0 158)">
+      <rect width="604" height="478" rx="28" fill="#fff" stroke="rgba(8,17,29,0.12)" stroke-width="2"/>
+      <rect width="604" height="70" rx="28" fill="#f7fbfb"/>
+      <text x="26" y="44" class="label" fill="#697783">Source</text>
+      <text x="190" y="44" class="label" fill="#697783">Record</text>
+      <text x="384" y="44" class="label" fill="#697783">Flag</text>
+      <text x="514" y="44" class="label" fill="#697783">State</text>
+
+      <g transform="translate(0 70)">
+        <line x1="0" y1="0" x2="604" y2="0" class="line"/>
+        <text x="26" y="52" class="cell ink">PDF</text>
+        <text x="190" y="52" class="cell ink">INV-1048</text>
+        <rect x="382" y="24" width="92" height="36" rx="18" fill="#fff2d8"/>
+        <text x="428" y="48" text-anchor="middle" fill="#9a6b12" font-size="17" font-weight="900">Date?</text>
+        <rect x="510" y="20" width="68" height="42" rx="21" fill="#eef3ff"/>
+        <text x="544" y="47" text-anchor="middle" fill="#1265ff" font-size="17" font-weight="950">Review</text>
+      </g>
+      <g transform="translate(0 142)">
+        <line x1="0" y1="0" x2="604" y2="0" class="line"/>
+        <text x="26" y="52" class="cell ink">Drive</text>
+        <text x="190" y="52" class="cell ink">SO-2210</text>
+        <rect x="382" y="24" width="112" height="36" rx="18" fill="#e5fbf1"/>
+        <text x="438" y="48" text-anchor="middle" fill="#12824f" font-size="17" font-weight="900">Ready</text>
+        <rect x="510" y="20" width="68" height="42" rx="21" fill="#e5fbf1"/>
+        <text x="544" y="47" text-anchor="middle" fill="#12824f" font-size="17" font-weight="950">Pass</text>
+      </g>
+      <g transform="translate(0 214)">
+        <line x1="0" y1="0" x2="604" y2="0" class="line"/>
+        <text x="26" y="52" class="cell ink">Photo</text>
+        <text x="190" y="52" class="cell ink">Lot B-77</text>
+        <rect x="382" y="24" width="116" height="36" rx="18" fill="#ffe8ea"/>
+        <text x="440" y="48" text-anchor="middle" fill="#a92339" font-size="17" font-weight="900">Owner?</text>
+        <rect x="510" y="20" width="68" height="42" rx="21" fill="#eef3ff"/>
+        <text x="544" y="47" text-anchor="middle" fill="#1265ff" font-size="17" font-weight="950">Review</text>
+      </g>
+      <g transform="translate(0 286)">
+        <line x1="0" y1="0" x2="604" y2="0" class="line"/>
+        <text x="26" y="52" class="cell ink">Email</text>
+        <text x="190" y="52" class="cell ink">Claim 58</text>
+        <rect x="382" y="24" width="102" height="36" rx="18" fill="#f3f6f8"/>
+        <text x="433" y="48" text-anchor="middle" fill="#61707e" font-size="17" font-weight="900">Source</text>
+        <rect x="510" y="20" width="68" height="42" rx="21" fill="#e5fbf1"/>
+        <text x="544" y="47" text-anchor="middle" fill="#12824f" font-size="17" font-weight="950">Pass</text>
+      </g>
+      <g transform="translate(0 358)">
+        <line x1="0" y1="0" x2="604" y2="0" class="line"/>
+        <text x="26" y="52" class="cell ink">Sheet</text>
+        <text x="190" y="52" class="cell ink">SKU 3882</text>
+        <rect x="382" y="24" width="130" height="36" rx="18" fill="#fff2d8"/>
+        <text x="447" y="48" text-anchor="middle" fill="#9a6b12" font-size="17" font-weight="900">Duplicate?</text>
+        <rect x="526" y="20" width="52" height="42" rx="21" fill="#eef3ff"/>
+        <text x="552" y="47" text-anchor="middle" fill="#1265ff" font-size="17" font-weight="950">Fix</text>
+      </g>
+    </g>
+  </g>
+
+  <g class="font" transform="translate(118 814)">
+    <rect width="1332" height="72" rx="25" fill="url(#dark)"/>
+    <text x="28" y="46" fill="#72f3ff" class="label">Next action</text>
+    <text x="260" y="46" fill="#fff" font-size="28" font-weight="900">Approve the flagged rows, then export to Sheets, CRM, ERP, or the app.</text>
+  </g>
+</svg>
