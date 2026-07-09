@@ -15,14 +15,14 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
     <style>
-      /* SuperMega — canonical "Void Blue + Fire Red" (source: BRAND-TOKENS.css) */
+      /* SuperMega — canonical "Void Blue + Electric Blue" (source: BRAND-TOKENS.css) */
       :root {
         color-scheme: dark;
         --void: #07111f; --void-deep: #06101d;
         --panel: rgba(255,255,255,0.06); --panel-2: rgba(255,255,255,0.045);
         --line: rgba(255,255,255,0.15);
         --text: #f6fbff; --muted: #a9b8c7; --dotdev: #5E6B87;
-        --fire: #FF3B3B; --fire-light: #FF5C4D; --fire-glow: rgba(255,59,59,0.16);
+        --fire: #3B82F6; --fire-light: #60A5FA; --fire-glow: rgba(59, 130, 246,0.16);
         --ok: #58c98a; --warn: #e3b341;
         --font-display: "Space Grotesk", "Inter", system-ui, sans-serif;
         --font-sans: "Inter", system-ui, -apple-system, sans-serif;
@@ -100,12 +100,12 @@
       .posrow select { flex: 1; }
 
       /* agent products */
-      .tool.agent { border-color: rgba(255,59,59,.22); background: linear-gradient(180deg, var(--fire-glow), var(--panel)); }
+      .tool.agent { border-color: rgba(59, 130, 246,.22); background: linear-gradient(180deg, var(--fire-glow), var(--panel)); }
       .build-tag {
         display: inline-block; font-size: 10.5px; font-weight: 700;
         letter-spacing: .08em; text-transform: uppercase;
         padding: 3px 9px; border-radius: 999px;
-        border: 1px solid rgba(255,59,59,.3); color: var(--fire); background: var(--fire-glow);
+        border: 1px solid rgba(59, 130, 246,.3); color: var(--fire); background: var(--fire-glow);
         margin-bottom: 10px;
       }
 
@@ -120,7 +120,7 @@
       .custom textarea { min-height: 90px; resize: vertical; }
       .custom .hp { position: absolute; left: -9999px; }
       .scope-box {
-        border: 1px solid rgba(255,59,59,.28); border-radius: 14px;
+        border: 1px solid rgba(59, 130, 246,.28); border-radius: 14px;
         background: var(--fire-glow); padding: 16px; margin-top: 10px;
       }
       .scope-box b { color: var(--fire); }
@@ -140,8 +140,8 @@
       <header>
         <a class="brand" href="https://supermega.dev/">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <path d="M6.5 8 L11 12 L6.5 16" stroke="#FF3B3B" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
-            <path d="M12.6 16.2 L18 16.2" stroke="#FF3B3B" stroke-width="2.6" stroke-linecap="round"/>
+            <path d="M6.5 8 L11 12 L6.5 16" stroke="#3B82F6" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M12.6 16.2 L18 16.2" stroke="#3B82F6" stroke-width="2.6" stroke-linecap="round"/>
           </svg>
           <b>supermega</b><b class="dot">.dev</b>
         </a>

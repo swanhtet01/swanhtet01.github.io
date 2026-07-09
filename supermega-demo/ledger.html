@@ -8,14 +8,14 @@
 <link rel="preconnect" href="https://fonts.googleapis.com" /><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=Noto+Sans+Myanmar:wght@400;500;700&display=swap" rel="stylesheet" />
 <style>
-/* SuperMega — canonical "Void Blue + Fire Red" (source: BRAND-TOKENS.css) */
+/* SuperMega — canonical "Void Blue + Electric Blue" (source: BRAND-TOKENS.css) */
 :root{
   color-scheme:dark;
   --void:#07111f;--void-deep:#06101d;
   --panel:rgba(255,255,255,0.06);--panel-2:rgba(255,255,255,0.045);
   --line:rgba(255,255,255,0.15);
   --text:#f6fbff;--muted:#a9b8c7;--dotdev:#5E6B87;
-  --fire:#FF3B3B;--fire-light:#FF5C4D;--fire-glow:rgba(255,59,59,0.16);
+  --fire:#3B82F6;--fire-light:#60A5FA;--fire-glow:rgba(59, 130, 246,0.16);
   --ok:#58c98a;--warn:#e3b341;
   --font-display:"Space Grotesk","Inter",system-ui,sans-serif;
   --font-sans:"Inter",system-ui,-apple-system,sans-serif;
@@ -42,12 +42,12 @@ input::placeholder,textarea::placeholder{color:var(--muted);}
 input:focus,textarea:focus{outline:none;border-color:var(--fire);box-shadow:0 0 0 3px var(--fire-glow);}
 .card{border:1px solid var(--line);border-radius:var(--radius);background:var(--panel);padding:22px;box-shadow:0 24px 60px rgba(0,0,0,0.45);}
 .hero{padding:26px 0 10px;}.hero h1{font-size:clamp(34px,5vw,52px);}.hero p{color:var(--muted);max-width:60ch;margin:14px 0 0;font-size:clamp(16px,2vw,19px);}
-.pill{display:inline-block;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--fire);border:1px solid rgba(255,59,59,.3);background:var(--fire-glow);border-radius:999px;padding:4px 11px;}
+.pill{display:inline-block;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--fire);border:1px solid rgba(59, 130, 246,.3);background:var(--fire-glow);border-radius:999px;padding:4px 11px;}
 table{width:100%;border-collapse:collapse;font-size:14px;}th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);}th{color:var(--muted);font-size:11px;letter-spacing:.06em;text-transform:uppercase;font-weight:700;}
 .err{color:var(--fire-light);}.ok{color:var(--ok);}
 </style></head>
 <body><div class="wrap">
-<header><a class="brand" href="/"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6.5 8 L11 12 L6.5 16" stroke="#FF3B3B" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M12.6 16.2 L18 16.2" stroke="#FF3B3B" stroke-width="2.6" stroke-linecap="round"/></svg><b>supermega</b><b class="dot">.dev</b></a><a class="back" href="/">← all trials</a></header>
+<header><a class="brand" href="/"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6.5 8 L11 12 L6.5 16" stroke="#3B82F6" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M12.6 16.2 L18 16.2" stroke="#3B82F6" stroke-width="2.6" stroke-linecap="round"/></svg><b>supermega</b><b class="dot">.dev</b></a><a class="back" href="/">← all trials</a></header>
 <main>
 <section class="hero">
 <span class="pill">Document Ledger</span>
@@ -68,7 +68,7 @@ table{width:100%;border-collapse:collapse;font-size:14px;}th,td{text-align:left;
 
 <section id="state" style="margin-top:18px;"></section>
 <section id="out" style="margin-top:18px;"></section>
-<section id="ledger-cta" style="display:none;margin-top:16px;border:1px solid rgba(255,59,59,.28);border-radius:var(--radius);background:linear-gradient(135deg,rgba(255,59,59,.07),rgba(255,59,59,.02));padding:24px;display:none;flex-wrap:wrap;align-items:center;gap:16px;justify-content:space-between;">
+<section id="ledger-cta" style="display:none;margin-top:16px;border:1px solid rgba(59, 130, 246,.28);border-radius:var(--radius);background:linear-gradient(135deg,rgba(59, 130, 246,.07),rgba(59, 130, 246,.02));padding:24px;display:none;flex-wrap:wrap;align-items:center;gap:16px;justify-content:space-between;">
   <div>
     <div style="font-family:var(--font-display);font-size:20px;font-weight:600;color:var(--text);margin-bottom:5px">Want this built into your workflow?</div>
     <div style="color:var(--muted);font-size:14.5px;max-width:54ch">Auto-extract every Viber order and invoice into a live Sheet — no copy-paste. From $600, running in days.</div>
