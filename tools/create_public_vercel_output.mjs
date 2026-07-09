@@ -4513,7 +4513,111 @@ ${unicornHeader}
             </div>
           </div>
           <aside class="product-stage" aria-label="supermega app">
-            <img class="hero-img" src="/site/shots/live-product-restaurant-pos-menu-inventory.png?v=${publicShotVersion}" alt="supermega — your business in one app" loading="eager" decoding="async" />
+            <div class="hmk" role="img" aria-label="The supermega app — point of sale and live factory floor">
+              <style>
+                .hmk{position:relative}
+                .hmk-win{border:1px solid var(--line);border-radius:15px;overflow:hidden;background:#0a1424;box-shadow:0 30px 70px rgba(0,0,0,.5)}
+                :root[data-theme="light"] .hmk-win{background:#fff}
+                .hmk-cr{display:flex;align-items:center;gap:6px;padding:9px 12px;background:rgba(255,255,255,.04);border-bottom:1px solid var(--line)}
+                :root[data-theme="light"] .hmk-cr{background:rgba(11,15,23,.03)}
+                .hmk-cr i{width:9px;height:9px;border-radius:50%;background:var(--line)}
+                .hmk-cr .u{margin-left:8px;font-family:ui-monospace,Consolas,monospace;font-size:11px;color:var(--muted)}
+                .hmk-app{display:grid;grid-template-columns:150px 1fr}
+                .hmk-sb{border-right:1px solid var(--line);padding:11px 9px;display:flex;flex-direction:column;gap:2px;background:rgba(255,255,255,.02)}
+                :root[data-theme="light"] .hmk-sb{background:rgba(11,15,23,.02)}
+                .hmk-biz{display:flex;align-items:center;gap:8px;padding:4px 6px 10px;margin-bottom:3px;border-bottom:1px solid var(--line)}
+                .hmk-biz .lg{width:24px;height:24px;border-radius:6px;background:var(--blue);display:grid;place-items:center;color:#fff;font-weight:700;font-size:12px}
+                .hmk-biz b{font-size:12.5px;font-weight:600}
+                .hmk-ni{display:flex;align-items:center;gap:9px;padding:7px 8px;border-radius:7px;color:var(--muted);font-size:12.5px}
+                .hmk-ni.on{background:rgba(59,130,246,.12);color:var(--blue);font-weight:600}
+                .hmk-ni b{margin-left:auto;font-family:ui-monospace,monospace;font-size:9.5px;color:var(--muted);font-weight:500}
+                .hmk-mn{display:flex;flex-direction:column;min-width:0}
+                .hmk-tb{display:flex;align-items:center;gap:8px;padding:9px 12px;border-bottom:1px solid var(--line)}
+                .hmk-srch{flex:1;background:rgba(255,255,255,.04);border:1px solid var(--line);border-radius:8px;padding:6px 10px;font-size:12px;color:var(--muted)}
+                :root[data-theme="light"] .hmk-srch{background:rgba(11,15,23,.03)}
+                .hmk-who{width:26px;height:26px;border-radius:50%;background:var(--blue);display:grid;place-items:center;color:#fff;font-size:10.5px;font-weight:700}
+                .hmk-ct{display:grid;grid-template-columns:1.35fr .95fr}
+                .hmk-pl{padding:12px;border-right:1px solid var(--line)}
+                .hmk-tabs{display:flex;gap:5px;margin-bottom:10px}
+                .hmk-tab{font-size:11.5px;font-weight:600;color:var(--muted);padding:4px 9px;border-radius:7px}
+                .hmk-tab.on{background:rgba(59,130,246,.12);color:var(--blue)}
+                .hmk-pg{display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px}
+                .hmk-pc{border:1px solid var(--line);border-radius:9px;padding:8px;background:rgba(255,255,255,.03);position:relative}
+                :root[data-theme="light"] .hmk-pc{background:#fff}
+                .hmk-pc .ic{font-size:15px}
+                .hmk-pc .nm{font-size:11px;font-weight:600;margin-top:4px}
+                .hmk-pc .pr{font-family:ui-monospace,monospace;font-size:10.5px;color:var(--muted);margin-top:1px}
+                .hmk-pc .plus{position:absolute;top:7px;right:7px;width:17px;height:17px;border-radius:5px;background:var(--blue);color:#fff;display:grid;place-items:center;font-size:12px;line-height:1}
+                .hmk-cart{display:flex;flex-direction:column;background:rgba(255,255,255,.02)}
+                :root[data-theme="light"] .hmk-cart{background:rgba(11,15,23,.02)}
+                .hmk-che{padding:9px 12px;font-size:12px;font-weight:700;display:flex;justify-content:space-between;border-bottom:1px solid var(--line)}
+                .hmk-che span{color:var(--muted);font-family:ui-monospace,monospace;font-size:10.5px;font-weight:500}
+                .hmk-li{display:flex;justify-content:space-between;padding:7px 12px;font-size:12px;border-bottom:1px solid var(--line)}
+                .hmk-li .q{font-family:ui-monospace,monospace;font-size:10.5px;color:var(--muted);border:1px solid var(--line);border-radius:5px;padding:0 5px}
+                .hmk-li .m{font-family:ui-monospace,monospace}
+                .hmk-tot{padding:10px 12px;display:flex;justify-content:space-between;align-items:center;margin-top:auto}
+                .hmk-tot .l{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.09em}
+                .hmk-tot .a{font-family:ui-monospace,monospace;font-size:18px;font-weight:700}
+                .hmk-pays{display:flex;gap:5px;padding:0 12px 8px}
+                .hmk-pay{flex:1;text-align:center;font-size:10px;font-weight:600;border:1px solid var(--line);border-radius:7px;padding:5px;color:var(--muted)}
+                .hmk-pay.on{border-color:var(--blue);color:var(--blue);background:rgba(59,130,246,.1)}
+                .hmk-chg{margin:0 12px 12px;background:var(--blue);color:#fff;border-radius:9px;padding:10px;font-weight:700;font-size:12.5px;text-align:center}
+                .hmk-flt{position:absolute;right:-12px;bottom:-22px;width:228px;border:1px solid var(--line);border-radius:13px;background:#0c1626;box-shadow:0 20px 44px rgba(0,0,0,.4);padding:12px}
+                :root[data-theme="light"] .hmk-flt{background:#fff}
+                .hmk-fh{display:flex;justify-content:space-between;align-items:center;margin-bottom:9px}
+                .hmk-fh b{font-size:12.5px;font-weight:600}
+                .hmk-fh .lv{font-family:ui-monospace,monospace;font-size:9.5px;color:#34D399;display:inline-flex;align-items:center;gap:4px}
+                .hmk-fh .lv i{width:5px;height:5px;border-radius:50%;background:#34D399}
+                .hmk-tl{display:grid;grid-template-columns:repeat(4,1fr);gap:5px}
+                .hmk-t{aspect-ratio:1;border-radius:6px;border:1px solid var(--line);display:grid;place-items:center;font-family:ui-monospace,monospace;font-size:8.5px;color:var(--muted)}
+                .hmk-t.r{border-color:rgba(52,211,153,.5);color:#34D399}
+                .hmk-t.c{border-color:rgba(245,158,11,.5);color:#F59E0B}
+                .hmk-t.d{border-color:rgba(248,113,113,.5);color:#F87171}
+                @media (max-width:560px){.hmk-flt{display:none}.hmk-app{grid-template-columns:1fr}.hmk-sb{display:none}.hmk-ct{grid-template-columns:1fr}.hmk-pl{border-right:0;border-bottom:1px solid var(--line)}}
+              </style>
+              <div class="hmk-win">
+                <div class="hmk-cr"><i></i><i></i><i></i><span class="u">&gt;_ app.supermega.dev</span></div>
+                <div class="hmk-app">
+                  <div class="hmk-sb">
+                    <div class="hmk-biz"><span class="lg">S</span><b>Shwe Café</b></div>
+                    <div class="hmk-ni">Home</div>
+                    <div class="hmk-ni on">Sales</div>
+                    <div class="hmk-ni">Customers<b>128</b></div>
+                    <div class="hmk-ni">Books</div>
+                    <div class="hmk-ni">Factory</div>
+                  </div>
+                  <div class="hmk-mn">
+                    <div class="hmk-tb"><div class="hmk-srch">Search products…</div><span class="hmk-who">MM</span></div>
+                    <div class="hmk-ct">
+                      <div class="hmk-pl">
+                        <div class="hmk-tabs"><span class="hmk-tab on">All</span><span class="hmk-tab">Drinks</span><span class="hmk-tab">Food</span></div>
+                        <div class="hmk-pg">
+                          <div class="hmk-pc"><div class="ic">☕</div><div class="nm">Iced coffee</div><div class="pr">2,500 Ks</div><span class="plus">+</span></div>
+                          <div class="hmk-pc"><div class="ic">🧋</div><div class="nm">Milk tea</div><div class="pr">1,800 Ks</div><span class="plus">+</span></div>
+                          <div class="hmk-pc"><div class="ic">🥐</div><div class="nm">Croissant</div><div class="pr">3,000 Ks</div><span class="plus">+</span></div>
+                          <div class="hmk-pc"><div class="ic">🥪</div><div class="nm">Sandwich</div><div class="pr">4,500 Ks</div><span class="plus">+</span></div>
+                          <div class="hmk-pc"><div class="ic">🍰</div><div class="nm">Cake</div><div class="pr">3,500 Ks</div><span class="plus">+</span></div>
+                          <div class="hmk-pc"><div class="ic">💧</div><div class="nm">Water</div><div class="pr">500 Ks</div><span class="plus">+</span></div>
+                        </div>
+                      </div>
+                      <div class="hmk-cart">
+                        <div class="hmk-che">Current sale<span>#1042</span></div>
+                        <div class="hmk-li"><span><span class="q">2×</span> Iced coffee</span><span class="m">5,000</span></div>
+                        <div class="hmk-li"><span><span class="q">1×</span> Croissant</span><span class="m">3,000</span></div>
+                        <div class="hmk-li"><span><span class="q">1×</span> Water</span><span class="m">500</span></div>
+                        <div class="hmk-tot"><span class="l">Total</span><span class="a">8,500 Ks</span></div>
+                        <div class="hmk-pays"><span class="hmk-pay on">KBZPay</span><span class="hmk-pay">Cash</span><span class="hmk-pay">Wave</span></div>
+                        <div class="hmk-chg">Charge · 8,500 Ks</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="hmk-flt">
+                <div class="hmk-fh"><b>Factory floor</b><span class="lv"><i></i>LIVE</span></div>
+                <div class="hmk-tl"><span class="hmk-t r">M1</span><span class="hmk-t r">M2</span><span class="hmk-t c">M3</span><span class="hmk-t r">M4</span><span class="hmk-t r">M5</span><span class="hmk-t d">M6</span><span class="hmk-t r">M7</span><span class="hmk-t r">M8</span></div>
+              </div>
+            </div>
             <div class="proof-line" aria-label="Why it is simple">
               <div class="proof"><b>Free to start</b><span>No card</span></div>
               <div class="proof"><b>Yours to keep</b><span>Your data</span></div>
