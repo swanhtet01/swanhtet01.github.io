@@ -84,7 +84,7 @@ const requiredPublicSiteJsonFiles = [
   'value-intake-router.json',
 ]
 const legacyInitialsMarkHtml = ['<span class="mark">', String.fromCharCode(83, 77), '</span>'].join('')
-const signalMarkHtml = '<span style="display:inline-flex;align-items:center;flex:none" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M6.5 8 L11 12 L6.5 16" stroke="#FF3B3B" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M12.6 16.2 L18 16.2" stroke="#FF3B3B" stroke-width="2.6" stroke-linecap="round"/></svg></span>'
+const signalMarkHtml = '<span style="display:inline-flex;align-items:center;flex:none" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M6.5 8 L11 12 L6.5 16" stroke="#3B82F6" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M12.6 16.2 L18 16.2" stroke="#3B82F6" stroke-width="2.6" stroke-linecap="round"/></svg></span>'
 
 async function writeTextFileEnsuringDir(destination, content) {
   const targetDir = dirname(destination)
@@ -167,7 +167,7 @@ const publicMachineHtml = `<!doctype html>
     <meta name="theme-color" content="#07111f" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" />
     <style>
-      :root { color-scheme: dark; --bg:#07111f; --panel:rgba(255,255,255,.075); --line:rgba(255,255,255,.15); --text:#f6fbff; --muted:#a9b8c7; --cyan:#FF5C4D; --blue:#FF3B3B; --green:#8cf0b8; --ink:#06101d; }
+      :root { color-scheme: dark; --bg:#07111f; --panel:rgba(255,255,255,.075); --line:rgba(255,255,255,.15); --text:#f6fbff; --muted:#a9b8c7; --cyan:#60A5FA; --blue:#3B82F6; --green:#8cf0b8; --ink:#06101d; }
       * { box-sizing: border-box; }
       body { margin:0; min-height:100vh; background: radial-gradient(circle at 80% 8%, rgba(114,243,255,.2), transparent 28rem), radial-gradient(circle at 8% 24%, rgba(79,140,255,.18), transparent 28rem), linear-gradient(135deg,#07111f,#02050b); color:var(--text); font-family:"Inter","Segoe UI",system-ui,sans-serif; -webkit-font-smoothing: antialiased; }
       main { width:min(1120px, calc(100% - 32px)); margin:0 auto; padding:28px 0 56px; }
@@ -204,7 +204,7 @@ const publicMachineHtml = `<!doctype html>
   <body>
     <main>
       <header>
-        <a class="brand" href="/"><span style="display:inline-flex;align-items:center;flex:none" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M6.5 8 L11 12 L6.5 16" stroke="#FF3B3B" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M12.6 16.2 L18 16.2" stroke="#FF3B3B" stroke-width="2.6" stroke-linecap="round"/></svg></span><span class="wm" style="letter-spacing:-0.025em"><b style="font-weight:700">supermega</b><b style="color:#5E6B87;font-weight:500">.dev</b></span></a>
+        <a class="brand" href="/"><span style="display:inline-flex;align-items:center;flex:none" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M6.5 8 L11 12 L6.5 16" stroke="#3B82F6" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M12.6 16.2 L18 16.2" stroke="#3B82F6" stroke-width="2.6" stroke-linecap="round"/></svg></span><span class="wm" style="letter-spacing:-0.025em"><b style="font-weight:700">supermega</b><b style="color:#5E6B87;font-weight:500">.dev</b></span></a>
         <a class="btn" href="/contact/">Contact</a>
       </header>
       <section class="hero">
@@ -717,7 +717,7 @@ function publicToolsHtmlFromCatalog(catalog, agentRadar = {}, socialOAuth = {}) 
   <body>
     <div class="wrap">
       <header>
-        <a class="brand" href="/" aria-label="SUPERMEGA.dev home"><span style="display:inline-flex;align-items:center;flex:none" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M6.5 8 L11 12 L6.5 16" stroke="#FF3B3B" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M12.6 16.2 L18 16.2" stroke="#FF3B3B" stroke-width="2.6" stroke-linecap="round"/></svg></span><span class="wm" style="letter-spacing:-0.025em"><b style="font-weight:700">supermega</b><b style="color:#5E6B87;font-weight:500">.dev</b></span></a>
+        <a class="brand" href="/" aria-label="SUPERMEGA.dev home"><span style="display:inline-flex;align-items:center;flex:none" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M6.5 8 L11 12 L6.5 16" stroke="#3B82F6" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M12.6 16.2 L18 16.2" stroke="#3B82F6" stroke-width="2.6" stroke-linecap="round"/></svg></span><span class="wm" style="letter-spacing:-0.025em"><b style="font-weight:700">supermega</b><b style="color:#5E6B87;font-weight:500">.dev</b></span></a>
         <nav class="nav" aria-label="Primary">
           <a class="btn secondary-nav" href="/">Home</a>
           <a class="btn primary" href="/contact/?source=tools">Contact</a>
@@ -822,7 +822,7 @@ function publicValueHtmlFromEngine(engine) {
     <meta name="theme-color" content="#07111f" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" />
     <style>
-      :root { color-scheme: dark; --bg: #07111f; --panel: rgba(255,255,255,0.07); --line: rgba(255,255,255,0.14); --text: #f7fbf6; --muted: #aab8af; --green: #8cf0b8; --blue: #FF3B3B; --ink: #06100c; }
+      :root { color-scheme: dark; --bg: #07111f; --panel: rgba(255,255,255,0.07); --line: rgba(255,255,255,0.14); --text: #f7fbf6; --muted: #aab8af; --green: #8cf0b8; --blue: #3B82F6; --ink: #06100c; }
       * { box-sizing: border-box; }
       body { margin: 0; min-height: 100vh; background: #07111f; color: var(--text); font-family: "Inter", "Segoe UI", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
       a { color: inherit; text-decoration: none; }
@@ -862,7 +862,7 @@ function publicValueHtmlFromEngine(engine) {
   <body>
     <div class="wrap">
       <header>
-        <a class="brand" href="/" aria-label="SUPERMEGA.dev home"><span style="display:inline-flex;align-items:center;flex:none" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M6.5 8 L11 12 L6.5 16" stroke="#FF3B3B" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M12.6 16.2 L18 16.2" stroke="#FF3B3B" stroke-width="2.6" stroke-linecap="round"/></svg></span><span class="wm" style="letter-spacing:-0.025em"><b style="font-weight:700">supermega</b><b style="color:#5E6B87;font-weight:500">.dev</b></span></a>
+        <a class="brand" href="/" aria-label="SUPERMEGA.dev home"><span style="display:inline-flex;align-items:center;flex:none" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M6.5 8 L11 12 L6.5 16" stroke="#3B82F6" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M12.6 16.2 L18 16.2" stroke="#3B82F6" stroke-width="2.6" stroke-linecap="round"/></svg></span><span class="wm" style="letter-spacing:-0.025em"><b style="font-weight:700">supermega</b><b style="color:#5E6B87;font-weight:500">.dev</b></span></a>
         <nav class="nav" aria-label="Primary">
           <a class="btn secondary-nav" href="/tools/">Tools</a>
           <a class="btn secondary-nav" href="/start/">Start</a>
@@ -969,7 +969,7 @@ function publicIntakeHtmlFromRouter(router) {
     <meta name="theme-color" content="#07111f" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" />
     <style>
-      :root { color-scheme: dark; --bg: #07111f; --panel: rgba(255,255,255,0.07); --line: rgba(255,255,255,0.14); --text: #f7fbff; --muted: #aab6c3; --green: #8cf0b8; --blue: #FF3B3B; --ink: #06100c; }
+      :root { color-scheme: dark; --bg: #07111f; --panel: rgba(255,255,255,0.07); --line: rgba(255,255,255,0.14); --text: #f7fbff; --muted: #aab6c3; --green: #8cf0b8; --blue: #3B82F6; --ink: #06100c; }
       * { box-sizing: border-box; }
       body { margin: 0; min-height: 100vh; background: #07111f; color: var(--text); font-family: "Inter", "Segoe UI", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
       a { color: inherit; text-decoration: none; }
@@ -1016,7 +1016,7 @@ function publicIntakeHtmlFromRouter(router) {
   <body>
     <div class="wrap">
       <header>
-        <a class="brand" href="/" aria-label="SUPERMEGA.dev home"><span style="display:inline-flex;align-items:center;flex:none" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M6.5 8 L11 12 L6.5 16" stroke="#FF3B3B" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M12.6 16.2 L18 16.2" stroke="#FF3B3B" stroke-width="2.6" stroke-linecap="round"/></svg></span><span class="wm" style="letter-spacing:-0.025em"><b style="font-weight:700">supermega</b><b style="color:#5E6B87;font-weight:500">.dev</b></span></a>
+        <a class="brand" href="/" aria-label="SUPERMEGA.dev home"><span style="display:inline-flex;align-items:center;flex:none" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M6.5 8 L11 12 L6.5 16" stroke="#3B82F6" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M12.6 16.2 L18 16.2" stroke="#3B82F6" stroke-width="2.6" stroke-linecap="round"/></svg></span><span class="wm" style="letter-spacing:-0.025em"><b style="font-weight:700">supermega</b><b style="color:#5E6B87;font-weight:500">.dev</b></span></a>
         <nav class="nav" aria-label="Primary">
           <a class="btn secondary-nav" href="/tools/">Tools</a>
           <a class="btn secondary-nav" href="/proof/">Proof</a>
@@ -1257,7 +1257,7 @@ function publicProofHtmlFromPacks(proof) {
   <body>
     <div class="wrap">
       <header>
-        <a class="brand" href="/" aria-label="SUPERMEGA.dev home"><span style="display:inline-flex;align-items:center;flex:none" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M6.5 8 L11 12 L6.5 16" stroke="#FF3B3B" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M12.6 16.2 L18 16.2" stroke="#FF3B3B" stroke-width="2.6" stroke-linecap="round"/></svg></span><span class="wm" style="letter-spacing:-0.025em"><b style="font-weight:700">supermega</b><b style="color:#5E6B87;font-weight:500">.dev</b></span></a>
+        <a class="brand" href="/" aria-label="SUPERMEGA.dev home"><span style="display:inline-flex;align-items:center;flex:none" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M6.5 8 L11 12 L6.5 16" stroke="#3B82F6" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M12.6 16.2 L18 16.2" stroke="#3B82F6" stroke-width="2.6" stroke-linecap="round"/></svg></span><span class="wm" style="letter-spacing:-0.025em"><b style="font-weight:700">supermega</b><b style="color:#5E6B87;font-weight:500">.dev</b></span></a>
         <nav class="nav" aria-label="Primary">
           <a class="btn secondary-nav" href="/tools/">Tools</a>
           <a class="btn secondary-nav" href="/value/">Value</a>
@@ -1319,7 +1319,7 @@ function renderPublicPricingHtml() {
         --ink: #07111f;
         --muted: #5f6b66;
         --line: rgba(13, 17, 23, 0.13);
-        --blue: #FF3B3B;
+        --blue: #3B82F6;
         --navy: #07111f;
         --shadow: 0 34px 90px rgba(13, 17, 23, 0.14);
       }
@@ -1346,7 +1346,7 @@ function renderPublicPricingHtml() {
       .brand-text small { color: var(--muted); font-size: 10px; font-weight: 900; letter-spacing: 0.18em; text-transform: uppercase; }
       .nav, .cta { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
       .btn, button { display: inline-flex; align-items: center; justify-content: center; min-height: 48px; border: 1px solid var(--line); border-radius: 999px; padding: 0 18px; background: rgba(255,255,255,0.58); color: var(--ink); font: inherit; font-weight: 950; backdrop-filter: blur(18px); }
-      .btn.primary, button { color: #fff; border-color: transparent; background: linear-gradient(135deg, #07111f, #FF3B3B); box-shadow: 0 18px 46px rgba(18, 79, 255, 0.24); }
+      .btn.primary, button { color: #fff; border-color: transparent; background: linear-gradient(135deg, #07111f, #3B82F6); box-shadow: 0 18px 46px rgba(18, 79, 255, 0.24); }
       .poster { display: grid; grid-template-columns: minmax(0, 0.84fr) minmax(340px, 1.16fr); gap: clamp(24px, 5vw, 72px); align-items: center; min-height: min(620px, calc(100svh - 86px)); padding: 10px 0 42px; }
       .eyebrow { color: var(--blue); font-size: 12px; font-weight: 950; letter-spacing: 0.22em; text-transform: uppercase; }
       h1, h2, h3 { font-family: var(--font-serif, "Georgia", ui-serif, serif); font-weight: 560; font-optical-sizing: auto; }
@@ -1373,7 +1373,7 @@ function renderPublicPricingHtml() {
     <div class="wrap">
       <header>
         <a class="brand" href="/" aria-label="SUPERMEGA.dev home">
-          <span style="display:inline-flex;align-items:center;flex:none" aria-hidden="true"><svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M6.5 8 L11 12 L6.5 16" stroke="#FF3B3B" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M12.6 16.2 L18 16.2" stroke="#FF3B3B" stroke-width="2.6" stroke-linecap="round"/></svg></span>
+          <span style="display:inline-flex;align-items:center;flex:none" aria-hidden="true"><svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M6.5 8 L11 12 L6.5 16" stroke="#3B82F6" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M12.6 16.2 L18 16.2" stroke="#3B82F6" stroke-width="2.6" stroke-linecap="round"/></svg></span>
           <span class="brand-text"><span class="wm" style="font-size:18px;letter-spacing:-0.025em"><b style="font-weight:700">supermega</b><b style="color:#5E6B87;font-weight:500">.dev</b></span></span>
         </a>
         <nav class="nav" aria-label="Primary">
@@ -1452,9 +1452,9 @@ const publicCardHtml = `<!doctype html>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" />
     <style>
       @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap');
-      :root { color-scheme: dark; --bg:#07111f; --surface:#111731; --elev:#1A2240; --ink:#EAEEF7; --muted:#93A0BC; --dim:#5E6B87; --accent:#FF3B3B; --accent-soft:rgba(255,59,59,.16); --line:rgba(255,255,255,.08); }
+      :root { color-scheme: dark; --bg:#07111f; --surface:#111731; --elev:#1A2240; --ink:#EAEEF7; --muted:#93A0BC; --dim:#5E6B87; --accent:#3B82F6; --accent-soft:rgba(59,130,246,.16); --line:rgba(255,255,255,.08); }
       * { box-sizing: border-box; }
-      body { margin: 0; min-height: 100svh; display: grid; place-items: center; padding: 24px; background-color: var(--bg); background-image: radial-gradient(ellipse at 82% 10%, rgba(255,59,59,0.12), transparent 32rem), radial-gradient(ellipse at 6% 92%, rgba(255,59,59,0.06), transparent 30rem), linear-gradient(160deg, #181B21, #101216 78%); color: var(--ink); font-family: "Inter", "Segoe UI", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+      body { margin: 0; min-height: 100svh; display: grid; place-items: center; padding: 24px; background-color: var(--bg); background-image: radial-gradient(ellipse at 82% 10%, rgba(59,130,246,0.12), transparent 32rem), radial-gradient(ellipse at 6% 92%, rgba(59,130,246,0.06), transparent 30rem), linear-gradient(160deg, #181B21, #101216 78%); color: var(--ink); font-family: "Inter", "Segoe UI", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
       a { color: inherit; text-decoration: none; }
       .card { position: relative; overflow: hidden; width: min(960px, 100%); min-height: min(600px, calc(100svh - 48px)); display: flex; align-items: center; gap: clamp(28px, 5vw, 56px); border: 1px solid var(--line); border-radius: clamp(24px, 4vw, 40px); background: linear-gradient(158deg, var(--surface) 0%, #191C23 100%); box-shadow: 0 50px 130px rgba(0,0,0,0.55); padding: clamp(30px, 6vw, 64px); }
       .card::before { content: "supermega"; position: absolute; right: -2%; bottom: -5%; color: transparent; -webkit-text-stroke: 1px rgba(255,255,255,0.028); font-size: clamp(56px, 13vw, 150px); font-weight: 700; letter-spacing: -0.04em; line-height: 0.8; pointer-events: none; font-family: "Space Grotesk", sans-serif; }
@@ -1466,7 +1466,7 @@ const publicCardHtml = `<!doctype html>
       .qr-label::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 7px var(--accent); }
       .content { position: relative; flex: 1 1 auto; min-width: 0; max-width: 540px; }
       .brand { display: inline-flex; align-items: center; font-family: "Space Grotesk", sans-serif; font-weight: 700; letter-spacing: -0.025em; font-size: 16px; color: var(--ink); }
-      .brand .bdot { width: 10px; height: 10px; border-radius: 3px; background: linear-gradient(135deg, #FF5C4D, #FF3B3B); box-shadow: 0 0 11px rgba(255,59,59,0.55); margin-right: 11px; }
+      .brand .bdot { width: 10px; height: 10px; border-radius: 3px; background: linear-gradient(135deg, #60A5FA, #3B82F6); box-shadow: 0 0 11px rgba(59,130,246,0.55); margin-right: 11px; }
       .brand .bd { color: var(--dim); font-weight: 500; }
       h1 { font-family: "Space Grotesk", sans-serif; margin: 22px 0 6px; font-size: clamp(40px, 6.5vw, 68px); line-height: 0.98; letter-spacing: -0.03em; font-weight: 700; color: var(--ink); }
       .role { margin: 0 0 18px; color: var(--accent); font-size: clamp(15px, 2.2vw, 18px); font-weight: 600; }
@@ -1521,9 +1521,9 @@ const publicCampaignRedirectHtml = `<!doctype html>
     <meta name="theme-color" content="#07111f" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" />
     <style>
-      :root { color-scheme: dark; --text: #f7fbff; --muted: #a8b8ca; --cyan: #FF3B3B; --blue: #FF3B3B; --ink: #06101d; }
+      :root { color-scheme: dark; --text: #f7fbff; --muted: #a8b8ca; --cyan: #3B82F6; --blue: #3B82F6; --ink: #06101d; }
       * { box-sizing: border-box; }
-      body { margin: 0; min-height: 100svh; display: grid; place-items: center; padding: 24px; background-color: #07111f; background-image: radial-gradient(circle at 76% 18%, rgba(255,59,59,0.18), transparent 24rem), radial-gradient(circle at 8% 84%, rgba(79,140,255,0.18), transparent 26rem), linear-gradient(135deg, #07111f, #02050b 72%); color: var(--text); font-family: "Inter", "Segoe UI", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+      body { margin: 0; min-height: 100svh; display: grid; place-items: center; padding: 24px; background-color: #07111f; background-image: radial-gradient(circle at 76% 18%, rgba(59,130,246,0.18), transparent 24rem), radial-gradient(circle at 8% 84%, rgba(79,140,255,0.18), transparent 26rem), linear-gradient(135deg, #07111f, #02050b 72%); color: var(--text); font-family: "Inter", "Segoe UI", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
       main { width: min(640px, 100%); border: 1px solid rgba(217,247,255,0.16); border-radius: 34px; background: rgba(255,255,255,0.07); box-shadow: inset 0 1px 0 rgba(255,255,255,0.12), 0 36px 100px rgba(0,0,0,0.36); padding: clamp(28px, 7vw, 54px); }
       .brand { display: inline-flex; align-items: center; gap: 12px; color: var(--cyan); font-size: 12px; font-weight: 950; letter-spacing: 0.22em; text-transform: uppercase; }
       .mark { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 14px; overflow: hidden; background: #07111f; border: 1px solid rgba(255,255,255,0.16); }
@@ -1535,7 +1535,7 @@ const publicCampaignRedirectHtml = `<!doctype html>
   </head>
   <body>
     <main>
-      <div class="brand"><span style="display:inline-flex;align-items:center;flex:none" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M6.5 8 L11 12 L6.5 16" stroke="#FF3B3B" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M12.6 16.2 L18 16.2" stroke="#FF3B3B" stroke-width="2.6" stroke-linecap="round"/></svg></span><span class="wm" style="letter-spacing:-0.025em"><b style="font-weight:700">supermega</b><b style="color:#5E6B87;font-weight:500">.dev</b></span></div>
+      <div class="brand"><span style="display:inline-flex;align-items:center;flex:none" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M6.5 8 L11 12 L6.5 16" stroke="#3B82F6" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M12.6 16.2 L18 16.2" stroke="#3B82F6" stroke-width="2.6" stroke-linecap="round"/></svg></span><span class="wm" style="letter-spacing:-0.025em"><b style="font-weight:700">supermega</b><b style="color:#5E6B87;font-weight:500">.dev</b></span></div>
       <h1>Opening SUPERMEGA.</h1>
       <p>Sending you to the main site.</p>
       <a data-sm-campaign-link href="${activeCardContactPath}">Continue</a>
@@ -1590,9 +1590,9 @@ const unicornShellStyle = `
         --text: #f6fbff;
         --muted: #a9b8c7;
         --line: rgba(255, 255, 255, 0.15);
-        --blue: #FF3B3B;
-        --blue-soft: rgba(255, 59, 59, 0.16);
-        --aqua: #FF5C4D;
+        --blue: #3B82F6;
+        --blue-soft: rgba(59, 130, 246, 0.16);
+        --aqua: #60A5FA;
         --navy: #07111f;
         --dotdev: #5E6B87;
         --shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
@@ -1607,8 +1607,8 @@ const unicornShellStyle = `
         overflow-x: hidden;
         color: var(--text);
         background:
-          radial-gradient(circle at 80% 2%, rgba(255, 59, 59, 0.10), transparent 30rem),
-          radial-gradient(circle at 4% 18%, rgba(255, 59, 59, 0.07), transparent 26rem),
+          radial-gradient(circle at 80% 2%, rgba(59, 130, 246, 0.10), transparent 30rem),
+          radial-gradient(circle at 4% 18%, rgba(59, 130, 246, 0.07), transparent 26rem),
           linear-gradient(180deg, #08121f 0%, var(--void) 58%, #050d18 100%);
         font-family: var(--font-sans);
         text-rendering: optimizeLegibility;
@@ -1638,8 +1638,8 @@ const unicornShellStyle = `
       .brand-text small { color: var(--muted); font-size: 10px; font-weight: 900; letter-spacing: 0.18em; text-transform: uppercase; }
       .nav { display: flex; align-items: center; gap: 10px; }
       .btn, button { display: inline-flex; align-items: center; justify-content: center; min-height: 48px; border: 1px solid var(--line); border-radius: 999px; padding: 0 18px; background: rgba(255,255,255,0.06); color: var(--text); font: inherit; font-weight: 650; backdrop-filter: blur(18px); transition: transform 180ms ease, background 180ms ease, border-color 180ms ease; }
-      .btn:hover, button:hover { transform: translateY(-1px); border-color: rgba(255,59,59,0.40); }
-      .btn.primary, button { color: #fff; border-color: transparent; background: linear-gradient(135deg, #FF3B3B, #FF5C4D); box-shadow: 0 18px 40px rgba(255, 59, 59, 0.28); }
+      .btn:hover, button:hover { transform: translateY(-1px); border-color: rgba(59,130,246,0.40); }
+      .btn.primary, button { color: #fff; border-color: transparent; background: linear-gradient(135deg, #3B82F6, #60A5FA); box-shadow: 0 18px 40px rgba(59, 130, 246, 0.28); }
       .poster { display: grid; grid-template-columns: minmax(0, 0.84fr) minmax(340px, 1.16fr); gap: clamp(24px, 5vw, 72px); align-items: center; min-height: min(620px, calc(100svh - 86px)); padding: 10px 0 42px; }
       .eyebrow { color: var(--blue); font-size: 12px; font-weight: 950; letter-spacing: 0.22em; text-transform: uppercase; }
       h1, h2, h3 { font-family: var(--font-serif, "Georgia", ui-serif, serif); font-weight: 560; font-optical-sizing: auto; }
@@ -1649,7 +1649,7 @@ const unicornShellStyle = `
       p { margin: 0; max-width: 34rem; color: var(--muted); font-size: clamp(17px, 1.8vw, 20px); line-height: 1.5; letter-spacing: -0.01em; }
       .cta { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 22px; }
       .product-stage { position: relative; display: grid; gap: 14px; }
-      .product-stage::before { content: ""; position: absolute; inset: -4% 2% auto 12%; height: 70%; border-radius: 999px; background: linear-gradient(135deg, rgba(255,59,59,0.20), rgba(43,74,160,0.14)); filter: blur(46px); z-index: -1; }
+      .product-stage::before { content: ""; position: absolute; inset: -4% 2% auto 12%; height: 70%; border-radius: 999px; background: linear-gradient(135deg, rgba(59,130,246,0.20), rgba(43,74,160,0.14)); filter: blur(46px); z-index: -1; }
       .browser { overflow: hidden; border: 1px solid rgba(255,255,255,0.84); border-radius: 36px; background: rgba(255,255,255,0.62); box-shadow: var(--shadow); backdrop-filter: blur(24px); }
       .browser-top { display: none; }
       .dots { display: inline-flex; gap: 6px; }
@@ -1670,8 +1670,8 @@ const unicornShellStyle = `
       .screen-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 12px; align-items: center; border: 1px solid var(--line); border-radius: 16px; padding: 12px; background: rgba(255,255,255,0.8); color: var(--ink); font-size: 14px; font-weight: 900; }
       .screen-row span { color: var(--muted); font-size: 12px; font-weight: 850; }
       .screen-row em { border-radius: 999px; padding: 6px 9px; background: #07111f; color: #fff; font-style: normal; font-size: 11px; }
-      .product-ui { display: grid; gap: 14px; aspect-ratio: 16 / 10.4; padding: clamp(18px, 3vw, 30px); background: radial-gradient(circle at top right, rgba(255,59,59,.16), transparent 34%), linear-gradient(135deg, #fffaf0, #f6efe4); color: var(--ink); }
-      .product-ui.dark { background: radial-gradient(circle at top right, rgba(255,59,59,.20), transparent 38%), linear-gradient(135deg, #221c17, #2c2620); color: #f8f4ec; }
+      .product-ui { display: grid; gap: 14px; aspect-ratio: 16 / 10.4; padding: clamp(18px, 3vw, 30px); background: radial-gradient(circle at top right, rgba(59,130,246,.16), transparent 34%), linear-gradient(135deg, #fffaf0, #f6efe4); color: var(--ink); }
+      .product-ui.dark { background: radial-gradient(circle at top right, rgba(59,130,246,.20), transparent 38%), linear-gradient(135deg, #221c17, #2c2620); color: #f8f4ec; }
       .product-ui.retail { background: radial-gradient(circle at top right, rgba(255,184,80,.24), transparent 34%), linear-gradient(135deg, #fff8eb, #f5fbff); }
       .app-frame { display: grid; grid-template-rows: auto 1fr; gap: 14px; height: 100%; min-height: 0; }
       .app-topbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; border: 1px solid rgba(13,17,23,.10); border-radius: 18px; padding: 10px 12px; background: rgba(255,255,255,.72); }
@@ -1686,18 +1686,18 @@ const unicornShellStyle = `
       .app-chip { border: 1px solid rgba(13,17,23,.10); border-radius: 999px; padding: 6px 8px; background: rgba(255,255,255,.72); font-size: 9px; font-weight: 950; white-space: nowrap; }
       .app-chip.active { background: #07111f; color: #fff; border-color: #07111f; }
       .product-ui.dark .app-chip { border-color: rgba(255,255,255,.14); background: rgba(255,255,255,.08); color: #f8fbff; }
-      .product-ui.dark .app-chip.active { background: #FF3B3B; color: #06221f; }
+      .product-ui.dark .app-chip.active { background: #3B82F6; color: #06221f; }
       .app-body { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(156px, .72fr); gap: 12px; min-height: 0; }
       .app-card { border: 1px solid rgba(13,17,23,.10); border-radius: 20px; background: rgba(255,255,255,.76); padding: 13px; min-width: 0; box-shadow: 0 12px 28px rgba(13,17,23,.06); }
       .product-ui.dark .app-card { border-color: rgba(255,255,255,.14); background: rgba(255,255,255,.08); box-shadow: none; }
       .app-card h4 { margin: 0; font-size: 20px; line-height: 1; letter-spacing: -.055em; }
       .app-label { display: block; margin-bottom: 6px; color: var(--blue); font-size: 8px; font-weight: 950; letter-spacing: .18em; text-transform: uppercase; }
-      .product-ui.dark .app-label { color: #FF3B3B; }
+      .product-ui.dark .app-label { color: #3B82F6; }
       .app-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 7px; margin-top: 10px; }
       .app-kpi { border: 1px solid rgba(13,17,23,.08); border-radius: 13px; padding: 8px; background: rgba(255,255,255,.72); }
       .product-ui.dark .app-kpi { border-color: rgba(255,255,255,.12); background: rgba(255,255,255,.07); }
       .app-kpi b { display: block; color: var(--blue); font-size: 7px; letter-spacing: .14em; text-transform: uppercase; }
-      .product-ui.dark .app-kpi b { color: #FF3B3B; }
+      .product-ui.dark .app-kpi b { color: #3B82F6; }
       .app-kpi span { display: block; margin-top: 3px; font-size: 18px; font-weight: 950; letter-spacing: -.04em; }
       .app-table { display: grid; gap: 7px; margin-top: 10px; }
       .app-row { display: grid; grid-template-columns: minmax(0,1fr) auto auto; gap: 8px; align-items: center; border: 1px solid rgba(13,17,23,.08); border-radius: 12px; padding: 8px 9px; background: rgba(255,255,255,.78); }
@@ -1705,18 +1705,18 @@ const unicornShellStyle = `
       .app-row strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; letter-spacing: -.015em; }
       .app-row span { color: var(--muted); font-size: 9px; font-weight: 850; white-space: nowrap; }
       .product-ui.dark .app-row span { color: rgba(245,250,255,.66); }
-      .app-row em { border-radius: 999px; padding: 5px 7px; background: rgba(255,59,59,.10); color: var(--blue); font-style: normal; font-size: 8px; font-weight: 950; white-space: nowrap; }
-      .product-ui.dark .app-row em { background: rgba(255,59,59,.16); color: #FF3B3B; }
+      .app-row em { border-radius: 999px; padding: 5px 7px; background: rgba(59,130,246,.10); color: var(--blue); font-style: normal; font-size: 8px; font-weight: 950; white-space: nowrap; }
+      .product-ui.dark .app-row em { background: rgba(59,130,246,.16); color: #3B82F6; }
       .app-side { display: grid; gap: 9px; align-content: start; }
       .app-module { border: 1px solid rgba(13,17,23,.10); border-radius: 16px; padding: 10px; background: rgba(255,255,255,.70); }
       .product-ui.dark .app-module { border-color: rgba(255,255,255,.14); background: rgba(255,255,255,.08); }
       .app-module b { display: block; color: var(--blue); font-size: 8px; letter-spacing: .15em; text-transform: uppercase; }
-      .product-ui.dark .app-module b { color: #FF3B3B; }
+      .product-ui.dark .app-module b { color: #3B82F6; }
       .app-module span { display: block; margin-top: 5px; font-size: 11px; line-height: 1.18; font-weight: 900; }
       .product-top { display: flex; justify-content: space-between; gap: 12px; align-items: center; }
       .product-title small { display: block; color: var(--blue); font-size: 10px; font-weight: 950; letter-spacing: .18em; text-transform: uppercase; }
       .product-title strong { display: block; margin-top: 5px; font-size: clamp(26px, 3.5vw, 42px); line-height: .94; letter-spacing: -.07em; }
-      .product-ui.dark .product-title small { color: #FF3B3B; }
+      .product-ui.dark .product-title small { color: #3B82F6; }
       .product-badge { border: 1px solid rgba(13,17,23,.10); border-radius: 999px; padding: 8px 10px; background: rgba(255,255,255,.72); font-size: 11px; font-weight: 950; text-transform: uppercase; white-space: nowrap; }
       .product-ui.dark .product-badge { border-color: rgba(255,255,255,.16); background: rgba(255,255,255,.08); color: #eaffff; }
       .metric-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 9px; }
@@ -1724,7 +1724,7 @@ const unicornShellStyle = `
       .metric b { display: block; color: var(--blue); font-size: 9px; font-weight: 950; letter-spacing: .14em; text-transform: uppercase; }
       .metric span { display: block; margin-top: 4px; font-size: clamp(18px, 2vw, 28px); font-weight: 950; letter-spacing: -.05em; }
       .product-ui.dark .metric { border-color: rgba(255,255,255,.14); background: rgba(255,255,255,.08); }
-      .product-ui.dark .metric b { color: #FF3B3B; }
+      .product-ui.dark .metric b { color: #3B82F6; }
       .work-list { display: grid; gap: 8px; }
       .work-item { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; border: 1px solid rgba(13,17,23,.10); border-radius: 16px; padding: 10px 12px; background: rgba(255,255,255,.78); }
       .work-item strong { display: block; font-size: 13px; letter-spacing: -.02em; }
@@ -1732,13 +1732,13 @@ const unicornShellStyle = `
       .work-item em { border-radius: 999px; padding: 6px 8px; background: #07111f; color: #fff; font-size: 10px; font-style: normal; font-weight: 950; white-space: nowrap; }
       .product-ui.dark .work-item { border-color: rgba(255,255,255,.14); background: rgba(255,255,255,.08); }
       .product-ui.dark .work-item span { color: rgba(245,250,255,.66); }
-      .product-ui.dark .work-item em { background: #FF3B3B; color: #06221f; }
+      .product-ui.dark .work-item em { background: #3B82F6; color: #06221f; }
       .module-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 9px; }
       .module-tile { border: 1px solid rgba(13,17,23,.10); border-radius: 16px; padding: 11px; background: rgba(255,255,255,.68); }
       .module-tile b { display: block; color: var(--blue); font-size: 9px; letter-spacing: .14em; text-transform: uppercase; }
       .module-tile span { display: block; margin-top: 6px; font-size: 13px; font-weight: 950; letter-spacing: -.03em; }
       .product-ui.dark .module-tile { border-color: rgba(255,255,255,.14); background: rgba(255,255,255,.08); }
-      .product-ui.dark .module-tile b { color: #FF3B3B; }
+      .product-ui.dark .module-tile b { color: #3B82F6; }
       .proof-line { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
       .proof { border: 1px solid rgba(255,255,255,0.72); border-radius: 20px; padding: 14px; background: rgba(255,255,255,0.62); backdrop-filter: blur(16px); }
       .proof b { display: block; color: var(--blue); font-size: 11px; letter-spacing: 0.17em; text-transform: uppercase; }
@@ -1837,13 +1837,13 @@ const unicornShellStyle = `
       .proof-step b { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 999px; color: #fff; background: var(--ink); }
       .proof-step strong { display: block; font-size: 23px; letter-spacing: -0.045em; }
       .proof-step span { display: block; margin-top: 7px; color: var(--muted); line-height: 1.42; font-weight: 760; }
-      .workcell-panel { border: 1px solid var(--line); border-radius: 28px; padding: clamp(22px,4vw,40px); background: linear-gradient(135deg, rgba(255,59,59,0.06), rgba(255,59,59,0.055)); }
+      .workcell-panel { border: 1px solid var(--line); border-radius: 28px; padding: clamp(22px,4vw,40px); background: linear-gradient(135deg, rgba(59,130,246,0.06), rgba(59,130,246,0.055)); }
       .workcell-panel p { color: var(--muted); line-height: 1.58; max-width: 66ch; }
       .workcell-grid { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 12px; margin-top: 22px; }
       .workcell-step { border: 1px solid var(--line); border-radius: 18px; padding: 16px; background: rgba(255,255,255,0.52); }
       .workcell-step strong { display: block; letter-spacing: -0.02em; }
       .workcell-step span { display: block; margin-top: 7px; color: var(--muted); font-size: 13px; line-height: 1.43; }
-      .local-worker-continue { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 18px; align-items: center; margin: 8px 0 20px; border: 1px solid rgba(255,59,59,0.26); border-radius: 24px; padding: 16px; background: rgba(255,255,255,0.68); box-shadow: 0 18px 54px rgba(42,36,28,0.08); }
+      .local-worker-continue { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 18px; align-items: center; margin: 8px 0 20px; border: 1px solid rgba(59,130,246,0.26); border-radius: 24px; padding: 16px; background: rgba(255,255,255,0.68); box-shadow: 0 18px 54px rgba(42,36,28,0.08); }
       .local-worker-continue[hidden] { display: none !important; }
       .local-worker-continue strong { display: block; margin-top: 5px; font-size: clamp(21px,2.4vw,30px); line-height: 1.05; letter-spacing: -0.035em; }
       .local-worker-continue p { margin-top: 6px; max-width: 62ch; font-size: 14px; line-height: 1.42; }
@@ -1860,7 +1860,7 @@ const unicornShellStyle = `
       .role-mode-choice[aria-pressed="true"] { border-color: rgba(43,105,124,0.5); background: rgba(43,105,124,0.12); color: var(--blue); }
       .role-mode-meta { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
       .role-mode-meta span { border: 1px solid var(--line); border-radius: 999px; padding: 5px 9px; color: var(--muted); font-size: 11px; font-weight: 900; }
-      .device-mode-panel { display: grid; grid-template-columns: minmax(0,1fr) minmax(220px,.56fr); gap: 16px; align-items: center; margin: 8px 0 20px; border: 1px solid rgba(255,59,59,0.34); border-radius: 24px; padding: 16px; background: rgba(255,255,255,0.62); box-shadow: 0 16px 48px rgba(42,36,28,0.07); }
+      .device-mode-panel { display: grid; grid-template-columns: minmax(0,1fr) minmax(220px,.56fr); gap: 16px; align-items: center; margin: 8px 0 20px; border: 1px solid rgba(59,130,246,0.34); border-radius: 24px; padding: 16px; background: rgba(255,255,255,0.62); box-shadow: 0 16px 48px rgba(42,36,28,0.07); }
       .device-mode-panel[hidden] { display: none !important; }
       .device-mode-panel strong { display: block; margin-top: 5px; font-size: clamp(20px,2.1vw,27px); line-height: 1.08; letter-spacing: -0.035em; }
       .device-mode-panel p { margin-top: 6px; max-width: 66ch; font-size: 14px; line-height: 1.42; }
@@ -1870,7 +1870,7 @@ const unicornShellStyle = `
       .adaptive-plan-panel strong { display: block; margin-top: 5px; font-size: clamp(20px,2.1vw,27px); line-height: 1.08; letter-spacing: -0.035em; }
       .adaptive-plan-panel p { margin-top: 6px; max-width: 66ch; font-size: 14px; line-height: 1.42; }
       .adaptive-plan-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
-      .source-pack-panel { display: grid; grid-template-columns: minmax(0,1fr) minmax(230px,.62fr); gap: 16px; align-items: center; margin: 8px 0 20px; border: 1px solid rgba(255,59,59,0.22); border-radius: 24px; padding: 16px; background: rgba(255,255,255,0.66); box-shadow: 0 16px 48px rgba(42,36,28,0.07); }
+      .source-pack-panel { display: grid; grid-template-columns: minmax(0,1fr) minmax(230px,.62fr); gap: 16px; align-items: center; margin: 8px 0 20px; border: 1px solid rgba(59,130,246,0.22); border-radius: 24px; padding: 16px; background: rgba(255,255,255,0.66); box-shadow: 0 16px 48px rgba(42,36,28,0.07); }
       .source-pack-panel[hidden] { display: none !important; }
       .source-pack-panel strong { display: block; margin-top: 5px; font-size: clamp(20px,2.1vw,27px); line-height: 1.08; letter-spacing: -0.035em; }
       .source-pack-panel p { margin-top: 6px; max-width: 66ch; font-size: 14px; line-height: 1.42; }
@@ -1888,7 +1888,7 @@ const unicornShellStyle = `
       .value-plan-panel p { margin-top: 6px; max-width: 66ch; font-size: 14px; line-height: 1.42; }
       .value-plan-panel ul { display: grid; gap: 6px; margin: 10px 0 0; padding-left: 18px; color: var(--muted); font-size: 13px; font-weight: 780; line-height: 1.35; }
       .value-plan-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
-      .pilot-plan-panel { display: grid; grid-template-columns: minmax(0,1fr) minmax(250px,.66fr); gap: 16px; align-items: center; margin: 8px 0 20px; border: 1px solid rgba(255,59,59,0.34); border-radius: 24px; padding: 16px; background: rgba(255,255,255,0.68); box-shadow: 0 16px 48px rgba(42,36,28,0.07); }
+      .pilot-plan-panel { display: grid; grid-template-columns: minmax(0,1fr) minmax(250px,.66fr); gap: 16px; align-items: center; margin: 8px 0 20px; border: 1px solid rgba(59,130,246,0.34); border-radius: 24px; padding: 16px; background: rgba(255,255,255,0.68); box-shadow: 0 16px 48px rgba(42,36,28,0.07); }
       .pilot-plan-panel[hidden] { display: none !important; }
       .pilot-plan-panel strong { display: block; margin-top: 5px; font-size: clamp(20px,2.1vw,27px); line-height: 1.08; letter-spacing: -0.035em; }
       .pilot-plan-panel p { margin-top: 6px; max-width: 66ch; font-size: 14px; line-height: 1.42; }
@@ -1999,7 +1999,7 @@ const unicornShellStyle = `
         .nav a[href="/demo/"] { display: none; }
       }
 
-      :root { --gilt: #FF3B3B; }
+      :root { --gilt: #3B82F6; }
       .reveal { opacity: 0; transform: translateY(18px); transition: opacity .66s cubic-bezier(.22,1,.36,1), transform .66s cubic-bezier(.22,1,.36,1); }
       .reveal.in { opacity: 1; transform: none; }
       .hero-tagline { font-family: var(--font-serif); font-style: italic; color: var(--blue); font-size: clamp(15px, 1.4vw, 17px); margin-top: 20px; letter-spacing: -0.01em; opacity: 0.88; max-width: 28ch; }
@@ -2011,18 +2011,18 @@ const unicornShellStyle = `
       :root[data-theme="dark"] {
         color-scheme: dark;
         --cream: #07111f; --paper: #111731; --ink: #EAEEF7; --muted: #93A0BC;
-        --line: rgba(148,164,210,0.12); --blue: #FF3B3B; --blue-soft: rgba(255,59,59,0.16);
-        --aqua: #FF5C4D; --navy: #EAEEF7; --shadow: 0 34px 90px rgba(0,0,0,0.6); --gilt: #FF3B3B;
+        --line: rgba(148,164,210,0.12); --blue: #3B82F6; --blue-soft: rgba(59,130,246,0.16);
+        --aqua: #60A5FA; --navy: #EAEEF7; --shadow: 0 34px 90px rgba(0,0,0,0.6); --gilt: #3B82F6;
       }
       :root[data-theme="dark"] body {
         background:
-          radial-gradient(circle at 84% 2%, rgba(255,59,59,0.13), transparent 32rem),
+          radial-gradient(circle at 84% 2%, rgba(59,130,246,0.13), transparent 32rem),
           radial-gradient(circle at 3% 20%, rgba(43,74,160,0.20), transparent 30rem),
           linear-gradient(180deg, #0C1122 0%, var(--cream) 55%, #070A15 100%);
       }
       :root[data-theme="dark"] body::before { background-image: linear-gradient(rgba(243,239,230,0.045) 1px, transparent 1px), linear-gradient(90deg, rgba(243,239,230,0.045) 1px, transparent 1px); }
       :root[data-theme="dark"] .btn, :root[data-theme="dark"] button { background: rgba(243,239,230,0.06); }
-      :root[data-theme="dark"] .btn.primary, :root[data-theme="dark"] button { color: #fff; background: linear-gradient(135deg, #D62828, #FF3B3B); box-shadow: 0 18px 40px rgba(217, 119, 87, 0.28); }
+      :root[data-theme="dark"] .btn.primary, :root[data-theme="dark"] button { color: #fff; background: linear-gradient(135deg, #D62828, #3B82F6); box-shadow: 0 18px 40px rgba(217, 119, 87, 0.28); }
       :root[data-theme="dark"] .output, :root[data-theme="dark"] .feature, :root[data-theme="dark"] .proof-card, :root[data-theme="dark"] .case, :root[data-theme="dark"] .proof-system, :root[data-theme="dark"] .workcell-panel, :root[data-theme="dark"] .workcell-step, :root[data-theme="dark"] .local-worker-continue, :root[data-theme="dark"] .role-mode-panel, :root[data-theme="dark"] .device-mode-panel, :root[data-theme="dark"] .adaptive-plan-panel, :root[data-theme="dark"] .source-pack-panel, :root[data-theme="dark"] .proof-plan-panel, :root[data-theme="dark"] .value-plan-panel, :root[data-theme="dark"] .pilot-plan-panel, :root[data-theme="dark"] .final, :root[data-theme="dark"] .home-shot-card, :root[data-theme="dark"] .browser, :root[data-theme="dark"] .proof, :root[data-theme="dark"] .upgrade-card, :root[data-theme="dark"] .shell-card, :root[data-theme="dark"] .setup-card, :root[data-theme="dark"] .market-card, :root[data-theme="dark"] form, :root[data-theme="dark"] .feature-pills span, :root[data-theme="dark"] .chip, :root[data-theme="dark"] .metric, :root[data-theme="dark"] .proof-step, :root[data-theme="dark"] footer .footer-links a {
         background: rgba(243,239,230,0.05); border-color: rgba(243,239,230,0.12);
       }
@@ -2042,7 +2042,7 @@ const unicornHeader = `
       <script>(function(){try{var t=localStorage.getItem('sm-theme');if(!t){t='dark';}document.documentElement.setAttribute('data-theme',t);}catch(e){}})();</script>
       <header>
         <a class="brand" href="/" aria-label="SUPERMEGA.dev home">
-          <span style="display:inline-flex;align-items:center;flex:none" aria-hidden="true"><svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M6.5 8 L11 12 L6.5 16" stroke="#FF3B3B" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M12.6 16.2 L18 16.2" stroke="#FF3B3B" stroke-width="2.6" stroke-linecap="round"/></svg></span>
+          <span style="display:inline-flex;align-items:center;flex:none" aria-hidden="true"><svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M6.5 8 L11 12 L6.5 16" stroke="#3B82F6" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M12.6 16.2 L18 16.2" stroke="#3B82F6" stroke-width="2.6" stroke-linecap="round"/></svg></span>
           <span class="brand-text"><span class="wm" style="font-size:18px;letter-spacing:-0.025em"><b style="font-weight:700">supermega</b><b style="color:#5E6B87;font-weight:500">.dev</b></span></span>
         </a>
         <nav class="nav" aria-label="Primary">
@@ -4142,7 +4142,7 @@ const unicornAiAgentsHtml = `<!doctype html>
       .worker-fact span { color: var(--ink); font-size: 14px; line-height: 1.42; }
       .worker-card ul { margin: 0; padding-left: 18px; color: var(--muted); font-size: 13px; line-height: 1.45; }
       .worker-ladder { border: 1px solid rgba(42,36,28,.12); border-radius: 16px; padding: 14px; background: rgba(255,250,241,.62); display: grid; gap: 10px; }
-      .worker-ladder > strong { display: block; font-size: 12px; letter-spacing: .1em; text-transform: uppercase; color: #FF3B3B; }
+      .worker-ladder > strong { display: block; font-size: 12px; letter-spacing: .1em; text-transform: uppercase; color: #3B82F6; }
       .worker-ladder > div { display: grid; gap: 8px; }
       .worker-ladder-step { border-top: 1px solid rgba(42,36,28,.1); padding-top: 8px; }
       .worker-ladder-step:first-child { border-top: 0; padding-top: 0; }
@@ -4153,10 +4153,10 @@ const unicornAiAgentsHtml = `<!doctype html>
       .crew-endpoint-panel code { white-space: normal; overflow-wrap: anywhere; font-size: 12px; color: var(--ink); }
       .crew-endpoint-panel span { color: var(--muted); line-height: 1.45; font-size: 13px; }
       .crew-endpoint-panel[data-status="ready"] { border-color: rgba(13,148,136,.42); background: rgba(13,148,136,.11); }
-      .crew-endpoint-panel[data-status="blocked"] { border-color: rgba(255,59,59,.28); background: rgba(255,59,59,.08); }
+      .crew-endpoint-panel[data-status="blocked"] { border-color: rgba(59,130,246,.28); background: rgba(59,130,246,.08); }
       .worker-price { margin-top: auto; font-weight: 900; color: var(--ink); }
       .worker-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
-      .worker-card.is-router-match { border-color: rgba(255,59,59,0.5); box-shadow: 0 22px 70px rgba(255,59,59,0.16); background: rgba(255,255,255,0.8); }
+      .worker-card.is-router-match { border-color: rgba(59,130,246,0.5); box-shadow: 0 22px 70px rgba(59,130,246,0.16); background: rgba(255,255,255,0.8); }
       .worker-router { display: grid; grid-template-columns: minmax(0,1.25fr) minmax(280px,.75fr); gap: 22px; align-items: stretch; }
       .router-copy p { color: var(--muted); line-height: 1.55; max-width: 62ch; }
       .router-groups { display: grid; gap: 16px; margin-top: 20px; }
@@ -4164,9 +4164,9 @@ const unicornAiAgentsHtml = `<!doctype html>
       .router-choice-group strong { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--blue); }
       .router-choice-row { display: flex; flex-wrap: wrap; gap: 8px; }
       .router-choice { border: 1px solid var(--line); border-radius: 999px; background: rgba(255,255,255,0.68); color: var(--ink); min-height: 40px; padding: 0 13px; font: inherit; font-size: 13px; font-weight: 850; cursor: pointer; }
-      .router-choice.is-selected, .router-choice[aria-pressed="true"] { border-color: rgba(255,59,59,0.55); background: rgba(255,59,59,0.12); color: var(--blue); }
-      .router-choice:focus-visible { outline: 3px solid rgba(255,59,59,0.22); outline-offset: 2px; }
-      .router-result { border: 1px solid rgba(255,59,59,0.28); border-radius: 18px; padding: 20px; background: rgba(255,255,255,0.72); display: grid; gap: 12px; align-content: start; min-height: 100%; }
+      .router-choice.is-selected, .router-choice[aria-pressed="true"] { border-color: rgba(59,130,246,0.55); background: rgba(59,130,246,0.12); color: var(--blue); }
+      .router-choice:focus-visible { outline: 3px solid rgba(59,130,246,0.22); outline-offset: 2px; }
+      .router-result { border: 1px solid rgba(59,130,246,0.28); border-radius: 18px; padding: 20px; background: rgba(255,255,255,0.72); display: grid; gap: 12px; align-content: start; min-height: 100%; }
       .router-result span, .router-proof b { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--blue); font-style: normal; }
       .router-result strong { font-size: clamp(20px,2.4vw,30px); line-height: 1.08; letter-spacing: -.02em; }
       .router-result p { margin: 0; color: var(--muted); line-height: 1.48; }
@@ -4185,7 +4185,7 @@ const unicornAiAgentsHtml = `<!doctype html>
       .connector-group-label { font-size: 11px; font-weight: 950; letter-spacing: 0.16em; text-transform: uppercase; color: var(--blue); }
       .connector-grid { display: flex; flex-wrap: wrap; gap: 8px; }
       .connector-chip { border: 1px solid var(--line); border-radius: 100px; padding: 6px 14px; font-size: 13px; font-weight: 500; color: var(--muted); background: rgba(255,255,255,0.55); transition: background 180ms ease, color 180ms ease; }
-      .connector-chip:hover { background: var(--blue-soft); color: var(--blue); border-color: rgba(255,59,59,0.28); }
+      .connector-chip:hover { background: var(--blue-soft); color: var(--blue); border-color: rgba(59,130,246,0.28); }
       .connector-note { margin-top: 28px; font-size: 14px; color: var(--muted); max-width: 52ch; }
       @media (max-width: 880px) { .connector-groups { grid-template-columns: 1fr; gap: 20px; } }
       .agent-proof { margin: 64px auto 0; max-width: 600px; text-align: center; }
@@ -4198,7 +4198,7 @@ const unicornAiAgentsHtml = `<!doctype html>
       :root[data-theme="dark"] .worker-ladder { background: rgba(243,239,230,.05); border-color: rgba(243,239,230,.12); }
       :root[data-theme="dark"] .crew-endpoint-panel { background: rgba(13,148,136,.08); }
       :root[data-theme="dark"] .connector-chip { background: rgba(243,239,230,0.05); border-color: rgba(243,239,230,0.12); }
-      :root[data-theme="dark"] .connector-chip:hover { background: rgba(255,59,59,0.12); color: #FF3B3B; border-color: rgba(255,59,59,0.28); }
+      :root[data-theme="dark"] .connector-chip:hover { background: rgba(59,130,246,0.12); color: #3B82F6; border-color: rgba(59,130,246,0.28); }
     </style>
   </head>
   <body>
@@ -4319,10 +4319,10 @@ ${renderSellableWorkerShelf()}
         <section class="section connector-section">
           <h2>One kernel, wired into 59 real systems.</h2>
           <p class="section-sub">Agents read from the tools your team already uses and act through rails you already trust. API connectors come first; browser, desktop, and mobile hands are used only when no safer API/export path exists.</p>
-          <div style="border:1px solid rgba(255,59,59,0.45);border-radius:18px;background:linear-gradient(135deg, rgba(255,59,59,0.12), rgba(255,59,59,0.06));padding:16px 20px;margin-bottom:20px">
-            <div class="connector-group-label" style="color:#FF3B3B">★ Myanmar-native rails — built in, no global SaaS has these · 9</div>
+          <div style="border:1px solid rgba(59,130,246,0.45);border-radius:18px;background:linear-gradient(135deg, rgba(59,130,246,0.12), rgba(59,130,246,0.06));padding:16px 20px;margin-bottom:20px">
+            <div class="connector-group-label" style="color:#3B82F6">★ Myanmar-native rails — built in, no global SaaS has these · 9</div>
             <div class="connector-grid" style="margin-top:10px">
-              ${['KBZPay','WavePay','AYA Pay','CB Pay','OnePay','MMQR','CBM Rate','Viber','Dinger'].map((n) => `<div class="connector-chip" style="border-color:rgba(255,59,59,0.55);background:rgba(255,59,59,0.14);color:#FFB4AB;font-weight:850">${n}</div>`).join('')}
+              ${['KBZPay','WavePay','AYA Pay','CB Pay','OnePay','MMQR','CBM Rate','Viber','Dinger'].map((n) => `<div class="connector-chip" style="border-color:rgba(59,130,246,0.55);background:rgba(59,130,246,0.14);color:#FFB4AB;font-weight:850">${n}</div>`).join('')}
             </div>
           </div>
           <div class="connector-groups">
@@ -4468,7 +4468,7 @@ const unicornPublicShellHtml = `<!doctype html>
       .how-step span { display: block; margin-top: 7px; color: var(--muted); font-size: 14px; line-height: 1.5; }
       .hero-img { width: 100%; display: block; border-radius: 16px; border: 1px solid var(--line); box-shadow: var(--shadow); background: rgba(255,255,255,0.04); }
       :root[data-theme="dark"] .hero-img { border-color: var(--line); }
-      .workcell-panel { border: 1px solid var(--line); border-radius: 28px; padding: clamp(22px,4vw,40px); background: linear-gradient(135deg, rgba(255,59,59,0.06), rgba(255,59,59,0.055)); }
+      .workcell-panel { border: 1px solid var(--line); border-radius: 28px; padding: clamp(22px,4vw,40px); background: linear-gradient(135deg, rgba(59,130,246,0.06), rgba(59,130,246,0.055)); }
       .workcell-panel p { color: var(--muted); line-height: 1.58; max-width: 66ch; }
       .workcell-grid { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 12px; margin-top: 22px; }
       .workcell-step { border: 1px solid var(--line); border-radius: 18px; padding: 16px; background: rgba(255,255,255,0.055); }
@@ -4525,13 +4525,13 @@ ${unicornHeader}
         <section class="section" id="products">
           <h2>Two apps. One way your business runs.</h2>
           <div class="uvp-grid" style="grid-template-columns:repeat(2,minmax(0,1fr))">
-            <div class="uvp-card" style="border-top:3px solid #FF3B3B"><strong>Retail OS</strong><span>The app for your shop or restaurant. Point of sale, customers and books — together in one place. Start free; premium adds AI and data features.</span></div>
-            <div class="uvp-card" style="border-top:3px solid #FF3B3B"><strong>Factory OS</strong><span>The app for your factory and operations. Log, assign and confirm the day's work, turn a whiteboard photo into data, and keep to your standards.</span></div>
+            <div class="uvp-card" style="border-top:3px solid #3B82F6"><strong>Retail OS</strong><span>The app for your shop or restaurant. Point of sale, customers and books — together in one place. Start free; premium adds AI and data features.</span></div>
+            <div class="uvp-card" style="border-top:3px solid #3B82F6"><strong>Factory OS</strong><span>The app for your factory and operations. Log, assign and confirm the day's work, turn a whiteboard photo into data, and keep to your standards.</span></div>
           </div>
         </section>
 
         <section class="section">
-          <div style="border:1px solid var(--line);border-radius:20px;padding:clamp(24px,4vw,36px);text-align:center;background:rgba(255,59,59,0.045)">
+          <div style="border:1px solid var(--line);border-radius:20px;padding:clamp(24px,4vw,36px);text-align:center;background:rgba(59,130,246,0.045)">
             <p style="font-size:clamp(18px,2.4vw,23px);font-weight:600;letter-spacing:-.01em;max-width:42ch;margin:0 auto;color:var(--text)">Simple to start. Yours to keep. Made for the way your business really works.</p>
             <div class="cta" style="justify-content:center;margin-top:22px"><a class="btn primary" href="/contact/">Start free</a></div>
           </div>
@@ -4585,7 +4585,7 @@ const unicornProductsHtml = `<!doctype html>
       .chip { border: 1px solid var(--line); border-radius: 999px; padding: 8px 10px; background: rgba(255,255,255,0.64); color: var(--muted); font-size: 12px; font-weight: 900; }
       .screen-gallery { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 8px 0 2px; }
       .mini-screen { display: grid; gap: 8px; min-height: 120px; border: 1px solid var(--line); border-radius: 18px; background: linear-gradient(180deg, rgba(255,255,255,.88), rgba(248,244,236,.78)); padding: 12px; box-shadow: inset 0 1px 0 rgba(255,255,255,.9); }
-      .mini-screen small { color: #FF3B3B; font-size: 10px; font-weight: 950; letter-spacing: .16em; text-transform: uppercase; }
+      .mini-screen small { color: #3B82F6; font-size: 10px; font-weight: 950; letter-spacing: .16em; text-transform: uppercase; }
       .mini-screen strong { color: #07111f; font-size: 16px; line-height: 1; letter-spacing: -.04em; }
       .mini-screen span { color: var(--muted); font-size: 12px; font-weight: 780; line-height: 1.25; }
       .shot-gallery { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-content: center; gap: 10px; padding: 14px; background: linear-gradient(135deg, rgba(255,255,255,.78), rgba(229,242,255,.58)); border-left: 1px solid var(--line); }
@@ -4759,21 +4759,21 @@ const unicornContactHtml = `<!doctype html>
       label { display: grid; gap: 7px; color: var(--muted); font-size: 12px; font-weight: 950; letter-spacing: 0.14em; text-transform: uppercase; }
       input, textarea, select { width: 100%; border: 1px solid var(--line); border-radius: 14px; background: rgba(255,250,241,0.86); color: var(--ink); padding: 11px 12px; font: inherit; outline: none; }
       input[type="file"] { cursor: pointer; }
-      input[type="file"]::file-selector-button { margin-right: 10px; border: 0; border-radius: 999px; background: linear-gradient(135deg, #111827, #FF3B3B); color: #fff; cursor: pointer; font: inherit; font-size: 13px; font-weight: 950; padding: 9px 12px; }
+      input[type="file"]::file-selector-button { margin-right: 10px; border: 0; border-radius: 999px; background: linear-gradient(135deg, #111827, #3B82F6); color: #fff; cursor: pointer; font: inherit; font-size: 13px; font-weight: 950; padding: 9px 12px; }
       select { appearance: none; background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%); background-position: calc(100% - 20px) 20px, calc(100% - 14px) 20px; background-size: 6px 6px, 6px 6px; background-repeat: no-repeat; }
       textarea { min-height: 88px; resize: vertical; }
-      input:focus, textarea:focus, select:focus { border-color: rgba(255,59,59,0.55); box-shadow: 0 0 0 4px rgba(255,59,59,0.10); }
+      input:focus, textarea:focus, select:focus { border-color: rgba(59,130,246,0.55); box-shadow: 0 0 0 4px rgba(59,130,246,0.10); }
       button { width: 100%; cursor: pointer; }
       button[disabled] { cursor: wait; opacity: 0.66; transform: none; }
       .form-status { min-height: 20px; margin: -2px 0 0; color: var(--muted); font-size: 13px; font-weight: 850; line-height: 1.35; }
       .field-help { color: var(--muted); font-size: 12px; font-weight: 800; letter-spacing: 0; line-height: 1.35; text-transform: none; }
       .upload-list { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 2px; }
       .upload-list span { border: 1px solid var(--line); border-radius: 999px; background: rgba(255,255,255,0.62); color: var(--muted); font-size: 12px; font-weight: 850; letter-spacing: 0; padding: 7px 9px; text-transform: none; }
-      .next-card { display: grid; gap: 7px; border: 1px solid rgba(255,59,59,0.18); border-radius: 20px; padding: 14px; background: rgba(255,59,59,0.08); color: var(--ink); }
+      .next-card { display: grid; gap: 7px; border: 1px solid rgba(59,130,246,0.18); border-radius: 20px; padding: 14px; background: rgba(59,130,246,0.08); color: var(--ink); }
       .next-card[hidden] { display: none; }
       .next-card strong { font-size: 16px; letter-spacing: -0.02em; }
       .next-card span { color: var(--muted); line-height: 1.4; font-weight: 760; }
-      .selected-path { display: grid; gap: 5px; border: 1px solid rgba(255,59,59,0.16); border-radius: 16px; background: rgba(255,59,59,0.055); padding: 11px 12px; }
+      .selected-path { display: grid; gap: 5px; border: 1px solid rgba(59,130,246,0.16); border-radius: 16px; background: rgba(59,130,246,0.055); padding: 11px 12px; }
       .selected-path small { color: var(--blue); font-size: 11px; font-weight: 950; letter-spacing: 0.14em; text-transform: uppercase; }
       .selected-path strong { font-size: 19px; letter-spacing: -0.035em; }
       .selected-path span { color: var(--muted); font-weight: 780; line-height: 1.35; }
@@ -4873,7 +4873,7 @@ ${unicornHeader}
             <input autocomplete="off" name="website" style="display:none" tabindex="-1" />
             <button type="submit">Send request</button>
             <p class="policy">No account or data connection before you approve the first step.</p>
-            <p class="policy" style="border-top:1px solid var(--line);margin-top:10px;padding-top:10px"><strong style="color:#FF3B3B">14-day money-back guarantee.</strong> KBZPay · AYA Pay · Wave Money · bank transfer. 50% deposit, fully refundable.</p>
+            <p class="policy" style="border-top:1px solid var(--line);margin-top:10px;padding-top:10px"><strong style="color:#3B82F6">14-day money-back guarantee.</strong> KBZPay · AYA Pay · Wave Money · bank transfer. 50% deposit, fully refundable.</p>
             <p class="form-status" data-lead-status aria-live="polite"></p>
             <div class="next-card" data-next-card hidden><strong>Saved</strong><span>We review the task and reply with the first useful output to build. Nothing changes without approval.</span></div>
           </form>
@@ -5146,13 +5146,13 @@ ${unicornHeader}
         </section>
         <section class="section">
           <div class="start-grid">
-            <div class="start-card" style="border-top:3px solid #FF3B3B">
+            <div class="start-card" style="border-top:3px solid #3B82F6">
               <div class="eyebrow">The app for your shop</div>
               <h3>Retail OS</h3>
               <p>Point of sale, customers and books — together in one place for your shop or restaurant. Start free; premium adds AI and data features.</p>
               <div class="cta"><a class="btn primary" href="https://pos.supermega.dev/" target="_blank" rel="noopener">Open the live app</a><a class="btn secondary" href="/products/pos/">See details</a></div>
             </div>
-            <div class="start-card" style="border-top:3px solid #FF3B3B">
+            <div class="start-card" style="border-top:3px solid #3B82F6">
               <div class="eyebrow">The app for your factory</div>
               <h3>Factory OS</h3>
               <p>Log, assign and confirm the day's work, turn a whiteboard photo into data, and keep to your standards — the collaborative operations app.</p>
@@ -5161,7 +5161,7 @@ ${unicornHeader}
           </div>
         </section>
         <section class="section">
-          <div style="border:1px solid var(--line);border-radius:20px;padding:clamp(24px,4vw,36px);text-align:center;background:rgba(255,59,59,0.045)">
+          <div style="border:1px solid var(--line);border-radius:20px;padding:clamp(24px,4vw,36px);text-align:center;background:rgba(59,130,246,0.045)">
             <p style="font-size:clamp(18px,2.4vw,23px);font-weight:600;letter-spacing:-.01em;max-width:42ch;margin:0 auto;color:var(--text)">Not sure which one fits? Tell us about your business and we'll help you start.</p>
             <div class="cta" style="justify-content:center;margin-top:22px"><a class="btn primary" href="/contact/">Contact us</a></div>
           </div>
@@ -5692,7 +5692,7 @@ await rm(outputDir, { recursive: true, force: true, maxRetries: 8, retryDelay: 2
 await mkdir(outputDir, { recursive: true })
 await copyPublicStatic(resolve(root, 'api-static'), staticDir)
 // Brand favicon is owned here (revert-proof against OneDrive restoring the old file): Capsule Forge mark.
-await writeFile(resolve(staticDir, 'favicon.svg'), `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="supermega"><rect x="4" y="4" width="56" height="56" rx="15" fill="#111731"/><rect x="4.75" y="4.75" width="54.5" height="54.5" rx="14.25" fill="none" stroke="#ffffff" stroke-opacity="0.10"/><path d="M21 23 L31.5 32 L21 41" fill="none" stroke="#FF3B3B" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/><path d="M35 41 L47 41" fill="none" stroke="#FF3B3B" stroke-width="5" stroke-linecap="round"/></svg>\n`, 'utf8')
+await writeFile(resolve(staticDir, 'favicon.svg'), `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="supermega"><rect x="4" y="4" width="56" height="56" rx="15" fill="#111731"/><rect x="4.75" y="4.75" width="54.5" height="54.5" rx="14.25" fill="none" stroke="#ffffff" stroke-opacity="0.10"/><path d="M21 23 L31.5 32 L21 41" fill="none" stroke="#3B82F6" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/><path d="M35 41 L47 41" fill="none" stroke="#3B82F6" stroke-width="5" stroke-linecap="round"/></svg>\n`, 'utf8')
 for (const entry of await readdir(resolve(staticDir, 'site')).catch(() => [])) {
   if (/\.json$/i.test(entry)) {
     await rm(resolve(staticDir, 'site', entry), { force: true })
@@ -6051,7 +6051,7 @@ function buildAiWorkerUserGuideHtml() {
       .guide-worker ul { margin: 0; padding-left: 18px; }
       .guide-actions { display:flex; gap: 10px; flex-wrap: wrap; align-items: center; }
       .guide-link { color: var(--blue); font-size: 12px; font-weight: 900; text-decoration: none; }
-      .guide-safety { border: 1px solid rgba(255,59,59,.35); border-radius: 18px; padding: 20px; background: rgba(255,59,59,.08); margin-top: 18px; }
+      .guide-safety { border: 1px solid rgba(59,130,246,.35); border-radius: 18px; padding: 20px; background: rgba(59,130,246,.08); margin-top: 18px; }
       .guide-safety p { color: var(--ink); max-width: 68ch; }
       [data-ai-worker-user-guide] .section,
       [data-ai-worker-user-guide] .section.reveal,
@@ -6380,7 +6380,7 @@ function buildAgentTemplateSetupHtml(kit) {
       .setup-form label { display:grid; gap:6px; color:var(--muted); font-size:12px; font-weight:950; letter-spacing:.12em; text-transform:uppercase; }
       .setup-form input,.setup-form textarea { width:100%; border:1px solid var(--line); border-radius:14px; background:rgba(255,250,241,.88); color:var(--ink); padding:11px 12px; font:inherit; outline:none; }
       .setup-form textarea { min-height:110px; resize:vertical; }
-      .setup-form input:focus,.setup-form textarea:focus { border-color:rgba(255,59,59,.55); box-shadow:0 0 0 4px rgba(255,59,59,.10); }
+      .setup-form input:focus,.setup-form textarea:focus { border-color:rgba(59,130,246,.55); box-shadow:0 0 0 4px rgba(59,130,246,.10); }
       .setup-proof { display:grid; gap:10px; margin-top:18px; }
       .setup-proof li { margin:7px 0; color:var(--muted); font-weight:780; line-height:1.4; }
       .setup-role-grid { display:grid; gap:10px; margin-top:16px; }
@@ -8902,7 +8902,7 @@ const publicProofReviewHtml = `<!doctype html>
   <meta name="theme-color" content="#07111f" />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" />
   <style>
-    :root { color-scheme: light; --paper:#f4efe6; --ink:#1b1815; --muted:#6f675d; --line:rgba(27,24,21,.16); --panel:#fffaf1; --panel2:#ebe2d3; --accent:#FF3B3B; --green:#1c8a5a; --red:#a14432; }
+    :root { color-scheme: light; --paper:#f4efe6; --ink:#1b1815; --muted:#6f675d; --line:rgba(27,24,21,.16); --panel:#fffaf1; --panel2:#ebe2d3; --accent:#3B82F6; --green:#1c8a5a; --red:#a14432; }
     * { box-sizing: border-box; }
     body { margin: 0; min-height: 100vh; background: var(--paper); color: var(--ink); font-family: "Inter", "Segoe UI", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
     main { width: min(1180px, calc(100% - 28px)); margin: 0 auto; padding: 24px 0 54px; }
@@ -8912,7 +8912,7 @@ const publicProofReviewHtml = `<!doctype html>
     .mark img { width: 100%; height: 100%; display: block; border-radius: inherit; }
     .btn { border: 1px solid var(--line); border-radius: 999px; padding: 11px 14px; background: var(--panel); color: var(--ink); font-weight: 850; text-decoration: none; cursor: pointer; }
     .btn.primary { background: var(--ink); color: var(--paper); border-color: var(--ink); }
-    .btn:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible { outline: 3px solid rgba(255,59,59,.28); outline-offset: 2px; }
+    .btn:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible { outline: 3px solid rgba(59,130,246,.28); outline-offset: 2px; }
     .hero { display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, 430px); gap: 16px; padding: 28px 0 20px; align-items: stretch; }
     .eyebrow { color: var(--accent); font-size: 12px; font-weight: 950; text-transform: uppercase; letter-spacing: 0; }
     h1 { margin: 10px 0 0; max-width: 12ch; font-size: clamp(44px, 8vw, 84px); line-height: .9; letter-spacing: 0; }
@@ -8942,7 +8942,7 @@ const publicProofReviewHtml = `<!doctype html>
 <body>
   <main>
     <header>
-      <a class="brand" href="/" aria-label="SUPERMEGA.dev home"><span style="display:inline-flex;align-items:center;flex:none" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M6.5 8 L11 12 L6.5 16" stroke="#FF3B3B" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M12.6 16.2 L18 16.2" stroke="#FF3B3B" stroke-width="2.6" stroke-linecap="round"/></svg></span><span class="wm" style="letter-spacing:-0.025em"><b style="font-weight:700">supermega</b><b style="color:#5E6B87;font-weight:500">.dev</b></span></a>
+      <a class="brand" href="/" aria-label="SUPERMEGA.dev home"><span style="display:inline-flex;align-items:center;flex:none" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M6.5 8 L11 12 L6.5 16" stroke="#3B82F6" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M12.6 16.2 L18 16.2" stroke="#3B82F6" stroke-width="2.6" stroke-linecap="round"/></svg></span><span class="wm" style="letter-spacing:-0.025em"><b style="font-weight:700">supermega</b><b style="color:#5E6B87;font-weight:500">.dev</b></span></a>
       <a class="btn" href="/operator/">Operator console</a>
     </header>
     <section class="hero">
@@ -9073,7 +9073,7 @@ const publicPaymentProofHtml = `<!doctype html>
   <meta name="theme-color" content="#07111f" />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" />
   <style>
-    :root { color-scheme: light; --paper:#f4efe6; --ink:#1b1815; --muted:#6f675d; --line:rgba(27,24,21,.16); --panel:#fffaf1; --panel2:#ebe2d3; --accent:#FF3B3B; --green:#1c8a5a; --red:#a14432; }
+    :root { color-scheme: light; --paper:#f4efe6; --ink:#1b1815; --muted:#6f675d; --line:rgba(27,24,21,.16); --panel:#fffaf1; --panel2:#ebe2d3; --accent:#3B82F6; --green:#1c8a5a; --red:#a14432; }
     * { box-sizing: border-box; }
     body { margin: 0; min-height: 100vh; background: var(--paper); color: var(--ink); font-family: "Inter", "Segoe UI", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
     main { width: min(1180px, calc(100% - 28px)); margin: 0 auto; padding: 24px 0 54px; }
@@ -9083,7 +9083,7 @@ const publicPaymentProofHtml = `<!doctype html>
     .mark img { width: 100%; height: 100%; display: block; border-radius: inherit; }
     .btn { border: 1px solid var(--line); border-radius: 999px; padding: 11px 14px; background: var(--panel); color: var(--ink); font-weight: 850; text-decoration: none; cursor: pointer; }
     .btn.primary { background: var(--ink); color: var(--paper); border-color: var(--ink); }
-    .btn:focus-visible, input:focus-visible, textarea:focus-visible { outline: 3px solid rgba(255,59,59,.28); outline-offset: 2px; }
+    .btn:focus-visible, input:focus-visible, textarea:focus-visible { outline: 3px solid rgba(59,130,246,.28); outline-offset: 2px; }
     .hero { display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, 430px); gap: 16px; padding: 28px 0 20px; align-items: stretch; }
     .eyebrow { color: var(--accent); font-size: 12px; font-weight: 950; text-transform: uppercase; letter-spacing: 0; }
     h1 { margin: 10px 0 0; max-width: 12ch; font-size: clamp(44px, 8vw, 84px); line-height: .9; letter-spacing: 0; }
@@ -9113,7 +9113,7 @@ const publicPaymentProofHtml = `<!doctype html>
 <body>
   <main>
     <header>
-      <a class="brand" href="/" aria-label="SUPERMEGA.dev home"><span style="display:inline-flex;align-items:center;flex:none" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M6.5 8 L11 12 L6.5 16" stroke="#FF3B3B" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M12.6 16.2 L18 16.2" stroke="#FF3B3B" stroke-width="2.6" stroke-linecap="round"/></svg></span><span class="wm" style="letter-spacing:-0.025em"><b style="font-weight:700">supermega</b><b style="color:#5E6B87;font-weight:500">.dev</b></span></a>
+      <a class="brand" href="/" aria-label="SUPERMEGA.dev home"><span style="display:inline-flex;align-items:center;flex:none" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M6.5 8 L11 12 L6.5 16" stroke="#3B82F6" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M12.6 16.2 L18 16.2" stroke="#3B82F6" stroke-width="2.6" stroke-linecap="round"/></svg></span><span class="wm" style="letter-spacing:-0.025em"><b style="font-weight:700">supermega</b><b style="color:#5E6B87;font-weight:500">.dev</b></span></a>
       <a class="btn" href="/operator/">Operator console</a>
     </header>
     <section class="hero">
@@ -9248,7 +9248,7 @@ const publicSourcePackIntakeHtml = `<!doctype html>
   <meta name="theme-color" content="#07111f" />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" />
   <style>
-    :root { color-scheme: light; --paper:#f4efe6; --ink:#1b1815; --muted:#6f675d; --line:rgba(27,24,21,.16); --panel:#fffaf1; --panel2:#ebe2d3; --accent:#FF3B3B; --green:#1c8a5a; --red:#a14432; }
+    :root { color-scheme: light; --paper:#f4efe6; --ink:#1b1815; --muted:#6f675d; --line:rgba(27,24,21,.16); --panel:#fffaf1; --panel2:#ebe2d3; --accent:#3B82F6; --green:#1c8a5a; --red:#a14432; }
     * { box-sizing: border-box; }
     body { margin: 0; min-height: 100vh; background: var(--paper); color: var(--ink); font-family: "Inter", "Segoe UI", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
     main { width: min(1180px, calc(100% - 28px)); margin: 0 auto; padding: 24px 0 54px; }
@@ -9258,7 +9258,7 @@ const publicSourcePackIntakeHtml = `<!doctype html>
     .mark img { width: 100%; height: 100%; display: block; border-radius: inherit; }
     .btn { border: 1px solid var(--line); border-radius: 999px; padding: 11px 14px; background: var(--panel); color: var(--ink); font-weight: 850; text-decoration: none; cursor: pointer; }
     .btn.primary { background: var(--ink); color: var(--paper); border-color: var(--ink); }
-    .btn:focus-visible, input:focus-visible, textarea:focus-visible { outline: 3px solid rgba(255,59,59,.28); outline-offset: 2px; }
+    .btn:focus-visible, input:focus-visible, textarea:focus-visible { outline: 3px solid rgba(59,130,246,.28); outline-offset: 2px; }
     .hero { display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, 430px); gap: 16px; padding: 28px 0 20px; align-items: stretch; }
     .eyebrow { color: var(--accent); font-size: 12px; font-weight: 950; text-transform: uppercase; letter-spacing: 0; }
     h1 { margin: 10px 0 0; max-width: 12ch; font-size: clamp(44px, 8vw, 84px); line-height: .9; letter-spacing: 0; }
@@ -9289,7 +9289,7 @@ const publicSourcePackIntakeHtml = `<!doctype html>
 <body>
   <main>
     <header>
-      <a class="brand" href="/" aria-label="SUPERMEGA.dev home"><span style="display:inline-flex;align-items:center;flex:none" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M6.5 8 L11 12 L6.5 16" stroke="#FF3B3B" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M12.6 16.2 L18 16.2" stroke="#FF3B3B" stroke-width="2.6" stroke-linecap="round"/></svg></span><span class="wm" style="letter-spacing:-0.025em"><b style="font-weight:700">supermega</b><b style="color:#5E6B87;font-weight:500">.dev</b></span></a>
+      <a class="brand" href="/" aria-label="SUPERMEGA.dev home"><span style="display:inline-flex;align-items:center;flex:none" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M6.5 8 L11 12 L6.5 16" stroke="#3B82F6" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M12.6 16.2 L18 16.2" stroke="#3B82F6" stroke-width="2.6" stroke-linecap="round"/></svg></span><span class="wm" style="letter-spacing:-0.025em"><b style="font-weight:700">supermega</b><b style="color:#5E6B87;font-weight:500">.dev</b></span></a>
       <a class="btn" href="/operator/">Operator console</a>
     </header>
     <section class="hero">
@@ -9444,7 +9444,7 @@ const publicPilotWorkspaceHtml = `<!doctype html>
   <meta name="theme-color" content="#07111f" />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" />
   <style>
-    :root { color-scheme: light; --paper:#f4efe6; --ink:#1b1815; --muted:#6f675d; --line:rgba(27,24,21,.16); --panel:#fffaf1; --panel2:#ebe2d3; --accent:#FF3B3B; --green:#1c8a5a; --blue:#255f99; }
+    :root { color-scheme: light; --paper:#f4efe6; --ink:#1b1815; --muted:#6f675d; --line:rgba(27,24,21,.16); --panel:#fffaf1; --panel2:#ebe2d3; --accent:#3B82F6; --green:#1c8a5a; --blue:#255f99; }
     * { box-sizing: border-box; }
     body { margin: 0; min-height: 100vh; background: var(--paper); color: var(--ink); font-family: "Inter", "Segoe UI", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
     a { color: inherit; }
@@ -9456,7 +9456,7 @@ const publicPilotWorkspaceHtml = `<!doctype html>
     .top-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
     .btn { border: 1px solid var(--line); border-radius: 999px; padding: 11px 14px; background: var(--panel); color: var(--ink); font-weight: 850; text-decoration: none; cursor: pointer; }
     .btn.primary { background: var(--ink); color: var(--paper); border-color: var(--ink); }
-    .btn:focus-visible, input:focus-visible, textarea:focus-visible { outline: 3px solid rgba(255,59,59,.28); outline-offset: 2px; }
+    .btn:focus-visible, input:focus-visible, textarea:focus-visible { outline: 3px solid rgba(59,130,246,.28); outline-offset: 2px; }
     .hero { display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, 420px); gap: 16px; align-items: stretch; padding: 28px 0 18px; }
     .workspace-title { padding: clamp(22px, 4vw, 42px) 0; }
     .eyebrow { color: var(--accent); font-size: 12px; font-weight: 950; text-transform: uppercase; letter-spacing: 0; }
@@ -9503,7 +9503,7 @@ const publicPilotWorkspaceHtml = `<!doctype html>
 <body>
   <main>
     <header>
-      <a class="brand" href="/" aria-label="SUPERMEGA.dev home"><span style="display:inline-flex;align-items:center;flex:none" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M6.5 8 L11 12 L6.5 16" stroke="#FF3B3B" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M12.6 16.2 L18 16.2" stroke="#FF3B3B" stroke-width="2.6" stroke-linecap="round"/></svg></span><span class="wm" style="letter-spacing:-0.025em"><b style="font-weight:700">supermega</b><b style="color:#5E6B87;font-weight:500">.dev</b></span></a>
+      <a class="brand" href="/" aria-label="SUPERMEGA.dev home"><span style="display:inline-flex;align-items:center;flex:none" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M6.5 8 L11 12 L6.5 16" stroke="#3B82F6" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M12.6 16.2 L18 16.2" stroke="#3B82F6" stroke-width="2.6" stroke-linecap="round"/></svg></span><span class="wm" style="letter-spacing:-0.025em"><b style="font-weight:700">supermega</b><b style="color:#5E6B87;font-weight:500">.dev</b></span></a>
       <nav class="top-actions" aria-label="Workspace actions">
         <a class="btn" href="/operator/">Operator console</a>
         <a class="btn primary" href="/contact/">Start another pilot</a>
@@ -9927,7 +9927,7 @@ const unicornPrivacyHtml = `<!doctype html>
   <script>(function(){try{var t=localStorage.getItem('sm-theme');if(!t){t='dark';}document.documentElement.setAttribute('data-theme',t);}catch(e){}})();</script>
   <header>
     <a class="brand" href="/" aria-label="SUPERMEGA.dev home">
-      <span style="display:inline-flex;align-items:center;flex:none" aria-hidden="true"><svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M6.5 8 L11 12 L6.5 16" stroke="#FF3B3B" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M12.6 16.2 L18 16.2" stroke="#FF3B3B" stroke-width="2.6" stroke-linecap="round"/></svg></span>
+      <span style="display:inline-flex;align-items:center;flex:none" aria-hidden="true"><svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M6.5 8 L11 12 L6.5 16" stroke="#3B82F6" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M12.6 16.2 L18 16.2" stroke="#3B82F6" stroke-width="2.6" stroke-linecap="round"/></svg></span>
       <span class="brand-text"><span class="wm" style="font-size:18px;letter-spacing:-0.025em"><b style="font-weight:700">supermega</b><b style="color:#5E6B87;font-weight:500">.dev</b></span></span>
     </a>
     <nav class="nav" aria-label="Primary">
