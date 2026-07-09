@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Document Ledger · SuperMega</title>
+<meta name="robots" content="noindex" />
+<meta name="theme-color" content="#07111f" />
+<link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+<link rel="preconnect" href="https://fonts.googleapis.com" /><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=Noto+Sans+Myanmar:wght@400;500;700&display=swap" rel="stylesheet" />
+<style>
+/* SuperMega — canonical "Void Blue + Fire Red" (source: BRAND-TOKENS.css) */
+:root{
+  color-scheme:dark;
+  --void:#07111f;--void-deep:#06101d;
+  --panel:rgba(255,255,255,0.06);--panel-2:rgba(255,255,255,0.045);
+  --line:rgba(255,255,255,0.15);
+  --text:#f6fbff;--muted:#a9b8c7;--dotdev:#5E6B87;
+  --fire:#FF3B3B;--fire-light:#FF5C4D;--fire-glow:rgba(255,59,59,0.16);
+  --ok:#58c98a;--warn:#e3b341;
+  --font-display:"Space Grotesk","Inter",system-ui,sans-serif;
+  --font-sans:"Inter",system-ui,-apple-system,sans-serif;
+  --radius:14px;
+}
+*{box-sizing:border-box;}html{scroll-behavior:smooth;}
+body{margin:0;color:var(--text);font-family:var(--font-sans);line-height:1.55;background:radial-gradient(900px 540px at 82% -12%,var(--fire-glow),transparent 55%),var(--void);-webkit-font-smoothing:antialiased;min-height:100vh;}
+.my{font-family:"Noto Sans Myanmar",Inter,sans-serif;}
+.wrap{width:min(1000px,calc(100% - 36px));margin:0 auto;padding-bottom:60px;}
+h1,h2,h3{font-family:var(--font-display);font-weight:600;letter-spacing:-0.02em;margin:0;}
+a{color:var(--fire);text-decoration:none;}
+.eyebrow{color:var(--fire);font-size:12px;font-weight:700;letter-spacing:.2em;text-transform:uppercase;}
+.muted{color:var(--muted);}
+header{display:flex;align-items:center;justify-content:space-between;padding:18px 0;border-bottom:1px solid var(--line);}
+.brand{display:flex;align-items:center;gap:8px;font-family:var(--font-display);font-weight:600;font-size:17px;color:var(--text);}
+.brand svg{display:block;}
+.brand .dot{color:var(--dotdev);}
+.back{font-size:13.5px;color:var(--muted);}
+.btn{display:inline-flex;align-items:center;gap:8px;border-radius:12px;padding:13px 20px;font:inherit;font-weight:700;font-size:15px;border:1px solid var(--line);background:var(--panel);color:var(--text);cursor:pointer;transition:transform .12s ease,border-color .12s ease;}
+.btn:hover{transform:translateY(-1px);}.btn.primary{background:var(--fire);color:#fff;border-color:transparent;}.btn.primary:hover{background:var(--fire-light);}.btn[disabled]{opacity:.55;cursor:progress;}
+.btn.mini{padding:7px 12px;font-size:12.5px;border-radius:9px;font-weight:600;}
+input,textarea,select{border:1px solid var(--line);border-radius:11px;background:var(--panel-2);color:var(--text);font:inherit;font-size:15px;padding:12px 14px;width:100%;}
+input::placeholder,textarea::placeholder{color:var(--muted);}
+input:focus,textarea:focus{outline:none;border-color:var(--fire);box-shadow:0 0 0 3px var(--fire-glow);}
+.card{border:1px solid var(--line);border-radius:var(--radius);background:var(--panel);padding:22px;box-shadow:0 24px 60px rgba(0,0,0,0.45);}
+.hero{padding:26px 0 10px;}.hero h1{font-size:clamp(34px,5vw,52px);}.hero p{color:var(--muted);max-width:60ch;margin:14px 0 0;font-size:clamp(16px,2vw,19px);}
+.pill{display:inline-block;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--fire);border:1px solid rgba(255,59,59,.3);background:var(--fire-glow);border-radius:999px;padding:4px 11px;}
+table{width:100%;border-collapse:collapse;font-size:14px;}th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);}th{color:var(--muted);font-size:11px;letter-spacing:.06em;text-transform:uppercase;font-weight:700;}
+.err{color:var(--fire-light);}.ok{color:var(--ok);}
+</style></head>
+<body><div class="wrap">
+<header><a class="brand" href="/"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6.5 8 L11 12 L6.5 16" stroke="#FF3B3B" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M12.6 16.2 L18 16.2" stroke="#FF3B3B" stroke-width="2.6" stroke-linecap="round"/></svg><b>supermega</b><b class="dot">.dev</b></a><a class="back" href="/">← all trials</a></header>
+<main>
+<section class="hero">
+<span class="pill">Document Ledger</span>
+<h1>Messy text in. Clean records out.</h1>
+<p>Paste a Viber order, an invoice, a receipt, or a handwritten-style list — in Burmese, English, or both — and get back structured, table-ready records in seconds. <span class="my">စာသားရှုပ်ထွေး → သပ်ရပ်သော မှတ်တမ်း။</span></p>
+</section>
+
+<section class="card" style="margin-top:18px;">
+<label for="src" style="display:block;font-weight:600;margin-bottom:8px;">Your document text</label>
+<textarea id="src" rows="9" placeholder="Paste your Viber order, invoice, or receipt here…&#10;ဗိုက်ဘာ order / ပြေစာ / ဘောက်ချာ ကို ဒီမှာ ထည့်ပါ…"></textarea>
+<div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:14px;align-items:center;">
+<button id="go" class="btn primary">Extract records →</button>
+<button id="ex1" class="btn mini" type="button">Try: Viber wholesale order</button>
+<button id="ex2" class="btn mini" type="button">Try: simple invoice</button>
+<span id="clear" class="muted" style="font-size:13px;cursor:pointer;margin-left:auto;">Clear</span>
+</div>
+</section>
+
+<section id="state" style="margin-top:18px;"></section>
+<section id="out" style="margin-top:18px;"></section>
+<section id="ledger-cta" style="display:none;margin-top:16px;border:1px solid rgba(255,59,59,.28);border-radius:var(--radius);background:linear-gradient(135deg,rgba(255,59,59,.07),rgba(255,59,59,.02));padding:24px;display:none;flex-wrap:wrap;align-items:center;gap:16px;justify-content:space-between;">
+  <div>
+    <div style="font-family:var(--font-display);font-size:20px;font-weight:600;color:var(--text);margin-bottom:5px">Want this built into your workflow?</div>
+    <div style="color:var(--muted);font-size:14.5px;max-width:54ch">Auto-extract every Viber order and invoice into a live Sheet — no copy-paste. From $600, running in days.</div>
+  </div>
+  <div style="display:flex;gap:10px;flex-wrap:wrap">
+    <a href="https://demo.supermega.dev/#build" class="btn primary" style="font-size:14px;padding:11px 18px" onclick="try{sessionStorage.setItem('sm_build_ctx','I need to auto-extract orders and invoices from my Viber/WhatsApp messages into a live ledger — no copy-paste, real-time.');}catch(e){}">Commission a build →</a>
+    <a href="https://supermega.dev/offers/" class="btn" style="font-size:14px;padding:11px 18px">See pricing</a>
+  </div>
+</section>
+</main>
+</div>
+<script>
+async function callAI(tool, input){
+  const r = await fetch('/api/ai',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tool:tool,input:input})});
+  const j = await r.json().catch(function(){return {};});
+  if(!r.ok || !j.ok) throw new Error((j&&j.reason)||'ai_failed');
+  return j.result;
+}
+function esc(s){var d=document.createElement('div');d.textContent=s==null?'':String(s);return d.innerHTML;}
+
+var src = document.getElementById('src');
+var go = document.getElementById('go');
+var stateEl = document.getElementById('state');
+var outEl = document.getElementById('out');
+
+var EX1 = "Aung Aung Wholesale — Viber order 24/6\n"
+  + "မင်္ဂလာပါ ဦးလေး။ ဒီနေ့ order တင်ချင်ပါတယ်။\n"
+  + "- ဆန် Paw San 5 အိတ် @ 92,000 ks\n"
+  + "- စားအုန်းဆီ 12 ဘူး @ 8,500\n"
+  + "- ကြက်ဥ 30 ဖာ price 9,200 each\n"
+  + "- Coffee mix 3in1 carton x4 @ 15,000\n"
+  + "ပိုက်ဆံ ည delivery မှာ ရှင်းပေးမယ်။ Thanks ✦";
+
+var EX2 = "INVOICE  #INV-2041\n"
+  + "Date: 22-06-2026\n"
+  + "Bill to: Shwe Yi Mart\n\n"
+  + "Mineral Water 500ml x 40 @ 350 = 14,000\n"
+  + "Instant Noodle box x 6 @ 6,800 = 40,800\n"
+  + "Sugar 1kg x 25 @ 2,100 = 52,500\n\n"
+  + "Total: 107,300 MMK";
+
+document.getElementById('ex1').onclick = function(){ src.value = EX1; src.focus(); };
+document.getElementById('ex2').onclick = function(){ src.value = EX2; src.focus(); };
+document.getElementById('clear').onclick = function(){ src.value=''; stateEl.innerHTML=''; outEl.innerHTML=''; src.focus(); };
+
+function setLoading(){
+  outEl.innerHTML='';
+  stateEl.innerHTML = '<div class="card"><strong class="ok">Reading your document…</strong><div class="muted" style="font-size:14px;margin-top:6px;">Pulling out items, parties, quantities and amounts.</div></div>';
+}
+function setError(msg){
+  stateEl.innerHTML = '<div class="card"><strong class="err">Couldn\'t extract that.</strong><div class="muted" style="font-size:14px;margin-top:6px;">'+esc(msg)+' — try again, or check the text has some line items.</div></div>';
+}
+
+function fmt(v){
+  if(v==null || v==='') return '';
+  if(typeof v==='number'){ try{ return v.toLocaleString('en-US'); }catch(e){ return String(v); } }
+  return String(v);
+}
+
+function render(res){
+  stateEl.innerHTML='';
+  var records = (res && Array.isArray(res.records)) ? res.records : [];
+  if(!records.length){
+    outEl.innerHTML = '<div class="card"><strong>No line items found.</strong><div class="muted" style="font-size:14px;margin-top:6px;">'+esc((res&&res.summary)||'The text didn\'t contain recognizable records.')+'</div></div>';
+    return;
+  }
+
+  var cur = (res && res.currency) ? String(res.currency) : '';
+  var cols = [
+    {key:'item', label:'Item'},
+    {key:'party', label:'Party'},
+    {key:'quantity', label:'Qty'},
+    {key:'unit_price', label:'Unit price'},
+    {key:'amount', label:'Amount'},
+    {key:'date', label:'Date'}
+  ];
+  // only keep columns that have data in at least one record
+  var active = cols.filter(function(c){
+    return records.some(function(r){ var v=r[c.key]; return v!=null && v!==''; });
+  });
+  if(!active.length) active = [{key:'item',label:'Item'}];
+
+  var head = '<tr>'+active.map(function(c){
+    var num = (c.key==='quantity'||c.key==='unit_price'||c.key==='amount');
+    return '<th'+(num?' style="text-align:right;"':'')+'>'+esc(c.label)+(num&&cur?' ('+esc(cur)+')':'')+'</th>';
+  }).join('')+'</tr>';
+
+  var rows = records.map(function(r){
+    return '<tr>'+active.map(function(c){
+      var num = (c.key==='quantity'||c.key==='unit_price'||c.key==='amount');
+      var v = fmt(r[c.key]);
+      return '<td'+(num?' style="text-align:right;font-variant-numeric:tabular-nums;"':'')+(c.key==='item'?' style="font-weight:600;"':'')+'>'+esc(v)+'</td>';
+    }).join('')+'</tr>';
+  }).join('');
+
+  var totalRow = '';
+  if(active.some(function(c){return c.key==='amount';})){
+    // Trust the line items, not the model's free-text total: sum the amounts ourselves.
+    var sum = records.reduce(function(a,r){ var n=parseInt(String(r.amount==null?'':r.amount).replace(/[^0-9]/g,''),10); return a+(isNaN(n)?0:n); },0);
+    var totalVal = sum>0 ? sum.toLocaleString('en-US') : ((res && res.total!=null && res.total!=='') ? fmt(res.total) : '');
+    if(totalVal!==''){
+      var span = active.length - 1;
+      totalRow = '<tr><td colspan="'+span+'" style="text-align:right;font-weight:700;border-bottom:none;padding-top:14px;">Total</td>'
+        + '<td style="text-align:right;font-weight:800;color:var(--fire);font-variant-numeric:tabular-nums;border-bottom:none;padding-top:14px;">'+esc(totalVal)+(cur?' '+esc(cur):'')+'</td></tr>';
+    }
+  }
+
+  var docType = (res && res.doc_type) ? String(res.doc_type) : 'document';
+  var summary = (res && res.summary) ? String(res.summary) : (records.length+' record(s) extracted.');
+
+  lastResult = { records: records, currency: cur, docType: docType, active: active };
+
+  var html = ''
+    + '<div class="card">'
+    + '<div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;margin-bottom:6px;">'
+    + '<div><span class="pill">'+esc(docType)+'</span></div>'
+    + '<div style="display:flex;align-items:center;gap:8px;">'
+    + '<span class="muted" style="font-size:13px;">'+esc(records.length)+' record'+(records.length===1?'':'s')+(cur?' · '+esc(cur):'')+'</span>'
+    + '<button id="csv-btn" class="btn mini" type="button" title="Download CSV to import in Google Sheets">↓ CSV</button>'
+    + '<button id="tsv-btn" class="btn mini" type="button" title="Copy tab-separated data — paste directly into Google Sheets">Copy to Sheets</button>'
+    + '</div>'
+    + '</div>'
+    + '<p class="muted" style="margin:8px 0 16px;font-size:15px;">'+esc(summary)+'</p>'
+    + '<div style="overflow-x:auto;"><table><thead>'+head+'</thead><tbody>'+rows+totalRow+'</tbody></table></div>'
+    + '</div>';
+
+  outEl.innerHTML = html;
+  document.getElementById('csv-btn').onclick = exportCSV;
+  document.getElementById('tsv-btn').onclick = copyTSV;
+}
+
+var lastResult = null;
+
+function buildRows(sep) {
+  if (!lastResult) return '';
+  var headers = lastResult.active.map(function(c){ return c.label + (lastResult.currency && (c.key==='unit_price'||c.key==='amount') ? ' ('+lastResult.currency+')' : ''); });
+  var lines = [headers.join(sep)];
+  lastResult.records.forEach(function(r){
+    lines.push(lastResult.active.map(function(c){ return String(r[c.key]==null?'':r[c.key]); }).join(sep));
+  });
+  return lines.join('\n');
+}
+
+function exportCSV() {
+  var csv = buildRows(',');
+  var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url; a.download = 'extracted-records.csv'; a.click();
+  URL.revokeObjectURL(url);
+}
+
+function copyTSV() {
+  var tsv = buildRows('\t');
+  navigator.clipboard.writeText(tsv).then(function(){
+    var btn = document.getElementById('tsv-btn');
+    var prev = btn.textContent;
+    btn.textContent = 'Copied!';
+    setTimeout(function(){ btn.textContent = prev; }, 1800);
+  }).catch(function(){
+    var ta = document.createElement('textarea');
+    ta.value = tsv; document.body.appendChild(ta); ta.select(); document.execCommand('copy');
+    document.body.removeChild(ta);
+    var btn = document.getElementById('tsv-btn');
+    var prev = btn.textContent;
+    btn.textContent = 'Copied!';
+    setTimeout(function(){ btn.textContent = prev; }, 1800);
+  });
+}
+
+async function run(){
+  var text = (src.value||'').trim();
+  if(!text){ setError('Paste some document text first.'); src.focus(); return; }
+  go.disabled = true;
+  var label = go.textContent;
+  go.textContent = 'Extracting…';
+  setLoading();
+  try{
+    var res = await callAI('ledger', text);
+    render(res);
+    document.getElementById('ledger-cta').style.display = 'flex';
+  }catch(e){
+    setError((e && e.message) ? e.message : 'Something went wrong.');
+  }finally{
+    go.disabled = false;
+    go.textContent = label;
+  }
+}
+
+go.onclick = run;
+src.addEventListener('keydown', function(e){
+  if((e.ctrlKey||e.metaKey) && e.key==='Enter') run();
+});
+</script>
+</body></html>

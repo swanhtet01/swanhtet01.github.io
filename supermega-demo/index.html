@@ -5,75 +5,75 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>SuperMega — see what we build</title>
     <meta name="description" content="Live demos and AI agent products from SuperMega. Try the tools or commission a build." />
-    <meta name="theme-color" content="#f7f4ec" />
+    <meta name="theme-color" content="#07111f" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="canonical" href="https://demo.supermega.dev/" />
     <meta property="og:title" content="SuperMega — see what we build" />
     <meta property="og:description" content="Live demos and AI agent products. Try the tools or commission a build." />
     <meta property="og:url" content="https://demo.supermega.dev/" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
     <style>
+      /* SuperMega — canonical "Void Blue + Fire Red" (source: BRAND-TOKENS.css) */
       :root {
-        --bg: #f7f4ec; --bg2: #fffdf8; --ink: #2a241c; --muted: #6f665a;
-        --clay: #c2603f; --clay2: #cc6e48; --green: #3f7d57;
-        --line: rgba(42,36,28,0.13); --card: #fffdf8;
+        color-scheme: dark;
+        --void: #07111f; --void-deep: #06101d;
+        --panel: rgba(255,255,255,0.06); --panel-2: rgba(255,255,255,0.045);
+        --line: rgba(255,255,255,0.15);
+        --text: #f6fbff; --muted: #a9b8c7; --dotdev: #5E6B87;
+        --fire: #FF3B3B; --fire-light: #FF5C4D; --fire-glow: rgba(255,59,59,0.16);
+        --ok: #58c98a; --warn: #e3b341;
+        --font-display: "Space Grotesk", "Inter", system-ui, sans-serif;
+        --font-sans: "Inter", system-ui, -apple-system, sans-serif;
+        --radius: 14px;
       }
       * { box-sizing: border-box; }
       html { scroll-behavior: smooth; }
       body {
-        margin: 0; color: var(--ink);
-        font-family: Inter, system-ui, -apple-system, sans-serif;
+        margin: 0; color: var(--text);
+        font-family: var(--font-sans);
         line-height: 1.55;
-        background: radial-gradient(900px 540px at 4% 4%, rgba(194,96,63,0.06), transparent 55%),
-          linear-gradient(180deg, #fbf9f3, #f0e9dc) fixed;
+        background:
+          radial-gradient(900px 540px at 4% 0%, var(--fire-glow), transparent 55%),
+          var(--void);
         -webkit-font-smoothing: antialiased; min-height: 100vh;
       }
       .wrap { width: min(1040px, calc(100% - 36px)); margin: 0 auto; }
-      h1, h2, h3 { font-family: Fraunces, Georgia, serif; font-weight: 600; letter-spacing: -0.02em; margin: 0; }
+      h1, h2, h3 { font-family: var(--font-display); font-weight: 600; letter-spacing: -0.02em; margin: 0; }
       a { color: inherit; text-decoration: none; }
-      .eyebrow { color: var(--clay); font-size: 12px; font-weight: 700; letter-spacing: .18em; text-transform: uppercase; }
+      .eyebrow { color: var(--fire); font-size: 12px; font-weight: 700; letter-spacing: .18em; text-transform: uppercase; }
       .muted { color: var(--muted); }
 
       header {
         display: flex; align-items: center; justify-content: space-between;
         padding: 20px 0; border-bottom: 1px solid var(--line);
       }
-      .header-left { display: flex; align-items: center; gap: 20px; }
-      .brand { display: flex; align-items: center; gap: 11px; font-weight: 700; }
-      .brand .dot {
-        width: 30px; height: 30px; border-radius: 9px;
-        background: linear-gradient(135deg, #b1542f, var(--clay2));
-        display: grid; place-items: center; color: #fff;
-        font-family: Fraunces, serif; font-weight: 600; font-size: 15px;
-      }
-      .back-link {
-        font-size: 13px; font-weight: 600; color: var(--muted);
-        border: 1px solid var(--line); border-radius: 999px;
-        padding: 5px 13px; transition: color .12s;
-      }
-      .back-link:hover { color: var(--ink); }
+      .brand { display: flex; align-items: center; gap: 8px; font-family: var(--font-display); font-weight: 600; font-size: 17px; }
+      .brand svg { display: block; }
+      .brand .dot { color: var(--dotdev); }
 
       .btn {
         display: inline-flex; align-items: center; gap: 8px;
         border-radius: 12px; padding: 11px 18px; font: inherit; font-weight: 700;
-        font-size: 15px; border: 1px solid var(--line); background: #fffdf8;
-        color: var(--ink); cursor: pointer; transition: transform .12s ease;
+        font-size: 15px; border: 1px solid var(--line); background: var(--panel);
+        color: var(--text); cursor: pointer; transition: transform .12s ease, border-color .12s ease;
       }
       .btn:hover { transform: translateY(-1px); }
       .btn.primary {
-        background: linear-gradient(135deg, #b1542f, #cc6e48);
-        color: #fff; border-color: transparent;
+        background: var(--fire); color: #fff; border-color: transparent;
       }
+      .btn.primary:hover { background: var(--fire-light); }
       .btn.ghost { background: transparent; }
       input, textarea, select {
-        border: 1px solid var(--line); border-radius: 11px; background: #ffffff;
-        color: var(--ink); font: inherit; font-size: 15px; padding: 12px 14px; width: 100%;
+        border: 1px solid var(--line); border-radius: 11px; background: var(--panel-2);
+        color: var(--text); font: inherit; font-size: 15px; padding: 12px 14px; width: 100%;
       }
-      input::placeholder, textarea::placeholder { color: #9a9082; }
+      input::placeholder, textarea::placeholder { color: var(--muted); }
       input:focus, textarea:focus, select:focus {
-        outline: none; border-color: var(--clay); box-shadow: 0 0 0 3px rgba(194,96,63,.16);
+        outline: none; border-color: var(--fire); box-shadow: 0 0 0 3px var(--fire-glow);
       }
+      select option { background: var(--void-deep); color: var(--text); }
 
       /* ── HERO ── */
       .hero { padding: 44px 0 14px; }
@@ -88,9 +88,8 @@
       .tools.three { grid-template-columns: repeat(3, 1fr); }
       @media (max-width: 840px) { .tools.three { grid-template-columns: 1fr; } }
       .tool {
-        border: 1px solid var(--line); border-radius: 18px; background: var(--card);
+        border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel);
         padding: 22px; display: flex; flex-direction: column;
-        box-shadow: 0 8px 26px rgba(42,36,28,.05);
       }
       .tool .ic { font-size: 26px; margin-bottom: 10px; }
       .tool h3 { font-size: 19px; margin-bottom: 8px; }
@@ -101,19 +100,19 @@
       .posrow select { flex: 1; }
 
       /* agent products */
-      .tool.agent { border-color: rgba(194,96,63,.22); background: linear-gradient(180deg, rgba(194,96,63,.04), var(--card)); }
+      .tool.agent { border-color: rgba(255,59,59,.22); background: linear-gradient(180deg, var(--fire-glow), var(--panel)); }
       .build-tag {
         display: inline-block; font-size: 10.5px; font-weight: 700;
         letter-spacing: .08em; text-transform: uppercase;
         padding: 3px 9px; border-radius: 999px;
-        border: 1px solid rgba(194,96,63,.3); color: var(--clay); background: #f2e4db;
+        border: 1px solid rgba(255,59,59,.3); color: var(--fire); background: var(--fire-glow);
         margin-bottom: 10px;
       }
 
       /* ── LEAD FORM ── */
       .custom {
-        border: 1px solid var(--line); border-radius: 18px; background: var(--card);
-        padding: 26px; box-shadow: 0 10px 30px rgba(42,36,28,.05);
+        border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel);
+        padding: 26px;
       }
       .custom form { display: grid; gap: 11px; max-width: 560px; margin-top: 14px; }
       .custom .two { display: grid; grid-template-columns: 1fr 1fr; gap: 11px; }
@@ -121,11 +120,11 @@
       .custom textarea { min-height: 90px; resize: vertical; }
       .custom .hp { position: absolute; left: -9999px; }
       .scope-box {
-        border: 1px solid rgba(194,96,63,.28); border-radius: 14px;
-        background: #f2e4db; padding: 16px; margin-top: 10px;
+        border: 1px solid rgba(255,59,59,.28); border-radius: 14px;
+        background: var(--fire-glow); padding: 16px; margin-top: 10px;
       }
-      .scope-box b { color: var(--clay); }
-      .err { color: #b1542f; }
+      .scope-box b { color: var(--fire); }
+      .err { color: var(--fire-light); }
 
       /* ── FOOTER ── */
       footer {
@@ -133,25 +132,25 @@
         color: var(--muted); font-size: 13.5px;
         display: flex; flex-wrap: wrap; gap: 14px; justify-content: space-between;
       }
-      footer a { color: var(--clay); }
+      footer a { color: var(--fire); }
     </style>
   </head>
   <body>
     <div class="wrap">
       <header>
-        <div class="header-left">
-          <a class="brand" href="https://supermega.dev/">
-            <span class="mark" style="display:inline-block;width:30px;height:30px;flex-shrink:0"><svg viewBox="0 0 64 64" width="100%" height="100%" fill="none" aria-hidden="true"><g stroke="#D97757" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M35.8 10.3 A22 22 0 1 1 28.2 10.3"/><path d="M22 45 L22 26 L32 38 L42 26 L42 45" stroke-width="4"/></g><path d="M32 34.5 L33.2 37 L35.5 38 L33.2 39 L32 41.5 L30.8 39 L28.5 38 L30.8 37 Z" fill="#C9A24B"/><path d="M32 7.6 L32.9 9.7 L35 10.3 L32.9 10.9 L32 13 L31.1 10.9 L29 10.3 L31.1 9.7 Z" fill="#C9A24B"/></svg></span>
-            <strong>SUPERMEGA</strong>
-          </a>
-          <a class="back-link" href="https://supermega.dev/">← supermega.dev</a>
-        </div>
+        <a class="brand" href="https://supermega.dev/">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M6.5 8 L11 12 L6.5 16" stroke="#FF3B3B" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M12.6 16.2 L18 16.2" stroke="#FF3B3B" stroke-width="2.6" stroke-linecap="round"/>
+          </svg>
+          <b>supermega</b><b class="dot">.dev</b>
+        </a>
       </header>
 
       <section class="hero">
-        <div class="eyebrow">Live demos</div>
+        <div class="eyebrow">Live tools</div>
         <h1>See what we build.</h1>
-        <p>Open a live tool or describe your workflow — we scope it in seconds.</p>
+        <p>Try DeskPOS now — no account needed. Or describe your workflow below and we'll scope a build for you.</p>
       </section>
 
       <!-- LIVE DEMOS -->
@@ -162,8 +161,8 @@
 
           <div class="tool">
             <div class="ic">🧾</div>
-            <h3 class="ff">DeskPOS</h3>
-            <p class="ff">Point of sale, bookings, and daily close. Configure it for your shop in seconds.</p>
+            <h3>DeskPOS</h3>
+            <p>Point of sale, bookings, and daily close. Configure it for your shop in seconds.</p>
             <div class="grow"></div>
             <div class="posrow">
               <select id="posType">
@@ -179,7 +178,7 @@
                 <option value="school">Tuition / school</option>
                 <option value="laundry">Laundry</option>
               </select>
-              <a class="btn primary" id="posBtn" href="https://spa-desk-pilot.vercel.app/?demo=retail" target="_blank" rel="noopener">Open →</a>
+              <a class="btn primary" id="posBtn" href="https://pos.supermega.dev/?demo=retail" target="_blank" rel="noopener">Open →</a>
             </div>
           </div>
 
@@ -250,7 +249,7 @@
       </section>
 
       <footer>
-        <span>© SUPERMEGA</span>
+        <span>© SuperMega</span>
         <span>
           <a href="https://supermega.dev/">supermega.dev</a> ·
           <a href="https://supermega.dev/offers/">Pricing</a> ·
@@ -264,7 +263,7 @@
         // POS vertical → demo URL
         var posType = document.getElementById('posType');
         var posBtn = document.getElementById('posBtn');
-        function setPos() { posBtn.setAttribute('href', 'https://spa-desk-pilot.vercel.app/?demo=' + posType.value); }
+        function setPos() { posBtn.setAttribute('href', 'https://pos.supermega.dev/?demo=' + posType.value); }
         posType.addEventListener('change', setPos);
         setPos();
 
@@ -299,7 +298,7 @@
           btn.disabled = true;
           st.innerHTML = '<p class="muted">' + esc('Reading your workflow…') + '</p>';
 
-          fetch('/api/lead', {
+          fetch('https://supermega.dev/api/lead', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ name: name, email: email, phone: (fd.get('phone') || '').trim(), company: (fd.get('company') || '').trim(), workflow: workflow, company_url: fd.get('company_url') || '', source_url: location.href })
@@ -309,10 +308,10 @@
               btn.disabled = false;
               if (res.status === 200 && res.j && res.j.ok) {
                 var s = res.j.scope;
-                var h = '<p style="color:var(--clay);font-weight:600">' + esc("Got it — here's your instant first-pass scope. Swan will follow up by email.") + '</p>';
+                var h = '<p style="color:var(--fire);font-weight:600">' + esc("Got it — here's your instant first-pass scope. Swan will follow up by email.") + '</p>';
                 if (s) {
                   h += '<div class="scope-box">';
-                  if (s.summary) h += '<p style="margin:0 0 8px;color:var(--ink)">' + esc(s.summary) + '</p>';
+                  if (s.summary) h += '<p style="margin:0 0 8px;color:var(--text)">' + esc(s.summary) + '</p>';
                   if (s.build) h += '<p style="margin:0 0 8px">' + esc(s.build) + '</p>';
                   if (s.first_proof) h += '<p style="margin:0"><b>First proof:</b> ' + esc(s.first_proof) + '</p>';
                   h += '</div>';
