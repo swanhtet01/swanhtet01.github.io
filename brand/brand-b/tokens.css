@@ -1,0 +1,139 @@
+/* ============================================================================
+   SUPERMEGA — BRAND B  ·  "MERIDIAN"
+   A design-comparison candidate. NOT live. NOT a rollout. Compare against
+   Brand A ("Void Blue + Fire Red", the current live system in BRAND-TOKENS.css).
+
+   THE IDEA (one line): a clean DAYLIGHT enterprise system — cool paper ground,
+   a single confident COBALT accent, a graphite "Slate" ink, and a geometric
+   "Meridian keystone" mark. Reads Linear/Stripe/Vercel-credible, holds up on a
+   mid-range Android in bright daylight, and is unmistakably NOT Void Blue + Fire Red.
+
+   HOW B DIFFERS FROM A (so the comparison is real, not a re-skin):
+     • Ground:   LIGHT cool paper #FBFCFE      (A = dark Void #07111f)
+     • Accent:   COBALT #1D4ED8 (blue, calm)   (A = Fire Red #FF3B3B, hot)
+     • Support:  a rationed TEAL #0E7C86        (A = red-only)
+     • Mark:     the "keystone" ◈ chevron-stack (A = the `>_` terminal mark)
+     • Type:     Space Grotesk is GONE. Display = Sora, body = IBM Plex Sans.
+     • Feel:     architectural / institutional  (A = terminal / hacker)
+
+   Every value below is validated for WCAG AA on its stated ground (see BRAND-B.md
+   for the ratios). Copy verbatim if B is ever chosen; do not hand-drift the hexes.
+
+   Fonts (self-contained board loads these from Google Fonts):
+   @import url('https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap');
+   Sora        = display / headings / wordmark (geometric, confident, NOT Space Grotesk)
+   IBM Plex Sans = body / UI (humanist, screen-legible, an engineering-house typeface)
+   Burmese     = Noto Sans Myanmar.  NO Aptos, NO Fraunces, NO Space Grotesk.
+   ============================================================================ */
+
+:root {
+  color-scheme: light;
+
+  /* --- Surfaces: cool daylight paper (NOT warm cream #f7f4ec, NOT Void #07111f) --- */
+  --ground:      #FBFCFE;   /* page background — cool paper white, the canonical B ground */
+  --card:        #FFFFFF;   /* raised surfaces / cards sit ABOVE the ground */
+  --sunk:        #F1F5FA;   /* sunken wells / input fields / table zebra */
+  --panel:       rgba(13, 27, 42, 0.03);   /* faint slate tint for large fills */
+  --line:        rgba(13, 27, 42, 0.10);   /* hairlines / borders (slate low-alpha) */
+  --line-strong: rgba(13, 27, 42, 0.16);   /* emphasized dividers */
+
+  /* --- Ink: graphite "Slate" family (echoes a blueprint, not pure black) --- */
+  --ink:         #0D1B2A;   /* primary text — deep slate  (16.9:1 on ground → AAA) */
+  --muted:       #4C5A6E;   /* secondary text — slate-blue (6.8:1 → AA) */
+  --faint:       #8A97A8;   /* de-emphasized / the ".dev" tail (decorative only) */
+
+  /* --- Cobalt: THE one accent (calm, institutional, trustworthy) --- */
+  --cobalt:      #1D4ED8;   /* primary accent — links, primary fill (6.5:1 on ground → AA) */
+  --cobalt-deep: #1E40AF;   /* pressed / hover-dark (8.7:1 white label → AAA) */
+  --cobalt-lift: #3B6FE8;   /* hover-light / focus glow center */
+  --cobalt-wash: #EAF1FE;   /* tinted chip / selected-row background */
+  --cobalt-glow: rgba(29, 78, 216, 0.14);  /* soft focus halo */
+
+  /* --- Teal: the SECOND, rationed accent (progress, "live", freshness) --- */
+  --teal:        #0E7C86;   /* supporting accent — used sparingly (4.8:1 → AA) */
+  --teal-wash:   #E4F5F5;   /* teal chip background */
+
+  /* --- Semantic (all AA on ground) --- */
+  --ok:          #0F7A4E;   /* success  (5.2:1) */
+  --warn:        #B45309;   /* warning  (4.9:1) */
+  --bad:         #B42318;   /* error    (6.4:1) — deliberately NOT the accent */
+
+  /* --- Type --- */
+  --font-display: "Sora", "IBM Plex Sans", system-ui, sans-serif;          /* headings / wordmark */
+  --font-sans:    "IBM Plex Sans", "Noto Sans Myanmar", system-ui, sans-serif; /* body / UI */
+  --font-mono:    "IBM Plex Mono", ui-monospace, "Cascadia Code", monospace;   /* numerals / codes */
+
+  /* Type ramp (fluid-ish; px anchors for the specimen) */
+  --step--1: 0.833rem;   /* 13.3px — captions / labels */
+  --step-0:  1rem;       /* 16px   — body */
+  --step-1:  1.25rem;    /* 20px   — lead / card title */
+  --step-2:  1.75rem;    /* 28px   — section head */
+  --step-3:  2.5rem;     /* 40px   — page head */
+  --step-4:  3.5rem;     /* 56px   — hero */
+
+  /* --- Shape & depth --- */
+  --radius:      10px;    /* tighter than A's 14px — architectural, not soft */
+  --radius-lg:   16px;
+  --radius-pill: 999px;
+  --shadow-sm:   0 1px 2px rgba(13, 27, 42, 0.06), 0 1px 1px rgba(13, 27, 42, 0.04);
+  --shadow:      0 10px 30px rgba(13, 27, 42, 0.10), 0 2px 6px rgba(13, 27, 42, 0.06);
+  --shadow-lg:   0 24px 60px rgba(13, 27, 42, 0.14);
+
+  /* --- Motif: the "meridian line" — a hairline cobalt rule with a keystone node.
+         Use as a top-border accent on hero/cards, or a section separator. --- */
+  --meridian:    linear-gradient(90deg, transparent, var(--cobalt) 20%, var(--cobalt) 80%, transparent);
+  --ring:        0 0 0 3px var(--cobalt-glow);   /* focus ring */
+}
+
+/* ---------------------------------------------------------------------------
+   OPTIONAL DARK VARIANT of Meridian — a graphite NIGHT, distinct from Void Blue.
+   Ground is a warm-neutral graphite #10151C (NOT #07111f), accent brightens to a
+   sky-cobalt so it holds AA on dark. Apply with <html data-theme="night">.
+   (Meridian's PRIMARY expression is the light daylight system above.)
+   --------------------------------------------------------------------------- */
+:root[data-theme="night"] {
+  color-scheme: dark;
+  --ground:      #10151C;   /* graphite night — neutral, NOT the blue Void #07111f */
+  --card:        #171E27;
+  --sunk:        #0C1116;
+  --panel:       rgba(255, 255, 255, 0.04);
+  --line:        rgba(255, 255, 255, 0.10);
+  --line-strong: rgba(255, 255, 255, 0.16);
+  --ink:         #EAF1F8;   /* 15.3:1 on ground → AAA */
+  --muted:       #9FB0C2;
+  --faint:       #6A7788;
+  --cobalt:      #5B8DEF;   /* brightened sky-cobalt (5.4:1 on ground → AA) */
+  --cobalt-deep: #3B6FE8;
+  --cobalt-lift: #7BA5F5;
+  --cobalt-wash: rgba(91, 141, 239, 0.14);
+  --cobalt-glow: rgba(91, 141, 239, 0.22);
+  --teal:        #3BC9C0;   /* 8.5:1 on ground → AAA */
+  --teal-wash:   rgba(59, 201, 192, 0.14);
+  --ok:          #4ADE80;
+  --warn:        #F5B44C;
+  --bad:         #F97066;
+  --shadow-sm:   0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow:      0 12px 34px rgba(0, 0, 0, 0.5);
+  --shadow-lg:   0 26px 64px rgba(0, 0, 0, 0.6);
+}
+
+/* ---------------------------------------------------------------------------
+   THE "MERIDIAN KEYSTONE" MARK (Brand B's signature — replaces A's `>_`).
+   A stacked-chevron keystone: two nested chevrons meeting at an apex node — reads
+   as an arch keystone / a mountain pass / a "meridian" convergence. Cobalt on light,
+   sky-cobalt on night. Use this SVG for every lockup; never an "M" tile.
+
+   <span style="display:inline-flex;align-items:center;gap:.5ch">
+     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+       <path d="M4 15 L12 6 L20 15" stroke="var(--cobalt)" stroke-width="2.4"
+             stroke-linecap="round" stroke-linejoin="round"/>
+       <path d="M8 18 L12 13.5 L16 18" stroke="var(--cobalt)" stroke-width="2.4"
+             stroke-linecap="round" stroke-linejoin="round" opacity=".55"/>
+     </svg>
+     <b style="font-family:var(--font-display)">supermega</b><b style="color:var(--faint)">.dev</b>
+   </span>
+   --------------------------------------------------------------------------- */
+
+/* PURGE-ON-SIGHT for Brand B files (kept distinct from A): the `>_` terminal mark,
+   Fire Red #FF3B3B, Space Grotesk, warm cream #f7f4ec / #f7f4ed, clay #c2603f,
+   gold #E9B949 / #C9A24B, Fraunces. If B is chosen, none of those belong here. */

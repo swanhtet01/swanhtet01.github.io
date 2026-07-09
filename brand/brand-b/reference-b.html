@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="day">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>SuperMega · Brand B — “Meridian” (comparison board)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet" />
+<style>
+  /* ---- BRAND B "MERIDIAN" tokens (mirror of tokens.css, inlined for a self-contained board) ---- */
+  :root{
+    --ground:#FBFCFE; --card:#FFFFFF; --sunk:#F1F5FA;
+    --panel:rgba(13,27,42,.03); --line:rgba(13,27,42,.10); --line-strong:rgba(13,27,42,.16);
+    --ink:#0D1B2A; --muted:#4C5A6E; --faint:#8A97A8;
+    --cobalt:#1D4ED8; --cobalt-deep:#1E40AF; --cobalt-lift:#3B6FE8; --cobalt-wash:#EAF1FE; --cobalt-glow:rgba(29,78,216,.14);
+    --teal:#0E7C86; --teal-wash:#E4F5F5;
+    --ok:#0F7A4E; --warn:#B45309; --bad:#B42318;
+    --font-display:"Sora","IBM Plex Sans",system-ui,sans-serif;
+    --font-sans:"IBM Plex Sans","Noto Sans Myanmar",system-ui,sans-serif;
+    --font-mono:"IBM Plex Mono",ui-monospace,monospace;
+    --radius:10px; --radius-lg:16px; --radius-pill:999px;
+    --step-2:1.75rem; --step-3:2.5rem; --step-4:3.5rem;
+    --shadow-sm:0 1px 2px rgba(13,27,42,.06),0 1px 1px rgba(13,27,42,.04);
+    --shadow:0 10px 30px rgba(13,27,42,.10),0 2px 6px rgba(13,27,42,.06);
+    --shadow-lg:0 24px 60px rgba(13,27,42,.14);
+    --meridian:linear-gradient(90deg,transparent,var(--cobalt) 20%,var(--cobalt) 80%,transparent);
+  }
+  html[data-theme="night"]{
+    --ground:#10151C; --card:#171E27; --sunk:#0C1116;
+    --panel:rgba(255,255,255,.04); --line:rgba(255,255,255,.10); --line-strong:rgba(255,255,255,.16);
+    --ink:#EAF1F8; --muted:#9FB0C2; --faint:#6A7788;
+    --cobalt:#5B8DEF; --cobalt-deep:#3B6FE8; --cobalt-lift:#7BA5F5; --cobalt-wash:rgba(91,141,239,.14); --cobalt-glow:rgba(91,141,239,.22);
+    --teal:#3BC9C0; --teal-wash:rgba(59,201,192,.14);
+    --ok:#4ADE80; --warn:#F5B44C; --bad:#F97066;
+    --shadow-sm:0 1px 2px rgba(0,0,0,.4); --shadow:0 12px 34px rgba(0,0,0,.5); --shadow-lg:0 26px 64px rgba(0,0,0,.6);
+  }
+
+  *,*::before,*::after{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{
+    margin:0; background:var(--ground); color:var(--ink);
+    font-family:var(--font-sans); font-size:16px; line-height:1.55;
+    -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
+    /* faint architectural blueprint grid — the "meridian" system's paper */
+    background-image:
+      linear-gradient(var(--line) 1px,transparent 1px),
+      linear-gradient(90deg,var(--line) 1px,transparent 1px);
+    background-size:56px 56px; background-position:-1px -1px;
+  }
+  html[data-theme="night"] body{background-image:linear-gradient(var(--line) 1px,transparent 1px),linear-gradient(90deg,var(--line) 1px,transparent 1px)}
+  h1,h2,h3,h4{font-family:var(--font-display); font-weight:700; line-height:1.1; letter-spacing:-.02em; margin:0}
+  p{margin:0}
+  a{color:var(--cobalt); text-decoration:none}
+  .wrap{max-width:1080px; margin:0 auto; padding:0 24px}
+
+  /* ---- top bar ---- */
+  .topbar{position:sticky; top:0; z-index:10; backdrop-filter:saturate(1.2) blur(8px);
+    background:color-mix(in srgb,var(--ground) 82%,transparent); border-bottom:1px solid var(--line)}
+  .topbar .row{display:flex; align-items:center; justify-content:space-between; height:60px}
+  .brandlock{display:inline-flex; align-items:center; gap:.55ch; font-family:var(--font-display); font-weight:700; font-size:20px; letter-spacing:-.02em}
+  .brandlock .dot{color:var(--faint)}
+  .themebtn{font:600 13px/1 var(--font-sans); color:var(--muted); background:var(--card); border:1px solid var(--line);
+    padding:8px 14px; border-radius:var(--radius-pill); cursor:pointer; box-shadow:var(--shadow-sm)}
+  .themebtn:hover{border-color:var(--cobalt); color:var(--cobalt)}
+
+  /* ---- section scaffolding ---- */
+  section{padding:56px 0}
+  .eyebrow{font:600 12px/1 var(--font-mono); letter-spacing:.16em; text-transform:uppercase; color:var(--cobalt); margin-bottom:14px; display:flex; align-items:center; gap:10px}
+  .eyebrow::before{content:""; width:26px; height:2px; background:var(--cobalt); border-radius:2px; display:inline-block}
+  .sechead{font-size:var(--step-2,28px); margin-bottom:6px}
+  .secsub{color:var(--muted); max-width:60ch; margin-bottom:28px}
+
+  /* ---- keystone mark helper ---- */
+  .keystone{flex:0 0 auto}
+
+  /* ---- hero ---- */
+  .hero{position:relative; background:var(--card); border:1px solid var(--line); border-radius:var(--radius-lg);
+    box-shadow:var(--shadow); overflow:hidden}
+  .hero::before{content:""; position:absolute; inset:0 0 auto 0; height:3px; background:var(--meridian)}
+  .hero-inner{display:grid; grid-template-columns:1.15fr .85fr; gap:0}
+  .hero-copy{padding:52px 48px}
+  .hero-badge{display:inline-flex; align-items:center; gap:8px; font:600 12.5px/1 var(--font-sans);
+    color:var(--teal); background:var(--teal-wash); padding:6px 12px; border-radius:var(--radius-pill); margin-bottom:22px}
+  .hero-badge .pulse{width:7px; height:7px; border-radius:50%; background:var(--teal); box-shadow:0 0 0 0 var(--teal)}
+  .hero h1{font-size:clamp(30px,4.4vw,52px); margin-bottom:18px}
+  .hero h1 .accent{color:var(--cobalt)}
+  .hero p.lead{font-size:18px; color:var(--muted); max-width:34ch; margin-bottom:30px}
+  .hero-cta{display:flex; gap:12px; flex-wrap:wrap}
+  .hero-panel{position:relative; background:linear-gradient(160deg,var(--cobalt-wash),var(--card)); border-left:1px solid var(--line);
+    display:flex; align-items:center; justify-content:center; padding:36px}
+  html[data-theme="night"] .hero-panel{background:linear-gradient(160deg,var(--cobalt-wash),transparent)}
+  /* mini "dashboard" glyph inside the hero panel */
+  .glyph{width:100%; max-width:280px; background:var(--card); border:1px solid var(--line); border-radius:12px; box-shadow:var(--shadow); overflow:hidden}
+  .glyph .g-top{display:flex; align-items:center; gap:6px; padding:11px 13px; border-bottom:1px solid var(--line)}
+  .glyph .g-top i{width:9px; height:9px; border-radius:50%; background:var(--line-strong); display:inline-block}
+  .glyph .g-body{padding:16px}
+  .glyph .g-row{display:flex; align-items:flex-end; gap:6px; height:78px; margin-bottom:14px}
+  .glyph .g-bar{flex:1; border-radius:4px 4px 2px 2px; background:var(--cobalt); opacity:.9}
+  .glyph .g-bar:nth-child(2){opacity:.55} .glyph .g-bar:nth-child(3){opacity:.7}
+  .glyph .g-bar:nth-child(4){background:var(--teal)} .glyph .g-bar:nth-child(5){opacity:.4}
+  .glyph .g-line{height:9px; border-radius:5px; background:var(--sunk)}
+  .glyph .g-line.short{width:55%; margin-top:8px}
+
+  /* ---- buttons ---- */
+  .btn{display:inline-flex; align-items:center; gap:9px; font:600 15px/1 var(--font-sans); padding:13px 22px;
+    border-radius:var(--radius); border:1px solid transparent; cursor:pointer; transition:.15s ease; text-decoration:none}
+  .btn:focus-visible{outline:none; box-shadow:0 0 0 3px var(--cobalt-glow)}
+  .btn-primary{background:var(--cobalt); color:#fff; box-shadow:var(--shadow-sm)}
+  .btn-primary:hover{background:var(--cobalt-deep); transform:translateY(-1px); box-shadow:var(--shadow)}
+  .btn-secondary{background:var(--card); color:var(--ink); border-color:var(--line-strong)}
+  .btn-secondary:hover{border-color:var(--cobalt); color:var(--cobalt); background:var(--cobalt-wash)}
+  .btn-ghost{background:transparent; color:var(--cobalt); padding-left:6px; padding-right:6px}
+  .btn-ghost:hover{color:var(--cobalt-deep)}
+  .btn .arrow{transition:transform .15s ease}
+  .btn:hover .arrow{transform:translateX(3px)}
+
+  /* ---- cards ---- */
+  .cards{display:grid; grid-template-columns:repeat(3,1fr); gap:20px}
+  .card{background:var(--card); border:1px solid var(--line); border-radius:var(--radius-lg); padding:26px;
+    box-shadow:var(--shadow-sm); transition:.18s ease; position:relative; overflow:hidden}
+  .card:hover{box-shadow:var(--shadow); transform:translateY(-3px); border-color:var(--line-strong)}
+  .card .kmark{width:38px; height:38px; border-radius:9px; background:var(--cobalt-wash); display:grid; place-items:center; margin-bottom:16px}
+  .card.teal .kmark{background:var(--teal-wash)}
+  .card h3{font-size:19px; margin-bottom:8px}
+  .card p{color:var(--muted); font-size:14.5px}
+  .card .tag{position:absolute; top:20px; right:20px; font:600 11px/1 var(--font-mono); letter-spacing:.08em; text-transform:uppercase;
+    color:var(--cobalt); background:var(--cobalt-wash); padding:5px 9px; border-radius:6px}
+  .card.teal .tag{color:var(--teal); background:var(--teal-wash)}
+  .card .price{margin-top:16px; font-family:var(--font-display); font-weight:700; font-size:22px}
+  .card .price small{font-family:var(--font-sans); font-weight:500; font-size:13px; color:var(--muted)}
+
+  /* ---- palette ---- */
+  .swatches{display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:14px}
+  .sw{border:1px solid var(--line); border-radius:var(--radius); overflow:hidden; background:var(--card); box-shadow:var(--shadow-sm)}
+  .sw .chip{height:76px}
+  .sw .meta{padding:11px 13px}
+  .sw .role{font:600 13px/1.2 var(--font-sans); color:var(--ink)}
+  .sw .hex{font:600 12px/1.4 var(--font-mono); color:var(--muted); margin-top:3px; text-transform:uppercase}
+
+  /* ---- type ladder ---- */
+  .ladder{background:var(--card); border:1px solid var(--line); border-radius:var(--radius-lg); box-shadow:var(--shadow-sm); overflow:hidden}
+  .ladder .lrow{display:grid; grid-template-columns:130px 1fr; gap:20px; align-items:baseline; padding:18px 26px; border-bottom:1px solid var(--line)}
+  .ladder .lrow:last-child{border-bottom:none}
+  .ladder .lmeta{font:600 12px/1.4 var(--font-mono); color:var(--faint); text-transform:uppercase; letter-spacing:.05em}
+  .ladder .ldisp{font-family:var(--font-display); font-weight:700; letter-spacing:-.02em; color:var(--ink)}
+  .ladder .lbody{font-family:var(--font-sans)}
+  .ll-4{font-size:52px} .ll-3{font-size:40px} .ll-2{font-size:28px} .ll-1{font-size:20px}
+  .ll-0{font-size:16px; font-weight:400; color:var(--muted); font-family:var(--font-sans); letter-spacing:0}
+  .ll-c{font-size:13px; font-family:var(--font-mono); color:var(--muted); letter-spacing:.04em}
+
+  /* ---- footer note ---- */
+  footer{border-top:1px solid var(--line); padding:30px 0 60px; color:var(--muted); font-size:13.5px}
+  footer .wrap{display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap}
+  .pill{font:600 11px/1 var(--font-mono); letter-spacing:.1em; text-transform:uppercase; color:var(--muted);
+    border:1px solid var(--line); padding:6px 11px; border-radius:var(--radius-pill)}
+
+  /* ---- responsive (mid-range Android / mobile) ---- */
+  @media (max-width:820px){
+    .hero-inner{grid-template-columns:1fr}
+    .hero-panel{border-left:none; border-top:1px solid var(--line)}
+    .hero-copy{padding:38px 26px}
+    .cards{grid-template-columns:1fr}
+    .ladder .lrow{grid-template-columns:1fr; gap:6px; padding:16px 20px}
+    .ll-4{font-size:38px} .ll-3{font-size:30px}
+  }
+</style>
+</head>
+<body>
+
+  <!-- keystone mark defined once as an inline symbol for reuse -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <symbol id="keystone" viewBox="0 0 24 24" fill="none">
+      <path d="M4 15 L12 6 L20 15" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M8 18 L12 13.5 L16 18" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" opacity=".55"/>
+    </symbol>
+  </svg>
+
+  <div class="topbar">
+    <div class="wrap row">
+      <span class="brandlock">
+        <svg class="keystone" width="22" height="22" style="color:var(--cobalt)"><use href="#keystone"/></svg>
+        supermega<span class="dot">.dev</span>
+      </span>
+      <button class="themebtn" id="toggle" type="button">Toggle day / night</button>
+    </div>
+  </div>
+
+  <div class="wrap">
+
+    <!-- ============ HERO ============ -->
+    <section id="hero">
+      <div class="eyebrow">Brand&nbsp;B · Meridian · comparison board</div>
+      <div class="hero">
+        <div class="hero-inner">
+          <div class="hero-copy">
+            <span class="hero-badge"><span class="pulse"></span> Retail OS · Factory OS</span>
+            <h1>Run your shop on <span class="accent">one clear system</span>—not Viber &amp; Excel.</h1>
+            <p class="lead">Sales, stock, staff and cash in one place. Built for Myanmar businesses. Yours to keep.</p>
+            <div class="hero-cta">
+              <a class="btn btn-primary" href="#">Start free <span class="arrow">→</span></a>
+              <a class="btn btn-secondary" href="#">See a live shop</a>
+            </div>
+          </div>
+          <div class="hero-panel">
+            <div class="glyph" role="img" aria-label="Illustrative dashboard">
+              <div class="g-top"><i></i><i></i><i></i></div>
+              <div class="g-body">
+                <div class="g-row">
+                  <span class="g-bar" style="height:44%"></span>
+                  <span class="g-bar" style="height:70%"></span>
+                  <span class="g-bar" style="height:58%"></span>
+                  <span class="g-bar" style="height:88%"></span>
+                  <span class="g-bar" style="height:36%"></span>
+                </div>
+                <div class="g-line"></div>
+                <div class="g-line short"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ BUTTONS ============ -->
+    <section id="buttons">
+      <div class="eyebrow">Components</div>
+      <h2 class="sechead">Buttons</h2>
+      <p class="secsub">One confident cobalt for the primary action; a quiet outline for the secondary; a ghost for tertiary links. The accent is rationed—most of the interface stays calm slate on paper.</p>
+      <div style="display:flex; gap:14px; flex-wrap:wrap; align-items:center">
+        <a class="btn btn-primary" href="#">Primary action <span class="arrow">→</span></a>
+        <a class="btn btn-secondary" href="#">Secondary</a>
+        <a class="btn btn-ghost" href="#">Tertiary link <span class="arrow">→</span></a>
+        <button class="btn btn-primary" type="button" disabled style="opacity:.5; cursor:not-allowed">Disabled</button>
+      </div>
+    </section>
+
+    <!-- ============ CARDS ============ -->
+    <section id="cards">
+      <div class="eyebrow">Surfaces</div>
+      <h2 class="sechead">Cards</h2>
+      <p class="secsub">Raised white surfaces on the cool paper ground, tight 16px radius, a keystone glyph tile, and a rationed teal card to show the second accent in context.</p>
+      <div class="cards">
+        <div class="card">
+          <span class="tag">Retail OS</span>
+          <div class="kmark"><svg width="20" height="20" style="color:var(--cobalt)"><use href="#keystone"/></svg></div>
+          <h3>Point of sale</h3>
+          <p>Ring up sales, track stock, print receipts. Works on the tablet you already own.</p>
+          <div class="price">15,000 <small>MMK / month</small></div>
+        </div>
+        <div class="card teal">
+          <span class="tag">Factory OS</span>
+          <div class="kmark"><svg width="20" height="20" style="color:var(--teal)"><use href="#keystone"/></svg></div>
+          <h3>Production board</h3>
+          <p>Orders, materials and output on one live board. Everyone sees the same truth.</p>
+          <div class="price">25,000 <small>MMK / month</small></div>
+        </div>
+        <div class="card">
+          <span class="tag">Add-on</span>
+          <div class="kmark"><svg width="20" height="20" style="color:var(--cobalt)"><use href="#keystone"/></svg></div>
+          <h3>Owner reports</h3>
+          <p>Daily cash, best sellers, who owes you money—delivered every morning.</p>
+          <div class="price">Included <small>with any plan</small></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ PALETTE ============ -->
+    <section id="palette">
+      <div class="eyebrow">Palette</div>
+      <h2 class="sechead">Colour &amp; role</h2>
+      <p class="secsub">Cool daylight surfaces, graphite “slate” ink, one cobalt accent, a rationed teal, and honest semantics. Every swatch passes WCAG&nbsp;AA on its ground.</p>
+      <div class="swatches">
+        <div class="sw"><div class="chip" style="background:#FBFCFE; border-bottom:1px solid var(--line)"></div><div class="meta"><div class="role">Ground · paper</div><div class="hex">#FBFCFE</div></div></div>
+        <div class="sw"><div class="chip" style="background:#FFFFFF; border-bottom:1px solid var(--line)"></div><div class="meta"><div class="role">Card · raised</div><div class="hex">#FFFFFF</div></div></div>
+        <div class="sw"><div class="chip" style="background:#0D1B2A"></div><div class="meta"><div class="role">Ink · slate</div><div class="hex">#0D1B2A</div></div></div>
+        <div class="sw"><div class="chip" style="background:#4C5A6E"></div><div class="meta"><div class="role">Muted text</div><div class="hex">#4C5A6E</div></div></div>
+        <div class="sw"><div class="chip" style="background:#1D4ED8"></div><div class="meta"><div class="role">Cobalt · accent</div><div class="hex">#1D4ED8</div></div></div>
+        <div class="sw"><div class="chip" style="background:#1E40AF"></div><div class="meta"><div class="role">Cobalt · deep</div><div class="hex">#1E40AF</div></div></div>
+        <div class="sw"><div class="chip" style="background:#0E7C86"></div><div class="meta"><div class="role">Teal · support</div><div class="hex">#0E7C86</div></div></div>
+        <div class="sw"><div class="chip" style="background:#0F7A4E"></div><div class="meta"><div class="role">OK</div><div class="hex">#0F7A4E</div></div></div>
+        <div class="sw"><div class="chip" style="background:#B45309"></div><div class="meta"><div class="role">Warn</div><div class="hex">#B45309</div></div></div>
+        <div class="sw"><div class="chip" style="background:#B42318"></div><div class="meta"><div class="role">Bad</div><div class="hex">#B42318</div></div></div>
+      </div>
+    </section>
+
+    <!-- ============ TYPE ============ -->
+    <section id="type">
+      <div class="eyebrow">Typography</div>
+      <h2 class="sechead">Type ladder</h2>
+      <p class="secsub">Display / headings / wordmark in <b>Sora</b> (geometric, confident). Body &amp; UI in <b>IBM Plex Sans</b> (humanist, engineering-house, screen-legible). Numerals in IBM Plex Mono.</p>
+      <div class="ladder">
+        <div class="lrow"><div class="lmeta">Sora · 56 · Hero</div><div class="ldisp ll-4">One clear system</div></div>
+        <div class="lrow"><div class="lmeta">Sora · 40 · Page</div><div class="ldisp ll-3">Stop the chaos</div></div>
+        <div class="lrow"><div class="lmeta">Sora · 28 · Section</div><div class="ldisp ll-2">Sales, stock, staff, cash</div></div>
+        <div class="lrow"><div class="lmeta">Sora · 20 · Card title</div><div class="ldisp ll-1">Point of sale</div></div>
+        <div class="lrow"><div class="lmeta">Plex Sans · 16 · Body</div><div class="lbody ll-0">Everything a Myanmar shop or factory needs to run the day, in one place, on the device you already own — and it stays yours.</div></div>
+        <div class="lrow"><div class="lmeta">Plex Mono · 13 · Data</div><div class="ll-c">15,000 MMK · #INV-0429 · 12:04 · +8.4%</div></div>
+      </div>
+    </section>
+
+  </div>
+
+  <footer>
+    <div class="wrap">
+      <span><span class="brandlock" style="font-size:15px"><svg class="keystone" width="16" height="16" style="color:var(--cobalt)"><use href="#keystone"/></svg> supermega<span class="dot">.dev</span></span> — Brand B “Meridian”. Design comparison only. Not live.</span>
+      <span class="pill">Cobalt · Slate · Daylight</span>
+    </div>
+  </footer>
+
+  <script>
+    // day / night toggle — demonstrates the graphite-night variant vs the daylight default
+    var root=document.documentElement, btn=document.getElementById('toggle');
+    btn.addEventListener('click',function(){
+      root.setAttribute('data-theme', root.getAttribute('data-theme')==='night' ? 'day' : 'night');
+    });
+  </script>
+</body>
+</html>
