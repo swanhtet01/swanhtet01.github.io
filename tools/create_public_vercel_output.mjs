@@ -2020,16 +2020,16 @@ const unicornShellStyle = `
           radial-gradient(circle at 3% 20%, rgba(43,74,160,0.20), transparent 30rem),
           linear-gradient(180deg, #0C1122 0%, var(--cream) 55%, #070A15 100%);
       }
-      :root[data-theme="dark"] body::before { background-image: linear-gradient(rgba(243,239,230,0.045) 1px, transparent 1px), linear-gradient(90deg, rgba(243,239,230,0.045) 1px, transparent 1px); }
-      :root[data-theme="dark"] .btn, :root[data-theme="dark"] button { background: rgba(243,239,230,0.06); }
-      :root[data-theme="dark"] .btn.primary, :root[data-theme="dark"] button { color: #fff; background: linear-gradient(135deg, #D62828, #3B82F6); box-shadow: 0 18px 40px rgba(217, 119, 87, 0.28); }
+      :root[data-theme="dark"] body::before { background-image: linear-gradient(rgba(255,255,255,0.045) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.045) 1px, transparent 1px); }
+      :root[data-theme="dark"] .btn, :root[data-theme="dark"] button { background: rgba(255,255,255,0.06); }
+      :root[data-theme="dark"] .btn.primary, :root[data-theme="dark"] button { color: #fff; background: linear-gradient(135deg, #60A5FA, #3B82F6); box-shadow: 0 18px 40px rgba(59, 130, 246, 0.28); }
       :root[data-theme="dark"] .output, :root[data-theme="dark"] .feature, :root[data-theme="dark"] .proof-card, :root[data-theme="dark"] .case, :root[data-theme="dark"] .proof-system, :root[data-theme="dark"] .workcell-panel, :root[data-theme="dark"] .workcell-step, :root[data-theme="dark"] .local-worker-continue, :root[data-theme="dark"] .role-mode-panel, :root[data-theme="dark"] .device-mode-panel, :root[data-theme="dark"] .adaptive-plan-panel, :root[data-theme="dark"] .source-pack-panel, :root[data-theme="dark"] .proof-plan-panel, :root[data-theme="dark"] .value-plan-panel, :root[data-theme="dark"] .pilot-plan-panel, :root[data-theme="dark"] .final, :root[data-theme="dark"] .home-shot-card, :root[data-theme="dark"] .browser, :root[data-theme="dark"] .proof, :root[data-theme="dark"] .upgrade-card, :root[data-theme="dark"] .shell-card, :root[data-theme="dark"] .setup-card, :root[data-theme="dark"] .market-card, :root[data-theme="dark"] form, :root[data-theme="dark"] .feature-pills span, :root[data-theme="dark"] .chip, :root[data-theme="dark"] .metric, :root[data-theme="dark"] .proof-step, :root[data-theme="dark"] footer .footer-links a {
-        background: rgba(243,239,230,0.05); border-color: rgba(243,239,230,0.12);
+        background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.12);
       }
       :root[data-theme="dark"] .product-carousel, :root[data-theme="dark"] .product-shot-card, :root[data-theme="dark"] .product-shot-card .shot-open, :root[data-theme="dark"] .output > img { background: #201c17; }
       /* Premium product-screenshot framing — real-software look, clean on light + dark */
       .product-shot-card img { border: 1px solid rgba(42,36,28,0.12); border-radius: 14px; box-shadow: 0 22px 55px -30px rgba(42,36,28,0.45); }
-      :root[data-theme="dark"] .product-shot-card img { border-color: rgba(243,239,230,0.14); box-shadow: 0 24px 60px -28px rgba(0,0,0,0.62); }
+      :root[data-theme="dark"] .product-shot-card img { border-color: rgba(255,255,255,0.14); box-shadow: 0 24px 60px -28px rgba(0,0,0,0.62); }
       .product-shot-card figcaption { background: transparent; border-top: 1px solid var(--line); }
       .carousel-btn { background: var(--paper); color: var(--ink); border: 1px solid var(--line); box-shadow: 0 6px 16px -10px rgba(42,36,28,0.4); }
       .carousel-dots { background: var(--paper); border-color: var(--line); box-shadow: none; }
@@ -4193,11 +4193,11 @@ const unicornAiAgentsHtml = `<!doctype html>
       .agent-proof cite { font-size: 14px; color: var(--muted); display: block; margin-top: 8px; }
       @media (max-width: 980px) { .worker-grid { grid-template-columns: repeat(2, minmax(0,1fr)); } .behavior-grid { grid-template-columns: repeat(2, minmax(0,1fr)); } }
       @media (max-width: 880px) { .sprint-grid, .worker-grid, .behavior-grid, .worker-router { grid-template-columns: 1fr; } }
-      :root[data-theme="dark"] .sprint-card, :root[data-theme="dark"] .worker-card, :root[data-theme="dark"] .behavior-step { background: rgba(243,239,230,0.05); }
-      :root[data-theme="dark"] .worker-card.is-router-match, :root[data-theme="dark"] .router-result, :root[data-theme="dark"] .router-choice { background: rgba(243,239,230,0.07); }
-      :root[data-theme="dark"] .worker-ladder { background: rgba(243,239,230,.05); border-color: rgba(243,239,230,.12); }
+      :root[data-theme="dark"] .sprint-card, :root[data-theme="dark"] .worker-card, :root[data-theme="dark"] .behavior-step { background: rgba(255,255,255,0.05); }
+      :root[data-theme="dark"] .worker-card.is-router-match, :root[data-theme="dark"] .router-result, :root[data-theme="dark"] .router-choice { background: rgba(255,255,255,0.07); }
+      :root[data-theme="dark"] .worker-ladder { background: rgba(255,255,255,.05); border-color: rgba(255,255,255,.12); }
       :root[data-theme="dark"] .crew-endpoint-panel { background: rgba(13,148,136,.08); }
-      :root[data-theme="dark"] .connector-chip { background: rgba(243,239,230,0.05); border-color: rgba(243,239,230,0.12); }
+      :root[data-theme="dark"] .connector-chip { background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.12); }
       :root[data-theme="dark"] .connector-chip:hover { background: rgba(59,130,246,0.12); color: #3B82F6; border-color: rgba(59,130,246,0.28); }
     </style>
   </head>
@@ -4451,7 +4451,7 @@ const unicornPublicShellHtml = `<!doctype html>
       .proof-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px,1fr)); margin-top: 44px; border: 1px solid var(--line); border-radius: 18px; overflow: hidden; }
       .proof-strip > div { padding: 18px 22px; border-right: 1px solid var(--line); }
       .proof-strip > div:last-child { border-right: 0; }
-      :root[data-theme="dark"] .proof-strip > div { border-color: rgba(243,239,230,0.1); }
+      :root[data-theme="dark"] .proof-strip > div { border-color: rgba(255,255,255,0.1); }
       .proof-strip strong { display: block; font-family: var(--font-serif); font-size: 22px; letter-spacing: -0.03em; }
       .proof-strip span { display: block; margin-top: 4px; color: var(--muted); font-size: 13px; line-height: 1.4; }
       .proof-strip a { color: inherit; text-decoration: none; }
@@ -4479,7 +4479,7 @@ const unicornPublicShellHtml = `<!doctype html>
       .founder-inner { display: grid; grid-template-columns: 220px 1fr; gap: 48px; align-items: start; }
       .founder-photo-wrap { position: sticky; top: 24px; }
       .founder-photo { width: 100%; border-radius: 16px; border: 1px solid rgba(42,36,28,0.12); box-shadow: var(--shadow); display: block; }
-      :root[data-theme="dark"] .founder-photo { border-color: rgba(243,239,230,0.14); }
+      :root[data-theme="dark"] .founder-photo { border-color: rgba(255,255,255,0.14); }
       .founder-quote { font-family: 'Space Grotesk', Georgia, serif; font-size: clamp(18px,2.2vw,22px); line-height: 1.45; color: var(--ink); font-style: italic; margin: 0 0 20px; border-left: 3px solid var(--blue); padding-left: 20px; }
       .founder-copy p { color: var(--muted); line-height: 1.65; margin: 0 0 14px; }
       .founder-sig { margin-top: 24px; display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
@@ -6003,10 +6003,10 @@ function buildProductDetailHtml(p) {
       .pd-point i { margin-top: 9px; width: 7px; height: 7px; border-radius: 999px; background: var(--blue); }
       .pd-point span { color: var(--ink); font-size: 16px; line-height: 1.5; }
       .pd-shot { width: 100%; display: block; border-radius: 16px; border: 1px solid rgba(42,36,28,0.12); box-shadow: var(--shadow); background: #f5f1e8; }
-      :root[data-theme="dark"] .pd-shot { border-color: rgba(243,239,230,0.14); }
+      :root[data-theme="dark"] .pd-shot { border-color: rgba(255,255,255,0.14); }
       .pd-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(248px, 1fr)); gap: 14px; margin-top: 24px; }
       .pd-card { border: 1px solid var(--line); border-radius: 18px; padding: 20px; background: rgba(255,255,255,0.5); }
-      :root[data-theme="dark"] .pd-card { background: rgba(243,239,230,0.05); }
+      :root[data-theme="dark"] .pd-card { background: rgba(255,255,255,0.05); }
       .pd-card strong { display: block; font-size: 17px; letter-spacing: -0.02em; }
       .pd-card span { display: block; margin-top: 8px; color: var(--muted); font-size: 14px; line-height: 1.5; }
       .pd-steps { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 16px; margin-top: 24px; }
@@ -6162,7 +6162,7 @@ function buildAiWorkerUserGuideHtml() {
       [data-ai-worker-user-guide] .section.sm-in { opacity: 1 !important; transform: none !important; }
       @media (max-width: 980px) { .guide-grid, .guide-rule-grid, .guide-worker-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
       @media (max-width: 760px) { .guide-hero, .guide-grid, .guide-rule-grid, .guide-worker-grid { grid-template-columns: 1fr; } }
-      :root[data-theme="dark"] .guide-panel, :root[data-theme="dark"] .guide-step, :root[data-theme="dark"] .guide-rule, :root[data-theme="dark"] .guide-worker { background: rgba(243,239,230,.05); }
+      :root[data-theme="dark"] .guide-panel, :root[data-theme="dark"] .guide-step, :root[data-theme="dark"] .guide-rule, :root[data-theme="dark"] .guide-worker { background: rgba(255,255,255,.05); }
     </style>
   </head>
   <body>
@@ -6848,7 +6848,7 @@ const publicWorkHtml = `<!doctype html>
     <style>${unicornShellStyle}
       .wk-list { display: grid; gap: 18px; margin-top: 28px; }
       .wk-case { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: clamp(18px,4vw,40px); align-items: start; border: 1px solid var(--line); border-radius: 22px; padding: clamp(20px,3vw,32px); background: rgba(255,255,255,0.5); }
-      :root[data-theme="dark"] .wk-case { background: rgba(243,239,230,0.05); }
+      :root[data-theme="dark"] .wk-case { background: rgba(255,255,255,0.05); }
       .wk-case .eyebrow { margin-bottom: 10px; }
       .wk-case h2 { font-size: clamp(24px,3vw,32px); letter-spacing: -0.03em; line-height: 1.08; margin: 0; }
       .wk-story { margin-top: 14px; color: var(--muted); font-size: 16px; line-height: 1.6; }
@@ -9006,13 +9006,13 @@ const publicProofReviewHtml = `<!doctype html>
   <meta name="theme-color" content="#07111f" />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" />
   <style>
-    :root { color-scheme: light; --paper:#f4efe6; --ink:#1b1815; --muted:#6f675d; --line:rgba(27,24,21,.16); --panel:#fffaf1; --panel2:#ebe2d3; --accent:#3B82F6; --green:#1c8a5a; --red:#a14432; }
+    :root { color-scheme: light; --paper:#F7F9FC; --ink:#0B0F17; --muted:#5A6478; --line:rgba(11,15,23,.12); --panel:#FFFFFF; --panel2:#EEF2F8; --accent:#2563EB; --green:#059669; --red:#DC2626; }
     * { box-sizing: border-box; }
     body { margin: 0; min-height: 100vh; background: var(--paper); color: var(--ink); font-family: "Inter", "Segoe UI", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
     main { width: min(1180px, calc(100% - 28px)); margin: 0 auto; padding: 24px 0 54px; }
     header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px 0 22px; border-bottom: 1px solid var(--line); }
     .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: inherit; font-weight: 950; }
-    .mark { width: 38px; height: 38px; border-radius: 12px; background: #1b1815; display: grid; place-items: center; border: 1px solid rgba(27,24,21,.22); }
+    .mark { width: 38px; height: 38px; border-radius: 12px; background: #07111f; display: grid; place-items: center; border: 1px solid rgba(11,15,23,.16); }
     .mark img { width: 100%; height: 100%; display: block; border-radius: inherit; }
     .btn { border: 1px solid var(--line); border-radius: 999px; padding: 11px 14px; background: var(--panel); color: var(--ink); font-weight: 850; text-decoration: none; cursor: pointer; }
     .btn.primary { background: var(--ink); color: var(--paper); border-color: var(--ink); }
@@ -9033,7 +9033,7 @@ const publicProofReviewHtml = `<!doctype html>
     .panel { padding: 16px; display: grid; gap: 12px; background: var(--panel2); }
     .decision-card { padding: 14px; display: grid; gap: 10px; }
     label { display: grid; gap: 7px; color: var(--muted); font-size: 12px; font-weight: 900; text-transform: uppercase; }
-    input, textarea, select { width: 100%; border: 1px solid var(--line); border-radius: 8px; padding: 11px 12px; background: #fffaf1; color: var(--ink); font: inherit; }
+    input, textarea, select { width: 100%; border: 1px solid var(--line); border-radius: 8px; padding: 11px 12px; background: #FFFFFF; color: var(--ink); font: inherit; }
     textarea { min-height: 190px; resize: vertical; line-height: 1.45; }
     .actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
     .pill { display: inline-flex; align-items: center; width: fit-content; border-radius: 999px; padding: 7px 9px; background: rgba(28,138,90,.1); color: var(--green); font-size: 11px; font-weight: 950; text-transform: uppercase; }
@@ -9177,13 +9177,13 @@ const publicPaymentProofHtml = `<!doctype html>
   <meta name="theme-color" content="#07111f" />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" />
   <style>
-    :root { color-scheme: light; --paper:#f4efe6; --ink:#1b1815; --muted:#6f675d; --line:rgba(27,24,21,.16); --panel:#fffaf1; --panel2:#ebe2d3; --accent:#3B82F6; --green:#1c8a5a; --red:#a14432; }
+    :root { color-scheme: light; --paper:#F7F9FC; --ink:#0B0F17; --muted:#5A6478; --line:rgba(11,15,23,.12); --panel:#FFFFFF; --panel2:#EEF2F8; --accent:#2563EB; --green:#059669; --red:#DC2626; }
     * { box-sizing: border-box; }
     body { margin: 0; min-height: 100vh; background: var(--paper); color: var(--ink); font-family: "Inter", "Segoe UI", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
     main { width: min(1180px, calc(100% - 28px)); margin: 0 auto; padding: 24px 0 54px; }
     header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px 0 22px; border-bottom: 1px solid var(--line); }
     .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: inherit; font-weight: 950; }
-    .mark { width: 38px; height: 38px; border-radius: 12px; background: #1b1815; display: grid; place-items: center; border: 1px solid rgba(27,24,21,.22); }
+    .mark { width: 38px; height: 38px; border-radius: 12px; background: #07111f; display: grid; place-items: center; border: 1px solid rgba(11,15,23,.16); }
     .mark img { width: 100%; height: 100%; display: block; border-radius: inherit; }
     .btn { border: 1px solid var(--line); border-radius: 999px; padding: 11px 14px; background: var(--panel); color: var(--ink); font-weight: 850; text-decoration: none; cursor: pointer; }
     .btn.primary { background: var(--ink); color: var(--paper); border-color: var(--ink); }
@@ -9204,7 +9204,7 @@ const publicPaymentProofHtml = `<!doctype html>
     .panel { padding: 16px; display: grid; gap: 12px; background: var(--panel2); }
     .proof-card { padding: 14px; display: grid; gap: 10px; }
     label { display: grid; gap: 7px; color: var(--muted); font-size: 12px; font-weight: 900; text-transform: uppercase; }
-    input, textarea { width: 100%; border: 1px solid var(--line); border-radius: 8px; padding: 11px 12px; background: #fffaf1; color: var(--ink); font: inherit; }
+    input, textarea { width: 100%; border: 1px solid var(--line); border-radius: 8px; padding: 11px 12px; background: #FFFFFF; color: var(--ink); font: inherit; }
     textarea { min-height: 150px; resize: vertical; line-height: 1.45; }
     .actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
     .pill { display: inline-flex; align-items: center; width: fit-content; border-radius: 999px; padding: 7px 9px; background: rgba(28,138,90,.1); color: var(--green); font-size: 11px; font-weight: 950; text-transform: uppercase; }
@@ -9352,13 +9352,13 @@ const publicSourcePackIntakeHtml = `<!doctype html>
   <meta name="theme-color" content="#07111f" />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" />
   <style>
-    :root { color-scheme: light; --paper:#f4efe6; --ink:#1b1815; --muted:#6f675d; --line:rgba(27,24,21,.16); --panel:#fffaf1; --panel2:#ebe2d3; --accent:#3B82F6; --green:#1c8a5a; --red:#a14432; }
+    :root { color-scheme: light; --paper:#F7F9FC; --ink:#0B0F17; --muted:#5A6478; --line:rgba(11,15,23,.12); --panel:#FFFFFF; --panel2:#EEF2F8; --accent:#2563EB; --green:#059669; --red:#DC2626; }
     * { box-sizing: border-box; }
     body { margin: 0; min-height: 100vh; background: var(--paper); color: var(--ink); font-family: "Inter", "Segoe UI", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
     main { width: min(1180px, calc(100% - 28px)); margin: 0 auto; padding: 24px 0 54px; }
     header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px 0 22px; border-bottom: 1px solid var(--line); }
     .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: inherit; font-weight: 950; }
-    .mark { width: 38px; height: 38px; border-radius: 12px; background: #1b1815; display: grid; place-items: center; border: 1px solid rgba(27,24,21,.22); }
+    .mark { width: 38px; height: 38px; border-radius: 12px; background: #07111f; display: grid; place-items: center; border: 1px solid rgba(11,15,23,.16); }
     .mark img { width: 100%; height: 100%; display: block; border-radius: inherit; }
     .btn { border: 1px solid var(--line); border-radius: 999px; padding: 11px 14px; background: var(--panel); color: var(--ink); font-weight: 850; text-decoration: none; cursor: pointer; }
     .btn.primary { background: var(--ink); color: var(--paper); border-color: var(--ink); }
@@ -9379,7 +9379,7 @@ const publicSourcePackIntakeHtml = `<!doctype html>
     .source-card { padding: 14px; display: grid; gap: 9px; }
     .source-card strong { font-size: 18px; }
     label { display: grid; gap: 7px; color: var(--muted); font-size: 12px; font-weight: 900; text-transform: uppercase; }
-    input, textarea { width: 100%; border: 1px solid var(--line); border-radius: 8px; padding: 11px 12px; background: #fffaf1; color: var(--ink); font: inherit; }
+    input, textarea { width: 100%; border: 1px solid var(--line); border-radius: 8px; padding: 11px 12px; background: #FFFFFF; color: var(--ink); font: inherit; }
     textarea { min-height: 150px; resize: vertical; line-height: 1.45; }
     .panel { padding: 16px; display: grid; gap: 12px; background: var(--panel2); }
     .actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
@@ -9548,14 +9548,14 @@ const publicPilotWorkspaceHtml = `<!doctype html>
   <meta name="theme-color" content="#07111f" />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" />
   <style>
-    :root { color-scheme: light; --paper:#f4efe6; --ink:#1b1815; --muted:#6f675d; --line:rgba(27,24,21,.16); --panel:#fffaf1; --panel2:#ebe2d3; --accent:#3B82F6; --green:#1c8a5a; --blue:#255f99; }
+    :root { color-scheme: light; --paper:#F7F9FC; --ink:#0B0F17; --muted:#5A6478; --line:rgba(11,15,23,.12); --panel:#FFFFFF; --panel2:#EEF2F8; --accent:#2563EB; --green:#059669; --blue:#2563EB; }
     * { box-sizing: border-box; }
     body { margin: 0; min-height: 100vh; background: var(--paper); color: var(--ink); font-family: "Inter", "Segoe UI", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
     a { color: inherit; }
     main { width: min(1180px, calc(100% - 28px)); margin: 0 auto; padding: 24px 0 56px; }
     header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px 0 22px; border-bottom: 1px solid var(--line); }
     .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; font-weight: 900; }
-    .mark { width: 38px; height: 38px; border-radius: 12px; background: #1b1815; display: grid; place-items: center; border: 1px solid rgba(27,24,21,.22); }
+    .mark { width: 38px; height: 38px; border-radius: 12px; background: #07111f; display: grid; place-items: center; border: 1px solid rgba(11,15,23,.16); }
     .mark img { width: 100%; height: 100%; display: block; border-radius: inherit; }
     .top-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
     .btn { border: 1px solid var(--line); border-radius: 999px; padding: 11px 14px; background: var(--panel); color: var(--ink); font-weight: 850; text-decoration: none; cursor: pointer; }
