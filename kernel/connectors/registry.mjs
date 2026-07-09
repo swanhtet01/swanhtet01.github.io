@@ -9,7 +9,7 @@
 // Zero dependencies (matches gateway.mjs / store.mjs). ESM. See ../../PLATFORM.md.
 
 /**
- * @typedef {'payment'|'messaging'|'data'|'ai'|'integration'|'commerce'} ConnectorCategory
+ * @typedef {'payment'|'messaging'|'data'|'ai'|'integration'|'commerce'|'infra'|'logistics'|'marketing'} ConnectorCategory
  *
  * @typedef {object} Connector
  * @property {string} key                 stable id, e.g. 'payment-stripe' (unique in the registry)
@@ -26,7 +26,9 @@
 // API). 'commerce' was added for commerce-shopify; 'integration' for integration-webhook;
 // 'infra' for infra-http (whose 'infra' category was previously missing here, which threw
 // at import and broke the whole registry — added 2026-06-26).
-export const CATEGORIES = ['payment', 'messaging', 'data', 'ai', 'integration', 'commerce', 'infra']
+// 'logistics' added for retail-fulfillment carriers (Ninja Van, J&T); 'marketing' for ads
+// platforms (Meta Ads) — 2026-07-08.
+export const CATEGORIES = ['payment', 'messaging', 'data', 'ai', 'integration', 'commerce', 'infra', 'logistics', 'marketing']
 
 const registry = new Map() // key -> Connector
 
