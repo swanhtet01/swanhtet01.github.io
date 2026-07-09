@@ -1576,7 +1576,7 @@ const publicCampaignRedirectHtml = `<!doctype html>
 `
 
 const unicornShellStyle = `
-      @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400..700&family=Inter:wght@400..900&display=swap');
+      @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400..900&display=swap');
       :root {
         color-scheme: light;
         --cream: #f7f4ec;
@@ -1590,7 +1590,7 @@ const unicornShellStyle = `
         --navy: #2a241c;
         --shadow: 0 34px 90px rgba(42, 36, 28, 0.13);
         --font-sans: "Inter", "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
-        --font-serif: "Fraunces", "Georgia", "Cambria", ui-serif, serif;
+        --font-serif: "Space Grotesk", "Georgia", "Cambria", ui-serif, serif;
       }
       * { box-sizing: border-box; }
       html { scroll-behavior: smooth; }
@@ -4113,7 +4113,7 @@ const unicornAiAgentsHtml = `<!doctype html>
     <style>${unicornShellStyle}
       .agent-hero { padding: clamp(56px,10vw,96px) 0 0; text-align: center; }
       .agent-hero .eyebrow { margin-bottom: 18px; }
-      .agent-hero h1 { font-family: 'Fraunces', Georgia, serif; font-size: clamp(38px,6vw,72px); line-height: .95; letter-spacing: -.04em; max-width: 14ch; margin: 0 auto 24px; }
+      .agent-hero h1 { font-family: 'Space Grotesk', Georgia, serif; font-size: clamp(38px,6vw,72px); line-height: .95; letter-spacing: -.04em; max-width: 14ch; margin: 0 auto 24px; }
       .agent-hero p:not(.hero-tagline) { max-width: 46ch; margin: 0 auto 36px; color: var(--muted); font-size: clamp(16px,1.5vw,19px); line-height: 1.6; }
       .agent-hero .hero-tagline { margin: 16px auto 0; text-align: center; }
       .sprint-grid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 20px; margin-top: 48px; }
@@ -4133,7 +4133,7 @@ const unicornAiAgentsHtml = `<!doctype html>
       .worker-fact span { color: var(--ink); font-size: 14px; line-height: 1.42; }
       .worker-card ul { margin: 0; padding-left: 18px; color: var(--muted); font-size: 13px; line-height: 1.45; }
       .worker-ladder { border: 1px solid rgba(42,36,28,.12); border-radius: 16px; padding: 14px; background: rgba(255,250,241,.62); display: grid; gap: 10px; }
-      .worker-ladder > strong { display: block; font-size: 12px; letter-spacing: .1em; text-transform: uppercase; color: var(--clay); }
+      .worker-ladder > strong { display: block; font-size: 12px; letter-spacing: .1em; text-transform: uppercase; color: #FF3B3B; }
       .worker-ladder > div { display: grid; gap: 8px; }
       .worker-ladder-step { border-top: 1px solid rgba(42,36,28,.1); padding-top: 8px; }
       .worker-ladder-step:first-child { border-top: 0; padding-top: 0; }
@@ -4180,7 +4180,7 @@ const unicornAiAgentsHtml = `<!doctype html>
       .connector-note { margin-top: 28px; font-size: 14px; color: var(--muted); max-width: 52ch; }
       @media (max-width: 880px) { .connector-groups { grid-template-columns: 1fr; gap: 20px; } }
       .agent-proof { margin: 64px auto 0; max-width: 600px; text-align: center; }
-      .agent-proof blockquote { font-family: 'Fraunces', Georgia, serif; font-size: clamp(17px,2vw,22px); font-style: italic; line-height: 1.45; color: var(--ink); border-left: 3px solid var(--blue); padding-left: 20px; text-align: left; margin: 0 0 20px; }
+      .agent-proof blockquote { font-family: 'Space Grotesk', Georgia, serif; font-size: clamp(17px,2vw,22px); font-style: italic; line-height: 1.45; color: var(--ink); border-left: 3px solid var(--blue); padding-left: 20px; text-align: left; margin: 0 0 20px; }
       .agent-proof cite { font-size: 14px; color: var(--muted); display: block; margin-top: 8px; }
       @media (max-width: 980px) { .worker-grid { grid-template-columns: repeat(2, minmax(0,1fr)); } .behavior-grid { grid-template-columns: repeat(2, minmax(0,1fr)); } }
       @media (max-width: 880px) { .sprint-grid, .worker-grid, .behavior-grid, .worker-router { grid-template-columns: 1fr; } }
@@ -4311,7 +4311,7 @@ ${renderSellableWorkerShelf()}
           <h2>One kernel, wired into 51 real systems.</h2>
           <p class="section-sub">Agents read from the tools your team already uses and act through rails you already trust. API connectors come first; browser, desktop, and mobile hands are used only when no safer API/export path exists.</p>
           <div style="border:1px solid rgba(255,59,59,0.45);border-radius:18px;background:linear-gradient(135deg, rgba(255,59,59,0.12), rgba(255,59,59,0.06));padding:16px 20px;margin-bottom:20px">
-            <div class="connector-group-label" style="color:#B8892E">★ Myanmar-native rails — built in, no global SaaS has these · 8</div>
+            <div class="connector-group-label" style="color:#FF3B3B">★ Myanmar-native rails — built in, no global SaaS has these · 8</div>
             <div class="connector-grid" style="margin-top:10px">
               ${['KBZPay','WavePay','AYA Pay','CB Pay','OnePay','MMQR','CBM Rate','Viber'].map((n) => `<div class="connector-chip" style="border-color:rgba(255,59,59,0.55);background:rgba(255,59,59,0.14);color:#7a6320;font-weight:850">${n}</div>`).join('')}
             </div>
@@ -4470,7 +4470,7 @@ const unicornPublicShellHtml = `<!doctype html>
       .founder-photo-wrap { position: sticky; top: 24px; }
       .founder-photo { width: 100%; border-radius: 16px; border: 1px solid rgba(42,36,28,0.12); box-shadow: var(--shadow); display: block; }
       :root[data-theme="dark"] .founder-photo { border-color: rgba(243,239,230,0.14); }
-      .founder-quote { font-family: 'Fraunces', Georgia, serif; font-size: clamp(18px,2.2vw,22px); line-height: 1.45; color: var(--ink); font-style: italic; margin: 0 0 20px; border-left: 3px solid var(--blue); padding-left: 20px; }
+      .founder-quote { font-family: 'Space Grotesk', Georgia, serif; font-size: clamp(18px,2.2vw,22px); line-height: 1.45; color: var(--ink); font-style: italic; margin: 0 0 20px; border-left: 3px solid var(--blue); padding-left: 20px; }
       .founder-copy p { color: var(--muted); line-height: 1.65; margin: 0 0 14px; }
       .founder-sig { margin-top: 24px; display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
       .founder-sig strong { font-size: 16px; letter-spacing: -0.02em; }
@@ -4904,7 +4904,7 @@ ${unicornHeader}
             <input autocomplete="off" name="website" style="display:none" tabindex="-1" />
             <button type="submit">Send request</button>
             <p class="policy">No account or data connection before you approve the first step.</p>
-            <p class="policy" style="border-top:1px solid var(--line);margin-top:10px;padding-top:10px"><strong style="color:var(--clay)">14-day money-back guarantee.</strong> KBZPay · AYA Pay · Wave Money · bank transfer. 50% deposit, fully refundable.</p>
+            <p class="policy" style="border-top:1px solid var(--line);margin-top:10px;padding-top:10px"><strong style="color:#FF3B3B">14-day money-back guarantee.</strong> KBZPay · AYA Pay · Wave Money · bank transfer. 50% deposit, fully refundable.</p>
             <p class="form-status" data-lead-status aria-live="polite"></p>
             <div class="next-card" data-next-card hidden><strong>Saved</strong><span>We review the workflow and reply with the first app to build. Nothing changes without approval.</span></div>
           </form>
@@ -5254,7 +5254,7 @@ const publicSourceToScreenHtml = `<!doctype html>
       .free-output pre { white-space:pre-wrap; overflow:auto; margin:0; border:1px solid var(--line); border-radius:8px; background:#111827; color:#f8fafc; padding:14px; font-size:13px; line-height:1.5; }
       .free-rules { display:grid; gap:9px; margin-top:18px; }
       .free-rules div { display:flex; gap:9px; align-items:flex-start; color:var(--muted); font-weight:820; line-height:1.4; }
-      .free-rules b { color:var(--clay); min-width:118px; }
+      .free-rules b { color:#FF3B3B; min-width:118px; }
       .workcell-picker { border:1px solid var(--line); border-radius:8px; background:rgba(255,255,255,.5); padding:14px; margin-top:18px; }
       .workcell-picker > strong { display:block; margin-bottom:10px; }
       .workcell-template-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:9px; }
