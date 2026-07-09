@@ -67,6 +67,12 @@ import './data-zoho-books.mjs'
 import './ai-perplexity.mjs'
 import './marketing-meta-ads.mjs'
 import './data-ga4.mjs'
+import './ai-together.mjs'
+import './ai-fireworks.mjs'
+import './data-onedrive.mjs'
+import './data-box.mjs'
+import './data-google-contacts.mjs'
+import './messaging-zalo.mjs'
 
 export * from './registry.mjs'
 export default registry
