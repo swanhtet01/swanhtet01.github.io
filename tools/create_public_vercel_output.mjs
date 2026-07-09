@@ -1495,7 +1495,7 @@ const publicCardHtml = `<!doctype html>
         <a class="brand" href="/" aria-label="supermega.dev home"><span class="bdot"></span><b>supermega</b><span class="bd">.dev</span></a>
         <h1>Swan Htet</h1>
         <p class="role">Founder · supermega.dev</p>
-        <p class="pitch">I build simple software that helps businesses run better — one app for the whole thing, easy to use, and yours to keep.</p>
+        <p class="pitch">Most businesses I meet already have a system — it just lives in a Viber group, a shared Excel, and one person's head. I build the software that finally holds it all: your sales, stock, customers and floor in one simple app you own. And I stay until it genuinely makes your day easier — that's the whole job.</p>
         <div class="details">
           <a href="mailto:swanhtet@supermega.dev">swanhtet@supermega.dev</a>
           <a href="tel:+9595000721">+95 9 500 0721</a>
