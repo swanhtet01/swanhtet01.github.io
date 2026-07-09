@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en" data-skin="b-light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SuperMega — Brand B (Light Skin) reference</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap');
+
+/* ── Brand B: LIGHT SKIN tokens (mirror of BRAND-TOKENS.css, light values). Self-contained copy so this
+      board renders standalone. Source of truth: ./tokens.css ── */
+:root{
+  color-scheme:light;
+  --void:#F7F9FC; --void-deep:#FFFFFF;
+  --panel:rgba(7,17,31,0.04); --panel-2:rgba(7,17,31,0.025);
+  --line:rgba(11,20,32,0.12);
+  --text:#0B1420; --muted:#566173; --dotdev:#8A93A3;
+  --fire:#D92D2D;        /* fire TEXT (AA on light) */
+  --fire-solid:#FF3B3B;  /* fire FILL (brand red, matches A) */
+  --fire-light:#FF5C4D;
+  --fire-glow:rgba(217,45,45,0.14);
+  --ok:#1A7F54; --warn:#9A6B00; --bad:#D92D2D;
+  --font-display:"Space Grotesk","Inter",system-ui,sans-serif;
+  --font-sans:"Inter","Noto Sans Myanmar","Segoe UI",system-ui,sans-serif;
+  --radius:14px;
+  --shadow:0 18px 44px rgba(11,20,32,0.12);
+}
+
+*{box-sizing:border-box}
+html,body{margin:0}
+body{
+  background:var(--void); color:var(--text);
+  font-family:var(--font-sans); font-size:15px; line-height:1.55;
+  -webkit-font-smoothing:antialiased;
+  /* faint cool gradient so the light ground reads as "paper", not flat white */
+  background-image:radial-gradient(1200px 600px at 78% -8%, rgba(217,45,45,0.05), transparent 60%);
+}
+.wrap{max-width:1080px; margin:0 auto; padding:48px 28px 80px}
+
+h1,h2,h3,.brand{font-family:var(--font-display); letter-spacing:-0.02em}
+h2{font-size:13px; text-transform:uppercase; letter-spacing:0.14em; color:var(--muted); font-weight:600; margin:0 0 16px}
+.eyebrow{font-size:12px; letter-spacing:0.16em; text-transform:uppercase; color:var(--fire); font-weight:600}
+
+/* wordmark */
+.brand{display:inline-flex; align-items:center; font-weight:700; font-size:26px; gap:11px}
+.brand .mark{display:inline-flex; align-items:center}
+.brand b{font-weight:700}
+.brand .dev{color:var(--dotdev); font-weight:600}
+
+/* top bar */
+.topbar{display:flex; align-items:center; justify-content:space-between; padding-bottom:28px; border-bottom:1px solid var(--line); margin-bottom:44px; flex-wrap:wrap; gap:16px}
+.skinbadge{display:inline-flex; align-items:center; gap:8px; font-size:12px; color:var(--muted); font-weight:600; border:1px solid var(--line); border-radius:999px; padding:6px 12px; background:var(--void-deep)}
+.skinbadge .dotlt{width:9px; height:9px; border-radius:50%; background:#FFFFFF; border:1px solid var(--line)}
+
+section{margin:0 0 52px}
+
+/* buttons */
+.btn{display:inline-flex; align-items:center; gap:8px; border-radius:var(--radius); padding:12px 20px; font-family:var(--font-sans); font-weight:600; font-size:15px; cursor:pointer; border:1px solid transparent; text-decoration:none; line-height:1}
+.btn--fire{background:var(--fire-solid); color:#fff; box-shadow:0 8px 22px var(--fire-glow)}
+.btn--fire:hover{background:var(--fire-light)}
+.btn--primary{background:var(--text); color:var(--void-deep)}      /* solid ink — the calm default CTA */
+.btn--secondary{background:var(--void-deep); color:var(--text); border-color:var(--line)}
+.btn--secondary:hover{border-color:var(--muted)}
+.btnrow{display:flex; gap:14px; flex-wrap:wrap; align-items:center}
+.btnnote{font-size:12.5px; color:var(--muted)}
+
+/* card */
+.card{background:var(--void-deep); border:1px solid var(--line); border-radius:var(--radius); padding:24px; box-shadow:var(--shadow)}
+.card h3{margin:0 0 6px; font-size:18px}
+.card p{margin:0 0 14px; color:var(--muted); font-size:14px}
+.chip{display:inline-flex; align-items:center; gap:7px; font-size:12px; font-weight:600; color:var(--fire); background:color-mix(in srgb, var(--fire) 8%, var(--void-deep)); border:1px solid color-mix(in srgb, var(--fire) 22%, transparent); border-radius:999px; padding:5px 11px}
+.dot{width:8px; height:8px; border-radius:50%; background:var(--fire-solid)}
+
+.grid2{display:grid; grid-template-columns:1fr 1fr; gap:20px}
+@media(max-width:720px){.grid2{grid-template-columns:1fr}}
+
+/* hero */
+.hero{background:var(--void-deep); border:1px solid var(--line); border-radius:var(--radius); padding:44px 40px; box-shadow:var(--shadow); position:relative; overflow:hidden}
+.hero::after{content:""; position:absolute; inset:0; background:radial-gradient(600px 300px at 88% 0%, var(--fire-glow), transparent 62%); pointer-events:none}
+.hero h1{font-size:40px; line-height:1.08; margin:12px 0 14px; max-width:16ch}
+.hero .fire{color:var(--fire)}
+.hero p{color:var(--muted); font-size:16px; max-width:52ch; margin:0 0 26px}
+
+/* palette */
+.swatches{display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:14px}
+.sw{border:1px solid var(--line); border-radius:12px; overflow:hidden; background:var(--void-deep)}
+.sw .chipcolor{height:66px}
+.sw .meta{padding:9px 11px}
+.sw .name{font-size:12.5px; font-weight:600}
+.sw .hex{font-size:11.5px; color:var(--muted); font-family:"Space Grotesk",monospace; letter-spacing:0.02em}
+
+/* dark-vs-light note strip */
+.compare{display:grid; grid-template-columns:1fr 1fr; gap:0; border:1px solid var(--line); border-radius:var(--radius); overflow:hidden}
+@media(max-width:720px){.compare{grid-template-columns:1fr}}
+.compare .side{padding:22px}
+.compare .a{background:#07111f; color:#f6fbff}   /* literal Skin A dark for the side-by-side */
+.compare .b{background:var(--void-deep); color:var(--text)}
+.compare .side small{display:block; font-size:11px; letter-spacing:0.14em; text-transform:uppercase; opacity:.7; margin-bottom:10px; font-weight:600}
+.compare .miniwm{font-family:var(--font-display); font-weight:700; font-size:19px; display:inline-flex; align-items:center; gap:9px}
+.compare .a .dev{color:#5E6B87}
+.compare .b .dev{color:var(--dotdev)}
+.compare .minibtn{display:inline-block; margin-top:14px; background:#FF3B3B; color:#fff; font-weight:600; font-size:13px; padding:9px 15px; border-radius:12px}
+
+.footnote{margin-top:14px; font-size:12.5px; color:var(--muted)}
+code{font-family:"Space Grotesk",ui-monospace,monospace; background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:1px 6px; font-size:12.5px; color:var(--text)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- TOP BAR -->
+  <div class="topbar">
+    <span class="brand">
+      <span class="mark">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M6.5 8 L11 12 L6.5 16" stroke="#D92D2D" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M12.6 16.2 L18 16.2" stroke="#D92D2D" stroke-width="2.6" stroke-linecap="round"/>
+        </svg>
+      </span>
+      <b>supermega</b><b class="dev">.dev</b>
+    </span>
+    <span class="skinbadge"><span class="dotlt"></span>Brand B · Light skin</span>
+  </div>
+
+  <!-- HERO -->
+  <section>
+    <div class="hero">
+      <span class="eyebrow">One system · two skins</span>
+      <h1>The same brand, in <span class="fire">daylight</span>.</h1>
+      <p>Brand B is a light skin of the Void Blue + Fire Red system — cool near-white paper instead of the dark operator surface. Same <code>&gt;_</code> mark, same Space Grotesk, same Fire Red. Built for docs, print and bright rooms.</p>
+      <div class="btnrow">
+        <a class="btn btn--fire" href="#">Start free</a>
+        <a class="btn btn--secondary" href="#">See a demo</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- BUTTONS -->
+  <section>
+    <h2>Buttons</h2>
+    <div class="btnrow" style="margin-bottom:12px">
+      <a class="btn btn--primary" href="#">Primary (ink)</a>
+      <a class="btn btn--secondary" href="#">Secondary</a>
+      <a class="btn btn--fire" href="#">Fire (charged)</a>
+    </div>
+    <p class="btnnote">Fire is the 5% — rationed to the one action that matters. Primary is calm solid ink; the fire fill is the brand red <code>#FF3B3B</code> with a white label at 15px semibold (AA-large).</p>
+  </section>
+
+  <!-- CARD + hero already shown; a component card -->
+  <section>
+    <h2>Card</h2>
+    <div class="grid2">
+      <div class="card">
+        <span class="chip"><span class="dot"></span>Live</span>
+        <h3 style="margin-top:12px">Retail OS</h3>
+        <p>Run the shop without Viber &amp; Excel. Sales, stock and staff in one place — plain and simple.</p>
+        <a class="btn btn--fire" href="#" style="font-size:14px; padding:10px 16px">Open app</a>
+      </div>
+      <div class="card">
+        <h3>Fire on light, done right</h3>
+        <p>Small fire text uses the deepened <span style="color:var(--fire); font-weight:600">#D92D2D</span> so it clears WCAG AA on white — while the button fill keeps the bright brand red. Same look, readable everywhere.</p>
+        <a class="btn btn--secondary" href="#" style="font-size:14px; padding:10px 16px">Read the tokens</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- PALETTE -->
+  <section>
+    <h2>Palette</h2>
+    <div class="swatches">
+      <div class="sw"><div class="chipcolor" style="background:#F7F9FC; border-bottom:1px solid var(--line)"></div><div class="meta"><div class="name">Ground</div><div class="hex">#F7F9FC</div></div></div>
+      <div class="sw"><div class="chipcolor" style="background:#FFFFFF; border-bottom:1px solid var(--line)"></div><div class="meta"><div class="name">Card / deep</div><div class="hex">#FFFFFF</div></div></div>
+      <div class="sw"><div class="chipcolor" style="background:#0B1420"></div><div class="meta"><div class="name">Ink / text</div><div class="hex">#0B1420</div></div></div>
+      <div class="sw"><div class="chipcolor" style="background:#566173"></div><div class="meta"><div class="name">Muted</div><div class="hex">#566173</div></div></div>
+      <div class="sw"><div class="chipcolor" style="background:#FF3B3B"></div><div class="meta"><div class="name">Fire · fill</div><div class="hex">#FF3B3B</div></div></div>
+      <div class="sw"><div class="chipcolor" style="background:#D92D2D"></div><div class="meta"><div class="name">Fire · text (AA)</div><div class="hex">#D92D2D</div></div></div>
+      <div class="sw"><div class="chipcolor" style="background:#F59E1B"></div><div class="meta"><div class="name">Factory · amber</div><div class="hex">#F59E1B</div></div></div>
+      <div class="sw"><div class="chipcolor" style="background:#8B5CF6"></div><div class="meta"><div class="name">Studio · violet</div><div class="hex">#8B5CF6</div></div></div>
+    </div>
+    <p class="footnote">Semantic: <span style="color:var(--ok); font-weight:600">OK #1A7F54</span> · <span style="color:var(--warn); font-weight:600">Warn #9A6B00</span> · <span style="color:var(--bad); font-weight:600">Bad #D92D2D</span> — all deepened to pass AA on the light ground.</p>
+  </section>
+
+  <!-- SAME COMPONENT: DARK vs LIGHT -->
+  <section>
+    <h2>Same component · dark vs light</h2>
+    <div class="compare">
+      <div class="side a">
+        <small>Skin A — operator (default)</small>
+        <span class="miniwm">
+          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M6.5 8 L11 12 L6.5 16" stroke="#FF3B3B" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M12.6 16.2 L18 16.2" stroke="#FF3B3B" stroke-width="2.6" stroke-linecap="round"/>
+          </svg>
+          <b>supermega</b><b class="dev">.dev</b>
+        </span>
+        <div><a class="minibtn" href="#">Start free</a></div>
+      </div>
+      <div class="side b">
+        <small>Skin B — daylight (this board)</small>
+        <span class="miniwm">
+          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M6.5 8 L11 12 L6.5 16" stroke="#D92D2D" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M12.6 16.2 L18 16.2" stroke="#D92D2D" stroke-width="2.6" stroke-linecap="round"/>
+          </svg>
+          <b>supermega</b><b class="dev">.dev</b>
+        </span>
+        <div><a class="minibtn" href="#">Start free</a></div>
+      </div>
+    </div>
+    <p class="footnote">Identical structure, type, mark, radius and Fire Red. Only the surfaces flip — dark ground &amp; near-white text (A) ↔ cool paper &amp; ink (B). Full rationale in <code>BRAND-A-VS-B.md</code>.</p>
+  </section>
+
+</div>
+</body>
+</html>

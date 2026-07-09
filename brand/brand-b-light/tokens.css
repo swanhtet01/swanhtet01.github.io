@@ -1,0 +1,105 @@
+/* SUPERMEGA — BRAND B: "LIGHT SKIN" TOKENS.
+   ONE SYSTEM, TWO SKINS. This is the LIGHT counterpart to the canonical dark tokens at
+   C:/Users/swann/OneDrive - BDA/BRAND-TOKENS.css ("Void Blue + Fire Red", the founder-approved default).
+
+   Same identity — same Fire Red accent, same `>_` terminal mark, same Space Grotesk + Inter, same 14px
+   radius, same 95%-calm / 5%-charged doctrine. ONLY the surfaces flip: dark Void Blue ground → clean,
+   COOL near-white (never warm cream — #f7f4ec is retired/rejected). This is a drop-in "skin": every
+   variable name below matches BRAND-TOKENS.css exactly, so swapping the stylesheet re-skins any surface.
+
+   Skin A (dark)  = "operator / terminal" — the default product surface.
+   Skin B (light) = "daylight / print / docs" — this file.
+
+   Fonts (identical to A):
+   @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap');
+   Space Grotesk = display/headings/wordmark. Inter = body/UI. Burmese: Noto Sans Myanmar. */
+
+/* ── LIGHT as the root default of THIS skin ──────────────────────────────────────────────────────────
+   Two ways to use these tokens:
+   (1) As a standalone light stylesheet — load this file and :root is light. (What reference-light.html does.)
+   (2) As A's opt-in light mode — the same values also live under `:root[data-theme="light"]` in
+       BRAND-TOKENS.css, so a page shipping the dark tokens can flip to this skin with
+       <html data-theme="light">. Both routes resolve to the SAME numbers below. */
+:root {
+  color-scheme: light;
+
+  /* Void Blue, inverted → cool light surfaces (the "paper", NOT warm cream) */
+  --void:        #F7F9FC;   /* page background — clean cool near-white (the canonical light ground; never #f7f4ec) */
+  --void-deep:   #FFFFFF;   /* cards / raised surfaces sit ABOVE the page on light (inverse of dark, where deep = darkest) */
+  --panel:       rgba(7, 17, 31, 0.04);   /* raised surface tint — a whisper of Void ink instead of white-on-dark */
+  --panel-2:     rgba(7, 17, 31, 0.025);  /* second-level panel */
+  --line:        rgba(11, 20, 32, 0.12);  /* hairlines — dark low-alpha ink (mirrors A's white low-alpha) */
+
+  /* Text — deep Void ink instead of near-white */
+  --text:        #0B1420;   /* primary ink (echoes the Void #07111f family; ~17.5:1 on --void → AAA) */
+  --muted:       #566173;   /* secondary — blue-grey; ~5.9:1 on --void (6.3:1 on white) → passes AA text */
+  --dotdev:      #8A93A3;   /* the ".dev" in the wordmark / de-emphasized (~3.1:1 → decorative use only, not body text) */
+
+  /* Fire Red — SAME through-line accent as A.
+     AA FIX: pure #FF3B3B on white is only ~3.1:1 → fails AA for normal-size TEXT. So fire-coloured TEXT
+     and small marks use the deepened --fire (#D92D2D, ~4.6:1 on white → passes AA). The SOLID-FILL
+     button keeps the bright brand red via --fire-solid (label is white, so contrast is on the fill, not
+     small text) — the button stays visually identical to A. */
+  --fire:        #D92D2D;   /* fire for TEXT/links/small marks on light — deepened for WCAG AA (~4.8:1 on #FFF, 4.6:1 on ground) */
+  --fire-solid:  #FF3B3B;   /* the brand Fire Red, for SOLID FILLS (button bg) with a #fff label — matches A exactly.
+                               NOTE: white-on-#FF3B3B is ~3.5:1 (AA for LARGE/bold text ≥18.66px or ≥24px). Keep the
+                               button label ≥15px SEMIBOLD (as the reference board does) so it clears AA-large; for
+                               tiny fire labels, prefer text-fire --fire on a light chip instead of a solid fill. */
+  --fire-light:  #FF5C4D;   /* hover / secondary accent — same as A */
+  --fire-glow:   rgba(217, 45, 45, 0.14);  /* soft fire halo, tuned deeper+slightly stronger to read on light */
+
+  /* Semantic — same roles as A, darkened so status TEXT passes AA on the light ground */
+  --ok:          #1A7F54;   /* success (A: #58c98a fails on light → deepened to ~5.0:1 → AA text) */
+  --warn:        #9A6B00;   /* warning (A: #e3b341 → deepened to ~4.7:1 → AA text) */
+  --bad:         #D92D2D;   /* error — same deepened fire as text-fire, AA on white (~4.8:1) */
+
+  /* Type — IDENTICAL to A (one system) */
+  --font-display: "Space Grotesk", "Inter", system-ui, sans-serif;   /* headings / wordmark */
+  --font-sans:    "Inter", "Noto Sans Myanmar", "Segoe UI", system-ui, sans-serif;  /* body/UI */
+  --radius:       14px;     /* same corner radius as A */
+  --shadow:       0 18px 44px rgba(11, 20, 32, 0.12);   /* softer, ink-tinted shadow (dark shadows read as heavy on light) */
+}
+
+/* Per-product accents — SAME hues as A (Retail=fire / Factory=amber / Studio=violet), but DEEPENED so
+   accent TEXT clears WCAG AA on the light ground. The bright A-hue is kept for solid fills (*-solid).
+   Apply with [data-product="factory"] / [data-product="studio"] on <html> or a scope.
+     Retail  = Fire Red   (default, above)
+     Factory = Amber      (A: #F59E1B)
+     Studio  = Violet      (A: #8B5CF6) */
+:root[data-product="factory"] {
+  --fire:        #A66200;   /* amber for TEXT — deepened from #F59E1B for AA (~4.8:1 on #FFF) */
+  --fire-solid:  #F59E1B;   /* bright A amber for solid fills — use a DARK label (#0B1420 ~8.6:1), white fails */
+  --fire-light:  #FFB74D;
+  --fire-glow:   rgba(166, 98, 0, 0.14);
+}
+:root[data-product="studio"] {
+  --fire:        #6D3BE0;   /* violet for TEXT — deepened from #8B5CF6 for AA (~6.3:1 on #FFF) */
+  --fire-solid:  #8B5CF6;   /* bright A violet for solid fills — white label on large text only (~4.2:1) */
+  --fire-light:  #A855F7;
+  --fire-glow:   rgba(109, 59, 224, 0.14);
+}
+
+/* The `>_` terminal mark — SAME mark as A. On light, stroke it with the deepened text-fire (--fire /
+   #D92D2D) so the small strokes hold AA; the bright #FF3B3B is fine for a large mark but text-fire is safe
+   at every size.
+   <span style="display:inline-flex;align-items:center"><svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+     <path d="M6.5 8 L11 12 L6.5 16" stroke="#D92D2D" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+     <path d="M12.6 16.2 L18 16.2" stroke="#D92D2D" stroke-width="2.6" stroke-linecap="round"/></svg>
+   </span><b>supermega</b><b style="color:#8A93A3">.dev</b> */
+
+/* Tailwind/shadcn HSL for a LIGHT MegaOS/DeskPOS surface (paste into index.css under a light selector,
+   mirroring A's dark block). Fill uses the bright Fire Red; text-fire uses the deepened value.
+   --background: 214 43% 98%;      (#F7F9FC cool light ground)
+   --foreground: 213 48% 8%;       (#0B1420 Void ink)
+   --card: 0 0% 100%;              (#FFFFFF)
+   --primary: 0 100% 62%;          (#FF3B3B Fire Red — solid fills)
+   --primary-foreground: 0 0% 100%;
+   --muted-foreground: 213 15% 39%;(#566173)
+   --border: 213 48% 8% / 0.12;
+   --ring: 0 71% 51%;              (#D92D2D deepened fire — for focus rings/AA)
+   color-scheme: light;  */
+
+/* PURGE on sight (same audit as A, restated for light): warm cream #f7f4ed / #f7f4ec (retired ground —
+   this skin is COOL #F7F9FC), clay #c2603f / #D97757, the "Aptos"/"Fraunces" fonts. And never render
+   fire as small #FF3B3B TEXT on white — use --fire (#D92D2D). Keep the accent RATIONED: 95% calm ink,
+   5% charged fire. */
