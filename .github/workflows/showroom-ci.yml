@@ -27,6 +27,9 @@ jobs:
       - name: Guard public Vercel config
         run: npm run vercel:guard
 
+      - name: Connector resilience (never-throws contract)
+        run: node tools/test_connector_resilience.mjs
+
       - name: Preflight public env
         env:
           VITE_GOOGLE_MAPS_API_KEY: ${{ secrets.VITE_GOOGLE_MAPS_API_KEY }}

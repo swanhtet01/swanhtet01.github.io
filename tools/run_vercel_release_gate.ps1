@@ -90,6 +90,9 @@ if ($Target -in @('all', 'public')) {
   Invoke-Step 'Public Vercel config guard' npm @('run', 'vercel:guard')
   Add-StepResult 'Public Vercel config guard'
 
+  Invoke-Step 'Connector resilience (never-throws contract)' node @('tools/test_connector_resilience.mjs')
+  Add-StepResult 'Connector resilience (never-throws contract)'
+
   if (-not $SkipBuild) {
     Invoke-Step 'Showroom lint' cmd @('/c', 'npm --prefix showroom run lint')
     Add-StepResult 'Showroom lint'
