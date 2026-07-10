@@ -73,6 +73,7 @@ import './data-onedrive.mjs'
 import './data-box.mjs'
 import './data-google-contacts.mjs'
 import './messaging-zalo.mjs'
+import './ai-vertex.mjs'
 
 export * from './registry.mjs'
 export default registry

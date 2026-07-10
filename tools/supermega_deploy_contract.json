@@ -25,7 +25,7 @@
     {
       "key": "pos",
       "project": "spa-desk-pilot",
-      "purpose": "DeskPOS client-facing POS product, onboarding links, and operator console for restaurant, spa, retail, and service pilots.",
+      "purpose": "Shop client-facing POS product, onboarding links, and operator console for restaurant, spa, retail, and service pilots.",
       "domains": ["pos.supermega.dev"],
       "build_mode": "deskpos-vite",
       "deploy_script": "cd ..\\..\\spa-desk-pilot && npx vercel --prod --yes",

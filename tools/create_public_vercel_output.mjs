@@ -142,14 +142,14 @@ function normalizePublicProductNames(content) {
     .replace(/\/site\/shots\/product-factory-maintenance-quality-app\.svg|\/site\/shots\/product-factory-operations-app\.svg|\/site\/shots\/product-factory-issue-maintenance-tracker\.svg/g, '/site/shots/product-factory-issues-maintenance-quality.svg')
     .replace(/\/site\/shots\/product-restaurant-pos-inventory-app\.svg|\/site\/shots\/product-restaurant-pos-app\.svg|\/site\/shots\/product-restaurant-pos-stock-tracker\.svg/g, '/site/shots/product-restaurant-pos-menu-inventory.svg')
     .replace(/Back Office (?:Back Office )+Workflow Desk/g, 'Back Office Workflow Desk')
-    // FINAL CANONICALIZATION — founder-locked 2-suite product story (SITE-CONSISTENCY-KIT.md,
-    // 2026-07-09): the site sells exactly two apps — Retail OS (the shop app) and Factory OS (the
-    // factory/operations app). Collapse every legacy/variant name into those two. Runs last so
-    // nothing slips through, on every normalized page.
+    // FINAL CANONICALIZATION - founder-locked 2-suite product story. Keep the
+    // legacy collapses, then normalize every public label to Shop or Plant.
     .replace(/Restaurant POS \+ Inventory|Restaurant POS and Inventory/g, 'Retail OS')
     .replace(/DeskPOS\s*[—–-]\s*Point of Sale/g, 'Retail OS')
     .replace(/\bDeskPOS\b/g, 'Retail OS')
     .replace(/Factory & Operations App|Factory Operations App/g, 'Factory OS')
+    .replace(/\bRetail OS\b/g, 'Shop')
+    .replace(/\bFactory OS\b/g, 'Plant')
     .replace(/Document Extraction Ledger|Back Office AI Desk|Back Office Workflow Desk/g, 'Custom Solutions & AI Agents')
     // Retire the old tagline. Header sub-mark → clean wordmark; every other use → the one line.
     .replace(/<small>Cast real work into software<\/small>/g, '')
@@ -4629,8 +4629,8 @@ ${unicornHeader}
         <section class="section" id="products">
           <h2>Two apps. One way your business runs.</h2>
           <div class="uvp-grid" style="grid-template-columns:repeat(2,minmax(0,1fr))">
-            <div class="uvp-card" style="border-top:3px solid #3B82F6"><strong>Retail OS</strong><span>The app for your shop or restaurant. Point of sale, customers and books — together in one place. Start free; premium adds AI and data features.</span></div>
-            <div class="uvp-card" style="border-top:3px solid #3B82F6"><strong>Factory OS</strong><span>The app for your factory and operations. Log, assign and confirm the day's work, turn a whiteboard photo into data, and keep to your standards.</span></div>
+            <div class="uvp-card" style="border-top:3px solid #3B82F6"><strong>Shop</strong><span>Point of sale, customers and books — together in one place. Start free; premium adds AI and data features.</span></div>
+            <div class="uvp-card" style="border-top:3px solid #3B82F6"><strong>Plant</strong><span>Log, assign and confirm the day's work, turn a whiteboard photo into data, and keep to your standards.</span></div>
           </div>
         </section>
 
@@ -4759,7 +4759,7 @@ ${unicornHeader}
           <div class="copy">
             <div class="eyebrow">Two apps · Start free · Yours to keep</div>
             <h1>Stop running your business on Viber &amp; Excel.</h1>
-            <p>Two simple apps, built for the way your business really runs. Retail OS for your shop. Factory OS for your factory floor. Start free; add AI and data features when you need them.</p>
+            <p>Two simple apps. Shop runs your counter; Plant runs your operations. Start free; add AI and data features when you need them.</p>
             <div class="cta">
               <a class="btn primary" href="/contact/">Start free</a>
               <a class="btn secondary" href="/offers/">Pricing</a>
@@ -4910,7 +4910,7 @@ ${unicornHeader}
         <section aria-label="Contact SUPERMEGA">
           <div class="eyebrow">Start free</div>
           <h1 data-contact-heading>Tell us about your business.</h1>
-          <p data-contact-lead>Retail OS for your shop, Factory OS for your factory floor. Tell us what you run and we'll help you start free.</p>
+          <p data-contact-lead>Shop runs your counter; Plant runs your operations. Tell us what you run and we'll help you start free.</p>
         </section>
         <section aria-label="Workflow contact form">
           <form action="/api/contact-submissions" data-sm-lead-form enctype="multipart/form-data" method="post">
@@ -5793,7 +5793,8 @@ async function prunePublicSiteDir() {
 }
 
 await rm(outputDir, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 })
-await mkdir(outputDir, { recursive: true })
+await mkdir(staticDir, { recursive: true })
+await mkdir(functionsDir, { recursive: true })
 await copyPublicStatic(resolve(root, 'api-static'), staticDir)
 // Brand favicon is owned here (revert-proof against OneDrive restoring the old file): Capsule Forge mark.
 await writeFile(resolve(staticDir, 'favicon.svg'), `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="supermega"><rect x="4" y="4" width="56" height="56" rx="15" fill="#111731"/><rect x="4.75" y="4.75" width="54.5" height="54.5" rx="14.25" fill="none" stroke="#ffffff" stroke-opacity="0.10"/><path d="M21 23 L31.5 32 L21 41" fill="none" stroke="#3B82F6" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/><path d="M35 41 L47 41" fill="none" stroke="#3B82F6" stroke-width="5" stroke-linecap="round"/></svg>\n`, 'utf8')
@@ -10083,7 +10084,7 @@ ${publicRuntimeScripts}
 </body>
 </html>`
 await mkdir(resolve(staticDir, 'privacy'), { recursive: true })
-await writeFile(resolve(staticDir, 'privacy', 'index.html'), unicornPrivacyHtml, 'utf8')
+await writeFile(resolve(staticDir, 'privacy', 'index.html'), normalizePublicProductNames(unicornPrivacyHtml), 'utf8')
 await mkdir(resolve(staticDir, 'machine'), { recursive: true })
 await writeFile(resolve(staticDir, 'machine', 'index.html'), normalizePublicProductNames(publicMachineHtml), 'utf8')
 await mkdir(resolve(staticDir, 'card'), { recursive: true })
@@ -10101,9 +10102,17 @@ if (megaosPreviewBody) {
     'utf8',
   )
 }
-// Demo hub (source lives in C:/sm-site, outside OneDrive) served at /demo/
+// Use the local demo source when available; clean cloud builds get a durable
+// redirect to the separately deployed demo instead of an empty route.
 await mkdir(resolve(staticDir, 'demo'), { recursive: true })
-await cp('C:/sm-site/supermega-demo/index.html', resolve(staticDir, 'demo', 'index.html'), { force: true }).catch(() => undefined)
+const localDemoHtml = await readFile('C:/sm-site/supermega-demo/index.html', 'utf8').catch(() => '')
+await writeFile(
+  resolve(staticDir, 'demo', 'index.html'),
+  localDemoHtml
+    ? normalizePublicProductNames(localDemoHtml)
+    : publicRedirectHtml('https://demo.supermega.dev', 'Open the live demo'),
+  'utf8',
+)
 await cp('C:/sm-site/supermega-demo/favicon.svg', resolve(staticDir, 'demo', 'favicon.svg'), { force: true }).catch(() => undefined)
 await writeFile(resolve(staticDir, 'robots.txt'), 'User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /app/\nDisallow: /clients/\nDisallow: /machine/\nDisallow: /operator/\nSitemap: https://supermega.dev/sitemap.xml\n', 'utf8')
 await writeFile(resolve(staticDir, 'sitemap.xml'), '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url><loc>https://supermega.dev/</loc><changefreq>weekly</changefreq><priority>1.0</priority></url>\n  <url><loc>https://supermega.dev/products/</loc><changefreq>weekly</changefreq><priority>0.9</priority></url>\n  <url><loc>https://supermega.dev/products/pos/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>\n  <url><loc>https://supermega.dev/products/factory/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>\n  <url><loc>https://supermega.dev/products/documents/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>\n  <url><loc>https://supermega.dev/ai-agents/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>\n  <url><loc>https://supermega.dev/agent-templates/</loc><changefreq>weekly</changefreq><priority>0.85</priority></url>\n  <url><loc>https://supermega.dev/agent-templates/deskpos-quickstart/</loc><changefreq>weekly</changefreq><priority>0.72</priority></url>\n  <url><loc>https://supermega.dev/agent-templates/chat-ledger/</loc><changefreq>weekly</changefreq><priority>0.72</priority></url>\n  <url><loc>https://supermega.dev/agent-templates/inbox-calendar-operator/</loc><changefreq>weekly</changefreq><priority>0.72</priority></url>\n  <url><loc>https://supermega.dev/agent-templates/daily-intelligence-brief/</loc><changefreq>weekly</changefreq><priority>0.72</priority></url>\n  <url><loc>https://supermega.dev/agent-templates/factory-ops-ledger/</loc><changefreq>weekly</changefreq><priority>0.72</priority></url>\n  <url><loc>https://supermega.dev/agent-templates/data-clean-report-agent/</loc><changefreq>weekly</changefreq><priority>0.72</priority></url>\n  <url><loc>https://supermega.dev/offers/</loc><changefreq>weekly</changefreq><priority>0.95</priority></url>\n  <url><loc>https://supermega.dev/work/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>\n  <url><loc>https://supermega.dev/contact/</loc><changefreq>monthly</changefreq><priority>0.9</priority></url>\n  <url><loc>https://supermega.dev/card/</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>\n  <url><loc>https://supermega.dev/privacy/</loc><changefreq>yearly</changefreq><priority>0.3</priority></url>\n</urlset>\n', 'utf8')

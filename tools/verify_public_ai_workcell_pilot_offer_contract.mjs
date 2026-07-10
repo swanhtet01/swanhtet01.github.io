@@ -3,16 +3,10 @@ import { resolve } from 'node:path'
 
 const root = process.cwd()
 const staticDir = resolve(root, '.vercel', 'output', 'static')
-const sourcePath = resolve(root, 'tools', 'create_public_vercel_output.mjs')
 const failures = []
 
-function read(path) {
-  return existsSync(path) ? readFileSync(path, 'utf8') : ''
-}
-
-function fail(name, extra = {}) {
-  failures.push({ name, ...extra })
-}
+const read = (path) => (existsSync(path) ? readFileSync(path, 'utf8') : '')
+const fail = (name, extra = {}) => failures.push({ name, ...extra })
 
 function requireTokens(label, text, tokens) {
   for (const token of tokens) {
@@ -20,62 +14,85 @@ function requireTokens(label, text, tokens) {
   }
 }
 
-const source = read(sourcePath)
-const home = read(resolve(staticDir, 'index.html'))
-const offers = read(resolve(staticDir, 'offers', 'index.html'))
-const agents = read(resolve(staticDir, 'ai-agents', 'index.html'))
+function rejectTokens(label, text, tokens) {
+  for (const token of tokens) {
+    if (text.includes(token)) fail(`${label}_retired_token_found`, { token })
+  }
+}
+
+const source = read(resolve(root, 'tools', 'create_public_vercel_output.mjs'))
+const pages = {
+  home: read(resolve(staticDir, 'index.html')),
+  products: read(resolve(staticDir, 'products', 'index.html')),
+  offers: read(resolve(staticDir, 'offers', 'index.html')),
+  agents: read(resolve(staticDir, 'ai-agents', 'index.html')),
+  contact: read(resolve(staticDir, 'contact', 'index.html')),
+}
 
 if (!source) fail('missing_public_generator')
-if (!home) fail('missing_public_home_output')
-if (!offers) fail('missing_public_offers_output')
-if (!agents) fail('missing_public_ai_agents_output')
+for (const [label, html] of Object.entries(pages)) {
+  if (!html) fail(`missing_public_${label}_output`)
+}
 
-const workcellTokens = [
+requireTokens('generator_two_suite_redesign', source, [
+  "replace(/\\bRetail OS\\b/g, 'Shop')",
+  "replace(/\\bFactory OS\\b/g, 'Plant')",
+  'Shop runs your counter; Plant runs your operations.',
+  'custom-ai-agent-build',
+])
+
+requireTokens('home_two_suite_redesign', pages.home, [
+  'Stop running your business on Viber',
+  '<strong>Shop</strong>',
+  '<strong>Plant</strong>',
+  'Powered by SuperMega Technologies',
+])
+
+requireTokens('products_two_suite_redesign', pages.products, [
+  '<h2>Shop.</h2>',
+  '<h2>Plant.</h2>',
+  'Custom Solutions & AI Agents',
+  '/products/pos/',
+  '/products/factory/',
+])
+
+requireTokens('offers_two_suite_redesign', pages.offers, [
+  'Start free. Pay when the worker proves value.',
+  'Tool in a week',
+  'Custom build',
+  'Design + ship system',
+  'Start free with the two apps.',
+])
+
+requireTokens('agents_redirect_to_products', pages.agents, [
+  'Continue to SuperMega',
+  'url=/products/',
+  'window.location.replace("/products/")',
+  'See our two apps',
+])
+
+requireTokens('contact_two_suite_intake', pages.contact, [
+  'Tell us about your business.',
+  'Shop runs your counter; Plant runs your operations.',
+  'custom-ai-agent-build',
+  'Custom Solutions & AI Agents - from 11,000,000 MMK',
+])
+
+const retiredPublicOfferTokens = [
   'AI Workcell Pilot',
-  'Source pack',
-  'First proof',
-  'First production run',
-  'Owner acceptance',
-  'Maintenance',
-  'approval-only',
-  'payment proof',
-  'proof-to-maintenance',
+  'Source-to-Screen',
+  'source_to_screen',
+  'data-source-to-screen',
+  'package=ai-workcell-pilot',
+  'Agents that do the tasks SaaS leaves for humans',
+  'AI Agent Army',
+  'Free core tools',
 ]
 
-requireTokens('generator_workcell_offer', source, [
-  ...workcellTokens,
-  '/app/source-pack',
-  '/app/proof-review',
-  'Myanmar',
-])
-
-requireTokens('home_workcell_offer', home, [
-  'Your whole business, in one simple app.',
-  'Start free',
-])
-
-requireTokens('offers_workcell_offer', offers, [
-  ...workcellTokens,
-  'Premium setup',
-  'easy setup',
-  'private workspace',
-  'customer success desk',
-])
-
-requireTokens('agents_workcell_offer', agents, [
-  ...workcellTokens,
-  'AI Agent Army',
-  'Agents that do the tasks SaaS leaves for humans',
-  'Every send, write, payment, browser/mobile action, or connector write waits for approval',
-])
-
-for (const [label, text] of [
-  ['home', home],
-  ['offers', offers],
-  ['agents', agents],
-]) {
-  const hit = text.match(/\bUSD\b|\$\s?\d/)
-  if (hit) fail(`${label}_contains_public_usd_price`, { match: hit[0] })
+for (const [label, html] of Object.entries(pages)) {
+  rejectTokens(label, html, retiredPublicOfferTokens)
+  const priceMatch = html.match(/\bUSD\b|\$\s?\d/)
+  if (priceMatch) fail(`${label}_contains_public_usd_price`, { match: priceMatch[0] })
 }
 
 if (failures.length) {
@@ -83,4 +100,4 @@ if (failures.length) {
   process.exit(1)
 }
 
-console.log('public_ai_workcell_pilot_offer_contract=verified')
+console.log('public_shop_plant_two_suite_contract=verified')

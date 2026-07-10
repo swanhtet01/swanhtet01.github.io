@@ -125,7 +125,7 @@ const publicProductSetupContracts = [
   },
   {
     package: 'restaurant-pos-menu-inventory',
-    product: 'DeskPOS',
+    product: 'Shop',
     checkout_plan: 'starter-sprint',
     first_source: 'menu, item list, shift close sheet, payment proof, or stock count',
     acceptance_test: 'A cashier or owner can review menu, orders, payment proof, stock movement, and daily close from one screen.',

@@ -78,7 +78,7 @@ try {
   await open(page, '/products/')
   await expectBodyIncludes(
     page,
-    ['AI agent templates', 'DeskPOS Quickstart', 'Daily Intelligence Brief Agent', 'Factory Ops Ledger', 'View setup kit', 'DeskPOS'],
+    ['AI agent templates', 'Shop Quickstart', 'Daily Intelligence Brief Agent', 'Factory Ops Ledger', 'View setup kit', 'Shop'],
     'products_key_labels',
   )
   const products = await page.evaluate(() => ({
