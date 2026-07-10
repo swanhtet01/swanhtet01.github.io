@@ -3,9 +3,10 @@
 // a defined output contract, with a gateway tier pinned per role so cost is decided at design time,
 // not at runtime. Schema + conventions: kernel/crews/README.md.
 //
-// This module is a LOADER ONLY — enumeration + validation. Execution plumbing is deliberately not
-// built yet (B13 defines the discipline first); when it is, it must route every model call through
-// gateway.complete() with the role's tier and the tenant's clientId, never the SDK directly.
+// This module is the LOADER — enumeration + validation. Execution lives in crew-run.mjs (runCrew),
+// which routes every model call through gateway.complete() with the role's tier and the tenant's
+// clientId, never the SDK directly; forging (crew-forge.mjs), installing (crew-install.mjs), and the
+// HTTP surface (api/crew.mjs) build on this loader. See crews/README.md for the full loop.
 
 import { readFile, readdir } from 'node:fs/promises'
 import { join, dirname } from 'node:path'
