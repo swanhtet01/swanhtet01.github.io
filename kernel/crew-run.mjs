@@ -75,7 +75,15 @@ export async function runCrew(slug, intake, o = {}) {
 
   let def
   try { def = await loadCrew(slug) }
-  catch (e) { return { ok: false, slug: String(slug || ''), reason: String((e && e.message) || 'crew_load_failed'), errors: e && e.errors } }
+  catch (e) {
+    // Map load failures to CLEAN reasons — never surface the raw fs error (it leaks the server path).
+    const msg = (e && e.message) || ''
+    const reason = (e && e.code === 'ENOENT') ? 'crew_not_found'
+      : msg.startsWith('crew_invalid') ? 'crew_invalid'
+        : msg.startsWith('crew_bad') ? msg
+          : 'crew_load_failed'
+    return { ok: false, slug: String(slug || ''), reason, errors: e && e.errors }
+  }
 
   // Plan gate: a crew that names a minimum plan is unavailable to free-plan tenants — return the
   // documented free_tier_fallback instead of running (no model spend on a gated crew).
