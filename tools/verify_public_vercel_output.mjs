@@ -863,8 +863,8 @@ for (const token of [
 }
 for (const token of [
   '<title>Products | SUPERMEGA.dev</title>',
-  'Retail OS',
-  'Factory OS',
+  'Shop',
+  'Plant',
   'Custom Solutions & AI Agents',
   '/products/factory/',
   '/products/pos/',
@@ -874,7 +874,7 @@ for (const token of [
 const checkoutFunctionPath = resolve(functionsDir, 'api/checkout-start.js.func/api/checkout-start.js')
 if (!existsSync(checkoutFunctionPath)) fail('public_checkout_function_missing')
 const checkoutFunctionSource = readFileSync(checkoutFunctionPath, 'utf8')
-for (const token of ['2,500,000 MMK', '8,000,000 MMK', '11,000,000 MMK', 'Custom Solutions & AI Agents', 'DeskPOS']) {
+for (const token of ['2,500,000 MMK', '8,000,000 MMK', '11,000,000 MMK', 'Custom Solutions & AI Agents', 'Shop']) {
   if (!checkoutFunctionSource.includes(token)) {
     fail('public_checkout_mmk_contract_missing', { token })
   }
@@ -1105,7 +1105,7 @@ for (const token of [
   if (!paymentProofHtml.includes(token)) fail('public_payment_proof_submit_contract_missing', { token })
 }
 const publicAgentTemplateContract = [
-  ['deskpos-quickstart', 'Retail OS Quickstart'],
+  ['deskpos-quickstart', 'Shop Quickstart'],
   ['chat-ledger', 'Viber / WhatsApp Business Ledger'],
   ['inbox-calendar-operator', 'Inbox & Calendar Operator'],
   ['daily-intelligence-brief', 'Daily Intelligence Brief Agent'],
@@ -1302,6 +1302,10 @@ for (const entry of walkHtmlFiles(staticDir)) {
   const html = readFileSync(resolve(staticDir, entry), 'utf8')
   const staleMatch = html.match(/Product Activation|Three products\. One setup contract|Quote-ready setup|View pricing|USD\s|Demo hub|Demo center|open demos|login demos|Request quote|AI Workcell Pilot|Source-to-Screen|Agents that do the tasks SaaS leaves for humans|AI Agent Army/i)
   if (staleMatch) fail('retired_public_copy_found_anywhere', { entry, match: staleMatch[0] })
+  const retiredProductMatch = html.match(/\b(?:Retail OS|Factory OS|DeskPOS|Factory & Operations App)\b/)
+  if (retiredProductMatch) fail('retired_public_product_name_found', { entry, match: retiredProductMatch[0] })
+  const productCollision = html.match(/\b(?:Shop for your shop|Plant for your (?:plant|factory))\b/i)
+  if (productCollision) fail('public_product_name_collision', { entry, match: productCollision[0] })
   const privateMatch = html.match(privateLeakPattern)
   if (privateMatch) fail('private_client_copy_leak_anywhere', { entry, match: privateMatch[0] })
   // Every public "N,NNN,NNN MMK" price string MUST be a canonical value from pricing.json.

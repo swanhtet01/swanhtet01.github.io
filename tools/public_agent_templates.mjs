@@ -20,7 +20,7 @@ export function buildPublicAgentTemplates(pricing) {
   return [
     {
       id: 'deskpos-quickstart',
-      name: 'DeskPOS Quickstart',
+      name: 'Shop Quickstart',
       status: 'live',
       buyer: 'Spa, salon, retail, cafe, repair, clinic, gym, or tuition owner',
       promise: 'Private POS setup with sales, bookings, payments, receipts, stock, customers, and daily close actions.',
@@ -29,8 +29,8 @@ export function buildPublicAgentTemplates(pricing) {
       pricingLabel: `${productTierMmk('deskpos', 'Counter')} setup`,
       sourceCategory: 'spa',
       sourceArea: 'Yangon, Myanmar',
-      contactPackage: 'DeskPOS Quickstart',
-      productArea: 'DeskPOS',
+      contactPackage: 'Shop Quickstart',
+      productArea: 'Shop',
       placeholder: 'Tell us your shop type, service/product list, payment wallet, staff, and what you need to close daily.',
       next: 'Next: we configure a private shop link and prove one real sale and closeout flow.',
       sampleSources: ['service menu', 'staff list', 'payment wallet name', 'last ten sales or bookings'],
@@ -106,7 +106,7 @@ export function buildPublicAgentTemplates(pricing) {
       sourceCategory: 'factory',
       sourceArea: 'Yangon, Myanmar',
       contactPackage: 'Factory Ops Ledger',
-      productArea: 'Factory & Operations App',
+      productArea: 'Plant',
       placeholder: 'Paste or describe the production, quality, maintenance, or issue files that should become one plant ledger.',
       next: 'Next: we build a read-only plant dashboard before changing staff workflows.',
       sampleSources: ['daily production sheet', 'quality claim log', 'maintenance notes', 'machine list'],
@@ -199,7 +199,7 @@ function buildEntitlementLadder(template) {
   const sampleProof = `One approved source-pack proof: ${template.firstProof}`
   const freeCore =
     template.id === 'deskpos-quickstart'
-      ? 'Free DeskPOS trial, worker matcher, setup checklist, and one checkout or booking proof without private connectors.'
+      ? 'Free Shop trial, worker matcher, setup checklist, and one checkout or booking proof without private connectors.'
       : `Free matcher, setup checklist, and ${sampleProof} without live connectors or recurring runs.`
   const paidPilot =
     template.id === 'deskpos-quickstart'

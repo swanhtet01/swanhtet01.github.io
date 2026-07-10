@@ -24,14 +24,14 @@
     { "key": "care-lite",   "name": "Care — Lite",   "usd": 79,  "period": "/mo", "mmk": "340,000 / mo",   "role": "monthly fallback; NOT shown on /offers/" }
   ],
   "products": [
-    { "key": "deskpos",   "name": "DeskPOS",                      "note": "LIVE product",                    "tiers": { "Counter": "2,500,000 MMK", "Counter + AI": "8,000,000 MMK" } },
-    { "key": "factory",   "name": "Factory & Operations App",     "note": "build-to-order (no shipped app)", "tiers": { "Operations build": "8,000,000 MMK", "Full plant build": "13,000,000 MMK" } },
+    { "key": "deskpos",   "name": "Shop",                         "note": "LIVE product (was 'DeskPOS')",    "tiers": { "Counter": "2,500,000 MMK", "Counter + AI": "8,000,000 MMK" } },
+    { "key": "factory",   "name": "Plant",                        "note": "build-to-order (was 'Factory & Operations App')", "tiers": { "Operations build": "8,000,000 MMK", "Full plant build": "13,000,000 MMK" } },
     { "key": "custom-ai", "name": "Custom Solutions & AI Agents", "note": "build-to-order (no shipped app)", "tiers": { "One agent": "8,000,000 MMK", "Pipeline build": "13,000,000 MMK" } }
   ],
   "taxonomy": {
-    "canonicalProductNames": ["DeskPOS", "Factory & Operations App", "Custom Solutions & AI Agents"],
-    "retireTheseVariants": ["Custom Workflow App", "Custom Portal", "Back-Office & Workflow Desk"],
-    "twoViewsNote": "Two views, prices must agree: (1) BY SCOPE = the 4 services above (Tool / Custom build / AI agent / Design+ship); (2) BY PRODUCT = the 3 classes, each with 2 tiers. DeskPOS Counter/Counter+AI are REAL; Factory & Custom are build-to-order bands. MMK only on public surfaces.",
+    "canonicalProductNames": ["Shop", "Plant", "Custom Solutions & AI Agents"],
+    "retireTheseVariants": ["DeskPOS", "Retail OS", "Factory OS", "Factory & Operations App", "Custom Workflow App", "Custom Portal", "Back-Office & Workflow Desk"],
+    "twoViewsNote": "Two views, prices must agree: (1) BY SCOPE = the 4 services above (Tool / Custom build / AI agent / Design+ship); (2) BY PRODUCT = the 3 classes, each with 2 tiers. Shop Counter/Counter+AI are REAL; Plant & Custom are build-to-order bands. MMK only on public surfaces.",
     "thirdTierNote": "KILLED: there is no 3rd tier and no Starter/Pro/Operator/Operate/Managed naming anymore. By-product = exactly 2 tiers per class (see products above). Any reappearance of a 3-tier or monthly Operate/Care tier is a regression."
   },
   "killed": [

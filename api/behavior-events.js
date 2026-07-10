@@ -19,9 +19,9 @@ const allowedDeviceModes = new Set(['phone', 'tablet', 'desktop'])
 
 const sellableToolProfiles = {
   'deskpos-quickstart': {
-    tool_name: 'DeskPOS Quickstart',
+    tool_name: 'Shop Quickstart',
     buyer: 'Spa, salon, retail, cafe, repair, clinic, gym, tuition, or service owner',
-    free_core_tool: 'Free DeskPOS trial plus catalog setup checklist',
+    free_core_tool: 'Free Shop trial plus catalog setup checklist',
     premium_upgrade: 'Private POS setup, payment receipts, daily close insight, and owner diagnosis',
     proof_metric: 'one real checkout or booking flow plus daily close action list',
     source_pack_ask: 'menu or product list, staff list, wallet name, logo, hours',

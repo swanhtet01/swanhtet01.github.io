@@ -61,15 +61,16 @@ const requiredProductShotPaths = [
 
 assertIncludes('home', home, [
   '<title>supermega.dev — your business, in one simple app</title>',
-  'Your whole business, in one simple app.',
+  'Stop running your business on Viber',
 ])
 assertIncludes('products', products, [
   '<title>Products | SUPERMEGA.dev</title>',
 ])
-assertIncludes('contact', contact, ['<title>Contact | SUPERMEGA.dev</title>', 'Send one workflow.', 'Send the source your team already uses.'])
+assertIncludes('contact', contact, ['<title>Contact | SUPERMEGA.dev</title>', 'Tell us about your business.', 'Shop runs your counter; Plant runs your operations.'])
 assertIncludes('combined', combinedText, [
+  'Shop',
+  'Plant',
   'Custom Solutions & AI Agents',
-  'Factory & Operations App',
   '/contact/?package=build',
 ])
 

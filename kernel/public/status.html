@@ -8,53 +8,55 @@
 <meta name="robots" content="noindex" />
 <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 <style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap');
   :root{
-    --bg:#14110e; --panel:#1c1813; --panel2:#221d17; --line:rgba(243,239,230,.10);
-    --ink:#f3efe6; --muted:#a79f90; --clay:#d9895f; --clay-deep:#c2603f;
-    --ok:#5fbf8f; --warn:#e3b341; --bad:#e06a5a; --gold:#c9a24b;
+    color-scheme:dark;
+    --bg:#07111f; --panel:rgba(255,255,255,.075); --panel2:rgba(255,255,255,.045); --line:rgba(255,255,255,.15);
+    --ink:#f6fbff; --muted:#a9b8c7; --accent:#3B82F6; --accent-2:#60A5FA;
+    --ok:#34D399; --warn:#F59E0B; --bad:#F87171;
     --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
-    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,sans-serif;
+    --sans:Inter,"Noto Sans Myanmar","Segoe UI",system-ui,sans-serif;
+    --display:"Space Grotesk",Inter,system-ui,sans-serif;
   }
   *{box-sizing:border-box}
-  body{margin:0;background:radial-gradient(1200px 600px at 70% -10%,rgba(217,137,95,.10),transparent),var(--bg);color:var(--ink);font-family:var(--sans);-webkit-font-smoothing:antialiased;line-height:1.5}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);-webkit-font-smoothing:antialiased;line-height:1.5}
   .wrap{max-width:880px;margin:0 auto;padding:40px 22px 64px}
   header{display:flex;align-items:center;gap:14px;margin-bottom:30px}
-  .mark{width:40px;height:40px;border-radius:11px;background:#1B1815;display:grid;place-items:center;border:1px solid var(--line)}
-  .mark img{width:30px;height:30px;display:block}
-  .brand b{font-size:16px;letter-spacing:-.01em}
+  .mark{width:40px;height:40px;border-radius:8px;background:var(--panel);display:grid;place-items:center;border:1px solid var(--line)}
+  .brand b{font-family:var(--display);font-size:16px;letter-spacing:0}
   .brand span{display:block;font-size:12px;color:var(--muted)}
-  .hero{border:1px solid var(--line);border-radius:18px;padding:24px 26px;background:linear-gradient(180deg,var(--panel),var(--panel2));margin-bottom:18px}
-  .hero .dot{width:13px;height:13px;border-radius:50%;display:inline-block;margin-right:10px;box-shadow:0 0 0 4px rgba(95,191,143,.14)}
-  .hero h1{font-size:clamp(22px,4vw,30px);margin:0;letter-spacing:-.02em;display:flex;align-items:center}
+  .hero{border:1px solid var(--line);border-radius:8px;padding:24px 26px;background:var(--panel);margin-bottom:18px}
+  .hero .dot{width:13px;height:13px;border-radius:50%;display:inline-block;margin-right:10px;box-shadow:0 0 0 4px rgba(52,211,153,.14)}
+  .hero h1{font-family:var(--display);font-size:clamp(22px,4vw,30px);margin:0;letter-spacing:0;display:flex;align-items:center}
   .hero .sub{color:var(--muted);font-size:13.5px;margin-top:8px;font-family:var(--mono)}
   .grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
   @media(max-width:620px){.grid{grid-template-columns:1fr}}
-  .card{border:1px solid var(--line);border-radius:16px;padding:18px 20px;background:var(--panel)}
+  .card{border:1px solid var(--line);border-radius:8px;padding:18px 20px;background:var(--panel)}
   .card h2{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin:0 0 14px;font-weight:700}
   .row{display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-top:1px solid var(--line);font-size:14px}
   .row:first-of-type{border-top:0}
   .row .k{color:var(--muted)}
   .row .v{font-family:var(--mono);font-size:13px}
   .pill{font-family:var(--mono);font-size:11px;padding:3px 9px;border-radius:999px;border:1px solid var(--line)}
-  .pill.ok{color:var(--ok);border-color:rgba(95,191,143,.35);background:rgba(95,191,143,.08)}
-  .pill.warn{color:var(--warn);border-color:rgba(227,179,65,.35);background:rgba(227,179,65,.08)}
-  .pill.bad{color:var(--bad);border-color:rgba(224,106,90,.35);background:rgba(224,106,90,.08)}
+  .pill.ok{color:var(--ok);border-color:rgba(52,211,153,.35);background:rgba(52,211,153,.08)}
+  .pill.warn{color:var(--warn);border-color:rgba(245,158,11,.35);background:rgba(245,158,11,.08)}
+  .pill.bad{color:var(--bad);border-color:rgba(248,113,113,.35);background:rgba(248,113,113,.08)}
   .pill.off{color:var(--muted)}
   .bars{display:flex;flex-wrap:wrap;gap:7px;margin-top:4px}
   .bar{font-family:var(--mono);font-size:11px;color:var(--muted);border:1px solid var(--line);border-radius:8px;padding:5px 9px;background:var(--panel2)}
   .bar b{color:var(--ink)}
-  .big{font-family:var(--mono);font-size:30px;letter-spacing:-.02em}
+  .big{font-family:var(--mono);font-size:30px;letter-spacing:0}
   .big .u{font-size:13px;color:var(--muted)}
   footer{margin-top:26px;color:var(--muted);font-size:12.5px;font-family:var(--mono);display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px}
-  a{color:var(--clay)}
-  .spin{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--clay);margin-left:8px;animation:p 1.4s ease-in-out infinite}
+  a{color:var(--accent-2)}
+  .spin{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--accent);margin-left:8px;animation:p 1.4s ease-in-out infinite}
   @keyframes p{0%,100%{opacity:.3}50%{opacity:1}}
 </style>
 </head>
 <body>
 <div class="wrap">
   <header>
-    <span class="mark"><svg viewBox="0 0 64 64" width="28" height="28" fill="none" aria-label="SuperMega"><g stroke="#D97757" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M35.8 10.3 A22 22 0 1 1 28.2 10.3"/><path d="M22 45 L22 26 L32 38 L42 26 L42 45" stroke-width="4"/></g><path d="M32 34.5 L33.2 37 L35.5 38 L33.2 39 L32 41.5 L30.8 39 L28.5 38 L30.8 37 Z" fill="#C9A24B"/><path d="M32 7.6 L32.9 9.7 L35 10.3 L32.9 10.9 L32 13 L31.1 10.9 L29 10.3 L31.1 9.7 Z" fill="#C9A24B"/></svg></span>
+    <span class="mark"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" aria-label="SuperMega"><path d="M6.5 8 L11 12 L6.5 16" stroke="#3B82F6" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M12.6 16.2 L18 16.2" stroke="#3B82F6" stroke-width="2.6" stroke-linecap="round"/></svg></span>
     <div class="brand"><b>SuperMega</b><span>Platform Status</span></div>
   </header>
 
@@ -102,7 +104,7 @@ async function load() {
     const ok = s.ok === true
     const color = ok ? 'var(--ok)' : 'var(--bad)'
     $('hero').querySelector('.dot').style.background = color
-    $('hero').querySelector('.dot').style.boxShadow = `0 0 0 4px ${ok ? 'rgba(95,191,143,.16)' : 'rgba(224,106,90,.16)'}`
+    $('hero').querySelector('.dot').style.boxShadow = `0 0 0 4px ${ok ? 'rgba(52,211,153,.16)' : 'rgba(248,113,113,.16)'}`
     $('headline').textContent = ok ? 'All systems operational' : 'Degraded — investigating'
     $('subline').textContent = `supermega-kernel · ${s.latency_ms ?? '?'}ms · ${s.db?.mode || '?'} spine`
 

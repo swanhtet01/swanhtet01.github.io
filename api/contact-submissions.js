@@ -324,13 +324,13 @@ function recommendedNextStep(record) {
 const solutionRouteCatalog = [
   {
     template_id: 'deskpos-quickstart',
-    package_name: 'DeskPOS Quickstart',
-    product_area: 'DeskPOS',
+    package_name: 'Shop Quickstart',
+    product_area: 'Shop',
     delivery_lane: 'pos_launch_workcell',
     keywords: ['pos', 'point of sale', 'restaurant', 'cafe', 'shop', 'store', 'retail', 'spa', 'salon', 'clinic', 'booking', 'checkout', 'receipt', 'inventory', 'stock'],
     first_proof_target: 'Working checkout, booking flow, receipt proof, and daily close insight on their starting catalog.',
     source_requests: ['service or product list', 'staff list', 'payment wallet name', 'opening hours'],
-    sales_motion: 'Sell a fixed-scope DeskPOS setup after one checkout or booking proof is accepted.',
+    sales_motion: 'Sell a fixed-scope Shop setup after one checkout or booking proof is accepted.',
   },
   {
     template_id: 'chat-ledger',
@@ -365,7 +365,7 @@ const solutionRouteCatalog = [
   {
     template_id: 'factory-ops-ledger',
     package_name: 'Factory Ops Ledger',
-    product_area: 'Factory & Operations App',
+    product_area: 'Plant',
     delivery_lane: 'factory_ops_workcell',
     keywords: ['factory', 'production', 'quality', 'maintenance', 'machine', 'line', 'plant', 'warehouse', 'receiving', 'capa', 'issue', 'defect'],
     first_proof_target: 'Dashboard showing production, quality claims, open issues, and the top risks to review today.',

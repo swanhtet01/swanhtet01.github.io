@@ -111,7 +111,7 @@ assert(
 )
 assert(
   status.product_setup_contracts.some((contract) => contract.product === 'Custom Solutions & AI Agents') &&
-    status.product_setup_contracts.some((contract) => contract.product === 'DeskPOS'),
+    status.product_setup_contracts.some((contract) => contract.product === 'Shop'),
   'checkout_contract_canonical_product_names_missing',
 )
 assert(!status.product_setup_contracts.some((contract) => contract.product === 'Custom Workflow App'), 'checkout_contract_retired_product_name_found')
