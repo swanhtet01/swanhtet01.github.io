@@ -6,6 +6,7 @@ const pages = {
   console: read('index.html'),
   status: read('status.html'),
 }
+const favicon = read('favicon.svg')
 
 const banned = /Fraunces|Georgia|#f7f4e[cd]|#c2603f|#D97757|#d9895f|#C9A24B|rgba\(217,137,95|--clay|--gold|radial-gradient|linear-gradient/i
 
@@ -19,11 +20,19 @@ for (const [name, html] of Object.entries(pages)) {
 
 assert.match(pages.console, /&gt;_<\/b>SuperMega/)
 assert.match(pages.status, /M6\.5 8 L11 12 L6\.5 16/)
+assert.match(pages.console, /href="\/favicon\.svg"/)
+assert.match(pages.status, /href="\/favicon\.svg"/)
+assert.match(favicon, /#07111f/i)
+assert.match(favicon, /#3B82F6/i)
+assert.doesNotMatch(favicon, banned)
+assert.match(pages.console, /function loadProtectedState\(\)/)
+assert.match(pages.console, /if\(!hasOpsKey\(\)\)\{renderLockedOverview\(\);return\}/)
+assert.doesNotMatch(pages.console, /refresh\(\);loadOverview\(\)\s*\n<\/script>/)
 
 console.log(
   JSON.stringify({
     ok: true,
     contract: 'kernel_void_electric_brand',
-    pages: Object.keys(pages),
+    pages: [...Object.keys(pages), 'favicon'],
   })
 )
