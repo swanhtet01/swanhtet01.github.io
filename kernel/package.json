@@ -3,7 +3,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test"
+    "test": "node --test",
+    "connector:resilience": "node ../tools/test_connector_resilience.mjs",
+    "verify": "npm test && npm run connector:resilience",
+    "deploy:prod": "npm run verify && npx vercel deploy --prod -y"
   },
   "dependencies": {
     "pg": "^8.13.1"
