@@ -5,10 +5,13 @@ defined intake into a defined output contract. Cost is decided at **design time*
 a gateway tier — not at runtime, so a crew's worst-case burn is knowable before it ever runs.
 
 Every crew is one file: `crews/{slug}.json`. The loader (`../crew-runner.mjs`) enumerates and
-validates them; `crew-runner.test.mjs` keeps the shipped definitions honest. There is **no
-execution plumbing yet** — that is deliberate. When execution lands it must route every model call
-through `gateway.complete()` with the role's tier and the tenant's `clientId` (so the plan gate and
-the cost-weighted cap apply), never the SDK directly.
+validates them; `crew-runner.test.mjs` keeps the shipped definitions honest. **Execution is live**
+(`../crew-run.mjs`): `runCrew(slug, intake, {clientId})` folds the roles through `gateway.complete()`
+with each role's tier and the tenant's `clientId` — so the plan gate, the cost-weighted cap, provider
+failover, and injection-stripping all apply, never the SDK directly. It enforces the `output_contract`
+(a missing field → `crew_contract_violation`) and has **no send/write/pay** capability: it drafts and
+returns `blocked_actions`/`approval_queue` as data — the approve → act gate stays with the human.
+Adversarially gated by `../../tools/test_crew_resilience.mjs` (wired into `verify` + CI).
 
 ## Schema
 
@@ -76,9 +79,32 @@ await listCrews()                 // every valid crew in this directory (bad fil
 validateCrew(def, { slug })       // pure — returns [] when valid, else human-readable errors
 ```
 
+## Run · forge · install · serve — the full loop
+
+```js
+import { runCrew } from '../crew-run.mjs'
+await runCrew('read-my-chaos', intakeText, { clientId })   // → { ok, output, usageByRole, trace }
+
+import { buildCrewFromSpec, forgeCrewFromDescription } from '../crew-forge.mjs'
+buildCrewFromSpec(spec)                        // tiny spec → GUARANTEED-valid crew def (compiler, not a model)
+await forgeCrewFromDescription(text, { model }) // a sentence → a valid crew (AI drafts the spec; compiler guarantees the rest)
+
+import { installCrewFromSpec } from '../crew-install.mjs'
+await installCrewFromSpec(spec)                // writes crews/<slug>.json → auto-enumerated + gate-checked + live
+```
+
+HTTP (`../api/crew.mjs`, LIVE at `console.supermega.dev/api/crew`):
+- `GET  /api/crew` → the catalog (public product metadata: slug, roles, tiers, accepts, returns, bright-line flag)
+- `POST /api/crew { slug, intake, clientId? }` → runs one (ops-gated, `x-ops-key`; goes through `runCrew`)
+
+Adding a task is: **write or forge one JSON → it's registered, gated, runnable, and served.**
+
 ## Shipped crews
 
 | slug | plan | what it does |
 |---|---|---|
+| `read-my-chaos` | all | own-account inbox/chat exports → structured ledgers + operator brief; bright line embedded |
+| `chase-the-money` | all | own-account threads + POS ledger → unpaid balances (MMK) + drafted reminders in the customer's language; drafts only, bright line |
+| `daily-operator-brief` | all | any trade's day numbers → actions ranked by money-at-stake + tomorrow's risk |
 | `reconcile-premium` | pro | MMQR/KBZPay/WavePay ↔ POS reconciliation with LIVE intra-day shortfall flagging by staff/shift; free tier keeps the end-of-day close |
-| `read-my-chaos` | (all) | own-account inbox/chat exports → structured ledgers + operator brief; bright-line flags embedded |
+| `source-to-screen-pilot` | pilot | the paid upgrade from a free browser-only draft → one source-traced first proof + owner approval queue |
