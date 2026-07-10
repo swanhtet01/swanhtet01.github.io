@@ -5,7 +5,8 @@
   "scripts": {
     "test": "node --test",
     "connector:resilience": "node ../tools/test_connector_resilience.mjs",
-    "verify": "npm test && npm run connector:resilience",
+    "crew:resilience": "node ../tools/test_crew_resilience.mjs",
+    "verify": "npm test && npm run connector:resilience && npm run crew:resilience",
     "deploy:prod": "npm run verify && npx vercel deploy --prod -y"
   },
   "dependencies": {

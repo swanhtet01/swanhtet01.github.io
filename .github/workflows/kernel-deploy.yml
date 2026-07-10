@@ -43,6 +43,9 @@ jobs:
       - name: Connector resilience gate
         run: node tools/test_connector_resilience.mjs
 
+      - name: Crew resilience gate
+        run: node tools/test_crew_resilience.mjs
+
       - name: Deploy kernel to Vercel production
         if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
         working-directory: kernel
