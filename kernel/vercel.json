@@ -7,7 +7,8 @@
     "api/wavepay-notify.mjs": { "maxDuration": 10 },
     "api/status.mjs": { "maxDuration": 10 },
     "api/operator.mjs": { "maxDuration": 45 },
-    "api/brief.mjs": { "maxDuration": 45 }
+    "api/brief.mjs": { "maxDuration": 45 },
+    "api/crew.mjs": { "maxDuration": 45 }
   },
   "crons": [
     { "path": "/api/brief", "schedule": "30 1 * * *" }
@@ -19,6 +20,7 @@
     { "src": "/api/status", "dest": "/api/status" },
     { "src": "/api/operator", "dest": "/api/operator" },
     { "src": "/api/brief", "dest": "/api/brief" },
+    { "src": "/api/crew", "dest": "/api/crew" },
     { "src": "/api/(.*)", "dest": "/api/index" },
     { "src": "/status", "dest": "/status.html" },
     { "src": "/(.*)", "dest": "/public/$1" }
