@@ -12,6 +12,7 @@ broader system boundaries.
 | `connectors/` | Fixed-host provider adapters with health and resilience contracts | 69 live |
 | `tools.mjs` + `api/operator.mjs` | Bounded read tools and grounded operations agent | live |
 | `workcells.mjs` + `workcell-run.mjs` | Cash Close, Pipeline Control, and Owner Command products | live |
+| `approval-actions.mjs` + `api/approvals.mjs` | Immutable owner approval and idempotent ClickUp execution | live |
 | `crews/` + `crew-run.mjs` | Contract-enforced, draft-only multi-role tasks | 5 live |
 | `public/` + `api/` | Ops console, status, workcell activation, and scheduled delivery | live |
 
@@ -55,11 +56,19 @@ environment contract, and activation proof.
 - `SUPERMEGA_CLIENT_TOKEN_CAP` for the monthly client ceiling; default 150,000 weighted tokens.
 - `SUPERMEGA_CLIENT_CAP_SOFT_RATIO` for pre-cap tier downgrade; default `0.8`.
 
+## Action Approval
+
+Pipeline Control and Owner Command can explicitly queue one ClickUp task draft. The agent never
+receives a write tool. The owner reviews the exact list, task name, description, marker, and payload
+fingerprint in the Approval Inbox, approves the frozen payload, and executes it in a separate step.
+Execution uses a compare-and-swap lease plus a visible provider marker; an uncertain response stays
+in recovery instead of being retried blindly.
+
 ## Honest Limits
 
 - Client connector secrets are isolated per Vercel project, not stored in a shared multi-tenant vault.
-- Workcells read and draft only. Customer sends, record changes, refunds, and payments require a
-  separate approval and idempotency layer.
+- ClickUp task creation is the only approval-backed write. Customer sends, other record changes,
+  refunds, and payments remain unavailable.
 - The token cap can modestly overshoot under highly concurrent calls because storage updates are not
   a database-side atomic increment in every store mode.
 - The default cron is one daily UTC schedule. Each isolated client deployment sets its own UTC time.
@@ -68,6 +77,6 @@ environment contract, and activation proof.
 
 1. Bootstrap the dedicated client data spine with `supabase/workcell-client.sql`, then use
    `npm run workcell:provision` to plan or apply its isolated Vercel project.
-2. Add an approval inbox before any write-capable connector action.
+2. Apply the four-table workcell schema before enabling action drafts for a client.
 3. Move from one cron per client deployment to a durable scheduler when a shared control plane is
    justified by real client volume.

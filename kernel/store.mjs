@@ -51,6 +51,7 @@ async function ensurePgTables() {
     create table if not exists supermega_console_activity (id text primary key, at timestamptz default now(), kind text, summary text, ref text);
     create table if not exists supermega_token_ledger (tenant_id text not null, "window" text not null, in_tokens bigint default 0, out_tokens bigint default 0, calls bigint default 0, updated_at timestamptz default now(), primary key (tenant_id, "window"));
     create table if not exists supermega_ai_cache (cache_key text primary key, payload jsonb not null, created_at timestamptz default now());
+    create table if not exists supermega_action_queue (id text primary key, client_id text not null, action_type text not null, title text not null, payload jsonb not null, payload_hash text not null, source jsonb not null default '{}'::jsonb, status text not null default 'draft', version int not null default 0, approved_by text, approved_at timestamptz, rejected_by text, rejected_at timestamptz, executing_at timestamptz, lease_expires_at timestamptz, attempts int not null default 0, provider_ref text, result jsonb, last_error text, executed_at timestamptz, created_at timestamptz not null default now(), updated_at timestamptz not null default now(), constraint supermega_action_queue_status check (status in ('draft','approved','executing','succeeded','failed','rejected')));
     create table if not exists supermega_graduation (signature text primary key, label text, count int not null default 1, sources jsonb default '[]'::jsonb, modules jsonb default '[]'::jsonb, productized boolean not null default false, graduated_at timestamptz, updated_at timestamptz default now());
     create table if not exists supermega_build_modules (id text primary key, project_id text, signature text, modules jsonb default '[]'::jsonb, shipped_at timestamptz default now());
     create table if not exists supermega_payment_events (provider text not null, event_id text not null, project_ref text, amount_total bigint, currency text, at timestamptz default now(), primary key (provider, event_id));
@@ -59,7 +60,7 @@ async function ensurePgTables() {
 }
 
 // ---------- in-memory fallback ----------
-const mem = { lead: new Map(), client: new Map(), project: new Map(), deal: new Map(), activity: new Map(), tokenLedger: new Map(), aiCache: new Map(), graduation: new Map(), buildModules: new Map(), paymentEvents: new Set() }
+const mem = { lead: new Map(), client: new Map(), project: new Map(), deal: new Map(), activity: new Map(), tokenLedger: new Map(), aiCache: new Map(), approval: new Map(), graduation: new Map(), buildModules: new Map(), paymentEvents: new Set() }
 const memSort = (rows) => rows.sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))
 
 // ---------- leads (real supermega_leads) ----------
@@ -382,6 +383,114 @@ export async function putCachedResponse(cacheKey, payload) {
   return true
 }
 
+// ---------- approval queue ----------
+// State changes are compare-and-swap updates on status + version. Provider credentials never enter
+// these rows; payload contains only the exact owner-reviewed action arguments.
+
+const APPROVAL_PATCH_FIELDS = new Set([
+  'status', 'approved_by', 'approved_at', 'rejected_by', 'rejected_at',
+  'executing_at', 'lease_expires_at', 'attempts', 'provider_ref', 'result',
+  'last_error', 'executed_at',
+])
+
+export async function createApprovalRecord(input) {
+  const now = new Date().toISOString()
+  const row = {
+    id: String(input.id),
+    client_id: String(input.client_id),
+    action_type: String(input.action_type),
+    title: String(input.title),
+    payload: input.payload,
+    payload_hash: String(input.payload_hash),
+    source: input.source || {},
+    status: 'draft',
+    version: 0,
+    attempts: 0,
+    created_at: now,
+    updated_at: now,
+  }
+  if (mode === 'supabase') return (await rest('POST', 'supermega_action_queue', row))[0] || null
+  if (mode === 'postgres') {
+    await ensurePgTables()
+    const rows = await q(
+      `insert into supermega_action_queue
+       (id,client_id,action_type,title,payload,payload_hash,source,status,version,attempts,created_at,updated_at)
+       values ($1,$2,$3,$4,$5,$6,$7,'draft',0,0,$8,$8) returning *`,
+      [row.id, row.client_id, row.action_type, row.title, JSON.stringify(row.payload), row.payload_hash, JSON.stringify(row.source), now],
+    )
+    return rows[0] || null
+  }
+  if (mem.approval.has(row.id)) throw new Error('approval_id_conflict')
+  mem.approval.set(row.id, row)
+  return { ...row }
+}
+
+export async function getApprovalRecord(id) {
+  const key = String(id || '').trim()
+  if (!key) return null
+  if (mode === 'supabase') return (await rest('GET', `supermega_action_queue?id=eq.${encodeURIComponent(key)}&limit=1`))[0] || null
+  if (mode === 'postgres') {
+    await ensurePgTables()
+    return (await q('select * from supermega_action_queue where id=$1 limit 1', [key]))[0] || null
+  }
+  const row = mem.approval.get(key)
+  return row ? { ...row } : null
+}
+
+export async function listApprovalRecords({ status, clientId, limit = 100 } = {}) {
+  const bounded = Math.max(1, Math.min(200, Number(limit) || 100))
+  if (mode === 'supabase') {
+    const filters = []
+    if (status) filters.push(`status=eq.${encodeURIComponent(status)}`)
+    if (clientId) filters.push(`client_id=eq.${encodeURIComponent(clientId)}`)
+    return rest('GET', `supermega_action_queue?order=created_at.desc&limit=${bounded}${filters.length ? `&${filters.join('&')}` : ''}`)
+  }
+  if (mode === 'postgres') {
+    await ensurePgTables()
+    const clauses = []
+    const params = []
+    if (status) { params.push(status); clauses.push(`status=$${params.length}`) }
+    if (clientId) { params.push(clientId); clauses.push(`client_id=$${params.length}`) }
+    params.push(bounded)
+    return q(`select * from supermega_action_queue ${clauses.length ? `where ${clauses.join(' and ')}` : ''} order by created_at desc limit $${params.length}`, params)
+  }
+  let rows = [...mem.approval.values()]
+  if (status) rows = rows.filter((row) => row.status === status)
+  if (clientId) rows = rows.filter((row) => row.client_id === clientId)
+  return memSort(rows.map((row) => ({ ...row }))).slice(0, bounded)
+}
+
+export async function transitionApprovalRecord(id, expectedStatus, expectedVersion, inputPatch = {}) {
+  const key = String(id || '').trim()
+  const version = Number(expectedVersion)
+  if (!key || !expectedStatus || !Number.isInteger(version) || version < 0) return null
+  const patch = {}
+  for (const [name, value] of Object.entries(inputPatch)) {
+    if (APPROVAL_PATCH_FIELDS.has(name)) patch[name] = value
+  }
+  patch.version = version + 1
+  patch.updated_at = new Date().toISOString()
+  if (mode === 'supabase') {
+    const path = `supermega_action_queue?id=eq.${encodeURIComponent(key)}&status=eq.${encodeURIComponent(expectedStatus)}&version=eq.${version}`
+    return (await rest('PATCH', path, patch))[0] || null
+  }
+  if (mode === 'postgres') {
+    await ensurePgTables()
+    const entries = Object.entries(patch)
+    const set = entries.map(([name], index) => `${name}=$${index + 4}`).join(', ')
+    const rows = await q(
+      `update supermega_action_queue set ${set} where id=$1 and status=$2 and version=$3 returning *`,
+      [key, expectedStatus, version, ...entries.map(([, value]) => value && typeof value === 'object' ? JSON.stringify(value) : value)],
+    )
+    return rows[0] || null
+  }
+  const current = mem.approval.get(key)
+  if (!current || current.status !== expectedStatus || Number(current.version) !== version) return null
+  const next = { ...current, ...patch }
+  mem.approval.set(key, next)
+  return { ...next }
+}
+
 // ---------- graduation flywheel (auto: 3rd repeat of a request signature → productize) ----------
 // supermega_graduation: one row per normalized request signature; count grows as deals/builds repeat it.
 // supermega_build_modules: the modules of each shipped project (the "what we actually built" record).
@@ -514,4 +623,4 @@ export async function ping() {
   return { ok: false, mode, detail: 'unknown_mode' }
 }
 
-export default { mode, listLeads, getLead, insertLead, updateLead, listClients, listProjects, createClient, getClient, createProject, updateProject, getProject, markDepositPaid, convertedLeadIds, saveDeal, listDeals, updateDeal, logActivity, claimActivity, releaseActivityClaim, listActivity, getTokenUsage, addTokenUsage, getCachedResponse, putCachedResponse, recordPaymentEvent, ping, bumpGraduation, recordBuildModules, listGraduation }
+export default { mode, listLeads, getLead, insertLead, updateLead, listClients, listProjects, createClient, getClient, createProject, updateProject, getProject, markDepositPaid, convertedLeadIds, saveDeal, listDeals, updateDeal, logActivity, claimActivity, releaseActivityClaim, listActivity, getTokenUsage, addTokenUsage, getCachedResponse, putCachedResponse, createApprovalRecord, getApprovalRecord, listApprovalRecords, transitionApprovalRecord, recordPaymentEvent, ping, bumpGraduation, recordBuildModules, listGraduation }

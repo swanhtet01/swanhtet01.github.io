@@ -1,7 +1,7 @@
 # Operator Workcells
 
 A workcell is the sellable runtime unit above connectors: fixed owned-account reads, one structured
-owner output, optional owner-channel delivery, and no customer-facing send/write/pay capability.
+owner output, optional owner-channel delivery, and one bounded owner-approved ClickUp action.
 
 ## Products
 
@@ -13,6 +13,21 @@ owner output, optional owner-channel delivery, and no customer-facing send/write
 
 The runtime executes the declared reads directly. A model does not choose or expand the tool plan.
 If one required source is unavailable, the workcell stops before synthesis.
+
+## Approval-Backed Action
+
+`pipeline-control` and `owner-command` can set `queueAction:true` on an explicit console/API run.
+That creates a draft only. It does not call ClickUp.
+
+1. Review the exact ClickUp list, task name, description, execution marker, and payload fingerprint
+   in the Approval Inbox.
+2. Approve the immutable payload.
+3. Separately execute the approved payload.
+4. If the provider response is lost, wait for the two-minute lease and use recovery. Recovery searches
+   the bounded task list for the unique marker before it can re-arm the same payload.
+
+The ClickUp create capability is not registered as an agent tool. No other connector write, message,
+refund, payment, or record mutation is available through this approval executor.
 
 ## Client Isolation
 
@@ -55,8 +70,10 @@ fails closed without durable storage, so duplicate cron events cannot send the o
 
 1. `GET /api/workcells` with `x-ops-key` reports all required configuration as present.
 2. `POST /api/workcells {"slug":"owner-command","deliver":false}` proves provider access and returns a structured preview.
-3. Repeat with `deliver:true` and confirm one owner-channel message.
-4. Trigger the scheduled route twice for the same local date and confirm the second result is
+3. Repeat with `queueAction:true`, verify one draft in `GET /api/approvals`, approve it, then execute it
+   only against a client-owned test ClickUp list.
+4. Repeat with `deliver:true` and confirm one owner-channel message.
+5. Trigger the scheduled route twice for the same local date and confirm the second result is
    `duplicate:true` with no second message.
 
 The default production cron remains `01:30 UTC` (08:00 Myanmar). Because each client has an isolated
@@ -77,7 +94,7 @@ confirmation. It never prints values.
 
 Before apply, create a dedicated Supabase project for the customer and run
 `supabase/workcell-client.sql` in its SQL editor. The bootstrap creates only the durable delivery
-claim, token ledger, and AI cache tables required by the workcells. It enables RLS, removes
+claim, token ledger, AI cache, and action-queue tables required by the workcells. It enables RLS, removes
 `anon`/`authenticated` access, and grants access only to the Supabase service role.
 
 Apply only after loading the plan's exact `SUPERMEGA_NEW_CLIENT_*` inputs into the current process
@@ -88,7 +105,7 @@ npm run workcell:provision -- --apply --manifest <client.json> --scope <vercel-t
 ```
 
 Apply refuses dirty source and an existing project by default. `--allow-existing` is the explicit
-upgrade path. Before touching Vercel, it checks all three required tables in the dedicated Supabase
+upgrade path. Before touching Vercel, it checks all four required tables in the dedicated Supabase
 project, inserts the same claim twice to prove duplicate suppression, and deletes the temporary
 probe. Every environment value is then piped to Vercel over stdin, never placed in command
 arguments. The provisioner copies the clean kernel to an isolated temporary directory, patches only
