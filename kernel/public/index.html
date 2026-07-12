@@ -79,6 +79,17 @@
   .workcell-output h3{font-size:18px;margin-bottom:8px}.workcell-output .metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:8px;margin:12px 0}
   .workcell-output .metric{border-top:1px solid var(--line);padding-top:8px}.workcell-output .metric b{display:block}.workcell-output .metric small{color:var(--muted)}
   .workcell-output ol{padding-left:22px}.workcell-output li{margin:8px 0}.workcell-output .owner-action{border-left:3px solid var(--accent);padding:9px 12px;background:var(--accent-soft)}
+  .workcell-toolbar{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:14px}.workcell-toolbar h2{font-size:20px}.workcell-toolbar button{min-height:44px;white-space:nowrap}
+  .activation{border:1px solid rgba(59,130,246,.32);border-radius:8px;background:rgba(59,130,246,.055);padding:18px;margin-bottom:16px}
+  .activation-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;margin-bottom:16px}.activation-head h3{font-size:17px}.activation-head .badge{display:inline-block;margin-top:6px}
+  .activation-close{width:44px;height:44px;padding:0;font-size:22px;line-height:1}.activation-fields{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+  .activation-fields .field{margin:0}.activation-fields input,.activation-fields select{min-height:44px}.activation-actions{display:flex;align-items:center;gap:12px;margin-top:16px}.activation-actions button{min-height:44px}
+  .activation-result{border-top:1px solid var(--line);margin-top:18px;padding-top:18px;scroll-margin-top:120px}.activation-summary{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
+  .activation-output{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(260px,.85fr);gap:18px}.activation-output h4{font-family:Inter,sans-serif;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:0 0 8px}
+  .activation-code{display:block;min-height:96px;max-height:290px;margin:0;padding:13px;border:1px solid var(--line);border-radius:8px;background:var(--deep);color:var(--ink);overflow:auto;white-space:pre-wrap;word-break:break-word;font:12px/1.55 Consolas,"Courier New",monospace}
+  .activation-commands{display:grid;gap:8px;margin-top:12px}.activation-command{padding:10px 12px;border-left:3px solid var(--accent);background:var(--deep);overflow:auto;white-space:nowrap;font:12px/1.5 Consolas,"Courier New",monospace}
+  .activation-inputs{display:grid;gap:7px}.activation-inputs code{display:block;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--deep);font-size:11px;overflow-wrap:anywhere}
+  .activation-result .row{margin-top:12px}.activation-result .row button{min-height:44px}
   .loading-pulse{color:var(--muted);font-size:13px;padding:24px 0;text-align:center;animation:pulse 1.2s ease-in-out infinite}
   @keyframes pulse{0%,100%{opacity:.5}50%{opacity:1}}
   .err-banner{background:rgba(248,113,113,.09);border:1px solid rgba(248,113,113,.35);border-radius:8px;padding:14px 16px;color:var(--bad);font-size:13px}
@@ -86,7 +97,10 @@
     header{display:grid;grid-template-columns:max-content max-content minmax(0,1fr);gap:8px 10px;padding:12px 16px}
     .brand{grid-column:1/-1;white-space:nowrap}.grow{display:none}.key{grid-column:1/-1;max-width:none}
     nav{padding:14px 16px 0}main{padding:18px 16px 70px}
-    .cols{grid-template-columns:1fr}.two{grid-template-columns:1fr}
+    .cols{grid-template-columns:1fr}.two{grid-template-columns:1fr}.activation-fields{grid-template-columns:repeat(2,minmax(0,1fr))}.activation-output{grid-template-columns:1fr}
+  }
+  @media(max-width:520px){
+    .workcell-toolbar{align-items:stretch;flex-direction:column}.workcell-toolbar button{width:100%}.activation{padding:15px}.activation-fields{grid-template-columns:1fr}.activation-actions{align-items:stretch;flex-direction:column}.activation-actions button{width:100%}
   }
 </style>
 </head>
@@ -124,6 +138,38 @@
   </section>
 
   <section id="view-workcells" hidden>
+    <div class="workcell-toolbar">
+      <div><h2>Operator workcells</h2><div class="muted">Cash, pipeline, and owner command</div></div>
+      <button class="primary" id="activationOpen" type="button">New client plan</button>
+    </div>
+    <div class="activation" id="activationPanel" hidden>
+      <div class="activation-head">
+        <div><h3>Client activation</h3><span class="badge">no secret fields</span></div>
+        <button class="activation-close" id="activationClose" type="button" aria-label="Close client activation" title="Close">×</button>
+      </div>
+      <form id="activationForm">
+        <div class="activation-fields">
+          <div class="field"><label for="activationClientName">Client name</label><input id="activationClientName" autocomplete="organization" required /></div>
+          <div class="field"><label for="activationClientSlug">Deployment slug</label><input id="activationClientSlug" autocomplete="off" pattern="[a-z0-9][a-z0-9\-]{1,39}" required /></div>
+          <div class="field"><label for="activationWorkcell">Workcell</label><select id="activationWorkcell"><option value="owner-command">Owner Command</option><option value="cash-close">Cash Close</option><option value="pipeline-control">Pipeline Control</option></select></div>
+          <div class="field" id="activationClickupField"><label for="activationClickup">ClickUp List ID</label><input id="activationClickup" inputmode="numeric" pattern="[0-9]{1,32}" required /></div>
+          <div class="field"><label for="activationTimeZone">Time zone</label><input id="activationTimeZone" value="Asia/Yangon" required /></div>
+          <div class="field"><label for="activationCurrency">Currency</label><input id="activationCurrency" value="MMK" maxlength="8" required /></div>
+          <div class="field"><label for="activationDelivery">Daily delivery (UTC)</label><input id="activationDelivery" type="time" value="01:30" required /></div>
+          <div class="field"><label for="activationLookback">Lookback hours</label><input id="activationLookback" type="number" min="1" max="168" value="24" required /></div>
+          <div class="field"><label for="activationScope">Vercel scope</label><input id="activationScope" value="swanhtet01s-projects" autocomplete="off" required /></div>
+        </div>
+        <div class="activation-actions"><button class="primary" id="activationGenerate" type="submit">Generate activation plan</button><span class="muted" id="activationState" role="status" aria-live="polite"></span></div>
+      </form>
+      <div class="activation-result" id="activationResult" hidden>
+        <div class="activation-summary" id="activationSummary"></div>
+        <div class="activation-output">
+          <div><h4>Client manifest</h4><pre class="activation-code" id="activationManifest"></pre><div class="activation-commands"><code class="activation-command" id="activationPlanCommand"></code><code class="activation-command" id="activationApplyCommand"></code></div></div>
+          <div><h4>Credential inputs</h4><div class="activation-inputs" id="activationInputs"></div></div>
+        </div>
+        <div class="row"><button type="button" id="activationCopyManifest">Copy manifest</button><button type="button" id="activationDownloadManifest">Download manifest</button><button type="button" id="activationCopyInputs">Copy input list</button></div>
+      </div>
+    </div>
     <div id="workcellGrid" class="workcell-grid"><div class="loading-pulse">Loading workcells...</div></div>
     <div id="workcellOut" class="workcell-output" role="status" aria-live="polite"></div>
   </section>
@@ -421,6 +467,75 @@ const WORKCELL_MISSING={
   'tool:work_tasks_read':'Connect ClickUp',
   'input:WORKCELL_CLICKUP_LIST_ID':'Choose a ClickUp list',
   unknown_workcell:'Unknown workcell'
+}
+let activationSlugEdited=false, activationManifest=null, activationPlan=null
+const activationSlug=(value)=>{
+  const slug=String(value||'').toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,40)
+  return slug.length>1?slug:'client'
+}
+function syncActivationInputs(){
+  const needsClickUp=$('#activationWorkcell').value!=='cash-close'
+  $('#activationClickupField').hidden=!needsClickUp
+  $('#activationClickup').required=needsClickUp
+  $('#activationClickup').disabled=!needsClickUp
+}
+async function copyActivationText(value,message){
+  try{await navigator.clipboard.writeText(value);toast(message)}
+  catch{
+    const area=document.createElement('textarea');area.value=value;area.style.position='fixed';area.style.opacity='0';document.body.appendChild(area);area.select();document.execCommand('copy');area.remove();toast(message)
+  }
+}
+function renderActivationPlan(response){
+  activationManifest=response.manifest
+  activationPlan=response.plan
+  const manifestText=JSON.stringify(activationManifest,null,2)
+  const fileName=`${activationManifest.clientSlug}.json`
+  const manifestPath=`workcells/${fileName}`
+  const planCommand=`npm run workcell:provision -- --manifest ${manifestPath} --scope ${activationPlan.scope}`
+  const applyCommand=`npm run workcell:provision -- --apply --manifest ${manifestPath} --scope ${activationPlan.scope} --confirm "${activationPlan.confirmation}"`
+  $('#activationManifest').textContent=manifestText
+  $('#activationPlanCommand').textContent=`Plan: ${planCommand}`
+  $('#activationApplyCommand').textContent=`Apply: ${applyCommand}`
+  $('#activationInputs').innerHTML=(activationPlan.requiredSecretInputs||[]).map(name=>`<code>${esc(name)}</code>`).join('')
+  $('#activationSummary').innerHTML=`<span class="badge on">plan ready</span><span class="badge">${esc(activationPlan.projectName)}</span><span class="badge">${esc(activationPlan.cron.utc)} UTC daily</span><span class="badge">${esc(activationPlan.workcells.join(', '))}</span>`
+  $('#activationResult').hidden=false
+  $('#activationState').textContent='Plan ready'
+  $('#activationResult').scrollIntoView({behavior:'smooth',block:'nearest'})
+}
+$('#activationOpen').onclick=()=>{$('#activationPanel').hidden=false;syncActivationInputs();$('#activationClientName').focus()}
+$('#activationClose').onclick=()=>{$('#activationPanel').hidden=true;$('#activationOpen').focus()}
+$('#activationClientName').addEventListener('input',event=>{if(!activationSlugEdited)$('#activationClientSlug').value=activationSlug(event.currentTarget.value)})
+$('#activationClientSlug').addEventListener('input',()=>{activationSlugEdited=true})
+$('#activationWorkcell').addEventListener('change',syncActivationInputs)
+$('#activationForm').addEventListener('submit',async event=>{
+  event.preventDefault()
+  if(!event.currentTarget.reportValidity())return
+  const button=$('#activationGenerate');button.disabled=true;button.textContent='Generating...';$('#activationState').textContent='Validating client boundary...'
+  const selected=$('#activationWorkcell').value
+  const manifest={
+    version:1,
+    clientSlug:$('#activationClientSlug').value.trim(),
+    clientName:$('#activationClientName').value.trim(),
+    workcells:[selected],
+    timeZone:$('#activationTimeZone').value.trim(),
+    currency:$('#activationCurrency').value.trim(),
+    lookbackHours:Number($('#activationLookback').value),
+    clickupListId:selected==='cash-close'?'':$('#activationClickup').value.trim(),
+    deliveryUtc:$('#activationDelivery').value,
+  }
+  try{
+    const response=await api('POST','/api/workcell-plan',{scope:$('#activationScope').value.trim(),manifest})
+    if(!response.ok){$('#activationState').textContent=response.reason||'Plan failed';return}
+    renderActivationPlan(response)
+  }catch(error){$('#activationState').textContent=String(error.message||'Network error').slice(0,120)}
+  finally{button.disabled=false;button.textContent='Generate activation plan'}
+})
+$('#activationCopyManifest').onclick=()=>activationManifest&&copyActivationText(JSON.stringify(activationManifest,null,2),'Manifest copied')
+$('#activationCopyInputs').onclick=()=>activationPlan&&copyActivationText((activationPlan.requiredSecretInputs||[]).join('\n'),'Input list copied')
+$('#activationDownloadManifest').onclick=()=>{
+  if(!activationManifest)return
+  const blob=new Blob([`${JSON.stringify(activationManifest,null,2)}\n`],{type:'application/json'})
+  const url=URL.createObjectURL(blob);const link=document.createElement('a');link.href=url;link.download=`${activationManifest.clientSlug}.json`;link.click();setTimeout(()=>URL.revokeObjectURL(url),0)
 }
 function renderWorkcellOutput(r){
   const out=$('#workcellOut')
