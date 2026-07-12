@@ -83,7 +83,8 @@ async function writeTextFileEnsuringDir(destination, content) {
 }
 
 function normalizePublicProductNames(content) {
-  return String(content)
+  return canonFounderLockedProductNames(
+    String(content)
     .replaceAll(legacyInitialsMarkHtml, signalMarkHtml)
     .replace(/\.mark \{([^}]*)\}/g, '.mark {$1}.mark img { width: 100%; height: 100%; display: block; border-radius: inherit; }')
     .replace(/Back Office Back Office Workflow Desk/g, 'Back Office Workflow Desk')
@@ -122,6 +123,22 @@ function normalizePublicProductNames(content) {
     .replace(/\/site\/shots\/product-factory-maintenance-quality-app\.svg|\/site\/shots\/product-factory-operations-app\.svg|\/site\/shots\/product-factory-issue-maintenance-tracker\.svg/g, '/site/shots/product-factory-issues-maintenance-quality.svg')
     .replace(/\/site\/shots\/product-restaurant-pos-inventory-app\.svg|\/site\/shots\/product-restaurant-pos-app\.svg|\/site\/shots\/product-restaurant-pos-stock-tracker\.svg/g, '/site/shots/product-restaurant-pos-menu-inventory.svg')
     .replace(/Back Office (?:Back Office )+Workflow Desk/g, 'Back Office Workflow Desk')
+  )
+}
+
+// Terminal product-name canon (founder-locked 2026-07-10): collapse every retired display
+// name — including the intermediate targets produced by normalizePublicProductNames above —
+// to the two founder-locked names Shop (the counter app; was DeskPOS / Retail OS / Restaurant
+// POS + Inventory) and Plant (operations/ERP; was Factory OS / Factory Operations App).
+// Touches only human-readable display strings, never lowercase slugs / ids / query params, so
+// it is safe to apply to raw-copied pages (e.g. the demo hub) without breaking their routing.
+function canonFounderLockedProductNames(content) {
+  return String(content)
+    .replace(/Restaurant POS \+ Inventory|Restaurant POS and Inventory/g, 'Shop')
+    .replace(/\bRetail OS\b/g, 'Shop')
+    .replace(/Factory Operations App|Factory & Operations App/g, 'Plant')
+    .replace(/\bFactory OS\b/g, 'Plant')
+    .replace(/\bDeskPOS\b/g, 'Shop')
 }
 
 const publicShellHtml = `<!doctype html>
@@ -6337,7 +6354,13 @@ await mkdir(resolve(staticDir, 'machine'), { recursive: true })
 await writeFile(resolve(staticDir, 'machine', 'index.html'), normalizePublicProductNames(publicMachineHtml), 'utf8')
 // Demo hub (source lives in C:/sm-site, outside OneDrive) served at /demo/
 await mkdir(resolve(staticDir, 'demo'), { recursive: true })
-await cp('C:/sm-site/supermega-demo/index.html', resolve(staticDir, 'demo', 'index.html'), { force: true }).catch(() => undefined)
+// The demo hub is a separate lane's artifact (supermega-demo); copy it verbatim EXCEPT run it
+// through the founder-locked display-name canon so the bundled /demo/ page can't regress to
+// retired product names (DeskPOS etc.). Only display strings are touched, never the demo app's
+// own lowercase slugs / query params, so its routing stays intact.
+await readFile('C:/sm-site/supermega-demo/index.html', 'utf8')
+  .then((demoHtml) => writeFile(resolve(staticDir, 'demo', 'index.html'), canonFounderLockedProductNames(demoHtml), 'utf8'))
+  .catch(() => undefined)
 await cp('C:/sm-site/supermega-demo/favicon.svg', resolve(staticDir, 'demo', 'favicon.svg'), { force: true }).catch(() => undefined)
 await writeFile(resolve(staticDir, 'robots.txt'), 'User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /app/\nDisallow: /clients/\nDisallow: /machine/\nSitemap: https://supermega.dev/sitemap.xml\n', 'utf8')
 await writeFile(resolve(staticDir, 'sitemap.xml'), '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url><loc>https://supermega.dev/</loc><changefreq>weekly</changefreq><priority>1.0</priority></url>\n  <url><loc>https://supermega.dev/products/</loc><changefreq>weekly</changefreq><priority>0.9</priority></url>\n  <url><loc>https://supermega.dev/offers/</loc><changefreq>weekly</changefreq><priority>0.95</priority></url>\n  <url><loc>https://supermega.dev/work/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>\n  <url><loc>https://supermega.dev/contact/</loc><changefreq>monthly</changefreq><priority>0.9</priority></url>\n  <url><loc>https://supermega.dev/card/</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>\n</urlset>\n', 'utf8')
