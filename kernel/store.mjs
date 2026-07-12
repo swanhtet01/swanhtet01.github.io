@@ -501,7 +501,14 @@ export async function recordPaymentEvent(provider, eventId, meta = {}) {
 export async function ping() {
   if (mode === 'memory') return { ok: true, mode, detail: 'in-memory (no external DB)' }
   try {
-    if (mode === 'supabase') { await rest('GET', 'supermega_leads?select=lead_id&limit=1'); return { ok: true, mode } }
+    if (mode === 'supabase') {
+      const workcellMode = Boolean(String(process.env.SUPERMEGA_WORKCELL_SLUGS || process.env.SUPERMEGA_WORKCELL_SLUG || '').trim())
+      const probe = workcellMode
+        ? 'supermega_console_activity?select=id&limit=1'
+        : 'supermega_leads?select=lead_id&limit=1'
+      await rest('GET', probe)
+      return { ok: true, mode }
+    }
     if (mode === 'postgres') { await q('select 1'); return { ok: true, mode } }
   } catch (e) { return { ok: false, mode, detail: String((e && e.message) || 'ping_failed').slice(0, 120) } }
   return { ok: false, mode, detail: 'unknown_mode' }
