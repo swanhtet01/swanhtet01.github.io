@@ -11,6 +11,8 @@ const mmk = (raw) => {
   return /MMK/i.test(value) ? value : `${value} MMK`
 }
 const serviceMmk = (key) => mmk(pricingServiceByKey[key]?.mmk)
+const pricingProductByKey = Object.fromEntries((pricing.products || []).map((product) => [product.key, product]))
+const customAiTiers = pricingProductByKey['custom-ai']?.tiers || {}
 const publicAgentTemplates = buildPublicAgentTemplates(pricing)
 const publicAgentTemplateStarterKits = buildAgentTemplateStarterKits(publicAgentTemplates)
 const outputDir = resolve(root, '.vercel', 'output')
@@ -4121,6 +4123,63 @@ function unicornSocialMeta({ title, description, url }) {
     <meta name="twitter:image" content="https://supermega.dev/site/social/supermega-portal-card.png" />`
 }
 
+const publicOperatorWorkcells = [
+  {
+    slug: 'cash-close',
+    package: 'workcell-cash-close',
+    name: 'Cash Close',
+    buyer: 'Finance or operations owner',
+    source: 'PayPal settlement activity',
+    outcome: 'A daily settled-cash, fees, net receipts, and exception brief.',
+    firstProof: 'One read-only cash-close preview from a test window, with gross receipts, fees, net cash, transaction count, and exceptions traced to source rows.',
+    acceptanceTests: 'The preview reconciles gross minus fees to net, cites the source window, flags missing evidence, and performs no payment or refund action.',
+    launchBlockers: 'No read-only PayPal access | No agreed close window | No owner reviewer',
+    automationBoundary: 'Read-only first run. No payment, refund, transfer, message, or accounting write.',
+    price: mmk(customAiTiers['One agent']),
+  },
+  {
+    slug: 'pipeline-control',
+    package: 'workcell-pipeline-control',
+    name: 'Pipeline Control',
+    buyer: 'Sales or delivery owner',
+    source: 'Pipedrive open deals and one ClickUp list',
+    outcome: 'Revenue-at-risk deals matched against the team work queue.',
+    firstProof: 'One read-only revenue-control preview that ranks at-risk deals, cites exact deal and task evidence, and names one owner action.',
+    acceptanceTests: 'Every risk cites a real deal or task, unsupported deal-task links are excluded, and any ClickUp task remains a separate owner-approved draft.',
+    launchBlockers: 'No Pipedrive read access | No ClickUp list | No owner reviewer',
+    automationBoundary: 'Reads first. An optional ClickUp task is drafted only; creation requires separate owner approval and idempotent execution.',
+    price: mmk(customAiTiers['Pipeline build']),
+  },
+  {
+    slug: 'owner-command',
+    package: 'workcell-owner-command',
+    name: 'Owner Command',
+    buyer: 'Founder, general manager, or operator',
+    source: 'PayPal, Pipedrive, and one ClickUp list',
+    outcome: 'One daily command brief across cash, sales pipeline, and delivery work.',
+    firstProof: 'One read-only owner brief that leads with money at stake, cites source numbers, lists exceptions, and proposes one owner action.',
+    acceptanceTests: 'Cash, pipeline, and delivery evidence remain distinguishable, missing links stay explicit, and any proposed ClickUp task waits in the Approval Inbox.',
+    launchBlockers: 'No source access | No ClickUp list | No owner reviewer | No agreed delivery time',
+    automationBoundary: 'Reads and drafts only. Sending the brief and creating a ClickUp task are separately owner-controlled actions.',
+    price: mmk(customAiTiers['Pipeline build']),
+  },
+]
+
+function renderPublicOperatorWorkcells() {
+  return publicOperatorWorkcells.map((workcell) => `
+    <article class="runtime-workcell" data-runtime-workcell="${escapeHtml(workcell.slug)}">
+      <div class="runtime-workcell-head"><span>Deployable now</span><strong>${escapeHtml(workcell.name)}</strong></div>
+      <p>${escapeHtml(workcell.outcome)}</p>
+      <dl>
+        <dt>Best for</dt><dd>${escapeHtml(workcell.buyer)}</dd>
+        <dt>Reads</dt><dd>${escapeHtml(workcell.source)}</dd>
+        <dt>First proof</dt><dd>${escapeHtml(workcell.firstProof)}</dd>
+      </dl>
+      <div class="runtime-workcell-boundary"><strong>Control boundary</strong><span>${escapeHtml(workcell.automationBoundary)}</span></div>
+      <div class="runtime-workcell-action"><span>From ${escapeHtml(workcell.price)}</span><a class="btn primary" href="/contact/?package=${escapeHtml(workcell.package)}&amp;utm_source=products&amp;utm_medium=workcell_catalog&amp;utm_campaign=fixed_workcells&amp;utm_content=${escapeHtml(workcell.slug)}">Start ${escapeHtml(workcell.name)}</a></div>
+    </article>`).join('')
+}
+
 const unicornAiAgentsHtml = `<!doctype html>
 <html lang="en">
   <head>
@@ -4750,6 +4809,22 @@ const unicornProductsHtml = `<!doctype html>
       .template-card ul { margin: 0; padding-left: 18px; }
       .template-card .btn { width: fit-content; min-height: 42px; padding: 0 14px; font-size: 13px; }
       .template-card .link { color: var(--blue); font-size: 12px; font-weight: 900; text-decoration: none; }
+      .runtime-workcell-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 16px; margin-top: 28px; }
+      .runtime-workcell { display: flex; flex-direction: column; gap: 16px; min-width: 0; border: 1px solid var(--line); border-radius: 18px; padding: 22px; background: rgba(255,255,255,.62); }
+      .runtime-workcell-head { display: grid; gap: 7px; }
+      .runtime-workcell-head span { color: var(--blue); font-size: 11px; font-weight: 900; letter-spacing: .12em; text-transform: uppercase; }
+      .runtime-workcell-head strong { font-size: 22px; line-height: 1.1; }
+      .runtime-workcell p { margin: 0; color: var(--muted); line-height: 1.5; }
+      .runtime-workcell dl { display: grid; grid-template-columns: 74px minmax(0,1fr); gap: 8px 10px; margin: 0; font-size: 13px; }
+      .runtime-workcell dt { color: var(--blue); font-weight: 850; }
+      .runtime-workcell dd { min-width: 0; margin: 0; color: var(--ink); overflow-wrap: anywhere; }
+      .runtime-workcell-boundary { display: grid; gap: 5px; border-left: 3px solid var(--blue); padding-left: 11px; }
+      .runtime-workcell-boundary strong { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; }
+      .runtime-workcell-boundary span { color: var(--muted); font-size: 13px; line-height: 1.45; }
+      .runtime-workcell-action { display: grid; gap: 10px; margin-top: auto; }
+      .runtime-workcell-action > span { font-size: 14px; font-weight: 900; }
+      .runtime-workcell-action .btn { width: 100%; min-height: 44px; text-align: center; }
+      #operator-workcells { scroll-margin-top: 104px; }
       @media (max-width: 980px) {
         .shell { grid-template-columns: 1fr; }
         .shell-grid, .setup, .tool-grid, .template-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -4758,6 +4833,7 @@ const unicornProductsHtml = `<!doctype html>
       @media (max-width: 880px) {
         .feature { grid-template-columns: 1fr; border-radius: 26px; }
         .feature img { border-left: 0; border-top: 1px solid var(--line); min-height: auto; aspect-ratio: 16 / 10; }
+        .runtime-workcell-grid { grid-template-columns: 1fr; }
       }
       @media (max-width: 620px) {
         .shell-grid, .setup, .tool-grid, .template-grid { grid-template-columns: 1fr; }
@@ -4830,13 +4906,22 @@ ${unicornHeader}
               <p>For the work that does not fit a normal app: messy files, Viber orders, inboxes, PDFs, reports, follow-ups, and approval queues. Start from a setup kit, prove one useful output, then turn it into a maintained workflow.</p>
               <div class="chips"><span class="chip">Setup kits</span><span class="chip">Data cleanup</span><span class="chip">Inbox / calendar</span><span class="chip">PDF intake</span><span class="chip">Approval queues</span></div>
               <div class="use"><strong>Start with one proof</strong><span>Pick a template or send the repeated task. We show the first useful output before anything runs in production.</span></div>
-              <div class="cta"><a class="btn primary" href="/agent-templates/">View setup kits</a><a class="btn secondary" href="/contact/?package=custom-ai-agent-build">Ask for a custom build</a></div>
+              <div class="cta"><a class="btn primary" href="#operator-workcells">View deployable workcells</a><a class="btn secondary" href="/agent-templates/">Browse setup kits</a></div>
             </div>
             <div class="shot-gallery" aria-label="Custom Solutions and AI Agents product screen">
               <img src="/site/shots/live-product-build-app-from-workflow.png" alt="Custom AI worker product screen" loading="lazy" decoding="async" />
             </div>
           </article>
 
+        </section>
+
+        <section class="section" id="operator-workcells" aria-labelledby="runtime-products-title">
+          <div class="eyebrow">Fixed operator workcells</div>
+          <h2 id="runtime-products-title">Three outcomes you can start without inventing a platform.</h2>
+          <p style="color:var(--muted);max-width:64ch">Choose the closest outcome. We connect only the named read sources, produce one owner-reviewed proof, and keep every send or write behind an explicit approval. Each customer runs in an isolated deployment.</p>
+          <div class="runtime-workcell-grid">
+${renderPublicOperatorWorkcells()}
+          </div>
         </section>
 
         <section class="section sm-in">
@@ -4965,6 +5050,9 @@ ${unicornHeader}
             <input type="hidden" name="template_source_area" value="" />
             <input type="hidden" name="starter_kit_url" value="" />
             <input type="hidden" name="first_proof_target" value="" />
+            <input type="hidden" name="acceptance_tests" value="" />
+            <input type="hidden" name="launch_blockers" value="" />
+            <input type="hidden" name="automation_boundary" value="" />
             <input type="hidden" name="price_hint" value="" />
             <input type="hidden" name="entitlement_free_core" value="" />
             <input type="hidden" name="entitlement_paid_pilot" value="" />
@@ -5061,6 +5149,9 @@ ${publicBehaviorEventsScript}
           'agent-drive': 'custom-ai-agent-build',
           'agent-digest': 'custom-ai-agent-build',
           'ai-agent': 'custom-ai-agent-build',
+          'cash-close': 'workcell-cash-close',
+          'pipeline-control': 'workcell-pipeline-control',
+          'owner-command': 'workcell-owner-command',
           'operations-digital-twin': 'factory-issues-maintenance-quality',
           'digital-twin': 'factory-issues-maintenance-quality',
           'factorydesk': 'factory-issues-maintenance-quality',
@@ -5104,6 +5195,48 @@ ${publicBehaviorEventsScript}
             lead: 'Custom Solutions & AI Agents - from 11,000,000 MMK. Tell us the repeated task and the first proof you need.',
             placeholder: 'Describe the recurring work, the sources it reads, who approves it, and what should happen first.',
             next: 'Next: sample review, first proof, then owner-approved setup scope.'
+          },
+          'workcell-cash-close': {
+            id: 'cash-close',
+            name: 'Cash Close',
+            productArea: 'Custom Solutions & AI Agents',
+            heading: 'Start Cash Close.',
+            price: 'From ${mmk(customAiTiers['One agent'])}',
+            lead: 'Cash Close turns PayPal settlement activity into a daily owner-reviewed cash, fees, net, and exceptions brief.',
+            placeholder: 'Describe the close window, who reviews it, and provide a test or read-only PayPal source after we confirm the access boundary.',
+            firstProof: 'One read-only cash-close preview with gross receipts, fees, net cash, transaction count, exceptions, and source trace.',
+            acceptanceTests: 'Gross minus fees reconciles to net; the source window is cited; missing evidence is explicit; no payment or refund action occurs.',
+            launchBlockers: 'No read-only PayPal access | No agreed close window | No owner reviewer',
+            automationBoundary: 'Read-only first run. No payment, refund, transfer, message, or accounting write.',
+            next: 'Next: source check, one read-only proof, then an isolated deployment if you approve the result.'
+          },
+          'workcell-pipeline-control': {
+            id: 'pipeline-control',
+            name: 'Pipeline Control',
+            productArea: 'Custom Solutions & AI Agents',
+            heading: 'Start Pipeline Control.',
+            price: 'From ${mmk(customAiTiers['Pipeline build'])}',
+            lead: 'Pipeline Control matches Pipedrive open deals against one ClickUp work queue and shows revenue at risk.',
+            placeholder: 'Describe the sales pipeline, the ClickUp list that carries delivery work, and who approves the proposed next action.',
+            firstProof: 'One read-only revenue-control preview with ranked risks, exact deal and task evidence, and one owner action.',
+            acceptanceTests: 'Every risk cites a real deal or task; unsupported links are excluded; any ClickUp task stays a separate owner-approved draft.',
+            launchBlockers: 'No Pipedrive read access | No ClickUp list | No owner reviewer',
+            automationBoundary: 'Reads first. An optional ClickUp task is drafted only; creation requires separate owner approval and idempotent execution.',
+            next: 'Next: source check, one read-only proof, then isolated scheduled delivery after acceptance.'
+          },
+          'workcell-owner-command': {
+            id: 'owner-command',
+            name: 'Owner Command',
+            productArea: 'Custom Solutions & AI Agents',
+            heading: 'Start Owner Command.',
+            price: 'From ${mmk(customAiTiers['Pipeline build'])}',
+            lead: 'Owner Command produces one daily brief across settled cash, open sales pipeline, and active delivery work.',
+            placeholder: 'Describe the owner decision, close window, Pipedrive pipeline, ClickUp list, and preferred daily review time.',
+            firstProof: 'One read-only owner brief that leads with money at stake, cites exact source numbers, lists exceptions, and proposes one owner action.',
+            acceptanceTests: 'Cash, pipeline, and delivery evidence stay distinct; missing links are explicit; any ClickUp task waits in the Approval Inbox.',
+            launchBlockers: 'No source access | No ClickUp list | No owner reviewer | No agreed delivery time',
+            automationBoundary: 'Reads and drafts only. Sending the brief and creating a ClickUp task are separately owner-controlled actions.',
+            next: 'Next: source check, one owner-reviewed proof, then an isolated daily deployment after acceptance.'
           },
           'design-ship': {
             name: 'Design + ship system',
@@ -5156,6 +5289,12 @@ ${publicBehaviorEventsScript}
           set('product_area', selectedPackage.productArea || selectedPackage.name);
           set('public_package', selectedPackage.name);
           set('first_step', selectedPackage.firstProof ? 'Produce first proof: ' + selectedPackage.firstProof : 'Review the source and reply with the first useful app.');
+          set('template_id', selectedPackage.id || '');
+          set('first_proof_target', selectedPackage.firstProof || '');
+          set('acceptance_tests', selectedPackage.acceptanceTests || '');
+          set('launch_blockers', selectedPackage.launchBlockers || '');
+          set('automation_boundary', selectedPackage.automationBoundary || '');
+          set('price_hint', selectedPackage.price || '');
           if (selectedTemplate) {
             set('template_id', selectedTemplate.id);
             set('template_status', selectedTemplate.status);
