@@ -128,6 +128,21 @@ Health is a **cheap token mint** (proves creds parse + Google accepts the JWT) â
 mutate any spreadsheet/mailbox/calendar. `data-gmail.health()` reports "no subject mailbox" when
 `GOOGLE_WORKSPACE_SUBJECT` is unset, since send/search can't work without one.
 
+## Agent work and cross-border money connectors
+
+These adapters are read-only first. They let an operator crew see external money, pipeline, and work
+without granting the kernel a write scope during initial onboarding.
+
+| key | purpose | accepted credentials | capability |
+|---|---|---|---|
+| `payment-paypal` | settled cross-border payment activity | `PAYPAL_CLIENT_ID` + `PAYPAL_CLIENT_SECRET` with Transaction Search | `listTransactions({startDate,endDate,page,pageSize})` |
+| `crm-pipedrive` | open/won/lost CRM pipeline | preferred `PIPEDRIVE_ACCESS_TOKEN`, or `PIPEDRIVE_API_TOKEN` for one-company setup | `listDeals({limit,cursor,status})` via API v2 |
+| `data-clickup` | team work queue | `CLICKUP_ACCESS_TOKEN` or `CLICKUP_API_TOKEN` | `listTasks({listId,page,includeClosed,subtasks})` |
+
+All three use fixed provider hosts, bounded inputs and timeouts, sanitized error envelopes, and cheap
+non-mutating health checks. PayPal caches its OAuth token; Pipedrive uses cursor pagination; ClickUp
+requires a numeric list id before any request leaves the kernel.
+
 ## The endpoint
 
 `GET /api/integrations` (passcode-gated with `x-ops-key`, like every other kernel endpoint)

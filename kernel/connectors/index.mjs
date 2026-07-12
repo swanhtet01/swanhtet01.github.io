@@ -74,6 +74,9 @@ import './data-box.mjs'
 import './data-google-contacts.mjs'
 import './messaging-zalo.mjs'
 import './ai-vertex.mjs'
+import './payment-paypal.mjs'
+import './crm-pipedrive.mjs'
+import './data-clickup.mjs'
 
 export * from './registry.mjs'
 export default registry

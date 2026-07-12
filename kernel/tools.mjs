@@ -7,6 +7,9 @@ import gmail from './connectors/data-gmail.mjs'
 import store from './store.mjs'
 import cbm from './connectors/data-cbm-rate.mjs'
 import sheets from './connectors/data-sheets.mjs'
+import paypal from './connectors/payment-paypal.mjs'
+import pipedrive from './connectors/crm-pipedrive.mjs'
+import clickup from './connectors/data-clickup.mjs'
 
 export const TOOLS = {
   platform_status: {
@@ -77,6 +80,121 @@ export const TOOLS = {
       const r = await sheets.readRange(String(spreadsheet_id || ''), String(range || ''))
       const values = (r.values || []).slice(0, 50).map((row) => (Array.isArray(row) ? row.slice(0, 20) : row))
       return { range: r.range, rows: values.length, values }
+    },
+  },
+  settled_transactions_read: {
+    description: 'Read a bounded PayPal Transaction Search window for reconciliation. Read-only: cannot capture, refund, or move money. Requires start_date and end_date in ISO date-time format; maximum window is 31 days.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        start_date: { type: 'string', description: 'ISO date-time, e.g. 2026-07-01T00:00:00Z' },
+        end_date: { type: 'string', description: 'ISO date-time after start_date, maximum 31 days later' },
+        page: { type: 'integer', minimum: 1, maximum: 10000 },
+        page_size: { type: 'integer', minimum: 1, maximum: 100 },
+      },
+      required: ['start_date', 'end_date'],
+      additionalProperties: false,
+    },
+    available: () => { try { return paypal.configured() } catch { return false } },
+    run: async ({ start_date, end_date, page = 1, page_size = 100 } = {}) => {
+      const result = await paypal.listTransactions({
+        startDate: start_date,
+        endDate: end_date,
+        page,
+        pageSize: Math.min(100, Number(page_size) || 100),
+      })
+      if (!result.ok) throw new Error(result.reason || 'payment-paypal_read_failed')
+      const transactions = result.transactions.slice(0, 100).map((row) => {
+        const info = row && typeof row === 'object' ? row.transaction_info || {} : {}
+        return {
+          id: info.transaction_id || null,
+          at: info.transaction_initiation_date || info.transaction_updated_date || null,
+          status: info.transaction_status || null,
+          eventCode: info.transaction_event_code || null,
+          gross: info.transaction_amount || null,
+          fee: info.fee_amount || null,
+          net: info.transaction_amount && info.fee_amount
+            ? {
+                currency_code: info.transaction_amount.currency_code || null,
+                value: Number(info.transaction_amount.value || 0) - Number(info.fee_amount.value || 0),
+              }
+            : null,
+        }
+      })
+      return {
+        transactions,
+        page: result.page,
+        totalItems: result.totalItems,
+        totalPages: result.totalPages,
+      }
+    },
+  },
+  crm_deals_read: {
+    description: 'Read a bounded page of Pipedrive deals for pipeline briefs. Read-only: cannot create or modify CRM records.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        limit: { type: 'integer', minimum: 1, maximum: 100 },
+        cursor: { type: 'string', maxLength: 2048 },
+        status: { type: 'string', enum: ['open', 'won', 'lost', 'deleted'] },
+      },
+      additionalProperties: false,
+    },
+    available: () => { try { return pipedrive.configured() } catch { return false } },
+    run: async ({ limit = 100, cursor, status } = {}) => {
+      const result = await pipedrive.listDeals({ limit: Math.min(100, Number(limit) || 100), cursor, status })
+      if (!result.ok) throw new Error(result.reason || 'crm-pipedrive_read_failed')
+      return {
+        deals: result.deals.slice(0, 100).map((deal) => ({
+          id: deal?.id || null,
+          title: deal?.title || null,
+          status: deal?.status || null,
+          value: deal?.value ?? null,
+          currency: deal?.currency || null,
+          expectedCloseDate: deal?.expected_close_date || null,
+          updatedAt: deal?.update_time || null,
+        })),
+        nextCursor: result.nextCursor,
+      }
+    },
+  },
+  work_tasks_read: {
+    description: 'Read one ClickUp List page for an operator work brief. Read-only: cannot create, assign, close, or modify tasks.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        list_id: { type: 'string', pattern: '^\\d{1,32}$' },
+        page: { type: 'integer', minimum: 0, maximum: 10000 },
+        include_closed: { type: 'boolean' },
+        subtasks: { type: 'boolean' },
+      },
+      required: ['list_id'],
+      additionalProperties: false,
+    },
+    available: () => { try { return clickup.configured() } catch { return false } },
+    run: async ({ list_id, page = 0, include_closed = false, subtasks = false } = {}) => {
+      const result = await clickup.listTasks({
+        listId: list_id,
+        page,
+        includeClosed: include_closed,
+        subtasks,
+      })
+      if (!result.ok) throw new Error(result.reason || 'data-clickup_read_failed')
+      return {
+        tasks: result.tasks.slice(0, 100).map((task) => {
+          const status = typeof task?.status === 'string' ? task.status : task?.status?.status
+          const priority = typeof task?.priority === 'string' ? task.priority : task?.priority?.priority
+          return {
+            id: task?.id || null,
+            name: task?.name || null,
+            status: status || null,
+            dueAt: task?.due_date || null,
+            priority: priority || null,
+            url: task?.url || null,
+          }
+        }),
+        page: result.page,
+      }
     },
   },
 }
