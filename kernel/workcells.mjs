@@ -148,6 +148,7 @@ export function listWorkcells(options = {}) {
   const scheduled = new Set(scheduledWorkcellSlugs(env))
   return Object.values(DEFINITIONS).map((definition) => {
     const readiness = workcellReadiness(definition.slug, options)
+    const actionDraftSupported = ['pipeline-control', 'owner-command'].includes(definition.slug)
     return {
       slug: definition.slug,
       name: definition.name,
@@ -158,6 +159,8 @@ export function listWorkcells(options = {}) {
       configured: readiness.ready,
       missing: readiness.missing,
       scheduled: scheduled.has(definition.slug),
+      actionDraftSupported,
+      actionDraftReady: actionDraftSupported && Boolean(readiness.config.clientId) && /^\d{1,32}$/.test(readiness.config.clickupListId),
     }
   })
 }

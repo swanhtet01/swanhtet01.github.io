@@ -22,6 +22,7 @@ const WORKCELL_DATA_TABLES = [
   ['supermega_console_activity', 'id'],
   ['supermega_token_ledger', 'tenant_id'],
   ['supermega_ai_cache', 'cache_key'],
+  ['supermega_action_queue', 'id'],
 ]
 
 function text(value, max = 200) {

@@ -127,12 +127,12 @@ test('data-spine preflight proves table access and atomic claims without leaving
     },
     randomBytes: () => Buffer.from('fixed-probe'),
   })
-  assert.deepEqual(result.tables, ['supermega_console_activity', 'supermega_token_ledger', 'supermega_ai_cache'])
+  assert.deepEqual(result.tables, ['supermega_console_activity', 'supermega_token_ledger', 'supermega_ai_cache', 'supermega_action_queue'])
   assert.equal(result.idempotentClaim, true)
   assert.equal(result.probeCleaned, true)
-  assert.deepEqual(calls.map((call) => call.options?.method || 'GET'), ['GET', 'GET', 'GET', 'POST', 'POST', 'DELETE'])
+  assert.deepEqual(calls.map((call) => call.options?.method || 'GET'), ['GET', 'GET', 'GET', 'GET', 'POST', 'POST', 'DELETE'])
   assert.equal(calls.every((call) => call.options.headers.apikey === 'supabase-secret'), true)
-  assert.equal(JSON.parse(calls[3].options.body).id, JSON.parse(calls[4].options.body).id)
+  assert.equal(JSON.parse(calls[4].options.body).id, JSON.parse(calls[5].options.body).id)
   assert.doesNotMatch(JSON.stringify(result), /supabase-secret/)
   await assert.rejects(
     verifyClientDataSpine(resolved, { fetch: async () => ({ ok: false, status: 404 }) }),
@@ -295,11 +295,12 @@ test('project inspection auth or network failures never become create operations
 
 test('client SQL bootstrap contains the exact durable workcell contract', async () => {
   const sql = await readFile(new URL('./supabase/workcell-client.sql', import.meta.url), 'utf8')
-  for (const table of ['supermega_console_activity', 'supermega_token_ledger', 'supermega_ai_cache']) {
+  for (const table of ['supermega_console_activity', 'supermega_token_ledger', 'supermega_ai_cache', 'supermega_action_queue']) {
     assert.match(sql, new RegExp(`create table if not exists public\\.${table}`))
     assert.match(sql, new RegExp(`alter table public\\.${table} enable row level security`))
     assert.match(sql, new RegExp(`revoke all on public\\.${table} from anon, authenticated`))
   }
+  assert.match(sql, /create index if not exists supermega_action_queue_status_created_idx/)
   assert.match(sql, /primary key \(tenant_id, "window"\)/)
 })
 

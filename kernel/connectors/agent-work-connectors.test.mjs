@@ -6,7 +6,7 @@ import {
   resetPayPalTokenCacheForTests,
 } from './payment-paypal.mjs'
 import { listDeals } from './crm-pipedrive.mjs'
-import { listTasks } from './data-clickup.mjs'
+import { createTask, findTaskByMarker, listTasks } from './data-clickup.mjs'
 import { TOOLS, runTool } from '../tools.mjs'
 
 const originalFetch = globalThis.fetch
@@ -169,6 +169,84 @@ test('ClickUp reads one bounded page with the raw Authorization token', async ()
   assert.equal(url.searchParams.get('include_closed'), 'true')
   assert.equal(url.searchParams.get('subtasks'), 'true')
   assert.equal(calls[0].options.headers.authorization, 'oauth-or-personal-token')
+})
+
+test('ClickUp task creation is exact, marked, and never exposed as an agent tool', async () => {
+  process.env.CLICKUP_ACCESS_TOKEN = 'clickup-token'
+  const calls = []
+  globalThis.fetch = async (url, options) => {
+    calls.push({ url: String(url), options })
+    return response(200, { id: 'task-created', name: 'Call the buyer', url: 'https://app.clickup.com/t/task-created' })
+  }
+  const marker = 'supermega-action:11111111-1111-4111-8111-111111111111'
+  const result = await createTask({
+    listId: '12345',
+    name: 'Call the buyer',
+    markdownContent: 'Evidence:\n- Budget confirmed',
+    priority: 2,
+    dueDate: 1783900800000,
+    marker,
+  })
+  assert.equal(result.ok, true)
+  assert.equal(result.task.id, 'task-created')
+  assert.equal(calls.length, 1)
+  assert.equal(calls[0].url, 'https://api.clickup.com/api/v2/list/12345/task')
+  assert.equal(calls[0].options.method, 'POST')
+  assert.equal(calls[0].options.headers.authorization, 'clickup-token')
+  assert.deepEqual(JSON.parse(calls[0].options.body), {
+    name: 'Call the buyer',
+    markdown_content: `Evidence:\n- Budget confirmed\n\n[SuperMega execution: ${marker}]`,
+    notify_all: false,
+    check_required_custom_fields: true,
+    priority: 2,
+    due_date: 1783900800000,
+    due_date_time: true,
+  })
+  assert.equal(TOOLS.work_tasks_create, undefined)
+})
+
+test('ClickUp writes validate before network and treat lost responses as uncertain', async () => {
+  process.env.CLICKUP_ACCESS_TOKEN = 'clickup-token'
+  let calls = 0
+  globalThis.fetch = async () => { calls += 1; throw new Error('connection reset') }
+  const marker = 'supermega-action:11111111-1111-4111-8111-111111111111'
+  assert.equal((await createTask({ listId: '../bad', name: 'Task', marker })).reason, 'data-clickup_invalid_listId')
+  assert.equal((await createTask({ listId: '123', name: '', marker })).reason, 'data-clickup_task_name_required')
+  assert.equal((await createTask({ listId: '123', name: 'Task', marker: 'bad-marker' })).reason, 'data-clickup_invalid_marker')
+  assert.equal(calls, 0)
+  const result = await createTask({ listId: '123', name: 'Task', marker })
+  assert.equal(result.ok, false)
+  assert.equal(result.uncertain, true)
+  assert.equal(result.retryable, true)
+  assert.equal(calls, 1)
+})
+
+test('ClickUp marker recovery scans bounded pages and reports truncation safely', async () => {
+  process.env.CLICKUP_ACCESS_TOKEN = 'clickup-token'
+  const marker = 'supermega-action:11111111-1111-4111-8111-111111111111'
+  let page = 0
+  globalThis.fetch = async () => {
+    page += 1
+    return response(200, {
+      tasks: page === 1
+        ? Array.from({ length: 100 }, (_, index) => ({ id: `old-${index}`, name: `Old ${index}` }))
+        : [{ id: 'recovered', name: 'Call buyer', markdown_content: `[SuperMega execution: ${marker}]`, url: 'https://app.clickup.com/t/recovered' }],
+    })
+  }
+  const found = await findTaskByMarker({ listId: '123', marker, maxPages: 2 })
+  assert.equal(found.found, true)
+  assert.equal(found.task.id, 'recovered')
+  assert.equal(found.pagesRead, 2)
+
+  page = 0
+  globalThis.fetch = async () => {
+    page += 1
+    return response(200, { tasks: Array.from({ length: 100 }, (_, index) => ({ id: `${page}-${index}`, name: 'Unrelated' })) })
+  }
+  const truncated = await findTaskByMarker({ listId: '123', marker, maxPages: 2 })
+  assert.equal(truncated.found, false)
+  assert.equal(truncated.truncated, true)
+  assert.equal(page, 2)
 })
 
 test('the durable registry exposes all three connectors without registration faults', async () => {

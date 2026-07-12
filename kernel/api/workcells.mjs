@@ -3,6 +3,7 @@
 
 import crypto from 'node:crypto'
 import { notify } from '../alert.mjs'
+import { createActionDraft, workcellActionDraft } from '../approval-actions.mjs'
 import { formatWorkcellNotification, runWorkcell } from '../workcell-run.mjs'
 import { listWorkcells, resolveWorkcellConfig, scheduledWorkcellSlugs } from '../workcells.mjs'
 
@@ -44,6 +45,7 @@ export async function handleWorkcells(request = {}, options = {}) {
   const body = request.body && typeof request.body === 'object' && !Array.isArray(request.body) ? request.body : {}
   const slug = String(body.slug || '').trim().slice(0, 60)
   if (!slug) return { status: 400, json: { ok: false, reason: 'missing_slug' } }
+  const config = resolveWorkcellConfig(env, options.now || new Date())
   const run = options.runWorkcell || runWorkcell
   const result = await run(slug, {
     env,
@@ -66,6 +68,20 @@ export async function handleWorkcells(request = {}, options = {}) {
     const sent = await send(formatWorkcellNotification(result))
     delivery = { requested: true, sent: Boolean(sent) }
   }
+
+  let approvalQueue = { requested: false, ok: false }
+  if (body.queueAction === true) {
+    const draft = workcellActionDraft(result, config)
+    if (!draft) {
+      approvalQueue = { requested: true, ok: false, reason: 'workcell_action_draft_not_available' }
+    } else {
+      const create = options.createActionDraft || createActionDraft
+      const created = await create(draft)
+      approvalQueue = created.ok
+        ? { requested: true, ok: true, approval: created.approval }
+        : { requested: true, ok: false, reason: created.reason || 'approval_store_write_failed' }
+    }
+  }
   return {
     status: 200,
     json: {
@@ -77,6 +93,7 @@ export async function handleWorkcells(request = {}, options = {}) {
       sources: result.sources,
       output: result.output,
       delivery,
+      approvalQueue,
     },
   }
 }
