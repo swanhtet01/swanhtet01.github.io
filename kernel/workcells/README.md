@@ -92,10 +92,18 @@ The plan prints the exact project, UTC cron, non-secret variable names, deployed
 required `SUPERMEGA_NEW_CLIENT_*` input names, missing inputs, clean-source state, and required
 confirmation. It never prints values.
 
-Before apply, create a dedicated Supabase project for the customer and run
-`supabase/workcell-client.sql` in its SQL editor. The bootstrap creates only the durable delivery
-claim, token ledger, AI cache, and action-queue tables required by the workcells. It enables RLS, removes
-`anon`/`authenticated` access, and grants access only to the Supabase service role.
+Create a dedicated Supabase project for the customer. For one-command schema setup, load its
+direct or session-pooler port-5432 connection string into
+`SUPERMEGA_NEW_CLIENT_SUPABASE_DB_URL`. The URL must match the project ref in
+`SUPERMEGA_NEW_CLIENT_SUPABASE_URL` and target the `postgres` database. TLS is enforced by the
+bootstrap client even when the dashboard connection string omits `sslmode`. It is used
+only for bootstrap: it is never added to Vercel, printed, or returned. If the team does not provide
+that temporary input, run `supabase/workcell-client.sql` in the dedicated project's SQL editor
+before apply.
+
+The bootstrap creates only the durable delivery claim, token ledger, AI cache, and action-queue
+tables required by the workcells. It enables RLS, removes `anon`/`authenticated` access, and grants
+access only to the Supabase service role.
 
 Apply only after loading the plan's exact `SUPERMEGA_NEW_CLIENT_*` inputs into the current process
 environment:
@@ -105,13 +113,14 @@ npm run workcell:provision -- --apply --manifest <client.json> --scope <vercel-t
 ```
 
 Apply refuses dirty source and an existing project by default. `--allow-existing` is the explicit
-upgrade path. Before touching Vercel, it checks all four required tables in the dedicated Supabase
-project, inserts the same claim twice to prove duplicate suppression, and deletes the temporary
-probe. Every environment value is then piped to Vercel over stdin, never placed in command
-arguments. The provisioner copies the clean kernel to an isolated temporary directory, patches only
-that copy's daily cron, deploys, verifies `/api/status`, verifies that every selected workcell is
-configured in the protected `/api/workcells` catalog, reports names and readiness without values,
-then removes the temporary copy.
+upgrade path. Before touching Vercel, it validates/applies the optional bootstrap transaction,
+checks the full shape of all four tables, inserts the same delivery claim twice to prove duplicate
+suppression, proves one action-queue draft-to-approved compare-and-swap, proves the stale duplicate
+transition loses, and deletes both probes. Every deployable environment value is then piped to
+Vercel over stdin, never placed in command arguments. The provisioner copies the clean kernel to an
+isolated temporary directory, patches only that copy's daily cron, deploys, verifies `/api/status`,
+verifies every selected workcell and action-draft readiness in `/api/workcells`, verifies the live
+`/api/approvals` inbox, reports only safe readiness metadata, then removes the temporary copy.
 
 All credential inputs are deliberately client-namespaced, including Supabase, Telegram, provider,
 and model keys. Generic names such as `SUPABASE_URL` or `PAYPAL_CLIENT_SECRET` are ignored by the
@@ -119,3 +128,5 @@ provisioner, preventing inherited shell credentials from silently crossing the c
 `SUPERMEGA_NEW_CLIENT_OPS_KEY` must be distinct from the shared console key.
 `SUPERMEGA_NEW_CLIENT_CRON_SECRET` is optional; the provisioner generates a random cron secret when
 it is absent.
+`SUPERMEGA_NEW_CLIENT_SUPABASE_DB_URL` is conditional and bootstrap-only; it never becomes a Vercel
+environment variable.

@@ -75,8 +75,9 @@ in recovery instead of being retried blindly.
 
 ## Next
 
-1. Bootstrap the dedicated client data spine with `supabase/workcell-client.sql`, then use
-   `npm run workcell:provision` to plan or apply its isolated Vercel project.
-2. Apply the four-table workcell schema before enabling action drafts for a client.
+1. Generate the isolated client plan, load its client-scoped inputs, and run the exact-confirmation
+   provisioner. A matching bootstrap-only Supabase database URL applies the schema automatically;
+   pre-applying `supabase/workcell-client.sql` remains the fallback.
+2. Complete the client-owned test ClickUp draft, approval, execution, and recovery proof.
 3. Move from one cron per client deployment to a durable scheduler when a shared control plane is
    justified by real client volume.

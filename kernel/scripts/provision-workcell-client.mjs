@@ -44,8 +44,10 @@ function help() {
     'Vercel over stdin and are never included in the printed plan or command arguments. Every',
     'client value must use the SUPERMEGA_NEW_CLIENT_* input name printed by the plan.',
     '',
-    'Before apply, run supabase/workcell-client.sql in the dedicated client Supabase project.',
-    'Apply verifies the schema and a temporary idempotent claim before it changes Vercel.',
+    'For one-command bootstrap, set SUPERMEGA_NEW_CLIENT_SUPABASE_DB_URL to the matching',
+    'direct/session-pooler port-5432 URL. It is used only for schema setup and never deployed.',
+    'If omitted, pre-apply supabase/workcell-client.sql in the dedicated client project.',
+    'Apply proves the full schema, duplicate claim, approval CAS, cleanup, and live inbox before success.',
   ].join('\n')
 }
 

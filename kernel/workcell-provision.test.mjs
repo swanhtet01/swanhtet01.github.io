@@ -5,10 +5,12 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
 import {
+  applyClientSchema,
   applyProvisionPlan,
   buildProvisionPlan,
   requiredSecretGroups,
   resolveProvisionEnvironment,
+  resolveSchemaBootstrapEnvironment,
   validateClientManifest,
   verifyClientDataSpine,
   verifyProvisionedClient,
@@ -39,6 +41,9 @@ const SECRET_ENV = {
   SUPERMEGA_NEW_CLIENT_PIPEDRIVE_ACCESS_TOKEN: 'pipedrive-secret',
   SUPERMEGA_NEW_CLIENT_CLICKUP_ACCESS_TOKEN: 'clickup-secret',
 }
+
+const BOOTSTRAP_DB_URL = 'postgresql://postgres:bootstrap-password@db.client-project.supabase.co:5432/postgres?sslmode=require'
+const BOOTSTRAP_ENV = { ...SECRET_ENV, SUPERMEGA_NEW_CLIENT_SUPABASE_DB_URL: BOOTSTRAP_DB_URL }
 
 test('client manifest normalizes one isolated owner-command project', () => {
   const manifest = validateClientManifest(MANIFEST)
@@ -73,6 +78,10 @@ test('required secrets derive from selected workcells and plan output never cont
   assert.equal(plan.missingSecretInputs.length, 0)
   assert.ok(plan.secretNames.includes('CRON_SECRET'))
   assert.ok(plan.requiredSecretInputs.includes('SUPERMEGA_NEW_CLIENT_SUPABASE_SERVICE_ROLE_KEY'))
+  assert.ok(plan.requiredSecretInputs.some((name) => name.startsWith('SUPERMEGA_NEW_CLIENT_SUPABASE_DB_URL ')))
+  assert.equal(plan.schemaBootstrap.supplied, false)
+  assert.equal(plan.schemaBootstrap.targetProjectRef, 'client-project')
+  assert.equal(plan.schemaBootstrap.deployedToVercel, false)
   const serialized = JSON.stringify(plan)
   for (const secret of Object.values(SECRET_ENV)) assert.doesNotMatch(serialized, new RegExp(secret.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
 
@@ -85,6 +94,14 @@ test('required secrets derive from selected workcells and plan output never cont
   assert.ok(inherited.missingSecretInputs.includes('SUPERMEGA_NEW_CLIENT_SUPABASE_URL'))
   assert.equal(inherited.secrets.has('SUPABASE_URL'), false)
   assert.equal(inherited.secrets.has('PAYPAL_CLIENT_SECRET'), false)
+
+  const bootstrapPlan = buildProvisionPlan(MANIFEST, {
+    scope: 'test-team', env: BOOTSTRAP_ENV, sourceDirectory: 'C:\\source\\kernel',
+  })
+  assert.equal(bootstrapPlan.schemaBootstrap.supplied, true)
+  assert.equal(bootstrapPlan.schemaBootstrap.connectionMode, 'direct')
+  assert.equal(bootstrapPlan.secretNames.includes('SUPABASE_DB_URL'), false)
+  assert.doesNotMatch(JSON.stringify(bootstrapPlan), /bootstrap-password|postgresql:/)
 })
 
 test('secret resolution uses aliases, generates cron auth, and rejects multiline values', () => {
@@ -112,16 +129,109 @@ test('secret resolution uses aliases, generates cron auth, and rejects multiline
   )
 })
 
+test('schema bootstrap accepts only the matching direct or session-pooler project on port 5432 with SSL', () => {
+  const resolved = resolveProvisionEnvironment(MANIFEST, SECRET_ENV)
+  const direct = resolveSchemaBootstrapEnvironment(resolved, BOOTSTRAP_ENV)
+  assert.equal(direct.provided, true)
+  assert.equal(direct.projectRef, 'client-project')
+  assert.equal(direct.connectionMode, 'direct')
+  assert.equal(direct.tlsMode, 'require')
+
+  const session = resolveSchemaBootstrapEnvironment(resolved, {
+    ...SECRET_ENV,
+    SUPERMEGA_NEW_CLIENT_SUPABASE_DB_URL: 'postgresql://postgres.client-project:password@aws-0-ap-southeast-1.pooler.supabase.com:5432/postgres?sslmode=require',
+  })
+  assert.equal(session.connectionMode, 'session_pooler')
+  const dashboardDirect = resolveSchemaBootstrapEnvironment(resolved, {
+    ...SECRET_ENV,
+    SUPERMEGA_NEW_CLIENT_SUPABASE_DB_URL: 'postgresql://postgres:password@db.client-project.supabase.co:5432/postgres',
+  })
+  assert.equal(dashboardDirect.tlsMode, 'require')
+
+  for (const [value, reason] of [
+    ['postgresql://postgres:password@db.other-project.supabase.co:5432/postgres?sslmode=require', /project_mismatch/],
+    ['postgresql://postgres.client-project:password@aws-0-ap-southeast-1.pooler.supabase.com:6543/postgres?sslmode=require', /requires_port_5432/],
+    ['postgresql://postgres:password@db.client-project.supabase.co:5432/postgres?sslmode=disable', /ssl_required/],
+    ['postgresql://postgres:password@db.client-project.supabase.co:5432/postgres?sslmode=verify-full', /ssl_mode_unsupported/],
+    ['postgresql://postgres:password@db.client-project.supabase.co:5432/other?sslmode=require', /database_must_be_postgres/],
+    ['https://db.client-project.supabase.co:5432/postgres?sslmode=require', /url_invalid/],
+    [`postgresql://postgres:${'x'.repeat(4_100)}@db.client-project.supabase.co:5432/postgres`, /url_invalid/],
+    ['postgresql://postgres:password@db.client-project.supabase.co:5432/postgres\n', /url_invalid/],
+  ]) {
+    assert.throws(
+      () => resolveSchemaBootstrapEnvironment(resolved, { ...SECRET_ENV, SUPERMEGA_NEW_CLIENT_SUPABASE_DB_URL: value }),
+      reason,
+    )
+  }
+})
+
+test('schema bootstrap executes the canonical transaction and returns no connection secret', async () => {
+  const resolved = resolveProvisionEnvironment(MANIFEST, SECRET_ENV)
+  const queries = []
+  let config
+  let connected = false
+  let ended = false
+  const result = await applyClientSchema(resolved, {
+    env: BOOTSTRAP_ENV,
+    clientFactory: async (input) => {
+      config = input
+      return {
+        async connect() { connected = true },
+        async query(sql) { queries.push(sql); return { rows: [] } },
+        async end() { ended = true },
+      }
+    },
+  })
+  assert.equal(connected, true)
+  assert.equal(ended, true)
+  assert.equal(config.connectionString, 'postgresql://postgres:bootstrap-password@db.client-project.supabase.co:5432/postgres')
+  assert.equal(config.application_name, 'supermega-workcell-bootstrap')
+  assert.equal(queries.length, 1)
+  assert.match(queries[0], /begin;/)
+  assert.match(queries[0], /create table if not exists public\.supermega_action_queue/)
+  assert.match(queries[0], /notify pgrst, 'reload schema'/)
+  assert.equal(result.applied, true)
+  assert.doesNotMatch(JSON.stringify(result), /bootstrap-password|postgresql:/)
+
+  let rolledBack = false
+  let failureEnded = false
+  await assert.rejects(
+    applyClientSchema(resolved, {
+      env: BOOTSTRAP_ENV,
+      clientFactory: async () => ({
+        async connect() {},
+        async query(sql) {
+          if (sql === 'rollback') { rolledBack = true; return }
+          throw new Error('provider detail must not escape')
+        },
+        async end() { failureEnded = true },
+      }),
+    }),
+    /^Error: client_schema_bootstrap_failed$/,
+  )
+  assert.equal(rolledBack, true)
+  assert.equal(failureEnded, true)
+})
+
 test('data-spine preflight proves table access and atomic claims without leaving its probe', async () => {
   const resolved = resolveProvisionEnvironment(MANIFEST, SECRET_ENV)
   const calls = []
-  let writes = 0
+  let activityWrites = 0
+  let approvalTransitions = 0
   const result = await verifyClientDataSpine(resolved, {
     fetch: async (url, options) => {
       calls.push({ url, options })
+      if (url.includes('supermega_action_queue')) {
+        if (options?.method === 'POST') return { ok: true, async json() { return [{ status: 'draft', version: 0 }] } }
+        if (options?.method === 'PATCH') {
+          approvalTransitions += 1
+          return { ok: true, async json() { return approvalTransitions === 1 ? [{ status: 'approved', version: 1 }] : [] } }
+        }
+        return { ok: true, async json() { return [] } }
+      }
       if (options?.method === 'POST') {
-        writes += 1
-        return { ok: true, async json() { return writes === 1 ? [{ id: 'probe' }] : [] } }
+        activityWrites += 1
+        return { ok: true, async json() { return activityWrites === 1 ? [{ id: 'probe' }] : [] } }
       }
       return { ok: true, async json() { return [] } }
     },
@@ -129,8 +239,11 @@ test('data-spine preflight proves table access and atomic claims without leaving
   })
   assert.deepEqual(result.tables, ['supermega_console_activity', 'supermega_token_ledger', 'supermega_ai_cache', 'supermega_action_queue'])
   assert.equal(result.idempotentClaim, true)
+  assert.equal(result.approvalCas, true)
   assert.equal(result.probeCleaned, true)
-  assert.deepEqual(calls.map((call) => call.options?.method || 'GET'), ['GET', 'GET', 'GET', 'GET', 'POST', 'POST', 'DELETE'])
+  assert.deepEqual(calls.map((call) => call.options?.method || 'GET'), [
+    'GET', 'GET', 'GET', 'GET', 'POST', 'POST', 'DELETE', 'POST', 'PATCH', 'PATCH', 'DELETE',
+  ])
   assert.equal(calls.every((call) => call.options.headers.apikey === 'supabase-secret'), true)
   assert.equal(JSON.parse(calls[4].options.body).id, JSON.parse(calls[5].options.body).id)
   assert.doesNotMatch(JSON.stringify(result), /supabase-secret/)
@@ -151,6 +264,27 @@ test('data-spine preflight proves table access and atomic claims without leaving
     /client_data_spine_claim_insert_failed/,
   )
   assert.equal(failedCalls.at(-1), 'DELETE')
+
+  let activityPost = 0
+  await assert.rejects(
+    verifyClientDataSpine(resolved, {
+      fetch: async (url, options) => {
+        if (!options?.method) return { ok: true, async json() { return [] } }
+        if (url.includes('supermega_console_activity') && options.method === 'POST') {
+          activityPost += 1
+          return { ok: true, async json() { return activityPost === 1 ? [{ id: 'probe' }] : [] } }
+        }
+        if (url.includes('supermega_action_queue') && options.method === 'POST') {
+          return { ok: true, async json() { return [{ status: 'draft', version: 0 }] } }
+        }
+        if (url.includes('supermega_action_queue') && options.method === 'PATCH') {
+          return { ok: true, async json() { return [{ status: 'approved', version: 1 }] } }
+        }
+        return { ok: true, async json() { return [] } }
+      },
+    }),
+    /client_data_spine_approval_transition_not_atomic/,
+  )
 })
 
 async function fixtureSource() {
@@ -167,7 +301,10 @@ test('apply creates, links, configures, deploys, and verifies without secrets in
   const calls = []
   let copiedConfig
   let applyCwd
+  let spineChecks = 0
+  const events = []
   const run = async (args, options = {}) => {
+    events.push('vercel')
     calls.push({ args: [...args], input: options.input, cwd: options.cwd })
     if (args.slice(0, 3).join(' ') === 'vercel project inspect') {
       return { code: 1, stdout: '', stderr: 'Error: There is no project for "supermega-wc-acme-trading"' }
@@ -182,18 +319,32 @@ test('apply creates, links, configures, deploys, and verifies without secrets in
   try {
     const result = await applyProvisionPlan(MANIFEST, {
       scope: 'test-team',
-      env: SECRET_ENV,
+      env: BOOTSTRAP_ENV,
       sourceDirectory: source,
       sourceClean: true,
       confirm: 'PROVISION supermega-wc-acme-trading',
       tempRoot: tempParent,
       randomBytes: () => Buffer.from('generated-cron'),
       run,
-      verifyDataSpine: async () => ({ ok: true, idempotentClaim: true, probeCleaned: true }),
+      applySchema: async (resolved, options) => {
+        events.push('schema')
+        assert.equal(options.bootstrap.projectRef, 'client-project')
+        assert.equal(resolved.secrets.has('SUPABASE_DB_URL'), false)
+        return { requested: true, applied: true, projectRef: 'client-project', connectionMode: 'direct' }
+      },
+      verifyDataSpine: async () => {
+        events.push('spine')
+        spineChecks += 1
+        if (spineChecks === 1) throw new Error('client_data_spine_schema_missing:supermega_console_activity')
+        return { ok: true, idempotentClaim: true, probeCleaned: true }
+      },
+      sleep: async () => { events.push('sleep') },
       verify: async (url, options) => ({ url, selected: options.workcells, connectors: 69 }),
     })
     assert.equal(result.ok, true)
     assert.equal(result.dataSpine.idempotentClaim, true)
+    assert.equal(result.schemaBootstrap.applied, true)
+    assert.deepEqual(events.slice(0, 5), ['schema', 'spine', 'sleep', 'spine', 'vercel'])
     assert.equal(result.deploymentUrl, 'https://supermega-wc-acme-trading.vercel.app')
     assert.deepEqual(copiedConfig.crons, [{ path: '/api/brief', schedule: '30 1 * * *' }])
     assert.ok(calls.some((call) => call.args.slice(0, 4).join(' ') === 'vercel project add supermega-wc-acme-trading'))
@@ -204,15 +355,40 @@ test('apply creates, links, configures, deploys, and verifies without secrets in
     assert.equal(envCalls.length, result.variablesApplied.length + result.secretsApplied.length)
     const commandText = JSON.stringify(calls.map((call) => call.args))
     const resultText = JSON.stringify(result)
-    for (const secret of [...Object.values(SECRET_ENV), Buffer.from('generated-cron').toString('base64url')]) {
+    for (const secret of [...Object.values(BOOTSTRAP_ENV), Buffer.from('generated-cron').toString('base64url')]) {
       assert.doesNotMatch(commandText, new RegExp(secret.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
       assert.doesNotMatch(resultText, new RegExp(secret.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
+    }
+    for (const secret of Object.values(SECRET_ENV)) {
       assert.ok(envCalls.some((call) => call.input === secret), `secret ${secret.slice(0, 4)}... must travel over stdin`)
     }
+    assert.equal(envCalls.some((call) => call.input === BOOTSTRAP_DB_URL), false)
     await assert.rejects(stat(applyCwd), /ENOENT/)
   } finally {
     await rm(source, { recursive: true, force: true })
     await rm(tempParent, { recursive: true, force: true })
+  }
+})
+
+test('failed schema bootstrap stops before data-spine proof and every Vercel command', async () => {
+  const source = await fixtureSource()
+  let commands = 0
+  let proofs = 0
+  try {
+    await assert.rejects(
+      applyProvisionPlan(MANIFEST, {
+        scope: 'team', env: BOOTSTRAP_ENV, sourceDirectory: source, sourceClean: true,
+        confirm: 'PROVISION supermega-wc-acme-trading',
+        applySchema: async () => { throw new Error('client_schema_bootstrap_failed') },
+        verifyDataSpine: async () => { proofs += 1; return { ok: true } },
+        run: async () => { commands += 1; return { code: 0, stdout: '', stderr: '' } },
+      }),
+      /client_schema_bootstrap_failed/,
+    )
+    assert.equal(proofs, 0)
+    assert.equal(commands, 0)
+  } finally {
+    await rm(source, { recursive: true, force: true })
   }
 })
 
@@ -301,13 +477,15 @@ test('client SQL bootstrap contains the exact durable workcell contract', async 
     assert.match(sql, new RegExp(`revoke all on public\\.${table} from anon, authenticated`))
   }
   assert.match(sql, /create index if not exists supermega_action_queue_status_created_idx/)
+  assert.match(sql, /notify pgrst, 'reload schema'/)
   assert.match(sql, /primary key \(tenant_id, "window"\)/)
 })
 
 test('live verifier requires healthy status and every selected workcell', async () => {
   const responses = [
     { ok: true, service: 'supermega-kernel', connectors: { total: 69, registrationErrors: 0 } },
-    { ok: true, workcells: [{ slug: 'owner-command', configured: true, missing: [] }] },
+    { ok: true, workcells: [{ slug: 'owner-command', configured: true, actionDraftSupported: true, actionDraftReady: true, missing: [] }] },
+    { ok: true, approvals: [] },
   ]
   const fetchCalls = []
   const fetch = async (url, options = {}) => {
@@ -322,7 +500,10 @@ test('live verifier requires healthy status and every selected workcell', async 
   })
   assert.equal(result.connectors, 69)
   assert.equal(result.workcells[0].configured, true)
+  assert.equal(result.approvalInbox.ready, true)
+  assert.equal(result.approvalInbox.count, 0)
   assert.equal(fetchCalls[1].options.headers['x-ops-key'], 'ops-secret')
+  assert.equal(fetchCalls[2].options.headers['x-ops-key'], 'ops-secret')
   assert.doesNotMatch(JSON.stringify(result), /ops-secret/)
 
   await assert.rejects(
@@ -339,5 +520,21 @@ test('live verifier requires healthy status and every selected workcell', async 
       workcells: ['owner-command'],
     }),
     /provision_workcell_not_configured:owner-command/,
+  )
+
+  await assert.rejects(
+    verifyProvisionedClient('https://client.vercel.app', {
+      fetch: async (url) => ({
+        ok: true,
+        async json() {
+          return url.endsWith('/api/status')
+            ? { ok: true, service: 'supermega-kernel', connectors: {} }
+            : { ok: true, workcells: [{ slug: 'owner-command', configured: true, actionDraftSupported: true, actionDraftReady: false, missing: [] }] }
+        },
+      }),
+      opsKey: 'ops-secret',
+      workcells: ['owner-command'],
+    }),
+    /provision_workcell_action_not_ready:owner-command/,
   )
 })

@@ -70,4 +70,6 @@ grant select, insert, update, delete on public.supermega_token_ledger to service
 grant select, insert, update, delete on public.supermega_ai_cache to service_role;
 grant select, insert, update, delete on public.supermega_action_queue to service_role;
 
+notify pgrst, 'reload schema';
+
 commit;
