@@ -229,6 +229,73 @@ export async function logActivity(a) {
     const rec = { ...row, at: new Date().toISOString() }; mem.activity.set(rec.id, rec); return rec
   } catch { return null }
 }
+// Atomically reserve one deterministic activity id. Scheduled deliveries use this as their
+// idempotency key because Vercel cron events can be delivered more than once.
+export async function claimActivity(a) {
+  const row = {
+    id: String(a?.id || '').trim().slice(0, 120),
+    kind: String(a?.kind || '').trim().slice(0, 80),
+    summary: String(a?.summary || '').slice(0, 300),
+    ref: a?.ref ? String(a.ref).slice(0, 160) : null,
+  }
+  if (!row.id) return { fresh: false, durable: mode !== 'memory', reason: 'missing_claim_id' }
+  try {
+    if (mode === 'supabase') {
+      const response = await fetch(`${SUPABASE_URL}/rest/v1/supermega_console_activity?on_conflict=id`, {
+        method: 'POST',
+        headers: {
+          apikey: SUPABASE_KEY,
+          authorization: `Bearer ${SUPABASE_KEY}`,
+          'content-type': 'application/json',
+          prefer: 'resolution=ignore-duplicates,return=representation',
+        },
+        body: JSON.stringify(row),
+      })
+      if (!response.ok) return { fresh: false, durable: false, reason: `claim_store_http_${response.status}` }
+      const rows = await response.json().catch(() => [])
+      return { fresh: Array.isArray(rows) && rows.length > 0, durable: true }
+    }
+    if (mode === 'postgres') {
+      await ensurePgTables()
+      const rows = await q(
+        'insert into supermega_console_activity (id,kind,summary,ref) values ($1,$2,$3,$4) on conflict (id) do nothing returning id',
+        [row.id, row.kind, row.summary, row.ref],
+      )
+      return { fresh: rows.length > 0, durable: true }
+    }
+    if (mem.activity.has(row.id)) return { fresh: false, durable: false }
+    mem.activity.set(row.id, { ...row, at: new Date().toISOString() })
+    return { fresh: true, durable: false }
+  } catch {
+    return { fresh: false, durable: false, reason: 'claim_store_unavailable' }
+  }
+}
+// Release only an internal deterministic claim so an owner delivery that failed can be retried.
+export async function releaseActivityClaim(id) {
+  const key = String(id || '').trim().slice(0, 120)
+  if (!key) return false
+  try {
+    if (mode === 'supabase') {
+      const response = await fetch(`${SUPABASE_URL}/rest/v1/supermega_console_activity?id=eq.${encodeURIComponent(key)}`, {
+        method: 'DELETE',
+        headers: {
+          apikey: SUPABASE_KEY,
+          authorization: `Bearer ${SUPABASE_KEY}`,
+          prefer: 'return=minimal',
+        },
+      })
+      return response.ok
+    }
+    if (mode === 'postgres') {
+      await ensurePgTables()
+      await q('delete from supermega_console_activity where id=$1', [key])
+      return true
+    }
+    return mem.activity.delete(key)
+  } catch {
+    return false
+  }
+}
 export async function listActivity(limit = 30) {
   if (mode === 'supabase') return rest('GET', `supermega_console_activity?order=at.desc&limit=${limit}`)
   if (mode === 'postgres') { await ensurePgTables(); return q('select * from supermega_console_activity order by at desc limit $1', [limit]) }
@@ -440,4 +507,4 @@ export async function ping() {
   return { ok: false, mode, detail: 'unknown_mode' }
 }
 
-export default { mode, listLeads, getLead, insertLead, updateLead, listClients, listProjects, createClient, getClient, createProject, updateProject, getProject, markDepositPaid, convertedLeadIds, saveDeal, listDeals, updateDeal, logActivity, listActivity, getTokenUsage, addTokenUsage, getCachedResponse, putCachedResponse, recordPaymentEvent, ping, bumpGraduation, recordBuildModules, listGraduation }
+export default { mode, listLeads, getLead, insertLead, updateLead, listClients, listProjects, createClient, getClient, createProject, updateProject, getProject, markDepositPaid, convertedLeadIds, saveDeal, listDeals, updateDeal, logActivity, claimActivity, releaseActivityClaim, listActivity, getTokenUsage, addTokenUsage, getCachedResponse, putCachedResponse, recordPaymentEvent, ping, bumpGraduation, recordBuildModules, listGraduation }
