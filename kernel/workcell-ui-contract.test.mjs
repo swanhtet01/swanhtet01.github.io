@@ -56,3 +56,10 @@ test('Vercel serves the guarded workcell function before the generic API route',
   assert.ok(approvalRoute >= 0 && approvalRoute < catchAll)
   assert.deepEqual(config.crons, [{ path: '/api/brief', schedule: '30 1 * * *' }])
 })
+
+test('Vercel upload excludes test suites and browser QA artifacts', async () => {
+  const ignore = await readFile(new URL('./.vercelignore', import.meta.url), 'utf8')
+  assert.match(ignore, /^\*\*\/\*\.test\.mjs$/m)
+  assert.match(ignore, /^\.playwright-cli\/$/m)
+  assert.match(ignore, /^output\/$/m)
+})
