@@ -2,7 +2,7 @@
 // Plan mode is pure. Apply mode creates one isolated Vercel project, supplies secrets only over
 // stdin, deploys a clean kernel copy, and verifies the protected workcell catalog before success.
 
-import { randomBytes } from 'node:crypto'
+import { randomBytes, randomUUID } from 'node:crypto'
 import { cp, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { basename, join, resolve } from 'node:path'
@@ -18,11 +18,12 @@ const CLICKUP_LIST_RE = /^\d{1,32}$/
 const DAILY_TIME_RE = /^(?:[01]\d|2[0-3]):[0-5]\d$/
 const SECRET_LINE_BREAK_RE = /[\r\n]/
 const CONTROL_CHARACTER_RE = /[\u0000-\u001f\u007f]/
+const SCHEMA_BOOTSTRAP_INPUT = 'SUPERMEGA_NEW_CLIENT_SUPABASE_DB_URL'
 const WORKCELL_DATA_TABLES = [
-  ['supermega_console_activity', 'id'],
-  ['supermega_token_ledger', 'tenant_id'],
-  ['supermega_ai_cache', 'cache_key'],
-  ['supermega_action_queue', 'id'],
+  ['supermega_console_activity', 'id,kind,summary,at'],
+  ['supermega_token_ledger', 'tenant_id,window,in_tokens,out_tokens,calls,updated_at'],
+  ['supermega_ai_cache', 'cache_key,payload,created_at'],
+  ['supermega_action_queue', 'id,client_id,action_type,title,payload,payload_hash,source,status,version,approved_by,approved_at,rejected_by,rejected_at,executing_at,lease_expires_at,attempts,provider_ref,result,last_error,executed_at,created_at,updated_at'],
 ]
 
 function text(value, max = 200) {
@@ -195,13 +196,70 @@ export function resolveProvisionEnvironment(manifestInput, env = process.env, op
   return { manifest, variables, secrets, missingSecrets, missingSecretInputs }
 }
 
+function supabaseProjectRef(rawUrl) {
+  try {
+    const parsed = new URL(rawUrl)
+    const suffix = '.supabase.co'
+    if (parsed.protocol !== 'https:' || parsed.username || parsed.password || !parsed.hostname.endsWith(suffix)) throw new Error('invalid')
+    const projectRef = parsed.hostname.slice(0, -suffix.length)
+    if (!/^[a-z0-9][a-z0-9-]{2,62}[a-z0-9]$/.test(projectRef) || projectRef.includes('.')) throw new Error('invalid')
+    return projectRef
+  } catch {
+    throw new Error('client_schema_bootstrap_supabase_url_invalid')
+  }
+}
+
+export function resolveSchemaBootstrapEnvironment(resolvedInput, env = process.env) {
+  const resolved = resolvedInput?.secrets instanceof Map
+    ? resolvedInput
+    : resolveProvisionEnvironment(resolvedInput, env)
+  let rawInput
+  try { rawInput = String(env[SCHEMA_BOOTSTRAP_INPUT] ?? '') } catch { throw new Error('client_schema_bootstrap_url_invalid') }
+  if (rawInput.length > 4_096 || SECRET_LINE_BREAK_RE.test(rawInput) || CONTROL_CHARACTER_RE.test(rawInput)) {
+    throw new Error('client_schema_bootstrap_url_invalid')
+  }
+  const raw = rawInput.trim()
+  const supabaseUrl = resolved.secrets.get('SUPABASE_URL')
+  if (!supabaseUrl) {
+    if (raw) throw new Error('client_schema_bootstrap_supabase_url_invalid')
+    return { provided: false, inputName: SCHEMA_BOOTSTRAP_INPUT, projectRef: null, connectionMode: null }
+  }
+  const projectRef = supabaseProjectRef(supabaseUrl)
+  if (!raw) return { provided: false, inputName: SCHEMA_BOOTSTRAP_INPUT, projectRef, connectionMode: null }
+  let parsed
+  try { parsed = new URL(raw) } catch { throw new Error('client_schema_bootstrap_url_invalid') }
+  if (!['postgres:', 'postgresql:'].includes(parsed.protocol) || !parsed.username || !parsed.password) {
+    throw new Error('client_schema_bootstrap_url_invalid')
+  }
+  if (parsed.port !== '5432') throw new Error('client_schema_bootstrap_requires_port_5432')
+  if (parsed.pathname !== '/postgres') throw new Error('client_schema_bootstrap_database_must_be_postgres')
+  const requestedSslMode = parsed.searchParams.get('sslmode')
+  if (requestedSslMode === 'disable') throw new Error('client_schema_bootstrap_ssl_required')
+  if (requestedSslMode && requestedSslMode !== 'require') throw new Error('client_schema_bootstrap_ssl_mode_unsupported')
+
+  const direct = parsed.hostname === `db.${projectRef}.supabase.co` && parsed.username === 'postgres'
+  const sessionPooler = parsed.hostname.endsWith('.pooler.supabase.com') && parsed.username === `postgres.${projectRef}`
+  if (!direct && !sessionPooler) throw new Error('client_schema_bootstrap_project_mismatch')
+  parsed.searchParams.delete('sslmode')
+  return {
+    provided: true,
+    inputName: SCHEMA_BOOTSTRAP_INPUT,
+    projectRef,
+    connectionMode: direct ? 'direct' : 'session_pooler',
+    connectionString: parsed.toString(),
+    tlsMode: 'require',
+  }
+}
+
 export function buildProvisionPlan(manifestInput, options = {}) {
   const scope = text(options.scope || process.env.VERCEL_SCOPE, 120)
   if (!VERCEL_SCOPE_RE.test(scope)) throw new Error('vercel_scope_required')
   const resolved = resolveProvisionEnvironment(manifestInput, options.env || process.env, options)
+  const schemaBootstrap = resolveSchemaBootstrapEnvironment(resolved, options.env || process.env)
   const requiredSecretInputs = requiredSecretGroups(resolved.manifest)
     .map((group) => group.sources.map((source) => source.name).join('|'))
   requiredSecretInputs.push('SUPERMEGA_NEW_CLIENT_CRON_SECRET (optional; generated when absent)')
+  requiredSecretInputs.push(`${SCHEMA_BOOTSTRAP_INPUT} (conditional; bootstrap-only when schema is not pre-applied)`)
   const [hour, minute] = resolved.manifest.deliveryUtc.split(':').map(Number)
   return {
     version: 1,
@@ -221,8 +279,69 @@ export function buildProvisionPlan(manifestInput, options = {}) {
     requiredSecretInputs,
     missingSecrets: [...resolved.missingSecrets],
     missingSecretInputs: [...resolved.missingSecretInputs],
+    schemaBootstrap: {
+      inputName: schemaBootstrap.inputName,
+      supplied: schemaBootstrap.provided,
+      targetProjectRef: schemaBootstrap.projectRef,
+      connectionMode: schemaBootstrap.connectionMode,
+      tlsMode: schemaBootstrap.provided ? schemaBootstrap.tlsMode : null,
+      deployedToVercel: false,
+    },
     sourceDirectory: options.sourceDirectory ? resolve(options.sourceDirectory) : null,
   }
+}
+
+export async function applyClientSchema(resolvedInput, options = {}) {
+  const env = options.env || process.env
+  const bootstrap = options.bootstrap || resolveSchemaBootstrapEnvironment(resolvedInput, env)
+  if (!bootstrap.provided) {
+    return { requested: false, applied: false, projectRef: bootstrap.projectRef, connectionMode: null }
+  }
+  let client
+  try {
+    const clientFactory = options.clientFactory || (async (config) => {
+      const pgmod = (await import('pg')).default
+      return new pgmod.Client(config)
+    })
+    client = await clientFactory({
+      connectionString: bootstrap.connectionString,
+      ssl: { rejectUnauthorized: false },
+      connectionTimeoutMillis: 15_000,
+      query_timeout: 30_000,
+      statement_timeout: 30_000,
+      application_name: 'supermega-workcell-bootstrap',
+    })
+    await client.connect()
+    const sql = await readFile(new URL('./supabase/workcell-client.sql', import.meta.url), 'utf8')
+    await client.query(sql)
+    return {
+      requested: true,
+      applied: true,
+      projectRef: bootstrap.projectRef,
+      connectionMode: bootstrap.connectionMode,
+    }
+  } catch {
+    try { await client?.query('rollback') } catch { /* best effort after an aborted transaction */ }
+    throw new Error('client_schema_bootstrap_failed')
+  } finally {
+    try { await client?.end() } catch { /* connection is disposable */ }
+  }
+}
+
+async function proveClientDataSpine(resolved, options = {}) {
+  const verify = options.verify || verifyClientDataSpine
+  const attempts = options.schemaApplied ? 5 : 1
+  const sleep = options.sleep || ((milliseconds) => new Promise((resolvePromise) => setTimeout(resolvePromise, milliseconds)))
+  let lastError
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try { return await verify(resolved) } catch (error) {
+      lastError = error
+      const schemaVisibilityDelay = String(error?.message || '').startsWith('client_data_spine_schema_missing:')
+      if (!schemaVisibilityDelay || attempt === attempts) throw error
+      await sleep(1_000)
+    }
+  }
+  throw lastError
 }
 
 function defaultRunner(args, options = {}) {
@@ -355,7 +474,56 @@ export async function verifyClientDataSpine(resolvedInput, options = {}) {
   }).catch(() => null)
   if (!cleanup?.ok && !failure) failure = new Error('client_data_spine_probe_cleanup_failed')
   if (failure) throw failure
-  return { ok: true, tables, idempotentClaim: true, probeCleaned: true }
+
+  const actionId = (options.randomUUID || randomUUID)()
+  const actionUrl = `${baseUrl}/rest/v1/supermega_action_queue`
+  let actionFailure = null
+  try {
+    const draft = await fetchImpl(actionUrl, {
+      method: 'POST',
+      headers: writeHeaders,
+      body: JSON.stringify({
+        id: actionId,
+        client_id: resolved.manifest.clientId,
+        action_type: 'clickup.create_task',
+        title: 'temporary approval CAS proof',
+        payload: { list_id: '1', name: 'temporary proof', marker: `supermega-action:${actionId}` },
+        payload_hash: '0'.repeat(64),
+        source: { kind: 'provision_probe' },
+      }),
+      signal: AbortSignal.timeout(10_000),
+    })
+    const draftRows = await draft.json().catch(() => null)
+    if (!draft.ok || !Array.isArray(draftRows) || draftRows.length !== 1 || draftRows[0]?.status !== 'draft' || Number(draftRows[0]?.version) !== 0) {
+      throw new Error('client_data_spine_approval_insert_failed')
+    }
+
+    const transitionUrl = `${actionUrl}?id=eq.${encodeURIComponent(actionId)}&status=eq.draft&version=eq.0`
+    const transitionBody = JSON.stringify({ status: 'approved', version: 1, approved_by: 'provision_probe', approved_at: new Date(0).toISOString() })
+    const firstTransition = await fetchImpl(transitionUrl, {
+      method: 'PATCH', headers: writeHeaders, body: transitionBody, signal: AbortSignal.timeout(10_000),
+    })
+    const firstTransitionRows = await firstTransition.json().catch(() => null)
+    if (!firstTransition.ok || !Array.isArray(firstTransitionRows) || firstTransitionRows.length !== 1 || firstTransitionRows[0]?.status !== 'approved' || Number(firstTransitionRows[0]?.version) !== 1) {
+      throw new Error('client_data_spine_approval_transition_failed')
+    }
+
+    const duplicateTransition = await fetchImpl(transitionUrl, {
+      method: 'PATCH', headers: writeHeaders, body: transitionBody, signal: AbortSignal.timeout(10_000),
+    })
+    const duplicateTransitionRows = await duplicateTransition.json().catch(() => null)
+    if (!duplicateTransition.ok || !Array.isArray(duplicateTransitionRows) || duplicateTransitionRows.length !== 0) {
+      throw new Error('client_data_spine_approval_transition_not_atomic')
+    }
+  } catch (error) {
+    actionFailure = error
+  }
+  const actionCleanup = await fetchImpl(`${actionUrl}?id=eq.${encodeURIComponent(actionId)}`, {
+    method: 'DELETE', headers: { ...writeHeaders, prefer: 'return=minimal' }, signal: AbortSignal.timeout(10_000),
+  }).catch(() => null)
+  if (!actionCleanup?.ok && !actionFailure) actionFailure = new Error('client_data_spine_approval_cleanup_failed')
+  if (actionFailure) throw actionFailure
+  return { ok: true, tables, idempotentClaim: true, approvalCas: true, probeCleaned: true }
 }
 
 async function addEnvironmentVariable(run, cwd, scope, name, value, sensitive) {
@@ -398,6 +566,18 @@ export async function verifyProvisionedClient(deploymentUrl, options = {}) {
     const row = rows.find((item) => item.slug === slug)
     if (!row) throw new Error(`provision_workcell_missing:${slug}`)
     if (!row.configured) throw new Error(`provision_workcell_not_configured:${slug}`)
+    const actionExpected = slug === 'pipeline-control' || slug === 'owner-command'
+    if (actionExpected && (!row.actionDraftSupported || !row.actionDraftReady)) {
+      throw new Error(`provision_workcell_action_not_ready:${slug}`)
+    }
+  }
+  const approvalsResponse = await fetchImpl(`${deploymentUrl}/api/approvals`, {
+    headers: { 'x-ops-key': opsKey },
+    signal: AbortSignal.timeout(15_000),
+  })
+  const approvals = await approvalsResponse.json().catch(() => null)
+  if (!approvalsResponse.ok || !approvals?.ok || !Array.isArray(approvals.approvals)) {
+    throw new Error('provision_approval_inbox_check_failed')
   }
   return {
     service: status.service,
@@ -408,6 +588,7 @@ export async function verifyProvisionedClient(deploymentUrl, options = {}) {
       configured: Boolean(row.configured),
       missing: row.missing || [],
     })),
+    approvalInbox: { ready: true, count: approvals.approvals.length },
   }
 }
 
@@ -425,7 +606,15 @@ export async function applyProvisionPlan(manifestInput, options = {}) {
   if (!sourceClean && options.allowDirtySource !== true) throw new Error('source_tree_not_clean')
 
   const resolved = resolveProvisionEnvironment(manifestInput, env, { randomBytes: options.randomBytes })
-  const dataSpine = await (options.verifyDataSpine || verifyClientDataSpine)(resolved)
+  const bootstrap = resolveSchemaBootstrapEnvironment(resolved, env)
+  const schemaBootstrap = bootstrap.provided
+    ? await (options.applySchema || applyClientSchema)(resolved, { env, bootstrap })
+    : { requested: false, applied: false, projectRef: bootstrap.projectRef, connectionMode: null }
+  const dataSpine = await proveClientDataSpine(resolved, {
+    verify: options.verifyDataSpine,
+    schemaApplied: schemaBootstrap.applied,
+    sleep: options.sleep,
+  })
   const run = options.run || defaultRunner
   let tempDirectory
   try {
@@ -465,6 +654,7 @@ export async function applyProvisionPlan(manifestInput, options = {}) {
       workcells: [...resolved.manifest.workcells],
       variablesApplied: plan.variableNames,
       secretsApplied: plan.secretNames,
+      schemaBootstrap,
       dataSpine,
       verification,
     }
@@ -481,5 +671,7 @@ export default {
   applyProvisionPlan,
   verifyProvisionedClient,
   verifyClientDataSpine,
+  resolveSchemaBootstrapEnvironment,
+  applyClientSchema,
   isSourceClean,
 }
