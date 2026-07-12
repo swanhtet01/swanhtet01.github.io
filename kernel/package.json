@@ -2,6 +2,14 @@
   "name": "supermega-console",
   "private": true,
   "type": "module",
+  "scripts": {
+    "test": "node --test",
+    "brand:verify": "node scripts/verify-brand.mjs",
+    "connector:resilience": "node ../tools/test_connector_resilience.mjs",
+    "crew:resilience": "node ../tools/test_crew_resilience.mjs",
+    "verify": "npm test && npm run brand:verify && npm run connector:resilience && npm run crew:resilience",
+    "deploy:prod": "npm run verify && npx vercel deploy --prod -y"
+  },
   "dependencies": {
     "pg": "^8.13.1"
   }

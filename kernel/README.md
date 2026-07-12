@@ -41,10 +41,15 @@ const { data } = await complete({
 
 ## Env
 - `ANTHROPIC_API_KEY` (required) — already set on the `supermega-machine` project.
-- `SUPERMEGA_CLIENT_TOKEN_CAP` (optional) — per-client token ceiling, default 2,000,000.
+- `SUPERMEGA_CLIENT_TOKEN_CAP` (optional) — per-tenant **monthly** token ceiling, default 2,000,000. Override per call with `complete({ capTokens })`.
+- `SUPERMEGA_CLIENT_CAP_SOFT_RATIO` (optional) — fraction of the cap above which a call is auto-downgraded one tier (default `0.8`). Below the hard cap, this keeps a client under budget instead of cutting them off.
+- `SUPERMEGA_GATEWAY_PERSIST` (optional) — set to `0` to force pure in-memory ledger/cache (skip the spine). Default on.
+
+## Per-tenant cost cap (spine-backed)
+The token ledger + response cache are now backed by `store.mjs` (Supabase / Postgres / memory), so the cap **survives cold starts and spans instances**. Each tenant gets one ledger row per `YYYY-MM` window; `complete()` reads the persisted total before each call, **refuses** over the hard cap, and **downgrades a tier** past the soft threshold. Memory mode still works locally with no credentials. Two tables back this — `supermega_token_ledger` and `supermega_ai_cache` — created by `ensurePgTables()` in postgres mode and present in `supabase/console-tables.sql` for Supabase mode.
 
 ## Known limits (v0, honest)
-- The response cache and per-client token ledger are **in-memory per warm instance** — they reset on cold start and don't share across instances. Back them with Supabase/KV before relying on the caps at scale. (Same caveat the Deal Desk hit with its rate-limiter.)
+- The cap is enforced at monthly granularity per tenant; there's a small race window if the same tenant fires many concurrent calls across instances (each reads-then-writes), so the cap can be modestly overshot under high concurrency — acceptable for a budget ceiling.
 - No streaming yet — add when the console needs it.
 
 ## Next

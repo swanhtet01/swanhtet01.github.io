@@ -1,0 +1,51 @@
+{
+  "slug": "chase-the-money",
+  "name": "Chase the Money",
+  "version": 1,
+  "description": "Finds unpaid balances and promised follow-ups buried in the owner’s OWN message threads and drafts a reminder in the customer’s language. The owner reads and sends — the crew never messages anyone on its own.",
+  "requires_account_access": true,
+  "policy": {
+    "own_accounts_only": true,
+    "skip_personal": true,
+    "read_only": true
+  },
+  "intake": {
+    "accepts": [
+      "viber chat export",
+      "gmail thread export",
+      "pos sales ledger export",
+      "invoice photo"
+    ],
+    "description": "The owner’s OWN threads + the POS sales ledger for the window. Personal chats are skipped; injection frames are stripped at the gateway before any content reaches a model."
+  },
+  "roles": [
+    {
+      "id": "intake",
+      "title": "Intake",
+      "tier": "bulk",
+      "goal": "Normalize the incoming intake into clean units, drop anything out of scope (and, for account-reading crews, personal/non-business content), and never invent facts."
+    },
+    {
+      "id": "balance-finder",
+      "title": "Balance Finder",
+      "tier": "bulk",
+      "goal": "Scan the intake for unpaid or partly-paid orders and promised follow-ups; for each capture the customer, amount owed in MMK, the order/invoice reference, and the exact source quote it came from."
+    },
+    {
+      "id": "reminder-drafter",
+      "title": "Reminder Drafter",
+      "tier": "reason",
+      "goal": "For each open balance draft a short, warm reminder in the CUSTOMER’s own language (Burmese or English), matched to how overdue it is and how good a customer they are. Draft only — never send."
+    }
+  ],
+  "output_contract": {
+    "format": "json",
+    "fields": [
+      "open_balances",
+      "reminders",
+      "total_owed_mmk",
+      "sources"
+    ],
+    "description": "Open balances with amount owed in MMK and the source quote for each, plus ready-to-send reminder drafts. Nothing is sent — the owner approves and sends."
+  }
+}
