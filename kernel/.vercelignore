@@ -1,0 +1,3 @@
+**/*.test.mjs
+.playwright-cli/
+output/
