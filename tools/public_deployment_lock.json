@@ -1,11 +1,11 @@
 {
-    "public_host":  "supermega-public-gnb7g0fm8-swanhtet01s-projects.vercel.app",
-    "deployment_id":  "dpl_5dHB4kUSFV7e6FBGBz5cnd6cV2xM",
-    "locked_at":  "2026-07-12T23:38:38.7732574Z",
+    "public_host":  "supermega-public-iuij4dhby-swanhtet01s-projects.vercel.app",
+    "deployment_id":  "dpl_5HY98j4t31cQNjWSbme9UzZ4nNqF",
+    "locked_at":  "2026-07-12T23:53:28.0437568Z",
     "domains":  [
                     "supermega.dev",
                     "www.supermega.dev"
                 ],
     "project":  "supermega-public",
-    "reason":  "Runtime workcell catalog and intake contract verified live on the separated public project and attached to public domains."
+    "reason":  "Runtime workcell catalog, exact lead routing, and no-secret provisioner handoff verified on the separated public project and attached to public domains."
 }
