@@ -37,14 +37,16 @@ for (const [label, html] of Object.entries(pages)) {
 requireTokens('generator_two_suite_redesign', source, [
   "replace(/\\bRetail OS\\b/g, 'Shop')",
   "replace(/\\bFactory OS\\b/g, 'Plant')",
-  'Shop runs your counter; Plant runs your operations.',
+  'Custom software, built for your business.',
   'custom-ai-agent-build',
 ])
 
 requireTokens('home_two_suite_redesign', pages.home, [
-  'Stop running your business on Viber',
+  '<h1>SuperMega</h1>',
+  'site-hero-screen',
   '<strong>Shop</strong>',
   '<strong>Plant</strong>',
+  'Custom Solutions &amp; AI Agents',
   'Powered by SuperMega Technologies',
 ])
 
@@ -57,25 +59,25 @@ requireTokens('products_two_suite_redesign', pages.products, [
 ])
 
 requireTokens('offers_two_suite_redesign', pages.offers, [
-  'Start free. Pay when the worker proves value.',
+  'Clear scope. Clear starting point.',
   'Tool in a week',
   'Custom build',
+  'AI agent / automation',
   'Design + ship system',
-  'Start free with the two apps.',
+  'Start with a real workflow.',
 ])
 
 requireTokens('agents_redirect_to_products', pages.agents, [
   'Continue to SuperMega',
   'url=/products/',
   'window.location.replace("/products/")',
-  'See our two apps',
+  'Explore products',
 ])
 
 requireTokens('contact_two_suite_intake', pages.contact, [
-  'Tell us about your business.',
-  'Shop runs your counter; Plant runs your operations.',
+  'Tell us what needs to work better.',
+  'Source link or system',
   'custom-ai-agent-build',
-  'Custom Solutions & AI Agents - from 11,000,000 MMK',
 ])
 
 const retiredPublicOfferTokens = [
@@ -100,4 +102,4 @@ if (failures.length) {
   process.exit(1)
 }
 
-console.log('public_shop_plant_two_suite_contract=verified')
+console.log('public_shop_plant_ai_workers_contract=verified')

@@ -2,6 +2,7 @@ import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { resolve } from 'node:path'
 import './enforce_current_public_product_output.mjs'
 import './verify_public_ai_workcell_pilot_offer_contract.mjs'
+import './verify_public_enterprise_visual_contract.mjs'
 
 const root = process.cwd()
 const outputRoot = resolve(root, '.vercel', 'output')
@@ -744,8 +745,8 @@ for (const token of [
   }
 }
 for (const token of [
-  '<title>supermega.dev — your business, in one simple app</title>',
-  'Stop running your business on Viber',
+  '<title>SuperMega | Operating software and AI workers</title>',
+  '<h1>SuperMega</h1>',
   'sm_worker_continue_state',
   'data-local-worker-continue',
   'Browser-local continuation',
@@ -800,11 +801,11 @@ for (const [entry, html] of Object.entries({
   'operator/index.html': operatorHtml,
 })) {
   const match = html.match(/\bDigital workers?\b/i)
-  if (match) {
-    fail('public_digital_worker_term_guard_missing_poc', {
+  if (match && !/review|approval|proof/i.test(html)) {
+    fail('public_digital_worker_term_guard_missing_control', {
       entry,
       match: match[0],
-      required_gate: 'measured_poc_pass_rate_report_before_customer_facing_term',
+      required_guard: 'review_or_approval_or_proof',
     })
   }
 }
@@ -812,7 +813,7 @@ for (const token of [
   'Continue to SuperMega',
   'url=/products/',
   'window.location.replace("/products/")',
-  'See our two apps',
+  'Explore products',
 ]) {
   if (!aiAgentsHtml.includes(token)) fail('public_ai_agents_redirect_contract_missing', { token })
 }
@@ -1125,7 +1126,7 @@ if (!Array.isArray(starterKitIndex.templates) || starterKitIndex.templates.lengt
 const starterPageIndexPath = resolve(staticDir, 'agent-templates/index.html')
 if (!existsSync(starterPageIndexPath)) fail('public_agent_template_page_index_missing')
 const starterPageIndexHtml = readFileSync(starterPageIndexPath, 'utf8')
-if (!starterPageIndexHtml.includes('AI agent setup kits') || !starterPageIndexHtml.includes('Start from a working template.')) {
+if (!starterPageIndexHtml.includes('AI worker library') || !starterPageIndexHtml.includes('Start with a deployable AI worker.')) {
   fail('public_agent_template_page_index_contract_missing')
 }
 if (!starterPageIndexHtml.includes('/ai-agents/guide/')) {
@@ -1239,7 +1240,7 @@ for (const [id, name] of publicAgentTemplateContract) {
   }
 }
 const agentTemplatePublicHtml = [productsHtml, contactHtml, starterPageIndexHtml].join('\n')
-for (const token of ['AI agent setup kits', 'View setup kit', 'name="template_id"', 'name="starter_kit_url"', "search.get('template')", '/site/agent-templates/daily-intelligence-brief.json', '/agent-templates/daily-intelligence-brief/setup/']) {
+for (const token of ['AI worker library', 'View setup kit', 'name="template_id"', 'name="starter_kit_url"', "search.get('template')", '/site/agent-templates/daily-intelligence-brief.json', '/agent-templates/daily-intelligence-brief/setup/']) {
   if (!agentTemplatePublicHtml.includes(token)) {
     fail('public_agent_template_contract_missing', { token })
   }

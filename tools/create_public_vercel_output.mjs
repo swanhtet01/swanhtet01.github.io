@@ -151,9 +151,9 @@ function normalizePublicProductNames(content) {
     .replace(/\bRetail OS\b/g, 'Shop')
     .replace(/\bFactory OS\b/g, 'Plant')
     .replace(/Document Extraction Ledger|Back Office AI Desk|Back Office Workflow Desk/g, 'Custom Solutions & AI Agents')
-    // Retire the old tagline. Header sub-mark → clean wordmark; every other use → the one line.
+    // Retire the old tagline. Header sub-mark → clean wordmark; every other use → the one canonical line.
     .replace(/<small>Cast real work into software<\/small>/g, '')
-    .replace(/Cast real work into software\.?/g, 'Stop running your business on Viber & Excel.')
+    .replace(/Cast real work into software\.?/g, 'Custom software, built for your business.')
 }
 
 const publicMachineHtml = `<!doctype html>
@@ -1579,23 +1579,24 @@ const publicCampaignRedirectHtml = `<!doctype html>
 const unicornShellStyle = `
       @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400..900&display=swap');
       :root {
-        color-scheme: dark;
+        color-scheme: light;
         /* Void Blue + Fire Red — canonical (BRAND-TOKENS.css). Legacy var names kept, dark values. */
-        --void: #07111f;
-        --void-deep: #06101d;
-        --cream: #07111f;
-        --paper: rgba(255, 255, 255, 0.075);
-        --panel: rgba(255, 255, 255, 0.075);
-        --ink: #f6fbff;
-        --text: #f6fbff;
-        --muted: #a9b8c7;
-        --line: rgba(255, 255, 255, 0.15);
+        --void: #f7f9fc;
+        --void-deep: #edf2f7;
+        --cream: #f7f9fc;
+        --paper: rgba(255, 255, 255, 0.78);
+        --panel: rgba(255, 255, 255, 0.72);
+        --field: #ffffff;
+        --ink: #0b1220;
+        --text: #0b1220;
+        --muted: #526176;
+        --line: rgba(15, 23, 42, 0.14);
         --blue: #3B82F6;
-        --blue-soft: rgba(59, 130, 246, 0.16);
-        --aqua: #60A5FA;
-        --navy: #07111f;
+        --blue-soft: rgba(59, 130, 246, 0.12);
+        --aqua: #1d4ed8;
+        --navy: #0b1220;
         --dotdev: #5E6B87;
-        --shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+        --shadow: 0 22px 60px rgba(15, 23, 42, 0.14);
         --font-sans: "Inter", "Noto Sans Myanmar", "Segoe UI", system-ui, -apple-system, sans-serif;
         --font-serif: "Space Grotesk", "Inter", system-ui, ui-serif, sans-serif;
       }
@@ -1606,10 +1607,7 @@ const unicornShellStyle = `
         min-height: 100vh;
         overflow-x: hidden;
         color: var(--text);
-        background:
-          radial-gradient(circle at 80% 2%, rgba(59, 130, 246, 0.10), transparent 30rem),
-          radial-gradient(circle at 4% 18%, rgba(59, 130, 246, 0.07), transparent 26rem),
-          linear-gradient(180deg, #08121f 0%, var(--void) 58%, #050d18 100%);
+        background: linear-gradient(180deg, #fbfcfe 0%, var(--void) 62%, #eef3f8 100%);
         font-family: var(--font-sans);
         text-rendering: optimizeLegibility;
         -webkit-font-smoothing: antialiased;
@@ -1619,17 +1617,17 @@ const unicornShellStyle = `
         position: fixed;
         inset: 0;
         pointer-events: none;
-        opacity: 0.10;
+        opacity: 0.24;
         background-image:
-          linear-gradient(rgba(255, 255, 255, 0.06) 1px, transparent 1px),
-          linear-gradient(90deg, rgba(255, 255, 255, 0.06) 1px, transparent 1px);
+          linear-gradient(rgba(15, 23, 42, 0.035) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(15, 23, 42, 0.035) 1px, transparent 1px);
         background-size: 64px 64px;
         mask-image: linear-gradient(180deg, #000 0%, transparent 72%);
       }
       a { color: inherit; text-decoration: none; }
       img { max-width: 100%; }
-      .wrap { width: min(1180px, calc(100% - 36px)); margin: 0 auto; position: relative; overflow: clip; }
-      header { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 22px 0; }
+      .wrap { width: min(1180px, calc(100% - 36px)); margin: 0 auto; position: relative; overflow: visible; }
+      header { position: sticky; top: 12px; z-index: 20; display: flex; align-items: center; justify-content: space-between; gap: 18px; margin-top: 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 16px; background: rgba(250, 252, 255, 0.72); box-shadow: 0 12px 32px rgba(15, 23, 42, 0.08); backdrop-filter: blur(18px); }
       .brand { display: inline-flex; align-items: center; gap: 12px; font-weight: 950; letter-spacing: -0.045em; }
       .mark { position: relative; display: grid; place-items: center; width: 43px; height: 43px; border-radius: 14px; overflow: hidden; background: transparent; }
       .mark img { display: block; width: 100%; height: 100%; }
@@ -1637,9 +1635,9 @@ const unicornShellStyle = `
       .brand-text strong { font-size: 18px; }
       .brand-text small { color: var(--muted); font-size: 10px; font-weight: 900; letter-spacing: 0.18em; text-transform: uppercase; }
       .nav { display: flex; align-items: center; gap: 10px; }
-      .btn, button { display: inline-flex; align-items: center; justify-content: center; min-height: 48px; border: 1px solid var(--line); border-radius: 999px; padding: 0 18px; background: rgba(255,255,255,0.06); color: var(--text); font: inherit; font-weight: 650; backdrop-filter: blur(18px); transition: transform 180ms ease, background 180ms ease, border-color 180ms ease; }
+      .btn, button { display: inline-flex; align-items: center; justify-content: center; min-height: 48px; border: 1px solid var(--line); border-radius: 12px; padding: 0 18px; background: var(--paper); color: var(--text); font: inherit; font-weight: 700; backdrop-filter: blur(18px); transition: transform 180ms ease, background 180ms ease, border-color 180ms ease; }
       .btn:hover, button:hover { transform: translateY(-1px); border-color: rgba(59,130,246,0.40); }
-      .btn.primary, button { color: #fff; border-color: transparent; background: linear-gradient(135deg, #3B82F6, #60A5FA); box-shadow: 0 18px 40px rgba(59, 130, 246, 0.28); }
+      .btn.primary, button { color: #fff; border-color: transparent; background: var(--blue); box-shadow: 0 12px 28px rgba(59, 130, 246, 0.24); }
       .poster { display: grid; grid-template-columns: minmax(0, 0.84fr) minmax(340px, 1.16fr); gap: clamp(24px, 5vw, 72px); align-items: center; min-height: min(620px, calc(100svh - 86px)); padding: 10px 0 42px; }
       .eyebrow { color: var(--blue); font-size: 12px; font-weight: 950; letter-spacing: 0.22em; text-transform: uppercase; }
       h1, h2, h3 { font-family: var(--font-serif, "Georgia", ui-serif, serif); font-weight: 560; font-optical-sizing: auto; }
@@ -1649,8 +1647,8 @@ const unicornShellStyle = `
       p { margin: 0; max-width: 34rem; color: var(--muted); font-size: clamp(17px, 1.8vw, 20px); line-height: 1.5; letter-spacing: -0.01em; }
       .cta { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 22px; }
       .product-stage { position: relative; display: grid; gap: 14px; }
-      .product-stage::before { content: ""; position: absolute; inset: -4% 2% auto 12%; height: 70%; border-radius: 999px; background: linear-gradient(135deg, rgba(59,130,246,0.20), rgba(43,74,160,0.14)); filter: blur(46px); z-index: -1; }
-      .browser { overflow: hidden; border: 1px solid rgba(255,255,255,0.84); border-radius: 36px; background: rgba(255,255,255,0.62); box-shadow: var(--shadow); backdrop-filter: blur(24px); }
+      .product-stage::before { display: none; }
+      .browser { overflow: hidden; border: 1px solid var(--line); border-radius: 18px; background: var(--paper); box-shadow: var(--shadow); backdrop-filter: blur(24px); }
       .browser-top { display: none; }
       .dots { display: inline-flex; gap: 6px; }
       .dots span { width: 9px; height: 9px; border-radius: 50%; background: #07111f; opacity: 0.18; }
@@ -1995,8 +1993,17 @@ const unicornShellStyle = `
         .proof-plan-actions { justify-content: stretch; }
         .proof-plan-actions .btn { flex: 1 1 auto; }
       }
-      @media (max-width: 480px) {
-        .nav a[href="/demo/"] { display: none; }
+      @media (max-width: 720px) {
+        .wrap { width: min(100% - 20px, 1180px); }
+        header { top: 6px; gap: 8px; margin-top: 8px; padding: 8px; border-radius: 14px; }
+        .nav { gap: 6px; }
+        .nav .btn { min-height: 44px; padding: 0 12px; }
+        .optional-nav { display: none; }
+      }
+      @media (max-width: 430px) {
+        .nav a[href="/offers/"] { display: none; }
+        .brand { gap: 8px; }
+        .brand-text .wm { font-size: 16px !important; }
       }
 
       :root { --gilt: #3B82F6; }
@@ -2006,24 +2013,24 @@ const unicornShellStyle = `
       a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, summary:focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; }
       .btn.primary:focus-visible, .theme-toggle:focus-visible { outline-color: var(--ink); }
       @media (prefers-reduced-motion: reduce) { html, .product-shot-gallery { scroll-behavior: auto; } .reveal, .copy, .product-stage { animation: none !important; transition: none !important; opacity: 1 !important; transform: none !important; } }
-      .theme-toggle::before { content: 'Dark'; }
-      :root[data-theme="dark"] .theme-toggle::before { content: 'Light'; }
+      .theme-toggle { width: 44px; min-width: 44px; padding: 0; border-radius: 12px; }
+      .theme-toggle::before { content: '☾'; font-size: 19px; line-height: 1; }
+      :root[data-theme="dark"] .theme-toggle::before { content: '☀'; }
+      :root[data-theme="light"] { color-scheme: light; }
       :root[data-theme="dark"] {
         color-scheme: dark;
-        --cream: #07111f; --paper: #111731; --ink: #EAEEF7; --muted: #93A0BC;
+        --void: #07111f; --void-deep: #050b14; --cream: #07111f; --paper: rgba(17, 27, 45, 0.76); --panel: rgba(17, 27, 45, 0.72); --field: #111b2d; --ink: #EAEEF7; --text: #EAEEF7; --muted: #a7b4c8;
         --line: rgba(148,164,210,0.12); --blue: #3B82F6; --blue-soft: rgba(59,130,246,0.16);
         --aqua: #60A5FA; --navy: #EAEEF7; --shadow: 0 34px 90px rgba(0,0,0,0.6); --gilt: #3B82F6;
       }
       :root[data-theme="dark"] body {
-        background:
-          radial-gradient(circle at 84% 2%, rgba(59,130,246,0.13), transparent 32rem),
-          radial-gradient(circle at 3% 20%, rgba(43,74,160,0.20), transparent 30rem),
-          linear-gradient(180deg, #0C1122 0%, var(--cream) 55%, #070A15 100%);
+        background: linear-gradient(180deg, #0c1122 0%, var(--cream) 58%, #070a15 100%);
       }
       :root[data-theme="dark"] body::before { background-image: linear-gradient(rgba(255,255,255,0.045) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.045) 1px, transparent 1px); }
+      :root[data-theme="dark"] header { background: rgba(9, 16, 29, 0.72); box-shadow: 0 12px 34px rgba(0,0,0,0.28); }
       :root[data-theme="dark"] .btn, :root[data-theme="dark"] button { background: rgba(255,255,255,0.06); }
-      :root[data-theme="dark"] .btn.primary, :root[data-theme="dark"] button { color: #fff; background: linear-gradient(135deg, #60A5FA, #3B82F6); box-shadow: 0 18px 40px rgba(59, 130, 246, 0.28); }
-      :root[data-theme="dark"] .output, :root[data-theme="dark"] .feature, :root[data-theme="dark"] .proof-card, :root[data-theme="dark"] .case, :root[data-theme="dark"] .proof-system, :root[data-theme="dark"] .workcell-panel, :root[data-theme="dark"] .workcell-step, :root[data-theme="dark"] .local-worker-continue, :root[data-theme="dark"] .role-mode-panel, :root[data-theme="dark"] .device-mode-panel, :root[data-theme="dark"] .adaptive-plan-panel, :root[data-theme="dark"] .source-pack-panel, :root[data-theme="dark"] .proof-plan-panel, :root[data-theme="dark"] .value-plan-panel, :root[data-theme="dark"] .pilot-plan-panel, :root[data-theme="dark"] .final, :root[data-theme="dark"] .home-shot-card, :root[data-theme="dark"] .browser, :root[data-theme="dark"] .proof, :root[data-theme="dark"] .upgrade-card, :root[data-theme="dark"] .shell-card, :root[data-theme="dark"] .setup-card, :root[data-theme="dark"] .market-card, :root[data-theme="dark"] form, :root[data-theme="dark"] .feature-pills span, :root[data-theme="dark"] .chip, :root[data-theme="dark"] .metric, :root[data-theme="dark"] .proof-step, :root[data-theme="dark"] footer .footer-links a {
+      :root[data-theme="dark"] .btn.primary, :root[data-theme="dark"] button { color: #fff; background: var(--blue); box-shadow: 0 12px 28px rgba(59, 130, 246, 0.28); }
+      :root[data-theme="dark"] .output, :root[data-theme="dark"] .feature, :root[data-theme="dark"] .proof-card, :root[data-theme="dark"] .case, :root[data-theme="dark"] .proof-system, :root[data-theme="dark"] .workcell-panel, :root[data-theme="dark"] .workcell-step, :root[data-theme="dark"] .local-worker-continue, :root[data-theme="dark"] .role-mode-panel, :root[data-theme="dark"] .device-mode-panel, :root[data-theme="dark"] .adaptive-plan-panel, :root[data-theme="dark"] .source-pack-panel, :root[data-theme="dark"] .proof-plan-panel, :root[data-theme="dark"] .value-plan-panel, :root[data-theme="dark"] .pilot-plan-panel, :root[data-theme="dark"] .final, :root[data-theme="dark"] .home-shot-card, :root[data-theme="dark"] .browser, :root[data-theme="dark"] .proof, :root[data-theme="dark"] .upgrade-card, :root[data-theme="dark"] .shell-card, :root[data-theme="dark"] .setup-card, :root[data-theme="dark"] .market-card, :root[data-theme="dark"] .kit-card, :root[data-theme="dark"] form, :root[data-theme="dark"] .feature-pills span, :root[data-theme="dark"] .chip, :root[data-theme="dark"] .metric, :root[data-theme="dark"] .proof-step, :root[data-theme="dark"] footer .footer-links a {
         background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.12);
       }
       :root[data-theme="dark"] .product-carousel, :root[data-theme="dark"] .product-shot-card, :root[data-theme="dark"] .product-shot-card .shot-open, :root[data-theme="dark"] .output > img { background: #201c17; }
@@ -2036,23 +2043,29 @@ const unicornShellStyle = `
       .carousel-dots button { background: color-mix(in srgb, var(--ink) 28%, transparent); }
       .carousel-dots button.active { background: var(--blue); }
       .output > img { border-radius: 0; }
+      .site-hero-screen { position: relative; margin: 0; overflow: hidden; border: 1px solid var(--line); border-radius: 18px; background: var(--paper); box-shadow: var(--shadow); }
+      .site-hero-screen img { display: block; width: 100%; aspect-ratio: 16 / 10; object-fit: cover; object-position: 50% 14%; }
+      .site-hero-screen figcaption { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 14px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; font-weight: 750; }
+      .site-hero-screen figcaption strong { color: var(--ink); font-size: 13px; }
+      .hmk { display: none; }
 `
 
 const unicornHeader = `
-      <script>(function(){try{var t=localStorage.getItem('sm-theme');if(!t){t='dark';}document.documentElement.setAttribute('data-theme',t);}catch(e){}})();</script>
+      <script>(function(){var r=document.documentElement;try{var t=localStorage.getItem('sm-theme');if(!t&&window.matchMedia){t=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';}r.setAttribute('data-theme',t||'light');}catch(e){r.setAttribute('data-theme','light');}})();</script>
       <header>
         <a class="brand" href="/" aria-label="SUPERMEGA.dev home">
           <span style="display:inline-flex;align-items:center;flex:none" aria-hidden="true"><svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M6.5 8 L11 12 L6.5 16" stroke="#3B82F6" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M12.6 16.2 L18 16.2" stroke="#3B82F6" stroke-width="2.6" stroke-linecap="round"/></svg></span>
           <span class="brand-text"><span class="wm" style="font-size:18px;letter-spacing:-0.025em"><b style="font-weight:700">supermega</b><b style="color:#5E6B87;font-weight:500">.dev</b></span></span>
         </a>
         <nav class="nav" aria-label="Primary">
-          <button class="btn secondary theme-toggle" type="button" aria-label="Toggle dark mode" onclick="var r=document.documentElement,n=r.getAttribute('data-theme')==='dark'?'light':'dark';r.setAttribute('data-theme',n);try{localStorage.setItem('sm-theme',n)}catch(e){}"></button>
+          <button class="btn secondary theme-toggle" type="button" data-theme-toggle aria-label="Use dark mode" title="Use dark mode"></button>
           <a class="btn secondary optional-nav" href="/products/">Products</a>
-          <a class="btn secondary" href="/demo/">Demos</a>
+          <a class="btn secondary optional-nav" href="/agent-templates/">AI workers</a>
           <a class="btn secondary" href="/offers/">Pricing</a>
           <a class="btn primary" href="/contact/">Contact</a>
         </nav>
       </header>
+      <script>(function(){var r=document.documentElement,b=document.querySelector('[data-theme-toggle]');if(!b)return;function sync(){var dark=r.getAttribute('data-theme')==='dark';b.setAttribute('aria-pressed',String(dark));b.setAttribute('aria-label',dark?'Use light mode':'Use dark mode');b.setAttribute('title',dark?'Use light mode':'Use dark mode');}sync();b.addEventListener('click',function(){var n=r.getAttribute('data-theme')==='dark'?'light':'dark';r.setAttribute('data-theme',n);try{localStorage.setItem('sm-theme',n);}catch(e){}sync();});})();</script>
       <script>(function(){if(window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches)return;if(!('IntersectionObserver'in window))return;var io=new IntersectionObserver(function(es){es.forEach(function(e){if(e.isIntersecting){e.target.classList.add('in');io.unobserve(e.target);}});},{rootMargin:'0px 0px -8% 0px',threshold:0.06});addEventListener('DOMContentLoaded',function(){document.querySelectorAll('.section,.product-stage,.proof-card,.output,.uvp-card,.how-step,.home-shot-card,.sprint-card,.of-card').forEach(function(el){if(el.getBoundingClientRect().top>window.innerHeight*0.9){el.classList.add('reveal');io.observe(el);}});});})();</script>`
 
 const productRequestLinks = {
@@ -2480,6 +2493,7 @@ const publicLanguageToggleScript = ''
 const publicBehaviorEventsScript = `
 <script>
   (function () {
+    if (/^(localhost|127\.0\.0\.1|\[::1\])$/i.test(window.location.hostname)) return;
     var endpoint = '/api/behavior-events';
     var allowed = ['page_viewed', 'cta_clicked', 'template_clicked', 'setup_started', 'lead_form_submitted'];
     var params = new URLSearchParams(window.location.search || '');
@@ -4363,7 +4377,7 @@ ${renderSellableWorkerShelf()}
         <span class="footer-links">
           <a href="mailto:swanhtet@supermega.dev">swanhtet@supermega.dev</a>
           <a href="/products/">Products</a>
-          <a href="/demo/">Demos</a>
+          <a href="/agent-templates/">AI workers</a>
           <a href="/offers/">Pricing</a>
           <a href="/contact/">Contact</a>
           <a href="/privacy/">Privacy</a>
@@ -4427,23 +4441,23 @@ const unicornPublicShellHtml = `<!doctype html>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="robots" content="index,follow" />
-    <title>supermega.dev — your business, in one simple app</title>
-    <meta name="description" content="One simple app for your whole business — sales, stock, customers and money. Easy to use, yours to keep, and it works on the phone you already have." />
+    <title>SuperMega | Operating software and AI workers</title>
+    <meta name="description" content="Shop, Plant, and custom AI workers for teams that need one clear operating picture across the counter, floor, files, and approvals." />
     <meta name="theme-color" content="#07111f" />
     <link rel="canonical" href="https://supermega.dev/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" />
     <link rel="manifest" href="/site.webmanifest?v=supermega-atelier-20260623" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="SUPERMEGA.dev" />
-    <meta property="og:title" content="supermega.dev — your business, in one simple app" />
-    <meta property="og:description" content="One simple app for your whole business. Easy to use, yours to keep." />
+    <meta property="og:title" content="SuperMega | Operating software and AI workers" />
+    <meta property="og:description" content="Shop, Plant, and custom AI workers built around the work your team already does." />
     <meta property="og:url" content="https://supermega.dev/" />
     <meta property="og:image" content="https://supermega.dev/site/social/supermega-portal-card.png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="supermega.dev — your business, in one simple app" />
-    <meta name="twitter:description" content="One simple app for your whole business. Yours to keep." />
+    <meta name="twitter:title" content="SuperMega | Operating software and AI workers" />
+    <meta name="twitter:description" content="Shop, Plant, and custom AI workers built around the work your team already does." />
     <meta name="twitter:image" content="https://supermega.dev/site/social/supermega-portal-card.png" />
     <script type="application/ld+json">{"@context":"https://schema.org","@type":"Organization","name":"SUPERMEGA.dev","url":"https://supermega.dev/","logo":"https://supermega.dev/favicon.svg","description":"Free core business tools and premium AI workers for Myanmar SMBs and factories. POS, factory operations, AI agent crews, data cleanup, and approval-gated workcells.","email":"swanhtet@supermega.dev","telephone":"+95-9-500-0721","sameAs":["https://www.linkedin.com/in/theswanhtet"]}</script>
     <style>${unicornShellStyle}
@@ -4505,14 +4519,19 @@ ${unicornHeader}
       <main>
         <section class="poster">
           <div class="copy">
-            <h1>Stop running your business on Viber &amp; Excel.</h1>
-            <p style="font-size:clamp(16px,2vw,19px);color:var(--muted);margin:18px 0 0;max-width:38ch;line-height:1.55">Two simple apps for the way your business really runs — your shop and your factory floor. Easy to use, yours to keep, and they work on the phone you already have.</p>
+            <div class="eyebrow">Operating software for growing teams</div>
+            <h1>SuperMega</h1>
+            <p style="font-size:clamp(16px,2vw,19px);color:var(--muted);margin:18px 0 0;max-width:38ch;line-height:1.55">Custom software, built for your business. Shop, Plant, and custom AI workers for teams ready to replace scattered handoffs with one clear operating picture.</p>
             <div class="cta" style="margin-top:28px">
-              <a class="btn primary" href="/contact/">Start free</a>
-              <a class="btn secondary" href="/products/">See the two apps</a>
+              <a class="btn primary" href="https://pos.supermega.dev/" target="_blank" rel="noopener noreferrer">Open Shop</a>
+              <a class="btn secondary" href="/products/">Explore products</a>
             </div>
           </div>
           <aside class="product-stage" aria-label="supermega app">
+            <figure class="site-hero-screen">
+              <img src="/site/shots/live-product-restaurant-pos-menu-inventory.png" alt="Shop product screen showing menu and inventory management" loading="eager" decoding="async" />
+              <figcaption><strong>Shop, live now</strong><span>Counter, payments, stock, daily close</span></figcaption>
+            </figure>
             <div class="hmk" role="img" aria-label="The supermega app — point of sale and live factory floor">
               <style>
                 .hmk{position:relative}
@@ -4619,25 +4638,27 @@ ${unicornHeader}
               </div>
             </div>
             <div class="proof-line" aria-label="Why it is simple">
-              <div class="proof"><b>Free to start</b><span>No card</span></div>
-              <div class="proof"><b>Yours to keep</b><span>Your data</span></div>
-              <div class="proof"><b>On your phone</b><span>Nothing to install</span></div>
+              <div class="proof"><b>Shop, live now</b><span>Open and explore</span></div>
+              <div class="proof"><b>Built around your work</b><span>Not a generic template</span></div>
+              <div class="proof"><b>Every screen</b><span>Phone, tablet, desktop</span></div>
             </div>
           </aside>
         </section>
 
         <section class="section" id="products">
-          <h2>Two apps. One way your business runs.</h2>
-          <div class="uvp-grid" style="grid-template-columns:repeat(2,minmax(0,1fr))">
-            <div class="uvp-card" style="border-top:3px solid #3B82F6"><strong>Shop</strong><span>Point of sale, customers and books — together in one place. Start free; premium adds AI and data features.</span></div>
-            <div class="uvp-card" style="border-top:3px solid #3B82F6"><strong>Plant</strong><span>Log, assign and confirm the day's work, turn a whiteboard photo into data, and keep to your standards.</span></div>
+          <div class="eyebrow">Products</div>
+          <h2>Three products. One connected operating layer.</h2>
+          <div class="uvp-grid">
+            <a class="uvp-card" href="/products/pos/" style="border-top:3px solid #3B82F6"><strong>Shop</strong><span>Point of sale, customers, payments, stock, and an honest daily close in one live product.</span></a>
+            <a class="uvp-card" href="/products/factory/" style="border-top:3px solid #3B82F6"><strong>Plant</strong><span>A tailored operations surface for floor events, ownership, review, and the work that needs to be confirmed.</span></a>
+            <a class="uvp-card" href="/agent-templates/" style="border-top:3px solid #3B82F6"><strong>Custom Solutions &amp; AI Agents</strong><span>Sellable digital workers that turn files, inboxes, and recurring tasks into reviewed outputs and usable data.</span></a>
           </div>
         </section>
 
         <section class="section">
           <div style="border:1px solid var(--line);border-radius:20px;padding:clamp(24px,4vw,36px);text-align:center;background:rgba(59,130,246,0.045)">
-            <p style="font-size:clamp(18px,2.4vw,23px);font-weight:600;letter-spacing:-.01em;max-width:42ch;margin:0 auto;color:var(--text)">Simple to start. Yours to keep. Made for the way your business really works.</p>
-            <div class="cta" style="justify-content:center;margin-top:22px"><a class="btn primary" href="/contact/">Start free</a></div>
+            <p style="font-size:clamp(18px,2.4vw,23px);font-weight:600;letter-spacing:-.01em;max-width:42ch;margin:0 auto;color:var(--text)">Start with one workflow. Leave with a system your team can actually run.</p>
+            <div class="cta" style="justify-content:center;margin-top:22px"><a class="btn primary" href="/contact/">Tell us what needs to work better</a></div>
           </div>
         </section>
       </main>
@@ -4674,7 +4695,7 @@ const unicornProductsHtml = `<!doctype html>
     <style>${unicornShellStyle}
       main { padding-bottom: 72px; }
       .poster { min-height: auto; align-items: end; padding-top: 34px; }
-      .poster h1 { max-width: 10.2ch; }
+      .poster h1 { max-width: 13ch; }
       .poster p { max-width: 40rem; }
       .gallery { display: grid; gap: 18px; }
       .feature { display: grid; grid-template-columns: minmax(0, 0.72fr) minmax(320px, 1.28fr); gap: 0; overflow: hidden; border: 1px solid rgba(255,255,255,0.74); border-radius: 36px; background: rgba(255,255,255,0.60); box-shadow: var(--shadow); backdrop-filter: blur(22px); }
@@ -4757,18 +4778,19 @@ ${unicornHeader}
       <main>
         <section class="poster">
           <div class="copy">
-            <div class="eyebrow">Two apps · Start free · Yours to keep</div>
-            <h1>Stop running your business on Viber &amp; Excel.</h1>
-            <p>Two simple apps. Shop runs your counter; Plant runs your operations. Start free; add AI and data features when you need them.</p>
+            <div class="eyebrow">Apps and AI workers</div>
+            <h1>Your work, one operating surface.</h1>
+            <p>Start with Shop or Plant. Add a custom AI worker when the task needs to move across files, inboxes, reports, and approvals.</p>
             <div class="cta">
-              <a class="btn primary" href="/contact/">Start free</a>
+              <a class="btn primary" href="https://pos.supermega.dev/" target="_blank" rel="noopener noreferrer">Open Shop</a>
               <a class="btn secondary" href="/offers/">Pricing</a>
             </div>
           </div>
           <aside class="product-stage">
-            <div class="browser">
-            ${restaurantProductUi}
-            </div>
+            <figure class="site-hero-screen">
+              <img src="/site/shots/live-product-restaurant-pos-menu-inventory.png" alt="Shop product screen showing menu and inventory management" loading="eager" decoding="async" />
+              <figcaption><strong>Shop, live now</strong><span>Explore the product before you contact us</span></figcaption>
+            </figure>
           </aside>
         </section>
 
@@ -4776,28 +4798,28 @@ ${unicornHeader}
           <article class="feature" id="restaurant-pos-menu-inventory">
             <div class="feature-copy">
               <div class="eyebrow">The app for your shop</div>
-              <h2>Retail OS.</h2>
-              <p>Point of sale, customers and books — together in one place for your shop or restaurant. Take any payment, track stock, and close the day with proof. Live now.</p>
+              <h2>Shop.</h2>
+              <p>Point of sale, customers, books, payment proof, and a daily close in one live product for a shop or restaurant.</p>
               <div class="chips"><span class="chip">Point of sale</span><span class="chip">Any payment</span><span class="chip">Customers</span><span class="chip">Books</span><span class="chip">Daily close</span></div>
-              <div class="use"><strong>Start free</strong><span>Ring up sales and close the day. Premium adds AI and data features.</span></div>
+              <div class="use"><strong>Live product</strong><span>Ring up sales and close the day, then add connected data and AI capabilities when they earn their place.</span></div>
               <div class="cta"><a class="btn primary" href="/products/pos/">See details</a><a class="btn secondary" href="https://pos.supermega.dev/" target="_blank" rel="noopener">Try it live ↗</a></div>
             </div>
-            <div class="shot-gallery" aria-label="Retail OS product screenshots">
-              ${restaurantProductUi}
+            <div class="shot-gallery" aria-label="Shop product screenshots">
+              <img src="/site/shots/live-product-restaurant-pos-menu-inventory.png" alt="Shop product screen" loading="lazy" decoding="async" />
             </div>
           </article>
 
           <article class="feature" id="factory-issues-maintenance-quality">
             <div class="feature-copy">
               <div class="eyebrow">The app for your factory</div>
-              <h2>Factory OS.</h2>
-              <p>Log, assign and confirm the day's work on the floor. Turn a whiteboard photo into data, track quality and maintenance, and keep to your standards — the collaborative operations app.</p>
+              <h2>Plant.</h2>
+              <p>A tailored operations surface for floor events, quality, maintenance, and the work that needs an owner, review, and confirmed outcome.</p>
               <div class="chips"><span class="chip">Log / assign / confirm</span><span class="chip">Whiteboard → data</span><span class="chip">Quality</span><span class="chip">Maintenance</span></div>
-              <div class="use"><strong>Start free</strong><span>One factory screen for open work, owner, status, and confirmed action.</span></div>
+              <div class="use"><strong>Built around your plant</strong><span>We start from your line, role, evidence, and operating rhythm rather than forcing a generic factory template.</span></div>
               <a class="btn primary" href="/products/factory/">See details</a>
             </div>
-            <div class="shot-gallery" aria-label="Factory OS product screenshots">
-              ${factoryProductUi}
+            <div class="shot-gallery" aria-label="Plant product screenshots">
+              <img src="/site/shots/live-product-factory-issues-maintenance-quality.png" alt="Plant product screen" loading="lazy" decoding="async" />
             </div>
           </article>
 
@@ -4811,7 +4833,7 @@ ${unicornHeader}
               <div class="cta"><a class="btn primary" href="/agent-templates/">View setup kits</a><a class="btn secondary" href="/contact/?package=custom-ai-agent-build">Ask for a custom build</a></div>
             </div>
             <div class="shot-gallery" aria-label="Custom Solutions and AI Agents product screen">
-              ${workflowProductUi}
+              <img src="/site/shots/live-product-build-app-from-workflow.png" alt="Custom AI worker product screen" loading="lazy" decoding="async" />
             </div>
           </article>
 
@@ -4820,11 +4842,11 @@ ${unicornHeader}
         <section class="section sm-in">
           <div class="final">
             <div>
-              <div class="eyebrow">Start free</div>
-              <h2>Try it with your own business.</h2>
-              <p>Tell us about your shop or factory and we'll help you start. Pricing is shared at launch or on a scoping call.</p>
+              <div class="eyebrow">Start with real work</div>
+              <h2>Bring us the handoff that keeps breaking.</h2>
+              <p>We will help you choose a live product, a scoped build, or an AI worker that can prove value before it becomes part of the operating system.</p>
             </div>
-            <div style="display:flex;gap:12px;flex-wrap:wrap"><a class="btn primary" href="/contact/">Start free</a><a class="btn secondary" href="/offers/">Pricing</a></div>
+            <div style="display:flex;gap:12px;flex-wrap:wrap"><a class="btn primary" href="/contact/">Start a conversation</a><a class="btn secondary" href="/offers/">Pricing</a></div>
           </div>
         </section>
       </main>
@@ -4843,12 +4865,12 @@ const unicornContactHtml = `<!doctype html>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="robots" content="index,follow" />
     <title>Contact | SUPERMEGA.dev</title>
-    <meta name="description" content="Tell SUPERMEGA what you run. Start free with Retail OS or Factory OS, then add custom automation when it proves useful." />
+    <meta name="description" content="Tell SUPERMEGA what needs to work better. Start with Shop, Plant, or a custom AI worker built around a real workflow." />
     <link rel="canonical" href="https://supermega.dev/contact/" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="SUPERMEGA.dev" />
     <meta property="og:title" content="Contact SUPERMEGA.dev - start free" />
-    <meta property="og:description" content="Tell SUPERMEGA what you run. Start free with Retail OS or Factory OS, then add custom automation when it proves useful." />
+    <meta property="og:description" content="Tell SUPERMEGA what needs to work better. Start with Shop, Plant, or a custom AI worker built around a real workflow." />
     <meta property="og:url" content="https://supermega.dev/contact/" />
     <meta property="og:image" content="https://supermega.dev/site/social/supermega-portal-card.png" />
     <meta name="twitter:card" content="summary_large_image" />
@@ -4861,7 +4883,7 @@ const unicornContactHtml = `<!doctype html>
       .form-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 13px; }
       .wide { grid-column: 1 / -1; }
       label { display: grid; gap: 7px; color: var(--muted); font-size: 12px; font-weight: 950; letter-spacing: 0.14em; text-transform: uppercase; }
-      input, textarea, select { width: 100%; border: 1px solid var(--line); border-radius: 14px; background: rgba(255,250,241,0.86); color: var(--ink); padding: 11px 12px; font: inherit; outline: none; }
+      input, textarea, select { width: 100%; border: 1px solid var(--line); border-radius: 14px; background: var(--field); color: var(--ink); padding: 11px 12px; font: inherit; outline: none; }
       input[type="file"] { cursor: pointer; }
       input[type="file"]::file-selector-button { margin-right: 10px; border: 0; border-radius: 999px; background: linear-gradient(135deg, #111827, #3B82F6); color: #fff; cursor: pointer; font: inherit; font-size: 13px; font-weight: 950; padding: 9px 12px; }
       select { appearance: none; background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%); background-position: calc(100% - 20px) 20px, calc(100% - 14px) 20px; background-size: 6px 6px, 6px 6px; background-repeat: no-repeat; }
@@ -4908,9 +4930,9 @@ const unicornContactHtml = `<!doctype html>
 ${unicornHeader}
       <main class="contact-main">
         <section aria-label="Contact SUPERMEGA">
-          <div class="eyebrow">Start free</div>
-          <h1 data-contact-heading>Tell us about your business.</h1>
-          <p data-contact-lead>Shop runs your counter; Plant runs your operations. Tell us what you run and we'll help you start free.</p>
+          <div class="eyebrow">Start with the work</div>
+          <h1 data-contact-heading>Tell us what needs to work better.</h1>
+          <p data-contact-lead>Send the handoff, report, queue, or daily task that is slowing the team down. We will point you to a live product, a scoped build, or a custom AI worker.</p>
         </section>
         <section aria-label="Workflow contact form">
           <form action="/api/contact-submissions" data-sm-lead-form enctype="multipart/form-data" method="post">
@@ -4971,18 +4993,17 @@ ${unicornHeader}
               <label>Company<input autocomplete="organization" name="company" required /></label>
               <div class="wide selected-path" data-selected-path hidden><small>Selected</small><strong>General enquiry</strong><span class="selected-price" data-selected-price hidden></span><span class="selected-next" data-selected-next hidden></span></div>
               <label class="wide file-label">Upload files<input data-file-picker multiple name="source_files" type="file" /><span class="upload-list" data-upload-list></span></label>
-              <label class="wide">Source link or system<input name="source_links" placeholder="Drive folder, sheet, email thread, POS export, meter reading, device, or note" /></label>
-              <label class="wide">What should become clear?<textarea name="goal" placeholder="Example: what changed, who owns it, what is missing, and what should happen next." required></textarea></label>
+              <label class="wide">Source link or system<input name="source_links" /></label>
+              <label class="wide">What should become clear?<textarea name="goal" required></textarea></label>
             </div>
             <input autocomplete="off" name="website" style="display:none" tabindex="-1" />
             <button type="submit">Send request</button>
-            <p class="policy">No account or data connection before you approve the first step.</p>
-            <p class="policy" style="border-top:1px solid var(--line);margin-top:10px;padding-top:10px"><strong style="color:#3B82F6">14-day money-back guarantee.</strong> KBZPay · AYA Pay · Wave Money · bank transfer. 50% deposit, fully refundable.</p>
+            <p class="policy">We use this note to recommend the clearest next step. No account or data connection is made before you approve it.</p>
             <p class="form-status" data-lead-status aria-live="polite"></p>
             <div class="next-card" data-next-card hidden><strong>Saved</strong><span>We review the task and reply with the first useful output to build. Nothing changes without approval.</span></div>
           </form>
         </section>
-        <section aria-label="Direct contact options" style="margin-top:32px;padding-top:24px;border-top:1px solid var(--line)">
+        <section aria-label="Direct contact options" style="grid-column:1 / -1;margin-top:32px;padding-top:24px;border-top:1px solid var(--line)">
           <p style="font-size:13px;color:var(--muted);margin:0 0 14px;font-weight:850;letter-spacing:0.08em;text-transform:uppercase">Or reach us directly</p>
           <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center">
             <a href="viber://chat?number=%2B9595000721" style="display:inline-flex;align-items:center;gap:8px;background:transparent;border:1px solid var(--line);color:var(--ink);padding:11px 18px;border-radius:12px;font-size:15px;font-weight:850;text-decoration:none;letter-spacing:-0.01em" aria-label="Chat on Viber">
@@ -5002,7 +5023,7 @@ ${unicornHeader}
         <span>Powered by SuperMega Technologies</span>
       </footer>
     </div>
-${publicRuntimeScripts}
+${publicBehaviorEventsScript}
     <script>
       for (const form of document.querySelectorAll('[data-sm-lead-form]')) {
         const search = new URLSearchParams(window.location.search);
@@ -5122,9 +5143,12 @@ ${publicRuntimeScripts}
           }
         };
         const requestedTemplate = search.get('template') || search.get('agent_template') || '';
-        const selectedTemplate = templatePackages[requestedTemplate] || templatePackages[search.get('tool') || ''] || null;
-        const requestedPackage = selectedTemplate ? '' : (search.get('tool') || search.get('package') || '');
-        const selectedPackage = selectedTemplate || packages[packageAliases[requestedPackage] || requestedPackage || ''];
+        const requestedTool = search.get('tool') || '';
+        const selectedTemplate = requestedTemplate
+          ? templatePackages[requestedTemplate] || null
+          : (requestedTool ? templatePackages[requestedTool] || null : null);
+        const requestedPackage = selectedTemplate ? '' : (requestedTool || search.get('package') || '');
+        const selectedPackage = selectedTemplate || (requestedPackage ? packages[packageAliases[requestedPackage] || requestedPackage] : null);
         if (selectedPackage) {
           set('workflow', selectedPackage.name);
           set('requested_package', selectedPackage.name);
@@ -5165,9 +5189,7 @@ ${publicRuntimeScripts}
           const selectedPath = selectedBox && selectedBox.querySelector('strong');
           if (selectedPath) selectedPath.textContent = selectedPackage.name;
           const lead = document.querySelector('[data-contact-lead]');
-          const goal = form.querySelector('[name="goal"]');
           if (lead) lead.textContent = selectedPackage.lead;
-          if (goal) goal.placeholder = selectedPackage.placeholder;
           const priceEl = document.querySelector('[data-selected-price]');
           if (priceEl && selectedPackage.price) { priceEl.textContent = selectedPackage.price; priceEl.hidden = false; }
           const nextEl = document.querySelector('[data-selected-next]');
@@ -5883,7 +5905,7 @@ await writeFile(resolve(staticDir, 'products', 'index.html'), normalizePublicPro
 const productDetailDocs = [
   {
     slug: 'pos',
-    displayName: 'Retail OS',
+    displayName: 'Shop',
     eyebrow: 'The app for your shop',
     headline: 'Ring up sales, take any payment, and close the day with proof',
     subhead: 'The counter app for spas, salons, retail shops, cafes, restaurants, and repair counters. Take cash or any digital payment; track stock and bookings; and close every day with a clean cash-up the owner can trust — even when the internet drops.',
@@ -5911,14 +5933,14 @@ const productDetailDocs = [
     ],
     proofPoint: 'Live and in use — try the full point-of-sale, payments, and daily-close flow at pos.supermega.dev, no signup required.',
     whoFor: 'Owners and counter staff at spas, salons, retail shops, cafes, restaurants, and repair counters — especially operators who want a clean daily close and payment proof without migrating to a heavy POS.',
-    primaryCta: { label: 'Open the live demo', href: 'https://pos.supermega.dev/' },
+    primaryCta: { label: 'Open Shop', href: 'https://pos.supermega.dev/' },
   },
   {
     slug: 'factory',
-    displayName: 'Factory OS',
+    displayName: 'Plant',
     eyebrow: 'The app for your factory',
-    headline: 'Run production, quality, and maintenance from one system',
-    subhead: 'Built for factories that need to replace shop-floor log books and scattered Excel files with one production, quality, and maintenance operating lane.',
+    headline: 'Build one operating lane for production, quality, and maintenance',
+    subhead: 'A tailored Plant workspace for factories moving from shop-floor log books and scattered Excel files toward a clear operating rhythm.',
     shot: '/site/shots/live-product-factory-issues-maintenance-quality.png',
     whatItDoes: [
       'Tracks output by line and shift against daily targets',
@@ -5941,9 +5963,9 @@ const productDetailDocs = [
       { title: 'Maintenance work orders', desc: 'When a machine goes down or drifts out of spec, raise a work order from the same screen, assign it, and track it to completion.' },
       { title: 'Plant-manager and CEO brief', desc: 'One daily summary — reject rate against target, top defects, lines over target, downtime, overdue CAPA.' },
     ],
-    proofPoint: 'We build it around your real factory operations — your line targets, defect taxonomy, grading rules, downtime reasons, and CAPA owners. We stand up the first working version in a few working days once we have your taxonomy and a sample of real records.',
+    proofPoint: 'Plant is built around your real factory operations: line targets, quality checks, downtime reasons, evidence needs, and owners. We scope the first operating lane from a sample of real records before expanding it.',
     whoFor: 'Discrete manufacturers that still run on log books and Excel — for QC managers, production supervisors, maintenance leads, and the plant manager who needs one honest picture of the floor.',
-    primaryCta: { label: 'Talk to us about your plant', href: '/contact/' },
+    primaryCta: { label: 'Scope your Plant', href: '/contact/?package=factory-issues-maintenance-quality' },
   },
   {
     slug: 'documents',
@@ -6608,7 +6630,7 @@ function buildAgentTemplateIndexHtml() {
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="robots" content="index,follow" />
     <title>AI Agent Setup Kits | SUPERMEGA.dev</title>
-    <meta name="description" content="Practical setup kits for SUPERMEGA.dev AI-agent templates." />
+    <meta name="description" content="Deployable setup kits for SUPERMEGA.dev AI workers with defined inputs, proof, approval points, and outcomes." />
     <link rel="canonical" href="https://supermega.dev/agent-templates/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" />
     <style>${unicornShellStyle}
@@ -6627,17 +6649,23 @@ ${unicornHeader}
       <main>
         <section class="poster" style="min-height:auto">
           <div class="copy">
-            <div class="eyebrow">AI agent setup kits</div>
-            <h1>Start from a working template.</h1>
-            <p>Each kit defines the buyer, sample inputs, first proof, workflow, outputs, and acceptance tests before any client system is connected.</p>
-            <div class="cta"><a class="btn secondary" href="/ai-agents/guide/">Read the user guide</a></div>
+            <div class="eyebrow">AI worker library</div>
+            <h1>Start with a deployable AI worker.</h1>
+            <p>Each kit makes the buyer, inputs, first proof, approval points, outputs, and acceptance checks explicit before a client system is connected.</p>
+            <div class="cta"><a class="btn primary" href="/contact/?package=custom-ai-agent-build">Scope a custom worker</a><a class="btn secondary" href="/ai-agents/guide/">Read the user guide</a></div>
           </div>
+          <aside class="product-stage">
+            <figure class="site-hero-screen">
+              <img src="/site/shots/live-product-build-app-from-workflow.png" alt="Custom AI worker product screen showing a structured work queue" loading="eager" decoding="async" />
+              <figcaption><strong>Custom Solutions &amp; AI Agents</strong><span>Inputs, review, proof, and outcomes</span></figcaption>
+            </figure>
+          </aside>
         </section>
         <section class="section"><div class="kit-grid">${cards}</div></section>
       </main>
       <footer><span>SUPERMEGA.dev setup kits.</span><span class="footer-links"><a href="/products/">Products</a><a href="/contact/">Contact</a></span></footer>
     </div>
-${publicRuntimeScripts}
+${publicBehaviorEventsScript}
   </body>
 </html>`
 }
@@ -6670,6 +6698,13 @@ const publicOffers = [
     who: 'Your numbers live across five spreadsheets and nobody trusts them.',
     gets: ['One screen that updates itself from your real data', 'Built around how you actually work', 'Export to clean CSV anytime'],
     cta: 'Scope my build',
+    flagship: true,
+  },
+  {
+    slug: 'ai-agent', name: pricingServiceByKey['ai-agent'].name, mmkDisplay: serviceMmk('ai-agent'),
+    who: 'A repeated knowledge task needs a durable worker, not another manual handoff.',
+    gets: ['One defined worker with clear inputs and reviewed outputs', 'Source links and approval points where the work needs them', 'A launch path that starts small and earns broader access'],
+    cta: 'Scope an agent',
   },
   {
     slug: 'design-ship', name: pricingServiceByKey['design-ship'].name, mmkDisplay: serviceMmk('design-ship'),
@@ -6709,6 +6744,9 @@ const publicOffersHtml = `<!doctype html>
     <meta name="twitter:image" content="https://supermega.dev/site/social/supermega-portal-card.png" />
     <style>${unicornShellStyle}
       .of-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px,1fr)); gap: 16px; margin-top: 24px; align-items: stretch; }
+      .offer-hero { grid-template-columns: minmax(0, 0.84fr) minmax(320px, 1.16fr); align-items: center; min-height: min(560px, calc(100svh - 96px)); padding: 28px 0 42px; }
+      .offer-hero .copy { max-width: 46rem; }
+      .offer-hero h1 { max-width: 12ch; }
       .of-card { position: relative; display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 20px; padding: 24px; background: rgba(255,255,255,0.055); }
       :root[data-theme="dark"] .of-card { background: rgba(255,255,255,0.055); }
       .of-card.flagship { border-color: var(--blue); box-shadow: var(--shadow); }
@@ -6736,18 +6774,24 @@ const publicOffersHtml = `<!doctype html>
     <div class="wrap">
 ${unicornHeader}
       <main>
-        <section class="poster" style="min-height:auto;align-items:center">
+        <section class="poster offer-hero">
           <div class="copy">
             <div class="eyebrow">Pricing</div>
-            <h1>Start free. Pay when the worker proves value.</h1>
-            <p>Start with the app or setup kit that fits the business. Paid builds add private data, connectors, source trace, approval queues, scheduled runs, and maintenance. Starting prices in MMK; final quote after one short call.</p>
+            <h1>Clear scope. Clear starting point.</h1>
+            <p>Open Shop to explore a live product. For a tailored system or AI worker, we scope the real workflow first and quote a clear starting point in MMK.</p>
             <div class="cta">
-              <a class="btn primary" href="/contact/?package=build">Get a quote</a>
-              <a class="btn secondary" href="viber://chat?number=%2B9595000721" aria-label="Chat with us on Viber">Chat on Viber</a>
-              <a class="btn secondary" href="/demo/">See live demos</a>
+              <a class="btn primary" href="/contact/?package=build">Start a scope</a>
+              <a class="btn secondary" href="https://pos.supermega.dev/" target="_blank" rel="noopener noreferrer">Open Shop</a>
+              <a class="btn secondary" href="/agent-templates/">AI workers</a>
             </div>
-            <p class="hero-tagline">Stop running your business on Viber &amp; Excel.</p>
+            <p class="hero-tagline">Custom software, built for your business.</p>
           </div>
+          <aside class="product-stage">
+            <figure class="site-hero-screen">
+              <img src="/site/shots/live-product-build-app-from-workflow.png" alt="Custom workflow product screen showing a structured work queue" loading="eager" decoding="async" />
+              <figcaption><strong>Start from a real workflow</strong><span>Source, owner, evidence, and next action</span></figcaption>
+            </figure>
+          </aside>
         </section>
 
         <section class="section">
@@ -6762,31 +6806,31 @@ ${unicornHeader}
               <a class="btn ${o.flagship ? 'primary' : 'secondary'}" href="/contact/?package=${o.slug}">${o.cta}</a>
             </div>`).join('')}
           </div>
-          <p class="of-note">Starting "from" prices in MMK. Final scope and price confirmed on a short call. Fixed-scope with clear revision caps; 50% deposit to start, payment method confirmed on first call.</p>
+          <p class="of-note">Starting prices are shown in MMK. The final scope, delivery plan, and ownership are confirmed before a build begins.</p>
         </section>
 
         <section class="section">
           <div class="eyebrow">How it works</div>
-          <h2>From one workflow to a running system</h2>
+          <h2>From a real handoff to a running system</h2>
           <div class="pd-steps">
-            <div class="pd-step"><strong>1. Tell us what you run</strong><span>Start with your shop, factory floor, or operating team. One file, screenshot, or note is enough for the first screen.</span></div>
-            <div class="pd-step"><strong>2. Scope call (free)</strong><span>We review your source, show you the first screen, and confirm the price. No payment, no access required.</span></div>
-            <div class="pd-step"><strong>3. 50% deposit to start</strong><span>Fixed-scope, fixed price. The second 50% is due when the system is live and you're satisfied.</span></div>
-            <div class="pd-step"><strong>4. Delivered in weeks</strong><span>A running system at a real URL. You own it outright — no monthly fees, no vendor lock-in.</span></div>
+            <div class="pd-step"><strong>1. Show the workflow</strong><span>A file, screenshot, queue, or note is enough to start the conversation.</span></div>
+            <div class="pd-step"><strong>2. Choose the right start</strong><span>We point to a live product, a setup kit, or a scoped custom build.</span></div>
+            <div class="pd-step"><strong>3. Review the direction</strong><span>For a build, the scope and the first useful output are agreed before live data is connected.</span></div>
+            <div class="pd-step"><strong>4. Go live with control</strong><span>The finished system has a clear owner, real URL, and handoff plan for the team that will run it.</span></div>
           </div>
         </section>
 
         <section class="section">
           <div class="trust-note" style="margin-top:24px;padding:20px 24px;border:1px solid var(--line);border-radius:16px;background:rgba(255,255,255,0.055);max-width:640px;">
-            <strong style="display:block;font-size:15px;letter-spacing:-0.02em;margin-bottom:8px;">Our guarantee</strong>
-            <p style="font-size:14px;color:var(--muted);margin:0;line-height:1.55;">If we haven't delivered a working first screen within 14 days of your deposit, we refund in full. We accept KBZPay, AYA Pay, Wave Money, and bank transfer.</p>
+            <strong style="display:block;font-size:15px;letter-spacing:-0.02em;margin-bottom:8px;">What stays in your control</strong>
+            <p style="font-size:14px;color:var(--muted);margin:0;line-height:1.55;">A connected worker is scoped around its inputs, outputs, and approval points. Nothing should quietly turn into a black box for your operating team.</p>
           </div>
         </section>
 
         <section class="section">
           <div class="final">
-            <div><h2>Start free with the two apps.</h2></div>
-            <a class="btn primary" href="/contact/">Start free</a>
+            <div><h2>Start with a real workflow.</h2></div>
+            <a class="btn primary" href="/contact/">Start a conversation</a>
           </div>
         </section>
       </main>
@@ -6801,12 +6845,12 @@ ${publicRuntimeScripts}
 await mkdir(resolve(staticDir, 'contact'), { recursive: true })
 await writeFile(resolve(staticDir, 'contact', 'index.html'), normalizePublicProductNames(collapsedContactHtml), 'utf8')
 await mkdir(resolve(staticDir, 'free'), { recursive: true })
-await writeFile(resolve(staticDir, 'free', 'index.html'), publicRedirectHtml('/products/', 'See the two apps'), 'utf8')
+await writeFile(resolve(staticDir, 'free', 'index.html'), publicRedirectHtml('/products/', 'Explore products'), 'utf8')
 await mkdir(resolve(staticDir, 'offers'), { recursive: true })
 await writeFile(resolve(staticDir, 'offers', 'index.html'), normalizePublicProductNames(publicOffersHtml), 'utf8')
 await mkdir(resolve(staticDir, 'ai-agents'), { recursive: true })
 // AI agents index is not a standalone product page. Redirect to the two-suite products page.
-await writeFile(resolve(staticDir, 'ai-agents', 'index.html'), publicRedirectHtml('/products/', 'See our two apps'), 'utf8')
+await writeFile(resolve(staticDir, 'ai-agents', 'index.html'), publicRedirectHtml('/products/', 'Explore products'), 'utf8')
 
 // Work / case studies — public proof. Honest, de-identified real builds (live products + client systems).
 const publicWorkCases = [
@@ -6873,7 +6917,7 @@ ${unicornHeader}
             <p>A few of the things we've built — live products you can try right now, and custom systems we've shipped for businesses in Myanmar. Every one started from someone's real, messy work.</p>
             <div class="cta">
               <a class="btn primary" href="/contact/">Tell us what to fix</a>
-              <a class="btn secondary" href="/demo/">See live demos</a>
+              <a class="btn secondary" href="https://pos.supermega.dev/" target="_blank" rel="noopener noreferrer">Open Shop</a>
               <a class="btn secondary" href="/offers/">Pricing</a>
             </div>
             <p class="hero-tagline">Cast real work into software.</p>
@@ -10029,20 +10073,7 @@ const unicornPrivacyHtml = `<!doctype html>
 </head>
 <body>
 <div class="wrap">
-  <script>(function(){try{var t=localStorage.getItem('sm-theme');if(!t){t='dark';}document.documentElement.setAttribute('data-theme',t);}catch(e){}})();</script>
-  <header>
-    <a class="brand" href="/" aria-label="SUPERMEGA.dev home">
-      <span style="display:inline-flex;align-items:center;flex:none" aria-hidden="true"><svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M6.5 8 L11 12 L6.5 16" stroke="#3B82F6" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M12.6 16.2 L18 16.2" stroke="#3B82F6" stroke-width="2.6" stroke-linecap="round"/></svg></span>
-      <span class="brand-text"><span class="wm" style="font-size:18px;letter-spacing:-0.025em"><b style="font-weight:700">supermega</b><b style="color:#5E6B87;font-weight:500">.dev</b></span></span>
-    </a>
-    <nav class="nav" aria-label="Primary">
-      <button class="btn secondary theme-toggle" type="button" aria-label="Toggle dark mode" onclick="var r=document.documentElement,n=r.getAttribute('data-theme')==='dark'?'light':'dark';r.setAttribute('data-theme',n);try{localStorage.setItem('sm-theme',n)}catch(e){}"></button>
-      <a class="btn secondary optional-nav" href="/products/">Products</a>
-      <a class="btn secondary" href="/demo/">Demos</a>
-      <a class="btn secondary" href="/offers/">Pricing</a>
-      <a class="btn primary" href="/contact/">Contact</a>
-    </nav>
-  </header>
+${unicornHeader}
   <main>
     <section style="padding: clamp(28px,5vw,64px) 0 clamp(40px,7vw,80px); max-width: 720px;">
       <div class="eyebrow">Privacy</div>
@@ -10074,7 +10105,7 @@ const unicornPrivacyHtml = `<!doctype html>
       <a href="mailto:swanhtet@supermega.dev">swanhtet@supermega.dev</a>
       <a href="tel:+9595000721">+95 9 500 0721</a>
       <a href="/products/">Products</a>
-      <a href="/demo/">Demos</a>
+      <a href="/agent-templates/">AI workers</a>
       <a href="/offers/">Pricing</a>
       <a href="/contact/">Contact</a>
     </span>
