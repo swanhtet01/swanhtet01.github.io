@@ -13,7 +13,7 @@
     "vercel:deploy": "npx vercel deploy --prebuilt -y",
     "vercel:deploy:prod": "npx vercel deploy --prebuilt --prod -y",
     "public:build": "node tools/create_public_vercel_output.mjs",
-    "public:verify": "node tools/verify_public_vercel_artifact_budget.mjs && node tools/verify_public_vercel_output.mjs && node tools/test_connector_resilience.mjs",
+    "public:verify": "node tools/verify_public_vercel_artifact_budget.mjs && node tools/verify_public_vercel_output.mjs && node tools/verify_public_runtime_workcells_contract.mjs && node tools/test_connector_resilience.mjs",
     "_public:verify:RETIRED": "source-to-screen/workcell/intake/contact-order + operator-retainer contracts retired 2026-07-09 — they enforced the discontinued 'source-to-screen / AI Workcell' model the founder removed. Kept only artifact-budget + vercel-output structural checks.",
     "deploy:public:prod": "node tools/create_public_vercel_output.mjs && npm run public:verify && npx vercel deploy --prebuilt --prod -y",
     "kernel:verify": "npm --prefix kernel run verify",
