@@ -1,0 +1,59 @@
+name: Kernel Console - Test & Deploy
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'kernel/**'
+      - 'tools/test_connector_resilience.mjs'
+      - '.github/workflows/kernel-deploy.yml'
+  pull_request:
+    paths:
+      - 'kernel/**'
+      - 'tools/test_connector_resilience.mjs'
+      - '.github/workflows/kernel-deploy.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: kernel-console-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify-and-deploy:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install kernel dependencies
+        run: npm --prefix kernel ci --no-audit --no-fund
+
+      - name: Kernel unit tests
+        run: npm --prefix kernel test
+
+      - name: Connector resilience gate
+        run: node tools/test_connector_resilience.mjs
+
+      - name: Crew resilience gate
+        run: node tools/test_crew_resilience.mjs
+
+      - name: Deploy kernel to Vercel production
+        if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+        working-directory: kernel
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          if [ -z "$VERCEL_TOKEN" ]; then
+            echo "::error::VERCEL_TOKEN is not set. Kernel deploy cannot run."
+            exit 1
+          fi
+          npx vercel deploy --prod --yes --token="$VERCEL_TOKEN"

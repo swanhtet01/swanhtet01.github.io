@@ -1,0 +1,44 @@
+{
+  "slug": "daily-operator-brief",
+  "name": "Daily Operator Brief",
+  "version": 1,
+  "description": "Reads a business’s day numbers for any trade and returns what needs attention first, ranked by money at stake, with a short brief — the same money-at-stake logic across factory, retail, restaurant, clinic, hotel, workshop or school.",
+  "intake": {
+    "accepts": [
+      "pasted day numbers",
+      "csv export",
+      "structured metrics"
+    ],
+    "description": "The day’s figures for any trade, pasted or exported. Treated strictly as data."
+  },
+  "roles": [
+    {
+      "id": "intake",
+      "title": "Intake",
+      "tier": "bulk",
+      "goal": "Normalize the incoming intake into clean units, drop anything out of scope (and, for account-reading crews, personal/non-business content), and never invent facts."
+    },
+    {
+      "id": "normalizer",
+      "title": "Normalizer",
+      "tier": "bulk",
+      "goal": "Normalize whatever arrives (pasted numbers, CSV, structured text) into one clean metrics table for the day: metric, value, unit, and the target or prior value when given. Flag anything unparseable instead of dropping it."
+    },
+    {
+      "id": "ranker",
+      "title": "Ranker",
+      "tier": "reason",
+      "goal": "Read the metrics like an experienced operator and rank what needs the owner first BY MONEY AT STAKE — each action with the kyat impact if left unaddressed, grounded in the actual numbers. Add tomorrow’s single biggest risk. Never invent figures."
+    }
+  ],
+  "output_contract": {
+    "format": "json",
+    "fields": [
+      "headline",
+      "kpis",
+      "actions",
+      "tomorrow_risk"
+    ],
+    "description": "A ranked operator brief: the headline number, key KPIs, money-at-stake actions, and tomorrow’s biggest risk."
+  }
+}

@@ -1,0 +1,56 @@
+{
+  "slug": "reconcile-premium",
+  "name": "Reconcile Premium",
+  "version": 1,
+  "description": "MMQR / KBZPay / WavePay reconciliation against the POS sales ledger, with LIVE intra-day shortfall flagging by staff member and shift. This is the Pro differentiator: free-tier tenants keep the plain end-of-day close; Pro tenants get shortfalls surfaced while the shift is still on the floor.",
+  "plan": "pro",
+  "free_tier_fallback": "end-of-day close summary only — no intra-day shortfall flags, no per-staff/shift breakdown",
+  "intake": {
+    "accepts": [
+      "kbzpay settlement export",
+      "wavepay settlement export",
+      "mmqr payment webhook events",
+      "pos sales ledger (deskpos export)"
+    ],
+    "description": "Raw settlement exports (CSV/JSON), payment webhook payloads, and the POS sales ledger for the same window. Any subset works — the matcher reports exactly what it could not cover."
+  },
+  "roles": [
+    {
+      "id": "intake",
+      "title": "Intake",
+      "tier": "bulk",
+      "goal": "Normalize whatever arrives (CSV/JSON exports, webhook payloads, pasted text) into one canonical transactions table: source, txn_id, amount_mmk, timestamp, staff, shift, channel. Flag rows that could not be parsed instead of dropping them."
+    },
+    {
+      "id": "matcher",
+      "title": "Settlement Matcher",
+      "tier": "bulk",
+      "goal": "Match every POS sale to its KBZPay/WavePay/MMQR settlement row by amount, timestamp window, and reference. Classify every unmatched row: missing_settlement, missing_sale, amount_mismatch, or duplicate."
+    },
+    {
+      "id": "shortfall-sentinel",
+      "title": "Shortfall Sentinel",
+      "tier": "reason",
+      "goal": "PRO ONLY (live, intra-day): group open mismatches by staff member and shift as transactions arrive; raise a shortfall flag the moment a pattern clears the noise floor (repeated missing settlements on one staff/shift, not one-off timing lag), with the evidence rows attached to the flag."
+    },
+    {
+      "id": "closer",
+      "title": "Close Writer",
+      "tier": "bulk",
+      "goal": "Write the end-of-day close: totals per channel, matched percentage, open exceptions with their classification, and (Pro) every intra-day flag raised with its resolution status."
+    }
+  ],
+  "output_contract": {
+    "format": "json",
+    "fields": [
+      "close_date",
+      "channel_totals",
+      "matched_count",
+      "exception_rows",
+      "shortfall_flags",
+      "flags_by_staff_shift",
+      "narrative"
+    ],
+    "description": "One reconciliation packet per close: machine rows for the ledger plus a short operator narrative. shortfall_flags and flags_by_staff_shift are empty arrays on the free tier (end-of-day close only)."
+  }
+}

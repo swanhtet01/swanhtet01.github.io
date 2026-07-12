@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>SuperMega — Platform Status</title>
+<meta name="description" content="Live operational status of the SuperMega platform." />
+<meta name="robots" content="noindex" />
+<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap');
+  :root{
+    color-scheme:dark;
+    --bg:#07111f; --panel:rgba(255,255,255,.075); --panel2:rgba(255,255,255,.045); --line:rgba(255,255,255,.15);
+    --ink:#f6fbff; --muted:#a9b8c7; --accent:#3B82F6; --accent-2:#60A5FA;
+    --ok:#34D399; --warn:#F59E0B; --bad:#F87171;
+    --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+    --sans:Inter,"Noto Sans Myanmar","Segoe UI",system-ui,sans-serif;
+    --display:"Space Grotesk",Inter,system-ui,sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);-webkit-font-smoothing:antialiased;line-height:1.5}
+  .wrap{max-width:880px;margin:0 auto;padding:40px 22px 64px}
+  header{display:flex;align-items:center;gap:14px;margin-bottom:30px}
+  .mark{width:40px;height:40px;border-radius:8px;background:var(--panel);display:grid;place-items:center;border:1px solid var(--line)}
+  .brand b{font-family:var(--display);font-size:16px;letter-spacing:0}
+  .brand span{display:block;font-size:12px;color:var(--muted)}
+  .hero{border:1px solid var(--line);border-radius:8px;padding:24px 26px;background:var(--panel);margin-bottom:18px}
+  .hero .dot{width:13px;height:13px;border-radius:50%;display:inline-block;margin-right:10px;box-shadow:0 0 0 4px rgba(52,211,153,.14)}
+  .hero h1{font-family:var(--display);font-size:clamp(22px,4vw,30px);margin:0;letter-spacing:0;display:flex;align-items:center}
+  .hero .sub{color:var(--muted);font-size:13.5px;margin-top:8px;font-family:var(--mono)}
+  .grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
+  @media(max-width:620px){.grid{grid-template-columns:1fr}}
+  .card{border:1px solid var(--line);border-radius:8px;padding:18px 20px;background:var(--panel)}
+  .card h2{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin:0 0 14px;font-weight:700}
+  .row{display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-top:1px solid var(--line);font-size:14px}
+  .row:first-of-type{border-top:0}
+  .row .k{color:var(--muted)}
+  .row .v{font-family:var(--mono);font-size:13px}
+  .pill{font-family:var(--mono);font-size:11px;padding:3px 9px;border-radius:999px;border:1px solid var(--line)}
+  .pill.ok{color:var(--ok);border-color:rgba(52,211,153,.35);background:rgba(52,211,153,.08)}
+  .pill.warn{color:var(--warn);border-color:rgba(245,158,11,.35);background:rgba(245,158,11,.08)}
+  .pill.bad{color:var(--bad);border-color:rgba(248,113,113,.35);background:rgba(248,113,113,.08)}
+  .pill.off{color:var(--muted)}
+  .bars{display:flex;flex-wrap:wrap;gap:7px;margin-top:4px}
+  .bar{font-family:var(--mono);font-size:11px;color:var(--muted);border:1px solid var(--line);border-radius:8px;padding:5px 9px;background:var(--panel2)}
+  .bar b{color:var(--ink)}
+  .big{font-family:var(--mono);font-size:30px;letter-spacing:0}
+  .big .u{font-size:13px;color:var(--muted)}
+  footer{margin-top:26px;color:var(--muted);font-size:12.5px;font-family:var(--mono);display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px}
+  a{color:var(--accent-2)}
+  .spin{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--accent);margin-left:8px;animation:p 1.4s ease-in-out infinite}
+  @keyframes p{0%,100%{opacity:.3}50%{opacity:1}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <span class="mark"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" aria-label="SuperMega"><path d="M6.5 8 L11 12 L6.5 16" stroke="#3B82F6" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M12.6 16.2 L18 16.2" stroke="#3B82F6" stroke-width="2.6" stroke-linecap="round"/></svg></span>
+    <div class="brand"><b>SuperMega</b><span>Platform Status</span></div>
+  </header>
+
+  <div class="hero" id="hero">
+    <h1><span class="dot" style="background:var(--muted)"></span><span id="headline">Checking…</span><span class="spin"></span></h1>
+    <div class="sub" id="subline">console.supermega.dev/api/status</div>
+  </div>
+
+  <div class="grid">
+    <div class="card"><h2>Data spine</h2>
+      <div class="row"><span class="k">Reachability</span><span class="v" id="db-pill"><span class="pill off">…</span></span></div>
+      <div class="row"><span class="k">Store mode</span><span class="v" id="db-mode">—</span></div>
+    </div>
+    <div class="card"><h2>AI gateway</h2>
+      <div class="row"><span class="k">Primary</span><span class="v" id="ai-primary">—</span></div>
+      <div class="row"><span class="k">Failover</span><span class="v" id="ai-failover"><span class="pill off">…</span></span></div>
+    </div>
+    <div class="card" style="grid-column:1/-1"><h2>Connectors</h2>
+      <div style="display:flex;align-items:baseline;gap:18px;flex-wrap:wrap">
+        <div class="big"><span id="c-configured">—</span><span class="u"> / <span id="c-total">—</span> configured</span></div>
+        <div class="v" id="c-faults"><span class="pill off">…</span></div>
+      </div>
+      <div class="bars" id="c-cats"></div>
+    </div>
+    <div class="card" style="grid-column:1/-1"><h2>Payments</h2>
+      <div class="bars" id="money"></div>
+    </div>
+  </div>
+
+  <footer>
+    <span id="updated">—</span>
+    <span>auto-refresh 15s · <a href="/api/status">raw JSON</a></span>
+  </footer>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id)
+const pill = (ok, label, warn) => `<span class="pill ${ok ? 'ok' : warn ? 'warn' : 'bad'}">${label}</span>`
+const offPill = (on, label) => `<span class="pill ${on ? 'ok' : 'off'}">${on ? '✓ ' + label : label}</span>`
+
+async function load() {
+  try {
+    const r = await fetch('/api/status', { cache: 'no-store' })
+    const s = await r.json()
+    const ok = s.ok === true
+    const color = ok ? 'var(--ok)' : 'var(--bad)'
+    $('hero').querySelector('.dot').style.background = color
+    $('hero').querySelector('.dot').style.boxShadow = `0 0 0 4px ${ok ? 'rgba(52,211,153,.16)' : 'rgba(248,113,113,.16)'}`
+    $('headline').textContent = ok ? 'All systems operational' : 'Degraded — investigating'
+    $('subline').textContent = `supermega-kernel · ${s.latency_ms ?? '?'}ms · ${s.db?.mode || '?'} spine`
+
+    const dbok = s.db?.ok === true
+    $('db-pill').innerHTML = pill(dbok, dbok ? 'reachable' : (s.db?.detail || 'unreachable'))
+    $('db-mode').textContent = s.db?.mode || '—'
+
+    $('ai-primary').textContent = s.ai?.primary || 'none'
+    $('ai-failover').innerHTML = s.ai?.failover ? pill(true, 'enabled') : `<span class="pill warn">single-provider</span>`
+
+    $('c-configured').textContent = s.connectors?.configured ?? '—'
+    $('c-total').textContent = s.connectors?.total ?? '—'
+    const faults = s.connectors?.registrationErrors ?? 0
+    $('c-faults').innerHTML = faults === 0 ? pill(true, '0 faults') : pill(false, faults + ' registration faults')
+    $('c-cats').innerHTML = Object.entries(s.connectors?.byCategory || {}).map(([k, v]) => `<span class="bar">${k} <b>${v}</b></span>`).join('')
+
+    $('money').innerHTML = Object.entries(s.money || {}).map(([k, v]) => `<span class="bar">${offPill(v, k.replace(/_configured$/, '').replace(/_/g, ' '))}</span>`).join('') || '<span class="bar">no rails configured</span>'
+
+    $('updated').textContent = 'Updated ' + new Date(s.time || Date.now()).toLocaleTimeString()
+  } catch (e) {
+    $('headline').textContent = 'Status unavailable'
+    $('hero').querySelector('.dot').style.background = 'var(--bad)'
+  }
+}
+load(); setInterval(load, 15000)
+</script>
+</body>
+</html>

@@ -1,0 +1,50 @@
+{
+  "slug": "source-to-screen-pilot",
+  "name": "Source-to-Screen Pilot",
+  "version": 1,
+  "description": "The paid upgrade path from a free browser-only Source-to-Screen draft: turns the saved order packet and approved sample sources into one source-traced first proof plus an owner approval queue.",
+  "plan": "pilot",
+  "free_tier_fallback": "browser-only draft and order packet; no server run, no model call, no connector, no external action",
+  "intake": {
+    "accepts": [
+      "source-to-screen order packet",
+      "approved sample source",
+      "source hash",
+      "proof target",
+      "owner acceptance rule"
+    ],
+    "description": "A browser-only free draft plus the buyer-approved source pack. The free draft is treated as a routing artifact, not as permission to run server automation."
+  },
+  "roles": [
+    {
+      "id": "intake",
+      "title": "Intake",
+      "tier": "bulk",
+      "goal": "Normalize the saved order packet, source hash, proof target, required sources, and owner acceptance rule. Reject missing source trace instead of inventing facts."
+    },
+    {
+      "id": "proof-builder",
+      "title": "First Proof Builder",
+      "tier": "reason",
+      "goal": "Build the smallest useful first proof from approved sources only: one structured output, every important claim tied to source trace, and no external send/write/payment action."
+    },
+    {
+      "id": "approval-pack",
+      "title": "Approval Pack Writer",
+      "tier": "bulk",
+      "goal": "Write the owner approval queue: what was produced, what is blocked, what source is missing, and what becomes paid scope only after the owner accepts."
+    }
+  ],
+  "output_contract": {
+    "format": "json",
+    "fields": [
+      "source_trace",
+      "first_proof",
+      "approval_queue",
+      "required_sources",
+      "blocked_actions",
+      "paid_pilot_scope"
+    ],
+    "description": "A first-proof packet for a paid AI Workcell Pilot. blocked_actions must always include external send, connector write, browser/mobile action, payment request, and recurring workspace activation until owner approval."
+  }
+}
