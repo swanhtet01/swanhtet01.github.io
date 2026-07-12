@@ -16,6 +16,15 @@ test('availableTools returns a catalog with input schemas', () => {
   for (const tool of t) { assert.ok(tool.name && tool.description && tool.input_schema) }
 })
 
+test('external operator connectors are exposed only as bounded read tools', () => {
+  for (const name of ['settled_transactions_read', 'crm_deals_read', 'work_tasks_read']) {
+    assert.ok(TOOLS[name], `${name} must be in the crew tool-belt`)
+    assert.match(TOOLS[name].description, /Read|read/)
+    assert.match(TOOLS[name].description, /Read-only/)
+    assert.equal(TOOLS[name].input_schema.additionalProperties, false)
+  }
+})
+
 test('runTool executes an allow-listed local tool', async () => {
   const r = await runTool('platform_status', {})
   assert.equal(r.ok, true)
