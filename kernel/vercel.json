@@ -9,6 +9,7 @@
     "api/operator.mjs": { "maxDuration": 45 },
     "api/brief.mjs": { "maxDuration": 45 },
     "api/crew.mjs": { "maxDuration": 45 },
+    "api/workcell-plan.mjs": { "maxDuration": 10 },
     "api/workcells.mjs": { "maxDuration": 45 }
   },
   "crons": [
@@ -22,6 +23,7 @@
     { "src": "/api/operator", "dest": "/api/operator" },
     { "src": "/api/brief", "dest": "/api/brief" },
     { "src": "/api/crew", "dest": "/api/crew" },
+    { "src": "/api/workcell-plan", "dest": "/api/workcell-plan" },
     { "src": "/api/workcells", "dest": "/api/workcells" },
     { "src": "/api/(.*)", "dest": "/api/index" },
     { "src": "/status", "dest": "/status.html" },
