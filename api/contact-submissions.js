@@ -321,7 +321,70 @@ function recommendedNextStep(record) {
   return 'Reply asking for the first messy workflow, current tools, and the team that owns it.'
 }
 
+const runtimeWorkcellCatalog = {
+  'cash-close': {
+    template_id: 'cash-close',
+    package_name: 'Cash Close',
+    product_area: 'Custom Solutions & AI Agents',
+    delivery_lane: 'cash_close_workcell',
+    keywords: ['cash close', 'cash', 'paypal', 'settlement', 'fees', 'net receipts', 'reconcile'],
+    first_proof_target: 'One read-only cash-close preview with gross receipts, fees, net cash, transaction count, exceptions, and source trace.',
+    source_requests: [
+      'PayPal account owner and one settlement window; load credentials only during isolated provisioning, never in this form or email',
+      'agreed close window and reporting timezone',
+      'owner who reviews the first proof',
+    ],
+    sales_motion: 'Prove one read-only close, then provision an isolated daily Cash Close deployment after owner acceptance.',
+    modules: ['paypal_settlement_read', 'cash_close_reconciliation', 'fee_and_net_summary', 'exception_queue', 'source_trace'],
+    requires_clickup_list: false,
+    provider_secret_inputs: ['SUPERMEGA_NEW_CLIENT_PAYPAL_CLIENT_ID', 'SUPERMEGA_NEW_CLIENT_PAYPAL_CLIENT_SECRET'],
+  },
+  'pipeline-control': {
+    template_id: 'pipeline-control',
+    package_name: 'Pipeline Control',
+    product_area: 'Custom Solutions & AI Agents',
+    delivery_lane: 'pipeline_control_workcell',
+    keywords: ['pipeline control', 'pipeline', 'pipedrive', 'clickup', 'deal', 'revenue risk', 'delivery queue'],
+    first_proof_target: 'One read-only revenue-control preview with ranked risks, exact deal and task evidence, and one owner action.',
+    source_requests: [
+      'Pipedrive account owner and pipeline scope; load credentials only during isolated provisioning, never in this form or email',
+      'ClickUp workspace owner and the exact delivery list ID',
+      'owner who approves any proposed ClickUp task',
+    ],
+    sales_motion: 'Prove one read-only revenue-risk brief, then provision an isolated scheduled Pipeline Control deployment after owner acceptance.',
+    modules: ['pipedrive_open_deals_read', 'clickup_work_queue_read', 'revenue_risk_ranking', 'evidence_matching', 'approval_only_task_draft'],
+    requires_clickup_list: true,
+    provider_secret_inputs: [
+      'SUPERMEGA_NEW_CLIENT_PIPEDRIVE_ACCESS_TOKEN|SUPERMEGA_NEW_CLIENT_PIPEDRIVE_API_TOKEN',
+      'SUPERMEGA_NEW_CLIENT_CLICKUP_ACCESS_TOKEN|SUPERMEGA_NEW_CLIENT_CLICKUP_API_TOKEN',
+    ],
+  },
+  'owner-command': {
+    template_id: 'owner-command',
+    package_name: 'Owner Command',
+    product_area: 'Custom Solutions & AI Agents',
+    delivery_lane: 'owner_command_workcell',
+    keywords: ['owner command', 'owner brief', 'daily command', 'paypal', 'pipedrive', 'clickup', 'cash', 'pipeline', 'delivery'],
+    first_proof_target: 'One read-only owner brief that leads with money at stake, cites exact source numbers, lists exceptions, and proposes one owner action.',
+    source_requests: [
+      'PayPal and Pipedrive account owners; load credentials only during isolated provisioning, never in this form or email',
+      'ClickUp workspace owner and the exact delivery list ID',
+      'daily delivery time, reporting timezone, and owner reviewer',
+    ],
+    sales_motion: 'Prove one source-traced owner brief, then provision an isolated daily Owner Command deployment after owner acceptance.',
+    modules: ['paypal_settlement_read', 'pipedrive_open_deals_read', 'clickup_work_queue_read', 'owner_command_brief', 'approval_only_task_draft'],
+    requires_clickup_list: true,
+    provider_secret_inputs: [
+      'SUPERMEGA_NEW_CLIENT_PAYPAL_CLIENT_ID',
+      'SUPERMEGA_NEW_CLIENT_PAYPAL_CLIENT_SECRET',
+      'SUPERMEGA_NEW_CLIENT_PIPEDRIVE_ACCESS_TOKEN|SUPERMEGA_NEW_CLIENT_PIPEDRIVE_API_TOKEN',
+      'SUPERMEGA_NEW_CLIENT_CLICKUP_ACCESS_TOKEN|SUPERMEGA_NEW_CLIENT_CLICKUP_API_TOKEN',
+    ],
+  },
+}
+
 const solutionRouteCatalog = [
+  ...Object.values(runtimeWorkcellCatalog),
   {
     template_id: 'deskpos-quickstart',
     package_name: 'Shop Quickstart',
@@ -414,6 +477,7 @@ function buildSolutionRoute(record = {}) {
   const matchedKeywords = winner?.matched_keywords || []
   const fitScore = Math.max(20, Math.min(100, winner?.score || 20))
   const templateId = explicitTemplate || route.template_id
+  const runtimeWorkcell = runtimeWorkcellCatalog[templateId] || null
   const requestedPackage = text(record.requested_package)
   const publicPackage = text(record.public_package)
   const genericPackage = /^(first output request|first useful output|general enquiry|general inquiry|custom supermega template)$/i
@@ -423,7 +487,7 @@ function buildSolutionRoute(record = {}) {
       ? requestedPackage
       : route.package_name
   const firstProofTarget = text(record.first_proof_target) || text(record.first_output) || route.first_proof_target
-  const starterKitUrl = text(record.starter_kit_url) || `/site/agent-templates/${templateId}.json`
+  const starterKitUrl = text(record.starter_kit_url) || (runtimeWorkcell ? '' : `/site/agent-templates/${templateId}.json`)
   const priceHint = text(record.price_hint) || 'quote after first proof review'
   const status = fitScore >= 55 || explicitTemplate ? 'route_ready' : 'needs_operator_review'
   const sourceRequests = route.source_requests
@@ -487,11 +551,125 @@ function buildSolutionRoute(record = {}) {
     sales_motion: route.sales_motion,
     delivery_path: deliveryPath,
     service_model: 'managed_ai_workcell',
+    runtime_workcell_slug: runtimeWorkcell?.template_id || null,
+    provisioner_handoff_supported: Boolean(runtimeWorkcell),
     enterprise_controls: ['source_trace', 'role_separation', 'approval_queue', 'value_ledger'],
     approval_boundary: 'owner approval before send/write/payment actions',
     external_action_state: 'blocked_until_owner_approval',
     connector_write_state: 'blocked_until_owner_approval',
     payment_action_state: 'blocked_until_owner_approval',
+    real_mrr_delta: 0,
+    packet,
+  }
+}
+
+function runtimeWorkcellClientSlug(record = {}) {
+  let base = text(record.company || record.name || 'client')
+  try { base = base.normalize('NFKD') } catch { /* use source text */ }
+  base = base
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+  if (base.length < 3) base = 'client'
+  const identity = text(record.lead_id || record.email || record.company || record.name || 'pending-client')
+  const suffix = crypto.createHash('sha256').update(identity).digest('hex').slice(0, 6)
+  return `${base.slice(0, 33).replace(/-+$/g, '')}-${suffix}`
+}
+
+function buildRuntimeWorkcellActivationHandoff(record = {}, solutionRoute = {}, intakeJob = {}) {
+  const runtime = runtimeWorkcellCatalog[text(record.template_id || solutionRoute.runtime_workcell_slug)]
+  if (!runtime) return null
+
+  const clientSlug = runtimeWorkcellClientSlug(record)
+  const projectName = `supermega-wc-${clientSlug}`
+  const manifestFile = `workcells/${clientSlug}.json`
+  const missingManifestFields = runtime.requires_clickup_list ? ['clickupListId'] : []
+  const sharedSecretInputs = [
+    'SUPERMEGA_NEW_CLIENT_OPS_KEY',
+    'SUPERMEGA_NEW_CLIENT_ANTHROPIC_API_KEY|SUPERMEGA_NEW_CLIENT_CLAUDE_API_KEY|SUPERMEGA_NEW_CLIENT_OPENROUTER_API_KEY',
+    'SUPERMEGA_NEW_CLIENT_SUPABASE_URL',
+    'SUPERMEGA_NEW_CLIENT_SUPABASE_SERVICE_ROLE_KEY',
+    'SUPERMEGA_NEW_CLIENT_TELEGRAM_BOT_TOKEN',
+    'SUPERMEGA_NEW_CLIENT_TELEGRAM_ALERT_CHAT_ID|SUPERMEGA_NEW_CLIENT_TELEGRAM_CHAT_ID',
+  ]
+  const requiredSecretInputs = [...sharedSecretInputs, ...runtime.provider_secret_inputs]
+  const optionalBootstrapInputs = [
+    'SUPERMEGA_NEW_CLIENT_SUPABASE_DB_URL',
+    'SUPERMEGA_NEW_CLIENT_CRON_SECRET',
+  ]
+  const manifestDraft = {
+    version: 1,
+    clientSlug,
+    clientName: truncate(record.company || record.name || 'Client', 120).replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim() || 'Client',
+    clientId: `workcell-${clientSlug}`,
+    projectName,
+    workcells: [runtime.template_id],
+    timeZone: 'Asia/Yangon',
+    currency: 'MMK',
+    lookbackHours: 24,
+    clickupListId: '',
+    deliveryUtc: '01:30',
+    tokenCap: 150000,
+  }
+  const status = missingManifestFields.length ? 'needs_manifest_inputs' : 'needs_client_credentials'
+  const operatorSteps = [
+    'Confirm the buyer accepted the first proof and approved isolated activation.',
+    ...(runtime.requires_clickup_list ? ['Collect the exact client-owned ClickUp list ID and place it in the manifest draft.'] : []),
+    'Create or confirm the client-owned Supabase project; never reuse the shared console or another client project.',
+    'Load every required credential through the isolated provisioning environment, never through the public form, email, logs, or the manifest file.',
+    `Run the plan command and review the normalized manifest, missing inputs, project target, and schedule before applying.`,
+    `Apply only with the exact confirmation PROVISION ${projectName}.`,
+    'Use client-owned test data for the first authenticated read-only run and keep every proposed write in the Approval Inbox.',
+  ]
+  const packet = [
+    `# ${runtime.package_name} isolated activation handoff`,
+    '',
+    `Status: ${status}`,
+    `Lead: ${record.lead_id || 'not set'}`,
+    `Runtime workcell: ${runtime.template_id}`,
+    `Manifest file: ${manifestFile}`,
+    `Project: ${projectName}`,
+    `Apply allowed: false`,
+    '',
+    '## Missing manifest fields',
+    ...(missingManifestFields.length ? missingManifestFields.map((item) => `- ${item}`) : ['- none']),
+    '',
+    '## Required secret input names',
+    ...requiredSecretInputs.map((item) => `- ${item}`),
+    '',
+    '## Bootstrap-only optional inputs',
+    ...optionalBootstrapInputs.map((item) => `- ${item}`),
+    '',
+    '## Operator steps',
+    ...operatorSteps.map((item, index) => `${index + 1}. ${item}`),
+    '',
+    '## Boundary',
+    '- No credential value belongs in this packet or manifest.',
+    '- No project creation, schema write, provider action, send, or payment occurs from intake.',
+    '- Apply remains blocked until client-owned inputs and exact owner confirmation are present.',
+  ].join('\n')
+
+  return {
+    status,
+    handoff_type: 'isolated_workcell_provisioner',
+    runtime_workcell_slug: runtime.template_id,
+    lead_id: record.lead_id || '',
+    manifest_file: manifestFile,
+    manifest_draft: manifestDraft,
+    missing_manifest_fields: missingManifestFields,
+    required_secret_input_names: requiredSecretInputs,
+    optional_bootstrap_input_names: optionalBootstrapInputs,
+    plan_command: `npm run workcell:provision -- --manifest ${manifestFile} --scope <vercel-team>`,
+    apply_command: `npm run workcell:provision -- --apply --manifest ${manifestFile} --scope <vercel-team> --confirm "PROVISION ${projectName}"`,
+    exact_apply_confirmation: `PROVISION ${projectName}`,
+    provisioner_source: 'kernel/workcell-provision.mjs',
+    schema_source: 'kernel/supabase/workcell-client.sql',
+    operator_steps: operatorSteps,
+    intake_status: intakeJob.status || null,
+    manifest_ready: missingManifestFields.length === 0,
+    credentials_present: false,
+    apply_allowed: false,
+    external_action_state: 'blocked_until_owner_approval_and_client_inputs',
     real_mrr_delta: 0,
     packet,
   }
@@ -514,6 +692,8 @@ function recordWithSolutionRoute(record, solutionRoute) {
 function implementationModulesForRoute(solutionRoute = {}) {
   const lane = text(solutionRoute.delivery_lane)
   const defaults = ['buyer_goal', 'approved_sources', 'source_trace', 'first_proof', 'approval_queue', 'delivery_packet']
+  const runtime = runtimeWorkcellCatalog[text(solutionRoute.runtime_workcell_slug || solutionRoute.template_id)]
+  if (runtime) return [...new Set([...defaults, ...runtime.modules])]
   const byLane = {
     pos_launch_workcell: ['business_profile', 'catalog', 'staff_roles', 'checkout_or_booking', 'payment_proof', 'receipt', 'daily_close'],
     chat_to_ledger_workcell: ['chat_sources', 'customer_match', 'order_ledger', 'open_balance_queue', 'delivery_queue', 'approval_only_followups'],
@@ -934,6 +1114,7 @@ function buildPilotCrewRunSheet(sourceToScreenOrder) {
 function buildIntakeJob(record, acceptanceTests = []) {
   const templateName = record.public_package || record.requested_package || record.template_id || 'Custom SUPERMEGA template'
   const sourceToScreenOrder = buildSourceToScreenOrder(record)
+  const runtimeWorkcell = runtimeWorkcellCatalog[text(record.template_id)] || null
   const proofTarget = sourceToScreenOrder?.proof_target || record.first_proof_target || record.first_output || record.requested_package || 'First useful output'
   const sourceManifest = [
     {
@@ -954,9 +1135,9 @@ function buildIntakeJob(record, acceptanceTests = []) {
       workcell_id: sourceToScreenOrder.workcell_id,
     }] : []),
     {
-      source_type: 'starter_kit',
-      status: record.starter_kit_url ? 'provided' : 'missing',
-      value: record.starter_kit_url || (record.template_id ? `/site/agent-templates/${record.template_id}.json` : 'SELECT_TEMPLATE_STARTER_KIT'),
+      source_type: runtimeWorkcell ? 'runtime_contract' : 'starter_kit',
+      status: record.starter_kit_url || runtimeWorkcell ? 'provided' : 'missing',
+      value: record.starter_kit_url || (runtimeWorkcell ? `runtime-workcell:${runtimeWorkcell.template_id}` : (record.template_id ? `/site/agent-templates/${record.template_id}.json` : 'SELECT_TEMPLATE_STARTER_KIT')),
     },
     {
       source_type: 'approval_boundary',
@@ -1235,12 +1416,14 @@ function buildOwnerOnboardingAlert(record, sourcePackRequest) {
 function buildFirstProofTaskPayload(record) {
   const solutionRoute = buildSolutionRoute(record)
   const routedRecord = recordWithSolutionRoute(record, solutionRoute)
+  const runtimeWorkcell = runtimeWorkcellCatalog[text(routedRecord.template_id)] || null
   const sourceToScreenOrder = buildSourceToScreenOrder(routedRecord)
   const acceptanceTests = listFromText(routedRecord.acceptance_tests)
   const proofTarget = sourceToScreenOrder?.proof_target || routedRecord.first_proof_target || routedRecord.first_output || routedRecord.requested_package || 'First useful output'
-  const starterKitUrl = routedRecord.starter_kit_url || (routedRecord.template_id ? `/site/agent-templates/${routedRecord.template_id}.json` : '')
+  const starterKitUrl = routedRecord.starter_kit_url || (!runtimeWorkcell && routedRecord.template_id ? `/site/agent-templates/${routedRecord.template_id}.json` : '')
   const templateName = routedRecord.public_package || routedRecord.requested_package || routedRecord.template_id || 'Custom SUPERMEGA template'
   const intakeJob = buildIntakeJob(routedRecord, acceptanceTests)
+  const workcellActivationHandoff = buildRuntimeWorkcellActivationHandoff(routedRecord, solutionRoute, intakeJob)
   const clientKickoffPack = buildClientKickoffPack(routedRecord, intakeJob)
   const implementationBlueprintPack = buildImplementationBlueprintPack(routedRecord, solutionRoute, intakeJob)
   const sourcePackRequest = buildContactSourcePackRequest(routedRecord)
@@ -1259,6 +1442,7 @@ function buildFirstProofTaskPayload(record) {
     sourceToScreenOrder?.source_hash ? `Source hash: ${sourceToScreenOrder.source_hash}.` : '',
     `First proof: ${proofTarget}.`,
     starterKitUrl ? `Starter kit: ${starterKitUrl}.` : '',
+    workcellActivationHandoff ? `Activation handoff: ${workcellActivationHandoff.status}; ${workcellActivationHandoff.manifest_file}.` : '',
     sourceSummary ? `Sources: ${sourceSummary}.` : 'Sources: request the minimum sample sources before building.',
     `Boundary: ${routedRecord.automation_boundary || 'Approval required before external sends, connector writes, payment actions, or live record edits.'}`,
   ].filter(Boolean).join('\n')
@@ -1280,6 +1464,7 @@ function buildFirstProofTaskPayload(record) {
     intake_job: intakeJob,
     client_kickoff_pack: clientKickoffPack,
     implementation_blueprint_pack: implementationBlueprintPack,
+    workcell_activation_handoff: workcellActivationHandoff,
     source_pack_request: sourcePackRequest,
     source_pack_request_packet: sourcePackRequest.client_message,
     source_pack_request_json: JSON.stringify(sourcePackRequest, null, 2),
@@ -1364,6 +1549,7 @@ function pipelineActionPayload(record) {
       source_to_screen_order: firstProofTask.source_to_screen_order,
       pilot_crew_run_sheet: firstProofTask.pilot_crew_run_sheet,
       implementation_blueprint_pack: firstProofTask.implementation_blueprint_pack,
+      workcell_activation_handoff: firstProofTask.workcell_activation_handoff,
       source_pack_request: firstProofTask.source_pack_request,
       source_pack_request_packet: firstProofTask.source_pack_request_packet,
       source_pack_request_json: firstProofTask.source_pack_request_json,
@@ -2121,6 +2307,7 @@ async function handler(req, res) {
 
 handler.__test = {
   buildSolutionRoute,
+  buildRuntimeWorkcellActivationHandoff,
   buildImplementationBlueprintPack,
   buildFirstProofTaskPayload,
   buildClientKickoffPack,
