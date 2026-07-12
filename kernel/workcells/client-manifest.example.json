@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "clientSlug": "acme-trading",
+  "clientName": "Acme Trading",
+  "projectName": "supermega-wc-acme-trading",
+  "workcells": [
+    "owner-command"
+  ],
+  "timeZone": "Asia/Yangon",
+  "currency": "MMK",
+  "lookbackHours": 24,
+  "clickupListId": "123456789",
+  "deliveryUtc": "01:30",
+  "tokenCap": 150000
+}

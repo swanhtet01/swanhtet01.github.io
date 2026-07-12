@@ -52,7 +52,7 @@ environment contract, and activation proof.
 - `SUPERMEGA_OPS_KEY` for protected APIs and the console.
 - `CRON_SECRET` for Vercel cron authentication.
 - `SUPABASE_URL` plus `SUPABASE_SERVICE_ROLE_KEY`, or a supported Postgres URL.
-- `SUPERMEGA_CLIENT_TOKEN_CAP` for the monthly client ceiling; default 2,000,000 weighted tokens.
+- `SUPERMEGA_CLIENT_TOKEN_CAP` for the monthly client ceiling; default 150,000 weighted tokens.
 - `SUPERMEGA_CLIENT_CAP_SOFT_RATIO` for pre-cap tier downgrade; default `0.8`.
 
 ## Honest Limits
@@ -66,7 +66,8 @@ environment contract, and activation proof.
 
 ## Next
 
-1. Automate isolated client-project provisioning and environment setup.
+1. Bootstrap the dedicated client data spine with `supabase/workcell-client.sql`, then use
+   `npm run workcell:provision` to plan or apply its isolated Vercel project.
 2. Add an approval inbox before any write-capable connector action.
 3. Move from one cron per client deployment to a durable scheduler when a shared control plane is
    justified by real client volume.
