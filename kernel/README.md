@@ -1,58 +1,72 @@
-# SUPERMEGA kernel
+# SuperMega Kernel
 
-The smallest real spine the machine stands on. See [../PLATFORM.md](../PLATFORM.md) for the why and the build order.
+The cloud control plane for SuperMega operator products. See [../PLATFORM.md](../PLATFORM.md) for the
+broader system boundaries.
 
-## What's here
+## Runtime
 
-| File | What it is | Status |
+| Area | Purpose | Current state |
 |---|---|---|
-| `gateway.mjs` | The AI gateway — one interface in front of every Claude call (tiers, retry, fallback, cost caps, injection-stripping, forced structured output). | **built (v0)** |
-| `schema.sql` | The data spine — Lead → Client → Project → Build → OperatorRun + graduation tracker. Apply in Supabase. | **built (v0)** |
-| `console/` | Login-gated internal app: leads inbox, run-a-deal, project pipeline. | to build |
+| `gateway.mjs` | Model tiers, failover, cost caps, injection stripping, structured output | live |
+| `store.mjs` | Supabase/Postgres/memory spine for clients, pipeline, usage, activity, idempotency | live |
+| `connectors/` | Fixed-host provider adapters with health and resilience contracts | 69 live |
+| `tools.mjs` + `api/operator.mjs` | Bounded read tools and grounded operations agent | live |
+| `workcells.mjs` + `workcell-run.mjs` | Cash Close, Pipeline Control, and Owner Command products | live |
+| `crews/` + `crew-run.mjs` | Contract-enforced, draft-only multi-role tasks | 5 live |
+| `public/` + `api/` | Ops console, status, workcell activation, and scheduled delivery | live |
 
-## Using the gateway
+## Gateway
 
 ```js
 import { complete } from './gateway.mjs'
 
-// plain text
-const { text } = await complete({
-  tier: 'reason',
-  system: 'You scope software builds for Myanmar SMBs.',
-  messages: [{ role: 'user', content: 'Shop owner: I lose track of which dealer paid. What do we build first?' }],
-})
-
-// validated structured output (forced tool-use — never JSON-from-text)
 const { data } = await complete({
-  tier: 'bulk',
-  clientId: 'client_123',                 // enables per-client cost caps + logging
-  system: 'Score this lead 0-100 for ICP fit and return the shape.',
-  messages: [{ role: 'user', content: leadText }],
+  tier: 'reason',
+  clientId: 'client_123',
+  system: 'Use only the supplied evidence.',
+  messages: [{ role: 'user', content: 'Summarize the owner metrics.' }],
   schema: {
-    title: 'LeadScore',
+    title: 'OwnerMetrics',
     type: 'object',
-    required: ['score', 'reason'],
-    properties: { score: { type: 'integer' }, reason: { type: 'string' } },
+    required: ['headline'],
+    properties: { headline: { type: 'string' } },
   },
 })
 ```
 
-**Tiers:** `bulk` (Haiku — classification/extraction), `reason` (Sonnet — scoping/drafting, the default), `deep` (Opus — hard build reasoning). On overload it backs off and drops a tier.
+Tiers are `bulk`, `reason`, and `deep`. The client id activates server-side plan resolution,
+cost-weighted monthly usage, and the persistent response cache.
 
-## Env
-- `ANTHROPIC_API_KEY` (required) — already set on the `supermega-machine` project.
-- `SUPERMEGA_CLIENT_TOKEN_CAP` (optional) — per-tenant **monthly** token ceiling, default 2,000,000. Override per call with `complete({ capTokens })`.
-- `SUPERMEGA_CLIENT_CAP_SOFT_RATIO` (optional) — fraction of the cap above which a call is auto-downgraded one tier (default `0.8`). Below the hard cap, this keeps a client under budget instead of cutting them off.
-- `SUPERMEGA_GATEWAY_PERSIST` (optional) — set to `0` to force pure in-memory ledger/cache (skip the spine). Default on.
+## Workcells
 
-## Per-tenant cost cap (spine-backed)
-The token ledger + response cache are now backed by `store.mjs` (Supabase / Postgres / memory), so the cap **survives cold starts and spans instances**. Each tenant gets one ledger row per `YYYY-MM` window; `complete()` reads the persisted total before each call, **refuses** over the hard cap, and **downgrades a tier** past the soft threshold. Memory mode still works locally with no credentials. Two tables back this — `supermega_token_ledger` and `supermega_ai_cache` — created by `ensurePgTables()` in postgres mode and present in `supabase/console-tables.sql` for Supabase mode.
+Workcells are the unit of recurring client value above connectors. Their tool plan is declared in
+code; the model cannot add tools. Provider records are reduced before synthesis, raw rows are not
+returned by the API, and scheduled owner delivery uses an atomic daily activity claim.
 
-## Known limits (v0, honest)
-- The cap is enforced at monthly granularity per tenant; there's a small race window if the same tenant fires many concurrent calls across instances (each reads-then-writes), so the cap can be modestly overshot under high concurrency — acceptable for a budget ceiling.
-- No streaming yet — add when the console needs it.
+See [workcells/README.md](workcells/README.md) for the product matrix, isolated deployment model,
+environment contract, and activation proof.
+
+## Core Environment
+
+- `ANTHROPIC_API_KEY` or another configured gateway provider.
+- `SUPERMEGA_OPS_KEY` for protected APIs and the console.
+- `CRON_SECRET` for Vercel cron authentication.
+- `SUPABASE_URL` plus `SUPABASE_SERVICE_ROLE_KEY`, or a supported Postgres URL.
+- `SUPERMEGA_CLIENT_TOKEN_CAP` for the monthly client ceiling; default 2,000,000 weighted tokens.
+- `SUPERMEGA_CLIENT_CAP_SOFT_RATIO` for pre-cap tier downgrade; default `0.8`.
+
+## Honest Limits
+
+- Client connector secrets are isolated per Vercel project, not stored in a shared multi-tenant vault.
+- Workcells read and draft only. Customer sends, record changes, refunds, and payments require a
+  separate approval and idempotency layer.
+- The token cap can modestly overshoot under highly concurrent calls because storage updates are not
+  a database-side atomic increment in every store mode.
+- The default cron is one daily UTC schedule. Each isolated client deployment sets its own UTC time.
 
 ## Next
-1. Refactor `supermega-machine/api/deal.js` to call `complete()` instead of the Anthropic SDK directly — proves the gateway on live code.
-2. Apply `schema.sql` to a Supabase project; wire `/contact/` submissions into `lead`.
-3. Build `console/` v0 (leads inbox → run-a-deal → pipeline).
+
+1. Automate isolated client-project provisioning and environment setup.
+2. Add an approval inbox before any write-capable connector action.
+3. Move from one cron per client deployment to a durable scheduler when a shared control plane is
+   justified by real client volume.
