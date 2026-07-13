@@ -107,6 +107,16 @@ def healthy_responses() -> dict[str, checker.HttpResult]:
         "db": {"ok": True, "mode": "supabase"},
         "connectors": {"total": 69, "configured": 12, "registrationErrors": 0},
         "ai": {"providers": ["anthropic"], "primary": "anthropic"},
+        "agentCompany": {
+            "plannerReady": True,
+            "actionMode": "draft_only",
+            "maxAgents": 2,
+            "maxRoleBudget": 8,
+            "probeMode": "plan_only",
+            "modelRequest": False,
+            "durableClaimCreated": False,
+            "externalWrites": False,
+        },
     }
 
     responses = {
@@ -198,6 +208,18 @@ class PortfolioHealthTest(unittest.TestCase):
         self.assertEqual(report["status"], "error")
         failure = next(item for item in report["failures"] if item["kind"] == "agent_company_status")
         self.assertIn("connectors.registrationErrors", failure["mismatches"])
+
+    def test_unready_agent_company_planner_fails_status(self):
+        responses = healthy_responses()
+        payload = copy.deepcopy(json.loads(responses[f"{CONSOLE}api/status"].body))
+        payload["agentCompany"]["plannerReady"] = False
+        payload["agentCompany"]["actionMode"] = "unavailable"
+        responses[f"{CONSOLE}api/status"] = result(f"{CONSOLE}api/status", payload)
+        report = self.run_report(responses)
+        self.assertEqual(report["status"], "error")
+        failure = next(item for item in report["failures"] if item["kind"] == "agent_company_status")
+        self.assertIn("agentCompany.plannerReady", failure["mismatches"])
+        self.assertIn("agentCompany.actionMode", failure["mismatches"])
 
     def test_unprotected_agent_company_endpoint_fails_guard(self):
         responses = healthy_responses()
