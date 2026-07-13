@@ -1,0 +1,50 @@
+{
+  "slug": "customer-support-desk",
+  "name": "Customer Support Desk",
+  "version": 1,
+  "description": "Turns owner-approved customer-service evidence into consistent triage, a policy-grounded resolution path, and a reply draft that remains behind human review.",
+  "intake": {
+    "accepts": [
+      "support ticket export",
+      "customer message",
+      "order or account facts",
+      "support policy",
+      "prior action history"
+    ],
+    "description": "The exact approved customer issue, verified account or order facts, relevant policy excerpts, and prior actions. Sensitive data should be minimized before intake."
+  },
+  "roles": [
+    {
+      "id": "intake",
+      "title": "Intake",
+      "tier": "bulk",
+      "goal": "Normalize the issue, customer-stated impact, verified account facts, timeline, policy evidence, prior actions, and missing information without assuming intent or fault."
+    },
+    {
+      "id": "resolution-analyst",
+      "title": "Resolution Analyst",
+      "tier": "reason",
+      "goal": "Classify urgency and risk, map the issue to supplied policy, identify the safest resolution path, and escalate money, safety, legal, security, or identity-sensitive decisions."
+    },
+    {
+      "id": "reply-drafter",
+      "title": "Reply Drafter",
+      "tier": "bulk",
+      "goal": "Draft a clear empathetic response with verified facts, the proposed next step, owner-required approvals, and no unsupported promise, refund, admission, or send action."
+    }
+  ],
+  "output_contract": {
+    "format": "json",
+    "fields": [
+      "case_summary",
+      "priority",
+      "verified_facts",
+      "resolution_path",
+      "reply_draft",
+      "escalations",
+      "knowledge_gaps",
+      "blocked_actions"
+    ],
+    "description": "A policy-grounded service packet whose reply and resolution remain drafts until an authorized human approves them."
+  }
+}

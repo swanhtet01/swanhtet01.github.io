@@ -30,7 +30,8 @@ test('GET returns the protected fixed roster and hard limits', async () => {
   const result = await handleAgentCompany(request({ method: 'GET', body: undefined }), { opsKey: KEY })
   assert.equal(result.status, 200)
   assert.equal(result.json.actionMode, 'draft_only')
-  assert.equal(result.json.agents.length, 8)
+  assert.equal(result.json.agents.length, 12)
+  assert.equal(result.json.agents.every((agent) => agent.evidenceHint), true)
   assert.equal(result.json.limits.maxAgents, 2)
   assert.equal(result.json.limits.maxRoleBudget, 8)
   assert.equal(result.json.workOrders.enabled, true)
@@ -44,6 +45,7 @@ test('GET returns the protected fixed roster and hard limits', async () => {
   assert.equal(result.json.operations.immutableReviews, true)
   assert.equal(result.json.operations.rawEvidenceReturned, false)
   assert.equal(result.json.operations.modelOutputReturned, false)
+  assert.equal(result.json.operations.workforceMetrics, true)
   assert.equal(result.json.operations.customerSlaClaimed, false)
 })
 

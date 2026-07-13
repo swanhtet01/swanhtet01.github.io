@@ -23,13 +23,14 @@ const cycle = (patch = {}) => ({
 
 test('agent roster is fixed, bounded, and backed by validated crews', async () => {
   const roster = listCompanyAgents()
-  assert.equal(roster.length, 8)
+  assert.equal(roster.length, 12)
   assert.equal(MAX_CYCLE_AGENTS, 2)
   assert.equal(MAX_CYCLE_ROLE_BUDGET, 8)
   assert.equal(new Set(roster.map((agent) => agent.id)).size, roster.length)
+  assert.equal(roster.every((agent) => typeof agent.evidenceHint === 'string' && agent.evidenceHint.length > 20), true)
   assert.deepEqual(
-    roster.slice(-3).map((agent) => agent.id),
-    ['sales-qualifier', 'delivery-planner', 'quality-reviewer'],
+    roster.slice(-4).map((agent) => agent.id),
+    ['data-insights-analyst', 'customer-support-operator', 'knowledge-manager', 'project-controller'],
   )
   const plan = await planCompanyCycle(cycle())
   assert.equal(plan.ok, true)
@@ -39,6 +40,35 @@ test('agent roster is fixed, bounded, and backed by validated crews', async () =
   assert.equal(plan.controls.execution, 'sequential')
   assert.equal(plan.controls.dynamicDelegation, false)
   assert.equal(plan.controls.crossAgentContext, false)
+  assert.equal(plan.controls.externalWrites, false)
+  for (const agent of roster) {
+    const single = await planCompanyCycle({
+      clientId: 'client-acme',
+      cycleId: `contract-${agent.id}`,
+      agents: [agent.id],
+      evidence: { [agent.id]: `Approved evidence fixture for ${agent.id}.` },
+      roleBudget: MAX_CYCLE_ROLE_BUDGET,
+    })
+    assert.equal(single.ok, true, `${agent.id} is backed by a valid fixed crew`)
+  }
+})
+
+test('new general-use specialists plan through fixed validated crews under the same budget', async () => {
+  const plan = await planCompanyCycle({
+    clientId: 'client-acme',
+    cycleId: '2026-07-14-general-work',
+    agents: ['data-insights-analyst', 'customer-support-operator'],
+    evidence: {
+      'data-insights-analyst': 'Approved sales export, field dictionary, January to June, explain repeat purchase decline.',
+      'customer-support-operator': 'Approved ticket 42, order facts, returns policy, and prior support actions.',
+    },
+    roleBudget: 6,
+  })
+  assert.equal(plan.ok, true)
+  assert.deepEqual(plan.assignments.map((assignment) => assignment.crew), ['data-insights-desk', 'customer-support-desk'])
+  assert.equal(plan.budget.plannedRoles, 6)
+  assert.equal(plan.controls.execution, 'sequential')
+  assert.equal(plan.controls.dynamicDelegation, false)
   assert.equal(plan.controls.externalWrites, false)
 })
 

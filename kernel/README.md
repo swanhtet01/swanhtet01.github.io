@@ -57,7 +57,7 @@ The agent receives only the bounded read tool and cannot write to the inbox.
 
 ## Agent Company Cycles
 
-`POST /api/agent-company` is the protected manager layer over the eight validated crews. Callers must
+`POST /api/agent-company` is the protected manager layer over twelve validated crews. Callers must
 choose `action: "plan"` or `action: "run"`, a stable client and cycle id, one or two allowlisted
 specialists, and separate evidence for each specialist. A plan reports the exact role-call budget
 before any model call. A run atomically claims the cycle in durable storage, then executes the crews
@@ -89,8 +89,10 @@ additional explicit actions:
   requires the saved plan hash, exact `EVALUATE <workOrderId>` confirmation, and either four passing checks for
   `accepted` or at least one failed check for `revision_required`. It accepts no notes or raw text.
 - `operations-report` measures only durable client-bound work orders over a fixed 7, 30, or 90 day
-  window. It returns timestamps, counts, rates, target states, and evaluation metadata, never evidence
-  or specialist model output.
+  window. It returns timestamps, counts, rates, target states, evaluation metadata, and fixed-roster
+  utilization, never evidence or specialist model output. Utilization covers assignments, active
+  load, specialist completion, and role calls so operators can manage capacity without opening
+  private evidence or generated deliverables.
 
 The work-order id is deterministic for one client and cycle. Re-creating the same exact plan replays
 the saved order, while changed evidence under the same cycle id is a conflict. Dispatch first saves

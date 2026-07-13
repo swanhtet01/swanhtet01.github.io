@@ -23,6 +23,7 @@ export const AGENT_ROSTER = Object.freeze([
     department: 'operations',
     crew: 'daily-operator-brief',
     outcome: 'Ranks the day by money at stake and identifies the next operational risk.',
+    evidenceHint: 'Provide current sales, cash, delivery, staffing, and exception facts for one operating period.',
   }),
   Object.freeze({
     id: 'cash-reconciler',
@@ -30,6 +31,7 @@ export const AGENT_ROSTER = Object.freeze([
     department: 'finance',
     crew: 'reconcile-premium',
     outcome: 'Reconciles payment channels against POS evidence and drafts the close packet.',
+    evidenceHint: 'Provide POS totals and matching MMQR, KBZPay, WavePay, cash, shift, or staff records.',
   }),
   Object.freeze({
     id: 'receivables-agent',
@@ -37,6 +39,7 @@ export const AGENT_ROSTER = Object.freeze([
     department: 'revenue',
     crew: 'chase-the-money',
     outcome: 'Finds open balances and prepares customer-language reminder drafts.',
+    evidenceHint: 'Provide approved invoice, balance, payment, and customer-thread evidence with dates and currency.',
   }),
   Object.freeze({
     id: 'evidence-organizer',
@@ -44,6 +47,7 @@ export const AGENT_ROSTER = Object.freeze([
     department: 'operations',
     crew: 'read-my-chaos',
     outcome: 'Turns owner-provided business messages into traceable ledgers and follow-ups.',
+    evidenceHint: 'Provide an owner-approved business inbox or chat export with personal threads removed.',
   }),
   Object.freeze({
     id: 'proof-builder',
@@ -51,6 +55,7 @@ export const AGENT_ROSTER = Object.freeze([
     department: 'delivery',
     crew: 'source-to-screen-pilot',
     outcome: 'Builds one source-traced proof and a human approval packet.',
+    evidenceHint: 'Provide the approved order packet, source files or links, acceptance test, and known constraints.',
   }),
   Object.freeze({
     id: 'sales-qualifier',
@@ -58,6 +63,7 @@ export const AGENT_ROSTER = Object.freeze([
     department: 'growth',
     crew: 'lead-qualification-desk',
     outcome: 'Qualifies one opportunity from evidence and drafts the smallest useful next step.',
+    evidenceHint: 'Provide approved lead notes, buyer, problem, timing, budget evidence, and discovery gaps.',
   }),
   Object.freeze({
     id: 'delivery-planner',
@@ -65,6 +71,7 @@ export const AGENT_ROSTER = Object.freeze([
     department: 'delivery',
     crew: 'delivery-planning-desk',
     outcome: 'Turns an accepted outcome into milestones, dependencies, and objective acceptance checks.',
+    evidenceHint: 'Provide the accepted outcome, deadline, owners, dependencies, constraints, and acceptance rules.',
   }),
   Object.freeze({
     id: 'quality-reviewer',
@@ -72,6 +79,39 @@ export const AGENT_ROSTER = Object.freeze([
     department: 'assurance',
     crew: 'quality-review-desk',
     outcome: 'Audits a deliverable against sources and acceptance rules before owner release.',
+    evidenceHint: 'Provide the exact draft, source trace, tests, acceptance rules, and declared limitations.',
+  }),
+  Object.freeze({
+    id: 'data-insights-analyst',
+    name: 'Data & Insights Analyst',
+    department: 'insights',
+    crew: 'data-insights-desk',
+    outcome: 'Cleans the analytical frame, calculates traceable metrics, and turns findings into an owner-ready story.',
+    evidenceHint: 'Provide approved exports, field definitions, date range, business questions, and known data gaps.',
+  }),
+  Object.freeze({
+    id: 'customer-support-operator',
+    name: 'Customer Support Operator',
+    department: 'service',
+    crew: 'customer-support-desk',
+    outcome: 'Triages support evidence, drafts resolution paths, and identifies escalations and knowledge gaps.',
+    evidenceHint: 'Provide approved ticket or message text, account and order facts, policy excerpts, and prior actions.',
+  }),
+  Object.freeze({
+    id: 'knowledge-manager',
+    name: 'Knowledge Manager',
+    department: 'knowledge',
+    crew: 'knowledge-base-desk',
+    outcome: 'Turns approved source documents into canonical answers, procedures, and a controlled update queue.',
+    evidenceHint: 'Provide approved policies, manuals, FAQs, source owners, effective dates, and publication scope.',
+  }),
+  Object.freeze({
+    id: 'project-controller',
+    name: 'Project Controller',
+    department: 'delivery',
+    crew: 'project-control-desk',
+    outcome: 'Finds critical-path risk and produces a factual owner update with the next accountable actions.',
+    evidenceHint: 'Provide the baseline plan, current milestones, owners, dates, dependencies, changes, and blockers.',
   }),
 ])
 

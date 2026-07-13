@@ -1,0 +1,50 @@
+{
+  "slug": "project-control-desk",
+  "name": "Project Control Desk",
+  "version": 1,
+  "description": "Turns an approved project baseline and current evidence into critical-path visibility, accountable next actions, and a factual stakeholder update.",
+  "intake": {
+    "accepts": [
+      "project baseline",
+      "milestone status",
+      "task and owner export",
+      "dependency log",
+      "risk and change evidence"
+    ],
+    "description": "The approved baseline, current dated status, owners, dependencies, changes, blockers, and delivery constraints. An undocumented status remains unverified."
+  },
+  "roles": [
+    {
+      "id": "intake",
+      "title": "Intake",
+      "tier": "bulk",
+      "goal": "Normalize baseline and current dates, milestones, owners, dependencies, changes, status evidence, and unknowns without silently rewriting the approved plan."
+    },
+    {
+      "id": "critical-path-analyst",
+      "title": "Critical Path Analyst",
+      "tier": "reason",
+      "goal": "Identify the evidence-backed critical path, schedule variance, blocked dependencies, decision deadlines, delivery risks, and the smallest accountable recovery actions."
+    },
+    {
+      "id": "stakeholder-update-writer",
+      "title": "Stakeholder Update Writer",
+      "tier": "bulk",
+      "goal": "Draft a concise factual update separating completed, in-progress, blocked, changed, and unverified work. Name owners and dates without sending or promising outcomes."
+    }
+  ],
+  "output_contract": {
+    "format": "json",
+    "fields": [
+      "status",
+      "milestones",
+      "critical_path",
+      "risks",
+      "dependencies",
+      "owner_actions",
+      "update_draft",
+      "blocked_claims"
+    ],
+    "description": "A source-backed project-control packet with accountable next actions and a draft update for human review."
+  }
+}

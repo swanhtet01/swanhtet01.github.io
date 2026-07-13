@@ -95,6 +95,7 @@ export async function handleAgentCompany(request = {}, options = {}) {
           windows: COMPANY_OPERATIONS_WINDOWS,
           targets: COMPANY_OPERATIONS_TARGETS,
           immutableReviews: true,
+          workforceMetrics: true,
           rawEvidenceReturned: false,
           modelOutputReturned: false,
           customerSlaClaimed: false,

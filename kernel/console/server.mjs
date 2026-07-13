@@ -5,12 +5,30 @@
 import { createServer } from 'node:http'
 import { readFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
-import { dirname, resolve } from 'node:path'
+import { dirname, extname, resolve, sep } from 'node:path'
+import { handleAgentCompany } from '../api/agent-company.mjs'
 import { handle } from './api.mjs'
 import store from '../store.mjs'
 
 const here = dirname(fileURLToPath(import.meta.url))
+const publicRoot = resolve(here, '..', 'public')
 const PORT = Number(process.env.PORT || 4310)
+const CONTENT_TYPES = Object.freeze({
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'text/javascript; charset=utf-8',
+  '.svg': 'image/svg+xml; charset=utf-8',
+})
+
+function resolvePublicFile(pathname) {
+  let requested
+  try { requested = decodeURIComponent(pathname) }
+  catch { return null }
+  if (requested === '/' || requested === '') requested = '/index.html'
+  if (requested === '/status') requested = '/status.html'
+  if (requested.includes('\0') || requested.includes('\\')) return null
+  const target = resolve(publicRoot, requested.replace(/^\/+/, ''))
+  return target === publicRoot || target.startsWith(`${publicRoot}${sep}`) ? target : null
+}
 
 async function readJson(req) {
   const chunks = []
@@ -31,14 +49,29 @@ const server = createServer(async (req, res) => {
     if (url.pathname.startsWith('/api/')) {
       let body = {}
       if (req.method !== 'GET' && req.method !== 'OPTIONS') body = await readJson(req)
-      const result = await handle({ method: req.method, path: url.pathname, query: Object.fromEntries(url.searchParams), body, headers: req.headers })
+      const request = { method: req.method, path: url.pathname, query: Object.fromEntries(url.searchParams), body, headers: req.headers }
+      const result = url.pathname === '/api/agent-company'
+        ? await handleAgentCompany(request)
+        : await handle(request)
       res.writeHead(result.status, { 'content-type': 'application/json', 'cache-control': 'no-store' })
       res.end(JSON.stringify(result.json))
       return
     }
-    const html = await readFile(resolve(here, '..', 'public', 'index.html'), 'utf8')
-    res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
-    res.end(html)
+    const target = resolvePublicFile(url.pathname)
+    if (!target) {
+      res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' })
+      res.end('Not found')
+      return
+    }
+    let content
+    try { content = await readFile(target) }
+    catch {
+      res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' })
+      res.end('Not found')
+      return
+    }
+    res.writeHead(200, { 'content-type': CONTENT_TYPES[extname(target)] || 'application/octet-stream' })
+    res.end(content)
   } catch (err) {
     res.writeHead(400, { 'content-type': 'application/json' })
     res.end(JSON.stringify({ ok: false, reason: String(err.message || 'error').slice(0, 120) }))
