@@ -180,6 +180,29 @@ test('operations report distinguishes no evidence, collecting evidence, and boun
   assert.equal(collecting.counts.missingEvaluation, 1)
   assert.equal(collecting.targets.every((target) => target.state === 'collecting'), true)
 
+  const cancelled = order({
+    workOrderId: `company-order:${'9'.repeat(40)}`,
+    cycleId: 'cycle-cancelled',
+    status: 'cancelled',
+    startedAt: null,
+    completedAt: null,
+    result: undefined,
+  })
+  const withCancellation = await buildCompanyOperationsReport({ clientId: 'client-acme', windowDays: 30 }, {
+    listCompanyWorkOrders: async () => ({ ok: true, workOrders: [order(), cancelled] }),
+    getCompanyWorkOrder: async ({ workOrderId }) => ({
+      ok: true,
+      workOrder: workOrderId === cancelled.workOrderId ? cancelled : order(),
+    }),
+    getEvaluation: async () => null,
+    now: () => '2026-07-15T00:00:00.000Z',
+  })
+  assert.equal(withCancellation.counts.total, 2)
+  assert.equal(withCancellation.counts.terminal, 1)
+  assert.equal(withCancellation.counts.cancelled, 1)
+  assert.equal(withCancellation.counts.missingEvaluation, 1)
+  assert.equal(withCancellation.coverage.cancelledOrdersExcluded, 1)
+
   const legacyRunning = order({ status: 'running', startedAt: null, completedAt: null, result: undefined })
   const attention = await buildCompanyOperationsReport({ clientId: 'client-acme', windowDays: 30 }, {
     listCompanyWorkOrders: async () => ({ ok: true, workOrders: [legacyRunning] }),

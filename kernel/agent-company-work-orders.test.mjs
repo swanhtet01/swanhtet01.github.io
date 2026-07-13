@@ -2,6 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
 import {
+  cancelCompanyWorkOrder,
   createCompanyWorkOrder,
   getCompanyWorkOrder,
   getCompanyWorkOrderProof,
@@ -38,6 +39,14 @@ function harness() {
       },
       releaseActivityClaim: async (id) => claims.delete(id),
       putWorkOrder: async (key, payload) => { records.set(key, structuredClone(payload)); return true },
+      transitionWorkOrder: async (key, expected, payload) => {
+        const current = records.get(key)
+        if (!current || current.status !== expected.status || current.planHash !== expected.planHash) {
+          return { updated: false, durable: true, reason: 'transition_conflict' }
+        }
+        records.set(key, structuredClone(payload))
+        return { updated: true, durable: true }
+      },
       getWorkOrder: async (key) => records.get(key) || null,
       listActivity: async () => activity,
       now: () => '2026-07-14T00:00:00.000Z',
@@ -156,6 +165,158 @@ test('list and get remain client-bound and never return queued raw evidence', as
     workOrderId: created.workOrder.workOrderId,
   }, state.options)
   assert.equal(wrongClient.reason, 'company_work_order_not_found')
+})
+
+test('planned work orders cancel atomically and scrub queued evidence without model spend', async () => {
+  const state = harness()
+  const created = await createCompanyWorkOrder(work(), state.options)
+  const args = {
+    clientId: created.workOrder.clientId,
+    workOrderId: created.workOrder.workOrderId,
+    planHash: created.workOrder.planHash,
+    confirmation: `CANCEL AND SCRUB ${created.workOrder.workOrderId} ${created.workOrder.planHash}`,
+  }
+  const before = [...state.records.values()].find((row) => row.workOrderId === created.workOrder.workOrderId)
+  assert.match(before.input.evidence['sales-qualifier'], /Manual close/)
+  assert.equal((await cancelCompanyWorkOrder({ ...args, confirmation: 'CANCEL something-else' }, state.options)).reason, 'company_work_order_cancel_confirmation_required')
+
+  const cancelled = await cancelCompanyWorkOrder(args, state.options)
+  assert.equal(cancelled.ok, true)
+  assert.equal(cancelled.mode, 'work_order_cancel')
+  assert.equal(cancelled.replayed, false)
+  assert.equal(cancelled.workOrder.status, 'cancelled')
+  assert.equal(cancelled.workOrder.evidenceState, 'scrubbed')
+  assert.equal(cancelled.workOrder.cancelledAt, '2026-07-14T00:00:00.000Z')
+  assert.equal(JSON.stringify(cancelled).includes('Manual close takes two days'), false)
+
+  const saved = [...state.records.values()].find((row) => row.workOrderId === created.workOrder.workOrderId)
+  assert.equal(saved.input, null)
+  assert.deepEqual(saved.cancellation, { evidenceScrubbed: true, modelRequested: false })
+  assert.match(saved.evidenceDigests['sales-qualifier'], /^[a-f0-9]{64}$/)
+
+  const replay = await cancelCompanyWorkOrder(args, state.options)
+  assert.equal(replay.ok, true)
+  assert.equal(replay.replayed, true)
+  let runs = 0
+  const dispatch = await runCompanyWorkOrder({
+    clientId: created.workOrder.clientId,
+    workOrderId: created.workOrder.workOrderId,
+    planHash: created.workOrder.planHash,
+    confirmation: `RUN ${created.workOrder.workOrderId}`,
+  }, {
+    ...state.options,
+    runCompanyCycle: async () => { runs += 1; return { ok: true } },
+  })
+  assert.equal(dispatch.reason, 'company_work_order_cancelled')
+  assert.equal(runs, 0)
+})
+
+test('cancellation loses safely to dispatch and fails closed when the atomic store is unavailable', async () => {
+  const state = harness()
+  const created = await createCompanyWorkOrder(work(), state.options)
+  const args = {
+    clientId: created.workOrder.clientId,
+    workOrderId: created.workOrder.workOrderId,
+    planHash: created.workOrder.planHash,
+    confirmation: `CANCEL AND SCRUB ${created.workOrder.workOrderId} ${created.workOrder.planHash}`,
+  }
+  const raced = await cancelCompanyWorkOrder(args, {
+    ...state.options,
+    transitionWorkOrder: async (key) => {
+      const current = state.records.get(key)
+      state.records.set(key, { ...current, status: 'running' })
+      return { updated: false, durable: true, reason: 'transition_conflict' }
+    },
+  })
+  assert.equal(raced.reason, 'company_work_order_cancel_not_allowed')
+  assert.equal(raced.workOrder.status, 'running')
+  assert.match(state.records.get(`company-work-order-record:${created.workOrder.workOrderId}`).input.evidence['sales-qualifier'], /Manual close/)
+
+  const unavailable = harness()
+  const unavailableCreated = await createCompanyWorkOrder(work(), unavailable.options)
+  const unavailableArgs = {
+    clientId: unavailableCreated.workOrder.clientId,
+    workOrderId: unavailableCreated.workOrder.workOrderId,
+    planHash: unavailableCreated.workOrder.planHash,
+    confirmation: `CANCEL AND SCRUB ${unavailableCreated.workOrder.workOrderId} ${unavailableCreated.workOrder.planHash}`,
+  }
+  const failed = await cancelCompanyWorkOrder(unavailableArgs, {
+    ...unavailable.options,
+    transitionWorkOrder: async () => ({ updated: false, durable: false, reason: 'store_unavailable' }),
+  })
+  assert.equal(failed.reason, 'company_work_order_store_unavailable')
+  const stillPlanned = unavailable.records.get(`company-work-order-record:${unavailableCreated.workOrder.workOrderId}`)
+  assert.equal(stillPlanned.status, 'planned')
+  assert.match(stillPlanned.input.evidence['sales-qualifier'], /Manual close/)
+
+  const completed = harness()
+  const completedOrder = await completeOrder(completed)
+  const notAllowed = await cancelCompanyWorkOrder({
+    clientId: completedOrder.workOrder.clientId,
+    workOrderId: completedOrder.workOrder.workOrderId,
+    planHash: completedOrder.workOrder.planHash,
+    confirmation: `CANCEL AND SCRUB ${completedOrder.workOrder.workOrderId} ${completedOrder.workOrder.planHash}`,
+  }, completed.options)
+  assert.equal(notAllowed.reason, 'company_work_order_cancel_not_allowed')
+})
+
+test('dispatch stops before model spend when cancellation wins the atomic transition', async () => {
+  const state = harness()
+  const created = await createCompanyWorkOrder(work(), state.options)
+  let runs = 0
+  const result = await runCompanyWorkOrder({
+    clientId: created.workOrder.clientId,
+    workOrderId: created.workOrder.workOrderId,
+    planHash: created.workOrder.planHash,
+    confirmation: `RUN ${created.workOrder.workOrderId}`,
+  }, {
+    ...state.options,
+    transitionWorkOrder: async (key) => {
+      const current = state.records.get(key)
+      state.records.set(key, {
+        ...current,
+        status: 'cancelled',
+        input: null,
+        cancelledAt: '2026-07-14T00:00:00.000Z',
+        cancellation: { evidenceScrubbed: true, modelRequested: false },
+      })
+      return { updated: false, durable: true, reason: 'transition_conflict' }
+    },
+    runCompanyCycle: async () => { runs += 1; return { ok: true, status: 'completed' } },
+  })
+  assert.equal(result.reason, 'company_work_order_cancelled')
+  assert.equal(result.workOrder.evidenceState, 'scrubbed')
+  assert.equal(runs, 0)
+})
+
+test('scrubbed-state claims fail closed when a terminal record still contains raw input', async () => {
+  const cancelledState = harness()
+  const created = await createCompanyWorkOrder(work(), cancelledState.options)
+  const key = `company-work-order-record:${created.workOrder.workOrderId}`
+  const current = cancelledState.records.get(key)
+  cancelledState.records.set(key, {
+    ...current,
+    status: 'cancelled',
+    cancellation: { evidenceScrubbed: true, modelRequested: false },
+  })
+  const cancellation = await cancelCompanyWorkOrder({
+    clientId: created.workOrder.clientId,
+    workOrderId: created.workOrder.workOrderId,
+    planHash: created.workOrder.planHash,
+    confirmation: `CANCEL AND SCRUB ${created.workOrder.workOrderId} ${created.workOrder.planHash}`,
+  }, cancelledState.options)
+  assert.equal(cancellation.reason, 'company_work_order_state_unavailable')
+
+  const completedState = harness()
+  const completed = await completeOrder(completedState)
+  const completedKey = `company-work-order-record:${completed.workOrder.workOrderId}`
+  const completedRecord = completedState.records.get(completedKey)
+  completedState.records.set(completedKey, { ...completedRecord, input: work() })
+  const proof = await getCompanyWorkOrderProof({
+    clientId: completed.workOrder.clientId,
+    workOrderId: completed.workOrder.workOrderId,
+  }, completedState.options)
+  assert.equal(proof.reason, 'company_work_order_state_unavailable')
 })
 
 test('dispatch is bound to the saved fingerprint and exact confirmation', async () => {
@@ -403,7 +564,7 @@ test('dispatch never spends when the running state cannot be persisted', async (
     confirmation: `RUN ${created.workOrder.workOrderId}`,
   }, {
     ...state.options,
-    putWorkOrder: async () => null,
+    transitionWorkOrder: async () => ({ updated: false, durable: false, reason: 'store_unavailable' }),
     runCompanyCycle: async () => { runs += 1; return { ok: true, status: 'completed' } },
   })
   assert.equal(result.reason, 'company_work_order_store_unavailable')
@@ -414,6 +575,7 @@ test('work-order actions reject unknown fields and unbounded listing', async () 
   assert.equal((await createCompanyWorkOrder({ ...work(), execute: true })).reason, 'company_work_order_unknown_field')
   assert.equal((await listCompanyWorkOrders({ clientId: 'client-acme', limit: 41 })).reason, 'company_work_order_invalid_limit')
   assert.equal((await runCompanyWorkOrder({ clientId: 'client-acme', workOrderId: 'x', planHash: 'x', confirmation: 'x', action: true })).reason, 'company_work_order_unknown_field')
+  assert.equal((await cancelCompanyWorkOrder({ clientId: 'client-acme', workOrderId: 'x', planHash: 'x', confirmation: 'x', action: true })).reason, 'company_work_order_unknown_field')
   assert.equal((await getCompanyWorkOrderProof({ clientId: 'client-acme', workOrderId: 'x', output: true })).reason, 'company_work_order_unknown_field')
   assert.equal((await reviewCompanyWorkOrder({ clientId: 'client-acme', workOrderId: 'x', accept: true })).reason, 'company_work_order_unknown_field')
 })

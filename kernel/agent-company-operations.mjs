@@ -342,6 +342,7 @@ export async function buildCompanyOperationsReport(input, options = {}) {
     total: orders.length,
     planned: orders.filter((order) => order.status === 'planned').length,
     running: orders.filter((order) => order.status === 'running').length,
+    cancelled: orders.filter((order) => order.status === 'cancelled').length,
     terminal: terminal.length,
     completed: terminal.filter((order) => order.status === 'completed').length,
     partial: terminal.filter((order) => order.status === 'partial').length,
@@ -384,6 +385,7 @@ export async function buildCompanyOperationsReport(input, options = {}) {
       unavailableOrders,
       capped: listedOrders.length === MAX_COMPANY_WORK_ORDERS,
       directCyclesExcluded: true,
+      cancelledOrdersExcluded: counts.cancelled,
       minimumSamples: COMPANY_OPERATIONS_TARGETS.minimumSamples,
     },
     exposure: {

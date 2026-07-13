@@ -70,7 +70,7 @@ approval path. Reusing a claimed cycle id is blocked to prevent duplicate spend.
 Completed specialist and final envelopes are also stored under the claimed run id, so an idempotent
 replay can return a finished result or expose the recoverable partial results without spending again.
 
-For durable delegation, delivery proof, and operating evidence, the same endpoint accepts eight
+For durable delegation, delivery proof, and operating evidence, the same endpoint accepts nine
 additional explicit actions:
 
 - `work-order-create` validates and stores the exact cycle plan without a model call.
@@ -79,6 +79,9 @@ additional explicit actions:
 - `work-order-get` returns assignments, budgets, byte counts, evidence fingerprints, and any result.
 - `work-order-run` requires the saved 64-character plan hash and exact `RUN <workOrderId>`
   confirmation, then reuses `runCompanyCycle`; there is no second runner or recursive delegation.
+- `work-order-cancel` requires the same saved plan hash plus exact
+  `CANCEL AND SCRUB <workOrderId> <planHash>` confirmation. It cancels only a still-planned order and
+  atomically removes its queued source evidence before any model request.
 - `work-order-proof` returns a deterministic customer delivery packet with result and packet hashes,
   bounded specialist outputs, role-call usage, evidence fingerprints, and execution controls. It never
   returns queued raw evidence.
@@ -94,11 +97,13 @@ additional explicit actions:
 
 The work-order id is deterministic for one client and cycle. Re-creating the same exact plan replays
 the saved order, while changed evidence under the same cycle id is a conflict. Dispatch first saves
-the `running` state plus the first dispatch timestamp, so storage failure blocks model spend and
-latency remains measurable. A concurrent or lost-response retry hits
+the `running` state plus the first dispatch timestamp through the same atomic transition used by
+cancellation, so only dispatch or cancellation can win and storage failure blocks model spend.
+A concurrent or lost-response retry hits
 the cycle runner's durable claim and either returns the saved result or reports the existing run.
-Queued evidence remains inside the service-role-only cache record and is replaced by fingerprints
-after a terminal dispatch state.
+Queued evidence remains inside the service-role-only cache record until an explicit dispatch or
+cancel decision. Terminal dispatch and cancellation both scrub the raw input while preserving its
+fingerprints.
 Customer review records are explicitly `operator_recorded_customer_review` with
 `customerAuthenticated: false`; they are evidence copied by the operator from email, chat, call, or
 an in-person conversation, not a customer login or digital signature. A different review cannot
@@ -139,12 +144,13 @@ in recovery instead of being retried blindly.
 - The default cron is one daily UTC schedule. Each isolated client deployment sets its own UTC time.
 - Agent Company cycles are synchronous waves capped at two specialists and eight planned role calls.
   Failed or partial waves require a new explicit cycle id; there is no automatic retry or hidden loop.
-- Planned work orders retain their bounded evidence in the protected cache until dispatch. There is
-  no unattended dispatcher or retention sweeper; an owner still reviews and dispatches each order.
+- Planned work orders retain their bounded evidence in the protected cache until dispatch or an
+  explicit cancel-and-scrub decision. There is no unattended dispatcher or retention sweeper.
 - Customer review is operator-recorded provenance, not cryptographic proof of customer identity.
 - Company health covers the latest 40 durable work orders in the selected window. It excludes direct
-  compatibility cycles, returns no evidence or model output, and cannot prove customer acceptance
-  from an internal evaluation. Customer acceptance remains the separate operator-recorded review.
+  compatibility cycles and cancelled orders from delivery metrics, returns no evidence or model
+  output, and cannot prove customer acceptance from an internal evaluation. Customer acceptance
+  remains the separate operator-recorded review.
 
 ## Next
 

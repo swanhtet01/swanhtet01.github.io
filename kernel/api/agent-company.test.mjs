@@ -39,6 +39,8 @@ test('GET returns the protected fixed roster and hard limits', async () => {
   assert.equal(result.json.workOrders.deliveryProof, true)
   assert.equal(result.json.workOrders.operatorRecordedReview, true)
   assert.equal(result.json.workOrders.customerAuthenticated, false)
+  assert.equal(result.json.workOrders.explicitCancellation, true)
+  assert.equal(result.json.workOrders.cancelledEvidenceScrubbed, true)
   assert.equal(result.json.operations.enabled, true)
   assert.deepEqual(result.json.operations.windows, [7, 30, 90])
   assert.equal(result.json.operations.immutableReviews, true)
@@ -87,6 +89,7 @@ test('protected work-order actions delegate to the durable queue contract', asyn
     listCompanyWorkOrders: async (body) => { calls.push(['list', body]); return { ok: true, mode: 'work_order_list' } },
     getCompanyWorkOrder: async (body) => { calls.push(['get', body]); return { ok: true, mode: 'work_order_get' } },
     runCompanyWorkOrder: async (body) => { calls.push(['run', body]); return { ok: true, mode: 'work_order_run' } },
+    cancelCompanyWorkOrder: async (body) => { calls.push(['cancel', body]); return { ok: true, mode: 'work_order_cancel' } },
     getCompanyWorkOrderProof: async (body) => { calls.push(['proof', body]); return { ok: true, mode: 'work_order_proof' } },
     reviewCompanyWorkOrder: async (body) => { calls.push(['review', body]); return { ok: true, mode: 'work_order_review' } },
     evaluateCompanyWorkOrder: async (body) => { calls.push(['evaluate', body]); return { ok: true, mode: 'work_order_evaluate' } },
@@ -97,6 +100,7 @@ test('protected work-order actions delegate to the durable queue contract', asyn
     ['work-order-list', { clientId: 'client-acme', limit: 10 }],
     ['work-order-get', { clientId: 'client-acme', workOrderId: 'company-order:abc' }],
     ['work-order-run', { clientId: 'client-acme', workOrderId: 'company-order:abc', planHash: 'a'.repeat(64), confirmation: 'RUN company-order:abc' }],
+    ['work-order-cancel', { clientId: 'client-acme', workOrderId: 'company-order:abc', planHash: 'a'.repeat(64), confirmation: 'CANCEL AND SCRUB company-order:abc hash' }],
     ['work-order-proof', { clientId: 'client-acme', workOrderId: 'company-order:abc' }],
     ['work-order-review', { clientId: 'client-acme', workOrderId: 'company-order:abc', resultHash: 'a'.repeat(64), decision: 'accepted', reviewerName: 'Aye Aye', source: 'chat', statement: 'Accepted.', recordedBy: 'Swan', confirmation: 'ACCEPT company-order:abc hash' }],
     ['work-order-evaluate', { clientId: 'client-acme', workOrderId: 'company-order:abc', planHash: 'a'.repeat(64), verdict: 'accepted', checks: { accurate: true, complete: true, usable: true, boundarySafe: true }, confirmation: 'EVALUATE company-order:abc' }],
@@ -106,7 +110,7 @@ test('protected work-order actions delegate to the durable queue contract', asyn
     const result = await handleAgentCompany(request({ body: { ...body, action } }), options)
     assert.equal(result.status, 200)
   }
-  assert.deepEqual(calls.map(([name]) => name), ['create', 'list', 'get', 'run', 'proof', 'review', 'evaluate', 'report'])
+  assert.deepEqual(calls.map(([name]) => name), ['create', 'list', 'get', 'run', 'cancel', 'proof', 'review', 'evaluate', 'report'])
   assert.equal(calls.every(([, body]) => !('action' in body)), true)
 })
 
@@ -163,6 +167,22 @@ test('work-order API maps isolation, conflicts, and unavailable storage without 
     buildCompanyOperationsReport: async () => ({ ok: false, reason: 'company_operations_store_unavailable' }),
   })
   assert.equal(reportUnavailable.status, 503)
+
+  const cancelled = await handleAgentCompany(request({
+    body: { action: 'work-order-run', clientId: 'client-acme' },
+  }), {
+    opsKey: KEY,
+    runCompanyWorkOrder: async () => ({ ok: false, reason: 'company_work_order_cancelled' }),
+  })
+  assert.equal(cancelled.status, 409)
+
+  const cancelUnavailable = await handleAgentCompany(request({
+    body: { action: 'work-order-cancel', clientId: 'client-acme' },
+  }), {
+    opsKey: KEY,
+    cancelCompanyWorkOrder: async () => ({ ok: false, reason: 'company_work_order_store_unavailable' }),
+  })
+  assert.equal(cancelUnavailable.status, 503)
 })
 
 test('API runtime has no connector, approval execution, or process-launch path', async () => {
