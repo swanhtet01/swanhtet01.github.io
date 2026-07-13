@@ -21,78 +21,60 @@ function rejectTokens(label, text, tokens) {
 }
 
 const source = read(resolve(root, 'tools', 'create_public_vercel_output.mjs'))
-const pages = {
-  home: read(resolve(staticDir, 'index.html')),
-  products: read(resolve(staticDir, 'products', 'index.html')),
-  offers: read(resolve(staticDir, 'offers', 'index.html')),
-  agents: read(resolve(staticDir, 'ai-agents', 'index.html')),
-  contact: read(resolve(staticDir, 'contact', 'index.html')),
-}
+const home = read(resolve(staticDir, 'index.html'))
+const contact = read(resolve(staticDir, 'contact', 'index.html'))
 
 if (!source) fail('missing_public_generator')
-for (const [label, html] of Object.entries(pages)) {
-  if (!html) fail(`missing_public_${label}_output`)
-}
+if (!home) fail('missing_public_home_output')
+if (!contact) fail('missing_public_contact_output')
 
-requireTokens('generator_two_suite_redesign', source, [
-  "replace(/\\bRetail OS\\b/g, 'Shop')",
-  "replace(/\\bFactory OS\\b/g, 'Plant')",
-  'Custom software, built for your business.',
-  'custom-ai-agent-build',
+requireTokens('generator_front_door', source, [
+  'const simplifiedPublicShellHtml',
+  "src: '^/(?:products|offers|pricing|plans|packages|agent-templates|ai-agents)(?:/.*)?$'",
+  "Location: 'https://demo.supermega.dev/'",
 ])
 
-requireTokens('home_two_suite_redesign', pages.home, [
-  '<h1>SuperMega</h1>',
-  'site-hero-screen',
-  '<strong>Shop</strong>',
-  '<strong>Plant</strong>',
-  'Custom Solutions &amp; AI Agents',
+requireTokens('home_front_door', home, [
+  '<h1 id="supermega-heading">SuperMega</h1>',
+  'https://app.supermega.dev/',
+  'https://demo.supermega.dev/',
+  'Need something built?',
   'Powered by SuperMega Technologies',
 ])
 
-requireTokens('products_two_suite_redesign', pages.products, [
-  '<h2>Shop.</h2>',
-  '<h2>Plant.</h2>',
-  'Custom Solutions & AI Agents',
-  '/products/pos/',
-  '/products/factory/',
+rejectTokens('home_front_door', home, [
+  '<figure class="site-hero-screen"',
+  '<img src="/site/shots/live-product-',
+  '<strong>Shop</strong>',
+  '<strong>Plant</strong>',
+  'Custom Solutions &amp; AI Agents',
+  '>Products<',
+  '>Pricing<',
+  '>AI workers<',
 ])
 
-requireTokens('offers_two_suite_redesign', pages.offers, [
-  'Clear scope. Clear starting point.',
-  'Tool in a week',
-  'Custom build',
-  'AI agent / automation',
-  'Design + ship system',
-  'Start with a real workflow.',
-])
-
-requireTokens('agents_redirect_to_products', pages.agents, [
-  'Continue to SuperMega',
-  'url=/products/',
-  'window.location.replace("/products/")',
-  'Explore products',
-])
-
-requireTokens('contact_two_suite_intake', pages.contact, [
+requireTokens('contact_front_door', contact, [
   'Tell us what needs to work better.',
-  'Source link or system',
-  'custom-ai-agent-build',
+  'What do you need?',
+  'No account or data connection is made before you approve it.',
 ])
 
-const retiredPublicOfferTokens = [
-  'AI Workcell Pilot',
-  'Source-to-Screen',
-  'source_to_screen',
-  'data-source-to-screen',
-  'package=ai-workcell-pilot',
-  'Agents that do the tasks SaaS leaves for humans',
-  'AI Agent Army',
-  'Free core tools',
-]
+rejectTokens('contact_front_door', contact, [
+  'Source link or system',
+  'Upload files',
+  'custom AI worker',
+])
 
-for (const [label, html] of Object.entries(pages)) {
-  rejectTokens(label, html, retiredPublicOfferTokens)
+for (const [label, html] of [['home', home], ['contact', contact]]) {
+  rejectTokens(label, html, [
+    'AI Workcell Pilot',
+    'Source-to-Screen',
+    'source_to_screen',
+    'data-source-to-screen',
+    'package=ai-workcell-pilot',
+    'Agents that do the tasks SaaS leaves for humans',
+    'AI Agent Army',
+  ])
   const priceMatch = html.match(/\bUSD\b|\$\s?\d/)
   if (priceMatch) fail(`${label}_contains_public_usd_price`, { match: priceMatch[0] })
 }
@@ -102,4 +84,4 @@ if (failures.length) {
   process.exit(1)
 }
 
-console.log('public_shop_plant_ai_workers_contract=verified')
+console.log('public_front_door_contract=verified')

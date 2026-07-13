@@ -2061,9 +2061,8 @@ const unicornHeader = `
         </a>
         <nav class="nav" aria-label="Primary">
           <button class="btn secondary theme-toggle" type="button" data-theme-toggle aria-label="Use dark mode" title="Use dark mode"></button>
-          <a class="btn secondary optional-nav" href="/products/">Products</a>
-          <a class="btn secondary optional-nav" href="/agent-templates/">AI workers</a>
-          <a class="btn secondary" href="/offers/">Pricing</a>
+          <a class="btn secondary optional-nav" href="https://app.supermega.dev/" target="_blank" rel="noopener noreferrer">Open app</a>
+          <a class="btn secondary optional-nav" href="https://demo.supermega.dev/" target="_blank" rel="noopener noreferrer">Try demo</a>
           <a class="btn primary" href="/contact/">Contact</a>
         </nav>
       </header>
@@ -4114,13 +4113,9 @@ function unicornSocialMeta({ title, description, url }) {
     <meta property="og:title" content="${t}" />
     <meta property="og:description" content="${d}" />
     <meta property="og:url" content="${u}" />
-    <meta property="og:image" content="https://supermega.dev/site/social/supermega-portal-card.png" />
-    <meta property="og:image:width" content="1200" />
-    <meta property="og:image:height" content="630" />
-    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:card" content="summary" />
     <meta name="twitter:title" content="${t}" />
-    <meta name="twitter:description" content="${d}" />
-    <meta name="twitter:image" content="https://supermega.dev/site/social/supermega-portal-card.png" />`
+    <meta name="twitter:description" content="${d}" />`
 }
 
 const publicOperatorWorkcells = [
@@ -4730,6 +4725,89 @@ ${productCarouselScript}
   </body>
 </html>`
 
+const simplifiedPublicShellHtml = `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="index,follow" />
+    <title>SuperMega | Open the app or try the demo</title>
+    <meta name="description" content="Start with the SuperMega app, try a live demo, or talk to us about work that needs a better system." />
+    <meta name="theme-color" content="#07111f" />
+    <link rel="canonical" href="https://supermega.dev/" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" />
+    <link rel="manifest" href="/site.webmanifest?v=supermega-atelier-20260623" />
+    ${unicornSocialMeta({ title: 'SuperMega | Open the app or try the demo', description: 'Start with the app, try a live demo, or talk to us about work that needs a better system.', url: 'https://supermega.dev/' })}
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"Organization","name":"SUPERMEGA.dev","url":"https://supermega.dev/","logo":"https://supermega.dev/favicon.svg","description":"Business software and custom systems built around the work a team already does.","email":"swanhtet@supermega.dev","telephone":"+95-9-500-0721","sameAs":["https://www.linkedin.com/in/theswanhtet"]}</script>
+    <style>${unicornShellStyle}
+      .launch-main { padding-top: 12px; }
+      .launch-hero { position: relative; min-height: calc(100svh - 106px); overflow: hidden; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); background: #f4f7fb; color: var(--ink); }
+      .launch-inner { position: relative; width: min(100% - 48px, 1180px); min-height: calc(100svh - 106px); margin: 0 auto; display: flex; align-items: center; padding: 72px 0 92px; }
+      .launch-copy { position: relative; z-index: 1; max-width: 620px; }
+      .launch-copy h1 { margin: 12px 0 18px; font-size: 76px; line-height: 0.96; letter-spacing: 0; }
+      .launch-copy p { max-width: 30ch; margin: 0; color: var(--muted); font-size: 20px; line-height: 1.45; }
+      .launch-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 30px; }
+      .launch-actions .btn { min-height: 48px; }
+      .launch-contact { color: var(--ink); font-size: 14px; font-weight: 800; text-decoration: underline; text-underline-offset: 4px; }
+      .launch-domains { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 28px; color: var(--muted); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 12px; line-height: 1.4; }
+      .launch-domains span { white-space: nowrap; }
+      .launch-mark { position: absolute; right: clamp(6%, 10vw, 16%); top: 50%; width: min(34vw, 460px); transform: translateY(-50%); opacity: 0.9; pointer-events: none; }
+      .launch-mark img { display: block; width: 100%; height: auto; filter: drop-shadow(0 24px 42px rgba(11, 18, 32, 0.16)); }
+      .launch-followup { width: min(100% - 48px, 1180px); margin: 0 auto; display: flex; justify-content: space-between; align-items: center; gap: 28px; padding: 42px 0 56px; }
+      .launch-followup p { max-width: 42ch; margin: 0; color: var(--muted); font-size: 17px; line-height: 1.5; }
+      .launch-followup a { color: var(--blue); font-size: 15px; font-weight: 850; text-decoration: none; white-space: nowrap; }
+      .launch-followup a:hover { text-decoration: underline; text-underline-offset: 4px; }
+      :root[data-theme="dark"] .launch-hero { background: #0a1020; color: #eef3fb; border-color: rgba(255,255,255,0.11); }
+      :root[data-theme="dark"] .launch-copy p, :root[data-theme="dark"] .launch-domains, :root[data-theme="dark"] .launch-followup p { color: #aab7c9; }
+      :root[data-theme="dark"] .launch-contact { color: #eef3fb; }
+      :root[data-theme="dark"] .launch-mark img { filter: drop-shadow(0 24px 42px rgba(0, 0, 0, 0.48)); }
+      @media (max-width: 720px) {
+        .launch-hero, .launch-inner { min-height: calc(100svh - 84px); }
+        .launch-inner { width: min(100% - 32px, 1180px); padding: 52px 0 64px; align-items: flex-end; }
+        .launch-copy h1 { font-size: 54px; }
+        .launch-copy p { font-size: 18px; }
+        .launch-mark { right: -66px; top: 18%; width: 250px; transform: none; opacity: 0.12; }
+        .launch-actions { margin-top: 24px; }
+        .launch-actions .btn { flex: 1 1 148px; }
+        .launch-contact { width: 100%; }
+        .launch-followup { width: min(100% - 32px, 1180px); display: block; padding: 32px 0 44px; }
+        .launch-followup a { display: inline-block; margin-top: 14px; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">${unicornHeader}</div>
+    <main class="launch-main">
+      <section class="launch-hero" aria-labelledby="supermega-heading">
+        <div class="launch-inner">
+          <div class="launch-copy">
+            <div class="eyebrow">One place to start</div>
+            <h1 id="supermega-heading">SuperMega</h1>
+            <p>Open the app, try a live demo, or talk to us when your work needs a better system.</p>
+            <div class="launch-actions">
+              <a class="btn primary" href="https://app.supermega.dev/" target="_blank" rel="noopener noreferrer">Open app</a>
+              <a class="btn secondary" href="https://demo.supermega.dev/" target="_blank" rel="noopener noreferrer">Try demo</a>
+              <a class="launch-contact" href="/contact/">Need something built?</a>
+            </div>
+            <div class="launch-domains" aria-label="Live SuperMega destinations"><span>app.supermega.dev</span><span>demo.supermega.dev</span></div>
+          </div>
+          <div class="launch-mark" aria-hidden="true"><img src="/favicon.svg" alt="" /></div>
+        </div>
+      </section>
+      <section class="launch-followup" aria-label="Start with SuperMega">
+        <p>Already know where to begin? Go straight into the app. Want to look around first? Use the demo. For everything else, contact SuperMega.</p>
+        <a href="/contact/">Talk to SuperMega</a>
+      </section>
+    </main>
+    <div class="wrap">
+      <footer>
+        <span>Powered by SuperMega Technologies</span>
+        <span class="footer-links"><a href="https://app.supermega.dev/" target="_blank" rel="noopener noreferrer">Open app</a><a href="https://demo.supermega.dev/" target="_blank" rel="noopener noreferrer">Try demo</a><a href="/contact/">Contact</a><a href="/privacy/">Privacy</a></span>
+      </footer>
+    </div>
+  </body>
+</html>`
+
 const unicornProductsHtml = `<!doctype html>
 <html lang="en">
   <head>
@@ -4950,16 +5028,14 @@ const unicornContactHtml = `<!doctype html>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="robots" content="index,follow" />
     <title>Contact | SUPERMEGA.dev</title>
-    <meta name="description" content="Tell SUPERMEGA what needs to work better. Start with Shop, Plant, or a custom AI worker built around a real workflow." />
+    <meta name="description" content="Tell SUPERMEGA what needs to work better. We will point you to the clearest next step." />
     <link rel="canonical" href="https://supermega.dev/contact/" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="SUPERMEGA.dev" />
-    <meta property="og:title" content="Contact SUPERMEGA.dev - start free" />
-    <meta property="og:description" content="Tell SUPERMEGA what needs to work better. Start with Shop, Plant, or a custom AI worker built around a real workflow." />
+    <meta property="og:title" content="Contact SUPERMEGA.dev" />
+    <meta property="og:description" content="Tell SUPERMEGA what needs to work better. We will point you to the clearest next step." />
     <meta property="og:url" content="https://supermega.dev/contact/" />
-    <meta property="og:image" content="https://supermega.dev/site/social/supermega-portal-card.png" />
-    <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:image" content="https://supermega.dev/site/social/supermega-portal-card.png" />
+    <meta name="twitter:card" content="summary" />
     <meta name="theme-color" content="#07111f" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" />
     <style>${unicornShellStyle}
@@ -4994,7 +5070,8 @@ const unicornContactHtml = `<!doctype html>
       @media (max-width: 880px) {
         .contact-main { grid-template-columns: 1fr; min-height: auto; padding: 10px 0 24px; }
         .contact-main > section[aria-label="Contact SUPERMEGA"] { order: 1; }
-        .contact-main > section[aria-label="Workflow contact form"] { order: 2; }
+        .contact-main > section[aria-label="Contact form"] { order: 2; }
+        .contact-main > section[aria-label="Direct contact options"] { order: 3; }
         form { gap: 7px; border-radius: 22px; padding: 12px; }
         .form-row { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
         label { gap: 5px; font-size: 11px; letter-spacing: 0.1em; }
@@ -5017,9 +5094,9 @@ ${unicornHeader}
         <section aria-label="Contact SUPERMEGA">
           <div class="eyebrow">Start with the work</div>
           <h1 data-contact-heading>Tell us what needs to work better.</h1>
-          <p data-contact-lead>Send the handoff, report, queue, or daily task that is slowing the team down. We will point you to a live product, a scoped build, or a custom AI worker.</p>
+          <p data-contact-lead>Send a short note about the task that is slowing the team down. We will recommend the clearest next step.</p>
         </section>
-        <section aria-label="Workflow contact form">
+        <section aria-label="Contact form">
           <form action="/api/contact-submissions" data-sm-lead-form enctype="multipart/form-data" method="post">
             <input type="hidden" name="workflow" value="General enquiry" />
             <input type="hidden" name="first_output" value="General enquiry" />
@@ -5077,12 +5154,8 @@ ${unicornHeader}
             <div class="form-row">
               <label>Name<input autocomplete="name" name="name" required /></label>
               <label>Work email<input autocomplete="email" name="email" required type="email" /></label>
-              <label class="optional-mobile">Phone / WhatsApp<input autocomplete="tel" name="phone" type="tel" /></label>
               <label>Company<input autocomplete="organization" name="company" required /></label>
-              <div class="wide selected-path" data-selected-path hidden><small>Selected</small><strong>General enquiry</strong><span class="selected-price" data-selected-price hidden></span><span class="selected-next" data-selected-next hidden></span></div>
-              <label class="wide file-label">Upload files<input data-file-picker multiple name="source_files" type="file" /><span class="upload-list" data-upload-list></span></label>
-              <label class="wide">Source link or system<input name="source_links" /></label>
-              <label class="wide">What should become clear?<textarea name="goal" required></textarea></label>
+              <label class="wide">What do you need?<textarea name="goal" required></textarea></label>
             </div>
             <input autocomplete="off" name="website" style="display:none" tabindex="-1" />
             <button type="submit">Send request</button>
@@ -5275,13 +5348,10 @@ ${publicBehaviorEventsScript}
             placeholder: 'Paste the menu, payment proof, stock note, order export, or daily close source.'
           }
         };
-        const requestedTemplate = search.get('template') || search.get('agent_template') || '';
-        const requestedTool = search.get('tool') || '';
-        const selectedTemplate = requestedTemplate
-          ? templatePackages[requestedTemplate] || null
-          : (requestedTool ? templatePackages[requestedTool] || null : null);
-        const requestedPackage = selectedTemplate ? '' : (requestedTool || search.get('package') || '');
-        const selectedPackage = selectedTemplate || (requestedPackage ? packages[packageAliases[requestedPackage] || requestedPackage] : null);
+        // The public contact page is intentionally neutral. Legacy package parameters
+        // remain accepted by the endpoint but cannot change the visitor-facing copy.
+        void search.get('template');
+        const selectedPackage = null;
         if (selectedPackage) {
           set('workflow', selectedPackage.name);
           set('requested_package', selectedPackage.name);
@@ -5682,7 +5752,14 @@ const config = {
       src: '^/(?:about|demos|demo-center|enterprise-demo|modules|portal-types|implementation|how-it-works|portfolio|tools|value|proof|platform|solutions|find-companies|company-list|task-list|receiving-log|products/(?:industrial-dqms|knowledge-graph|agent-runtime|tenant-control-plane|data-science-studio))/?$',
       status: 308,
       headers: {
-        Location: '/#products',
+        Location: '/',
+      },
+    },
+    {
+      src: '^/(?:products|offers|pricing|plans|packages|agent-templates|ai-agents)(?:/.*)?$',
+      status: 308,
+      headers: {
+        Location: '/',
       },
     },
     {
@@ -5753,6 +5830,11 @@ const config = {
       src: '^/pricing/?$',
       status: 308,
       headers: { Location: '/offers/' },
+    },
+    {
+      src: '^/demo/?$',
+      status: 308,
+      headers: { Location: 'https://demo.supermega.dev/' },
     },
     {
       src: '^/work/?$',
@@ -6036,8 +6118,8 @@ for (const entry of await readdir(staticDir, { withFileTypes: true })) {
     await rm(resolve(staticDir, entry.name), { recursive: true, force: true, maxRetries: 8, retryDelay: 250 })
   }
 }
-await writeFile(resolve(staticDir, 'index.html'), normalizePublicProductNames(unicornPublicShellHtml), 'utf8')
-await writeFile(resolve(staticDir, '404.html'), `<!doctype html><html lang="en"><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="robots" content="noindex,nofollow" /><title>Page not found | SUPERMEGA.dev</title><meta name="theme-color" content="#07111f" /><link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" /><style>${unicornShellStyle}</style></head><body><div class="wrap">${unicornHeader}<main><section class="poster" style="min-height:58vh;align-items:center"><div class="copy"><div class="eyebrow">404</div><h1>Page not found.</h1><p>That page doesn’t exist. Head back home, or see what we build.</p><div class="cta"><a class="btn primary" href="/">Home</a><a class="btn secondary" href="/products/">Products</a></div></div></section></main></div></body></html>`, 'utf8')
+await writeFile(resolve(staticDir, 'index.html'), simplifiedPublicShellHtml, 'utf8')
+await writeFile(resolve(staticDir, '404.html'), `<!doctype html><html lang="en"><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="robots" content="noindex,nofollow" /><title>Page not found | SUPERMEGA.dev</title><meta name="theme-color" content="#07111f" /><link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" /><style>${unicornShellStyle}</style></head><body><div class="wrap">${unicornHeader}<main><section class="poster" style="min-height:58vh;align-items:center"><div class="copy"><div class="eyebrow">404</div><h1>Page not found.</h1><p>That page does not exist. Head back home, open the app, or try the demo.</p><div class="cta"><a class="btn primary" href="/">Home</a><a class="btn secondary" href="https://demo.supermega.dev/" target="_blank" rel="noopener noreferrer">Try demo</a></div></div></section></main></div></body></html>`, 'utf8')
 await mkdir(resolve(staticDir, 'products'), { recursive: true })
 await writeFile(resolve(staticDir, 'products', 'index.html'), normalizePublicProductNames(unicornProductsHtml), 'utf8')
 // Premium product detail pages (one per product, data-driven, shares the brand shell)
@@ -10327,9 +10409,8 @@ ${unicornHeader}
     <span class="footer-links">
       <a href="mailto:swanhtet@supermega.dev">swanhtet@supermega.dev</a>
       <a href="tel:+9595000721">+95 9 500 0721</a>
-      <a href="/products/">Products</a>
-      <a href="/agent-templates/">AI workers</a>
-      <a href="/offers/">Pricing</a>
+      <a href="https://app.supermega.dev/" target="_blank" rel="noopener noreferrer">Open app</a>
+      <a href="https://demo.supermega.dev/" target="_blank" rel="noopener noreferrer">Try demo</a>
       <a href="/contact/">Contact</a>
     </span>
   </footer>
@@ -10372,18 +10453,7 @@ await writeFile(resolve(staticDir, 'robots.txt'), 'User-agent: *\nAllow: /\nDisa
 await writeFile(resolve(staticDir, 'sitemap.xml'), '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url><loc>https://supermega.dev/</loc><changefreq>weekly</changefreq><priority>1.0</priority></url>\n  <url><loc>https://supermega.dev/products/</loc><changefreq>weekly</changefreq><priority>0.9</priority></url>\n  <url><loc>https://supermega.dev/products/pos/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>\n  <url><loc>https://supermega.dev/products/factory/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>\n  <url><loc>https://supermega.dev/products/documents/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>\n  <url><loc>https://supermega.dev/ai-agents/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>\n  <url><loc>https://supermega.dev/agent-templates/</loc><changefreq>weekly</changefreq><priority>0.85</priority></url>\n  <url><loc>https://supermega.dev/agent-templates/deskpos-quickstart/</loc><changefreq>weekly</changefreq><priority>0.72</priority></url>\n  <url><loc>https://supermega.dev/agent-templates/chat-ledger/</loc><changefreq>weekly</changefreq><priority>0.72</priority></url>\n  <url><loc>https://supermega.dev/agent-templates/inbox-calendar-operator/</loc><changefreq>weekly</changefreq><priority>0.72</priority></url>\n  <url><loc>https://supermega.dev/agent-templates/daily-intelligence-brief/</loc><changefreq>weekly</changefreq><priority>0.72</priority></url>\n  <url><loc>https://supermega.dev/agent-templates/factory-ops-ledger/</loc><changefreq>weekly</changefreq><priority>0.72</priority></url>\n  <url><loc>https://supermega.dev/agent-templates/data-clean-report-agent/</loc><changefreq>weekly</changefreq><priority>0.72</priority></url>\n  <url><loc>https://supermega.dev/offers/</loc><changefreq>weekly</changefreq><priority>0.95</priority></url>\n  <url><loc>https://supermega.dev/work/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>\n  <url><loc>https://supermega.dev/contact/</loc><changefreq>monthly</changefreq><priority>0.9</priority></url>\n  <url><loc>https://supermega.dev/card/</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>\n  <url><loc>https://supermega.dev/privacy/</loc><changefreq>yearly</changefreq><priority>0.3</priority></url>\n</urlset>\n', 'utf8')
 const publicSitemapUrls = [
   ['/', 'weekly', '1.0'],
-  ['/products/', 'weekly', '0.9'],
-  ['/products/pos/', 'weekly', '0.8'],
-  ['/products/factory/', 'weekly', '0.8'],
-  ['/products/documents/', 'weekly', '0.8'],
-  ['/ai-agents/', 'weekly', '0.8'],
-  ['/ai-agents/guide/', 'weekly', '0.82'],
-  ['/agent-templates/', 'weekly', '0.85'],
-  ...publicAgentTemplateStarterKits.map((kit) => [kit.contact_url.replace('/contact/?template=', '/agent-templates/') + '/', 'weekly', '0.72']),
-  ['/offers/', 'weekly', '0.95'],
-  ['/work/', 'weekly', '0.8'],
   ['/contact/', 'monthly', '0.9'],
-  ['/card/', 'monthly', '0.6'],
   ['/privacy/', 'yearly', '0.3'],
 ]
 await writeFile(
@@ -10435,7 +10505,7 @@ await prunePublicSiteDir()
 await prunePublicStaticRoot()
 await mkdir(staticDir, { recursive: true })
 await mkdir(resolve(staticDir, 'free'), { recursive: true })
-await writeFile(resolve(staticDir, 'free', 'index.html'), publicRedirectHtml('/products/', 'See the two apps'), 'utf8')
+await writeFile(resolve(staticDir, 'free', 'index.html'), publicRedirectHtml('https://demo.supermega.dev/', 'Try the live demo'), 'utf8')
 await writeFile(
   resolve(staticDir, 'private-not-found.html'),
   '<!doctype html><html lang="en"><meta charset="utf-8"><meta name="robots" content="noindex,nofollow"><title>Not found</title><body>Not found.</body></html>\n',

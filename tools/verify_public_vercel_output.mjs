@@ -61,9 +61,19 @@ for (const [path, schedule] of [
   if (cron?.schedule !== schedule) fail('cron_contract_missing', { path, expected: schedule, actual: cron })
 }
 
-const productsRoute = (config.routes || []).find((route) => route.src === '^/products/?$')
-if (productsRoute?.dest !== '/products/index.html') {
-  fail('products_route_not_static_page', { expected: { dest: '/products/index.html' }, actual: productsRoute })
+const legacyCatalogRouteIndex = (config.routes || []).findIndex(
+  (route) => route.src === '^/(?:products|offers|pricing|plans|packages|agent-templates|ai-agents)(?:/.*)?$',
+)
+const productsRouteIndex = (config.routes || []).findIndex((route) => route.src === '^/products/?$')
+const legacyCatalogRoute = (config.routes || [])[legacyCatalogRouteIndex]
+if (
+  legacyCatalogRouteIndex < 0 ||
+  productsRouteIndex < 0 ||
+  legacyCatalogRouteIndex > productsRouteIndex ||
+  legacyCatalogRoute?.status !== 308 ||
+  legacyCatalogRoute?.headers?.Location !== '/'
+) {
+  fail('legacy_catalog_route_not_retired', { legacyCatalogRouteIndex, productsRouteIndex, actual: legacyCatalogRoute })
 }
 const appStartRoute = (config.routes || []).find((route) => route.src === '^/app/start/?$')
 if (appStartRoute?.dest !== '/app/start/index.html') {
@@ -745,50 +755,13 @@ for (const token of [
   }
 }
 for (const token of [
-  '<title>SuperMega | Operating software and AI workers</title>',
-  '<h1>SuperMega</h1>',
-  'sm_worker_continue_state',
-  'data-local-worker-continue',
-  'Browser-local continuation',
-  'No source files, typed business text, credentials, or payment data are stored',
-  'supermegaRememberWorker',
-  'sm_worker_role_mode',
-  'data-role-mode-panel',
-  'Role-aware onboarding',
-  'supermegaSetRoleMode',
-  'user_role_mode',
-  'sm_worker_device_mode',
-  'data-device-mode-panel',
-  'Device-aware onboarding',
-  'supermegaDetectDeviceMode',
-  'user_device_mode',
-  'sm_adaptive_setup_plan',
-  'data-adaptive-setup-plan',
-  'Adaptive setup plan',
-  'supermegaAdaptiveSetupPlan',
-  'adaptive_plan_summary',
-  'sm_adaptive_source_pack',
-  'data-adaptive-source-pack',
-  'Source pack checklist',
-  'supermegaAdaptiveSourcePack',
-  'source_pack_required',
-  'sm_adaptive_proof_plan',
-  'data-adaptive-proof-plan',
-  'First proof planner',
-  'supermegaAdaptiveProofPlan',
-  'proof_plan_milestones',
-  'sm_adaptive_value_plan',
-  'data-adaptive-value-plan',
-  'Value proof plan',
-  'supermegaAdaptiveValuePlan',
-  'value_plan_metrics',
-  'no_revenue_claim_without_payment_proof',
-  'sm_adaptive_pilot_plan',
-  'data-adaptive-pilot-plan',
-  'Paid pilot close plan',
-  'supermegaAdaptivePilotPlan',
-  'pilot_plan_next_action',
-  'payment_proof_required_before_workspace_or_mrr',
+  '<title>SuperMega | Open the app or try the demo</title>',
+  '<h1 id="supermega-heading">SuperMega</h1>',
+  'https://app.supermega.dev/',
+  'https://demo.supermega.dev/',
+  'data-theme-toggle',
+  'prefers-color-scheme',
+  'prefers-reduced-motion',
 ]) {
   if (!homeHtml.includes(token)) fail('public_shell_contract_missing', { token })
 }
@@ -1133,8 +1106,8 @@ if (!starterPageIndexHtml.includes('/ai-agents/guide/')) {
   fail('public_agent_template_page_index_guide_link_missing')
 }
 const sitemapHtml = readFileSync(resolve(staticDir, 'sitemap.xml'), 'utf8')
-if (!sitemapHtml.includes('https://supermega.dev/ai-agents/guide/')) {
-  fail('public_ai_worker_user_guide_sitemap_missing')
+if (sitemapHtml.includes('https://supermega.dev/ai-agents/guide/')) {
+  fail('retired_ai_worker_guide_still_indexed')
 }
 for (const [id, name] of publicAgentTemplateContract) {
   if (!starterPageIndexHtml.includes(id) || (!starterPageIndexHtml.includes(name) && !starterPageIndexHtml.includes(htmlEscaped(name)))) {
@@ -1142,9 +1115,6 @@ for (const [id, name] of publicAgentTemplateContract) {
   }
   if (!aiWorkerGuideHtml.includes(id) || (!aiWorkerGuideHtml.includes(name) && !aiWorkerGuideHtml.includes(htmlEscaped(name)))) {
     fail('public_ai_worker_user_guide_template_missing', { id, name })
-  }
-  if (!sitemapHtml.includes(`https://supermega.dev/agent-templates/${id}/`)) {
-    fail('public_agent_template_sitemap_missing', { id })
   }
   if (!contactHtml.includes(id)) {
     fail('public_agent_template_missing_from_contact_router', { id })
