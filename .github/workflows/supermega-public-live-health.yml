@@ -26,15 +26,18 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Checkout
-        uses: actions/checkout@v5
-        with:
-          persist-credentials: false
-
       - name: Setup Python
         uses: actions/setup-python@v6
         with:
           python-version: '3.12'
 
+      - name: Fetch checker from the triggering commit
+        run: |
+          curl --fail --silent --show-error --location \
+            --proto '=https' --proto-redir '=https' \
+            --retry 3 --retry-all-errors \
+            "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${GITHUB_SHA}/tools/check_public_live_health.py" \
+            --output "${RUNNER_TEMP}/check_public_live_health.py"
+
       - name: Check current public funnel
-        run: python tools/check_public_live_health.py
+        run: python "${RUNNER_TEMP}/check_public_live_health.py"
