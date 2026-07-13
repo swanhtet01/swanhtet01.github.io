@@ -30,7 +30,7 @@ if (!existsSync(configPath)) fail('missing_public_config')
 const config = JSON.parse(readFileSync(configPath, 'utf8'))
 const routes = Array.isArray(config.routes) ? config.routes : []
 
-const expectedStaticEntries = new Set(['404.html', 'contact', 'favicon.svg', 'index.html', 'live-shop-dashboard.png', 'privacy', 'robots.txt', 'site.webmanifest', 'sitemap.xml', 'sw.js'])
+const expectedStaticEntries = new Set(['404.html', 'contact', 'favicon.svg', 'index.html', 'live-shop-mobile.png', 'live-shop-workspace.png', 'privacy', 'robots.txt', 'site.webmanifest', 'sitemap.xml', 'sw.js'])
 const actualStaticEntries = readdirSync(staticDir)
 for (const entry of actualStaticEntries) {
   if (!expectedStaticEntries.has(entry)) fail('retired_public_static_entry_present', { entry })
@@ -70,19 +70,27 @@ for (const [relativePath, html] of pages) {
   for (const required of ['data-theme="light"', 'data-theme="dark"', 'prefers-color-scheme', 'prefers-reduced-motion', 'data-theme-toggle']) {
     if (!html.includes(required)) fail('public_page_missing_theme_contract', { relativePath, required })
   }
-  for (const forbidden of ['>Products<', '>Pricing<', '>AI workers<', '/site/shots/', 'supermega-portal-card.png', 'WorkDesk', 'AgentOps', 'Source-to-Screen', 'AI Workcell']) {
+  for (const required of ['&gt;_</span>', 'backdrop-filter: blur(24px)', 'supermega<span class="domain">.dev</span>']) {
+    if (!html.includes(required)) fail('public_page_missing_terminal_brand_contract', { relativePath, required })
+  }
+  for (const forbidden of ['>Products<', '>Pricing<', '>AI workers<', '/site/shots/', 'supermega-portal-card.png', 'WorkDesk', 'AgentOps', 'Source-to-Screen', 'AI Workcell', 'live-shop-dashboard.png', '<h1 id="supermega-heading">SuperMega</h1>', '/icon.svg', 'M-rune']) {
     if (html.includes(forbidden)) fail('public_page_contains_retired_catalog_content', { relativePath, forbidden })
   }
 }
 
 for (const required of [
-  '<h1 id="supermega-heading">SuperMega</h1>',
+  '<h1 id="workspace-heading">The intelligent workspace for daily operations.</h1>',
   'https://app.supermega.dev/',
   'https://app.supermega.dev/?demo=shop',
   'https://demo.supermega.dev/',
-  'Need something built?',
-  'src="/favicon.svg"',
-  'src="/live-shop-dashboard.png"',
+  'Bring a workflow',
+  'src="/live-shop-workspace.png"',
+  'src="/live-shop-mobile.png"',
+  'data-public-status',
+  "fetch('/api/health'",
+  'Phone</span><strong>Fast daily actions and live visibility',
+  'Tablet</span><strong>Touch-first work with full context',
+  'Desktop</span><strong>Complete navigation and operational depth',
   'site.webmanifest',
 ]) {
   if (!home.includes(required)) fail('homepage_front_door_contract_missing', { required })
@@ -110,8 +118,13 @@ for (const required of ['Only the details needed to reply.', 'Sending a contact 
   if (!privacy.includes(required)) fail('privacy_surface_contract_missing', { required })
 }
 
+const favicon = readText('favicon.svg')
+for (const required of ['supermega.dev terminal mark', '#5f8cff', '#3dd6a2']) {
+  if (!favicon.includes(required)) fail('terminal_favicon_contract_invalid', { required })
+}
+
 const manifest = JSON.parse(readText('site.webmanifest'))
-if (manifest.name !== 'SuperMega' || manifest.start_url !== '/' || manifest.icons?.[0]?.src !== '/favicon.svg') {
+if (manifest.name !== 'supermega.dev' || manifest.short_name !== 'supermega' || manifest.start_url !== '/' || manifest.icons?.[0]?.src !== '/favicon.svg') {
   fail('webmanifest_contract_invalid', { manifest })
 }
 
