@@ -126,6 +126,20 @@ for (const runtimeWorkcellSlug of ['cash-close', 'pipeline-control', 'owner-comm
   assert.equal(operatorHandoff.credentials_present, false)
 }
 
+const ownerHandoff = contactHandler.__test.buildFirstProofTaskPayload({
+  lead_id: 'LEAD-OWNER-NO-SAAS',
+  template_id: 'owner-command',
+  company: 'Owner Message Business',
+  name: 'Owner',
+  email: 'owner@example.com',
+}).workcell_activation_handoff
+const safeOwnerHandoff = pipelineHandler.__test.safeWorkcellActivationHandoff(ownerHandoff)
+assert.deepEqual(safeOwnerHandoff.missing_manifest_fields, [])
+assert.equal(safeOwnerHandoff.manifest_ready, true)
+assert.equal(safeOwnerHandoff.manifest_draft.clickupListId, '')
+assert.equal(safeOwnerHandoff.required_secret_input_names.some((name) => /PAYPAL|PIPEDRIVE|CLICKUP/.test(name)), false)
+assert.ok(safeOwnerHandoff.required_secret_input_names.includes('SUPERMEGA_NEW_CLIENT_TELEGRAM_BOT_TOKEN'))
+
 for (const [label, source] of [['pipeline', pipelineSource], ['bundled_pipeline', bundledPipelineSource]]) {
   for (const token of [
     'function safeWorkcellActivationHandoff',
