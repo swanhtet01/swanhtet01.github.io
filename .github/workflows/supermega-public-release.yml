@@ -1,0 +1,65 @@
+name: SuperMega Public - Verified Prebuilt Release
+
+# Keep this definition on main so GitHub registers workflow_dispatch. The
+# canonical public branch carries the same file and runs it for every release.
+on:
+  push:
+    branches:
+      - codex/public-enterprise-site
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: supermega-public-production
+  cancel-in-progress: false
+
+jobs:
+  verify-and-deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production
+    env:
+      VERCEL_ORG_ID: team_wI4l7ZgSxcEztQPSlCCYVeJ5
+      VERCEL_PROJECT_ID: prj_Yaf0cZYbiFXcLkMcKaAm4alPWMhR
+
+    steps:
+      - name: Checkout canonical public source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'push' && github.sha || 'codex/public-enterprise-site' }}
+          fetch-depth: 1
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Require production deploy credential
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          if [ -z "$VERCEL_TOKEN" ]; then
+            echo "::error::VERCEL_TOKEN is not configured for the production environment."
+            exit 1
+          fi
+
+      - name: Link locked Vercel project
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: npx --yes vercel@56.1.0 pull --yes --environment=production --token="$VERCEL_TOKEN"
+
+      - name: Verify release configuration
+        run: npm run vercel:guard
+
+      - name: Generate and verify Build Output API artifact
+        run: npm run public:prebuilt
+
+      - name: Deploy verified artifact to production
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: npx --yes vercel@56.1.0 deploy --prebuilt --prod --yes --token="$VERCEL_TOKEN"
+
+      - name: Verify live aliases and first-proof route
+        run: npm run public:verify:live
