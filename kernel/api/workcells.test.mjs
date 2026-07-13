@@ -16,6 +16,7 @@ const availableTools = () => [
   { name: 'settled_transactions_read' },
   { name: 'crm_deals_read' },
   { name: 'work_tasks_read' },
+  { name: 'owner_updates_read' },
 ]
 
 test('workcell API fails closed and exposes readiness only behind the ops key', async () => {
@@ -30,6 +31,16 @@ test('workcell API fails closed and exposes readiness only behind the ops key', 
   assert.equal(result.json.workcells.find((item) => item.slug === 'owner-command').actionDraftSupported, true)
   assert.equal(result.json.workcells.find((item) => item.slug === 'owner-command').actionDraftReady, true)
   assert.equal(result.json.schedule.configuredSlugs[0], 'cash-close')
+
+  const noClickUp = await handleWorkcells(
+    { method: 'GET', headers },
+    { env: { ...env, WORKCELL_CLICKUP_LIST_ID: '' }, availableTools },
+  )
+  const owner = noClickUp.json.workcells.find((item) => item.slug === 'owner-command')
+  assert.equal(owner.configured, true)
+  assert.equal(owner.actionDraftSupported, true)
+  assert.equal(owner.actionDraftReady, false)
+  assert.deepEqual(owner.missing, [])
 })
 
 test('workcell API queues an immutable action only when the owner explicitly requests it', async () => {
@@ -119,11 +130,11 @@ test('workcell API runs a fixed product and delivers only when explicitly reques
 test('workcell API preserves readiness and source failures as non-success responses', async () => {
   const notReady = await handleWorkcells(
     { method: 'POST', headers, body: { slug: 'owner-command' } },
-    { env, runWorkcell: async (slug) => ({ ok: false, slug, reason: 'workcell_not_ready', missing: ['tool:crm_deals_read'] }) },
+    { env, runWorkcell: async (slug) => ({ ok: false, slug, reason: 'workcell_not_ready', missing: ['tool:owner_updates_read'] }) },
   )
   assert.equal(notReady.status, 409)
   assert.equal(notReady.json.ok, false)
-  assert.deepEqual(notReady.json.missing, ['tool:crm_deals_read'])
+  assert.deepEqual(notReady.json.missing, ['tool:owner_updates_read'])
 
   const failed = await handleWorkcells(
     { method: 'POST', headers, body: { slug: 'cash-close' } },

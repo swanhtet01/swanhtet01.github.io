@@ -9,14 +9,15 @@ owner output, optional owner-channel delivery, and one bounded owner-approved Cl
 |---|---|---|---|
 | `cash-close` | settled cash, fees, net receipts, exceptions | PayPal | none |
 | `pipeline-control` | deals and delivery work ranked by revenue risk | Pipedrive, ClickUp | ClickUp list id |
-| `owner-command` | one cash, pipeline, and delivery command brief | PayPal, Pipedrive, ClickUp | ClickUp list id |
+| `owner-command` | one daily action brief from owner-forwarded sales, cash, delivery, and issue updates | private Telegram owner chat | ClickUp list id (optional action queue) |
 
 The runtime executes the declared reads directly. A model does not choose or expand the tool plan.
 If one required source is unavailable, the workcell stops before synthesis.
 
 ## Approval-Backed Action
 
-`pipeline-control` and `owner-command` can set `queueAction:true` on an explicit console/API run.
+`pipeline-control` and an `owner-command` deployment with optional ClickUp setup can set
+`queueAction:true` on an explicit console/API run.
 That creates a draft only. It does not call ClickUp.
 
 1. Review the exact ClickUp list, task name, description, execution marker, and payload fingerprint

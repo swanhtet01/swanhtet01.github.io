@@ -36,9 +36,6 @@ const SECRET_ENV = {
   SUPERMEGA_NEW_CLIENT_SUPABASE_SERVICE_ROLE_KEY: 'supabase-secret',
   SUPERMEGA_NEW_CLIENT_TELEGRAM_BOT_TOKEN: 'telegram-secret',
   SUPERMEGA_NEW_CLIENT_TELEGRAM_ALERT_CHAT_ID: '123456',
-  SUPERMEGA_NEW_CLIENT_PAYPAL_CLIENT_ID: 'paypal-client',
-  SUPERMEGA_NEW_CLIENT_PAYPAL_CLIENT_SECRET: 'paypal-secret',
-  SUPERMEGA_NEW_CLIENT_PIPEDRIVE_ACCESS_TOKEN: 'pipedrive-secret',
   SUPERMEGA_NEW_CLIENT_CLICKUP_ACCESS_TOKEN: 'clickup-secret',
 }
 
@@ -55,16 +52,26 @@ test('client manifest normalizes one isolated owner-command project', () => {
   assert.throws(() => validateClientManifest({ ...MANIFEST, clientSlug: '../escape' }), /manifest_invalid_client_slug/)
   assert.throws(() => validateClientManifest({ ...MANIFEST, timeZone: 'Mars/Olympus' }), /manifest_invalid_time_zone/)
   assert.throws(() => validateClientManifest({ ...MANIFEST, workcells: ['invented'] }), /manifest_unknown_workcell/)
-  assert.throws(() => validateClientManifest({ ...MANIFEST, clickupListId: '../../secret' }), /manifest_clickup_list_id_required/)
+  assert.throws(() => validateClientManifest({ ...MANIFEST, clickupListId: '../../secret' }), /manifest_invalid_clickup_list_id/)
   assert.throws(() => validateClientManifest({ ...MANIFEST, clientName: 'Acme\u001b[2J' }), /manifest_client_name_required/)
   assert.throws(() => validateClientManifest({ ...MANIFEST, clientId: '../shared' }), /manifest_invalid_client_id/)
 })
 
 test('required secrets derive from selected workcells and plan output never contains values', () => {
   const groups = requiredSecretGroups(MANIFEST).map((group) => group.target)
-  assert.ok(groups.includes('PAYPAL_CLIENT_ID'))
-  assert.ok(groups.includes('PIPEDRIVE_ACCESS_TOKEN|PIPEDRIVE_API_TOKEN'))
+  assert.equal(groups.includes('PAYPAL_CLIENT_ID'), false)
+  assert.equal(groups.includes('PIPEDRIVE_ACCESS_TOKEN|PIPEDRIVE_API_TOKEN'), false)
   assert.ok(groups.includes('CLICKUP_ACCESS_TOKEN|CLICKUP_API_TOKEN'))
+
+  const noSystemOwner = { ...MANIFEST, clickupListId: '' }
+  const noSystemGroups = requiredSecretGroups(noSystemOwner).map((group) => group.target)
+  assert.equal(noSystemGroups.includes('CLICKUP_ACCESS_TOKEN|CLICKUP_API_TOKEN'), false)
+  assert.doesNotThrow(() => validateClientManifest(noSystemOwner))
+  const cashGroups = requiredSecretGroups({ ...MANIFEST, workcells: ['cash-close'], clickupListId: '' }).map((group) => group.target)
+  assert.ok(cashGroups.includes('PAYPAL_CLIENT_ID'))
+  const pipelineGroups = requiredSecretGroups({ ...MANIFEST, workcells: ['pipeline-control'] }).map((group) => group.target)
+  assert.ok(pipelineGroups.includes('PIPEDRIVE_ACCESS_TOKEN|PIPEDRIVE_API_TOKEN'))
+  assert.ok(pipelineGroups.includes('CLICKUP_ACCESS_TOKEN|CLICKUP_API_TOKEN'))
 
   const plan = buildProvisionPlan(MANIFEST, {
     scope: 'test-team',
@@ -111,8 +118,8 @@ test('secret resolution uses aliases, generates cron auth, and rejects multiline
     SUPERMEGA_NEW_CLIENT_OPENROUTER_API_KEY: 'openrouter-secret',
     SUPERMEGA_NEW_CLIENT_TELEGRAM_ALERT_CHAT_ID: '',
     SUPERMEGA_NEW_CLIENT_TELEGRAM_CHAT_ID: 'fallback-chat',
-    SUPERMEGA_NEW_CLIENT_PIPEDRIVE_ACCESS_TOKEN: '',
-    SUPERMEGA_NEW_CLIENT_PIPEDRIVE_API_TOKEN: 'pipedrive-api-secret',
+    SUPERMEGA_NEW_CLIENT_CLICKUP_ACCESS_TOKEN: '',
+    SUPERMEGA_NEW_CLIENT_CLICKUP_API_TOKEN: 'clickup-api-secret',
   }
   const result = resolveProvisionEnvironment(MANIFEST, env, {
     randomBytes: () => Buffer.from('generated-cron'),
@@ -121,11 +128,11 @@ test('secret resolution uses aliases, generates cron auth, and rejects multiline
   assert.equal(result.secrets.get('SUPERMEGA_OPS_KEY'), 'new-client-ops-secret')
   assert.equal(result.secrets.get('OPENROUTER_API_KEY'), 'openrouter-secret')
   assert.equal(result.secrets.get('TELEGRAM_ALERT_CHAT_ID'), 'fallback-chat')
-  assert.equal(result.secrets.get('PIPEDRIVE_API_TOKEN'), 'pipedrive-api-secret')
+  assert.equal(result.secrets.get('CLICKUP_API_TOKEN'), 'clickup-api-secret')
   assert.equal(result.secrets.get('CRON_SECRET'), Buffer.from('generated-cron').toString('base64url'))
   assert.throws(
-    () => resolveProvisionEnvironment(MANIFEST, { ...SECRET_ENV, SUPERMEGA_NEW_CLIENT_PAYPAL_CLIENT_SECRET: 'bad\nvalue' }),
-    /secret_contains_line_break:SUPERMEGA_NEW_CLIENT_PAYPAL_CLIENT_SECRET/,
+    () => resolveProvisionEnvironment(MANIFEST, { ...SECRET_ENV, SUPERMEGA_NEW_CLIENT_CLICKUP_ACCESS_TOKEN: 'bad\nvalue' }),
+    /secret_contains_line_break:SUPERMEGA_NEW_CLIENT_CLICKUP_ACCESS_TOKEN/,
   )
 })
 
@@ -339,7 +346,10 @@ test('apply creates, links, configures, deploys, and verifies without secrets in
         return { ok: true, idempotentClaim: true, probeCleaned: true }
       },
       sleep: async () => { events.push('sleep') },
-      verify: async (url, options) => ({ url, selected: options.workcells, connectors: 69 }),
+      verify: async (url, options) => {
+        assert.deepEqual(options.actionWorkcells, ['owner-command'])
+        return { url, selected: options.workcells, connectors: 69 }
+      },
     })
     assert.equal(result.ok, true)
     assert.equal(result.dataSpine.idempotentClaim, true)
@@ -513,7 +523,7 @@ test('live verifier requires healthy status and every selected workcell', async 
         async json() {
           return url.endsWith('/api/status')
             ? { ok: true, service: 'supermega-kernel', connectors: {} }
-            : { ok: true, workcells: [{ slug: 'owner-command', configured: false, missing: ['tool:crm_deals_read'] }] }
+            : { ok: true, workcells: [{ slug: 'owner-command', configured: false, missing: ['tool:owner_updates_read'] }] }
         },
       }),
       opsKey: 'ops-secret',
@@ -537,4 +547,17 @@ test('live verifier requires healthy status and every selected workcell', async 
     }),
     /provision_workcell_action_not_ready:owner-command/,
   )
+
+  const noActionResponses = [
+    { ok: true, service: 'supermega-kernel', connectors: { total: 69, registrationErrors: 0 } },
+    { ok: true, workcells: [{ slug: 'owner-command', configured: true, actionDraftSupported: true, actionDraftReady: false, missing: [] }] },
+    { ok: true, approvals: [] },
+  ]
+  const noActionResult = await verifyProvisionedClient('https://client.vercel.app', {
+    fetch: async () => ({ ok: true, async json() { return noActionResponses.shift() } }),
+    opsKey: 'ops-secret',
+    workcells: ['owner-command'],
+    actionWorkcells: [],
+  })
+  assert.equal(noActionResult.workcells[0].configured, true)
 })

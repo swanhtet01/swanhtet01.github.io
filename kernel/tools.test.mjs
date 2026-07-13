@@ -17,7 +17,7 @@ test('availableTools returns a catalog with input schemas', () => {
 })
 
 test('external operator connectors are exposed only as bounded read tools', () => {
-  for (const name of ['settled_transactions_read', 'crm_deals_read', 'work_tasks_read']) {
+  for (const name of ['settled_transactions_read', 'crm_deals_read', 'work_tasks_read', 'owner_updates_read']) {
     assert.ok(TOOLS[name], `${name} must be in the crew tool-belt`)
     assert.match(TOOLS[name].description, /Read|read/)
     assert.match(TOOLS[name].description, /Read-only/)

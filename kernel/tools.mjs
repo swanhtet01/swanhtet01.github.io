@@ -10,6 +10,7 @@ import sheets from './connectors/data-sheets.mjs'
 import paypal from './connectors/payment-paypal.mjs'
 import pipedrive from './connectors/crm-pipedrive.mjs'
 import clickup from './connectors/data-clickup.mjs'
+import telegram from './connectors/messaging-telegram.mjs'
 
 export const TOOLS = {
   platform_status: {
@@ -194,6 +195,29 @@ export const TOOLS = {
           }
         }),
         page: result.page,
+      }
+    },
+  },
+  owner_updates_read: {
+    description: 'Read a bounded time window of incoming messages from the configured private Telegram owner chat. Read-only: does not acknowledge updates, send messages, or expose other chats.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        start_date: { type: 'string', description: 'ISO date-time at the start of the evidence window' },
+        end_date: { type: 'string', description: 'ISO date-time after start_date, maximum 168 hours later' },
+        limit: { type: 'integer', minimum: 1, maximum: 100 },
+      },
+      required: ['start_date', 'end_date'],
+      additionalProperties: false,
+    },
+    available: () => { try { return telegram.ownerChatConfigured() } catch { return false } },
+    run: async ({ start_date, end_date, limit = 100 } = {}) => {
+      const result = await telegram.readOwnerUpdates({ startDate: start_date, endDate: end_date, limit })
+      if (!result.ok) throw new Error(result.reason || 'messaging-telegram_read_failed')
+      return {
+        updates: result.updates.slice(0, 100),
+        fetched: result.fetched,
+        truncated: Boolean(result.truncated),
       }
     },
   },
