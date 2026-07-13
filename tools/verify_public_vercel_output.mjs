@@ -91,7 +91,18 @@ for (const required of [
 for (const required of ['action="/api/contact-submissions"', 'name="name"', 'name="email"', 'name="company"', 'name="goal"', 'No account or data connection is made before you approve it.']) {
   if (!contact.includes(required)) fail('contact_surface_contract_missing', { required })
 }
-for (const forbidden of ['placeholder="Drive folder', 'placeholder="Example:', 'Upload files', 'Source link or system', 'custom AI worker']) {
+for (const forbidden of [
+  'placeholder="Drive folder',
+  'placeholder="Example:',
+  'Upload files',
+  'Source link or system',
+  'custom AI worker',
+  'name="workflow"',
+  'name="first_output"',
+  'name="requested_package"',
+  'name="product_area"',
+  'General enquiry',
+]) {
   if (contact.includes(forbidden)) fail('contact_surface_keeps_retired_intake', { forbidden })
 }
 
