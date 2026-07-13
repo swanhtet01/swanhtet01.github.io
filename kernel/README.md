@@ -14,9 +14,10 @@ broader system boundaries.
 | `workcells.mjs` + `workcell-run.mjs` | Cash Close, Pipeline Control, and Owner Command products | live |
 | `owner-evidence.mjs` + `api/owner-evidence.mjs` | Reviewed LINE/Viber evidence preview, immutable storage, and bounded read | live |
 | `approval-actions.mjs` + `api/approvals.mjs` | Immutable owner approval and idempotent ClickUp execution | live |
-| `crews/` + `crew-run.mjs` | Contract-enforced, draft-only multi-role tasks | 8 live |
+| `crews/` + `crew-run.mjs` | Contract-enforced, draft-only multi-role tasks | 12 live |
 | `agent-company.mjs` + `agent-company-work-orders.mjs` | Bounded supervisor cycles and durable reviewed delegation | live |
 | `agent-company-operations.mjs` | Immutable outcome review and metadata-only operating targets | live |
+| `agent-company-operator.mjs` + `scripts/operate-agent-company.mjs` | Guided plan, queue, dispatch, evaluation, and proof client | operator-run |
 | `public/` + `api/` | Ops console, status, workcell activation, and scheduled delivery | live |
 
 ## Gateway
@@ -118,6 +119,26 @@ from the operations report. Internal targets cover queue p90, execution p90, com
 orders, durable result storage, role-budget compliance, draft-only boundary compliance, evaluation
 coverage, and accepted evaluations. Readiness stays `collecting` until each target has at least five
 relevant samples. These are operator targets, not a contractual customer SLA or customer acceptance.
+
+### Guided Operator
+
+The operator CLI is a thin client over the same protected API and durable queue. It does not add a
+runner, scheduler, or model supervisor. Start from the redacted example and keep the real manifest
+outside version control:
+
+```powershell
+$env:SUPERMEGA_OPS_KEY = '<owner-provided in this terminal only>'
+npm run agent-company:operate -- --manifest C:\secure-local\work-order.json
+Remove-Item Env:SUPERMEGA_OPS_KEY
+```
+
+The default is plan-only. Queueing requires exact `QUEUE <runId>` confirmation, dispatch requires a
+separate exact `RUN <workOrderId>` confirmation, and optional internal evaluation requires the four
+fixed checks plus `EVALUATE <workOrderId>`. The command then retrieves the deterministic delivery
+proof. It rejects credential-shaped manifest fields before network access, fixes the API host to
+`console.supermega.dev`, accepts the Ops key only from the process environment, and has no customer
+review or connector-write command. Customer decisions still belong in the console after the operator
+has exact evidence from an allowed source.
 
 ## Core Environment
 
