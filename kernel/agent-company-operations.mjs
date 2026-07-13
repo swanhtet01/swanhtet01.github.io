@@ -3,6 +3,7 @@
 
 import { createHash, timingSafeEqual } from 'node:crypto'
 
+import { listCompanyAgents } from './agent-company.mjs'
 import {
   getCompanyWorkOrder,
   listCompanyWorkOrders,
@@ -234,6 +235,20 @@ function evaluateOrder(order, evaluation, nowMs) {
   const executionMinutes = minutesBetween(order.startedAt, order.completedAt)
   const ageMinutes = createdTime === null ? null : Math.max(0, Math.round(((nowMs - createdTime) / 60000) * 10) / 10)
   const evaluationPublic = evaluation ? publicEvaluation(evaluation) : null
+  const resultByAgent = new Map(results.map((item) => [item?.agentId, item]))
+  const agents = assignments.map((assignment) => {
+    const specialist = resultByAgent.get(assignment.agentId)
+    const usedRoleCalls = Number(specialist?.usedRoleCalls)
+    return {
+      agentId: assignment.agentId,
+      name: assignment.name || assignment.agentId,
+      department: assignment.department || 'unknown',
+      crew: assignment.crew || null,
+      status: specialist?.status || (terminal ? 'missing' : order.status),
+      plannedRoleCalls: Number.isFinite(Number(assignment.roleCount)) ? Number(assignment.roleCount) : null,
+      usedRoleCalls: Number.isFinite(usedRoleCalls) ? usedRoleCalls : null,
+    }
+  })
   return {
     workOrderId: order.workOrderId,
     cycleId: order.cycleId,
@@ -259,6 +274,58 @@ function evaluateOrder(order, evaluation, nowMs) {
       && boundaryCompliant,
     ) : null,
     evaluation: evaluationPublic,
+    agents,
+  }
+}
+
+function buildWorkforce(orders) {
+  const catalog = listCompanyAgents()
+  const byId = new Map(catalog.map((agent) => [agent.id, {
+    agentId: agent.id,
+    name: agent.name,
+    department: agent.department,
+    crew: agent.crew,
+    assignedOrders: 0,
+    activeAssignments: 0,
+    terminalAssignments: 0,
+    completedAssignments: 0,
+    usedRoleCalls: 0,
+  }]))
+  for (const order of orders) {
+    for (const agent of order.agents || []) {
+      const current = byId.get(agent.agentId) || {
+        agentId: agent.agentId,
+        name: agent.name || agent.agentId,
+        department: agent.department || 'unknown',
+        crew: agent.crew || null,
+        assignedOrders: 0,
+        activeAssignments: 0,
+        terminalAssignments: 0,
+        completedAssignments: 0,
+        usedRoleCalls: 0,
+      }
+      current.assignedOrders += 1
+      if (['planned', 'running'].includes(order.status)) current.activeAssignments += 1
+      if (TERMINAL_STATUSES.has(order.status)) current.terminalAssignments += 1
+      if (agent.status === 'completed') current.completedAssignments += 1
+      if (Number.isFinite(agent.usedRoleCalls)) current.usedRoleCalls += agent.usedRoleCalls
+      byId.set(agent.agentId, current)
+    }
+  }
+  const utilized = [...byId.values()]
+    .filter((agent) => agent.assignedOrders > 0)
+    .map((agent) => ({
+      ...agent,
+      completionRate: rate(agent.completedAssignments, agent.terminalAssignments),
+    }))
+    .sort((left, right) => right.assignedOrders - left.assignedOrders || left.name.localeCompare(right.name))
+  return {
+    availableAgents: catalog.length,
+    utilizedAgents: utilized.length,
+    totalAssignments: utilized.reduce((total, agent) => total + agent.assignedOrders, 0),
+    activeAssignments: utilized.reduce((total, agent) => total + agent.activeAssignments, 0),
+    usedRoleCalls: utilized.reduce((total, agent) => total + agent.usedRoleCalls, 0),
+    agents: utilized,
   }
 }
 
@@ -333,6 +400,7 @@ export async function buildCompanyOperationsReport(input, options = {}) {
   const terminal = orders.filter((order) => TERMINAL_STATUSES.has(order.status))
   const evaluated = terminal.filter((order) => order.evaluation)
   const { measures, targets } = buildTargets(orders)
+  const workforce = buildWorkforce(orders)
   const overduePlanned = orders.filter((order) => order.status === 'planned' && order.ageMinutes > COMPANY_OPERATIONS_TARGETS.queueP90Minutes).length
   const overdueRunning = orders.filter((order) => order.status === 'running' && (
     !order.startedAt
@@ -371,6 +439,7 @@ export async function buildCompanyOperationsReport(input, options = {}) {
     counts,
     measures,
     targets,
+    workforce,
     attention: {
       overduePlanned,
       overdueRunning,
@@ -391,6 +460,7 @@ export async function buildCompanyOperationsReport(input, options = {}) {
     exposure: {
       rawEvidenceReturned: false,
       modelOutputReturned: false,
+      specialistOutputReturned: false,
       customerSlaClaimed: false,
     },
     orders,

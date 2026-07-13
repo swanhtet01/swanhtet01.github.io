@@ -113,6 +113,10 @@ budget, boundary, review, and acceptance evidence without returning the intake o
 
 | slug | plan | what it does |
 |---|---|---|
+| `data-insights-desk` | all | approved exports + definitions + business questions -> data-quality findings, traceable metrics, chart specs, and decision story |
+| `customer-support-desk` | all | approved tickets + account facts + policy -> triage, resolution path, escalations, and reply draft |
+| `knowledge-base-desk` | all | approved policies + manuals + ownership metadata -> canonical answers, procedures, conflicts, and publication queue |
+| `project-control-desk` | all | approved baseline + current status + dependencies -> critical path, risks, accountable actions, and update draft |
 | `read-my-chaos` | all | own-account inbox/chat exports → structured ledgers + operator brief; bright line embedded |
 | `chase-the-money` | all | own-account threads + POS ledger → unpaid balances (MMK) + drafted reminders in the customer's language; drafts only, bright line |
 | `daily-operator-brief` | all | any trade's day numbers → actions ranked by money-at-stake + tomorrow's risk |

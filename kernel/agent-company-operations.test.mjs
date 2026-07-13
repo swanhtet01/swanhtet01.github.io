@@ -17,7 +17,7 @@ const order = (patch = {}) => ({
   startedAt: '2026-07-14T00:10:00.000Z',
   completedAt: '2026-07-14T00:20:00.000Z',
   plan: {
-    assignments: [{ agentId: 'sales-qualifier' }],
+    assignments: [{ agentId: 'sales-qualifier', name: 'Sales Qualifier', department: 'growth', crew: 'lead-qualification-desk', roleCount: 3 }],
     budget: { roleLimit: 3 },
     controls: { externalWrites: false, dynamicDelegation: false },
   },
@@ -26,7 +26,7 @@ const order = (patch = {}) => ({
     status: 'completed',
     actionMode: 'draft_only',
     approvalRequired: true,
-    results: [{ agentId: 'sales-qualifier', status: 'completed', output: { private: 'model output' } }],
+    results: [{ agentId: 'sales-qualifier', status: 'completed', usedRoleCalls: 3, output: { private: 'model output' } }],
     budget: { usedRoleCalls: 3 },
     durableResultStored: true,
   },
@@ -154,12 +154,64 @@ test('operations report measures five durable accepted orders without exposing e
   assert.equal(report.measures.executionP90Minutes, 10)
   assert.equal(report.measures.acceptedEvaluationRate, 1)
   assert.equal(report.targets.every((target) => target.state === 'met'), true)
+  assert.equal(report.workforce.availableAgents, 12)
+  assert.equal(report.workforce.utilizedAgents, 1)
+  assert.equal(report.workforce.totalAssignments, 5)
+  assert.equal(report.workforce.usedRoleCalls, 15)
+  assert.deepEqual(report.workforce.agents.map((agent) => ({
+    id: agent.agentId,
+    assignments: agent.assignedOrders,
+    completionRate: agent.completionRate,
+  })), [{ id: 'sales-qualifier', assignments: 5, completionRate: 1 }])
   assert.equal(report.exposure.rawEvidenceReturned, false)
   assert.equal(report.exposure.modelOutputReturned, false)
+  assert.equal(report.exposure.specialistOutputReturned, false)
   const serialized = JSON.stringify(report)
   assert.equal(serialized.includes('model output'), false)
   assert.equal(serialized.includes('e'.repeat(64)), false)
   assert.equal(serialized.includes('output'), false)
+})
+
+test('workforce utilization aggregates specialist metadata without carrying deliverables', async () => {
+  const mixed = order({
+    workOrderId: `company-order:${'9'.repeat(40)}`,
+    cycleId: 'mixed-workforce',
+    plan: {
+      assignments: [
+        { agentId: 'data-insights-analyst', name: 'Data & Insights Analyst', department: 'insights', crew: 'data-insights-desk', roleCount: 3 },
+        { agentId: 'project-controller', name: 'Project Controller', department: 'delivery', crew: 'project-control-desk', roleCount: 3 },
+      ],
+      budget: { roleLimit: 6 },
+      controls: { externalWrites: false, dynamicDelegation: false },
+    },
+    result: {
+      ok: true,
+      status: 'partial',
+      actionMode: 'draft_only',
+      approvalRequired: true,
+      results: [
+        { agentId: 'data-insights-analyst', status: 'completed', usedRoleCalls: 3, output: { privateMetric: 42 } },
+        { agentId: 'project-controller', status: 'failed', usedRoleCalls: 2, reason: 'company_agent_failed' },
+      ],
+      budget: { usedRoleCalls: 5 },
+      durableResultStored: true,
+    },
+  })
+  const report = await buildCompanyOperationsReport({ clientId: 'client-acme', windowDays: 30 }, {
+    listCompanyWorkOrders: async () => ({ ok: true, workOrders: [mixed] }),
+    getCompanyWorkOrder: async () => ({ ok: true, workOrder: structuredClone(mixed) }),
+    getEvaluation: async () => null,
+    now: () => '2026-07-15T00:00:00.000Z',
+  })
+  assert.equal(report.workforce.availableAgents, 12)
+  assert.equal(report.workforce.utilizedAgents, 2)
+  assert.equal(report.workforce.totalAssignments, 2)
+  assert.equal(report.workforce.usedRoleCalls, 5)
+  const byId = Object.fromEntries(report.workforce.agents.map((agent) => [agent.agentId, agent]))
+  assert.equal(byId['data-insights-analyst'].completionRate, 1)
+  assert.equal(byId['project-controller'].completionRate, 0)
+  assert.equal(JSON.stringify(report).includes('privateMetric'), false)
+  assert.equal(JSON.stringify(report).includes('company_agent_failed'), false)
 })
 
 test('operations report distinguishes no evidence, collecting evidence, and bounded coverage', async () => {

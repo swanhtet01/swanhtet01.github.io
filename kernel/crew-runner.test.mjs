@@ -7,9 +7,30 @@ import { TIERS } from './gateway.mjs'
 
 test('listCrews enumerates every shipped crew', async () => {
   const slugs = (await listCrews()).map((c) => c.slug)
+  assert.equal(slugs.length, 12)
   assert.ok(slugs.includes('reconcile-premium'), 'reconcile-premium is registered')
   assert.ok(slugs.includes('read-my-chaos'), 'read-my-chaos is registered')
   assert.ok(slugs.includes('source-to-screen-pilot'), 'source-to-screen-pilot is registered')
+  for (const slug of ['data-insights-desk', 'customer-support-desk', 'knowledge-base-desk', 'project-control-desk']) {
+    assert.ok(slugs.includes(slug), `${slug} is registered`)
+  }
+})
+
+test('general-use workforce crews are bounded, sellable, and contract-complete', async () => {
+  const expected = {
+    'data-insights-desk': ['data_quality', 'metrics', 'decision_story', 'blocked_claims'],
+    'customer-support-desk': ['resolution_path', 'reply_draft', 'escalations', 'blocked_actions'],
+    'knowledge-base-desk': ['canonical_answers', 'procedures', 'update_queue', 'publication_boundary'],
+    'project-control-desk': ['critical_path', 'risks', 'owner_actions', 'update_draft'],
+  }
+  for (const [slug, fields] of Object.entries(expected)) {
+    const crew = await loadCrew(slug)
+    assert.equal(validateCrew(crew, { slug }).length, 0, `${slug} validates clean`)
+    assert.equal(crew.roles.length, 3, `${slug} stays within one three-role specialist budget`)
+    assert.equal(crew.roles[0].id, 'intake')
+    assert.equal(crew.requires_account_access, undefined)
+    for (const field of fields) assert.ok(crew.output_contract.fields.includes(field), `${slug} returns ${field}`)
+  }
 })
 
 test('shipped crews follow the convention: INTAKE first, real tier per role, output contract', async () => {

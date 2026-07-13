@@ -1,0 +1,49 @@
+{
+  "slug": "knowledge-base-desk",
+  "name": "Knowledge Base Desk",
+  "version": 1,
+  "description": "Converts approved company sources into canonical answers, repeatable procedures, conflict findings, and a controlled publication queue.",
+  "intake": {
+    "accepts": [
+      "policy documents",
+      "manuals and procedures",
+      "approved FAQs",
+      "source ownership metadata",
+      "effective dates"
+    ],
+    "description": "Approved source documents with owners, versions, effective dates, intended audience, and publication scope. Conflicting or stale sources must remain visible."
+  },
+  "roles": [
+    {
+      "id": "intake",
+      "title": "Intake",
+      "tier": "bulk",
+      "goal": "Inventory each source, owner, version, effective date, audience, scope, and authority. Mark duplicate, stale, missing, or conflicting material."
+    },
+    {
+      "id": "knowledge-architect",
+      "title": "Knowledge Architect",
+      "tier": "reason",
+      "goal": "Resolve only source-supported overlaps, organize canonical topics and procedures, preserve citations, and route unresolved conflicts back to the named source owner."
+    },
+    {
+      "id": "procedure-writer",
+      "title": "Procedure Writer",
+      "tier": "bulk",
+      "goal": "Draft concise answers and stepwise procedures with prerequisites, decision points, exceptions, owners, and review dates. Do not publish or invent policy."
+    }
+  ],
+  "output_contract": {
+    "format": "json",
+    "fields": [
+      "source_inventory",
+      "canonical_answers",
+      "procedures",
+      "conflicts",
+      "missing_evidence",
+      "update_queue",
+      "publication_boundary"
+    ],
+    "description": "A source-controlled knowledge packet with explicit ownership and an approval queue for publication or policy resolution."
+  }
+}

@@ -1,0 +1,50 @@
+{
+  "slug": "data-insights-desk",
+  "name": "Data & Insights Desk",
+  "version": 1,
+  "description": "Turns owner-approved business exports into a traceable analytical frame, defensible metrics, and a concise decision story without inventing missing data.",
+  "intake": {
+    "accepts": [
+      "CSV or spreadsheet export",
+      "database result",
+      "metric definitions",
+      "business questions",
+      "known data-quality notes"
+    ],
+    "description": "Approved tabular evidence, its date range and field meanings, the business questions to answer, and known limitations. Missing definitions remain explicit gaps."
+  },
+  "roles": [
+    {
+      "id": "intake",
+      "title": "Intake",
+      "tier": "bulk",
+      "goal": "Inventory sources, fields, units, date ranges, grain, joins, and missing definitions. Preserve source labels and never silently coerce ambiguous values."
+    },
+    {
+      "id": "data-quality-analyst",
+      "title": "Data Quality Analyst",
+      "tier": "reason",
+      "goal": "Define a reproducible cleaning and calculation plan, identify duplicates, nulls, outliers, inconsistent units, and unsupported joins, then compute only metrics supported by supplied evidence."
+    },
+    {
+      "id": "insight-storyteller",
+      "title": "Insight Storyteller",
+      "tier": "bulk",
+      "goal": "Turn supported findings into a concise owner narrative, decision options, and chart specifications. Separate facts, interpretations, and unanswered questions."
+    }
+  ],
+  "output_contract": {
+    "format": "json",
+    "fields": [
+      "source_inventory",
+      "normalized_schema",
+      "data_quality",
+      "metrics",
+      "findings",
+      "decision_story",
+      "chart_specs",
+      "blocked_claims"
+    ],
+    "description": "A source-traced analytical packet with reproducible metric definitions and explicit limits, ready for owner review rather than automatic publication."
+  }
+}
