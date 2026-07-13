@@ -9,7 +9,7 @@ owner output, optional owner-channel delivery, and one bounded owner-approved Cl
 |---|---|---|---|
 | `cash-close` | settled cash, fees, net receipts, exceptions | PayPal | none |
 | `pipeline-control` | deals and delivery work ranked by revenue risk | Pipedrive, ClickUp | ClickUp list id |
-| `owner-command` | one daily action brief from owner-forwarded sales, cash, delivery, and issue updates | private Telegram owner chat | ClickUp list id (optional action queue) |
+| `owner-command` | one daily action brief from owner-forwarded sales, cash, delivery, and issue updates | private Telegram owner chat and/or reviewed LINE/Viber inbox | ClickUp list id (optional action queue) |
 
 The runtime executes the declared reads directly. A model does not choose or expand the tool plan.
 If one required source is unavailable, the workcell stops before synthesis.
@@ -53,6 +53,7 @@ WORKCELL_TIME_ZONE=Asia/Yangon
 WORKCELL_CURRENCY=MMK
 WORKCELL_LOOKBACK_HOURS=24
 WORKCELL_CLICKUP_LIST_ID
+WORKCELL_OWNER_EVIDENCE_ENABLED=true
 ```
 
 Provider variables:
@@ -67,14 +68,26 @@ CLICKUP_ACCESS_TOKEN (preferred) or CLICKUP_API_TOKEN
 `SUPABASE_URL` and the service-role key are required for durable delivery claims. Scheduled delivery
 fails closed without durable storage, so duplicate cron events cannot send the owner brief twice.
 
+## Reviewed Owner Evidence
+
+New Owner Command deployments enable the reviewed evidence inbox automatically. In the Workcells
+console, select LINE, Viber, or Manual; enter the original occurrence time and exact verified text;
+then preview it. The preview returns a canonical payload fingerprint. Storage remains disabled until
+the operator checks the exact-review confirmation, and the API refuses any payload that changed
+after preview. Stored rows are immutable: the service role receives only `select` and `insert`, while
+`anon` and `authenticated` receive no access. `GET /api/owner-evidence` returns metadata only; the
+bounded read tool supplies text to Owner Command inside the isolated client runtime.
+
 ## Activation Proof
 
 1. `GET /api/workcells` with `x-ops-key` reports all required configuration as present.
-2. `POST /api/workcells {"slug":"owner-command","deliver":false}` proves provider access and returns a structured preview.
-3. Repeat with `queueAction:true`, verify one draft in `GET /api/approvals`, approve it, then execute it
+2. Preview and store one client-approved test update through `/api/owner-evidence`; confirm a changed
+   payload or missing confirmation cannot write.
+3. `POST /api/workcells {"slug":"owner-command","deliver":false}` proves the bounded source read and returns a structured brief.
+4. Repeat with `queueAction:true`, verify one draft in `GET /api/approvals`, approve it, then execute it
    only against a client-owned test ClickUp list.
-4. Repeat with `deliver:true` and confirm one owner-channel message.
-5. Trigger the scheduled route twice for the same local date and confirm the second result is
+5. Repeat with `deliver:true` and confirm one owner-channel message.
+6. Trigger the scheduled route twice for the same local date and confirm the second result is
    `duplicate:true` with no second message.
 
 The default production cron remains `01:30 UTC` (08:00 Myanmar). Because each client has an isolated
@@ -102,9 +115,9 @@ only for bootstrap: it is never added to Vercel, printed, or returned. If the te
 that temporary input, run `supabase/workcell-client.sql` in the dedicated project's SQL editor
 before apply.
 
-The bootstrap creates only the durable delivery claim, token ledger, AI cache, and action-queue
-tables required by the workcells. It enables RLS, removes `anon`/`authenticated` access, and grants
-access only to the Supabase service role.
+The bootstrap creates only the durable delivery claim, token ledger, AI cache, action queue, and
+immutable owner-evidence tables required by the workcells. It enables RLS, removes
+`anon`/`authenticated` access, and grants access only to the Supabase service role.
 
 Apply only after loading the plan's exact `SUPERMEGA_NEW_CLIENT_*` inputs into the current process
 environment:
@@ -128,13 +141,14 @@ preloaded secure environments.
 
 Apply refuses dirty source and an existing project by default. `--allow-existing` is the explicit
 upgrade path. Before touching Vercel, it validates/applies the optional bootstrap transaction,
-checks the full shape of all four tables, inserts the same delivery claim twice to prove duplicate
+checks the full shape of all five tables, inserts the same delivery claim twice to prove duplicate
 suppression, proves one action-queue draft-to-approved compare-and-swap, proves the stale duplicate
 transition loses, and deletes both probes. Every deployable environment value is then piped to
 Vercel over stdin, never placed in command arguments. The provisioner copies the clean kernel to an
 isolated temporary directory, patches only that copy's daily cron, deploys, verifies `/api/status`,
 verifies every selected workcell and action-draft readiness in `/api/workcells`, verifies the live
-`/api/approvals` inbox, reports only safe readiness metadata, then removes the temporary copy.
+`/api/approvals` inbox, verifies `/api/owner-evidence` for Owner Command deployments, reports only
+safe readiness metadata, then removes the temporary copy.
 
 All credential inputs are deliberately client-namespaced, including Supabase, Telegram, provider,
 and model keys. Generic names such as `SUPABASE_URL` or `PAYPAL_CLIENT_SECRET` are ignored by the

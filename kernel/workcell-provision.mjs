@@ -24,6 +24,7 @@ const WORKCELL_DATA_TABLES = [
   ['supermega_token_ledger', 'tenant_id,window,in_tokens,out_tokens,calls,updated_at'],
   ['supermega_ai_cache', 'cache_key,payload,created_at'],
   ['supermega_action_queue', 'id,client_id,action_type,title,payload,payload_hash,source,status,version,approved_by,approved_at,rejected_by,rejected_at,executing_at,lease_expires_at,attempts,provider_ref,result,last_error,executed_at,created_at,updated_at'],
+  ['supermega_owner_evidence', 'id,source,source_ref,occurred_at,text,reviewed_by,reviewed_at,fingerprint,created_at'],
 ]
 
 function text(value, max = 200) {
@@ -197,6 +198,7 @@ export function resolveProvisionEnvironment(manifestInput, env = process.env, op
     ['SUPERMEGA_CLIENT_TOKEN_CAP', String(manifest.tokenCap)],
   ])
   if (manifest.clickupListId) variables.set('WORKCELL_CLICKUP_LIST_ID', manifest.clickupListId)
+  if (manifest.workcells.includes('owner-command')) variables.set('WORKCELL_OWNER_EVIDENCE_ENABLED', 'true')
   return { manifest, variables, secrets, missingSecrets, missingSecretInputs }
 }
 
@@ -584,6 +586,18 @@ export async function verifyProvisionedClient(deploymentUrl, options = {}) {
   if (!approvalsResponse.ok || !approvals?.ok || !Array.isArray(approvals.approvals)) {
     throw new Error('provision_approval_inbox_check_failed')
   }
+  let ownerEvidenceInbox = { required: false, ready: false, count: 0 }
+  if (selectedSlugs.includes('owner-command')) {
+    const evidenceResponse = await fetchImpl(`${deploymentUrl}/api/owner-evidence`, {
+      headers: { 'x-ops-key': opsKey },
+      signal: AbortSignal.timeout(15_000),
+    })
+    const evidence = await evidenceResponse.json().catch(() => null)
+    if (!evidenceResponse.ok || !evidence?.ok || evidence.configured !== true || !Array.isArray(evidence.evidence)) {
+      throw new Error('provision_owner_evidence_inbox_check_failed')
+    }
+    ownerEvidenceInbox = { required: true, ready: true, count: Number(evidence.count) || 0 }
+  }
   return {
     service: status.service,
     connectors: status.connectors?.total || 0,
@@ -594,6 +608,7 @@ export async function verifyProvisionedClient(deploymentUrl, options = {}) {
       missing: row.missing || [],
     })),
     approvalInbox: { ready: true, count: approvals.approvals.length },
+    ownerEvidenceInbox,
   }
 }
 

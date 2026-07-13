@@ -12,6 +12,7 @@ broader system boundaries.
 | `connectors/` | Fixed-host provider adapters with health and resilience contracts | 69 live |
 | `tools.mjs` + `api/operator.mjs` | Bounded read tools and grounded operations agent | live |
 | `workcells.mjs` + `workcell-run.mjs` | Cash Close, Pipeline Control, and Owner Command products | live |
+| `owner-evidence.mjs` + `api/owner-evidence.mjs` | Reviewed LINE/Viber evidence preview, immutable storage, and bounded read | live |
 | `approval-actions.mjs` + `api/approvals.mjs` | Immutable owner approval and idempotent ClickUp execution | live |
 | `crews/` + `crew-run.mjs` | Contract-enforced, draft-only multi-role tasks | 5 live |
 | `public/` + `api/` | Ops console, status, workcell activation, and scheduled delivery | live |
@@ -46,6 +47,11 @@ returned by the API, and scheduled owner delivery uses an atomic daily activity 
 
 See [workcells/README.md](workcells/README.md) for the product matrix, isolated deployment model,
 environment contract, and activation proof.
+
+Owner Command accepts two evidence paths inside the same fixed workcell: incoming messages from the
+client's private Telegram bot and operator-reviewed LINE/Viber updates. Reviewed updates are
+previewed first, frozen by payload hash, and inserted into an immutable service-role-only table.
+The agent receives only the bounded read tool and cannot write to the inbox.
 
 ## Core Environment
 
