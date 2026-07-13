@@ -102,6 +102,9 @@ Adding a task is: **write or forge one JSON → it's registered, gated, runnable
 The separate ops-gated `../api/agent-company.mjs` manager runs bounded multi-crew cycles. It accepts
 only the fixed roster, isolates evidence per specialist, budgets role calls before execution, claims
 one durable cycle id, and returns draft-only partial results without cross-agent context or writes.
+`../agent-company-work-orders.mjs` adds durable reviewed delegation around that same runner: exact
+plan fingerprints, no-spend queue creation, client-filtered listing, explicit dispatch, and
+duplicate-safe recovery. It never exposes queued raw evidence in list or detail responses.
 
 ## Shipped crews
 
@@ -112,3 +115,6 @@ one durable cycle id, and returns draft-only partial results without cross-agent
 | `daily-operator-brief` | all | any trade's day numbers → actions ranked by money-at-stake + tomorrow's risk |
 | `reconcile-premium` | pro | MMQR/KBZPay/WavePay ↔ POS reconciliation with LIVE intra-day shortfall flagging by staff/shift; free tier keeps the end-of-day close |
 | `source-to-screen-pilot` | pilot | the paid upgrade from a free browser-only draft → one source-traced first proof + owner approval queue |
+| `lead-qualification-desk` | all | approved lead facts → fit decision, proof step, open questions, and owner-reviewed follow-up draft |
+| `delivery-planning-desk` | all | accepted outcome → milestones, dependencies, owner inputs, and objective acceptance checks |
+| `quality-review-desk` | all | draft + sources + acceptance rules → proof-linked ship, revise, or block recommendation |

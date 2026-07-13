@@ -9,6 +9,13 @@ import {
   planCompanyCycle,
   runCompanyCycle,
 } from '../agent-company.mjs'
+import {
+  createCompanyWorkOrder,
+  getCompanyWorkOrder,
+  listCompanyWorkOrders,
+  MAX_COMPANY_WORK_ORDERS,
+  runCompanyWorkOrder,
+} from '../agent-company-work-orders.mjs'
 
 function constantTimeEqual(a, b) {
   const left = crypto.createHash('sha256').update(String(a)).digest()
@@ -18,8 +25,21 @@ function constantTimeEqual(a, b) {
 
 function statusFor(result) {
   if (result.ok) return 200
-  if (result.reason === 'company_cycle_already_claimed') return 409
-  if (result.reason === 'company_claim_unavailable' || result.reason === 'company_durable_claim_required') return 503
+  if (result.reason === 'company_work_order_not_found') return 404
+  if ([
+    'company_cycle_already_claimed',
+    'company_work_order_already_claimed',
+    'company_work_order_conflict',
+    'company_work_order_plan_mismatch',
+    'company_work_order_running',
+  ].includes(result.reason)) return 409
+  if ([
+    'company_claim_unavailable',
+    'company_durable_claim_required',
+    'company_work_order_durable_claim_required',
+    'company_work_order_state_unavailable',
+    'company_work_order_store_unavailable',
+  ].includes(result.reason)) return 503
   if (result.reason === 'company_role_budget_exceeded') return 422
   if (result.status === 'failed') return 502
   return 400
@@ -42,6 +62,12 @@ export async function handleAgentCompany(request = {}, options = {}) {
         actionMode: 'draft_only',
         agents: listCompanyAgents(),
         limits: { maxAgents: MAX_CYCLE_AGENTS, maxRoleBudget: MAX_CYCLE_ROLE_BUDGET },
+        workOrders: {
+          enabled: true,
+          maxList: MAX_COMPANY_WORK_ORDERS,
+          explicitDispatch: true,
+          rawEvidenceReturned: false,
+        },
       },
     }
   }
@@ -52,7 +78,14 @@ export async function handleAgentCompany(request = {}, options = {}) {
     : {}
   const action = String(body.action || '').trim()
   delete body.action
-  if (action !== 'plan' && action !== 'run') {
+  if (![
+    'plan',
+    'run',
+    'work-order-create',
+    'work-order-list',
+    'work-order-get',
+    'work-order-run',
+  ].includes(action)) {
     return { status: 400, json: { ok: false, reason: 'company_invalid_action' } }
   }
   const configuredClientId = String(options.clientId ?? env.SUPERMEGA_CLIENT_ID ?? '').trim()
@@ -62,7 +95,16 @@ export async function handleAgentCompany(request = {}, options = {}) {
 
   const plan = options.planCompanyCycle || planCompanyCycle
   const run = options.runCompanyCycle || runCompanyCycle
-  const result = action === 'plan' ? await plan(body) : await run(body)
+  const createOrder = options.createCompanyWorkOrder || createCompanyWorkOrder
+  const listOrders = options.listCompanyWorkOrders || listCompanyWorkOrders
+  const getOrder = options.getCompanyWorkOrder || getCompanyWorkOrder
+  const runOrder = options.runCompanyWorkOrder || runCompanyWorkOrder
+  const result = action === 'plan' ? await plan(body)
+    : action === 'run' ? await run(body)
+      : action === 'work-order-create' ? await createOrder(body)
+        : action === 'work-order-list' ? await listOrders(body)
+          : action === 'work-order-get' ? await getOrder(body)
+            : await runOrder(body)
   return { status: statusFor(result), json: result }
 }
 

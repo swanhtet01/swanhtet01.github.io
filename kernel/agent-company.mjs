@@ -52,6 +52,27 @@ export const AGENT_ROSTER = Object.freeze([
     crew: 'source-to-screen-pilot',
     outcome: 'Builds one source-traced proof and a human approval packet.',
   }),
+  Object.freeze({
+    id: 'sales-qualifier',
+    name: 'Sales Qualifier',
+    department: 'growth',
+    crew: 'lead-qualification-desk',
+    outcome: 'Qualifies one opportunity from evidence and drafts the smallest useful next step.',
+  }),
+  Object.freeze({
+    id: 'delivery-planner',
+    name: 'Delivery Planner',
+    department: 'delivery',
+    crew: 'delivery-planning-desk',
+    outcome: 'Turns an accepted outcome into milestones, dependencies, and objective acceptance checks.',
+  }),
+  Object.freeze({
+    id: 'quality-reviewer',
+    name: 'Quality Reviewer',
+    department: 'assurance',
+    crew: 'quality-review-desk',
+    outcome: 'Audits a deliverable against sources and acceptance rules before owner release.',
+  }),
 ])
 
 const ROSTER_BY_ID = new Map(AGENT_ROSTER.map((agent) => [agent.id, agent]))

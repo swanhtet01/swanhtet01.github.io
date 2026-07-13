@@ -13,10 +13,25 @@ test('console exposes one plan-first Agent Company workspace', async () => {
   assert.match(html, /api\('POST','\/api\/agent-company',\{action:'run',\.\.\.companyDraft\.input\}\)/)
   assert.match(html, /I reviewed this exact client, evidence, assignments, and budget/)
   assert.match(html, /id="companyRunButton" type="button" disabled/)
+  assert.match(html, /id="companyQueueButton" type="button" disabled/)
   assert.match(html, /if\(companyDraft\)invalidateCompanyPlan\('Inputs changed\. Plan the cycle again\.'\)/)
   assert.match(html, /Result unavailable\. Checking again is idempotent\./)
   assert.match(html, /if\(location\.hash==='\#company'\)/)
-  assert.match(html, /companyRoster=\[\]\s+invalidateCompanyPlan\(\)\s+loadProtectedState\(\)/)
+  assert.match(html, /companyRoster=\[\]\s+companyWorkOrders=\[\]\s+invalidateCompanyPlan\(\)/)
+})
+
+test('Agent Company console queues and dispatches only exact reviewed work orders', async () => {
+  const html = await readConsole()
+  assert.match(html, /action:'work-order-create',\.\.\.companyDraft\.input/)
+  assert.match(html, /action:'work-order-list',clientId,limit:20/)
+  assert.match(html, /action:'work-order-get',clientId,workOrderId/)
+  assert.match(html, /action:'work-order-run',clientId:order\.clientId,workOrderId:order\.workOrderId,planHash:order\.planHash,confirmation:`RUN \$\{order\.workOrderId\}`/)
+  assert.match(html, /I reviewed this stored plan, evidence fingerprints, assignments, and budget/)
+  assert.match(html, /Work order queued\. No model call was made\./)
+  assert.match(html, /renderCompanyWorkOrderDetail\(response\.workOrder\)/)
+  assert.match(html, /companyWorkOrders=\[\]\s+invalidateCompanyPlan\(\)/)
+  assert.match(html, /invalidateCompanyPlan\(\)\s+\$\('#companyOrderDetail'\)\.hidden=true\s+\$\('#companyOrderDetail'\)\.innerHTML=''\s+\$\('#companyResults'\)\.innerHTML=''/)
+  assert.doesNotMatch(html, /order\.input|workOrder\.input/)
 })
 
 test('Agent Company UI accepts bounded evidence but no credential or action fields', async () => {
@@ -40,8 +55,12 @@ test('Agent Company controls remain touch-safe and collapse to one column', asyn
   assert.match(html, /\.company-actions button\{min-height:44px\}/)
   assert.match(html, /\.company-plan-actions button\{min-height:44px\}/)
   assert.match(html, /\.company-new-cycle\{min-height:44px\}/)
+  assert.match(html, /\.company-work-orders-head button\{min-height:44px\}/)
+  assert.match(html, /\.company-order-actions button\{min-height:44px\}/)
+  assert.match(html, /\.company-order-confirm\{[^}]*min-height:44px/)
   assert.match(html, /\.company-agent\{grid-template-columns:1fr\}/)
   assert.match(html, /\.company-scope\{grid-template-columns:1fr\}/)
+  assert.match(html, /\.company-assignment,\.company-order-row\{grid-template-columns:1fr/)
 })
 
 test('Agent Company API route is a dedicated function before the catch-all', async () => {

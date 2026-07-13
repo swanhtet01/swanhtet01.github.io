@@ -297,10 +297,32 @@ export async function releaseActivityClaim(id) {
     return false
   }
 }
-export async function listActivity(limit = 30) {
-  if (mode === 'supabase') return rest('GET', `supermega_console_activity?order=at.desc&limit=${limit}`)
-  if (mode === 'postgres') { await ensurePgTables(); return q('select * from supermega_console_activity order by at desc limit $1', [limit]) }
-  return [...mem.activity.values()].sort((a, b) => String(b.at).localeCompare(String(a.at))).slice(0, limit)
+export async function listActivity(limit = 30, filter = {}) {
+  const boundedLimit = Math.min(200, Math.max(1, Number.isInteger(Number(limit)) ? Number(limit) : 30))
+  const kind = String(filter?.kind || '').trim().slice(0, 80)
+  const ref = String(filter?.ref || '').trim().slice(0, 160)
+  if (mode === 'supabase') {
+    const query = [
+      kind ? `kind=eq.${encodeURIComponent(kind)}` : '',
+      ref ? `ref=eq.${encodeURIComponent(ref)}` : '',
+      'order=at.desc',
+      `limit=${boundedLimit}`,
+    ].filter(Boolean).join('&')
+    return rest('GET', `supermega_console_activity?${query}`)
+  }
+  if (mode === 'postgres') {
+    await ensurePgTables()
+    const where = []
+    const values = []
+    if (kind) { values.push(kind); where.push(`kind=$${values.length}`) }
+    if (ref) { values.push(ref); where.push(`ref=$${values.length}`) }
+    values.push(boundedLimit)
+    return q(`select * from supermega_console_activity${where.length ? ` where ${where.join(' and ')}` : ''} order by at desc limit $${values.length}`, values)
+  }
+  let rows = [...mem.activity.values()]
+  if (kind) rows = rows.filter((row) => row.kind === kind)
+  if (ref) rows = rows.filter((row) => row.ref === ref)
+  return rows.sort((a, b) => String(b.at).localeCompare(String(a.at))).slice(0, boundedLimit)
 }
 
 // ---------- per-tenant token ledger (monthly window) + AI response cache ----------
