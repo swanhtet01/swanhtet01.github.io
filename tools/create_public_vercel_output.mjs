@@ -2061,7 +2061,7 @@ const unicornHeader = `
         </a>
         <nav class="nav" aria-label="Primary">
           <button class="btn secondary theme-toggle" type="button" data-theme-toggle aria-label="Use dark mode" title="Use dark mode"></button>
-          <a class="btn secondary optional-nav" href="https://app.supermega.dev/" target="_blank" rel="noopener noreferrer">Open app</a>
+          <a class="btn secondary optional-nav" href="https://app.supermega.dev/?demo=shop" target="_blank" rel="noopener noreferrer">Open Shop</a>
           <a class="btn secondary optional-nav" href="https://demo.supermega.dev/" target="_blank" rel="noopener noreferrer">Try demo</a>
           <a class="btn primary" href="/contact/">Contact</a>
         </nav>
@@ -4780,7 +4780,7 @@ const frontDoorHeader = `
         </a>
         <nav class="nav" aria-label="Primary">
           <button class="icon-button theme-toggle" type="button" data-theme-toggle aria-label="Use dark mode" title="Use dark mode"><svg class="theme-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"></path></svg><svg class="theme-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 15.2A8.5 8.5 0 0 1 8.8 3.5 8.5 8.5 0 1 0 20.5 15.2Z"></path></svg></button>
-          <a class="btn secondary optional-nav" href="https://app.supermega.dev/" target="_blank" rel="noopener noreferrer">Open app</a>
+          <a class="btn secondary optional-nav" href="https://app.supermega.dev/?demo=shop" target="_blank" rel="noopener noreferrer">Open Shop</a>
           <a class="btn secondary optional-nav" href="https://demo.supermega.dev/" target="_blank" rel="noopener noreferrer">Try demo</a>
           <a class="btn primary" href="/contact/">Contact</a>
         </nav>
@@ -4793,13 +4793,13 @@ const simplifiedPublicShellHtml = `<!doctype html>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="robots" content="index,follow" />
-    <title>SuperMega | Open the app or try the demo</title>
-    <meta name="description" content="Start with the SuperMega app, try a live demo, or talk to us about work that needs a better system." />
+    <title>SuperMega | Open Shop or try a demo</title>
+    <meta name="description" content="Open Shop, choose a live demo, or talk to us about work that needs a better system." />
     <meta name="theme-color" content="#07111f" />
     <link rel="canonical" href="https://supermega.dev/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" />
     <link rel="manifest" href="/site.webmanifest?v=supermega-atelier-20260623" />
-    ${unicornSocialMeta({ title: 'SuperMega | Open the app or try the demo', description: 'Start with the app, try a live demo, or talk to us about work that needs a better system.', url: 'https://supermega.dev/' })}
+    ${unicornSocialMeta({ title: 'SuperMega | Open Shop or try a demo', description: 'Open Shop, choose a live demo, or talk to us about work that needs a better system.', url: 'https://supermega.dev/' })}
     <script type="application/ld+json">{"@context":"https://schema.org","@type":"Organization","name":"SUPERMEGA.dev","url":"https://supermega.dev/","logo":"https://supermega.dev/favicon.svg","description":"Business software and custom systems built around the work a team already does.","email":"swanhtet@supermega.dev","telephone":"+95-9-500-0721","sameAs":["https://www.linkedin.com/in/theswanhtet"]}</script>
     <style>${frontDoorShellStyle}
       .launch-main { padding-top: 12px; }
@@ -4845,9 +4845,9 @@ const simplifiedPublicShellHtml = `<!doctype html>
           <div class="launch-copy">
             <div class="eyebrow">One place to start</div>
             <h1 id="supermega-heading">SuperMega</h1>
-            <p>Open the app, try a live demo, or talk to us when your work needs a better system.</p>
+            <p>Open Shop, choose a live demo, or talk to us when your work needs a better system.</p>
             <div class="launch-actions">
-              <a class="btn primary" href="https://app.supermega.dev/" target="_blank" rel="noopener noreferrer">Open app</a>
+              <a class="btn primary" href="https://app.supermega.dev/?demo=shop" target="_blank" rel="noopener noreferrer">Open Shop</a>
               <a class="btn secondary" href="https://demo.supermega.dev/" target="_blank" rel="noopener noreferrer">Try demo</a>
               <a class="launch-contact" href="/contact/">Need something built?</a>
             </div>
@@ -4857,14 +4857,14 @@ const simplifiedPublicShellHtml = `<!doctype html>
         </div>
       </section>
       <section class="launch-followup" aria-label="Start with SuperMega">
-        <p>Already know where to begin? Go straight into the app. Want to look around first? Use the demo. For everything else, contact SuperMega.</p>
+        <p>Already know where to begin? Open Shop. Want to look around first? Use the demo. For everything else, contact SuperMega.</p>
         <a href="/contact/">Talk to SuperMega</a>
       </section>
     </main>
     <div class="wrap">
       <footer>
         <span>Powered by SuperMega Technologies</span>
-        <span class="footer-links"><a href="https://app.supermega.dev/" target="_blank" rel="noopener noreferrer">Open app</a><a href="https://demo.supermega.dev/" target="_blank" rel="noopener noreferrer">Try demo</a><a href="/contact/">Contact</a><a href="/privacy/">Privacy</a></span>
+        <span class="footer-links"><a href="https://app.supermega.dev/?demo=shop" target="_blank" rel="noopener noreferrer">Open Shop</a><a href="https://demo.supermega.dev/" target="_blank" rel="noopener noreferrer">Try demo</a><a href="/contact/">Contact</a><a href="/privacy/">Privacy</a></span>
       </footer>
     </div>
   </body>
@@ -5599,7 +5599,7 @@ ${frontDoorHeader}
       </main>
       <footer>
         <span>Powered by SuperMega Technologies</span>
-        <span class="footer-links"><a href="https://app.supermega.dev/" target="_blank" rel="noopener noreferrer">Open app</a><a href="https://demo.supermega.dev/" target="_blank" rel="noopener noreferrer">Try demo</a><a href="/contact/">Contact</a><a href="/privacy/">Privacy</a></span>
+        <span class="footer-links"><a href="https://app.supermega.dev/?demo=shop" target="_blank" rel="noopener noreferrer">Open Shop</a><a href="https://demo.supermega.dev/" target="_blank" rel="noopener noreferrer">Try demo</a><a href="/contact/">Contact</a><a href="/privacy/">Privacy</a></span>
       </footer>
     </div>
     <script>
@@ -5679,7 +5679,7 @@ ${frontDoorHeader}
           <section><h2>Delete a request</h2><p>Email <a href="mailto:swanhtet@supermega.dev">swanhtet@supermega.dev</a> to request deletion of a contact record.</p></section>
         </div>
       </main>
-      <footer><span>Powered by SuperMega Technologies</span><span class="footer-links"><a href="https://app.supermega.dev/" target="_blank" rel="noopener noreferrer">Open app</a><a href="https://demo.supermega.dev/" target="_blank" rel="noopener noreferrer">Try demo</a><a href="/contact/">Contact</a></span></footer>
+      <footer><span>Powered by SuperMega Technologies</span><span class="footer-links"><a href="https://app.supermega.dev/?demo=shop" target="_blank" rel="noopener noreferrer">Open Shop</a><a href="https://demo.supermega.dev/" target="_blank" rel="noopener noreferrer">Try demo</a><a href="/contact/">Contact</a></span></footer>
     </div>
   </body>
 </html>`
@@ -10678,7 +10678,7 @@ ${unicornHeader}
     <span class="footer-links">
       <a href="mailto:swanhtet@supermega.dev">swanhtet@supermega.dev</a>
       <a href="tel:+9595000721">+95 9 500 0721</a>
-      <a href="https://app.supermega.dev/" target="_blank" rel="noopener noreferrer">Open app</a>
+      <a href="https://app.supermega.dev/?demo=shop" target="_blank" rel="noopener noreferrer">Open Shop</a>
       <a href="https://demo.supermega.dev/" target="_blank" rel="noopener noreferrer">Try demo</a>
       <a href="/contact/">Contact</a>
     </span>

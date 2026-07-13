@@ -73,6 +73,7 @@ for (const [relativePath, html] of pages) {
 for (const required of [
   '<h1 id="supermega-heading">SuperMega</h1>',
   'https://app.supermega.dev/',
+  'https://app.supermega.dev/?demo=shop',
   'https://demo.supermega.dev/',
   'Need something built?',
   'src="/favicon.svg"',
