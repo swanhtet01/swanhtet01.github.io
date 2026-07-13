@@ -307,10 +307,18 @@ def run(
         "<title>SuperMega Console</title>",
         'data-view="company"',
         'id="view-company"',
-        "Plan and run one bounded specialist wave",
+        "Plan, queue, dispatch, evaluate, and deliver one bounded specialist wave",
         "I reviewed this exact client, evidence, assignments, and budget",
         "api('POST','/api/agent-company',{action:'plan',...input})",
-        "api('POST','/api/agent-company',{action:'run',...companyDraft.input})",
+        "api('POST','/api/agent-company',{action:'work-order-create',...companyDraft.input})",
+        "api('POST','/api/agent-company',{action:'work-order-run'",
+        "api('POST','/api/agent-company',{action:'work-order-cancel'",
+        "api('POST','/api/agent-company',{action:'work-order-evaluate'",
+        "api('POST','/api/agent-company',{action:'work-order-proof'",
+        "api('POST','/api/agent-company',{action:'work-order-review'",
+        "action:'operations-report'",
+        "CANCEL AND SCRUB ${order.workOrderId} ${order.planHash}",
+        "cancelled excluded from delivery metrics",
     ]
     console_page_missing = [token for token in console_page_tokens if token not in console_page_body]
     console_page_result = {
