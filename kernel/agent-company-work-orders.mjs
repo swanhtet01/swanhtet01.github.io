@@ -10,6 +10,7 @@ import {
   listActivity,
   putCachedResponse,
   releaseActivityClaim,
+  transitionCachedResponse,
 } from './store.mjs'
 
 export const MAX_COMPANY_WORK_ORDERS = 40
@@ -21,6 +22,7 @@ const CREATE_FIELDS = new Set(['clientId', 'cycleId', 'agents', 'evidence', 'rol
 const LIST_FIELDS = new Set(['clientId', 'limit'])
 const GET_FIELDS = new Set(['clientId', 'workOrderId'])
 const RUN_FIELDS = new Set(['clientId', 'workOrderId', 'planHash', 'confirmation'])
+const CANCEL_FIELDS = new Set(['clientId', 'workOrderId', 'planHash', 'confirmation'])
 const PROOF_FIELDS = new Set(['clientId', 'workOrderId'])
 const REVIEW_FIELDS = new Set([
   'clientId',
@@ -112,6 +114,8 @@ function publicWorkOrder(record, { includeResult = true } = {}) {
     updatedAt: record.updatedAt,
     completedAt: record.completedAt || null,
     dispatchAttempts: Number(record.dispatchAttempts || 0),
+    cancelledAt: record.cancelledAt || null,
+    evidenceState: record.input === null ? 'scrubbed' : 'retained',
     plan: record.plan,
     evidence: record.plan.assignments.map((assignment) => ({
       agentId: assignment.agentId,
@@ -129,6 +133,19 @@ async function readWorkOrder(workOrderId, options = {}) {
     return isRecord(record) && record.workOrderId === workOrderId ? record : null
   } catch {
     return null
+  }
+}
+
+async function transitionWorkOrder(record, nextRecord, options = {}) {
+  const transition = options.transitionWorkOrder || transitionCachedResponse
+  try {
+    const result = await transition(recordKey(record.workOrderId), {
+      status: record.status,
+      planHash: record.planHash,
+    }, nextRecord)
+    return isRecord(result) ? result : { updated: false, reason: 'store_unavailable' }
+  } catch {
+    return { updated: false, reason: 'store_unavailable' }
   }
 }
 
@@ -358,6 +375,16 @@ export async function runCompanyWorkOrder(input, options = {}) {
       confirmation: `RUN ${workOrderId}`,
     })
   }
+  if (record.status === 'cancelled') {
+    if (record.input !== null || record.cancellation?.evidenceScrubbed !== true) {
+      return failure('company_work_order_state_unavailable', { status: 'recovery_required', workOrderId })
+    }
+    return failure('company_work_order_cancelled', {
+      status: 'conflict',
+      workOrderId,
+      workOrder: publicWorkOrder(record),
+    })
+  }
   if (FINAL_STATUSES.has(record.status) && isRecord(record.result)) {
     return {
       ok: true,
@@ -371,18 +398,55 @@ export async function runCompanyWorkOrder(input, options = {}) {
 
   const save = options.putWorkOrder || putCachedResponse
   const now = () => String(options.now?.() || new Date().toISOString())
-  const dispatchAt = now()
-  const running = {
-    ...record,
-    status: 'running',
-    startedAt: record.startedAt || dispatchAt,
-    dispatchAttempts: Number(record.dispatchAttempts || 0) + 1,
-    updatedAt: dispatchAt,
+  let running = record
+  if (record.status === 'planned') {
+    const dispatchAt = now()
+    const candidate = {
+      ...record,
+      status: 'running',
+      startedAt: record.startedAt || dispatchAt,
+      dispatchAttempts: Number(record.dispatchAttempts || 0) + 1,
+      updatedAt: dispatchAt,
+    }
+    const transitioned = await transitionWorkOrder(record, candidate, options)
+    if (!transitioned.updated) {
+      const latest = await readWorkOrder(workOrderId, options)
+      if (!latest) return failure('company_work_order_store_unavailable', { status: 'blocked', workOrderId })
+      if (latest.status === 'cancelled') {
+        if (latest.input !== null || latest.cancellation?.evidenceScrubbed !== true) {
+          return failure('company_work_order_state_unavailable', { status: 'recovery_required', workOrderId })
+        }
+        return failure('company_work_order_cancelled', {
+          status: 'conflict',
+          workOrderId,
+          workOrder: publicWorkOrder(latest),
+        })
+      }
+      if (FINAL_STATUSES.has(latest.status) && isRecord(latest.result)) {
+        return {
+          ok: true,
+          mode: 'work_order_run',
+          replayed: true,
+          workOrder: publicWorkOrder(latest),
+          cycleResult: latest.result,
+        }
+      }
+      if (latest.status === 'running') {
+        return failure('company_work_order_running', {
+          status: 'duplicate',
+          workOrderId,
+          workOrder: publicWorkOrder(latest),
+        })
+      }
+      const reason = transitioned.reason === 'store_unavailable'
+        ? 'company_work_order_store_unavailable'
+        : 'company_work_order_transition_conflict'
+      return failure(reason, { status: transitioned.reason === 'store_unavailable' ? 'blocked' : 'conflict', workOrderId })
+    }
+    running = candidate
+  } else if (record.status !== 'running') {
+    return failure('company_work_order_invalid_state', { status: 'conflict', workOrderId })
   }
-  let runningStored = false
-  try { runningStored = Boolean(await save(recordKey(workOrderId), running)) }
-  catch { runningStored = false }
-  if (!runningStored) return failure('company_work_order_store_unavailable', { status: 'blocked', workOrderId })
 
   const execute = options.runCompanyCycle || runCompanyCycle
   let result
@@ -434,6 +498,88 @@ export async function runCompanyWorkOrder(input, options = {}) {
   }
 }
 
+export async function cancelCompanyWorkOrder(input, options = {}) {
+  const fields = onlyFields(input, CANCEL_FIELDS)
+  if (!fields.ok) return fields
+  const clientId = normalizeId(input.clientId, 'company_invalid_client_id')
+  if (isRecord(clientId)) return clientId
+  const workOrderId = normalizeId(input.workOrderId, 'company_work_order_invalid_id')
+  if (isRecord(workOrderId)) return workOrderId
+  const record = await readWorkOrder(workOrderId, options)
+  if (!record || record.clientId !== clientId) return failure('company_work_order_not_found')
+  if (!sameHash(input.planHash, record.planHash)) {
+    return failure('company_work_order_plan_mismatch', { status: 'conflict', workOrderId })
+  }
+  const confirmation = `CANCEL AND SCRUB ${workOrderId} ${record.planHash}`
+  if (String(input.confirmation || '') !== confirmation) {
+    return failure('company_work_order_cancel_confirmation_required', { workOrderId, confirmation })
+  }
+  if (record.status === 'cancelled') {
+    if (record.input !== null || record.cancellation?.evidenceScrubbed !== true) {
+      return failure('company_work_order_state_unavailable', { status: 'recovery_required', workOrderId })
+    }
+    return {
+      ok: true,
+      mode: 'work_order_cancel',
+      replayed: true,
+      workOrder: publicWorkOrder(record),
+    }
+  }
+  if (record.status !== 'planned' || !isRecord(record.input)) {
+    return failure('company_work_order_cancel_not_allowed', {
+      status: 'conflict',
+      workOrderId,
+      workOrder: publicWorkOrder(record),
+    })
+  }
+
+  const now = String(options.now?.() || new Date().toISOString())
+  const cancelled = {
+    ...record,
+    status: 'cancelled',
+    updatedAt: now,
+    cancelledAt: now,
+    input: null,
+    cancellation: {
+      evidenceScrubbed: true,
+      modelRequested: false,
+    },
+  }
+  const transitioned = await transitionWorkOrder(record, cancelled, options)
+  if (!transitioned.updated) {
+    const latest = await readWorkOrder(workOrderId, options)
+    if (!latest) return failure('company_work_order_store_unavailable', { status: 'blocked', workOrderId })
+    if (latest.status === 'cancelled' && sameHash(latest.planHash, record.planHash)) {
+      if (latest.input !== null || latest.cancellation?.evidenceScrubbed !== true) {
+        return failure('company_work_order_state_unavailable', { status: 'recovery_required', workOrderId })
+      }
+      return {
+        ok: true,
+        mode: 'work_order_cancel',
+        replayed: true,
+        workOrder: publicWorkOrder(latest),
+      }
+    }
+    if (latest.status !== 'planned') {
+      return failure('company_work_order_cancel_not_allowed', {
+        status: 'conflict',
+        workOrderId,
+        workOrder: publicWorkOrder(latest),
+      })
+    }
+    const reason = transitioned.reason === 'store_unavailable'
+      ? 'company_work_order_store_unavailable'
+      : 'company_work_order_transition_conflict'
+    return failure(reason, { status: transitioned.reason === 'store_unavailable' ? 'blocked' : 'conflict', workOrderId })
+  }
+  return {
+    ok: true,
+    mode: 'work_order_cancel',
+    replayed: false,
+    workOrder: publicWorkOrder(cancelled),
+  }
+}
+
 export async function getCompanyWorkOrderProof(input, options = {}) {
   const fields = onlyFields(input, PROOF_FIELDS)
   if (!fields.ok) return fields
@@ -445,6 +591,9 @@ export async function getCompanyWorkOrderProof(input, options = {}) {
   if (!record || record.clientId !== clientId) return failure('company_work_order_not_found')
   if (!REVIEWABLE_STATUSES.has(record.status) || !isRecord(record.result)) {
     return failure('company_work_order_proof_unavailable', { status: record.status, workOrderId })
+  }
+  if (record.input !== null) {
+    return failure('company_work_order_state_unavailable', { status: 'recovery_required', workOrderId })
   }
   const review = await readWorkOrderReview(workOrderId, options)
   return {
@@ -466,6 +615,9 @@ export async function reviewCompanyWorkOrder(input, options = {}) {
   if (!record || record.clientId !== clientId) return failure('company_work_order_not_found')
   if (!REVIEWABLE_STATUSES.has(record.status) || !isRecord(record.result)) {
     return failure('company_work_order_not_reviewable', { status: record.status, workOrderId })
+  }
+  if (record.input !== null) {
+    return failure('company_work_order_state_unavailable', { status: 'recovery_required', workOrderId })
   }
 
   const exactResultHash = sha256(stableStringify(record.result))
@@ -563,6 +715,7 @@ export async function reviewCompanyWorkOrder(input, options = {}) {
 }
 
 export default {
+  cancelCompanyWorkOrder,
   createCompanyWorkOrder,
   getCompanyWorkOrderProof,
   getCompanyWorkOrder,

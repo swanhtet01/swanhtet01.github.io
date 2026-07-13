@@ -405,6 +405,60 @@ export async function putCachedResponse(cacheKey, payload) {
   return true
 }
 
+// Atomically replace one cached work-order payload only while its status and plan hash still match.
+// This prevents a dispatch and a cancellation from both winning after reading the same planned row.
+export async function transitionCachedResponse(cacheKey, expected, payload) {
+  const key = String(cacheKey || '').trim()
+  const status = String(expected?.status || '').trim()
+  const planHash = String(expected?.planHash || '').trim()
+  const valid = key
+    && /^[a-z][a-z_]{0,39}$/.test(status)
+    && /^[a-f0-9]{64}$/.test(planHash)
+    && payload && typeof payload === 'object' && !Array.isArray(payload)
+  if (!valid) return { updated: false, durable: mode !== 'memory', reason: 'invalid_transition' }
+
+  if (mode === 'supabase') {
+    try {
+      const query = [
+        `cache_key=eq.${encodeURIComponent(key)}`,
+        `payload->>status=eq.${encodeURIComponent(status)}`,
+        `payload->>planHash=eq.${encodeURIComponent(planHash)}`,
+        'select=cache_key',
+      ].join('&')
+      const rows = await rest('PATCH', `supermega_ai_cache?${query}`, { payload })
+      return Array.isArray(rows) && rows.length === 1
+        ? { updated: true, durable: true }
+        : { updated: false, durable: true, reason: 'transition_conflict' }
+    } catch {
+      return { updated: false, durable: false, reason: 'store_unavailable' }
+    }
+  }
+  if (mode === 'postgres') {
+    try {
+      await ensurePgTables()
+      const rows = await q(
+        `update supermega_ai_cache
+         set payload=$4
+         where cache_key=$1 and payload->>'status'=$2 and payload->>'planHash'=$3
+         returning cache_key`,
+        [key, status, planHash, JSON.stringify(payload)],
+      )
+      return rows.length === 1
+        ? { updated: true, durable: true }
+        : { updated: false, durable: true, reason: 'transition_conflict' }
+    } catch {
+      return { updated: false, durable: false, reason: 'store_unavailable' }
+    }
+  }
+
+  const current = mem.aiCache.get(key)
+  if (!current || current.status !== status || current.planHash !== planHash) {
+    return { updated: false, durable: false, reason: 'transition_conflict' }
+  }
+  mem.aiCache.set(key, payload)
+  return { updated: true, durable: false }
+}
+
 // ---------- approval queue ----------
 // State changes are compare-and-swap updates on status + version. Provider credentials never enter
 // these rows; payload contains only the exact owner-reviewed action arguments.
@@ -645,4 +699,4 @@ export async function ping() {
   return { ok: false, mode, detail: 'unknown_mode' }
 }
 
-export default { mode, listLeads, getLead, insertLead, updateLead, listClients, listProjects, createClient, getClient, createProject, updateProject, getProject, markDepositPaid, convertedLeadIds, saveDeal, listDeals, updateDeal, logActivity, claimActivity, releaseActivityClaim, listActivity, getTokenUsage, addTokenUsage, getCachedResponse, putCachedResponse, createApprovalRecord, getApprovalRecord, listApprovalRecords, transitionApprovalRecord, recordPaymentEvent, ping, bumpGraduation, recordBuildModules, listGraduation }
+export default { mode, listLeads, getLead, insertLead, updateLead, listClients, listProjects, createClient, getClient, createProject, updateProject, getProject, markDepositPaid, convertedLeadIds, saveDeal, listDeals, updateDeal, logActivity, claimActivity, releaseActivityClaim, listActivity, getTokenUsage, addTokenUsage, getCachedResponse, putCachedResponse, transitionCachedResponse, createApprovalRecord, getApprovalRecord, listApprovalRecords, transitionApprovalRecord, recordPaymentEvent, ping, bumpGraduation, recordBuildModules, listGraduation }
