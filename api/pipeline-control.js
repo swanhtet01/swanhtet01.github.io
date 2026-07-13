@@ -83,13 +83,8 @@ function safeWorkcellActivationHandoff(value) {
     },
     'owner-command': {
       packageName: 'Owner Command',
-      requiresClickupList: true,
-      providerInputs: [
-        'SUPERMEGA_NEW_CLIENT_PAYPAL_CLIENT_ID',
-        'SUPERMEGA_NEW_CLIENT_PAYPAL_CLIENT_SECRET',
-        'SUPERMEGA_NEW_CLIENT_PIPEDRIVE_ACCESS_TOKEN|SUPERMEGA_NEW_CLIENT_PIPEDRIVE_API_TOKEN',
-        'SUPERMEGA_NEW_CLIENT_CLICKUP_ACCESS_TOKEN|SUPERMEGA_NEW_CLIENT_CLICKUP_API_TOKEN',
-      ],
+      requiresClickupList: false,
+      providerInputs: [],
     },
   }
   const runtimeWorkcellSlug = text(source.runtime_workcell_slug)
@@ -106,7 +101,9 @@ function safeWorkcellActivationHandoff(value) {
     .replace(/[\u0000-\u001f\u007f]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim() || 'Client'
-  const clickupListId = truncate(sourceManifest.clickupListId, 120).replace(/[^a-zA-Z0-9_-]/g, '')
+  const clickupListId = profile.requiresClickupList
+    ? truncate(sourceManifest.clickupListId, 120).replace(/[^a-zA-Z0-9_-]/g, '')
+    : ''
   const missingManifestFields = profile.requiresClickupList && !clickupListId ? ['clickupListId'] : []
   const deliveryUtcCandidate = truncate(sourceManifest.deliveryUtc, 5)
   const deliveryUtc = /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(deliveryUtcCandidate) ? deliveryUtcCandidate : '01:30'

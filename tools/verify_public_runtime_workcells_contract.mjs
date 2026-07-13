@@ -33,7 +33,8 @@ requireTokens('runtime_catalog', products, [
   'data-runtime-workcell="owner-command"',
   'A daily settled-cash, fees, net receipts, and exception brief.',
   'Revenue-at-risk deals matched against the team work queue.',
-  'One daily command brief across cash, sales pipeline, and delivery work.',
+  'One daily action brief from the sales, cash, delivery, and issue updates already reaching the owner.',
+  'Updates the owner forwards to one private Telegram bot',
   '/contact/?package=workcell-cash-close&amp;utm_source=products',
   '/contact/?package=workcell-pipeline-control&amp;utm_source=products',
   '/contact/?package=workcell-owner-command&amp;utm_source=products',
@@ -55,6 +56,9 @@ requireTokens('workcell_intake', contact, [
   "id: 'cash-close'",
   "id: 'pipeline-control'",
   "id: 'owner-command'",
+  'Owner Command turns the updates already reaching you into one daily sales, cash, delivery, and issue brief through a private Telegram bot.',
+  "launchBlockers: 'No private Telegram bot | No owner chat | No agreed delivery time'",
+  "automationBoundary: 'Reads only the configured owner chat. Delivery is explicit; any later task action requires a separate approved setup.'",
   "set('template_id', selectedPackage.id || '')",
   "set('acceptance_tests', selectedPackage.acceptanceTests || '')",
   "set('launch_blockers', selectedPackage.launchBlockers || '')",
@@ -70,7 +74,13 @@ requireTokens('contact_order_packet', contactApi, [
   'acceptance_tests: acceptanceTests',
   'launch_blockers: launchBlockers',
   'automation_boundary: automationBoundary',
+  "requires_clickup_list: false",
+  "modules: ['telegram_owner_updates_read', 'owner_command_brief', 'source_trace', 'owner_delivery', 'optional_approval_task_draft']",
 ])
+
+const ownerCatalog = products.match(/<article class="runtime-workcell" data-runtime-workcell="owner-command">([\s\S]*?)<\/article>/)?.[1] || ''
+if (!ownerCatalog) fail('owner_command_catalog_missing')
+if (/PayPal|Pipedrive|ClickUp/i.test(ownerCatalog)) fail('owner_command_catalog_requires_external_saas')
 
 for (const [label, html] of [['products', products], ['contact', contact]]) {
   if (/\bUSD\b|\$\s?\d/.test(html)) fail(`${label}_contains_public_usd_price`)

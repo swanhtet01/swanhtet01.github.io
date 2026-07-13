@@ -48,14 +48,9 @@ const cases = [
     slug: 'owner-command',
     name: 'Owner Command',
     lane: 'owner_command_workcell',
-    status: 'needs_manifest_inputs',
-    clickupRequired: true,
-    providerInputs: [
-      'SUPERMEGA_NEW_CLIENT_PAYPAL_CLIENT_ID',
-      'SUPERMEGA_NEW_CLIENT_PAYPAL_CLIENT_SECRET',
-      'SUPERMEGA_NEW_CLIENT_PIPEDRIVE_ACCESS_TOKEN|SUPERMEGA_NEW_CLIENT_PIPEDRIVE_API_TOKEN',
-      'SUPERMEGA_NEW_CLIENT_CLICKUP_ACCESS_TOKEN|SUPERMEGA_NEW_CLIENT_CLICKUP_API_TOKEN',
-    ],
+    status: 'needs_client_credentials',
+    clickupRequired: false,
+    providerInputs: [],
   },
 ]
 
@@ -146,6 +141,11 @@ for (const [index, item] of cases.entries()) {
   assert.match(handoff.apply_command, /--apply/)
   assert.match(handoff.apply_command, new RegExp(`--confirm "PROVISION ${handoff.manifest_draft.projectName}"`))
   assert.deepEqual(handoff.required_secret_input_names, [...sharedInputs, ...item.providerInputs])
+  if (item.slug === 'owner-command') {
+    assert.equal(handoff.manifest_draft.clickupListId, '')
+    assert.equal(handoff.required_secret_input_names.some((name) => /PAYPAL|PIPEDRIVE|CLICKUP/.test(name)), false)
+    assert.ok(route.source_requests.some((request) => /private Telegram bot/i.test(request)))
+  }
   assert.deepEqual(handoff.optional_bootstrap_input_names, ['SUPERMEGA_NEW_CLIENT_SUPABASE_DB_URL', 'SUPERMEGA_NEW_CLIENT_CRON_SECRET'])
   assert.equal(Object.prototype.hasOwnProperty.call(handoff, 'secrets'), false)
   assert.equal(Object.prototype.hasOwnProperty.call(handoff.manifest_draft, 'secret'), false)
