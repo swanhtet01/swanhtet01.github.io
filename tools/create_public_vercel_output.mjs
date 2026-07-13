@@ -4726,7 +4726,7 @@ ${productCarouselScript}
 </html>`
 
 const simplifiedPublicShellHtml = `<!doctype html>
-<html lang="en">
+<html lang="en" data-theme="light">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -5445,7 +5445,139 @@ ${publicBehaviorEventsScript}
   </body>
 </html>`
 
-const collapsedContactHtml = unicornContactHtml
+const simplifiedPublicContactHtml = `<!doctype html>
+<html lang="en" data-theme="light">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="index,follow" />
+    <title>Contact | SUPERMEGA.dev</title>
+    <meta name="description" content="Tell SuperMega what needs to work better." />
+    <meta name="theme-color" content="#07111f" />
+    <link rel="canonical" href="https://supermega.dev/contact/" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" />
+    ${unicornSocialMeta({ title: 'Contact | SUPERMEGA.dev', description: 'Tell SuperMega what needs to work better.', url: 'https://supermega.dev/contact/' })}
+    <style>${unicornShellStyle}
+      .contact-main { width: min(100% - 48px, 1180px); margin: 0 auto; display: grid; grid-template-columns: minmax(0, 0.84fr) minmax(340px, 1.16fr); gap: clamp(32px, 7vw, 96px); align-items: start; padding: clamp(56px, 10vw, 120px) 0 72px; }
+      .contact-copy { padding-top: 18px; }
+      .contact-copy h1 { max-width: 10ch; margin: 12px 0 18px; font-size: clamp(44px, 5.8vw, 72px); line-height: 0.98; letter-spacing: 0; }
+      .contact-copy p { max-width: 34ch; margin: 0; color: var(--muted); font-size: 18px; line-height: 1.52; }
+      .contact-direct { display: grid; gap: 10px; margin-top: 32px; }
+      .contact-direct small { color: var(--muted); font-size: 12px; font-weight: 850; letter-spacing: 0.08em; text-transform: uppercase; }
+      .contact-direct-links { display: flex; flex-wrap: wrap; gap: 8px; }
+      .contact-direct a { display: inline-flex; align-items: center; min-height: 42px; border: 1px solid var(--line); border-radius: 8px; padding: 0 13px; color: var(--ink); font-size: 14px; font-weight: 800; text-decoration: none; }
+      .contact-direct a:hover { border-color: var(--blue); color: var(--blue); }
+      .contact-form { display: grid; gap: 18px; border: 1px solid var(--line); border-radius: 8px; padding: clamp(20px, 3vw, 32px); background: rgba(255,255,255,0.58); box-shadow: var(--shadow); }
+      .contact-form h2 { margin: 0; font-size: 20px; line-height: 1.2; }
+      .field-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+      .field-grid label { display: grid; gap: 7px; color: var(--muted); font-size: 12px; font-weight: 850; letter-spacing: 0.08em; text-transform: uppercase; }
+      .field-grid label.wide { grid-column: 1 / -1; }
+      .field-grid input, .field-grid textarea { width: 100%; min-width: 0; border: 1px solid var(--line); border-radius: 8px; padding: 12px; background: rgba(255,255,255,0.78); color: var(--ink); font: inherit; font-size: 16px; letter-spacing: 0; text-transform: none; }
+      .field-grid textarea { min-height: 144px; resize: vertical; }
+      .field-grid input:focus, .field-grid textarea:focus { outline: 3px solid rgba(59,130,246,0.2); border-color: var(--blue); }
+      .contact-form button { justify-content: center; min-height: 48px; }
+      .contact-policy, .form-status { margin: 0; color: var(--muted); font-size: 14px; font-weight: 700; line-height: 1.45; }
+      .form-status { min-height: 1.45em; }
+      :root[data-theme="dark"] .contact-form { background: rgba(17,27,48,0.76); }
+      :root[data-theme="dark"] .field-grid input, :root[data-theme="dark"] .field-grid textarea { background: rgba(10,16,32,0.82); }
+      @media (max-width: 780px) {
+        .contact-main { width: min(100% - 32px, 1180px); grid-template-columns: 1fr; gap: 32px; padding: 46px 0 48px; }
+        .contact-copy { padding-top: 0; }
+        .contact-copy h1 { max-width: 9ch; font-size: 50px; }
+        .contact-copy p { font-size: 17px; }
+      }
+      @media (max-width: 460px) {
+        .field-grid { grid-template-columns: 1fr; }
+        .field-grid label.wide { grid-column: auto; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+${unicornHeader}
+      <main class="contact-main">
+        <section class="contact-copy" aria-label="Contact SUPERMEGA">
+          <div class="eyebrow">Start with the work</div>
+          <h1>Tell us what needs to work better.</h1>
+          <p>Send a short note about the task that is slowing the team down. We will recommend the clearest next step.</p>
+          <div class="contact-direct" aria-label="Direct contact options">
+            <small>Or reach us directly</small>
+            <div class="contact-direct-links">
+              <a href="viber://chat?number=%2B9595000721">Chat on Viber</a>
+              <a href="mailto:swanhtet@supermega.dev">Email SuperMega</a>
+              <a href="tel:+9595000721">+95 9 500 0721</a>
+            </div>
+          </div>
+        </section>
+        <form class="contact-form" action="/api/contact-submissions" data-sm-contact-form method="post">
+          <input type="hidden" name="workflow" value="General enquiry" />
+          <input type="hidden" name="first_output" value="General enquiry" />
+          <input type="hidden" name="requested_package" value="General enquiry" />
+          <input type="hidden" name="product_area" value="General enquiry" />
+          <input type="hidden" name="source_url" value="https://supermega.dev/contact/" />
+          <input type="hidden" name="page_path" value="/contact/" />
+          <input type="hidden" name="referrer" value="" />
+          <input type="hidden" name="utm_source" value="" />
+          <input type="hidden" name="utm_medium" value="" />
+          <input type="hidden" name="utm_campaign" value="" />
+          <input type="hidden" name="utm_content" value="" />
+          <input type="hidden" name="utm_term" value="" />
+          <h2>Contact SuperMega</h2>
+          <div class="field-grid">
+            <label>Name<input autocomplete="name" name="name" required /></label>
+            <label>Work email<input autocomplete="email" name="email" required type="email" /></label>
+            <label>Company<input autocomplete="organization" name="company" required /></label>
+            <label class="wide">What do you need?<textarea name="goal" required></textarea></label>
+          </div>
+          <input autocomplete="off" name="website" style="display:none" tabindex="-1" />
+          <button class="btn primary" type="submit">Send request</button>
+          <p class="contact-policy">We use this note to recommend the clearest next step. No account or data connection is made before you approve it.</p>
+          <p class="form-status" data-contact-status aria-live="polite"></p>
+        </form>
+      </main>
+      <footer>
+        <span>Powered by SuperMega Technologies</span>
+        <span class="footer-links"><a href="https://app.supermega.dev/" target="_blank" rel="noopener noreferrer">Open app</a><a href="https://demo.supermega.dev/" target="_blank" rel="noopener noreferrer">Try demo</a><a href="/contact/">Contact</a><a href="/privacy/">Privacy</a></span>
+      </footer>
+    </div>
+    <script>
+      (function () {
+        const form = document.querySelector('[data-sm-contact-form]');
+        if (!form) return;
+        const set = function (name, value) {
+          const input = form.querySelector('[name="' + name + '"]');
+          if (input) input.value = value || '';
+        };
+        const search = new URLSearchParams(window.location.search);
+        set('source_url', window.location.href);
+        set('page_path', window.location.pathname + window.location.search);
+        set('referrer', document.referrer || '');
+        for (const key of ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term']) set(key, search.get(key) || '');
+        const status = form.querySelector('[data-contact-status]');
+        const submit = form.querySelector('button[type="submit"]');
+        form.addEventListener('submit', async function (event) {
+          event.preventDefault();
+          if (form.querySelector('[name="website"]')?.value) return;
+          if (status) status.textContent = 'Sending...';
+          if (submit) { submit.disabled = true; submit.textContent = 'Sending...'; }
+          try {
+            const response = await fetch(form.action, { method: 'POST', body: new FormData(form) });
+            const body = await response.json().catch(function () { return {}; });
+            if (!response.ok) throw new Error(body.reason || 'send_failed');
+            if (status) status.textContent = 'Request sent.';
+            form.reset();
+          } catch {
+            if (status) status.textContent = 'Could not send here. Email swanhtet@supermega.dev.';
+          } finally {
+            if (submit) { submit.disabled = false; submit.textContent = 'Send request'; }
+          }
+        });
+      })();
+    </script>
+  </body>
+</html>`
+
+const collapsedContactHtml = simplifiedPublicContactHtml
 
 const publicSourceToScreenHtml = `<!doctype html>
 <html lang="en">
@@ -5741,7 +5873,7 @@ const config = {
       src: '^/(?:agentops|agentops-toolbox|ai-back-office|back-office-operator|back-office-workflow-desk|openclaw|office-operator)/?$',
       status: 308,
       headers: {
-        Location: '/contact/?package=back-office-workflow-desk',
+        Location: '/',
       },
     },
     {
@@ -5791,7 +5923,7 @@ const config = {
       src: '^/products/(?:agentops|agentops-toolbox|ai-agent-operator|ai-back-office|back-office-operator|back-office-workflow-desk|openclaw)/?$',
       status: 308,
       headers: {
-        Location: '/contact/?package=back-office-workflow-desk',
+        Location: '/',
       },
     },
     {
@@ -5838,7 +5970,8 @@ const config = {
     },
     {
       src: '^/work/?$',
-      dest: '/work/index.html',
+      status: 308,
+      headers: { Location: '/' },
     },
     {
       src: '^/(?:site/.*|favicon\\.svg|favicon-[0-9]+\\.png|apple-touch-icon\\.png|vite\\.svg|site\\.webmanifest)$',

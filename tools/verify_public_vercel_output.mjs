@@ -90,8 +90,8 @@ for (const src of [
   '^/products/(?:agentops|agentops-toolbox|ai-agent-operator|ai-back-office|back-office-operator|back-office-workflow-desk|openclaw)/?$',
 ]) {
   const route = (config.routes || []).find((entry) => entry.src === src)
-  if (route?.status !== 308 || route?.headers?.Location !== '/contact/?package=back-office-workflow-desk') {
-    fail('agentops_route_contract_missing', { src, expected: { status: 308, Location: '/contact/?package=back-office-workflow-desk' }, actual: route })
+  if (route?.status !== 308 || route?.headers?.Location !== '/') {
+    fail('retired_agentops_route_not_redirected_home', { src, expected: { status: 308, Location: '/' }, actual: route })
   }
 }
 
@@ -1116,9 +1116,6 @@ for (const [id, name] of publicAgentTemplateContract) {
   if (!aiWorkerGuideHtml.includes(id) || (!aiWorkerGuideHtml.includes(name) && !aiWorkerGuideHtml.includes(htmlEscaped(name)))) {
     fail('public_ai_worker_user_guide_template_missing', { id, name })
   }
-  if (!contactHtml.includes(id)) {
-    fail('public_agent_template_missing_from_contact_router', { id })
-  }
   const starterJsonPath = resolve(staticDir, 'site/agent-templates', `${id}.json`)
   const starterMarkdownPath = resolve(staticDir, 'site/agent-templates', `${id}.md`)
   const starterPagePath = resolve(staticDir, 'agent-templates', id, 'index.html')
@@ -1209,10 +1206,9 @@ for (const [id, name] of publicAgentTemplateContract) {
     }
   }
 }
-const agentTemplatePublicHtml = [productsHtml, contactHtml, starterPageIndexHtml].join('\n')
-for (const token of ['AI worker library', 'View setup kit', 'name="template_id"', 'name="starter_kit_url"', "search.get('template')", '/site/agent-templates/daily-intelligence-brief.json', '/agent-templates/daily-intelligence-brief/setup/']) {
-  if (!agentTemplatePublicHtml.includes(token)) {
-    fail('public_agent_template_contract_missing', { token })
+for (const token of ['templatePackages', 'deskpos-quickstart', 'Custom Solutions & AI Agents', 'name="template_id"', 'name="starter_kit_url"', "search.get('template')", '/site/agent-templates/']) {
+  if (contactHtml.includes(token)) {
+    fail('retired_catalog_payload_leaked_into_contact', { token })
   }
 }
 const behaviorFunctionPath = resolve(functionsDir, 'api/behavior-events.js.func/api/behavior-events.js')

@@ -46,24 +46,25 @@ requireTokens('runtime_prices', products, [
   `From ${pipelinePrice}`,
 ])
 
-requireTokens('workcell_intake', contact, [
+requireTokens('simple_contact_intake', contact, [
+  'data-sm-contact-form',
+  'General enquiry',
+  'What do you need?',
+  'No account or data connection is made before you approve it.',
+])
+
+for (const token of [
+  'workcell-cash-close',
+  'workcell-pipeline-control',
+  'workcell-owner-command',
+  'name="template_id"',
   'name="acceptance_tests"',
   'name="launch_blockers"',
   'name="automation_boundary"',
-  "'workcell-cash-close'",
-  "'workcell-pipeline-control'",
-  "'workcell-owner-command'",
-  "id: 'cash-close'",
-  "id: 'pipeline-control'",
-  "id: 'owner-command'",
-  'Owner Command turns the updates already reaching you into one daily sales, cash, delivery, and issue brief through a private Telegram bot.',
-  "launchBlockers: 'No private Telegram bot | No owner chat | No agreed delivery time'",
-  "automationBoundary: 'Reads only the configured owner chat. Delivery is explicit; any later task action requires a separate approved setup.'",
-  "set('template_id', selectedPackage.id || '')",
-  "set('acceptance_tests', selectedPackage.acceptanceTests || '')",
-  "set('launch_blockers', selectedPackage.launchBlockers || '')",
-  "set('automation_boundary', selectedPackage.automationBoundary || '')",
-])
+  'Owner Command turns the updates already reaching you',
+]) {
+  if (contact.includes(token)) fail('retired_workcell_catalog_leaked_into_contact', { token })
+}
 
 requireTokens('contact_order_packet', contactApi, [
   'const templateId = truncate(payload.template_id, 100)',

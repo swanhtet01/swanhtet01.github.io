@@ -68,6 +68,17 @@ if (demoRoute?.status !== 308 || demoRoute?.headers?.Location !== 'https://demo.
   fail('legacy_demo_route_not_forwarded', { actual: demoRoute })
 }
 
+for (const src of [
+  '^/(?:agentops|agentops-toolbox|ai-back-office|back-office-operator|back-office-workflow-desk|openclaw|office-operator)/?$',
+  '^/products/(?:agentops|agentops-toolbox|ai-agent-operator|ai-back-office|back-office-operator|back-office-workflow-desk|openclaw)/?$',
+  '^/work/?$',
+]) {
+  const route = (config.routes || []).find((entry) => entry.src === src)
+  if (route?.status !== 308 || route?.headers?.Location !== '/') {
+    fail('retired_catalog_alias_not_redirected_home', { src, actual: route })
+  }
+}
+
 for (const allowed of ['https://supermega.dev/', 'https://supermega.dev/contact/', 'https://supermega.dev/privacy/']) {
   if (!sitemap.includes(allowed)) fail('front_door_sitemap_missing_entry', { allowed })
 }
