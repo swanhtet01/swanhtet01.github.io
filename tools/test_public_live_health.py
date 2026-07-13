@@ -17,6 +17,7 @@ import check_public_live_health as checker
 BASE = "https://public.example/"
 WWW = "https://www.example/"
 APP = "https://app.example/"
+DEMO = "https://demo.example/"
 CONSOLE = "https://console.example/"
 AGENT_INTAKE = f"{BASE}contact/?from=ai-agent-solution"
 
@@ -72,6 +73,16 @@ def healthy_responses() -> dict[str, checker.HttpResult]:
         "<title>Shop - SuperMega</title>",
         '<div id="root"></div>',
         '<script type="module" crossorigin src="/assets/index-current.js"></script>',
+    )
+    demo = page(
+        "<title>SuperMega - open the app</title>",
+        "Open a working Shop workspace or Shop POS demo.",
+        "https://app.supermega.dev/",
+        "https://pos.supermega.dev/?demo=",
+        'data-en="Open Shop POS"',
+        'data-my="Shop POS ဖွင့်ရန်"',
+        "assets/noto-sans-myanmar.woff2",
+        "Shop POS Shop POS Shop POS Shop POS",
     )
     console = page(
         "<title>SuperMega Console</title>",
@@ -157,6 +168,16 @@ def healthy_responses() -> dict[str, checker.HttpResult]:
             f"{APP}assets/index-current.js", "Shop" + ("x" * 1400)
         ),
         f"{APP}api/health": result(f"{APP}api/health", app_health),
+        DEMO: result(
+            DEMO,
+            demo,
+            headers={
+                "Content-Type": "text/html; charset=utf-8",
+                "X-Content-Type-Options": "nosniff",
+                "X-Frame-Options": "SAMEORIGIN",
+                "Referrer-Policy": "strict-origin-when-cross-origin",
+            },
+        ),
         CONSOLE: result(CONSOLE, console),
         f"{CONSOLE}api/status": result(f"{CONSOLE}api/status", kernel_status),
         f"{CONSOLE}api/agent-company": result(
@@ -177,13 +198,55 @@ class PortfolioHealthTest(unittest.TestCase):
             return responses[url]
 
         with patch.object(checker, "fetch", side_effect=fake_fetch):
-            return checker.run(BASE, WWW, APP, CONSOLE, timeout=1, attempts=1)
+            return checker.run(BASE, WWW, APP, DEMO, CONSOLE, timeout=1, attempts=1)
 
-    def test_healthy_portfolio_passes_all_seventeen_checks(self):
+    def test_healthy_portfolio_passes_all_eighteen_checks(self):
         report = self.run_report(healthy_responses())
         self.assertEqual(report["status"], "ready")
-        self.assertEqual(report["checks"], 17)
+        self.assertEqual(report["checks"], 18)
         self.assertEqual(report["failures"], [])
+
+    def test_retired_product_name_fails_demo_page(self):
+        responses = healthy_responses()
+        responses[DEMO] = result(
+            DEMO,
+            responses[DEMO].body.decode() + "DeskPOS",
+            headers=responses[DEMO].headers,
+        )
+        report = self.run_report(responses)
+        self.assertEqual(report["status"], "error")
+        failure = next(item for item in report["failures"] if item["kind"] == "demo_shop_pos")
+        self.assertIn("DeskPOS", failure["unexpected"])
+
+    def test_missing_burmese_action_fails_demo_page(self):
+        responses = healthy_responses()
+        responses[DEMO] = result(
+            DEMO,
+            responses[DEMO].body.decode().replace('data-my="Shop POS ဖွင့်ရန်"', ""),
+            headers=responses[DEMO].headers,
+        )
+        report = self.run_report(responses)
+        failure = next(item for item in report["failures"] if item["kind"] == "demo_shop_pos")
+        self.assertIn('data-my="Shop POS ဖွင့်ရန်"', failure["missing"])
+
+    def test_invalid_demo_security_header_fails_closed(self):
+        responses = healthy_responses()
+        responses[DEMO].headers["X-Frame-Options"] = "ALLOWALL"
+        report = self.run_report(responses)
+        failure = next(item for item in report["failures"] if item["kind"] == "demo_shop_pos")
+        self.assertIn("x-frame-options", failure["header_mismatches"])
+
+    def test_redirected_or_oversized_demo_fails_closed(self):
+        for response in (
+            result(DEMO, "", status=308, headers={"Location": "https://other.example/"}),
+            result(DEMO, "x" * (checker.DEMO_MAX_BYTES + 1)),
+        ):
+            with self.subTest(status=response.status, bytes=len(response.body)):
+                responses = healthy_responses()
+                responses[DEMO] = response
+                report = self.run_report(responses)
+                self.assertEqual(report["status"], "error")
+                self.assertTrue(any(item["kind"] == "demo_shop_pos" for item in report["failures"]))
 
     def test_missing_agent_context_fails_first_proof_route(self):
         responses = healthy_responses()
