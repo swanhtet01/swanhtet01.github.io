@@ -1,22 +1,27 @@
-name: SuperMega Platform — Build & Deploy
+name: SuperMega Public - Build and Deploy
 
-# Autonomous deploy pipeline for supermega-platform (supermega.dev).
-# Triggers on push to main or the console/kernel-fixes branch.
-# Requires VERCEL_TOKEN secret in GitHub repo settings.
-# Set via: Settings → Secrets and variables → Actions → New repository secret
-#   VERCEL_TOKEN  — from vercel.com/account/tokens (scope: full account)
+# The live public site is released from the canonical public branch, not main.
+# Project IDs are non-secret and lock prebuilt deploys to supermega-public.
 on:
   push:
     branches:
-      - main
-      - 'console/**'
+      - codex/public-enterprise-site
   workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: supermega-public-production
+  cancel-in-progress: false
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
-    # Only auto-deploy main; feature branches build + verify but don't promote to prod
-    environment: ${{ github.ref == 'refs/heads/main' && 'production' || 'preview' }}
+    environment: production
+    env:
+      VERCEL_ORG_ID: team_wI4l7ZgSxcEztQPSlCCYVeJ5
+      VERCEL_PROJECT_ID: prj_Yaf0cZYbiFXcLkMcKaAm4alPWMhR
 
     steps:
       - name: Checkout
@@ -28,17 +33,12 @@ jobs:
           node-version: 22
 
       - name: Build public output
-        working-directory: .
-        run: node tools/create_public_vercel_output.mjs
+        run: npm run public:build
 
-      - name: Verify build gate
-        working-directory: .
-        run: node tools/verify_public_vercel_output.mjs
+      - name: Verify full public gate
+        run: npm run public:verify
 
-      - name: Deploy to Vercel (production)
-        if: github.ref == 'refs/heads/main'
-        run: npx vercel deploy --prebuilt --prod --yes --token=${{ secrets.VERCEL_TOKEN }}
-
-      - name: Deploy to Vercel (preview)
-        if: github.ref != 'refs/heads/main'
-        run: npx vercel deploy --prebuilt --yes --token=${{ secrets.VERCEL_TOKEN }}
+      - name: Deploy canonical public production
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: npx vercel deploy --prebuilt --prod --yes --token="$VERCEL_TOKEN"
