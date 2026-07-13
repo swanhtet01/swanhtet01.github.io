@@ -1,11 +1,11 @@
 {
-    "public_host":  "supermega-public-iuij4dhby-swanhtet01s-projects.vercel.app",
-    "deployment_id":  "dpl_5HY98j4t31cQNjWSbme9UzZ4nNqF",
-    "locked_at":  "2026-07-12T23:53:28.0437568Z",
+    "public_host":  "supermega-public-h4mztimwq-swanhtet01s-projects.vercel.app",
+    "deployment_id":  "dpl_Dt74ZYNyyjHBpEFLBjiuYw23MmiV",
+    "locked_at":  "2026-07-13T00:20:31.7718445Z",
     "domains":  [
                     "supermega.dev",
                     "www.supermega.dev"
                 ],
     "project":  "supermega-public",
-    "reason":  "Runtime workcell catalog, exact lead routing, and no-secret provisioner handoff verified on the separated public project and attached to public domains."
+    "reason":  "Sanitized runtime workcell activation handoff is reviewable, copyable, and downloadable in the Operator Console with no credential fields or browser-side apply path; merged artifact verified on the separated public project and attached to public domains."
 }
