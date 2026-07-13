@@ -1981,6 +1981,98 @@ async function postLeadWebhook({ record }) {
   }
 }
 
+function opsIntakeTarget() {
+  return envText('SUPERMEGA_OPS_INTAKE_URL') || 'https://supermega-machine.vercel.app/api/intake'
+}
+
+function isSafeOpsIntakeUrl(value) {
+  try {
+    const url = new URL(value)
+    return (
+      url.protocol === 'https:' &&
+      url.hostname === 'supermega-machine.vercel.app' &&
+      url.pathname === '/api/intake' &&
+      !url.search &&
+      !url.hash
+    )
+  } catch {
+    return false
+  }
+}
+
+function opsIntakeStatus() {
+  const target = opsIntakeTarget()
+  const configured = Boolean(envText('SUPERMEGA_INTAKE_SECRET'))
+  return {
+    status: configured && isSafeOpsIntakeUrl(target) ? 'ready' : 'needs_configuration',
+    target,
+    contract: 'body_secret',
+  }
+}
+
+async function forwardOpsIntake({ record }) {
+  const intakeSecret = envText('SUPERMEGA_INTAKE_SECRET')
+  if (!intakeSecret) return { status: 'skipped', reason: 'ops_intake_not_configured' }
+
+  const target = opsIntakeTarget()
+  if (!isSafeOpsIntakeUrl(target)) {
+    return { status: 'skipped', reason: 'unsafe_ops_intake_url' }
+  }
+
+  const workflow = truncate([
+    record.template_id ? `Template: ${record.template_id}` : '',
+    record.starter_kit_url ? `Starter kit: ${record.starter_kit_url}` : '',
+    record.requested_package ? `Package: ${record.requested_package}` : '',
+    record.first_proof_target ? `First proof: ${record.first_proof_target}` : '',
+    record.price_hint ? `Price hint: ${record.price_hint}` : '',
+    record.entitlement_free_core ? `Free core entitlement: ${record.entitlement_free_core}` : '',
+    record.entitlement_paid_pilot ? `Paid pilot entitlement: ${record.entitlement_paid_pilot}` : '',
+    record.entitlement_premium ? `Premium maintained entitlement: ${record.entitlement_premium}` : '',
+    record.entitlement_gated_hands ? `Gated hands entitlement: ${record.entitlement_gated_hands}` : '',
+    record.entitlement_gate ? `Entitlement gate: ${record.entitlement_gate}` : '',
+    record.goal || '',
+    record.data || '',
+  ].filter(Boolean).join('\n'), 2400)
+
+  try {
+    const response = await fetch(target, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        Authorization: `Bearer ${intakeSecret}`,
+      },
+      signal: AbortSignal.timeout(8000),
+      body: JSON.stringify({
+        secret: intakeSecret,
+        source: 'website',
+        external_id: record.lead_id,
+        name: record.name,
+        email: record.email,
+        phone: record.phone,
+        company: record.company,
+        business_type: record.template_source_category || record.product_area || record.requested_package || 'inbound',
+        template_id: record.template_id,
+        starter_kit_url: record.starter_kit_url,
+        price_hint: record.price_hint,
+        workflow,
+      }),
+    })
+    const body = await response.json().catch(() => ({}))
+    if (!response.ok || body.ok === false) {
+      return { status: 'error', reason: `ops_intake_${response.status}`, target }
+    }
+    return {
+      status: 'ready',
+      target,
+      lead_id: text(body.lead_id) || null,
+      duplicate: body.duplicate === true,
+      fit_score: Number.isFinite(Number(body.fit_score)) ? Number(body.fit_score) : null,
+    }
+  } catch (error) {
+    return { status: 'error', reason: text(error?.message) || 'ops_intake_failed', target }
+  }
+}
+
 // Build the concise CEO lead-alert text, then push it via the shared Telegram helper.
 // Best-effort: the helper never throws and skips cleanly when TELEGRAM_* isn't configured.
 function telegramLeadMessage(record) {
@@ -2084,6 +2176,7 @@ async function handler(req, res) {
         pipeline_actions: pipelineActionStatus(),
         pipeline_actions_table: 'supermega_pipeline_actions',
         deskpos_pipeline: deskposPipelineStatus(),
+        ops_intake: opsIntakeStatus(),
         primary_datastore: datastore.datastoreStatus(),
         fallback_queue: fallbackQueueStatus(),
         management_mode: databaseConfigured() ? 'database_queue' : 'email_fallback',
@@ -2158,9 +2251,10 @@ async function handler(req, res) {
   const firstProofTask = buildFirstProofTaskPayload(record)
   const ledger = await saveLeadLedger({ record })
   const pipelineAction = await savePipelineAction({ record })
-  const [webhook, deskposPipeline] = await Promise.all([
+  const [webhook, deskposPipeline, opsIntake] = await Promise.all([
     postLeadWebhook({ record }),
     forwardDeskposPipeline({ record }),
+    forwardOpsIntake({ record }),
   ])
   const [delivery, confirmation, telegram, sheets] = await Promise.all([
     sendEmail({ record }),
@@ -2168,50 +2262,6 @@ async function handler(req, res) {
     notifyTelegram({ record }),
     appendToGoogleSheet({ record }),
   ])
-
-  // Forward to the Ops pipeline so the lead appears in the machine console
-  // Fire-and-forget: doesn't block or affect the response
-  ;(async () => {
-    const intakeSecret = text(process.env.SUPERMEGA_INTAKE_SECRET)
-    const intakeUrl = text(process.env.SUPERMEGA_OPS_INTAKE_URL) || 'https://supermega-machine.vercel.app/api/intake'
-    if (!intakeSecret) return
-    if (intakeUrl && !intakeUrl.startsWith('https://supermega-machine.vercel.app')) return
-    try {
-      await fetch(intakeUrl, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', 'Authorization': `Bearer ${intakeSecret}` },
-        signal: AbortSignal.timeout(5000),
-        body: JSON.stringify({
-          source: 'website',
-          external_id: record.lead_id,
-          name: record.name,
-          email: record.email,
-          phone: record.phone,
-          company: record.company,
-          business_type: record.template_source_category || record.product_area || record.requested_package || 'inbound',
-          template_id: record.template_id,
-          starter_kit_url: record.starter_kit_url,
-          price_hint: record.price_hint,
-          workflow: truncate([
-            record.template_id ? `Template: ${record.template_id}` : '',
-            record.starter_kit_url ? `Starter kit: ${record.starter_kit_url}` : '',
-            record.requested_package ? `Package: ${record.requested_package}` : '',
-            record.first_proof_target ? `First proof: ${record.first_proof_target}` : '',
-            record.price_hint ? `Price hint: ${record.price_hint}` : '',
-            record.entitlement_free_core ? `Free core entitlement: ${record.entitlement_free_core}` : '',
-            record.entitlement_paid_pilot ? `Paid pilot entitlement: ${record.entitlement_paid_pilot}` : '',
-            record.entitlement_premium ? `Premium maintained entitlement: ${record.entitlement_premium}` : '',
-            record.entitlement_gated_hands ? `Gated hands entitlement: ${record.entitlement_gated_hands}` : '',
-            record.entitlement_gate ? `Entitlement gate: ${record.entitlement_gate}` : '',
-            record.goal || goal || '',
-            record.data || '',
-          ].filter(Boolean).join('\n'), 2400),
-        }),
-      })
-    } catch (err) {
-      console.error('[contact-submissions] ops_intake_failed', err && err.message)
-    }
-  })().catch(() => {})
 
   // Email is a notification layer — only fail hard if the lead was not saved anywhere
   const leadSaved = ledger.status === 'ready' || pipelineAction.status === 'ready'
@@ -2270,6 +2320,7 @@ async function handler(req, res) {
     ledger,
     pipeline_action: pipelineAction,
     deskpos_pipeline: deskposPipeline,
+    ops_intake: opsIntake,
     webhook,
     confirmation,
     telegram,
@@ -2285,6 +2336,7 @@ async function handler(req, res) {
           : 'email_fallback',
       datastore: pipelineAction.adapter || ledger.adapter || 'email_fallback',
       deskpos: deskposPipeline,
+      ops_intake: opsIntake,
       workspace_id: 'public-site',
       lead_id: leadId,
       task_id: taskId,
@@ -2312,6 +2364,9 @@ handler.__test = {
   pipelineActionPayload,
   telegramLeadMessage,
   operatorConsoleUrl,
+  forwardOpsIntake,
+  isSafeOpsIntakeUrl,
+  opsIntakeStatus,
 }
 
 module.exports = handler
