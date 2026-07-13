@@ -29,13 +29,20 @@ if (!existsSync(configPath)) fail('missing_public_config')
 const config = JSON.parse(readFileSync(configPath, 'utf8'))
 
 requireTokens('home', home, [
-  '<title>SuperMega | Open the app or try the demo</title>',
-  '<h1 id="supermega-heading">SuperMega</h1>',
-  'https://app.supermega.dev/',
-  'https://demo.supermega.dev/',
-  'Need something built?',
-  'app.supermega.dev',
-  'demo.supermega.dev',
+  '<title>supermega.dev | Shop, Plant and AI Agent Solutions</title>',
+  '<h1 id="portfolio-heading">Shop. Plant. AI Agent Solutions.</h1>',
+  'supermega<span class="domain">.dev</span>',
+  '&gt;_</span>',
+  'https://app.supermega.dev/?demo=shop',
+  'https://app.supermega.dev/?demo=plant',
+  'Two products. One agent layer.',
+  '<strong>Shop</strong>',
+  '<strong>Plant</strong>',
+  '<strong>AI Agent Solutions</strong>',
+  'Build an agent solution',
+  'external actions approval-gated',
+  'src="/live-shop-workspace.png"',
+  'src="/live-shop-mobile.png"',
   '/favicon.svg',
 ])
 
@@ -46,9 +53,11 @@ for (const forbidden of [
   '>Products<',
   '>Pricing<',
   '>AI workers<',
-  'Custom Solutions &amp; AI Agents',
-  'Shop, Plant',
   'supermega-portal-card.png',
+  'https://demo.supermega.dev/',
+  'The intelligent workspace for daily operations.',
+  'Explore live demos',
+  'Open workspace',
 ]) {
   if (home.includes(forbidden)) fail('catalog_copy_or_stale_product_visual_on_home', { forbidden })
 }
@@ -58,7 +67,7 @@ for (const forbidden of ['placeholder="Drive folder', 'placeholder="Example:', '
 }
 
 const legacyCatalogRoute = (config.routes || []).find(
-  (route) => route.src === '^/(?:products|offers|pricing|plans|packages|agent-templates|ai-agents)(?:/.*)?$',
+  (route) => route.src === '^/(?:products|product|offers|pricing|plans|packages|agent-templates|ai-agents|work|operator|machine|card|megaos-preview|free)(?:/.*)?$',
 )
 if (legacyCatalogRoute?.status !== 308 || legacyCatalogRoute?.headers?.Location !== '/') {
   fail('legacy_catalog_route_not_retired', { actual: legacyCatalogRoute })
@@ -69,9 +78,7 @@ if (demoRoute?.status !== 308 || demoRoute?.headers?.Location !== 'https://demo.
 }
 
 for (const src of [
-  '^/(?:agentops|agentops-toolbox|ai-back-office|back-office-operator|back-office-workflow-desk|openclaw|office-operator)/?$',
-  '^/products/(?:agentops|agentops-toolbox|ai-agent-operator|ai-back-office|back-office-operator|back-office-workflow-desk|openclaw)/?$',
-  '^/work/?$',
+  '^/(?:agentops|agentops-toolbox|ai-back-office|back-office-operator|back-office-workflow-desk|openclaw|office-operator|try|book|setup|get-started|intake|free-tools|free-tool|builder|tool-builder|scan|calculator|workflow-scan|daily-close|payment-close|close-checker|mmqr|store-tool|agent-builder|agent-scope|ai-agent|agent-tool|agents|about|demos|demo-center|enterprise-demo|modules|portal-types|implementation|how-it-works|portfolio|tools|value|proof|platform|solutions|find-companies|company-list|task-list|receiving-log)/?$',
 ]) {
   const route = (config.routes || []).find((entry) => entry.src === src)
   if (route?.status !== 308 || route?.headers?.Location !== '/') {
