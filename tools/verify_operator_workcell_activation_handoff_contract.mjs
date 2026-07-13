@@ -148,10 +148,13 @@ for (const token of [
   'Copy plan command',
   'Copy gated apply command',
   'No credential values belong in this console',
+  'href="https://console.supermega.dev/#activation"',
+  'Open activation planner',
 ]) {
   assert.ok(rendererSource.includes(token), `renderer_missing:${token}`)
 }
 assert.doesNotMatch(rendererSource, /fetch\s*\(|<input|data-(?:execute|apply)-workcell|applyProvisionPlan/)
+assert.doesNotMatch(rendererSource, /console\.supermega\.dev\/[^"']*[?&](?:key|token|secret|credential|password)=/i)
 
 for (const token of [
   'SAMPLE-CASH-CLOSE-ACTIVATION',
@@ -159,6 +162,8 @@ for (const token of [
   'data-download-workcell-manifest=',
   'Copy gated apply command',
   'No credential values belong in this console',
+  'href="https://console.supermega.dev/#activation"',
+  'Open activation planner',
   '.operator-grid>*{min-width:0}',
   '.operator-panel .btn{min-height:44px}',
   '.operator-reply{box-sizing:border-box;width:100%;max-width:100%;min-width:0',
