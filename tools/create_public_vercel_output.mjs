@@ -618,9 +618,9 @@ const contactHtml = documentHtml({
   `,
   content: `<main class="contact-main">
   <section class="contact-copy" aria-label="Contact SuperMega">
-    <div class="contact-command">&gt;_ direct / contact</div>
-    <h1>What needs to work better?</h1>
-    <p>Send the shortest useful version of the problem. We will reply with the clearest next step.</p>
+    <div class="contact-command" data-contact-command>&gt;_ direct / contact</div>
+    <h1 data-contact-heading>What needs to work better?</h1>
+    <p data-contact-intro>Send the shortest useful version of the problem. We will reply with the clearest next step.</p>
     <div class="contact-direct" aria-label="Direct contact options">
       <a href="viber://chat?number=%2B9595000721"><span>Viber</span><strong>Chat directly</strong><span aria-hidden="true">&#8599;</span></a>
       <a href="mailto:swanhtet@supermega.dev"><span>Email</span><strong>swanhtet@supermega.dev</strong><span aria-hidden="true">&#8594;</span></a>
@@ -636,20 +636,68 @@ const contactHtml = documentHtml({
     <input type="hidden" name="utm_campaign" value="" />
     <input type="hidden" name="utm_content" value="" />
     <input type="hidden" name="utm_term" value="" />
-    <div class="contact-form-header"><h2>Send a request</h2><span class="form-ready">Ready</span></div>
+    <div class="contact-form-header"><h2 data-contact-form-heading>Send a request</h2><span class="form-ready">Ready</span></div>
     <div class="field-grid">
       <label>Name<input autocomplete="name" name="name" required /></label>
       <label>Work email<input autocomplete="email" name="email" required type="email" /></label>
-      <label>Company<input autocomplete="organization" name="company" required /></label>
-      <label class="wide">What do you need?<textarea name="goal" required></textarea></label>
+      <label class="wide">Company<input autocomplete="organization" name="company" required /></label>
+      <label class="wide"><span data-contact-goal-label>What do you need?</span><textarea name="goal" required></textarea></label>
     </div>
     <input autocomplete="off" name="website" style="display:none" tabindex="-1" />
-    <button class="btn primary" type="submit">Send request</button>
-    <p class="contact-policy">We use this note to recommend the clearest next step. No account or data connection is made before you approve it.</p>
+    <button class="btn primary" type="submit" data-contact-submit>Send request</button>
+    <p class="contact-policy" data-contact-policy>We use this note to recommend the clearest next step. No account or data connection is made before you approve it.</p>
     <p class="form-status" data-contact-status aria-live="polite"></p>
   </form>
 </main>
-<script>(function(){var form=document.querySelector('[data-sm-contact-form]');if(!form)return;function set(name,value){var input=form.querySelector('[name="'+name+'"]');if(input)input.value=value||'';}var search=new URLSearchParams(window.location.search);set('source_url',window.location.href);set('page_path',window.location.pathname+window.location.search);set('referrer',document.referrer||'');['utm_source','utm_medium','utm_campaign','utm_content','utm_term'].forEach(function(key){set(key,search.get(key)||'');});var status=form.querySelector('[data-contact-status]');var submit=form.querySelector('button[type="submit"]');form.addEventListener('submit',async function(event){event.preventDefault();var honeypot=form.querySelector('[name="website"]');if(honeypot&&honeypot.value)return;if(status)status.textContent='Sending...';if(submit){submit.disabled=true;submit.textContent='Sending...';}try{var response=await fetch(form.action,{method:'POST',body:new FormData(form)});var body=await response.json().catch(function(){return {};});if(!response.ok)throw new Error(body.reason||'send_failed');if(status)status.textContent='Request sent.';form.reset();}catch(error){if(status)status.textContent='Could not send here. Email swanhtet@supermega.dev.';}finally{if(submit){submit.disabled=false;submit.textContent='Send request';}}});})();</script>`,
+<script>(function(){
+  var form=document.querySelector('[data-sm-contact-form]');
+  if(!form)return;
+  var search=new URLSearchParams(window.location.search);
+  var agentIntent=search.get('from')==='ai-agent-solution';
+  var submit=form.querySelector('[data-contact-submit]');
+  var idleSubmitLabel='Send request';
+  function text(selector,value){var element=document.querySelector(selector);if(element)element.textContent=value;}
+  function set(name,value){var input=form.querySelector('[name="'+name+'"]');if(input)input.value=value||'';}
+  function hydrateTracking(){
+    set('source_url',window.location.href);
+    set('page_path',window.location.pathname+window.location.search);
+    set('referrer',document.referrer||'');
+    ['utm_source','utm_medium','utm_campaign','utm_content','utm_term'].forEach(function(key){set(key,search.get(key)||'');});
+  }
+  if(agentIntent){
+    document.title='AI Agent Solution | supermega.dev';
+    form.dataset.intake='ai-agent-solution';
+    text('[data-contact-command]','>_ agent / first proof');
+    text('[data-contact-heading]','What should your agent handle every week?');
+    text('[data-contact-intro]','Describe one repeated task, the information it reads, and the useful result your team needs. We will reply with the smallest proof to test first.');
+    text('[data-contact-form-heading]','Request an agent proof');
+    text('[data-contact-goal-label]','What does your team repeat?');
+    text('[data-contact-policy]','We start with one redacted sample and one reviewed output. No account, data connection, or external action is made before you approve it.');
+    idleSubmitLabel='Request first proof';
+    if(submit)submit.textContent=idleSubmitLabel;
+  }
+  hydrateTracking();
+  var status=form.querySelector('[data-contact-status]');
+  form.addEventListener('submit',async function(event){
+    event.preventDefault();
+    var honeypot=form.querySelector('[name="website"]');
+    if(honeypot&&honeypot.value)return;
+    if(status)status.textContent='Sending...';
+    if(submit){submit.disabled=true;submit.textContent='Sending...';}
+    try{
+      var response=await fetch(form.action,{method:'POST',body:new FormData(form)});
+      var body=await response.json().catch(function(){return {};});
+      if(!response.ok)throw new Error(body.reason||'send_failed');
+      if(status)status.textContent='Request sent.';
+      form.reset();
+      hydrateTracking();
+    }catch(error){
+      if(status)status.textContent='Could not send here. Email swanhtet@supermega.dev.';
+    }finally{
+      if(submit){submit.disabled=false;submit.textContent=idleSubmitLabel;}
+    }
+  });
+})();</script>`,
 })
 
 const privacyHtml = documentHtml({
