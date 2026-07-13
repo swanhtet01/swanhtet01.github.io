@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto'
+
 const ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$/
 const HASH_RE = /^[a-f0-9]{64}$/
 const MANIFEST_FIELDS = new Set(['clientId', 'cycleId', 'agents', 'evidence', 'roleBudget'])
@@ -48,6 +50,26 @@ function evidenceText(value) {
   }
 }
 
+function stableStringify(value) {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value)
+  if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`
+  return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${stableStringify(value[key])}`).join(',')}}`
+}
+
+function storedManifestInput(manifest) {
+  return {
+    clientId: manifest.clientId,
+    cycleId: manifest.cycleId,
+    agents: [...manifest.agents],
+    evidence: Object.fromEntries(manifest.agents.map((agentId) => [agentId, evidenceText(manifest.evidence[agentId])])),
+    roleBudget: manifest.roleBudget,
+  }
+}
+
+function stableHash(value) {
+  return createHash('sha256').update(stableStringify(value)).digest('hex')
+}
+
 export function validateAgentCompanyManifest(value) {
   if (!isRecord(value)) fail('agent_company_operator_invalid_manifest')
   const unknown = Object.keys(value).filter((field) => !MANIFEST_FIELDS.has(field)).sort()
@@ -87,6 +109,35 @@ export function validateAgentCompanyManifest(value) {
   return { clientId, cycleId, agents, evidence, roleBudget }
 }
 
+export function buildAgentCompanyManifestPreflight(value) {
+  const manifest = validateAgentCompanyManifest(value)
+  const storedInput = storedManifestInput(manifest)
+  const cycleDigest = createHash('sha256').update(`${manifest.clientId}\n${manifest.cycleId}`).digest('hex').slice(0, 40)
+  const evidence = manifest.agents.map((agentId) => ({
+    agentId,
+    bytes: Buffer.byteLength(storedInput.evidence[agentId], 'utf8'),
+  }))
+  return {
+    version: 1,
+    kind: 'agent_company_manifest_preflight',
+    clientId: manifest.clientId,
+    cycleId: manifest.cycleId,
+    expectedRunId: `agent-company:${cycleDigest}`,
+    expectedWorkOrderId: `company-order:${cycleDigest}`,
+    agents: evidence,
+    roleBudget: manifest.roleBudget,
+    totalEvidenceBytes: evidence.reduce((total, entry) => total + entry.bytes, 0),
+    expectedPlanHash: stableHash(storedInput),
+    controls: {
+      planOnlyDefault: true,
+      explicitQueue: true,
+      explicitDispatch: true,
+      externalWrites: false,
+      rawEvidenceIncluded: false,
+    },
+  }
+}
+
 function safeReason(value) {
   const reason = String(value || '')
   return /^company_[a-z0-9_]{1,120}$/.test(reason) ? reason : 'agent_company_request_failed'
@@ -122,13 +173,15 @@ export function createAgentCompanyApi(options = {}) {
   }
 }
 
-function summarizePlan(plan) {
+function summarizePlan(plan, preflight) {
   return {
     runId: plan.runId,
     clientId: plan.clientId,
     cycleId: plan.cycleId,
     actionMode: plan.actionMode,
     approvalRequired: plan.approvalRequired === true,
+    expectedPlanHash: preflight.expectedPlanHash,
+    reviewedPlanHash: stableHash(plan),
     assignments: (plan.assignments || []).map((assignment) => ({
       agentId: assignment.agentId,
       name: assignment.name,
@@ -143,9 +196,10 @@ function summarizePlan(plan) {
   }
 }
 
-function assertPlan(plan, manifest, roster) {
+function assertPlan(plan, manifest, roster, preflight) {
   if (!isRecord(plan) || !ID_RE.test(String(plan.runId || ''))) fail('agent_company_operator_invalid_plan')
-  if (plan.clientId !== manifest.clientId
+  if (plan.runId !== preflight.expectedRunId
+    || plan.clientId !== manifest.clientId
     || plan.cycleId !== manifest.cycleId
     || plan.actionMode !== 'draft_only'
     || plan.approvalRequired !== true) {
@@ -168,22 +222,28 @@ function assertPlan(plan, manifest, roster) {
   }
 }
 
-function assertQueuedWorkOrder(workOrder, manifest) {
+function assertQueuedWorkOrder(workOrder, manifest, preflight, reviewedPlanHash) {
   if (!isRecord(workOrder)
     || !ID_RE.test(String(workOrder.workOrderId || ''))
     || !HASH_RE.test(String(workOrder.planHash || ''))
+    || !isRecord(workOrder.plan)
     || !WORK_ORDER_STATUSES.has(workOrder.status)) {
     fail('agent_company_operator_invalid_work_order')
   }
-  if (workOrder.clientId !== manifest.clientId || workOrder.cycleId !== manifest.cycleId) {
+  if (workOrder.workOrderId !== preflight.expectedWorkOrderId
+    || workOrder.clientId !== manifest.clientId
+    || workOrder.cycleId !== manifest.cycleId) {
     fail('agent_company_operator_work_order_mismatch')
   }
+  if (workOrder.planHash !== preflight.expectedPlanHash) fail('agent_company_operator_plan_hash_mismatch')
+  if (stableHash(workOrder.plan) !== reviewedPlanHash) fail('agent_company_operator_queued_plan_mismatch')
 }
 
-function assertCompletedWorkOrder(completed, queued, manifest) {
+function assertCompletedWorkOrder(completed, queued, manifest, reviewedPlanHash) {
   if (!isRecord(completed)
     || !TERMINAL_STATUSES.has(completed.status)
     || !isRecord(completed.result)
+    || !isRecord(completed.plan)
     || !HASH_RE.test(String(completed.resultHash || ''))
     || completed.evidenceState !== 'scrubbed') {
     fail('agent_company_operator_invalid_result')
@@ -192,6 +252,7 @@ function assertCompletedWorkOrder(completed, queued, manifest) {
     || completed.clientId !== manifest.clientId
     || completed.cycleId !== manifest.cycleId
     || completed.planHash !== queued.planHash
+    || stableHash(completed.plan) !== reviewedPlanHash
     || completed.result.actionMode !== 'draft_only') {
     fail('agent_company_operator_result_mismatch')
   }
@@ -246,6 +307,7 @@ function validateEvaluation(value, workOrderId) {
 
 export async function runGuidedAgentCompany(manifestValue, options = {}) {
   const manifest = validateAgentCompanyManifest(manifestValue)
+  const preflight = buildAgentCompanyManifestPreflight(manifest)
   const manifestPayload = () => structuredClone(manifest)
   const request = options.request
   if (typeof request !== 'function') fail('agent_company_request_required')
@@ -254,8 +316,8 @@ export async function runGuidedAgentCompany(manifestValue, options = {}) {
   const rosterResult = await request('GET')
   const planResult = await request('POST', { action: 'plan', ...manifestPayload() })
   const plan = planResult?.plan
-  assertPlan(plan, manifest, rosterResult?.agents)
-  const planSummary = summarizePlan(plan)
+  assertPlan(plan, manifest, rosterResult?.agents, preflight)
+  const planSummary = summarizePlan(plan, preflight)
   await options.onPlan?.(planSummary)
 
   const queueConfirmation = `QUEUE ${plan.runId}`
@@ -265,7 +327,7 @@ export async function runGuidedAgentCompany(manifestValue, options = {}) {
 
   const queued = await request('POST', { action: 'work-order-create', ...manifestPayload() })
   const workOrder = queued?.workOrder
-  assertQueuedWorkOrder(workOrder, manifest)
+  assertQueuedWorkOrder(workOrder, manifest, preflight, planSummary.reviewedPlanHash)
   await options.onQueued?.(workOrder)
 
   const runConfirmation = `RUN ${workOrder.workOrderId}`
@@ -281,7 +343,7 @@ export async function runGuidedAgentCompany(manifestValue, options = {}) {
     confirmation: runConfirmation,
   })
   const completed = dispatched?.workOrder
-  assertCompletedWorkOrder(completed, workOrder, manifest)
+  assertCompletedWorkOrder(completed, workOrder, manifest, planSummary.reviewedPlanHash)
   await options.onResult?.(completed)
 
   let evaluation = null
@@ -318,4 +380,10 @@ export async function runGuidedAgentCompany(manifestValue, options = {}) {
   }
 }
 
-export default { AGENT_COMPANY_ENDPOINT, createAgentCompanyApi, runGuidedAgentCompany, validateAgentCompanyManifest }
+export default {
+  AGENT_COMPANY_ENDPOINT,
+  buildAgentCompanyManifestPreflight,
+  createAgentCompanyApi,
+  runGuidedAgentCompany,
+  validateAgentCompanyManifest,
+}

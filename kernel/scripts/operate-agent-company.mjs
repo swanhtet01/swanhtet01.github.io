@@ -5,9 +5,11 @@ import { stdin, stdout } from 'node:process'
 import { resolve } from 'node:path'
 
 import {
+  buildAgentCompanyManifestPreflight,
   createAgentCompanyApi,
   runGuidedAgentCompany,
 } from '../agent-company-operator.mjs'
+import { planCompanyCycle } from '../agent-company.mjs'
 import { TerminalPrompt } from '../terminal-prompt.mjs'
 
 function parseArgs(argv) {
@@ -15,6 +17,7 @@ function parseArgs(argv) {
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index]
     if (arg === '--help' || arg === '-h') out.help = true
+    else if (arg === '--preflight') out.preflight = true
     else if (arg === '--manifest') {
       const value = argv[index + 1]
       if (!value || value.startsWith('--')) throw new Error('argument_value_required:--manifest')
@@ -29,11 +32,13 @@ function help() {
   return [
     'SuperMega Agent Company operator',
     '',
-    '  SUPERMEGA_OPS_KEY=<owner-provided> npm run agent-company:operate -- --manifest <work-order.json>',
+    '  npm run agent-company:operate -- --manifest <work-order.json> --preflight',
+    '  npm run agent-company:operate -- --manifest <work-order.json>',
     '',
-    'The command validates a redacted manifest, prints a plan, and stops by default. Queueing,',
+    'Preflight validates locally, prints no raw evidence, and requires no Ops key or network call.',
+    'Normal operation prints the expected durable plan hash and stops at plan by default. Queueing,',
     'dispatch, and internal evaluation each require a separate exact terminal confirmation.',
-    'The Ops key is accepted only from the process environment and is never printed or stored.',
+    'Set SUPERMEGA_OPS_KEY in the current process first; the key is never printed or stored.',
     'This command cannot record a customer review or perform connector writes.',
   ].join('\n')
 }
@@ -59,18 +64,61 @@ function resultSummary(workOrder) {
   }
 }
 
+async function buildOfflinePreflight(manifest) {
+  const preflight = buildAgentCompanyManifestPreflight(manifest)
+  const plan = await planCompanyCycle(manifest)
+  if (!plan?.ok) {
+    const reason = /^company_[a-z0-9_]{1,120}$/.test(String(plan?.reason || ''))
+      ? plan.reason
+      : 'agent_company_local_plan_failed'
+    throw new Error(reason)
+  }
+  if (plan.runId !== preflight.expectedRunId
+    || plan.budget?.roleLimit !== preflight.roleBudget
+    || plan.assignments?.some((assignment, index) => assignment.agentId !== preflight.agents[index]?.agentId)
+    || plan.controls?.execution !== 'sequential'
+    || plan.controls?.dynamicDelegation !== false
+    || plan.controls?.crossAgentContext !== false
+    || plan.controls?.externalWrites !== false
+    || plan.controls?.durableClaimRequired !== true) {
+    throw new Error('agent_company_local_plan_mismatch')
+  }
+  return {
+    ...preflight,
+    planner: {
+      assignments: plan.assignments.map((assignment) => ({
+        agentId: assignment.agentId,
+        name: assignment.name,
+        department: assignment.department,
+        crew: assignment.crew,
+        roleCount: assignment.roleCount,
+        evidenceBytes: assignment.evidenceBytes,
+        returns: assignment.returns,
+      })),
+      budget: plan.budget,
+      controls: plan.controls,
+    },
+  }
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2))
   if (args.help) { stdout.write(`${help()}\n`); return }
   if (!args.manifest) throw new Error('manifest_path_required')
+  const manifest = JSON.parse(await readFile(resolve(args.manifest), 'utf8'))
+  const preflight = await buildOfflinePreflight(manifest)
+  if (args.preflight) {
+    stdout.write(`${JSON.stringify({ ok: true, mode: 'agent_company_manifest_preflight', preflight }, null, 2)}\n`)
+    return
+  }
+
   const opsKey = String(process.env.SUPERMEGA_OPS_KEY || '').trim()
   if (!opsKey) throw new Error('agent_company_ops_key_required')
-
-  const manifest = JSON.parse(await readFile(resolve(args.manifest), 'utf8'))
   const prompt = new TerminalPrompt(stdin, stdout)
   prompt.assertInteractive()
   const request = createAgentCompanyApi({ opsKey })
 
+  stdout.write(`${JSON.stringify({ ok: true, mode: 'agent_company_manifest_preflight', preflight }, null, 2)}\n`)
   stdout.write('Ops key stays in process memory. No connector writes or customer review are available.\n')
   const result = await runGuidedAgentCompany(manifest, {
     request,
