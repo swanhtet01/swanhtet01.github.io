@@ -18,6 +18,7 @@ BASE = "https://public.example/"
 WWW = "https://www.example/"
 APP = "https://app.example/"
 CONSOLE = "https://console.example/"
+AGENT_INTAKE = f"{BASE}contact/?from=ai-agent-solution"
 
 
 def result(url: str, body: str | dict, *, status: int = 200, headers: dict[str, str] | None = None):
@@ -48,6 +49,20 @@ def healthy_responses() -> dict[str, checker.HttpResult]:
         'name="company"',
         'name="goal"',
         "No account or data connection is made before you approve it.",
+    )
+    agent_contact = page(
+        "search.get('from')==='ai-agent-solution'",
+        "document.title='AI Agent Solution | supermega.dev'",
+        "What should your agent handle every week?",
+        "Request an agent proof",
+        "What does your team repeat?",
+        "Request first proof",
+        "one redacted sample and one reviewed output",
+        'action="/api/contact-submissions"',
+        'name="name"',
+        'name="email"',
+        'name="company"',
+        'name="goal"',
     )
     privacy = page(
         "<title>Privacy | supermega.dev</title>",
@@ -131,6 +146,7 @@ def healthy_responses() -> dict[str, checker.HttpResult]:
         BASE: result(BASE, home),
         WWW: result(WWW, home),
         f"{BASE}contact/": result(f"{BASE}contact/", contact),
+        AGENT_INTAKE: result(AGENT_INTAKE, agent_contact),
         f"{BASE}privacy/": result(f"{BASE}privacy/", privacy),
         f"{BASE}api/contact-submissions/status": result(
             f"{BASE}api/contact-submissions/status", contact_status
@@ -163,11 +179,34 @@ class PortfolioHealthTest(unittest.TestCase):
         with patch.object(checker, "fetch", side_effect=fake_fetch):
             return checker.run(BASE, WWW, APP, CONSOLE, timeout=1, attempts=1)
 
-    def test_healthy_portfolio_passes_all_sixteen_checks(self):
+    def test_healthy_portfolio_passes_all_seventeen_checks(self):
         report = self.run_report(healthy_responses())
         self.assertEqual(report["status"], "ready")
-        self.assertEqual(report["checks"], 16)
+        self.assertEqual(report["checks"], 17)
         self.assertEqual(report["failures"], [])
+
+    def test_missing_agent_context_fails_first_proof_route(self):
+        responses = healthy_responses()
+        responses[AGENT_INTAKE] = result(
+            AGENT_INTAKE,
+            responses[AGENT_INTAKE].body.decode().replace("Request first proof", ""),
+        )
+        report = self.run_report(responses)
+        self.assertEqual(report["status"], "error")
+        failure = next(item for item in report["failures"] if item["kind"] == "agent_intake_page")
+        self.assertEqual(failure["url"], AGENT_INTAKE)
+        self.assertIn("Request first proof", failure["missing"])
+
+    def test_technical_intake_field_fails_first_proof_route(self):
+        responses = healthy_responses()
+        responses[AGENT_INTAKE] = result(
+            AGENT_INTAKE,
+            responses[AGENT_INTAKE].body.decode() + 'name="workflow"',
+        )
+        report = self.run_report(responses)
+        self.assertEqual(report["status"], "error")
+        failure = next(item for item in report["failures"] if item["kind"] == "agent_intake_page")
+        self.assertIn('name="workflow"', failure["unexpected"])
 
     def test_missing_plant_link_fails_public_page(self):
         responses = healthy_responses()
