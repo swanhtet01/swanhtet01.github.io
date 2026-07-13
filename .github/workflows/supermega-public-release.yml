@@ -30,6 +30,7 @@ jobs:
         with:
           ref: ${{ github.event_name == 'push' && github.sha || 'codex/public-enterprise-site' }}
           fetch-depth: 1
+          persist-credentials: false
 
       - name: Setup Node
         uses: actions/setup-node@v6
