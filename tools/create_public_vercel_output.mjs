@@ -4725,6 +4725,68 @@ ${productCarouselScript}
   </body>
 </html>`
 
+const frontDoorShellStyle = `
+      :root { color-scheme: light; --page: #f5f7fb; --surface: rgba(255,255,255,0.78); --surface-solid: #ffffff; --ink: #111827; --muted: #5f6c80; --line: rgba(17,24,39,0.13); --blue: #2563eb; --blue-strong: #1d4ed8; --blue-soft: rgba(37,99,235,0.12); --shadow: 0 18px 44px rgba(15,23,42,0.10); }
+      :root[data-theme="dark"] { color-scheme: dark; --page: #08111f; --surface: rgba(16,25,42,0.82); --surface-solid: #10192a; --ink: #edf3ff; --muted: #a8b7cb; --line: rgba(200,215,240,0.16); --blue: #78a9ff; --blue-strong: #9abfff; --blue-soft: rgba(120,169,255,0.16); --shadow: 0 20px 50px rgba(0,0,0,0.34); }
+      * { box-sizing: border-box; }
+      html { background: var(--page); }
+      body { min-width: 320px; margin: 0; background: var(--page); color: var(--ink); font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; line-height: 1.5; text-rendering: optimizeLegibility; }
+      a, button, input, textarea { font: inherit; }
+      button, a { -webkit-tap-highlight-color: transparent; }
+      a { color: inherit; }
+      .front-header { position: sticky; top: 0; z-index: 20; width: min(100% - 48px, 1180px); min-height: 72px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 20px; border-bottom: 1px solid var(--line); background: color-mix(in srgb, var(--page) 86%, transparent); backdrop-filter: blur(18px); }
+      .brand { display: inline-flex; align-items: center; min-height: 44px; gap: 9px; min-width: 0; color: var(--ink); text-decoration: none; }
+      .brand-text { white-space: nowrap; font-size: 18px; letter-spacing: 0; }
+      .brand-text b { font-weight: 700; }
+      .nav { display: flex; align-items: center; justify-content: flex-end; gap: 8px; min-width: 0; }
+      .btn, .icon-button { min-height: 44px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); font-size: 14px; font-weight: 750; text-decoration: none; cursor: pointer; }
+      .btn { display: inline-flex; align-items: center; justify-content: center; padding: 0 14px; white-space: nowrap; }
+      .btn.primary { border-color: var(--blue); background: var(--blue); color: #ffffff; box-shadow: 0 8px 20px rgba(37,99,235,0.22); }
+      .btn.primary:hover { background: var(--blue-strong); border-color: var(--blue-strong); }
+      .btn.secondary:hover, .icon-button:hover { border-color: var(--blue); color: var(--blue); }
+      .icon-button { display: grid; place-items: center; width: 44px; padding: 0; }
+      .icon-button svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.9; }
+      .theme-moon { display: none; }
+      :root[data-theme="dark"] .theme-sun { display: none; }
+      :root[data-theme="dark"] .theme-moon { display: block; }
+      .eyebrow { color: var(--blue); font-size: 12px; font-weight: 800; letter-spacing: 0; text-transform: uppercase; }
+      footer { width: min(100% - 48px, 1180px); margin: 0 auto; display: flex; justify-content: space-between; gap: 18px; padding: 26px 0 34px; border-top: 1px solid var(--line); color: var(--muted); font-size: 13px; font-weight: 650; }
+      .footer-links { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 12px; }
+      .footer-links a { display: inline-flex; align-items: center; min-height: 44px; color: var(--muted); text-decoration: none; }
+      .footer-links a:hover { color: var(--blue); }
+      :focus-visible { outline: 3px solid color-mix(in srgb, var(--blue) 38%, transparent); outline-offset: 3px; }
+      @media (prefers-color-scheme: dark) { :root { color-scheme: dark; } }
+      @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; } }
+      @media (max-width: 720px) {
+        .front-header { width: min(100% - 32px, 1180px); min-height: 84px; gap: 10px; }
+        .nav { gap: 6px; }
+        .btn { padding: 0 10px; font-size: 13px; }
+        footer { width: min(100% - 32px, 1180px); display: grid; gap: 12px; }
+        .footer-links { justify-content: flex-start; }
+      }
+      @media (max-width: 420px) {
+        .front-header { align-items: center; }
+        .brand-text { font-size: 16px; }
+        .optional-nav { display: none; }
+      }
+`
+
+const frontDoorHeader = `
+      <script>(function(){var root=document.documentElement;try{var theme=localStorage.getItem('sm-theme');if(!theme&&window.matchMedia){theme=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';}root.setAttribute('data-theme',theme||'light');}catch(error){root.setAttribute('data-theme','light');}})();</script>
+      <header class="front-header">
+        <a class="brand" href="/" aria-label="SUPERMEGA.dev home">
+          <span aria-hidden="true"><svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M6.5 8 L11 12 L6.5 16" stroke="#3B82F6" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M12.6 16.2 L18 16.2" stroke="#3B82F6" stroke-width="2.6" stroke-linecap="round"/></svg></span>
+          <span class="brand-text"><b>supermega</b><b style="color:#5E6B87;font-weight:500">.dev</b></span>
+        </a>
+        <nav class="nav" aria-label="Primary">
+          <button class="icon-button theme-toggle" type="button" data-theme-toggle aria-label="Use dark mode" title="Use dark mode"><svg class="theme-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"></path></svg><svg class="theme-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 15.2A8.5 8.5 0 0 1 8.8 3.5 8.5 8.5 0 1 0 20.5 15.2Z"></path></svg></button>
+          <a class="btn secondary optional-nav" href="https://app.supermega.dev/" target="_blank" rel="noopener noreferrer">Open app</a>
+          <a class="btn secondary optional-nav" href="https://demo.supermega.dev/" target="_blank" rel="noopener noreferrer">Try demo</a>
+          <a class="btn primary" href="/contact/">Contact</a>
+        </nav>
+      </header>
+      <script>(function(){var root=document.documentElement,button=document.querySelector('[data-theme-toggle]');if(!button)return;function sync(){var dark=root.getAttribute('data-theme')==='dark';button.setAttribute('aria-pressed',String(dark));button.setAttribute('aria-label',dark?'Use light mode':'Use dark mode');button.setAttribute('title',dark?'Use light mode':'Use dark mode');}sync();button.addEventListener('click',function(){var next=root.getAttribute('data-theme')==='dark'?'light':'dark';root.setAttribute('data-theme',next);try{localStorage.setItem('sm-theme',next);}catch(error){}sync();});})();</script>`
+
 const simplifiedPublicShellHtml = `<!doctype html>
 <html lang="en" data-theme="light">
   <head>
@@ -4739,23 +4801,23 @@ const simplifiedPublicShellHtml = `<!doctype html>
     <link rel="manifest" href="/site.webmanifest?v=supermega-atelier-20260623" />
     ${unicornSocialMeta({ title: 'SuperMega | Open the app or try the demo', description: 'Start with the app, try a live demo, or talk to us about work that needs a better system.', url: 'https://supermega.dev/' })}
     <script type="application/ld+json">{"@context":"https://schema.org","@type":"Organization","name":"SUPERMEGA.dev","url":"https://supermega.dev/","logo":"https://supermega.dev/favicon.svg","description":"Business software and custom systems built around the work a team already does.","email":"swanhtet@supermega.dev","telephone":"+95-9-500-0721","sameAs":["https://www.linkedin.com/in/theswanhtet"]}</script>
-    <style>${unicornShellStyle}
+    <style>${frontDoorShellStyle}
       .launch-main { padding-top: 12px; }
       .launch-hero { position: relative; min-height: calc(100svh - 106px); overflow: hidden; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); background: #f4f7fb; color: var(--ink); }
       .launch-inner { position: relative; width: min(100% - 48px, 1180px); min-height: calc(100svh - 106px); margin: 0 auto; display: flex; align-items: center; padding: 72px 0 92px; }
       .launch-copy { position: relative; z-index: 1; max-width: 620px; }
-      .launch-copy h1 { margin: 12px 0 18px; font-size: 76px; line-height: 0.96; letter-spacing: 0; }
+      .launch-copy h1 { margin: 12px 0 18px; font-size: 72px; line-height: 0.96; letter-spacing: 0; }
       .launch-copy p { max-width: 30ch; margin: 0; color: var(--muted); font-size: 20px; line-height: 1.45; }
       .launch-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 30px; }
       .launch-actions .btn { min-height: 48px; }
-      .launch-contact { color: var(--ink); font-size: 14px; font-weight: 800; text-decoration: underline; text-underline-offset: 4px; }
+      .launch-contact { display: inline-flex; align-items: center; min-height: 44px; color: var(--ink); font-size: 14px; font-weight: 800; text-decoration: underline; text-underline-offset: 4px; }
       .launch-domains { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 28px; color: var(--muted); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 12px; line-height: 1.4; }
       .launch-domains span { white-space: nowrap; }
       .launch-mark { position: absolute; right: clamp(6%, 10vw, 16%); top: 50%; width: min(34vw, 460px); transform: translateY(-50%); opacity: 0.9; pointer-events: none; }
       .launch-mark img { display: block; width: 100%; height: auto; filter: drop-shadow(0 24px 42px rgba(11, 18, 32, 0.16)); }
       .launch-followup { width: min(100% - 48px, 1180px); margin: 0 auto; display: flex; justify-content: space-between; align-items: center; gap: 28px; padding: 42px 0 56px; }
       .launch-followup p { max-width: 42ch; margin: 0; color: var(--muted); font-size: 17px; line-height: 1.5; }
-      .launch-followup a { color: var(--blue); font-size: 15px; font-weight: 850; text-decoration: none; white-space: nowrap; }
+      .launch-followup a { display: inline-flex; align-items: center; min-height: 44px; color: var(--blue); font-size: 15px; font-weight: 850; text-decoration: none; white-space: nowrap; }
       .launch-followup a:hover { text-decoration: underline; text-underline-offset: 4px; }
       :root[data-theme="dark"] .launch-hero { background: #0a1020; color: #eef3fb; border-color: rgba(255,255,255,0.11); }
       :root[data-theme="dark"] .launch-copy p, :root[data-theme="dark"] .launch-domains, :root[data-theme="dark"] .launch-followup p { color: #aab7c9; }
@@ -4764,7 +4826,7 @@ const simplifiedPublicShellHtml = `<!doctype html>
       @media (max-width: 720px) {
         .launch-hero, .launch-inner { min-height: calc(100svh - 84px); }
         .launch-inner { width: min(100% - 32px, 1180px); padding: 52px 0 64px; align-items: flex-end; }
-        .launch-copy h1 { font-size: 54px; }
+        .launch-copy h1 { font-size: 50px; }
         .launch-copy p { font-size: 18px; }
         .launch-mark { right: -66px; top: 18%; width: 250px; transform: none; opacity: 0.12; }
         .launch-actions { margin-top: 24px; }
@@ -4776,7 +4838,7 @@ const simplifiedPublicShellHtml = `<!doctype html>
     </style>
   </head>
   <body>
-    <div class="wrap">${unicornHeader}</div>
+    <div class="wrap">${frontDoorHeader}</div>
     <main class="launch-main">
       <section class="launch-hero" aria-labelledby="supermega-heading">
         <div class="launch-inner">
@@ -5457,15 +5519,15 @@ const simplifiedPublicContactHtml = `<!doctype html>
     <link rel="canonical" href="https://supermega.dev/contact/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" />
     ${unicornSocialMeta({ title: 'Contact | SUPERMEGA.dev', description: 'Tell SuperMega what needs to work better.', url: 'https://supermega.dev/contact/' })}
-    <style>${unicornShellStyle}
+    <style>${frontDoorShellStyle}
       .contact-main { width: min(100% - 48px, 1180px); margin: 0 auto; display: grid; grid-template-columns: minmax(0, 0.84fr) minmax(340px, 1.16fr); gap: clamp(32px, 7vw, 96px); align-items: start; padding: clamp(56px, 10vw, 120px) 0 72px; }
       .contact-copy { padding-top: 18px; }
-      .contact-copy h1 { max-width: 10ch; margin: 12px 0 18px; font-size: clamp(44px, 5.8vw, 72px); line-height: 0.98; letter-spacing: 0; }
+      .contact-copy h1 { max-width: 10ch; margin: 12px 0 18px; font-size: 70px; line-height: 0.98; letter-spacing: 0; }
       .contact-copy p { max-width: 34ch; margin: 0; color: var(--muted); font-size: 18px; line-height: 1.52; }
       .contact-direct { display: grid; gap: 10px; margin-top: 32px; }
       .contact-direct small { color: var(--muted); font-size: 12px; font-weight: 850; letter-spacing: 0.08em; text-transform: uppercase; }
       .contact-direct-links { display: flex; flex-wrap: wrap; gap: 8px; }
-      .contact-direct a { display: inline-flex; align-items: center; min-height: 42px; border: 1px solid var(--line); border-radius: 8px; padding: 0 13px; color: var(--ink); font-size: 14px; font-weight: 800; text-decoration: none; }
+      .contact-direct a { display: inline-flex; align-items: center; min-height: 44px; border: 1px solid var(--line); border-radius: 8px; padding: 0 13px; color: var(--ink); font-size: 14px; font-weight: 800; text-decoration: none; }
       .contact-direct a:hover { border-color: var(--blue); color: var(--blue); }
       .contact-form { display: grid; gap: 18px; border: 1px solid var(--line); border-radius: 8px; padding: clamp(20px, 3vw, 32px); background: rgba(255,255,255,0.58); box-shadow: var(--shadow); }
       .contact-form h2 { margin: 0; font-size: 20px; line-height: 1.2; }
@@ -5494,7 +5556,7 @@ const simplifiedPublicContactHtml = `<!doctype html>
   </head>
   <body>
     <div class="wrap">
-${unicornHeader}
+${frontDoorHeader}
       <main class="contact-main">
         <section class="contact-copy" aria-label="Contact SUPERMEGA">
           <div class="eyebrow">Start with the work</div>
@@ -5578,6 +5640,49 @@ ${unicornHeader}
 </html>`
 
 const collapsedContactHtml = simplifiedPublicContactHtml
+
+const simplifiedPublicPrivacyHtml = `<!doctype html>
+<html lang="en" data-theme="light">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="index,follow" />
+    <title>Privacy | SUPERMEGA.dev</title>
+    <meta name="description" content="How SuperMega handles contact requests." />
+    <meta name="theme-color" content="#07111f" />
+    <link rel="canonical" href="https://supermega.dev/privacy/" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" />
+    ${unicornSocialMeta({ title: 'Privacy | SUPERMEGA.dev', description: 'How SuperMega handles contact requests.', url: 'https://supermega.dev/privacy/' })}
+    <style>${frontDoorShellStyle}
+      .privacy-main { width: min(100% - 48px, 780px); margin: 0 auto; padding: 78px 0 72px; }
+      .privacy-main h1 { max-width: 12ch; margin: 12px 0 18px; font-size: 64px; line-height: 1; letter-spacing: 0; }
+      .privacy-main > p { max-width: 54ch; margin: 0; color: var(--muted); font-size: 18px; }
+      .privacy-prose { display: grid; gap: 28px; margin-top: 46px; }
+      .privacy-prose section { padding-top: 26px; border-top: 1px solid var(--line); }
+      .privacy-prose h2 { margin: 0; font-size: 22px; line-height: 1.2; }
+      .privacy-prose p { margin: 10px 0 0; color: var(--muted); font-size: 16px; line-height: 1.6; }
+      .privacy-prose a { display: inline-flex; align-items: center; min-height: 44px; color: var(--blue); }
+      @media (max-width: 720px) { .privacy-main { width: min(100% - 32px, 780px); padding: 50px 0 48px; } .privacy-main h1 { font-size: 48px; } }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+${frontDoorHeader}
+      <main class="privacy-main">
+        <div class="eyebrow">Privacy</div>
+        <h1>Only the details needed to reply.</h1>
+        <p>SuperMega keeps the public site intentionally small. This page explains how a contact request is handled.</p>
+        <div class="privacy-prose">
+          <section><h2>What we collect</h2><p>When you contact us, we receive the name, work email, company, and request you choose to send.</p></section>
+          <section><h2>How we use it</h2><p>We use those details to respond to the request and, if you approve a project, to deliver the agreed work. We do not sell or rent contact details.</p></section>
+          <section><h2>Connections and accounts</h2><p>Sending a contact request does not create an account or connect any data source. Any later connection is discussed and approved separately.</p></section>
+          <section><h2>Delete a request</h2><p>Email <a href="mailto:swanhtet@supermega.dev">swanhtet@supermega.dev</a> to request deletion of a contact record.</p></section>
+        </div>
+      </main>
+      <footer><span>Powered by SuperMega Technologies</span><span class="footer-links"><a href="https://app.supermega.dev/" target="_blank" rel="noopener noreferrer">Open app</a><a href="https://demo.supermega.dev/" target="_blank" rel="noopener noreferrer">Try demo</a><a href="/contact/">Contact</a></span></footer>
+    </div>
+  </body>
+</html>`
 
 const publicSourceToScreenHtml = `<!doctype html>
 <html lang="en">
@@ -5999,6 +6104,37 @@ const config = {
   ],
 }
 
+const simplifiedPublicVercelConfig = {
+  version: 3,
+  routes: [
+    { src: '^/api/contact-submissions$', dest: '/api/contact-submissions.js' },
+    { src: '^/api/contact-submissions/status$', dest: '/api/contact-submissions.js' },
+    { src: '^/api/health$', dest: '/api/health.js' },
+    { src: '^/api/(.*)$', dest: '/api/not-found.js' },
+    { src: '^/(?:login|app|clients)(?:/.*)?$', status: 308, headers: { Location: 'https://app.supermega.dev/' } },
+    { src: '^/demo/?$', status: 308, headers: { Location: 'https://demo.supermega.dev/' } },
+    { src: '^/start/?$', status: 308, headers: { Location: '/contact/' } },
+    {
+      src: '^/(?:products|product|offers|pricing|plans|packages|agent-templates|ai-agents|work|operator|machine|card|megaos-preview|free)(?:/.*)?$',
+      status: 308,
+      headers: { Location: '/' },
+    },
+    {
+      src: '^/(?:agentops|agentops-toolbox|ai-back-office|back-office-operator|back-office-workflow-desk|openclaw|office-operator|try|book|setup|get-started|intake|free-tools|free-tool|builder|tool-builder|scan|calculator|workflow-scan|daily-close|payment-close|close-checker|mmqr|store-tool|agent-builder|agent-scope|ai-agent|agent-tool|agents|about|demos|demo-center|enterprise-demo|modules|portal-types|implementation|how-it-works|portfolio|tools|value|proof|platform|solutions|find-companies|company-list|task-list|receiving-log)/?$',
+      status: 308,
+      headers: { Location: '/' },
+    },
+    { src: '^/c/([^/]+)/?$', status: 308, headers: { Location: '/' } },
+    {
+      src: '^/(?:favicon\\.svg|site\\.webmanifest|robots\\.txt|sitemap\\.xml|sw\\.js)$',
+      headers: { 'cache-control': 'public, max-age=31536000, immutable' },
+      continue: true,
+    },
+    { handle: 'filesystem' },
+    { src: '^/(.*)$', status: 404, dest: '/404.html' },
+  ],
+}
+
 async function writeNodeFunction(name, opts = {}) {
   const functionDir = resolve(functionsDir, `${name}.func`)
   await mkdir(resolve(functionDir, 'api'), { recursive: true })
@@ -6149,9 +6285,9 @@ async function copyPublicStatic(source, destination, rootSource = source) {
 }
 
 async function prunePublicStaticRoot() {
-  const allowedRootDirs = new Set(['assets', 'site', 'social', 'products', 'agent-templates', 'app', 'start', 'contact', 'offers', 'work', 'operator', 'machine', 'card', 'c', 'demo', 'ai-agents', 'privacy', 'megaos-preview'])
+  const allowedRootEntries = new Set(['index.html', '404.html', 'favicon.svg', 'site.webmanifest', 'robots.txt', 'sitemap.xml', 'sw.js', 'contact', 'privacy'])
   for (const entry of await readdir(staticDir, { withFileTypes: true }).catch(() => [])) {
-    if (!entry.isDirectory() || allowedRootDirs.has(entry.name)) continue
+    if (allowedRootEntries.has(entry.name)) continue
     await rm(resolve(staticDir, entry.name), { recursive: true, force: true, maxRetries: 8, retryDelay: 250 })
   }
 }
@@ -6252,7 +6388,7 @@ for (const entry of await readdir(staticDir, { withFileTypes: true })) {
   }
 }
 await writeFile(resolve(staticDir, 'index.html'), simplifiedPublicShellHtml, 'utf8')
-await writeFile(resolve(staticDir, '404.html'), `<!doctype html><html lang="en"><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="robots" content="noindex,nofollow" /><title>Page not found | SUPERMEGA.dev</title><meta name="theme-color" content="#07111f" /><link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" /><style>${unicornShellStyle}</style></head><body><div class="wrap">${unicornHeader}<main><section class="poster" style="min-height:58vh;align-items:center"><div class="copy"><div class="eyebrow">404</div><h1>Page not found.</h1><p>That page does not exist. Head back home, open the app, or try the demo.</p><div class="cta"><a class="btn primary" href="/">Home</a><a class="btn secondary" href="https://demo.supermega.dev/" target="_blank" rel="noopener noreferrer">Try demo</a></div></div></section></main></div></body></html>`, 'utf8')
+await writeFile(resolve(staticDir, '404.html'), `<!doctype html><html lang="en" data-theme="light"><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="robots" content="noindex,nofollow" /><title>Page not found | SUPERMEGA.dev</title><meta name="theme-color" content="#07111f" /><link rel="icon" type="image/svg+xml" href="/favicon.svg?v=supermega-atelier-20260623" /><style>${frontDoorShellStyle}.not-found { width:min(100% - 48px,1180px); min-height:58vh; margin:0 auto; display:grid; align-content:center; padding:72px 0; }.not-found h1 { margin:12px 0 18px; font-size:64px; line-height:1; letter-spacing:0; }.not-found p { max-width:38ch; margin:0; color:var(--muted); font-size:18px; }.not-found .actions { display:flex; flex-wrap:wrap; gap:10px; margin-top:28px; }@media(max-width:720px){.not-found{width:min(100% - 32px,1180px);padding:48px 0;}.not-found h1{font-size:48px;}}</style></head><body><div class="wrap">${frontDoorHeader}<main class="not-found"><div class="eyebrow">404</div><h1>Page not found.</h1><p>That page does not exist. Head back home, open the app, or try the demo.</p><div class="actions"><a class="btn primary" href="/">Home</a><a class="btn secondary" href="https://demo.supermega.dev/" target="_blank" rel="noopener noreferrer">Try demo</a></div></main><footer><span>Powered by SuperMega Technologies</span><span class="footer-links"><a href="/contact/">Contact</a></span></footer></div></body></html>`, 'utf8')
 await mkdir(resolve(staticDir, 'products'), { recursive: true })
 await writeFile(resolve(staticDir, 'products', 'index.html'), normalizePublicProductNames(unicornProductsHtml), 'utf8')
 // Premium product detail pages (one per product, data-driven, shares the brand shell)
@@ -10552,7 +10688,7 @@ ${publicRuntimeScripts}
 </body>
 </html>`
 await mkdir(resolve(staticDir, 'privacy'), { recursive: true })
-await writeFile(resolve(staticDir, 'privacy', 'index.html'), normalizePublicProductNames(unicornPrivacyHtml), 'utf8')
+await writeFile(resolve(staticDir, 'privacy', 'index.html'), simplifiedPublicPrivacyHtml, 'utf8')
 await mkdir(resolve(staticDir, 'machine'), { recursive: true })
 await writeFile(resolve(staticDir, 'machine', 'index.html'), normalizePublicProductNames(publicMachineHtml), 'utf8')
 await mkdir(resolve(staticDir, 'card'), { recursive: true })
@@ -10598,7 +10734,7 @@ await writeFile(
 )
 await writeFile(
   resolve(staticDir, 'sw.js'),
-  `const CACHE_VERSION = 'supermega-public-clean-20260522'
+  `const CACHE_VERSION = 'supermega-front-door-20260713'
 
 self.addEventListener('install', () => {
   self.skipWaiting()
@@ -10615,35 +10751,29 @@ self.addEventListener('activate', (event) => {
 `,
   'utf8',
 )
+await writeFile(
+  resolve(staticDir, 'site.webmanifest'),
+  `${JSON.stringify(
+    {
+      name: 'SuperMega',
+      short_name: 'SuperMega',
+      start_url: '/',
+      display: 'browser',
+      background_color: '#f5f7fb',
+      theme_color: '#07111f',
+      icons: [{ src: '/favicon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' }],
+    },
+    null,
+    2,
+  )}\n`,
+  'utf8',
+)
 await writeNodeFunction('health.js')
 await writeNodeFunction('contact-submissions.js')
-await writeNodeFunction('source-pack-submissions.js')
-await writeNodeFunction('proof-review-submissions.js')
-await writeNodeFunction('first-run-acceptance-submissions.js')
-await writeNodeFunction('pilot-payment-submissions.js')
-await writeNodeFunction('campaign-clicks.js')
-await writeNodeFunction('behavior-events.js')
-await writeNodeFunction('commercial-control.js')
-await writeNodeFunction('pipeline-control.js')
-await writeNodeFunction('checkout-start.js')
-await writeNodeFunction('product-activation.js')
-await writeNodeFunction('sales-daily.js', { maxDuration: 25 })
-await writeNodeFunction('telegram-webhook.js')
-await writeNodeFunction('action-runner.js', { maxDuration: 25 })
-await writeNodeFunction('lead.js')
 await writeNodeFunction('not-found.js')
-await writeNodeFunction('public-app-handoff.js')
 await removePrivateRootFunctions()
 await prunePublicSiteDir()
 await prunePublicStaticRoot()
-await mkdir(staticDir, { recursive: true })
-await mkdir(resolve(staticDir, 'free'), { recursive: true })
-await writeFile(resolve(staticDir, 'free', 'index.html'), publicRedirectHtml('https://demo.supermega.dev/', 'Try the live demo'), 'utf8')
-await writeFile(
-  resolve(staticDir, 'private-not-found.html'),
-  '<!doctype html><html lang="en"><meta charset="utf-8"><meta name="robots" content="noindex,nofollow"><title>Not found</title><body>Not found.</body></html>\n',
-  'utf8',
-)
-await writeFile(resolve(outputDir, 'config.json'), `${JSON.stringify(config, null, 2)}\n`, 'utf8')
+await writeFile(resolve(outputDir, 'config.json'), `${JSON.stringify(simplifiedPublicVercelConfig, null, 2)}\n`, 'utf8')
 
 console.log('public_vercel_output=ready')
