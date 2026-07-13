@@ -14,7 +14,7 @@ from typing import Any
 from urllib.parse import urljoin
 
 
-USER_AGENT = "supermega-portfolio-live-health/3.0"
+USER_AGENT = "supermega-portfolio-live-health/4.0"
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -76,10 +76,19 @@ def nested_value(payload: dict[str, Any], path: str) -> Any:
     return value
 
 
-def run(base_url: str, www_url: str, app_url: str, *, timeout: float, attempts: int) -> dict[str, Any]:
+def run(
+    base_url: str,
+    www_url: str,
+    app_url: str,
+    console_url: str,
+    *,
+    timeout: float,
+    attempts: int,
+) -> dict[str, Any]:
     base_url = base_url.rstrip("/") + "/"
     www_url = www_url.rstrip("/") + "/"
     app_url = app_url.rstrip("/") + "/"
+    console_url = console_url.rstrip("/") + "/"
     failures: list[dict[str, Any]] = []
     results: list[dict[str, Any]] = []
 
@@ -239,6 +248,91 @@ def run(base_url: str, www_url: str, app_url: str, *, timeout: float, attempts: 
     if app_health_response.status != 200 or app_health_mismatches:
         failures.append(app_health_result)
 
+    console_page_response = fetch(console_url, timeout=timeout, attempts=attempts)
+    console_page_body = console_page_response.body.decode("utf-8", errors="replace")
+    console_page_tokens = [
+        "<title>SuperMega Console</title>",
+        'data-view="company"',
+        'id="view-company"',
+        "Plan and run one bounded specialist wave",
+        "I reviewed this exact client, evidence, assignments, and budget",
+        "api('POST','/api/agent-company',{action:'plan',...input})",
+        "api('POST','/api/agent-company',{action:'run',...companyDraft.input})",
+    ]
+    console_page_missing = [token for token in console_page_tokens if token not in console_page_body]
+    console_page_result = {
+        "kind": "agent_company_page",
+        "url": console_url,
+        "status": console_page_response.status,
+        "bytes": len(console_page_response.body),
+        "missing": console_page_missing,
+    }
+    results.append(console_page_result)
+    if console_page_response.status != 200 or len(console_page_response.body) < 1000 or console_page_missing:
+        failures.append(console_page_result)
+
+    kernel_status_url = urljoin(console_url, "api/status")
+    kernel_status_response = fetch(kernel_status_url, timeout=timeout, attempts=attempts)
+    try:
+        kernel_status_payload = json.loads(kernel_status_response.body.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        kernel_status_payload = {}
+    expected_kernel_status = {
+        "ok": True,
+        "service": "supermega-kernel",
+        "db.ok": True,
+        "db.mode": "supabase",
+        "connectors.total": 69,
+        "connectors.registrationErrors": 0,
+        "ai.primary": "anthropic",
+    }
+    kernel_status_mismatches = {
+        path: {"expected": expected, "actual": nested_value(kernel_status_payload, path)}
+        for path, expected in expected_kernel_status.items()
+        if nested_value(kernel_status_payload, path) != expected
+    }
+    configured_connectors = nested_value(kernel_status_payload, "connectors.configured")
+    if not isinstance(configured_connectors, int) or configured_connectors < 1:
+        kernel_status_mismatches["connectors.configured"] = {
+            "expected": "integer >= 1",
+            "actual": configured_connectors,
+        }
+    providers = nested_value(kernel_status_payload, "ai.providers")
+    if not isinstance(providers, list) or "anthropic" not in providers:
+        kernel_status_mismatches["ai.providers"] = {
+            "expected": "contains anthropic",
+            "actual": providers,
+        }
+    kernel_status_result = {
+        "kind": "agent_company_status",
+        "url": kernel_status_url,
+        "status": kernel_status_response.status,
+        "mismatches": kernel_status_mismatches,
+    }
+    results.append(kernel_status_result)
+    if kernel_status_response.status != 200 or kernel_status_mismatches:
+        failures.append(kernel_status_result)
+
+    company_guard_url = urljoin(console_url, "api/agent-company")
+    company_guard_response = fetch(company_guard_url, timeout=timeout, attempts=attempts)
+    try:
+        company_guard_payload = json.loads(company_guard_response.body.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        company_guard_payload = {}
+    company_guard_result = {
+        "kind": "agent_company_guard",
+        "url": company_guard_url,
+        "status": company_guard_response.status,
+        "reason": company_guard_payload.get("reason"),
+    }
+    results.append(company_guard_result)
+    if (
+        company_guard_response.status != 401
+        or company_guard_payload.get("ok") is not False
+        or company_guard_payload.get("reason") != "unauthorized"
+    ):
+        failures.append(company_guard_result)
+
     return {
         "status": "ready" if not failures else "error",
         "checks": len(results),
@@ -252,6 +346,7 @@ def main() -> int:
     parser.add_argument("--base-url", default="https://supermega.dev")
     parser.add_argument("--www-url", default="https://www.supermega.dev")
     parser.add_argument("--app-url", default="https://app.supermega.dev")
+    parser.add_argument("--console-url", default="https://console.supermega.dev")
     parser.add_argument("--timeout", type=float, default=30.0)
     parser.add_argument("--attempts", type=int, default=3)
     args = parser.parse_args()
@@ -259,7 +354,14 @@ def main() -> int:
         parser.error("timeout and attempts must be positive")
 
     try:
-        report = run(args.base_url, args.www_url, args.app_url, timeout=args.timeout, attempts=args.attempts)
+        report = run(
+            args.base_url,
+            args.www_url,
+            args.app_url,
+            args.console_url,
+            timeout=args.timeout,
+            attempts=args.attempts,
+        )
     except Exception as error:  # Keep Actions output concise and secret-free.
         report = {"status": "error", "reason": str(error)}
 

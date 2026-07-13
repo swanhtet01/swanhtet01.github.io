@@ -17,6 +17,7 @@ import check_public_live_health as checker
 BASE = "https://public.example/"
 WWW = "https://www.example/"
 APP = "https://app.example/"
+CONSOLE = "https://console.example/"
 
 
 def result(url: str, body: str | dict, *, status: int = 200, headers: dict[str, str] | None = None):
@@ -57,6 +58,15 @@ def healthy_responses() -> dict[str, checker.HttpResult]:
         '<div id="root"></div>',
         'type="module"',
     )
+    console = page(
+        "<title>SuperMega Console</title>",
+        'data-view="company"',
+        'id="view-company"',
+        "Plan and run one bounded specialist wave",
+        "I reviewed this exact client, evidence, assignments, and budget",
+        "api('POST','/api/agent-company',{action:'plan',...input})",
+        "api('POST','/api/agent-company',{action:'run',...companyDraft.input})",
+    )
     contact_status = {
         "status": "ready",
         "lead_ledger": "configured",
@@ -91,6 +101,13 @@ def healthy_responses() -> dict[str, checker.HttpResult]:
             "realCustomerAcceptance": "not-asserted",
         },
     }
+    kernel_status = {
+        "ok": True,
+        "service": "supermega-kernel",
+        "db": {"ok": True, "mode": "supabase"},
+        "connectors": {"total": 69, "configured": 12, "registrationErrors": 0},
+        "ai": {"providers": ["anthropic"], "primary": "anthropic"},
+    }
 
     responses = {
         BASE: result(BASE, home),
@@ -103,6 +120,13 @@ def healthy_responses() -> dict[str, checker.HttpResult]:
         f"{APP}home": result(f"{APP}home", app_shell),
         f"{APP}factory": result(f"{APP}factory", app_shell),
         f"{APP}api/health": result(f"{APP}api/health", app_health),
+        CONSOLE: result(CONSOLE, console),
+        f"{CONSOLE}api/status": result(f"{CONSOLE}api/status", kernel_status),
+        f"{CONSOLE}api/agent-company": result(
+            f"{CONSOLE}api/agent-company",
+            {"ok": False, "reason": "unauthorized"},
+            status=401,
+        ),
     }
     for path in ("products/", "pricing/", "ai-agents/", "offers/"):
         url = f"{BASE}{path}"
@@ -116,12 +140,12 @@ class PortfolioHealthTest(unittest.TestCase):
             return responses[url]
 
         with patch.object(checker, "fetch", side_effect=fake_fetch):
-            return checker.run(BASE, WWW, APP, timeout=1, attempts=1)
+            return checker.run(BASE, WWW, APP, CONSOLE, timeout=1, attempts=1)
 
-    def test_healthy_portfolio_passes_all_twelve_checks(self):
+    def test_healthy_portfolio_passes_all_fifteen_checks(self):
         report = self.run_report(healthy_responses())
         self.assertEqual(report["status"], "ready")
-        self.assertEqual(report["checks"], 12)
+        self.assertEqual(report["checks"], 15)
         self.assertEqual(report["failures"], [])
 
     def test_missing_plant_link_fails_public_page(self):
@@ -148,6 +172,43 @@ class PortfolioHealthTest(unittest.TestCase):
         self.assertEqual(report["status"], "error")
         health_failure = next(item for item in report["failures"] if item["kind"] == "app_health")
         self.assertIn("proof.productionCloudDurability", health_failure["mismatches"])
+
+    def test_missing_review_gate_fails_agent_company_page(self):
+        responses = healthy_responses()
+        responses[CONSOLE] = result(
+            CONSOLE,
+            responses[CONSOLE].body.decode().replace(
+                "I reviewed this exact client, evidence, assignments, and budget", ""
+            ),
+        )
+        report = self.run_report(responses)
+        self.assertEqual(report["status"], "error")
+        failure = next(item for item in report["failures"] if item["kind"] == "agent_company_page")
+        self.assertIn(
+            "I reviewed this exact client, evidence, assignments, and budget",
+            failure["missing"],
+        )
+
+    def test_kernel_registration_fault_fails_agent_company_status(self):
+        responses = healthy_responses()
+        payload = copy.deepcopy(json.loads(responses[f"{CONSOLE}api/status"].body))
+        payload["connectors"]["registrationErrors"] = 1
+        responses[f"{CONSOLE}api/status"] = result(f"{CONSOLE}api/status", payload)
+        report = self.run_report(responses)
+        self.assertEqual(report["status"], "error")
+        failure = next(item for item in report["failures"] if item["kind"] == "agent_company_status")
+        self.assertIn("connectors.registrationErrors", failure["mismatches"])
+
+    def test_unprotected_agent_company_endpoint_fails_guard(self):
+        responses = healthy_responses()
+        responses[f"{CONSOLE}api/agent-company"] = result(
+            f"{CONSOLE}api/agent-company",
+            {"ok": True, "agents": []},
+        )
+        report = self.run_report(responses)
+        self.assertEqual(report["status"], "error")
+        failure = next(item for item in report["failures"] if item["kind"] == "agent_company_guard")
+        self.assertEqual(failure["status"], 200)
 
 
 if __name__ == "__main__":

@@ -1,9 +1,16 @@
-name: SuperMega Public Live Health
+name: SuperMega Portfolio Live Health
 
-# Default-branch, read-only production monitor. The public release itself is
-# owned by codex/public-enterprise-site; this workflow only checks live truth.
+# Default-branch, read-only production monitor for the public front door,
+# Shop and Plant app, and protected AI Agent Solutions control plane.
 on:
   push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/supermega-public-live-health.yml
+      - tools/check_public_live_health.py
+      - tools/test_public_live_health.py
+  pull_request:
     branches:
       - main
     paths:
@@ -19,7 +26,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: supermega-public-live-health
+  group: supermega-portfolio-live-health
   cancel-in-progress: true
 
 jobs:
@@ -33,17 +40,19 @@ jobs:
           python-version: '3.12'
 
       - name: Fetch checker from the triggering commit
+        env:
+          SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           curl --fail --silent --show-error --location \
             --proto '=https' --proto-redir '=https' \
             --retry 3 --retry-all-errors \
-            "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${GITHUB_SHA}/tools/check_public_live_health.py" \
+            "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${SOURCE_SHA}/tools/check_public_live_health.py" \
             --output "${RUNNER_TEMP}/check_public_live_health.py"
 
           curl --fail --silent --show-error --location \
             --proto '=https' --proto-redir '=https' \
             --retry 3 --retry-all-errors \
-            "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${GITHUB_SHA}/tools/test_public_live_health.py" \
+            "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${SOURCE_SHA}/tools/test_public_live_health.py" \
             --output "${RUNNER_TEMP}/test_public_live_health.py"
 
       - name: Test portfolio health checker
