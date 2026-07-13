@@ -25,12 +25,32 @@ jobs:
       VERCEL_PROJECT_ID: prj_Yaf0cZYbiFXcLkMcKaAm4alPWMhR
 
     steps:
-      - name: Checkout canonical public source
-        uses: actions/checkout@v6
-        with:
-          ref: ${{ github.event_name == 'push' && github.sha || 'codex/public-enterprise-site' }}
-          fetch-depth: 1
-          persist-credentials: false
+      - name: Fetch exact canonical public source
+        id: source
+        env:
+          PUSH_SHA: ${{ github.event_name == 'push' && github.sha || '' }}
+        run: |
+          if [ -n "$PUSH_SHA" ]; then
+            SOURCE_SHA="$PUSH_SHA"
+          else
+            SOURCE_SHA="$(git ls-remote --exit-code "https://github.com/${GITHUB_REPOSITORY}.git" "refs/heads/codex/public-enterprise-site" | awk 'NR == 1 { print $1 }')"
+          fi
+
+          if ! [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::Canonical public source did not resolve to one commit."
+            exit 1
+          fi
+
+          curl --fail --silent --show-error --location \
+            --proto '=https' --proto-redir '=https' \
+            --retry 3 --retry-all-errors \
+            "https://codeload.github.com/${GITHUB_REPOSITORY}/tar.gz/${SOURCE_SHA}" \
+            --output "$RUNNER_TEMP/supermega-public-source.tgz"
+          tar --extract --gzip \
+            --file "$RUNNER_TEMP/supermega-public-source.tgz" \
+            --directory "$GITHUB_WORKSPACE" \
+            --strip-components=1
+          printf 'sha=%s\n' "$SOURCE_SHA" >> "$GITHUB_OUTPUT"
 
       - name: Setup Node
         uses: actions/setup-node@v6
@@ -61,7 +81,7 @@ jobs:
       - name: Deploy verified artifact to production
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-        run: npx --yes vercel@56.1.0 deploy --prebuilt --prod --yes --token="$VERCEL_TOKEN"
+        run: npx --yes vercel@56.1.0 deploy --prebuilt --prod --yes --token="$VERCEL_TOKEN" --meta "githubCommitSha=${{ steps.source.outputs.sha }}" --meta "githubCommitRef=codex/public-enterprise-site"
 
       - name: Verify live aliases and first-proof route
         run: npm run public:verify:live
