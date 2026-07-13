@@ -16,6 +16,7 @@ broader system boundaries.
 | `approval-actions.mjs` + `api/approvals.mjs` | Immutable owner approval and idempotent ClickUp execution | live |
 | `crews/` + `crew-run.mjs` | Contract-enforced, draft-only multi-role tasks | 8 live |
 | `agent-company.mjs` + `agent-company-work-orders.mjs` | Bounded supervisor cycles and durable reviewed delegation | live |
+| `agent-company-operations.mjs` | Immutable outcome review and metadata-only operating targets | live |
 | `public/` + `api/` | Ops console, status, workcell activation, and scheduled delivery | live |
 
 ## Gateway
@@ -69,7 +70,8 @@ approval path. Reusing a claimed cycle id is blocked to prevent duplicate spend.
 Completed specialist and final envelopes are also stored under the claimed run id, so an idempotent
 replay can return a finished result or expose the recoverable partial results without spending again.
 
-For durable delegation and delivery proof, the same endpoint accepts six additional explicit actions:
+For durable delegation, delivery proof, and operating evidence, the same endpoint accepts eight
+additional explicit actions:
 
 - `work-order-create` validates and stores the exact cycle plan without a model call.
 - `work-order-list` returns up to 40 client-bound order summaries, filtered in the store by kind and
@@ -83,10 +85,17 @@ For durable delegation and delivery proof, the same endpoint accepts six additio
 - `work-order-review` stores one immutable accepted or changes-requested decision against the exact
   result hash. It requires the exact customer statement, source, reviewer name, recorder name, and an
   `ACCEPT ...` or `REQUEST CHANGES ...` confirmation bound to that result.
+- `work-order-evaluate` accepts one immutable internal checklist verdict for a terminal result. It
+  requires the saved plan hash, exact `EVALUATE <workOrderId>` confirmation, and either four passing checks for
+  `accepted` or at least one failed check for `revision_required`. It accepts no notes or raw text.
+- `operations-report` measures only durable client-bound work orders over a fixed 7, 30, or 90 day
+  window. It returns timestamps, counts, rates, target states, and evaluation metadata, never evidence
+  or specialist model output.
 
 The work-order id is deterministic for one client and cycle. Re-creating the same exact plan replays
 the saved order, while changed evidence under the same cycle id is a conflict. Dispatch first saves
-the `running` state, so storage failure blocks model spend. A concurrent or lost-response retry hits
+the `running` state plus the first dispatch timestamp, so storage failure blocks model spend and
+latency remains measurable. A concurrent or lost-response retry hits
 the cycle runner's durable claim and either returns the saved result or reports the existing run.
 Queued evidence remains inside the service-role-only cache record and is replaced by fingerprints
 after a terminal dispatch state.
@@ -94,6 +103,14 @@ Customer review records are explicitly `operator_recorded_customer_review` with
 `customerAuthenticated: false`; they are evidence copied by the operator from email, chat, call, or
 an in-person conversation, not a customer login or digital signature. A different review cannot
 overwrite the first immutable record. Revised work requires a new cycle and work order.
+
+The console's normal operating path is `plan -> queue -> explicit dispatch -> internal evaluation`;
+delivery proof and operator-recorded customer review are separate follow-up controls. The old direct
+`run` API remains for compatibility but is not exposed in the Company UI and is explicitly excluded
+from the operations report. Internal targets cover queue p90, execution p90, completed terminal
+orders, durable result storage, role-budget compliance, draft-only boundary compliance, evaluation
+coverage, and accepted evaluations. Readiness stays `collecting` until each target has at least five
+relevant samples. These are operator targets, not a contractual customer SLA or customer acceptance.
 
 ## Core Environment
 
@@ -125,14 +142,19 @@ in recovery instead of being retried blindly.
 - Planned work orders retain their bounded evidence in the protected cache until dispatch. There is
   no unattended dispatcher or retention sweeper; an owner still reviews and dispatches each order.
 - Customer review is operator-recorded provenance, not cryptographic proof of customer identity.
+- Company health covers the latest 40 durable work orders in the selected window. It excludes direct
+  compatibility cycles, returns no evidence or model output, and cannot prove customer acceptance
+  from an internal evaluation. Customer acceptance remains the separate operator-recorded review.
 
 ## Next
 
-1. Generate the isolated client plan, load its client-scoped inputs, and run the exact-confirmation
+1. Dispatch one legitimate redacted work order, record its internal checklist evaluation, download
+   the delivery proof, and record the customer's exact decision from an allowed source.
+2. After that proof, add an opt-in durable dispatcher, bounded evidence-retention sweeper, and alerts
+   over the measured target states. Do not introduce recursive delegation.
+3. Generate the isolated client plan, load its client-scoped inputs, and run the exact-confirmation
    provisioner. A matching bootstrap-only Supabase database URL applies the schema automatically;
    pre-applying `supabase/workcell-client.sql` remains the fallback.
-2. Complete the client-owned test ClickUp draft, approval, execution, and recovery proof.
-3. Dispatch one legitimate reviewed work order, download its delivery proof, record the customer's
-   exact decision from an allowed source, and retain the accepted or changes-requested packet.
-4. Move from one cron per client deployment to a durable scheduler when a shared control plane is
-   justified by real client volume.
+4. Complete the client-owned test ClickUp draft, approval, execution, and recovery proof.
+5. Move from one cron per client deployment to a durable scheduler when real client volume justifies
+   a shared control plane.

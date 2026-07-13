@@ -108,8 +108,10 @@ function publicWorkOrder(record, { includeResult = true } = {}) {
     status: record.status,
     planHash: record.planHash,
     createdAt: record.createdAt,
+    startedAt: record.startedAt || null,
     updatedAt: record.updatedAt,
     completedAt: record.completedAt || null,
+    dispatchAttempts: Number(record.dispatchAttempts || 0),
     plan: record.plan,
     evidence: record.plan.assignments.map((assignment) => ({
       agentId: assignment.agentId,
@@ -369,7 +371,14 @@ export async function runCompanyWorkOrder(input, options = {}) {
 
   const save = options.putWorkOrder || putCachedResponse
   const now = () => String(options.now?.() || new Date().toISOString())
-  const running = { ...record, status: 'running', updatedAt: now() }
+  const dispatchAt = now()
+  const running = {
+    ...record,
+    status: 'running',
+    startedAt: record.startedAt || dispatchAt,
+    dispatchAttempts: Number(record.dispatchAttempts || 0) + 1,
+    updatedAt: dispatchAt,
+  }
   let runningStored = false
   try { runningStored = Boolean(await save(recordKey(workOrderId), running)) }
   catch { runningStored = false }
@@ -396,11 +405,12 @@ export async function runCompanyWorkOrder(input, options = {}) {
   }
 
   const status = FINAL_STATUSES.has(result.status) ? result.status : (result.ok ? 'completed' : 'failed')
+  const completedAt = now()
   const finished = {
     ...running,
     status,
-    updatedAt: now(),
-    completedAt: now(),
+    updatedAt: completedAt,
+    completedAt,
     input: null,
     result,
   }

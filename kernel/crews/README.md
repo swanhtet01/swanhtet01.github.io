@@ -105,6 +105,9 @@ one durable cycle id, and returns draft-only partial results without cross-agent
 `../agent-company-work-orders.mjs` adds durable reviewed delegation around that same runner: exact
 plan fingerprints, no-spend queue creation, client-filtered listing, explicit dispatch, and
 duplicate-safe recovery. It never exposes queued raw evidence in list or detail responses.
+`../agent-company-operations.mjs` adds one immutable checklist verdict per terminal work order and a
+client-bound 7/30/90-day operating report. The report measures durable queue, execution, completion,
+budget, boundary, review, and acceptance evidence without returning the intake or model output.
 
 ## Shipped crews
 

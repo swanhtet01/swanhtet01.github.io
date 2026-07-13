@@ -18,6 +18,12 @@ import {
   reviewCompanyWorkOrder,
   runCompanyWorkOrder,
 } from '../agent-company-work-orders.mjs'
+import {
+  buildCompanyOperationsReport,
+  COMPANY_OPERATIONS_TARGETS,
+  COMPANY_OPERATIONS_WINDOWS,
+  evaluateCompanyWorkOrder,
+} from '../agent-company-operations.mjs'
 
 function constantTimeEqual(a, b) {
   const left = crypto.createHash('sha256').update(String(a)).digest()
@@ -37,6 +43,9 @@ function statusFor(result) {
     'company_work_order_review_conflict',
     'company_work_order_review_result_mismatch',
     'company_work_order_running',
+    'company_evaluation_already_claimed',
+    'company_evaluation_conflict',
+    'company_evaluation_terminal_result_required',
   ].includes(result.reason)) return 409
   if ([
     'company_claim_unavailable',
@@ -46,6 +55,9 @@ function statusFor(result) {
     'company_work_order_store_unavailable',
     'company_work_order_review_durable_claim_required',
     'company_work_order_review_store_unavailable',
+    'company_evaluation_durable_claim_required',
+    'company_evaluation_store_unavailable',
+    'company_operations_store_unavailable',
   ].includes(result.reason)) return 503
   if (['company_role_budget_exceeded', 'company_work_order_not_reviewable', 'company_work_order_proof_unavailable'].includes(result.reason)) return 422
   if (result.status === 'failed') return 502
@@ -78,6 +90,15 @@ export async function handleAgentCompany(request = {}, options = {}) {
           operatorRecordedReview: true,
           customerAuthenticated: false,
         },
+        operations: {
+          enabled: true,
+          windows: COMPANY_OPERATIONS_WINDOWS,
+          targets: COMPANY_OPERATIONS_TARGETS,
+          immutableReviews: true,
+          rawEvidenceReturned: false,
+          modelOutputReturned: false,
+          customerSlaClaimed: false,
+        },
       },
     }
   }
@@ -97,6 +118,8 @@ export async function handleAgentCompany(request = {}, options = {}) {
     'work-order-run',
     'work-order-proof',
     'work-order-review',
+    'work-order-evaluate',
+    'operations-report',
   ].includes(action)) {
     return { status: 400, json: { ok: false, reason: 'company_invalid_action' } }
   }
@@ -113,6 +136,8 @@ export async function handleAgentCompany(request = {}, options = {}) {
   const runOrder = options.runCompanyWorkOrder || runCompanyWorkOrder
   const getProof = options.getCompanyWorkOrderProof || getCompanyWorkOrderProof
   const reviewOrder = options.reviewCompanyWorkOrder || reviewCompanyWorkOrder
+  const evaluateOrder = options.evaluateCompanyWorkOrder || evaluateCompanyWorkOrder
+  const operationsReport = options.buildCompanyOperationsReport || buildCompanyOperationsReport
   const result = action === 'plan' ? await plan(body)
     : action === 'run' ? await run(body)
       : action === 'work-order-create' ? await createOrder(body)
@@ -120,7 +145,9 @@ export async function handleAgentCompany(request = {}, options = {}) {
           : action === 'work-order-get' ? await getOrder(body)
             : action === 'work-order-run' ? await runOrder(body)
               : action === 'work-order-proof' ? await getProof(body)
-                : await reviewOrder(body)
+                : action === 'work-order-review' ? await reviewOrder(body)
+                  : action === 'work-order-evaluate' ? await evaluateOrder(body)
+                    : await operationsReport(body)
   return { status: statusFor(result), json: result }
 }
 

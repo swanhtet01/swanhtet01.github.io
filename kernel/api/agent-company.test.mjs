@@ -39,6 +39,12 @@ test('GET returns the protected fixed roster and hard limits', async () => {
   assert.equal(result.json.workOrders.deliveryProof, true)
   assert.equal(result.json.workOrders.operatorRecordedReview, true)
   assert.equal(result.json.workOrders.customerAuthenticated, false)
+  assert.equal(result.json.operations.enabled, true)
+  assert.deepEqual(result.json.operations.windows, [7, 30, 90])
+  assert.equal(result.json.operations.immutableReviews, true)
+  assert.equal(result.json.operations.rawEvidenceReturned, false)
+  assert.equal(result.json.operations.modelOutputReturned, false)
+  assert.equal(result.json.operations.customerSlaClaimed, false)
 })
 
 test('POST plans without claiming a run or accepting an implicit action', async () => {
@@ -83,6 +89,8 @@ test('protected work-order actions delegate to the durable queue contract', asyn
     runCompanyWorkOrder: async (body) => { calls.push(['run', body]); return { ok: true, mode: 'work_order_run' } },
     getCompanyWorkOrderProof: async (body) => { calls.push(['proof', body]); return { ok: true, mode: 'work_order_proof' } },
     reviewCompanyWorkOrder: async (body) => { calls.push(['review', body]); return { ok: true, mode: 'work_order_review' } },
+    evaluateCompanyWorkOrder: async (body) => { calls.push(['evaluate', body]); return { ok: true, mode: 'work_order_evaluate' } },
+    buildCompanyOperationsReport: async (body) => { calls.push(['report', body]); return { ok: true, mode: 'operations_report' } },
   }
   const actions = [
     ['work-order-create', validBody],
@@ -91,12 +99,14 @@ test('protected work-order actions delegate to the durable queue contract', asyn
     ['work-order-run', { clientId: 'client-acme', workOrderId: 'company-order:abc', planHash: 'a'.repeat(64), confirmation: 'RUN company-order:abc' }],
     ['work-order-proof', { clientId: 'client-acme', workOrderId: 'company-order:abc' }],
     ['work-order-review', { clientId: 'client-acme', workOrderId: 'company-order:abc', resultHash: 'a'.repeat(64), decision: 'accepted', reviewerName: 'Aye Aye', source: 'chat', statement: 'Accepted.', recordedBy: 'Swan', confirmation: 'ACCEPT company-order:abc hash' }],
+    ['work-order-evaluate', { clientId: 'client-acme', workOrderId: 'company-order:abc', planHash: 'a'.repeat(64), verdict: 'accepted', checks: { accurate: true, complete: true, usable: true, boundarySafe: true }, confirmation: 'EVALUATE company-order:abc' }],
+    ['operations-report', { clientId: 'client-acme', windowDays: 30 }],
   ]
   for (const [action, body] of actions) {
     const result = await handleAgentCompany(request({ body: { ...body, action } }), options)
     assert.equal(result.status, 200)
   }
-  assert.deepEqual(calls.map(([name]) => name), ['create', 'list', 'get', 'run', 'proof', 'review'])
+  assert.deepEqual(calls.map(([name]) => name), ['create', 'list', 'get', 'run', 'proof', 'review', 'evaluate', 'report'])
   assert.equal(calls.every(([, body]) => !('action' in body)), true)
 })
 
@@ -137,6 +147,22 @@ test('work-order API maps isolation, conflicts, and unavailable storage without 
     getCompanyWorkOrderProof: async () => ({ ok: false, reason: 'company_work_order_proof_unavailable' }),
   })
   assert.equal(notReviewable.status, 422)
+
+  const evaluationConflict = await handleAgentCompany(request({
+    body: { action: 'work-order-evaluate', clientId: 'client-acme' },
+  }), {
+    opsKey: KEY,
+    evaluateCompanyWorkOrder: async () => ({ ok: false, reason: 'company_evaluation_conflict' }),
+  })
+  assert.equal(evaluationConflict.status, 409)
+
+  const reportUnavailable = await handleAgentCompany(request({
+    body: { action: 'operations-report', clientId: 'client-acme', windowDays: 30 },
+  }), {
+    opsKey: KEY,
+    buildCompanyOperationsReport: async () => ({ ok: false, reason: 'company_operations_store_unavailable' }),
+  })
+  assert.equal(reportUnavailable.status, 503)
 })
 
 test('API runtime has no connector, approval execution, or process-launch path', async () => {
