@@ -10,6 +10,7 @@ import {
   runCompanyCycle,
 } from '../agent-company.mjs'
 import {
+  cancelCompanyWorkOrder,
   createCompanyWorkOrder,
   getCompanyWorkOrder,
   getCompanyWorkOrderProof,
@@ -38,11 +39,15 @@ function statusFor(result) {
     'company_cycle_already_claimed',
     'company_work_order_already_claimed',
     'company_work_order_conflict',
+    'company_work_order_cancel_not_allowed',
+    'company_work_order_cancelled',
+    'company_work_order_invalid_state',
     'company_work_order_plan_mismatch',
     'company_work_order_review_already_claimed',
     'company_work_order_review_conflict',
     'company_work_order_review_result_mismatch',
     'company_work_order_running',
+    'company_work_order_transition_conflict',
     'company_evaluation_already_claimed',
     'company_evaluation_conflict',
     'company_evaluation_terminal_result_required',
@@ -89,6 +94,8 @@ export async function handleAgentCompany(request = {}, options = {}) {
           deliveryProof: true,
           operatorRecordedReview: true,
           customerAuthenticated: false,
+          explicitCancellation: true,
+          cancelledEvidenceScrubbed: true,
         },
         operations: {
           enabled: true,
@@ -117,6 +124,7 @@ export async function handleAgentCompany(request = {}, options = {}) {
     'work-order-list',
     'work-order-get',
     'work-order-run',
+    'work-order-cancel',
     'work-order-proof',
     'work-order-review',
     'work-order-evaluate',
@@ -135,6 +143,7 @@ export async function handleAgentCompany(request = {}, options = {}) {
   const listOrders = options.listCompanyWorkOrders || listCompanyWorkOrders
   const getOrder = options.getCompanyWorkOrder || getCompanyWorkOrder
   const runOrder = options.runCompanyWorkOrder || runCompanyWorkOrder
+  const cancelOrder = options.cancelCompanyWorkOrder || cancelCompanyWorkOrder
   const getProof = options.getCompanyWorkOrderProof || getCompanyWorkOrderProof
   const reviewOrder = options.reviewCompanyWorkOrder || reviewCompanyWorkOrder
   const evaluateOrder = options.evaluateCompanyWorkOrder || evaluateCompanyWorkOrder
@@ -145,10 +154,11 @@ export async function handleAgentCompany(request = {}, options = {}) {
         : action === 'work-order-list' ? await listOrders(body)
           : action === 'work-order-get' ? await getOrder(body)
             : action === 'work-order-run' ? await runOrder(body)
-              : action === 'work-order-proof' ? await getProof(body)
-                : action === 'work-order-review' ? await reviewOrder(body)
-                  : action === 'work-order-evaluate' ? await evaluateOrder(body)
-                    : await operationsReport(body)
+              : action === 'work-order-cancel' ? await cancelOrder(body)
+                : action === 'work-order-proof' ? await getProof(body)
+                  : action === 'work-order-review' ? await reviewOrder(body)
+                    : action === 'work-order-evaluate' ? await evaluateOrder(body)
+                      : await operationsReport(body)
   return { status: statusFor(result), json: result }
 }
 
