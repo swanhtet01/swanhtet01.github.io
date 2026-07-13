@@ -316,10 +316,6 @@ const contactHtml = documentHtml({
     </div>
   </section>
   <form class="contact-form" action="/api/contact-submissions" data-sm-contact-form method="post">
-    <input type="hidden" name="workflow" value="General enquiry" />
-    <input type="hidden" name="first_output" value="General enquiry" />
-    <input type="hidden" name="requested_package" value="General enquiry" />
-    <input type="hidden" name="product_area" value="General enquiry" />
     <input type="hidden" name="source_url" value="https://supermega.dev/contact/" />
     <input type="hidden" name="page_path" value="/contact/" />
     <input type="hidden" name="referrer" value="" />
