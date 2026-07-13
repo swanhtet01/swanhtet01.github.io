@@ -189,6 +189,8 @@ test('dispatch is bound to the saved fingerprint and exact confirmation', async 
   })
   assert.equal(result.ok, true)
   assert.equal(result.workOrder.status, 'completed')
+  assert.equal(result.workOrder.startedAt, '2026-07-14T00:00:00.000Z')
+  assert.equal(result.workOrder.dispatchAttempts, 1)
   assert.equal(received.clientId, 'client-acme')
   assert.deepEqual(received.agents, ['sales-qualifier', 'quality-reviewer'])
   assert.match(received.evidence['sales-qualifier'], /Manual close/)
@@ -196,6 +198,7 @@ test('dispatch is bound to the saved fingerprint and exact confirmation', async 
   const saved = [...state.records.values()].find((row) => row.workOrderId === created.workOrder.workOrderId)
   assert.equal(saved.input, null)
   assert.equal(saved.result.status, 'completed')
+  assert.equal(saved.startedAt, '2026-07-14T00:00:00.000Z')
 })
 
 test('completed dispatches replay without another specialist call', async () => {
