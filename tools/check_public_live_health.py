@@ -15,7 +15,8 @@ from typing import Any
 from urllib.parse import urljoin, urlparse
 
 
-USER_AGENT = "supermega-portfolio-live-health/4.2"
+USER_AGENT = "supermega-portfolio-live-health/4.3"
+DEMO_MAX_BYTES = 256 * 1024
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -60,7 +61,14 @@ def app_module_url(body: str, app_url: str) -> str | None:
     return None
 
 
-def fetch(url: str, *, timeout: float, attempts: int, follow_redirects: bool = True) -> HttpResult:
+def fetch(
+    url: str,
+    *,
+    timeout: float,
+    attempts: int,
+    follow_redirects: bool = True,
+    max_bytes: int | None = None,
+) -> HttpResult:
     opener = urllib.request.build_opener() if follow_redirects else urllib.request.build_opener(NoRedirect())
     request = urllib.request.Request(
         url,
@@ -77,14 +85,14 @@ def fetch(url: str, *, timeout: float, attempts: int, follow_redirects: bool = T
                     url=response.geturl(),
                     status=response.getcode(),
                     headers=dict(response.headers.items()),
-                    body=response.read(),
+                    body=response.read(max_bytes + 1) if max_bytes is not None else response.read(),
                 )
         except urllib.error.HTTPError as error:
             result = HttpResult(
                 url=url,
                 status=error.code,
                 headers=dict(error.headers.items()),
-                body=error.read(),
+                body=error.read(max_bytes + 1) if max_bytes is not None else error.read(),
             )
             if 500 <= error.code < 600 and attempt < attempts:
                 time.sleep(attempt)
@@ -106,10 +114,16 @@ def nested_value(payload: dict[str, Any], path: str) -> Any:
     return value
 
 
+def header_value(headers: dict[str, str], name: str) -> str:
+    expected = name.lower()
+    return next((value for key, value in headers.items() if key.lower() == expected), "")
+
+
 def run(
     base_url: str,
     www_url: str,
     app_url: str,
+    demo_url: str,
     console_url: str,
     *,
     timeout: float,
@@ -118,6 +132,7 @@ def run(
     base_url = base_url.rstrip("/") + "/"
     www_url = www_url.rstrip("/") + "/"
     app_url = app_url.rstrip("/") + "/"
+    demo_url = demo_url.rstrip("/") + "/"
     console_url = console_url.rstrip("/") + "/"
     failures: list[dict[str, Any]] = []
     results: list[dict[str, Any]] = []
@@ -213,6 +228,76 @@ def run(
         results.append(result)
         if response.status != 200 or len(response.body) < 1000 or missing or unexpected:
             failures.append(result)
+
+    demo_response = fetch(
+        demo_url,
+        timeout=timeout,
+        attempts=attempts,
+        follow_redirects=False,
+        max_bytes=DEMO_MAX_BYTES,
+    )
+    try:
+        demo_body = demo_response.body.decode("utf-8")
+        demo_encoding_error = False
+    except UnicodeDecodeError:
+        demo_body = ""
+        demo_encoding_error = True
+    demo_tokens = [
+        "<title>SuperMega - open the app</title>",
+        "Open a working Shop workspace or Shop POS demo.",
+        "https://app.supermega.dev/",
+        "https://pos.supermega.dev/?demo=",
+        'data-en="Open Shop POS"',
+        'data-my="Shop POS ဖွင့်ရန်"',
+        "assets/noto-sans-myanmar.woff2",
+    ]
+    demo_forbidden = [
+        "DeskPOS",
+        "MegaOS",
+        "Retail OS",
+        "Factory OS",
+        "spa-desk-pilot.vercel.app",
+        "<iframe",
+    ]
+    demo_missing = [token for token in demo_tokens if token not in demo_body]
+    demo_unexpected = [token for token in demo_forbidden if token in demo_body]
+    demo_header_contract = {
+        "content-type": "text/html",
+        "x-content-type-options": "nosniff",
+        "x-frame-options": "sameorigin",
+        "referrer-policy": "strict-origin-when-cross-origin",
+    }
+    demo_header_mismatches = {}
+    for name, expected in demo_header_contract.items():
+        actual = header_value(demo_response.headers, name)
+        valid = actual.lower().startswith(expected) if name == "content-type" else actual.lower() == expected
+        if not valid:
+            demo_header_mismatches[name] = {"expected": expected, "actual": actual}
+    demo_result = {
+        "kind": "demo_shop_pos",
+        "url": demo_url,
+        "status": demo_response.status,
+        "bytes": len(demo_response.body),
+        "response_url_changed": demo_response.url != demo_url,
+        "encoding_error": demo_encoding_error,
+        "shop_pos_markers": demo_body.count("Shop POS"),
+        "missing": demo_missing,
+        "unexpected": demo_unexpected,
+        "header_mismatches": demo_header_mismatches,
+    }
+    results.append(demo_result)
+    if (
+        demo_response.status != 200
+        or demo_response.url != demo_url
+        or len(demo_response.body) < 1000
+        or len(demo_response.body) > DEMO_MAX_BYTES
+        or demo_encoding_error
+        or demo_result["shop_pos_markers"] < 5
+        or demo_missing
+        or demo_unexpected
+        or demo_header_mismatches
+    ):
+        failures.append(demo_result)
 
     for path in ("products/", "pricing/", "ai-agents/", "offers/"):
         url = urljoin(base_url, path)
@@ -448,6 +533,7 @@ def main() -> int:
     parser.add_argument("--base-url", default="https://supermega.dev")
     parser.add_argument("--www-url", default="https://www.supermega.dev")
     parser.add_argument("--app-url", default="https://app.supermega.dev")
+    parser.add_argument("--demo-url", default="https://demo.supermega.dev")
     parser.add_argument("--console-url", default="https://console.supermega.dev")
     parser.add_argument("--timeout", type=float, default=30.0)
     parser.add_argument("--attempts", type=int, default=3)
@@ -460,6 +546,7 @@ def main() -> int:
             args.base_url,
             args.www_url,
             args.app_url,
+            args.demo_url,
             args.console_url,
             timeout=args.timeout,
             attempts=args.attempts,
